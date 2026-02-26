@@ -185,7 +185,7 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
       condition = "REQUIRES_SINGLE_PART_NAMESPACE",
       parameters = Map(
         "sessionCatalog" -> "spark_catalog",
-        "namespace" -> "`default`.`ns1`.`ns2`")
+        "identifier" -> "`default`.`ns1`.`ns2`.`fun`")
     )
   }
 
@@ -204,7 +204,7 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
       condition = "REQUIRES_SINGLE_PART_NAMESPACE",
       parameters = Map(
         "sessionCatalog" -> "spark_catalog",
-        "namespace" -> "`default`.`ns1`.`ns2`")
+        "identifier" -> "`default`.`ns1`.`ns2`.`fun`")
     )
   }
 
@@ -240,7 +240,7 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
       condition = "REQUIRES_SINGLE_PART_NAMESPACE",
       parameters = Map(
         "sessionCatalog" -> "spark_catalog",
-        "namespace" -> "`default`.`ns1`.`ns2`")
+        "identifier" -> "`default`.`ns1`.`ns2`.`fun`")
     )
   }
 

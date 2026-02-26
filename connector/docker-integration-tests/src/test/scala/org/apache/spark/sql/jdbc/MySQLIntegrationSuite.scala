@@ -31,9 +31,9 @@ import org.apache.spark.sql.types.ShortType
 import org.apache.spark.tags.DockerTest
 
 /**
- * To run this test suite for a specific version (e.g., mysql:9.2.0):
+ * To run this test suite for a specific version (e.g., mysql:9.6.0):
  * {{{
- *   ENABLE_DOCKER_INTEGRATION_TESTS=1 MYSQL_DOCKER_IMAGE_NAME=mysql:9.2.0
+ *   ENABLE_DOCKER_INTEGRATION_TESTS=1 MYSQL_DOCKER_IMAGE_NAME=mysql:9.6.0
  *     ./build/sbt -Pdocker-integration-tests
  *     "docker-integration-tests/testOnly org.apache.spark.sql.jdbc.MySQLIntegrationSuite"
  * }}}
@@ -110,7 +110,7 @@ class MySQLIntegrationSuite extends SharedJDBCIntegrationSuite {
   }
 
   test("Basic test") {
-    val df = sqlContext.read.jdbc(jdbcUrl, "tbl", new Properties)
+    val df = spark.read.jdbc(jdbcUrl, "tbl", new Properties)
     val rows = df.collect()
     assert(rows.length == 2)
     val types = rows(0).toSeq.map(x => x.getClass.toString)
@@ -120,7 +120,7 @@ class MySQLIntegrationSuite extends SharedJDBCIntegrationSuite {
   }
 
   test("Numeric types") {
-    val row = sqlContext.read.jdbc(jdbcUrl, "numbers", new Properties).head()
+    val row = spark.read.jdbc(jdbcUrl, "numbers", new Properties).head()
     assert(row.length === 10)
     assert(row(0).isInstanceOf[Boolean])
     assert(row(1).isInstanceOf[Array[Byte]])
@@ -145,14 +145,14 @@ class MySQLIntegrationSuite extends SharedJDBCIntegrationSuite {
     assert(row.getDouble(8) == 1.0000000000000002)
     assert(row.getByte(9) == 0x80.toByte)
     withSQLConf(SQLConf.LEGACY_MYSQL_BIT_ARRAY_MAPPING_ENABLED.key -> "true") {
-      val row = sqlContext.read.jdbc(jdbcUrl, "numbers", new Properties).head()
+      val row = spark.read.jdbc(jdbcUrl, "numbers", new Properties).head()
       assert(row(1).isInstanceOf[Long])
       assert(row.getLong(1) == 0x225)
     }
   }
 
   test("SPARK-47462: Unsigned numeric types") {
-    val df = sqlContext.read.jdbc(jdbcUrl, "unsigned_numbers", new Properties)
+    val df = spark.read.jdbc(jdbcUrl, "unsigned_numbers", new Properties)
     val rows = df.head()
     assert(rows.get(0).isInstanceOf[Short])
     assert(rows.get(1).isInstanceOf[Integer])
@@ -184,7 +184,7 @@ class MySQLIntegrationSuite extends SharedJDBCIntegrationSuite {
 
   test("Date types") {
     withDefaultTimeZone(UTC) {
-      val df = sqlContext.read.jdbc(jdbcUrl, "dates", new Properties)
+      val df = spark.read.jdbc(jdbcUrl, "dates", new Properties)
       checkAnswer(df, Row(
         Date.valueOf("1991-11-09"),
         Timestamp.valueOf("1970-01-01 13:31:24"),
@@ -203,7 +203,7 @@ class MySQLIntegrationSuite extends SharedJDBCIntegrationSuite {
 
   test("SPARK-47406: MySQL datetime types with preferTimestampNTZ") {
     withDefaultTimeZone(UTC) {
-      val df = sqlContext.read.option("preferTimestampNTZ", true)
+      val df = spark.read.option("preferTimestampNTZ", true)
         .jdbc(jdbcUrl, "dates", new Properties)
       checkAnswer(df, Row(
         Date.valueOf("1991-11-09"),
@@ -216,7 +216,7 @@ class MySQLIntegrationSuite extends SharedJDBCIntegrationSuite {
   }
 
   test("String types") {
-    val df = sqlContext.read.jdbc(jdbcUrl, "strings", new Properties)
+    val df = spark.read.jdbc(jdbcUrl, "strings", new Properties)
     val rows = df.collect()
     assert(rows.length == 1)
     val types = rows(0).toSeq.map(x => x.getClass.toString)
@@ -244,9 +244,9 @@ class MySQLIntegrationSuite extends SharedJDBCIntegrationSuite {
   }
 
   test("Basic write test") {
-    val df1 = sqlContext.read.jdbc(jdbcUrl, "numbers", new Properties)
-    val df2 = sqlContext.read.jdbc(jdbcUrl, "dates", new Properties)
-    val df3 = sqlContext.read.jdbc(jdbcUrl, "strings", new Properties)
+    val df1 = spark.read.jdbc(jdbcUrl, "numbers", new Properties)
+    val df2 = spark.read.jdbc(jdbcUrl, "dates", new Properties)
+    val df3 = spark.read.jdbc(jdbcUrl, "strings", new Properties)
     df1.write.jdbc(jdbcUrl, "numberscopy", new Properties)
     df2.write.jdbc(jdbcUrl, "datescopy", new Properties)
     df3.write.jdbc(jdbcUrl, "stringscopy", new Properties)
@@ -280,7 +280,7 @@ class MySQLIntegrationSuite extends SharedJDBCIntegrationSuite {
 
 
   test("SPARK-47478: all boolean synonyms read-write roundtrip") {
-    val df = sqlContext.read.jdbc(jdbcUrl, "bools", new Properties)
+    val df = spark.read.jdbc(jdbcUrl, "bools", new Properties)
     checkAnswer(df, Row(true, true, true))
 
     val properties0 = new Properties()
@@ -295,7 +295,7 @@ class MySQLIntegrationSuite extends SharedJDBCIntegrationSuite {
 
     val properties2 = new Properties()
     properties2.setProperty("tinyInt1isBit", "false")
-    checkAnswer(sqlContext.read.jdbc(jdbcUrl, "bools", properties2), Row(1, true, 1))
+    checkAnswer(spark.read.jdbc(jdbcUrl, "bools", properties2), Row(1, true, 1))
 
     df.write.mode("append").jdbc(jdbcUrl, "bools", new Properties)
     checkAnswer(df, Seq(Row(true, true, true), Row(true, true, true)))
@@ -364,9 +364,9 @@ class MySQLIntegrationSuite extends SharedJDBCIntegrationSuite {
 
 
 /**
- * To run this test suite for a specific version (e.g., mysql:9.2.0):
+ * To run this test suite for a specific version (e.g., mysql:9.6.0):
  * {{{
- *   ENABLE_DOCKER_INTEGRATION_TESTS=1 MYSQL_DOCKER_IMAGE_NAME=mysql:9.2.0
+ *   ENABLE_DOCKER_INTEGRATION_TESTS=1 MYSQL_DOCKER_IMAGE_NAME=mysql:9.6.0
  *     ./build/sbt -Pdocker-integration-tests
  *     "docker-integration-tests/testOnly *MySQLOverMariaConnectorIntegrationSuite"
  * }}}
@@ -377,12 +377,12 @@ class MySQLOverMariaConnectorIntegrationSuite extends MySQLIntegrationSuite {
   override val db = new MySQLDatabaseOnDocker {
     override def getJdbcUrl(ip: String, port: Int): String =
       s"jdbc:mysql://$ip:$port/mysql?user=root&password=rootpass&allowPublicKeyRetrieval=true" +
-        s"&useSSL=false"
+        s"&useSSL=false&permitMysqlScheme"
   }
 
   override def testConnection(): Unit = {
     Using.resource(getConnection()) { conn =>
-      assert(conn.getClass.getName === "org.mariadb.jdbc.MariaDbConnection")
+      assert(conn.getClass.getName === "org.mariadb.jdbc.Connection")
     }
   }
 }

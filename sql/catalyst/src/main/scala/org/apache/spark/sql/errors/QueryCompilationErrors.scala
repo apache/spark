@@ -1557,12 +1557,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new TableAlreadyExistsException(ident.asMultipartIdentifier)
   }
 
-  def requiresSinglePartNamespaceError(namespace: Seq[String]): Throwable = {
+  def requiresSinglePartNamespaceError(identifier: Seq[String]): Throwable = {
     new AnalysisException(
       errorClass = "REQUIRES_SINGLE_PART_NAMESPACE",
       messageParameters = Map(
         "sessionCatalog" -> CatalogManager.SESSION_CATALOG_NAME,
-        "namespace" -> toSQLId(namespace)))
+        "identifier" -> toSQLId(identifier)))
   }
 
   def namespaceAlreadyExistsError(namespace: Array[String]): Throwable = {

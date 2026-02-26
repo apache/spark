@@ -55,7 +55,6 @@ from typing import (
     cast,
     TYPE_CHECKING,
     Type,
-    Sequence,
 )
 
 import pandas as pd
@@ -88,6 +87,7 @@ import pyspark.sql.connect.proto.base_pb2_grpc as grpc_lib
 import pyspark.sql.connect.types as types
 from pyspark.errors.exceptions.connect import (
     convert_exception,
+    convert_observation_errors,
     SparkConnectException,
     SparkConnectGrpcException,
 )
@@ -1003,11 +1003,6 @@ class SparkConnectClient(object):
         resources = properties["get_resources_command_result"]
         return resources
 
-    def _build_observed_metrics(
-        self, metrics: Sequence["pb2.ExecutePlanResponse.ObservedMetrics"]
-    ) -> Iterator[PlanObservedMetrics]:
-        return (PlanObservedMetrics(x.name, [v for v in x.values], list(x.keys)) for x in metrics)
-
     def to_table_as_iterator(
         self, plan: pb2.Plan, observations: Dict[str, Observation]
     ) -> Iterator[Union[StructType, "pa.Table"]]:
@@ -1276,7 +1271,7 @@ class SparkConnectClient(object):
         """
         Close the channel.
         """
-        concurrent.futures.wait(self._release_futures)
+        concurrent.futures.wait(self._release_futures, timeout=10)
         ExecutePlanResponseReattachableIterator.shutdown_threadpool_if_idle()
         self._channel.close()
         self._closed = True
@@ -1553,23 +1548,32 @@ class SparkConnectClient(object):
                 yield from self._build_metrics(b.metrics)
             if b.observed_metrics:
                 logger.debug("Received observed metric batch.")
-                for observed_metrics in self._build_observed_metrics(b.observed_metrics):
-                    if observed_metrics.name == "__python_accumulator__":
-                        for metric in observed_metrics.metrics:
-                            (aid, update) = pickleSer.loads(LiteralExpression._to_value(metric))
-                            if aid == SpecialAccumulatorIds.SQL_UDF_PROFIER:
-                                self._profiler_collector._update(update)
-                    elif observed_metrics.name in observations:
-                        observation_result = observations[observed_metrics.name]._result
-                        assert observation_result is not None
-                        observation_result.update(
-                            {
-                                key: LiteralExpression._to_value(metric)
-                                for key, metric in zip(
-                                    observed_metrics.keys, observed_metrics.metrics
-                                )
-                            }
-                        )
+                for x in b.observed_metrics:
+                    observed_metrics = PlanObservedMetrics(
+                        x.name, [v for v in x.values], list(x.keys)
+                    )
+                    if x.HasField("root_error_idx"):
+                        if x.name in observations:
+                            converted = convert_observation_errors(x.root_error_idx, list(x.errors))
+                            observations[x.name]._set_error(converted)
+                    else:
+                        if observed_metrics.name == "__python_accumulator__":
+                            for metric in observed_metrics.metrics:
+                                (aid, update) = pickleSer.loads(LiteralExpression._to_value(metric))
+                                if aid == SpecialAccumulatorIds.SQL_UDF_PROFIER:
+                                    self._profiler_collector._update(update)
+                        elif observed_metrics.name in observations:
+                            observation_result = observations[observed_metrics.name]._result
+                            assert observation_result is not None
+                            observation_result.update(
+                                {
+                                    key: LiteralExpression._to_value(metric)
+                                    for key, metric in zip(
+                                        observed_metrics.keys,
+                                        observed_metrics.metrics,
+                                    )
+                                }
+                            )
                     yield observed_metrics
             if b.HasField("schema"):
                 logger.debug("Received the schema.")
@@ -1697,11 +1701,13 @@ class SparkConnectClient(object):
                 for attempt in self._retrying():
                     with attempt:
                         with disable_gc():
-                            gen = self._stub.ExecutePlan(req, metadata=self._builder.metadata())
+                            it = iter(
+                                self._stub.ExecutePlan(req, metadata=self._builder.metadata())
+                            )
                         while True:
                             try:
                                 with disable_gc():
-                                    b = next(gen)
+                                    b = next(it)
                                 yield from handle_response(b)
                             except StopIteration:
                                 break

@@ -5234,6 +5234,11 @@ class AstBuilder extends DataTypeAstBuilder
             "Partition column types may not be specified in Create Table As Select (CTAS)",
             ctx)
 
+        case Some(_) if constraints.nonEmpty =>
+          operationNotAllowed(
+            "Constraints may not be specified in a Create Table As Select (CTAS) statement",
+            ctx)
+
         case Some(query) =>
           CreateTableAsSelect(identifier, partitioning, query, tableSpec, Map.empty, ifNotExists)
 
@@ -5311,6 +5316,11 @@ class AstBuilder extends DataTypeAstBuilder
           // non-reference partition columns are not allowed because schema can't be specified
           operationNotAllowed(
             "Partition column types may not be specified in Replace Table As Select (RTAS)",
+            ctx)
+
+        case Some(_) if constraints.nonEmpty =>
+          operationNotAllowed(
+            "Constraints may not be specified in a Replace Table As Select (RTAS) statement",
             ctx)
 
         case Some(query) =>

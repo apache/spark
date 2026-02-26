@@ -512,6 +512,7 @@ class FunctionResolution(
       case last: Last => last.copy(ignoreNulls = ignoreNulls)
       case anyValue: AnyValue => anyValue.copy(ignoreNulls = ignoreNulls)
       case collectList: CollectList => collectList.copy(ignoreNulls = ignoreNulls)
+      case collectSet: CollectSet => collectSet.copy(ignoreNulls = ignoreNulls)
       case _ if ignoreNulls =>
         // Only fail for IGNORE NULLS; RESPECT NULLS is the default behavior
         throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(

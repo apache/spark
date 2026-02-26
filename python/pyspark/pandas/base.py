@@ -40,7 +40,7 @@ from pyspark.pandas.internal import (
     SPARK_DEFAULT_INDEX_NAME,
 )
 from pyspark.pandas.spark.accessors import SparkIndexOpsMethods
-from pyspark.pandas.typedef import extension_dtypes
+from pyspark.pandas.typedef.typehints import handle_dtype_as_extension_dtype
 from pyspark.pandas.utils import (
     ansi_mode_context,
     combine_frames,
@@ -228,7 +228,7 @@ def column_op(f: Callable[..., Column]) -> Callable[..., SeriesOrIndex]:
             field = InternalField.from_struct_field(
                 self._internal.spark_frame.select(scol).schema[0],
                 use_extension_dtypes=any(
-                    isinstance(col.dtype, extension_dtypes) for col in [self] + cols
+                    handle_dtype_as_extension_dtype(col.dtype) for col in [self] + cols
                 ),
             )
 

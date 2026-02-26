@@ -16,7 +16,6 @@
 #
 
 import inspect
-import os
 from textwrap import dedent
 from typing import Dict, List, IO, Tuple
 
@@ -32,8 +31,8 @@ from pyspark.sql.functions import OrderingColumn, PartitioningColumn, SelectedCo
 from pyspark.sql.types import _parse_datatype_json_string, StructType
 from pyspark.sql.udtf import AnalyzeArgument, AnalyzeResult
 from pyspark.sql.worker.utils import worker_run
-from pyspark.util import local_connect_and_auth
 from pyspark.worker_util import (
+    get_sock_file_to_executor,
     read_command,
     pickleSer,
     utf8_deserializer,
@@ -238,13 +237,5 @@ def main(infile: IO, outfile: IO) -> None:
 
 
 if __name__ == "__main__":
-    # Read information about how to connect back to the JVM from the environment.
-    conn_info = os.environ.get(
-        "PYTHON_WORKER_FACTORY_SOCK_PATH", int(os.environ.get("PYTHON_WORKER_FACTORY_PORT", -1))
-    )
-    auth_secret = os.environ.get("PYTHON_WORKER_FACTORY_SECRET")
-    (sock_file, _) = local_connect_and_auth(conn_info, auth_secret)
-    # TODO: Remove the following two lines and use `Process.pid()` when we drop JDK 8.
-    write_int(os.getpid(), sock_file)
-    sock_file.flush()
-    main(sock_file, sock_file)
+    with get_sock_file_to_executor() as sock_file:
+        main(sock_file, sock_file)

@@ -37,7 +37,6 @@ import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.types.{DataType, MetadataBuilder, StringType, StructField, StructType}
-import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SparkStringUtils
 
 /**
@@ -764,10 +763,10 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     def unapply(resolved: LogicalPlan): Option[TableIdentifier] = resolved match {
       case ResolvedPersistentView(catalog, ident, _) =>
         assert(isSessionCatalog(catalog))
-        assert(ident.namespace().length == 1)
-        Some(TableIdentifier(ident.name, Some(ident.namespace.head), Some(catalog.name)))
+        Some(ident.asTableIdentifier.copy(catalog = Some(catalog.name)))
 
-      case ResolvedTempView(ident, _) => Some(ident.asTableIdentifier)
+      case ResolvedTempView(ident, _) =>
+        Some(TableIdentifier(ident.name(), ident.namespace().headOption))
 
       case _ => None
     }
@@ -800,17 +799,13 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
   object ResolvedV1Identifier {
     def unapply(resolved: LogicalPlan): Option[TableIdentifier] = resolved match {
       case ResolvedIdentifier(catalog, ident) if supportsV1Command(catalog) =>
-        if (ident.namespace().length != 1) {
-          throw QueryCompilationErrors
-            .requiresSinglePartNamespaceError(ident.namespace().toImmutableArraySeq)
-        }
-        Some(TableIdentifier(ident.name, Some(ident.namespace.head), Some(catalog.name)))
+        Some(ident.asTableIdentifier.copy(catalog = Some(catalog.name)))
       case _ => None
     }
   }
 
   // Use this object to help match commands that do not have a v2 implementation.
-  object ResolvedIdentifierInSessionCatalog{
+  object ResolvedIdentifierInSessionCatalog {
     def unapply(resolved: LogicalPlan): Option[TableIdentifier] = resolved match {
       case ResolvedIdentifier(catalog, ident) if isSessionCatalog(catalog) =>
         if (ident.namespace().length != 1) {
@@ -822,7 +817,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
           throw QueryCompilationErrors
             .requiresSinglePartNamespaceError(ident.namespace().toImmutableArraySeq)
         }
-        Some(TableIdentifier(ident.name, Some(ident.namespace.head), Some(catalog.name)))
+        Some(TableIdentifier(ident.name(), Some(ident.namespace().head), Some(catalog.name)))
       case _ => None
     }
   }

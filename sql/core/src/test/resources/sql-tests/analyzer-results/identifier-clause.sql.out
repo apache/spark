@@ -883,7 +883,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "REQUIRES_SINGLE_PART_NAMESPACE",
   "sqlState" : "42K05",
   "messageParameters" : {
-    "namespace" : "`a`.`b`",
+    "identifier" : "`a`.`b`.`c`",
     "sessionCatalog" : "spark_catalog"
   }
 }
@@ -897,7 +897,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "REQUIRES_SINGLE_PART_NAMESPACE",
   "sqlState" : "42K05",
   "messageParameters" : {
-    "namespace" : "`a`.`b`",
+    "identifier" : "`a`.`b`.`c`",
     "sessionCatalog" : "spark_catalog"
   }
 }
@@ -911,7 +911,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "REQUIRES_SINGLE_PART_NAMESPACE",
   "sqlState" : "42K05",
   "messageParameters" : {
-    "namespace" : "`a`.`b`",
+    "identifier" : "`a`.`b`.`c`",
     "sessionCatalog" : "spark_catalog"
   }
 }
@@ -925,7 +925,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "REQUIRES_SINGLE_PART_NAMESPACE",
   "sqlState" : "42K05",
   "messageParameters" : {
-    "namespace" : "`a`.`b`",
+    "identifier" : "`a`.`b`.`c`",
     "sessionCatalog" : "spark_catalog"
   }
 }
@@ -939,7 +939,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "REQUIRES_SINGLE_PART_NAMESPACE",
   "sqlState" : "42K05",
   "messageParameters" : {
-    "namespace" : "`a`.`b`.`c`",
+    "identifier" : "`a`.`b`.`c`.`d`",
     "sessionCatalog" : "spark_catalog"
   }
 }
@@ -975,7 +975,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "REQUIRES_SINGLE_PART_NAMESPACE",
   "sqlState" : "42K05",
   "messageParameters" : {
-    "namespace" : "`a`.`b`.`c`",
+    "identifier" : "`a`.`b`.`c`.`d`",
     "sessionCatalog" : "spark_catalog"
   },
   "queryContext" : [ {
