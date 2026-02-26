@@ -293,7 +293,6 @@ def build_spark_assembly_sbt(extra_profiles, checkstyle=False):
     build_profiles = extra_profiles + modules.root.build_profile_flags
     sbt_goals = ["assembly/package"]
     profiles_and_goals = build_profiles + sbt_goals
-
     print(
         "[info] Building Spark assembly using SBT with these arguments: ",
         " ".join(profiles_and_goals),
