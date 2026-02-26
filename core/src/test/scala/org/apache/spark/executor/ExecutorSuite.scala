@@ -780,7 +780,7 @@ class ExecutorSuite extends SparkFunSuite
       when(env.closureSerializer).thenReturn(mockClosureSerializer)
 
       executor.killMarks.put(taskDescription.taskId,
-        (true, "AQE stage cancellation", System.currentTimeMillis()))
+        (true, "stage cancelled", System.currentTimeMillis()))
 
       executor.launchTask(mockExecutorBackend, taskDescription)
 
@@ -797,7 +797,7 @@ class ExecutorSuite extends SparkFunSuite
       val failureData = statusCaptor.getValue
       val failReason = serializer.newInstance()
         .deserialize[TaskKilled](failureData)
-      assert(failReason.reason === "AQE stage cancellation")
+      assert(failReason.reason === "stage cancelled")
     }
   }
 
