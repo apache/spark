@@ -47,6 +47,7 @@ import org.apache.spark.sql.catalyst.encoders.OuterScopes;
 import org.apache.spark.sql.catalyst.expressions.GenericRow;
 import org.apache.spark.sql.test.TestSparkSession;
 import org.apache.spark.sql.types.StructType;
+import org.apache.spark.sql.catalyst.JavaTypeInferenceBeans;
 import org.apache.spark.util.LongAccumulator;
 
 import static org.apache.spark.sql.functions.*;
@@ -2108,6 +2109,40 @@ public class JavaDatasetSuite implements Serializable {
         .filter(col("a").geq(1));
     final List<Row> expected = Arrays.asList(create(1, "s1"), create(2, "s2"));
     Assertions.assertEquals(expected, df.collectAsList());
+  }
+
+  @Test
+  public void testNestedEncoder() {
+    JavaTypeInferenceBeans.Foo<String> foo = new JavaTypeInferenceBeans.Foo<>();
+    foo.setT("test value");
+
+    JavaTypeInferenceBeans.StringFooWrapper wrapper = new JavaTypeInferenceBeans.StringFooWrapper();
+    wrapper.setFoo(foo);
+
+    List<JavaTypeInferenceBeans.StringFooWrapper> data = Arrays.asList(wrapper);
+    Dataset<JavaTypeInferenceBeans.StringFooWrapper> ds =
+      spark.createDataset(data, Encoders.bean(JavaTypeInferenceBeans.StringFooWrapper.class));
+
+    List<JavaTypeInferenceBeans.StringFooWrapper> result = ds.collectAsList();
+    Assertions.assertEquals(1, result.size());
+    Assertions.assertEquals("test value", result.get(0).getFoo().getT());
+  }
+
+  @Test
+  public void testNestedEncoder2() {
+    JavaTypeInferenceBeans.Bar<String> bar = new JavaTypeInferenceBeans.Bar<>();
+    bar.setT("test value");
+
+    JavaTypeInferenceBeans.StringBarWrapper wrapper = new JavaTypeInferenceBeans.StringBarWrapper();
+    wrapper.setBar(bar);
+
+    List<JavaTypeInferenceBeans.StringBarWrapper> data = Arrays.asList(wrapper);
+    Dataset<JavaTypeInferenceBeans.StringBarWrapper> ds =
+      spark.createDataset(data, Encoders.bean(JavaTypeInferenceBeans.StringBarWrapper.class));
+
+    List<JavaTypeInferenceBeans.StringBarWrapper> result = ds.collectAsList();
+    Assertions.assertEquals(1, result.size());
+    Assertions.assertEquals("test value", result.get(0).getBar().getT());
   }
 
   public static class BeanWithSet implements Serializable {

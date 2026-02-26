@@ -75,7 +75,7 @@ jobs:
       image_pyspark_url_link: ${{ steps.infra-image-link.outputs.image_pyspark_url_link }}
     steps:
     - name: Checkout Spark repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
       with:
         fetch-depth: 0
         repository: apache/spark
@@ -320,7 +320,7 @@ jobs:
       SKIP_PACKAGING: true
     steps:
     - name: Checkout Spark repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
       # In order to fetch changed files
       with:
         fetch-depth: 0
@@ -335,7 +335,7 @@ jobs:
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
     # Cache local repositories. Note that GitHub Actions cache has a 10G limit.
     - name: Cache SBT and Maven
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: |
           build/apache-maven-*
@@ -345,7 +345,7 @@ jobs:
         restore-keys: |
           build-
     - name: Cache Coursier local repository
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: ~/.cache/coursier
         key: ${{ matrix.java }}-${{ matrix.hadoop }}-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
@@ -357,12 +357,12 @@ jobs:
           ./dev/free_disk_space
         fi
     - name: Install Java ${{ matrix.java }}
-      uses: actions/setup-java@v4
+      uses: actions/setup-java@v5
       with:
         distribution: zulu
         java-version: ${{ matrix.java }}
     - name: Install Python 3.12
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v6
       # We should install one Python that is higher than 3+ for SQL and Yarn because:
       # - SQL component also has Python related tests, for example, IntegratedUDFTestUtils.
       # - Yarn has a Python specific test too, for example, YarnClusterSuite.
@@ -392,7 +392,7 @@ jobs:
         ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST" --included-tags "$INCLUDED_TAGS" --excluded-tags "$EXCLUDED_TAGS"
     - name: Upload test results to report
       if: always()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: test-results-${{ matrix.modules }}-${{ matrix.comment }}-${{ matrix.java }}-${{ matrix.hadoop }}-${{ matrix.hive }}
         path: |
@@ -407,13 +407,13 @@ jobs:
           **/target/surefire-reports/*.xml
     - name: Upload unit tests log files
       if: ${{ !success() }}
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: unit-tests-log-${{ matrix.modules }}-${{ matrix.comment }}-${{ matrix.java }}-${{ matrix.hadoop }}-${{ matrix.hive }}
         path: "**/target/*.log"
     - name: Upload yarn app log files
       if: ${{ !success() && contains(matrix.modules, 'yarn') }}
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: yarn-app-log-${{ matrix.comment }}-${{ matrix.java }}-${{ matrix.hadoop }}-${{ matrix.hive }}
         path: "**/target/test/data/"
@@ -438,7 +438,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Checkout Spark repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         # In order to fetch changed files
         with:
           fetch-depth: 0
@@ -585,7 +585,7 @@ jobs:
       PYSPARK_TEST_TIMEOUT: 450
     steps:
     - name: Checkout Spark repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
       # In order to fetch changed files
       with:
         fetch-depth: 0
@@ -603,7 +603,7 @@ jobs:
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
     # Cache local repositories. Note that GitHub Actions cache has a 10G limit.
     - name: Cache SBT and Maven
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: |
           build/apache-maven-*
@@ -613,7 +613,7 @@ jobs:
         restore-keys: |
           build-
     - name: Cache Coursier local repository
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: ~/.cache/coursier
         key: pyspark-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
@@ -623,7 +623,7 @@ jobs:
       shell: 'script -q -e -c "bash {0}"'
       run: ./dev/free_disk_space_container
     - name: Install Java ${{ matrix.java }}
-      uses: actions/setup-java@v4
+      uses: actions/setup-java@v5
       with:
         distribution: zulu
         java-version: ${{ matrix.java }}
@@ -677,7 +677,7 @@ jobs:
     - name: Upload test results to report
       env: ${{ fromJSON(inputs.envs) }}
       if: always()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: test-results-${{ matrix.modules }}--${{ matrix.java }}-${{ inputs.hadoop }}-hive2.3-${{ env.PYTHON_TO_TEST }}
         path: |
@@ -693,7 +693,7 @@ jobs:
     - name: Upload unit tests log files
       env: ${{ fromJSON(inputs.envs) }}
       if: ${{ !success() }}
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: unit-tests-log-${{ matrix.modules }}--${{ matrix.java }}-${{ inputs.hadoop }}-hive2.3-${{ env.PYTHON_TO_TEST }}
         path: "**/target/unit-tests.log"
@@ -717,7 +717,7 @@ jobs:
       SKIP_PACKAGING: true
     steps:
     - name: Checkout Spark repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
       # In order to fetch changed files
       with:
         fetch-depth: 0
@@ -735,7 +735,7 @@ jobs:
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
     # Cache local repositories. Note that GitHub Actions cache has a 10G limit.
     - name: Cache SBT and Maven
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: |
           build/apache-maven-*
@@ -745,7 +745,7 @@ jobs:
         restore-keys: |
           build-
     - name: Cache Coursier local repository
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: ~/.cache/coursier
         key: sparkr-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
@@ -754,7 +754,7 @@ jobs:
     - name: Free up disk space
       run: ./dev/free_disk_space_container
     - name: Install Java ${{ inputs.java }}
-      uses: actions/setup-java@v4
+      uses: actions/setup-java@v5
       with:
         distribution: zulu
         java-version: ${{ inputs.java }}
@@ -768,7 +768,7 @@ jobs:
         ./dev/run-tests --parallelism 1 --modules sparkr
     - name: Upload test results to report
       if: always()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: test-results-sparkr--${{ inputs.java }}-${{ inputs.hadoop }}-hive2.3
         path: |
@@ -789,7 +789,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout Spark repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
       with:
         fetch-depth: 0
         repository: apache/spark
@@ -814,7 +814,7 @@ jobs:
         input: sql/connect/common/src/main
         against: 'https://github.com/apache/spark.git#branch=branch-4.0,subdir=sql/connect/common/src/main'
     - name: Install Python 3.12
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v6
       with:
         python-version: '3.12'
     - name: Install dependencies for Python CodeGen check
@@ -846,7 +846,7 @@ jobs:
       image: ${{ needs.precondition.outputs.image_lint_url_link }}
     steps:
     - name: Checkout Spark repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
       with:
         fetch-depth: 0
         repository: apache/spark
@@ -863,7 +863,7 @@ jobs:
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
     # Cache local repositories. Note that GitHub Actions cache has a 10G limit.
     - name: Cache SBT and Maven
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: |
           build/apache-maven-*
@@ -873,14 +873,14 @@ jobs:
         restore-keys: |
           build-
     - name: Cache Coursier local repository
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: ~/.cache/coursier
         key: docs-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
           docs-coursier-
     - name: Cache Maven local repository
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: ~/.m2/repository
         key: docs-maven-${{ hashFiles('**/pom.xml') }}
@@ -889,7 +889,7 @@ jobs:
     - name: Free up disk space
       run: ./dev/free_disk_space_container
     - name: Install Java ${{ inputs.java }}
-      uses: actions/setup-java@v4
+      uses: actions/setup-java@v5
       with:
         distribution: zulu
         java-version: ${{ inputs.java }}
@@ -991,8 +991,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
-    - uses: actions/checkout@v4
-    - uses: actions/setup-java@v4
+    - uses: actions/checkout@v6
+    - uses: actions/setup-java@v5
       with:
         distribution: zulu
         java-version: 17
@@ -1009,8 +1009,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
-    - uses: actions/checkout@v4
-    - uses: actions/setup-java@v4
+    - uses: actions/checkout@v6
+    - uses: actions/setup-java@v5
       with:
         distribution: zulu
         java-version: 25
@@ -1039,7 +1039,7 @@ jobs:
       image: ${{ needs.precondition.outputs.image_docs_url_link }}
     steps:
     - name: Checkout Spark repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
       with:
         fetch-depth: 0
         repository: apache/spark
@@ -1056,7 +1056,7 @@ jobs:
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
     # Cache local repositories. Note that GitHub Actions cache has a 10G limit.
     - name: Cache SBT and Maven
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: |
           build/apache-maven-*
@@ -1066,14 +1066,14 @@ jobs:
         restore-keys: |
           build-
     - name: Cache Coursier local repository
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: ~/.cache/coursier
         key: docs-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
           docs-coursier-
     - name: Cache Maven local repository
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: ~/.m2/repository
         key: docs-maven-${{ hashFiles('**/pom.xml') }}
@@ -1082,7 +1082,7 @@ jobs:
     - name: Free up disk space
       run: ./dev/free_disk_space_container
     - name: Install Java ${{ inputs.java }}
-      uses: actions/setup-java@v4
+      uses: actions/setup-java@v5
       with:
         distribution: zulu
         java-version: ${{ inputs.java }}
@@ -1104,11 +1104,14 @@ jobs:
     - name: List Python packages for branch-3.5 and branch-4.0
       if: inputs.branch == 'branch-3.5' || inputs.branch == 'branch-4.0'
       run: python3.9 -m pip list
+    - name: List Python packages for branch-4.1
+      if: inputs.branch == 'branch-4.1'
+      run: python3.11 -m pip list
     - name: List Python packages
-      if: inputs.branch != 'branch-3.5' && inputs.branch != 'branch-4.0'
+      if: inputs.branch != 'branch-3.5' && inputs.branch != 'branch-4.0' && inputs.branch != 'branch-4.1'
       run: |
         lsb_release -a
-        python3.11 -m pip list
+        python3.12 -m pip list
     - name: Install dependencies for documentation generation
       run: |
         # Keep the version of Bundler here in sync with the following locations:
@@ -1139,8 +1142,8 @@ jobs:
         echo "SKIP_SQLDOC: $SKIP_SQLDOC"
         cd docs
         bundle exec jekyll build
-    - name: Run documentation build
-      if: inputs.branch != 'branch-3.5' && inputs.branch != 'branch-4.0'
+    - name: Run documentation build for branch-4.1
+      if: inputs.branch == 'branch-4.1'
       run: |
         # We need this link to make sure `python3` points to `python3.11` which contains the prerequisite packages.
         ln -s "$(which python3.11)" "/usr/local/bin/python3"
@@ -1163,12 +1166,36 @@ jobs:
         echo "SKIP_SQLDOC: $SKIP_SQLDOC"
         cd docs
         bundle exec jekyll build
+    - name: Run documentation build
+      if: inputs.branch != 'branch-3.5' && inputs.branch != 'branch-4.0' && inputs.branch != 'branch-4.1'
+      run: |
+        # We need this link to make sure `python3` points to `python3.12` which contains the prerequisite packages.
+        ln -s "$(which python3.12)" "/usr/local/bin/python3"
+        # Build docs first with SKIP_API to ensure they are buildable without requiring any
+        # language docs to be built beforehand.
+        cd docs; SKIP_ERRORDOC=1 SKIP_API=1 bundle exec jekyll build; cd ..
+        if [ -f "./dev/is-changed.py" ]; then
+          # Skip PySpark and SparkR docs while keeping Scala/Java/SQL docs
+          pyspark_modules=`cd dev && python3.12 -c "import sparktestsupport.modules as m; print(','.join(m.name for m in m.all_modules if m.name.startswith('pyspark')))"`
+          if [ `./dev/is-changed.py -m $pyspark_modules` = false ]; then export SKIP_PYTHONDOC=1; fi
+          if [ `./dev/is-changed.py -m sparkr` = false ]; then export SKIP_RDOC=1; fi
+        fi
+        export PYSPARK_DRIVER_PYTHON=python3.12
+        export PYSPARK_PYTHON=python3.12
+        # Print the values of environment variables `SKIP_ERRORDOC`, `SKIP_SCALADOC`, `SKIP_PYTHONDOC`, `SKIP_RDOC` and `SKIP_SQLDOC`
+        echo "SKIP_ERRORDOC: $SKIP_ERRORDOC"
+        echo "SKIP_SCALADOC: $SKIP_SCALADOC"
+        echo "SKIP_PYTHONDOC: $SKIP_PYTHONDOC"
+        echo "SKIP_RDOC: $SKIP_RDOC"
+        echo "SKIP_SQLDOC: $SKIP_SQLDOC"
+        cd docs
+        bundle exec jekyll build
     - name: Tar documentation
       if: github.repository != 'apache/spark'
       run: tar cjf site.tar.bz2 docs/_site
     - name: Upload documentation
       if: github.repository != 'apache/spark'
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: site
         path: site.tar.bz2
@@ -1185,7 +1212,7 @@ jobs:
       SPARK_LOCAL_IP: localhost
     steps:
     - name: Checkout Spark repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
       with:
         fetch-depth: 0
         repository: apache/spark
@@ -1197,7 +1224,7 @@ jobs:
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
     - name: Cache SBT and Maven
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: |
           build/apache-maven-*
@@ -1207,26 +1234,26 @@ jobs:
         restore-keys: |
           build-
     - name: Cache Coursier local repository
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: ~/.cache/coursier
         key: tpcds-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
           tpcds-coursier-
     - name: Install Java ${{ inputs.java }}
-      uses: actions/setup-java@v4
+      uses: actions/setup-java@v5
       with:
         distribution: zulu
         java-version: ${{ inputs.java }}
     - name: Cache TPC-DS generated data
       id: cache-tpcds-sf-1
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: ./tpcds-sf-1
         key: tpcds-${{ hashFiles('.github/workflows/build_and_test.yml', 'sql/core/src/test/scala/org/apache/spark/sql/TPCDSSchema.scala') }}
     - name: Checkout tpcds-kit repository
       if: steps.cache-tpcds-sf-1.outputs.cache-hit != 'true'
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
       with:
         repository: databricks/tpcds-kit
         ref: 1b7fb7529edae091684201fab142d956d6afd881
@@ -1266,7 +1293,7 @@ jobs:
         SPARK_TPCDS_DATA=`pwd`/tpcds-sf-1 build/sbt "sql/testOnly org.apache.spark.sql.TPCDSCollationQueryTestSuite"
     - name: Upload test results to report
       if: always()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: test-results-tpcds--${{ inputs.java }}-${{ inputs.hadoop }}-hive2.3
         path: |
@@ -1281,7 +1308,7 @@ jobs:
           **/target/surefire-reports/*.xml
     - name: Upload unit tests log files
       if: ${{ !success() }}
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: unit-tests-log-tpcds--${{ inputs.java }}-${{ inputs.hadoop }}-hive2.3
         path: "**/target/unit-tests.log"
@@ -1302,7 +1329,7 @@ jobs:
       SKIP_PACKAGING: true
     steps:
     - name: Checkout Spark repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
       with:
         fetch-depth: 0
         repository: apache/spark
@@ -1315,7 +1342,7 @@ jobs:
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
     - name: Cache SBT and Maven
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: |
           build/apache-maven-*
@@ -1325,14 +1352,14 @@ jobs:
         restore-keys: |
           build-
     - name: Cache Coursier local repository
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: ~/.cache/coursier
         key: docker-integration-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
           docker-integration-coursier-
     - name: Install Java ${{ inputs.java }}
-      uses: actions/setup-java@v4
+      uses: actions/setup-java@v5
       with:
         distribution: zulu
         java-version: ${{ inputs.java }}
@@ -1342,7 +1369,7 @@ jobs:
         ./dev/run-tests --parallelism 1 --modules docker-integration-tests --included-tags org.apache.spark.tags.DockerTest
     - name: Upload test results to report
       if: always()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: test-results-docker-integration--${{ inputs.java }}-${{ inputs.hadoop }}-hive2.3
         path: |
@@ -1357,7 +1384,7 @@ jobs:
           **/target/surefire-reports/*.xml
     - name: Upload unit tests log files
       if: ${{ !success() }}
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: unit-tests-log-docker-integration--${{ inputs.java }}-${{ inputs.hadoop }}-hive2.3
         path: "**/target/unit-tests.log"
@@ -1370,7 +1397,7 @@ jobs:
     timeout-minutes: 120
     steps:
       - name: Checkout Spark repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
           repository: apache/spark
@@ -1383,7 +1410,7 @@ jobs:
           git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
           git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
       - name: Cache SBT and Maven
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             build/apache-maven-*
@@ -1393,7 +1420,7 @@ jobs:
           restore-keys: |
             build-
       - name: Cache Coursier local repository
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/coursier
           key: k8s-integration-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
@@ -1405,7 +1432,7 @@ jobs:
             ./dev/free_disk_space
           fi
       - name: Install Java ${{ inputs.java }}
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: zulu
           java-version: ${{ inputs.java }}
@@ -1437,13 +1464,13 @@ jobs:
           elif [[ "${{ inputs.branch }}" == 'branch-4.0' ]]; then
             kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.11.0/installer/volcano-development.yaml || true
           else
-            kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.14.0/installer/volcano-development.yaml || true
+            kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.14.1/installer/volcano-development.yaml || true
           fi
           eval $(minikube docker-env)
           build/sbt -Phadoop-3 -Psparkr -Pkubernetes -Pvolcano -Pkubernetes-integration-tests -Dspark.kubernetes.test.volcanoMaxConcurrencyJobNum=1 -Dtest.exclude.tags=local "kubernetes-integration-tests/test"
       - name: Upload Spark on K8S integration tests log files
         if: ${{ !success() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: spark-on-kubernetes-it-log
           path: "**/target/integration-tests.log"
@@ -1455,7 +1482,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Use Node.js
         uses: actions/setup-node@v6
         with:

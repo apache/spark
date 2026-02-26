@@ -270,9 +270,14 @@ private[spark] class HadoopDelegationTokenManager(
     val providers = mutable.ArrayBuffer[HadoopDelegationTokenProvider]()
 
     val iterator = loader.iterator
-    while (iterator.hasNext) {
+    var keepLoading = true
+    while (keepLoading) {
       try {
-        providers += iterator.next
+        if (iterator.hasNext) {
+          providers += iterator.next()
+        } else {
+          keepLoading = false
+        }
       } catch {
         case t: Throwable =>
           logDebug(s"Failed to load built in provider.", t)

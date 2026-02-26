@@ -118,6 +118,9 @@ class ExecutorPodsAllocator(
 
   protected val numOutstandingPods = new AtomicInteger()
 
+  // Track total failed pod creation attempts across the application lifecycle
+  protected val totalFailedPodCreations = new AtomicInteger(0)
+
   protected var lastSnapshot = ExecutorPodsSnapshot()
 
   protected var appId: String = _
@@ -459,32 +462,55 @@ class ExecutorPodsAllocator(
         .build()
       val resources = replacePVCsIfNeeded(
         podWithAttachedContainer, resolvedExecutorSpec.executorKubernetesResources, reusablePVCs)
-      val createdExecutorPod =
-        kubernetesClient.pods().inNamespace(namespace).resource(podWithAttachedContainer).create()
-      try {
-        addOwnerReference(createdExecutorPod, resources)
-        resources
-          .filter(_.getKind == "PersistentVolumeClaim")
-          .foreach { resource =>
-            if (conf.get(KUBERNETES_DRIVER_OWN_PVC) && driverPod.nonEmpty) {
-              addOwnerReference(driverPod.get, Seq(resource))
-            }
-            val pvc = resource.asInstanceOf[PersistentVolumeClaim]
-            logInfo(log"Trying to create PersistentVolumeClaim " +
-              log"${MDC(LogKeys.PVC_METADATA_NAME, pvc.getMetadata.getName)} with " +
-              log"StorageClass ${MDC(LogKeys.CLASS_NAME, pvc.getSpec.getStorageClassName)}")
-            kubernetesClient.persistentVolumeClaims().inNamespace(namespace).resource(pvc).create()
-            PVC_COUNTER.incrementAndGet()
-          }
-        newlyCreatedExecutors(newExecutorId) = (resourceProfileId, clock.getTimeMillis())
-        logDebug(s"Requested executor with id $newExecutorId from Kubernetes.")
+      val optCreatedExecutorPod = try {
+        Some(kubernetesClient
+          .pods()
+          .inNamespace(namespace)
+          .resource(podWithAttachedContainer)
+          .create())
       } catch {
         case NonFatal(e) =>
-          kubernetesClient.pods()
-            .inNamespace(namespace)
-            .resource(createdExecutorPod)
-            .delete()
-          throw e
+          // Register failure with global tracker if lifecycle manager is available
+          val failureCount = registerPodCreationFailure()
+          logError(log"Failed to create executor pod ${MDC(LogKeys.EXECUTOR_ID, newExecutorId)}. " +
+            log"Total failures: ${MDC(LogKeys.TOTAL, failureCount)}", e)
+          None
+      }
+      optCreatedExecutorPod.foreach { createdExecutorPod =>
+        try {
+          addOwnerReference(createdExecutorPod, resources)
+          resources
+            .filter(_.getKind == "PersistentVolumeClaim")
+            .foreach { resource =>
+              if (conf.get(KUBERNETES_DRIVER_OWN_PVC) && driverPod.nonEmpty) {
+                addOwnerReference(driverPod.get, Seq(resource))
+              }
+              val pvc = resource.asInstanceOf[PersistentVolumeClaim]
+              logInfo(log"Trying to create PersistentVolumeClaim " +
+                log"${MDC(LogKeys.PVC_METADATA_NAME, pvc.getMetadata.getName)} with " +
+                log"StorageClass ${MDC(LogKeys.CLASS_NAME, pvc.getSpec.getStorageClassName)}")
+              kubernetesClient
+                .persistentVolumeClaims()
+                .inNamespace(namespace)
+                .resource(pvc)
+                .create()
+              PVC_COUNTER.incrementAndGet()
+            }
+          newlyCreatedExecutors(newExecutorId) = (resourceProfileId, clock.getTimeMillis())
+          logDebug(s"Requested executor with id $newExecutorId from Kubernetes.")
+        } catch {
+          case NonFatal(e) =>
+            // Register failure with global tracker if lifecycle manager is available
+            val failureCount = registerPodCreationFailure()
+            logError(log"Failed to add owner reference or create PVC for executor pod " +
+              log"${MDC(LogKeys.EXECUTOR_ID, newExecutorId)}. " +
+              log"Total failures: ${MDC(LogKeys.TOTAL, failureCount)}", e)
+            kubernetesClient.pods()
+              .inNamespace(namespace)
+              .resource(createdExecutorPod)
+              .delete()
+            throw e
+        }
       }
     }
   }
@@ -496,11 +522,12 @@ class ExecutorPodsAllocator(
     val replacedResources = mutable.Set[HasMetadata]()
     resources.foreach {
       case pvc: PersistentVolumeClaim =>
-        // Find one with the same storage class and size.
+        // Find one with the same storage class and same or greater size.
+        // Larger disks will be encountered when they have been expanded by an external actor.
         val index = reusablePVCs.indexWhere { p =>
           p.getSpec.getStorageClassName == pvc.getSpec.getStorageClassName &&
-            p.getSpec.getResources.getRequests.get("storage") ==
-              pvc.getSpec.getResources.getRequests.get("storage")
+          p.getSpec.getResources.getRequests.get("storage")
+            .compareTo(pvc.getSpec.getResources.getRequests.get("storage")) >= 0
         }
         if (index >= 0) {
           val volume = pod.getSpec.getVolumes.asScala.find { v =>
@@ -518,6 +545,16 @@ class ExecutorPodsAllocator(
       case _ => // no-op
     }
     resources.filterNot(replacedResources.contains)
+  }
+
+  /**
+   * Registers a pod creation failure with the lifecycle manager and increments the local counter.
+   * Returns the total failure count for logging purposes.
+   */
+  protected def registerPodCreationFailure(): Int = {
+    val failureCount = totalFailedPodCreations.incrementAndGet()
+    executorPodsLifecycleManager.foreach(_.registerExecutorFailure())
+    failureCount
   }
 
   protected def isExecutorIdleTimedOut(state: ExecutorPodState, currentTime: Long): Boolean = {

@@ -25,8 +25,8 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
 /**
- * This object provides a global list of configured relation, expression and command plugins for
- * Spark Connect. The plugins are used to handle custom message types.
+ * This object provides a global list of configured relation, expression, command, and getStatus
+ * plugins for Spark Connect. The plugins are used to handle custom message types.
  */
 object SparkConnectPluginRegistry {
 
@@ -46,15 +46,22 @@ object SparkConnectPluginRegistry {
     // expression[DummyExpressionPlugin](classOf[DummyExpressionPlugin])
   )
 
+  private lazy val getStatusPluginChain: Seq[getStatusPluginBuilder] = Seq(
+    // Adding a new plugin at compile time works like the example below:
+    // getStatus[DummyGetStatusPlugin](classOf[DummyGetStatusPlugin])
+  )
+
   private var initialized = false
   private var relationRegistryCache: Seq[RelationPlugin] = Seq.empty
   private var expressionRegistryCache: Seq[ExpressionPlugin] = Seq.empty
   private var commandRegistryCache: Seq[CommandPlugin] = Seq.empty
+  private var getStatusRegistryCache: Seq[GetStatusPlugin] = Seq.empty
 
   // Type used to identify the closure responsible to instantiate a ServerInterceptor.
   type relationPluginBuilder = () => RelationPlugin
   type expressionPluginBuilder = () => ExpressionPlugin
   type commandPluginBuilder = () => CommandPlugin
+  type getStatusPluginBuilder = () => GetStatusPlugin
 
   def relationRegistry: Seq[RelationPlugin] = withInitialize {
     relationRegistryCache
@@ -65,6 +72,9 @@ object SparkConnectPluginRegistry {
   def commandRegistry: Seq[CommandPlugin] = withInitialize {
     commandRegistryCache
   }
+  def getStatusRegistry: Seq[GetStatusPlugin] = withInitialize {
+    getStatusRegistryCache
+  }
   def mlBackendRegistry(conf: SQLConf): Seq[MLBackendPlugin] = loadMlBackendPlugins(conf)
 
   private def withInitialize[T](f: => Seq[T]): Seq[T] = {
@@ -73,6 +83,7 @@ object SparkConnectPluginRegistry {
         relationRegistryCache = loadRelationPlugins()
         expressionRegistryCache = loadExpressionPlugins()
         commandRegistryCache = loadCommandPlugins()
+        getStatusRegistryCache = loadGetStatusPlugins()
         initialized = true
       }
     }
@@ -85,6 +96,23 @@ object SparkConnectPluginRegistry {
   def reset(): Unit = {
     synchronized {
       initialized = false
+    }
+  }
+
+  /**
+   * Only visible for testing. Allows injecting test GetStatus plugins directly into the registry
+   * cache, bypassing the normal plugin chain loading. Forces initialization of all other caches
+   * if not already initialized, then overrides the GetStatus cache.
+   */
+  private[connect] def setGetStatusPluginsForTesting(plugins: Seq[GetStatusPlugin]): Unit = {
+    synchronized {
+      if (!initialized) {
+        relationRegistryCache = loadRelationPlugins()
+        expressionRegistryCache = loadExpressionPlugins()
+        commandRegistryCache = loadCommandPlugins()
+        initialized = true
+      }
+      getStatusRegistryCache = plugins
     }
   }
 
@@ -107,6 +135,12 @@ object SparkConnectPluginRegistry {
   private[connect] def loadCommandPlugins(): Seq[CommandPlugin] = {
     commandPluginChain.map(x => x()) ++ createConfiguredPlugins(
       SparkEnv.get.conf.get(Connect.CONNECT_EXTENSIONS_COMMAND_CLASSES))
+  }
+
+  private[connect] def loadGetStatusPlugins(): Seq[GetStatusPlugin] = {
+    getStatusPluginChain.map(x => x()) ++
+      createConfiguredPlugins(
+        SparkEnv.get.conf.get(Connect.CONNECT_EXTENSIONS_GET_STATUS_CLASSES))
   }
 
   private[connect] def loadMlBackendPlugins(sqlConf: SQLConf): Seq[MLBackendPlugin] = {
@@ -182,4 +216,12 @@ object SparkConnectPluginRegistry {
    */
   def command[T <: CommandPlugin](cls: Class[T]): commandPluginBuilder =
     () => createInstance[CommandPlugin, T](cls)
+
+  /**
+   * Creates a callable expression that instantiates the configured GetStatus plugin.
+   *
+   * Visible for testing only.
+   */
+  def getStatus[T <: GetStatusPlugin](cls: Class[T]): getStatusPluginBuilder =
+    () => createInstance[GetStatusPlugin, T](cls)
 }

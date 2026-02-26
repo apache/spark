@@ -26,6 +26,7 @@ import re
 import unittest
 
 from pyspark.errors import PySparkTypeError, PySparkValueError, SparkRuntimeException
+from pyspark.errors.exceptions.base import IllegalArgumentException
 from pyspark.sql import Row, Window, functions as F, types
 from pyspark.sql.avro.functions import from_avro, to_avro
 from pyspark.sql.column import Column
@@ -2622,6 +2623,203 @@ class FunctionsTestsMixin:
         ).first()[0]
         self.assertEqual(estimate, 1.0)
 
+    def test_tuple_difference_theta_double_basic(self):
+        """Test tuple_difference_theta_double basic functionality"""
+        df1 = self.spark.createDataFrame(
+            [(1, 1.5), (2, 2.5), (3, 3.5), (5, 5.5)], ["key", "summary"]
+        )
+        df2 = self.spark.createDataFrame([1, 2, 4], "int")
+
+        tuple_sketch_df = df1.agg(F.tuple_sketch_agg_double("key", "summary").alias("tuple_sketch"))
+        theta_sketch_df = df2.agg(F.theta_sketch_agg(F.col("value")).alias("theta_sketch"))
+
+        joined = tuple_sketch_df.crossJoin(theta_sketch_df)
+
+        # Test difference (keys in tuple_sketch but not in theta_sketch: 3 and 5)
+        difference = joined.select(
+            F.tuple_difference_theta_double("tuple_sketch", "theta_sketch")
+        ).first()[0]
+        self.assertIsNotNone(difference)
+        self.assertIsInstance(difference, (bytes, bytearray))
+
+        # Verify estimate from difference
+        estimate = joined.select(
+            F.tuple_sketch_estimate_double(
+                F.tuple_difference_theta_double("tuple_sketch", "theta_sketch")
+            )
+        ).first()[0]
+        self.assertEqual(estimate, 2.0)
+
+    def test_tuple_difference_theta_integer_basic(self):
+        """Test tuple_difference_theta_integer basic functionality"""
+        df1 = self.spark.createDataFrame([(1, 10), (2, 20), (3, 30), (5, 50)], ["key", "summary"])
+        df2 = self.spark.createDataFrame([1, 2, 4], "int")
+
+        tuple_sketch_df = df1.agg(
+            F.tuple_sketch_agg_integer("key", "summary").alias("tuple_sketch")
+        )
+        theta_sketch_df = df2.agg(F.theta_sketch_agg(F.col("value")).alias("theta_sketch"))
+
+        joined = tuple_sketch_df.crossJoin(theta_sketch_df)
+
+        # Test difference (keys in tuple_sketch but not in theta_sketch: 3 and 5)
+        difference = joined.select(
+            F.tuple_difference_theta_integer("tuple_sketch", "theta_sketch")
+        ).first()[0]
+        self.assertIsNotNone(difference)
+
+        # Verify estimate from difference
+        estimate = joined.select(
+            F.tuple_sketch_estimate_integer(
+                F.tuple_difference_theta_integer("tuple_sketch", "theta_sketch")
+            )
+        ).first()[0]
+        self.assertEqual(estimate, 2.0)
+
+    def test_tuple_intersection_theta_double_basic(self):
+        """Test tuple_intersection_theta_double basic functionality"""
+        df1 = self.spark.createDataFrame([(1, 1.5), (2, 2.5), (3, 3.5)], ["key", "summary"])
+        df2 = self.spark.createDataFrame([2, 3, 4], "int")
+
+        tuple_sketch_df = df1.agg(F.tuple_sketch_agg_double("key", "summary").alias("tuple_sketch"))
+        theta_sketch_df = df2.agg(F.theta_sketch_agg(F.col("value")).alias("theta_sketch"))
+
+        joined = tuple_sketch_df.crossJoin(theta_sketch_df)
+
+        # Test intersection with default mode
+        intersection1 = joined.select(
+            F.tuple_intersection_theta_double("tuple_sketch", "theta_sketch")
+        ).first()[0]
+        self.assertIsNotNone(intersection1)
+        self.assertIsInstance(intersection1, (bytes, bytearray))
+
+        # Test intersection with mode
+        intersection2 = joined.select(
+            F.tuple_intersection_theta_double("tuple_sketch", "theta_sketch", "sum")
+        ).first()[0]
+        self.assertIsNotNone(intersection2)
+
+        # Test with min mode
+        intersection3 = joined.select(
+            F.tuple_intersection_theta_double("tuple_sketch", "theta_sketch", "min")
+        ).first()[0]
+        self.assertIsNotNone(intersection3)
+
+        # Verify estimate from intersection (keys 2 and 3 are common)
+        estimate = joined.select(
+            F.tuple_sketch_estimate_double(
+                F.tuple_intersection_theta_double("tuple_sketch", "theta_sketch")
+            )
+        ).first()[0]
+        self.assertEqual(estimate, 2.0)
+
+    def test_tuple_intersection_theta_integer_basic(self):
+        """Test tuple_intersection_theta_integer basic functionality"""
+        df1 = self.spark.createDataFrame([(1, 10), (2, 20), (3, 30)], ["key", "summary"])
+        df2 = self.spark.createDataFrame([2, 3, 4], "int")
+
+        tuple_sketch_df = df1.agg(
+            F.tuple_sketch_agg_integer("key", "summary").alias("tuple_sketch")
+        )
+        theta_sketch_df = df2.agg(F.theta_sketch_agg(F.col("value")).alias("theta_sketch"))
+
+        joined = tuple_sketch_df.crossJoin(theta_sketch_df)
+
+        # Test intersection with default mode
+        intersection1 = joined.select(
+            F.tuple_intersection_theta_integer("tuple_sketch", "theta_sketch")
+        ).first()[0]
+        self.assertIsNotNone(intersection1)
+
+        # Test intersection with mode
+        intersection2 = joined.select(
+            F.tuple_intersection_theta_integer("tuple_sketch", "theta_sketch", "max")
+        ).first()[0]
+        self.assertIsNotNone(intersection2)
+
+        # Verify estimate from intersection (keys 2 and 3 are common)
+        estimate = joined.select(
+            F.tuple_sketch_estimate_integer(
+                F.tuple_intersection_theta_integer("tuple_sketch", "theta_sketch")
+            )
+        ).first()[0]
+        self.assertEqual(estimate, 2.0)
+
+    def test_tuple_union_theta_double_basic(self):
+        """Test tuple_union_theta_double basic functionality"""
+        df1 = self.spark.createDataFrame([(1, 1.5), (2, 2.5)], ["key", "summary"])
+        df2 = self.spark.createDataFrame([3, 4], "int")
+
+        tuple_sketch_df = df1.agg(F.tuple_sketch_agg_double("key", "summary").alias("tuple_sketch"))
+        theta_sketch_df = df2.agg(F.theta_sketch_agg(F.col("value")).alias("theta_sketch"))
+
+        joined = tuple_sketch_df.crossJoin(theta_sketch_df)
+
+        # Test union with default parameters
+        union1 = joined.select(F.tuple_union_theta_double("tuple_sketch", "theta_sketch")).first()[
+            0
+        ]
+        self.assertIsNotNone(union1)
+        self.assertIsInstance(union1, (bytes, bytearray))
+
+        # Test union with lgNomEntries
+        union2 = joined.select(
+            F.tuple_union_theta_double("tuple_sketch", "theta_sketch", 10)
+        ).first()[0]
+        self.assertIsNotNone(union2)
+
+        # Test union with lgNomEntries and mode
+        union3 = joined.select(
+            F.tuple_union_theta_double("tuple_sketch", "theta_sketch", 10, "sum")
+        ).first()[0]
+        self.assertIsNotNone(union3)
+
+        # Verify estimate from union (all 4 keys)
+        estimate = joined.select(
+            F.tuple_sketch_estimate_double(
+                F.tuple_union_theta_double("tuple_sketch", "theta_sketch")
+            )
+        ).first()[0]
+        self.assertEqual(estimate, 4.0)
+
+    def test_tuple_union_theta_integer_basic(self):
+        """Test tuple_union_theta_integer basic functionality"""
+        df1 = self.spark.createDataFrame([(1, 10), (2, 20)], ["key", "summary"])
+        df2 = self.spark.createDataFrame([3, 4], "int")
+
+        tuple_sketch_df = df1.agg(
+            F.tuple_sketch_agg_integer("key", "summary").alias("tuple_sketch")
+        )
+        theta_sketch_df = df2.agg(F.theta_sketch_agg(F.col("value")).alias("theta_sketch"))
+
+        joined = tuple_sketch_df.crossJoin(theta_sketch_df)
+
+        # Test union with default parameters
+        union1 = joined.select(F.tuple_union_theta_integer("tuple_sketch", "theta_sketch")).first()[
+            0
+        ]
+        self.assertIsNotNone(union1)
+
+        # Test union with lgNomEntries and mode
+        union2 = joined.select(
+            F.tuple_union_theta_integer("tuple_sketch", "theta_sketch", 10, "max")
+        ).first()[0]
+        self.assertIsNotNone(union2)
+
+        # Test with lgNomEntries only
+        union3 = joined.select(
+            F.tuple_union_theta_integer("tuple_sketch", "theta_sketch", 10)
+        ).first()[0]
+        self.assertIsNotNone(union3)
+
+        # Verify estimate from union (all 4 keys)
+        estimate = joined.select(
+            F.tuple_sketch_estimate_integer(
+                F.tuple_union_theta_integer("tuple_sketch", "theta_sketch")
+            )
+        ).first()[0]
+        self.assertEqual(estimate, 4.0)
+
     def test_tuple_union_agg_double_basic(self):
         """Test tuple_union_agg_double basic functionality"""
         df1 = self.spark.createDataFrame([(1, 1, 1.5), (1, 2, 2.5)], ["id", "key", "summary"])
@@ -3601,6 +3799,25 @@ class FunctionsTestsMixin:
         )
         self.assertEqual(results, [expected])
 
+    def test_st_geogfromwkb(self):
+        df = self.spark.createDataFrame(
+            [(bytes.fromhex("0101000000000000000000F03F0000000000000040"),)],
+            ["wkb"],
+        )
+        results = df.select(
+            F.hex(F.st_asbinary(F.st_geogfromwkb("wkb"))),
+        ).collect()
+        expected = Row(
+            "0101000000000000000000F03F0000000000000040",
+        )
+        self.assertEqual(results, [expected])
+        # ST_GeogFromWKB with invalid WKB.
+        df = self.spark.createDataFrame([(bytearray(b"\x6f"),)], ["wkb"])
+        with self.assertRaises(IllegalArgumentException) as error_context:
+            df.select(F.st_geogfromwkb("wkb")).collect()
+        self.assertIn("[WKB_PARSE_ERROR]", str(error_context.exception))
+        self.assertIn("Unexpected end of WKB buffer", str(error_context.exception))
+
     def test_st_geomfromwkb(self):
         df = self.spark.createDataFrame(
             [(bytes.fromhex("0101000000000000000000F03F0000000000000040"), 4326)],
@@ -3617,6 +3834,12 @@ class FunctionsTestsMixin:
             "0101000000000000000000F03F0000000000000040",
         )
         self.assertEqual(results, [expected])
+        # ST_GeomFromWKB with invalid WKB.
+        df = self.spark.createDataFrame([(bytearray(b"\x6f"),)], ["wkb"])
+        with self.assertRaises(IllegalArgumentException) as error_context:
+            df.select(F.st_geomfromwkb("wkb")).collect()
+        self.assertIn("[WKB_PARSE_ERROR]", str(error_context.exception))
+        self.assertIn("Unexpected end of WKB buffer", str(error_context.exception))
 
     def test_st_setsrid(self):
         df = self.spark.createDataFrame(
@@ -3653,6 +3876,48 @@ class FunctionsTestsMixin:
             4326,
         )
         self.assertEqual(results, [expected])
+
+    def test_max_by_min_by_with_k(self):
+        """Test max_by and min_by aggregate functions with k parameter"""
+        df = self.spark.createDataFrame(
+            [("a", 10), ("b", 50), ("c", 20), ("d", 40), ("e", 30)],
+            schema=("x", "y"),
+        )
+
+        # Test max_by with k
+        result = df.select(F.max_by("x", "y", 3)).collect()[0][0]
+        self.assertEqual(result, ["b", "d", "e"])
+
+        # Test min_by with k
+        result = df.select(F.min_by("x", "y", 3)).collect()[0][0]
+        self.assertEqual(result, ["a", "c", "e"])
+
+        # Test k = 1
+        result = df.select(F.max_by("x", "y", 1)).collect()[0][0]
+        self.assertEqual(result, ["b"])
+
+        result = df.select(F.min_by("x", "y", 1)).collect()[0][0]
+        self.assertEqual(result, ["a"])
+
+        # Test k larger than row count
+        result = df.select(F.max_by("x", "y", 10)).collect()[0][0]
+        self.assertEqual(sorted(result), ["a", "b", "c", "d", "e"])
+
+        # Test with groupBy
+        df2 = self.spark.createDataFrame(
+            [
+                ("Eng", "Alice", 120000),
+                ("Eng", "Bob", 95000),
+                ("Eng", "Carol", 110000),
+                ("Sales", "Dave", 80000),
+                ("Sales", "Eve", 75000),
+                ("Sales", "Frank", 85000),
+            ],
+            schema=("dept", "emp", "salary"),
+        )
+        result = df2.groupBy("dept").agg(F.max_by("emp", "salary", 2)).orderBy("dept").collect()
+        self.assertEqual(result[0][1], ["Alice", "Carol"])  # Eng
+        self.assertEqual(result[1][1], ["Frank", "Dave"])  # Sales
 
 
 class FunctionsTests(ReusedSQLTestCase, FunctionsTestsMixin):

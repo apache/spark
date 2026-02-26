@@ -110,6 +110,19 @@ class STUtilsSuite {
     assertArrayEquals(testWkb, geometryWkb);
   }
 
+  // ST_AsEWKT
+  @Test
+  void testStAsEwktGeography() {
+    GeographyVal geographyVal = GeographyVal.fromBytes(testGeographyBytes);
+    assertEquals("SRID=4326;POINT(1 2)", STUtils.stAsEwkt(geographyVal).toString());
+  }
+
+  @Test
+  void testStAsEwktGeometry() {
+    GeometryVal geometryVal = GeometryVal.fromBytes(testGeometryBytes);
+    assertEquals("POINT(1 2)", STUtils.stAsEwkt(geometryVal).toString());
+  }
+
   // ST_GeogFromWKB
   @Test
   void testStGeogFromWKB() {

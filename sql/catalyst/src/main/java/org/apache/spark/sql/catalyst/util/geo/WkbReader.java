@@ -222,7 +222,7 @@ public class WkbReader {
 
     // Check that we have enough bytes for header (endianness byte + 4-byte type)
     if (currentWkb.length < WkbUtil.BYTE_SIZE + WkbUtil.TYPE_SIZE) {
-      throw new WkbParseException("WKB data too short", 0, currentWkb);
+      throw new WkbParseException("Unexpected end of WKB buffer", 0, currentWkb);
     }
 
     // Create buffer wrapping the entire byte array

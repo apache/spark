@@ -635,6 +635,28 @@ class DataFrameAggregateSuite extends QueryTest
     checkAnswer(df.selectExpr("collect_list(b) RESPECT NULLS"), Seq(Row(Seq(2, null, 4))))
   }
 
+  test("collect_set skips nulls by default") {
+    val df = Seq((1, Some(2)), (2, None), (3, Some(2))).toDF("a", "b")
+
+    checkAnswer(df.selectExpr("sort_array(collect_set(b))"), Seq(Row(Seq(2))))
+    checkAnswer(df.select(sort_array(collect_set($"b"))), Seq(Row(Seq(2))))
+  }
+
+  test("collect_set with IGNORE NULLS explicitly skips nulls") {
+    val df = Seq((1, Some(2)), (2, None), (3, Some(4))).toDF("a", "b")
+
+    checkAnswer(
+      df.selectExpr("sort_array(collect_set(b) IGNORE NULLS)"), Seq(Row(Seq(2, 4))))
+  }
+
+  test("collect_set with RESPECT NULLS preserves null in set") {
+    val df = Seq((1, Some(2)), (2, None), (3, Some(2))).toDF("a", "b")
+
+    // RESPECT NULLS preserves null value in the set
+    checkAnswer(
+      df.selectExpr("sort_array(collect_set(b) RESPECT NULLS)"), Seq(Row(Seq(null, 2))))
+  }
+
   test("collect functions structs") {
     val df = Seq((1, 2, 2), (2, 2, 2), (3, 4, 1))
       .toDF("a", "x", "y")
@@ -1132,6 +1154,311 @@ class DataFrameAggregateSuite extends QueryTest
         context = ExpectedContext(fragment = "min_by(x, y)", start = 7, stop = 18)
       )
     }
+  }
+
+  test("max_by and min_by with k") {
+    // Basic: string values, integer ordering
+    checkAnswer(
+      sql(
+        """
+          |SELECT max_by(x, y, 2), min_by(x, y, 2)
+          |FROM VALUES (('a', 10)), (('b', 50)), (('c', 20)) AS tab(x, y)
+        """.stripMargin),
+      Row(Seq("b", "c"), Seq("a", "c")) :: Nil
+    )
+
+    // DataFrame API
+    checkAnswer(
+      spark.sql("SELECT * FROM VALUES (('a', 10)), (('b', 50)), (('c', 20)) AS tab(x, y)")
+        .agg(max_by(col("x"), col("y"), 2), min_by(col("x"), col("y"), 2)),
+      Row(Seq("b", "c"), Seq("a", "c")) :: Nil
+    )
+
+    // k larger than available rows
+    checkAnswer(
+      sql(
+        """
+          |SELECT max_by(x, y, 5), min_by(x, y, 5)
+          |FROM VALUES (('a', 10)), (('b', 50)), (('c', 20)) AS tab(x, y)
+        """.stripMargin),
+      Row(Seq("b", "c", "a"), Seq("a", "c", "b")) :: Nil
+    )
+
+    // k = 1
+    checkAnswer(
+      sql(
+        """
+          |SELECT max_by(x, y, 1), min_by(x, y, 1)
+          |FROM VALUES (('a', 10)), (('b', 50)), (('c', 20)) AS tab(x, y)
+        """.stripMargin),
+      Row(Seq("b"), Seq("a")) :: Nil
+    )
+
+    // NULL orderings are skipped
+    checkAnswer(
+      sql(
+        """
+          |SELECT max_by(x, y, 2), min_by(x, y, 2)
+          |FROM VALUES (('a', 10)), (('b', null)), (('c', 20)) AS tab(x, y)
+        """.stripMargin),
+      Row(Seq("c", "a"), Seq("a", "c")) :: Nil
+    )
+
+    // All NULL orderings yields null
+    checkAnswer(
+      sql(
+        """
+          |SELECT max_by(x, y, 2), min_by(x, y, 2)
+          |FROM VALUES (('a', null)), (('b', null)) AS tab(x, y)
+        """.stripMargin),
+      Row(null, null) :: Nil
+    )
+
+    // Empty input yields null
+    checkAnswer(
+      sql(
+        """
+          |SELECT max_by(x, y, 2), min_by(x, y, 2)
+          |FROM VALUES (('a', 10)) AS tab(x, y) WHERE false
+        """.stripMargin),
+      Row(null, null) :: Nil
+    )
+
+    // Integer values, integer ordering
+    checkAnswer(
+      sql(
+        """
+          |SELECT max_by(x, y, 2), min_by(x, y, 2)
+          |FROM VALUES ((1, 100)), ((2, 200)), ((3, 150)) AS tab(x, y)
+        """.stripMargin),
+      Row(Seq(2, 3), Seq(1, 3)) :: Nil
+    )
+
+    // 10 elements, k=3 - forces heap replacements
+    checkAnswer(
+      sql(
+        """
+          |SELECT max_by(x, y, 3), min_by(x, y, 3)
+          |FROM VALUES ((1, 50)), ((2, 30)), ((3, 80)), ((4, 10)), ((5, 90)),
+          |            ((6, 20)), ((7, 70)), ((8, 40)), ((9, 60)), ((10, 100))
+          |AS tab(x, y)
+        """.stripMargin),
+      Row(Seq(10, 5, 3), Seq(4, 6, 2)) :: Nil
+    )
+
+    // descending input order (worst case for min-heap)
+    checkAnswer(
+      sql(
+        """
+          |SELECT max_by(x, y, 3)
+          |FROM VALUES ((1, 100)), ((2, 90)), ((3, 80)), ((4, 70)), ((5, 60)),
+          |            ((6, 50)), ((7, 40)), ((8, 30)), ((9, 20)), ((10, 10))
+          |AS tab(x, y)
+        """.stripMargin),
+      Row(Seq(1, 2, 3)) :: Nil
+    )
+
+    // ascending input order (worst case for max-heap in min_by)
+    checkAnswer(
+      sql(
+        """
+          |SELECT min_by(x, y, 3)
+          |FROM VALUES ((1, 10)), ((2, 20)), ((3, 30)), ((4, 40)), ((5, 50)),
+          |            ((6, 60)), ((7, 70)), ((8, 80)), ((9, 90)), ((10, 100))
+          |AS tab(x, y)
+        """.stripMargin),
+      Row(Seq(1, 2, 3)) :: Nil
+    )
+
+    // Large k with many elements
+    checkAnswer(
+      sql(
+        """
+          |SELECT max_by(x, y, 5), min_by(x, y, 5)
+          |FROM VALUES ((1, 15)), ((2, 25)), ((3, 35)), ((4, 45)), ((5, 55)),
+          |            ((6, 65)), ((7, 75)), ((8, 85))
+          |AS tab(x, y)
+        """.stripMargin),
+      Row(Seq(8, 7, 6, 5, 4), Seq(1, 2, 3, 4, 5)) :: Nil
+    )
+
+    // Duplicate ordering values (non-deterministic order within ties, but set should match)
+    val dupsResult = sql(
+      """
+        |SELECT max_by(x, y, 3)
+        |FROM VALUES ((1, 50)), ((2, 50)), ((3, 50)), ((4, 10)), ((5, 90))
+        |AS tab(x, y)
+      """.stripMargin).collect()(0).getSeq[Int](0).toSet
+    assert(dupsResult.contains(5))  // 90 is highest, must be included
+    assert(dupsResult.size == 3)
+
+    // Struct ordering
+    checkAnswer(
+      sql(
+        """
+          |SELECT max_by(x, y, 2), min_by(x, y, 2)
+          |FROM VALUES (('a', (10, 20))), (('b', (10, 50))), (('c', (10, 60))) AS tab(x, y)
+        """.stripMargin),
+      Row(Seq("c", "b"), Seq("a", "b")) :: Nil
+    )
+
+    // Array ordering
+    checkAnswer(
+      sql(
+        """
+          |SELECT max_by(x, y, 2), min_by(x, y, 2)
+          |FROM VALUES (('a', array(10, 20))), (('b', array(10, 50))), (('c', array(10, 60)))
+          |AS tab(x, y)
+        """.stripMargin),
+      Row(Seq("c", "b"), Seq("a", "b")) :: Nil
+    )
+
+    // Struct values
+    checkAnswer(
+      sql(
+        """
+          |SELECT max_by(x, y, 2), min_by(x, y, 2)
+          |FROM VALUES ((('a', 1), 10)), ((('b', 2), 50)), ((('c', 3), 20)) AS tab(x, y)
+        """.stripMargin),
+      Row(Seq(Row("b", 2), Row("c", 3)), Seq(Row("a", 1), Row("c", 3))) :: Nil
+    )
+
+    // Array values
+    checkAnswer(
+      sql(
+        """
+          |SELECT max_by(x, y, 2), min_by(x, y, 2)
+          |FROM VALUES ((array(1, 2), 10)), ((array(3, 4), 50)), ((array(5, 6), 20)) AS tab(x, y)
+        """.stripMargin),
+      Row(Seq(Seq(3, 4), Seq(5, 6)), Seq(Seq(1, 2), Seq(5, 6))) :: Nil
+    )
+
+    // Map values
+    checkAnswer(
+      sql(
+        """
+          |SELECT max_by(x, y, 2), min_by(x, y, 2)
+          |FROM VALUES ((map('a', 1), 10)), ((map('b', 2), 50)), ((map('c', 3), 20)) AS tab(x, y)
+        """.stripMargin),
+      Row(Seq(Map("b" -> 2), Map("c" -> 3)), Seq(Map("a" -> 1), Map("c" -> 3))) :: Nil
+    )
+
+    // GROUP BY
+    checkAnswer(
+      sql(
+        """
+          |SELECT course, max_by(year, earnings, 2), min_by(year, earnings, 2)
+          |FROM VALUES
+          |  (('Java', 2012, 20000)), (('Java', 2013, 30000)),
+          |  (('dotNET', 2012, 15000)), (('dotNET', 2013, 48000))
+          |AS tab(course, year, earnings)
+          |GROUP BY course
+          |ORDER BY course
+        """.stripMargin),
+      Row("Java", Seq(2013, 2012), Seq(2012, 2013)) ::
+        Row("dotNET", Seq(2013, 2012), Seq(2012, 2013)) :: Nil
+    )
+
+    // Error: k must be a constant (not a column reference)
+    Seq("max_by", "min_by").foreach { fn =>
+      val error = intercept[AnalysisException] {
+        sql(s"SELECT $fn(x, y, z) FROM VALUES (('a', 10, 2)) AS tab(x, y, z)").collect()
+      }
+      assert(error.getMessage.contains("NON_FOLDABLE_INPUT") ||
+        error.getMessage.contains("constant integer"))
+    }
+
+    // Float k is implicitly cast to integer (truncated) - 2.5 becomes 2
+    checkAnswer(
+      sql(
+        """
+          |SELECT max_by(x, y, 2.5), min_by(x, y, 2.5)
+          |FROM VALUES (('a', 10)), (('b', 50)), (('c', 20)) AS tab(x, y)
+        """.stripMargin),
+      Row(Seq("b", "c"), Seq("a", "c")) :: Nil
+    )
+
+    // Error: string k cannot be cast to integer
+    Seq("max_by", "min_by").foreach { fn =>
+      val error = intercept[Exception] {
+        sql(s"SELECT $fn(x, y, 'two') FROM VALUES (('a', 10)) AS tab(x, y)").collect()
+      }
+      if (conf.ansiEnabled) {
+        assert(error.getMessage.contains("CAST_INVALID_INPUT") ||
+          error.getMessage.contains("cannot be cast"))
+      } else {
+        assert(error.getMessage.contains("VALUE_OUT_OF_RANGE"))
+      }
+    }
+
+    // Error: k must be positive
+    Seq("max_by", "min_by").foreach { fn =>
+      val error = intercept[Exception] {
+        sql(s"SELECT $fn(x, y, 0) FROM VALUES (('a', 10)) AS tab(x, y)").collect()
+      }
+      assert(error.getMessage.contains("VALUE_OUT_OF_RANGE") ||
+        error.getMessage.contains("positive"))
+    }
+
+    // Error: non-orderable type (MAP)
+    withTempView("tempView") {
+      Seq((0, "a"), (1, "b"), (2, "c"))
+        .toDF("x", "y")
+        .select($"x", map($"x", $"y").as("y"))
+        .createOrReplaceTempView("tempView")
+      Seq("max_by", "min_by").foreach { fn =>
+        val mapError = intercept[AnalysisException] {
+          sql(s"SELECT $fn(x, y, 2) FROM tempView").collect()
+        }
+        assert(mapError.getMessage.contains("INVALID_ORDERING_TYPE") ||
+          mapError.getMessage.contains("not orderable"))
+      }
+    }
+
+    // Error: non-orderable type (ARRAY<MAP>)
+    withTempView("tempView") {
+      Seq((0, "a"), (1, "b"), (2, "c"))
+        .toDF("x", "y")
+        .select($"x", array(map($"x", $"y")).as("y"))
+        .createOrReplaceTempView("tempView")
+      Seq("max_by", "min_by").foreach { fn =>
+        val error = intercept[AnalysisException] {
+          sql(s"SELECT $fn(x, y, 2) FROM tempView").collect()
+        }
+        assert(error.getMessage.contains("INVALID_ORDERING_TYPE"))
+      }
+    }
+
+    // Error: non-orderable type (VARIANT)
+    withTempView("tempView") {
+      sql("SELECT 'a' as x, parse_json('{\"k\": 1}') as y")
+        .createOrReplaceTempView("tempView")
+      Seq("max_by", "min_by").foreach { fn =>
+        val error = intercept[AnalysisException] {
+          sql(s"SELECT $fn(x, y, 2) FROM tempView").collect()
+        }
+        assert(error.getMessage.contains("INVALID_ORDERING_TYPE"))
+      }
+    }
+
+    // Error: k exceeds maximum limit (100000)
+    Seq("max_by", "min_by").foreach { fn =>
+      val error = intercept[Exception] {
+        sql(s"SELECT $fn(x, y, 100001) FROM VALUES (('a', 10)) AS tab(x, y)").collect()
+      }
+      assert(error.getMessage.contains("VALUE_OUT_OF_RANGE") ||
+        error.getMessage.contains("100000"))
+    }
+
+    // Large k
+    checkAnswer(
+      sql(
+        """
+          |SELECT max_by(x, y, 100000), min_by(x, y, 100000)
+          |FROM VALUES (('a', 10)), (('b', 50)), (('c', 20)) AS tab(x, y)
+        """.stripMargin),
+      Row(Seq("b", "c", "a"), Seq("a", "c", "b")) :: Nil
+    )
   }
 
   test("percentile_like") {
@@ -3880,6 +4207,257 @@ class DataFrameAggregateSuite extends QueryTest
       .select(tuple_sketch_estimate_integer(tuple_difference_integer($"sketch", $"sketch2")))
       .collect()(0)(0)
     assert(estimate == 1.0)
+  }
+
+  test("SPARK-55558: tuple_difference_theta_double basic functionality") {
+    val df1 = Seq((1, 1.5), (2, 2.5), (3, 3.5), (5, 5.5)).toDF("key", "summary")
+    val df2 = Seq(1, 2, 4).toDF("value")
+
+    val tupleSketchDf = df1.agg(tuple_sketch_agg_double($"key", $"summary").alias("tuple_sketch"))
+    val thetaSketchDf = df2.agg(theta_sketch_agg($"value").alias("theta_sketch"))
+
+    val joined = tupleSketchDf.crossJoin(thetaSketchDf)
+
+    // Test difference (keys in tuple_sketch but not in theta_sketch: 3 and 5)
+    val difference = joined
+      .select(tuple_difference_theta_double($"tuple_sketch", $"theta_sketch"))
+      .collect()(0)(0)
+    assert(difference != null)
+    assert(difference.asInstanceOf[Array[Byte]].length > 0)
+
+    // Test with column names
+    val difference2 = joined
+      .select(tuple_difference_theta_double("tuple_sketch", "theta_sketch"))
+      .collect()(0)(0)
+    assert(difference2 != null)
+
+    // Verify estimate from difference (keys 3 and 5 remain)
+    val estimate = joined
+      .select(tuple_sketch_estimate_double(
+        tuple_difference_theta_double($"tuple_sketch", $"theta_sketch")))
+      .collect()(0)(0)
+    assert(estimate == 2.0)
+
+    // Verify summary value from difference (3.5 + 5.5 = 9.0)
+    val summary = joined
+      .select(tuple_sketch_summary_double(
+        tuple_difference_theta_double($"tuple_sketch", $"theta_sketch")))
+      .collect()(0)(0)
+    assert(summary == 9.0)
+  }
+
+  test("SPARK-55558: tuple_difference_theta_integer basic functionality") {
+    val df1 = Seq((1, 10), (2, 20), (3, 30), (5, 50)).toDF("key", "summary")
+    val df2 = Seq(1, 2, 4).toDF("value")
+
+    val tupleSketchDf = df1.agg(tuple_sketch_agg_integer($"key", $"summary").alias("tuple_sketch"))
+    val thetaSketchDf = df2.agg(theta_sketch_agg($"value").alias("theta_sketch"))
+
+    val joined = tupleSketchDf.crossJoin(thetaSketchDf)
+
+    // Test difference (keys in tuple_sketch but not in theta_sketch: 3 and 5)
+    val difference = joined
+      .select(tuple_difference_theta_integer($"tuple_sketch", $"theta_sketch"))
+      .collect()(0)(0)
+    assert(difference != null)
+
+    // Test with column names
+    val difference2 = joined
+      .select(tuple_difference_theta_integer("tuple_sketch", "theta_sketch"))
+      .collect()(0)(0)
+    assert(difference2 != null)
+
+    // Verify estimate from difference (keys 3 and 5 remain)
+    val estimate = joined
+      .select(tuple_sketch_estimate_integer(
+        tuple_difference_theta_integer($"tuple_sketch", $"theta_sketch")))
+      .collect()(0)(0)
+    assert(estimate == 2.0)
+
+    // Verify summary value from difference (30 + 50 = 80)
+    val summary = joined
+      .select(tuple_sketch_summary_integer(
+        tuple_difference_theta_integer($"tuple_sketch", $"theta_sketch")))
+      .collect()(0)(0)
+    assert(summary == 80)
+  }
+
+  test("SPARK-55558: tuple_intersection_theta_double basic functionality") {
+    val df1 = Seq((1, 1.5), (2, 2.5), (3, 3.5)).toDF("key", "summary")
+    val df2 = Seq(2, 3, 4).toDF("value")
+
+    val tupleSketchDf = df1.agg(tuple_sketch_agg_double($"key", $"summary").alias("tuple_sketch"))
+    val thetaSketchDf = df2.agg(theta_sketch_agg($"value").alias("theta_sketch"))
+
+    val joined = tupleSketchDf.crossJoin(thetaSketchDf)
+
+    // Test intersection with default mode
+    val intersection1 = joined
+      .select(tuple_intersection_theta_double($"tuple_sketch", $"theta_sketch"))
+      .collect()(0)(0)
+    assert(intersection1 != null)
+    assert(intersection1.asInstanceOf[Array[Byte]].length > 0)
+
+    // Test intersection with mode
+    val intersection2 = joined
+      .select(tuple_intersection_theta_double($"tuple_sketch", $"theta_sketch", "sum"))
+      .collect()(0)(0)
+    assert(intersection2 != null)
+
+    // Test with column names and min mode
+    val intersection3 = joined
+      .select(tuple_intersection_theta_double("tuple_sketch", "theta_sketch", "min"))
+      .collect()(0)(0)
+    assert(intersection3 != null)
+
+    // Verify estimate from intersection (keys 2 and 3 are common)
+    val estimate = joined
+      .select(tuple_sketch_estimate_double(
+        tuple_intersection_theta_double($"tuple_sketch", $"theta_sketch")))
+      .collect()(0)(0)
+    assert(estimate == 2.0)
+
+    // Verify summary value from intersection (2.5 + 3.5 = 6.0)
+    val summary = joined
+      .select(tuple_sketch_summary_double(
+        tuple_intersection_theta_double($"tuple_sketch", $"theta_sketch")))
+      .collect()(0)(0)
+    assert(summary == 6.0)
+  }
+
+  test("SPARK-55558: tuple_intersection_theta_integer basic functionality") {
+    val df1 = Seq((1, 10), (2, 20), (3, 30)).toDF("key", "summary")
+    val df2 = Seq(2, 3, 4).toDF("value")
+
+    val tupleSketchDf = df1.agg(tuple_sketch_agg_integer($"key", $"summary").alias("tuple_sketch"))
+    val thetaSketchDf = df2.agg(theta_sketch_agg($"value").alias("theta_sketch"))
+
+    val joined = tupleSketchDf.crossJoin(thetaSketchDf)
+
+    // Test intersection with default mode
+    val intersection1 = joined
+      .select(tuple_intersection_theta_integer($"tuple_sketch", $"theta_sketch"))
+      .collect()(0)(0)
+    assert(intersection1 != null)
+
+    // Test intersection with mode
+    val intersection2 = joined
+      .select(tuple_intersection_theta_integer($"tuple_sketch", $"theta_sketch", "max"))
+      .collect()(0)(0)
+    assert(intersection2 != null)
+
+    // Test with column names
+    val intersection3 = joined
+      .select(tuple_intersection_theta_integer("tuple_sketch", "theta_sketch"))
+      .collect()(0)(0)
+    assert(intersection3 != null)
+
+    // Verify estimate from intersection (keys 2 and 3 are common)
+    val estimate = joined
+      .select(tuple_sketch_estimate_integer(
+        tuple_intersection_theta_integer($"tuple_sketch", $"theta_sketch")))
+      .collect()(0)(0)
+    assert(estimate == 2.0)
+
+    // Verify summary value from intersection (20 + 30 = 50)
+    val summary = joined
+      .select(tuple_sketch_summary_integer(
+        tuple_intersection_theta_integer($"tuple_sketch", $"theta_sketch")))
+      .collect()(0)(0)
+    assert(summary == 50)
+  }
+
+  test("SPARK-55558: tuple_union_theta_double basic functionality") {
+    val df1 = Seq((1, 1.5), (2, 2.5)).toDF("key", "summary")
+    val df2 = Seq(3, 4).toDF("value")
+
+    val tupleSketchDf = df1.agg(tuple_sketch_agg_double($"key", $"summary").alias("tuple_sketch"))
+    val thetaSketchDf = df2.agg(theta_sketch_agg($"value").alias("theta_sketch"))
+
+    val joined = tupleSketchDf.crossJoin(thetaSketchDf)
+
+    // Test union with default parameters
+    val union1 = joined
+      .select(tuple_union_theta_double($"tuple_sketch", $"theta_sketch"))
+      .collect()(0)(0)
+    assert(union1 != null)
+    assert(union1.asInstanceOf[Array[Byte]].length > 0)
+
+    // Test union with lgNomEntries
+    val union2 = joined
+      .select(tuple_union_theta_double($"tuple_sketch", $"theta_sketch", 10))
+      .collect()(0)(0)
+    assert(union2 != null)
+
+    // Test union with lgNomEntries and mode
+    val union3 = joined
+      .select(tuple_union_theta_double($"tuple_sketch", $"theta_sketch", 10, "sum"))
+      .collect()(0)(0)
+    assert(union3 != null)
+
+    // Test with column names
+    val union4 = joined
+      .select(tuple_union_theta_double("tuple_sketch", "theta_sketch"))
+      .collect()(0)(0)
+    assert(union4 != null)
+
+    // Verify estimate from union (all 4 keys: 1, 2, 3, 4)
+    val estimate = joined
+      .select(tuple_sketch_estimate_double(
+        tuple_union_theta_double($"tuple_sketch", $"theta_sketch")))
+      .collect()(0)(0)
+    assert(estimate == 4.0)
+
+    // Verify summary value from union (1.5 + 2.5 + 0.0 + 0.0 = 4.0)
+    // Theta sketch entries (3, 4) get default value 0.0 for sum mode
+    val summary = joined
+      .select(tuple_sketch_summary_double(
+        tuple_union_theta_double($"tuple_sketch", $"theta_sketch")))
+      .collect()(0)(0)
+    assert(summary == 4.0)
+  }
+
+  test("SPARK-55558: tuple_union_theta_integer basic functionality") {
+    val df1 = Seq((1, 10), (2, 20)).toDF("key", "summary")
+    val df2 = Seq(3, 4).toDF("value")
+
+    val tupleSketchDf = df1.agg(tuple_sketch_agg_integer($"key", $"summary").alias("tuple_sketch"))
+    val thetaSketchDf = df2.agg(theta_sketch_agg($"value").alias("theta_sketch"))
+
+    val joined = tupleSketchDf.crossJoin(thetaSketchDf)
+
+    // Test union with default parameters
+    val union1 = joined
+      .select(tuple_union_theta_integer($"tuple_sketch", $"theta_sketch"))
+      .collect()(0)(0)
+    assert(union1 != null)
+
+    // Test union with lgNomEntries and mode
+    val union2 = joined
+      .select(tuple_union_theta_integer($"tuple_sketch", $"theta_sketch", 10, "max"))
+      .collect()(0)(0)
+    assert(union2 != null)
+
+    // Test with column names and lgNomEntries
+    val union3 = joined
+      .select(tuple_union_theta_integer("tuple_sketch", "theta_sketch", 10))
+      .collect()(0)(0)
+    assert(union3 != null)
+
+    // Verify estimate from union (all 4 keys: 1, 2, 3, 4)
+    val estimate = joined
+      .select(tuple_sketch_estimate_integer(
+        tuple_union_theta_integer($"tuple_sketch", $"theta_sketch")))
+      .collect()(0)(0)
+    assert(estimate == 4.0)
+
+    // Verify summary value from union (10 + 20 + 0 + 0 = 30)
+    // Theta sketch entries (3, 4) get default value 0 for sum mode
+    val summary = joined
+      .select(tuple_sketch_summary_integer(
+        tuple_union_theta_integer($"tuple_sketch", $"theta_sketch")))
+      .collect()(0)(0)
+    assert(summary == 30)
   }
 
   test("SPARK-54179: tuple_union_agg_double basic functionality") {

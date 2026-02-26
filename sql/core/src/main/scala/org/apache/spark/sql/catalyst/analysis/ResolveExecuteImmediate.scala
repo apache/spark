@@ -144,6 +144,17 @@ case class ResolveExecuteImmediate(sparkSession: SparkSession, catalogManager: C
   }
 
   private def extractQueryString(queryExpr: Expression): String = {
+    // Reject scalar subqueries and other non-evaluable expressions (same rule as USING clause).
+    // Unwrap Alias so that EXECUTE IMMEDIATE sql_string (variable) is allowed.
+    def checkAllowed(expr: Expression): Unit = expr match {
+      case _: VariableReference => // allowed
+      case Alias(child, _) => checkAllowed(child)
+      case foldable if foldable.foldable => // allowed (literals, constants)
+      case other =>
+        throw QueryCompilationErrors.unsupportedParameterExpression(other)
+    }
+    checkAllowed(queryExpr)
+
     // Ensure the expression resolves to string type
     if (!queryExpr.dataType.sameType(StringType)) {
       throw QueryCompilationErrors.invalidExecuteImmediateExpressionType(queryExpr.dataType)
