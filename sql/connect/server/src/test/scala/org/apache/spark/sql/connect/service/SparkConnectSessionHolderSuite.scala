@@ -28,7 +28,7 @@ import scala.util.Random
 import com.google.common.collect.Lists
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.{SparkEnv, SparkIllegalStateException}
+import org.apache.spark.SparkEnv
 import org.apache.spark.api.python.SimplePythonFunction
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.IntegratedUDFTestUtils
@@ -425,7 +425,7 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
   test("Test duplicate operation IDs") {
     val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
     sessionHolder.addOperationId("DUMMY")
-    val ex = intercept[SparkIllegalStateException] {
+    val ex = intercept[IllegalStateException] {
       sessionHolder.addOperationId("DUMMY")
     }
     assert(ex.getMessage.contains("already exists"))

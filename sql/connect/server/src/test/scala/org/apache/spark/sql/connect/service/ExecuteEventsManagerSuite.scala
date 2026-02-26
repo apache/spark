@@ -24,7 +24,7 @@ import scala.util.matching.Regex
 import org.mockito.Mockito._
 import org.scalatestplus.mockito.MockitoSugar
 
-import org.apache.spark.{SparkContext, SparkFunSuite, SparkIllegalStateException}
+import org.apache.spark.{SparkContext, SparkFunSuite}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{ExecutePlanRequest, Plan, UserContext}
 import org.apache.spark.scheduler.LiveListenerBus
@@ -215,128 +215,128 @@ class ExecuteEventsManagerSuite
 
   test("SPARK-43923: Closed wrong order throws exception") {
     val events = setupEvents(ExecuteStatus.Closed)
-    assertThrows[SparkIllegalStateException] {
+    assertThrows[IllegalStateException] {
       events.postStarted()
     }
-    assertThrows[SparkIllegalStateException] {
+    assertThrows[IllegalStateException] {
       events.postAnalyzed()
     }
-    assertThrows[SparkIllegalStateException] {
+    assertThrows[IllegalStateException] {
       events.postReadyForExecution()
     }
-    assertThrows[SparkIllegalStateException] {
+    assertThrows[IllegalStateException] {
       events.postFinished()
     }
-    assertThrows[SparkIllegalStateException] {
+    assertThrows[IllegalStateException] {
       events.postCanceled()
     }
-    assertThrows[SparkIllegalStateException] {
+    assertThrows[IllegalStateException] {
       events.postClosed()
     }
   }
 
   test("SPARK-43923: Finished wrong order throws exception") {
     val events = setupEvents(ExecuteStatus.Finished)
-    assertThrows[SparkIllegalStateException] {
+    assertThrows[IllegalStateException] {
       events.postStarted()
     }
-    assertThrows[SparkIllegalStateException] {
+    assertThrows[IllegalStateException] {
       events.postAnalyzed()
     }
-    assertThrows[SparkIllegalStateException] {
+    assertThrows[IllegalStateException] {
       events.postReadyForExecution()
     }
-    assertThrows[SparkIllegalStateException] {
+    assertThrows[IllegalStateException] {
       events.postFinished()
     }
   }
 
   test("SPARK-43923: Failed wrong order throws exception") {
     val events = setupEvents(ExecuteStatus.Finished)
-    assertThrows[SparkIllegalStateException] {
+    assertThrows[IllegalStateException] {
       events.postStarted()
     }
-    assertThrows[SparkIllegalStateException] {
+    assertThrows[IllegalStateException] {
       events.postAnalyzed()
     }
-    assertThrows[SparkIllegalStateException] {
+    assertThrows[IllegalStateException] {
       events.postReadyForExecution()
     }
-    assertThrows[SparkIllegalStateException] {
+    assertThrows[IllegalStateException] {
       events.postFinished()
     }
-    assertThrows[SparkIllegalStateException] {
+    assertThrows[IllegalStateException] {
       events.postFinished()
     }
   }
 
   test("SPARK-43923: Canceled wrong order throws exception") {
     val events = setupEvents(ExecuteStatus.Canceled)
-    assertThrows[SparkIllegalStateException] {
+    assertThrows[IllegalStateException] {
       events.postStarted()
     }
-    assertThrows[SparkIllegalStateException] {
+    assertThrows[IllegalStateException] {
       events.postAnalyzed()
     }
-    assertThrows[SparkIllegalStateException] {
+    assertThrows[IllegalStateException] {
       events.postReadyForExecution()
     }
-    assertThrows[SparkIllegalStateException] {
+    assertThrows[IllegalStateException] {
       events.postCanceled()
     }
-    assertThrows[SparkIllegalStateException] {
+    assertThrows[IllegalStateException] {
       events.postFinished()
     }
-    assertThrows[SparkIllegalStateException] {
+    assertThrows[IllegalStateException] {
       events.postFailed(DEFAULT_ERROR)
     }
   }
 
   test("SPARK-43923: ReadyForExecution wrong order throws exception") {
     val events = setupEvents(ExecuteStatus.ReadyForExecution)
-    assertThrows[SparkIllegalStateException] {
+    assertThrows[IllegalStateException] {
       events.postStarted()
     }
-    assertThrows[SparkIllegalStateException] {
+    assertThrows[IllegalStateException] {
       events.postAnalyzed()
     }
-    assertThrows[SparkIllegalStateException] {
+    assertThrows[IllegalStateException] {
       events.postReadyForExecution()
     }
-    assertThrows[SparkIllegalStateException] {
+    assertThrows[IllegalStateException] {
       events.postClosed()
     }
   }
 
   test("SPARK-43923: Analyzed wrong order throws exception") {
     val events = setupEvents(ExecuteStatus.Analyzed)
-    assertThrows[SparkIllegalStateException] {
+    assertThrows[IllegalStateException] {
       events.postStarted()
     }
-    assertThrows[SparkIllegalStateException] {
+    assertThrows[IllegalStateException] {
       events.postFinished()
     }
-    assertThrows[SparkIllegalStateException] {
+    assertThrows[IllegalStateException] {
       events.postClosed()
     }
   }
 
   test("SPARK-43923: Started wrong order throws exception") {
     val events = setupEvents(ExecuteStatus.Started)
-    assertThrows[SparkIllegalStateException] {
+    assertThrows[IllegalStateException] {
       events.postStarted()
     }
-    assertThrows[SparkIllegalStateException] {
+    assertThrows[IllegalStateException] {
       events.postReadyForExecution()
     }
-    assertThrows[SparkIllegalStateException] {
+    assertThrows[IllegalStateException] {
       events.postClosed()
     }
   }
 
   test("SPARK-43923: Started wrong session status") {
     val events = setupEvents(ExecuteStatus.Started, SessionStatus.Pending)
-    assertThrows[SparkIllegalStateException] {
+    assertThrows[IllegalStateException] {
       events.postStarted()
     }
   }

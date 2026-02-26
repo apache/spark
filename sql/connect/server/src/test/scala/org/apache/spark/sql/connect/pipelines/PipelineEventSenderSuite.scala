@@ -24,7 +24,6 @@ import org.mockito.{ArgumentCaptor, Mockito}
 import org.mockito.Mockito._
 import org.scalatestplus.mockito.MockitoSugar
 
-import org.apache.spark.SparkIllegalStateException
 import org.apache.spark.connect.proto.ExecutePlanResponse
 import org.apache.spark.sql.classic.{RuntimeConfig, SparkSession}
 import org.apache.spark.sql.connect.service.{SessionHolder, SessionKey}
@@ -129,7 +128,7 @@ class PipelineEventSenderSuite extends SparkDeclarativePipelinesServerTest with 
 
     val eventSender = new PipelineEventSender(mockObserver, mockSessionHolder)
     eventSender.shutdown()
-    intercept[SparkIllegalStateException] {
+    intercept[IllegalStateException] {
       eventSender.sendEvent(createTestEvent())
     }
   }

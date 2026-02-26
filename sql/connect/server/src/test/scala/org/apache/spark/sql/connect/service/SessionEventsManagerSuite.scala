@@ -20,7 +20,7 @@ package org.apache.spark.sql.connect.service
 import org.mockito.Mockito._
 import org.scalatestplus.mockito.MockitoSugar
 
-import org.apache.spark.{SparkContext, SparkFunSuite, SparkIllegalStateException}
+import org.apache.spark.{SparkContext, SparkFunSuite}
 import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connect.planner.SparkConnectPlanTest
@@ -72,17 +72,17 @@ class SessionEventsManagerSuite
 
   test("SPARK-43923: Started wrong order throws exception") {
     val events = setupEvents(SessionStatus.Started)
-    assertThrows[SparkIllegalStateException] {
+    assertThrows[IllegalStateException] {
       events.postStarted()
     }
   }
 
   test("SPARK-43923: Closed wrong order throws exception") {
     val events = setupEvents(SessionStatus.Closed)
-    assertThrows[SparkIllegalStateException] {
+    assertThrows[IllegalStateException] {
       events.postStarted()
     }
-    assertThrows[SparkIllegalStateException] {
+    assertThrows[IllegalStateException] {
       events.postClosed()
     }
   }
