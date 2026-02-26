@@ -86,33 +86,39 @@ class SequentialUnionExecution(
    */
   private def initializeChildMapping(): Unit = {
     if (childToSourcesMap.isEmpty) {
-      // Find the SequentialStreamingUnion node in the plan
-      val unionOpt = logicalPlan.collectFirst {
-        case union: SequentialStreamingUnion => union
-      }
+      try {
+        // Find the SequentialStreamingUnion node in the plan
+        val unionOpt = logicalPlan.collectFirst {
+          case union: SequentialStreamingUnion => union
+        }
 
-      val union = unionOpt.getOrElse {
-        throw new IllegalStateException(
-          "SequentialUnionExecution requires a SequentialStreamingUnion in the logical plan")
-      }
+        val union = unionOpt.getOrElse {
+          throw new IllegalStateException(
+            "SequentialUnionExecution requires a SequentialStreamingUnion in the logical plan")
+        }
 
-      sequentialUnion = Some(union)
+        sequentialUnion = Some(union)
 
-      // For each child, extract the sources it contains
-      val mapping = union.children.zipWithIndex.map { case (child, childIdx) =>
-        val childSources = child.collect {
-          case s: StreamingExecutionRelation => s.source
-          case r: StreamingDataSourceV2ScanRelation => r.stream
-        }.toSet
+        // For each child, extract the sources it contains
+        val mapping = union.children.zipWithIndex.map { case (child, childIdx) =>
+          val childSources = child.collect {
+            case s: StreamingExecutionRelation => s.source
+            case r: StreamingDataSourceV2ScanRelation => r.stream
+          }.toSet
 
-        childIdx -> childSources
-      }.toMap
+          childIdx -> childSources
+        }.toMap
 
-      childToSourcesMap = mapping
+        childToSourcesMap = mapping
 
-      logInfo(s"Initialized SequentialUnionExecution with ${union.children.size} children:")
-      childToSourcesMap.foreach { case (idx, srcs) =>
-        logInfo(s"  Child $idx has ${srcs.size} source(s)")
+        logInfo(s"Initialized SequentialUnionExecution with ${union.children.size} children:")
+        childToSourcesMap.foreach { case (idx, srcs) =>
+          logInfo(s"  Child $idx has ${srcs.size} source(s)")
+        }
+      } catch {
+        case e: Exception =>
+          logError(s"Error initializing SequentialUnionExecution: ${e.getMessage}", e)
+          throw e
       }
     }
   }
