@@ -597,13 +597,20 @@ case class ListAgg(
   /**
    * Returns true if the order value may be ambiguous after DISTINCT deduplication.
    *
-   * For LISTAGG(DISTINCT child) WITHIN GROUP (ORDER BY order_expr), each distinct child
-   * value must map to exactly one order value (a functional dependency: child -> order_expr,
-   * where equality is defined by GROUP BY semantics). Otherwise, after deduplication on child,
-   * the order value is ambiguous and the result is non-deterministic.
+   * For LISTAGG(DISTINCT child) WITHIN GROUP (ORDER BY order_expr), correctness requires
+   * a functional dependency (child -> order_expr, where equality is defined by GROUP BY
+   * semantics): each distinct child value must map to exactly one order value. Otherwise,
+   * after deduplication on child, the order value is ambiguous.
    *
-   * Currently only detects functional dependencies introduced by Cast (e.g.,
-   * child = Cast(order_expr, StringType) where the cast is equality-preserving).
+   * When child = Cast(order_expr, T), child -> order_expr is trivially satisfied since Cast is
+   * injective. However, an additional condition is needed: the cast must be
+   * equality-preserving (order_expr -> child), meaning GROUP BY-equal order values must produce
+   * GROUP BY-equal child values. Otherwise, the DISTINCT rewrite (which groups by child) may split
+   * values that should be in the same group, causing over-counting.
+   * For example, Float/Double violate this because -0.0 and 0.0 are GROUP BY-equal but cast
+   * to different strings. This is what [[isCastEqualityPreserving]] checks.
+   *
+   * Currently only detects these conditions for Cast.
    * TODO(SPARK-55718): extend to detect other functional dependencies.
    *
    * Returns false when the order expression matches the child (i.e., [[needSaveOrderValue]]
