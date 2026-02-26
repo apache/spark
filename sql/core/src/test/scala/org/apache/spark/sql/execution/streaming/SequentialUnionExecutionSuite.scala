@@ -65,20 +65,44 @@ class SequentialUnionExecutionSuite extends StreamTest with BeforeAndAfter {
       val df1 = input1.toDF().withColumn("source", lit("A"))
       val df2 = input2.toDF().withColumn("source", lit("B"))
 
-      val query = df1.followedBy(df2)
+      val sequential = df1.followedBy(df2)
 
-      testStream(query)(
-        StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
-        // Add data to both sources
-        AddData(input1, 1, 2),
-        AddData(input2, 10, 20),
-        // Should only see data from source1 (active child)
-        CheckNewAnswer((1, "A"), (2, "A")),
-        // Add more data to source1
-        AddData(input1, 3),
-        CheckNewAnswer((3, "A")),
-        StopStream
-      )
+      // Start the query like a real customer would
+      val query = sequential.writeStream
+        .format("memory")
+        .queryName("sequentialTest")
+        .option("checkpointLocation", checkpointDir.getCanonicalPath)
+        .start()
+
+      try {
+        // Add data to both sources upfront
+        input1.addData(1, 2, 3)
+        input2.addData(10, 20)
+
+        // Process all available data
+        query.processAllAvailable()
+
+        // Should see all data from input1 (active child), but none from input2
+        val results = spark.sql("SELECT * FROM sequentialTest ORDER BY value").collect()
+        val resultsStr = results.map(r => s"(${r.getInt(0)},${r.getString(1)})").mkString(", ")
+
+        // Should have exactly 3 rows from input1
+        assert(results.length == 3,
+          s"Expected 3 rows from input1, got ${results.length}. Rows: $resultsStr")
+
+        // Verify all rows are from source A (input1), not source B (input2)
+        val sources = results.map(_.getString(1)).toSet
+        assert(sources == Set("A"),
+          s"Expected only source A, but got sources: ${sources.mkString(", ")}. Rows: $resultsStr")
+
+        // Verify the actual values from input1
+        val values = results.map(_.getInt(0)).sorted
+        assert(values.toSeq == Seq(1, 2, 3),
+          s"Expected values [1,2,3] from input1, got: ${values.mkString(", ")}")
+
+      } finally {
+        query.stop()
+      }
     }
   }
 }

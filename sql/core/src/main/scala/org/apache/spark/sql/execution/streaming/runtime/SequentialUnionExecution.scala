@@ -71,6 +71,8 @@ class SequentialUnionExecution(
       return  // Already initialized
     }
 
+    // scalastyle:off println
+    println("[SEQEXEC] === Initializing ChildToSourcesMap ===")
     plan.collectFirst {
       case union: SequentialStreamingUnion => union
     }.foreach { union =>
@@ -80,24 +82,41 @@ class SequentialUnionExecution(
       val mapping = mutable.Map[Int, Set[SparkDataStream]]()
 
       union.children.zipWithIndex.foreach { case (child, childIdx) =>
+        println(s"[SEQEXEC] Processing child $childIdx:")
         val childSources = child.collect {
-          case s: StreamingExecutionRelation => s.source
-          case r: StreamingDataSourceV2ScanRelation => r.stream
+          case s: StreamingExecutionRelation =>
+            println(s"[SEQEXEC]   Found StreamingExecutionRelation with source: " +
+              s"${s.source.getClass.getSimpleName}@${System.identityHashCode(s.source)}")
+            s.source
+          case r: StreamingDataSourceV2ScanRelation =>
+            println(s"[SEQEXEC]   Found StreamingDataSourceV2ScanRelation with stream: " +
+              s"${r.stream.getClass.getSimpleName}@${System.identityHashCode(r.stream)}")
+            r.stream
         }.toSet
 
         if (childSources.nonEmpty) {
           mapping(childIdx) = childSources
+          val sourceNames = childSources.map(_.getClass.getSimpleName).mkString(", ")
+          val srcMsg = s"[SEQEXEC] Found ${childSources.size} source(s) for " +
+            s"child $childIdx: $sourceNames"
+          println(srcMsg)
+        } else {
+          println(s"[SEQEXEC] No sources found for child $childIdx")
         }
       }
 
       childToSourcesMap = mapping.toMap
 
       val numChildren = union.children.size
-      logInfo(s"Initialized SequentialUnionExecution with $numChildren children:")
+      println(s"[SEQEXEC] Initialized SequentialUnionExecution with $numChildren children:")
       childToSourcesMap.foreach { case (idx, srcs) =>
-        logInfo(s"  Child $idx has ${srcs.size} source(s)")
+        val srcDescr = srcs.map { s =>
+          s"${s.getClass.getSimpleName}@${System.identityHashCode(s)}"
+        }.mkString(", ")
+        println(s"[SEQEXEC]   Child $idx has ${srcs.size} source(s): $srcDescr")
       }
     }
+    // scalastyle:on println
   }
 
   /**
@@ -106,9 +125,17 @@ class SequentialUnionExecution(
    * sources should receive offsets.
    */
   def isSourceActive(source: SparkDataStream): Boolean = {
-    val isActive = getActiveChildSources().contains(source)
-    logDebug(
-      s"isSourceActive: source=$source, activeChild=$activeChildIndex, isActive=$isActive")
+    val activeChildSources = getActiveChildSources()
+    val isActive = activeChildSources.contains(source)
+    val srcId = s"${source.getClass.getSimpleName}@${System.identityHashCode(source)}"
+    val activeSrcIds = activeChildSources.map { s =>
+      s"${s.getClass.getSimpleName}@${System.identityHashCode(s)}"
+    }.mkString(",")
+    val msg = s"[SEQEXEC] isSourceActive: source=$srcId, activeChild=$activeChildIndex, " +
+      s"isActive=$isActive, activeSources=$activeSrcIds"
+    // scalastyle:off println
+    println(msg)
+    // scalastyle:on println
     isActive
   }
 
@@ -180,11 +207,17 @@ class SequentialUnionExecution(
     val batchConstructed = super.constructNextBatch(execCtx, noDataBatchesEnabled)
 
     if (batchConstructed) {
-      // Check if active child is exhausted and transition if needed
-      if (!isOnFinalChild && isActiveChildExhausted(execCtx)) {
-        logInfo(s"Transitioning from child $activeChildIndex to ${activeChildIndex + 1}")
-        transitionToNextChild()
-      }
+      // TODO: Implement proper source completion detection before enabling auto-transition
+      // For now, manual transition only (via API or explicit marking)
+      // The issue: we need to distinguish "temporarily no data" from "permanently exhausted"
+      // Current logic: startOffset == endOffset means "no new data this batch"
+      // But for unbounded sources (MemoryStream), this doesn't mean "complete"
+      // Need: SupportsSequentialExecution interface with isComplete() method
+
+      // if (!isOnFinalChild && isActiveChildExhausted(execCtx)) {
+      //   logInfo(s"Transitioning from child $activeChildIndex to ${activeChildIndex + 1}")
+      //   transitionToNextChild()
+      // }
 
       logDebug(s"Active child: $activeChildIndex, active sources: ${getActiveChildSources().size}")
     }
