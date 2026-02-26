@@ -445,22 +445,14 @@ case class EnsureRequirements(
     val leftSpec = specs.head
     val rightSpec = specs(1)
 
-    def containsPartitioning(
-        partitioning: Partitioning,
-        keyedPartitioning: KeyedPartitioning): Boolean = {
-      partitioning match {
-        case k: KeyedPartitioning => k == keyedPartitioning
-        case PartitioningCollection(partitionings) =>
-          partitionings.exists(containsPartitioning(_, keyedPartitioning))
-        case _ => false
-      }
-    }
-
     // We don't need to alter the existing or add new `GroupPartitionsExec` when the child
     // partitionings are not modified (projected) in specs and left and right side partitionings are
     // compatible with each other.
-    var isCompatible = containsPartitioning(left.outputPartitioning, leftSpec.partitioning) &&
-      containsPartitioning(right.outputPartitioning, rightSpec.partitioning) &&
+    // Left and right `outputPartitioning` is a `PartitioningCollection` or a `KeyedPartitioning`
+    // otherwise `createKeyGroupedShuffleSpec()` would have returned `None`.
+    var isCompatible =
+      left.outputPartitioning.asInstanceOf[Expression].exists(_ == leftSpec.partitioning) &&
+      right.outputPartitioning.asInstanceOf[Expression].exists(_ == rightSpec.partitioning) &&
       leftSpec.isCompatibleWith(rightSpec)
     if ((!isCompatible || conf.v2BucketingPartiallyClusteredDistributionEnabled) &&
         (conf.v2BucketingPushPartValuesEnabled ||
@@ -541,8 +533,11 @@ case class EnsureRequirements(
             logInfo(log"Skipping partially clustered distribution as it cannot be applied for " +
               log"join type '${MDC(LogKeys.JOIN_TYPE, joinType)}'")
           } else {
-            val leftLink = unwrapGroupPartitions(left).logicalLink
-            val rightLink = unwrapGroupPartitions(right).logicalLink
+            val unwrappedLeft = unwrapGroupPartitions(left)
+            val unwrappedRight = unwrapGroupPartitions(right)
+
+            val leftLink = unwrappedLeft.logicalLink
+            val rightLink = unwrappedRight.logicalLink
 
             replicateLeftSide = if (
               leftLink.isDefined && rightLink.isDefined &&
@@ -586,20 +581,18 @@ case class EnsureRequirements(
             } else {
               // In partially clustered distribution, we should use un-grouped partition values
               val (partiallyClusteredChild, partiallyClusteredSpec) = if (replicateLeftSide) {
-                (right, rightSpec)
+                (unwrappedRight, rightSpec)
               } else {
-                (left, leftSpec)
+                (unwrappedLeft, leftSpec)
               }
               // Original `KeyedPartitioning` can be obtained from the child directly if the child
               // satisfied the distribution requirement; or from the child's child if it didn't as
               // the child must be a `GroupPartitionsExec` inserted by `EnsureRequirement`
               // to satisfy the distribution requirement.
-              val originalPartitioning = (partiallyClusteredChild match {
-                case g: GroupPartitionsExec => g.child
-                case o => o
-              }).outputPartitioning.asInstanceOf[Partitioning with Expression]
-              // `originalPartitioning` can be a collection, but there must be `KeyedPartitioning`
-              // in it.
+              val originalPartitioning =
+                partiallyClusteredChild.outputPartitioning.asInstanceOf[Expression]
+              // `outputPartitioning` is either a `PartitioningCollection` or a `KeyedPartitioning`
+              // otherwise `createKeyGroupedShuffleSpec()` would have returned `None`.
               val originalKeyedPartitioning =
                 originalPartitioning.collectFirst { case k: KeyedPartitioning => k }.get
               val (projectedDataTypes, projectedOriginalPartitionKeys) =
