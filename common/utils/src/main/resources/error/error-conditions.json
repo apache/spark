@@ -214,7 +214,7 @@
   },
   "BEAN_ENCODER_INTERFACE_NOT_SUPPORTED" : {
     "message" : [
-      "Bean encoder does not support interface types: <className>."
+      "Bean encoder does not support interface type <className>."
     ],
     "sqlState" : "0A000"
   },

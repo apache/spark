@@ -38,6 +38,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.*;
@@ -1978,11 +1979,14 @@ public class JavaDatasetSuite implements Serializable {
 
   @Test
   public void testBeanEncoderRejectsInterface() {
-    // Bean encoder does not support interface types (deserialization would fail).
-    Exception e = Assertions.assertThrows(Exception.class,
+    SparkUnsupportedOperationException e = Assertions.assertThrows(
+        SparkUnsupportedOperationException.class,
         () -> Encoders.bean(BeanInterface.class));
-    Assertions.assertTrue(e.getMessage() != null && e.getMessage().contains("interface"),
-        "Expected message about interface not supported: " + e.getMessage());
+    Assertions.assertEquals("BEAN_ENCODER_INTERFACE_NOT_SUPPORTED", e.getCondition());
+    Assertions.assertEquals("0A000", e.getSqlState());
+    Assertions.assertEquals(
+        Collections.singletonMap("className", BeanInterface.class.getName()),
+        e.getMessageParameters());
   }
 
   @Test
