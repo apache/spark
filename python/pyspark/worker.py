@@ -36,7 +36,7 @@ from pyspark.accumulators import (
 from pyspark.sql.streaming.stateful_processor_api_client import StatefulProcessorApiClient
 from pyspark.sql.streaming.stateful_processor_util import TransformWithStateInPandasFuncMode
 from pyspark.taskcontext import BarrierTaskContext, TaskContext
-from pyspark.util import PythonEvalType, local_connect_and_auth
+from pyspark.util import PythonEvalType
 from pyspark.serializers import (
     write_int,
     read_long,
@@ -95,6 +95,7 @@ from pyspark import shuffle
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
 from pyspark.worker_util import (
     check_python_version,
+    get_sock_file_to_executor,
     read_command,
     pickleSer,
     send_accumulator_updates,
@@ -3449,13 +3450,5 @@ def main(infile, outfile):
 
 
 if __name__ == "__main__":
-    # Read information about how to connect back to the JVM from the environment.
-    conn_info = os.environ.get(
-        "PYTHON_WORKER_FACTORY_SOCK_PATH", int(os.environ.get("PYTHON_WORKER_FACTORY_PORT", -1))
-    )
-    auth_secret = os.environ.get("PYTHON_WORKER_FACTORY_SECRET")
-    (sock_file, _) = local_connect_and_auth(conn_info, auth_secret)
-    # TODO: Remove the following two lines and use `Process.pid()` when we drop JDK 8.
-    write_int(os.getpid(), sock_file)
-    sock_file.flush()
-    main(sock_file, sock_file)
+    with get_sock_file_to_executor() as sock_file:
+        main(sock_file, sock_file)
