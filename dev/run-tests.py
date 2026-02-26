@@ -88,6 +88,7 @@ def group_in_github_actions(title):
         finally:
             print("\n::endgroup::", flush=True)
     else:
+        print(title)
         yield
 
 
@@ -266,9 +267,9 @@ def build_spark_sbt(extra_profiles):
     ]
     profiles_and_goals = build_profiles + sbt_goals
 
-    print("[info] Building Spark using SBT with these arguments: ", " ".join(profiles_and_goals))
-
-    with group_in_github_actions("sbt build"):
+    with group_in_github_actions(
+        "[info] Building Spark using SBT with these arguments: " + " ".join(profiles_and_goals)
+    ):
         exec_sbt(profiles_and_goals)
 
 
@@ -292,11 +293,11 @@ def build_spark_assembly_sbt(extra_profiles, checkstyle=False):
     build_profiles = extra_profiles + modules.root.build_profile_flags
     sbt_goals = ["assembly/package"]
     profiles_and_goals = build_profiles + sbt_goals
-    print(
-        "[info] Building Spark assembly using SBT with these arguments: ",
-        " ".join(profiles_and_goals),
-    )
-    exec_sbt(profiles_and_goals)
+    with group_in_github_actions(
+        "[info] Building Spark assembly using SBT with these arguments: "
+        + " ".join(profiles_and_goals)
+    ):
+        exec_sbt(profiles_and_goals)
 
     if checkstyle:
         run_java_style_checks(build_profiles)
@@ -406,9 +407,6 @@ def run_python_tests(test_modules, test_pythons, parallelism, with_coverage=Fals
     command.append("--parallelism=%i" % parallelism)
     command.append("--python-executables=%s" % test_pythons)
     run_cmd(command)
-    print("::group::test", flush=True)
-    print("hello world", flush=True)
-    print("::endgroup::", flush=True)
 
 
 def run_python_packaging_tests():
