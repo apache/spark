@@ -20,12 +20,13 @@ package org.apache.spark.sql.jdbc.v2
 import java.sql.Connection
 import java.util.Locale
 
+import org.scalatest.Ignore
+
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.jdbc.DB2DatabaseOnDocker
 import org.apache.spark.sql.types._
-import org.apache.spark.tags.DockerTest
 
 /**
  * To run this test suite for a specific version (e.g., icr.io/db2_community/db2:11.5.9.0):
@@ -34,7 +35,7 @@ import org.apache.spark.tags.DockerTest
  *     ./build/sbt -Pdocker-integration-tests "testOnly *v2.DB2IntegrationSuite"
  * }}}
  */
-@DockerTest
+@Ignore // TODO(SPARK-55707): Re-enable DB2 JDBC Driver tests
 class DB2IntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest {
 
   // Following tests are disabled for both single and multiple partition read
