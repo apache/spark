@@ -19,40 +19,27 @@ package org.apache.spark.sql.catalyst.util.geo;
 /**
  * Exception thrown when parsing WKB data fails.
  */
-class WkbParseException extends RuntimeException {
+public class WkbParseException extends RuntimeException {
+  private final String parseError;
   private final long position;
-  private final String wkbString;
+  private final byte[] wkb;
 
-  WkbParseException(String message, long position, byte[] wkb) {
-    super(formatMessage(message, position, wkb));
+  WkbParseException(String parseError, long position, byte[] wkb) {
+    super();
+    this.parseError = parseError;
     this.position = position;
-    this.wkbString = wkb != null ? bytesToHex(wkb) : "";
+    this.wkb = wkb;
   }
 
-  private static String formatMessage(String message, long position, byte[] wkb) {
-    String baseMessage = message + " at position " + position;
-    if (wkb != null && wkb.length > 0) {
-      baseMessage += " in WKB: " + bytesToHex(wkb);
-    }
-    return baseMessage;
+  public String getParseError() {
+    return parseError;
   }
 
-  private static String bytesToHex(byte[] bytes) {
-    if (bytes == null || bytes.length == 0) {
-      return "";
-    }
-    StringBuilder sb = new StringBuilder(bytes.length * 2);
-    for (byte b : bytes) {
-      sb.append(String.format("%02X", b));
-    }
-    return sb.toString();
-  }
-
-  long getPosition() {
+  public long getPosition() {
     return position;
   }
 
-  String getWkbString() {
-    return wkbString;
+  public byte[] getWkb() {
+    return wkb;
   }
 }

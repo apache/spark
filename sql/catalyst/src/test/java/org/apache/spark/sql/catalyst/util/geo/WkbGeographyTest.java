@@ -629,7 +629,7 @@ public class WkbGeographyTest extends WkbTestBase {
     byte[] wkb = makePointWkb2D(200.0, 0.0);
     WkbParseException ex = Assertions.assertThrows(
         WkbParseException.class, () -> geographyReader1().read(wkb));
-    String msg = ex.getMessage();
+    String msg = ex.getParseError();
     Assertions.assertTrue(msg.contains("Invalid coordinate value"));
   }
 }
