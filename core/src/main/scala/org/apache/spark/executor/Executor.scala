@@ -51,7 +51,7 @@ import org.apache.spark.metrics.source.JVMCPUSource
 import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.rpc.RpcTimeout
 import org.apache.spark.scheduler._
-import org.apache.spark.serializer.SerializerHelper
+import org.apache.spark.serializer.{SerializerHelper, SerializerInstance}
 import org.apache.spark.shuffle.{FetchFailedException, ShuffleBlockPusher}
 import org.apache.spark.status.api.v1.ThreadStackTrace
 import org.apache.spark.storage.{StorageLevel, TaskResultBlockId}
@@ -803,36 +803,39 @@ private[spark] class Executor(
     }
 
     override def run(): Unit = {
-
-      // Classloader isolation
-      val isolatedSession = taskDescription.artifacts.state match {
-        case Some(jobArtifactState) =>
-          obtainSession(jobArtifactState)
-        case _ =>
-          // The default session is never in the cache and never evicted,
-          // so no need to acquire/release.
-          defaultSessionState
-      }
-
-      setMDCForTask(taskName, mdcProperties)
-      threadId = Thread.currentThread.getId
-      Thread.currentThread.setName(threadName)
-      val threadMXBean = ManagementFactory.getThreadMXBean
-      val taskMemoryManager = new TaskMemoryManager(env.memoryManager, taskId)
-      val deserializeStartTimeNs = System.nanoTime()
-      val deserializeStartCpuTime = if (threadMXBean.isCurrentThreadCpuTimeSupported) {
-        threadMXBean.getCurrentThreadCpuTime
-      } else 0L
-      Thread.currentThread.setContextClassLoader(isolatedSession.replClassLoader)
-      val ser = env.closureSerializer.newInstance()
-      logInfo(log"Running ${MDC(TASK_NAME, taskName)}")
-      execBackend.statusUpdate(taskId, TaskState.RUNNING, EMPTY_BYTE_BUFFER)
+      // SPARK-55661: isolatedSession and ser are declared before the try block so that
+      // the catch and finally blocks can access them for cleanup and error reporting.
+      var isolatedSession: IsolatedSessionState = defaultSessionState
+      var ser: SerializerInstance = null
       var taskStartTimeNs: Long = 0
       var taskStartCpu: Long = 0
-      startGCTime = computeTotalGcTime()
       var taskStarted: Boolean = false
 
       try {
+        // Classloader isolation
+        isolatedSession = taskDescription.artifacts.state match {
+          case Some(jobArtifactState) =>
+            obtainSession(jobArtifactState)
+          case _ =>
+            // The default session is never in the cache and never evicted,
+            // so no need to acquire/release.
+            defaultSessionState
+        }
+
+        setMDCForTask(taskName, mdcProperties)
+        threadId = Thread.currentThread.getId
+        Thread.currentThread.setName(threadName)
+        val threadMXBean = ManagementFactory.getThreadMXBean
+        val taskMemoryManager = new TaskMemoryManager(env.memoryManager, taskId)
+        val deserializeStartTimeNs = System.nanoTime()
+        val deserializeStartCpuTime = if (threadMXBean.isCurrentThreadCpuTimeSupported) {
+          threadMXBean.getCurrentThreadCpuTime
+        } else 0L
+        Thread.currentThread.setContextClassLoader(isolatedSession.replClassLoader)
+        ser = env.closureSerializer.newInstance()
+        logInfo(log"Running ${MDC(TASK_NAME, taskName)}")
+        execBackend.statusUpdate(taskId, TaskState.RUNNING, EMPTY_BYTE_BUFFER)
+        startGCTime = computeTotalGcTime()
         // Must be set before updateDependencies() is called, in case fetching dependencies
         // requires access to properties contained within (e.g. for access control).
         Executor.taskDeserializationProps.set(taskDescription.properties)
@@ -1083,25 +1086,47 @@ private[spark] class Executor(
           // the task failure would not be ignored if the shutdown happened because of preemption,
           // instead of an app issue).
           if (!ShutdownHookManager.inShutdown()) {
-            val (accums, accUpdates) = collectAccumulatorsAndResetStatusOnFailure(taskStartTimeNs)
-            val metricPeaks = metricsPoller.getTaskMetricPeaks(taskId).toImmutableArraySeq
+            if (ser != null) {
+              val (accums, accUpdates) =
+                collectAccumulatorsAndResetStatusOnFailure(taskStartTimeNs)
+              val metricPeaks = metricsPoller.getTaskMetricPeaks(taskId).toImmutableArraySeq
 
-            val (taskFailureReason, serializedTaskFailureReason) = {
-              try {
-                val ef = new ExceptionFailure(t, accUpdates).withAccums(accums)
-                  .withMetricPeaks(metricPeaks)
-                (ef, ser.serialize(ef))
-              } catch {
-                case _: NotSerializableException =>
-                  // t is not serializable so just send the stacktrace
-                  val ef = new ExceptionFailure(t, accUpdates, false).withAccums(accums)
+              val (taskFailureReason, serializedTaskFailureReason) = {
+                try {
+                  val ef = new ExceptionFailure(t, accUpdates).withAccums(accums)
                     .withMetricPeaks(metricPeaks)
                   (ef, ser.serialize(ef))
+                } catch {
+                  case _: NotSerializableException =>
+                    // t is not serializable so just send the stacktrace
+                    val ef = new ExceptionFailure(t, accUpdates, false).withAccums(accums)
+                      .withMetricPeaks(metricPeaks)
+                    (ef, ser.serialize(ef))
+                }
+              }
+              setTaskFinishedAndClearInterruptStatus()
+              plugins.foreach(_.onTaskFailed(taskFailureReason))
+              execBackend.statusUpdate(taskId, TaskState.FAILED, serializedTaskFailureReason)
+            } else {
+              // SPARK-55661: Setup failed before the serializer was created. Send a
+              // StatusUpdate so the driver releases resources allocated for this task.
+              try {
+                val killReason = reasonIfKilled
+                val failSer = env.closureSerializer.newInstance()
+                if (killReason.isDefined) {
+                  val reason = TaskKilled(killReason.get)
+                  execBackend.statusUpdate(taskId, TaskState.KILLED, failSer.serialize(reason))
+                } else {
+                  val ef = new ExceptionFailure(t, Seq.empty)
+                  execBackend.statusUpdate(taskId, TaskState.FAILED, failSer.serialize(ef))
+                }
+              } catch {
+                case NonFatal(inner) =>
+                  logError(
+                    log"Failed to report task setup failure for " +
+                      log"${MDC(TASK_NAME, taskName)}", inner)
               }
             }
-            setTaskFinishedAndClearInterruptStatus()
-            plugins.foreach(_.onTaskFailed(taskFailureReason))
-            execBackend.statusUpdate(taskId, TaskState.FAILED, serializedTaskFailureReason)
           } else {
             logInfo("Not reporting error to driver during JVM shutdown.")
           }
