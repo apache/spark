@@ -82,11 +82,11 @@ def set_title_and_block(title, err_block):
 @contextmanager
 def group_in_github_actions(title):
     if "GITHUB_ACTIONS" in os.environ:
-        print(f"::group::{title}")
+        print(f"::group::{title}", flush=True)
         try:
             yield
         finally:
-            print("::endgroup::")
+            print("::endgroup::", flush=True)
     else:
         yield
 
@@ -406,6 +406,9 @@ def run_python_tests(test_modules, test_pythons, parallelism, with_coverage=Fals
     command.append("--parallelism=%i" % parallelism)
     command.append("--python-executables=%s" % test_pythons)
     run_cmd(command)
+    print("::group::test", flush=True)
+    print("hello world", flush=True)
+    print("::endgroup::", flush=True)
 
 
 def run_python_packaging_tests():
