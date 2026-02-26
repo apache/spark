@@ -44,7 +44,6 @@ object RealTimeModeAllowlist extends Logging {
     "org.apache.spark.sql.execution.InputAdapter",
     "org.apache.spark.sql.execution.LocalTableScanExec",
     "org.apache.spark.sql.execution.MapElementsExec",
-    "org.apache.spark.sql.execution.MapPartitionsExec",
     "org.apache.spark.sql.execution.PlanLater",
     "org.apache.spark.sql.execution.ProjectExec",
     "org.apache.spark.sql.execution.RangeExec",
