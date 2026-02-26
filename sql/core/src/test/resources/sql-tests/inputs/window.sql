@@ -182,10 +182,40 @@ FROM testData
 WHERE val is not null
 WINDOW w AS (PARTITION BY cate ORDER BY val);
 
--- with filter predicate
+-- window aggregate with filter predicate: first_value/last_value (imperative aggregate)
 SELECT val, cate,
-count(val) FILTER (WHERE val > 1) OVER(PARTITION BY cate)
+first_value(val) FILTER (WHERE cate = 'a') OVER(ORDER BY val_long
+  ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS first_a,
+last_value(val) FILTER (WHERE cate = 'a') OVER(ORDER BY val_long
+  ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS last_a
+FROM testData ORDER BY val_long, cate;
+
+-- window aggregate with filter predicate: multiple aggregates with different filters
+SELECT val, cate,
+sum(val) FILTER (WHERE cate = 'a') OVER(ORDER BY val_long
+  ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS sum_a,
+sum(val) FILTER (WHERE cate = 'b') OVER(ORDER BY val_long
+  ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS sum_b,
+count(val) FILTER (WHERE val > 1) OVER(ORDER BY val_long
+  ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS cnt_gt1
+FROM testData ORDER BY val_long, cate;
+
+-- window aggregate with filter predicate: entire partition frame
+SELECT val, cate,
+sum(val) FILTER (WHERE cate = 'a') OVER(PARTITION BY cate) AS total_sum_filtered
 FROM testData ORDER BY cate, val;
+
+-- window aggregate with filter predicate: sliding window (ROWS frame)
+SELECT val, cate,
+sum(val) FILTER (WHERE val > 1) OVER(ORDER BY val_long
+  ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS sliding_sum_filtered
+FROM testData ORDER BY val_long, cate;
+
+-- window aggregate with filter predicate: RANGE frame
+SELECT val, cate,
+sum(val) FILTER (WHERE cate = 'a') OVER(ORDER BY val
+  RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS range_sum_filtered
+FROM testData ORDER BY val, cate;
 
 -- nth_value()/first_value()/any_value() over ()
 SELECT
