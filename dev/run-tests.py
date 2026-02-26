@@ -88,7 +88,6 @@ def group_in_github_actions(title):
         finally:
             print("\n::endgroup::", flush=True)
     else:
-        print(title)
         yield
 
 
@@ -267,9 +266,9 @@ def build_spark_sbt(extra_profiles):
     ]
     profiles_and_goals = build_profiles + sbt_goals
 
-    with group_in_github_actions(
-        "[info] Building Spark using SBT with these arguments: " + " ".join(profiles_and_goals)
-    ):
+    print("[info] Building Spark using SBT with these arguments: ", " ".join(profiles_and_goals))
+
+    with group_in_github_actions("sbt build spark"):
         exec_sbt(profiles_and_goals)
 
 
@@ -293,10 +292,13 @@ def build_spark_assembly_sbt(extra_profiles, checkstyle=False):
     build_profiles = extra_profiles + modules.root.build_profile_flags
     sbt_goals = ["assembly/package"]
     profiles_and_goals = build_profiles + sbt_goals
-    with group_in_github_actions(
-        "[info] Building Spark assembly using SBT with these arguments: "
-        + " ".join(profiles_and_goals)
-    ):
+
+    print(
+        "[info] Building Spark assembly using SBT with these arguments: ",
+        " ".join(profiles_and_goals),
+    )
+
+    with group_in_github_actions("sbt build spark assembly"):
         exec_sbt(profiles_and_goals)
 
     if checkstyle:
