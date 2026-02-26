@@ -180,8 +180,9 @@ private[spark] object MavenUtils extends Logging {
     br.setM2compatible(true)
     br.setUsepoms(true)
     val defaultInternalRepo: Option[String] = sys.env.get("DEFAULT_ARTIFACT_REPOSITORY")
-    br.setRoot(defaultInternalRepo.getOrElse("https://repo1.maven.org/maven2/"))
-    br.setName("central")
+    br.setRoot(defaultInternalRepo.getOrElse(
+      "https://maven-central.storage-download.googleapis.com/maven2/"))
+    br.setName("gcs-maven-central-mirror")
     cr.add(br)
 
     val sp: IBiblioResolver = new IBiblioResolver
