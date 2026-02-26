@@ -7754,6 +7754,12 @@
     ],
     "sqlState" : "42601"
   },
+  "WKB_PARSE_ERROR" : {
+    "message" : [
+      "Error parsing WKB: <parseError> at position <pos>"
+    ],
+    "sqlState" : "22023"
+  },
   "WRITE_STREAM_NOT_ALLOWED" : {
     "message" : [
       "`writeStream` can be called only on streaming Dataset/DataFrame."

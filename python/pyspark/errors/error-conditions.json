@@ -1488,6 +1488,12 @@
       "Value for `<arg_name>` must be between <lower_bound> and <upper_bound> (inclusive), got <actual>"
     ]
   },
+  "WKB_PARSE_ERROR" : {
+    "message" : [
+      "Error parsing WKB: <parseError> at position <pos>"
+    ],
+    "sqlState" : "22023"
+  },
   "WRONG_NUM_ARGS_FOR_HIGHER_ORDER_FUNCTION": {
     "message": [
       "Function `<func_name>` should take between 1 and 3 arguments, but the provided function takes <num_args>."
