@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{
 }
 import org.apache.spark.sql.catalyst.streaming.WriteToStream
 import org.apache.spark.sql.classic.SparkSession
-import org.apache.spark.sql.connector.read.streaming.SparkDataStream
+import org.apache.spark.sql.connector.read.streaming.{SparkDataStream, SupportsTriggerAvailableNow}
 import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2ScanRelation
 import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.util.Clock
@@ -180,6 +180,41 @@ class SequentialUnionExecution(
   }
 
   /**
+   * Prepares the active source with AvailableNow semantics to bound it.
+   * Called when transitioning to a new non-final child.
+   *
+   * This is key to completion detection:
+   * - Non-final children: call prepareForTriggerAvailableNow() to bound them
+   * - After bounding, startOffset==endOffset means "truly exhausted, transition to next"
+   * - Final child: never prepared, runs with user's trigger (unbounded)
+   */
+  private def prepareActiveSourceForAvailableNow(): Unit = {
+    // scalastyle:off println
+    if (isOnFinalChild) {
+      println(s"[SEQEXEC] Child $activeChildIndex is final - not preparing with AvailableNow")
+      return
+    }
+
+    val activeChildSources = getActiveChildSources()
+    val msg1 = s"[SEQEXEC] Preparing ${activeChildSources.size} source(s) for " +
+      s"child $activeChildIndex with AvailableNow semantics"
+    println(msg1)
+
+    activeChildSources.foreach {
+      case s: SupportsTriggerAvailableNow =>
+        val srcId = s"${s.getClass.getSimpleName}@${System.identityHashCode(s)}"
+        println(s"[SEQEXEC]   Calling prepareForTriggerAvailableNow on $srcId")
+        s.prepareForTriggerAvailableNow()
+        println(s"[SEQEXEC]   Done preparing ${s.getClass.getSimpleName}")
+      case s =>
+        val msg2 = s"[SEQEXEC]   WARNING: Source ${s.getClass.getSimpleName} " +
+          s"does not support AvailableNow"
+        println(msg2)
+    }
+    // scalastyle:on println
+  }
+
+  /**
    * Transitions to the next child. Should only be called after the current child is exhausted.
    */
   private def transitionToNextChild(): Unit = {
@@ -188,7 +223,12 @@ class SequentialUnionExecution(
     val previousChild = activeChildIndex
     activeChildIndex += 1
 
-    logInfo(s"Sequential union transitioning from child $previousChild to child $activeChildIndex")
+    // scalastyle:off println
+    println(s"[SEQEXEC] *** TRANSITIONING from child $previousChild to child $activeChildIndex ***")
+    // scalastyle:on println
+
+    // Prepare the new active child with AvailableNow semantics (if not final)
+    prepareActiveSourceForAvailableNow()
   }
 
   /**
@@ -201,25 +241,29 @@ class SequentialUnionExecution(
     // Initialize mapping on first use using the logical plan
     if (childToSourcesMap.isEmpty) {
       initializeChildToSourcesMap(logicalPlan)
+      // Prepare the initial (first) child with AvailableNow semantics
+      prepareActiveSourceForAvailableNow()
     }
 
     // Let parent construct the batch
     val batchConstructed = super.constructNextBatch(execCtx, noDataBatchesEnabled)
 
     if (batchConstructed) {
-      // TODO: Implement proper source completion detection before enabling auto-transition
-      // For now, manual transition only (via API or explicit marking)
-      // The issue: we need to distinguish "temporarily no data" from "permanently exhausted"
-      // Current logic: startOffset == endOffset means "no new data this batch"
-      // But for unbounded sources (MemoryStream), this doesn't mean "complete"
-      // Need: SupportsSequentialExecution interface with isComplete() method
+      // Check if active child is exhausted and transition if needed
+      // After prepareForTriggerAvailableNow(), startOffset==endOffset means truly exhausted
+      val exhausted = isActiveChildExhausted(execCtx)
+      // scalastyle:off println
+      val msg3 = s"[SEQEXEC] Batch constructed: activeChild=$activeChildIndex, " +
+        s"exhausted=$exhausted, isOnFinalChild=$isOnFinalChild"
+      println(msg3)
+      // scalastyle:on println
 
-      // if (!isOnFinalChild && isActiveChildExhausted(execCtx)) {
-      //   logInfo(s"Transitioning from child $activeChildIndex to ${activeChildIndex + 1}")
-      //   transitionToNextChild()
-      // }
-
-      logDebug(s"Active child: $activeChildIndex, active sources: ${getActiveChildSources().size}")
+      if (!isOnFinalChild && exhausted) {
+        // scalastyle:off println
+        println(s"[SEQEXEC] Child $activeChildIndex EXHAUSTED, will transition")
+        // scalastyle:on println
+        transitionToNextChild()
+      }
     }
 
     batchConstructed

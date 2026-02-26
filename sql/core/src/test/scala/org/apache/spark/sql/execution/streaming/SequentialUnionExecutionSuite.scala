@@ -21,7 +21,7 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.streaming.StreamTest
+import org.apache.spark.sql.streaming.{StreamTest, Trigger}
 
 /**
  * Test suite for [[SequentialUnionExecution]], which executes streaming queries
@@ -68,9 +68,12 @@ class SequentialUnionExecutionSuite extends StreamTest with BeforeAndAfter {
       val sequential = df1.followedBy(df2)
 
       // Start the query like a real customer would
+      // Non-final children automatically use AvailableNow regardless of trigger
+      // Final child uses the trigger specified here (ProcessingTime in this case)
       val query = sequential.writeStream
         .format("memory")
         .queryName("sequentialTest")
+        .trigger(Trigger.ProcessingTime("1 second"))
         .option("checkpointLocation", checkpointDir.getCanonicalPath)
         .start()
 
