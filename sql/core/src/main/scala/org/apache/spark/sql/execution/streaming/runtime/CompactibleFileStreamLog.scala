@@ -267,7 +267,7 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
           val logs =
             getAllValidBatches(latestId, compactInterval).flatMap { id =>
               filterInBatch(id)(shouldRetain(_, curTime)).getOrElse {
-                throw new FileNotFoundException(    
+                throw new FileNotFoundException(
                   s"${batchIdToPath(id)} doesn't exist " +
                     s"(latestId: $latestId, compactInterval: $compactInterval)")
               }
