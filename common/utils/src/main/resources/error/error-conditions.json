@@ -5497,6 +5497,7 @@
     "message" : [
       "Spark Connect encountered an illegal state condition."
     ],
+    "sqlState" : "XXSC0",
     "subClass" : {
       "DATA_INTEGRITY_CURSOR_OUT_OF_BOUNDS" : {
         "message" : [
@@ -5568,8 +5569,7 @@
           "Cannot send event after shutdown for session <key>."
         ]
       }
-    },
-    "sqlState" : "XXSC0"
+    }
   },
   "SPARK_JOB_CANCELLED" : {
     "message" : [
