@@ -28,12 +28,13 @@ on:
         default: '*'
       jdk:
         type: choice
-        description: 'JDK version: 17 or 21'
+        description: 'JDK version: 17, 21, or 25'
         required: true
         default: '17'
         options:
         - '17'
         - '21'
+        - '25'
       scala:
         type: choice
         description: 'Scala version: 2.13'
