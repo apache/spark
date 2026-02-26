@@ -23,6 +23,7 @@ import os
 import re
 import sys
 import subprocess
+from contextlib import contextmanager
 
 from sparktestsupport import SPARK_HOME, USER_HOME, ERROR_CODES
 from sparktestsupport.shellutils import exit_from_command_with_retcode, run_cmd, rm_r, which
@@ -76,6 +77,18 @@ def set_title_and_block(title, err_block):
     print(line_str)
     print(title)
     print(line_str)
+
+
+@contextmanager
+def group_in_github_actions(title):
+    if "GITHUB_ACTIONS" in os.environ:
+        print(f"::group::{title}")
+        try:
+            yield
+        finally:
+            print("::endgroup::")
+    else:
+        yield
 
 
 def run_apache_rat_checks():
@@ -255,7 +268,8 @@ def build_spark_sbt(extra_profiles):
 
     print("[info] Building Spark using SBT with these arguments: ", " ".join(profiles_and_goals))
 
-    exec_sbt(profiles_and_goals)
+    with group_in_github_actions("sbt build"):
+        exec_sbt(profiles_and_goals)
 
 
 def build_spark_unidoc_sbt(extra_profiles):
