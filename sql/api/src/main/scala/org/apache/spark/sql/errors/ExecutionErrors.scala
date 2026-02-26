@@ -217,13 +217,6 @@ private[sql] trait ExecutionErrors extends DataTypeErrorsBase {
       messageParameters = Map("name" -> name))
   }
 
-  def beanEncoderDoesNotSupportInterfaceError(className: String):
-  SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_2231",
-      messageParameters = Map("className" -> className))
-  }
-
   def primitiveTypesNotSupportedError(): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(errorClass = "_LEGACY_ERROR_TEMP_2230")
   }

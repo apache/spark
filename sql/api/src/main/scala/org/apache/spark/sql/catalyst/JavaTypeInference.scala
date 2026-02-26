@@ -26,6 +26,7 @@ import scala.reflect.ClassTag
 
 import org.apache.commons.lang3.reflect.{TypeUtils => JavaTypeUtils}
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ArrayEncoder, BinaryEncoder, BoxedBooleanEncoder, BoxedByteEncoder, BoxedDoubleEncoder, BoxedFloatEncoder, BoxedIntEncoder, BoxedLongEncoder, BoxedShortEncoder, DayTimeIntervalEncoder, DEFAULT_GEOGRAPHY_ENCODER, DEFAULT_GEOMETRY_ENCODER, DEFAULT_JAVA_DECIMAL_ENCODER, EncoderField, IterableEncoder, JavaBeanEncoder, JavaBigIntEncoder, JavaEnumEncoder, LocalDateTimeEncoder, LocalTimeEncoder, MapEncoder, PrimitiveBooleanEncoder, PrimitiveByteEncoder, PrimitiveDoubleEncoder, PrimitiveFloatEncoder, PrimitiveIntEncoder, PrimitiveLongEncoder, PrimitiveShortEncoder, STRICT_DATE_ENCODER, STRICT_INSTANT_ENCODER, STRICT_LOCAL_DATE_ENCODER, STRICT_TIMESTAMP_ENCODER, StringEncoder, UDTEncoder, YearMonthIntervalEncoder}
 import org.apache.spark.sql.errors.ExecutionErrors
@@ -154,7 +155,9 @@ object JavaTypeInference {
       // Encoders for interfaces are not supported because de-serialization uses its
       // Deserializer to instantiate the class, which will not work for interfaces.
       if (c.isInterface) {
-        throw ExecutionErrors.beanEncoderDoesNotSupportInterfaceError(c.getName)
+        throw new SparkUnsupportedOperationException(
+          errorClass = "_LEGACY_ERROR_TEMP_2231",
+          messageParameters = Map("className" -> c.getName))
       }
 
       // TODO: we should only collect properties that have getter and setter. However, some tests
