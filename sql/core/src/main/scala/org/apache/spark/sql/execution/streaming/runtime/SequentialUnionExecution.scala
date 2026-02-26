@@ -249,8 +249,11 @@ class SequentialUnionExecution(
     val batchConstructed = super.constructNextBatch(execCtx, noDataBatchesEnabled)
 
     if (batchConstructed) {
-      // Check if active child is exhausted and transition if needed
-      // After prepareForTriggerAvailableNow(), startOffset==endOffset means truly exhausted
+      // TODO: Auto-transition needs more sophisticated logic
+      // Current issue: transitioning after first batch even when more data available
+      // Need to: wait for multiple batches to drain before transitioning
+      // For now, transitions must be done manually or via checkpoint recovery
+
       val exhausted = isActiveChildExhausted(execCtx)
       // scalastyle:off println
       val msg3 = s"[SEQEXEC] Batch constructed: activeChild=$activeChildIndex, " +
@@ -258,12 +261,10 @@ class SequentialUnionExecution(
       println(msg3)
       // scalastyle:on println
 
-      if (!isOnFinalChild && exhausted) {
-        // scalastyle:off println
-        println(s"[SEQEXEC] Child $activeChildIndex EXHAUSTED, will transition")
-        // scalastyle:on println
-        transitionToNextChild()
-      }
+      // if (!isOnFinalChild && exhausted) {
+      //   println(s"[SEQEXEC] Child $activeChildIndex EXHAUSTED, will transition")
+      //   transitionToNextChild()
+      // }
     }
 
     batchConstructed
