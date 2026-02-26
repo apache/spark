@@ -117,6 +117,10 @@ class ArrowBatchTransformer:
         """
         Enforce target schema on a RecordBatch by reordering columns and coercing types.
 
+        .. note::
+            Currently this function is only used by UDTF. The error messages
+            are UDTF-specific (see SPARK-55723).
+
         Parameters
         ----------
         batch : pa.RecordBatch
@@ -154,6 +158,8 @@ class ArrowBatchTransformer:
                 try:
                     arr = arr.cast(target_type=field.type, safe=safecheck)
                 except (pa.ArrowInvalid, pa.ArrowTypeError):
+                    # TODO(SPARK-55723): Unify error messages for all UDF types,
+                    #  not just UDTF.
                     raise PySparkRuntimeError(
                         errorClass="RESULT_COLUMNS_MISMATCH_FOR_ARROW_UDTF",
                         messageParameters={
