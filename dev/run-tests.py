@@ -82,11 +82,11 @@ def set_title_and_block(title, err_block):
 @contextmanager
 def group_in_github_actions(title):
     if "GITHUB_ACTIONS" in os.environ:
-        print(f"::group::{title}", flush=True)
+        print(f"\n::group::{title}", flush=True)
         try:
             yield
         finally:
-            print("::endgroup::", flush=True)
+            print("\n::endgroup::", flush=True)
     else:
         yield
 
