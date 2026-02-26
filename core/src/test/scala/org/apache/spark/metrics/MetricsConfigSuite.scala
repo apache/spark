@@ -160,6 +160,18 @@ class MetricsConfigSuite extends SparkFunSuite with BeforeAndAfter {
     assert(servletProps.size() === 2)
   }
 
+  test("MetricsConfig substitutes environment references in metric properties") {
+    val sparkConf = new SparkConf(loadDefaults = false)
+    // Use an existing env var from Spark test conventions to avoid mutating process env.
+    assume(sys.env.get("SPARK_TESTING").contains("1"))
+    setMetricsProperty(sparkConf, "*.sink.statsd.host", "${env:SPARK_TESTING}")
+
+    val conf = new MetricsConfig(sparkConf)
+    conf.initialize()
+
+    assert(conf.getInstance("driver").getProperty("sink.statsd.host") === "1")
+  }
+
   private def setMetricsProperty(conf: SparkConf, name: String, value: String): Unit = {
     conf.set(s"spark.metrics.conf.$name", value)
   }

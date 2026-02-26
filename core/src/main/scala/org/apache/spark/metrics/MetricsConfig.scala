@@ -26,6 +26,7 @@ import scala.util.matching.Regex
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.{ConfigReader, SparkConfigProvider}
 import org.apache.spark.internal.config.METRICS_CONF
 import org.apache.spark.util.Utils
 
@@ -37,6 +38,7 @@ private[spark] class MetricsConfig(conf: SparkConf) extends Logging {
 
   private[metrics] val properties = new Properties()
   private[metrics] var perInstanceSubProperties: mutable.HashMap[String, Properties] = null
+  private val reader = new ConfigReader(new SparkConfigProvider(conf.getAll.toMap.asJava))
 
   private def setDefaultProperties(prop: Properties): Unit = {
     prop.setProperty("*.sink.servlet.class", "org.apache.spark.metrics.sink.MetricsServlet")
@@ -59,7 +61,7 @@ private[spark] class MetricsConfig(conf: SparkConf) extends Logging {
     val prefix = "spark.metrics.conf."
     conf.getAll.foreach {
       case (k, v) if k.startsWith(prefix) =>
-        properties.setProperty(k.substring(prefix.length()), v)
+        properties.setProperty(k.substring(prefix.length()), substitute(v))
       case _ =>
     }
 
@@ -136,6 +138,9 @@ private[spark] class MetricsConfig(conf: SparkConf) extends Logging {
 
       if (is != null) {
         properties.load(is)
+        properties.asScala.foreach { case (key, value) =>
+          properties.setProperty(key, substitute(value))
+        }
       }
     } catch {
       case e: Exception =>
@@ -147,5 +152,7 @@ private[spark] class MetricsConfig(conf: SparkConf) extends Logging {
       }
     }
   }
+
+  private def substitute(value: String): String = reader.substitute(value)
 
 }
