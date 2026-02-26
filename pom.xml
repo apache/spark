@@ -1357,12 +1357,13 @@
         <version>${postgresql.version}</version>
         <scope>test</scope>
       </dependency>
-      <dependency>
+      <!-- TODO(SPARK-55707: Re-enable DB2 JDBC Driver tests) -->
+      <!--dependency>
         <groupId>com.ibm.db2</groupId>
         <artifactId>jcc</artifactId>
         <version>${db2.jcc.version}</version>
         <scope>test</scope>
-      </dependency>
+      </dependency-->
       <dependency>
         <groupId>com.microsoft.sqlserver</groupId>
         <artifactId>mssql-jdbc</artifactId>
