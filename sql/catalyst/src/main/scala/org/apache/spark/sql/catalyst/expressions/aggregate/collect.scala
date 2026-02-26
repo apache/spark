@@ -595,30 +595,32 @@ case class ListAgg(
   }
 
   /**
-   * Returns true if the ordering expression is incompatible with DISTINCT deduplication.
+   * Returns true if the order value may be ambiguous after DISTINCT deduplication.
    *
-   * When LISTAGG(DISTINCT col) WITHIN GROUP (ORDER BY col) is used on a non-string column,
-   * the child is implicitly cast to string (with UTF8_BINARY collation). The DISTINCT rewrite
-   * (see [[RewriteDistinctAggregates]]) uses GROUP BY on both the original and cast columns,
-   * so the cast must preserve equality semantics: values that are GROUP BY-equal must cast to
-   * equal strings, and vice versa. Types like Float/Double violate this because IEEE 754
-   * negative zero (-0.0) and positive zero (0.0) are equal but produce different strings.
+   * For LISTAGG(DISTINCT child) WITHIN GROUP (ORDER BY order_expr), each distinct child
+   * value must map to exactly one order value (a functional dependency: child -> order_expr,
+   * where equality is defined by GROUP BY semantics). Otherwise, after deduplication on child,
+   * the order value is ambiguous and the result is non-deterministic.
+   *
+   * Currently only detects functional dependencies introduced by Cast (e.g.,
+   * child = Cast(order_expr, StringType) where the cast is equality-preserving).
+   * TODO(SPARK-55718): extend to detect other functional dependencies.
    *
    * Returns false when the order expression matches the child (i.e., [[needSaveOrderValue]]
    * is false). Otherwise, the behavior depends on the
    * [[SQLConf.LISTAGG_ALLOW_DISTINCT_CAST_WITH_ORDER]] config:
-   *  - If enabled, delegates to [[orderMismatchCastSafety]] to determine whether the
-   *    mismatch is due to a safe cast, an unsafe cast, or not a cast at all.
-   *  - If disabled, any mismatch is considered incompatible.
+   *  - If enabled, delegates to [[checkOrderValueDeterminism]] to determine whether the
+   *    order value is uniquely determined by the child.
+   *  - If disabled, any mismatch is considered ambiguous.
    *
-   * @return true if an incompatibility exists, false if the ordering is safe
+   * @return true if ambiguity exists, false if the order value is deterministic
    * @see [[throwDistinctOrderError]] to throw the appropriate error when this returns true
    */
-  def hasDistinctOrderIncompatibility: Boolean = {
+  def hasDistinctOrderAmbiguity: Boolean = {
     needSaveOrderValue && {
       if (SQLConf.get.listaggAllowDistinctCastWithOrder) {
-        orderMismatchCastSafety match {
-          case CastSafetyResult.SafeCast => false
+        checkOrderValueDeterminism match {
+          case OrderDeterminismResult.Deterministic => false
           case _ => true
         }
       } else {
@@ -629,12 +631,12 @@ case class ListAgg(
 
   def throwDistinctOrderError(): Nothing = {
     if (SQLConf.get.listaggAllowDistinctCastWithOrder) {
-      orderMismatchCastSafety match {
-        case CastSafetyResult.UnsafeCast(inputType, castType) =>
-          throwFunctionAndOrderExpressionUnsafeCastError(inputType, castType)
-        case CastSafetyResult.NotACast =>
+      checkOrderValueDeterminism match {
+        case OrderDeterminismResult.NonDeterministicMismatch =>
           throwFunctionAndOrderExpressionMismatchError()
-        case CastSafetyResult.SafeCast =>
+        case OrderDeterminismResult.NonDeterministicCast(inputType, castType) =>
+          throwFunctionAndOrderExpressionUnsafeCastError(inputType, castType)
+        case OrderDeterminismResult.Deterministic =>
           throw SparkException.internalError(
             "ListAgg.throwDistinctOrderError should not be called when the cast is safe")
       }
@@ -655,31 +657,39 @@ case class ListAgg(
   }
 
   /**
-   * Classifies the order-expression mismatch as a safe cast, unsafe cast, or not a cast.
+   * Checks whether the order value is uniquely determined by the child value.
    *
-   * @see [[hasDistinctOrderIncompatibility]] for the full invariant this enforces
+   * Currently only handles the case where child = Cast(order_expr, T). If the cast is
+   * equality-preserving, the order value is deterministic (each child string maps back to
+   * exactly one original value). Otherwise, returns
+   * [[OrderDeterminismResult.NonDeterministicMismatch]].
+   *
+   * @see [[hasDistinctOrderAmbiguity]]
    */
-  private def orderMismatchCastSafety: CastSafetyResult = {
-    if (orderExpressions.size != 1) return CastSafetyResult.NotACast
+  private def checkOrderValueDeterminism: OrderDeterminismResult = {
+    if (orderExpressions.size != 1) return OrderDeterminismResult.NonDeterministicMismatch
     child match {
       case Cast(castChild, castType, _, _)
         if orderExpressions.head.child.semanticEquals(castChild) =>
-          if (isCastSafeForDistinct(castChild.dataType) &&
-              isCastTargetSafeForDistinct(castType)) {
-            CastSafetyResult.SafeCast
+          if (isCastEqualityPreserving(castChild.dataType) &&
+              isCastTargetEqualityPreserving(castType)) {
+            OrderDeterminismResult.Deterministic
           } else {
-            CastSafetyResult.UnsafeCast(castChild.dataType, castType)
+            OrderDeterminismResult.NonDeterministicCast(castChild.dataType, castType)
           }
-      case _ => CastSafetyResult.NotACast
+      case _ => OrderDeterminismResult.NonDeterministicMismatch
     }
   }
 
   /**
-   * Returns true if casting `dt` to string/binary is injective for DISTINCT deduplication.
+   * Returns true if casting `dt` to string/binary preserves equality semantics: values that
+   * are GROUP BY-equal must cast to equal results, and different results must imply different
+   * original values. Types like Float/Double are unsafe because IEEE 754 negative zero (-0.0)
+   * and positive zero (0.0) are equal but produce different string representations.
    *
-   * @see [[hasDistinctOrderIncompatibility]]
+   * @see [[checkOrderValueDeterminism]]
    */
-  private def isCastSafeForDistinct(dt: DataType): Boolean = dt match {
+  private def isCastEqualityPreserving(dt: DataType): Boolean = dt match {
     case _: IntegerType | LongType | ShortType | ByteType => true
     case _: DecimalType => true
     case _: DateType | TimestampNTZType => true
@@ -698,34 +708,36 @@ case class ListAgg(
   }
 
   /**
-   * Returns true if the target type's equality semantics are safe for DISTINCT deduplication
-   * (i.e., UTF8_BINARY collation or BinaryType).
+   * Returns true if the cast target type preserves equality semantics for DISTINCT
+   * deduplication. A non-binary-equality collation on the target [[StringType]] can cause
+   * different source values to become equal after casting (e.g., "ABC" and "abc" are different
+   * under UTF8_BINARY but equal under UTF8_LCASE).
    *
-   * @see [[hasDistinctOrderIncompatibility]]
+   * @see [[checkOrderValueDeterminism]]
    */
-  private def isCastTargetSafeForDistinct(dt: DataType): Boolean = dt match {
+  private def isCastTargetEqualityPreserving(dt: DataType): Boolean = dt match {
     case st: StringType => st.isUTF8BinaryCollation
     case BinaryType => true
     case _ => false
   }
 
   /**
-   * Result of checking whether a LISTAGG(DISTINCT) order-expression mismatch
-   * is caused by a cast and whether that cast is safe for deduplication.
+   * Result of checking whether the order value is uniquely determined by the child value
+   * after DISTINCT deduplication. Currently only handles Cast.
    */
-  private sealed trait CastSafetyResult
+  private sealed trait OrderDeterminismResult
 
-  private object CastSafetyResult {
-    /** The mismatch is not due to a cast at all. */
-    case object NotACast extends CastSafetyResult
+  private object OrderDeterminismResult {
+    /** The order value is uniquely determined by the child value. */
+    case object Deterministic extends OrderDeterminismResult
 
-    /** The mismatch is due to a cast that is safe for DISTINCT. */
-    case object SafeCast extends CastSafetyResult
+    /** Non-deterministic: cannot establish a child -> order functional dependency. */
+    case object NonDeterministicMismatch extends OrderDeterminismResult
 
-    /** The mismatch is due to a cast that is unsafe for DISTINCT. */
-    case class UnsafeCast(
+    /** Non-deterministic: the cast does not preserve equality semantics. */
+    case class NonDeterministicCast(
         inputType: DataType,
-        castType: DataType) extends CastSafetyResult
+        castType: DataType) extends OrderDeterminismResult
   }
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =

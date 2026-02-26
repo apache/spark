@@ -78,10 +78,10 @@ class AggregateExpressionResolver(
    *    2. Handle [[OuterReference]] in [[AggregateExpression]], if there are any (see
    *    `handleOuterAggregateExpression`);
    *  - Validation:
-   *   1. [[ListAgg]] is not allowed in DISTINCT aggregates if it contains [[SortOrder]] different
-   *      from its child. However, when [[SQLConf.LISTAGG_ALLOW_DISTINCT_CAST_WITH_ORDER]] is
-   *      enabled, a mismatch is tolerated if it is solely due to a [[Cast]] whose source type is
-   *      injective when cast to string (see [[ListAgg.hasDistinctOrderIncompatibility]]);
+   *   1. [[ListAgg]] is not allowed in DISTINCT aggregates if the order value is ambiguous
+   *      after deduplication. When [[SQLConf.LISTAGG_ALLOW_DISTINCT_CAST_WITH_ORDER]] is
+   *      enabled, a mismatch is tolerated if the child value uniquely determines the order
+   *      value (see [[ListAgg.hasDistinctOrderAmbiguity]]);
    *   2. Nested aggregate functions are not allowed;
    *   3. Nondeterministic expressions in the subtree of a related aggregate function are not
    *      allowed;
@@ -118,7 +118,7 @@ class AggregateExpressionResolver(
   private def validateResolvedAggregateExpression(aggregateExpression: AggregateExpression): Unit =
     aggregateExpression match {
       case agg @ AggregateExpression(listAgg: ListAgg, _, _, _, _)
-          if agg.isDistinct && listAgg.hasDistinctOrderIncompatibility =>
+          if agg.isDistinct && listAgg.hasDistinctOrderAmbiguity =>
         listAgg.throwDistinctOrderError()
       case _ =>
         if (expressionResolutionContextStack.peek().hasAggregateExpressions) {
