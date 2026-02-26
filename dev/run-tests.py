@@ -82,11 +82,11 @@ def set_title_and_block(title, err_block):
 @contextmanager
 def group_in_github_actions(title):
     if "GITHUB_ACTIONS" in os.environ:
-        print(f"\n::group::{title}", flush=True)
+        print(f"::group::{title}", flush=True)
         try:
             yield
         finally:
-            print("\n::endgroup::", flush=True)
+            print("::endgroup::", flush=True)
     else:
         yield
 
@@ -179,6 +179,7 @@ def exec_sbt(sbt_args=()):
     for line in iter(sbt_proc.stdout.readline, b""):
         if not sbt_output_filter.match(line):
             print(line.decode("utf-8"), end="")
+    print()  # print a new line because the code above does not guarantee a new line
     retcode = sbt_proc.wait()
 
     if retcode != 0:
