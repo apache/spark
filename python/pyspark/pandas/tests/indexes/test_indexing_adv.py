@@ -22,6 +22,7 @@ import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
+from pyspark.loose_version import LooseVersion
 from pyspark.pandas.exceptions import SparkPandasNotImplementedError
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
@@ -339,8 +340,12 @@ class IndexingAdvMixin:
         self.assert_eq(psdf[10:3], pdf[10:3], almost=True)
 
         # Index loc search
-        self.assert_eq(psdf.A[4], pdf.A[4])
-        self.assert_eq(psdf.A[3], pdf.A[3])
+        if LooseVersion(pd.__version__) < "3.0.0":
+            self.assert_eq(psdf.A[4], pdf.A[4])
+            self.assert_eq(psdf.A[3], pdf.A[3])
+        else:
+            with self.assertRaises(KeyError):
+                psdf.A[4]
 
         # Positional iloc search
         self.assert_eq(psdf.A[:4], pdf.A[:4], almost=True)
