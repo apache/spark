@@ -384,9 +384,13 @@ class FrameComputeMixin:
             pdf.quantile([0.25, 0.5, 0.75], numeric_only=True),
         )
 
-        with self.assertRaisesRegex(TypeError, "Could not convert object \\(string\\) to numeric"):
+        with self.assertRaisesRegex(
+            TypeError, r"Could not convert (object|str) \(string\) to numeric"
+        ):
             psdf.quantile(0.5, numeric_only=False)
-        with self.assertRaisesRegex(TypeError, "Could not convert object \\(string\\) to numeric"):
+        with self.assertRaisesRegex(
+            TypeError, r"Could not convert (object|str) \(string\) to numeric"
+        ):
             psdf.quantile([0.25, 0.5, 0.75], numeric_only=False)
 
     def test_product(self):

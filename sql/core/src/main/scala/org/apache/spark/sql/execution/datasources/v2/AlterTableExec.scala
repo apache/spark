@@ -31,7 +31,8 @@ import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 case class AlterTableExec(
     catalog: TableCatalog,
     ident: Identifier,
-    changes: Seq[TableChange]) extends LeafV2CommandExec {
+    changes: Seq[TableChange],
+    refreshCache: () => Unit) extends LeafV2CommandExec {
 
   override def output: Seq[Attribute] = Seq.empty
 
@@ -42,7 +43,7 @@ case class AlterTableExec(
       case e: IllegalArgumentException if !e.isInstanceOf[SparkThrowable] =>
         throw QueryExecutionErrors.unsupportedTableChangeError(e)
     }
-
+    refreshCache()
     Seq.empty
   }
 }
