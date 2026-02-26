@@ -148,16 +148,21 @@ def main():
     parser.add_argument("-c", "--component", help="Component for the issue")
     args = parser.parse_args()
 
-    if not args.component:
-        args.component = choose_components()
+    if args.parent:
+        asf_jira = jira.client.JIRA(
+            {"server": JIRA_API_BASE}, token_auth=JIRA_ACCESS_TOKEN, timeout=(3.05, 30)
+        )
+        parent_issue = asf_jira.issue(args.parent)
+        print("Parent issue title: %s" % parent_issue.fields.summary)
+        print("Creating a subtask of %s with title: %s" % (args.parent, args.title))
+    else:
+        print("Creating JIRA issue with title: %s" % args.title)
 
     if not args.title:
         parser.error("the following arguments are required: title")
 
-    if args.parent:
-        print("Creating a subtask of %s with title: %s" % (args.parent, args.title))
-    else:
-        print("Creating JIRA issue with title: %s" % args.title)
+    if not args.component:
+        args.component = choose_components()
 
     jira_id = create_jira_issue(args.title, args.parent, args.type, args.version, args.component)
     print("Created JIRA issue: %s" % jira_id)
