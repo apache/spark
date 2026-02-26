@@ -2848,8 +2848,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * @return the cleaned closure
    */
   private[spark] def clean[F <: AnyRef](f: F, checkSerializable: Boolean = true): F = {
-    val cleanedF = SparkClosureCleaner.clean(f, checkSerializable)
-    cleanedF
+    SparkClosureCleaner.clean(f, checkSerializable)
   }
 
   /**
