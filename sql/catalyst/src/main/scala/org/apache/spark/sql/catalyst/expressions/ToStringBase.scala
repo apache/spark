@@ -68,120 +68,120 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
 
   private def castToString(from: DataType): Any => UTF8String =
     TypeApiOps(from).map(ops => acceptAny[Any](v => ops.formatUTF8(v))).getOrElse {
-    from match {
-    case CalendarIntervalType =>
-      acceptAny[CalendarInterval](i => UTF8String.fromString(i.toString))
-    case BinaryType => acceptAny[Array[Byte]](binaryFormatter.apply)
-    case DateType =>
-      acceptAny[Int](d => UTF8String.fromString(dateFormatter.format(d)))
-    case TimestampType =>
-      acceptAny[Long](t => UTF8String.fromString(timestampFormatter.format(t)))
-    case TimestampNTZType =>
-      acceptAny[Long](t => UTF8String.fromString(timestampNTZFormatter.format(t)))
-    case _: TimeType =>
-      acceptAny[Long](t => UTF8String.fromString(timeFormatter.format(t)))
-    case ArrayType(et, _) =>
-      acceptAny[ArrayData](array => {
-        val builder = new UTF8StringBuilder
-        builder.append("[")
-        if (array.numElements() > 0) {
-          val toUTF8String = castToString(et)
-          if (array.isNullAt(0)) {
-            if (nullString.nonEmpty) builder.append(nullString)
-          } else {
-            builder.append(toUTF8String(array.get(0, et)))
-          }
-          var i = 1
-          while (i < array.numElements()) {
-            builder.append(",")
-            if (array.isNullAt(i)) {
-              if (nullString.nonEmpty) builder.append(" " + nullString)
-            } else {
-              builder.append(" ")
-              builder.append(toUTF8String(array.get(i, et)))
+      from match {
+        case CalendarIntervalType =>
+          acceptAny[CalendarInterval](i => UTF8String.fromString(i.toString))
+        case BinaryType => acceptAny[Array[Byte]](binaryFormatter.apply)
+        case DateType =>
+          acceptAny[Int](d => UTF8String.fromString(dateFormatter.format(d)))
+        case TimestampType =>
+          acceptAny[Long](t => UTF8String.fromString(timestampFormatter.format(t)))
+        case TimestampNTZType =>
+          acceptAny[Long](t => UTF8String.fromString(timestampNTZFormatter.format(t)))
+        case _: TimeType =>
+          acceptAny[Long](t => UTF8String.fromString(timeFormatter.format(t)))
+        case ArrayType(et, _) =>
+          acceptAny[ArrayData](array => {
+            val builder = new UTF8StringBuilder
+            builder.append("[")
+            if (array.numElements() > 0) {
+              val toUTF8String = castToString(et)
+              if (array.isNullAt(0)) {
+                if (nullString.nonEmpty) builder.append(nullString)
+              } else {
+                builder.append(toUTF8String(array.get(0, et)))
+              }
+              var i = 1
+              while (i < array.numElements()) {
+                builder.append(",")
+                if (array.isNullAt(i)) {
+                  if (nullString.nonEmpty) builder.append(" " + nullString)
+                } else {
+                  builder.append(" ")
+                  builder.append(toUTF8String(array.get(i, et)))
+                }
+                i += 1
+              }
             }
-            i += 1
-          }
-        }
-        builder.append("]")
-        builder.build()
-      })
-    case MapType(kt, vt, _) =>
-      acceptAny[MapData](map => {
-        val builder = new UTF8StringBuilder
-        builder.append(leftBracket)
-        if (map.numElements() > 0) {
-          val keyArray = map.keyArray()
-          val valueArray = map.valueArray()
-          val keyToUTF8String = castToString(kt)
-          val valueToUTF8String = castToString(vt)
-          builder.append(keyToUTF8String(keyArray.get(0, kt)))
-          builder.append(" ->")
-          if (valueArray.isNullAt(0)) {
-            if (nullString.nonEmpty) builder.append(" " + nullString)
-          } else {
-            builder.append(" ")
-            builder.append(valueToUTF8String(valueArray.get(0, vt)))
-          }
-          var i = 1
-          while (i < map.numElements()) {
-            builder.append(", ")
-            builder.append(keyToUTF8String(keyArray.get(i, kt)))
-            builder.append(" ->")
-            if (valueArray.isNullAt(i)) {
-              if (nullString.nonEmpty) builder.append(" " + nullString)
-            } else {
-              builder.append(" ")
-              builder.append(valueToUTF8String(valueArray.get(i, vt)))
+            builder.append("]")
+            builder.build()
+          })
+        case MapType(kt, vt, _) =>
+          acceptAny[MapData](map => {
+            val builder = new UTF8StringBuilder
+            builder.append(leftBracket)
+            if (map.numElements() > 0) {
+              val keyArray = map.keyArray()
+              val valueArray = map.valueArray()
+              val keyToUTF8String = castToString(kt)
+              val valueToUTF8String = castToString(vt)
+              builder.append(keyToUTF8String(keyArray.get(0, kt)))
+              builder.append(" ->")
+              if (valueArray.isNullAt(0)) {
+                if (nullString.nonEmpty) builder.append(" " + nullString)
+              } else {
+                builder.append(" ")
+                builder.append(valueToUTF8String(valueArray.get(0, vt)))
+              }
+              var i = 1
+              while (i < map.numElements()) {
+                builder.append(", ")
+                builder.append(keyToUTF8String(keyArray.get(i, kt)))
+                builder.append(" ->")
+                if (valueArray.isNullAt(i)) {
+                  if (nullString.nonEmpty) builder.append(" " + nullString)
+                } else {
+                  builder.append(" ")
+                  builder.append(valueToUTF8String(valueArray.get(i, vt)))
+                }
+                i += 1
+              }
             }
-            i += 1
-          }
-        }
-        builder.append(rightBracket)
-        builder.build()
-      })
-    case StructType(fields) =>
-      acceptAny[InternalRow](row => {
-        val builder = new UTF8StringBuilder
-        builder.append(leftBracket)
-        if (row.numFields > 0) {
-          val st = fields.map(_.dataType)
-          val toUTF8StringFuncs = st.map(castToString)
-          if (row.isNullAt(0)) {
-            if (nullString.nonEmpty) builder.append(nullString)
-          } else {
-            builder.append(toUTF8StringFuncs(0)(row.get(0, st(0))))
-          }
-          var i = 1
-          while (i < row.numFields) {
-            builder.append(",")
-            if (row.isNullAt(i)) {
-              if (nullString.nonEmpty) builder.append(" " + nullString)
-            } else {
-              builder.append(" ")
-              builder.append(toUTF8StringFuncs(i)(row.get(i, st(i))))
+            builder.append(rightBracket)
+            builder.build()
+          })
+        case StructType(fields) =>
+          acceptAny[InternalRow](row => {
+            val builder = new UTF8StringBuilder
+            builder.append(leftBracket)
+            if (row.numFields > 0) {
+              val st = fields.map(_.dataType)
+              val toUTF8StringFuncs = st.map(castToString)
+              if (row.isNullAt(0)) {
+                if (nullString.nonEmpty) builder.append(nullString)
+              } else {
+                builder.append(toUTF8StringFuncs(0)(row.get(0, st(0))))
+              }
+              var i = 1
+              while (i < row.numFields) {
+                builder.append(",")
+                if (row.isNullAt(i)) {
+                  if (nullString.nonEmpty) builder.append(" " + nullString)
+                } else {
+                  builder.append(" ")
+                  builder.append(toUTF8StringFuncs(i)(row.get(i, st(i))))
+                }
+                i += 1
+              }
             }
-            i += 1
-          }
-        }
-        builder.append(rightBracket)
-        builder.build()
-      })
-    case pudt: PythonUserDefinedType => castToString(pudt.sqlType)
-    case udt: UserDefinedType[_] =>
-      o => UTF8String.fromString(udt.stringifyValue(udt.deserialize(o)))
-    case YearMonthIntervalType(startField, endField) =>
-      acceptAny[Int](i => UTF8String.fromString(
-        IntervalUtils.toYearMonthIntervalString(i, ANSI_STYLE, startField, endField)))
-    case DayTimeIntervalType(startField, endField) =>
-      acceptAny[Long](i => UTF8String.fromString(
-        IntervalUtils.toDayTimeIntervalString(i, ANSI_STYLE, startField, endField)))
-    case _: DecimalType if useDecimalPlainString =>
-      acceptAny[Decimal](d => UTF8String.fromString(d.toPlainString))
-    case _: StringType => acceptAny[UTF8String](identity[UTF8String])
-    case _ => o => UTF8String.fromString(o.toString)
+            builder.append(rightBracket)
+            builder.build()
+          })
+        case pudt: PythonUserDefinedType => castToString(pudt.sqlType)
+        case udt: UserDefinedType[_] =>
+          o => UTF8String.fromString(udt.stringifyValue(udt.deserialize(o)))
+        case YearMonthIntervalType(startField, endField) =>
+          acceptAny[Int](i => UTF8String.fromString(
+            IntervalUtils.toYearMonthIntervalString(i, ANSI_STYLE, startField, endField)))
+        case DayTimeIntervalType(startField, endField) =>
+          acceptAny[Long](i => UTF8String.fromString(
+            IntervalUtils.toDayTimeIntervalString(i, ANSI_STYLE, startField, endField)))
+        case _: DecimalType if useDecimalPlainString =>
+          acceptAny[Decimal](d => UTF8String.fromString(d.toPlainString))
+        case _: StringType => acceptAny[UTF8String](identity[UTF8String])
+        case _ => o => UTF8String.fromString(o.toString)
+      }
     }
-  }
 
   // Returns a function to generate code to convert a value to pretty string. It assumes the input
   // is not null.
