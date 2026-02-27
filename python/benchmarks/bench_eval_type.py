@@ -258,7 +258,15 @@ class GroupedMapPandasUDFBench:
         """1k rows/group, 5 cols, 1500 groups."""
         self._run(self._small_few_input)
 
+    def peakmem_small_groups_few_cols(self):
+        """1k rows/group, 5 cols, 1500 groups."""
+        self._run(self._small_few_input)
+
     def time_small_groups_many_cols(self):
+        """1k rows/group, 50 cols, 200 groups."""
+        self._run(self._small_many_input)
+
+    def peakmem_small_groups_many_cols(self):
         """1k rows/group, 50 cols, 200 groups."""
         self._run(self._small_many_input)
 
@@ -266,7 +274,15 @@ class GroupedMapPandasUDFBench:
         """100k rows/group, 5 cols, 350 groups."""
         self._run(self._large_few_input)
 
+    def peakmem_large_groups_few_cols(self):
+        """100k rows/group, 5 cols, 350 groups."""
+        self._run(self._large_few_input)
+
     def time_large_groups_many_cols(self):
+        """100k rows/group, 50 cols, 40 groups."""
+        self._run(self._large_many_input)
+
+    def peakmem_large_groups_many_cols(self):
         """100k rows/group, 50 cols, 40 groups."""
         self._run(self._large_many_input)
 
@@ -274,31 +290,13 @@ class GroupedMapPandasUDFBench:
         """Mixed column types, 1-arg UDF, 3 rows/group, 1300 groups."""
         self._run(self._mixed_input)
 
-    def time_mixed_types_two_args(self):
-        """Mixed column types, 2-arg UDF with key, 3 rows/group, 1600 groups."""
-        self._run(self._two_args_input)
-
-    # -- memory benchmarks ---------------------------------------------------
-
-    def peakmem_small_groups_few_cols(self):
-        """1k rows/group, 5 cols, 1500 groups."""
-        self._run(self._small_few_input)
-
-    def peakmem_small_groups_many_cols(self):
-        """1k rows/group, 50 cols, 200 groups."""
-        self._run(self._small_many_input)
-
-    def peakmem_large_groups_few_cols(self):
-        """100k rows/group, 5 cols, 350 groups."""
-        self._run(self._large_few_input)
-
-    def peakmem_large_groups_many_cols(self):
-        """100k rows/group, 50 cols, 40 groups."""
-        self._run(self._large_many_input)
-
     def peakmem_mixed_types(self):
         """Mixed column types, 1-arg UDF, 3 rows/group, 1300 groups."""
         self._run(self._mixed_input)
+
+    def time_mixed_types_two_args(self):
+        """Mixed column types, 2-arg UDF with key, 3 rows/group, 1600 groups."""
+        self._run(self._two_args_input)
 
     def peakmem_mixed_types_two_args(self):
         """Mixed column types, 2-arg UDF with key, 3 rows/group, 1600 groups."""
