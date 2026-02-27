@@ -21,9 +21,8 @@ import java.io.{DataInputStream, DataOutputStream}
 
 import net.razorvine.pickle.Pickler
 
-import org.apache.spark.api.python.{PythonFunction, PythonWorkerUtils, SpecialLengths}
+import org.apache.spark.api.python.{PythonException, PythonFunction, PythonWorkerUtils, SpecialLengths}
 import org.apache.spark.sql.connector.write.WriterCommitMessage
-import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.python.PythonPlannerRunner
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
@@ -78,8 +77,7 @@ class PythonStreamingSinkCommitRunner(
     val code = dataIn.readInt()
     if (code == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
       val msg = PythonWorkerUtils.readUTF(dataIn)
-      val action = if (abort) "abort" else "commit"
-      throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(action, msg)
+      throw new PythonException(msg, null)
     }
   }
 }
