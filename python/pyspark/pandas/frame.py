@@ -9983,22 +9983,30 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     data[psser.name] = [0, 0, np.nan, np.nan]
                 return DataFrame(data, index=["count", "unique", "top", "freq"])
 
-            # Get `top` & `freq` for each column in a single pass.
-            # Unpivot all string columns into (idx, str_value) pairs using posexplode,
-            # then find the most frequent value per column using the struct min trick.
-            # The negative count ensures min(struct(neg_count, str_value)) picks the
-            # highest count, and among ties, the alphabetically first value (matching pandas).
-            rows = (
-                sdf.select(F.posexplode(F.array(*exprs_string)).alias("idx", "str_value"))
-                .groupby("idx", "str_value")
-                .agg(F.negative(F.count("*")).alias("neg_count"))
-                .groupby("idx")
-                .agg(F.min(F.struct("neg_count", "str_value")).alias("s"))
-                .sort("idx")
-                .collect()
-            )
-            tops = [str(r.s.str_value) for r in rows]
-            freqs = [str(-r.s.neg_count) for r in rows]
+            if len(exprs_string) == 1:
+                # Fast path for single column (e.g. Series.describe): avoid unpivot overhead.
+                top, freq = (
+                    sdf.groupby(exprs_string[0]).count().sort("count", ascending=False).first()
+                )
+                tops = [str(top)]
+                freqs = [str(freq)]
+            else:
+                # Get `top` & `freq` for each column in a single pass.
+                # Unpivot all string columns into (idx, str_value) pairs using posexplode,
+                # then find the most frequent value per column via the struct min trick.
+                # The negative count ensures min(struct(neg_count, str_value)) picks the
+                # highest count; among ties, the alphabetically first value (matching pandas).
+                rows = (
+                    sdf.select(F.posexplode(F.array(*exprs_string)).alias("idx", "str_value"))
+                    .groupby("idx", "str_value")
+                    .agg(F.negative(F.count("*")).alias("neg_count"))
+                    .groupby("idx")
+                    .agg(F.min(F.struct("neg_count", "str_value")).alias("s"))
+                    .sort("idx")
+                    .collect()
+                )
+                tops = [str(r.s.str_value) for r in rows]
+                freqs = [str(-r.s.neg_count) for r in rows]
             stats = [counts, uniques, tops, freqs]
             stats_names = ["count", "unique", "top", "freq"]
 
