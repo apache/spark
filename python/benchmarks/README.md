@@ -24,6 +24,13 @@ cd python/benchmarks
 asv run --python=same --quick
 ```
 
+You can also specify the test class to run:
+
+```bash
+cd python/benchmarks
+asv run --python=same --quick -b 'bench_arrow.LongArrowToPandasBenchmark'
+```
+
 ### Full run against a commit
 
 Run benchmarks in an isolated virtualenv (builds pyspark from source):
