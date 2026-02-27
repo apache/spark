@@ -367,7 +367,8 @@ class ResolverGuard(catalogManager: CatalogManager) extends SQLConfHelper {
     val functionName = nameParts.last
 
     // Only reject functions that are explicitly unsupported or not in the builtin registry
-    // for unqualified names. For qualified names, let the resolver attempt resolution.
+    // for unqualified names. For qualified names, still reject unsupported function names
+    // (e.g. builtin.explode), but allow others to pass through for the resolver.
     val shouldReject = if (nameParts.length == 1) {
       // Unqualified: only allow if it's a known builtin (excluding unsupported ones)
       ResolverGuard.UNSUPPORTED_FUNCTION_NAMES.contains(functionName) ||
@@ -375,8 +376,9 @@ class ResolverGuard(catalogManager: CatalogManager) extends SQLConfHelper {
         FunctionIdentifier(functionName.toLowerCase(Locale.ROOT))
       )
     } else {
-      // Qualified: allow to pass through, let downstream resolver handle it
-      false
+      // Qualified: reject if the function name is unsupported (e.g. builtin.explode);
+      // otherwise allow to pass through for the downstream resolver.
+      ResolverGuard.UNSUPPORTED_FUNCTION_NAMES.contains(functionName)
     }
 
     !shouldReject && unresolvedFunction.children.forall(checkExpression)

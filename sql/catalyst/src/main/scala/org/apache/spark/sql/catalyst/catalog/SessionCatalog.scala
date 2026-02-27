@@ -2383,7 +2383,8 @@ class SessionCatalog(
       functionRegistry.functionExists(tempIdent) ||
         tableFunctionRegistry.functionExists(tempIdent)
     } else {
-      isTempFunctionIdentifier(name)
+      isTempFunctionIdentifier(name) &&
+        (functionRegistry.functionExists(name) || tableFunctionRegistry.functionExists(name))
     }
   }
 
@@ -2526,7 +2527,7 @@ class SessionCatalog(
    * Resolution order follows the configured path (e.g. builtin then session);
    * extension functions are stored in the builtin namespace.
    */
-  def lookupBuiltinOrTempTableFunction(name: String): Option[ExpressionInfo] = {
+  def lookupBuiltinOrTempTableFunction(name: String): Option[ExpressionInfo] = synchronized {
     lookupFunctionWithShadowing(name, tableFunctionRegistry, checkBuiltinOperators = false)
   }
 
@@ -2553,8 +2554,7 @@ class SessionCatalog(
     val tempIdentifier = tempFunctionIdentifier(name)
     synchronized(lookupTempFuncWithViewContext(
       name,
-      // Return false if temp exists (not builtin)
-      ident => !functionRegistry.functionExists(tempIdentifier),
+      _ => false, // Temp-only path: not a builtin, so apply view context
       _ => functionRegistry.lookupFunction(tempIdentifier)))
   }
 
@@ -2607,8 +2607,7 @@ class SessionCatalog(
       if (functionRegistry.functionExists(tempIdentifier)) {
     lookupTempFuncWithViewContext(
           name,
-          // Return false if temp exists (not builtin)
-          ident => !functionRegistry.functionExists(tempIdentifier),
+          _ => false, // Temp-only path: not a builtin, so apply view context
           _ => Option(functionRegistry.lookupFunction(tempIdentifier, arguments)))
       } else {
         None
@@ -2661,8 +2660,7 @@ class SessionCatalog(
       if (tableFunctionRegistry.functionExists(tempIdentifier)) {
         lookupTempFuncWithViewContext(
           name,
-          // Return false if temp exists (not builtin)
-          ident => !tableFunctionRegistry.functionExists(tempIdentifier),
+          _ => false, // Temp-only path: not a builtin, so apply view context
           _ => Option(tableFunctionRegistry.lookupFunction(tempIdentifier, arguments)))
       } else {
         None
