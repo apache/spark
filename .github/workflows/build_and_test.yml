@@ -59,7 +59,9 @@ concurrency:
 jobs:
   precondition:
     name: Check changes
-    runs-on: ubuntu-latest
+    # `ubuntu-slim` is lighter than `ubuntu-latest`.
+    # Please see https://docs.github.com/en/actions/how-tos/write-workflows/choose-where-workflows-run/choose-the-runner-for-a-job#standard-github-hosted-runners-for-public-repositories
+    runs-on: ubuntu-slim
     env:
       GITHUB_PREV_SHA: ${{ github.event.before }}
     outputs:
@@ -1480,7 +1482,9 @@ jobs:
     needs: [precondition]
     if: fromJson(needs.precondition.outputs.required).ui == 'true'
     name: Run Spark UI tests
-    runs-on: ubuntu-latest
+    # `ubuntu-slim` is lighter than `ubuntu-latest`.
+    # Please see https://docs.github.com/en/actions/how-tos/write-workflows/choose-where-workflows-run/choose-the-runner-for-a-job#standard-github-hosted-runners-for-public-repositories
+    runs-on: ubuntu-slim
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v6
