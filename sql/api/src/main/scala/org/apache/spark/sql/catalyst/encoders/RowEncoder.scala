@@ -73,62 +73,61 @@ object RowEncoder extends DataTypeErrorsBase {
   private[sql] def encoderForDataType(dataType: DataType, lenient: Boolean): AgnosticEncoder[_] =
     TypeApiOps(dataType).map(_.getEncoder).getOrElse {
       dataType match {
-      case NullType => NullEncoder
-      case BooleanType => BoxedBooleanEncoder
-      case ByteType => BoxedByteEncoder
-      case ShortType => BoxedShortEncoder
-      case IntegerType => BoxedIntEncoder
-      case LongType => BoxedLongEncoder
-      case FloatType => BoxedFloatEncoder
-      case DoubleType => BoxedDoubleEncoder
-      case dt: DecimalType => JavaDecimalEncoder(dt, lenientSerialization = true)
-      case BinaryType => BinaryEncoder
-      case c: CharType if SqlApiConf.get.preserveCharVarcharTypeInfo =>
-        CharEncoder(c.length)
-      case v: VarcharType if SqlApiConf.get.preserveCharVarcharTypeInfo =>
-        VarcharEncoder(v.length)
-      case s: StringType if StringHelper.isPlainString(s) => StringEncoder
-      case TimestampType if SqlApiConf.get.datetimeJava8ApiEnabled => InstantEncoder(lenient)
-      case TimestampType => TimestampEncoder(lenient)
-      case TimestampNTZType => LocalDateTimeEncoder
-      case DateType if SqlApiConf.get.datetimeJava8ApiEnabled => LocalDateEncoder(lenient)
-      case DateType => DateEncoder(lenient)
-      case _: TimeType => LocalTimeEncoder
-      case CalendarIntervalType => CalendarIntervalEncoder
-      case _: DayTimeIntervalType => DayTimeIntervalEncoder
-      case _: YearMonthIntervalType => YearMonthIntervalEncoder
-      case _: VariantType => VariantEncoder
-      case p: PythonUserDefinedType =>
-        // TODO check if this works.
-        encoderForDataType(p.sqlType, lenient)
-      case udt: UserDefinedType[_] => UDTEncoder(udt, udt.getClass)
-      case ArrayType(elementType, containsNull) =>
-        IterableEncoder(
-          classTag[mutable.ArraySeq[_]],
-          encoderForDataType(elementType, lenient),
-          containsNull,
-          lenientSerialization = true)
-      case MapType(keyType, valueType, valueContainsNull) =>
-        MapEncoder(
-          classTag[scala.collection.Map[_, _]],
-          encoderForDataType(keyType, lenient),
-          encoderForDataType(valueType, lenient),
-          valueContainsNull)
-      case StructType(fields) =>
-        AgnosticRowEncoder(fields.map { field =>
-          EncoderField(
-            field.name,
-            encoderForDataType(field.dataType, lenient),
-            field.nullable,
-            field.metadata)
-        }.toImmutableArraySeq)
-      case g: GeographyType => GeographyEncoder(g)
-      case g: GeometryType => GeometryEncoder(g)
-
-      case _ =>
-        throw new AnalysisException(
-          errorClass = "UNSUPPORTED_DATA_TYPE_FOR_ENCODER",
-          messageParameters = Map("dataType" -> toSQLType(dataType)))
+        case NullType => NullEncoder
+        case BooleanType => BoxedBooleanEncoder
+        case ByteType => BoxedByteEncoder
+        case ShortType => BoxedShortEncoder
+        case IntegerType => BoxedIntEncoder
+        case LongType => BoxedLongEncoder
+        case FloatType => BoxedFloatEncoder
+        case DoubleType => BoxedDoubleEncoder
+        case dt: DecimalType => JavaDecimalEncoder(dt, lenientSerialization = true)
+        case BinaryType => BinaryEncoder
+        case c: CharType if SqlApiConf.get.preserveCharVarcharTypeInfo =>
+          CharEncoder(c.length)
+        case v: VarcharType if SqlApiConf.get.preserveCharVarcharTypeInfo =>
+          VarcharEncoder(v.length)
+        case s: StringType if StringHelper.isPlainString(s) => StringEncoder
+        case TimestampType if SqlApiConf.get.datetimeJava8ApiEnabled => InstantEncoder(lenient)
+        case TimestampType => TimestampEncoder(lenient)
+        case TimestampNTZType => LocalDateTimeEncoder
+        case DateType if SqlApiConf.get.datetimeJava8ApiEnabled => LocalDateEncoder(lenient)
+        case DateType => DateEncoder(lenient)
+        case _: TimeType => LocalTimeEncoder
+        case CalendarIntervalType => CalendarIntervalEncoder
+        case _: DayTimeIntervalType => DayTimeIntervalEncoder
+        case _: YearMonthIntervalType => YearMonthIntervalEncoder
+        case _: VariantType => VariantEncoder
+        case p: PythonUserDefinedType =>
+          // TODO check if this works.
+          encoderForDataType(p.sqlType, lenient)
+        case udt: UserDefinedType[_] => UDTEncoder(udt, udt.getClass)
+        case ArrayType(elementType, containsNull) =>
+          IterableEncoder(
+            classTag[mutable.ArraySeq[_]],
+            encoderForDataType(elementType, lenient),
+            containsNull,
+            lenientSerialization = true)
+        case MapType(keyType, valueType, valueContainsNull) =>
+          MapEncoder(
+            classTag[scala.collection.Map[_, _]],
+            encoderForDataType(keyType, lenient),
+            encoderForDataType(valueType, lenient),
+            valueContainsNull)
+        case StructType(fields) =>
+          AgnosticRowEncoder(fields.map { field =>
+            EncoderField(
+              field.name,
+              encoderForDataType(field.dataType, lenient),
+              field.nullable,
+              field.metadata)
+          }.toImmutableArraySeq)
+        case g: GeographyType => GeographyEncoder(g)
+        case g: GeometryType => GeometryEncoder(g)
+        case _ =>
+          throw new AnalysisException(
+            errorClass = "UNSUPPORTED_DATA_TYPE_FOR_ENCODER",
+            messageParameters = Map("dataType" -> toSQLType(dataType)))
       }
     }
 }
