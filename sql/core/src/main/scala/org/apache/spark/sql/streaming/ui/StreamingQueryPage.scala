@@ -102,7 +102,7 @@ private[ui] class StreamingQueryPage(parent: StreamingQueryTab)
       ).table(page)
     } catch {
       case e@(_: IllegalArgumentException | _: IndexOutOfBoundsException) =>
-        <div class="alert alert-error">
+        <div class="alert alert-danger">
           <p>Error while rendering execution table:</p>
           <pre>
             {Utils.exceptionString(e)}

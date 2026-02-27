@@ -623,7 +623,7 @@ $(document).ready(function () {
         execDataTable.column('executorLogsCol:name').visible(logsExist(response));
         execDataTable.column('threadDumpCol:name').visible(getThreadDumpEnabled());
         execDataTable.column('heapHistogramCol:name').visible(getHeapHistogramEnabled());
-        $('#active-executors [data-toggle="tooltip"]').tooltip();
+        $('#active-executors [data-bs-toggle="tooltip"]').each(function() { new bootstrap.Tooltip(this); });
     
         // This section should be visible once API gives the response.
         $('.active-process-container').hide();
@@ -751,7 +751,7 @@ $(document).ready(function () {
         };
 
         sumDataTable = $(sumSelector).DataTable(sumConf);
-        $('#execSummary [data-toggle="tooltip"]').tooltip();
+        $('#execSummary [data-bs-toggle="tooltip"]').each(function() { new bootstrap.Tooltip(this); });
   
         $("#showAdditionalMetrics").append(
           "<div><a id='additionalMetrics' class='collapse-table'>" +

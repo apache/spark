@@ -105,7 +105,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
            |  'start': new Date(${submissionTime}),
            |  'end': new Date(${completionTime}),
            |  'content': '<div class="application-timeline-content"' +
-           |     'data-html="true" data-placement="top" data-toggle="tooltip"' +
+           |     'data-bs-html="true" data-bs-placement="top" data-bs-toggle="tooltip"' +
            |     'data-title="${jsEscapedDescForTooltip} (Job ${jobId})<br>' +
            |     'Status: ${status}<br>' +
            |     'Submitted: ${UIUtils.formatDate(new Date(submissionTime))}' +
@@ -136,10 +136,10 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
            |  'group': 'executors',
            |  'start': new Date(${e.addTime.getTime()}),
            |  'content': '<div class="executor-event-content"' +
-           |    'data-toggle="tooltip" data-placement="top"' +
+           |    'data-bs-toggle="tooltip" data-bs-placement="top"' +
            |    'data-title="Executor ${e.id}<br>' +
            |    'Added at ${UIUtils.formatDate(e.addTime)}"' +
-           |    'data-html="true">Executor ${e.id} added</div>'
+           |    'data-bs-html="true">Executor ${e.id} added</div>'
            |}
          """.stripMargin
       events += addedEvent
@@ -152,7 +152,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
              |  'group': 'executors',
              |  'start': new Date(${removeTime.getTime()}),
              |  'content': '<div class="executor-event-content"' +
-             |    'data-toggle="tooltip" data-placement="top"' +
+             |    'data-bs-toggle="tooltip" data-bs-placement="top"' +
              |    'data-title="Executor ${e.id}<br>' +
              |    'Removed at ${UIUtils.formatDate(removeTime)}' +
              |    '${
@@ -161,7 +161,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
                           reason.replace("\n", " "))}"""
                       }.getOrElse("")
                    }"' +
-             |    'data-html="true">Executor ${e.id} removed</div>'
+             |    'data-bs-html="true">Executor ${e.id} removed</div>'
              |}
            """.stripMargin
         events += removedEvent
@@ -199,7 +199,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
 
     <span class="expand-application-timeline">
       <span class="expand-application-timeline-arrow arrow-closed"></span>
-      <a data-toggle="tooltip" title={ToolTips.JOB_TIMELINE} data-placement="top">
+      <a data-bs-toggle="tooltip" title={ToolTips.JOB_TIMELINE} data-bs-placement="top">
         Event Timeline
       </a>
     </span> ++
@@ -266,7 +266,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
       ).table(jobPage)
     } catch {
       case e @ (_ : IllegalArgumentException | _ : IndexOutOfBoundsException) =>
-        <div class="alert alert-error">
+        <div class="alert alert-danger">
           <p>Error while rendering job table:</p>
           <pre>
             {Utils.exceptionString(e)}
