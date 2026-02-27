@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BinaryEncoder, B
 import org.apache.spark.sql.errors.DataTypeErrorsBase
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.types.ops.EncodeTypeOps
+import org.apache.spark.sql.types.ops.TypeApiOps
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -71,10 +71,8 @@ object RowEncoder extends DataTypeErrorsBase {
   }
 
   private[sql] def encoderForDataType(dataType: DataType, lenient: Boolean): AgnosticEncoder[_] =
-    dataType match {
-      // Types Framework: delegate to EncodeTypeOps for supported types when enabled
-      case _ if SqlApiConf.get.typesFrameworkEnabled && EncodeTypeOps.supports(dataType) =>
-        EncodeTypeOps(dataType).getEncoder
+    TypeApiOps(dataType).map(_.getEncoder).getOrElse {
+      dataType match {
       case NullType => NullEncoder
       case BooleanType => BoxedBooleanEncoder
       case ByteType => BoxedByteEncoder
@@ -131,5 +129,6 @@ object RowEncoder extends DataTypeErrorsBase {
         throw new AnalysisException(
           errorClass = "UNSUPPORTED_DATA_TYPE_FOR_ENCODER",
           messageParameters = Map("dataType" -> toSQLType(dataType)))
+      }
     }
 }

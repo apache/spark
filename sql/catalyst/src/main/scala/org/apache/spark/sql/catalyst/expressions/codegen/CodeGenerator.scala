@@ -41,7 +41,7 @@ import org.apache.spark.sql.catalyst.encoders.HashableWeakReference
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.catalyst.types.ops.PhyTypeOps
+import org.apache.spark.sql.catalyst.types.ops.TypeOps
 import org.apache.spark.sql.catalyst.util.{ArrayData, CollationAwareUTF8String, CollationFactory, CollationSupport, MapData, SQLOrderingUtil, UnsafeRowUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_MILLIS
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -1990,33 +1990,32 @@ object CodeGenerator extends Logging {
     }
   }
 
-  @tailrec
-  def javaClass(dt: DataType): Class[_] = dt match {
-    // Types Framework: delegate to PhyTypeOps for supported types when enabled
-    case _ if SQLConf.get.typesFrameworkEnabled && PhyTypeOps.supports(dt) =>
-      PhyTypeOps(dt).getJavaClass
-    case BooleanType => java.lang.Boolean.TYPE
-    case ByteType => java.lang.Byte.TYPE
-    case ShortType => java.lang.Short.TYPE
-    case IntegerType | DateType | _: YearMonthIntervalType => java.lang.Integer.TYPE
-    case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType | _: TimeType =>
-      java.lang.Long.TYPE
-    case FloatType => java.lang.Float.TYPE
-    case DoubleType => java.lang.Double.TYPE
-    case _: DecimalType => classOf[Decimal]
-    case BinaryType => classOf[Array[Byte]]
-    case _: GeographyType => classOf[GeographyVal]
-    case _: GeometryType => classOf[GeometryVal]
-    case _: StringType => classOf[UTF8String]
-    case CalendarIntervalType => classOf[CalendarInterval]
-    case _: StructType => classOf[InternalRow]
-    case _: ArrayType => classOf[ArrayData]
-    case _: MapType => classOf[MapData]
-    case udt: UserDefinedType[_] => javaClass(udt.sqlType)
-    case ObjectType(cls) => cls
-    case VariantType => classOf[VariantVal]
-    case _ => classOf[Object]
-  }
+  def javaClass(dt: DataType): Class[_] =
+    TypeOps(dt).map(_.getJavaClass).getOrElse {
+      dt match {
+        case BooleanType => java.lang.Boolean.TYPE
+        case ByteType => java.lang.Byte.TYPE
+        case ShortType => java.lang.Short.TYPE
+        case IntegerType | DateType | _: YearMonthIntervalType => java.lang.Integer.TYPE
+        case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType | _: TimeType =>
+          java.lang.Long.TYPE
+        case FloatType => java.lang.Float.TYPE
+        case DoubleType => java.lang.Double.TYPE
+        case _: DecimalType => classOf[Decimal]
+        case BinaryType => classOf[Array[Byte]]
+        case _: GeographyType => classOf[GeographyVal]
+        case _: GeometryType => classOf[GeometryVal]
+        case _: StringType => classOf[UTF8String]
+        case CalendarIntervalType => classOf[CalendarInterval]
+        case _: StructType => classOf[InternalRow]
+        case _: ArrayType => classOf[ArrayData]
+        case _: MapType => classOf[MapData]
+        case udt: UserDefinedType[_] => javaClass(udt.sqlType)
+        case ObjectType(cls) => cls
+        case VariantType => classOf[VariantVal]
+        case _ => classOf[Object]
+      }
+    }
 
   /**
    * Returns the boxed type in Java.

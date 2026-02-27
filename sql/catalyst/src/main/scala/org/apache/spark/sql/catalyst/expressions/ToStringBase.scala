@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.util.IntervalStringStyles.ANSI_STYLE
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.BinaryOutputStyle
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.types.ops.FormatTypeOps
+import org.apache.spark.sql.types.ops.TypeApiOps
 import org.apache.spark.unsafe.UTF8StringBuilder
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 import org.apache.spark.util.ArrayImplicits._
@@ -66,10 +66,9 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
       case NoConstraint => castToString(from)
     }
 
-  private def castToString(from: DataType): Any => UTF8String = from match {
-    // Types Framework: delegate to FormatTypeOps for supported types when enabled
-    case _ if SQLConf.get.typesFrameworkEnabled && FormatTypeOps.supports(from) =>
-      acceptAny[Any](v => FormatTypeOps(from).formatUTF8(v))
+  private def castToString(from: DataType): Any => UTF8String =
+    TypeApiOps(from).map(ops => acceptAny[Any](v => ops.formatUTF8(v))).getOrElse {
+    from match {
     case CalendarIntervalType =>
       acceptAny[CalendarInterval](i => UTF8String.fromString(i.toString))
     case BinaryType => acceptAny[Array[Byte]](binaryFormatter.apply)
@@ -181,6 +180,7 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
       acceptAny[Decimal](d => UTF8String.fromString(d.toPlainString))
     case _: StringType => acceptAny[UTF8String](identity[UTF8String])
     case _ => o => UTF8String.fromString(o.toString)
+    }
   }
 
   // Returns a function to generate code to convert a value to pretty string. It assumes the input

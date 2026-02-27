@@ -30,7 +30,7 @@ import scala.language.existentials
 import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.types.ops.ExternalTypeOps
+import org.apache.spark.sql.catalyst.types.ops.TypeOps
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -63,38 +63,37 @@ object CatalystTypeConverters {
 
   private def getConverterForType(dataType: DataType): CatalystTypeConverter[Any, Any, Any] = {
     TypeUtils.failUnsupportedDataType(dataType, SQLConf.get)
-    val converter = dataType match {
-      // Types Framework: delegate to ExternalTypeOps for supported types when enabled
-      case _ if SQLConf.get.typesFrameworkEnabled && ExternalTypeOps.supports(dataType) =>
-        new TypeOpsConverter(dataType)
-      case udt: UserDefinedType[_] => UDTConverter(udt)
-      case arrayType: ArrayType => ArrayConverter(arrayType.elementType)
-      case mapType: MapType => MapConverter(mapType.keyType, mapType.valueType)
-      case structType: StructType => StructConverter(structType)
-      case c: CharType => new CharConverter(c.length)
-      case v: VarcharType => new VarcharConverter(v.length)
-      case _: StringType => StringConverter
-      case g: GeographyType =>
-        new GeographyConverter(g)
-      case g: GeometryType =>
-        new GeometryConverter(g)
-      case DateType if SQLConf.get.datetimeJava8ApiEnabled => LocalDateConverter
-      case DateType => DateConverter
-      case _: TimeType => TimeConverter
-      case TimestampType if SQLConf.get.datetimeJava8ApiEnabled => InstantConverter
-      case TimestampType => TimestampConverter
-      case TimestampNTZType => TimestampNTZConverter
-      case dt: DecimalType => new DecimalConverter(dt)
-      case BooleanType => BooleanConverter
-      case ByteType => ByteConverter
-      case ShortType => ShortConverter
-      case IntegerType => IntConverter
-      case LongType => LongConverter
-      case FloatType => FloatConverter
-      case DoubleType => DoubleConverter
-      case DayTimeIntervalType(_, endField) => DurationConverter(endField)
-      case YearMonthIntervalType(_, endField) => PeriodConverter(endField)
-      case dataType: DataType => IdentityConverter(dataType)
+    val converter = TypeOps(dataType).map(ops => new TypeOpsConverter(ops)).getOrElse {
+      dataType match {
+        case udt: UserDefinedType[_] => UDTConverter(udt)
+        case arrayType: ArrayType => ArrayConverter(arrayType.elementType)
+        case mapType: MapType => MapConverter(mapType.keyType, mapType.valueType)
+        case structType: StructType => StructConverter(structType)
+        case c: CharType => new CharConverter(c.length)
+        case v: VarcharType => new VarcharConverter(v.length)
+        case _: StringType => StringConverter
+        case g: GeographyType =>
+          new GeographyConverter(g)
+        case g: GeometryType =>
+          new GeometryConverter(g)
+        case DateType if SQLConf.get.datetimeJava8ApiEnabled => LocalDateConverter
+        case DateType => DateConverter
+        case _: TimeType => TimeConverter
+        case TimestampType if SQLConf.get.datetimeJava8ApiEnabled => InstantConverter
+        case TimestampType => TimestampConverter
+        case TimestampNTZType => TimestampNTZConverter
+        case dt: DecimalType => new DecimalConverter(dt)
+        case BooleanType => BooleanConverter
+        case ByteType => ByteConverter
+        case ShortType => ShortConverter
+        case IntegerType => IntConverter
+        case LongType => LongConverter
+        case FloatType => FloatConverter
+        case DoubleType => DoubleConverter
+        case DayTimeIntervalType(_, endField) => DurationConverter(endField)
+        case YearMonthIntervalType(_, endField) => PeriodConverter(endField)
+        case dataType: DataType => IdentityConverter(dataType)
+      }
     }
     converter.asInstanceOf[CatalystTypeConverter[Any, Any, Any]]
   }
@@ -155,12 +154,11 @@ object CatalystTypeConverters {
   }
 
   /**
-   * Adapter that wraps ExternalTypeOps to implement CatalystTypeConverter.
+   * Adapter that wraps TypeOps to implement CatalystTypeConverter.
    * Used by the Types Framework to provide type conversion for framework-supported types.
    */
-  private class TypeOpsConverter(dt: DataType)
+  private class TypeOpsConverter(ops: TypeOps)
       extends CatalystTypeConverter[Any, Any, Any] {
-    private val ops = ExternalTypeOps(dt)
     override def toCatalystImpl(scalaValue: Any): Any = ops.toCatalystImpl(scalaValue)
     override def toScala(catalystValue: Any): Any = ops.toScala(catalystValue)
     override def toScalaImpl(row: InternalRow, column: Int): Any = ops.toScalaImpl(row, column)
