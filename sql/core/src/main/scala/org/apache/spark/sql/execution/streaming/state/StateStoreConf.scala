@@ -116,6 +116,9 @@ class StateStoreConf(
   /** Whether file checksum generation and verification is enabled. */
   val checkpointFileChecksumEnabled: Boolean = sqlConf.checkpointFileChecksumEnabled
 
+  /** Number of threads used to compute file checksums concurrently for RocksDB state store. */
+  val fileChecksumThreadPoolSize: Int = sqlConf.stateStoreRocksDBFileChecksumThreadPoolSize
+
   /** whether to validate state schema during query run. */
   val stateSchemaCheckEnabled = sqlConf.isStateSchemaCheckEnabled
 

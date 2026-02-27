@@ -250,6 +250,30 @@ abstract class ChecksumCheckpointFileManagerSuite extends CheckpointFileManagerT
       checksumFmWithoutFallback.close()
     }
   }
+
+  test("numThreads = 1 is valid") {
+    withTempHadoopPath { basePath =>
+      val fm = new ChecksumCheckpointFileManager(
+        createNoChecksumManager(basePath),
+        allowConcurrentDelete = true,
+        numThreads = 1,
+        skipCreationIfFileMissingChecksum = false)
+      fm.close()
+    }
+  }
+
+  test("odd numThreads > 1 is invalid") {
+    withTempHadoopPath { basePath =>
+      val ex = intercept[AssertionError] {
+        new ChecksumCheckpointFileManager(
+          createNoChecksumManager(basePath),
+          allowConcurrentDelete = true,
+          numThreads = 3,
+          skipCreationIfFileMissingChecksum = false)
+      }
+      assert(ex.getMessage.contains("numThreads must be 1 or a multiple of 2"))
+    }
+  }
 }
 
 class FileContextChecksumCheckpointFileManagerSuite extends ChecksumCheckpointFileManagerSuite {
