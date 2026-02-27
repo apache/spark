@@ -105,8 +105,6 @@ class FunctionResolution(
                 u.nameParts,
                 searchPath,
                 u.origin)
-            case other =>
-              throw other
           }
         }
       }
