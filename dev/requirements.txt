@@ -17,9 +17,9 @@ pyyaml>=3.11
 # PySpark test dependencies
 unittest-xml-reporting
 openpyxl
-asv
 
 # PySpark test dependencies (optional)
+asv
 coverage
 tabulate
 
