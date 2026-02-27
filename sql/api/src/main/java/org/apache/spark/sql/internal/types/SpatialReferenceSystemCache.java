@@ -111,7 +111,7 @@ public class SpatialReferenceSystemCache {
 
   /**
    * Add Spark-specific SRS entries and aliases that are not part of the PROJ EPSG database.
-   * These ensure compatibility with storage formats (Parquet, Delta, Iceberg) and Spark conventions.
+   * These will ensure the compatibility with storage formats (i.e. Parquet, Delta, Iceberg).
    */
   private void addSparkSpecificEntries() {
     // SRID 0 is a Spark convention for a Cartesian coordinate system with no defined SRS.
