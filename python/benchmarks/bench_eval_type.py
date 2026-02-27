@@ -217,9 +217,6 @@ class GroupedMapPandasUDFBench:
     mirroring the JVM-side behaviour.  Small groups (1k rows) are unaffected.
     """
 
-    # Run at least 5 times, at most 10, stop if wall time exceeds 10s per benchmark.
-    repeat = (5, 10, 10.0)
-
     # spark.sql.execution.arrow.maxRecordsPerBatch default
     _MAX_RECORDS_PER_BATCH = 10_000
 
