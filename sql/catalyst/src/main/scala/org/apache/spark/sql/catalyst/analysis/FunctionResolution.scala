@@ -91,7 +91,24 @@ class FunctionResolution(
           }
         }
       } else {
-        builtinOrSessionResult.getOrElse(resolvePersistentFunction(u))
+        builtinOrSessionResult.getOrElse {
+          try {
+            resolvePersistentFunction(u)
+          } catch {
+            case e: AnalysisException if e.getCondition == "REQUIRES_SINGLE_PART_NAMESPACE" =>
+              // Session catalog rejects multi-part namespace in loadFunction (asFunctionIdentifier)
+              val catalogPath = (
+                catalogManager.currentCatalog.name +: catalogManager.currentNamespace
+              ).mkString(".")
+              val searchPath = SQLConf.get.functionResolutionSearchPath(catalogPath)
+              throw QueryCompilationErrors.unresolvedRoutineError(
+                u.nameParts,
+                searchPath,
+                u.origin)
+            case other =>
+              throw other
+          }
+        }
       }
     }
   }
