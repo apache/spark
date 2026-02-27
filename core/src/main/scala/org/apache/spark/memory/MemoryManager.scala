@@ -234,8 +234,9 @@ private[spark] abstract class MemoryManager(
         "No support for unaligned Unsafe. Set spark.memory.offHeap.enabled to false.")
       MemoryMode.OFF_HEAP
     } else {
-      if(conf.get(MEMORY_OFFHEAP_SIZE) > 0)
-       logWarning(s"spark.memory.offHeap.size is > 0 when spark.memory.offHeap.enabled == false")
+      if (conf.get(MEMORY_OFFHEAP_SIZE) > 0) {
+        logWarning(s"spark.memory.offHeap.size is > 0 when spark.memory.offHeap.enabled == false")
+      }
       MemoryMode.ON_HEAP
     }
   }
