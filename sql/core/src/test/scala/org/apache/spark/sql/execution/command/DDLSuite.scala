@@ -317,7 +317,7 @@ trait DDLSuiteBase extends SQLTestUtils {
     spec: TablePartitionSpec,
     tableName: TableIdentifier): Unit = {
     val part = CatalogTablePartition(
-      spec, CatalogStorageFormat(None, None, None, None, false, Map()))
+      spec, CatalogStorageFormat(None, None, None, None, None, false, Map()))
     catalog.createPartitions(tableName, Seq(part), ignoreIfExists = false)
   }
 
