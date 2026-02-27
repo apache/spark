@@ -35,9 +35,7 @@ class ArrowToPandasBenchmark:
 
     def setup(self, n_rows, types_mapper):
         self.int_array = pa.array(np.random.randint(0, 1000, n_rows))
-        self.int_array_with_nulls = pa.array(
-            [i if i % 10 != 0 else None for i in range(n_rows)]
-        )
+        self.int_array_with_nulls = pa.array([i if i % 10 != 0 else None for i in range(n_rows)])
         self.types_mapper = pd.ArrowDtype if types_mapper == "arrow_dtype" else None
 
     def time_int_to_pandas(self, n_rows, types_mapper):
@@ -95,7 +93,7 @@ class NullableLongArrowToPandasBenchmark:
         self.long_array_with_nulls = pa.array(
             [i if i % 10 != 0 else None for i in range(n_rows - 1)] + [9223372036854775707],
             type=pa.int64(),
-            )
+        )
 
     # check 3 different ways to convert nullable longs to nullable extension type
     def run_long_with_nulls_to_pandas_ext(self, n_rows, method):
