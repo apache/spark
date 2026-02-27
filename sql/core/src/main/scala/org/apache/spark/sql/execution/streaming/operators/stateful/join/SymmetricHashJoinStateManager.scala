@@ -168,6 +168,10 @@ trait SupportsEvictByTimestamp { self: SymmetricHashJoinStateManager =>
  * (timestamp, key) to scan the keys to evict for each watermark. To retrieve the values for a key,
  * we perform prefix scan with the key to get all the (key, timestamp) -> values.
  *
+ * This implementation leverages (virtual) column family, and uses features which are only
+ * available in RocksDB state store provider. Please make sure to set the state store provider to
+ * RocksDBStateStoreProvider.
+ *
  * Refer to the [[KeyWithTsToValuesStore]] and [[TsWithKeyTypeStore]] for more details.
  */
 class SymmetricHashJoinStateManagerV4(
@@ -186,6 +190,9 @@ class SymmetricHashJoinStateManagerV4(
     snapshotOptions: Option[SnapshotOptions] = None,
     joinStoreGenerator: JoinStateManagerStoreGenerator)
   extends SymmetricHashJoinStateManager with SupportsEvictByTimestamp with Logging {
+
+  // TODO: [SPARK-55729] Once the new state manager is integrated to stream-stream join operator,
+  //  we should support state data source to understand the state for state format version v4.
 
   import SymmetricHashJoinStateManager._
 

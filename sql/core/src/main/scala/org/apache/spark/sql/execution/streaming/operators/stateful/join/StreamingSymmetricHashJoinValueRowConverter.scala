@@ -42,7 +42,7 @@ trait StreamingSymmetricHashJoinValueRowConverter {
    *
    * NOTE: depending on the implementation, the result row "may" be reused during execution
    * (to avoid initialization of object), so the caller should ensure that the logic doesn't
-   * affect by such behavior. Call copy() against the result row if needed.
+   * get affected by such behavior. Call copy() against the result row if needed.
    */
   def convertToValueRow(value: UnsafeRow, matched: Boolean): UnsafeRow
 }
@@ -57,9 +57,8 @@ class StreamingSymmetricHashJoinValueRowConverterFormatV1(
     inputValueAttributes: Seq[Attribute]) extends StreamingSymmetricHashJoinValueRowConverter {
   override val valueAttributes: Seq[Attribute] = inputValueAttributes
 
-  override def convertValue(value: UnsafeRow): ValueAndMatchPair = {
+  override def convertValue(value: UnsafeRow): ValueAndMatchPair =
     if (value != null) ValueAndMatchPair(value, false) else null
-  }
 
   override def convertToValueRow(value: UnsafeRow, matched: Boolean): UnsafeRow = value
 }
