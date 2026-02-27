@@ -602,13 +602,15 @@ case class ListAgg(
    * semantics): each distinct child value must map to exactly one order value. Otherwise,
    * after deduplication on child, the order value is ambiguous.
    *
-   * When child = Cast(order_expr, T), child -> order_expr is trivially satisfied since Cast is
-   * injective. However, an additional condition is needed: the cast must be
-   * equality-preserving (order_expr -> child), meaning GROUP BY-equal order values must produce
-   * GROUP BY-equal child values. Otherwise, the DISTINCT rewrite (which groups by child) may split
-   * values that should be in the same group, causing over-counting.
+   * When child = Cast(order_expr, T) where T is STRING or BINARY (LISTAGG's accepted input
+   * types), the functional dependency (child -> order_expr) is satisfied since casting to
+   * string/binary is injective for the types we allow. However, the cast must also be
+   * equality-preserving (order_expr -> child): GROUP BY-equal order values must produce
+   * GROUP BY-equal child values. Otherwise, the DISTINCT rewrite (which groups by child) may
+   * split values that should be in the same group, causing over-counting.
    * For example, Float/Double violate this because -0.0 and 0.0 are GROUP BY-equal but cast
-   * to different strings. This is what [[isCastEqualityPreserving]] checks.
+   * to different strings. This is checked by [[isCastEqualityPreserving]] and
+   * [[isCastTargetEqualityPreserving]].
    *
    * Currently only detects these conditions for Cast.
    * TODO(SPARK-55718): extend to detect other functional dependencies.
