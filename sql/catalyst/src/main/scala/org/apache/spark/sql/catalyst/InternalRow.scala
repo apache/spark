@@ -19,9 +19,8 @@ package org.apache.spark.sql.catalyst
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.catalyst.types.ops.PhyTypeOps
+import org.apache.spark.sql.catalyst.types.ops.TypeOps
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 import org.apache.spark.util.ArrayImplicits._
@@ -170,29 +169,31 @@ object InternalRow {
   /**
    * Returns a writer for an `InternalRow` with given data type.
    */
-  @scala.annotation.tailrec
-  def getWriter(ordinal: Int, dt: DataType): (InternalRow, Any) => Unit = dt match {
-    case _ if SQLConf.get.typesFrameworkEnabled && PhyTypeOps.supports(dt) =>
-      PhyTypeOps(dt).getRowWriter(ordinal)
-    case BooleanType => (input, v) => input.setBoolean(ordinal, v.asInstanceOf[Boolean])
-    case ByteType => (input, v) => input.setByte(ordinal, v.asInstanceOf[Byte])
-    case ShortType => (input, v) => input.setShort(ordinal, v.asInstanceOf[Short])
-    case IntegerType | DateType | _: YearMonthIntervalType =>
-      (input, v) => input.setInt(ordinal, v.asInstanceOf[Int])
-    case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType | _: TimeType =>
-      (input, v) => input.setLong(ordinal, v.asInstanceOf[Long])
-    case FloatType => (input, v) => input.setFloat(ordinal, v.asInstanceOf[Float])
-    case DoubleType => (input, v) => input.setDouble(ordinal, v.asInstanceOf[Double])
-    case CalendarIntervalType =>
-      (input, v) => input.setInterval(ordinal, v.asInstanceOf[CalendarInterval])
-    case DecimalType.Fixed(precision, _) =>
-      (input, v) => input.setDecimal(ordinal, v.asInstanceOf[Decimal], precision)
-    case udt: UserDefinedType[_] => getWriter(ordinal, udt.sqlType)
-    case NullType => (input, _) => input.setNullAt(ordinal)
-    case StringType => (input, v) => input.update(ordinal, v.asInstanceOf[UTF8String].copy())
-    case _: StructType => (input, v) => input.update(ordinal, v.asInstanceOf[InternalRow].copy())
-    case _: ArrayType => (input, v) => input.update(ordinal, v.asInstanceOf[ArrayData].copy())
-    case _: MapType => (input, v) => input.update(ordinal, v.asInstanceOf[MapData].copy())
-    case _ => (input, v) => input.update(ordinal, v)
-  }
+  def getWriter(ordinal: Int, dt: DataType): (InternalRow, Any) => Unit =
+    TypeOps(dt).map(_.getRowWriter(ordinal)).getOrElse {
+      dt match {
+        case BooleanType => (input, v) => input.setBoolean(ordinal, v.asInstanceOf[Boolean])
+        case ByteType => (input, v) => input.setByte(ordinal, v.asInstanceOf[Byte])
+        case ShortType => (input, v) => input.setShort(ordinal, v.asInstanceOf[Short])
+        case IntegerType | DateType | _: YearMonthIntervalType =>
+          (input, v) => input.setInt(ordinal, v.asInstanceOf[Int])
+        case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType | _: TimeType =>
+          (input, v) => input.setLong(ordinal, v.asInstanceOf[Long])
+        case FloatType => (input, v) => input.setFloat(ordinal, v.asInstanceOf[Float])
+        case DoubleType => (input, v) => input.setDouble(ordinal, v.asInstanceOf[Double])
+        case CalendarIntervalType =>
+          (input, v) => input.setInterval(ordinal, v.asInstanceOf[CalendarInterval])
+        case DecimalType.Fixed(precision, _) =>
+          (input, v) => input.setDecimal(ordinal, v.asInstanceOf[Decimal], precision)
+        case udt: UserDefinedType[_] => getWriter(ordinal, udt.sqlType)
+        case NullType => (input, _) => input.setNullAt(ordinal)
+        case StringType => (input, v) => input.update(ordinal, v.asInstanceOf[UTF8String].copy())
+        case _: StructType =>
+          (input, v) => input.update(ordinal, v.asInstanceOf[InternalRow].copy())
+        case _: ArrayType =>
+          (input, v) => input.update(ordinal, v.asInstanceOf[ArrayData].copy())
+        case _: MapType => (input, v) => input.update(ordinal, v.asInstanceOf[MapData].copy())
+        case _ => (input, v) => input.update(ordinal, v)
+      }
+    }
 }

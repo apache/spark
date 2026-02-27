@@ -47,7 +47,7 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.trees.TreePattern
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LITERAL, NULL_LITERAL, TRUE_OR_FALSE_LITERAL}
 import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.catalyst.types.ops.LiteralTypeOps
+import org.apache.spark.sql.catalyst.types.ops.TypeOps
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{instantToMicros, localTimeToNanos}
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.ANSI_STYLE
@@ -187,10 +187,9 @@ object Literal {
   /**
    * Create a literal with default value for given DataType
    */
-  def default(dataType: DataType): Literal = dataType match {
-    // Types Framework: delegate to LiteralTypeOps for supported types when enabled
-    case _ if SQLConf.get.typesFrameworkEnabled && LiteralTypeOps.supports(dataType) =>
-      LiteralTypeOps(dataType).getDefaultLiteral
+  def default(dataType: DataType): Literal =
+    TypeOps(dataType).map(_.getDefaultLiteral).getOrElse {
+    dataType match {
     case NullType => create(null, NullType)
     case BooleanType => Literal(false)
     case ByteType => Literal(0.toByte)
@@ -225,6 +224,7 @@ object Literal {
       create(VariantExpressionEvalUtils.castToVariant(0, IntegerType), VariantType)
     case other =>
       throw QueryExecutionErrors.noDefaultForDataTypeError(dataType)
+    }
   }
 
   private[expressions] def validateLiteralValue(value: Any, dataType: DataType): Unit = {

@@ -598,7 +598,7 @@ object SQLConf {
       .doc("When true, use the Types Framework for supported types (currently TimeType). " +
         "The framework centralizes type-specific operations in Ops classes instead of " +
         "scattered pattern matching. When false, use legacy scattered implementation.")
-      .version("4.1.0")
+      .version("4.2.0")
       .booleanConf
       .createWithDefaultFunction(() => Utils.isTesting)
 

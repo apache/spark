@@ -21,10 +21,9 @@ import scala.reflect.runtime.universe.TypeTag
 import scala.reflect.runtime.universe.typeTag
 
 import org.apache.spark.sql.catalyst.expressions.{Ascending, BoundReference, InterpretedOrdering, SortOrder}
-import org.apache.spark.sql.catalyst.types.ops.PhyTypeOps
+import org.apache.spark.sql.catalyst.types.ops.TypeOps
 import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, MapData, SQLOrderingUtil}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteExactNumeric, ByteType, CalendarIntervalType, CharType, DataType, DateType, DayTimeIntervalType, Decimal, DecimalExactNumeric, DecimalType, DoubleExactNumeric, DoubleType, FloatExactNumeric, FloatType, FractionalType, GeographyType, GeometryType, IntegerExactNumeric, IntegerType, IntegralType, LongExactNumeric, LongType, MapType, NullType, NumericType, ShortExactNumeric, ShortType, StringType, StructField, StructType, TimestampNTZType, TimestampType, TimeType, VarcharType, VariantType, YearMonthIntervalType}
 import org.apache.spark.unsafe.types.{ByteArray, GeographyVal, GeometryVal, UTF8String, VariantVal}
 import org.apache.spark.util.ArrayImplicits._
@@ -36,39 +35,39 @@ sealed abstract class PhysicalDataType {
 }
 
 object PhysicalDataType {
-  def apply(dt: DataType): PhysicalDataType = dt match {
-    // Types Framework: delegate to PhyTypeOps for supported types when enabled
-    case _ if SQLConf.get.typesFrameworkEnabled && PhyTypeOps.supports(dt) =>
-      PhyTypeOps(dt).getPhysicalType
-    case NullType => PhysicalNullType
-    case ByteType => PhysicalByteType
-    case ShortType => PhysicalShortType
-    case IntegerType => PhysicalIntegerType
-    case LongType => PhysicalLongType
-    case v: VarcharType => PhysicalStringType(v.collationId)
-    case c: CharType => PhysicalStringType(c.collationId)
-    case s: StringType => PhysicalStringType(s.collationId)
-    case FloatType => PhysicalFloatType
-    case DoubleType => PhysicalDoubleType
-    case DecimalType.Fixed(p, s) => PhysicalDecimalType(p, s)
-    case BooleanType => PhysicalBooleanType
-    case BinaryType => PhysicalBinaryType
-    case TimestampType => PhysicalLongType
-    case TimestampNTZType => PhysicalLongType
-    case CalendarIntervalType => PhysicalCalendarIntervalType
-    case DayTimeIntervalType(_, _) => PhysicalLongType
-    case YearMonthIntervalType(_, _) => PhysicalIntegerType
-    case DateType => PhysicalIntegerType
-    case _: TimeType => PhysicalLongType
-    case ArrayType(elementType, containsNull) => PhysicalArrayType(elementType, containsNull)
-    case StructType(fields) => PhysicalStructType(fields)
-    case MapType(keyType, valueType, valueContainsNull) =>
-      PhysicalMapType(keyType, valueType, valueContainsNull)
-    case _: GeometryType => PhysicalGeometryType
-    case _: GeographyType => PhysicalGeographyType
-    case VariantType => PhysicalVariantType
-    case _ => UninitializedPhysicalType
-  }
+  def apply(dt: DataType): PhysicalDataType =
+    TypeOps(dt).map(_.getPhysicalType).getOrElse {
+      dt match {
+        case NullType => PhysicalNullType
+        case ByteType => PhysicalByteType
+        case ShortType => PhysicalShortType
+        case IntegerType => PhysicalIntegerType
+        case LongType => PhysicalLongType
+        case v: VarcharType => PhysicalStringType(v.collationId)
+        case c: CharType => PhysicalStringType(c.collationId)
+        case s: StringType => PhysicalStringType(s.collationId)
+        case FloatType => PhysicalFloatType
+        case DoubleType => PhysicalDoubleType
+        case DecimalType.Fixed(p, s) => PhysicalDecimalType(p, s)
+        case BooleanType => PhysicalBooleanType
+        case BinaryType => PhysicalBinaryType
+        case TimestampType => PhysicalLongType
+        case TimestampNTZType => PhysicalLongType
+        case CalendarIntervalType => PhysicalCalendarIntervalType
+        case DayTimeIntervalType(_, _) => PhysicalLongType
+        case YearMonthIntervalType(_, _) => PhysicalIntegerType
+        case DateType => PhysicalIntegerType
+        case _: TimeType => PhysicalLongType
+        case ArrayType(elementType, containsNull) => PhysicalArrayType(elementType, containsNull)
+        case StructType(fields) => PhysicalStructType(fields)
+        case MapType(keyType, valueType, valueContainsNull) =>
+          PhysicalMapType(keyType, valueType, valueContainsNull)
+        case _: GeometryType => PhysicalGeometryType
+        case _: GeographyType => PhysicalGeographyType
+        case VariantType => PhysicalVariantType
+        case _ => UninitializedPhysicalType
+      }
+    }
 
   def ordering(dt: DataType): Ordering[Any] = apply(dt).ordering.asInstanceOf[Ordering[Any]]
 }
