@@ -3091,6 +3091,8 @@ object SQLConf {
         "1 is DEPRECATED and should not be explicitly set by users.")
       .version("3.0.0")
       .intConf
+      // TODO: [SPARK-55628] Add version 4 once we integrate the state format version 4 into
+      //  stream-stream join operator.
       .checkValue(v => Set(1, 2, 3).contains(v), "Valid versions are 1, 2, and 3")
       .createWithDefault(2)
 
