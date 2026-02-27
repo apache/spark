@@ -23,10 +23,11 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.TypeUtils._
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
-import org.apache.spark.sql.functions.struct
+import org.apache.spark.sql.functions.{array, map, struct}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode}
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.LongType
 
 /**
  * A collection of "INSERT INTO" tests that can be run through the SQL or DataFrameWriter APIs.
@@ -264,6 +265,23 @@ trait InsertIntoSQLOnlyTests
           ExpectedContext(t2, 12, 11 + t2.length))
       }
     }
+
+  test("InsertInto: extra column by name fails without schema evolution") {
+    val t1 = s"${catalogAndNamespace}tbl"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"INSERT INTO $t1 BY NAME SELECT 2L AS id, TRUE AS active, 'b' AS data")
+        },
+        condition = "INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS",
+        parameters = Map(
+          "tableName" -> toSQLId(t1),
+          "tableColumns" -> "`id`, `data`",
+          "dataColumns" -> "`id`, `active`, `data`")
+      )
+    }
+  }
 
     test("InsertInto: append to partitioned table - static clause") {
       val t1 = s"${catalogAndNamespace}tbl"
@@ -807,24 +825,6 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
       )
     }
   }
-
-  test("Insert extra column by name fails without schema evolution") {
-    val t1 = s"${catalogAndNamespace}tbl"
-    withTable(t1) {
-      sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
-      checkError(
-        exception = intercept[AnalysisException] {
-          doInsert(t1, Seq((2L, "b", true)).toDF("id", "data", "active"))
-        },
-        condition = "INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS",
-        parameters = Map(
-          "tableName" -> toSQLId(t1),
-          "tableColumns" -> "`id`, `data`",
-          "dataColumns" -> "`id`, `data`, `active`")
-      )
-    }
-  }
-
   test("Insert schema evolution: INSERT OVERWRITE with dynamic partition mode") {
     withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
       val t1 = s"${catalogAndNamespace}tbl"
@@ -933,6 +933,109 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
         (1L, "a", null),
         (2L, "b", true)
       ).toDF("id", "data", "active"))
+    }
+  }
+
+  test("Insert schema evolution: extra field in 2-level nested struct by position") {
+    val t1 = s"${catalogAndNamespace}tbl"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, info struct<nested:struct<name:string>>) USING $v2Format")
+      doInsert(t1,
+        Seq((1L, "Alice")).toDF("id", "name")
+          .select($"id", struct(struct($"name").as("nested")).as("info")))
+      doInsertWithSchemaEvolution(t1,
+        Seq((2L, "Bob", 30)).toDF("id", "name", "age")
+          .select($"id", struct(struct($"name", $"age").as("nested")).as("info")))
+      checkAnswer(
+        sql(s"SELECT * FROM $t1"),
+        Seq(Row(1L, Row(Row("Alice", null))), Row(2L, Row(Row("Bob", 30)))))
+    }
+  }
+
+  test("Insert schema evolution: extra field in 2-level nested struct by name") {
+    val t1 = s"${catalogAndNamespace}tbl"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id int, info struct<nested:struct<name:string>>) USING $v2Format")
+      doInsert(t1,
+        Seq((1L, "Alice")).toDF("id", "name")
+          .select($"id", struct(struct($"name").as("nested")).as("info")))
+      doInsertWithSchemaEvolution(t1,
+        Seq((2L, "Bob", 30)).toDF("id", "name", "age")
+          .select($"id", struct(struct($"age", $"name").as("nested")).as("info")),
+        byName = true)
+      checkAnswer(
+        sql(s"SELECT * FROM $t1"),
+        Seq(Row(1L, Row(Row("Alice", null))), Row(2L, Row(Row("Bob", 30)))))
+    }
+  }
+
+  test("Insert schema evolution: extra field in array element struct by position") {
+    val t1 = s"${catalogAndNamespace}tbl"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id int, info array<struct<name:string>>) USING $v2Format")
+      doInsert(t1,
+        Seq((1L, "Alice")).toDF("id", "name")
+          .select($"id", array(struct($"name")).as("info")))
+      doInsertWithSchemaEvolution(t1,
+        Seq((2L, "Bob", 30)).toDF("id", "name", "age")
+          .select($"id", array(struct($"name", $"age")).as("info")))
+      checkAnswer(
+        sql(s"SELECT * FROM $t1"),
+        Seq(
+          Row(1L, Seq(Row("Alice", null))),
+          Row(2L, Seq(Row("Bob", 30)))))
+    }
+  }
+
+  test("Insert schema evolution: extra field in map value struct by position") {
+    val t1 = s"${catalogAndNamespace}tbl"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id int, info map<string, struct<name:string>>) USING $v2Format")
+      doInsert(t1,
+        Seq((1L, "A", "Alice")).toDF("id", "key", "name")
+          .select($"id", map($"key", struct($"name")).as("info")))
+      doInsertWithSchemaEvolution(t1,
+        Seq((2L, "B", "Bob", 30)).toDF("id", "key", "name", "age")
+          .select($"id", map($"key", struct($"name", $"age")).as("info")))
+      checkAnswer(
+        sql(s"SELECT * FROM $t1"),
+        Seq(
+          Row(1L, Map("A" -> Row("Alice", null))),
+          Row(2L, Map("B" -> Row("Bob", 30)))))
+    }
+  }
+
+  test("Insert schema evolution: extra field in map key struct by position") {
+    val t1 = s"${catalogAndNamespace}tbl"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id int, info map<struct<name:string>, string>) USING $v2Format")
+      doInsert(t1,
+        Seq((1L, "Alice", "A")).toDF("id", "name", "value")
+          .select($"id", map(struct($"name"), $"value").as("info")))
+      doInsertWithSchemaEvolution(t1,
+        Seq((2L, "Bob", 30, "B")).toDF("id", "name", "age", "value")
+          .select($"id", map(struct($"name", $"age"), $"value").as("info")))
+      checkAnswer(
+        sql(s"SELECT * FROM $t1"),
+        Seq(
+          Row(1L, Map(Row("Alice", null) -> "A")),
+          Row(2L, Map(Row("Bob", 30) -> "B"))))
+    }
+  }
+
+  test("Insert schema evolution: type widening int to long") {
+    val t1 = s"${catalogAndNamespace}tbl"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id int, data string) USING $v2Format")
+      // Insert with long value to trigger type evolution from int to long.
+      doInsertWithSchemaEvolution(t1,
+        Seq((Long.MaxValue, "a")).toDF("id", "data"))
+      checkAnswer(
+        sql(s"SELECT * FROM $t1"),
+        Seq(Row(Long.MaxValue, "a")))
+      // Verify the schema was widened to long.
+      val schema = spark.table(t1).schema
+      assert(schema("id").dataType === LongType)
     }
   }
 }

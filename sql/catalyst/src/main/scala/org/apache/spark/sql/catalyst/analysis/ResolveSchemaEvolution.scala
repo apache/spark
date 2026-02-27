@@ -236,7 +236,7 @@ object ResolveSchemaEvolution extends Logging {
     updates ++ adds
   }
 
-  def toFieldMap(fields: Array[StructField]): Map[String, StructField] = {
+  private def toFieldMap(fields: Array[StructField]): Map[String, StructField] = {
     val fieldMap = fields.map(field => field.name -> field).toMap
     if (SQLConf.get.caseSensitiveAnalysis) {
       fieldMap
