@@ -21,10 +21,6 @@ Microbenchmarks for PySpark UDF eval types.
 Each benchmark class simulates the full worker pipeline for one eval type
 by constructing the complete binary protocol that ``worker.py``'s
 ``main(infile, outfile)`` expects.
-
-The protocol is version-aware: at import time we detect whether the current
-PySpark carries the ``RunnerConf`` class (2026+) and build the appropriate
-wire format so that the *same* benchmark file works on both old and new code.
 """
 
 import io
@@ -46,19 +42,6 @@ from pyspark.sql.types import (
 )
 from pyspark.util import PythonEvalType
 from pyspark.worker import main as worker_main
-
-# ---------------------------------------------------------------------------
-# Protocol version detection
-# ---------------------------------------------------------------------------
-# RunnerConf exists only in the refactored worker (2026-01+).  When present
-# the wire format uses JSON TaskContext, separate RunnerConf/EvalConf
-# sections, per-arg ``is_kwarg`` flags, and an unconditional ``result_id``.
-try:
-    from pyspark.worker import RunnerConf as _RunnerConf  # noqa: F401
-
-    _NEW_PROTOCOL = True
-except ImportError:
-    _NEW_PROTOCOL = False
 
 
 # ---------------------------------------------------------------------------
@@ -86,33 +69,21 @@ def _build_preamble(buf):
     """Write everything ``main()`` reads before ``eval_type``."""
     write_int(0, buf)  # split_index
     _write_utf8(f"{sys.version_info[0]}.{sys.version_info[1]}", buf)  # python version
-
-    if _NEW_PROTOCOL:
-        _write_utf8(
-            json.dumps(
-                {
-                    "isBarrier": False,
-                    "stageId": 0,
-                    "partitionId": 0,
-                    "attemptNumber": 0,
-                    "taskAttemptId": 0,
-                    "cpus": 1,
-                    "resources": {},
-                    "localProperties": {},
-                }
-            ),
-            buf,
-        )
-    else:
-        _write_bool(False, buf)  # isBarrier
-        write_int(0, buf)  # stageId
-        write_int(0, buf)  # partitionId
-        write_int(0, buf)  # attemptNumber
-        write_long(0, buf)  # taskAttemptId
-        write_int(1, buf)  # cpus
-        write_int(0, buf)  # num_resources
-        write_int(0, buf)  # num_localProperties
-
+    _write_utf8(
+        json.dumps(
+            {
+                "isBarrier": False,
+                "stageId": 0,
+                "partitionId": 0,
+                "attemptNumber": 0,
+                "taskAttemptId": 0,
+                "cpus": 1,
+                "resources": {},
+                "localProperties": {},
+            }
+        ),
+        buf,
+    )
     _write_utf8("/tmp", buf)  # spark_files_dir
     write_int(0, buf)  # num_python_includes
     _write_bool(False, buf)  # needs_broadcast_decryption_server
@@ -125,14 +96,12 @@ def _build_udf_payload(udf_func, return_type, arg_offsets, buf):
     write_int(len(arg_offsets), buf)  # num_arg
     for offset in arg_offsets:
         write_int(offset, buf)
-        if _NEW_PROTOCOL:
-            _write_bool(False, buf)  # is_kwarg (new only)
+        _write_bool(False, buf)  # is_kwarg
     write_int(1, buf)  # num_chained
     command = cloudpickle_dumps((udf_func, return_type))
     write_int(len(command), buf)
     buf.write(command)
-    if _NEW_PROTOCOL:
-        write_long(0, buf)  # result_id (unconditional in new protocol)
+    write_long(0, buf)  # result_id
 
 
 def _build_grouped_arrow_data(arrow_batch, num_groups, buf):
@@ -152,13 +121,8 @@ def _build_worker_input(eval_type, udf_func, return_type, arg_offsets, arrow_bat
     _build_preamble(buf)
     write_int(eval_type, buf)
 
-    # Runner / eval configuration section
-    if _NEW_PROTOCOL:
-        write_int(0, buf)  # RunnerConf  (0 key-value pairs)
-        write_int(0, buf)  # EvalConf    (0 key-value pairs)
-    else:
-        write_int(0, buf)  # runner_conf (0 key-value pairs, inside read_udfs)
-        _write_bool(False, buf)  # is_profiling
+    write_int(0, buf)  # RunnerConf  (0 key-value pairs)
+    write_int(0, buf)  # EvalConf    (0 key-value pairs)
 
     _build_udf_payload(udf_func, return_type, arg_offsets, buf)
     _build_grouped_arrow_data(arrow_batch, num_groups, buf)
@@ -222,10 +186,7 @@ def _make_mixed_batch(rows_per_group):
 
 
 class GroupedMapPandasUDFBench:
-    """Full worker round-trip for ``SQL_GROUPED_MAP_PANDAS_UDF`` (201).
-
-    Cases are aligned with the Quicksilver ``PandasFunctionsAPIBenchmarkSuite``.
-    """
+    """Full worker round-trip for ``SQL_GROUPED_MAP_PANDAS_UDF`` (201)."""
 
     def setup(self):
         eval_type = PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF
