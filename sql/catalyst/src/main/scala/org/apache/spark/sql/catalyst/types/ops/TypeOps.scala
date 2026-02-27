@@ -28,15 +28,15 @@ import org.apache.spark.sql.types.{DataType, TimeType}
 /**
  * Server-side (catalyst) type operations for the Types Framework.
  *
- * This trait consolidates all server-side operations that a data type must implement to function
- * in the Spark SQL engine. All methods are mandatory because without any of them the type would
- * fail at runtime - physical type mapping is needed for storage, literals for the optimizer,
- * and external type conversion for user-facing operations like collect() and UDFs.
+ * This trait consolidates all server-side operations that a data type must implement to function in
+ * the Spark SQL engine. All methods are mandatory because without any of them the type would fail
+ * at runtime - physical type mapping is needed for storage, literals for the optimizer, and
+ * external type conversion for user-facing operations like collect() and UDFs.
  *
  * This single-interface design was chosen over separate PhyTypeOps/LiteralTypeOps/ExternalTypeOps
  * traits to make it clear what a new type must implement. There is one mandatory interface with
- * everything required. Optional capabilities (e.g., proto serialization, client integration)
- * are defined as separate traits that can be mixed in incrementally as a type's support expands.
+ * everything required. Optional capabilities (e.g., proto serialization, client integration) are
+ * defined as separate traits that can be mixed in incrementally as a type's support expands.
  *
  * USAGE - integration points use TypeOps(dt) which returns Option[TypeOps]:
  * {{{
@@ -54,7 +54,8 @@ import org.apache.spark.sql.types.{DataType, TimeType}
  *   2. Register it in TypeOps.apply() below - single registration point
  *   3. No other file modifications needed - all integration points automatically work
  *
- * @see TimeTypeOps for a reference implementation
+ * @see
+ *   TimeTypeOps for a reference implementation
  * @since 4.2.0
  */
 trait TypeOps extends Serializable {
@@ -69,29 +70,34 @@ trait TypeOps extends Serializable {
    *
    * Determines how values are stored in memory and accessed from InternalRow.
    *
-   * @return PhysicalDataType (e.g., PhysicalLongType for TimeType)
+   * @return
+   *   PhysicalDataType (e.g., PhysicalLongType for TimeType)
    */
   def getPhysicalType: PhysicalDataType
 
   /**
    * Returns the Java class used for code generation.
    *
-   * @return Java class (e.g., classOf[Long] for TimeType)
+   * @return
+   *   Java class (e.g., classOf[Long] for TimeType)
    */
   def getJavaClass: Class[_]
 
   /**
    * Returns a MutableValue instance for use in SpecificInternalRow.
    *
-   * @return MutableValue instance (e.g., MutableLong for TimeType)
+   * @return
+   *   MutableValue instance (e.g., MutableLong for TimeType)
    */
   def getMutableValue: MutableValue
 
   /**
    * Returns a writer function for setting values in an InternalRow.
    *
-   * @param ordinal the column index to write to
-   * @return writer function (InternalRow, Any) => Unit
+   * @param ordinal
+   *   the column index to write to
+   * @return
+   *   writer function (InternalRow, Any) => Unit
    */
   def getRowWriter(ordinal: Int): (InternalRow, Any) => Unit
 
@@ -102,15 +108,18 @@ trait TypeOps extends Serializable {
    *
    * Used by Literal.default() for ALTER TABLE ADD COLUMN, optimizer, etc.
    *
-   * @return Literal with the default value and correct type
+   * @return
+   *   Literal with the default value and correct type
    */
   def getDefaultLiteral: Literal
 
   /**
    * Returns the Java literal representation for code generation.
    *
-   * @param v the internal value to represent
-   * @return Java literal string (e.g., "37800000000000L")
+   * @param v
+   *   the internal value to represent
+   * @return
+   *   Java literal string (e.g., "37800000000000L")
    */
   def getJavaLiteral(v: Any): String
 
@@ -121,8 +130,10 @@ trait TypeOps extends Serializable {
    *
    * Handles null checking and Option unwrapping automatically.
    *
-   * @param maybeScalaValue the external value (may be null or Option)
-   * @return the internal representation, or null if input was null/None
+   * @param maybeScalaValue
+   *   the external value (may be null or Option)
+   * @return
+   *   the internal representation, or null if input was null/None
    */
   final def toCatalyst(@Nullable maybeScalaValue: Any): Any = {
     maybeScalaValue match {
@@ -135,25 +146,32 @@ trait TypeOps extends Serializable {
   /**
    * Converts a non-null external value to its internal representation.
    *
-   * @param scalaValue the external value (guaranteed non-null)
-   * @return the internal Catalyst representation
+   * @param scalaValue
+   *   the external value (guaranteed non-null)
+   * @return
+   *   the internal Catalyst representation
    */
   def toCatalystImpl(scalaValue: Any): Any
 
   /**
    * Converts an internal Catalyst value to its external representation.
    *
-   * @param catalystValue the internal value (may be null)
-   * @return the external representation, or null if input was null
+   * @param catalystValue
+   *   the internal value (may be null)
+   * @return
+   *   the external representation, or null if input was null
    */
   def toScala(@Nullable catalystValue: Any): Any
 
   /**
    * Extracts a value from an InternalRow and converts to external representation.
    *
-   * @param row the InternalRow containing the value
-   * @param column the column index
-   * @return the external representation
+   * @param row
+   *   the InternalRow containing the value
+   * @param column
+   *   the column index
+   * @return
+   *   the external representation
    */
   def toScalaImpl(row: InternalRow, column: Int): Any
 
@@ -168,23 +186,25 @@ trait TypeOps extends Serializable {
 /**
  * Factory object for creating TypeOps instances.
  *
- * Returns Option to serve as both lookup and existence check - callers use
- * getOrElse to fall through to legacy handling. The feature flag check is
- * inside apply(), so callers don't need to check it separately.
+ * Returns Option to serve as both lookup and existence check - callers use getOrElse to fall
+ * through to legacy handling. The feature flag check is inside apply(), so callers don't need to
+ * check it separately.
  *
- * Uses pattern matching (not Set enumeration) to support parameterized types
- * like TimeType(precision) or DecimalType(precision, scale).
+ * Uses pattern matching (not Set enumeration) to support parameterized types like
+ * TimeType(precision) or DecimalType(precision, scale).
  */
 object TypeOps {
 
   /**
    * Returns a TypeOps instance for the given DataType, if supported by the framework.
    *
-   * Returns None if the type is not supported or the framework is disabled.
-   * This is the single registration point for all server-side type operations.
+   * Returns None if the type is not supported or the framework is disabled. This is the single
+   * registration point for all server-side type operations.
    *
-   * @param dt the DataType to get operations for
-   * @return Some(TypeOps) if supported, None otherwise
+   * @param dt
+   *   the DataType to get operations for
+   * @return
+   *   Some(TypeOps) if supported, None otherwise
    */
   def apply(dt: DataType): Option[TypeOps] = {
     if (!SQLConf.get.typesFrameworkEnabled) return None

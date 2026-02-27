@@ -25,15 +25,15 @@ import org.apache.spark.unsafe.types.UTF8String
 /**
  * Client-side (spark-api) type operations for the Types Framework.
  *
- * This trait consolidates all client-side operations that a data type must implement to be
- * usable in the Spark SQL API layer. All methods are mandatory because a type cannot function
- * correctly without string formatting (needed for CAST to STRING, EXPLAIN, SHOW) or encoding
- * (needed for Dataset[T] operations).
+ * This trait consolidates all client-side operations that a data type must implement to be usable
+ * in the Spark SQL API layer. All methods are mandatory because a type cannot function correctly
+ * without string formatting (needed for CAST to STRING, EXPLAIN, SHOW) or encoding (needed for
+ * Dataset[T] operations).
  *
  * This single-interface design was chosen over separate FormatTypeOps/EncodeTypeOps traits to
  * make it clear what a new type must implement - there is one mandatory interface, and it
- * contains everything required. Optional capabilities (e.g., proto, Arrow, JDBC) are defined
- * as separate traits that can be mixed in incrementally.
+ * contains everything required. Optional capabilities (e.g., proto, Arrow, JDBC) are defined as
+ * separate traits that can be mixed in incrementally.
  *
  * RELATIONSHIP TO TypeOps:
  *   - TypeOps (catalyst): Server-side operations - physical types, literals, conversions
@@ -42,7 +42,8 @@ import org.apache.spark.unsafe.types.UTF8String
  * The split exists because sql/api cannot depend on sql/catalyst. For TimeType, TimeTypeOps
  * (catalyst) extends TimeTypeApiOps (sql-api) to inherit both sets of operations.
  *
- * @see TimeTypeApiOps for reference implementation
+ * @see
+ *   TimeTypeApiOps for reference implementation
  * @since 4.2.0
  */
 trait TypeApiOps extends Serializable {
@@ -57,8 +58,10 @@ trait TypeApiOps extends Serializable {
    *
    * Used by CAST to STRING, EXPLAIN output, SHOW commands.
    *
-   * @param v the internal value (e.g., Long nanoseconds for TimeType)
-   * @return formatted string (e.g., "10:30:45.123456")
+   * @param v
+   *   the internal value (e.g., Long nanoseconds for TimeType)
+   * @return
+   *   formatted string (e.g., "10:30:45.123456")
    */
   def format(v: Any): String
 
@@ -72,8 +75,10 @@ trait TypeApiOps extends Serializable {
   /**
    * Formats an internal value as a SQL literal string.
    *
-   * @param v the internal value
-   * @return SQL literal string (e.g., "TIME '10:30:00'")
+   * @param v
+   *   the internal value
+   * @return
+   *   SQL literal string (e.g., "TIME '10:30:00'")
    */
   def toSQLValue(v: Any): String
 
@@ -84,7 +89,8 @@ trait TypeApiOps extends Serializable {
    *
    * Used by RowEncoder for Dataset[T] operations.
    *
-   * @return AgnosticEncoder instance (e.g., LocalTimeEncoder for TimeType)
+   * @return
+   *   AgnosticEncoder instance (e.g., LocalTimeEncoder for TimeType)
    */
   def getEncoder: AgnosticEncoder[_]
 }
@@ -92,20 +98,22 @@ trait TypeApiOps extends Serializable {
 /**
  * Factory object for creating TypeApiOps instances.
  *
- * Returns Option to serve as both lookup and existence check - callers use
- * getOrElse to fall through to legacy handling. The feature flag check is
- * inside apply(), so callers don't need to check it separately.
+ * Returns Option to serve as both lookup and existence check - callers use getOrElse to fall
+ * through to legacy handling. The feature flag check is inside apply(), so callers don't need to
+ * check it separately.
  */
 object TypeApiOps {
 
   /**
    * Returns a TypeApiOps instance for the given DataType, if supported by the framework.
    *
-   * Returns None if the type is not supported or the framework is disabled.
-   * This is the single registration point for all client-side type operations.
+   * Returns None if the type is not supported or the framework is disabled. This is the single
+   * registration point for all client-side type operations.
    *
-   * @param dt the DataType to get operations for
-   * @return Some(TypeApiOps) if supported, None otherwise
+   * @param dt
+   *   the DataType to get operations for
+   * @return
+   *   Some(TypeApiOps) if supported, None otherwise
    */
   def apply(dt: DataType): Option[TypeApiOps] = {
     if (!SqlApiConf.get.typesFrameworkEnabled) return None
