@@ -1479,7 +1479,7 @@ jobs:
     needs: [precondition]
     if: fromJson(needs.precondition.outputs.required).ui == 'true'
     name: Run Spark UI tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v6
