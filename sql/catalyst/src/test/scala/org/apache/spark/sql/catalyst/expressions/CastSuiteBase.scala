@@ -57,6 +57,16 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  // Test data for invalid UTF-8 binary to string conversion tests
+  protected lazy val invalidUtf8Bytes = Array[Byte](0x80.toByte, 0x00, 0x00, 0x00)
+  protected lazy val invalidUtf8Literal = Literal.create(invalidUtf8Bytes, BinaryType)
+
+  protected lazy val validUtf8Bytes = "Hello".getBytes("UTF-8")
+  protected lazy val validUtf8Literal = Literal.create(validUtf8Bytes, BinaryType)
+
+  protected lazy val emptyBinaryBytes = Array.empty[Byte]
+  protected lazy val emptyBinaryLiteral = Literal.create(emptyBinaryBytes, BinaryType)
+
   // expected cannot be null
   protected def checkCast(v: Any, expected: Any): Unit = {
     checkEvaluation(cast(v, Literal(expected).dataType), expected)

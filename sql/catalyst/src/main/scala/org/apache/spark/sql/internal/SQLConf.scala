@@ -6053,6 +6053,19 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val VALIDATE_BINARY_TO_STRING_CAST =
+    buildConf("spark.sql.castBinaryToString.validateUtf8")
+      .doc("When true, casting from BinaryType to StringType validates that the binary data " +
+        "contains valid UTF-8 sequences. Spark's StringType is UTF-8 by design. When invalid " +
+        "UTF-8 is cast to StringType, the original bytes cannot be recovered, resulting in " +
+        "data corruption. In ANSI mode, invalid UTF-8 will throw an exception. In LEGACY " +
+        "mode, invalid UTF-8 will return NULL. When false (not recommended), invalid UTF-8 " +
+        "is allowed, which corrupts data and may cause undefined behavior. This config will " +
+        "be removed in a future version.")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val LEGACY_PATH_OPTION_BEHAVIOR =
     buildConf("spark.sql.legacy.pathOptionBehavior.enabled")
       .internal()

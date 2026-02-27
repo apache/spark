@@ -188,10 +188,18 @@ def _as_bool_type(index_ops: IndexOpsLike, dtype: Dtype) -> IndexOpsLike:
 
 
 def _as_string_type(
-    index_ops: IndexOpsLike, dtype: Dtype, *, null_str: str = str(None)
+    index_ops: IndexOpsLike,
+    dtype: Dtype,
+    *,
+    null_str: str = str(None),
+    nullable: Optional[bool] = None,
 ) -> IndexOpsLike:
     """Cast `index_ops` to StringType Spark type, given `dtype` and `null_str`,
     representing null Spark column. Note that `null_str` is for non-extension dtypes only.
+
+    Args:
+        nullable: If provided, use this value for the resulting field's nullable.
+                  If None, preserve the source field's nullable.
     """
     spark_type = StringType()
     if handle_dtype_as_extension_dtype(dtype):
@@ -199,8 +207,17 @@ def _as_string_type(
     else:
         casted = index_ops.spark.column.cast(spark_type)
         scol = F.when(index_ops.spark.column.isNull(), null_str).otherwise(casted)
+
+    # Use provided nullable or preserve from source
+    field_nullable = (
+        nullable if nullable is not None else index_ops._internal.data_fields[0].nullable
+    )
+
     return index_ops._with_new_scol(
-        scol, field=index_ops._internal.data_fields[0].copy(dtype=dtype, spark_type=spark_type)
+        scol,
+        field=index_ops._internal.data_fields[0].copy(
+            dtype=dtype, spark_type=spark_type, nullable=field_nullable
+        ),
     )
 
 

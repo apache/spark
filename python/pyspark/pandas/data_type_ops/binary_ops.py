@@ -93,6 +93,13 @@ class BinaryOps(DataTypeOps):
             # We should cast binary to str first, and cast it to boolean
             return index_ops.astype(str).astype(bool)
         elif isinstance(spark_type, StringType):
-            return _as_string_type(index_ops, dtype)
+            # Binary->String can be nullable when UTF-8 validation is enabled.
+            # Query actual nullable from Spark schema before creating the result.
+            cast_expr = index_ops.spark.column.cast(spark_type)
+            temp_sdf = index_ops._internal.spark_frame.select(cast_expr)
+            actual_nullable = temp_sdf.schema.fields[0].nullable
+
+            # Pass the actual nullable to _as_string_type
+            return _as_string_type(index_ops, dtype, nullable=actual_nullable)
         else:
             return _as_other_type(index_ops, dtype, spark_type)

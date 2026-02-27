@@ -1855,6 +1855,60 @@ Project [try_validate_utf8(cast(0x80 as string)) AS try_validate_utf8(X'80')#x]
 
 
 -- !query
+SET spark.sql.castBinaryToString.validateUtf8=false
+-- !query analysis
+SetCommand (spark.sql.castBinaryToString.validateUtf8,Some(false))
+
+
+-- !query
+select is_valid_utf8(x'80')
+-- !query analysis
+Project [is_valid_utf8(cast(0x80 as string)) AS is_valid_utf8(X'80')#x]
++- OneRowRelation
+
+
+-- !query
+select is_valid_utf8(x'61C262')
+-- !query analysis
+Project [is_valid_utf8(cast(0x61C262 as string)) AS is_valid_utf8(X'61C262')#x]
++- OneRowRelation
+
+
+-- !query
+select make_valid_utf8(x'80')
+-- !query analysis
+Project [make_valid_utf8(cast(0x80 as string)) AS make_valid_utf8(X'80')#x]
++- OneRowRelation
+
+
+-- !query
+select make_valid_utf8(x'61C262')
+-- !query analysis
+Project [make_valid_utf8(cast(0x61C262 as string)) AS make_valid_utf8(X'61C262')#x]
++- OneRowRelation
+
+
+-- !query
+select try_validate_utf8(x'80')
+-- !query analysis
+Project [try_validate_utf8(cast(0x80 as string)) AS try_validate_utf8(X'80')#x]
++- OneRowRelation
+
+
+-- !query
+select try_validate_utf8(x'61C262')
+-- !query analysis
+Project [try_validate_utf8(cast(0x61C262 as string)) AS try_validate_utf8(X'61C262')#x]
++- OneRowRelation
+
+
+-- !query
+SET spark.sql.castBinaryToString.validateUtf8=true
+-- !query analysis
+SetCommand (spark.sql.castBinaryToString.validateUtf8,Some(true))
+
+
+-- !query
 select quote('Spark')
 -- !query analysis
 Project [quote(Spark) AS quote(Spark)#x]
