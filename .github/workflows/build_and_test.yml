@@ -59,7 +59,7 @@ concurrency:
 jobs:
   precondition:
     name: Check changes
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     env:
       GITHUB_PREV_SHA: ${{ github.event.before }}
     outputs:
