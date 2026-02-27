@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.{KeyedPartitioning, SinglePartition}
-import org.apache.spark.sql.catalyst.util.{truncatedString, InternalRowComparableWrapper}
+import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.util.ArrayImplicits._
@@ -75,44 +75,38 @@ case class BatchScanExec(
       val newPartitions = scan.toBatch.planInputPartitions()
 
       originalPartitioning match {
-        case p: KeyedPartitioning =>
+        case k: KeyedPartitioning =>
           if (newPartitions.exists(!_.isInstanceOf[HasPartitionKey])) {
             throw new SparkException("Data source must have preserved the original partitioning " +
                 "during runtime filtering: not all partitions implement HasPartitionKey after " +
                 "filtering")
           }
-          val newPartitionKeys = newPartitions.map(partition =>
-              InternalRowComparableWrapper(partition.asInstanceOf[HasPartitionKey], p.expressions))
-            .toSet
-          val oldPartitionKeys = p.partitionKeys
-            .map(partition => InternalRowComparableWrapper(partition, p.expressions)).toSet
-          // We require the new number of partition values to be equal or less than the old number
-          // of partition values here. In the case of less than, empty partitions will be added for
-          // those missing values that are not present in the new input partitions.
-          if (oldPartitionKeys.size < newPartitionKeys.size) {
-            throw new SparkException("During runtime filtering, data source must either report " +
-                "the same number of partition values, or a subset of partition values from the " +
-                s"original. Before: ${oldPartitionKeys.size} partition values. " +
-                s"After: ${newPartitionKeys.size} partition values")
-          }
 
-          if (!newPartitionKeys.forall(oldPartitionKeys.contains)) {
-            throw new SparkException("During runtime filtering, data source must not report new " +
-                "partition values that are not present in the original partitioning.")
-          }
-
-          val comparableKeyWrapperFactory = p.comparableKeyWrapperFactory
-          val inputMap = inputPartitions.groupBy(p =>
-            comparableKeyWrapperFactory(p.asInstanceOf[HasPartitionKey].partitionKey())
+          val inputMap = inputPartitions.groupBy(
+            p => k.comparableKeyWrapperFactory(p.asInstanceOf[HasPartitionKey].partitionKey())
           ).view.mapValues(_.size)
-          val filteredMap = newPartitions.groupBy(p =>
-            comparableKeyWrapperFactory(p.asInstanceOf[HasPartitionKey].partitionKey())
+          val filteredMap = newPartitions.groupBy(
+            p => k.comparableKeyWrapperFactory(p.asInstanceOf[HasPartitionKey].partitionKey())
           )
+
+          if (!filteredMap.keySet.subsetOf(inputMap.keySet)) {
+            throw new SparkException("During runtime filtering, data source must not report new " +
+                "partition keys that are not present in the original partitioning.")
+          }
+
           inputMap.toSeq
-            .sortBy { case (keyWrapper, _) => keyWrapper.row }(p.keyOrdering)
+            .sortBy { case (keyWrapper, _) => keyWrapper.row }(k.keyOrdering)
             .flatMap { case (keyWrapper, size) =>
+              // We require the new number of partitions to be equal or less than the old number of
+              // partitions for a given key. In the case of less than, empty partitions are added.
               val fps = filteredMap.getOrElse(keyWrapper, Array.empty)
-              assert(fps.size <= size)
+
+              if (fps.size > size) {
+                throw new SparkException("During runtime filtering, data source must not report " +
+                  s"new partitions for a given key. Before: $size partitions. " +
+                  s"After: ${fps.size} partitions")
+              }
+
               fps.map(Some).padTo(size, None)
             }
 
@@ -123,8 +117,8 @@ case class BatchScanExec(
 
     } else {
       (originalPartitioning match {
-        case p: KeyedPartitioning =>
-          inputPartitions.sortBy(_.asInstanceOf[HasPartitionKey].partitionKey())(p.keyOrdering)
+        case k: KeyedPartitioning =>
+          inputPartitions.sortBy(_.asInstanceOf[HasPartitionKey].partitionKey())(k.keyOrdering)
 
         case _ => inputPartitions
       }).map(Some)
