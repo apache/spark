@@ -190,45 +190,45 @@ public class PlatformUtilSuite {
 
   @Test
   public void reallocateMemoryShrinkDoesNotOverflow() {
-    final long OLD_SIZE = 1024L;
-    final long NEW_SIZE = 512L;
-    final long SENTINEL_SIZE = OLD_SIZE - NEW_SIZE;
-    final byte SENTINEL_VALUE = (byte) 0xAB;
-    final byte SOURCE_VALUE   = (byte) 0xCD;
-    final int  PAIRS = 1000;
+    long oldSize = 1024L;
+    long newSize = 512L;
+    long sentinelSize = oldSize - newSize;
+    byte sentinelValue = (byte) 0xAB;
+    byte sourceValue   = (byte) 0xCD;
+    int pairs = 1000;
 
-    long[] sources = new long[PAIRS];
-    long[] sentinels = new long[PAIRS];
+    long[] sources = new long[pairs];
+    long[] sentinels = new long[pairs];
 
     try {
       // Allocate all pairs
-      for (int i = 0; i < PAIRS; i++) {
-        sources[i] = Platform.allocateMemory(OLD_SIZE);
-        sentinels[i] = Platform.allocateMemory(SENTINEL_SIZE);
+      for (int i = 0; i < pairs; i++) {
+        sources[i] = Platform.allocateMemory(oldSize);
+        sentinels[i] = Platform.allocateMemory(sentinelSize);
 
-        Platform.setMemory(sources[i], SOURCE_VALUE, OLD_SIZE);
-        Platform.setMemory(sentinels[i], SENTINEL_VALUE, SENTINEL_SIZE);
+        Platform.setMemory(sources[i], sourceValue, oldSize);
+        Platform.setMemory(sentinels[i], sentinelValue, sentinelSize);
       }
 
       // Reallocate source blocks
-      for (int i = 0; i < PAIRS; i++) {
+      for (int i = 0; i < pairs; i++) {
         long oldAddr = sources[i];
-        long newAddr = Platform.reallocateMemory(oldAddr, OLD_SIZE, NEW_SIZE);
+        long newAddr = Platform.reallocateMemory(oldAddr, oldSize, newSize);
         sources[i] = newAddr;
       }
 
       // Verify dest content
-      for (int i = 0; i < PAIRS; i++) {
-        for (long j = 0; j < NEW_SIZE; j++) {
-          Assertions.assertEquals(SOURCE_VALUE, Platform.getByte(null, sources[i] + j),
+      for (int i = 0; i < pairs; i++) {
+        for (long j = 0; j < newSize; j++) {
+          Assertions.assertEquals(sourceValue, Platform.getByte(null, sources[i] + j),
             "dest block content corrupted at pair " + i);
         }
       }
 
       // Verify sentinel content
-      for (int i = 0; i < PAIRS; i++) {
-        for (long j = 0; j < SENTINEL_SIZE; j++) {
-          Assertions.assertEquals(SENTINEL_VALUE, Platform.getByte(null, sentinels[i] + j),
+      for (int i = 0; i < pairs; i++) {
+        for (long j = 0; j < sentinelSize; j++) {
+          Assertions.assertEquals(sentinelValue, Platform.getByte(null, sentinels[i] + j),
             "sentinel corrupted – overflow write detected at pair " + i);
         }
       }
