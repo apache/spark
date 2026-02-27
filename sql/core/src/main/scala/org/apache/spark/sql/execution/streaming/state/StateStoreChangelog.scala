@@ -642,8 +642,7 @@ class StateStoreChangelogReaderV4(
 /**
  * Base class representing a iterator that iterates over a range of changelog files in a state
  * store. In each iteration, it will return a tuple of (changeType: [[RecordType]],
- * nested key: [[UnsafeRow]], nested value: [[UnsafeRow]], batchId: [[Long]],
- * endKey: [[UnsafeRow]])
+ * nested key: [[UnsafeRow]], nested value: [[UnsafeRow]], batchId: [[Long]])
  *
  * @param storeId id of the state store
  * @param fm checkpoint file manager used to manage streaming query checkpoint
@@ -662,7 +661,7 @@ abstract class StateStoreChangeDataReader(
     compressionCodec: CompressionCodec,
     storeConf: StateStoreConf,
     colFamilyNameOpt: Option[String] = None)
-  extends NextIterator[(RecordType.Value, UnsafeRow, UnsafeRow, UnsafeRow, Long)] with Logging {
+  extends NextIterator[(RecordType.Value, UnsafeRow, UnsafeRow, Long)] with Logging {
 
   assert(startVersion >= 1)
   assert(endVersion >= startVersion)

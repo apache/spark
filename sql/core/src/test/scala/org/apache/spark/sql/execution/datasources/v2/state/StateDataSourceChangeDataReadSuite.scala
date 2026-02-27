@@ -210,14 +210,12 @@ abstract class StateDataSourceChangeDataReaderSuite extends StateDataSourceTestB
         provider.asInstanceOf[SupportsFineGrainedReplay]
           .getStateStoreChangeDataReader(1, 4, None, versionToCkptId.getOrElse(4, None))
 
+      assert(reader.next() === (RecordType.PUT_RECORD, dataToKeyRow("a", 1), dataToValueRow(1), 0L))
+      assert(reader.next() === (RecordType.PUT_RECORD, dataToKeyRow("b", 2), dataToValueRow(2), 1L))
       assert(reader.next() ===
-        (RecordType.PUT_RECORD, dataToKeyRow("a", 1), dataToValueRow(1), null, 0L))
+        (RecordType.DELETE_RECORD, dataToKeyRow("a", 1), null, 2L))
       assert(reader.next() ===
-        (RecordType.PUT_RECORD, dataToKeyRow("b", 2), dataToValueRow(2), null, 1L))
-      assert(reader.next() ===
-        (RecordType.DELETE_RECORD, dataToKeyRow("a", 1), null, null, 2L))
-      assert(reader.next() ===
-        (RecordType.DELETE_RECORD, dataToKeyRow("b", 2), null, null, 3L))
+        (RecordType.DELETE_RECORD, dataToKeyRow("b", 2), null, 3L))
     }
   }
 
@@ -242,9 +240,9 @@ abstract class StateDataSourceChangeDataReaderSuite extends StateDataSourceTestB
         .load(tempDir.getAbsolutePath)
 
       val expectedDf = Seq(
-        Row(0L, "update", Row(null), Row(4), null, 0),
-        Row(1L, "update", Row(null), Row(8), null, 0),
-        Row(2L, "update", Row(null), Row(10), null, 0)
+        Row(0L, "update", Row(null), Row(4), 0),
+        Row(1L, "update", Row(null), Row(8), 0),
+        Row(2L, "update", Row(null), Row(10), 0)
       )
 
       checkAnswer(stateDf, expectedDf)
@@ -272,18 +270,18 @@ abstract class StateDataSourceChangeDataReaderSuite extends StateDataSourceTestB
         .load(tempDir.getAbsolutePath)
 
       val expectedDf = Seq(
-        Row(0L, "update", Row(3), Row(1), null, 1),
-        Row(1L, "update", Row(3), Row(2), null, 1),
-        Row(1L, "update", Row(5), Row(1), null, 1),
-        Row(2L, "update", Row(3), Row(3), null, 1),
-        Row(2L, "update", Row(5), Row(2), null, 1),
-        Row(0L, "update", Row(4), Row(1), null, 2),
-        Row(1L, "update", Row(4), Row(2), null, 2),
-        Row(2L, "update", Row(4), Row(3), null, 2),
-        Row(0L, "update", Row(1), Row(1), null, 3),
-        Row(0L, "update", Row(2), Row(1), null, 4),
-        Row(1L, "update", Row(2), Row(2), null, 4),
-        Row(2L, "update", Row(6), Row(1), null, 4)
+        Row(0L, "update", Row(3), Row(1), 1),
+        Row(1L, "update", Row(3), Row(2), 1),
+        Row(1L, "update", Row(5), Row(1), 1),
+        Row(2L, "update", Row(3), Row(3), 1),
+        Row(2L, "update", Row(5), Row(2), 1),
+        Row(0L, "update", Row(4), Row(1), 2),
+        Row(1L, "update", Row(4), Row(2), 2),
+        Row(2L, "update", Row(4), Row(3), 2),
+        Row(0L, "update", Row(1), Row(1), 3),
+        Row(0L, "update", Row(2), Row(1), 4),
+        Row(1L, "update", Row(2), Row(2), 4),
+        Row(2L, "update", Row(6), Row(1), 4)
       )
 
       checkAnswer(stateDf, expectedDf)
@@ -311,12 +309,12 @@ abstract class StateDataSourceChangeDataReaderSuite extends StateDataSourceTestB
         .load(tempDir.getAbsolutePath)
 
       val expectedDf = Seq(
-        Row(0L, "update", Row(1), Row(null), null, 3),
-        Row(0L, "update", Row(2), Row(null), null, 4),
-        Row(0L, "update", Row(3), Row(null), null, 1),
-        Row(0L, "update", Row(4), Row(null), null, 2),
-        Row(1L, "update", Row(5), Row(null), null, 1),
-        Row(2L, "update", Row(6), Row(null), null, 4)
+        Row(0L, "update", Row(1), Row(null), 3),
+        Row(0L, "update", Row(2), Row(null), 4),
+        Row(0L, "update", Row(3), Row(null), 1),
+        Row(0L, "update", Row(4), Row(null), 2),
+        Row(1L, "update", Row(5), Row(null), 1),
+        Row(2L, "update", Row(6), Row(null), 4)
       )
 
       checkAnswer(stateDf, expectedDf)
@@ -348,11 +346,11 @@ abstract class StateDataSourceChangeDataReaderSuite extends StateDataSourceTestB
         .load(tempDir.getAbsolutePath)
 
       val keyWithIndexToValueExpectedDf = Seq(
-        Row(1L, "update", Row(3, 0L), Row(3, 3L, false), null, 1),
-        Row(1L, "update", Row(4, 0L), Row(4, 4L, true), null, 2),
-        Row(0L, "update", Row(1, 0L), Row(1, 1L, false), null, 3),
-        Row(0L, "update", Row(2, 0L), Row(2, 2L, false), null, 4),
-        Row(0L, "update", Row(2, 0L), Row(2, 2L, true), null, 4)
+        Row(1L, "update", Row(3, 0L), Row(3, 3L, false), 1),
+        Row(1L, "update", Row(4, 0L), Row(4, 4L, true), 2),
+        Row(0L, "update", Row(1, 0L), Row(1, 1L, false), 3),
+        Row(0L, "update", Row(2, 0L), Row(2, 2L, false), 4),
+        Row(0L, "update", Row(2, 0L), Row(2, 2L, true), 4)
       )
 
       checkAnswer(keyWithIndexToValueDf, keyWithIndexToValueExpectedDf)
@@ -365,10 +363,10 @@ abstract class StateDataSourceChangeDataReaderSuite extends StateDataSourceTestB
         .load(tempDir.getAbsolutePath)
 
       val keyToNumValuesDfExpectedDf = Seq(
-        Row(1L, "update", Row(3), Row(1L), null, 1),
-        Row(1L, "update", Row(4), Row(1L), null, 2),
-        Row(0L, "update", Row(1), Row(1L), null, 3),
-        Row(0L, "update", Row(2), Row(1L), null, 4)
+        Row(1L, "update", Row(3), Row(1L), 1),
+        Row(1L, "update", Row(4), Row(1L), 2),
+        Row(0L, "update", Row(1), Row(1L), 3),
+        Row(0L, "update", Row(2), Row(1L), 4)
       )
 
       checkAnswer(keyToNumValuesDf, keyToNumValuesDfExpectedDf)
@@ -403,21 +401,21 @@ abstract class StateDataSourceChangeDataReaderSuite extends StateDataSourceTestB
           .load(tempDir.getAbsolutePath)
 
         val expectedDf = Seq(
-          Row(0L, "update", Row(3), Row(1), null, 1),
-          Row(1L, "update", Row(3), Row(2), null, 1),
-          Row(1L, "update", Row(5), Row(1), null, 1),
-          Row(2L, "update", Row(3), Row(3), null, 1),
-          Row(2L, "update", Row(5), Row(2), null, 1),
-          Row(0L, "update", Row(4), Row(1), null, 2),
-          Row(1L, "update", Row(4), Row(2), null, 2),
-          Row(2L, "update", Row(4), Row(3), null, 2),
-          Row(0L, "update", Row(1), Row(2), null, 3),
-          Row(3L, "update", Row(1), Row(4), null, 3),
-          Row(4L, "update", Row(1), Row(6), null, 3),
-          Row(5L, "update", Row(1), Row(8), null, 3),
-          Row(0L, "update", Row(2), Row(1), null, 4),
-          Row(1L, "update", Row(2), Row(2), null, 4),
-          Row(2L, "update", Row(6), Row(1), null, 4)
+          Row(0L, "update", Row(3), Row(1), 1),
+          Row(1L, "update", Row(3), Row(2), 1),
+          Row(1L, "update", Row(5), Row(1), 1),
+          Row(2L, "update", Row(3), Row(3), 1),
+          Row(2L, "update", Row(5), Row(2), 1),
+          Row(0L, "update", Row(4), Row(1), 2),
+          Row(1L, "update", Row(4), Row(2), 2),
+          Row(2L, "update", Row(4), Row(3), 2),
+          Row(0L, "update", Row(1), Row(2), 3),
+          Row(3L, "update", Row(1), Row(4), 3),
+          Row(4L, "update", Row(1), Row(6), 3),
+          Row(5L, "update", Row(1), Row(8), 3),
+          Row(0L, "update", Row(2), Row(1), 4),
+          Row(1L, "update", Row(2), Row(2), 4),
+          Row(2L, "update", Row(6), Row(1), 4)
         )
 
         checkAnswer(stateDf, expectedDf)
@@ -429,15 +427,15 @@ abstract class StateDataSourceChangeDataReaderSuite extends StateDataSourceTestB
           .load(tempDir.getAbsolutePath)
 
         val expectedDf2 = Seq(
-          Row(1L, "update", Row(3), Row(2), null, 1),
-          Row(1L, "update", Row(5), Row(1), null, 1),
-          Row(2L, "update", Row(3), Row(3), null, 1),
-          Row(2L, "update", Row(5), Row(2), null, 1),
-          Row(1L, "update", Row(4), Row(2), null, 2),
-          Row(2L, "update", Row(4), Row(3), null, 2),
-          Row(3L, "update", Row(1), Row(4), null, 3),
-          Row(1L, "update", Row(2), Row(2), null, 4),
-          Row(2L, "update", Row(6), Row(1), null, 4)
+          Row(1L, "update", Row(3), Row(2), 1),
+          Row(1L, "update", Row(5), Row(1), 1),
+          Row(2L, "update", Row(3), Row(3), 1),
+          Row(2L, "update", Row(5), Row(2), 1),
+          Row(1L, "update", Row(4), Row(2), 2),
+          Row(2L, "update", Row(4), Row(3), 2),
+          Row(3L, "update", Row(1), Row(4), 3),
+          Row(1L, "update", Row(2), Row(2), 4),
+          Row(2L, "update", Row(6), Row(1), 4)
         )
 
         checkAnswer(stateDf2, expectedDf2)
@@ -449,12 +447,12 @@ abstract class StateDataSourceChangeDataReaderSuite extends StateDataSourceTestB
           .load(tempDir.getAbsolutePath)
 
         val expectedDf3 = Seq(
-          Row(2L, "update", Row(3), Row(3), null, 1),
-          Row(2L, "update", Row(5), Row(2), null, 1),
-          Row(2L, "update", Row(4), Row(3), null, 2),
-          Row(3L, "update", Row(1), Row(4), null, 3),
-          Row(4L, "update", Row(1), Row(6), null, 3),
-          Row(2L, "update", Row(6), Row(1), null, 4)
+          Row(2L, "update", Row(3), Row(3), 1),
+          Row(2L, "update", Row(5), Row(2), 1),
+          Row(2L, "update", Row(4), Row(3), 2),
+          Row(3L, "update", Row(1), Row(4), 3),
+          Row(4L, "update", Row(1), Row(6), 3),
+          Row(2L, "update", Row(6), Row(1), 4)
         )
 
         checkAnswer(stateDf3, expectedDf3)
@@ -494,10 +492,10 @@ abstract class StateDataSourceChangeDataReaderSuite extends StateDataSourceTestB
         .load(tempDir.getAbsolutePath)
 
       val expectedDf = Seq(
-        Row(0L, "update", Row(Row(ts0, ts1)), Row(2), null, 4),
-        Row(1L, "update", Row(Row(ts2, ts3)), Row(1), null, 1),
-        Row(2L, "delete", Row(Row(ts0, ts1)), null, null, 4),
-        Row(2L, "update", Row(Row(ts3, ts4)), Row(1), null, 4)
+        Row(0L, "update", Row(Row(ts0, ts1)), Row(2), 4),
+        Row(1L, "update", Row(Row(ts2, ts3)), Row(1), 1),
+        Row(2L, "delete", Row(Row(ts0, ts1)), null, 4),
+        Row(2L, "update", Row(Row(ts3, ts4)), Row(1), 4)
       )
 
       checkAnswer(stateDf, expectedDf)

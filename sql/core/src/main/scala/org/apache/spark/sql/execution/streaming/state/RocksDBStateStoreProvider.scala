@@ -1408,7 +1408,7 @@ class RocksDBStateStoreChangeDataReader(
 
   override protected val changelogSuffix: String = "changelog"
 
-  override def getNext(): (RecordType.Value, UnsafeRow, UnsafeRow, UnsafeRow, Long) = {
+  override def getNext(): (RecordType.Value, UnsafeRow, UnsafeRow, Long) = {
     var currRecord: (RecordType.Value, Array[Byte], Array[Byte]) = null
     val currEncoder: (RocksDBKeyStateEncoder, RocksDBValueStateEncoder, Short) =
       keyValueEncoderMap.get(colFamilyNameOpt
@@ -1427,6 +1427,11 @@ class RocksDBStateStoreChangeDataReader(
         }
 
         val nextRecord = reader.next()
+        if (nextRecord._1 == RecordType.DELETE_RANGE_RECORD) {
+          throw new UnsupportedOperationException(
+            "DELETE_RANGE_RECORD is not supported in the state data source change feed. " +
+              "Range deletions cannot be expanded into individual key-value change records.")
+        }
         val keyBytes = if (storeConf.rowChecksumEnabled
           && nextRecord._1 == RecordType.DELETE_RECORD) {
           // remove checksum and decode to the original key
@@ -1460,6 +1465,11 @@ class RocksDBStateStoreChangeDataReader(
         return null
       }
       val nextRecord = reader.next()
+      if (nextRecord._1 == RecordType.DELETE_RANGE_RECORD) {
+        throw new UnsupportedOperationException(
+          "DELETE_RANGE_RECORD is not supported in the state data source change feed. " +
+            "Range deletions cannot be expanded into individual key-value change records.")
+      }
       currRecord = if (storeConf.rowChecksumEnabled) {
         nextRecord._1 match {
           case RecordType.DELETE_RECORD =>
@@ -1476,28 +1486,12 @@ class RocksDBStateStoreChangeDataReader(
       }
     }
 
-    if (currRecord._1 == RecordType.DELETE_RANGE_RECORD) {
-      // For delete_range entries, decode beginKey from _2 and endKey from _3.
-      // Both follow the key schema. endKey is placed in a separate field since it
-      // cannot go into the value field (different schema).
-      val beginKeyRow = currEncoder._1.decodeKey(currRecord._2).copy()
-      // When colFamilyNameOpt is defined, the beginKey prefix was already stripped
-      // (via decodeStateRowWithPrefix) but endKey still has it. Strip it here.
-      val endKeyBytes = if (colFamilyNameOpt.isDefined) {
-        RocksDBStateStoreProvider.decodeStateRowWithPrefix(currRecord._3)
-      } else {
-        currRecord._3
-      }
-      val endKeyRow = currEncoder._1.decodeKey(endKeyBytes)
-      (currRecord._1, beginKeyRow, null, endKeyRow, currentChangelogVersion - 1)
+    val keyRow = currEncoder._1.decodeKey(currRecord._2)
+    if (currRecord._3 == null) {
+      (currRecord._1, keyRow, null, currentChangelogVersion - 1)
     } else {
-      val keyRow = currEncoder._1.decodeKey(currRecord._2)
-      if (currRecord._3 == null) {
-        (currRecord._1, keyRow, null, null, currentChangelogVersion - 1)
-      } else {
-        val valueRow = currEncoder._2.decodeValue(currRecord._3)
-        (currRecord._1, keyRow, valueRow, null, currentChangelogVersion - 1)
-      }
+      val valueRow = currEncoder._2.decodeValue(currRecord._3)
+      (currRecord._1, keyRow, valueRow, currentChangelogVersion - 1)
     }
   }
 }
