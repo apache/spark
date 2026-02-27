@@ -152,11 +152,10 @@ class RocksDB(
 
   private val workingDir = createTempDir("workingDir")
 
-  // We need 2 threads per fm caller to avoid blocking
-  // (one for main file and another for checksum file).
-  // Since this fm is used by both query task and maintenance thread,
-  // then we need 2 * 2 = 4 threads.
-  protected val fileChecksumThreadPoolSize: Option[Int] = Some(4)
+  // To avoid blocking, we need 2 threads per fm caller (one for main file, one for checksum file).
+  // Since this fm is used by both query task and maintenance thread, the recommended default is
+  // 2 * 2 = 4 threads. A value of 1 disables concurrency (sequential execution).
+  protected val fileChecksumThreadPoolSize: Option[Int] = Some(conf.fileChecksumThreadPoolSize)
 
   protected def createFileManager(
       dfsRootDir: String,
@@ -2404,6 +2403,7 @@ case class RocksDBConf(
     reportSnapshotUploadLag: Boolean,
     maxVersionsToDeletePerMaintenance: Int,
     fileChecksumEnabled: Boolean,
+    fileChecksumThreadPoolSize: Int,
     rowChecksumEnabled: Boolean,
     rowChecksumReadVerificationRatio: Long,
     mergeOperatorVersion: Int,
@@ -2619,6 +2619,7 @@ object RocksDBConf {
       storeConf.reportSnapshotUploadLag,
       storeConf.maxVersionsToDeletePerMaintenance,
       storeConf.checkpointFileChecksumEnabled,
+      storeConf.fileChecksumThreadPoolSize,
       storeConf.rowChecksumEnabled,
       storeConf.rowChecksumReadVerificationRatio,
       getPositiveIntConf(MERGE_OPERATOR_VERSION_CONF),

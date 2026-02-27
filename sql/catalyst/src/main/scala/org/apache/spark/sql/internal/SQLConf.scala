@@ -3684,6 +3684,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val STATE_STORE_ROCKSDB_FILE_CHECKSUM_THREAD_POOL_SIZE =
+    buildConf("spark.sql.streaming.stateStore.rocksdb.fileChecksumThreadPoolSize")
+      .internal()
+      .doc("Number of threads used to compute file checksums concurrently when uploading " +
+        "RocksDB state store checkpoints (e.g. main file and checksum file).")
+      .version("4.1.0")
+      .intConf
+      .checkValue(x => x == 1 || (x > 0 && x % 2 == 0), "Must be 1 or a positive even number")
+      .createWithDefault(4)
+
   val PARALLEL_FILE_LISTING_IN_STATS_COMPUTATION =
     buildConf("spark.sql.statistics.parallelFileListingInStatsComputation.enabled")
       .internal()
@@ -7172,6 +7182,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def checkpointFileChecksumSkipCreationIfFileMissingChecksum: Boolean =
     getConf(STREAMING_CHECKPOINT_FILE_CHECKSUM_SKIP_CREATION_IF_FILE_MISSING_CHECKSUM)
+
+  def stateStoreRocksDBFileChecksumThreadPoolSize: Int =
+    getConf(STATE_STORE_ROCKSDB_FILE_CHECKSUM_THREAD_POOL_SIZE)
 
   def isUnsupportedOperationCheckEnabled: Boolean = getConf(UNSUPPORTED_OPERATION_CHECK_ENABLED)
 

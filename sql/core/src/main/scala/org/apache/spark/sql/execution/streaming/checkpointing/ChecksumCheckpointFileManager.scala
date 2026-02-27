@@ -127,9 +127,11 @@ case class ChecksumFile(path: Path) {
  *                              orphan checksum files. If using this, it is your responsibility
  *                              to clean up the potential orphan checksum files.
  * @param numThreads This is the number of threads to use for the thread pool, for reading/writing
- *                   files. To avoid blocking, if the file manager instance is being used by a
- *                   single thread, then you can set this to 2 (one thread for main file, another
- *                   for checksum file).
+ *                   files. Must be 1 or a positive even number.
+ *                   Setting this to 1 means operations are performed sequentially (no concurrency
+ *                   between main file and checksum file).
+ *                   To avoid blocking with concurrent callers, set this to 2 (one thread for main
+ *                   file, another for checksum file) per caller thread.
  *                   If file manager is shared by multiple threads, you can set it to
  *                   number of threads using file manager * 2.
  *                   Setting this differently can lead to file operation being blocked waiting for
@@ -150,12 +152,13 @@ class ChecksumCheckpointFileManager(
     val numThreads: Int,
     val skipCreationIfFileMissingChecksum: Boolean)
   extends CheckpointFileManager with Logging {
-  assert(numThreads % 2 == 0, "numThreads must be a multiple of 2, we need 1 for the main file" +
+  assert(numThreads == 1 || numThreads % 2 == 0,
+    "numThreads must be 1 or a multiple of 2, we need 1 for the main file" +
     "and another for the checksum file")
 
   import ChecksumCheckpointFileManager._
 
-  // This allows us to concurrently read/write the main file and checksum file
+  // This allows us to read/write the main file and checksum file (concurrently if numThreads > 1)
   private val threadPool = ExecutionContext.fromExecutorService(
     ThreadUtils.newDaemonFixedThreadPool(numThreads, s"${this.getClass.getSimpleName}-Thread"))
 
