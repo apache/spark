@@ -1558,6 +1558,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   }
 
   def requiresSinglePartNamespaceError(identifier: Seq[String]): Throwable = {
+    // Callers must pass the full multipart identifier (e.g. namespace :+ name for table/view)
+    // so the message shows the full name like "`t`" or "`a`.`b`.`c`", not empty or namespace-only.
     new AnalysisException(
       errorClass = "REQUIRES_SINGLE_PART_NAMESPACE",
       messageParameters = Map(

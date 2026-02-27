@@ -814,8 +814,9 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
             throw QueryCompilationErrors.operationNotAllowedOnBuiltinFunctionError(
               "CREATE", ident.name())
           }
+          // Pass full identifier (namespace + name) so error shows e.g. "`a`.`b`.`c`"
           throw QueryCompilationErrors
-            .requiresSinglePartNamespaceError(ident.namespace().toSeq)
+            .requiresSinglePartNamespaceError(ident.namespace().toSeq :+ ident.name())
         }
         Some(TableIdentifier(ident.name(), Some(ident.namespace().head), Some(catalog.name)))
       case _ => None
