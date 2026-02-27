@@ -77,10 +77,7 @@ import urllib.request
 DEFAULT_PROJ_VERSION = "9.7.1"
 
 # URL template for raw SQL files from the PROJ GitHub repository.
-PROJ_RAW_URL = (
-    "https://raw.githubusercontent.com/OSGeo/PROJ/"
-    "{version}/data/sql/{filename}"
-)
+PROJ_RAW_URL = "https://raw.githubusercontent.com/OSGeo/PROJ/{version}/data/sql/{filename}"
 
 # PROJ SQL files to download. EPSG CRS definitions are spread across dedicated
 # per-table files, while ESRI definitions are all in a single file.
@@ -96,19 +93,16 @@ PROJ_SQL_FILES = [
 # OGC special cases: these SRIDs are standardized under OGC rather than EPSG.
 # The OGC string IDs override the EPSG ones for these SRIDs.
 OGC_SPECIAL_CASES = {
-    4267: "OGC:CRS27",   # NAD27
-    4269: "OGC:CRS83",   # NAD83
-    4326: "OGC:CRS84",   # WGS 84
+    4267: "OGC:CRS27",  # NAD27
+    4269: "OGC:CRS83",  # NAD83
+    4326: "OGC:CRS84",  # WGS 84
 }
 
 # Output paths for the generated CSV, relative to the Spark repo root.
 JAVA_RESOURCE_PATH = os.path.join(
-    "sql", "api", "src", "main", "resources",
-    "org", "apache", "spark", "sql", "srs_registry.csv"
+    "sql", "api", "src", "main", "resources", "org", "apache", "spark", "sql", "srs_registry.csv"
 )
-PYTHON_RESOURCE_PATH = os.path.join(
-    "python", "pyspark", "sql", "srs_registry.csv"
-)
+PYTHON_RESOURCE_PATH = os.path.join("python", "pyspark", "sql", "srs_registry.csv")
 
 
 def download_sql(version, filename):
@@ -158,7 +152,7 @@ def parse_sql_values(values_str):
                     buf.append(values_str[i])
                     i += 1
             fields.append("".join(buf))
-        elif values_str[i:i + 4].upper() == "NULL":
+        elif values_str[i : i + 4].upper() == "NULL":
             fields.append(None)
             i += 4
         else:
@@ -189,9 +183,7 @@ def parse_geodetic_crs(sql_content):
     excluding deprecated entries and entries with non-numeric codes.
     """
     results = []
-    pattern = re.compile(
-        r'INSERT INTO "geodetic_crs" VALUES\((.+)\);', re.IGNORECASE
-    )
+    pattern = re.compile(r'INSERT INTO "geodetic_crs" VALUES\((.+)\);', re.IGNORECASE)
     for line in sql_content.splitlines():
         match = pattern.search(line)
         if not match:
@@ -220,9 +212,7 @@ def parse_simple_crs(sql_content, table_name):
     Returns a list of (srid, string_id, is_geographic=False) tuples.
     """
     results = []
-    pattern = re.compile(
-        rf'INSERT INTO "{table_name}" VALUES\((.+)\);', re.IGNORECASE
-    )
+    pattern = re.compile(rf'INSERT INTO "{table_name}" VALUES\((.+)\);', re.IGNORECASE)
     for line in sql_content.splitlines():
         match = pattern.search(line)
         if not match:
@@ -364,8 +354,10 @@ def main():
     n_geographic = sum(1 for _, _, g in all_entries if g)
     n_nongeographic = len(all_entries) - n_geographic
     print()
-    print(f"  Total: {len(all_entries)} entries "
-          f"({n_geographic} geographic, {n_nongeographic} non-geographic)")
+    print(
+        f"  Total: {len(all_entries)} entries "
+        f"({n_geographic} geographic, {n_nongeographic} non-geographic)"
+    )
     print(f"  Breakdown by authority:")
     for auth in sorted(authority_counts):
         print(f"    {auth}: {authority_counts[auth]}")
