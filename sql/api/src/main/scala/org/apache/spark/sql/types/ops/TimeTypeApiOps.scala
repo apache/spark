@@ -32,7 +32,8 @@ import org.apache.spark.sql.types.{DataType, TimeType}
  * RELATIONSHIP TO TimeTypeOps: TimeTypeOps (in catalyst package) extends this class to inherit
  * client-side operations while adding server-side operations (physical type, literals, etc.).
  *
- * @param t The TimeType with precision information
+ * @param t
+ *   The TimeType with precision information
  * @since 4.2.0
  */
 class TimeTypeApiOps(val t: TimeType) extends TypeApiOps {

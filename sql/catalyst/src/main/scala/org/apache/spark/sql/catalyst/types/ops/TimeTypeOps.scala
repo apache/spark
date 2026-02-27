@@ -44,12 +44,11 @@ import org.apache.spark.sql.types.ops.TimeTypeApiOps
  *   - External type: java.time.LocalTime
  *   - Precision (0-6) affects display only, not storage
  *
- * @param t The TimeType with precision information
+ * @param t
+ *   The TimeType with precision information
  * @since 4.2.0
  */
-case class TimeTypeOps(override val t: TimeType)
-    extends TimeTypeApiOps(t)
-    with TypeOps {
+case class TimeTypeOps(override val t: TimeType) extends TimeTypeApiOps(t) with TypeOps {
 
   override def dataType: DataType = t
 
