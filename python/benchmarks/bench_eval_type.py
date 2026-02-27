@@ -20,8 +20,7 @@ Microbenchmarks for PySpark UDF eval types.
 
 Each benchmark class simulates the full worker pipeline for one eval type
 by constructing the complete binary protocol that ``worker.py``'s
-``main(infile, outfile)`` expects.  This avoids depending on internal APIs
-(e.g. ``read_udfs``) whose signatures change across versions.
+``main(infile, outfile)`` expects.
 
 The protocol is version-aware: at import time we detect whether the current
 PySpark carries the ``RunnerConf`` class (2026+) and build the appropriate
