@@ -25,7 +25,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.catalyst.{QualifiedTableName, SQLConfHelper}
-import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{NoSuchFunctionException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils, ClusterBySpec, SessionCatalog}
 import org.apache.spark.sql.catalyst.util.TypeUtils._
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, Column, FunctionCatalog, Identifier, NamespaceChange, SupportsNamespaces, Table, TableCatalog, TableCatalogCapability, TableChange, V1Table}
@@ -457,6 +457,12 @@ class V2SessionCatalog(catalog: SessionCatalog)
   }
 
   override def loadFunction(ident: Identifier): UnboundFunction = {
+    // Session catalog (V1) only supports 0 or 1 namespace part for functions (database.func).
+    // Multi-part namespace cannot map to FunctionIdentifier; treat as function not found
+    // so callers report UNRESOLVED_ROUTINE with search path instead of REQUIRES_SINGLE_PART_NAMESPACE.
+    if (ident.namespace().length > 1) {
+      throw new NoSuchFunctionException(ident)
+    }
     catalog.loadPersistentScalarFunction(ident.asFunctionIdentifier)
   }
 
@@ -473,6 +479,11 @@ class V2SessionCatalog(catalog: SessionCatalog)
   }
 
   override def functionExists(ident: Identifier): Boolean = {
+    // Session catalog (V1) only supports 0 or 1 namespace part for functions.
+    // Multi-part namespace cannot map to FunctionIdentifier; treat as not found.
+    if (ident.namespace().length > 1) {
+      return false
+    }
     catalog.isPersistentFunction(ident.asFunctionIdentifier)
   }
 

@@ -2029,68 +2029,12 @@ class Analyzer(
             f
           } else {
             // Might be a persistent function - compute full name and check cache first
-            // Use try-catch to handle session catalog with invalid multi-part namespace
-            // (from expandIdentifier or from lookupFunctionType -> functionExists -> asFunctionIdentifier)
-            try {
-              val (catalog, ident) = try {
-                val CatalogAndIdentifier(cat, id) = relationResolution.expandIdentifier(nameParts)
-                (cat, id)
-              } catch {
-                case e: AnalysisException if e.getCondition == "REQUIRES_SINGLE_PART_NAMESPACE" =>
-                  // Session catalog doesn't support multi-part namespaces for tables, but for
-                  // function lookups we want to report this as "function not found" rather than
-                  // "invalid namespace". This handles cases like foo.bar.count where foo.bar is
-                  // treated as a multi-part namespace in the session catalog.
-                  val catalogPath = (catalogManager.currentCatalog.name +:
-                    catalogManager.currentNamespace).mkString(".")
-                  val searchPath = SQLConf.get.functionResolutionSearchPath(catalogPath)
-                  throw QueryCompilationErrors.unresolvedRoutineError(
-                    nameParts,
-                    searchPath,
-                    f.origin)
-              }
-
-              val fullName = normalizeFuncName(
-                (catalog.name +: ident.namespace :+ ident.name).toImmutableArraySeq)
-
-              if (externalFunctionNameSet.contains(fullName)) {
-                // Already validated this function exists - skip lookup
-                f
-              } else {
-                // Not in cache - do full lookup to determine type
-                val functionType = functionResolution.lookupFunctionType(nameParts, Some(f))
-
-                functionType match {
-                  case FunctionType.Builtin | FunctionType.Temporary =>
-                    // This indicates a logic bug - the quick check said this was NOT a
-                    // builtin/temp function, but the full lookup says it IS.
-                    throw SparkException.internalError(
-                      s"Logic inconsistency: Function ${nameParts.mkString(".")} was " +
-                      s"classified as $functionType by full lookup but not found by quick check. " +
-                      s"Check maybeBuiltinFunctionName/maybeTempFunctionName logic.")
-
-                  case FunctionType.Persistent =>
-                    // Cache it to avoid repeated external catalog lookups
-                    externalFunctionNameSet.add(fullName)
-                    f
-
-                  case FunctionType.TableOnly =>
-                    // Function exists ONLY in table registry - cannot be used in scalar context
-                    throw QueryCompilationErrors.notAScalarFunctionError(nameParts.mkString("."), f)
-
-                  case FunctionType.NotFound =>
-                    // Function doesn't exist anywhere - throw UNRESOLVED_ROUTINE error
-                    val catalogPath = (catalog.name +: catalogManager.currentNamespace).mkString(".")
-                    val searchPath = SQLConf.get.functionResolutionSearchPath(catalogPath)
-                    throw QueryCompilationErrors.unresolvedRoutineError(
-                      nameParts,
-                      searchPath,
-                      f.origin)
-                }
-              }
+            val (catalog, ident) = try {
+              val CatalogAndIdentifier(cat, id) = relationResolution.expandIdentifier(nameParts)
+              (cat, id)
             } catch {
               case e: AnalysisException if e.getCondition == "REQUIRES_SINGLE_PART_NAMESPACE" =>
-                // Session catalog rejects multi-part namespace in functionExists (asFunctionIdentifier)
+                // expandIdentifier can still throw for e.g. spark_catalog.func (no database)
                 val catalogPath = (catalogManager.currentCatalog.name +:
                   catalogManager.currentNamespace).mkString(".")
                 val searchPath = SQLConf.get.functionResolutionSearchPath(catalogPath)
@@ -2098,6 +2042,41 @@ class Analyzer(
                   nameParts,
                   searchPath,
                   f.origin)
+            }
+
+            val fullName = normalizeFuncName(
+              (catalog.name +: ident.namespace :+ ident.name).toImmutableArraySeq)
+
+            if (externalFunctionNameSet.contains(fullName)) {
+              // Already validated this function exists - skip lookup
+              f
+            } else {
+              // Not in cache - do full lookup to determine type
+              // Session catalog returns false for multi-part namespace (no throw)
+              val functionType = functionResolution.lookupFunctionType(nameParts, Some(f))
+
+              functionType match {
+                case FunctionType.Builtin | FunctionType.Temporary =>
+                  throw SparkException.internalError(
+                    s"Logic inconsistency: Function ${nameParts.mkString(".")} was " +
+                    s"classified as $functionType by full lookup but not found by quick check. " +
+                    s"Check maybeBuiltinFunctionName/maybeTempFunctionName logic.")
+
+                case FunctionType.Persistent =>
+                  externalFunctionNameSet.add(fullName)
+                  f
+
+                case FunctionType.TableOnly =>
+                  throw QueryCompilationErrors.notAScalarFunctionError(nameParts.mkString("."), f)
+
+                case FunctionType.NotFound =>
+                  val catalogPath = (catalog.name +: catalogManager.currentNamespace).mkString(".")
+                  val searchPath = SQLConf.get.functionResolutionSearchPath(catalogPath)
+                  throw QueryCompilationErrors.unresolvedRoutineError(
+                    nameParts,
+                    searchPath,
+                    f.origin)
+              }
             }
           }
       }

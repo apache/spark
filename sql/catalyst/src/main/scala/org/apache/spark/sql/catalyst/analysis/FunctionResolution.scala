@@ -95,8 +95,8 @@ class FunctionResolution(
           try {
             resolvePersistentFunction(u)
           } catch {
-            case e: AnalysisException if e.getCondition == "REQUIRES_SINGLE_PART_NAMESPACE" =>
-              // Session catalog rejects multi-part namespace in loadFunction (asFunctionIdentifier)
+            case _: NoSuchFunctionException =>
+              // Session catalog returns this for multi-part namespace; report as function not found
               val catalogPath = (
                 catalogManager.currentCatalog.name +: catalogManager.currentNamespace
               ).mkString(".")
