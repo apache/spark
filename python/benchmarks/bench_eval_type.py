@@ -27,6 +27,7 @@ import io
 import json
 import struct
 import sys
+from typing import Any, Callable, Optional
 
 import numpy as np
 import pyarrow as pa
@@ -49,14 +50,14 @@ from pyspark.worker import main as worker_main
 # ---------------------------------------------------------------------------
 
 
-def _write_utf8(s, buf):
+def _write_utf8(s: str, buf: io.BytesIO) -> None:
     """Write a length-prefixed UTF-8 string (matches ``UTF8Deserializer.loads``)."""
     encoded = s.encode("utf-8")
     write_int(len(encoded), buf)
     buf.write(encoded)
 
 
-def _write_bool(val, buf):
+def _write_bool(val: bool, buf: io.BytesIO) -> None:
     buf.write(struct.pack("!?", val))
 
 
@@ -65,7 +66,7 @@ def _write_bool(val, buf):
 # ---------------------------------------------------------------------------
 
 
-def _build_preamble(buf):
+def _build_preamble(buf: io.BytesIO) -> None:
     """Write everything ``main()`` reads before ``eval_type``."""
     write_int(0, buf)  # split_index
     _write_utf8(f"{sys.version_info[0]}.{sys.version_info[1]}", buf)  # python version
@@ -90,7 +91,12 @@ def _build_preamble(buf):
     write_int(0, buf)  # num_broadcast_variables
 
 
-def _build_udf_payload(udf_func, return_type, arg_offsets, buf):
+def _build_udf_payload(
+    udf_func: Callable[..., Any],
+    return_type: StructType,
+    arg_offsets: list[int],
+    buf: io.BytesIO,
+) -> None:
     """Write the ``read_single_udf`` portion of the protocol."""
     write_int(1, buf)  # num_udfs
     write_int(len(arg_offsets), buf)  # num_arg
@@ -104,7 +110,12 @@ def _build_udf_payload(udf_func, return_type, arg_offsets, buf):
     write_long(0, buf)  # result_id
 
 
-def _build_grouped_arrow_data(arrow_batch, num_groups, buf, max_records_per_batch=None):
+def _build_grouped_arrow_data(
+    arrow_batch: pa.RecordBatch,
+    num_groups: int,
+    buf: io.BytesIO,
+    max_records_per_batch: Optional[int] = None,
+) -> None:
     """Write grouped-map Arrow data: ``(write_int(1) + IPC) * N + write_int(0)``.
 
     When *max_records_per_batch* is set and the batch exceeds that limit, each
@@ -124,14 +135,14 @@ def _build_grouped_arrow_data(arrow_batch, num_groups, buf, max_records_per_batc
 
 
 def _build_worker_input(
-    eval_type,
-    udf_func,
-    return_type,
-    arg_offsets,
-    arrow_batch,
-    num_groups,
-    max_records_per_batch=None,
-):
+    eval_type: int,
+    udf_func: Callable[..., Any],
+    return_type: StructType,
+    arg_offsets: list[int],
+    arrow_batch: pa.RecordBatch,
+    num_groups: int,
+    max_records_per_batch: Optional[int] = None,
+) -> bytes:
     """Assemble the full binary stream consumed by ``worker_main(infile, outfile)``.
 
     Parameters
@@ -161,7 +172,7 @@ def _build_worker_input(
 # ---------------------------------------------------------------------------
 
 
-def _build_grouped_arg_offsets(n_cols, n_keys=0):
+def _build_grouped_arg_offsets(n_cols: int, n_keys: int = 0) -> list[int]:
     """``[len, num_keys, key_col_0, …, val_col_0, …]``"""
     keys = list(range(n_keys))
     vals = list(range(n_keys, n_cols))
@@ -169,7 +180,7 @@ def _build_grouped_arg_offsets(n_cols, n_keys=0):
     return [len(offsets)] + offsets
 
 
-def _make_grouped_batch(rows_per_group, n_cols):
+def _make_grouped_batch(rows_per_group: int, n_cols: int) -> tuple[pa.RecordBatch, StructType]:
     """``group_key (int64)`` + ``(n_cols - 1)`` float32 value columns."""
     arrays = [pa.array(np.zeros(rows_per_group, dtype=np.int64))] + [
         pa.array(np.random.rand(rows_per_group).astype(np.float32)) for _ in range(n_cols - 1)
@@ -183,7 +194,7 @@ def _make_grouped_batch(rows_per_group, n_cols):
     )
 
 
-def _make_mixed_batch(rows_per_group):
+def _make_mixed_batch(rows_per_group: int) -> tuple[pa.RecordBatch, StructType]:
     """``id``, ``str_col``, ``float_col``, ``double_col``, ``long_col``."""
     arrays = [
         pa.array(np.zeros(rows_per_group, dtype=np.int64)),
