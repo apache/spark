@@ -104,28 +104,52 @@ def _build_udf_payload(udf_func, return_type, arg_offsets, buf):
     write_long(0, buf)  # result_id
 
 
-def _build_grouped_arrow_data(arrow_batch, num_groups, buf):
-    """Write grouped-map Arrow data: ``(write_int(1) + IPC) * N + write_int(0)``."""
+def _build_grouped_arrow_data(arrow_batch, num_groups, buf, max_records_per_batch=None):
+    """Write grouped-map Arrow data: ``(write_int(1) + IPC) * N + write_int(0)``.
+
+    When *max_records_per_batch* is set and the batch exceeds that limit, each
+    group is split into multiple smaller Arrow batches inside the same IPC stream,
+    mirroring what the JVM does under ``spark.sql.execution.arrow.maxRecordsPerBatch``.
+    """
     for _ in range(num_groups):
         write_int(1, buf)
         writer = pa.RecordBatchStreamWriter(buf, arrow_batch.schema)
-        writer.write_batch(arrow_batch)
+        if max_records_per_batch and arrow_batch.num_rows > max_records_per_batch:
+            for offset in range(0, arrow_batch.num_rows, max_records_per_batch):
+                writer.write_batch(arrow_batch.slice(offset, max_records_per_batch))
+        else:
+            writer.write_batch(arrow_batch)
         writer.close()
     write_int(0, buf)
 
 
-def _build_worker_input(eval_type, udf_func, return_type, arg_offsets, arrow_batch, num_groups):
-    """Assemble the full binary stream consumed by ``worker_main(infile, outfile)``."""
+def _build_worker_input(
+    eval_type, udf_func, return_type, arg_offsets, arrow_batch, num_groups, runner_conf=None
+):
+    """Assemble the full binary stream consumed by ``worker_main(infile, outfile)``.
+
+    Parameters
+    ----------
+    runner_conf : dict, optional
+        Key-value pairs written into the RunnerConf section of the protocol.
+        Use ``{"spark.sql.execution.arrow.maxRecordsPerBatch": N}`` to simulate
+        the JVM-side batch-splitting behaviour for large groups.
+    """
     buf = io.BytesIO()
+    runner_conf = runner_conf or {}
+    max_records_per_batch = runner_conf.get("spark.sql.execution.arrow.maxRecordsPerBatch")
 
     _build_preamble(buf)
     write_int(eval_type, buf)
 
-    write_int(0, buf)  # RunnerConf  (0 key-value pairs)
-    write_int(0, buf)  # EvalConf    (0 key-value pairs)
+    write_int(len(runner_conf), buf)  # RunnerConf
+    for k, v in runner_conf.items():
+        _write_utf8(k, buf)
+        _write_utf8(str(v), buf)
+    write_int(0, buf)  # EvalConf (0 key-value pairs)
 
     _build_udf_payload(udf_func, return_type, arg_offsets, buf)
-    _build_grouped_arrow_data(arrow_batch, num_groups, buf)
+    _build_grouped_arrow_data(arrow_batch, num_groups, buf, max_records_per_batch)
     write_int(-4, buf)  # SpecialLengths.END_OF_STREAM
 
     return buf.getvalue()
@@ -186,10 +210,21 @@ def _make_mixed_batch(rows_per_group):
 
 
 class GroupedMapPandasUDFBench:
-    """Full worker round-trip for ``SQL_GROUPED_MAP_PANDAS_UDF``."""
+    """Full worker round-trip for ``SQL_GROUPED_MAP_PANDAS_UDF``.
+
+    Large groups (100k rows) are split into Arrow sub-batches of at most
+    ``spark.sql.execution.arrow.maxRecordsPerBatch`` rows (default 10 000),
+    mirroring the JVM-side behaviour.  Small groups (1k rows) are unaffected.
+    """
+
+    # spark.sql.execution.arrow.maxRecordsPerBatch default
+    _MAX_RECORDS_PER_BATCH = 10_000
 
     def setup(self):
         eval_type = PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF
+        runner_conf = {
+            "spark.sql.execution.arrow.maxRecordsPerBatch": self._MAX_RECORDS_PER_BATCH
+        }
 
         # ---- varying group size (float data, identity UDF) ----
         for name, (rows_per_group, n_cols, num_groups) in {
@@ -209,6 +244,7 @@ class GroupedMapPandasUDFBench:
                     _build_grouped_arg_offsets(n_cols),
                     batch,
                     num_groups=num_groups,
+                    runner_conf=runner_conf,
                 ),
             )
 
@@ -226,6 +262,7 @@ class GroupedMapPandasUDFBench:
             _build_grouped_arg_offsets(n_mixed),
             mixed_batch,
             num_groups=1_300,
+            runner_conf=runner_conf,
         )
 
         # ---- mixed types, 2-arg UDF with key ----
@@ -247,6 +284,7 @@ class GroupedMapPandasUDFBench:
             _build_grouped_arg_offsets(n_mixed, n_keys=1),
             mixed_batch,
             num_groups=1_600,
+            runner_conf=runner_conf,
         )
 
     # -- benchmarks ---------------------------------------------------------
@@ -271,19 +309,19 @@ class GroupedMapPandasUDFBench:
         self._run(self._small_many_input)
 
     def time_large_groups_few_cols(self):
-        """100k rows/group, 5 cols, 350 groups."""
+        """100k rows/group, 5 cols, 350 groups, split at 10k rows/batch."""
         self._run(self._large_few_input)
 
     def peakmem_large_groups_few_cols(self):
-        """100k rows/group, 5 cols, 350 groups."""
+        """100k rows/group, 5 cols, 350 groups, split at 10k rows/batch."""
         self._run(self._large_few_input)
 
     def time_large_groups_many_cols(self):
-        """100k rows/group, 50 cols, 40 groups."""
+        """100k rows/group, 50 cols, 40 groups, split at 10k rows/batch."""
         self._run(self._large_many_input)
 
     def peakmem_large_groups_many_cols(self):
-        """100k rows/group, 50 cols, 40 groups."""
+        """100k rows/group, 50 cols, 40 groups, split at 10k rows/batch."""
         self._run(self._large_many_input)
 
     def time_mixed_types(self):
