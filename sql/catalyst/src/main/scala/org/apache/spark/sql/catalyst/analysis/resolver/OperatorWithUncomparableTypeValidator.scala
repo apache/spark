@@ -17,10 +17,11 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
+
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{Distinct, LogicalPlan, SetOperation}
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.types.{DataType, MapType, VariantType}
+import org.apache.spark.sql.types.{DataType, GeographyType, GeometryType, MapType, VariantType}
 
 /**
  * [[OperatorWithUncomparableTypeValidator]] performs the validation of a logical plan to ensure
@@ -38,13 +39,14 @@ object OperatorWithUncomparableTypeValidator {
   def validate(operator: LogicalPlan, output: Seq[Attribute]): Unit = {
     operator match {
       case unsupportedOperator @ (_: SetOperation | _: Distinct) =>
+        val enableUndefinedVariantGroupingBehavior = false
 
         output.foreach { element =>
           if (hasMapType(element.dataType)) {
             throwUnsupportedSetOperationOnMapType(element, unsupportedOperator)
           }
 
-          if (hasVariantType(element.dataType)) {
+          if (!enableUndefinedVariantGroupingBehavior && hasVariantType(element.dataType)) {
             throwUnsupportedSetOperationOnVariantType(element, unsupportedOperator)
           }
         }

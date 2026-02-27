@@ -262,7 +262,12 @@ class HybridAnalyzer(
 
   private def checkResolverGuard(plan: LogicalPlan): Boolean = {
     try {
-      resolverGuard.apply(plan)
+      resolverGuard.apply(plan).planUnsupportedReason match {
+        case Some(reason) =>
+          false
+        case None =>
+          true
+      }
     } catch {
       case e: Throwable
           if !conf.getConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_EXPOSE_RESOLVER_GUARD_FAILURE) =>
@@ -307,7 +312,9 @@ object HybridAnalyzer {
         sharedRelationCache = legacyAnalyzer.sharedRelationCache,
         extensions = legacyAnalyzer.singlePassResolverExtensions,
         metadataResolverExtensions = legacyAnalyzer.singlePassMetadataResolverExtensions,
-        externalRelationResolution = Some(legacyAnalyzer.getRelationResolution)
+        externalRelationResolution = Some(legacyAnalyzer.getRelationResolution),
+        extendedRewriteRules = legacyAnalyzer.singlePassPostHocResolutionRules,
+        tracker = Some(tracker)
       ),
       tracker = tracker,
       extendedResolutionChecks = legacyAnalyzer.singlePassExtendedResolutionChecks,

@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
+import com.databricks.sql.catalyst.analysis.AIFunctionRepartition
+
+import org.apache.spark.sql.catalyst.MetricKey
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.logical.{AnalysisHelper, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
@@ -25,10 +28,16 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
 /**
  * Utility wrapper on top of [[RuleExecutor]], used to apply post-resolution rules on single-pass
  * resolution result. [[SinglePassRewriter]] transforms the plan and the subqueries inside.
+ *
+ * [[AIFunctionRepartition]] has to be in a separate batch because otherwise
+ * [[RuleExecutor.checkBatchIdempotence]] check fails since the second invocation of the
+ * [[AIFunctionRepartition]] would change the plan again (this is not allowed for `Once` batches).
  */
 class PlanRewriter(
     planRewriteRules: Seq[Rule[LogicalPlan]],
-    extendedRewriteRules: Seq[Rule[LogicalPlan]]) {
+    extendedRewriteRules: Seq[Rule[LogicalPlan]])
+    extends ResolverMetricTracker // EDGE
+    {
   private val planRewriter = new RuleExecutor[LogicalPlan] {
     override def batches: Seq[Batch] =
       Seq(

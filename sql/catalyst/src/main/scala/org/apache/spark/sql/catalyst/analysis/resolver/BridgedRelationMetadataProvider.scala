@@ -53,12 +53,14 @@ class BridgedRelationMetadataProvider(
   private def updateRelationsWithResolvedMetadata(): Unit = {
     analyzerBridgeState.relationsWithResolvedMetadata.forEach(
       (bridgeRelationId, relationWithResolvedMetadata) => {
-        if (viewResolver.getCatalogAndNamespace.getOrElse(Seq.empty)
+        if (viewResolver.getViewResolutionContext
+            .flatMap(_.catalogAndNamespace)
+            .getOrElse(Seq.empty)
           == bridgeRelationId.catalogAndNamespace) {
           relationsWithResolvedMetadata.put(
             relationIdFromUnresolvedRelation(bridgeRelationId.unresolvedRelation),
             visitUnderSubqueryAlias(relationWithResolvedMetadata)({ relation =>
-              tryConvertHiveTableRelation(tryConvertUnresolvedCatalogRelation(relation))
+              tryConvertRelation(tryConvertUnresolvedCatalogRelation(relation))
             })
           )
         }
@@ -77,7 +79,8 @@ class BridgedRelationMetadataProvider(
     }
   }
 
-  private def tryConvertHiveTableRelation(relation: LogicalPlan): LogicalPlan = {
+  private def tryConvertRelation(relation: LogicalPlan): LogicalPlan = {
+    RestrictRowLevelSecurityFeature(relation)
     relation match {
       case leafNode: LeafNode =>
         analyzerBridgeState.getLogicalRelationForHiveRelation(leafNode).getOrElse(leafNode)

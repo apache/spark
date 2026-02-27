@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import org.apache.spark.sql.catalyst.SQLConfHelper
+import com.databricks.sql.acl.TrustedPlan
+
+import org.apache.spark.sql.catalyst.{MetricKey, SQLConfHelper}
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.logical.{AnalysisHelper, LogicalPlan}
 import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
@@ -29,11 +31,16 @@ import org.apache.spark.sql.internal.SQLConf
  * Important note: these checks are not always idempotent, and sometimes perform heavy network
  * operations.
  */
-class ResolutionCheckRunner(resolutionChecks: Seq[LogicalPlan => Unit]) extends SQLConfHelper {
+class ResolutionCheckRunner(resolutionChecks: Seq[LogicalPlan => Unit])
+    extends ResolverMetricTracker
+    with SQLConfHelper {
 
   /**
    * Runs the resolution checks on `plan`. Invokes all the checks for every subquery plan, and
    * eventually for the main query plan.
+   *
+   * Fur subqueries the plan is wrapped with [[TrustedPlan]] to make sure that rules like
+   * [[UnityCatalogCheckRule]] are not applied on the subquery plans.
    */
   def runWithSubqueries(plan: LogicalPlan): Unit = {
     if (conf.getConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_RUN_EXTENDED_RESOLUTION_CHECKS)) {
@@ -47,7 +54,7 @@ class ResolutionCheckRunner(resolutionChecks: Seq[LogicalPlan => Unit]) extends 
     val planWithRewrittenSubqueries =
       plan.transformAllExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
         case subqueryExpression: SubqueryExpression =>
-          doRunWithSubqueries(subqueryExpression.plan)
+          doRunWithSubqueries(TrustedPlan(subqueryExpression.plan))
 
           subqueryExpression
       }

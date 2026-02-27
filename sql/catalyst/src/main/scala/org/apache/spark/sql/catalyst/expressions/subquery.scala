@@ -103,6 +103,7 @@ abstract class SubqueryExpression(
   def hint: Option[HintInfo]
 
   def withNewHint(hint: Option[HintInfo]): SubqueryExpression
+  def newInstance(exprId: ExprId = NamedExpression.newExprId): SubqueryExpression
 }
 
 object SubqueryExpression {

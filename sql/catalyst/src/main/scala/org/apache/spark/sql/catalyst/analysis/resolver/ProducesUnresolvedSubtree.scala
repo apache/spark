@@ -62,6 +62,31 @@ trait ProducesUnresolvedSubtree extends ResolvesExpressionChildren {
   }
 
   /**
+   * Variant of [[withResolvedSubtree]] where transformation with [[expressionResolver]] starts
+   * from parent expression rather than its children and where boundary tag cleanup is performed
+   * manually.
+   *
+   * In general, tag cleanup is performed by [[ExpressionResolver]] when an already resolved node
+   * is encountered. However, in case of function resolution, [[handlePartiallyResolvedFunction]]
+   * will not always invoke [[ExpressionResolver]], so boundary tags will need to be cleaned up
+   * manually.
+   */
+  protected def withResolvedSubtreeWithManualTagCleanup(
+      expression: Expression,
+      expressionResolver: Expression => Expression)(body: => Expression): Expression = {
+    expression.children.foreach { child =>
+      child.setTagValue(ResolverTag.SINGLE_PASS_SUBTREE_BOUNDARY, ())
+    }
+
+    val withBodyApplied = body
+
+    val resolvedExpression = expressionResolver(withBodyApplied)
+    val resolvedExpressionWithTagCleanup = unsetBoundaryTagsWithPruning(resolvedExpression)
+
+    resolvedExpressionWithTagCleanup
+  }
+
+  /**
    * Try to pop the tag that marks the boundary of the single-pass subtree resolution.
    * [[ExpressionResolver]] calls this method to check if the subtree traversal needs to be stopped
    * because lower subtree is already resolved.
@@ -74,6 +99,20 @@ trait ProducesUnresolvedSubtree extends ResolvesExpressionChildren {
       true
     } else {
       false
+    }
+  }
+
+  /**
+   * Recursively unsets [[ResolverTag.SINGLE_PASS_SUBTREE_BOUNDARY]] tags from the expression tree.
+   * Stops recursion once a tagged node is found (after unsetting its tag), since children of
+   * tagged nodes are already resolved and don't need further traversal.
+   */
+  private def unsetBoundaryTagsWithPruning(expression: Expression): Expression = {
+    if (expression.getTagValue(ResolverTag.SINGLE_PASS_SUBTREE_BOUNDARY).isDefined) {
+      expression.unsetTagValue(ResolverTag.SINGLE_PASS_SUBTREE_BOUNDARY)
+      expression
+    } else {
+      expression.mapChildren(child => unsetBoundaryTagsWithPruning(child.asInstanceOf[Expression]))
     }
   }
 }

@@ -22,8 +22,22 @@ import java.util.HashSet
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.catalyst.expressions.{ExprId, NamedExpression, PipeOperator}
-import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.expressions.{
+  AttributeReference,
+  ExprId,
+  NamedExpression,
+  PipeOperator
+}
+import org.apache.spark.sql.catalyst.plans.logical.{
+  Aggregate,
+  Distinct,
+  Filter,
+  LogicalPlan,
+  Project,
+  SubqueryAlias,
+  UnaryNode,
+  Window
+}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.internal.SQLConf
 
@@ -147,8 +161,8 @@ import org.apache.spark.sql.internal.SQLConf
  * }}}
  *
  * As it can be seen, `col2` ([[Sort]] order expression) needs to be resolved using the hidden
- * output. Because of that it must be added to all the [[Project]]s and [[Aggregate]]s below the
- * [[Sort]] operator.
+ * output. Because of that it must be added to all the [[Project]]s, [[Window]]s, and [[Aggregate]]s
+ * below the [[Sort]] operator.
  * Resolved plan would be:
  *
  * {{{
@@ -163,13 +177,44 @@ import org.apache.spark.sql.internal.SQLConf
  * }}}
  *
  * In the plan you can see that `col2` is added to the lower [[Project.projectList]].
+ *
+ * Missing expressions can appear in the DISTRIBUTE BY clause as well ([[RepartitionByExpression]]
+ * operator).
+ * In the following query:
+ *
+ * {{{
+ *   SELECT col1 FROM values(1, 2) WHERE col2 = 1 DISTRIBUTE BY col2;
+ * }}}
+ *
+ * Parsed plan looks like:
+ *
+ * {{{
+ *   'RepartitionByExpression ['col2]
+ *   +- 'Project ['col1]
+ *      +- 'Filter ('col2 = 1)
+ *         +- LocalRelation [col1#0, col2#1]
+ * }}}
+ *
+ * Here `col2` from the `DISTRIBUTE BY` would be resolved using the hidden output and thus
+ * the analyzed plan looks like:
+ *
+ * {{{
+ *   Project [col1#0]
+ *   +- RepartitionByExpression [col2#1]
+ *      +- Project [col1#0, col2#1]
+ *         +- Filter (col2#1 = 1)
+ *            +- LocalRelation [col1#0, col2#1]
+ * }}}
+ *
+ * As it can be seen, `col2` is added to the [[Project.projectList]] below
+ * [[RepartitionByExpression]].
  */
 trait ResolvesNameByHiddenOutput extends SQLConfHelper {
 
   /**
    * Insert the missing expressions in the output list of the operator. Recursively call
-   * `expandOperatorsOutputList` to expand the output lists of [[Project]]s and [[Aggregate]]s
-   * below the current one.
+   * `expandOperatorsOutputList` to expand the output lists of [[Project]]s, [[Window]]s,
+   * and [[Aggregate]]s below the current one.
    * In order to stay compatible with fixed-point, missing expressions are inserted after the
    * original output list, but before any qualified access only columns that have been added as
    * part of resolution from hidden output.
@@ -214,6 +259,12 @@ trait ResolvesNameByHiddenOutput extends SQLConfHelper {
               operatorOutput = aggregate.aggregateExpressions,
               missingExpressions = missingExpressions
             )
+          case window: Window =>
+            expandOperatorsOutputList(
+              operator = window,
+              operatorOutput = window.projectList,
+              missingExpressions = missingExpressions
+            )
           case other =>
             other.withNewChildren(
               Seq(insertMissingExpressions(expandableOperator.child, missingExpressions))
@@ -221,20 +272,6 @@ trait ResolvesNameByHiddenOutput extends SQLConfHelper {
         }
       case other => other
     }
-
-  /**
-   * Deduplicates missing expressions by [[ExprId]].
-   */
-  def deduplicateMissingExpressions(
-      missingExpressions: Seq[NamedExpression]): Seq[NamedExpression] = {
-    val duplicateMissingExpressions = new HashSet[ExprId]
-    missingExpressions.collect {
-      case expression: NamedExpression
-        if !duplicateMissingExpressions.contains(expression.exprId) =>
-        duplicateMissingExpressions.add(expression.exprId)
-        expression
-    }
-  }
 
   private def expandOperatorsOutputList(
       operator: UnaryNode,
@@ -253,6 +290,14 @@ trait ResolvesNameByHiddenOutput extends SQLConfHelper {
         case aggregate: Aggregate =>
           val newAggregateList = nonMetadataCols ++ filteredMissingExpressions ++ metadataCols
           aggregate.copy(aggregateExpressions = newAggregateList)
+        case window: Window =>
+          val expandedChild = insertMissingExpressions(
+            operator = operator.child,
+            missingExpressions = filteredMissingExpressions
+          )
+          val newProjectList =
+            nonMetadataCols ++ filteredMissingExpressions.map(_.toAttribute) ++ metadataCols
+          window.copy(projectList = newProjectList, child = expandedChild)
         case project: Project =>
           val expandedChild = insertMissingExpressions(
             operator = operator.child,
@@ -301,11 +346,13 @@ trait ResolvesNameByHiddenOutput extends SQLConfHelper {
   /**
    * If [[missingExpressions]] is not empty, output of an operator has been changed by
    * [[insertMissingExpressions]]. Therefore, we need to restore the original output, by placing a
-   * [[Project]] on top of an original node, with original's node output. Additionally, we append
-   * all qualified access only columns from hidden output that were inserted as missing attributes,
-   * because they may be needed in upper operators (if not, they will be pruned away in
-   * [[PruneMetadataColumns]]). Other hidden attributes are thrown away, because we cannot
-   * reference them from the new [[Project]] (they are not outputted from below).
+   * [[Project]] on top of an original node, with original's node output. In that case, we set
+   * [[OperatorResolutionContext.baseOperator]] to the original operator so we can validate it
+   * later in the [[Resolver]]. Additionally, we append all qualified access only columns from
+   * hidden output that were inserted as missing attributes, because they may be needed in upper
+   * operators (if not, they will be pruned away in [[PruneMetadataColumns]]). Other hidden
+   * attributes are thrown away, because we cannot reference them from the new [[Project]] (they
+   * are not outputted from below).
    *
    * If [[SQLConf.SINGLE_PASS_RESOLVER_PREVENT_USING_ALIASES_FROM_NON_DIRECT_CHILDREN]] is set to
    * true, we need to overwrite the current scope and clear `aggregateListAliases` and
@@ -342,10 +389,13 @@ trait ResolvesNameByHiddenOutput extends SQLConfHelper {
   def retainOriginalOutput(
       operator: LogicalPlan,
       missingExpressions: Seq[NamedExpression],
-      scopes: NameScopeStack): LogicalPlan = {
+      scopes: NameScopeStack,
+      operatorResolutionContextStack: OperatorResolutionContextStack): LogicalPlan = {
     if (missingExpressions.isEmpty) {
       operator
     } else {
+      operatorResolutionContextStack.current.baseOperator = Some(operator)
+
       val missingExpressionIds = new HashSet[ExprId](missingExpressions.size)
       missingExpressions.foreach { expression =>
         missingExpressionIds.add(expression.exprId)

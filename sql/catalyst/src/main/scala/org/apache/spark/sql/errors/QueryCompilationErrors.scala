@@ -4099,6 +4099,19 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
+  def lateralColumnAliasOnImplicitlyGeneratedAlias(
+    name: String,
+    implicitAlias: Expression
+  ): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.LATERAL_COLUMN_ALIAS_ON_IMPLICITLY_GENERATED_ALIAS",
+      messageParameters = Map(
+        "lca" -> toSQLId(name),
+        "implicitAlias" -> toSQLExpr(implicitAlias)
+      )
+    )
+  }
+
   def dataTypeOperationUnsupportedError(): Throwable = {
     SparkException.internalError(
       "The operation `dataType` is not supported.")

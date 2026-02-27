@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
+import org.apache.spark.sql.catalyst.analysis.TimeTravelSpec
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**

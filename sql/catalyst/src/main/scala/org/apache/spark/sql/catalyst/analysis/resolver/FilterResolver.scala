@@ -26,8 +26,10 @@ import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan}
 class FilterResolver(resolver: Resolver, expressionResolver: ExpressionResolver)
     extends TreeNodeResolver[Filter, LogicalPlan]
     with ResolvesNameByHiddenOutput
-    with ValidatesFilter {
+    with ValidatesFilter
+    with RetainsOriginalJoinOutput {
   private val scopes: NameScopeStack = resolver.getNameScopes
+  private val operatorResolutionContextStack = resolver.getOperatorResolutionContextStack
 
   /**
    * Resolve [[Filter]] by resolving its child and its condition. If an attribute that is used in
@@ -39,6 +41,12 @@ class FilterResolver(resolver: Resolver, expressionResolver: ExpressionResolver)
    */
   override def resolve(unresolvedFilter: Filter): LogicalPlan = {
     val resolvedChild = resolver.resolve(unresolvedFilter.child)
+
+    GroupingAnalyticsResolver.restrictGroupingAnalyticsBelowSortAndFilter(
+      operatorResolutionContextStack.current
+    )
+
+    val childReferencedAttributes = expressionResolver.getLastReferencedAttributes
 
     val partiallyResolvedFilter = unresolvedFilter.copy(child = resolvedChild)
     val resolvedCondition = expressionResolver.resolveExpressionTreeInOperator(
@@ -60,12 +68,20 @@ class FilterResolver(resolver: Resolver, expressionResolver: ExpressionResolver)
       scopes.current.resolveMissingAttributesByHiddenOutput(referencedAttributes)
     val resolvedChildWithMissingAttributes =
       insertMissingExpressions(resolvedChild, missingAttributes)
-    val finalFilter = resolvedFilter.copy(child = resolvedChildWithMissingAttributes)
+    val resolvedChildWithMetadataColumns = retainOriginalJoinOutput(
+      plan = resolvedChildWithMissingAttributes,
+      outputExpressions = Seq.empty,
+      scopes = scopes,
+      childReferencedAttributes = childReferencedAttributes
+    )
+
+    val finalFilter = resolvedFilter.copy(child = resolvedChildWithMetadataColumns)
 
     retainOriginalOutput(
       operator = finalFilter,
       missingExpressions = missingAttributes,
-      scopes = scopes
+      scopes = scopes,
+      operatorResolutionContextStack = operatorResolutionContextStack
     )
   }
 }

@@ -40,7 +40,7 @@ import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
  * `ansiTransformations` and `nonAnsiTransformations` may be overridden with custom transformation
  * lists.
  */
-trait CoercesExpressionTypes extends SQLConfHelper {
+trait CoercesExpressionTypes extends SQLConfHelper with ResolverMetricTracker {
   protected val ansiTransformations: CoercesExpressionTypes.Transformations =
     CoercesExpressionTypes.DEFAULT_ANSI_TYPE_COERCION_TRANSFORMATIONS
   protected val nonAnsiTransformations: CoercesExpressionTypes.Transformations =
@@ -76,9 +76,9 @@ trait CoercesExpressionTypes extends SQLConfHelper {
       val expressionAfterTypeCoercion = if (coercedExpressionOnce.eq(expression)) {
         coercedExpressionOnce
       } else {
-        // This is a hack necessary because fixed-point analyzer sometimes requires multiple passes
-        // to resolve type coercion. Instead, in single pass, we apply type coercion twice on the
-        // same node in order to ensure that types are resolved.
+        // This is a hack necessary because fixed-point analyzer sometimes requires multiple
+        // passes to resolve type coercion. Instead, in single pass, we apply type coercion twice
+        // on the same node in order to ensure that types are resolved.
         applyTypeCoercion(
           expression = coercedExpressionOnce,
           expressionTreeTraversal = expressionTreeTraversal
@@ -101,24 +101,23 @@ trait CoercesExpressionTypes extends SQLConfHelper {
    * Takes in a sequence of type coercion transformations that should be applied to an expression
    * and applies them in order. Finally, [[TypeCoercionResolver]] applies timezone to expression's
    * children, as a child could be replaced with Cast(child, type), therefore [[Cast]] resolution
-   * is needed. Timezone is applied only on children that have been re-instantiated, because
-   * otherwise children are already resolved.
+   * is needed. [[TimezoneAwareExpressionResolver]] will apply timezone recursively up until the
+   * first [[TimeZoneAwareExpression]] that already has timezone, which means it was previously
+   * resolved.
    */
   private def applyTypeCoercion(
       expression: Expression,
       expressionTreeTraversal: ExpressionTreeTraversal): Expression = {
-    val oldChildren = expression.children
-
     val withTypeCoercion = runCoercionTransformations(
       expression = expression,
       ansiMode = expressionTreeTraversal.ansiMode
     )
 
-    val newChildren = withTypeCoercion.children.zip(oldChildren).map {
-      case (newChild: Cast, oldChild) if !newChild.eq(oldChild) =>
+    val newChildren = withTypeCoercion.children.map {
+      case cast: Cast =>
         TimezoneAwareExpressionResolver
-          .resolveTimezone(newChild, expressionTreeTraversal.sessionLocalTimeZone)
-      case (newChild, _) => newChild
+          .resolveTimezone(cast, expressionTreeTraversal.sessionLocalTimeZone)
+      case other => other
     }
 
     withTypeCoercion.withNewChildren(newChildren)
