@@ -323,12 +323,20 @@ class GroupedMapPandasUDFBench:
         """100k rows/group, 5 cols, 350 groups, split at 10k rows/batch."""
         self._run(self._large_few_input)
 
+    def peakmem_large_groups_few_cols(self):
+        """100k rows/group, 5 cols, 350 groups."""
+        self._run(self._large_few_input)
+
     def time_large_groups_many_cols(self):
         """100k rows/group, 50 cols, 40 groups, split at 10k rows/batch."""
         self._run(self._large_many_input)
 
     def peakmem_large_groups_many_cols(self):
         """100k rows/group, 50 cols, 40 groups, split at 10k rows/batch."""
+        self._run(self._large_many_input)
+
+    def peakmem_large_groups_many_cols(self):
+        """100k rows/group, 50 cols, 40 groups."""
         self._run(self._large_many_input)
 
     def time_mixed_types(self):
