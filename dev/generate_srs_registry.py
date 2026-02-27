@@ -358,7 +358,7 @@ def main():
         f"  Total: {len(all_entries)} entries "
         f"({n_geographic} geographic, {n_nongeographic} non-geographic)"
     )
-    print(f"  Breakdown by authority:")
+    print("  Breakdown by authority:")
     for auth in sorted(authority_counts):
         print(f"    {auth}: {authority_counts[auth]}")
     print()
