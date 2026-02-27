@@ -1465,11 +1465,6 @@ class RocksDBStateStoreChangeDataReader(
         return null
       }
       val nextRecord = reader.next()
-      if (nextRecord._1 == RecordType.DELETE_RANGE_RECORD) {
-        throw new UnsupportedOperationException(
-          "DELETE_RANGE_RECORD is not supported in the state data source change feed. " +
-            "Range deletions cannot be expanded into individual key-value change records.")
-      }
       currRecord = if (storeConf.rowChecksumEnabled) {
         nextRecord._1 match {
           case RecordType.DELETE_RECORD =>
