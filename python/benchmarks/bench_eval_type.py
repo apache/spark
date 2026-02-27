@@ -181,12 +181,12 @@ def _make_mixed_batch(rows_per_group):
 
 
 # ---------------------------------------------------------------------------
-# SQL_GROUPED_MAP_PANDAS_UDF  (eval type 201)
+# SQL_GROUPED_MAP_PANDAS_UDF
 # ---------------------------------------------------------------------------
 
 
 class GroupedMapPandasUDFBench:
-    """Full worker round-trip for ``SQL_GROUPED_MAP_PANDAS_UDF`` (201)."""
+    """Full worker round-trip for ``SQL_GROUPED_MAP_PANDAS_UDF``."""
 
     def setup(self):
         eval_type = PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF
