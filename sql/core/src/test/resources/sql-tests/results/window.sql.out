@@ -669,15 +669,102 @@ b	6
 
 -- !query
 SELECT val, cate,
-count(val) FILTER (WHERE val > 1) OVER(PARTITION BY cate)
+first_value(val) FILTER (WHERE cate = 'a') OVER(ORDER BY val_long
+  ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS first_a,
+last_value(val) FILTER (WHERE cate = 'a') OVER(ORDER BY val_long
+  ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS last_a
+FROM testData ORDER BY val_long, cate
+-- !query schema
+struct<val:int,cate:string,first_a:int,last_a:int>
+-- !query output
+NULL	NULL	1	NULL
+1	b	1	NULL
+3	NULL	1	1
+NULL	a	1	NULL
+1	a	1	1
+1	a	1	1
+2	b	1	1
+2	a	1	2
+3	b	1	2
+
+
+-- !query
+SELECT val, cate,
+sum(val) FILTER (WHERE cate = 'a') OVER(ORDER BY val_long
+  ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS sum_a,
+sum(val) FILTER (WHERE cate = 'b') OVER(ORDER BY val_long
+  ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS sum_b,
+count(val) FILTER (WHERE val > 1) OVER(ORDER BY val_long
+  ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS cnt_gt1
+FROM testData ORDER BY val_long, cate
+-- !query schema
+struct<val:int,cate:string,sum_a:bigint,sum_b:bigint,cnt_gt1:bigint>
+-- !query output
+NULL	NULL	NULL	1	0
+1	b	NULL	1	0
+3	NULL	1	1	1
+NULL	a	NULL	1	0
+1	a	1	1	0
+1	a	2	1	1
+2	b	2	3	2
+2	a	4	3	3
+3	b	4	6	4
+
+
+-- !query
+SELECT val, cate,
+sum(val) FILTER (WHERE cate = 'a') OVER(PARTITION BY cate) AS total_sum_filtered
 FROM testData ORDER BY cate, val
 -- !query schema
-struct<>
+struct<val:int,cate:string,total_sum_filtered:bigint>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "_LEGACY_ERROR_TEMP_1030"
-}
+NULL	NULL	NULL
+3	NULL	NULL
+NULL	a	4
+1	a	4
+1	a	4
+2	a	4
+1	b	NULL
+2	b	NULL
+3	b	NULL
+
+
+-- !query
+SELECT val, cate,
+sum(val) FILTER (WHERE val > 1) OVER(ORDER BY val_long
+  ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS sliding_sum_filtered
+FROM testData ORDER BY val_long, cate
+-- !query schema
+struct<val:int,cate:string,sliding_sum_filtered:bigint>
+-- !query output
+NULL	NULL	NULL
+1	b	NULL
+3	NULL	3
+NULL	a	NULL
+1	a	3
+1	a	5
+2	b	4
+2	a	7
+3	b	5
+
+
+-- !query
+SELECT val, cate,
+sum(val) FILTER (WHERE cate = 'a') OVER(ORDER BY val
+  RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS range_sum_filtered
+FROM testData ORDER BY val, cate
+-- !query schema
+struct<val:int,cate:string,range_sum_filtered:bigint>
+-- !query output
+NULL	NULL	NULL
+NULL	a	NULL
+1	a	2
+1	a	2
+1	b	2
+2	a	4
+2	b	4
+3	NULL	4
+3	b	4
 
 
 -- !query
