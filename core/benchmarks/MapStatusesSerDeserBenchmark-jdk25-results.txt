@@ -1,0 +1,66 @@
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+200000 MapOutputs, 10 blocks w/ broadcast:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------
+Serialization                                         85             89           4          2.3         426.5       1.0X
+Deserialization                                      120            126           5          1.7         599.3       0.7X
+
+Compressed Serialized MapStatus sizes: 425.0 B
+Compressed Serialized Broadcast MapStatus sizes: 3.2 MiB
+
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+200000 MapOutputs, 10 blocks w/o broadcast:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------
+Serialization                                          82             83           1          2.4         409.0       1.0X
+Deserialization                                       119            121           4          1.7         597.0       0.7X
+
+Compressed Serialized MapStatus sizes: 3.2 MiB
+Compressed Serialized Broadcast MapStatus sizes: 0.0 B
+
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+200000 MapOutputs, 100 blocks w/ broadcast:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------
+Serialization                                         161            165           8          1.2         802.8       1.0X
+Deserialization                                       135            140          11          1.5         674.9       1.2X
+
+Compressed Serialized MapStatus sizes: 444.0 B
+Compressed Serialized Broadcast MapStatus sizes: 14.3 MiB
+
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+200000 MapOutputs, 100 blocks w/o broadcast:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+---------------------------------------------------------------------------------------------------------------------------
+Serialization                                          141            145           6          1.4         706.0       1.0X
+Deserialization                                        135            138           6          1.5         673.1       1.0X
+
+Compressed Serialized MapStatus sizes: 14.3 MiB
+Compressed Serialized Broadcast MapStatus sizes: 0.0 B
+
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+200000 MapOutputs, 1000 blocks w/ broadcast:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+---------------------------------------------------------------------------------------------------------------------------
+Serialization                                          691            711          27          0.3        3453.5       1.0X
+Deserialization                                        289            304          17          0.7        1446.1       2.4X
+
+Compressed Serialized MapStatus sizes: 566.0 B
+Compressed Serialized Broadcast MapStatus sizes: 123.4 MiB
+
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+200000 MapOutputs, 1000 blocks w/o broadcast:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------
+Serialization                                           557            565           9          0.4        2783.4       1.0X
+Deserialization                                         289            304          22          0.7        1444.7       1.9X
+
+Compressed Serialized MapStatus sizes: 123.4 MiB
+Compressed Serialized Broadcast MapStatus sizes: 0.0 B
+
+

@@ -158,7 +158,7 @@ class RunnerConf(Conf):
 
     @property
     def timezone(self) -> Optional[str]:
-        return self.get("spark.sql.session.timeZone", None)
+        return self.get("spark.sql.session.timeZone", None, lower_str=False)
 
     @property
     def arrow_max_records_per_batch(self) -> int:
