@@ -124,7 +124,12 @@ def _build_grouped_arrow_data(arrow_batch, num_groups, buf, max_records_per_batc
 
 
 def _build_worker_input(
-    eval_type, udf_func, return_type, arg_offsets, arrow_batch, num_groups,
+    eval_type,
+    udf_func,
+    return_type,
+    arg_offsets,
+    arrow_batch,
+    num_groups,
     max_records_per_batch=None,
 ):
     """Assemble the full binary stream consumed by ``worker_main(infile, outfile)``.
