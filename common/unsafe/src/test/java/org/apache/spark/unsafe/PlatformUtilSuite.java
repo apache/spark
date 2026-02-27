@@ -164,4 +164,83 @@ public class PlatformUtilSuite {
     // path to be hit in normal usage.
     Assertions.assertTrue(Platform.cleanerCreateMethodIsDefined());
   }
+
+  @Test
+  public void reallocateMemoryGrow() {
+    long address = Platform.allocateMemory(1024);
+    try {
+      for (int i = 0; i < 1024; i++) {
+        Platform.putByte(null, address + i, (byte) i);
+      }
+
+      address = Platform.reallocateMemory(address, 1024, 2048);
+      for (int i = 0; i < 1024; i++) {
+        Assertions.assertEquals((byte) i, Platform.getByte(null, address + i));
+      }
+      for (int i = 1024; i < 2048; i++) {
+        Platform.putByte(null, address + i, (byte) i);
+      }
+      for (int i = 1024; i < 2048; i++) {
+        Assertions.assertEquals((byte) i, Platform.getByte(null, address + i));
+      }
+    } finally {
+      Platform.freeMemory(address);
+    }
+  }
+
+  @Test
+  public void reallocateMemoryShrinkDoesNotOverflow() {
+    final long OLD_SIZE = 1024L;
+    final long NEW_SIZE = 512L;
+    final long SENTINEL_SIZE = OLD_SIZE - NEW_SIZE;
+    final byte SENTINEL_VALUE = (byte) 0xAB;
+    final byte SOURCE_VALUE   = (byte) 0xCD;
+    final int  PAIRS = 1000;
+
+    long[] sources = new long[PAIRS];
+    long[] sentinels = new long[PAIRS];
+
+    try {
+      // Allocate all pairs
+      for (int i = 0; i < PAIRS; i++) {
+        sources[i] = Platform.allocateMemory(OLD_SIZE);
+        sentinels[i] = Platform.allocateMemory(SENTINEL_SIZE);
+
+        Platform.setMemory(sources[i], SOURCE_VALUE, OLD_SIZE);
+        Platform.setMemory(sentinels[i], SENTINEL_VALUE, SENTINEL_SIZE);
+      }
+
+      // Reallocate source blocks
+      for (int i = 0; i < PAIRS; i++) {
+        long oldAddr = sources[i];
+        long newAddr = Platform.reallocateMemory(oldAddr, OLD_SIZE, NEW_SIZE);
+        sources[i] = newAddr;
+      }
+
+      // Verify dest content
+      for (int i = 0; i < PAIRS; i++) {
+        for (long j = 0; j < NEW_SIZE; j++) {
+          Assertions.assertEquals(SOURCE_VALUE, Platform.getByte(null, sources[i] + j),
+            "dest block content corrupted at pair " + i);
+        }
+      }
+
+      // Verify sentinel content
+      for (int i = 0; i < PAIRS; i++) {
+        for (long j = 0; j < SENTINEL_SIZE; j++) {
+          Assertions.assertEquals(SENTINEL_VALUE, Platform.getByte(null, sentinels[i] + j),
+            "sentinel corrupted – overflow write detected at pair " + i);
+        }
+      }
+
+    } finally {
+      // Free all memory
+      for (long addr : sources) {
+        if (addr != 0) Platform.freeMemory(addr);
+      }
+      for (long addr : sentinels) {
+        if (addr != 0) Platform.freeMemory(addr);
+      }
+    }
+  }
 }
