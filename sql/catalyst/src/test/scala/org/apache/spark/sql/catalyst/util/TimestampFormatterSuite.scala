@@ -448,10 +448,9 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
     assert(formatter.parse("294247") === date(294247))
     assert(formatter.parse("-290307") === date(-290307))
     val e1 = intercept[ArithmeticException](formatter.parse("294248"))
-    // On JDK 25+, Math.multiplyExact may throw ArithmeticException without a message
-    assert(e1.getMessage == null || e1.getMessage === "long overflow")
+    assert(e1.getMessage === "long overflow")
     val e2 = intercept[ArithmeticException](formatter.parse("-290308"))
-    assert(e2.getMessage == null || e2.getMessage === "long overflow")
+    assert(e2.getMessage === "long overflow")
   }
 
   test("SPARK-36418: default parsing w/o pattern") {

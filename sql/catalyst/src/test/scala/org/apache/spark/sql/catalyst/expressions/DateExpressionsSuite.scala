@@ -1822,8 +1822,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
             null)
         }.getCause
         assert(e.isInstanceOf[ArithmeticException])
-        // On JDK 25+, Math.multiplyExact may throw ArithmeticException without a message
-        assert(e.getMessage == null || e.getMessage.contains("long overflow"))
+        assert(e.getMessage.contains("long overflow"))
 
         checkEvaluation(
           TimestampAddInterval(

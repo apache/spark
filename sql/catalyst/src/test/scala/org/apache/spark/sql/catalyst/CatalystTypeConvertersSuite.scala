@@ -302,8 +302,7 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
     val errMsg = intercept[ArithmeticException] {
       IntervalUtils.durationToMicros(Duration.ofSeconds(Long.MaxValue, Long.MaxValue))
     }.getMessage
-    // On JDK 25+, Math.multiplyExact may throw ArithmeticException without a message
-    assert(errMsg == null || errMsg.contains("long overflow"))
+    assert(errMsg.contains("long overflow"))
   }
 
   test("SPARK-35726: Truncate java.time.Duration by fields of day-time interval type") {
