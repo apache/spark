@@ -1841,8 +1841,9 @@ class Analyzer(
           matchesFunctionName(f0.nameParts, "count") &&
           isCountStarExpansionAllowed(f0.arguments) =>
           // Transform COUNT(*) into COUNT(1).
-          // The transformed node keeps the same name parts so that resolution still
-          // sees the same qualification.
+          // We do not normalize the name to "count"; we keep the original name parts
+          // (e.g. builtin.count, system.builtin.count) so that resolution still sees
+          // the same qualification.
           f0.copy(arguments = Seq(Literal(1)))
         case f1: UnresolvedFunction if containsStar(f1.arguments) =>
           // SPECIAL CASE: We want to block count(tblName.*) because in spark, count(tblName.*) will
