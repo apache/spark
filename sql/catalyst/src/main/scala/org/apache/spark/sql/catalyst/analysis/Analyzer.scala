@@ -2018,8 +2018,7 @@ class Analyzer(
           // For builtin/temp functions, we can do a quick check without catalog lookup
           val quickCheck = if (nameParts.size == 1) {
             functionResolution.lookupBuiltinOrTempFunction(nameParts, Some(f))
-          } else if (FunctionResolution.maybeBuiltinFunctionName(nameParts) ||
-                     FunctionResolution.maybeTempFunctionName(nameParts)) {
+          } else if (FunctionResolution.sessionNamespaceKind(nameParts).isDefined) {
             functionResolution.lookupBuiltinOrTempFunction(nameParts, Some(f))
           } else {
             None
@@ -2081,7 +2080,7 @@ class Analyzer(
                   throw SparkException.internalError(
                     s"Logic inconsistency: Function ${nameParts.mkString(".")} was " +
                     s"classified as $functionType by full lookup but not found by quick check. " +
-                    s"Check maybeBuiltinFunctionName/maybeTempFunctionName logic.")
+                    s"Check sessionNamespaceKind logic.")
 
                 case FunctionType.Persistent =>
                   externalFunctionNameSet.add(fullName)

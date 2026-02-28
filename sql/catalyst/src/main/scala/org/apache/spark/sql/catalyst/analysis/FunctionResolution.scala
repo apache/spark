@@ -68,16 +68,8 @@ class FunctionResolution(
 
   /** Session namespace kind for qualified names; None if not a session namespace. */
   private def sessionFunctionKind(nameParts: Seq[String])
-      : Option[SessionCatalog.SessionFunctionKind] = {
-    if (nameParts.length <= 1) None
-    else if (FunctionResolution.maybeExtensionFunctionName(nameParts)) {
-      Some(SessionCatalog.Extension)
-    } else if (FunctionResolution.maybeBuiltinFunctionName(nameParts)) {
-      Some(SessionCatalog.Builtin)
-    } else if (FunctionResolution.maybeTempFunctionName(nameParts)) {
-      Some(SessionCatalog.Temp)
-    } else None
-  }
+      : Option[SessionCatalog.SessionFunctionKind] =
+    FunctionResolution.sessionNamespaceKind(nameParts)
 
   def resolveFunction(u: UnresolvedFunction): Expression = {
     withPosition(u) {
@@ -225,44 +217,35 @@ class FunctionResolution(
       node: Option[UnresolvedFunction] = None): FunctionType = {
 
     // Check if it's explicitly qualified as extension, builtin, or temp
-    if (maybeExtensionFunctionName(nameParts)) {
-      // Explicitly qualified as extension (e.g., extension.func or system.extension.func)
-      if (lookupBuiltinOrTempFunction(nameParts, node).isDefined) {
-        return FunctionType.Builtin  // Extensions are treated as builtin for resolution purposes
-      }
-    } else if (maybeBuiltinFunctionName(nameParts)) {
-      // Explicitly qualified as builtin (e.g., builtin.abs or system.builtin.abs)
-      if (lookupBuiltinOrTempFunction(nameParts, node).isDefined) {
-        return FunctionType.Builtin
-      }
-    } else if (maybeTempFunctionName(nameParts)) {
-      // Explicitly qualified as temp (e.g., session.func or system.session.func)
-      if (lookupBuiltinOrTempFunction(nameParts, node).isDefined) {
-        return FunctionType.Temporary
-      }
-    } else {
-      // Unqualified or qualified with a catalog
-      // Use lookupBuiltinOrTempFunction which handles internal functions correctly
-      val funcInfoOpt = lookupBuiltinOrTempFunction(nameParts, node)
-      funcInfoOpt match {
-        case Some(info) =>
-          // Determine if it's extension, temp, or builtin from the ExpressionInfo
-          if (info.getDb == CatalogManager.EXTENSION_NAMESPACE) {
-            // Extensions are treated as builtin for resolution purposes
-            return FunctionType.Builtin
-          } else if (info.getDb == CatalogManager.SESSION_NAMESPACE) {
-            // Could be temp or internal - check if it's in the internal registry
-            if (nameParts.size == 1 && node.exists(_.isInternal)) {
-              return FunctionType.Builtin  // Internal functions are treated as builtins
+    sessionFunctionKind(nameParts) match {
+      case Some(SessionCatalog.Extension) | Some(SessionCatalog.Builtin) =>
+        if (lookupBuiltinOrTempFunction(nameParts, node).isDefined) {
+          return FunctionType.Builtin  // Extension and builtin both as Builtin
+        }
+      case Some(SessionCatalog.Temp) =>
+        if (lookupBuiltinOrTempFunction(nameParts, node).isDefined) {
+          return FunctionType.Temporary
+        }
+      case None =>
+        // Unqualified or qualified with a catalog
+        // Use lookupBuiltinOrTempFunction which handles internal functions correctly
+        val funcInfoOpt = lookupBuiltinOrTempFunction(nameParts, node)
+        funcInfoOpt match {
+          case Some(info) =>
+            // Determine if it's extension, temp, or builtin from the ExpressionInfo
+            if (info.getDb == CatalogManager.EXTENSION_NAMESPACE) {
+              return FunctionType.Builtin
+            } else if (info.getDb == CatalogManager.SESSION_NAMESPACE) {
+              if (nameParts.size == 1 && node.exists(_.isInternal)) {
+                return FunctionType.Builtin
+              } else {
+                return FunctionType.Temporary
+              }
             } else {
-              return FunctionType.Temporary
+              return FunctionType.Builtin
             }
-          } else {
-            return FunctionType.Builtin
-          }
-        case None =>
-          // Not found as scalar, continue checking
-      }
+          case None =>
+        }
     }
 
     // Check if function exists as table function only
@@ -652,6 +635,27 @@ object FunctionResolution {
    */
   def maybeTempFunctionName(nameParts: Seq[String]): Boolean = {
     isQualifiedWithNamespace(nameParts, CatalogManager.SESSION_NAMESPACE)
+  }
+
+  /**
+   * Single qualification result for session namespaces: returns the kind when nameParts
+   * is explicitly qualified as extension, builtin, or session; None otherwise.
+   * Use this instead of calling maybeBuiltinFunctionName/maybeTempFunctionName/
+   * maybeExtensionFunctionName in multiple places so namespace rules live in one place.
+   *
+   * @param nameParts The function name parts (e.g. Seq("builtin", "abs"), Seq("session", "my_udf"))
+   * @return Some(Builtin)|Some(Temp)|Some(Extension) for 2/3-part session qualification, None otherwise
+   */
+  def sessionNamespaceKind(nameParts: Seq[String])
+    : Option[org.apache.spark.sql.catalyst.catalog.SessionCatalog.SessionFunctionKind] = {
+    if (nameParts.length <= 1) None
+    else if (maybeExtensionFunctionName(nameParts)) {
+      Some(org.apache.spark.sql.catalyst.catalog.SessionCatalog.Extension)
+    } else if (maybeBuiltinFunctionName(nameParts)) {
+      Some(org.apache.spark.sql.catalyst.catalog.SessionCatalog.Builtin)
+    } else if (maybeTempFunctionName(nameParts)) {
+      Some(org.apache.spark.sql.catalyst.catalog.SessionCatalog.Temp)
+    } else None
   }
 
   /**

@@ -161,15 +161,10 @@ class SessionCatalog(
    * Each entry is a FunctionIdentifier representing a namespace (catalog + database).
    * The funcName field is unused (empty string) as these represent namespace templates.
    *
-   * Resolution order (CRITICAL FOR SECURITY):
-   * 1. system.extension (extension functions - can shadow built-ins)
-   * 2. system.builtin (built-in functions - protected from user shadowing)
-   * 3. system.session (temporary functions - CANNOT shadow built-ins)
-   *
-   * This order ensures that:
-   * - Extensions (admin-installed, trusted) can shadow built-ins if needed
-   * - Built-ins are resolved BEFORE user temp functions, preventing security exploits
-   * - Users cannot shadow security-critical functions like current_user()
+   * Resolution order follows the configured path: builtin then session (default "second"),
+   * or session then builtin (legacy "first"), or builtin only ("last" - session tried after
+   * persistent in FunctionResolution). Extension functions are stored and resolved in the
+   * builtin namespace; they are not a separate path step.
    *
    * When resolving a view, the system.session namespace is included in the path, but
    * handleViewContext filters to only return temporary functions that were referred to
@@ -226,7 +221,7 @@ class SessionCatalog(
    * Storage conventions:
    * - Builtin functions: FunctionIdentifier(name, None, None)
    * - Extension functions: FunctionIdentifier(name, None, None) (Treated as builtin)
-   * - Temp functions: FunctionIdentifier(name, Some("session"), None)
+   * - Temp functions: FunctionIdentifier(name, Some("session"), Some("system"))
    * - Other: FunctionIdentifier(name, namespace.database, namespace.catalog)
    *
    * @param namespace The namespace template

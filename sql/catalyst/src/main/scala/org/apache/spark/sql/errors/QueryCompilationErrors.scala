@@ -3085,12 +3085,23 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def operationNotAllowedOnBuiltinFunctionError(
       statement: String,
       functionName: String): Throwable = {
+    operationNotAllowedOnBuiltinNamespaceError(statement, "FUNCTION", functionName)
+  }
+
+  /**
+   * Error when an operation is not allowed on the builtin namespace.
+   * Uses objectType so callers can pass TABLE, VIEW, or FUNCTION as appropriate.
+   */
+  def operationNotAllowedOnBuiltinNamespaceError(
+      statement: String,
+      objectType: String,
+      objectName: String): Throwable = {
     new AnalysisException(
       errorClass = "FORBIDDEN_OPERATION",
       messageParameters = Map(
         "statement" -> toSQLStmt(statement),
-        "objectType" -> "FUNCTION",
-        "objectName" -> toSQLId(functionName)))
+        "objectType" -> objectType,
+        "objectName" -> toSQLId(objectName)))
   }
 
   def invalidTempObjQualifierError(

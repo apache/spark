@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.catalyst.util.SparkCharVarcharUtils.replaceCharVarcharWithString
+import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -156,17 +157,18 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         val CatalogAndIdentifier(catalog, ident) = nameParts
         ResolvedIdentifier(catalog, ident)
       }
-    } else if (FunctionResolution.maybeBuiltinFunctionName(nameParts)) {
-      // Explicitly qualified as builtin (e.g., builtin.abs or system.builtin.abs)
-      val ident = Identifier.of(Array(CatalogManager.BUILTIN_NAMESPACE), nameParts.last)
-      ResolvedIdentifier(FakeSystemCatalog, ident)
-    } else if (FunctionResolution.maybeTempFunctionName(nameParts)) {
-      // Explicitly qualified as temp (e.g., session.func or system.session.func)
-      val ident = Identifier.of(Array(CatalogManager.SESSION_NAMESPACE), nameParts.last)
-      ResolvedIdentifier(FakeSystemCatalog, ident)
-    } else {
-      val CatalogAndIdentifier(catalog, ident) = nameParts
-      ResolvedIdentifier(catalog, ident)
+    } else FunctionResolution.sessionNamespaceKind(nameParts) match {
+      case Some(SessionCatalog.Builtin) | Some(SessionCatalog.Extension) =>
+        // Explicitly qualified as builtin or extension (extension stored as builtin)
+        val ident = Identifier.of(Array(CatalogManager.BUILTIN_NAMESPACE), nameParts.last)
+        ResolvedIdentifier(FakeSystemCatalog, ident)
+      case Some(SessionCatalog.Temp) =>
+        // Explicitly qualified as temp (e.g., session.func or system.session.func)
+        val ident = Identifier.of(Array(CatalogManager.SESSION_NAMESPACE), nameParts.last)
+        ResolvedIdentifier(FakeSystemCatalog, ident)
+      case None =>
+        val CatalogAndIdentifier(catalog, ident) = nameParts
+        ResolvedIdentifier(catalog, ident)
     }
   }
 
