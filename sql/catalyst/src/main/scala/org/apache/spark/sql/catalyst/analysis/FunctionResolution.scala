@@ -106,15 +106,19 @@ class FunctionResolution(
                 searchPath,
                 u.origin)
             case e: AnalysisException if e.getCondition == "REQUIRES_SINGLE_PART_NAMESPACE" =>
-              // Session catalog throws this for multi-part namespace; report as function not found
-              val catalogPath = (
-                catalogManager.currentCatalog.name +: catalogManager.currentNamespace
-              ).mkString(".")
-              val searchPath = SQLConf.get.functionResolutionSearchPath(catalogPath)
-              throw QueryCompilationErrors.unresolvedRoutineError(
-                u.nameParts,
-                searchPath,
-                u.origin)
+              // Only convert for 3-part names; 4+ parts keep REQUIRES_SINGLE_PART_NAMESPACE
+              if (u.nameParts.size == 3) {
+                val catalogPath = (
+                  catalogManager.currentCatalog.name +: catalogManager.currentNamespace
+                ).mkString(".")
+                val searchPath = SQLConf.get.functionResolutionSearchPath(catalogPath)
+                throw QueryCompilationErrors.unresolvedRoutineError(
+                  u.nameParts,
+                  searchPath,
+                  u.origin)
+              } else {
+                throw e
+              }
           }
         }
       }

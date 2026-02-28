@@ -2034,14 +2034,18 @@ class Analyzer(
               (cat, id)
             } catch {
               case e: AnalysisException if e.getCondition == "REQUIRES_SINGLE_PART_NAMESPACE" =>
-                // expandIdentifier can still throw for e.g. spark_catalog.func (no database)
-                val catalogPath = (catalogManager.currentCatalog.name +:
-                  catalogManager.currentNamespace).mkString(".")
-                val searchPath = SQLConf.get.functionResolutionSearchPath(catalogPath)
-                throw QueryCompilationErrors.unresolvedRoutineError(
-                  nameParts,
-                  searchPath,
-                  f.origin)
+                // Only convert for 2–3 part names; 4+ parts keep REQUIRES_SINGLE_PART_NAMESPACE
+                if (nameParts.size <= 3) {
+                  val catalogPath = (catalogManager.currentCatalog.name +:
+                    catalogManager.currentNamespace).mkString(".")
+                  val searchPath = SQLConf.get.functionResolutionSearchPath(catalogPath)
+                  throw QueryCompilationErrors.unresolvedRoutineError(
+                    nameParts,
+                    searchPath,
+                    f.origin)
+                } else {
+                  throw e
+                }
             }
 
             val fullName = normalizeFuncName(
@@ -2057,13 +2061,18 @@ class Analyzer(
                 functionResolution.lookupFunctionType(nameParts, Some(f))
               } catch {
                 case e: AnalysisException if e.getCondition == "REQUIRES_SINGLE_PART_NAMESPACE" =>
-                  val catalogPath = (catalogManager.currentCatalog.name +:
-                    catalogManager.currentNamespace).mkString(".")
-                  val searchPath = SQLConf.get.functionResolutionSearchPath(catalogPath)
-                  throw QueryCompilationErrors.unresolvedRoutineError(
-                    nameParts,
-                    searchPath,
-                    f.origin)
+                  // Only convert for 3-part names; 4+ parts keep REQUIRES_SINGLE_PART_NAMESPACE
+                  if (nameParts.size == 3) {
+                    val catalogPath = (catalogManager.currentCatalog.name +:
+                      catalogManager.currentNamespace).mkString(".")
+                    val searchPath = SQLConf.get.functionResolutionSearchPath(catalogPath)
+                    throw QueryCompilationErrors.unresolvedRoutineError(
+                      nameParts,
+                      searchPath,
+                      f.origin)
+                  } else {
+                    throw e
+                  }
               }
 
               functionType match {
