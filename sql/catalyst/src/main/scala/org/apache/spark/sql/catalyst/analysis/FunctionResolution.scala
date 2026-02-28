@@ -21,6 +21,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.FunctionIdentifier
+import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
+import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -64,6 +66,19 @@ class FunctionResolution(
 
   private val trimWarningEnabled = new AtomicBoolean(true)
 
+  /** Session namespace kind for qualified names; None if not a session namespace. */
+  private def sessionFunctionKind(nameParts: Seq[String])
+      : Option[SessionCatalog.SessionFunctionKind] = {
+    if (nameParts.length <= 1) None
+    else if (FunctionResolution.maybeExtensionFunctionName(nameParts)) {
+      Some(SessionCatalog.Extension)
+    } else if (FunctionResolution.maybeBuiltinFunctionName(nameParts)) {
+      Some(SessionCatalog.Builtin)
+    } else if (FunctionResolution.maybeTempFunctionName(nameParts)) {
+      Some(SessionCatalog.Temp)
+    } else None
+  }
+
   def resolveFunction(u: UnresolvedFunction): Expression = {
     withPosition(u) {
       // For "last" order this is builtin then persistent then session; for "first"/"second"
@@ -83,7 +98,8 @@ class FunctionResolution(
                 catalogManager.currentCatalog.name +: catalogManager.currentNamespace
               ).mkString(".")
               val searchPath = SQLConf.get.functionResolutionSearchPath(catalogPath)
-              v1SessionCatalog.resolveTempFunction(u.nameParts.head, u.arguments).getOrElse(
+              v1SessionCatalog.resolveScalarFunction(
+                SessionCatalog.Temp, u.nameParts.head, u.arguments).getOrElse(
                 throw QueryCompilationErrors.unresolvedRoutineError(
                   u.nameParts,
                   searchPath,
@@ -151,41 +167,30 @@ class FunctionResolution(
       u: Option[UnresolvedFunction]): Option[ExpressionInfo] = {
     if (name.size == 1 && u.exists(_.isInternal)) {
       FunctionRegistry.internal.lookupFunction(FunctionIdentifier(name.head))
-    } else if (maybeBuiltinFunctionName(name)) {
-      // Explicitly qualified as builtin - lookup only builtin
-      // After validation, last element is the function name (e.g., "abs" from "builtin.abs")
-      v1SessionCatalog.lookupBuiltinFunction(name.last)
-    } else if (maybeTempFunctionName(name)) {
-      // Explicitly qualified as temp - lookup only temp
-      // After validation, last element is the function name (e.g., "func" from "session.func")
-      v1SessionCatalog.lookupTempFunction(name.last)
-    } else if (name.size == 1) {
-      // Unqualified: resolution order is given by the session resolution path
-      // (builtin then session by default, or session then builtin when session is first).
-      v1SessionCatalog.lookupBuiltinOrTempFunction(name.head)
     } else {
-      // Multi-part name that's not system.builtin/session - this is a catalog-qualified name.
-      // Don't check builtins here - let the catalog handle it.
-      None
+      sessionFunctionKind(name) match {
+        case Some(kind) =>
+          v1SessionCatalog.lookupFunctionInfo(kind, name.last, tableFunction = false)
+        case None =>
+          if (name.size == 1) {
+            v1SessionCatalog.lookupBuiltinOrTempFunction(name.head)
+          } else {
+            None
+          }
+      }
     }
   }
 
   def lookupBuiltinOrTempTableFunction(name: Seq[String]): Option[ExpressionInfo] = {
-    if (maybeExtensionFunctionName(name)) {
-      // Explicitly qualified as extension - lookup only extension
-      v1SessionCatalog.lookupExtensionTableFunction(name.last)
-    } else if (maybeBuiltinFunctionName(name)) {
-      // Explicitly qualified as builtin - lookup only builtin
-      v1SessionCatalog.lookupBuiltinTableFunction(name.last)
-    } else if (maybeTempFunctionName(name)) {
-      // Explicitly qualified as temp - lookup only temp
-      v1SessionCatalog.lookupTempTableFunction(name.last)
-    } else if (name.length == 1) {
-      // Unqualified: resolution order follows the session resolution path
-      // (see lookupBuiltinOrTempFunction).
-      v1SessionCatalog.lookupBuiltinOrTempTableFunction(name.head)
-    } else {
-      None
+    sessionFunctionKind(name) match {
+      case Some(kind) =>
+        v1SessionCatalog.lookupFunctionInfo(kind, name.last, tableFunction = true)
+      case None =>
+        if (name.length == 1) {
+          v1SessionCatalog.lookupBuiltinOrTempTableFunction(name.head)
+        } else {
+          None
+        }
     }
   }
 
@@ -283,31 +288,25 @@ class FunctionResolution(
     // Step 1: Try to resolve as scalar function
     val expression = if (name.size == 1 && u.isInternal) {
       Option(FunctionRegistry.internal.lookupFunction(FunctionIdentifier(name.head), arguments))
-    } else if (maybeExtensionFunctionName(name)) {
-      // Explicitly qualified as extension - resolve only extension
-      v1SessionCatalog.resolveExtensionFunction(name.last, arguments)
-    } else if (maybeBuiltinFunctionName(name)) {
-      // Explicitly qualified as builtin - resolve only builtin
-      v1SessionCatalog.resolveBuiltinFunction(name.last, arguments)
-    } else if (maybeTempFunctionName(name)) {
-      // Explicitly qualified as temp - resolve only temp
-      v1SessionCatalog.resolveTempFunction(name.last, arguments)
-    } else if (name.size == 1) {
-      // Unqualified: resolution order follows the session resolution path
-      // (builtin then session by default).
-      // Cross-type checking: if only a temp table function exists (no scalar version),
-      // throw error when used in scalar context.
-      val funcName = name.head
-      val scalarResult = v1SessionCatalog.resolveBuiltinOrTempFunction(funcName, arguments)
-
-      if (scalarResult.isEmpty && v1SessionCatalog.lookupTempTableFunction(funcName).isDefined) {
-        // No scalar function found (neither builtin nor temp), but temp table function exists
-        throw QueryCompilationErrors.notAScalarFunctionError(name.mkString("."), u)
-      } else {
-        scalarResult
-      }
     } else {
-      None
+      sessionFunctionKind(name) match {
+        case Some(kind) =>
+          v1SessionCatalog.resolveScalarFunction(kind, name.last, arguments)
+        case None =>
+          if (name.size == 1) {
+            val funcName = name.head
+            val scalarResult = v1SessionCatalog.resolveBuiltinOrTempFunction(funcName, arguments)
+            if (scalarResult.isEmpty &&
+                v1SessionCatalog.lookupFunctionInfo(
+                  SessionCatalog.Temp, funcName, tableFunction = true).isDefined) {
+              throw QueryCompilationErrors.notAScalarFunctionError(name.mkString("."), u)
+            } else {
+              scalarResult
+            }
+          } else {
+            None
+          }
+      }
     }
 
     // Step 2: Check for table-only functions (cross-type error detection)
@@ -328,29 +327,22 @@ class FunctionResolution(
       arguments: Seq[Expression]): Option[LogicalPlan] = {
 
     // Step 1: Try to resolve as table function
-    val tableFunctionResult = if (maybeExtensionFunctionName(name)) {
-      // Explicitly qualified as extension - resolve only extension
-      v1SessionCatalog.resolveExtensionTableFunction(name.last, arguments)
-    } else if (maybeBuiltinFunctionName(name)) {
-      // Explicitly qualified as builtin - resolve only builtin
-      v1SessionCatalog.resolveBuiltinTableFunction(name.last, arguments)
-    } else if (maybeTempFunctionName(name)) {
-      // Explicitly qualified as temp - resolve only temp
-      v1SessionCatalog.resolveTempTableFunction(name.last, arguments)
-    } else if (name.length == 1) {
-      // Unqualified: first match in path (scalar or table) wins; if scalar first, throw
-      // NOT_A_TABLE (consistent with scalar context where table-first yields
-      // NOT_A_SCALAR_FUNCTION).
-      val funcName = name.head
-      v1SessionCatalog
-        .resolveBuiltinOrTempTableFunctionRespectingPathOrder(funcName, arguments) match {
-        case Some(scala.util.Left(plan)) => Some(plan)
-        case Some(scala.util.Right(())) =>
-          throw QueryCompilationErrors.notATableFunctionError(name.mkString("."))
-        case None => None
-      }
-    } else {
-      None
+    val tableFunctionResult = sessionFunctionKind(name) match {
+      case Some(kind) =>
+        v1SessionCatalog.resolveTableFunction(kind, name.last, arguments)
+      case None =>
+        if (name.length == 1) {
+          val funcName = name.head
+          v1SessionCatalog
+            .resolveBuiltinOrTempTableFunctionRespectingPathOrder(funcName, arguments) match {
+            case Some(scala.util.Left(plan)) => Some(plan)
+            case Some(scala.util.Right(())) =>
+              throw QueryCompilationErrors.notATableFunctionError(name.mkString("."))
+            case None => None
+          }
+        } else {
+          None
+        }
     }
 
     // Step 2: If no table function was found in path, check if a scalar exists (wrong type).

@@ -60,6 +60,16 @@ import org.apache.spark.util.Utils
 
 object SessionCatalog {
   val DEFAULT_DATABASE = "default"
+
+  /**
+   * Kind of session-scoped function namespace for lookup/resolve.
+   * Used by the kind-based API to avoid 12 separate methods per
+   * (builtin/temp/extension) x (lookup/resolve) x (scalar/table).
+   */
+  sealed trait SessionFunctionKind
+  case object Builtin extends SessionFunctionKind
+  case object Temp extends SessionFunctionKind
+  case object Extension extends SessionFunctionKind
 }
 
 /**
@@ -2513,6 +2523,121 @@ class SessionCatalog(
   }
 
   /**
+   * Builds the FunctionIdentifier for a given session function kind and name.
+   * Used by the kind-based lookup/resolve API.
+   */
+  private def functionIdentifier(
+      kind: SessionCatalog.SessionFunctionKind,
+      name: String): FunctionIdentifier =
+    kind match {
+      case SessionCatalog.Builtin =>
+        FunctionIdentifier(format(name))
+      case SessionCatalog.Temp =>
+        tempFunctionIdentifier(name)
+      case SessionCatalog.Extension =>
+        extensionFunctionIdentifier(name)
+    }
+
+  /**
+   * Kind-based lookup: one entry point for all
+   * (builtin/temp/extension) x (scalar/table).
+   * Callers that have already determined the kind (e.g. FunctionResolution) use this
+   * instead of 6 separate lookup* methods.
+   */
+  def lookupFunctionInfo(
+      kind: SessionCatalog.SessionFunctionKind,
+      name: String,
+      tableFunction: Boolean): Option[ExpressionInfo] = {
+    val identifier = functionIdentifier(kind, name)
+    val registry = if (tableFunction) tableFunctionRegistry else functionRegistry
+    kind match {
+      case SessionCatalog.Temp =>
+        synchronized {
+          if (tableFunction) {
+            if (registry.functionExists(identifier)) registry.lookupFunction(identifier) else None
+          } else {
+            lookupTempFuncWithViewContext(
+              name,
+              _ => false,
+              _ => registry.lookupFunction(identifier))
+          }
+        }
+      case _ =>
+        registry.lookupFunction(identifier)
+    }
+  }
+
+  /**
+   * Kind-based resolve for scalar functions.
+   */
+  def resolveScalarFunction(
+      kind: SessionCatalog.SessionFunctionKind,
+      name: String,
+      arguments: Seq[Expression]): Option[Expression] = {
+    val identifier = functionIdentifier(kind, name)
+    kind match {
+      case SessionCatalog.Builtin =>
+        if (functionRegistry.functionExists(identifier)) {
+          Option(functionRegistry.lookupFunction(identifier, arguments))
+        } else {
+          None
+        }
+      case SessionCatalog.Temp =>
+        synchronized {
+          if (functionRegistry.functionExists(identifier)) {
+            lookupTempFuncWithViewContext(
+              name,
+              _ => false,
+              _ => Option(functionRegistry.lookupFunction(identifier, arguments)))
+          } else {
+            None
+          }
+        }
+      case SessionCatalog.Extension =>
+        if (functionRegistry.functionExists(identifier)) {
+          Option(functionRegistry.lookupFunction(identifier, arguments))
+        } else {
+          None
+        }
+    }
+  }
+
+  /**
+   * Kind-based resolve for table functions.
+   */
+  def resolveTableFunction(
+      kind: SessionCatalog.SessionFunctionKind,
+      name: String,
+      arguments: Seq[Expression]): Option[LogicalPlan] = {
+    val identifier = functionIdentifier(kind, name)
+    kind match {
+      case SessionCatalog.Builtin =>
+        if (tableFunctionRegistry.functionExists(identifier)) {
+          Option(tableFunctionRegistry.lookupFunction(identifier, arguments))
+        } else {
+          None
+        }
+      case SessionCatalog.Temp =>
+        synchronized {
+          if (tableFunctionRegistry.functionExists(identifier)) {
+            lookupTempFuncWithViewContext(
+              name,
+              _ => false,
+              _ => Option(tableFunctionRegistry.lookupFunction(identifier, arguments)))
+          } else {
+            None
+          }
+        }
+      case SessionCatalog.Extension =>
+        if (tableFunctionRegistry.functionExists(identifier)) {
+          Option(tableFunctionRegistry.lookupFunction(identifier, arguments))
+        } else {
+          None
+        }
+    }
+  }
+
+  /**
    * Look up the `ExpressionInfo` of the given function by name.
    * Resolution order follows the configured path (e.g. builtin then session);
    * extension functions are stored in the builtin namespace.
@@ -2532,155 +2657,12 @@ class SessionCatalog(
   }
 
   /**
-   * Look up only builtin function (no temp).
-   */
-  def lookupBuiltinFunction(name: String): Option[ExpressionInfo] = {
-    val builtinIdentifier = FunctionIdentifier(format(name))
-    functionRegistry.lookupFunction(builtinIdentifier)
-  }
-
-  /**
-   * Look up only builtin table function (no temp).
-   */
-  def lookupBuiltinTableFunction(name: String): Option[ExpressionInfo] = {
-    val builtinIdentifier = FunctionIdentifier(format(name))
-    tableFunctionRegistry.lookupFunction(builtinIdentifier)
-  }
-
-  /**
-   * Look up only temp function (no builtin).
-   */
-  def lookupTempFunction(name: String): Option[ExpressionInfo] = {
-    val tempIdentifier = tempFunctionIdentifier(name)
-    synchronized(lookupTempFuncWithViewContext(
-      name,
-      _ => false, // Temp-only path: not a builtin, so apply view context
-      _ => functionRegistry.lookupFunction(tempIdentifier)))
-  }
-
-  /**
-   * Look up only temp table function (no builtin).
-   */
-  def lookupTempTableFunction(name: String): Option[ExpressionInfo] = {
-    val tempIdentifier = tempFunctionIdentifier(name)
-    if (tableFunctionRegistry.functionExists(tempIdentifier)) {
-      tableFunctionRegistry.lookupFunction(tempIdentifier)
-    } else {
-      None
-    }
-  }
-
-  /**
-   * Look up only extension function (no builtin or temp).
-   */
-  def lookupExtensionFunction(name: String): Option[ExpressionInfo] = {
-    val extensionIdentifier = extensionFunctionIdentifier(name)
-    functionRegistry.lookupFunction(extensionIdentifier)
-  }
-
-  /**
-   * Look up only extension table function (no builtin or temp).
-   */
-  def lookupExtensionTableFunction(name: String): Option[ExpressionInfo] = {
-    val extensionIdentifier = extensionFunctionIdentifier(name)
-    tableFunctionRegistry.lookupFunction(extensionIdentifier)
-  }
-
-  /**
-   * Resolve only builtin function.
-   */
-  def resolveBuiltinFunction(name: String, arguments: Seq[Expression]): Option[Expression] = {
-    val builtinIdentifier = FunctionIdentifier(format(name))
-    if (functionRegistry.functionExists(builtinIdentifier)) {
-      Option(functionRegistry.lookupFunction(builtinIdentifier, arguments))
-    } else {
-      None
-    }
-  }
-
-  /**
-   * Resolve only temp function.
-   */
-  def resolveTempFunction(name: String, arguments: Seq[Expression]): Option[Expression] = {
-    val tempIdentifier = tempFunctionIdentifier(name)
-    synchronized {
-      if (functionRegistry.functionExists(tempIdentifier)) {
-    lookupTempFuncWithViewContext(
-          name,
-          _ => false, // Temp-only path: not a builtin, so apply view context
-          _ => Option(functionRegistry.lookupFunction(tempIdentifier, arguments)))
-      } else {
-        None
-      }
-    }
-  }
-
-  /**
-   * Resolve only extension function.
-   */
-  def resolveExtensionFunction(name: String, arguments: Seq[Expression]): Option[Expression] = {
-    val extensionIdentifier = extensionFunctionIdentifier(name)
-    if (functionRegistry.functionExists(extensionIdentifier)) {
-      Option(functionRegistry.lookupFunction(extensionIdentifier, arguments))
-    } else {
-      None
-    }
-  }
-
-  /**
    * Look up a scalar function by name and resolve it to an Expression.
    * Resolution order follows the configured path (e.g. builtin then session);
    * extension functions are stored in the builtin namespace.
    */
   def resolveBuiltinOrTempFunction(name: String, arguments: Seq[Expression]): Option[Expression] =
     resolveFunctionWithFallback(name, arguments, functionRegistry)
-
-  /**
-   * Resolve only builtin table function.
-   */
-  def resolveBuiltinTableFunction(
-      name: String,
-      arguments: Seq[Expression]): Option[LogicalPlan] = {
-    val builtinIdentifier = FunctionIdentifier(format(name))
-    if (tableFunctionRegistry.functionExists(builtinIdentifier)) {
-      Option(tableFunctionRegistry.lookupFunction(builtinIdentifier, arguments))
-    } else {
-      None
-    }
-  }
-
-  /**
-   * Resolve only temp table function.
-   */
-  def resolveTempTableFunction(
-      name: String,
-      arguments: Seq[Expression]): Option[LogicalPlan] = {
-    val tempIdentifier = tempFunctionIdentifier(name)
-    synchronized {
-      if (tableFunctionRegistry.functionExists(tempIdentifier)) {
-        lookupTempFuncWithViewContext(
-          name,
-          _ => false, // Temp-only path: not a builtin, so apply view context
-          _ => Option(tableFunctionRegistry.lookupFunction(tempIdentifier, arguments)))
-      } else {
-        None
-      }
-    }
-  }
-
-  /**
-   * Resolve only extension table function.
-   */
-  def resolveExtensionTableFunction(
-      name: String,
-      arguments: Seq[Expression]): Option[LogicalPlan] = {
-    val extensionIdentifier = extensionFunctionIdentifier(name)
-    if (tableFunctionRegistry.functionExists(extensionIdentifier)) {
-      Option(tableFunctionRegistry.lookupFunction(extensionIdentifier, arguments))
-    } else {
-      None
-    }
-  }
 
   /**
    * Look up a table function by name and resolve it to a LogicalPlan.
