@@ -16,12 +16,13 @@ If you are new to the project, here are some resources to help you get started:
 - Contributing to the codebase:  
   See the “Contributing code changes” section below.
 
-- Helping with issue triage:  
-  https://issues.apache.org/jira/projects/SPARK
+- Helping with issue triage:
+  - GitHub Issues: https://github.com/apache/spark/issues
+  - https://issues.apache.org/jira/projects/SPARK
 
 Please also consider joining the Spark developer community via the `dev@spark.apache.org` mailing list.
 
-If something is unclear or does not go smoothly, you can ask on the dev mailing list or comment on the related JIRA issue.
+If something is unclear or does not go smoothly, you can ask on the dev mailing list or comment on the related JIRA issue or GitHub issue.
 
 ## Looking for a Place to Begin?
 
