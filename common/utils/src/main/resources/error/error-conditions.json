@@ -8008,11 +8008,6 @@
       "count(<targetString>.*) is not allowed. Please use count(*) or expand the columns manually, e.g. count(col1, col2)."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1030" : {
-    "message" : [
-      "Window aggregate function with filter predicate is not supported yet."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1031" : {
     "message" : [
       "It is not allowed to use a window function inside an aggregate function. Please use the inner window function in a sub-query."
