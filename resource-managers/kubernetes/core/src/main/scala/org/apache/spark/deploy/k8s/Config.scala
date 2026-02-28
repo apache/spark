@@ -523,10 +523,14 @@ private[spark] object Config extends Logging {
 
   val KUBERNETES_ALLOCATION_RECOVERY_MODE_ENABLED =
     ConfigBuilder("spark.kubernetes.allocation.recoveryMode.enabled")
-      .doc("If true, enables the recovery mode during executor allocation.")
+      .doc("When Spark driver detects an executor termination due to OOM, Spark starts to " +
+        "allocate the recovery-mode executors which accept only a single task per executor JVM. " +
+        "In other words, the recovery-mode executors replace the OOM-terminated executors to " +
+        "survive from the resource-hungry tasks for the remaining tasks and stages. " +
+        "If set to `false`, Spark will not use the recovery-mode executors.")
       .version("4.2.0")
       .booleanConf
-      .createWithDefault(false)
+      .createOptional
 
   val KUBERNETES_ALLOCATION_MAXIMUM =
     ConfigBuilder("spark.kubernetes.allocation.maximum")

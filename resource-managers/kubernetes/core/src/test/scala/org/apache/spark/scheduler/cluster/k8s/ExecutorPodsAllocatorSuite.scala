@@ -1086,6 +1086,6 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     val podsAllocator = new ExecutorPodsAllocator(newConf, secMgr, executorBuilder,
       kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
     podsAllocator.setRecoveryMode()
-    assert(!newConf.get(KUBERNETES_ALLOCATION_RECOVERY_MODE_ENABLED))
+    assert(!newConf.get(KUBERNETES_ALLOCATION_RECOVERY_MODE_ENABLED).get)
   }
 }
