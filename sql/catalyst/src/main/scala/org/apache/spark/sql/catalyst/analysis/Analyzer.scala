@@ -2052,8 +2052,19 @@ class Analyzer(
               f
             } else {
               // Not in cache - do full lookup to determine type
-              // Session catalog returns false for multi-part namespace (no throw)
-              val functionType = functionResolution.lookupFunctionType(nameParts, Some(f))
+              // Session catalog may throw REQUIRES_SINGLE_PART_NAMESPACE for multi-part namespace
+              val functionType = try {
+                functionResolution.lookupFunctionType(nameParts, Some(f))
+              } catch {
+                case e: AnalysisException if e.getCondition == "REQUIRES_SINGLE_PART_NAMESPACE" =>
+                  val catalogPath = (catalogManager.currentCatalog.name +:
+                    catalogManager.currentNamespace).mkString(".")
+                  val searchPath = SQLConf.get.functionResolutionSearchPath(catalogPath)
+                  throw QueryCompilationErrors.unresolvedRoutineError(
+                    nameParts,
+                    searchPath,
+                    f.origin)
+              }
 
               functionType match {
                 case FunctionType.Builtin | FunctionType.Temporary =>

@@ -96,7 +96,17 @@ class FunctionResolution(
             resolvePersistentFunction(u)
           } catch {
             case _: NoSuchFunctionException =>
-              // Session catalog returns this for multi-part namespace; report as function not found
+              // Session catalog returns this when function is missing
+              val catalogPath = (
+                catalogManager.currentCatalog.name +: catalogManager.currentNamespace
+              ).mkString(".")
+              val searchPath = SQLConf.get.functionResolutionSearchPath(catalogPath)
+              throw QueryCompilationErrors.unresolvedRoutineError(
+                u.nameParts,
+                searchPath,
+                u.origin)
+            case e: AnalysisException if e.getCondition == "REQUIRES_SINGLE_PART_NAMESPACE" =>
+              // Session catalog throws this for multi-part namespace; report as function not found
               val catalogPath = (
                 catalogManager.currentCatalog.name +: catalogManager.currentNamespace
               ).mkString(".")
