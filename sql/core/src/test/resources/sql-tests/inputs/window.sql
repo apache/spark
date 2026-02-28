@@ -184,11 +184,11 @@ WINDOW w AS (PARTITION BY cate ORDER BY val);
 
 -- window aggregate with filter predicate: first_value/last_value (imperative aggregate)
 SELECT val, cate,
-first_value(val) FILTER (WHERE cate = 'a') OVER(ORDER BY val_long
+first_value(val) FILTER (WHERE cate = 'a') OVER(ORDER BY val_long NULLS LAST, val NULLS LAST, cate NULLS LAST
   ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS first_a,
-last_value(val) FILTER (WHERE cate = 'a') OVER(ORDER BY val_long
+last_value(val) FILTER (WHERE cate = 'a') OVER(ORDER BY val_long NULLS LAST, val NULLS LAST, cate NULLS LAST
   ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS last_a
-FROM testData ORDER BY val_long, cate;
+FROM testData ORDER BY val_long NULLS LAST, val NULLS LAST, cate NULLS LAST;
 
 -- window aggregate with filter predicate: multiple aggregates with different filters
 SELECT val, cate,
