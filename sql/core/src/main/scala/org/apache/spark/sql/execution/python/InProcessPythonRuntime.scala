@@ -50,7 +50,7 @@ private[python] object InProcessPythonRuntime extends Logging {
       SharedInterpreter.setConfig(config)
       interp = new SharedInterpreter()
       // Import the bridge entry point into the interpreter's global namespace
-      interp.eval("from pyspark.inprocess.runtime import _inprocess_invoke")
+      interp.eval("from pyspark.inprocess.runtime import _inprocess_invoke, _release_export")
       initialized = true
       logInfo("jep SharedInterpreter ready; bridge module loaded.")
     }
@@ -78,8 +78,8 @@ private[python] object InProcessPythonRuntime extends Logging {
    * @param inputAddrList  list of address maps, one per input column - see
    *                       [[InProcessArrowBridge.extractAddresses]] for key spec
    * @param numRows        number of rows in the batch
-   * @return               map with result buffer info - see [[InProcessArrowBridge.resultToColumn]]
-   *                       for key spec
+   * @return               map with native buffer addresses and export ID - see
+   *                       [[InProcessArrowBridge.foreignToColumn]] for key spec
    */
   def invoke(
       serializedUdf: Array[Byte],
@@ -96,6 +96,27 @@ private[python] object InProcessPythonRuntime extends Logging {
       case e: JepException =>
         throw new RuntimeException(
           s"In-process Python UDF execution failed: ${e.getMessage}", e)
+    }
+  }
+
+  /**
+   * Release the Python-side exported array identified by `exportId`.
+   *
+   * Must be called only after the JVM has closed all [[org.apache.arrow.vector.FieldVector]]s
+   * that reference the array's native buffers (i.e. after
+   * [[InProcessArrowEvalExec]] closes the result [[ArrowColumnVector]]s for
+   * the completed batch).
+   *
+   * Failures are logged as warnings rather than propagated -- a missed release
+   * causes a Python memory leak for this batch but does not corrupt results.
+   */
+  def releaseExport(exportId: Int): Unit = {
+    if (!initialized) return
+    try {
+      interp.invoke("_release_export", Integer.valueOf(exportId))
+    } catch {
+      case e: JepException =>
+        logWarning(s"Failed to release Python export $exportId: ${e.getMessage}", e)
     }
   }
 }

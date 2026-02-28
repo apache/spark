@@ -36,7 +36,7 @@ jep type conversions (Python → Java):
 
 import cloudpickle
 
-from pyspark.inprocess.bridge import addresses_to_array, array_to_result
+from pyspark.inprocess.bridge import addresses_to_array, array_to_addresses, release_export
 
 # UDF deserialization cache: cloudpickle bytes → callable
 # Avoids re-deserializing the same UDF for every batch on this executor.
@@ -56,8 +56,8 @@ def _inprocess_invoke(serialized_udf, input_addrs, num_rows: int) -> dict:
         num_rows:        number of rows in the batch (Java Integer)
 
     Returns:
-        dict suitable for ``InProcessArrowBridge.resultToColumn`` — jep converts
-        to Java Map<String, Object>
+        dict of native buffer addresses — jep converts to Java Map<String, Object>.
+        See ``InProcessArrowBridge.foreignToColumn`` for key spec.
     """
     # jep converts Java byte[] to a sequence of signed Java integers (-128..127).
     # Mask each byte to unsigned (0..255) before constructing Python bytes.
@@ -77,5 +77,16 @@ def _inprocess_invoke(serialized_udf, input_addrs, num_rows: int) -> dict:
     else:
         result = udf_func(*input_arrays)
 
-    # Serialize result for JVM to copy back into an Arrow vector
-    return array_to_result(result)
+    # Export result as native buffer addresses for zero-copy transfer to JVM.
+    # The array is kept alive in bridge._live_arrays until the JVM calls _release_export.
+    return array_to_addresses(result)
+
+
+def _release_export(export_id: int) -> None:
+    """
+    Release the Python-side array export identified by ``export_id``.
+
+    Called from JVM via jep after all rows from a batch have been consumed and
+    the JVM has closed the Arrow vectors that referenced the array's buffers.
+    """
+    release_export(export_id)

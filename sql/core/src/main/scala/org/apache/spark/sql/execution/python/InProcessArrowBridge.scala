@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql.execution.python
 
-import java.util.{HashMap => JHashMap, Map => JMap}
+import java.util.{ArrayList => JArrayList, HashMap => JHashMap, Map => JMap}
 
+import org.apache.arrow.memory.{ArrowBuf, ForeignAllocation}
 import org.apache.arrow.vector._
+import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ArrowUtils
@@ -33,9 +35,13 @@ import org.apache.spark.sql.vectorized.ArrowColumnVector
  *   and passes them as long integers to Python. Python calls `pa.foreign_buffer(addr, size)`
  *   to wrap the same native memory as a PyArrow Buffer -- no memcpy.
  *
- * Output path (Python to JVM, one copy):
- *   Python returns the result array's data as raw bytes. JVM allocates a new Arrow vector and
- *   copies the bytes in. This one copy is acceptable; the expensive direction is input.
+ * Output path (Python to JVM, zero-copy for values):
+ *   Python returns native buffer addresses via `array_to_addresses`. JVM calls
+ *   `wrapForeignAllocation` on each address, making Arrow vectors reference Python's
+ *   memory directly without copying. The PyArrow array is kept alive in Python's
+ *   `_live_arrays` registry until the JVM closes the vectors and calls `_release_export`.
+ *   The validity bitmap is zero-copy when null_count > 0; when null_count == 0, the JVM
+ *   allocates a small all-valid bitmap (O(n/8) bytes).
  *
  * Phase 1 supported types: LongType, IntegerType, DoubleType, FloatType, BooleanType,
  * ShortType, ByteType. Complex types (StringType, ArrayType, StructType, MapType)
@@ -111,102 +117,89 @@ private[python] object InProcessArrowBridge {
   }
 
   /**
-   * Reconstruct an [[ArrowColumnVector]] from the result dict returned by Python.
+   * Reconstruct an [[ArrowColumnVector]] from the zero-copy address dict returned by Python.
    *
-   * Expected map keys (from `pyspark.inprocess.bridge.array_to_result`):
+   * Expected map keys (from `pyspark.inprocess.bridge.array_to_addresses`):
+   *   export_id      - Integer or Long (Python _live_arrays registry key)
    *   num_rows       - Integer or Long
    *   null_count     - Integer or Long
-   *   values_bytes   - byte[]  (data buffer contents)
-   *   validity_bytes - byte[] or null (validity bitmap; null means all rows non-null)
+   *   validity_addr  - Long (native address of validity bitmap; 0 if no nulls)
+   *   validity_size  - Long (size in bytes; 0 if no nulls)
+   *   values_addr    - Long (native address of values buffer)
+   *   values_size    - Long (size in bytes of values buffer)
    *
-   * One copy: allocates a new Arrow vector and copies the result bytes into it.
+   * Zero-copy for values: wraps Python's native Arrow buffer via ForeignAllocation.
+   * The caller must call [[InProcessPythonRuntime.releaseExport]] with the returned
+   * export ID after closing the returned [[ArrowColumnVector]].
+   *
+   * @return (ArrowColumnVector wrapping Python's buffers, export ID for release)
    */
-  def resultToColumn(resultMap: JMap[String, AnyRef], returnType: DataType): ArrowColumnVector = {
+  def foreignToColumn(
+      resultMap: JMap[String, AnyRef],
+      returnType: DataType): (ArrowColumnVector, Int) = {
+    val exportId = toInt(resultMap.get("export_id"))
     val numRows = toInt(resultMap.get("num_rows"))
     val nullCount = toInt(resultMap.get("null_count"))
-    val valuesBytes = resultMap.get("values_bytes").asInstanceOf[Array[Byte]]
-    val validityBytes = resultMap.get("validity_bytes") match {
-      case b: Array[Byte] => b
-      case _ => null
-    }
+    val valuesAddr = toLong(resultMap.get("values_addr"))
+    val valuesSize = toLong(resultMap.get("values_size"))
+    val validityAddr = toLong(resultMap.get("validity_addr"))
+    val validitySize = toLong(resultMap.get("validity_size"))
 
     val allocator = ArrowUtils.rootAllocator
       .newChildAllocator("inprocess-udf-result", 0, Long.MaxValue)
 
-    // BooleanType (BitVector) uses bit-packed storage where the data and validity
-    // bitmaps are managed differently from fixed-width byte-per-value types.
-    // Use setSafe(i, v) which correctly sets both the data bit and validity bit
-    // for each row, rather than writing raw bytes to the data buffer directly.
-    if (returnType == BooleanType) {
-      val bitVec = new BitVector("result", allocator)
-      bitVec.allocateNew(numRows)
-      for (i <- 0 until numRows) {
-        val byteIdx = i >> 3
-        val bitIdx = i & 7
-        val isNull = nullCount > 0 && (
-          validityBytes == null ||
-          byteIdx >= validityBytes.length ||
-          ((validityBytes(byteIdx).toInt & 0xFF) >> bitIdx & 1) == 0
-        )
-        if (!isNull) {
-          val bitVal =
-            if (valuesBytes != null && byteIdx < valuesBytes.length) {
-              (valuesBytes(byteIdx).toInt & 0xFF) >> bitIdx & 1
-            } else {
-              0
-            }
-          bitVec.setSafe(i, bitVal)
-        }
-        // null rows: remain null (setSafe not called, validity bit stays 0)
-      }
-      bitVec.setValueCount(numRows)
-      return new ArrowColumnVector(bitVec)
+    // Zero-copy: wrap Python's values buffer as a ForeignAllocation ArrowBuf.
+    // release0() is a no-op -- lifetime is managed via releaseExport(exportId).
+    val valuesBuf: ArrowBuf = if (valuesAddr != 0L && valuesSize > 0L) {
+      allocator.wrapForeignAllocation(new ForeignAllocation(valuesSize, valuesAddr) {
+        override protected def release0(): Unit = ()
+      })
+    } else {
+      allocator.buffer(0)
     }
 
+    // Validity: zero-copy when there are actual nulls; otherwise pass a
+    // zero-capacity buffer -- loadValidityBuffer creates an all-valid bitmap.
+    val validityBuf: ArrowBuf = if (validityAddr != 0L && validitySize > 0L) {
+      allocator.wrapForeignAllocation(new ForeignAllocation(validitySize, validityAddr) {
+        override protected def release0(): Unit = ()
+      })
+    } else {
+      allocator.buffer(0)
+    }
+
+    val fieldNode = new ArrowFieldNode(numRows, nullCount)
+    val bufList = new JArrayList[ArrowBuf](2)
+    bufList.add(validityBuf)
+    bufList.add(valuesBuf)
+
     val vector: FieldVector = returnType match {
-      case LongType =>
-        val v = new BigIntVector("result", allocator); v.allocateNew(numRows); v
-      case IntegerType =>
-        val v = new IntVector("result", allocator); v.allocateNew(numRows); v
-      case DoubleType =>
-        val v = new Float8Vector("result", allocator); v.allocateNew(numRows); v
-      case FloatType =>
-        val v = new Float4Vector("result", allocator); v.allocateNew(numRows); v
-      case ShortType =>
-        val v = new SmallIntVector("result", allocator); v.allocateNew(numRows); v
-      case ByteType =>
-        val v = new TinyIntVector("result", allocator); v.allocateNew(numRows); v
+      case LongType => new BigIntVector("result", allocator)
+      case IntegerType => new IntVector("result", allocator)
+      case DoubleType => new Float8Vector("result", allocator)
+      case FloatType => new Float4Vector("result", allocator)
+      case ShortType => new SmallIntVector("result", allocator)
+      case ByteType => new TinyIntVector("result", allocator)
+      case BooleanType => new BitVector("result", allocator)
       case other =>
         allocator.close()
         throw new UnsupportedOperationException(
           s"Unsupported return type for in-process UDF: $other")
     }
 
-    // Copy values bytes into the vector's data buffer
-    if (valuesBytes != null && valuesBytes.nonEmpty) {
-      vector.getDataBuffer.setBytes(0, valuesBytes, 0, valuesBytes.length)
-    }
-
-    // Set the validity bitmap.
-    // allocateNew() leaves the validity buffer zeroed (all null), so we must
-    // explicitly mark rows as valid. When there are no nulls, fill every byte
-    // with 0xFF. When there are nulls, copy the per-row bitmap from Python.
-    if (nullCount == 0) {
-      val validityBuf = vector.getValidityBuffer
-      val capBytes = validityBuf.capacity().toInt
-      val allValid = Array.fill[Byte](capBytes)(0xFF.toByte)
-      validityBuf.setBytes(0, allValid, 0, capBytes)
-    } else if (validityBytes != null) {
-      vector.getValidityBuffer.setBytes(0, validityBytes, 0, validityBytes.length)
-    }
-
-    vector.setValueCount(numRows)
-    new ArrowColumnVector(vector)
+    vector.loadFieldBuffers(fieldNode, bufList)
+    (new ArrowColumnVector(vector), exportId)
   }
 
   private def toInt(v: AnyRef): Int = v match {
     case i: Integer => i.intValue()
     case l: java.lang.Long => l.intValue()
     case _ => v.toString.toInt
+  }
+
+  private def toLong(v: AnyRef): Long = v match {
+    case l: java.lang.Long => l.longValue()
+    case i: Integer => i.longValue()
+    case _ => v.toString.toLong
   }
 }

@@ -24,9 +24,15 @@ Input path (JVM → Python, zero-copy):
     memory as a PyArrow Buffer without copying — the same physical bytes are
     accessible from both the JVM (as an ArrowBuf) and Python (as a pa.Buffer).
 
-Output path (Python → JVM, one copy):
-    ``array_to_result`` serializes the result PyArrow array's data buffer to
-    Python ``bytes``. The JVM copies these bytes into a new Arrow vector.
+Output path (Python → JVM, zero-copy for values):
+    ``array_to_addresses`` returns the native buffer addresses of the result
+    PyArrow array.  The JVM calls ``wrapForeignAllocation`` to wrap those
+    addresses as Arrow ``ArrowBuf`` objects without copying.  The PyArrow array
+    is kept alive in the module-level ``_live_arrays`` registry until the JVM
+    calls ``release_export`` after consuming all rows from the batch.
+
+    Validity bitmap: when ``null_count == 0`` the JVM allocates a small
+    all-valid bitmap (O(n/8) bytes) instead of sharing Python's buffer.
 
 Phase 1 supported Arrow format strings (fixed-width types):
     "l"  int64   (LongType)
@@ -92,37 +98,67 @@ def addresses_to_array(addrs: dict) -> pa.Array:
     return pa.Array.from_buffers(arrow_type, num_rows, [validity_buf, values_buf])
 
 
-def array_to_result(arr: pa.Array) -> dict:
-    """
-    Serialize a ``pa.Array`` to a dict of raw bytes for copying back to JVM.
+# Export registry: maps export_id → pa.Array to keep arrays alive while JVM holds
+# references to their native buffers.  Entries are removed by release_export().
+_live_arrays: dict = {}
+_next_export_id: list = [0]  # single-element mutable list used as an int counter
 
-    The dict is converted by jep to a ``java.util.Map<String, Object>`` which
-    ``InProcessArrowBridge.resultToColumn`` uses to reconstruct an Arrow vector.
+
+def array_to_addresses(arr: pa.Array) -> dict:
+    """
+    Export a ``pa.Array`` for zero-copy access by JVM.
+
+    Stores ``arr`` in ``_live_arrays`` so its underlying native buffers remain
+    live until the JVM calls ``release_export``.
 
     Args:
         arr: result PyArrow array from the UDF
 
     Returns:
-        dict with keys:
-            num_rows       (int)   number of rows
-            null_count     (int)   number of null rows
-            values_bytes   (bytes) data buffer contents
-            validity_bytes (bytes) validity bitmap bytes, or None if no nulls
+        dict with keys (jep converts to ``java.util.Map<String, Object>``):
+            export_id      (int)  unique registry key; pass to release_export when done
+            num_rows       (int)  number of rows
+            null_count     (int)  number of null rows
+            validity_addr  (int)  native address of validity bitmap; 0 if no nulls
+            validity_size  (int)  size in bytes of validity bitmap; 0 if no nulls
+            values_addr    (int)  native address of values buffer (0 for empty arrays)
+            values_size    (int)  size in bytes of values buffer
     """
+    export_id = _next_export_id[0]
+    _next_export_id[0] += 1
+    _live_arrays[export_id] = arr
+
     bufs = arr.buffers()
-    # Only return the bytes that hold actual data (buffers may be over-allocated).
-    # Validity bitmap: ceil(num_rows / 8) bytes.
-    valid_bytes_len = (len(arr) + 7) // 8
-    validity_bytes = bufs[0].to_pybytes()[:valid_bytes_len] if bufs[0] is not None else None
-    # Values: ceil(num_rows * bit_width / 8) bytes.
-    if len(bufs) > 1 and bufs[1] is not None:
-        actual_bytes = (len(arr) * arr.type.bit_width + 7) // 8
-        values_bytes = bufs[1].to_pybytes()[:actual_bytes]
-    else:
-        values_bytes = b""
+    validity_buf = bufs[0] if len(bufs) > 0 else None
+    values_buf = bufs[1] if len(bufs) > 1 else None
+
+    # Pass non-zero validity address only when there are actual nulls.
+    # When null_count == 0, the JVM creates an all-valid bitmap locally (O(n/8)).
+    null_count = arr.null_count
+    validity_addr = validity_buf.address if (null_count > 0 and validity_buf is not None) else 0
+    validity_size = validity_buf.size if (null_count > 0 and validity_buf is not None) else 0
+    values_addr = values_buf.address if values_buf is not None else 0
+    values_size = values_buf.size if values_buf is not None else 0
+
     return {
+        "export_id": export_id,
         "num_rows": len(arr),
-        "null_count": arr.null_count,
-        "validity_bytes": validity_bytes,
-        "values_bytes": values_bytes,
+        "null_count": null_count,
+        "validity_addr": validity_addr,
+        "validity_size": validity_size,
+        "values_addr": values_addr,
+        "values_size": values_size,
     }
+
+
+def release_export(export_id: int) -> None:
+    """
+    Release the exported array for ``export_id``, allowing Python GC.
+
+    Removes the array from ``_live_arrays``.  Must only be called after the
+    JVM has closed all Arrow vectors that reference the array's native buffers.
+
+    Args:
+        export_id: the id returned by ``array_to_addresses``
+    """
+    _live_arrays.pop(export_id, None)

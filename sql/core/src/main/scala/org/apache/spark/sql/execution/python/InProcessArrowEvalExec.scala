@@ -21,6 +21,7 @@ import java.util.{ArrayList => JArrayList}
 
 import scala.jdk.CollectionConverters._
 
+import org.apache.spark.TaskContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
@@ -38,12 +39,14 @@ import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch}
  *  3. Extract native buffer addresses from each Arrow vector (zero-copy)
  *  4. Pass addresses to CPython via [[InProcessPythonRuntime.invoke]] (in-process, no socket)
  *  5. Python reconstructs PyArrow arrays via `pa.foreign_buffer` (zero-copy)
- *  6. Python executes UDF and returns result bytes
- *  7. JVM copies result bytes into a new Arrow vector (one copy: Python to JVM Arrow)
+ *  6. Python executes UDF and returns native buffer addresses of the result array
+ *  7. JVM wraps those addresses via `ForeignAllocation` (zero-copy: Python to JVM Arrow)
  *  8. Append result column(s) to the original row and emit
+ *  9. After all rows in a batch are consumed, close result columns and release the
+ *     Python export so CPython can GC the array
  *
- * Net copies: 2 per batch (row-to-Arrow on input, Arrow-to-row on output) vs. the current
- * out-of-process path which additionally serializes over a socket.
+ * Net copies: 1 per batch (row-to-Arrow on input only) vs. the out-of-process path
+ * which additionally serializes over a socket.
  *
  * Concurrency: [[InProcessPythonChecks]] enforces spark.executor.cores == spark.task.cpus,
  * guaranteeing exactly one task runs per executor and eliminating GIL contention on
@@ -65,6 +68,21 @@ case class InProcessArrowEvalExec(
       // One ArrowWriter per partition - reset between batches.
       val writer = ArrowWriter.create(inputSchema, timeZoneId)
 
+      // Track result columns and Python export IDs from the previous batch.
+      // We close the columns (releasing JVM references to Python memory) and then
+      // release the Python exports at the start of each new batch, and at task end.
+      var pendingResultCols: Array[ArrowColumnVector] = Array.empty
+      var pendingExportIds: Array[Int] = Array.empty
+
+      // Release the last batch's resources when the task completes.
+      val taskCtx = TaskContext.get()
+      if (taskCtx != null) {
+        taskCtx.addTaskCompletionListener[Unit] { _ =>
+          pendingResultCols.foreach(_.close())
+          pendingExportIds.foreach(InProcessPythonRuntime.releaseExport)
+        }
+      }
+
       new Iterator[InternalRow] {
         // Current batch's row iterator; empty until the first batch is filled.
         private var batchIter: Iterator[InternalRow] = Iterator.empty
@@ -73,6 +91,14 @@ case class InProcessArrowEvalExec(
 
         override def next(): InternalRow = {
           if (!batchIter.hasNext) {
+            // Close previous batch's result columns before releasing Python exports.
+            // Closing first ensures the JVM no longer holds any reference to Python's
+            // native buffers before Python is allowed to GC the array.
+            pendingResultCols.foreach(_.close())
+            pendingResultCols = Array.empty
+            pendingExportIds.foreach(InProcessPythonRuntime.releaseExport)
+            pendingExportIds = Array.empty
+
             // Fill the next Arrow batch using a while loop.
             // ArrowWriter.write() copies each row's fields into off-heap Arrow memory
             // immediately, so it is safe even when WholeStageCodegenExec reuses the same
@@ -89,7 +115,9 @@ case class InProcessArrowEvalExec(
             val numRows = root.getRowCount
 
             // For each UDF, collect the native buffer addresses of its input columns,
-            // invoke Python in-process, and reconstruct the result as an Arrow column.
+            // invoke Python in-process, and reconstruct the result as an Arrow column
+            // wrapping Python's native memory (zero-copy).
+            val exportIds = new scala.collection.mutable.ArrayBuffer[Int]()
             val resultColumns = udfs.map { udf =>
               val inputAddrList = new JArrayList[java.util.Map[String, AnyRef]]()
 
@@ -104,8 +132,13 @@ case class InProcessArrowEvalExec(
 
               val resultMap = InProcessPythonRuntime.invoke(
                 udf.serializedFunc, inputAddrList, numRows)
-              InProcessArrowBridge.resultToColumn(resultMap, udf.dataType)
+              val (col, exportId) = InProcessArrowBridge.foreignToColumn(resultMap, udf.dataType)
+              exportIds += exportId
+              col
             }
+
+            pendingResultCols = resultColumns.toArray
+            pendingExportIds = exportIds.toArray
 
             val allColumns: Array[ArrowColumnVector] =
               (0 until root.getFieldVectors.size()).map(i =>
