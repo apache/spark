@@ -832,7 +832,8 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       val msg = intercept[ArithmeticException] {
         DateTimeUtils.localDateTimeToMicros(dt)
       }.getMessage
-      assert(msg == "long overflow")
+      // On JDK 25+, Math.multiplyExact may throw ArithmeticException without a message
+      assert(msg == null || msg == "long overflow")
     }
   }
 

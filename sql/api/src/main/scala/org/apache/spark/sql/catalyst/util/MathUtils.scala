@@ -94,7 +94,9 @@ object MathUtils {
       f
     } catch {
       case e: ArithmeticException =>
-        throw ExecutionErrors.arithmeticOverflowError(e.getMessage, hint, context)
+        // On JDK 25+, Math.*Exact may throw ArithmeticException without a message
+        val message = if (e.getMessage != null) e.getMessage else "Overflow"
+        throw ExecutionErrors.arithmeticOverflowError(message, hint, context)
     }
   }
 
@@ -103,7 +105,8 @@ object MathUtils {
        |try {
        |  $evalCode
        |} catch (ArithmeticException e) {
-       |  throw QueryExecutionErrors.arithmeticOverflowError(e.getMessage(), "", $context);
+       |  String msg = e.getMessage() != null ? e.getMessage() : "Overflow";
+       |  throw QueryExecutionErrors.arithmeticOverflowError(msg, "", $context);
        |}
        |""".stripMargin
   }

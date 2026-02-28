@@ -590,7 +590,8 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
     val errMsg = intercept[ArithmeticException] {
       durationToMicros(Duration.ofDays(106751991 + 1))
     }.getMessage
-    assert(errMsg.contains("long overflow"))
+    // On JDK 25+, Math.multiplyExact may throw ArithmeticException without a message
+    assert(errMsg == null || errMsg.contains("long overflow"))
   }
 
   test("SPARK-34615: period to months") {
