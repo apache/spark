@@ -6916,6 +6916,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LISTAGG_ALLOW_DISTINCT_CAST_WITH_ORDER =
+    buildConf("spark.sql.listagg.allowDistinctCastWithOrder.enabled")
+      .internal()
+      .doc("When true, LISTAGG(DISTINCT expr) WITHIN GROUP (ORDER BY expr) is allowed on " +
+        "non-string expr when the implicit cast to string preserves equality (e.g., integer, " +
+        "decimal, date). When false, the function argument and ORDER BY expression must have " +
+        "the exact same type, which requires explicit casts.")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(true)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -8143,6 +8154,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     getConf(SQLConf.MERGE_INTO_NESTED_TYPE_COERCION_ENABLED)
 
   def isTimeTypeEnabled: Boolean = getConf(SQLConf.TIME_TYPE_ENABLED)
+
+  def listaggAllowDistinctCastWithOrder: Boolean = getConf(LISTAGG_ALLOW_DISTINCT_CAST_WITH_ORDER)
 
   /** ********************** SQLConf functionality methods ************ */
 
