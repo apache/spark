@@ -166,7 +166,7 @@ private[spark] class BasicExecutorFeatureStep(
           ENV_DRIVER_URL -> driverUrl,
           ENV_EXECUTOR_CORES -> {
             if (kubernetesConf.get(KUBERNETES_ALLOCATION_RECOVERY_MODE_ENABLED).getOrElse(false)) {
-              kubernetesConf.get("spark.task.cpus")
+              kubernetesConf.get("spark.task.cpus", "1")
             } else {
               execResources.cores.get.toString
             }
