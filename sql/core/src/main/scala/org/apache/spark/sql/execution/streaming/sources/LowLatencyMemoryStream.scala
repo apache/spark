@@ -286,7 +286,7 @@ class LowLatencyMemoryStreamPartitionReader(
     current = getRecordWithTimestamp
     while (current.isEmpty) {
       val POLL_TIME = 10L
-      if (elapsedTimeMs >= timeout) {
+      if (elapsedTimeMs >= timeoutMs) {
         return RecordStatus.newStatusWithoutArrivalTime(false)
       }
       Thread.sleep(POLL_TIME)
