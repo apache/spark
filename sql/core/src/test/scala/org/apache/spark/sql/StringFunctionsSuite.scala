@@ -1477,7 +1477,7 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
     // This caused codegen to skip null checks, leading to NPE when calling
     // array.numElements() on a null array during bounds checking.
     withTable("t") {
-      sql("CREATE OR REPLACE TABLE t (s STRING) USING parquet")
+      sql("CREATE TABLE t (s STRING) USING parquet")
       sql("INSERT INTO t VALUES ('a-b'), (null)")
       checkAnswer(
         sql("SELECT split(s, '-')[size(split(s, '-')) - 1] FROM t"),
