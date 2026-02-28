@@ -35,6 +35,17 @@
   </properties>
 
   <dependencies>
+    <!--
+      jep (Java Embedded Python): embeds CPython in the JVM via JNI for in-process Python UDFs.
+      Marked as "provided" — users must install jep on each executor separately.
+      See: https://github.com/ninia/jep
+    -->
+    <dependency>
+      <groupId>black.ninia</groupId>
+      <artifactId>jep</artifactId>
+      <version>4.2.0</version>
+      <scope>provided</scope>
+    </dependency>
     <dependency>
       <groupId>org.rocksdb</groupId>
       <artifactId>rocksdbjni</artifactId>

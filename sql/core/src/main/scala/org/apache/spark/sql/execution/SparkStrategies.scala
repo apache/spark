@@ -1027,6 +1027,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    */
   object PythonEvals extends Strategy {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case python.InProcessEvalPython(udfs, resultAttrs, child) =>
+        python.InProcessArrowEvalExec(udfs, resultAttrs, planLater(child)) :: Nil
       case ArrowEvalPython(udfs, output, child, evalType) =>
         ArrowEvalPythonExec(udfs, output, planLater(child), evalType) :: Nil
       case BatchEvalPython(udfs, output, child) =>
