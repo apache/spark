@@ -429,6 +429,10 @@ class ExecutorPodsAllocator(
     }
   }
 
+  def setRecoveryMode(): Unit = {
+    conf.set(KUBERNETES_ALLOCATION_RECOVERY_MODE_ENABLED, true)
+  }
+
   protected def requestNewExecutors(
       numExecutorsToAllocate: Int,
       applicationId: String,

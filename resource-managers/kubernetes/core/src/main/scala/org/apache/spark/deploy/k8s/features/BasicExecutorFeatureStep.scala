@@ -164,7 +164,13 @@ private[spark] class BasicExecutorFeatureStep(
       KubernetesUtils.buildEnvVars(
         Seq(
           ENV_DRIVER_URL -> driverUrl,
-          ENV_EXECUTOR_CORES -> execResources.cores.get.toString,
+          ENV_EXECUTOR_CORES -> {
+            if (kubernetesConf.get(KUBERNETES_ALLOCATION_RECOVERY_MODE_ENABLED)) {
+              "1"
+            } else {
+              execResources.cores.get.toString
+            }
+          },
           ENV_EXECUTOR_MEMORY -> executorMemoryString,
           ENV_APPLICATION_ID -> kubernetesConf.appId,
           // This is to set the SPARK_CONF_DIR to be /opt/spark/conf

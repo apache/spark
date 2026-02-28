@@ -521,6 +521,13 @@ private[spark] object Config extends Logging {
       .checkValue(value => value > 100, "Allocation batch delay must be greater than 0.1s.")
       .createWithDefaultString("1s")
 
+  val KUBERNETES_ALLOCATION_RECOVERY_MODE_ENABLED =
+    ConfigBuilder("spark.kubernetes.allocation.recoveryMode.enabled")
+      .doc("If true, enables the recovery mode during executor allocation.")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val KUBERNETES_ALLOCATION_MAXIMUM =
     ConfigBuilder("spark.kubernetes.allocation.maximum")
       .doc("The maximum number of executor pods to try to create during the whole job lifecycle.")

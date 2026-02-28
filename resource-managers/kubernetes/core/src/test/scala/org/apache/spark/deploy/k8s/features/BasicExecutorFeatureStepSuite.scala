@@ -668,6 +668,27 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     assert(memoryPolicy.get.getRestartPolicy === "NotRequired")
   }
 
+  test("SPARK-55639: ENV_EXECUTOR_CORES is always 1 when recoveryMode is enabled") {
+    val rpb = new ResourceProfileBuilder()
+    val ereq = new ExecutorResourceRequests()
+    val treq = new TaskResourceRequests()
+    ereq.cores(4)
+    treq.cpus(2)
+    rpb.require(ereq).require(treq)
+    val rp = rpb.build()
+
+    var step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf), rp)
+    var executor = step.configurePod(SparkPod.initialPod())
+    var cores = executor.container.getEnv.asScala.find(_.getName == ENV_EXECUTOR_CORES).get.getValue
+    assert(cores === "4")
+
+    baseConf.set(KUBERNETES_ALLOCATION_RECOVERY_MODE_ENABLED, true)
+    step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf), rp)
+    executor = step.configurePod(SparkPod.initialPod())
+    cores = executor.container.getEnv.asScala.find(_.getName == ENV_EXECUTOR_CORES).get.getValue
+    assert(cores === "1")
+  }
+
   // There is always exactly one controller reference, and it points to the driver pod.
   private def checkOwnerReferences(executor: Pod, driverPodUid: String): Unit = {
     assert(executor.getMetadata.getOwnerReferences.size() === 1)
