@@ -35,6 +35,8 @@ import pyarrow as pa
 from pyspark.cloudpickle import dumps as cloudpickle_dumps
 from pyspark.serializers import write_int, write_long
 from pyspark.sql.types import (
+    BinaryType,
+    BooleanType,
     DoubleType,
     IntegerType,
     StringType,
@@ -110,6 +112,42 @@ def _build_udf_payload(
     write_long(0, buf)  # result_id
 
 
+def _build_scalar_arrow_data(
+    arrow_batch: pa.RecordBatch,
+    num_batches: int,
+    buf: io.BytesIO,
+) -> None:
+    """Write a plain Arrow IPC stream with *num_batches* copies of *arrow_batch*."""
+    writer = pa.RecordBatchStreamWriter(buf, arrow_batch.schema)
+    for _ in range(num_batches):
+        writer.write_batch(arrow_batch)
+    writer.close()
+
+
+def _build_scalar_worker_input(
+    eval_type: int,
+    udf_func: Callable[..., Any],
+    return_type: StructType,
+    arg_offsets: list[int],
+    arrow_batch: pa.RecordBatch,
+    num_batches: int,
+) -> bytes:
+    """Assemble the full binary stream for scalar (non-grouped) eval types."""
+    buf = io.BytesIO()
+
+    _build_preamble(buf)
+    write_int(eval_type, buf)
+
+    write_int(0, buf)  # RunnerConf  (0 key-value pairs)
+    write_int(0, buf)  # EvalConf    (0 key-value pairs)
+
+    _build_udf_payload(udf_func, return_type, arg_offsets, buf)
+    _build_scalar_arrow_data(arrow_batch, num_batches, buf)
+    write_int(-4, buf)  # SpecialLengths.END_OF_STREAM
+
+    return buf.getvalue()
+
+
 def _build_grouped_arrow_data(
     arrow_batch: pa.RecordBatch,
     num_groups: int,
@@ -178,6 +216,22 @@ def _build_grouped_arg_offsets(n_cols: int, n_keys: int = 0) -> list[int]:
     vals = list(range(n_keys, n_cols))
     offsets = [n_keys] + keys + vals
     return [len(offsets)] + offsets
+
+
+def _make_typed_batch(rows: int, n_cols: int) -> tuple[pa.RecordBatch, IntegerType]:
+    """Columns cycling through int64, string, binary, boolean — reflects realistic serde costs."""
+    type_cycle = [
+        (lambda r: pa.array(np.random.randint(0, 1000, r, dtype=np.int64)), IntegerType()),
+        (lambda r: pa.array([f"s{j}" for j in range(r)]), StringType()),
+        (lambda r: pa.array([f"b{j}".encode() for j in range(r)]), BinaryType()),
+        (lambda r: pa.array(np.random.choice([True, False], r)), BooleanType()),
+    ]
+    arrays = [type_cycle[i % len(type_cycle)][0](rows) for i in range(n_cols)]
+    fields = [StructField(f"col_{i}", type_cycle[i % len(type_cycle)][1]) for i in range(n_cols)]
+    return (
+        pa.RecordBatch.from_arrays(arrays, names=[f.name for f in fields]),
+        IntegerType(),
+    )
 
 
 def _make_grouped_batch(rows_per_group: int, n_cols: int) -> tuple[pa.RecordBatch, StructType]:
@@ -346,3 +400,257 @@ class GroupedMapPandasUDFBench:
     def peakmem_mixed_types_two_args(self):
         """Mixed column types, 2-arg UDF with key, 3 rows/group, 1600 groups."""
         self._run(self._two_args_input)
+
+
+# ---------------------------------------------------------------------------
+# SQL_SCALAR_ARROW_UDF
+# ---------------------------------------------------------------------------
+
+
+class ScalarArrowUDFBench:
+    """Full worker round-trip for ``SQL_SCALAR_ARROW_UDF``."""
+
+    def setup(self):
+        eval_type = PythonEvalType.SQL_SCALAR_ARROW_UDF
+
+        # ---- varying batch size (mixed types, identity UDF) ----
+        # JVM splits at maxRecordsPerBatch (default 10k), so large cases use
+        # 10k rows with proportionally more batches to keep total rows constant.
+        for name, (rows, n_cols, num_batches) in {
+            "small_few": (1_000, 5, 1_500),
+            "small_many": (1_000, 50, 200),
+            "large_few": (10_000, 5, 3_500),
+            "large_many": (10_000, 50, 400),
+        }.items():
+            batch, ret_type = _make_typed_batch(rows, n_cols)
+            setattr(
+                self,
+                f"_{name}_input",
+                _build_scalar_worker_input(
+                    eval_type,
+                    lambda c: c,
+                    ret_type,
+                    [0],
+                    batch,
+                    num_batches=num_batches,
+                ),
+            )
+
+        # ---- compute: arithmetic on two columns ----
+        compute_arrays = [pa.array(np.random.rand(10_000)) for _ in range(3)]
+        compute_batch = pa.RecordBatch.from_arrays(
+            compute_arrays, names=[f"col_{i}" for i in range(3)]
+        )
+
+        def arrow_compute(a, b):
+            import pyarrow.compute as pc
+
+            return pc.add(a, pc.multiply(b, 2))
+
+        self._compute_input = _build_scalar_worker_input(
+            eval_type,
+            arrow_compute,
+            DoubleType(),
+            [0, 1],
+            compute_batch,
+            num_batches=500,
+        )
+
+        # ---- mixed types: string manipulation ----
+        mixed_batch, _ = _make_mixed_batch(3)
+
+        def upper_str(s):
+            import pyarrow.compute as pc
+
+            return pc.utf8_upper(s)
+
+        self._mixed_input = _build_scalar_worker_input(
+            eval_type,
+            upper_str,
+            StringType(),
+            [1],  # str_col
+            mixed_batch,
+            num_batches=1_300,
+        )
+
+    # -- benchmarks ---------------------------------------------------------
+
+    def _run(self, input_bytes):
+        worker_main(io.BytesIO(input_bytes), io.BytesIO())
+
+    def time_small_batches_few_cols(self):
+        """1k rows/batch, 5 cols, 1500 batches."""
+        self._run(self._small_few_input)
+
+    def peakmem_small_batches_few_cols(self):
+        """1k rows/batch, 5 cols, 1500 batches."""
+        self._run(self._small_few_input)
+
+    def time_small_batches_many_cols(self):
+        """1k rows/batch, 50 cols, 200 batches."""
+        self._run(self._small_many_input)
+
+    def peakmem_small_batches_many_cols(self):
+        """1k rows/batch, 50 cols, 200 batches."""
+        self._run(self._small_many_input)
+
+    def time_large_batches_few_cols(self):
+        """10k rows/batch, 5 cols, 3500 batches."""
+        self._run(self._large_few_input)
+
+    def peakmem_large_batches_few_cols(self):
+        """10k rows/batch, 5 cols, 3500 batches."""
+        self._run(self._large_few_input)
+
+    def time_large_batches_many_cols(self):
+        """10k rows/batch, 50 cols, 400 batches."""
+        self._run(self._large_many_input)
+
+    def peakmem_large_batches_many_cols(self):
+        """10k rows/batch, 50 cols, 400 batches."""
+        self._run(self._large_many_input)
+
+    def time_compute(self):
+        """10k rows/batch, 3 cols, 500 batches, arithmetic UDF."""
+        self._run(self._compute_input)
+
+    def peakmem_compute(self):
+        """10k rows/batch, 3 cols, 500 batches, arithmetic UDF."""
+        self._run(self._compute_input)
+
+    def time_mixed_types(self):
+        """Mixed column types, string UDF, 3 rows/batch, 1300 batches."""
+        self._run(self._mixed_input)
+
+    def peakmem_mixed_types(self):
+        """Mixed column types, string UDF, 3 rows/batch, 1300 batches."""
+        self._run(self._mixed_input)
+
+
+# ---------------------------------------------------------------------------
+# SQL_SCALAR_ARROW_ITER_UDF
+# ---------------------------------------------------------------------------
+
+
+class ScalarArrowIterUDFBench:
+    """Full worker round-trip for ``SQL_SCALAR_ARROW_ITER_UDF``.
+
+    Same Arrow IPC wire format as ``SQL_SCALAR_ARROW_UDF`` but the UDF
+    receives/returns ``Iterator[pa.Array]`` instead of a single array.
+    """
+
+    def setup(self):
+        eval_type = PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF
+
+        # ---- varying batch size (mixed types, identity UDF) ----
+        for name, (rows, n_cols, num_batches) in {
+            "small_few": (1_000, 5, 1_500),
+            "small_many": (1_000, 50, 200),
+            "large_few": (10_000, 5, 3_500),
+            "large_many": (10_000, 50, 400),
+        }.items():
+            batch, ret_type = _make_typed_batch(rows, n_cols)
+            setattr(
+                self,
+                f"_{name}_input",
+                _build_scalar_worker_input(
+                    eval_type,
+                    lambda it: (c for c in it),
+                    ret_type,
+                    [0],
+                    batch,
+                    num_batches=num_batches,
+                ),
+            )
+
+        # ---- compute: arithmetic on two columns ----
+        compute_arrays = [pa.array(np.random.rand(10_000)) for _ in range(3)]
+        compute_batch = pa.RecordBatch.from_arrays(
+            compute_arrays, names=[f"col_{i}" for i in range(3)]
+        )
+
+        def arrow_compute_iter(it):
+            import pyarrow.compute as pc
+
+            for a, b in it:
+                yield pc.add(a, pc.multiply(b, 2))
+
+        self._compute_input = _build_scalar_worker_input(
+            eval_type,
+            arrow_compute_iter,
+            DoubleType(),
+            [0, 1],
+            compute_batch,
+            num_batches=500,
+        )
+
+        # ---- mixed types: string manipulation ----
+        mixed_batch, _ = _make_mixed_batch(3)
+
+        def upper_str_iter(it):
+            import pyarrow.compute as pc
+
+            for s in it:
+                yield pc.utf8_upper(s)
+
+        self._mixed_input = _build_scalar_worker_input(
+            eval_type,
+            upper_str_iter,
+            StringType(),
+            [1],  # str_col
+            mixed_batch,
+            num_batches=1_300,
+        )
+
+    # -- benchmarks ---------------------------------------------------------
+
+    def _run(self, input_bytes):
+        worker_main(io.BytesIO(input_bytes), io.BytesIO())
+
+    def time_small_batches_few_cols(self):
+        """1k rows/batch, 5 cols, 1500 batches."""
+        self._run(self._small_few_input)
+
+    def peakmem_small_batches_few_cols(self):
+        """1k rows/batch, 5 cols, 1500 batches."""
+        self._run(self._small_few_input)
+
+    def time_small_batches_many_cols(self):
+        """1k rows/batch, 50 cols, 200 batches."""
+        self._run(self._small_many_input)
+
+    def peakmem_small_batches_many_cols(self):
+        """1k rows/batch, 50 cols, 200 batches."""
+        self._run(self._small_many_input)
+
+    def time_large_batches_few_cols(self):
+        """10k rows/batch, 5 cols, 3500 batches."""
+        self._run(self._large_few_input)
+
+    def peakmem_large_batches_few_cols(self):
+        """10k rows/batch, 5 cols, 3500 batches."""
+        self._run(self._large_few_input)
+
+    def time_large_batches_many_cols(self):
+        """10k rows/batch, 50 cols, 400 batches."""
+        self._run(self._large_many_input)
+
+    def peakmem_large_batches_many_cols(self):
+        """10k rows/batch, 50 cols, 400 batches."""
+        self._run(self._large_many_input)
+
+    def time_compute(self):
+        """10k rows/batch, 3 cols, 500 batches, arithmetic UDF."""
+        self._run(self._compute_input)
+
+    def peakmem_compute(self):
+        """10k rows/batch, 3 cols, 500 batches, arithmetic UDF."""
+        self._run(self._compute_input)
+
+    def time_mixed_types(self):
+        """Mixed column types, string UDF, 3 rows/batch, 1300 batches."""
+        self._run(self._mixed_input)
+
+    def peakmem_mixed_types(self):
+        """Mixed column types, string UDF, 3 rows/batch, 1300 batches."""
+        self._run(self._mixed_input)
