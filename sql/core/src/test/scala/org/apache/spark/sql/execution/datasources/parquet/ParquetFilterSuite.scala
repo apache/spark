@@ -34,7 +34,7 @@ import org.apache.parquet.filter2.predicate.FilterApi._
 import org.apache.parquet.filter2.predicate.Operators.{Column => _, Eq, Gt, GtEq, In => FilterIn, Lt, LtEq, NotEq, UserDefinedByInstance}
 import org.apache.parquet.hadoop.{ParquetFileReader, ParquetInputFormat, ParquetOutputFormat}
 import org.apache.parquet.hadoop.util.HadoopInputFile
-import org.apache.parquet.schema.MessageType
+import org.apache.parquet.schema.{MessageType, MessageTypeParser}
 
 import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException}
 import org.apache.spark.sql._
@@ -46,7 +46,7 @@ import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.parseColumnPath
 import org.apache.spark.sql.execution.ExplainMode
-import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, HadoopFsRelation, LogicalRelationWithTable, PushableColumnAndNestedColumn}
+import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, HadoopFsRelation, LogicalRelationWithTable, PushableColumnAndNestedColumn, VariantMetadata}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
 import org.apache.spark.sql.functions._
@@ -2357,6 +2357,229 @@ class ParquetV1FilterSuite extends ParquetFilterSuite {
         }
       }
     }
+  }
+
+ /**
+  * Tests for shredded variant filter pushdown in ParquetFilters.
+  * These tests construct ParquetFilters and directly exercise
+  * resolveShreddedPrimitive / variantStructEntries.
+  */
+  private def variantParquetFilters(
+      parquetSchemaStr: String,
+      variantExtractionSchema: Option[StructType],
+      caseSensitive: Boolean = true): ParquetFilters = {
+    val parquetSchema = MessageTypeParser.parseMessageType(parquetSchemaStr)
+    new ParquetFilters(
+      parquetSchema,
+      conf.parquetFilterPushDownDate,
+      conf.parquetFilterPushDownTimestamp,
+      conf.parquetFilterPushDownDecimal,
+      conf.parquetFilterPushDownStringPredicate,
+      conf.parquetFilterPushDownInFilterThreshold,
+      caseSensitive,
+      RebaseSpec(LegacyBehaviorPolicy.CORRECTED),
+      variantExtractionSchema = variantExtractionSchema)
+  }
+
+  /** Construct a variant struct field with VariantMetadata. */
+  private def variantStructField(name: String, dt: DataType, path: String): StructField =
+    StructField(name, dt, metadata = VariantMetadata(path, failOnError = true, "UTC").toMetadata)
+
+  /**
+   * Build the variantExtractionSchema that PushVariantIntoScan produces for a top-level
+   * variant column `colName` with one extracted field at `variantPath` of type `dt`.
+   * The struct child is named by its ordinal "0".
+   */
+  private def variantExtractionSchema(
+      colName: String,
+      variantPath: String,
+      dt: DataType): StructType = {
+    StructType(Seq(
+      StructField(colName, StructType(Seq(variantStructField("0", dt, variantPath))))))
+  }
+
+  test("variant shredded filter: top-level bigint field resolves to physical typed_value path") {
+    val parquetSchema =
+      """message spark_schema {
+        |  optional group v {
+        |    optional binary value;
+        |    optional group typed_value {
+        |      optional group a {
+        |        optional binary value;
+        |        optional int64 typed_value;
+        |      }
+        |    }
+        |  }
+        |}""".stripMargin
+    val pushDownSchema = variantExtractionSchema("v", "$.a", LongType)
+    val pf = variantParquetFilters(parquetSchema, Some(pushDownSchema))
+    // "v.`0`" should resolve to physical column "v.typed_value.a.typed_value"
+    val filter = pf.createFilter(sources.GreaterThan("v.`0`", 1000L))
+    assert(filter.isDefined,
+      "Expected filter predicate to be created via shredded column mapping v.`0`")
+    assert(filter.get.toString.contains("v.typed_value.a.typed_value"),
+      s"Expected physical path v.typed_value.a.typed_value in filter, got: ${filter.get}")
+  }
+
+  test("variant shredded filter: without variantExtractionSchema logical path is unknown") {
+    val parquetSchema =
+      """message spark_schema {
+        |  optional group v {
+        |    optional binary value;
+        |    optional group typed_value {
+        |      optional group a {
+        |        optional binary value;
+        |        optional int64 typed_value;
+        |      }
+        |    }
+        |  }
+        |}""".stripMargin
+    val pf = variantParquetFilters(parquetSchema, variantExtractionSchema = None)
+    // Without variantExtractionSchema the mapping "v.`0`" is unknown -- None
+    assert(pf.createFilter(sources.GreaterThan("v.`0`", 1000L)).isEmpty)
+  }
+
+  test("variant shredded filter: top-level string field resolves correctly") {
+    val parquetSchema =
+      """message spark_schema {
+        |  optional group v {
+        |    optional binary value;
+        |    optional group typed_value {
+        |      optional group b {
+        |        optional binary value;
+        |        optional binary typed_value (STRING);
+        |      }
+        |    }
+        |  }
+        |}""".stripMargin
+    val pushDownSchema = variantExtractionSchema("v", "$.b", StringType)
+    val pf = variantParquetFilters(parquetSchema, Some(pushDownSchema))
+    // GreaterThan with a string value should produce a predicate on the physical column
+    val filter = pf.createFilter(sources.GreaterThan("v.`0`", "str500"))
+    assert(filter.isDefined,
+      "Expected GreaterThan on shredded string column to produce a predicate")
+  }
+
+  test("variant shredded filter: nested variant (s.v) uses full physical prefix") {
+    // Bug fixed by this PR: without physPrefix the path was "v.typed_value.a.typed_value"
+    // instead of the correct "s.v.typed_value.a.typed_value".
+    val parquetSchema =
+      """message spark_schema {
+        |  optional group s {
+        |    optional group v {
+        |      optional binary value;
+        |      optional group typed_value {
+        |        optional group a {
+        |          optional binary value;
+        |          optional int64 typed_value;
+        |        }
+        |      }
+        |    }
+        |  }
+        |}""".stripMargin
+    // variantExtractionSchema: s: struct<v: struct<0: bigint [VariantMetadata($.a)]>>
+    val pushDownSchema = StructType(Seq(
+      StructField("s", StructType(Seq(
+        StructField("v", StructType(Seq(
+          variantStructField("0", LongType, "$.a")))))))))
+    val pf = variantParquetFilters(parquetSchema, Some(pushDownSchema))
+    val filter = pf.createFilter(sources.GreaterThan("s.v.`0`", 500L))
+    assert(filter.isDefined,
+      "Expected filter predicate for nested s.v.`0` via shredded column mapping")
+    assert(filter.get.toString.contains("s.v.typed_value.a.typed_value"),
+      s"Expected full physical path s.v.typed_value.a.typed_value, got: ${filter.get}")
+  }
+
+  test("variant shredded filter: multi-level path $.a.b resolves correctly") {
+    val parquetSchema =
+      """message spark_schema {
+        |  optional group v {
+        |    optional binary value;
+        |    optional group typed_value {
+        |      optional group a {
+        |        optional binary value;
+        |        optional group typed_value {
+        |          optional group b {
+        |            optional binary value;
+        |            optional int64 typed_value;
+        |          }
+        |        }
+        |      }
+        |    }
+        |  }
+        |}""".stripMargin
+    val pushDownSchema = variantExtractionSchema("v", "$.a.b", LongType)
+    val pf = variantParquetFilters(parquetSchema, Some(pushDownSchema))
+    val filter = pf.createFilter(sources.LessThan("v.`0`", 100L))
+    assert(filter.isDefined,
+      "Expected filter predicate for multi-level path $.a.b via shredded column mapping")
+    assert(filter.get.toString.contains("v.typed_value.a.typed_value.b.typed_value"),
+      s"Expected multi-level physical path in filter, got: ${filter.get}")
+  }
+
+  test("variant shredded filter: field absent from physical schema falls back gracefully") {
+    val parquetSchema =
+      """message spark_schema {
+        |  optional group v {
+        |    optional binary value;
+        |    optional group typed_value {
+        |      optional group a {
+        |        optional binary value;
+        |        optional int64 typed_value;
+        |      }
+        |    }
+        |  }
+        |}""".stripMargin
+    val pushDownSchema = variantExtractionSchema("v", "$.missing", LongType)
+    val pf = variantParquetFilters(parquetSchema, Some(pushDownSchema))
+    // resolveShredded returns None -- no FilterPredicate created (falls back to record-level)
+    assert(pf.createFilter(sources.GreaterThan("v.`0`", 1000L)).isEmpty)
+  }
+
+  test("variant shredded filter: array index path is skipped (falls back to record-level)") {
+    val parquetSchema =
+      """message spark_schema {
+        |  optional group v {
+        |    optional binary value;
+        |    optional group typed_value (LIST) {
+        |      repeated group list {
+        |        optional group element {
+        |          optional binary value;
+        |          optional int64 typed_value;
+        |        }
+        |      }
+        |    }
+        |  }
+        |}""".stripMargin
+    // Path "$.arr[0]" contains an ArrayExtraction segment
+    val pushDownSchema = variantExtractionSchema("v", "$.arr[0]", LongType)
+    val pf = variantParquetFilters(parquetSchema, Some(pushDownSchema))
+    assert(pf.createFilter(sources.GreaterThan("v.`0`", 1000L)).isEmpty)
+  }
+
+  test("variant shredded filter: case-insensitive column matching") {
+    val parquetSchema =
+      """message spark_schema {
+        |  optional group V {
+        |    optional binary value;
+        |    optional group typed_value {
+        |      optional group a {
+        |        optional binary value;
+        |        optional int64 typed_value;
+        |      }
+        |    }
+        |  }
+        |}""".stripMargin
+    // Spark schema uses lowercase "v" but Parquet column is "V"
+    val pushDownSchema = variantExtractionSchema("v", "$.a", LongType)
+    val pfSensitive =
+      variantParquetFilters(parquetSchema, Some(pushDownSchema), caseSensitive = true)
+    assert(pfSensitive.createFilter(sources.GreaterThan("v.`0`", 1000L)).isEmpty,
+      "Case-sensitive: 'v' should not match Parquet column 'V'")
+    val pfInsensitive =
+      variantParquetFilters(parquetSchema, Some(pushDownSchema), caseSensitive = false)
+    assert(pfInsensitive.createFilter(sources.GreaterThan("v.`0`", 1000L)).isDefined,
+      "Case-insensitive: 'v' should match Parquet column 'V'")
   }
 }
 
