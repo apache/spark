@@ -576,7 +576,63 @@ the workaround. This can be revisited as the ecosystem matures.
 
 ---
 
-## 10. Appendix: Key Dependencies
+## 10. Running Integration Tests
+
+### Prerequisites
+
+**1. Build the Spark SQL JAR** (required after any Scala change):
+
+```bash
+# From the repo root
+build/sbt "sql/package"
+cp sql/core/target/scala-2.13/spark-sql_2.13-*.jar \
+   assembly/target/scala-2.13/jars/
+```
+
+**2. Create a dedicated virtual environment** with jep, PyArrow, and cloudpickle:
+
+```bash
+python3 -m venv python/.venv-inprocess
+python/.venv-inprocess/bin/pip install "jep>=4.2" pyarrow cloudpickle pytest
+```
+
+jep bundles its own JAR (`jep-*.jar`) and native library (`libjep.dylib` / `libjep.so`)
+inside the venv's site-packages — no separate installation needed.
+
+### Running the tests
+
+A convenience script at [python/integration/run_inprocess_udf_tests.sh](../python/integration/run_inprocess_udf_tests.sh)
+handles all environment setup automatically:
+
+```bash
+# Stop on first failure (default):
+bash python/integration/run_inprocess_udf_tests.sh
+
+# Run all tests to see the full results:
+bash python/integration/run_inprocess_udf_tests.sh --no-x
+```
+
+Expected output: **15 passed in ~6s**.
+
+### What the script does
+
+| Step | What | Why |
+|---|---|---|
+| `INPROCESS_TESTS=1` | Enables the test class | Tests are skipped unless this is set |
+| `PYTHONPATH=venv/site-packages:...` | Puts venv first | Embedded jep interpreter needs to `import jep` and `import pyspark.inprocess` |
+| `--driver-class-path jep-*.jar` | Adds jep JAR to JVM classpath | `jep.SharedInterpreter` must be loadable by the JVM |
+| `-Djava.library.path=<jep dir>` | Locates `libjep` native library | JVM `System.loadLibrary("jep")` looks here |
+
+### Skipping conditions
+
+All tests are skipped automatically if any of the following are missing:
+- `INPROCESS_TESTS=1` environment variable
+- `pyarrow` importable in the active Python interpreter
+- `cloudpickle` importable in the active Python interpreter
+
+---
+
+## 11. Appendix: Key Dependencies
 
 | Dependency | Version | Role |
 |---|---|---|
