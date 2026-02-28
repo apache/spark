@@ -62,48 +62,62 @@ case class InProcessArrowEvalExec(
     val timeZoneId = conf.sessionLocalTimeZone
 
     child.execute().mapPartitions { rows =>
-      // One ArrowWriter per partition - reset between batches
+      // One ArrowWriter per partition - reset between batches.
       val writer = ArrowWriter.create(inputSchema, timeZoneId)
 
-      // Copy each row before grouping: child plan may reuse the same UnsafeRow instance
-      // (e.g. WholeStageCodegenExec), so we must snapshot each row before buffering.
-      rows.map(_.copy()).grouped(batchSize).flatMap { batch =>
-        writer.reset()
-        batch.foreach(writer.write)
-        writer.finish()
+      new Iterator[InternalRow] {
+        // Current batch's row iterator; empty until the first batch is filled.
+        private var batchIter: Iterator[InternalRow] = Iterator.empty
 
-        val root = writer.root
-        val numRows = root.getRowCount
+        override def hasNext: Boolean = batchIter.hasNext || rows.hasNext
 
-        // Build input address list for all UDFs in this exec node.
-        // For each UDF, resolve its input columns by position in child.output.
-        val resultColumns = udfs.map { udf =>
-          val inputAddrList = new JArrayList[java.util.Map[String, AnyRef]]()
+        override def next(): InternalRow = {
+          if (!batchIter.hasNext) {
+            // Fill the next Arrow batch using a while loop.
+            // ArrowWriter.write() copies each row's fields into off-heap Arrow memory
+            // immediately, so it is safe even when WholeStageCodegenExec reuses the same
+            // UnsafeRow object across calls to rows.next(). No .copy() needed.
+            writer.reset()
+            var count = 0
+            while (rows.hasNext && count < batchSize) {
+              writer.write(rows.next())
+              count += 1
+            }
+            writer.finish()
 
-          udf.children.foreach { case attr: Attribute =>
-            val idx = child.output.indexWhere(_.exprId == attr.exprId)
-            require(idx >= 0,
-              s"InProcessArrowEvalExec: cannot find input column '${attr}' " +
-              s"in child output ${child.output.map(_.name).mkString("[", ", ", "]")}")
-            val arrowCol = new ArrowColumnVector(root.getVector(idx))
-            inputAddrList.add(InProcessArrowBridge.extractAddresses(arrowCol, numRows))
+            val root = writer.root
+            val numRows = root.getRowCount
+
+            // For each UDF, collect the native buffer addresses of its input columns,
+            // invoke Python in-process, and reconstruct the result as an Arrow column.
+            val resultColumns = udfs.map { udf =>
+              val inputAddrList = new JArrayList[java.util.Map[String, AnyRef]]()
+
+              udf.children.foreach { case attr: Attribute =>
+                val idx = child.output.indexWhere(_.exprId == attr.exprId)
+                require(idx >= 0,
+                  s"InProcessArrowEvalExec: cannot find input column '${attr}' " +
+                  s"in child output ${child.output.map(_.name).mkString("[", ", ", "]")}")
+                val arrowCol = new ArrowColumnVector(root.getVector(idx))
+                inputAddrList.add(InProcessArrowBridge.extractAddresses(arrowCol, numRows))
+              }
+
+              val resultMap = InProcessPythonRuntime.invoke(
+                udf.serializedFunc, inputAddrList, numRows)
+              InProcessArrowBridge.resultToColumn(resultMap, udf.dataType)
+            }
+
+            val allColumns: Array[ArrowColumnVector] =
+              (0 until root.getFieldVectors.size()).map(i =>
+                new ArrowColumnVector(root.getVector(i))).toArray ++ resultColumns
+
+            val columnarBatch = new ColumnarBatch(
+              allColumns.asInstanceOf[Array[org.apache.spark.sql.vectorized.ColumnVector]],
+              numRows)
+            batchIter = columnarBatch.rowIterator().asScala
           }
-
-          // Invoke Python UDF in-process (no socket, no serialization)
-          val resultMap = InProcessPythonRuntime.invoke(udf.serializedFunc, inputAddrList, numRows)
-
-          // Reconstruct result as Arrow column (one copy)
-          InProcessArrowBridge.resultToColumn(resultMap, udf.dataType)
+          batchIter.next()
         }
-
-        // Append result columns to existing columns and emit as InternalRows
-        val allColumns: Array[ArrowColumnVector] =
-          (0 until root.getFieldVectors.size()).map(i =>
-            new ArrowColumnVector(root.getVector(i))).toArray ++ resultColumns
-
-        val columnarBatch = new ColumnarBatch(allColumns.asInstanceOf[Array[
-          org.apache.spark.sql.vectorized.ColumnVector]], numRows)
-        columnarBatch.rowIterator().asScala
       }
     }
   }
