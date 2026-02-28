@@ -884,7 +884,11 @@ private[spark] class AppStatusListener(
     exec.hostPort = event.blockManagerId.hostPort
     event.maxOnHeapMem.foreach { _ =>
       exec.totalOnHeap = event.maxOnHeapMem.get
-      exec.totalOffHeap = event.maxOffHeapMem.get
+      if (event.blockManagerId.executorId == SparkContext.DRIVER_IDENTIFIER) {
+        exec.totalOffHeap = 0
+      } else {
+        exec.totalOffHeap = event.maxOffHeapMem.get
+      }
       // SPARK-30594: whenever(first time or re-register) a BlockManager added, all blocks
       // from this BlockManager will be reported to driver later. So, we should clean up
       // used memory to avoid overlapped count.
