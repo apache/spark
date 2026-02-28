@@ -668,7 +668,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     assert(memoryPolicy.get.getRestartPolicy === "NotRequired")
   }
 
-  test("SPARK-55639: ENV_EXECUTOR_CORES is always 1 when recoveryMode is enabled") {
+  test("SPARK-55639: ENV_EXECUTOR_CORES is spark.task.cpus when recoveryMode is enabled") {
     val rpb = new ResourceProfileBuilder()
     val ereq = new ExecutorResourceRequests()
     val treq = new TaskResourceRequests()
@@ -683,10 +683,11 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     assert(cores === "4")
 
     baseConf.set(KUBERNETES_ALLOCATION_RECOVERY_MODE_ENABLED, true)
+    baseConf.set("spark.task.cpus", "2")
     step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf), rp)
     executor = step.configurePod(SparkPod.initialPod())
     cores = executor.container.getEnv.asScala.find(_.getName == ENV_EXECUTOR_CORES).get.getValue
-    assert(cores === "1")
+    assert(cores === "2")
   }
 
   // There is always exactly one controller reference, and it points to the driver pod.
