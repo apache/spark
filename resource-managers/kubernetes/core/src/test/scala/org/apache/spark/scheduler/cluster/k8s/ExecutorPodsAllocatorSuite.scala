@@ -1080,4 +1080,20 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     // Verify no pods were created since all attempts failed
     assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 0)
   }
+
+  test("SPARK-55639: setRecoveryMode should set recovery mode if spark.task.cpus <= 1") {
+    val confWithCpus1 = conf.clone.set("spark.task.cpus", "1")
+    val podsAllocator = new ExecutorPodsAllocator(confWithCpus1, secMgr,
+      executorBuilder, kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
+    podsAllocator.setRecoveryMode()
+    assert(confWithCpus1.get(KUBERNETES_ALLOCATION_RECOVERY_MODE_ENABLED))
+  }
+
+  test("SPARK-55639: setRecoveryMode should not set recovery mode if spark.task.cpus > 1") {
+    val confWithCpus2 = conf.clone.set("spark.task.cpus", "2")
+    val podsAllocator = new ExecutorPodsAllocator(confWithCpus2, secMgr,
+      executorBuilder, kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
+    podsAllocator.setRecoveryMode()
+    assert(!confWithCpus2.get(KUBERNETES_ALLOCATION_RECOVERY_MODE_ENABLED))
+  }
 }

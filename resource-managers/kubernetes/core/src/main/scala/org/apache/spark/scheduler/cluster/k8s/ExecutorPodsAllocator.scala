@@ -430,6 +430,9 @@ class ExecutorPodsAllocator(
   }
 
   def setRecoveryMode(): Unit = {
+    if (conf.getInt("spark.task.cpus", 1) > 1) {
+      return
+    }
     conf.set(KUBERNETES_ALLOCATION_RECOVERY_MODE_ENABLED, true)
   }
 
