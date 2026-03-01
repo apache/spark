@@ -256,8 +256,13 @@ private[spark] object JettyUtils extends Logging {
       poolSize: Int = 200): ServerInfo = {
 
     val stopTimeout = conf.get(UI_JETTY_STOP_TIMEOUT)
-    logInfo(log"Start Jetty ${MDC(HOST, hostName)}:${MDC(PORT, port)}" +
-      log" for ${MDC(SERVER_NAME, serverName)}")
+    if (sslOptions.enabled && sslOptions.disableHttpPort.getOrElse(false)) {
+      logInfo(log"Start Jetty ${MDC(HOST, hostName)} (HTTPS only)" +
+        log" for ${MDC(SERVER_NAME, serverName)}")
+    } else {
+      logInfo(log"Start Jetty ${MDC(HOST, hostName)}:${MDC(PORT, port)}" +
+        log" for ${MDC(SERVER_NAME, serverName)}")
+    }
     // Start the server first, with no connectors.
     val pool = new QueuedThreadPool(poolSize)
     if (serverName.nonEmpty) {
@@ -357,29 +362,33 @@ private[spark] object JettyUtils extends Logging {
         boundPort
       }
 
-      // Bind the HTTP port.
-      def httpConnect(currentPort: Int): (ServerConnector, Int) = {
-        newConnector(Array(new HttpConnectionFactory(httpConfig)), currentPort)
+      if (!sslOptions.disableHttpPort.getOrElse(false)) {
+        // Bind the HTTP port.
+        def httpConnect(currentPort: Int): (ServerConnector, Int) = {
+          newConnector(Array(new HttpConnectionFactory(httpConfig)), currentPort)
+        }
+
+        val (httpConnector, httpPort) = Utils.startServiceOnPort[ServerConnector](port, httpConnect,
+          conf, serverName)
+
+        // If SSL is configured, then configure redirection in the HTTP connector.
+        securePort match {
+          case Some(p) =>
+            httpConnector.setName(REDIRECT_CONNECTOR_NAME)
+            val redirector = createRedirectHttpsHandler(p, "https")
+            collection.addHandler(redirector)
+            redirector.start()
+
+          case None =>
+            httpConnector.setName(SPARK_CONNECTOR_NAME)
+        }
+
+        server.addConnector(httpConnector)
+        pool.setMaxThreads(math.max(pool.getMaxThreads, minThreads))
+        ServerInfo(server, httpPort, securePort, conf, collection)
+      } else {
+        ServerInfo(server, -1, securePort, conf, collection)
       }
-
-      val (httpConnector, httpPort) = Utils.startServiceOnPort[ServerConnector](port, httpConnect,
-        conf, serverName)
-
-      // If SSL is configured, then configure redirection in the HTTP connector.
-      securePort match {
-        case Some(p) =>
-          httpConnector.setName(REDIRECT_CONNECTOR_NAME)
-          val redirector = createRedirectHttpsHandler(p, "https")
-          collection.addHandler(redirector)
-          redirector.start()
-
-        case None =>
-          httpConnector.setName(SPARK_CONNECTOR_NAME)
-      }
-
-      server.addConnector(httpConnector)
-      pool.setMaxThreads(math.max(pool.getMaxThreads, minThreads))
-      ServerInfo(server, httpPort, securePort, conf, collection)
     } catch {
       case e: Exception =>
         server.stop()
