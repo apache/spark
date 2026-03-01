@@ -122,7 +122,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       serializerManager, taskContext, recordComparatorSupplier, prefixComparator, initialSize,
         pageSizeBytes, numElementsForSpillThreshold, sizeInBytesForSpillThreshold,
         inMemorySorter, false /* ignored */);
-    sorter.spill(Long.MAX_VALUE, sorter);
+    sorter.spillWithTiming(Long.MAX_VALUE, sorter);
     taskContext.taskMetrics().incMemoryBytesSpilled(existingMemoryConsumption);
     sorter.totalSpillBytes += existingMemoryConsumption;
     // The external sorter will be used to insert records, in-memory sorter is not needed.

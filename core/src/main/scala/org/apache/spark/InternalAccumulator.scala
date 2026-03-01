@@ -40,6 +40,7 @@ private[spark] object InternalAccumulator {
   val RESULT_SERIALIZATION_TIME = METRICS_PREFIX + "resultSerializationTime"
   val MEMORY_BYTES_SPILLED = METRICS_PREFIX + "memoryBytesSpilled"
   val DISK_BYTES_SPILLED = METRICS_PREFIX + "diskBytesSpilled"
+  val SPILL_TIME = METRICS_PREFIX + "spillTime"
   val PEAK_EXECUTION_MEMORY = METRICS_PREFIX + "peakExecutionMemory"
   val PEAK_ON_HEAP_EXECUTION_MEMORY = METRICS_PREFIX + "peakOnHeapExecutionMemory"
   val PEAK_OFF_HEAP_EXECUTION_MEMORY = METRICS_PREFIX + "peakOffHeapExecutionMemory"
