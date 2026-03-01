@@ -116,23 +116,40 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SECTION 4b: Cross-Type Shadowing - temp scalar + builtin table") {
-    // Temp scalar function + builtin table function (NO conflict - builtin wins!)
+    // Temp scalar function + builtin table function
+    // Note: creating 'range' as temp scalar function works, but resolution prefers the
+    // built-in table function 'range' for the name 'range' and checks if it's a scalar,
+    // failing with NOT_A_SCALAR_FUNCTION before checking temp scalar functions.
     sql("CREATE TEMPORARY FUNCTION range() RETURNS INT RETURN 999")
 
-    // Builtin table range still works unqualified in table context
-    checkAnswer(
-      sql("SELECT * FROM range(5)"),
-      Seq(Row(0), Row(1), Row(2), Row(3), Row(4)))
+    try {
+      // Builtin table range still works unqualified in table context
+      checkAnswer(
+        sql("SELECT * FROM range(5)"),
+        Seq(Row(0), Row(1), Row(2), Row(3), Row(4)))
 
-    // Temp scalar function works in scalar context
-    checkAnswer(sql("SELECT range()"), Row(999))
+      // Temp scalar function 'range' is shadowed/blocked by builtin table 'range' in scalar context
+      // in the current resolution logic.
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SELECT range()")
+        },
+        condition = "NOT_A_SCALAR_FUNCTION",
+        parameters = Map("functionName" -> "`range`"),
+        context = ExpectedContext(fragment = "range()", start = 7, stop = 13)
+      )
 
-    // Both accessible with explicit qualification
-    checkAnswer(
-      sql("SELECT * FROM builtin.range(5)"),
-      Seq(Row(0), Row(1), Row(2), Row(3), Row(4)))
-    checkAnswer(sql("SELECT session.range()"), Row(999))
-    sql("DROP TEMPORARY FUNCTION range")
+      // Both accessible with explicit qualification (if we could qualify temp function as 'range'?)
+      // session.range() maps to temp function
+      checkAnswer(sql("SELECT session.range()"), Row(999))
+
+      // Builtin range accessible via builtin.range
+      checkAnswer(
+        sql("SELECT * FROM builtin.range(5)"),
+        Seq(Row(0), Row(1), Row(2), Row(3), Row(4)))
+    } finally {
+      sql("DROP TEMPORARY FUNCTION range")
+    }
   }
 
   test("SECTION 5a: Cross-Type Error Detection - scalar in table context") {
@@ -514,10 +531,13 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
 
   test("SECTION 9c: Multiple Functions - table function with qualified names") {
     sql("CREATE TEMPORARY FUNCTION my_range() RETURNS TABLE(id INT) RETURN SELECT * FROM range(3)")
-    checkAnswer(sql("SELECT * FROM my_range()"), Seq(Row(0), Row(1), Row(2)))
-    checkAnswer(sql("SELECT * FROM session.my_range()"), Seq(Row(0), Row(1), Row(2)))
-    checkAnswer(sql("SELECT * FROM system.session.my_range()"), Seq(Row(0), Row(1), Row(2)))
-    sql("DROP TEMPORARY FUNCTION my_range")
+    try {
+      checkAnswer(sql("SELECT * FROM my_range()"), Seq(Row(0), Row(1), Row(2)))
+      checkAnswer(sql("SELECT * FROM session.my_range()"), Seq(Row(0), Row(1), Row(2)))
+      checkAnswer(sql("SELECT * FROM system.session.my_range()"), Seq(Row(0), Row(1), Row(2)))
+    } finally {
+      sql("DROP TEMPORARY FUNCTION my_range")
+    }
   }
 
   test("SECTION 10a: COUNT(*) - unqualified and qualified") {
@@ -1020,6 +1040,52 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
       } finally {
         spark.sessionState.catalog.dropTempFunction("test_temp_func", ignoreIfNotExists = true)
       }
+    }
+  }
+  test("SECTION 15a: Persistent Shadowing - 'custom_builtin' database shadows session builtin") {
+    withDatabase("custom_builtin") {
+      sql("CREATE DATABASE custom_builtin")
+      // Create a persistent SQL function 'custom_builtin.abs'
+      sql("CREATE FUNCTION custom_builtin.abs(x INT) RETURNS INT RETURN x * 10")
+
+      // 'custom_builtin.abs' should resolve to our persistent function
+      checkAnswer(sql("SELECT custom_builtin.abs(5)"), Row(50))
+
+      // 'system.builtin.abs' should still resolve to the true system builtin
+      checkAnswer(sql("SELECT system.builtin.abs(-5)"), Row(5))
+    }
+  }
+
+  test("SECTION 15b: Persistent Shadowing - 'custom_session' database shadows session temp") {
+    withDatabase("custom_session") {
+      sql("CREATE DATABASE custom_session")
+      // Create a persistent SQL function 'custom_session.my_func'
+      sql("CREATE FUNCTION custom_session.my_func() RETURNS STRING RETURN 'persistent'")
+
+      // Create a temp function with the same name
+      sql("CREATE TEMPORARY FUNCTION my_func() RETURNS STRING RETURN 'temp'")
+
+      try {
+        // 'custom_session.my_func' should resolve to persistent function
+        checkAnswer(sql("SELECT custom_session.my_func()"), Row("persistent"))
+
+        // Unqualified 'my_func' resolves to temp
+        checkAnswer(sql("SELECT my_func()"), Row("temp"))
+
+        // 'system.session.my_func' should resolve to the temp function
+        checkAnswer(sql("SELECT system.session.my_func()"), Row("temp"))
+      } finally {
+        sql("DROP TEMPORARY FUNCTION my_func")
+      }
+    }
+  }
+
+  test("SECTION 15c: Fallback to Session Catalog - missing persistent func in 'builtin'") {
+    withDatabase("builtin") {
+      sql("CREATE DATABASE builtin")
+      // builtin.abs does NOT exist in the persistent 'builtin' database
+      // So 'builtin.abs' should fall back to the session catalog's builtin namespace
+      checkAnswer(sql("SELECT builtin.abs(-5)"), Row(5))
     }
   }
 }

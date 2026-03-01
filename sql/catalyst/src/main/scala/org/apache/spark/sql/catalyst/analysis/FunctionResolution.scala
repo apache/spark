@@ -19,6 +19,9 @@ package org.apache.spark.sql.catalyst.analysis
 
 import java.util.concurrent.atomic.AtomicBoolean
 
+import scala.util.control.NonFatal
+
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
@@ -61,7 +64,7 @@ import org.apache.spark.sql.types._
 class FunctionResolution(
     override val catalogManager: CatalogManager,
     relationResolution: RelationResolution)
-    extends DataTypeErrorsBase with LookupCatalog {
+    extends DataTypeErrorsBase with LookupCatalog with Logging {
   private val v1SessionCatalog = catalogManager.v1SessionCatalog
 
   private val trimWarningEnabled = new AtomicBoolean(true)
@@ -71,78 +74,140 @@ class FunctionResolution(
       : Option[SessionCatalog.SessionFunctionKind] =
     FunctionResolution.sessionNamespaceKind(nameParts)
 
-  def resolveFunction(u: UnresolvedFunction): Expression = {
-    withPosition(u) {
-      // For "last" order this is builtin then persistent then session; for "first"/"second"
-      // it is the result of the session resolution path (builtin then session,
-      // or session then builtin).
-      val builtinOrSessionResult = resolveBuiltinOrTempFunction(u.nameParts, u.arguments, u)
-      val order = SQLConf.get.sessionFunctionResolutionOrder
-      if (order == "last" && u.nameParts.size == 1) {
-        // Order: builtin -> persistent -> session; session not in
-        // resolveBuiltinOrTempFunction path.
-        builtinOrSessionResult.getOrElse {
-          try {
-            resolvePersistentFunction(u)
-          } catch {
-            case _: NoSuchFunctionException | _: AnalysisException =>
-              val catalogPath = (
-                catalogManager.currentCatalog.name +: catalogManager.currentNamespace
-              ).mkString(".")
-              val searchPath = SQLConf.get.functionResolutionSearchPath(catalogPath)
-              v1SessionCatalog.resolveScalarFunction(
-                SessionCatalog.Temp, u.nameParts.head, u.arguments).getOrElse(
-                throw QueryCompilationErrors.unresolvedRoutineError(
-                  u.nameParts,
-                  searchPath,
-                  u.origin))
-          }
-        }
-      } else {
-        builtinOrSessionResult.getOrElse {
-          try {
-            resolvePersistentFunction(u)
-          } catch {
-            case _: NoSuchFunctionException =>
-              // Session catalog returns this when function is missing
-              val catalogPath = (
-                catalogManager.currentCatalog.name +: catalogManager.currentNamespace
-              ).mkString(".")
-              val searchPath = SQLConf.get.functionResolutionSearchPath(catalogPath)
-              throw QueryCompilationErrors.unresolvedRoutineError(
-                u.nameParts,
-                searchPath,
-                u.origin)
-            case e: AnalysisException if e.getCondition == "REQUIRES_SINGLE_PART_NAMESPACE" =>
-              // Only convert for 3-part names; 4+ parts keep REQUIRES_SINGLE_PART_NAMESPACE
-              if (u.nameParts.size == 3) {
-                val catalogPath = (
-                  catalogManager.currentCatalog.name +: catalogManager.currentNamespace
-                ).mkString(".")
-                val searchPath = SQLConf.get.functionResolutionSearchPath(catalogPath)
-                throw QueryCompilationErrors.unresolvedRoutineError(
-                  u.nameParts,
-                  searchPath,
-                  u.origin)
-              } else {
-                throw e
-              }
-          }
-        }
+  /**
+   * A single place to look for a scalar function. Fully qualified => one candidate;
+   * partially qualified => typically two (system + current catalog); unqualified => three
+   * (e.g. builtin, session, persistent in path order). Builtin and session are just two
+   * lookups in the path; they may share the same registry internally.
+   */
+  private sealed trait ScalarCandidate
+  private case class SessionNamespaceCandidate(
+      kind: SessionCatalog.SessionFunctionKind,
+      funcName: String) extends ScalarCandidate
+  private case class PersistentCandidate(nameParts: Seq[String]) extends ScalarCandidate
+  private case class InternalCandidate(funcName: String) extends ScalarCandidate
+
+  /** Produces the ordered list of candidates for scalar resolution. */
+  private def scalarResolutionCandidates(
+      nameParts: Seq[String],
+      u: UnresolvedFunction): Seq[ScalarCandidate] = {
+    val order = SQLConf.get.sessionFunctionResolutionOrder
+    if (nameParts.size == 1 && u.isInternal) {
+      InternalCandidate(nameParts.head) +: unqualifiedScalarCandidates(nameParts, order)
+    } else {
+      nameParts.size match {
+        case 1 =>
+          unqualifiedScalarCandidates(nameParts, order)
+        case 2 if sessionFunctionKind(nameParts).isDefined =>
+          // Partially qualified builtin/session: try persistent first so user schema wins
+          PersistentCandidate(nameParts) +: sessionNamespaceToCandidate(nameParts).toSeq
+        case 3 if sessionFunctionKind(nameParts).isDefined =>
+          // Fully qualified system.builtin.func or system.session.func => single candidate
+          sessionNamespaceToCandidate(nameParts).toSeq
+        case _ =>
+          Seq(PersistentCandidate(nameParts))
       }
     }
   }
 
-  /** Resolve from persistent catalog (current catalog/namespace). Throws if not found. */
-  private def resolvePersistentFunction(u: UnresolvedFunction): Expression = {
-    val CatalogAndIdentifier(catalog, ident) =
-      relationResolution.expandIdentifier(u.nameParts)
-    catalog.asFunctionCatalog.loadFunction(ident) match {
-      case v1Func: V1Function =>
-        val func = v1Func.invoke(u.arguments)
-        validateFunction(func, u.arguments.length, u)
-      case unboundV2Func =>
-        resolveV2Function(unboundV2Func, u.arguments, u)
+  private def sessionNamespaceToCandidate(
+      nameParts: Seq[String]): Option[SessionNamespaceCandidate] =
+    sessionFunctionKind(nameParts).map(k => SessionNamespaceCandidate(k, nameParts.last))
+
+  private def unqualifiedSessionCandidates(
+      nameParts: Seq[String],
+      order: String): Seq[SessionNamespaceCandidate] = {
+    val funcName = nameParts.head
+    order match {
+      case "first" =>
+        Seq(
+          SessionNamespaceCandidate(SessionCatalog.Temp, funcName),
+          SessionNamespaceCandidate(SessionCatalog.Builtin, funcName))
+      case "last" =>
+        Seq(
+          SessionNamespaceCandidate(SessionCatalog.Builtin, funcName),
+          SessionNamespaceCandidate(SessionCatalog.Temp, funcName))
+      case _ =>
+        Seq(
+          SessionNamespaceCandidate(SessionCatalog.Builtin, funcName),
+          SessionNamespaceCandidate(SessionCatalog.Temp, funcName))
+    }
+  }
+
+  /** For unqualified names, full candidate list in resolution order (may interleave persistent). */
+  private def unqualifiedScalarCandidates(
+      nameParts: Seq[String],
+      order: String): Seq[ScalarCandidate] = {
+    val sessionCandidates = unqualifiedSessionCandidates(nameParts, order)
+    if (order == "last") {
+      Seq(sessionCandidates.head, PersistentCandidate(nameParts), sessionCandidates(1))
+    } else {
+      sessionCandidates :+ PersistentCandidate(nameParts)
+    }
+  }
+
+  private def tryResolveScalarCandidate(
+      c: ScalarCandidate,
+      u: UnresolvedFunction): Option[Expression] = c match {
+    case InternalCandidate(funcName) =>
+      Option(FunctionRegistry.internal.lookupFunction(
+        FunctionIdentifier(funcName), u.arguments))
+    case SessionNamespaceCandidate(kind, funcName) =>
+      val expr = v1SessionCatalog.resolveScalarFunction(kind, funcName, u.arguments)
+      if (expr.isEmpty) {
+        if (v1SessionCatalog.lookupFunctionInfo(
+            SessionCatalog.Temp, funcName, tableFunction = true).isDefined) {
+          throw QueryCompilationErrors.notAScalarFunctionError(funcName, u)
+        }
+        if (v1SessionCatalog.lookupBuiltinOrTempTableFunction(funcName).isDefined) {
+          throw QueryCompilationErrors.notAScalarFunctionError(funcName, u)
+        }
+      }
+      expr.map(e => validateFunction(e, u.arguments.length, u))
+    case PersistentCandidate(parts) =>
+      try {
+        val CatalogAndIdentifier(catalog, ident) =
+          relationResolution.expandIdentifier(parts)
+        val loaded = catalog.asFunctionCatalog.loadFunction(ident)
+        Some(loaded match {
+          case v1Func: V1Function =>
+            val func = v1Func.invoke(u.arguments)
+            validateFunction(func, u.arguments.length, u)
+          case unboundV2Func =>
+            resolveV2Function(unboundV2Func, u.arguments, u)
+        })
+      } catch {
+        case e: AnalysisException if e.getCondition == "REQUIRES_SINGLE_PART_NAMESPACE" &&
+            parts.size == 3 =>
+          val catalogPath = (
+            catalogManager.currentCatalog.name +: catalogManager.currentNamespace
+          ).mkString(".")
+          val searchPath = SQLConf.get.functionResolutionSearchPath(catalogPath)
+          throw QueryCompilationErrors.unresolvedRoutineError(
+            u.nameParts, searchPath, u.origin)
+        case _: AnalysisException =>
+          None
+        case NonFatal(e) =>
+          logWarning(s"Persistent lookup failed for ${parts.mkString(".")}", e)
+          None
+      }
+  }
+
+  def resolveFunction(u: UnresolvedFunction): Expression = {
+    withPosition(u) {
+      val candidates = scalarResolutionCandidates(u.nameParts, u)
+      for (c <- candidates) {
+        tryResolveScalarCandidate(c, u) match {
+          case Some(expr) => return expr
+          case None =>
+        }
+      }
+      val catalogPath = (
+        catalogManager.currentCatalog.name +: catalogManager.currentNamespace
+      ).mkString(".")
+      val searchPath = SQLConf.get.functionResolutionSearchPath(catalogPath)
+      throw QueryCompilationErrors.unresolvedRoutineError(
+        u.nameParts, searchPath, u.origin)
     }
   }
 
@@ -263,7 +328,12 @@ class FunctionResolution(
     FunctionType.NotFound
   }
 
-  def resolveBuiltinOrTempFunction(
+  /**
+   * Tries to resolve a function from the session catalog only (builtin, temp, or extension).
+   * Returns None if the name is not session-qualified or not found there. The caller is
+   * responsible for then trying the persistent catalog when this returns None.
+   */
+  def tryResolveFromSessionCatalog(
       name: Seq[String],
       arguments: Seq[Expression],
       u: UnresolvedFunction): Option[Expression] = {
@@ -305,7 +375,12 @@ class FunctionResolution(
     }
   }
 
-  def resolveBuiltinOrTempTableFunction(
+  /**
+   * Tries to resolve a table function from the session catalog only (builtin, temp, or extension).
+   * Returns None if the name is not session-qualified or not found there. The caller may
+   * then try the persistent catalog or report an error.
+   */
+  def tryResolveTableFunctionFromSessionCatalog(
       name: Seq[String],
       arguments: Seq[Expression]): Option[LogicalPlan] = {
 

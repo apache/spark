@@ -2139,8 +2139,7 @@ class Analyzer(
       case u: UnresolvedTableValuedFunction if u.functionArgs.forall(_.resolved) =>
         withPosition(u) {
           try {
-            val resolvedFunc = functionResolution.resolveBuiltinOrTempTableFunction(
-                u.name, u.functionArgs).getOrElse {
+            def resolveFromPersistent: LogicalPlan = {
               val CatalogAndIdentifier(catalog, ident) =
                 relationResolution.expandIdentifier(u.name)
               if (CatalogV2Util.isSessionCatalog(catalog)) {
@@ -2150,6 +2149,19 @@ class Analyzer(
                 throw QueryCompilationErrors.missingCatalogTableValuedFunctionsAbilityError(
                   catalog)
               }
+            }
+            val resolvedFunc = if (u.name.size == 2 &&
+                FunctionResolution.sessionNamespaceKind(u.name).isDefined) {
+              try {
+                resolveFromPersistent
+              } catch {
+                case _: NoSuchFunctionException | _: AnalysisException =>
+                  functionResolution.tryResolveTableFunctionFromSessionCatalog(
+                    u.name, u.functionArgs).getOrElse(resolveFromPersistent)
+              }
+            } else {
+              functionResolution.tryResolveTableFunctionFromSessionCatalog(
+                  u.name, u.functionArgs).getOrElse(resolveFromPersistent)
             }
             resolvedFunc.transformAllExpressionsWithPruning(
               _.containsPattern(FUNCTION_TABLE_RELATION_ARGUMENT_EXPRESSION))  {
@@ -2248,7 +2260,7 @@ class Analyzer(
           ruleId) {
           case u @ UnresolvedFunction(nameParts, arguments, _, _, _, _, _)
               if functionResolution.hasLambdaAndResolvedArguments(arguments) => withPosition(u) {
-            functionResolution.resolveBuiltinOrTempFunction(nameParts, arguments, u).map {
+            functionResolution.tryResolveFromSessionCatalog(nameParts, arguments, u).map {
               case func: HigherOrderFunction => func
               case other => other.failAnalysis(
                 errorClass = "INVALID_LAMBDA_FUNCTION_CALL.NON_HIGHER_ORDER_FUNCTION",
