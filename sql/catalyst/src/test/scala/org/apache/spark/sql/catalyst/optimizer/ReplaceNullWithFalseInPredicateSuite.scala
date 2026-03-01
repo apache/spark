@@ -36,8 +36,8 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
       Batch("Replace null literals", FixedPoint(10),
         NullPropagation,
         ConstantFolding,
-        BooleanSimplification,
         SimplifyConditionals,
+        BooleanSimplification,
         ReplaceNullWithFalseInPredicate) :: Nil
   }
 

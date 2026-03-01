@@ -41,8 +41,8 @@ class BinaryComparisonSimplificationSuite extends PlanTest {
       Batch("Constant Folding", FixedPoint(50),
         NullPropagation,
         ConstantFolding,
-        BooleanSimplification,
         SimplifyBinaryComparison,
+        BooleanSimplification,
         PruneFilters) :: Nil
   }
 
