@@ -44,6 +44,7 @@ While `select_statement` is defined as
 SELECT [ hints , ... ] [ ALL | DISTINCT ] { [ [ named_expression | regex_column_names | star ] [ , ... ] | TRANSFORM (...) ] }
     FROM { from_item [ , ... ] }
     [ PIVOT clause ]
+    [ temporal clause]
     [ UNPIVOT clause ]
     [ LATERAL VIEW clause ] [ ... ] 
     [ WHERE boolean_expression ]
@@ -105,6 +106,10 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { [ [ named_expression | regex_column_
 * **LATERAL VIEW**
      
      The `LATERAL VIEW` clause is used in conjunction with generator functions such as `EXPLODE`, which will generate a virtual table containing one or more rows. `LATERAL VIEW` will apply the rows to each original output row.
+
+* **temporal clause** (VERSION AS OF | TIMESTAMP AS OF)
+
+    The temporal clause enables time travel when querying a table, allowing you to query at a specific version or point in time. See [Temporal Clause](sql-ref-syntax-qry-select-temporal.html) for details.
  
 * **WHERE**
 
@@ -202,6 +207,7 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { [ [ named_expression | regex_column_
 * [Window Function](sql-ref-syntax-qry-select-window.html)
 * [CASE Clause](sql-ref-syntax-qry-select-case.html)
 * [PIVOT Clause](sql-ref-syntax-qry-select-pivot.html)
+* [Temporal Clause](sql-ref-syntax-qry-select-temporal.html)
 * [UNPIVOT Clause](sql-ref-syntax-qry-select-unpivot.html)
 * [LATERAL VIEW Clause](sql-ref-syntax-qry-select-lateral-view.html)
 * [TRANSFORM Clause](sql-ref-syntax-qry-select-transform.html)
