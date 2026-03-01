@@ -22,9 +22,10 @@ import java.util.Collections
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.{DataFrame, Encoders, QueryTest, Row}
-import org.apache.spark.sql.QueryTest.sameRows
+import org.apache.spark.sql.QueryTest.{sameRows, withQueryExecutionsCaptured}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.{DynamicPruningExpression, GenericRowWithSchema}
+import org.apache.spark.sql.catalyst.expressions.{DynamicPruningExpression, Expression, GenericRowWithSchema}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReplaceData, WriteDelta}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.METADATA_COL_ATTR_KEY
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Delete, Identifier, InMemoryRowLevelOperationTable, InMemoryRowLevelOperationTableCatalog, Insert, MetadataColumn, Operation, Reinsert, TableInfo, Update, Write}
@@ -32,7 +33,7 @@ import org.apache.spark.sql.connector.expressions.LogicalExpressions.{identity, 
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.{InSubqueryExec, QueryExecution, SparkPlan}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
-import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2Relation, DataSourceV2ScanRelation}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, MetadataBuilder, StringType, StructField, StructType}
@@ -152,6 +153,22 @@ abstract class RowLevelOperationSuiteBase
     stripAQEPlan(executedPlan)
   }
 
+  // executes an operation and extracts conditions from ReplaceData or WriteDelta
+  protected def executeAndKeepConditions(func: => Unit): (Expression, Option[Expression]) = {
+    val qes = withQueryExecutionsCaptured(spark)(func)
+    qes.head.optimizedPlan.collectFirst {
+      case rd: ReplaceData => (rd.condition, rd.groupFilterCondition)
+      case wd: WriteDelta => (wd.condition, None)
+    }.getOrElse(fail("couldn't find row-level operation in optimized plan"))
+  }
+
+  protected def assertNoScanPlanning(plan: LogicalPlan): Unit = {
+    val relations = plan.collect { case r: DataSourceV2Relation => r }
+    assert(relations.nonEmpty, "plan must contain relations")
+    val scans = plan.collect { case s: DataSourceV2ScanRelation => s }
+    assert(scans.isEmpty, "plan must not contain scan relations")
+  }
+
   protected def executeAndCheckScan(
       query: String,
       expectedScanSchema: String): Unit = {
@@ -206,7 +223,7 @@ abstract class RowLevelOperationSuiteBase
       case Seq(partValue) => partValue
       case other => fail(s"expected only one partition value: $other" )
     }
-    assert(actualPartitions == expectedPartitions, "replaced partitions must match")
+    assert(actualPartitions.toSet == expectedPartitions.toSet, "replaced partitions must match")
   }
 
   protected def checkLastWriteInfo(

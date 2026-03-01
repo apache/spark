@@ -18,7 +18,7 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.{AnalysisException, Row}
-import org.apache.spark.sql.catalyst.expressions.DynamicPruningExpression
+import org.apache.spark.sql.catalyst.expressions.{DynamicPruningExpression, InSubquery}
 import org.apache.spark.sql.execution.{InSubqueryExec, ReusedSubqueryExec}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.internal.SQLConf
@@ -187,5 +187,68 @@ class GroupBasedUpdateTableSuite extends UpdateTableSuiteBase {
         start = 0,
         stop = 75)
     )
+  }
+
+  test("update does not double plan table (group filter enabled)") {
+    withSQLConf(SQLConf.RUNTIME_ROW_LEVEL_OPERATION_GROUP_FILTER_ENABLED.key -> "true") {
+      createAndInitTable("id INT, salary INT, dep STRING",
+        """{ "id": 1, "salary": 300, "dep": 'hr' }
+          |{ "id": 2, "salary": 150, "dep": 'software' }
+          |{ "id": 3, "salary": 120, "dep": 'hr' }
+          |""".stripMargin)
+
+      val (cond, groupFilterCond) = executeAndKeepConditions {
+        sql(
+          s"""UPDATE $tableNameAsString SET salary = -1
+             |WHERE id IN (SELECT id FROM $tableNameAsString WHERE salary > 200)
+             |""".stripMargin)
+      }
+
+      cond match {
+        case InSubquery(_, query) => assertNoScanPlanning(query.plan)
+        case _ => fail(s"unexpected condition: $cond")
+      }
+
+      groupFilterCond match {
+        case Some(InSubquery(_, query)) => assertNoScanPlanning(query.plan)
+        case _ => fail(s"unexpected group filter: $groupFilterCond")
+      }
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Row(1, -1, "hr") :: Row(2, 150, "software") :: Row(3, 120, "hr") :: Nil)
+
+      checkReplacedPartitions(Seq("hr"))
+    }
+  }
+
+  test("update does not double plan table (group filter disabled)") {
+    withSQLConf(SQLConf.RUNTIME_ROW_LEVEL_OPERATION_GROUP_FILTER_ENABLED.key -> "false") {
+      createAndInitTable("id INT, salary INT, dep STRING",
+        """{ "id": 1, "salary": 300, "dep": 'hr' }
+          |{ "id": 2, "salary": 150, "dep": 'software' }
+          |{ "id": 3, "salary": 120, "dep": 'hr' }
+          |""".stripMargin)
+
+      val (cond, groupFilterCond) = executeAndKeepConditions {
+        sql(
+          s"""UPDATE $tableNameAsString SET salary = -1
+             |WHERE id IN (SELECT id FROM $tableNameAsString WHERE salary > 200)
+             |""".stripMargin)
+      }
+
+      cond match {
+        case InSubquery(_, query) => assertNoScanPlanning(query.plan)
+        case _ => fail(s"unexpected condition: $cond")
+      }
+
+      assert(groupFilterCond.isEmpty, "group filter must be disabled")
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Row(1, -1, "hr") :: Row(2, 150, "software") :: Row(3, 120, "hr") :: Nil)
+
+      checkReplacedPartitions(Seq("hr", "software"))
+    }
   }
 }
