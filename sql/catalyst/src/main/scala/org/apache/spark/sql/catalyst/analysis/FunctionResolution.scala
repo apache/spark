@@ -106,22 +106,15 @@ class FunctionResolution(
   }
 
   /** Produces the ordered list of candidates for resolution. */
-  private def resolutionCandidates(
-      nameParts: Seq[String],
-      isInternal: Boolean): Seq[ResolutionCandidate] = {
+  private def resolutionCandidates(nameParts: Seq[String]): Seq[ResolutionCandidate] = {
     if (nameParts.size == 1) {
-      val candidates = resolutionSearchPath.map {
+      resolutionSearchPath.map {
         case SystemSessionScope =>
           SessionNamespaceCandidate(SessionCatalog.Temp, nameParts.head)
         case SystemBuiltinScope =>
           SessionNamespaceCandidate(SessionCatalog.Builtin, nameParts.head)
         case CurrentCatalogScope =>
           PersistentCandidate(nameParts)
-      }
-      if (isInternal) {
-        InternalCandidate(nameParts.head) +: candidates
-      } else {
-        candidates
       }
     } else {
       nameParts.size match {
@@ -210,7 +203,13 @@ class FunctionResolution(
 
   def resolveFunction(unresolvedFunc: UnresolvedFunction): Expression = {
     withPosition(unresolvedFunc) {
-      val candidates = resolutionCandidates(unresolvedFunc.nameParts, unresolvedFunc.isInternal)
+      val standardCandidates = resolutionCandidates(unresolvedFunc.nameParts)
+      // Internal functions are special; they have precedence if the parser flagged them.
+      val candidates = if (unresolvedFunc.isInternal && unresolvedFunc.nameParts.size == 1) {
+        InternalCandidate(unresolvedFunc.nameParts.head) +: standardCandidates
+      } else {
+        standardCandidates
+      }
       for (c <- candidates) {
         tryResolveScalarCandidate(c, unresolvedFunc) match {
           case Some(expr) => return expr
@@ -276,7 +275,7 @@ class FunctionResolution(
   def resolveTableFunction(
       nameParts: Seq[String],
       arguments: Seq[Expression]): Option[LogicalPlan] = {
-    val candidates = resolutionCandidates(nameParts, isInternal = false)
+    val candidates = resolutionCandidates(nameParts)
     for (c <- candidates) {
       tryResolveTableFunctionCandidate(c, arguments) match {
         case Some(plan) => return Some(plan)
