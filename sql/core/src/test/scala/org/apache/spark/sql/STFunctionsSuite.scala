@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -43,6 +44,27 @@ class STFunctionsSuite extends QueryTest with SharedSparkSession {
         "0101000000000000000000f03f0000000000000040"))
   }
 
+  test("st_geogfromwkb") {
+    // Test data: Well-Known Binary (WKB) representations.
+    val df = Seq[(String)](
+      (
+        "0101000000000000000000f03f0000000000000040"
+      )).toDF("wkb")
+    // ST_GeogFromWKB.
+    checkAnswer(
+      df.select(lower(hex(st_asbinary(st_geogfromwkb(unhex($"wkb"))))).as("col0")),
+      Row("0101000000000000000000f03f0000000000000040"))
+    // ST_GeogFromWKB with invalid WKB.
+    val df_invalid = Seq(Array[Byte](111)).toDF("wkb")
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        df_invalid.select(st_geogfromwkb($"wkb")).collect()
+      },
+      condition = "WKB_PARSE_ERROR",
+      parameters = Map("parseError" -> "Unexpected end of WKB buffer", "pos" -> "0")
+    )
+  }
+
   test("st_geomfromwkb") {
     // Test data: Well-Known Binary (WKB) representations.
     val df = Seq[(String, Int)](
@@ -59,6 +81,23 @@ class STFunctionsSuite extends QueryTest with SharedSparkSession {
         "0101000000000000000000f03f0000000000000040",
         "0101000000000000000000f03f0000000000000040",
         "0101000000000000000000f03f0000000000000040"))
+    // ST_GeomFromWKB with invalid SRID.
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        df.select(st_geomfromwkb(unhex($"wkb"), lit(-1))).collect()
+      },
+      condition = "ST_INVALID_SRID_VALUE",
+      parameters = Map("srid" -> "-1")
+    )
+    // ST_GeomFromWKB with invalid WKB.
+    val df_invalid = Seq(Array[Byte](111)).toDF("wkb")
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        df_invalid.select(st_geomfromwkb($"wkb")).collect()
+      },
+      condition = "WKB_PARSE_ERROR",
+      parameters = Map("parseError" -> "Unexpected end of WKB buffer", "pos" -> "0")
+    )
   }
 
   /** ST accessor expressions. */

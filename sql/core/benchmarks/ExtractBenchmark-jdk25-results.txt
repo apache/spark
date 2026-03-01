@@ -1,0 +1,104 @@
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+Invoke extract for timestamp:             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+cast to timestamp                                   257            279          19         38.9          25.7       1.0X
+YEAR of timestamp                                   562            581          23         17.8          56.2       0.5X
+YEAROFWEEK of timestamp                             630            657          34         15.9          63.0       0.4X
+QUARTER of timestamp                                651            669          20         15.4          65.1       0.4X
+MONTH of timestamp                                  570            593          36         17.6          57.0       0.5X
+WEEK of timestamp                                   895            910          16         11.2          89.5       0.3X
+DAY of timestamp                                    574            588          17         17.4          57.4       0.4X
+DAYOFWEEK of timestamp                              733            748          18         13.6          73.3       0.4X
+DOW of timestamp                                    737            748           9         13.6          73.7       0.3X
+DOW_ISO of timestamp                                687            708          28         14.6          68.7       0.4X
+DAYOFWEEK_ISO of timestamp                          685            712          30         14.6          68.5       0.4X
+DOY of timestamp                                    611            623          15         16.4          61.1       0.4X
+HOUR of timestamp                                   441            452          17         22.7          44.1       0.6X
+MINUTE of timestamp                                 439            449          11         22.8          43.9       0.6X
+SECOND of timestamp                                 555            560           7         18.0          55.5       0.5X
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+Invoke date_part for timestamp:           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+cast to timestamp                                   247            261          17         40.6          24.7       1.0X
+YEAR of timestamp                                   562            575          16         17.8          56.2       0.4X
+YEAROFWEEK of timestamp                             626            645          19         16.0          62.6       0.4X
+QUARTER of timestamp                                647            655          12         15.4          64.7       0.4X
+MONTH of timestamp                                  568            578          12         17.6          56.8       0.4X
+WEEK of timestamp                                   881            886           4         11.3          88.1       0.3X
+DAY of timestamp                                    573            583          11         17.5          57.3       0.4X
+DAYOFWEEK of timestamp                              731            738           6         13.7          73.1       0.3X
+DOW of timestamp                                    733            748          18         13.6          73.3       0.3X
+DOW_ISO of timestamp                                686            692           6         14.6          68.6       0.4X
+DAYOFWEEK_ISO of timestamp                          688            700          14         14.5          68.8       0.4X
+DOY of timestamp                                    607            611           5         16.5          60.7       0.4X
+HOUR of timestamp                                   451            452           1         22.2          45.1       0.5X
+MINUTE of timestamp                                 436            445          15         23.0          43.6       0.6X
+SECOND of timestamp                                 529            536          10         18.9          52.9       0.5X
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+Invoke extract for date:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+cast to date                                        529            533           5         18.9          52.9       1.0X
+YEAR of date                                        557            560           3         18.0          55.7       1.0X
+YEAROFWEEK of date                                  629            631           4         15.9          62.9       0.8X
+QUARTER of date                                     640            645           5         15.6          64.0       0.8X
+MONTH of date                                       567            581          22         17.6          56.7       0.9X
+WEEK of date                                        882            890          10         11.3          88.2       0.6X
+DAY of date                                         567            574           7         17.6          56.7       0.9X
+DAYOFWEEK of date                                   730            734           3         13.7          73.0       0.7X
+DOW of date                                         730            730           1         13.7          73.0       0.7X
+DOW_ISO of date                                     684            694          15         14.6          68.4       0.8X
+DAYOFWEEK_ISO of date                               683            686           2         14.6          68.3       0.8X
+DOY of date                                         608            610           3         16.4          60.8       0.9X
+HOUR of date                                        969            980          17         10.3          96.9       0.5X
+MINUTE of date                                      972            980          10         10.3          97.2       0.5X
+SECOND of date                                     1063           1064           2          9.4         106.3       0.5X
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+Invoke date_part for date:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+cast to date                                        530            531           1         18.9          53.0       1.0X
+YEAR of date                                        557            559           2         17.9          55.7       1.0X
+YEAROFWEEK of date                                  633            648          13         15.8          63.3       0.8X
+QUARTER of date                                     640            641           2         15.6          64.0       0.8X
+MONTH of date                                       563            566           2         17.8          56.3       0.9X
+WEEK of date                                        883            885           3         11.3          88.3       0.6X
+DAY of date                                         571            573           2         17.5          57.1       0.9X
+DAYOFWEEK of date                                   731            731           0         13.7          73.1       0.7X
+DOW of date                                         730            733           4         13.7          73.0       0.7X
+DOW_ISO of date                                     686            688           2         14.6          68.6       0.8X
+DAYOFWEEK_ISO of date                               687            688           2         14.6          68.7       0.8X
+DOY of date                                         608            609           1         16.5          60.8       0.9X
+HOUR of date                                        969            972           3         10.3          96.9       0.5X
+MINUTE of date                                      976            979           4         10.2          97.6       0.5X
+SECOND of date                                     1063           1064           2          9.4         106.3       0.5X
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+Invoke extract for interval:              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+cast to interval                                    743            745           3         13.5          74.3       1.0X
+YEAR of interval                                    726            732          10         13.8          72.6       1.0X
+MONTH of interval                                   729            738           9         13.7          72.9       1.0X
+DAY of interval                                     722            746          40         13.9          72.2       1.0X
+HOUR of interval                                    726            727           2         13.8          72.6       1.0X
+MINUTE of interval                                  734            737           4         13.6          73.4       1.0X
+SECOND of interval                                  780            781           1         12.8          78.0       1.0X
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+Invoke date_part for interval:            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+cast to interval                                    744            748           6         13.4          74.4       1.0X
+YEAR of interval                                    725            735          17         13.8          72.5       1.0X
+MONTH of interval                                   725            729           3         13.8          72.5       1.0X
+DAY of interval                                     719            721           3         13.9          71.9       1.0X
+HOUR of interval                                    724            726           2         13.8          72.4       1.0X
+MINUTE of interval                                  732            734           2         13.7          73.2       1.0X
+SECOND of interval                                  778            781           4         12.9          77.8       1.0X
+

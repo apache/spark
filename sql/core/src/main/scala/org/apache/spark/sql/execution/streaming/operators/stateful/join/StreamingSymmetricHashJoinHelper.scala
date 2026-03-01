@@ -46,12 +46,12 @@ object StreamingSymmetricHashJoinHelper extends Logging {
     override def toString: String = s"$desc: $expr"
   }
   /** Predicate for watermark on state keys */
-  case class JoinStateKeyWatermarkPredicate(expr: Expression)
+  case class JoinStateKeyWatermarkPredicate(expr: Expression, stateWatermark: Long)
     extends JoinStateWatermarkPredicate {
     def desc: String = "key predicate"
   }
   /** Predicate for watermark on state values */
-  case class JoinStateValueWatermarkPredicate(expr: Expression)
+  case class JoinStateValueWatermarkPredicate(expr: Expression, stateWatermark: Long)
     extends JoinStateWatermarkPredicate {
     def desc: String = "value predicate"
   }
@@ -212,8 +212,11 @@ object StreamingSymmetricHashJoinHelper extends Logging {
           oneSideJoinKeys(joinKeyOrdinalForWatermark.get).dataType,
           oneSideJoinKeys(joinKeyOrdinalForWatermark.get).nullable)
         val expr = watermarkExpression(Some(keyExprWithWatermark), eventTimeWatermarkForEviction)
-        expr.map(JoinStateKeyWatermarkPredicate.apply _)
-
+        expr.map { e =>
+          // watermarkExpression only provides the expression when eventTimeWatermarkForEviction
+          // is defined
+          JoinStateKeyWatermarkPredicate(e, eventTimeWatermarkForEviction.get)
+        }
       } else if (isWatermarkDefinedOnInput) { // case 2 in the StreamingSymmetricHashJoinExec docs
         val stateValueWatermark = StreamingJoinHelper.getStateValueWatermark(
           attributesToFindStateWatermarkFor = AttributeSet(oneSideInputAttributes),
@@ -222,8 +225,11 @@ object StreamingSymmetricHashJoinHelper extends Logging {
           eventTimeWatermarkForEviction)
         val inputAttributeWithWatermark = oneSideInputAttributes.find(_.metadata.contains(delayKey))
         val expr = watermarkExpression(inputAttributeWithWatermark, stateValueWatermark)
-        expr.map(JoinStateValueWatermarkPredicate.apply _)
-
+        expr.map { e =>
+          // watermarkExpression only provides the expression when eventTimeWatermarkForEviction
+          // is defined
+          JoinStateValueWatermarkPredicate(e, stateValueWatermark.get)
+        }
       } else {
         None
       }

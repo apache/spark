@@ -23,6 +23,7 @@ import java.util.concurrent.TimeUnit
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
+import com.google.protobuf.{Any => PAny, StringValue}
 import io.grpc.{CallOptions, Channel, ClientCall, ClientInterceptor, Metadata, MethodDescriptor, Server, ServerCall, ServerCallHandler, ServerInterceptor, Status, StatusRuntimeException}
 import io.grpc.netty.NettyServerBuilder
 import io.grpc.stub.StreamObserver
@@ -548,6 +549,114 @@ class SparkConnectClientSuite extends ConnectFunSuite {
     observer.onCompleted()
   }
 
+  test("getOperationStatuses returns operation statuses for requested IDs") {
+    startDummyServer(0)
+    client = SparkConnectClient
+      .builder()
+      .connectionString(s"sc://localhost:${server.getPort}")
+      .build()
+
+    val response =
+      client.getOperationStatuses(Seq("default-op-1", "unknown-op"))
+    val statuses = response.getOperationStatusesList.asScala.toSeq
+    assert(statuses.size == 2)
+    assert(statuses.map(_.getOperationId).toSet == Set("default-op-1", "unknown-op"))
+
+    val statusMap = statuses.map(s => s.getOperationId -> s.getState).toMap
+    assert(
+      statusMap("default-op-1") ==
+        proto.GetStatusResponse.OperationStatus.OperationState.OPERATION_STATE_SUCCEEDED)
+    assert(
+      statusMap("unknown-op") ==
+        proto.GetStatusResponse.OperationStatus.OperationState.OPERATION_STATE_UNKNOWN)
+  }
+
+  test("getOperationStatuses with no IDs returns all operations from server") {
+    startDummyServer(0)
+    client = SparkConnectClient
+      .builder()
+      .connectionString(s"sc://localhost:${server.getPort}")
+      .build()
+
+    val response = client.getOperationStatuses()
+    val statuses = response.getOperationStatusesList.asScala.toSeq
+    assert(statuses.size == 2)
+    assert(statuses.map(_.getOperationId).toSet == Set("default-op-1", "default-op-2"))
+
+    val statusMap = statuses.map(s => s.getOperationId -> s.getState).toMap
+    assert(
+      statusMap("default-op-1") ==
+        proto.GetStatusResponse.OperationStatus.OperationState.OPERATION_STATE_SUCCEEDED)
+    assert(
+      statusMap("default-op-2") ==
+        proto.GetStatusResponse.OperationStatus.OperationState.OPERATION_STATE_RUNNING)
+  }
+
+  test("getOperationStatuses sends extensions and returns them per operation") {
+    startDummyServer(0)
+    client = SparkConnectClient
+      .builder()
+      .connectionString(s"sc://localhost:${server.getPort}")
+      .build()
+
+    val extension = PAny.pack(StringValue.of("custom_extension"))
+
+    val response = client.getOperationStatuses(
+      operationIds = Seq("default-op-1", "default-op-2"),
+      operationExtensions = Seq(extension))
+
+    // Verify operation statuses are returned
+    val statuses = response.getOperationStatusesList.asScala.toSeq
+    assert(statuses.size == 2)
+
+    val statusMap = statuses.map(s => s.getOperationId -> s).toMap
+    assert(
+      statusMap("default-op-1").getState ==
+        proto.GetStatusResponse.OperationStatus.OperationState.OPERATION_STATE_SUCCEEDED)
+    assert(
+      statusMap("default-op-2").getState ==
+        proto.GetStatusResponse.OperationStatus.OperationState.OPERATION_STATE_RUNNING)
+
+    // Verify that extensions are echoed back per operation
+    statuses.foreach { status =>
+      val opExtensions = status.getExtensionsList.asScala.toSeq
+      assert(opExtensions.size == 1)
+      assert(opExtensions.head.is(classOf[StringValue]))
+      assert(
+        opExtensions.head
+          .unpack(classOf[StringValue])
+          .getValue == "custom_extension")
+    }
+  }
+
+  test("getOperationStatuses sends request-level extensions and echoes them in the response") {
+    startDummyServer(0)
+    client = SparkConnectClient
+      .builder()
+      .connectionString(s"sc://localhost:${server.getPort}")
+      .build()
+
+    val reqExtension = PAny.pack(StringValue.of("request_extension"))
+
+    val response = client.getOperationStatuses(
+      operationIds = Seq("default-op-1"),
+      requestExtensions = Seq(reqExtension))
+
+    // Verify the operation status is returned
+    val statuses = response.getOperationStatusesList.asScala.toSeq
+    assert(statuses.size == 1)
+    assert(statuses.head.getOperationId == "default-op-1")
+
+    // Verify request-level extensions were echoed back in the response
+    val responseExtensions = response.getExtensionsList.asScala.toSeq
+    assert(responseExtensions.size == 1)
+    assert(responseExtensions.head.is(classOf[StringValue]))
+    assert(
+      responseExtensions.head
+        .unpack(classOf[StringValue])
+        .getValue == "request_extension")
+  }
+
   test("client can set a custom operation id for ExecutePlan requests") {
     startDummyServer(0)
     client = SparkConnectClient
@@ -925,6 +1034,61 @@ class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectSer
       .setOperationId(request.getOperationId)
       .build()
     responseObserver.onNext(response)
+    responseObserver.onCompleted()
+  }
+
+  // Default operations stored in the mock session
+  private val defaultOperationStatuses = Map(
+    "default-op-1" ->
+      proto.GetStatusResponse.OperationStatus.OperationState.OPERATION_STATE_SUCCEEDED,
+    "default-op-2" ->
+      proto.GetStatusResponse.OperationStatus.OperationState.OPERATION_STATE_RUNNING)
+
+  override def getStatus(
+      request: proto.GetStatusRequest,
+      responseObserver: StreamObserver[proto.GetStatusResponse]): Unit = {
+    val responseBuilder = proto.GetStatusResponse
+      .newBuilder()
+      .setSessionId(request.getSessionId)
+      .setServerSideSessionId(UUID.randomUUID().toString)
+
+    if (request.hasOperationStatus) {
+      val opStatusRequest = request.getOperationStatus
+      val requestedIds = opStatusRequest.getOperationIdsList.asScala.toSeq
+      // Collect operation-status-level extensions from the request to echo back
+      val opStatusExtensions = opStatusRequest.getExtensionsList.asScala
+
+      if (requestedIds.isEmpty) {
+        // No specific IDs requested - return all default operations
+        defaultOperationStatuses.foreach { case (opId, state) =>
+          val statusBuilder = proto.GetStatusResponse.OperationStatus
+            .newBuilder()
+            .setOperationId(opId)
+            .setState(state)
+          opStatusExtensions.foreach(statusBuilder.addExtensions)
+          responseBuilder.addOperationStatuses(statusBuilder.build())
+        }
+      } else {
+        // Return status for each requested operation ID
+        // Unknown operations return OPERATION_STATE_UNKNOWN
+        requestedIds.foreach { opId =>
+          val state = defaultOperationStatuses.getOrElse(
+            opId,
+            proto.GetStatusResponse.OperationStatus.OperationState.OPERATION_STATE_UNKNOWN)
+          val statusBuilder = proto.GetStatusResponse.OperationStatus
+            .newBuilder()
+            .setOperationId(opId)
+            .setState(state)
+          opStatusExtensions.foreach(statusBuilder.addExtensions)
+          responseBuilder.addOperationStatuses(statusBuilder.build())
+        }
+      }
+    }
+
+    // Echo request-level extensions back in the response
+    request.getExtensionsList.asScala.foreach(responseBuilder.addExtensions)
+
+    responseObserver.onNext(responseBuilder.build())
     responseObserver.onCompleted()
   }
 }

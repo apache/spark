@@ -208,19 +208,6 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
          | RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)"
          |""".stripMargin.replaceAll("\n", "")))
 
-  errorTest(
-    "window aggregate function with filter predicate",
-    testRelation2.select(
-      WindowExpression(
-        Count(UnresolvedAttribute("b"))
-          .toAggregateExpression(isDistinct = false, filter = Some(UnresolvedAttribute("b") > 1)),
-        WindowSpecDefinition(
-          UnresolvedAttribute("a") :: Nil,
-          SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
-          UnspecifiedFrame)).as("window")),
-    "window aggregate function with filter predicate is not supported" :: Nil
-  )
-
   test("distinct function") {
     assertAnalysisErrorCondition(
       CatalystSqlParser.parsePlan("SELECT hex(DISTINCT a) FROM TaBlE"),

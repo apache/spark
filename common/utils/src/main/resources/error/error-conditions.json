@@ -206,6 +206,12 @@
     ],
     "sqlState" : "42K03"
   },
+  "BEAN_ENCODER_INTERFACE_NOT_SUPPORTED" : {
+    "message" : [
+      "Bean encoder does not support interface type <className>."
+    ],
+    "sqlState" : "0A000"
+  },
   "BINARY_ARITHMETIC_OVERFLOW" : {
     "message" : [
       "<value1> <symbol> <value2> caused overflow. Use <functionName> to ignore overflow problem and return NULL."
@@ -4290,6 +4296,11 @@
           "The function is invoked with DISTINCT and WITHIN GROUP but expressions <funcArg> and <orderingExpr> do not match. The WITHIN GROUP ordering expression must be picked from the function inputs."
         ]
       },
+      "MISMATCH_WITH_DISTINCT_INPUT_UNSAFE_CAST" : {
+        "message" : [
+          "The function <funcName> with DISTINCT and WITHIN GROUP (ORDER BY) is not supported for <inputType> input. Explicitly cast the input to <castType> before passing it to both the function argument and ORDER BY expression."
+        ]
+      },
       "WITHIN_GROUP_MISSING" : {
         "message" : [
           "WITHIN GROUP is required for the function."
@@ -7754,6 +7765,12 @@
     ],
     "sqlState" : "42601"
   },
+  "WKB_PARSE_ERROR" : {
+    "message" : [
+      "Error parsing WKB: <parseError> at position <pos>"
+    ],
+    "sqlState" : "22023"
+  },
   "WRITE_STREAM_NOT_ALLOWED" : {
     "message" : [
       "`writeStream` can be called only on streaming Dataset/DataFrame."
@@ -7989,11 +8006,6 @@
   "_LEGACY_ERROR_TEMP_1021" : {
     "message" : [
       "count(<targetString>.*) is not allowed. Please use count(*) or expand the columns manually, e.g. count(col1, col2)."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1030" : {
-    "message" : [
-      "Window aggregate function with filter predicate is not supported yet."
     ]
   },
   "_LEGACY_ERROR_TEMP_1031" : {

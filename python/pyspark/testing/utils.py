@@ -101,6 +101,9 @@ grpc_requirement_message = "" if have_grpc else "No module named 'grpc'"
 have_grpc_status = have_package("grpc_status")
 grpc_status_requirement_message = "" if have_grpc_status else "No module named 'grpc_status'"
 
+have_zstandard = have_package("zstandard")
+zstandard_requirement_message = "" if have_zstandard else "No module named 'zstandard'"
+
 
 googleapis_common_protos_requirement_message = ""
 
@@ -140,6 +143,7 @@ connect_requirement_message = (
     or grpc_requirement_message
     or googleapis_common_protos_requirement_message
     or grpc_status_requirement_message
+    or zstandard_requirement_message
 )
 
 should_test_connect = not connect_requirement_message
