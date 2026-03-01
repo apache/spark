@@ -127,7 +127,18 @@ abstract class FileFormatDataWriter(
     }
     val summary = ExecutedWriteSummary(
       updatedPartitions = updatedPartitions.toSet,
-      stats = statsTrackers.map(_.getFinalStats(taskCommitTime)))
+      stats = statsTrackers.map(_.getFinalStats(taskCommitTime, 0)))
+    WriteTaskResult(taskCommitMessage, summary)
+  }
+
+  override def commit(taskWriteDataTime: Long): WriteTaskResult = {
+    releaseResources()
+    val (taskCommitMessage, taskCommitTime) = Utils.timeTakenMs {
+      committer.commitTask(taskAttemptContext)
+    }
+    val summary = ExecutedWriteSummary(
+      updatedPartitions = updatedPartitions.toSet,
+      stats = statsTrackers.map(_.getFinalStats(taskCommitTime, taskWriteDataTime)))
     WriteTaskResult(taskCommitMessage, summary)
   }
 
