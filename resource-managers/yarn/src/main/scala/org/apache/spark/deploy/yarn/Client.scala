@@ -977,7 +977,7 @@ private[spark] class Client(
       .foreach { case (k, v) => YarnSparkHadoopUtil.addPathToEnvironment(env, k, v) }
 
     if (!env.contains("SPARK_USER")) {
-      env("SPARK_USER") = UserGroupInformation.getCurrentUser().getShortUserName()
+      env("SPARK_USER") = UserGroupInformation.getCurrentUser().getUserName()
     }
 
     // If pyFiles contains any .py files, we need to add LOCALIZED_PYTHON_DIR to the PYTHONPATH
