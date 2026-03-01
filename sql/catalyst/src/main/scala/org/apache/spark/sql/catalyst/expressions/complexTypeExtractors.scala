@@ -431,7 +431,7 @@ trait GetArrayItemUtil {
           true
       }
     } else {
-      if (failOnError) arrayElementNullable else true
+      if (failOnError) arrayElementNullable || child.nullable else true
     }
   }
 }
