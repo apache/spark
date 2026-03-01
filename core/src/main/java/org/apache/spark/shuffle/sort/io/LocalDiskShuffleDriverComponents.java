@@ -20,13 +20,26 @@ package org.apache.spark.shuffle.sort.io;
 import java.util.Collections;
 import java.util.Map;
 
+import org.apache.spark.SparkConf;
 import org.apache.spark.SparkEnv;
 import org.apache.spark.shuffle.api.ShuffleDriverComponents;
 import org.apache.spark.storage.BlockManagerMaster;
+import org.apache.spark.storage.FallbackStorage;
 
 public class LocalDiskShuffleDriverComponents implements ShuffleDriverComponents {
 
+  private final SparkConf sparkConf;
+
   private BlockManagerMaster blockManagerMaster;
+
+  @Deprecated
+  public LocalDiskShuffleDriverComponents() {
+      this.sparkConf = null;
+  }
+
+  public LocalDiskShuffleDriverComponents(SparkConf sparkConf) {
+      this.sparkConf = sparkConf;
+  }
 
   @Override
   public Map<String, String> initializeApplication() {
@@ -45,5 +58,9 @@ public class LocalDiskShuffleDriverComponents implements ShuffleDriverComponents
       throw new IllegalStateException("Driver components must be initialized before using");
     }
     blockManagerMaster.removeShuffle(shuffleId, blocking);
+  }
+
+  public boolean supportsReliableStorage() {
+    return FallbackStorage.isReliable(this.sparkConf);
   }
 }

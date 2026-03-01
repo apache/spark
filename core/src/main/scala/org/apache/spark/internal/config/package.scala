@@ -635,6 +635,26 @@ package object config {
       .checkValue(_.endsWith(java.io.File.separator), "Path should end with separator.")
       .createOptional
 
+  private[spark] val STORAGE_DECOMMISSION_FALLBACK_STORAGE_PROACTIVE_ENABLED =
+    ConfigBuilder("spark.storage.decommission.fallbackStorage.proactive.enabled")
+      .doc("Enables proactive shuffle block replication for fallback storage. " +
+        "If enabled, all shuffle blocks are copied asynchronously to the fallback storage. " +
+        "This speeds-up decommissioning as most shuffle data might have been replicated by then, " +
+        "at the cost of extra network traffic and storage usage if no decommission occurs. " +
+        "This does not migrate any shuffle data until decommission is started.")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val STORAGE_DECOMMISSION_FALLBACK_STORAGE_PROACTIVE_RELIABLE =
+    ConfigBuilder("spark.storage.decommission.fallbackStorage.proactive.reliable")
+      .doc("Enables reliable shuffle data replication to fallback storage. " +
+        "The task success depends on the successful transfer of shuffle data " +
+        "to the fallback storage. This allows to recover from node failures.")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val STORAGE_DECOMMISSION_SHUFFLE_MAX_DISK_SIZE =
     ConfigBuilder("spark.storage.decommission.shuffleBlocks.maxDiskSize")
       .doc("Maximum disk space to use to store shuffle blocks before rejecting remote " +

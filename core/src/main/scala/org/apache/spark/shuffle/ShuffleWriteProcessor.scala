@@ -21,6 +21,7 @@ import org.apache.spark.{ShuffleDependency, SparkEnv, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{NUM_MERGER_LOCATIONS, SHUFFLE_ID, STAGE_ID}
 import org.apache.spark.scheduler.MapStatus
+import org.apache.spark.storage.FallbackStorage
 
 /**
  * The interface for customizing shuffle write process. The driver create a ShuffleWriteProcessor
@@ -82,6 +83,26 @@ private[spark] class ShuffleWriteProcessor extends Serializable with Logging {
               new ShuffleBlockPusher(SparkEnv.get.conf)
                 .initiateBlockPush(dataFile, writer.getPartitionLengths(), dep, mapIndex)
             case _ =>
+          }
+        }
+        // copy block to fallback storage if pro-active replication to fallback storage is enabled
+        if (FallbackStorage.isProactive(SparkEnv.get.conf)) {
+          val shuffleBlockInfo = ShuffleBlockInfo(dep.shuffleId, mapId)
+          val fallbackStorage = FallbackStorage.getFallbackStorage(SparkEnv.get.conf)
+          val blockManager = SparkEnv.get.blockManager
+
+          if (FallbackStorage.isReliable(SparkEnv.get.conf)) {
+            // we are not catching exceptions here as we want them to fail the task to retry it,
+            // otherwise the next stage would see a fetch-failed exception when it has to read
+            // from the fallback storage, which will then retry this stage entirely
+            fallbackStorage.foreach(
+              _.copy(shuffleBlockInfo, blockManager, isAsyncCopy = false, reportBlockStatus = false)
+            )
+          } else {
+            // we ignore exceptions that occur asynchronously, this is best-effort replication
+            // we do not want to defer the task in any way
+            fallbackStorage
+              .foreach(_.copyAsync(shuffleBlockInfo, blockManager))
           }
         }
       }
