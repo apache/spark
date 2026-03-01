@@ -2456,12 +2456,8 @@ class AstBuilder extends DataTypeAstBuilder
       funcCallCtx.funcName,
       Nil,
       (ident, _) => {
-        if (ident.length > 1) {
-          throw new ParseException(
-            errorClass = "INVALID_SQL_SYNTAX.INVALID_TABLE_VALUED_FUNC_NAME",
-            messageParameters = Map("funcName" -> toSQLId(ident)),
-            ctx = funcCallCtx)
-        }
+        // Allow qualified table-valued function names (e.g., builtin.range, system.session.my_tvf)
+        // Removed artificial restriction on multi-part identifiers
         val funcName = funcCallCtx.funcName.getText
         val args = funcCallCtx.functionTableArgument.asScala.map { e =>
           Option(e.functionArgument).map(extractNamedArgument(_, funcName))

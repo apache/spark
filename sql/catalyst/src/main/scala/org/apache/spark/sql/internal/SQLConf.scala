@@ -2327,6 +2327,19 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val SESSION_FUNCTION_RESOLUTION_ORDER =
+    buildConf("spark.sql.functionResolution.sessionOrder")
+      .internal()
+      .version("4.2.0")
+      .doc("Order of the session (temporary) function namespace when resolving unqualified " +
+        "function names. Valid values: 'first', 'second', 'last'. " +
+        "'first': session -> builtin -> persistent (SQL temp creation blocked if " +
+        "conflicts with builtin). 'second': builtin -> session -> persistent (default). " +
+        "'last': builtin -> persistent (current schema) -> session.")
+      .stringConf
+      .checkValues(Set("first", "second", "last"))
+      .createWithDefault("second")
+
   // Whether to retain group by columns or not in GroupedData.agg.
   val DATAFRAME_RETAIN_GROUP_COLUMNS = buildConf("spark.sql.retainGroupColumns")
     .version("1.4.0")
@@ -8113,6 +8126,35 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def legacyEvalCurrentTime: Boolean = getConf(SQLConf.LEGACY_EVAL_CURRENT_TIME)
 
   def legacyOutputSchema: Boolean = getConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA)
+
+  def sessionFunctionResolutionOrder: String =
+    getConf(SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER)
+
+  /**
+   * Returns the single resolution search path for all objects (functions, tables, views).
+   * Used for both resolution order and error messages. Entries: "system.builtin", "system.session",
+   * and the current catalog path (e.g. "spark_catalog.default"). Order is determined by
+   * [[sessionFunctionResolutionOrder]]:
+   * - "first": session, builtin, catalogPath
+   * - "second": builtin, session, catalogPath (default)
+   * - "last": builtin, catalogPath, session
+   */
+  def resolutionSearchPath(catalogPath: String): Seq[String] = {
+    val order = sessionFunctionResolutionOrder
+    val systemSession = "system.session"
+    val systemBuiltin = "system.builtin"
+    order match {
+      case "first" =>
+        if (catalogPath.isEmpty) Seq(systemSession, systemBuiltin)
+        else Seq(systemSession, systemBuiltin, catalogPath)
+      case "last" =>
+        if (catalogPath.isEmpty) Seq(systemBuiltin, systemSession)
+        else Seq(systemBuiltin, catalogPath, systemSession)
+      case _ => // "second"
+        if (catalogPath.isEmpty) Seq(systemBuiltin, systemSession)
+        else Seq(systemBuiltin, systemSession, catalogPath)
+    }
+  }
 
   override def legacyParameterSubstitutionConstantsOnly: Boolean =
     getConf(SQLConf.LEGACY_PARAMETER_SUBSTITUTION_CONSTANTS_ONLY)

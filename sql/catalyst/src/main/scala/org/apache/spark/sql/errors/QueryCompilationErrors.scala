@@ -694,8 +694,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def singleTableStarInCountNotAllowedError(targetString: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1021",
-      messageParameters = Map("targetString" -> targetString))
+      errorClass = "INVALID_USAGE_OF_STAR_WITH_TABLE_IDENTIFIER_IN_COUNT",
+      messageParameters = Map("tableName" -> toSQLId(targetString)))
   }
 
   def orderByPositionRangeError(index: Int, size: Int, t: TreeNode[_]): Throwable = {
@@ -943,6 +943,34 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "searchPath" -> searchPath.map(toSQLId).mkString("[", ", ", "]")
       ),
       origin = context)
+  }
+
+  def tableOrViewNotFoundWithSearchPath(
+      name: Seq[String],
+      searchPath: Seq[String],
+      origin: Origin): Throwable = {
+    new AnalysisException(
+      errorClass = "TABLE_OR_VIEW_NOT_FOUND_WITH_SEARCH_PATH",
+      messageParameters = Map(
+        "relationName" -> toSQLId(name),
+        "searchPath" -> searchPath.map(toSQLId).mkString("[", ", ", "]")
+      ),
+      origin = origin)
+  }
+
+  def notAScalarFunctionError(
+      functionName: String,
+      u: TreeNode[_]): Throwable = {
+    new AnalysisException(
+      errorClass = "NOT_A_SCALAR_FUNCTION",
+      messageParameters = Map("functionName" -> toSQLId(functionName)),
+      origin = u.origin)
+  }
+
+  def notATableFunctionError(functionName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "NOT_A_TABLE_FUNCTION",
+      messageParameters = Map("functionName" -> toSQLId(functionName)))
   }
 
   def wrongNumArgsError(
@@ -1549,6 +1577,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   }
 
   def requiresSinglePartNamespaceError(identifier: Seq[String]): Throwable = {
+    // Callers must pass the full multipart identifier (e.g. namespace :+ name for table/view)
+    // so the message shows the full name like "`t`" or "`a`.`b`.`c`", not empty or namespace-only.
     new AnalysisException(
       errorClass = "REQUIRES_SINGLE_PART_NAMESPACE",
       messageParameters = Map(
@@ -3068,9 +3098,41 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   }
 
   def cannotDropBuiltinFuncError(functionName: String): Throwable = {
+    operationNotAllowedOnBuiltinFunctionError("DROP", functionName)
+  }
+
+  def operationNotAllowedOnBuiltinFunctionError(
+      statement: String,
+      functionName: String): Throwable = {
+    operationNotAllowedOnBuiltinNamespaceError(statement, "FUNCTION", functionName)
+  }
+
+  /**
+   * Error when an operation is not allowed on the builtin namespace.
+   * Uses objectType so callers can pass TABLE, VIEW, or FUNCTION as appropriate.
+   */
+  def operationNotAllowedOnBuiltinNamespaceError(
+      statement: String,
+      objectType: String,
+      objectName: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1255",
-      messageParameters = Map("functionName" -> functionName))
+      errorClass = "FORBIDDEN_OPERATION",
+      messageParameters = Map(
+        "statement" -> toSQLStmt(statement),
+        "objectType" -> objectType,
+        "objectName" -> toSQLId(objectName)))
+  }
+
+  def invalidTempObjQualifierError(
+      objectType: String,
+      objectName: String,
+      qualifier: String): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_TEMP_OBJ_QUALIFIER",
+      messageParameters = Map(
+        "objectType" -> objectType,
+        "objectName" -> toSQLId(objectName),
+        "qualifier" -> toSQLId(qualifier)))
   }
 
   def cannotRefreshBuiltInFuncError(functionName: String, t: TreeNode[_]): Throwable = {

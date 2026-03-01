@@ -300,6 +300,10 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case DropTable(ResolvedIdentifier(FakeSystemCatalog, ident), _, _) =>
       DropTempViewCommand(ident)
 
+    // Temp view resolved by name (e.g. session.v or system.session.v) -> drop by table name only
+    case DropView(ResolvedTempView(ident, _), ifExists) =>
+      DropTableCommand(TableIdentifier(ident.name(), None), ifExists, isView = true, purge = false)
+
     case DropView(ResolvedIdentifierInSessionCatalog(ident), ifExists) =>
       DropTableCommand(ident, ifExists, isView = true, purge = false)
 
@@ -574,8 +578,26 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         throw QueryCompilationErrors.missingCatalogRefreshFunctionAbilityError(catalog)
       }
 
+    case CreateFunction(UnresolvedIdentifier(nameParts, _), _, _, _, _)
+        if nameParts.length >= 2 &&
+          nameParts(nameParts.length - 2).equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE) =>
+      throw QueryCompilationErrors.operationNotAllowedOnBuiltinFunctionError(
+        "CREATE", nameParts.last)
+
+    case CreateFunction(
+        ResolvedIdentifier(catalog, ident), _, _, _, _)
+        if isSessionCatalog(catalog) &&
+          ident.namespace().length >= 1 &&
+          ident.namespace().last.equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE) =>
+      throw QueryCompilationErrors.operationNotAllowedOnBuiltinFunctionError(
+        "CREATE", ident.name())
+
     case CreateFunction(
         ResolvedIdentifierInSessionCatalog(ident), className, resources, ifExists, replace) =>
+      if (ident.database.exists(_.equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE))) {
+        throw QueryCompilationErrors.operationNotAllowedOnBuiltinFunctionError(
+          "CREATE", ident.table)
+      }
       CreateFunctionCommand(
         FunctionIdentifier(ident.table, ident.database, ident.catalog),
         className,
@@ -588,7 +610,26 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       throw QueryCompilationErrors.missingCatalogCreateFunctionAbilityError(catalog)
 
     case c @ CreateUserDefinedFunction(
+        UnresolvedIdentifier(nameParts, _), _, _, _, _, _, _, _, _, _, _, _)
+        if nameParts.length >= 2 &&
+          nameParts(nameParts.length - 2).equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE) =>
+      throw QueryCompilationErrors.operationNotAllowedOnBuiltinFunctionError(
+        "CREATE", nameParts.last)
+
+    case c @ CreateUserDefinedFunction(
+        ResolvedIdentifier(catalog, ident), _, _, _, _, _, _, _, _, _, _, _)
+        if isSessionCatalog(catalog) &&
+          ident.namespace().length >= 1 &&
+          ident.namespace().last.equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE) =>
+      throw QueryCompilationErrors.operationNotAllowedOnBuiltinFunctionError(
+        "CREATE", ident.name())
+
+    case c @ CreateUserDefinedFunction(
         ResolvedIdentifierInSessionCatalog(ident), _, _, _, _, _, _, _, _, _, _, _) =>
+      if (ident.database.exists(_.equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE))) {
+        throw QueryCompilationErrors.operationNotAllowedOnBuiltinFunctionError(
+          "CREATE", ident.table)
+      }
       CreateUserDefinedFunctionCommand(
         FunctionIdentifier(ident.table, ident.database, ident.catalog),
         c.inputParamText,
@@ -729,7 +770,9 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         Some(ident.asTableIdentifier.copy(catalog = Some(catalog.name)))
 
       case ResolvedTempView(ident, _) =>
-        Some(TableIdentifier(ident.name(), ident.namespace().headOption))
+        // Temp views are keyed by table name only in the v1 catalog; use None for database
+        // so that DESCRIBE/DROP etc. treat this as a temp view (e.g. session.desc_v -> desc_v).
+        Some(TableIdentifier(ident.name(), None))
 
       case _ => None
     }
@@ -771,7 +814,17 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
   object ResolvedIdentifierInSessionCatalog {
     def unapply(resolved: LogicalPlan): Option[TableIdentifier] = resolved match {
       case ResolvedIdentifier(catalog, ident) if isSessionCatalog(catalog) =>
-        Some(ident.asTableIdentifier.copy(catalog = Some(catalog.name)))
+        if (ident.namespace().length != 1) {
+          if (ident.namespace().length >= 1 &&
+              ident.namespace().last.equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE)) {
+            throw QueryCompilationErrors.operationNotAllowedOnBuiltinFunctionError(
+              "CREATE", ident.name())
+          }
+          // Pass full identifier (namespace + name) so error shows e.g. "`a`.`b`.`c`"
+          throw QueryCompilationErrors
+            .requiresSinglePartNamespaceError(ident.namespace().toSeq :+ ident.name())
+        }
+        Some(TableIdentifier(ident.name(), Some(ident.namespace().head), Some(catalog.name)))
       case _ => None
     }
   }
