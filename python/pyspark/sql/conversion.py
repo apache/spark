@@ -1711,7 +1711,7 @@ class ArrowArrayToPandasConversion:
                 lambda v: VariantVal(v["value"], v["metadata"]) if v is not None else None
             )
         elif isinstance(spark_type, GeographyType):
-            series = arr.to_pandas(date_as_object=True)
+            series = arr.to_pandas()
             series = series.map(
                 lambda v: Geography.fromWKB(v["wkb"], v["srid"]) if v is not None else None
             )
