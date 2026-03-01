@@ -149,13 +149,16 @@ case class StructField(
   }
 
   /**
-   * Updates the StructField with a new comment value.
+   * Updates the StructField with a new comment value. If the comment is null, the comment key is
+   * removed from metadata.
    */
   def withComment(comment: String): StructField = {
-    val newMetadata = new MetadataBuilder()
-      .withMetadata(metadata)
-      .putString("comment", comment)
-      .build()
+    val builder = new MetadataBuilder().withMetadata(metadata)
+    val newMetadata = if (comment == null) {
+      builder.remove("comment").build()
+    } else {
+      builder.putString("comment", comment).build()
+    }
     copy(metadata = newMetadata)
   }
 
