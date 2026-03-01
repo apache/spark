@@ -77,6 +77,7 @@ public class HiveServer2 extends CompositeService {
     // The signature of the callback must match that of a scala () -> Unit
     // function
     ShutdownHookManager.addShutdownHook(
+        "HiveServer2ShutdownHook",
         new AbstractFunction0<BoxedUnit>() {
           public BoxedUnit apply() {
             try {

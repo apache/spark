@@ -1341,7 +1341,7 @@ abstract class HiveThriftServer2TestBase extends SparkFunSuite with Logging {
       process
     }
 
-    ShutdownHookManager.addShutdownHook(stopThriftServer _)
+    ShutdownHookManager.addShutdownHook("StopThriftServerShutdownHook")(stopThriftServer _)
     ThreadUtils.awaitResult(serverStarted.future, SERVER_STARTUP_TIMEOUT)
   }
 
