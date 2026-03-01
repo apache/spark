@@ -72,6 +72,15 @@ class FunctionResolution(
   private val trimWarningEnabled = new AtomicBoolean(true)
 
   /**
+   * Represents a scope in the resolution search path.
+   * This is used to map the configuration to an ordered list of places to search.
+   */
+  private sealed trait ResolutionScope
+  private case object SystemBuiltinScope extends ResolutionScope
+  private case object SystemSessionScope extends ResolutionScope
+  private case object CurrentCatalogScope extends ResolutionScope
+
+  /**
    * A single place to look for a function (scalar or table). Fully qualified => one candidate;
    * partially qualified => typically two (system + current catalog); unqualified => three
    * (e.g. builtin, session, persistent in path order). Builtin and session are just two
@@ -84,17 +93,38 @@ class FunctionResolution(
   private case class PersistentCandidate(nameParts: Seq[String]) extends ResolutionCandidate
   private case class InternalCandidate(funcName: String) extends ResolutionCandidate
 
+  /**
+   * Returns the generic resolution search path based on the current configuration.
+   * The order of scopes determines the precedence for unqualified function lookups.
+   */
+  private def resolutionSearchPath: Seq[ResolutionScope] = {
+    SQLConf.get.sessionFunctionResolutionOrder match {
+      case "first" => Seq(SystemSessionScope, SystemBuiltinScope, CurrentCatalogScope)
+      case "last" => Seq(SystemBuiltinScope, CurrentCatalogScope, SystemSessionScope)
+      case _ => Seq(SystemBuiltinScope, SystemSessionScope, CurrentCatalogScope)
+    }
+  }
+
   /** Produces the ordered list of candidates for resolution. */
   private def resolutionCandidates(
       nameParts: Seq[String],
       isInternal: Boolean): Seq[ResolutionCandidate] = {
-    val resolutionOrder = SQLConf.get.sessionFunctionResolutionOrder
-    if (nameParts.size == 1 && isInternal) {
-      InternalCandidate(nameParts.head) +: unqualifiedCandidates(nameParts, resolutionOrder)
+    if (nameParts.size == 1) {
+      val candidates = resolutionSearchPath.map {
+        case SystemSessionScope =>
+          SessionNamespaceCandidate(SessionCatalog.Temp, nameParts.head)
+        case SystemBuiltinScope =>
+          SessionNamespaceCandidate(SessionCatalog.Builtin, nameParts.head)
+        case CurrentCatalogScope =>
+          PersistentCandidate(nameParts)
+      }
+      if (isInternal) {
+        InternalCandidate(nameParts.head) +: candidates
+      } else {
+        candidates
+      }
     } else {
       nameParts.size match {
-        case 1 =>
-          unqualifiedCandidates(nameParts, resolutionOrder)
         case 2 if FunctionResolution.sessionNamespaceKind(nameParts).isDefined =>
           // Partially qualified builtin/session: try persistent first so user schema wins
           PersistentCandidate(nameParts) +: sessionNamespaceToCandidate(nameParts).toSeq
@@ -111,38 +141,6 @@ class FunctionResolution(
       nameParts: Seq[String]): Option[SessionNamespaceCandidate] =
     FunctionResolution.sessionNamespaceKind(nameParts)
       .map(k => SessionNamespaceCandidate(k, nameParts.last))
-
-  private def unqualifiedSessionCandidates(
-      nameParts: Seq[String],
-      resolutionOrder: String): Seq[SessionNamespaceCandidate] = {
-    val funcName = nameParts.head
-    resolutionOrder match {
-      case "first" =>
-        Seq(
-          SessionNamespaceCandidate(SessionCatalog.Temp, funcName),
-          SessionNamespaceCandidate(SessionCatalog.Builtin, funcName))
-      case "last" =>
-        Seq(
-          SessionNamespaceCandidate(SessionCatalog.Builtin, funcName),
-          SessionNamespaceCandidate(SessionCatalog.Temp, funcName))
-      case _ =>
-        Seq(
-          SessionNamespaceCandidate(SessionCatalog.Builtin, funcName),
-          SessionNamespaceCandidate(SessionCatalog.Temp, funcName))
-    }
-  }
-
-  /** For unqualified names, full candidate list in resolution order (may interleave persistent). */
-  private def unqualifiedCandidates(
-      nameParts: Seq[String],
-      resolutionOrder: String): Seq[ResolutionCandidate] = {
-    val sessionCandidates = unqualifiedSessionCandidates(nameParts, resolutionOrder)
-    if (resolutionOrder == "last") {
-      Seq(sessionCandidates.head, PersistentCandidate(nameParts), sessionCandidates(1))
-    } else {
-      sessionCandidates :+ PersistentCandidate(nameParts)
-    }
-  }
 
   private def tryResolveScalarCandidate(
       c: ResolutionCandidate,
@@ -228,15 +226,14 @@ class FunctionResolution(
     }
   }
 
-  private def tryResolveTableCandidate(
+  private def tryResolveTableFunctionCandidate(
       c: ResolutionCandidate,
-      nameParts: Seq[String],
       arguments: Seq[Expression]): Option[LogicalPlan] = c match {
     case InternalCandidate(_) =>
       None
     case SessionNamespaceCandidate(kind, funcName) =>
-      val tableFunc = v1SessionCatalog.resolveTableFunction(kind, funcName, arguments)
-      if (tableFunc.isDefined) return tableFunc
+      val resolvedPlan = v1SessionCatalog.resolveTableFunction(kind, funcName, arguments)
+      if (resolvedPlan.isDefined) return resolvedPlan
       if (v1SessionCatalog.lookupFunctionInfo(kind, funcName, tableFunction = false).isDefined) {
         throw QueryCompilationErrors.notATableFunctionError(funcName)
       }
@@ -281,7 +278,7 @@ class FunctionResolution(
       arguments: Seq[Expression]): Option[LogicalPlan] = {
     val candidates = resolutionCandidates(nameParts, isInternal = false)
     for (c <- candidates) {
-      tryResolveTableCandidate(c, nameParts, arguments) match {
+      tryResolveTableFunctionCandidate(c, arguments) match {
         case Some(plan) => return Some(plan)
         case None =>
       }
@@ -298,17 +295,17 @@ class FunctionResolution(
   }
 
   def lookupBuiltinOrTempFunction(
-      name: Seq[String],
+      nameParts: Seq[String],
       unresolvedFunc: Option[UnresolvedFunction]): Option[ExpressionInfo] = {
-    if (name.size == 1 && unresolvedFunc.exists(_.isInternal)) {
-      FunctionRegistry.internal.lookupFunction(FunctionIdentifier(name.head))
+    if (nameParts.size == 1 && unresolvedFunc.exists(_.isInternal)) {
+      FunctionRegistry.internal.lookupFunction(FunctionIdentifier(nameParts.head))
     } else {
-      FunctionResolution.sessionNamespaceKind(name) match {
+      FunctionResolution.sessionNamespaceKind(nameParts) match {
         case Some(kind) =>
-          v1SessionCatalog.lookupFunctionInfo(kind, name.last, tableFunction = false)
+          v1SessionCatalog.lookupFunctionInfo(kind, nameParts.last, tableFunction = false)
         case None =>
-          if (name.size == 1) {
-            v1SessionCatalog.lookupBuiltinOrTempFunction(name.head)
+          if (nameParts.size == 1) {
+            v1SessionCatalog.lookupBuiltinOrTempFunction(nameParts.head)
           } else {
             None
           }
@@ -316,13 +313,13 @@ class FunctionResolution(
     }
   }
 
-  def lookupBuiltinOrTempTableFunction(name: Seq[String]): Option[ExpressionInfo] = {
-    FunctionResolution.sessionNamespaceKind(name) match {
+  def lookupBuiltinOrTempTableFunction(nameParts: Seq[String]): Option[ExpressionInfo] = {
+    FunctionResolution.sessionNamespaceKind(nameParts) match {
       case Some(kind) =>
-        v1SessionCatalog.lookupFunctionInfo(kind, name.last, tableFunction = true)
+        v1SessionCatalog.lookupFunctionInfo(kind, nameParts.last, tableFunction = true)
       case None =>
-        if (name.length == 1) {
-          v1SessionCatalog.lookupBuiltinOrTempTableFunction(name.head)
+        if (nameParts.length == 1) {
+          v1SessionCatalog.lookupBuiltinOrTempTableFunction(nameParts.head)
         } else {
           None
         }
@@ -637,7 +634,7 @@ object FunctionResolution {
    * Check if a function name is qualified as an extension function.
    * Valid forms: extension.func or system.extension.func
    */
-  def maybeExtensionFunctionName(nameParts: Seq[String]): Boolean = {
+  private def maybeExtensionFunctionName(nameParts: Seq[String]): Boolean = {
     isQualifiedWithNamespace(nameParts, CatalogManager.EXTENSION_NAMESPACE)
   }
 
@@ -645,7 +642,7 @@ object FunctionResolution {
    * Check if a function name is qualified as a builtin function.
    * Valid forms: builtin.func or system.builtin.func
    */
-  def maybeBuiltinFunctionName(nameParts: Seq[String]): Boolean = {
+  private def maybeBuiltinFunctionName(nameParts: Seq[String]): Boolean = {
     isQualifiedWithNamespace(nameParts, CatalogManager.BUILTIN_NAMESPACE)
   }
 
@@ -653,7 +650,7 @@ object FunctionResolution {
    * Check if a function name is qualified as a session temporary function.
    * Valid forms: session.func or system.session.func
    */
-  def maybeTempFunctionName(nameParts: Seq[String]): Boolean = {
+  private def maybeTempFunctionName(nameParts: Seq[String]): Boolean = {
     isQualifiedWithNamespace(nameParts, CatalogManager.SESSION_NAMESPACE)
   }
 
@@ -688,7 +685,7 @@ object FunctionResolution {
    * @param namespace The namespace to check for (e.g., "extension", "builtin", "session")
    * @return true if qualified with the given namespace and has a non-empty function name
    */
-  def isQualifiedWithNamespace(nameParts: Seq[String], namespace: String): Boolean = {
+  private def isQualifiedWithNamespace(nameParts: Seq[String], namespace: String): Boolean = {
     nameParts.length match {
       case 2 =>
         // Format: namespace.funcName (e.g., "builtin.abs")
