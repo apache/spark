@@ -1936,7 +1936,7 @@ CreateViewCommand `zt2`, select * from
 -- !query
 create or replace temporary view zt3(f3 int) using parquet
 -- !query analysis
-CreateTempViewUsing [tableIdent:`zt3` StructType(StructField(f3,IntegerType,true)) replace:true provider:parquet Map()
+CreateTempViewUsing [tableIdent:`zt3` StructType(StructField(f3,IntegerType,true)) ignoreIfExists:false replace:true provider:parquet Map()
 
 
 -- !query
@@ -2035,13 +2035,13 @@ Project [unique2#x, ten#x, tenthous#x, unique2#x, hundred#x]
 -- !query
 create or replace temporary view a (i integer) using parquet
 -- !query analysis
-CreateTempViewUsing [tableIdent:`a` StructType(StructField(i,IntegerType,true)) replace:true provider:parquet Map()
+CreateTempViewUsing [tableIdent:`a` StructType(StructField(i,IntegerType,true)) ignoreIfExists:false replace:true provider:parquet Map()
 
 
 -- !query
 create or replace temporary view b (x integer, y integer) using parquet
 -- !query analysis
-CreateTempViewUsing [tableIdent:`b` StructType(StructField(x,IntegerType,true),StructField(y,IntegerType,true)) replace:true provider:parquet Map()
+CreateTempViewUsing [tableIdent:`b` StructType(StructField(x,IntegerType,true),StructField(y,IntegerType,true)) ignoreIfExists:false replace:true provider:parquet Map()
 
 
 -- !query

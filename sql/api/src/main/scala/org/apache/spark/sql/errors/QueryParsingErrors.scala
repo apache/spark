@@ -619,7 +619,10 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
   }
 
   def createViewWithBothIfNotExistsAndReplaceError(ctx: ParserRuleContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0052", ctx)
+    new ParseException(
+      errorClass = "CREATE_OR_REPLACE_WITH_IF_NOT_EXISTS_IS_NOT_ALLOWED",
+      messageParameters = Map("resourceType" -> "VIEW"),
+      ctx)
   }
 
   def temporaryViewWithSchemaBindingMode(ctx: StatementContext): Throwable = {
@@ -635,10 +638,6 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       start = origin,
       errorClass = "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT",
       messageParameters = Map("statement" -> statement))
-  }
-
-  def defineTempViewWithIfNotExistsError(ctx: CreateViewContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0053", ctx)
   }
 
   def notAllowedToAddDBPrefixForTempViewError(

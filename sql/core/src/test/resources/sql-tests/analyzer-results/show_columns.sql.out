@@ -28,7 +28,7 @@ CreateDataSourceTableCommand `spark_catalog`.`showdb`.`showcolumn2`, false
 -- !query
 CREATE TEMPORARY VIEW showColumn3 (col3 int, `col 4` int) USING json
 -- !query analysis
-CreateTempViewUsing [tableIdent:`showColumn3` StructType(StructField(col3,IntegerType,true),StructField(col 4,IntegerType,true)) replace:false provider:json Map()
+CreateTempViewUsing [tableIdent:`showColumn3` StructType(StructField(col3,IntegerType,true),StructField(col 4,IntegerType,true)) ignoreIfExists:false replace:false provider:json Map()
 
 
 -- !query

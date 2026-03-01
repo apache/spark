@@ -331,7 +331,7 @@ statement
          commentSpec |
          (TBLPROPERTIES propertyList))*
         AS codeLiteral                                                 #createMetricView
-    | CREATE (OR REPLACE)? GLOBAL? TEMPORARY VIEW
+    | CREATE (OR REPLACE)? GLOBAL? TEMPORARY VIEW (IF errorCapturingNot EXISTS)?
         tableIdentifier (LEFT_PAREN colTypeList RIGHT_PAREN)? tableProvider
         (OPTIONS propertyList)?                                        #createTempViewUsing
     | ALTER VIEW identifierReference AS? query                         #alterViewQuery

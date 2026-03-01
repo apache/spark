@@ -143,6 +143,12 @@ private[sql] trait CompilationErrors extends DataTypeErrorsBase {
       errorClass = "CANNOT_MODIFY_CONFIG",
       messageParameters = Map("key" -> toSQLConf(key), "docroot" -> docroot))
   }
+
+  def createViewWithBothIfNotExistsAndReplaceError(): Throwable = {
+    new AnalysisException(
+      errorClass = "CREATE_OR_REPLACE_WITH_IF_NOT_EXISTS_IS_NOT_ALLOWED",
+      messageParameters = Map("resourceType" -> "VIEW"))
+  }
 }
 
 private[sql] object CompilationErrors extends CompilationErrors
