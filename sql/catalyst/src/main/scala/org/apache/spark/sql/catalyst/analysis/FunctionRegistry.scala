@@ -832,6 +832,8 @@ object FunctionRegistry {
     expression[Get]("get"),
 
     CreateStruct.registryEntry,
+    expression[IsStructEmpty]("is_struct_empty"),
+    expression[IsStructNonEmpty]("is_struct_non_empty"),
 
     // misc functions
     expression[AssertTrue]("assert_true"),

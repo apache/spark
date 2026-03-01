@@ -3169,6 +3169,32 @@ object functions {
   }
 
   /**
+   * Returns true if the given struct is non-null and all of its fields are null.
+   * Returns null if the struct itself is null.
+   *
+   * This is useful for detecting "empty" structs produced by permissive deserialization
+   * handlers (e.g. Avro PermissiveRecordExceptionHandler) without resorting to expensive
+   * serialization like `to_json`.
+   *
+   * @group struct_funcs
+   * @since 4.1.0
+   */
+  def is_struct_empty(e: Column): Column = Column.fn("is_struct_empty", e)
+
+  /**
+   * Returns true if the given struct is non-null and at least one field is non-null.
+   * Returns null if the struct itself is null.
+   *
+   * This is useful for filtering out "empty" structs produced by permissive deserialization
+   * handlers (e.g. Avro PermissiveRecordExceptionHandler) without resorting to expensive
+   * serialization like `to_json`.
+   *
+   * @group struct_funcs
+   * @since 4.1.0
+   */
+  def is_struct_non_empty(e: Column): Column = Column.fn("is_struct_non_empty", e)
+
+  /**
    * Evaluates a list of conditions and returns one of multiple possible result expressions. If
    * otherwise is not defined at the end, null is returned for unmatched conditions.
    *

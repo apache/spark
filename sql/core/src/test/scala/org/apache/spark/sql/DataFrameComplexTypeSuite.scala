@@ -333,6 +333,100 @@ class DataFrameComplexTypeSuite extends QueryTest with SharedSparkSession {
     sourceDF.cache()
     checkResult()
   }
+
+  test("is_struct_empty and is_struct_non_empty - Avro permissive handler") {
+    // Simulate what ABRiS PermissiveRecordExceptionHandler produces:
+    //   - On success: a non-null struct with real field values
+    //   - On deserialization failure: a non-null struct with ALL fields null
+    //   - Possible: a null struct (if upstream produces null)
+    val avroSchema = StructType(Seq(
+      StructField("id", IntegerType, nullable = true),
+      StructField("name", StringType, nullable = true),
+      StructField("amount", DoubleType, nullable = true)
+    ))
+    val valueSchema = StructType(Seq(
+      StructField("value", avroSchema, nullable = true)
+    ))
+
+    val rows = new java.util.ArrayList[Row]()
+    // Row 0: successful deserialization
+    rows.add(Row(Row(1, "alice", 100.0)))
+    // Row 1: failed deserialization -> GenericData.Record with all nulls
+    rows.add(Row(Row(null, null, null)))
+    // Row 2: successful deserialization
+    rows.add(Row(Row(2, "bob", 200.0)))
+    // Row 3: failed deserialization -> all nulls again
+    rows.add(Row(Row(null, null, null)))
+    // Row 4: null struct (e.g. tombstone record or upstream null)
+    rows.add(Row(null))
+    // Row 5: partial nulls (valid record, some optional fields missing)
+    rows.add(Row(Row(3, null, null)))
+
+    val df = spark.createDataFrame(rows, valueSchema)
+
+    // -- Test is_struct_empty --
+    checkAnswer(
+      df.select(is_struct_empty(col("value"))),
+      Seq(Row(false), Row(true), Row(false), Row(true), Row(null), Row(false))
+    )
+
+    // -- Test is_struct_non_empty --
+    checkAnswer(
+      df.select(is_struct_non_empty(col("value"))),
+      Seq(Row(true), Row(false), Row(true), Row(false), Row(null), Row(true))
+    )
+
+    // -- The real use case: filter out malformed records --
+    // New approach: is_struct_non_empty (no serialization)
+    val filtered = df
+      .filter(col("value").isNotNull && is_struct_non_empty(col("value")))
+      .select("value.*")
+
+    checkAnswer(
+      filtered,
+      Seq(Row(1, "alice", 100.0), Row(2, "bob", 200.0), Row(3, null, null))
+    )
+
+    // Old approach with to_json should produce the same results
+    val filteredOld = df
+      .filter(col("value").isNotNull.and(to_json(col("value")) =!= "{}"))
+      .select("value.*")
+
+    checkAnswer(filteredOld, filtered.collect().toSeq)
+
+    // -- SQL syntax works too --
+    df.createOrReplaceTempView("kafka_messages")
+    checkAnswer(
+      spark.sql(
+        """SELECT value.*
+          |FROM kafka_messages
+          |WHERE value IS NOT NULL AND is_struct_non_empty(value)""".stripMargin),
+      Seq(Row(1, "alice", 100.0), Row(2, "bob", 200.0), Row(3, null, null))
+    )
+  }
+
+  test("is_struct_empty - wide struct triggers loop codegen path") {
+    // Structs with > 8 fields use the loop codegen path instead of unrolled AND chain.
+    // This tests that path with a 12-field struct.
+    val fields = (1 to 12).map(i => StructField(s"f$i", IntegerType, nullable = true))
+    val wideSchema = StructType(Seq(StructField("s", StructType(fields), nullable = true)))
+
+    val allNull = Row((1 to 12).map(_ => null): _*)
+    val firstNonNull = Row(Seq(42) ++ (2 to 12).map(_ => null): _*)
+    val lastNonNull = Row((1 to 11).map(_ => null) ++ Seq(99): _*)
+
+    val rows = new java.util.ArrayList[Row]()
+    rows.add(Row(allNull))
+    rows.add(Row(firstNonNull))
+    rows.add(Row(lastNonNull))
+
+    val df = spark.createDataFrame(rows, wideSchema)
+
+    checkAnswer(
+      df.select(is_struct_empty(col("s")), is_struct_non_empty(col("s"))),
+      Seq(Row(true, false), Row(false, true), Row(false, true))
+    )
+  }
 }
 
 class S100(

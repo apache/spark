@@ -658,6 +658,132 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(m1.semanticEquals(m2))
   }
 
+  test("IsStructEmpty") {
+    // Basic: non-null struct with non-null fields -> false
+    val type1 = StructType(StructField("a", IntegerType) :: StructField("b", StringType) :: Nil)
+    val struct1 = Literal.create(create_row(1, "hello"), type1)
+    checkEvaluation(IsStructEmpty(struct1), false)
+
+    // Non-null struct with all null fields -> true
+    val struct2 = Literal.create(create_row(null, null), type1)
+    checkEvaluation(IsStructEmpty(struct2), true)
+
+    // Null struct -> null
+    val nullStruct = Literal.create(null, type1)
+    checkEvaluation(IsStructEmpty(nullStruct), null)
+
+    // Mixed: some fields null, some non-null -> false
+    val struct3 = Literal.create(create_row(1, null), type1)
+    checkEvaluation(IsStructEmpty(struct3), false)
+
+    val struct4 = Literal.create(create_row(null, "hello"), type1)
+    checkEvaluation(IsStructEmpty(struct4), false)
+
+    // Single field struct, non-null -> false
+    val type2 = StructType(StructField("x", IntegerType) :: Nil)
+    val struct5 = Literal.create(create_row(42), type2)
+    checkEvaluation(IsStructEmpty(struct5), false)
+
+    // Single field struct, null field -> true
+    val struct6 = Literal.create(create_row(null), type2)
+    checkEvaluation(IsStructEmpty(struct6), true)
+
+    // Empty schema (zero fields) -> vacuously true
+    val emptyType = StructType(Nil)
+    val emptyStruct = Literal.create(create_row(), emptyType)
+    checkEvaluation(IsStructEmpty(emptyStruct), true)
+
+    // Nested struct: inner struct is non-null (even if all its fields are null) -> false
+    val innerType = StructType(StructField("c", IntegerType) :: Nil)
+    val outerType = StructType(StructField("inner", innerType) :: Nil)
+    val nestedStruct = Literal.create(create_row(create_row(null)), outerType)
+    checkEvaluation(IsStructEmpty(nestedStruct), false)
+
+    // Nested struct: inner struct is null -> true (parent's field is null)
+    val nestedNull = Literal.create(create_row(null), outerType)
+    checkEvaluation(IsStructEmpty(nestedNull), true)
+
+    // Struct with array field: non-null empty array counts as non-null -> false
+    val typeWithArray = StructType(StructField("arr", ArrayType(IntegerType)) :: Nil)
+    val structWithEmptyArray = Literal.create(create_row(Seq.empty[Int]), typeWithArray)
+    checkEvaluation(IsStructEmpty(structWithEmptyArray), false)
+
+    // Struct with map field: non-null empty map counts as non-null -> false
+    val typeWithMap = StructType(StructField("m", MapType(StringType, IntegerType)) :: Nil)
+    val structWithEmptyMap = Literal.create(create_row(Map.empty[String, Int]), typeWithMap)
+    checkEvaluation(IsStructEmpty(structWithEmptyMap), false)
+
+    // Type check: non-struct input should fail
+    assert(IsStructEmpty(Literal(1)).checkInputDataTypes().isFailure)
+    assert(IsStructEmpty(Literal("hello")).checkInputDataTypes().isFailure)
+
+    // Nullable semantics: nullable follows child nullability
+    assert(!IsStructEmpty(struct1).nullable) // non-null literal -> not nullable
+    assert(IsStructEmpty(nullStruct).nullable) // null literal -> nullable
+    assert(IsStructEmpty(struct1).dataType == BooleanType)
+  }
+
+  test("IsStructNonEmpty") {
+    val type1 = StructType(StructField("a", IntegerType) :: StructField("b", StringType) :: Nil)
+
+    // Non-null struct with non-null fields -> true
+    val struct1 = Literal.create(create_row(1, "hello"), type1)
+    checkEvaluation(IsStructNonEmpty(struct1), true)
+
+    // Non-null struct with all null fields -> false
+    val struct2 = Literal.create(create_row(null, null), type1)
+    checkEvaluation(IsStructNonEmpty(struct2), false)
+
+    // Null struct -> null
+    val nullStruct = Literal.create(null, type1)
+    checkEvaluation(IsStructNonEmpty(nullStruct), null)
+
+    // Mixed -> true
+    val struct3 = Literal.create(create_row(1, null), type1)
+    checkEvaluation(IsStructNonEmpty(struct3), true)
+
+    val struct4 = Literal.create(create_row(null, "hello"), type1)
+    checkEvaluation(IsStructNonEmpty(struct4), true)
+
+    // Single field struct, non-null -> true
+    val type2 = StructType(StructField("x", IntegerType) :: Nil)
+    val struct5 = Literal.create(create_row(42), type2)
+    checkEvaluation(IsStructNonEmpty(struct5), true)
+
+    // Single field struct, null field -> false
+    val struct6 = Literal.create(create_row(null), type2)
+    checkEvaluation(IsStructNonEmpty(struct6), false)
+
+    // Empty schema (zero fields) -> false (vacuously empty)
+    val emptyType = StructType(Nil)
+    val emptyStruct = Literal.create(create_row(), emptyType)
+    checkEvaluation(IsStructNonEmpty(emptyStruct), false)
+
+    // Nested struct: inner struct is non-null but all its fields null -> true
+    val innerType = StructType(StructField("c", IntegerType) :: Nil)
+    val outerType = StructType(StructField("inner", innerType) :: Nil)
+    val nestedStruct = Literal.create(create_row(create_row(null)), outerType)
+    checkEvaluation(IsStructNonEmpty(nestedStruct), true)
+
+    // Nested struct: inner struct is null -> false
+    val nestedNull = Literal.create(create_row(null), outerType)
+    checkEvaluation(IsStructNonEmpty(nestedNull), false)
+
+    // Complementarity: for non-null structs, isEmpty and isNonEmpty are logical inverses
+    checkEvaluation(IsStructEmpty(struct1), false)
+    checkEvaluation(IsStructNonEmpty(struct1), true)
+    checkEvaluation(IsStructEmpty(struct2), true)
+    checkEvaluation(IsStructNonEmpty(struct2), false)
+
+    // Type check: non-struct input should fail
+    assert(IsStructNonEmpty(Literal(1)).checkInputDataTypes().isFailure)
+
+    // Nullable semantics: nullable follows child nullability
+    assert(!IsStructNonEmpty(struct1).nullable)
+    assert(IsStructNonEmpty(nullStruct).nullable)
+    assert(IsStructNonEmpty(struct1).dataType == BooleanType)
+  }
+
   test("SPARK-40315: Literals of ArrayBasedMapData should have deterministic hashCode.") {
     val keys = new Array[UTF8String](1)
     val values1 = new Array[UTF8String](1)
