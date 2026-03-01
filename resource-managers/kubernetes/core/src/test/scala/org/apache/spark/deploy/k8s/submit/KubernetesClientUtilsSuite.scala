@@ -29,7 +29,7 @@ import io.fabric8.kubernetes.api.model.ConfigMapBuilder
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.k8s.Config
+import org.apache.spark.deploy.k8s.{Config, KubernetesTestConf}
 import org.apache.spark.util.Utils
 
 class KubernetesClientUtilsSuite extends SparkFunSuite with BeforeAndAfter {
@@ -127,5 +127,53 @@ class KubernetesClientUtilsSuite extends SparkFunSuite with BeforeAndAfter {
         .addToData(confFileMap)
         .build()
     assert(outputConfigMap === expectedConfigMap)
+  }
+
+  test("SPARK-54605: check custom driver env appended as expected when config map size is " +
+    "below threshold.") {
+    val input = Map("spark-env.sh" -> "test12345\ntest12345", "testConf.1" -> "test123456")
+    val sparkConf = testSetup(input.map(f => f._1 -> f._2.getBytes(StandardCharsets.UTF_8)))
+      .set(Config.CONFIG_MAP_MAXSIZE.key, "90")
+    val conf = KubernetesTestConf.createDriverConf(
+      sparkConf = sparkConf,
+      environment = Map("AAA" -> "value1", "BBB" -> "value2")
+    )
+    val confFileMap = KubernetesClientUtils.overrideDefaultSparkEnv(conf, input)
+    val expectedConfFileMap = Map(
+      "spark-env.sh" -> "test12345\ntest12345\nexport AAA=value1\nexport BBB=value2\n",
+      "testConf.1" -> "test123456")
+    assert(confFileMap === expectedConfFileMap)
+  }
+
+  test("SPARK-54605: check custom driver env not appended when config map size is " +
+    "larger than threshold.") {
+    val input = Map("spark-env.sh" -> "test12345\ntest12345", "testConf.1" -> "test123456")
+    val sparkConf = testSetup(input.map(f => f._1 -> f._2.getBytes(StandardCharsets.UTF_8)))
+      .set(Config.CONFIG_MAP_MAXSIZE.key, "87")
+    val conf = KubernetesTestConf.createDriverConf(
+      sparkConf = sparkConf,
+      environment = Map("AAA" -> "value1", "BBB" -> "value2")
+    )
+    val confFileMap = KubernetesClientUtils.overrideDefaultSparkEnv(conf, input)
+    val expectedConfFileMap = Map(
+      "spark-env.sh" -> "test12345\ntest12345",
+      "testConf.1" -> "test123456")
+    assert(confFileMap === expectedConfFileMap)
+  }
+
+  test("SPARK-54605: check custom driver env not appended when config map size is " +
+    "equal to threshold.") {
+    val input = Map("spark-env.sh" -> "test12345\ntest12345", "testConf.1" -> "test123456")
+    val sparkConf = testSetup(input.map(f => f._1 -> f._2.getBytes(StandardCharsets.UTF_8)))
+      .set(Config.CONFIG_MAP_MAXSIZE.key, "88")
+    val conf = KubernetesTestConf.createDriverConf(
+      sparkConf = sparkConf,
+      environment = Map("AAA" -> "value1", "BBB" -> "value2")
+    )
+    val confFileMap = KubernetesClientUtils.overrideDefaultSparkEnv(conf, input)
+    val expectedConfFileMap = Map(
+      "spark-env.sh" -> "test12345\ntest12345",
+      "testConf.1" -> "test123456")
+    assert(confFileMap === expectedConfFileMap)
   }
 }
