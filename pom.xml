@@ -85,6 +85,7 @@
     <module>common/utils-java</module>
     <module>common/variant</module>
     <module>common/tags</module>
+    <module>common/config</module>
     <module>sql/connect/shims</module>
     <module>core</module>
     <module>graphx</module>
