@@ -74,7 +74,7 @@ object EncoderUtils {
     } else if (lenientSerialization) {
       ObjectType(classOf[java.lang.Object])
     } else {
-      ObjectType(enc.clsTag.runtimeClass)
+      dataTypeForClass(enc.clsTag.runtimeClass)
     }
   }
 
@@ -158,8 +158,16 @@ object EncoderUtils {
   def dataTypeForClass(c: Class[_]): DataType =
     javaClassToPrimitiveType.get(c).getOrElse(ObjectType(c))
 
-  private val javaClassToPrimitiveType: Map[Class[_], DataType] =
-    typeJavaMapping.iterator.filter(_._2.isPrimitive).map(_.swap).toMap
+  private val javaClassToPrimitiveType: Map[Class[_], DataType] = Map(
+    classOf[Boolean] -> BooleanType,
+    classOf[Byte] -> ByteType,
+    classOf[Short] -> ShortType,
+    classOf[Int] -> IntegerType,
+    classOf[Long] -> LongType,
+    classOf[Float] -> FloatType,
+    classOf[Double] -> DoubleType,
+    classOf[Array[Byte]] -> BinaryType
+  )
 
   val typeBoxedJavaMapping: Map[DataType, Class[_]] = Map[DataType, Class[_]](
     BooleanType -> classOf[java.lang.Boolean],
