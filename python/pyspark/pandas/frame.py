@@ -4827,7 +4827,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             lambda psser: psser._shift(periods, fill_value), should_resolve=True
         )
 
-    # TODO(SPARK-46161): axis should support 1 or 'columns' either at this moment
     def diff(self, periods: int = 1, axis: Axis = 0) -> "DataFrame":
         """
         First discrete difference of element.
@@ -4835,7 +4834,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         Calculates the difference of a DataFrame element compared with another element in the
         DataFrame (default is the element in the same column of the previous row).
 
-        .. note:: the current implementation of diff uses Spark's Window without
+        .. note:: When ``axis=0``, the current implementation of diff uses Spark's Window without
             specifying partition specification. This leads to moving all data into
             a single partition in a single machine and could cause serious
             performance degradation. Avoid this method with very large datasets.
@@ -4844,8 +4843,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ----------
         periods : int, default 1
             Periods to shift for calculating difference, accepts negative values.
-        axis : int, default 0 or 'index'
-            Can only be set to 0 now.
+        axis : {0 or 'index', 1 or 'columns'}, default 0
+            Take difference over rows (0) or columns (1).
 
         Returns
         -------
@@ -4895,12 +4894,37 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         3 -1.0 -2.0  -9.0
         4 -1.0 -3.0 -11.0
         5  NaN  NaN   NaN
+
+        Difference with previous column
+
+        >>> df.diff(axis=1)
+            a  b   c
+        0 NaN  0   0
+        1 NaN -1   3
+        2 NaN -1   7
+        3 NaN -1  13
+        4 NaN  0  20
+        5 NaN  2  28
         """
         axis = validate_axis(axis)
-        if axis != 0:
-            raise NotImplementedError('axis should be either 0 or "index" currently.')
-
-        return self._apply_series_op(lambda psser: psser._diff(periods), should_resolve=True)
+        if axis == 0:
+            return self._apply_series_op(lambda psser: psser._diff(periods), should_resolve=True)
+        else:
+            column_labels = self._internal.column_labels
+            data_col_names = self._internal.data_spark_column_names
+            new_columns: list[PySparkColumn] = []
+            for i, label in enumerate(column_labels):
+                prev_idx = i - periods
+                if 0 <= prev_idx < len(column_labels):
+                    prev_label = column_labels[prev_idx]
+                    cur_col = self._internal.spark_column_for(label)
+                    prev_col = self._internal.spark_column_for(prev_label)
+                    new_columns.append(cur_col - prev_col)
+                else:
+                    col_type = self._internal.spark_type_for(label)
+                    new_columns.append(F.lit(None).cast(col_type).alias(data_col_names[i]))
+            internal = self._internal.with_new_columns(new_columns)
+            return DataFrame(internal)
 
     def nunique(
         self,
