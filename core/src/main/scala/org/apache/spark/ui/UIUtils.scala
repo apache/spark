@@ -470,17 +470,23 @@ private[spark] object UIUtils extends Logging {
       if (skipped > 0) s" ($skipped skipped)" else ""
     } + killTaskReasonText
 
+    val progressLabel = s"$completed/$total" +
+      (if (failed == 0 && skipped == 0 && started > 0) s" ($started running)" else "") +
+      (if (failed > 0) s" ($failed failed)" else "") +
+      (if (skipped > 0) s" ($skipped skipped)" else "") +
+      killTaskReasonText
+
     // scalastyle:off line.size.limit
-    <div class="progress">
-      <span style="display: flex; align-items: center; justify-content: center; position:absolute; width:100%; height:100%; text-align:center;" title={progressTitle}>
-        { s"$completed/$total" +
-            (if (failed == 0 && skipped == 0 && started > 0) s" ($started running)" else "") +
-            (if (failed > 0) s" ($failed failed)" else "") +
-            (if (skipped > 0) s" ($skipped skipped)" else "") +
-            killTaskReasonText }
+    <div class="progress-stacked" title={progressTitle}>
+      <span class="position-absolute w-100 h-100 d-flex align-items-center justify-content-center">
+        {progressLabel}
       </span>
-      <div class="progress-bar progress-completed" style={completeWidth}></div>
-      <div class="progress-bar progress-started" style={startWidth}></div>
+      <div class="progress" role="progressbar" aria-label="Completed" aria-valuenow={ratio.toInt.toString} aria-valuemin="0" aria-valuemax="100" style={completeWidth}>
+        <div class="progress-bar progress-completed"></div>
+      </div>
+      <div class="progress" role="progressbar" aria-label="Running" aria-valuenow={startRatio.toInt.toString} aria-valuemin="0" aria-valuemax="100" style={startWidth}>
+        <div class="progress-bar progress-started"></div>
+      </div>
     </div>
     // scalastyle:on line.size.limit
   }
