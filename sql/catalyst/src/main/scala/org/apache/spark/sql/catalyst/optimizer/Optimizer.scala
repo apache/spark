@@ -168,7 +168,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         InferFiltersFromGenerate,
         InferFiltersFromConstraints),
       Batch("Operator Optimization after Inferring Filters", fixedPoint,
-        operatorOptimizationRuleSet: _*),
+          operatorOptimizationRuleSet :+ InferFiltersFromConstraints: _*),
       Batch("Push extra predicate through join", fixedPoint,
         PushExtraPredicateThroughJoin,
         PushDownPredicates))
@@ -1769,19 +1769,41 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
           val allConstraints = getAllConstraints(left, right, conditionOpt)
           val newLeft = inferNewFilter(left, allConstraints)
           val newRight = inferNewFilter(right, allConstraints)
-          join.copy(left = newLeft, right = newRight)
+          val isLeftModified = newLeft.ne(left) && newLeft.canonicalized != left.canonicalized
+          val isRightModified = newRight.ne(right) && newRight.canonicalized != right.canonicalized
+          if (isLeftModified || isRightModified) {
+            join.copy(left = if (isLeftModified) {
+              newLeft
+            } else {
+              left
+            }, right = if (isRightModified) {
+              newRight
+            } else {
+              right
+            })
+          } else {
+            join
+          }
 
         // For right outer join, we can only infer additional filters for left side.
         case RightOuter =>
           val allConstraints = getAllConstraints(left, right, conditionOpt)
           val newLeft = inferNewFilter(left, allConstraints)
-          join.copy(left = newLeft)
+          if (newLeft.ne(left) && newLeft.canonicalized != left.canonicalized) {
+            join.copy(left = newLeft)
+          } else {
+            join
+          }
 
         // For left join, we can only infer additional filters for right side.
         case LeftOuter | LeftAnti =>
           val allConstraints = getAllConstraints(left, right, conditionOpt)
           val newRight = inferNewFilter(right, allConstraints)
-          join.copy(right = newRight)
+          if (newRight.ne(right) && newRight.canonicalized != right.canonicalized) {
+            join.copy(right = newRight)
+          } else {
+            join
+          }
 
         case _ => join
       }
