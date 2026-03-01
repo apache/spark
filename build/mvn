@@ -125,7 +125,7 @@ install_mvn() {
   fi
   if [ $(version $MVN_DETECTED_VERSION) -ne $(version $MVN_VERSION) ]; then
     local MVN_TARBALL="apache-maven-${MVN_VERSION}-bin.tar.gz"
-    local FILE_PATH="maven/maven-3/${MVN_VERSION}/binaries/${MVN_TARBALL}"
+    local FILE_PATH="maven/maven-${MVN_VERSION:0:1}/${MVN_VERSION}/binaries/${MVN_TARBALL}"
     local APACHE_MIRROR=${APACHE_MIRROR:-'https://www.apache.org/dyn/closer.lua'}
     local MIRROR_URL_QUERY="?action=download"
 
