@@ -2138,50 +2138,26 @@ class Analyzer(
       // Resolve table-valued function references.
       case u: UnresolvedTableValuedFunction if u.functionArgs.forall(_.resolved) =>
         withPosition(u) {
-          try {
-            def resolveFromPersistent: LogicalPlan = {
-              val CatalogAndIdentifier(catalog, ident) =
-                relationResolution.expandIdentifier(u.name)
-              if (CatalogV2Util.isSessionCatalog(catalog)) {
-                v1SessionCatalog.resolvePersistentTableFunction(
-                  ident.asFunctionIdentifier, u.functionArgs)
-              } else {
-                throw QueryCompilationErrors.missingCatalogTableValuedFunctionsAbilityError(
-                  catalog)
-              }
-            }
-            val resolvedFunc = if (u.name.size == 2 &&
-                FunctionResolution.sessionNamespaceKind(u.name).isDefined) {
-              try {
-                resolveFromPersistent
-              } catch {
-                case _: NoSuchFunctionException | _: AnalysisException =>
-                  functionResolution.tryResolveTableFunctionFromSessionCatalog(
-                    u.name, u.functionArgs).getOrElse(resolveFromPersistent)
-              }
-            } else {
-              functionResolution.tryResolveTableFunctionFromSessionCatalog(
-                  u.name, u.functionArgs).getOrElse(resolveFromPersistent)
-            }
-            resolvedFunc.transformAllExpressionsWithPruning(
-              _.containsPattern(FUNCTION_TABLE_RELATION_ARGUMENT_EXPRESSION))  {
-              case t: FunctionTableSubqueryArgumentExpression =>
-                resolvedFunc match {
-                  case Generate(_: PythonUDTF, _, _, _, _, _) =>
-                  case Generate(_: UnresolvedPolymorphicPythonUDTF, _, _, _, _, _) =>
-                  case _ =>
-                    assert(!t.hasRepartitioning,
-                      "Cannot evaluate the table-valued function call because it included the " +
-                        "PARTITION BY clause, but only Python table functions support this " +
-                        "clause")
-                }
-                t
-            }
-          } catch {
-            case _: NoSuchFunctionException =>
+          val resolvedFunc = functionResolution.resolveTableFunction(u.name, u.functionArgs)
+            .getOrElse {
               u.failAnalysis(
                 errorClass = "UNRESOLVABLE_TABLE_VALUED_FUNCTION",
                 messageParameters = Map("name" -> toSQLId(u.name)))
+            }
+
+          resolvedFunc.transformAllExpressionsWithPruning(
+            _.containsPattern(FUNCTION_TABLE_RELATION_ARGUMENT_EXPRESSION))  {
+            case t: FunctionTableSubqueryArgumentExpression =>
+              resolvedFunc match {
+                case Generate(_: PythonUDTF, _, _, _, _, _) =>
+                case Generate(_: UnresolvedPolymorphicPythonUDTF, _, _, _, _, _) =>
+                case _ =>
+                  assert(!t.hasRepartitioning,
+                    "Cannot evaluate the table-valued function call because it included the " +
+                      "PARTITION BY clause, but only Python table functions support this " +
+                      "clause")
+              }
+              t
           }
         }
 
@@ -2260,18 +2236,12 @@ class Analyzer(
           ruleId) {
           case u @ UnresolvedFunction(nameParts, arguments, _, _, _, _, _)
               if functionResolution.hasLambdaAndResolvedArguments(arguments) => withPosition(u) {
-            functionResolution.tryResolveFromSessionCatalog(nameParts, arguments, u).map {
+            functionResolution.resolveFunction(u) match {
               case func: HigherOrderFunction => func
               case other => other.failAnalysis(
                 errorClass = "INVALID_LAMBDA_FUNCTION_CALL.NON_HIGHER_ORDER_FUNCTION",
                 messageParameters = Map(
                   "class" -> other.getClass.getCanonicalName))
-            }.getOrElse {
-              val searchPath = SQLConf.get.functionResolutionSearchPath("")
-              throw QueryCompilationErrors.unresolvedRoutineError(
-                nameParts,
-                searchPath,
-                u.origin)
             }
           }
 
