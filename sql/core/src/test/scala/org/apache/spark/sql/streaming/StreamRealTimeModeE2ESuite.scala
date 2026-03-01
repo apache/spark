@@ -182,97 +182,99 @@ class StreamRealTimeModeE2ESuite extends StreamRealTimeModeE2ESuiteBase {
   private def runMapPartitionsTest(withUnion: Boolean): Unit = {
     var query: StreamingQuery = null
     try {
-      withTempDir { checkpointDir =>
-        val clock = new GlobalSingletonManualClock()
-        LowLatencyClock.setClock(clock)
-        val uniqueSinkName = if (withUnion) {
-          sinkName + "mapPartitions-union"
-        } else {
-          sinkName + "mapPartitions"
-        }
-
-        val read = LowLatencyMemoryStream[(String, Int)](5)
-        val read1 = LowLatencyMemoryStream[(String, Int)](5)
-        val dataframe = if (withUnion) {
-          read.toDF().union(read1.toDF())
-        } else {
-          read.toDF()
-        }
-
-        val df = dataframe
-          .select(col("_1").as("key"), col("_2").as("value"))
-          .select(
-            concat(
-              col("key").cast("STRING"),
-              lit("-"),
-              col("value").cast("STRING")
-            ).as("output")
-          )
-          .as[String]
-          .mapPartitions(rows => {
-            rows.map(row => {
-              val collector = ResultsCollector
-                .computeIfAbsent(uniqueSinkName, (_) => new ConcurrentLinkedQueue[String]())
-              collector.add(row)
-              row
-            })
-          })
-          .toDF()
-
-        query = runStreamingQuery(sinkName, df)
-
-        val expectedResults = mutable.ListBuffer[String]()
-        val expectedResultsByBatch = mutable.HashMap[Int, mutable.ListBuffer[String]]()
-
-        val numRows = 10
-        for (i <- 0 until 3) {
-          expectedResultsByBatch(i) = new mutable.ListBuffer[String]()
-          for (key <- List("a", "b", "c")) {
-            for (j <- 1 to numRows) {
-              read.addData((key, 1))
-              val data = s"$key-1"
-              expectedResults += data
-              expectedResultsByBatch(i) += data
-            }
+      withSQLConf("spark.databricks.streaming.realTimeMode.allowlistCheck" -> "false") {
+        withTempDir { checkpointDir =>
+          val clock = new GlobalSingletonManualClock()
+          LowLatencyClock.setClock(clock)
+          val uniqueSinkName = if (withUnion) {
+            sinkName + "mapPartitions-union"
+          } else {
+            sinkName + "mapPartitions"
           }
 
-          if (withUnion) {
-            for (key <- List("d", "e", "f")) {
+          val read = LowLatencyMemoryStream[(String, Int)](5)
+          val read1 = LowLatencyMemoryStream[(String, Int)](5)
+          val dataframe = if (withUnion) {
+            read.toDF().union(read1.toDF())
+          } else {
+            read.toDF()
+          }
+
+          val df = dataframe
+            .select(col("_1").as("key"), col("_2").as("value"))
+            .select(
+              concat(
+                col("key").cast("STRING"),
+                lit("-"),
+                col("value").cast("STRING")
+              ).as("output")
+            )
+            .as[String]
+            .mapPartitions(rows => {
+              rows.map(row => {
+                val collector = ResultsCollector
+                  .computeIfAbsent(uniqueSinkName, (_) => new ConcurrentLinkedQueue[String]())
+                collector.add(row)
+                row
+              })
+            })
+            .toDF()
+
+          query = runStreamingQuery(sinkName, df)
+
+          val expectedResults = mutable.ListBuffer[String]()
+          val expectedResultsByBatch = mutable.HashMap[Int, mutable.ListBuffer[String]]()
+
+          val numRows = 10
+          for (i <- 0 until 3) {
+            expectedResultsByBatch(i) = new mutable.ListBuffer[String]()
+            for (key <- List("a", "b", "c")) {
               for (j <- 1 to numRows) {
-                read1.addData((key, 2))
-                val data = s"$key-2"
+                read.addData((key, 1))
+                val data = s"$key-1"
                 expectedResults += data
                 expectedResultsByBatch(i) += data
               }
             }
-          }
 
-          // results collected from mapPartitions
-          eventually(timeout(60.seconds)) {
-            ResultsCollector
-              .get(uniqueSinkName)
-              .toArray(new Array[String](ResultsCollector.get(uniqueSinkName).size()))
-              .toList
-              .sorted should equal(expectedResults.sorted)
-          }
+            if (withUnion) {
+              for (key <- List("d", "e", "f")) {
+                for (j <- 1 to numRows) {
+                  read1.addData((key, 2))
+                  val data = s"$key-2"
+                  expectedResults += data
+                  expectedResultsByBatch(i) += data
+                }
+              }
+            }
 
-          // results collected from foreach sink
-          eventually(timeout(60.seconds)) {
-            ResultsCollector
-              .get(sinkName)
-              .toArray(new Array[String](ResultsCollector.get(sinkName).size()))
-              .toList
-              .sorted should equal(expectedResults.sorted)
-          }
+            // results collected from mapPartitions
+            eventually(timeout(60.seconds)) {
+              ResultsCollector
+                .get(uniqueSinkName)
+                .toArray(new Array[String](ResultsCollector.get(uniqueSinkName).size()))
+                .toList
+                .sorted should equal(expectedResults.sorted)
+            }
 
-          clock.advance(defaultTrigger.batchDurationMs)
-          eventually(timeout(60.seconds)) {
-            query
-              .asInstanceOf[StreamingQueryWrapper]
-              .streamingQuery
-              .getLatestExecutionContext()
-              .batchId should be(i + 1)
-            query.lastProgress.sources(0).numInputRows should be(numRows * 3)
+            // results collected from foreach sink
+            eventually(timeout(60.seconds)) {
+              ResultsCollector
+                .get(sinkName)
+                .toArray(new Array[String](ResultsCollector.get(sinkName).size()))
+                .toList
+                .sorted should equal(expectedResults.sorted)
+            }
+
+            clock.advance(defaultTrigger.batchDurationMs)
+            eventually(timeout(60.seconds)) {
+              query
+                .asInstanceOf[StreamingQueryWrapper]
+                .streamingQuery
+                .getLatestExecutionContext()
+                .batchId should be(i + 1)
+              query.lastProgress.sources(0).numInputRows should be(numRows * 3)
+            }
           }
         }
       }
