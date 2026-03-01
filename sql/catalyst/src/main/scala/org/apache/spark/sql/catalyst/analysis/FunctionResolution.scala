@@ -644,7 +644,8 @@ object FunctionResolution {
    * maybeExtensionFunctionName in multiple places so namespace rules live in one place.
    *
    * @param nameParts The function name parts (e.g. Seq("builtin", "abs"), Seq("session", "my_udf"))
-   * @return Some(Builtin)|Some(Temp)|Some(Extension) for 2/3-part session qualification, None otherwise
+   * @return Some(Builtin), Some(Temp), or Some(Extension) for 2/3-part session qualification;
+   *         None otherwise
    */
   def sessionNamespaceKind(nameParts: Seq[String])
     : Option[org.apache.spark.sql.catalyst.catalog.SessionCatalog.SessionFunctionKind] = {

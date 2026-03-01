@@ -397,7 +397,7 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
       sqlState = "42809",
       parameters = Map(
         "statement" -> "CREATE",
-        "objectType" -> "OBJECT",
+        "objectType" -> "FUNCTION",
         "objectName" -> "`my_func`"
       )
     )

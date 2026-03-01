@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.{
   SQLConfHelper,
   SqlScriptingContextManager
 }
-import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.analysis.{
   FunctionRegistry,
   FunctionResolution,
@@ -40,6 +39,7 @@ import org.apache.spark.sql.catalyst.analysis.{
   UnresolvedStar,
   UnresolvedSubqueryColumnAliases
 }
+import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{
   AggregateExpression,
@@ -376,7 +376,8 @@ class ResolverGuard(catalogManager: CatalogManager) extends SQLConfHelper {
       !FunctionRegistry.functionSet.contains(
         FunctionIdentifier(functionName.toLowerCase(Locale.ROOT))
       )
-    } else if (FunctionResolution.sessionNamespaceKind(nameParts).contains(SessionCatalog.Builtin)) {
+    } else if (FunctionResolution.sessionNamespaceKind(nameParts)
+        .contains(SessionCatalog.Builtin)) {
       // Explicitly builtin-qualified (builtin.func, system.builtin.func): reject if unsupported
       ResolverGuard.UNSUPPORTED_FUNCTION_NAMES.contains(functionName)
     } else {
@@ -397,7 +398,8 @@ class ResolverGuard(catalogManager: CatalogManager) extends SQLConfHelper {
    * @return true if the name is unqualified, "builtin.func", or "system.builtin.func"
    */
   private def isBuiltinOrUnqualified(nameParts: Seq[String]): Boolean = {
-    nameParts.length == 1 || FunctionResolution.sessionNamespaceKind(nameParts).contains(SessionCatalog.Builtin)
+    nameParts.length == 1 ||
+      FunctionResolution.sessionNamespaceKind(nameParts).contains(SessionCatalog.Builtin)
   }
 
   private def checkLiteral(literal: Literal) = true
