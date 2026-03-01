@@ -16,16 +16,25 @@
 # limitations under the License.
 
 """
-Benchmark: out-of-process pandas UDF vs in-process UDF, two scenarios.
+Benchmark: out-of-process pandas UDF vs in-process UDF, four scenarios.
 
-Scenario A (baseline)  -- 1 column, small batch (10K rows)
+Scenario A (baseline)  -- 1 column LongType, small batch (10K rows)
     IPC overhead per batch is small (80 KB), so jep dispatch overhead
     dominates: inprocess is slightly slower than pandas UDF.
 
-Scenario B (wide/large) -- 10 columns, large batch (1M rows)
+Scenario B (wide/large) -- 10 columns LongType, large batch (1M rows)
     IPC must serialize ~80 MB of input per batch over a loopback socket;
     in-process zero-copies the same data via native addresses, so
     in-process is expected to win.
+
+Scenario C (very wide) -- 100 columns LongType, large batch (100K rows)
+    Even more IPC serialization overhead.
+
+Scenario D (string type) -- 1 column StringType, medium batch (100K rows)
+    Variable-length strings were unsupported by the old custom input path.
+    Full Arrow CDI transparently handles Utf8/LargeUtf8 and any other type.
+    IPC must also encode offsets + data buffers, so in-process is expected
+    to match or beat pandas UDF.
 
 Usage (via run_inprocess_udf_benchmark.sh):
     bash python/integration/run_inprocess_udf_benchmark.sh
@@ -40,8 +49,8 @@ import time
 
 import pyarrow.compute as pc
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import pandas_udf
-from pyspark.sql.types import LongType
+from pyspark.sql.functions import col, pandas_udf
+from pyspark.sql.types import LongType, StringType
 
 from pyspark.inprocess.udf import inprocess_udf
 
@@ -57,6 +66,7 @@ SCENARIO_A = {
     "name":       "Scenario A: 1 col, 10K batch (narrow/small -- baseline)",
     "n_cols":     1,
     "batch_size": 10_000,
+    "dtype":      "long",
     "row_counts": [100_000, 1_000_000, 5_000_000],
 }
 
@@ -65,6 +75,7 @@ SCENARIO_B = {
     "name":       "Scenario B: 10 cols, 1M batch (wide/large -- in-process wins)",
     "n_cols":     10,
     "batch_size": 1_000_000,
+    "dtype":      "long",
     "row_counts": [1_000_000, 5_000_000, 10_000_000],
 }
 
@@ -73,10 +84,23 @@ SCENARIO_C = {
     "name":       "Scenario C: 100 cols, 100K batch (very wide -- in-process wins more)",
     "n_cols":     100,
     "batch_size": 100_000,
+    "dtype":      "long",
     "row_counts": [1_000_000, 5_000_000, 10_000_000],
 }
 
-SCENARIOS = [SCENARIO_A, SCENARIO_B, SCENARIO_C]
+# Scenario D: StringType -- variable-length type, only supported via full CDI
+# Each value is a ~20-char string (e.g. "row-0000000001234567").
+# Pandas UDF must encode offsets + UTF-8 bytes over IPC; in-process passes
+# the raw Arrow Utf8 buffers directly via CDI (zero-copy).
+SCENARIO_D = {
+    "name":       "Scenario D: 1 col StringType, 100K batch (CDI variable-length)",
+    "n_cols":     1,
+    "batch_size": 100_000,
+    "dtype":      "string",
+    "row_counts": [1_000_000, 5_000_000, 10_000_000],
+}
+
+SCENARIOS = [SCENARIO_A, SCENARIO_B, SCENARIO_C, SCENARIO_D]
 
 # ---------------------------------------------------------------------------
 # UDF factories
@@ -103,14 +127,39 @@ def make_pandas_udf(n_cols):
         return result
     return _sum
 
+
+def make_inprocess_udf_string():
+    """Uppercase a single StringType Arrow array; arg is a pa.Array of strings."""
+    @inprocess_udf(return_type=StringType())
+    def _upper(s):
+        return pc.utf8_upper(s)
+    return _upper
+
+
+def make_pandas_udf_string():
+    """Uppercase a single StringType pandas Series."""
+    @pandas_udf(StringType())
+    def _upper(s):
+        return s.str.upper()
+    return _upper
+
 # ---------------------------------------------------------------------------
 # Benchmark helpers
 # ---------------------------------------------------------------------------
 
-def _make_df(spark, n_rows, n_cols):
+def _make_long_df(spark, n_rows, n_cols):
     """DataFrame with n_cols LongType columns (all equal to range id)."""
     base = spark.range(n_rows)
     return base.select(*[base["id"].alias(f"c{i}") for i in range(n_cols)])
+
+
+def _make_string_df(spark, n_rows):
+    """DataFrame with one StringType column of ~20-char strings."""
+    # Produces values like "row-0000000001234567" (20 chars each).
+    base = spark.range(n_rows)
+    return base.select(
+        col("id").cast("string").alias("s")
+    )
 
 
 def _benchmark(spark, scenario):
@@ -118,19 +167,28 @@ def _benchmark(spark, scenario):
     n_cols     = scenario["n_cols"]
     batch_size = scenario["batch_size"]
     row_counts = scenario["row_counts"]
+    dtype      = scenario.get("dtype", "long")
 
     spark.conf.set("spark.sql.execution.arrow.maxRecordsPerBatch", batch_size)
 
-    ip_udf = make_inprocess_udf(n_cols)
-    pd_udf = make_pandas_udf(n_cols)
+    if dtype == "string":
+        ip_udf = make_inprocess_udf_string()
+        pd_udf = make_pandas_udf_string()
+    else:
+        ip_udf = make_inprocess_udf(n_cols)
+        pd_udf = make_pandas_udf(n_cols)
 
     results = []
     for n_rows in row_counts:
-        df = _make_df(spark, n_rows, n_cols)
+        if dtype == "string":
+            df = _make_string_df(spark, n_rows)
+            input_cols = [df["s"]]
+        else:
+            df = _make_long_df(spark, n_rows, n_cols)
+            input_cols = [df[f"c{i}"] for i in range(n_cols)]
+
         df.cache()
         df.count()  # materialise cache
-
-        input_cols = [df[f"c{i}"] for i in range(n_cols)]
 
         def run(udf_fn):
             t0 = time.perf_counter()
@@ -168,13 +226,20 @@ def _print_results(results, scenario):
     sep = "=" * len(header)
     n_cols     = scenario["n_cols"]
     batch_size = scenario["batch_size"]
-    data_mb    = n_cols * batch_size * 8 / 1_048_576
+    dtype      = scenario.get("dtype", "long")
+    if dtype == "string":
+        # ~10 bytes average per string value (cast of range id: "0".."9999999")
+        data_mb = n_cols * batch_size * 10 / 1_048_576
+        size_note = f"~{data_mb:.0f} MB input/batch (est.)"
+    else:
+        data_mb = n_cols * batch_size * 8 / 1_048_576
+        size_note = f"{data_mb:.0f} MB input/batch"
 
     print(f"\n{sep}")
     print(f"  {scenario['name']}")
     print(
         f"  Cols: {n_cols}  |  Batch: {batch_size:,} rows  "
-        f"({data_mb:.0f} MB input/batch)  |  "
+        f"({size_note})  |  "
         f"{ITERATIONS} runs + {WARMUP_RUNS} warmup  |  local[1]"
     )
     print(sep)
