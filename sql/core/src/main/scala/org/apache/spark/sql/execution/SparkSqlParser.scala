@@ -877,7 +877,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       val exprText = Option(ctx.expression()).map(source)
       val queryText = Option(ctx.query()).map(source)
 
-      val (containsSQL, deterministic, comment, optionalLanguage) =
+      val (containsSQL, deterministic, comment, collation, optionalLanguage) =
         visitRoutineCharacteristics(ctx.routineCharacteristics())
       val language: RoutineLanguage = optionalLanguage.getOrElse(LanguageSQL)
       val isTableFunc = ctx.TABLE() != null || returnTypeText.equalsIgnoreCase("table")
@@ -891,6 +891,7 @@ class SparkSqlAstBuilder extends AstBuilder {
             exprText,
             queryText,
             comment,
+            collation,
             deterministic,
             containsSQL,
             language,
@@ -917,6 +918,7 @@ class SparkSqlAstBuilder extends AstBuilder {
             exprText,
             queryText,
             comment,
+            collation,
             deterministic,
             containsSQL,
             language,
@@ -942,7 +944,7 @@ class SparkSqlAstBuilder extends AstBuilder {
    * rights: [SQL SECURITY INVOKER | SQL SECURITY DEFINER]
    */
   override def visitRoutineCharacteristics(ctx: RoutineCharacteristicsContext)
-  : (Option[Boolean], Option[Boolean], Option[String], Option[RoutineLanguage]) =
+  : (Option[Boolean], Option[Boolean], Option[String], Option[String], Option[RoutineLanguage]) =
     withOrigin(ctx) {
       checkDuplicateClauses(ctx.routineLanguage(), "LANGUAGE", ctx)
       checkDuplicateClauses(ctx.specificName(), "SPECIFIC", ctx)
@@ -950,6 +952,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       checkDuplicateClauses(ctx.nullCall(), "NULL CALL", ctx)
       checkDuplicateClauses(ctx.deterministic(), "DETERMINISTIC", ctx)
       checkDuplicateClauses(ctx.commentSpec(), "COMMENT", ctx)
+      checkDuplicateClauses(ctx.collationSpec(), "DEFAULT COLLATION", ctx)
       checkDuplicateClauses(ctx.rightsClause(), "SQL SECURITY RIGHTS", ctx)
 
       val language: Option[RoutineLanguage] = ctx
@@ -967,13 +970,14 @@ class SparkSqlAstBuilder extends AstBuilder {
 
       val deterministic = ctx.deterministic().asScala.headOption.map(visitDeterminism)
       val comment = visitCommentSpecList(ctx.commentSpec())
+      val collation = ctx.collationSpec().asScala.headOption.map(visitCollationSpec)
 
       ctx.specificName().asScala.headOption.foreach(checkSpecificName)
       ctx.nullCall().asScala.headOption.foreach(checkNullCall)
       ctx.rightsClause().asScala.headOption.foreach(checkRightsClause)
       val containsSQL: Option[Boolean] =
         ctx.sqlDataAccess().asScala.headOption.map(visitDataAccess)
-      (containsSQL, deterministic, comment, language)
+      (containsSQL, deterministic, comment, collation, language)
     }
 
   /**

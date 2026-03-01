@@ -815,7 +815,7 @@ Project [spark_catalog.default.foo7a(a#x, b#x, c#x) AS spark_catalog.default.foo
 :  +- Project [concat(concat(concat(concat(concat(concat(concat(concat(concat(concat(concat(Foo.a: , outer(a#x)),  Foo.a: ), outer(a#x)),  T.b: ), b#x),  Foo.b: ), outer(b#x)),  T.c: ), c#x),  T.c: ), c#x) AS concat(concat(concat(concat(concat(concat(concat(concat(concat(concat(concat(Foo.a: , outer(foo7a.a)),  Foo.a: ), outer(foo7a.a)),  T.b: ), b),  Foo.b: ), outer(foo7a.b)),  T.c: ), c),  T.c: ), c)#x]
 :     +- SubqueryAlias T
 :        +- LocalRelation [b#x, c#x]
-+- Project [cast(Foo.a as string) AS a#x, cast(Foo.b as string) AS b#x, cast(Foo.c as string) AS c#x]
++- Project [cast(Foo.a as string collate UTF8_BINARY) AS a#x, cast(Foo.b as string collate UTF8_BINARY) AS b#x, cast(Foo.c as string collate UTF8_BINARY) AS c#x]
    +- OneRowRelation
 
 
@@ -836,8 +836,8 @@ SELECT * FROM foo7at('Foo.a', 'Foo.b', 'Foo.c')
 Project [a#x, b#x, c#x, d#x, e#x]
 +- SQLFunctionNode spark_catalog.default.foo7at
    +- SubqueryAlias foo7at
-      +- Project [cast(concat(Foo.a: , outer(foo7at.a))#x as string) AS a#x, cast(concat(Foo.b: , outer(foo7at.b))#x as string) AS b#x, cast(concat(T.b: , b)#x as string) AS c#x, cast(concat(Foo.c: , outer(foo7at.c))#x as string) AS d#x, cast(concat(T.c: , c)#x as string) AS e#x]
-         +- Project [concat(Foo.a: , cast(Foo.a as string)) AS concat(Foo.a: , outer(foo7at.a))#x, concat(Foo.b: , cast(Foo.b as string)) AS concat(Foo.b: , outer(foo7at.b))#x, concat(T.b: , b#x) AS concat(T.b: , b)#x, concat(Foo.c: , cast(Foo.c as string)) AS concat(Foo.c: , outer(foo7at.c))#x, concat(T.c: , c#x) AS concat(T.c: , c)#x]
+      +- Project [cast(concat(Foo.a: , outer(foo7at.a))#x as string collate UTF8_BINARY) AS a#x, cast(concat(Foo.b: , outer(foo7at.b))#x as string collate UTF8_BINARY) AS b#x, cast(concat(T.b: , b)#x as string collate UTF8_BINARY) AS c#x, cast(concat(Foo.c: , outer(foo7at.c))#x as string collate UTF8_BINARY) AS d#x, cast(concat(T.c: , c)#x as string collate UTF8_BINARY) AS e#x]
+         +- Project [concat(Foo.a: , cast(Foo.a as string collate UTF8_BINARY)) AS concat(Foo.a: , outer(foo7at.a))#x, concat(Foo.b: , cast(Foo.b as string collate UTF8_BINARY)) AS concat(Foo.b: , outer(foo7at.b))#x, concat(T.b: , b#x) AS concat(T.b: , b)#x, concat(Foo.c: , cast(Foo.c as string collate UTF8_BINARY)) AS concat(Foo.c: , outer(foo7at.c))#x, concat(T.c: , c#x) AS concat(T.c: , c)#x]
             +- SubqueryAlias T
                +- LocalRelation [b#x, c#x]
 
@@ -1032,7 +1032,7 @@ CreateSQLFunctionCommand spark_catalog.default.foo9g, a FLOAT, b String, FLOAT, 
 SELECT foo9g(123.23, '7')
 -- !query analysis
 Project [spark_catalog.default.foo9g(a#x, b#x) AS spark_catalog.default.foo9g(123.23, 7)#x]
-+- Project [cast(123.23 as float) AS a#x, cast(7 as string) AS b#x]
++- Project [cast(123.23 as float) AS a#x, cast(7 as string collate UTF8_BINARY) AS b#x]
    +- OneRowRelation
 
 
@@ -1040,7 +1040,7 @@ Project [spark_catalog.default.foo9g(a#x, b#x) AS spark_catalog.default.foo9g(12
 SELECT foo9g('hello', '7')
 -- !query analysis
 Project [spark_catalog.default.foo9g(a#x, b#x) AS spark_catalog.default.foo9g(hello, 7)#x]
-+- Project [cast(hello as float) AS a#x, cast(7 as string) AS b#x]
++- Project [cast(hello as float) AS a#x, cast(7 as string collate UTF8_BINARY) AS b#x]
    +- OneRowRelation
 
 
@@ -1048,7 +1048,7 @@ Project [spark_catalog.default.foo9g(a#x, b#x) AS spark_catalog.default.foo9g(he
 SELECT foo9g(123.23, 'q')
 -- !query analysis
 Project [spark_catalog.default.foo9g(a#x, b#x) AS spark_catalog.default.foo9g(123.23, q)#x]
-+- Project [cast(123.23 as float) AS a#x, cast(q as string) AS b#x]
++- Project [cast(123.23 as float) AS a#x, cast(q as string collate UTF8_BINARY) AS b#x]
    +- OneRowRelation
 
 
@@ -1062,7 +1062,7 @@ CreateSQLFunctionCommand spark_catalog.default.foo9h, a DOUBLE, b String, DOUBLE
 SELECT foo9h(123.23, '7')
 -- !query analysis
 Project [spark_catalog.default.foo9h(a#x, b#x) AS spark_catalog.default.foo9h(123.23, 7)#x]
-+- Project [cast(123.23 as double) AS a#x, cast(7 as string) AS b#x]
++- Project [cast(123.23 as double) AS a#x, cast(7 as string collate UTF8_BINARY) AS b#x]
    +- OneRowRelation
 
 
@@ -1070,7 +1070,7 @@ Project [spark_catalog.default.foo9h(a#x, b#x) AS spark_catalog.default.foo9h(12
 SELECT foo9h('hello', '7')
 -- !query analysis
 Project [spark_catalog.default.foo9h(a#x, b#x) AS spark_catalog.default.foo9h(hello, 7)#x]
-+- Project [cast(hello as double) AS a#x, cast(7 as string) AS b#x]
++- Project [cast(hello as double) AS a#x, cast(7 as string collate UTF8_BINARY) AS b#x]
    +- OneRowRelation
 
 
@@ -1078,7 +1078,7 @@ Project [spark_catalog.default.foo9h(a#x, b#x) AS spark_catalog.default.foo9h(he
 SELECT foo9h(123.23, 'q')
 -- !query analysis
 Project [spark_catalog.default.foo9h(a#x, b#x) AS spark_catalog.default.foo9h(123.23, q)#x]
-+- Project [cast(123.23 as double) AS a#x, cast(q as string) AS b#x]
++- Project [cast(123.23 as double) AS a#x, cast(q as string collate UTF8_BINARY) AS b#x]
    +- OneRowRelation
 
 
@@ -1102,7 +1102,7 @@ CreateSQLFunctionCommand spark_catalog.default.foo9j, a STRING, b STRING, STRING
 SELECT foo9j('1234567890', '12')
 -- !query analysis
 Project [spark_catalog.default.foo9j(a#x, b#x) AS spark_catalog.default.foo9j(1234567890, 12)#x]
-+- Project [cast(1234567890 as string) AS a#x, cast(12 as string) AS b#x]
++- Project [cast(1234567890 as string collate UTF8_BINARY) AS a#x, cast(12 as string collate UTF8_BINARY) AS b#x]
    +- OneRowRelation
 
 
@@ -1110,7 +1110,7 @@ Project [spark_catalog.default.foo9j(a#x, b#x) AS spark_catalog.default.foo9j(12
 SELECT foo9j(12345678901, '12')
 -- !query analysis
 Project [spark_catalog.default.foo9j(a#x, b#x) AS spark_catalog.default.foo9j(12345678901, 12)#x]
-+- Project [cast(12345678901 as string) AS a#x, cast(12 as string) AS b#x]
++- Project [cast(12345678901 as string collate UTF8_BINARY) AS a#x, cast(12 as string collate UTF8_BINARY) AS b#x]
    +- OneRowRelation
 
 
@@ -1311,7 +1311,7 @@ CreateSQLFunctionCommand spark_catalog.default.foo9o, a MAP<STRING, INTEGER>, MA
 SELECT foo9o(MAP('hello', 1, 'world', 2))
 -- !query analysis
 Project [spark_catalog.default.foo9o(a#x) AS spark_catalog.default.foo9o(map(hello, 1, world, 2))#x]
-+- Project [cast(map(hello, 1, world, 2) as map<string,int>) AS a#x]
++- Project [cast(map(hello, 1, world, 2) as map<string collate UTF8_BINARY,int>) AS a#x]
    +- OneRowRelation
 
 
@@ -1319,7 +1319,7 @@ Project [spark_catalog.default.foo9o(a#x) AS spark_catalog.default.foo9o(map(hel
 SELECT foo9o(from_json('{"hello":1, "world":2}', 'map<string,int>'))
 -- !query analysis
 Project [spark_catalog.default.foo9o(a#x) AS spark_catalog.default.foo9o(entries)#x]
-+- Project [cast(from_json(MapType(StringType,IntegerType,true), {"hello":1, "world":2}, Some(America/Los_Angeles), false) as map<string,int>) AS a#x]
++- Project [cast(from_json(MapType(StringType,IntegerType,true), {"hello":1, "world":2}, Some(America/Los_Angeles), false) as map<string collate UTF8_BINARY,int>) AS a#x]
    +- OneRowRelation
 
 
@@ -1333,7 +1333,7 @@ CreateSQLFunctionCommand spark_catalog.default.foo9p, a STRUCT<a1: INTEGER, a2: 
 SELECT foo9p(STRUCT(1, 'hello'))
 -- !query analysis
 Project [spark_catalog.default.foo9p(a#x) AS spark_catalog.default.foo9p(struct(1, hello))#x]
-+- Project [cast(struct(col1, 1, col2, hello) as struct<a1:int,a2:string>) AS a#x]
++- Project [cast(struct(col1, 1, col2, hello) as struct<a1:int,a2:string collate UTF8_BINARY>) AS a#x]
    +- OneRowRelation
 
 
@@ -1341,7 +1341,7 @@ Project [spark_catalog.default.foo9p(a#x) AS spark_catalog.default.foo9p(struct(
 SELECT foo9p(from_json('{1:"hello"}', 'struct<a1:int, a2:string>'))
 -- !query analysis
 Project [spark_catalog.default.foo9p(a#x) AS spark_catalog.default.foo9p(from_json({1:"hello"}))#x]
-+- Project [cast(from_json(StructField(a1,IntegerType,true), StructField(a2,StringType,true), {1:"hello"}, Some(America/Los_Angeles), false) as struct<a1:int,a2:string>) AS a#x]
++- Project [cast(from_json(StructField(a1,IntegerType,true), StructField(a2,StringType,true), {1:"hello"}, Some(America/Los_Angeles), false) as struct<a1:int,a2:string collate UTF8_BINARY>) AS a#x]
    +- OneRowRelation
 
 
@@ -1355,7 +1355,7 @@ CreateSQLFunctionCommand spark_catalog.default.foo9q, a ARRAY<STRUCT<a1: INT, a2
 SELECT foo9q(ARRAY(STRUCT(1, 'hello'), STRUCT(2, 'world')))
 -- !query analysis
 Project [spark_catalog.default.foo9q(a#x) AS spark_catalog.default.foo9q(array(struct(1, hello), struct(2, world)))#x]
-+- Project [cast(array(struct(col1, 1, col2, hello), struct(col1, 2, col2, world)) as array<struct<a1:int,a2:string>>) AS a#x]
++- Project [cast(array(struct(col1, 1, col2, hello), struct(col1, 2, col2, world)) as array<struct<a1:int,a2:string collate UTF8_BINARY>>) AS a#x]
    +- OneRowRelation
 
 
@@ -1363,7 +1363,7 @@ Project [spark_catalog.default.foo9q(a#x) AS spark_catalog.default.foo9q(array(s
 SELECT foo9q(ARRAY(NAMED_STRUCT('x', 1, 'y', 'hello'), NAMED_STRUCT('x', 2, 'y', 'world')))
 -- !query analysis
 Project [spark_catalog.default.foo9q(a#x) AS spark_catalog.default.foo9q(array(named_struct(x, 1, y, hello), named_struct(x, 2, y, world)))#x]
-+- Project [cast(array(named_struct(x, 1, y, hello), named_struct(x, 2, y, world)) as array<struct<a1:int,a2:string>>) AS a#x]
++- Project [cast(array(named_struct(x, 1, y, hello), named_struct(x, 2, y, world)) as array<struct<a1:int,a2:string collate UTF8_BINARY>>) AS a#x]
    +- OneRowRelation
 
 
@@ -1371,7 +1371,7 @@ Project [spark_catalog.default.foo9q(a#x) AS spark_catalog.default.foo9q(array(n
 SELECT foo9q(from_json('[{1:"hello"}, {2:"world"}]', 'array<struct<a1:int,a2:string>>'))
 -- !query analysis
 Project [spark_catalog.default.foo9q(a#x) AS spark_catalog.default.foo9q(from_json([{1:"hello"}, {2:"world"}]))#x]
-+- Project [cast(from_json(ArrayType(StructType(StructField(a1,IntegerType,true),StructField(a2,StringType,true)),true), [{1:"hello"}, {2:"world"}], Some(America/Los_Angeles), false) as array<struct<a1:int,a2:string>>) AS a#x]
++- Project [cast(from_json(ArrayType(StructType(StructField(a1,IntegerType,true),StructField(a2,StringType,true)),true), [{1:"hello"}, {2:"world"}], Some(America/Los_Angeles), false) as array<struct<a1:int,a2:string collate UTF8_BINARY>>) AS a#x]
    +- OneRowRelation
 
 
@@ -1385,7 +1385,7 @@ CreateSQLFunctionCommand spark_catalog.default.foo9r, a ARRAY<MAP<STRING, INT>>,
 SELECT foo9r(ARRAY(MAP('hello', 1), MAP('world', 2)))
 -- !query analysis
 Project [spark_catalog.default.foo9r(a#x) AS spark_catalog.default.foo9r(array(map(hello, 1), map(world, 2)))#x]
-+- Project [cast(array(map(hello, 1), map(world, 2)) as array<map<string,int>>) AS a#x]
++- Project [cast(array(map(hello, 1), map(world, 2)) as array<map<string collate UTF8_BINARY,int>>) AS a#x]
    +- OneRowRelation
 
 
@@ -1393,7 +1393,7 @@ Project [spark_catalog.default.foo9r(a#x) AS spark_catalog.default.foo9r(array(m
 SELECT foo9r(from_json('[{"hello":1}, {"world":2}]', 'array<map<string,int>>'))
 -- !query analysis
 Project [spark_catalog.default.foo9r(a#x) AS spark_catalog.default.foo9r(from_json([{"hello":1}, {"world":2}]))#x]
-+- Project [cast(from_json(ArrayType(MapType(StringType,IntegerType,true),true), [{"hello":1}, {"world":2}], Some(America/Los_Angeles), false) as array<map<string,int>>) AS a#x]
++- Project [cast(from_json(ArrayType(MapType(StringType,IntegerType,true),true), [{"hello":1}, {"world":2}], Some(America/Los_Angeles), false) as array<map<string collate UTF8_BINARY,int>>) AS a#x]
    +- OneRowRelation
 
 
@@ -1524,7 +1524,7 @@ CreateSQLFunctionCommand spark_catalog.default.foo1_11h, a INT, b STRING, , STRU
 SELECT foo1_11h(1, 'test')
 -- !query analysis
 Project [spark_catalog.default.foo1_11h(a#x, b#x) AS spark_catalog.default.foo1_11h(1, test)#x]
-+- Project [cast(1 as int) AS a#x, cast(test as string) AS b#x]
++- Project [cast(1 as int) AS a#x, cast(test as string collate UTF8_BINARY) AS b#x]
    +- OneRowRelation
 
 
@@ -1552,7 +1552,7 @@ CreateSQLFunctionCommand spark_catalog.default.foo1_11j, s STRING, , UPPER(s), f
 SELECT foo1_11j('hello')
 -- !query analysis
 Project [spark_catalog.default.foo1_11j(s#x) AS spark_catalog.default.foo1_11j(hello)#x]
-+- Project [cast(hello as string) AS s#x]
++- Project [cast(hello as string collate UTF8_BINARY) AS s#x]
    +- OneRowRelation
 
 
@@ -1566,7 +1566,7 @@ CreateSQLFunctionCommand spark_catalog.default.foo1_11k, a INT, b STRING, , CONC
 SELECT foo1_11k(123, 'test')
 -- !query analysis
 Project [spark_catalog.default.foo1_11k(a#x, b#x) AS spark_catalog.default.foo1_11k(123, test)#x]
-+- Project [cast(123 as int) AS a#x, cast(test as string) AS b#x]
++- Project [cast(123 as int) AS a#x, cast(test as string collate UTF8_BINARY) AS b#x]
    +- OneRowRelation
 
 
@@ -1582,7 +1582,7 @@ SELECT * FROM foo1_11l()
 Project [id#x, name#x]
 +- SQLFunctionNode spark_catalog.default.foo1_11l
    +- SubqueryAlias foo1_11l
-      +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x]
+      +- Project [cast(id#x as int) AS id#x, cast(name#x as string collate UTF8_BINARY) AS name#x]
          +- Project [1 AS id#x, hello AS name#x]
             +- OneRowRelation
 
@@ -1599,8 +1599,8 @@ SELECT * FROM foo1_11m(5, 'world')
 Project [doubled#x, upper_name#x]
 +- SQLFunctionNode spark_catalog.default.foo1_11m
    +- SubqueryAlias foo1_11m
-      +- Project [cast(doubled#x as int) AS doubled#x, cast(upper_name#x as string) AS upper_name#x]
-         +- Project [(cast(5 as int) * 2) AS doubled#x, upper(cast(world as string)) AS upper_name#x]
+      +- Project [cast(doubled#x as int) AS doubled#x, cast(upper_name#x as string collate UTF8_BINARY) AS upper_name#x]
+         +- Project [(cast(5 as int) * 2) AS doubled#x, upper(cast(world as string collate UTF8_BINARY)) AS upper_name#x]
             +- OneRowRelation
 
 
@@ -1633,8 +1633,8 @@ SELECT * FROM foo1_11o(1, 'Alice')
 Project [person_info#x, modified_id#x]
 +- SQLFunctionNode spark_catalog.default.foo1_11o
    +- SubqueryAlias foo1_11o
-      +- Project [cast(person_info#x as struct<id:int,name:string>) AS person_info#x, cast(modified_id#x as int) AS modified_id#x]
-         +- Project [struct(id, cast(1 as int), name, cast(Alice as string)) AS person_info#x, (cast(1 as int) + 100) AS modified_id#x]
+      +- Project [cast(person_info#x as struct<id:int,name:string collate UTF8_BINARY>) AS person_info#x, cast(modified_id#x as int) AS modified_id#x]
+         +- Project [struct(id, cast(1 as int), name, cast(Alice as string collate UTF8_BINARY)) AS person_info#x, (cast(1 as int) + 100) AS modified_id#x]
             +- OneRowRelation
 
 
@@ -1962,7 +1962,7 @@ Project [spark_catalog.default.foo2_4a(a#x) AS spark_catalog.default.foo2_4a(arr
 :     +- SubqueryAlias __auto_generated_subquery_name
 :        +- Project [map(a, 1, b, 2) AS rank#x]
 :           +- OneRowRelation
-+- Project [cast(array(a, b) as array<string>) AS a#x]
++- Project [cast(array(a, b) as array<string collate UTF8_BINARY>) AS a#x]
    +- OneRowRelation
 
 
@@ -1981,7 +1981,7 @@ Project [spark_catalog.default.foo2_4b(m#x, k#x) AS spark_catalog.default.foo2_4
 :     +- SubqueryAlias __auto_generated_subquery_name
 :        +- Project [upper(outer(m#x)[outer(k#x)]) AS v#x]
 :           +- OneRowRelation
-+- Project [cast(map(a, hello, b, world) as map<string,string>) AS m#x, cast(a as string) AS k#x]
++- Project [cast(map(a, hello, b, world) as map<string collate UTF8_BINARY,string collate UTF8_BINARY>) AS m#x, cast(a as string collate UTF8_BINARY) AS k#x]
    +- OneRowRelation
 
 
@@ -3496,10 +3496,10 @@ Project [spark_catalog.default.foo3_2e1(occurrences#x, instance_start_time#x) AS
 :     :  +- SubqueryAlias t
 :     :     +- Project [transform(outer(occurrences#x), lambdafunction(named_struct(diff, abs((unix_millis(lambda x#x.start_time) - unix_millis(outer(instance_start_time#x)))), id, lambda x#x.occurrence_id), lambda x#x, false)) AS diffs#x]
 :     :        +- OneRowRelation
-:     +- Project [CASE WHEN (isnull(outer(occurrences#x)) OR (size(outer(occurrences#x), false) = 0)) THEN cast(null as string) ELSE sort_array(diffs#x, true)[0].id END AS id#x]
+:     +- Project [CASE WHEN (isnull(outer(occurrences#x)) OR (size(outer(occurrences#x), false) = 0)) THEN cast(null as string collate UTF8_BINARY) ELSE sort_array(diffs#x, true)[0].id END AS id#x]
 :        +- SubqueryAlias t
 :           +- CTERelationRef xxxx, true, [diffs#x], false, false, 1
-+- Project [cast(array(struct(col1, 2022-01-01 10:11:12, col2, 1), struct(col1, 2022-01-01 10:11:15, col2, 2)) as array<struct<start_time:timestamp,occurrence_id:string>>) AS occurrences#x, cast(2022-01-01 as timestamp) AS instance_start_time#x]
++- Project [cast(array(struct(col1, 2022-01-01 10:11:12, col2, 1), struct(col1, 2022-01-01 10:11:15, col2, 2)) as array<struct<start_time:timestamp,occurrence_id:string collate UTF8_BINARY>>) AS occurrences#x, cast(2022-01-01 as timestamp) AS instance_start_time#x]
    +- OneRowRelation
 
 

@@ -216,6 +216,12 @@ object AnalysisContext {
     try f finally { set(originContext) }
   }
 
+  def withAnalysisContext[A](function: SQLFunction)(f: => A): A = {
+    val originContext = value.get()
+    val context = originContext.copy(collation = function.collation)
+    set(context)
+    try f finally { set(originContext) }
+  }
 
   def withNewAnalysisContext[A](f: => A): A = {
     val originContext = value.get()
@@ -2297,8 +2303,10 @@ class Analyzer(
         e: SubqueryExpression,
         outer: LogicalPlan)(
         f: (LogicalPlan, Seq[Expression]) => SubqueryExpression): SubqueryExpression = {
-      val newSubqueryPlan = AnalysisContext.withOuterPlan(outer) {
-        executeSameContext(e.plan)
+      val newSubqueryPlan = SQLFunctionContext.withNewContext {
+        AnalysisContext.withOuterPlan(outer) {
+          executeSameContext(e.plan)
+        }
       }
 
       // If the subquery plan is fully resolved, pull the outer references and record
@@ -2443,7 +2451,9 @@ class Analyzer(
           Analyzer.retainResolutionConfigsForAnalysis(newConf = newConf, existingConf = conf)
         }
         SQLConf.withExistingConf(newConf) {
-          executeSameContext(plan)
+          AnalysisContext.withAnalysisContext(f.function) {
+            executeSameContext(plan)
+          }
         }
       }
       // Fail the analysis eagerly if a SQL function cannot be resolved using its input.
@@ -2742,7 +2752,9 @@ class Analyzer(
         val resolved = SQLConf.withExistingConf(newConf) {
           val plan = v1SessionCatalog.makeSQLTableFunctionPlan(name, function, inputs, output)
           SQLFunctionContext.withSQLFunction {
-            executeSameContext(plan)
+            AnalysisContext.withAnalysisContext(function) {
+              executeSameContext(plan)
+            }
           }
         }
         // Remove unnecessary lateral joins that are used to resolve the SQL function.

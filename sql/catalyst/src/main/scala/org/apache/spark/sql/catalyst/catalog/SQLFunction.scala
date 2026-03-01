@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.catalog.UserDefinedFunction._
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo, ScalarSubquery}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation, Project}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.types.{DataType, StructType}
 
 /**
@@ -40,6 +41,7 @@ import org.apache.spark.sql.types.{DataType, StructType}
  * @param exprText function body as an expression
  * @param queryText function body as a query
  * @param comment function comment
+ * @param collation function default collation
  * @param deterministic whether the function is deterministic
  * @param containsSQL whether the function has data access routine to be CONTAINS SQL
  * @param isTableFunc whether the function is a table function
@@ -54,6 +56,7 @@ case class SQLFunction(
     exprText: Option[String],
     queryText: Option[String],
     comment: Option[String],
+    collation: Option[String],
     deterministic: Option[Boolean],
     containsSQL: Option[Boolean],
     isTableFunc: Boolean,
@@ -152,16 +155,22 @@ case class SQLFunction(
    */
   private def sqlFunctionToProps: Map[String, String] = {
     val props = new mutable.HashMap[String, String]
-    val inputParamText = inputParam.map(_.fields.map(_.toDDL).mkString(", "))
+    val inputParamText = inputParam.map(
+      DataTypeUtils.replaceNonCollatedTypesWithExplicitUTF8Binary(_)
+        .asInstanceOf[StructType].fields.map(_.toDDL).mkString(", "))
     inputParamText.foreach(props.put(INPUT_PARAM, _))
     val returnTypeText = returnType match {
-      case Left(dataType) => dataType.sql
-      case Right(columns) => columns.toDDL
+      case Left(dataType) =>
+        DataTypeUtils.replaceNonCollatedTypesWithExplicitUTF8Binary(dataType).sql
+      case Right(columns) =>
+        DataTypeUtils.replaceNonCollatedTypesWithExplicitUTF8Binary(columns)
+          .asInstanceOf[StructType].toDDL
     }
     props.put(RETURN_TYPE, returnTypeText)
     exprText.foreach(props.put(EXPRESSION, _))
     queryText.foreach(props.put(QUERY, _))
     comment.foreach(props.put(COMMENT, _))
+    collation.foreach(props.put(COLLATION, _))
     deterministic.foreach(d => props.put(DETERMINISTIC, d.toString))
     containsSQL.foreach(x => props.put(CONTAINS_SQL, x.toString))
     props.put(IS_TABLE_FUNC, isTableFunc.toString)
@@ -185,6 +194,7 @@ object SQLFunction {
   private val EXPRESSION: String = SQL_FUNCTION_PREFIX + "expression"
   private val QUERY: String = SQL_FUNCTION_PREFIX + "query"
   private val COMMENT: String = SQL_FUNCTION_PREFIX + "comment"
+  private val COLLATION: String = SQL_FUNCTION_PREFIX + "collation"
   private val DETERMINISTIC: String = SQL_FUNCTION_PREFIX + "deterministic"
   private val CONTAINS_SQL: String = SQL_FUNCTION_PREFIX + "containsSQL"
   private val IS_TABLE_FUNC: String = SQL_FUNCTION_PREFIX + "isTableFunc"
@@ -211,14 +221,16 @@ object SQLFunction {
       val blob = parts.sortBy(_._1).map(_._2).mkString
       val props = mapper.readValue(blob, classOf[Map[String, String]])
       val isTableFunc = props(IS_TABLE_FUNC).toBoolean
-      val returnType = parseReturnTypeText(props(RETURN_TYPE), isTableFunc, parser)
+      val collation = props.get(COLLATION)
+      val returnType = parseReturnTypeText(props(RETURN_TYPE), isTableFunc, parser, collation)
       SQLFunction(
         name = function.identifier,
-        inputParam = props.get(INPUT_PARAM).map(parseRoutineParam(_, parser)),
+        inputParam = props.get(INPUT_PARAM).map(parseRoutineParam(_, parser, collation)),
         returnType = returnType.get,
         exprText = props.get(EXPRESSION),
         queryText = props.get(QUERY),
         comment = props.get(COMMENT),
+        collation = collation,
         deterministic = props.get(DETERMINISTIC).map(_.toBoolean),
         containsSQL = props.get(CONTAINS_SQL).map(_.toBoolean),
         isTableFunc = isTableFunc,
@@ -249,7 +261,8 @@ object SQLFunction {
   def parseReturnTypeText(
       text: String,
       isTableFunc: Boolean,
-      parser: ParserInterface): Option[Either[DataType, StructType]] = {
+      parser: ParserInterface,
+      collation: Option[String]): Option[Either[DataType, StructType]] = {
     if (!isTableFunc) {
       // This is a scalar user-defined function.
       if (text.isEmpty) {
@@ -257,7 +270,7 @@ object SQLFunction {
         Option.empty[Either[DataType, StructType]]
       } else {
         // The CREATE FUNCTION statement included a RETURNS clause with an explicit return type.
-        Some(Left(parseDataType(text, parser)))
+        Some(Left(parseDataType(text, parser, collation)))
       }
     } else {
       // This is a table function.
@@ -266,7 +279,7 @@ object SQLFunction {
         Option.empty[Either[DataType, StructType]]
       } else {
         // The CREATE FUNCTION statement included a RETURNS TABLE clause with an explicit schema.
-        Some(Right(parseTableSchema(text, parser)))
+        Some(Right(parseTableSchema(text, parser, collation)))
       }
     }
   }
