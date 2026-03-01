@@ -8107,22 +8107,28 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     getConf(SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER)
 
   /**
-   * Returns the function resolution search path for error messages and resolution order.
-   * Uses [[sessionFunctionResolutionOrder]]: "first" (session first), "second" (session second),
-   * "last" (session last). When catalogPath is empty, returns only system namespaces.
+   * Returns the single resolution search path for all objects (functions, tables, views).
+   * Used for both resolution order and error messages. Entries: "system.builtin", "system.session",
+   * and the current catalog path (e.g. "spark_catalog.default"). Order is determined by
+   * [[sessionFunctionResolutionOrder]]:
+   * - "first": session, builtin, catalogPath
+   * - "second": builtin, session, catalogPath (default)
+   * - "last": builtin, catalogPath, session
    */
-  def functionResolutionSearchPath(catalogPath: String): Seq[String] = {
+  def resolutionSearchPath(catalogPath: String): Seq[String] = {
     val order = sessionFunctionResolutionOrder
+    val systemSession = "system.session"
+    val systemBuiltin = "system.builtin"
     order match {
       case "first" =>
-        if (catalogPath.isEmpty) Seq("system.session", "system.builtin")
-        else Seq("system.session", "system.builtin", catalogPath)
+        if (catalogPath.isEmpty) Seq(systemSession, systemBuiltin)
+        else Seq(systemSession, systemBuiltin, catalogPath)
       case "last" =>
-        if (catalogPath.isEmpty) Seq("system.builtin", "system.session")
-        else Seq("system.builtin", catalogPath, "system.session")
+        if (catalogPath.isEmpty) Seq(systemBuiltin, systemSession)
+        else Seq(systemBuiltin, catalogPath, systemSession)
       case _ => // "second"
-        if (catalogPath.isEmpty) Seq("system.builtin", "system.session")
-        else Seq("system.builtin", "system.session", catalogPath)
+        if (catalogPath.isEmpty) Seq(systemBuiltin, systemSession)
+        else Seq(systemBuiltin, systemSession, catalogPath)
     }
   }
 

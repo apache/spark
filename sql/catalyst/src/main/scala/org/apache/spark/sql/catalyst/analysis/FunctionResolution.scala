@@ -95,20 +95,21 @@ class FunctionResolution(
 
   /**
    * Returns the generic resolution search path based on the current configuration.
-   * The order of scopes determines the precedence for unqualified function lookups.
+   * Uses the single [[SQLConf.resolutionSearchPath]] for all objects; maps to function scopes.
    */
-  private def resolutionSearchPath: Seq[ResolutionScope] = {
-    SQLConf.get.sessionFunctionResolutionOrder match {
-      case "first" => Seq(SystemSessionScope, SystemBuiltinScope, CurrentCatalogScope)
-      case "last" => Seq(SystemBuiltinScope, CurrentCatalogScope, SystemSessionScope)
-      case _ => Seq(SystemBuiltinScope, SystemSessionScope, CurrentCatalogScope)
+  private def resolutionSearchPathScopes: Seq[ResolutionScope] = {
+    val catalogPath = (currentCatalog.name +: catalogManager.currentNamespace).mkString(".")
+    SQLConf.get.resolutionSearchPath(catalogPath).map {
+      case "system.builtin" => SystemBuiltinScope
+      case "system.session" => SystemSessionScope
+      case _ => CurrentCatalogScope
     }
   }
 
   /** Produces the ordered list of candidates for resolution. */
   private def resolutionCandidates(nameParts: Seq[String]): Seq[ResolutionCandidate] = {
     if (nameParts.size == 1) {
-      resolutionSearchPath.map {
+      resolutionSearchPathScopes.map {
         case SystemSessionScope =>
           SessionNamespaceCandidate(SessionCatalog.Temp, nameParts.head)
         case SystemBuiltinScope =>
@@ -181,7 +182,7 @@ class FunctionResolution(
           val catalogPath = (
             catalogManager.currentCatalog.name +: catalogManager.currentNamespace
           ).mkString(".")
-          val searchPath = SQLConf.get.functionResolutionSearchPath(catalogPath)
+          val searchPath = SQLConf.get.resolutionSearchPath(catalogPath)
           throw QueryCompilationErrors.unresolvedRoutineError(
             unresolvedFunc.nameParts, searchPath, unresolvedFunc.origin)
         case _: NoSuchFunctionException =>
@@ -219,7 +220,7 @@ class FunctionResolution(
       val catalogPath = (
         catalogManager.currentCatalog.name +: catalogManager.currentNamespace
       ).mkString(".")
-      val searchPath = SQLConf.get.functionResolutionSearchPath(catalogPath)
+      val searchPath = SQLConf.get.resolutionSearchPath(catalogPath)
       throw QueryCompilationErrors.unresolvedRoutineError(
         unresolvedFunc.nameParts, searchPath, unresolvedFunc.origin)
     }

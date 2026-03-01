@@ -2038,7 +2038,7 @@ class Analyzer(
                 if (nameParts.size <= 3) {
                   val catalogPath = (catalogManager.currentCatalog.name +:
                     catalogManager.currentNamespace).mkString(".")
-                  val searchPath = SQLConf.get.functionResolutionSearchPath(catalogPath)
+                  val searchPath = SQLConf.get.resolutionSearchPath(catalogPath)
                   throw QueryCompilationErrors.unresolvedRoutineError(
                     nameParts,
                     searchPath,
@@ -2065,7 +2065,7 @@ class Analyzer(
                   if (nameParts.size == 3) {
                     val catalogPath = (catalogManager.currentCatalog.name +:
                       catalogManager.currentNamespace).mkString(".")
-                    val searchPath = SQLConf.get.functionResolutionSearchPath(catalogPath)
+                    val searchPath = SQLConf.get.resolutionSearchPath(catalogPath)
                     throw QueryCompilationErrors.unresolvedRoutineError(
                       nameParts,
                       searchPath,
@@ -2091,7 +2091,7 @@ class Analyzer(
 
                 case FunctionType.NotFound =>
                   val catalogPath = (catalog.name +: catalogManager.currentNamespace).mkString(".")
-                  val searchPath = SQLConf.get.functionResolutionSearchPath(catalogPath)
+                  val searchPath = SQLConf.get.resolutionSearchPath(catalogPath)
                   throw QueryCompilationErrors.unresolvedRoutineError(
                     nameParts,
                     searchPath,

@@ -81,6 +81,8 @@ class RelationResolution(
 
   /**
    * Lookup temporary view by `identifier`. Returns `None` if the view wasn't found.
+   * For session-qualified names (session.v or system.session.v), normalizes to the view name
+   * before lookup so that SessionCatalog is queried for local temp view only.
    */
   def lookupTempView(identifier: Seq[String]): Option[TemporaryViewRelation] = {
     // We are resolving a view and this name is not a temp view when that view was created. We
@@ -89,7 +91,54 @@ class RelationResolution(
       return None
     }
 
-    v1SessionCatalog.getRawLocalOrGlobalTempView(identifier)
+    val lookupIdentifier = if (isSessionQualifiedViewName(identifier)) {
+      normalizeSessionQualifiedViewIdentifier(identifier)
+    } else {
+      identifier
+    }
+    v1SessionCatalog.getRawLocalOrGlobalTempView(lookupIdentifier)
+  }
+
+  /**
+   * True if the identifier is explicitly qualified as a session (local temp) view:
+   * session.viewName (2-part) or system.session.viewName (3-part).
+   */
+  private def isSessionQualifiedViewName(nameParts: Seq[String]): Boolean = {
+    nameParts.length == 2 && nameParts.head.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE) ||
+    nameParts.length == 3 &&
+      nameParts(0).equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
+      nameParts(1).equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)
+  }
+
+  /**
+   * For session-qualified view names (session.v or system.session.v), returns Seq(v).
+   * Call only when isSessionQualifiedViewName is true.
+   */
+  private def normalizeSessionQualifiedViewIdentifier(nameParts: Seq[String]): Seq[String] = {
+    Seq(nameParts.last)
+  }
+
+  /**
+   * Scope in the relation resolution search path. Used to interpret
+   * [[SQLConf.resolutionSearchPath]] when resolving unqualified table/view names.
+   */
+  private sealed trait RelationResolutionScope
+  private case object SessionScope extends RelationResolutionScope
+  private case object PersistentScope extends RelationResolutionScope
+
+  /**
+   * Returns the relation resolution search path for unqualified (1-part) names.
+   * Uses the single search path for all objects: [[SQLConf.resolutionSearchPath]].
+   * Maps "system.session" -> SessionScope, catalog path -> PersistentScope; skips "system.builtin"
+   * (no builtin views).
+   */
+  private def relationResolutionSearchPath: Seq[RelationResolutionScope] = {
+    val catalogPath = (currentCatalog.name +: catalogManager.currentNamespace).mkString(".")
+    conf.resolutionSearchPath(catalogPath).flatMap {
+      case "system.session" => Some(SessionScope)
+      case "system.builtin" => None
+      case _ => Some(PersistentScope)
+    }
   }
 
   /**
@@ -109,53 +158,86 @@ class RelationResolution(
       throw new AnalysisException("MULTIPLE_TIME_TRAVEL_SPEC", Map.empty[String, String])
     }
     val finalTimeTravelSpec = timeTravelSpec.orElse(timeTravelSpecFromOptions)
-    resolveTempView(
-      u.multipartIdentifier,
-      u.isStreaming,
-      finalTimeTravelSpec.isDefined
-    ).orElse {
-      expandIdentifier(u.multipartIdentifier) match {
-        case CatalogAndIdentifier(catalog, ident) =>
-          val key = toCacheKey(catalog, ident, finalTimeTravelSpec)
-          val planId = u.getTagValue(LogicalPlan.PLAN_ID_TAG)
-          relationCache
-            .get(key)
-            .map(adaptCachedRelation(_, planId))
-            .orElse {
-              val writePrivileges = u.options.get(UnresolvedRelation.REQUIRED_WRITE_PRIVILEGES)
-              val finalOptions = u.clearWritePrivileges.options
-              val table = CatalogV2Util.loadTable(
+    val identifier = u.multipartIdentifier
+
+    // Session-qualified (session.v or system.session.v): resolve only from temp views; no fallback.
+    if (isSessionQualifiedViewName(identifier)) {
+      val normalized = normalizeSessionQualifiedViewIdentifier(identifier)
+      return resolveTempView(
+        normalized,
+        u.isStreaming,
+        finalTimeTravelSpec.isDefined
+      )
+    }
+
+    // Multi-part (but not session-qualified): expand and resolve as persistent only.
+    if (identifier.length > 1) {
+      return tryResolvePersistent(u, identifier, finalTimeTravelSpec)
+    }
+
+    // 1-part name: try each scope in relationResolutionSearchPath order (mirrors
+    // FunctionResolution.resolutionCandidates / resolutionSearchPath).
+    val candidates = relationResolutionSearchPath
+    for (scope <- candidates) {
+      val result = scope match {
+        case SessionScope =>
+          resolveTempView(identifier, u.isStreaming, finalTimeTravelSpec.isDefined)
+        case PersistentScope =>
+          tryResolvePersistent(u, identifier, finalTimeTravelSpec)
+      }
+      if (result.isDefined) return result
+    }
+    None
+  }
+
+  /**
+   * Try to resolve the identifier as a persistent table/view (current catalog/namespace).
+   */
+  private def tryResolvePersistent(
+      u: UnresolvedRelation,
+      identifier: Seq[String],
+      finalTimeTravelSpec: Option[TimeTravelSpec]): Option[LogicalPlan] = {
+    expandIdentifier(identifier) match {
+      case CatalogAndIdentifier(catalog, ident) =>
+        val key = toCacheKey(catalog, ident, finalTimeTravelSpec)
+        val planId = u.getTagValue(LogicalPlan.PLAN_ID_TAG)
+        relationCache
+          .get(key)
+          .map(adaptCachedRelation(_, planId))
+          .orElse {
+            val writePrivileges = u.options.get(UnresolvedRelation.REQUIRED_WRITE_PRIVILEGES)
+            val finalOptions = u.clearWritePrivileges.options
+            val table = CatalogV2Util.loadTable(
+              catalog,
+              ident,
+              finalTimeTravelSpec,
+              Option(writePrivileges))
+
+            val sharedRelationCacheMatch = for {
+              t <- table
+              if finalTimeTravelSpec.isEmpty && writePrivileges == null && !u.isStreaming
+              cached <- lookupSharedRelationCache(catalog, ident, t)
+            } yield {
+              val updatedRelation = cached.copy(options = finalOptions)
+              val nameParts = ident.toQualifiedNameParts(catalog)
+              val aliasedRelation = SubqueryAlias(nameParts, updatedRelation)
+              relationCache.update(key, aliasedRelation)
+              adaptCachedRelation(aliasedRelation, planId)
+            }
+
+            sharedRelationCacheMatch.orElse {
+              val loaded = createRelation(
                 catalog,
                 ident,
-                finalTimeTravelSpec,
-                Option(writePrivileges))
-
-              val sharedRelationCacheMatch = for {
-                t <- table
-                if finalTimeTravelSpec.isEmpty && writePrivileges == null && !u.isStreaming
-                cached <- lookupSharedRelationCache(catalog, ident, t)
-              } yield {
-                val updatedRelation = cached.copy(options = finalOptions)
-                val nameParts = ident.toQualifiedNameParts(catalog)
-                val aliasedRelation = SubqueryAlias(nameParts, updatedRelation)
-                relationCache.update(key, aliasedRelation)
-                adaptCachedRelation(aliasedRelation, planId)
-              }
-
-              sharedRelationCacheMatch.orElse {
-                val loaded = createRelation(
-                  catalog,
-                  ident,
-                  table,
-                  finalOptions,
-                  u.isStreaming,
-                  finalTimeTravelSpec)
-                loaded.foreach(relationCache.update(key, _))
-                loaded.map(cloneWithPlanId(_, planId))
-              }
+                table,
+                finalOptions,
+                u.isStreaming,
+                finalTimeTravelSpec)
+              loaded.foreach(relationCache.update(key, _))
+              loaded.map(cloneWithPlanId(_, planId))
+            }
           }
-        case _ => None
-      }
+      case _ => None
     }
   }
 

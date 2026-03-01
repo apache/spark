@@ -988,10 +988,17 @@ class SessionCatalog(
 
   /**
    * Return the raw logical plan of a temporary local or global view for the given name.
+   * Accepts: 1-part (local temp), 2-part session.v or global_temp.v, 3-part system.session.v.
    */
   def getRawLocalOrGlobalTempView(name: Seq[String]): Option[TemporaryViewRelation] = {
     name match {
       case Seq(v) => getRawTempView(v)
+      case Seq(db, v) if db.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE) =>
+        getRawTempView(v)
+      case Seq(cat, ns, v)
+          if cat.equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
+            ns.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE) =>
+        getRawTempView(v)
       case Seq(db, v) if isGlobalTempViewDB(db) => getRawGlobalTempView(v)
       case _ => None
     }
