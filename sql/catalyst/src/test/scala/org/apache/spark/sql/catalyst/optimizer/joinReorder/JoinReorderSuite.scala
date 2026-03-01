@@ -74,14 +74,18 @@ class JoinReorderSuite extends JoinReorderPlanTestBase with StatsEstimationTestB
     attr("t4.k-1-2") -> rangeColumnStat(2, 0),
     attr("t4.v-1-10") -> rangeColumnStat(10, 0),
     attr("t5.k-1-5") -> rangeColumnStat(5, 0),
-    attr("t5.v-1-5") -> rangeColumnStat(5, 0)
+    attr("t5.v-1-5") -> rangeColumnStat(5, 0),
+    attr("t6.k-1-300") -> rangeColumnStat(300, 0),
+    attr("t6.k-2-5") -> rangeColumnStat(5, 0),
+    attr("t7.k-1-300") -> rangeColumnStat(300, 0),
+    attr("t7.k-2-5") -> rangeColumnStat(5, 0)
   ))
 
   private val nameToAttr: Map[String, Attribute] = columnInfo.map(kv => kv._1.name -> kv._1)
   private val nameToColInfo: Map[String, (Attribute, ColumnStat)] =
     columnInfo.map(kv => kv._1.name -> kv)
 
-  // Table t1/t4: big table with two columns
+  // Table t1/t4/t6: big table with two columns
   private val t1 = StatsTestPlan(
     outputList = Seq("t1.k-1-2", "t1.v-1-10").map(nameToAttr),
     rowCount = 1000,
@@ -94,6 +98,19 @@ class JoinReorderSuite extends JoinReorderPlanTestBase with StatsEstimationTestB
     rowCount = 2000,
     size = Some(2000 * (8 + 4 + 4)),
     attributeStats = AttributeMap(Seq("t4.k-1-2", "t4.v-1-10").map(nameToColInfo)))
+
+  private val t6 = StatsTestPlan(
+    outputList = Seq("t6.k-1-300", "t6.k-2-5").map(nameToAttr),
+    rowCount = 2000,
+    size = Some(2000 * (8 + 4 + 4)),
+    attributeStats = AttributeMap(Seq("t6.k-1-300", "t6.k-2-5").map(nameToColInfo)))
+
+  // Table t7: median table with two columns
+  private val t7 = StatsTestPlan(
+    outputList = Seq("t7.k-1-300", "t7.k-2-5").map(nameToAttr),
+    rowCount = 300,
+    size = Some(300 * (8 + 4 + 4)),
+    attributeStats = AttributeMap(Seq("t7.k-1-300", "t7.k-2-5").map(nameToColInfo)))
 
   // Table t2/t3: small table with only one column
   private val t2 = StatsTestPlan(
@@ -383,5 +400,21 @@ class JoinReorderSuite extends JoinReorderPlanTestBase with StatsEstimationTestB
 
     // this can fail before the fix
     Optimize.execute(plan.analyze)
+  }
+
+  test("SPARK-54725: add inferring transitive join conditions in CostBasedJoinReorder") {
+    val originalPlan =
+      t6.join(t7).join(t5).where(nameToAttr("t6.k-1-300") === nameToAttr("t7.k-1-300") &&
+          nameToAttr("t6.k-2-5") === nameToAttr("t7.k-2-5") &&
+          nameToAttr("t6.k-2-5") === nameToAttr("t5.k-1-5"))
+
+    val bestPlan =
+      t7.join(t5, Inner, Some(nameToAttr("t7.k-2-5") === nameToAttr("t5.k-1-5")))
+          .join(
+            t6, Inner, Some(nameToAttr("t7.k-1-300") === nameToAttr("t6.k-1-300") &&
+                nameToAttr("t7.k-2-5") === nameToAttr("t6.k-2-5")))
+          .select(outputsOf(t6, t7, t5): _*)
+
+    assertEqualJoinPlans(Optimize, originalPlan, bestPlan)
   }
 }
