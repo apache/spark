@@ -147,8 +147,18 @@ class FunctionResolution(
       c: ScalarCandidate,
       unresolvedFunc: UnresolvedFunction): Option[Expression] = c match {
     case InternalCandidate(funcName) =>
-      Option(FunctionRegistry.internal.lookupFunction(
-        FunctionIdentifier(funcName), unresolvedFunc.arguments))
+      val funcIdentifier = FunctionIdentifier(funcName)
+      // Internal functions are usually registered in the internal registry.
+      // We must wrap the result in Option to handle cases where it might not exist
+      // (though unlikely for valid internal calls) and critically, we must validate/wrap
+      // the function (e.g. wrap aggregates in AggregateExpression).
+      try {
+        val func = FunctionRegistry.internal.lookupFunction(
+          funcIdentifier, unresolvedFunc.arguments)
+        Some(validateFunction(func, unresolvedFunc.arguments.length, unresolvedFunc))
+      } catch {
+        case _: NoSuchFunctionException => None
+      }
     case SessionNamespaceCandidate(kind, funcName) =>
       val expr = v1SessionCatalog.resolveScalarFunction(kind, funcName, unresolvedFunc.arguments)
       if (expr.isEmpty) {
