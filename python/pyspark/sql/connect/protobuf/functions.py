@@ -19,10 +19,6 @@
 A collections of builtin protobuf functions
 """
 
-from pyspark.sql.connect.utils import check_dependencies
-
-check_dependencies(__name__)
-
 from typing import Dict, Optional, TYPE_CHECKING
 
 from pyspark.sql.protobuf import functions as PyProtobufFunctions

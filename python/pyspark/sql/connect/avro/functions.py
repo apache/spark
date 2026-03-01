@@ -20,9 +20,6 @@ A collections of builtin avro functions
 """
 
 from pyspark.errors import PySparkTypeError
-from pyspark.sql.connect.utils import check_dependencies
-
-check_dependencies(__name__)
 
 from typing import Dict, Optional, TYPE_CHECKING
 
