@@ -161,13 +161,21 @@ case class DescribeTableExec(
     val partitioning = table.partitioning
       .filter(t => !t.isInstanceOf[ClusterByTransform])
     if (partitioning.nonEmpty) {
-      val partitionColumnsOnly = table.partitioning.forall(t => t.isInstanceOf[IdentityTransform])
-      if (partitionColumnsOnly) {
+      val identityTransforms = table.partitioning
+        .filter(t => t.isInstanceOf[IdentityTransform])
+        .map(_.asInstanceOf[IdentityTransform])
+      val partitionColumnsOnly =
+        table.partitioning.forall(t => t.isInstanceOf[IdentityTransform])
+      // Always output "# Partition Information" with column names when we have partition columns,
+      // so that DESCRIBE TABLE EXTENDED is parseable (e.g. by Catalog.listColumns) even when
+      // the table also has bucket/cluster transforms (which would otherwise only show
+      // "# Partitioning").
+      if (identityTransforms.nonEmpty) {
         rows += toCatalystRow("# Partition Information", "", "")
         rows += toCatalystRow(s"# ${output(0).name}", output(1).name, output(2).name)
         val schema = CatalogV2Util.v2ColumnsToStructType(table.columns())
-        rows ++= table.partitioning
-          .map(_.asInstanceOf[IdentityTransform].ref.fieldNames())
+        rows ++= identityTransforms
+          .map(_.ref.fieldNames())
           .map { fieldNames =>
             val nestedField = schema.findNestedField(fieldNames.toImmutableArraySeq)
             if (nestedField.isEmpty) {
@@ -182,7 +190,8 @@ case class DescribeTableExec(
               field.dataType.simpleString,
               field.getComment().orNull)
           }
-      } else {
+      }
+      if (!partitionColumnsOnly) {
         rows += emptyRow()
         rows += toCatalystRow("# Partitioning", "", "")
         rows ++= table.partitioning.zipWithIndex.map {

@@ -34,8 +34,10 @@ case class DropTableExec(
     invalidateCache: () => Unit) extends LeafV2CommandExec {
 
   override def run(): Seq[InternalRow] = {
+    // Invalidate cache first so dependent cache entries (e.g. CACHE TABLE v AS SELECT FROM t)
+    // are removed when t is dropped, even if the table no longer exists.
+    invalidateCache()
     if (catalog.tableExists(ident)) {
-      invalidateCache()
       if (purge) catalog.purgeTable(ident) else catalog.dropTable(ident)
     } else if (!ifExists) {
       throw QueryCompilationErrors.noSuchTableError(

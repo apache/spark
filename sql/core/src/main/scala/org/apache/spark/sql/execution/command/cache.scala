@@ -25,7 +25,8 @@ import org.apache.spark.sql.{Row, SparkSession}
 case object ClearCacheCommand extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    sparkSession.catalog.clearCache()
+    // Call cacheManager directly to avoid recursion: CatalogImpl.clearCache() runs CLEAR CACHE
+    sparkSession.sharedState.cacheManager.clearCache()
     Seq.empty[Row]
   }
 }

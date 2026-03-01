@@ -403,6 +403,13 @@ class SparkSqlAstBuilder extends AstBuilder {
   }
 
   /**
+   * Create a [[ShowCachedTablesCommand]] logical command.
+   */
+  override def visitShowCachedTables(ctx: ShowCachedTablesContext): LogicalPlan = withOrigin(ctx) {
+    ShowCachedTablesCommand()
+  }
+
+  /**
    * Create a [[SetNamespaceCommand]] logical command.
    */
   override def visitUseNamespace(ctx: UseNamespaceContext): LogicalPlan = withOrigin(ctx) {

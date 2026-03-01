@@ -227,6 +227,22 @@ case class DropTableCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
+    val tableNameParts =
+      if (catalog.tableExists(tableName)) {
+        catalog.getTableMetadata(tableName).identifier.nameParts
+      } else {
+        Seq(tableName.table)
+      }
+
+    // Uncache temp views that reference this table (SPARK-34052). Use both full name and short
+    // name so we find plans that reference the table with any qualification.
+    CommandUtils.uncacheDependentTempViews(sparkSession, tableNameParts)
+    if (tableNameParts.length > 1) {
+      CommandUtils.uncacheDependentTempViews(sparkSession, Seq(tableNameParts.last))
+    }
+    // Invalidate cache by name so dependents and the table itself are uncached.
+    sparkSession.sharedState.cacheManager.uncacheTableOrView(
+      sparkSession, tableNameParts, cascade = true)
 
     if (catalog.tableExists(tableName)) {
       // If the command DROP VIEW is to drop a table or DROP TABLE is to drop a view
@@ -252,10 +268,15 @@ case class DropTableCommand(
       }
 
       try {
+        // Plan-based cascade so dependents (e.g. CACHE TABLE v AS SELECT FROM t) are invalidated.
         sparkSession.sharedState.cacheManager.uncacheQuery(
           sparkSession.table(tableName), cascade = true)
       } catch {
-        case NonFatal(e) => log.warn(e.toString, e)
+        case NonFatal(e) =>
+          log.warn(e.toString, e)
+          // Invalidate by table name when metadata lookup fails.
+          sparkSession.sharedState.cacheManager.uncacheTableOrView(
+            sparkSession, Seq(tableName.table), cascade = true)
       }
       catalog.refreshTable(tableName)
       catalog.dropTable(tableName, ifExists, purge)
@@ -276,8 +297,11 @@ case class DropTempViewCommand(ident: Identifier) extends LeafRunnableCommand {
     val catalog = sparkSession.sessionState.catalog
     catalog.getRawLocalOrGlobalTempView(nameParts).foreach { view =>
       val hasViewText = view.tableMeta.viewText.isDefined
+      // When storeAnalyzedPlanForView is true, dependents store the analyzed plan and
+      // should not be invalidated when this temp view is dropped.
+      val cascade = hasViewText && !sparkSession.sessionState.conf.storeAnalyzedPlanForView
       sparkSession.sharedState.cacheManager.uncacheTableOrView(
-        sparkSession, nameParts, cascade = hasViewText)
+        sparkSession, nameParts, cascade = cascade)
       view.refresh()
       if (ident.namespace().isEmpty) {
         catalog.dropTempView(ident.name())

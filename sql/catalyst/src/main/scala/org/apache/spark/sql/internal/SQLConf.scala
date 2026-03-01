@@ -3423,10 +3423,11 @@ object SQLConf {
     buildConf("spark.sql.legacy.storeAnalyzedPlanForView")
       .internal()
       .doc("When true, analyzed plan instead of SQL text will be stored when creating " +
-        "temporary view")
+        "temporary view. Also controls whether uncache/drop temp view cascades to dependents: " +
+        "when true, dependents are not invalidated; when false, they are.")
       .version("3.1.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val ALLOW_TEMP_VIEW_CREATION_WITH_MULTIPLE_NAME_PARTS =
     buildConf("spark.sql.legacy.allowTempViewCreationWithMultipleNameparts")

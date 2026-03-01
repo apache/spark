@@ -1143,8 +1143,8 @@ abstract class CatalogTestUtils {
       partitionColumnNames = if (clusterBy) Seq.empty else Seq("a", "b"),
       bucketSpec = if (clusterBy) None else Some(BucketSpec(4, Seq("col1"), Nil)),
       properties = if (clusterBy) {
-        Map(
-          ClusterBySpec.toPropertyWithoutValidation(ClusterBySpec.fromColumnNames(Seq("c1", "c2"))))
+        Map(ClusterBySpec.toPropertyWithoutValidation(
+          ClusterBySpec.fromColumnNames(Seq("col1", "col2"))))
       } else {
         Map.empty
       })

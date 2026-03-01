@@ -96,7 +96,7 @@ class SparkSession private(
     @transient private[sql] val extensions: SparkSessionExtensions,
     @transient private[sql] val initialSessionOptions: Map[String, String],
     @transient private val parentManagedJobTags: Map[String, String])
-  extends sql.SparkSession with Logging with ColumnConversions { self =>
+  extends sql.SparkSession with Logging with ColumnConversions with CatalogSupport { self =>
 
   // The call site where this SparkSession was constructed.
   private val creationSite: CallSite = Utils.getCallSite()
@@ -442,8 +442,28 @@ class SparkSession private(
    |  Catalog-related methods  |
    * ------------------------- */
 
+  // CatalogSupport: delegate to SessionState so CatalogImpl uses session as support (like Connect).
+  override private[sql] def parseMultipartIdentifier(identifier: String): Seq[String] =
+    sessionState.parseMultipartIdentifier(identifier)
+  override private[sql] def quoteIdentifier(identifier: String): String =
+    sessionState.quoteIdentifier(identifier)
+  override private[sql] def currentDatabase: String = sessionState.currentDatabase
+  override private[sql] def currentCatalog(): String = sessionState.currentCatalog()
+  override private[sql] def getFunctionMetadata(
+      catalogName: String,
+      namespace: Array[String],
+      functionName: String): Option[(String, String)] =
+    sessionState.getFunctionMetadata(catalogName, namespace, functionName)
+  override private[sql] def refreshByPath(
+      session: org.apache.spark.sql.SparkSession, path: String): Unit =
+    sessionState.refreshByPath(session, path)
+  override private[sql] def isTableCached(
+      session: org.apache.spark.sql.SparkSession, tableName: String): Boolean =
+    sessionState.isTableCached(session, tableName)
+
   /** @inheritdoc */
-  @transient lazy val catalog: Catalog = new Catalog(self)
+  @transient lazy val catalog: org.apache.spark.sql.catalog.Catalog =
+    new Catalog(self)
 
   /** @inheritdoc */
   def table(tableName: String): DataFrame = {

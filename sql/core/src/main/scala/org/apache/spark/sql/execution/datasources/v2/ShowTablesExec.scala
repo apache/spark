@@ -17,17 +17,17 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.util.StringUtils
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
+import org.apache.spark.sql.connector.catalog.CatalogV2Util
+import org.apache.spark.sql.connector.catalog.TableCatalog
 import org.apache.spark.sql.execution.LeafExecNode
 
 /**
- * Physical plan node for showing tables.
+ * Physical plan node for showing tables. Produces the same rows as
+ * SHOW TABLES [IN ns] [LIKE pattern].
  */
 case class ShowTablesExec(
     output: Seq[Attribute],
@@ -35,21 +35,23 @@ case class ShowTablesExec(
     namespace: Seq[String],
     pattern: Option[String]) extends V2CommandExec with LeafExecNode {
   override protected def run(): Seq[InternalRow] = {
-    val rows = new ArrayBuffer[InternalRow]()
-
-    val tables = catalog.listTables(namespace.toArray)
-    tables.map { table =>
-      if (pattern.map(StringUtils.filterPattern(Seq(table.name()), _).nonEmpty).getOrElse(true)) {
-        rows += toCatalystRow(table.namespace().quoted, table.name(), isTempView(table, catalog))
+    val tables = catalog.listTables(namespace.toArray).toSeq
+    val rows = tables.flatMap { ident =>
+      val matchesPattern = pattern.map(p =>
+        StringUtils.filterPattern(Seq(ident.name()), p).nonEmpty).getOrElse(true)
+      if (matchesPattern) {
+        val isTemp = if (CatalogV2Util.isSessionCatalog(catalog)) {
+          session.sessionState.catalog.isTempView((ident.namespace() :+ ident.name()).toSeq)
+        } else {
+          false
+        }
+        Some((ident.namespace().quoted, ident.name(), isTemp))
+      } else {
+        None
       }
     }
-
-    rows.toSeq
-  }
-
-  private def isTempView(ident: Identifier, catalog: TableCatalog): Boolean = {
-    if (CatalogV2Util.isSessionCatalog(catalog)) {
-      session.sessionState.catalog.isTempView((ident.namespace() :+ ident.name()).toSeq)
-    } else false
+    rows.map { case (nsQuoted, tableName, isTemp) =>
+      toCatalystRow(nsQuoted, tableName, isTemp)
+    }
   }
 }
