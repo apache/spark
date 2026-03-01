@@ -3113,11 +3113,7 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   override def visitCollateClause(ctx: CollateClauseContext): Seq[String] = withOrigin(ctx) {
-    val collationName = visitMultipartIdentifier(ctx.collationName)
-    if (!SQLConf.get.trimCollationEnabled && collationName.last.toUpperCase().contains("TRIM")) {
-      throw QueryCompilationErrors.trimCollationNotEnabledError()
-    }
-    collationName
+    visitMultipartIdentifier(ctx.collationName)
   }
 
   /**
