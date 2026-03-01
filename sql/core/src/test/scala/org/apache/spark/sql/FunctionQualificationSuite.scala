@@ -476,17 +476,19 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
       sql("CREATE TEMPORARY FUNCTION abs() RETURNS INT RETURN 777")
     }
 
-    // View must use qualified name to access temp function
-    sql("CREATE TEMPORARY VIEW shadow_view AS SELECT session.abs() as result")
-    checkAnswer(sql("SELECT * FROM shadow_view"), Row(777))
+    try {
+      // View must use qualified name to access temp function
+      sql("CREATE TEMPORARY VIEW shadow_view AS SELECT session.abs() as result")
+      checkAnswer(sql("SELECT * FROM shadow_view"), Row(777))
 
-    // Builtin accessible with qualification in view
-    sql("CREATE TEMPORARY VIEW builtin_view AS SELECT builtin.abs(-10) as result")
-    checkAnswer(sql("SELECT * FROM builtin_view"), Row(10))
-
-    sql("DROP VIEW shadow_view")
-    sql("DROP VIEW builtin_view")
-    sql("DROP TEMPORARY FUNCTION abs")
+      // Builtin accessible with qualification in view
+      sql("CREATE TEMPORARY VIEW builtin_view AS SELECT builtin.abs(-10) as result")
+      checkAnswer(sql("SELECT * FROM builtin_view"), Row(10))
+    } finally {
+      sql("DROP VIEW IF EXISTS shadow_view")
+      sql("DROP VIEW IF EXISTS builtin_view")
+      sql("DROP TEMPORARY FUNCTION IF EXISTS abs")
+    }
   }
 
   test("SECTION 8c: Views - multiple temp functions in same view") {
@@ -655,13 +657,15 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
       sql("CREATE TEMPORARY FUNCTION abs() RETURNS INT RETURN 999")
     }
 
-    // Unqualified abs still resolves to builtin (security-focused order)
-    checkAnswer(sql("SELECT abs(-5)"), Row(5))
+    try {
+      // Unqualified abs still resolves to builtin (security-focused order)
+      checkAnswer(sql("SELECT abs(-5)"), Row(5))
 
-    // Temp abs only accessible with qualification
-    checkAnswer(sql("SELECT session.abs()"), Row(999))
-
-    sql("DROP TEMPORARY FUNCTION abs")
+      // Temp abs only accessible with qualification
+      checkAnswer(sql("SELECT session.abs()"), Row(999))
+    } finally {
+      sql("DROP TEMPORARY FUNCTION IF EXISTS abs")
+    }
   }
 
   test("SECTION 11c: Security - session_user and current_database") {

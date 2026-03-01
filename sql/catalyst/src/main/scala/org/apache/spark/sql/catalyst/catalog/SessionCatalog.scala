@@ -172,11 +172,6 @@ class SessionCatalog(
    *
    * These identifiers are cached for performance since they're accessed frequently.
    */
-  private val EXTENSION_NAMESPACE_TEMPLATE = FunctionIdentifier(
-    funcName = "",
-    database = Some(CatalogManager.EXTENSION_NAMESPACE),
-    catalog = Some(CatalogManager.SYSTEM_CATALOG_NAME))
-
   private val SESSION_NAMESPACE_TEMPLATE = FunctionIdentifier(
     funcName = "",
     database = Some(CatalogManager.SESSION_NAMESPACE),

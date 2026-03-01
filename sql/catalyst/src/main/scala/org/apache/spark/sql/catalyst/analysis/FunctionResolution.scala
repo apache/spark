@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connector.catalog.{
   CatalogManager,
+  CatalogNotFoundException,
   LookupCatalog
 }
 
@@ -69,11 +70,6 @@ class FunctionResolution(
 
   private val trimWarningEnabled = new AtomicBoolean(true)
 
-  /** Session namespace kind for qualified names; None if not a session namespace. */
-  private def sessionFunctionKind(nameParts: Seq[String])
-      : Option[SessionCatalog.SessionFunctionKind] =
-    FunctionResolution.sessionNamespaceKind(nameParts)
-
   /**
    * A single place to look for a scalar function. Fully qualified => one candidate;
    * partially qualified => typically two (system + current catalog); unqualified => three
@@ -90,18 +86,18 @@ class FunctionResolution(
   /** Produces the ordered list of candidates for scalar resolution. */
   private def scalarResolutionCandidates(
       nameParts: Seq[String],
-      u: UnresolvedFunction): Seq[ScalarCandidate] = {
-    val order = SQLConf.get.sessionFunctionResolutionOrder
-    if (nameParts.size == 1 && u.isInternal) {
-      InternalCandidate(nameParts.head) +: unqualifiedScalarCandidates(nameParts, order)
+      unresolvedFunc: UnresolvedFunction): Seq[ScalarCandidate] = {
+    val resolutionOrder = SQLConf.get.sessionFunctionResolutionOrder
+    if (nameParts.size == 1 && unresolvedFunc.isInternal) {
+      InternalCandidate(nameParts.head) +: unqualifiedScalarCandidates(nameParts, resolutionOrder)
     } else {
       nameParts.size match {
         case 1 =>
-          unqualifiedScalarCandidates(nameParts, order)
-        case 2 if sessionFunctionKind(nameParts).isDefined =>
+          unqualifiedScalarCandidates(nameParts, resolutionOrder)
+        case 2 if FunctionResolution.sessionNamespaceKind(nameParts).isDefined =>
           // Partially qualified builtin/session: try persistent first so user schema wins
           PersistentCandidate(nameParts) +: sessionNamespaceToCandidate(nameParts).toSeq
-        case 3 if sessionFunctionKind(nameParts).isDefined =>
+        case 3 if FunctionResolution.sessionNamespaceKind(nameParts).isDefined =>
           // Fully qualified system.builtin.func or system.session.func => single candidate
           sessionNamespaceToCandidate(nameParts).toSeq
         case _ =>
@@ -112,13 +108,14 @@ class FunctionResolution(
 
   private def sessionNamespaceToCandidate(
       nameParts: Seq[String]): Option[SessionNamespaceCandidate] =
-    sessionFunctionKind(nameParts).map(k => SessionNamespaceCandidate(k, nameParts.last))
+    FunctionResolution.sessionNamespaceKind(nameParts)
+      .map(k => SessionNamespaceCandidate(k, nameParts.last))
 
   private def unqualifiedSessionCandidates(
       nameParts: Seq[String],
-      order: String): Seq[SessionNamespaceCandidate] = {
+      resolutionOrder: String): Seq[SessionNamespaceCandidate] = {
     val funcName = nameParts.head
-    order match {
+    resolutionOrder match {
       case "first" =>
         Seq(
           SessionNamespaceCandidate(SessionCatalog.Temp, funcName),
@@ -137,9 +134,9 @@ class FunctionResolution(
   /** For unqualified names, full candidate list in resolution order (may interleave persistent). */
   private def unqualifiedScalarCandidates(
       nameParts: Seq[String],
-      order: String): Seq[ScalarCandidate] = {
-    val sessionCandidates = unqualifiedSessionCandidates(nameParts, order)
-    if (order == "last") {
+      resolutionOrder: String): Seq[ScalarCandidate] = {
+    val sessionCandidates = unqualifiedSessionCandidates(nameParts, resolutionOrder)
+    if (resolutionOrder == "last") {
       Seq(sessionCandidates.head, PersistentCandidate(nameParts), sessionCandidates(1))
     } else {
       sessionCandidates :+ PersistentCandidate(nameParts)
@@ -148,33 +145,33 @@ class FunctionResolution(
 
   private def tryResolveScalarCandidate(
       c: ScalarCandidate,
-      u: UnresolvedFunction): Option[Expression] = c match {
+      unresolvedFunc: UnresolvedFunction): Option[Expression] = c match {
     case InternalCandidate(funcName) =>
       Option(FunctionRegistry.internal.lookupFunction(
-        FunctionIdentifier(funcName), u.arguments))
+        FunctionIdentifier(funcName), unresolvedFunc.arguments))
     case SessionNamespaceCandidate(kind, funcName) =>
-      val expr = v1SessionCatalog.resolveScalarFunction(kind, funcName, u.arguments)
+      val expr = v1SessionCatalog.resolveScalarFunction(kind, funcName, unresolvedFunc.arguments)
       if (expr.isEmpty) {
         if (v1SessionCatalog.lookupFunctionInfo(
             SessionCatalog.Temp, funcName, tableFunction = true).isDefined) {
-          throw QueryCompilationErrors.notAScalarFunctionError(funcName, u)
+          throw QueryCompilationErrors.notAScalarFunctionError(funcName, unresolvedFunc)
         }
         if (v1SessionCatalog.lookupBuiltinOrTempTableFunction(funcName).isDefined) {
-          throw QueryCompilationErrors.notAScalarFunctionError(funcName, u)
+          throw QueryCompilationErrors.notAScalarFunctionError(funcName, unresolvedFunc)
         }
       }
-      expr.map(e => validateFunction(e, u.arguments.length, u))
+      expr.map(e => validateFunction(e, unresolvedFunc.arguments.length, unresolvedFunc))
     case PersistentCandidate(parts) =>
       try {
         val CatalogAndIdentifier(catalog, ident) =
           relationResolution.expandIdentifier(parts)
         val loaded = catalog.asFunctionCatalog.loadFunction(ident)
         Some(loaded match {
-          case v1Func: V1Function =>
-            val func = v1Func.invoke(u.arguments)
-            validateFunction(func, u.arguments.length, u)
-          case unboundV2Func =>
-            resolveV2Function(unboundV2Func, u.arguments, u)
+        case v1Func: V1Function =>
+          val func = v1Func.invoke(unresolvedFunc.arguments)
+          validateFunction(func, unresolvedFunc.arguments.length, unresolvedFunc)
+        case unboundV2Func =>
+          resolveV2Function(unboundV2Func, unresolvedFunc.arguments, unresolvedFunc)
         })
       } catch {
         case e: AnalysisException if e.getCondition == "REQUIRES_SINGLE_PART_NAMESPACE" &&
@@ -184,20 +181,29 @@ class FunctionResolution(
           ).mkString(".")
           val searchPath = SQLConf.get.functionResolutionSearchPath(catalogPath)
           throw QueryCompilationErrors.unresolvedRoutineError(
-            u.nameParts, searchPath, u.origin)
-        case _: AnalysisException =>
+            unresolvedFunc.nameParts, searchPath, unresolvedFunc.origin)
+        case _: NoSuchFunctionException =>
           None
+        case _: NoSuchNamespaceException =>
+          None
+        case _: CatalogNotFoundException =>
+          None
+        case e: AnalysisException
+            if e.getCondition == "FORBIDDEN_OPERATION" =>
+          None
+        case e: AnalysisException =>
+          throw e
         case NonFatal(e) =>
           logWarning(s"Persistent lookup failed for ${parts.mkString(".")}", e)
           None
       }
   }
 
-  def resolveFunction(u: UnresolvedFunction): Expression = {
-    withPosition(u) {
-      val candidates = scalarResolutionCandidates(u.nameParts, u)
+  def resolveFunction(unresolvedFunc: UnresolvedFunction): Expression = {
+    withPosition(unresolvedFunc) {
+      val candidates = scalarResolutionCandidates(unresolvedFunc.nameParts, unresolvedFunc)
       for (c <- candidates) {
-        tryResolveScalarCandidate(c, u) match {
+        tryResolveScalarCandidate(c, unresolvedFunc) match {
           case Some(expr) => return expr
           case None =>
         }
@@ -207,7 +213,7 @@ class FunctionResolution(
       ).mkString(".")
       val searchPath = SQLConf.get.functionResolutionSearchPath(catalogPath)
       throw QueryCompilationErrors.unresolvedRoutineError(
-        u.nameParts, searchPath, u.origin)
+        unresolvedFunc.nameParts, searchPath, unresolvedFunc.origin)
     }
   }
 
@@ -221,11 +227,11 @@ class FunctionResolution(
 
   def lookupBuiltinOrTempFunction(
       name: Seq[String],
-      u: Option[UnresolvedFunction]): Option[ExpressionInfo] = {
-    if (name.size == 1 && u.exists(_.isInternal)) {
+      unresolvedFunc: Option[UnresolvedFunction]): Option[ExpressionInfo] = {
+    if (name.size == 1 && unresolvedFunc.exists(_.isInternal)) {
       FunctionRegistry.internal.lookupFunction(FunctionIdentifier(name.head))
     } else {
-      sessionFunctionKind(name) match {
+      FunctionResolution.sessionNamespaceKind(name) match {
         case Some(kind) =>
           v1SessionCatalog.lookupFunctionInfo(kind, name.last, tableFunction = false)
         case None =>
@@ -239,7 +245,7 @@ class FunctionResolution(
   }
 
   def lookupBuiltinOrTempTableFunction(name: Seq[String]): Option[ExpressionInfo] = {
-    sessionFunctionKind(name) match {
+    FunctionResolution.sessionNamespaceKind(name) match {
       case Some(kind) =>
         v1SessionCatalog.lookupFunctionInfo(kind, name.last, tableFunction = true)
       case None =>
@@ -256,13 +262,13 @@ class FunctionResolution(
    * This is a convenience method that uses lookupFunctionType internally.
    *
    * @param nameParts The function name parts.
-   * @param u Optional UnresolvedFunction for internal function detection.
+   * @param unresolvedFunc Optional UnresolvedFunction for internal function detection.
    * @return true if the function is a builtin or temporary function, false otherwise.
    */
   def isBuiltinOrTemporaryFunction(
       nameParts: Seq[String],
-      u: Option[UnresolvedFunction]): Boolean = {
-    lookupFunctionType(nameParts, u) match {
+      unresolvedFunc: Option[UnresolvedFunction]): Boolean = {
+    lookupFunctionType(nameParts, unresolvedFunc) match {
       case FunctionType.Builtin | FunctionType.Temporary | FunctionType.TableOnly => true
       case _ => false
     }
@@ -274,34 +280,34 @@ class FunctionResolution(
    * This method only performs the lookup and classification - it does not throw errors.
    *
    * @param nameParts The function name parts.
-   * @param node Optional UnresolvedFunction node for lookups that may need it.
+   * @param unresolvedFunc Optional UnresolvedFunction node for lookups that may need it.
    * @return The type of the function (Builtin, Temporary, Persistent, TableOnly, or NotFound).
    */
   def lookupFunctionType(
       nameParts: Seq[String],
-      node: Option[UnresolvedFunction] = None): FunctionType = {
+      unresolvedFunc: Option[UnresolvedFunction] = None): FunctionType = {
 
     // Check if it's explicitly qualified as extension, builtin, or temp
-    sessionFunctionKind(nameParts) match {
+    FunctionResolution.sessionNamespaceKind(nameParts) match {
       case Some(SessionCatalog.Extension) | Some(SessionCatalog.Builtin) =>
-        if (lookupBuiltinOrTempFunction(nameParts, node).isDefined) {
+        if (lookupBuiltinOrTempFunction(nameParts, unresolvedFunc).isDefined) {
           return FunctionType.Builtin  // Extension and builtin both as Builtin
         }
       case Some(SessionCatalog.Temp) =>
-        if (lookupBuiltinOrTempFunction(nameParts, node).isDefined) {
+        if (lookupBuiltinOrTempFunction(nameParts, unresolvedFunc).isDefined) {
           return FunctionType.Temporary
         }
       case None =>
         // Unqualified or qualified with a catalog
         // Use lookupBuiltinOrTempFunction which handles internal functions correctly
-        val funcInfoOpt = lookupBuiltinOrTempFunction(nameParts, node)
+        val funcInfoOpt = lookupBuiltinOrTempFunction(nameParts, unresolvedFunc)
         funcInfoOpt match {
           case Some(info) =>
             // Determine if it's extension, temp, or builtin from the ExpressionInfo
             if (info.getDb == CatalogManager.EXTENSION_NAMESPACE) {
               return FunctionType.Builtin
             } else if (info.getDb == CatalogManager.SESSION_NAMESPACE) {
-              if (nameParts.size == 1 && node.exists(_.isInternal)) {
+              if (nameParts.size == 1 && unresolvedFunc.exists(_.isInternal)) {
                 return FunctionType.Builtin
               } else {
                 return FunctionType.Temporary
@@ -336,13 +342,13 @@ class FunctionResolution(
   def tryResolveFromSessionCatalog(
       name: Seq[String],
       arguments: Seq[Expression],
-      u: UnresolvedFunction): Option[Expression] = {
+      unresolvedFunc: UnresolvedFunction): Option[Expression] = {
 
     // Step 1: Try to resolve as scalar function
-    val expression = if (name.size == 1 && u.isInternal) {
+    val expression = if (name.size == 1 && unresolvedFunc.isInternal) {
       Option(FunctionRegistry.internal.lookupFunction(FunctionIdentifier(name.head), arguments))
     } else {
-      sessionFunctionKind(name) match {
+      FunctionResolution.sessionNamespaceKind(name) match {
         case Some(kind) =>
           v1SessionCatalog.resolveScalarFunction(kind, name.last, arguments)
         case None =>
@@ -352,7 +358,8 @@ class FunctionResolution(
             if (scalarResult.isEmpty &&
                 v1SessionCatalog.lookupFunctionInfo(
                   SessionCatalog.Temp, funcName, tableFunction = true).isDefined) {
-              throw QueryCompilationErrors.notAScalarFunctionError(name.mkString("."), u)
+              throw QueryCompilationErrors.notAScalarFunctionError(
+                name.mkString("."), unresolvedFunc)
             } else {
               scalarResult
             }
@@ -366,12 +373,12 @@ class FunctionResolution(
     // If not found as scalar, check if it exists as a table-only function
     if (expression.isEmpty && name.size == 1) {
       if (v1SessionCatalog.lookupBuiltinOrTempTableFunction(name.head).isDefined) {
-        throw QueryCompilationErrors.notAScalarFunctionError(name.mkString("."), u)
+        throw QueryCompilationErrors.notAScalarFunctionError(name.mkString("."), unresolvedFunc)
       }
     }
 
     expression.map { func =>
-      validateFunction(func, arguments.length, u)
+      validateFunction(func, arguments.length, unresolvedFunc)
     }
   }
 
@@ -385,7 +392,7 @@ class FunctionResolution(
       arguments: Seq[Expression]): Option[LogicalPlan] = {
 
     // Step 1: Try to resolve as table function
-    val tableFunctionResult = sessionFunctionKind(name) match {
+    val tableFunctionResult = FunctionResolution.sessionNamespaceKind(name) match {
       case Some(kind) =>
         v1SessionCatalog.resolveTableFunction(kind, name.last, arguments)
       case None =>
@@ -413,61 +420,28 @@ class FunctionResolution(
     tableFunctionResult
   }
 
-  /**
-   * Check if a function name is qualified as an extension function.
-   * Valid forms: extension.func or system.extension.func
-   */
-  private def maybeExtensionFunctionName(nameParts: Seq[String]): Boolean = {
-    FunctionResolution.maybeExtensionFunctionName(nameParts)
-  }
-
-  /**
-   * Check if a function name is qualified as a builtin function.
-   * Valid forms: builtin.func or system.builtin.func
-   */
-  private def maybeBuiltinFunctionName(nameParts: Seq[String]): Boolean = {
-    FunctionResolution.maybeBuiltinFunctionName(nameParts)
-  }
-
-  /**
-   * Check if a function name is qualified as a session temporary function.
-   * Valid forms: session.func or system.session.func
-   */
-  private def maybeTempFunctionName(nameParts: Seq[String]): Boolean = {
-    FunctionResolution.maybeTempFunctionName(nameParts)
-  }
-
-  /**
-   * Checks if a multi-part name is qualified with a specific namespace.
-   * Supports both 2-part (namespace.name) and 3-part (system.namespace.name) qualifications.
-   *
-   * @param nameParts The multi-part name to check
-   * @param namespace The namespace to check for (e.g., "builtin", "session")
-   * @return true if qualified with the given namespace
-   */
-  private def isQualifiedWithNamespace(nameParts: Seq[String], namespace: String): Boolean = {
-    FunctionResolution.isQualifiedWithNamespace(nameParts, namespace)
-  }
-
   private def validateFunction(
       func: Expression,
       numArgs: Int,
-      u: UnresolvedFunction): Expression = {
+      unresolvedFunc: UnresolvedFunction): Expression = {
     func match {
-      case owg: SupportsOrderingWithinGroup if !owg.isDistinctSupported && u.isDistinct =>
+      case owg: SupportsOrderingWithinGroup
+          if !owg.isDistinctSupported && unresolvedFunc.isDistinct =>
         throw QueryCompilationErrors.distinctWithOrderingFunctionUnsupportedError(owg.prettyName)
       case owg: SupportsOrderingWithinGroup
-          if owg.isOrderingMandatory && !owg.orderingFilled && u.orderingWithinGroup.isEmpty =>
+          if owg.isOrderingMandatory && !owg.orderingFilled &&
+            unresolvedFunc.orderingWithinGroup.isEmpty =>
         throw QueryCompilationErrors.functionMissingWithinGroupError(owg.prettyName)
       case owg: SupportsOrderingWithinGroup
-          if owg.orderingFilled && u.orderingWithinGroup.nonEmpty =>
+          if owg.orderingFilled && unresolvedFunc.orderingWithinGroup.nonEmpty =>
         // e.g mode(expr1) within group (order by expr2) is not supported
         throw QueryCompilationErrors.wrongNumOrderingsForFunctionError(
           owg.prettyName,
           0,
-          u.orderingWithinGroup.length
+          unresolvedFunc.orderingWithinGroup.length
         )
-      case f if !f.isInstanceOf[SupportsOrderingWithinGroup] && u.orderingWithinGroup.nonEmpty =>
+      case f if !f.isInstanceOf[SupportsOrderingWithinGroup] &&
+          unresolvedFunc.orderingWithinGroup.nonEmpty =>
         throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
           func.prettyName,
           "WITHIN GROUP (ORDER BY ...)"
@@ -476,44 +450,44 @@ class FunctionResolution(
       // the context of a Window clause. They do not need to be wrapped in an
       // AggregateExpression.
       case wf: AggregateWindowFunction =>
-        if (u.isDistinct) {
+        if (unresolvedFunc.isDistinct) {
           throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(wf.prettyName, "DISTINCT")
-        } else if (u.filter.isDefined) {
+        } else if (unresolvedFunc.filter.isDefined) {
           throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
             wf.prettyName,
             "FILTER clause"
           )
         } else {
-          resolveIgnoreNulls(wf, u.ignoreNulls)
+          resolveIgnoreNulls(wf, unresolvedFunc.ignoreNulls)
         }
       case owf: FrameLessOffsetWindowFunction =>
-        if (u.isDistinct) {
+        if (unresolvedFunc.isDistinct) {
           throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
             owf.prettyName,
             "DISTINCT"
           )
-        } else if (u.filter.isDefined) {
+        } else if (unresolvedFunc.filter.isDefined) {
           throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
             owf.prettyName,
             "FILTER clause"
           )
         } else {
-          resolveIgnoreNulls(owf, u.ignoreNulls)
+          resolveIgnoreNulls(owf, unresolvedFunc.ignoreNulls)
         }
       // We get an aggregate function, we need to wrap it in an AggregateExpression.
       case agg: AggregateFunction =>
         // Note: PythonUDAF does not support these advanced clauses.
-        if (agg.isInstanceOf[PythonUDAF]) checkUnsupportedAggregateClause(agg, u)
+        if (agg.isInstanceOf[PythonUDAF]) checkUnsupportedAggregateClause(agg, unresolvedFunc)
         // After parse, the functions not set the ordering within group yet.
         val newAgg = agg match {
           case owg: SupportsOrderingWithinGroup
-              if !owg.orderingFilled && u.orderingWithinGroup.nonEmpty =>
-            owg.withOrderingWithinGroup(u.orderingWithinGroup)
+              if !owg.orderingFilled && unresolvedFunc.orderingWithinGroup.nonEmpty =>
+            owg.withOrderingWithinGroup(unresolvedFunc.orderingWithinGroup)
           case _ =>
             agg
         }
 
-        u.filter match {
+        unresolvedFunc.filter match {
           case Some(filter) if !filter.deterministic =>
             throw QueryCompilationErrors.nonDeterministicFilterInAggregateError(filterExpr = filter)
           case Some(filter) if filter.dataType != BooleanType =>
@@ -530,11 +504,11 @@ class FunctionResolution(
             )
           case _ =>
         }
-        val aggFunc = resolveIgnoreNulls(newAgg, u.ignoreNulls)
-        aggFunc.toAggregateExpression(u.isDistinct, u.filter)
+        val aggFunc = resolveIgnoreNulls(newAgg, unresolvedFunc.ignoreNulls)
+        aggFunc.toAggregateExpression(unresolvedFunc.isDistinct, unresolvedFunc.filter)
       // This function is not an aggregate function, just return the resolved one.
       case other =>
-        checkUnsupportedAggregateClause(other, u)
+        checkUnsupportedAggregateClause(other, unresolvedFunc)
         if (other.isInstanceOf[String2TrimExpression] && numArgs == 2) {
           if (trimWarningEnabled.get) {
             log.warn(
@@ -549,18 +523,20 @@ class FunctionResolution(
     }
   }
 
-  private def checkUnsupportedAggregateClause(func: Expression, u: UnresolvedFunction): Unit = {
-    if (u.isDistinct) {
+  private def checkUnsupportedAggregateClause(
+      func: Expression,
+      unresolvedFunc: UnresolvedFunction): Unit = {
+    if (unresolvedFunc.isDistinct) {
       throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(func.prettyName, "DISTINCT")
     }
-    if (u.filter.isDefined) {
+    if (unresolvedFunc.filter.isDefined) {
       throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
         func.prettyName,
         "FILTER clause"
       )
     }
     // Only fail for IGNORE NULLS; RESPECT NULLS is the default behavior
-    if (u.ignoreNulls.contains(true)) {
+    if (unresolvedFunc.ignoreNulls.contains(true)) {
       throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
         func.prettyName,
         "IGNORE NULLS"
@@ -608,7 +584,7 @@ class FunctionResolution(
   private def resolveV2Function(
       unbound: UnboundFunction,
       arguments: Seq[Expression],
-      u: UnresolvedFunction): Expression = {
+      unresolvedFunc: UnresolvedFunction): Expression = {
     val inputType = StructType(arguments.zipWithIndex.map {
       case (exp, pos) => StructField(s"_$pos", exp.dataType, exp.nullable)
     })
@@ -629,9 +605,9 @@ class FunctionResolution(
 
     bound match {
       case scalarFunc: ScalarFunction[_] =>
-        processV2ScalarFunction(scalarFunc, arguments, u)
+        processV2ScalarFunction(scalarFunc, arguments, unresolvedFunc)
       case aggFunc: V2AggregateFunction[_, _] =>
-        processV2AggregateFunction(aggFunc, arguments, u)
+        processV2AggregateFunction(aggFunc, arguments, unresolvedFunc)
       case _ =>
         failAnalysis(
           errorClass = "INVALID_UDF_IMPLEMENTATION",
@@ -643,15 +619,15 @@ class FunctionResolution(
   private def processV2ScalarFunction(
       scalarFunc: ScalarFunction[_],
       arguments: Seq[Expression],
-      u: UnresolvedFunction): Expression = {
-    if (u.isDistinct) {
+      unresolvedFunc: UnresolvedFunction): Expression = {
+    if (unresolvedFunc.isDistinct) {
       throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(scalarFunc.name(), "DISTINCT")
-    } else if (u.filter.isDefined) {
+    } else if (unresolvedFunc.filter.isDefined) {
       throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
         scalarFunc.name(),
         "FILTER clause"
       )
-    } else if (u.ignoreNulls.contains(true)) {
+    } else if (unresolvedFunc.ignoreNulls.contains(true)) {
       // Only fail for IGNORE NULLS; RESPECT NULLS is the default behavior
       throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
         scalarFunc.name(),
@@ -665,16 +641,16 @@ class FunctionResolution(
   private def processV2AggregateFunction(
       aggFunc: V2AggregateFunction[_, _],
       arguments: Seq[Expression],
-      u: UnresolvedFunction): Expression = {
+      unresolvedFunc: UnresolvedFunction): Expression = {
     // Only fail for IGNORE NULLS; RESPECT NULLS is the default behavior
-    if (u.ignoreNulls.contains(true)) {
+    if (unresolvedFunc.ignoreNulls.contains(true)) {
       throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
         aggFunc.name(),
         "IGNORE NULLS"
       )
     }
     val aggregator = V2Aggregator(aggFunc, arguments)
-    aggregator.toAggregateExpression(u.isDistinct, u.filter)
+    aggregator.toAggregateExpression(unresolvedFunc.isDistinct, unresolvedFunc.filter)
   }
 
   private def failAnalysis(errorClass: String, messageParameters: Map[String, String]): Nothing = {
