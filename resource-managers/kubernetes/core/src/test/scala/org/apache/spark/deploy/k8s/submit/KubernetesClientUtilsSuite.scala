@@ -60,26 +60,24 @@ class KubernetesClientUtilsSuite extends SparkFunSuite with BeforeAndAfter {
     assert(output === expectedOutput)
   }
 
-  test("verify load files, truncates the content to maxSize, when keys are very large in number.") {
+  test("fail when config map size exceeds the limit") {
     val input = (for (i <- 10000 to 1 by -1) yield (s"testConf.${i}" -> "test123456")).toMap
     val sparkConf = testSetup(input.map(f => f._1 -> f._2.getBytes(StandardCharsets.UTF_8)))
       .set(Config.CONFIG_MAP_MAXSIZE.key, "60")
-    val output = KubernetesClientUtils.loadSparkConfDirFiles(sparkConf)
-    val expectedOutput = Map("testConf.1" -> "test123456", "testConf.2" -> "test123456")
-    assert(output === expectedOutput)
-    val output1 = KubernetesClientUtils.loadSparkConfDirFiles(
-      sparkConf.set(Config.CONFIG_MAP_MAXSIZE.key, "250000"))
-    assert(output1 === input)
-  }
-
-  test("verify load files, truncates the content to maxSize, when keys are equal in length.") {
-    val input = (for (i <- 9 to 1 by -1) yield (s"testConf.${i}" -> "test123456")).toMap
-    val sparkConf = testSetup(input.map(f => f._1 -> f._2.getBytes(StandardCharsets.UTF_8)))
-      .set(Config.CONFIG_MAP_MAXSIZE.key, "80")
-    val output = KubernetesClientUtils.loadSparkConfDirFiles(sparkConf)
-    val expectedOutput = Map("testConf.1" -> "test123456", "testConf.2" -> "test123456",
-      "testConf.3" -> "test123456")
-    assert(output === expectedOutput)
+    val configMapName = s"configmap-name-${UUID.randomUUID.toString}"
+    val configMapNameSpace = s"configmap-namespace-${UUID.randomUUID.toString}"
+    val properties = Map(Config.KUBERNETES_NAMESPACE.key -> configMapNameSpace)
+    val confFileMap =
+      KubernetesClientUtils.buildSparkConfDirFilesMap(configMapName, sparkConf, properties)
+    val ex = intercept[IllegalArgumentException] {
+      KubernetesClientUtils.buildConfigMap(configMapName, confFileMap, sparkConf, properties)
+    }
+    assert(ex.getMessage === "Exceed the configMap max size: 60")
+    val ex2 = intercept[IllegalArgumentException] {
+      KubernetesClientUtils.buildConfigMap(configMapName, confFileMap,
+        sparkConf.set(Config.CONFIG_MAP_MAXSIZE.key, "80"), properties)
+    }
+    assert(ex2.getMessage === "Exceed the configMap max size: 80")
   }
 
   test("verify that configmap built as expected") {
@@ -91,7 +89,7 @@ class KubernetesClientUtilsSuite extends SparkFunSuite with BeforeAndAfter {
     val confFileMap =
       KubernetesClientUtils.buildSparkConfDirFilesMap(configMapName, sparkConf, properties)
     val outputConfigMap =
-      KubernetesClientUtils.buildConfigMap(configMapName, confFileMap, properties)
+      KubernetesClientUtils.buildConfigMap(configMapName, confFileMap, sparkConf, properties)
     val expectedConfigMap =
       new ConfigMapBuilder()
         .withNewMetadata()
@@ -115,7 +113,7 @@ class KubernetesClientUtilsSuite extends SparkFunSuite with BeforeAndAfter {
     val confFileMap =
       KubernetesClientUtils.buildSparkConfDirFilesMapJava(configMapName, sparkConf, properties)
     val outputConfigMap =
-      KubernetesClientUtils.buildConfigMapJava(configMapName, confFileMap, properties)
+      KubernetesClientUtils.buildConfigMapJava(configMapName, confFileMap, sparkConf, properties)
     val expectedConfigMap =
       new ConfigMapBuilder()
         .withNewMetadata()

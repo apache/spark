@@ -19,12 +19,13 @@ package org.apache.spark.deploy.k8s.features
 import java.io.File
 import java.nio.file.Files
 
-import io.fabric8.kubernetes.api.model.{ConfigMapBuilder, ContainerBuilder, HasMetadata, PodBuilder}
+import io.fabric8.kubernetes.api.model.{ContainerBuilder, HasMetadata, PodBuilder}
 
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.k8s.{KubernetesConf, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
+import org.apache.spark.deploy.k8s.submit.KubernetesClientUtils
 import org.apache.spark.util.DependencyUtils.downloadFile
 import org.apache.spark.util.Utils
 
@@ -81,13 +82,9 @@ private[spark] class PodTemplateConfigMapStep(conf: KubernetesConf)
       val uri = downloadFile(podTemplateFile, Utils.createTempDir(), conf.sparkConf, hadoopConf)
       val file = new java.net.URI(uri).getPath
       val podTemplateString = Files.readString(new File(file).toPath)
-      Seq(new ConfigMapBuilder()
-          .withNewMetadata()
-            .withName(configmapName)
-          .endMetadata()
-          .withImmutable(true)
-          .addToData(POD_TEMPLATE_KEY, podTemplateString)
-        .build())
+      Seq(KubernetesClientUtils.buildConfigMap(configmapName,
+        Map(POD_TEMPLATE_KEY -> podTemplateString), conf.sparkConf, Map(),
+        inNameSpace = false))
     } else {
       Nil
     }
