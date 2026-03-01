@@ -86,7 +86,12 @@ WITH w1(c1) AS
   SELECT * FROM w2)
 SELECT * FROM w1;
 
--- CTE referencing an outer-level variable, should fail
+-- CTE with correlated SELECT in nested scalar subquery, should work
+SELECT ( WITH cte(foo) AS ( SELECT id )
+         SELECT (SELECT foo FROM cte) )
+FROM t;
+
+-- CTE with correlated VALUES in nested scalar subquery, currently fails due to limitation
 SELECT ( WITH cte(foo) AS ( VALUES(id) )
          SELECT (SELECT foo FROM cte) )
 FROM t;

@@ -258,4 +258,24 @@ select * from (
 where t.c2 is not null;
 
 -- SPARK-43838: Subquery on single table with having clause
-SELECT c1, c2, (SELECT count(*) cnt FROM t1 t2 WHERE t1.c1 = t2.c1 HAVING cnt = 0) FROM t1
+SELECT c1, c2, (SELECT count(*) cnt FROM t1 t2 WHERE t1.c1 = t2.c1 HAVING cnt = 0) FROM t1;
+
+-- Correlated VALUES in scalar subquery (single value)
+SELECT id, (SELECT * FROM VALUES(t.id)) AS scalar
+FROM (VALUES (1), (2), (3)) AS t(id)
+ORDER BY id;
+
+-- Correlated VALUES in scalar subquery (with expression)
+SELECT id, (SELECT * FROM VALUES(t.id * 2)) AS doubled
+FROM (VALUES (1), (2), (3)) AS t(id)
+ORDER BY id;
+
+-- Correlated VALUES in scalar subquery (multiple columns)
+SELECT a, b, (SELECT col1 FROM VALUES(t.a + t.b) AS v(col1)) AS sum_val
+FROM (VALUES (1, 2), (3, 4)) AS t(a, b)
+ORDER BY a;
+
+-- Correlated VALUES with non-deterministic (should work in subquery context)
+SELECT id, (SELECT count(*) FROM VALUES(t.id, rand())) AS cnt
+FROM (VALUES (1), (2)) AS t(id)
+ORDER BY id;

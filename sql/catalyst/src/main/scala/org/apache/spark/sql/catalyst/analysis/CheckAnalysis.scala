@@ -873,7 +873,10 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
             !o.isInstanceOf[MapInPandas] &&
             !o.isInstanceOf[MapInArrow] &&
             // Lateral join is checked in checkSubqueryExpression.
-            !o.isInstanceOf[LateralJoin] =>
+            !o.isInstanceOf[LateralJoin] &&
+            // ResolvedInlineTable allows non-deterministic expressions when
+            // spark.sql.legacy.values.onlyFoldableExpressions is false (the default).
+            !o.isInstanceOf[ResolvedInlineTable] =>
             // The rule above is used to check Aggregate operator.
             o.failAnalysis(
               errorClass = "INVALID_NON_DETERMINISTIC_EXPRESSIONS",

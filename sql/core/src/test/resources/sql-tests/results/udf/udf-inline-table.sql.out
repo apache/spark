@@ -91,23 +91,10 @@ two	3.0
 -- !query
 select udf(a), b from values ("one", rand(5)), ("two", 3.0D) as data(a, b)
 -- !query schema
-struct<>
+struct<udf(a):string,b:double>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
-  "sqlState" : "42000",
-  "messageParameters" : {
-    "expr" : "\"rand(5)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 38,
-    "stopIndex" : 44,
-    "fragment" : "rand(5)"
-  } ]
-}
+one	0.02390696427502892
+two	3.0
 
 
 -- !query
@@ -208,19 +195,19 @@ select udf(a), udf(b) from values ("one", count(1)), ("two", 2) as data(a, b)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
-  "sqlState" : "42000",
+  "errorClass" : "UNSUPPORTED_EXPR_FOR_OPERATOR",
+  "sqlState" : "42K0E",
   "messageParameters" : {
-    "expr" : "\"count(1)\""
+    "invalidExprSqls" : "\"count(1)\""
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 43,
-    "stopIndex" : 50,
-    "fragment" : "count(1)"
+    "startIndex" : 28,
+    "stopIndex" : 77,
+    "fragment" : "values (\"one\", count(1)), (\"two\", 2) as data(a, b)"
   } ]
 }
 
