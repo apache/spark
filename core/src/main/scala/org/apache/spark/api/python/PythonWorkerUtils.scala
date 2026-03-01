@@ -133,56 +133,50 @@ private[spark] object PythonWorkerUtils extends Logging {
     // number of different broadcasts
     val toRemove = oldBids.diff(newBids)
     val addedBids = newBids.diff(oldBids)
-    val cnt = toRemove.size + addedBids.size
     val needsDecryptionServer = env.serializerManager.encryptionEnabled && addedBids.nonEmpty
-    dataOut.writeBoolean(needsDecryptionServer)
-    dataOut.writeInt(cnt)
-    def sendBidsToRemove(): Unit = {
-      for (bid <- toRemove) {
-        // remove the broadcast from worker
-        dataOut.writeLong(-bid - 1) // bid >= 0
-        oldBids.remove(bid)
-      }
-    }
+    var connInfo: Option[Any] = None
+    var secret: Option[String] = None
+
     if (needsDecryptionServer) {
       // if there is encryption, we setup a server which reads the encrypted files, and sends
       // the decrypted data to python
-      val idsAndFiles = broadcastVars.flatMap { broadcast =>
-        if (!oldBids.contains(broadcast.id)) {
-          oldBids.add(broadcast.id)
-          Some((broadcast.id, broadcast.value.path))
-        } else {
-          None
-        }
+      val idsAndFiles = broadcastVars.filter(b => !oldBids.contains(b.id)).map { broadcast =>
+        (broadcast.id, broadcast.value.path)
       }
       val server = new EncryptedPythonBroadcastServer(env, idsAndFiles)
       server.connInfo match {
         case portNum: Int =>
-          dataOut.writeInt(portNum)
-          writeUTF(server.secret, dataOut)
+          connInfo = Some(portNum)
+          secret = Some(server.secret)
         case sockPath: String =>
-          dataOut.writeInt(-1)
-          writeUTF(sockPath, dataOut)
+          connInfo = Some(sockPath)
       }
       logTrace(s"broadcast decryption server setup on ${server.connInfo}")
-      sendBidsToRemove()
-      idsAndFiles.foreach { case (id, _) =>
-        // send new broadcast
-        dataOut.writeLong(id)
-      }
-      dataOut.flush()
-    } else {
-      sendBidsToRemove()
-      for (broadcast <- broadcastVars) {
-        if (!oldBids.contains(broadcast.id)) {
-          // send new broadcast
-          dataOut.writeLong(broadcast.id)
-          writeUTF(broadcast.value.path, dataOut)
-          oldBids.add(broadcast.id)
-        }
-      }
     }
-    dataOut.flush()
+
+    val json = Serialization.write(Map(
+        "broadcast_decryption_server" -> needsDecryptionServer,
+        "conn_info" -> connInfo.orNull,
+        "auth_secret" -> secret.orNull,
+        "broadcast_variables" -> (
+          broadcastVars.filter(b => !oldBids.contains(b.id)).map { broadcast =>
+            Map(
+              "bid" -> broadcast.id,
+              "path" -> broadcast.value.path
+            )
+          } ++ toRemove.map { bid =>
+            Map(
+              "bid" -> (-bid - 1),
+              "path" -> null
+            )
+          }
+        )
+      ))
+
+    oldBids.clear()
+    oldBids ++= newBids
+
+    writeUTF(json, dataOut)
   }
 
   /**
