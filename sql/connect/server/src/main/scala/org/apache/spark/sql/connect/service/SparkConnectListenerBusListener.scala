@@ -137,13 +137,16 @@ private[sql] class SparkConnectListenerBusListener(
   }
 
   def sendResultComplete(): Unit = {
-    responseObserver
-      .asInstanceOf[ExecuteResponseObserver[ExecutePlanResponse]]
-      .onNextComplete(
-        ExecutePlanResponse
-          .newBuilder()
-          .setResultComplete(ExecutePlanResponse.ResultComplete.newBuilder().build())
-          .build())
+    responseObserver match {
+      case obs: ExecuteResponseObserver[ExecutePlanResponse] =>
+        obs.onNextComplete(
+          ExecutePlanResponse
+            .newBuilder()
+            .setResultComplete(ExecutePlanResponse.ResultComplete.newBuilder().build())
+            .build())
+      case _ =>
+        responseObserver.onCompleted()
+    }
   }
 
   // QueryStartedEvent is sent to client along with WriteStreamOperationStartResult
