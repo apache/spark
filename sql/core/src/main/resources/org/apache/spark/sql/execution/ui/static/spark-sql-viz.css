@@ -75,3 +75,22 @@ svg path.linked {
   stroke: #317EACFF;
   stroke-width: 2px;
 }
+
+/* Detail side panel */
+#plan-viz-details-panel .card {
+  font-size: 0.75rem;
+}
+
+#plan-viz-details-panel .card-header {
+  background-color: #C3EBFF;
+  border-bottom-color: #3EC0FF;
+}
+
+#plan-viz-details-panel .table th,
+#plan-viz-details-panel .table td:first-child {
+  white-space: nowrap;
+}
+
+#plan-viz-details-panel .table td:last-child {
+  word-break: break-word;
+}

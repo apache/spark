@@ -37,7 +37,7 @@ class SparkPlanGraphSuite extends SparkFunSuite {
           metricType = "nsTiming")))
     val dotNode = planGraphNode.makeDotNode(Map.empty[Long, String])
     val expectedDotNode = "  24 [id=\"node24\" labelType=\"html\" label=\"" +
-      "<br><b>Scan JDBCRelation(\\\"test-schema\\\".tickets) [numPartitions=1]</b><br><br>\" " +
+      "<b>Scan JDBCRelation(\\\"test-schema\\\".tickets) [numPartitions=1]</b>\" " +
       "tooltip=\"Scan JDBCRelation(\\\"test-schema\\\".tickets) [numPartitions=1] [ticket_no#0] " +
       "PushedFilters: [], ReadSchema: struct<ticket_no:string>\"];"
 

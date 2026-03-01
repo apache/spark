@@ -46,6 +46,28 @@ case class SparkPlanGraph(
   }
 
   /**
+   * Generate a JSON string containing node details (metrics, description) for the
+   * detail side panel. This keeps the DOT node labels compact (name only) while
+   * providing full metrics on demand via JavaScript.
+   */
+  def makeNodeDetailsJson(metrics: Map[Long, String]): String = {
+    val entries = allNodes.collect {
+      case node if !node.isInstanceOf[SparkPlanGraphCluster] =>
+        val metricsJson = node.metrics.flatMap { m =>
+          metrics.get(m.accumulatorId).map { v =>
+            val escaped = StringEscapeUtils.escapeJson(v)
+            val nameEscaped = StringEscapeUtils.escapeJson(m.name)
+            s"""{"name":"$nameEscaped","value":"$escaped"}"""
+          }
+        }.mkString("[", ",", "]")
+        val desc = StringEscapeUtils.escapeJson(node.desc)
+        s"""  "node${node.id}":{"name":"${StringEscapeUtils.escapeJson(node.name)}",""" +
+          s""""desc":"$desc","metrics":$metricsJson}"""
+    }
+    entries.mkString("{\n", ",\n", "\n}")
+  }
+
+  /**
    * All the SparkPlanGraphNodes, including those inside of WholeStageCodegen.
    */
   val allNodes: collection.Seq[SparkPlanGraphNode] = {
@@ -167,33 +189,10 @@ class SparkPlanGraphNode(
     val metrics: collection.Seq[SQLPlanMetric]) {
 
   def makeDotNode(metricsValue: Map[Long, String]): String = {
-    val builder = new mutable.StringBuilder("<b>" + name + "</b>")
-
-    val values = for {
-      metric <- metrics
-      value <- metricsValue.get(metric.accumulatorId)
-    } yield {
-      // The value may contain ":" to extend the name, like `total (min, med, max): ...`
-      if (value.contains(":")) {
-        metric.name + " " + value
-      } else {
-        metric.name + ": " + value
-      }
-    }
     val nodeId = s"node$id"
     val tooltip = StringEscapeUtils.escapeJava(desc)
-    val labelStr = if (values.nonEmpty) {
-      // If there are metrics, display each entry in a separate line.
-      // Note: whitespace between two "\n"s is to create an empty line between the name of
-      // SparkPlan and metrics. If removing it, it won't display the empty line in UI.
-      builder ++= "<br><br>"
-      builder ++= values.mkString("<br>")
-      StringEscapeUtils.escapeJava(builder.toString().replaceAll("\n", "<br>"))
-    } else {
-      // SPARK-30684: when there is no metrics, add empty lines to increase the height of the node,
-      // so that there won't be gaps between an edge and a small node.
-      s"<br><b>${StringEscapeUtils.escapeJava(name)}</b><br><br>"
-    }
+    // Compact label: show only operator name; metrics shown in side panel on click
+    val labelStr = s"<b>${StringEscapeUtils.escapeJava(name)}</b>"
     s"""  $id [id="$nodeId" labelType="html" label="$labelStr" tooltip="$tooltip"];"""
 
   }
