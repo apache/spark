@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.plans.physical
 import scala.annotation.tailrec
 import scala.collection.mutable
 
-import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
+import org.apache.spark.{Partitioner, SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
@@ -674,6 +674,29 @@ case class ShufflePartitionIdPassThrough(
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): ShufflePartitionIdPassThrough =
     copy(expr = newChildren.head.asInstanceOf[DirectShufflePartitionID])
+}
+
+/**
+ * Represents a partitioning where rows are distributed using a custom [[Partitioner]].
+ *
+ * The key extraction function is applied to deserialize each row and extract a key,
+ * which is then passed to the partitioner to determine the target partition.
+ */
+case class CustomFunctionPartitioning(
+    keyFunc: Any => Any,
+    deserializer: Expression,
+    partitioner: Partitioner,
+    outputAttributes: Seq[Attribute]) extends Partitioning {
+
+  override val numPartitions: Int = partitioner.numPartitions
+
+  // Cannot satisfy ClusteredDistribution because we don't know the semantics of the
+  // user-provided partitioner (e.g., it may not guarantee co-location of same keys).
+  override def satisfies0(required: Distribution): Boolean = required match {
+    case UnspecifiedDistribution => true
+    case AllTuples => numPartitions == 1
+    case _ => false
+  }
 }
 
 trait ShuffleSpec {

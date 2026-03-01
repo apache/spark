@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import org.apache.spark.Partitioner
 import org.apache.spark.api.java.function.FilterFunction
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.{catalyst, Encoder, Row}
@@ -395,6 +396,42 @@ case class AppendColumnsWithObject(
   override def output: Seq[Attribute] = (childSerializer ++ newColumnsSerializer).map(_.toAttribute)
 
   override protected def withNewChildInternal(newChild: LogicalPlan): AppendColumnsWithObject =
+    copy(child = newChild)
+}
+
+/** Factory for constructing new `RepartitionByPartitioner` nodes. */
+object RepartitionByPartitioner {
+  def apply[T: Encoder, K: Encoder](
+      keyFunc: T => K,
+      partitioner: Partitioner,
+      child: LogicalPlan): RepartitionByPartitioner = {
+    new RepartitionByPartitioner(
+      keyFunc.asInstanceOf[Any => Any],
+      implicitly[Encoder[T]].clsTag.runtimeClass,
+      implicitly[Encoder[T]].schema,
+      UnresolvedDeserializer(encoderFor[T].deserializer),
+      partitioner,
+      child)
+  }
+}
+
+/**
+ * Repartitions the input using a custom [[Partitioner]] by applying a key extraction function
+ * to each row.
+ */
+case class RepartitionByPartitioner(
+    keyFunc: Any => Any,
+    argumentClass: Class[_],
+    argumentSchema: StructType,
+    deserializer: Expression,
+    partitioner: Partitioner,
+    child: LogicalPlan) extends UnaryNode {
+
+  override def output: Seq[Attribute] = child.output
+
+  override def maxRows: Option[Long] = child.maxRows
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): RepartitionByPartitioner =
     copy(child = newChild)
 }
 
