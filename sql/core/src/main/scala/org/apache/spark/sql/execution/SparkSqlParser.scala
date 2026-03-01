@@ -224,6 +224,37 @@ class SparkSqlAstBuilder extends AstBuilder {
     }
   }
 
+  /**
+   * Normalizes a multi-part identifier for CREATE/DROP TEMPORARY VIEW.
+   * Allows: 1-part (v), 2-part session.v, 3-part system.session.v.
+   * Returns the single view name. Throws INVALID_TEMP_OBJ_QUALIFIER for invalid qualifiers.
+   */
+  private def normalizeTempViewIdentifier(
+      viewIdentifier: Seq[String],
+      ctx: ParserRuleContext): String = {
+    viewIdentifier.length match {
+      case 1 => viewIdentifier.head
+      case 2 =>
+        if (viewIdentifier.head.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)) {
+          viewIdentifier.last
+        } else {
+          throw QueryCompilationErrors.invalidTempObjQualifierError(
+            "VIEW", viewIdentifier.last, viewIdentifier.head)
+        }
+      case 3 =>
+        if (viewIdentifier(0).equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
+            viewIdentifier(1).equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)) {
+          viewIdentifier.last
+        } else {
+          throw QueryCompilationErrors.invalidTempObjQualifierError(
+            "VIEW", viewIdentifier.last, viewIdentifier.init.mkString("."))
+        }
+      case _ =>
+        throw QueryCompilationErrors.invalidTempObjQualifierError(
+          "VIEW", viewIdentifier.last, viewIdentifier.init.mkString("."))
+    }
+  }
+
   private def withCatalogIdentClause(
       ctx: CatalogIdentifierReferenceContext,
       builder: Seq[String] => LogicalPlan): LogicalPlan = {
@@ -529,7 +560,8 @@ class SparkSqlAstBuilder extends AstBuilder {
       }
 
       withIdentClause(identCtx, ident => {
-        val table = tableIdentifier(ident, "CREATE TEMPORARY VIEW", ctx)
+        val viewName = normalizeTempViewIdentifier(ident, ctx)
+        val table = TableIdentifier(viewName)
         val optionsList: Map[String, String] =
           options.options.map { case (key, value) =>
             val newValue: String =
@@ -554,8 +586,15 @@ class SparkSqlAstBuilder extends AstBuilder {
    */
   override def visitCreateTempViewUsing(
       ctx: CreateTempViewUsingContext): LogicalPlan = withOrigin(ctx) {
+    val ti = visitTableIdentifier(ctx.tableIdentifier())
+    val tableIdent = if (ctx.GLOBAL != null) {
+      ti
+    } else {
+      val parts = ti.database.toSeq :+ ti.table
+      TableIdentifier(normalizeTempViewIdentifier(parts, ctx))
+    }
     CreateTempViewUsing(
-      tableIdent = visitTableIdentifier(ctx.tableIdentifier()),
+      tableIdent = tableIdent,
       userSpecifiedSchema = Option(ctx.colTypeList()).map(createSchema),
       replace = ctx.REPLACE != null,
       global = ctx.GLOBAL != null,
@@ -744,12 +783,8 @@ class SparkSqlAstBuilder extends AstBuilder {
       }
 
       withIdentClause(ctx.identifierReference(), Seq(qPlan), (ident, otherPlans) => {
-        if (ident.length > 1) {
-          // Temporary view names should NOT contain database prefix like "database.table"
-          throw QueryParsingErrors
-            .notAllowedToAddDBPrefixForTempViewError(ident, ctx)
-        }
-        val tableIdentifier = TableIdentifier(ident.head)
+        val viewName = normalizeTempViewIdentifier(ident, ctx)
+        val tableIdentifier = TableIdentifier(viewName)
 
         CreateViewCommand(
           tableIdentifier,

@@ -951,6 +951,19 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       origin = context)
   }
 
+  def tableOrViewNotFoundWithSearchPath(
+      name: Seq[String],
+      searchPath: Seq[String],
+      origin: Origin): Throwable = {
+    new AnalysisException(
+      errorClass = "TABLE_OR_VIEW_NOT_FOUND_WITH_SEARCH_PATH",
+      messageParameters = Map(
+        "relationName" -> toSQLId(name),
+        "searchPath" -> searchPath.map(toSQLId).mkString("[", ", ", "]")
+      ),
+      origin = origin)
+  }
+
   def notAScalarFunctionError(
       functionName: String,
       u: TreeNode[_]): Throwable = {

@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch,
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util.quoteNameParts
-import org.apache.spark.sql.errors.QueryErrorsBase
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 
 /**
  * Provides a logical query plan [[Analyzer]] and supporting classes for performing analysis.
@@ -89,6 +89,10 @@ package object analysis {
         errorClass = "TABLE_OR_VIEW_NOT_FOUND",
         messageParameters = Map("relationName" ->  quoteNameParts(name)),
         origin = t.origin)
+    }
+
+    def tableNotFound(name: Seq[String], searchPath: Seq[String]): Nothing = {
+      throw QueryCompilationErrors.tableOrViewNotFoundWithSearchPath(name, searchPath, t.origin)
     }
 
     def schemaNotFound(name: Seq[String]): Nothing = {

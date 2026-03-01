@@ -255,12 +255,24 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
     // top-down traversal.
     plan.foreach {
       case InsertIntoStatement(u: UnresolvedRelation, _, _, _, _, _, _, _) =>
-        u.tableNotFound(u.multipartIdentifier)
+        if (u.multipartIdentifier.length == 1) {
+          val catalogPath = currentCatalog.name +: catalogManager.currentNamespace.toSeq
+          val searchPath = SQLConf.get.resolutionSearchPath(catalogPath).map(toSQLId)
+          u.tableNotFound(u.multipartIdentifier, searchPath)
+        } else {
+          u.tableNotFound(u.multipartIdentifier)
+        }
 
       // TODO (SPARK-27484): handle streaming write commands when we have them.
       case write: V2WriteCommand if write.table.isInstanceOf[UnresolvedRelation] =>
         val tblName = write.table.asInstanceOf[UnresolvedRelation].multipartIdentifier
-        write.table.tableNotFound(tblName)
+        if (tblName.length == 1) {
+          val catalogPath = currentCatalog.name +: catalogManager.currentNamespace.toSeq
+          val searchPath = SQLConf.get.resolutionSearchPath(catalogPath).map(toSQLId)
+          write.table.tableNotFound(tblName, searchPath)
+        } else {
+          write.table.tableNotFound(tblName)
+        }
 
       // We should check for trailing comma errors first, since we would get less obvious
       // unresolved column errors if we do it bottom up
@@ -291,20 +303,44 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
         u.schemaNotFound(u.multipartIdentifier)
 
       case u: UnresolvedTable =>
-        u.tableNotFound(u.multipartIdentifier)
+        if (u.multipartIdentifier.length == 1) {
+          val catalogPath = currentCatalog.name +: catalogManager.currentNamespace.toSeq
+          val searchPath = SQLConf.get.resolutionSearchPath(catalogPath).map(toSQLId)
+          u.tableNotFound(u.multipartIdentifier, searchPath)
+        } else {
+          u.tableNotFound(u.multipartIdentifier)
+        }
 
       case u: UnresolvedView =>
-        u.tableNotFound(u.multipartIdentifier)
+        if (u.multipartIdentifier.length == 1) {
+          val catalogPath = currentCatalog.name +: catalogManager.currentNamespace.toSeq
+          val searchPath = SQLConf.get.resolutionSearchPath(catalogPath).map(toSQLId)
+          u.tableNotFound(u.multipartIdentifier, searchPath)
+        } else {
+          u.tableNotFound(u.multipartIdentifier)
+        }
 
       case u: UnresolvedTableOrView =>
-        u.tableNotFound(u.multipartIdentifier)
+        if (u.multipartIdentifier.length == 1) {
+          val catalogPath = currentCatalog.name +: catalogManager.currentNamespace.toSeq
+          val searchPath = SQLConf.get.resolutionSearchPath(catalogPath).map(toSQLId)
+          u.tableNotFound(u.multipartIdentifier, searchPath)
+        } else {
+          u.tableNotFound(u.multipartIdentifier)
+        }
 
       case u: UnresolvedRelation =>
-        u.tableNotFound(u.multipartIdentifier)
+        if (u.multipartIdentifier.length == 1) {
+          val catalogPath = currentCatalog.name +: catalogManager.currentNamespace.toSeq
+          val searchPath = SQLConf.get.resolutionSearchPath(catalogPath).map(toSQLId)
+          u.tableNotFound(u.multipartIdentifier, searchPath)
+        } else {
+          u.tableNotFound(u.multipartIdentifier)
+        }
 
       case u: UnresolvedFunctionName =>
-        val catalogPath = currentCatalog.name +: catalogManager.currentNamespace
-        val searchPath = SQLConf.get.resolutionSearchPath(catalogPath.toSeq)
+        val catalogPath = currentCatalog.name +: catalogManager.currentNamespace.toSeq
+        val searchPath = SQLConf.get.resolutionSearchPath(catalogPath)
           .map(_.quoted)
         throw QueryCompilationErrors.unresolvedRoutineError(
           u.multipartIdentifier,

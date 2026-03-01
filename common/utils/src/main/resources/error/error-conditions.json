@@ -6261,6 +6261,14 @@
     ],
     "sqlState" : "42P01"
   },
+  "TABLE_OR_VIEW_NOT_FOUND_WITH_SEARCH_PATH" : {
+    "message" : [
+      "The table or view <relationName> cannot be found. Verify the spelling and correctness of the schema and catalog.",
+      "Search path: <searchPath>.",
+      "To tolerate the error on drop use DROP VIEW IF EXISTS or DROP TABLE IF EXISTS."
+    ],
+    "sqlState" : "42P01"
+  },
   "TABLE_VALUED_ARGUMENTS_NOT_YET_IMPLEMENTED_FOR_SQL_FUNCTIONS" : {
     "message" : [
       "Cannot <action> SQL user-defined function <functionName> with TABLE arguments because this functionality is not yet implemented."
