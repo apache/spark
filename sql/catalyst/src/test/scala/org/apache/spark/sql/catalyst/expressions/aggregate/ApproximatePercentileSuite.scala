@@ -426,12 +426,19 @@ class ApproximatePercentileSuite extends SparkFunSuite {
   }
 
   private def compareEquals(left: PercentileDigest, right: PercentileDigest): Boolean = {
-    val leftSummary = left.quantileSummaries
-    val rightSummary = right.quantileSummaries
-    leftSummary.compressThreshold == rightSummary.compressThreshold &&
-      leftSummary.relativeError == rightSummary.relativeError &&
-      leftSummary.count == rightSummary.count &&
-      leftSummary.sampled.sameElements(rightSummary.sampled)
+    val leftSketch = left.sketchInfo
+    val rightSketch = right.sketchInfo
+    if (leftSketch.isEmpty && rightSketch.isEmpty) {
+      true
+    } else if (leftSketch.isEmpty || rightSketch.isEmpty) {
+      false
+    } else {
+      leftSketch.getK == rightSketch.getK &&
+        leftSketch.getMaxItem == rightSketch.getMaxItem &&
+        leftSketch.getMinItem == rightSketch.getMinItem &&
+        leftSketch.getN == rightSketch.getN &&
+        leftSketch.toByteArray(false).sameElements(rightSketch.toByteArray(false))
+    }
   }
 
   private def assertEqual[T](left: T, right: T): Unit = {
