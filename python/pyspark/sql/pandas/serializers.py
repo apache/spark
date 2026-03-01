@@ -513,7 +513,6 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
         int_to_decimal_coercion_enabled: bool = False,
         prefers_large_types: bool = False,
         ignore_unexpected_complex_type_values: bool = False,
-        is_udtf: bool = False,
     ):
         super().__init__(
             timezone,
@@ -528,7 +527,6 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
         )
         self._assign_cols_by_name = assign_cols_by_name
         self._ignore_unexpected_complex_type_values = ignore_unexpected_complex_type_values
-        self._is_udtf = is_udtf
 
     def dump_stream(self, iterator, stream):
         """
@@ -567,7 +565,6 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
                 assign_cols_by_name=self._assign_cols_by_name,
                 int_to_decimal_coercion_enabled=self._int_to_decimal_coercion_enabled,
                 ignore_unexpected_complex_type_values=self._ignore_unexpected_complex_type_values,
-                is_udtf=self._is_udtf,
             )
 
         batches = self._write_stream_start(
@@ -767,9 +764,6 @@ class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
             int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
             # UDTF-specific: ignore unexpected complex type values in converter
             ignore_unexpected_complex_type_values=True,
-            # UDTF-specific: enables broader Arrow exception handling and
-            # converts errors to UDTF_ARROW_TYPE_CAST_ERROR
-            is_udtf=True,
         )
 
     def __repr__(self):

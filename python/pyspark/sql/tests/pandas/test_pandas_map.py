@@ -303,16 +303,12 @@ class MapInPandasTestsMixin:
                     pandas_type_name = "object" if LooseVersion(pd.__version__) < "3.0.0" else "str"
 
                     expected = (
-                        r"ValueError: Exception thrown when converting pandas.Series "
-                        rf"\({pandas_type_name}\) with name 'id' to Arrow Array \(double\)."
+                        rf"Cannot convert column 'id' of pandas type '{pandas_type_name}' "
+                        r"to Arrow type 'double'\."
+                        " Please verify the data values are compatible"
                     )
                     if safely:
-                        expected = expected + (
-                            " It can be caused by overflows or other "
-                            "unsafe conversions warned by Arrow. Arrow safe type check "
-                            "can be disabled by using SQL config "
-                            "`spark.sql.execution.pandas.convertToArrowArraySafely`."
-                        )
+                        expected += ".*It can be caused by overflows or other unsafe conversions"
                     with self.assertRaisesRegex(PythonException, expected):
                         (
                             self.spark.range(10, numPartitions=3)
@@ -333,12 +329,10 @@ class MapInPandasTestsMixin:
                     )
                     if safely:
                         expected = (
-                            r"ValueError: Exception thrown when converting pandas.Series "
-                            r"\(float64\) with name 'id' to Arrow Array \(int32\)."
-                            " It can be caused by overflows or other "
-                            "unsafe conversions warned by Arrow. Arrow safe type check "
-                            "can be disabled by using SQL config "
-                            "`spark.sql.execution.pandas.convertToArrowArraySafely`."
+                            r"Cannot convert column 'id' of pandas type 'float64' "
+                            r"to Arrow type 'int32'\."
+                            " Please verify the data values are compatible"
+                            ".*It can be caused by overflows or other unsafe conversions"
                         )
                         with self.assertRaisesRegex(PythonException, expected):
                             df.collect()
@@ -489,8 +483,8 @@ class MapInPandasTestsMixin:
         pandas_type_name = "object" if LooseVersion(pd.__version__) < "3.0.0" else "str"
         with self.assertRaisesRegex(
             PythonException,
-            f"PySparkValueError: Exception thrown when converting pandas.Series \\({pandas_type_name}\\) "
-            "with name 'id' to Arrow Array \\(int32\\)\\.",
+            f"Cannot convert column 'id' of pandas type '{pandas_type_name}' "
+            "to Arrow type 'int32'\\.",
         ):
             df.collect()
 

@@ -1258,11 +1258,6 @@
       "Cannot convert UDTF output to Arrow. Data: <data>. Schema: <schema>. Arrow Schema: <arrow_schema>."
     ]
   },
-  "UDTF_ARROW_TYPE_CAST_ERROR": {
-    "message": [
-      "Cannot convert the output value of the column '<col_name>' with type '<col_type>' to the specified return type of the column: '<arrow_type>'. Please check if the data types match and try again."
-    ]
-  },
   "UDTF_ARROW_TYPE_CONVERSION_ERROR": {
     "message": [
       "PyArrow UDTF must return an iterator of pyarrow.Table or pyarrow.RecordBatch objects."

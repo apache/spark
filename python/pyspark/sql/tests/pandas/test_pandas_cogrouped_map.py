@@ -256,16 +256,12 @@ class CogroupedApplyInPandasTestsMixin:
                 with self.subTest(convert="string to double"):
                     pandas_type_name = "object" if LooseVersion(pd.__version__) < "3.0.0" else "str"
                     expected = (
-                        rf"ValueError: Exception thrown when converting pandas.Series \({pandas_type_name}\) "
-                        r"with name 'k' to Arrow Array \(double\)."
+                        rf"Cannot convert column 'k' of pandas type '{pandas_type_name}' "
+                        r"to Arrow type 'double'\."
+                        " Please verify the data values are compatible"
                     )
                     if safely:
-                        expected = expected + (
-                            " It can be caused by overflows or other "
-                            "unsafe conversions warned by Arrow. Arrow safe type check "
-                            "can be disabled by using SQL config "
-                            "`spark.sql.execution.pandas.convertToArrowArraySafely`."
-                        )
+                        expected += ".*It can be caused by overflows or other unsafe conversions"
                     self._test_merge_error(
                         fn=lambda lft, rgt: pd.DataFrame({"id": [1], "k": ["test_string"]}),
                         output_schema="id long, k double",
@@ -276,8 +272,9 @@ class CogroupedApplyInPandasTestsMixin:
                 # sometimes we see TypeErrors
                 with self.subTest(convert="double to string"):
                     expected = (
-                        r"TypeError: Exception thrown when converting pandas.Series \(float64\) "
-                        r"with name 'k' to Arrow Array \(string\)."
+                        r"Cannot convert column 'k' of pandas type 'float64' "
+                        r"to Arrow type 'string'\."
+                        " The data type is not compatible with the specified return type."
                     )
                     self._test_merge_error(
                         fn=lambda lft, rgt: pd.DataFrame({"id": [1], "k": [2.0]}),
@@ -321,9 +318,7 @@ class CogroupedApplyInPandasTestsMixin:
         with self.sql_conf(
             {"spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled": False}
         ):
-            with self.assertRaisesRegex(
-                PythonException, "Exception thrown when converting pandas.Series"
-            ):
+            with self.assertRaisesRegex(PythonException, "Cannot convert column"):
                 (
                     left.groupby("id")
                     .cogroup(right.groupby("id"))
