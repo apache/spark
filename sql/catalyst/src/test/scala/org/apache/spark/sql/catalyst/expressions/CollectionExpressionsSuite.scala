@@ -3111,4 +3111,38 @@ class CollectionExpressionsSuite
       a, Literal(5), Literal.create("q", StringType)), Seq("b", "a", "c", null, "q")
     )
   }
+
+  test("SPARK-54918: array operations should normalize -0.0 to 0.0") {
+    // Double
+    val ad = Literal.create(Seq(0.0d, -0.0d, 1.0d), ArrayType(DoubleType))
+    checkEvaluation(ArrayDistinct(ad), Seq(0.0d, 1.0d))
+
+    val au1 = Literal.create(Seq(0.0d), ArrayType(DoubleType))
+    val au2 = Literal.create(Seq(-0.0d), ArrayType(DoubleType))
+    checkEvaluation(ArrayUnion(au1, au2), Seq(0.0d))
+
+    val ai1 = Literal.create(Seq(0.0d, 1.0d), ArrayType(DoubleType))
+    val ai2 = Literal.create(Seq(-0.0d, 2.0d), ArrayType(DoubleType))
+    checkEvaluation(ArrayIntersect(ai1, ai2), Seq(0.0d))
+
+    val ae1 = Literal.create(Seq(0.0d, 1.0d), ArrayType(DoubleType))
+    val ae2 = Literal.create(Seq(-0.0d), ArrayType(DoubleType))
+    checkEvaluation(ArrayExcept(ae1, ae2), Seq(1.0d))
+
+    // Float
+    val adf = Literal.create(Seq(0.0f, -0.0f, 1.0f), ArrayType(FloatType))
+    checkEvaluation(ArrayDistinct(adf), Seq(0.0f, 1.0f))
+
+    val au1f = Literal.create(Seq(0.0f), ArrayType(FloatType))
+    val au2f = Literal.create(Seq(-0.0f), ArrayType(FloatType))
+    checkEvaluation(ArrayUnion(au1f, au2f), Seq(0.0f))
+
+    val ai1f = Literal.create(Seq(0.0f, 1.0f), ArrayType(FloatType))
+    val ai2f = Literal.create(Seq(-0.0f, 2.0f), ArrayType(FloatType))
+    checkEvaluation(ArrayIntersect(ai1f, ai2f), Seq(0.0f))
+
+    val ae1f = Literal.create(Seq(0.0f, 1.0f), ArrayType(FloatType))
+    val ae2f = Literal.create(Seq(-0.0f), ArrayType(FloatType))
+    checkEvaluation(ArrayExcept(ae1f, ae2f), Seq(1.0f))
+  }
 }

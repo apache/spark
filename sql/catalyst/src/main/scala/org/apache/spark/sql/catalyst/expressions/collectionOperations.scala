@@ -27,17 +27,11 @@ import org.apache.spark.SparkException.internalError
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion, UnresolvedAttribute, UnresolvedSeed}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
-import org.apache.spark.sql.catalyst.expressions.KnownNotContainsNull
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, UnaryLike}
-import org.apache.spark.sql.catalyst.trees.TreePattern.{
-  ARRAYS_ZIP,
-  CONCAT,
-  MAP_FROM_ENTRIES,
-  TreePattern
-}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{ARRAYS_ZIP, CONCAT, MAP_FROM_ENTRIES, TreePattern}
 import org.apache.spark.sql.catalyst.types.{DataTypeUtils, PhysicalDataType, PhysicalIntegralType}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
@@ -4213,15 +4207,17 @@ case class ArrayDistinct(child: Expression)
       val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
       val hs = new SQLOpenHashSet[Any]()
       val withNaNCheckFunc = SQLOpenHashSet.withNaNCheckFunc(elementType, hs,
-        (value: Any) =>
-          if (!hs.contains(value)) {
+        (value: Any) => {
+          val normalized = SQLOpenHashSet.normalizeZero(value)
+          if (!hs.contains(normalized)) {
             if (arrayBuffer.size > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
               throw QueryExecutionErrors.arrayFunctionWithElementsExceedLimitError(
                 prettyName, arrayBuffer.size)
             }
-            arrayBuffer += value
-            hs.add(value)
-          },
+            arrayBuffer += normalized
+            hs.add(normalized)
+          }
+        },
         (valueNaN: Any) => arrayBuffer += valueNaN)
       val withNullCheckFunc = SQLOpenHashSet.withNullCheckFunc(elementType, hs,
         (value: Any) => withNaNCheckFunc(value),
@@ -4233,6 +4229,8 @@ case class ArrayDistinct(child: Expression)
       }
       new GenericArrayData(arrayBuffer)
   } else {
+    // Note: For complex types, deduplication correctly identifies -0.0 and 0.0 as equal
+    // via ordering.equiv. However, nested -0.0 values are not normalized to 0.0.
     (data: ArrayData) => {
       val array = data.toArray[AnyRef](elementType)
       val arrayBuffer = new scala.collection.mutable.ArrayBuffer[AnyRef]
@@ -4278,6 +4276,7 @@ case class ArrayDistinct(child: Expression)
         val hashSet = ctx.freshName("hashSet")
         val arrayBuilder = classOf[mutable.ArrayBuilder[_]].getName
         val arrayBuilderClass = s"$arrayBuilder$$of$ptName"
+        val normalizedValue = ctx.freshName("normalizedValue")
 
         // Only need to track null element index when array's element is nullable.
         val declareNullTrackVariables = if (resultArrayElementNullable) {
@@ -4288,14 +4287,17 @@ case class ArrayDistinct(child: Expression)
           ""
         }
 
+        val normalizeCode = SQLOpenHashSet.normalizeZeroCode(elementType, value)
+
         val body =
           s"""
-             |if (!$hashSet.contains($hsValueCast$value)) {
+             |$jt $normalizedValue = $normalizeCode;
+             |if (!$hashSet.contains($hsValueCast$normalizedValue)) {
              |  if (++$size > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
              |    break;
              |  }
-             |  $hashSet.add$hsPostFix($hsValueCast$value);
-             |  $builder.$$plus$$eq($value);
+             |  $hashSet.add$hsPostFix($hsValueCast$normalizedValue);
+             |  $builder.$$plus$$eq($normalizedValue);
              |}
            """.stripMargin
 
@@ -4387,15 +4389,17 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
         val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
         val hs = new SQLOpenHashSet[Any]()
         val withNaNCheckFunc = SQLOpenHashSet.withNaNCheckFunc(elementType, hs,
-          (value: Any) =>
-            if (!hs.contains(value)) {
+          (value: Any) => {
+            val normalized = SQLOpenHashSet.normalizeZero(value)
+            if (!hs.contains(normalized)) {
               if (arrayBuffer.size > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
                 throw QueryExecutionErrors.arrayFunctionWithElementsExceedLimitError(
                   prettyName, arrayBuffer.size)
               }
-              arrayBuffer += value
-              hs.add(value)
-            },
+              arrayBuffer += normalized
+              hs.add(normalized)
+            }
+          },
           (valueNaN: Any) => arrayBuffer += valueNaN)
         val withNullCheckFunc = SQLOpenHashSet.withNullCheckFunc(elementType, hs,
           (value: Any) => withNaNCheckFunc(value),
@@ -4410,6 +4414,8 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
         }
         new GenericArrayData(arrayBuffer)
     } else {
+      // Note: For complex types, deduplication correctly identifies -0.0 and 0.0 as equal
+      // via ordering.equiv. However, nested -0.0 values are not normalized to 0.0.
       (array1, array2) =>
         val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
         var alreadyIncludeNull = false
@@ -4470,15 +4476,19 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
         val hashSet = ctx.freshName("hashSet")
         val arrayBuilder = classOf[mutable.ArrayBuilder[_]].getName
         val arrayBuilderClass = s"$arrayBuilder$$of$ptName"
+        val normalizedValue = ctx.freshName("normalizedValue")
+
+        val normalizeCode = SQLOpenHashSet.normalizeZeroCode(elementType, value)
 
         val body =
           s"""
-             |if (!$hashSet.contains($hsValueCast$value)) {
+             |$jt $normalizedValue = $normalizeCode;
+             |if (!$hashSet.contains($hsValueCast$normalizedValue)) {
              |  if (++$size > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
              |    break;
              |  }
-             |  $hashSet.add$hsPostFix($hsValueCast$value);
-             |  $builder.$$plus$$eq($value);
+             |  $hashSet.add$hsPostFix($hsValueCast$normalizedValue);
+             |  $builder.$$plus$$eq($normalizedValue);
              |}
            """.stripMargin
 
@@ -4541,7 +4551,7 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
 }
 
 /**
- * Returns an array of the elements in the intersect of x and y, without duplicates
+ * Returns an array of the elements in the intersection of x and y, without duplicates
  */
 @ExpressionDescription(
   usage = """
@@ -4573,18 +4583,20 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
           val hsResult = new SQLOpenHashSet[Any]
           val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
           val withArray2NaNCheckFunc = SQLOpenHashSet.withNaNCheckFunc(elementType, hs,
-            (value: Any) => hs.add(value),
+            (value: Any) => hs.add(SQLOpenHashSet.normalizeZero(value)),
             (valueNaN: Any) => {} )
           val withArray2NullCheckFunc = SQLOpenHashSet.withNullCheckFunc(elementType, hs,
             (value: Any) => withArray2NaNCheckFunc(value),
             () => {}
           )
           val withArray1NaNCheckFunc = SQLOpenHashSet.withNaNCheckFunc(elementType, hsResult,
-            (value: Any) =>
-              if (hs.contains(value) && !hsResult.contains(value)) {
-                arrayBuffer += value
-                hsResult.add(value)
-              },
+            (value: Any) => {
+              val normalized = SQLOpenHashSet.normalizeZero(value)
+              if (hs.contains(normalized) && !hsResult.contains(normalized)) {
+                arrayBuffer += normalized
+                hsResult.add(normalized)
+              }
+            },
             (valueNaN: Any) =>
               if (hs.containsNaN()) {
                 arrayBuffer += valueNaN
@@ -4612,6 +4624,8 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
           new GenericArrayData(Array.emptyObjectArray)
         }
     } else {
+      // Note: For complex types, deduplication correctly identifies -0.0 and 0.0 as equal
+      // via ordering.equiv. However, nested -0.0 values are not normalized to 0.0.
       (array1, array2) =>
         if (array1.numElements() != 0 && array2.numElements() != 0) {
           val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
@@ -4686,12 +4700,16 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
         val hashSetResult = ctx.freshName("hashSetResult")
         val arrayBuilder = classOf[mutable.ArrayBuilder[_]].getName
         val arrayBuilderClass = s"$arrayBuilder$$of$ptName"
+        val normalizedValue = ctx.freshName("normalizedValue")
+
+        val normalizeCode = SQLOpenHashSet.normalizeZeroCode(elementType, value)
 
         val withArray2NaNCheckCodeGenerator =
           (array: String, index: String) =>
-            s"$jt $value = ${genGetValue(array, index)};" +
+            s"""$jt $value = ${genGetValue(array, index)};
+               |$jt $normalizedValue = $normalizeCode;""".stripMargin +
               SQLOpenHashSet.withNaNCheckCode(elementType, value, hashSet,
-                s"$hashSet.add$hsPostFix($hsValueCast$value);",
+                s"$hashSet.add$hsPostFix($hsValueCast$normalizedValue);",
                 (valueNaN: String) => "")
 
         val writeArray2ToHashSet = SQLOpenHashSet.withNullCheckCode(
@@ -4700,13 +4718,14 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
 
         val body =
           s"""
-             |if ($hashSet.contains($hsValueCast$value) &&
-             |    !$hashSetResult.contains($hsValueCast$value)) {
+             |$jt $normalizedValue = $normalizeCode;
+             |if ($hashSet.contains($hsValueCast$normalizedValue) &&
+             |    !$hashSetResult.contains($hsValueCast$normalizedValue)) {
              |  if (++$size > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
              |    break;
              |  }
-             |  $hashSetResult.add$hsPostFix($hsValueCast$value);
-             |  $builder.$$plus$$eq($value);
+             |  $hashSetResult.add$hsPostFix($hsValueCast$normalizedValue);
+             |  $builder.$$plus$$eq($normalizedValue);
              |}
            """.stripMargin
 
@@ -4773,7 +4792,7 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
 }
 
 /**
- * Returns an array of the elements in the intersect of x and y, without duplicates
+ * Returns an array of the elements in x but not in y, without duplicates
  */
 @ExpressionDescription(
   usage = """
@@ -4803,18 +4822,20 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
         val hs = new SQLOpenHashSet[Any]
         val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
         val withArray2NaNCheckFunc = SQLOpenHashSet.withNaNCheckFunc(elementType, hs,
-          (value: Any) => hs.add(value),
+          (value: Any) => hs.add(SQLOpenHashSet.normalizeZero(value)),
           (valueNaN: Any) => {})
         val withArray2NullCheckFunc = SQLOpenHashSet.withNullCheckFunc(elementType, hs,
           (value: Any) => withArray2NaNCheckFunc(value),
           () => {}
         )
         val withArray1NaNCheckFunc = SQLOpenHashSet.withNaNCheckFunc(elementType, hs,
-          (value: Any) =>
-            if (!hs.contains(value)) {
-              arrayBuffer += value
-              hs.add(value)
-            },
+          (value: Any) => {
+            val normalized = SQLOpenHashSet.normalizeZero(value)
+            if (!hs.contains(normalized)) {
+              arrayBuffer += normalized
+              hs.add(normalized)
+            }
+          },
           (valueNaN: Any) => arrayBuffer += valueNaN)
         val withArray1NullCheckFunc = SQLOpenHashSet.withNullCheckFunc(elementType, hs,
           (value: Any) => withArray1NaNCheckFunc(value),
@@ -4832,6 +4853,8 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
         }
         new GenericArrayData(arrayBuffer)
     } else {
+      // Note: For complex types, deduplication correctly identifies -0.0 and 0.0 as equal
+      // via ordering.equiv. However, nested -0.0 values are not normalized to 0.0.
       (array1, array2) =>
         val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
         var scannedNullElements = false
@@ -4902,12 +4925,16 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
         val hashSet = ctx.freshName("hashSet")
         val arrayBuilder = classOf[mutable.ArrayBuilder[_]].getName
         val arrayBuilderClass = s"$arrayBuilder$$of$ptName"
+        val normalizedValue = ctx.freshName("normalizedValue")
+
+        val normalizeCode = SQLOpenHashSet.normalizeZeroCode(elementType, value)
 
         val withArray2NaNCheckCodeGenerator =
           (array: String, index: String) =>
-            s"$jt $value = ${genGetValue(array, i)};" +
+            s"""$jt $value = ${genGetValue(array, i)};
+               |$jt $normalizedValue = $normalizeCode;""".stripMargin +
               SQLOpenHashSet.withNaNCheckCode(elementType, value, hashSet,
-                s"$hashSet.add$hsPostFix($hsValueCast$value);",
+                s"$hashSet.add$hsPostFix($hsValueCast$normalizedValue);",
                 (valueNaN: Any) => "")
 
         val writeArray2ToHashSet = SQLOpenHashSet.withNullCheckCode(
@@ -4916,12 +4943,13 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
 
         val body =
           s"""
-             |if (!$hashSet.contains($hsValueCast$value)) {
+             |$jt $normalizedValue = $normalizeCode;
+             |if (!$hashSet.contains($hsValueCast$normalizedValue)) {
              |  if (++$size > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
              |    break;
              |  }
-             |  $hashSet.add$hsPostFix($hsValueCast$value);
-             |  $builder.$$plus$$eq($value);
+             |  $hashSet.add$hsPostFix($hsValueCast$normalizedValue);
+             |  $builder.$$plus$$eq($normalizedValue);
              |}
            """.stripMargin
 
