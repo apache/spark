@@ -24,6 +24,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.scheduler.SparkListenerEvent
 import org.apache.spark.sql.catalyst.{QueryPlanningTracker, QueryPlanningTrackerCallback}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.connect.IllegalStateErrors
 import org.apache.spark.sql.connect.common.ProtoUtils
 import org.apache.spark.util.{Clock, Utils}
 
@@ -350,16 +351,17 @@ case class ExecuteEventsManager(executeHolder: ExecuteHolder, clock: Clock) {
       validStatuses: List[ExecuteStatus],
       eventStatus: ExecuteStatus): Unit = {
     if (validStatuses.find(s => s == status).isEmpty) {
-      throw new IllegalStateException(s"""
-        operationId: $operationId with status ${status}
-        is not within statuses $validStatuses for event $eventStatus
-        """)
+      throw IllegalStateErrors.executionStateTransitionInvalidOperationStatus(
+        executeHolder.operationId,
+        status,
+        validStatuses,
+        eventStatus)
     }
     if (sessionHolder.eventManager.status != SessionStatus.Started) {
-      throw new IllegalStateException(s"""
-        sessionId: $sessionId with status $sessionStatus
-        is not Started for event $eventStatus
-        """)
+      throw IllegalStateErrors.executionStateTransitionInvalidSessionNotStarted(
+        sessionHolder.sessionId,
+        sessionStatus,
+        eventStatus)
     }
     _status = eventStatus
   }
