@@ -28,6 +28,7 @@ import org.apache.spark.sql.connector.read.ScanBuilder
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.MERGE
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.sources.Filter
+import org.apache.spark.sql.types.StructType
 
 /**
  * A rule that builds scans for group-based row-level operations.
@@ -47,9 +48,10 @@ object GroupBasedRowLevelOperationScanPlanning extends Rule[LogicalPlan] with Pr
 
       val table = relation.table.asRowLevelOperationTable
       val scanBuilder = table.newScanBuilder(relation.options)
+      val partitionSchema = PushDownUtils.getPartitionSchemaForPartitionPredicate(relation)
 
       val (pushedFilters, evaluatedFilters, postScanFilters) =
-        pushFilters(cond, relation.output, scanBuilder)
+        pushFilters(cond, relation.output, scanBuilder, partitionSchema)
 
       val pushedFiltersStr = if (pushedFilters.isLeft) {
         pushedFilters.swap
@@ -97,13 +99,14 @@ object GroupBasedRowLevelOperationScanPlanning extends Rule[LogicalPlan] with Pr
   private def pushFilters(
       cond: Expression,
       tableAttrs: Seq[AttributeReference],
-      scanBuilder: ScanBuilder)
+      scanBuilder: ScanBuilder,
+      partitionSchema: Option[StructType])
   : (Either[Seq[Filter], Seq[V2Filter]], Seq[Expression], Seq[Expression]) = {
 
     val (filtersWithSubquery, filtersWithoutSubquery) = findTableFilters(cond, tableAttrs)
 
     val (pushedFilters, postScanFiltersWithoutSubquery) =
-      PushDownUtils.pushFilters(scanBuilder, filtersWithoutSubquery)
+      PushDownUtils.pushFilters(scanBuilder, filtersWithoutSubquery, partitionSchema)
 
     val postScanFilterSetWithoutSubquery = ExpressionSet(postScanFiltersWithoutSubquery)
     val evaluatedFilters = filtersWithoutSubquery.filterNot { filter =>
