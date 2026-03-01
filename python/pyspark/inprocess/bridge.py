@@ -16,25 +16,32 @@
 #
 
 """
-Arrow ↔ PyArrow zero-copy bridge for in-process Python UDF execution.
+Arrow <-> PyArrow zero-copy bridge for in-process Python UDF execution.
 
-Input path (JVM → Python, zero-copy):
+Input path (JVM -> Python, zero-copy):
     The JVM passes native memory addresses of Arrow column buffers.
     ``addresses_to_array`` calls ``pa.foreign_buffer(addr, size)`` to wrap that
-    memory as a PyArrow Buffer without copying — the same physical bytes are
+    memory as a PyArrow Buffer without copying -- the same physical bytes are
     accessible from both the JVM (as an ArrowBuf) and Python (as a pa.Buffer).
 
-Output path (Python → JVM, zero-copy for values):
-    ``array_to_addresses`` returns the native buffer addresses of the result
-    PyArrow array.  The JVM calls ``wrapForeignAllocation`` to wrap those
-    addresses as Arrow ``ArrowBuf`` objects without copying.  The PyArrow array
-    is kept alive in the module-level ``_live_arrays`` registry until the JVM
-    calls ``release_export`` after consuming all rows from the batch.
+Output path (Python -> JVM, zero-copy via Arrow C Data Interface):
+    The JVM pre-allocates ``ArrowArray`` and ``ArrowSchema`` C structs via
+    ``ArrowArray.allocateNew(allocator)`` / ``ArrowSchema.allocateNew(allocator)``
+    and passes their native addresses to Python.  Python calls
+    ``arr._export_to_c(output_array_ptr, output_schema_ptr)`` to fill those
+    JVM-owned structs in-place.  The JVM then calls ``Data.importVector`` which:
+      - Copies the struct snapshot, calls ``markReleased()`` + ``close()`` on the
+        original ArrowArray (so the JVM struct memory is freed), and wraps the
+        data buffers via ``ReferenceCountedArrowArray`` (zero-copy ForeignAlloc).
+      - When the imported FieldVector is closed, the reference count drops to
+        zero, PyArrow's C ``release`` callback is invoked, decrementing the
+        Python array refcount and allowing garbage collection.
 
-    Validity bitmap: when ``null_count == 0`` the JVM allocates a small
-    all-valid bitmap (O(n/8) bytes) instead of sharing Python's buffer.
+    No Python-side registry or cleanup is needed: PyArrow's internal reference
+    counting, triggered by the CDI ``release`` callback, manages the lifetime of
+    the backing array.
 
-Phase 1 supported Arrow format strings (fixed-width types):
+Phase 1 supported input Arrow format strings (fixed-width types):
     "l"  int64   (LongType)
     "i"  int32   (IntegerType)
     "g"  float64 (DoubleType)
@@ -42,11 +49,14 @@ Phase 1 supported Arrow format strings (fixed-width types):
     "b"  bool    (BooleanType)
     "s"  int16   (ShortType)
     "c"  int8    (ByteType)
+
+Output types are determined automatically from the ArrowSchema format string
+written by PyArrow into the JVM-allocated struct during ``_export_to_c``.
 """
 
 import pyarrow as pa
 
-# Arrow format string → PyArrow type (Phase 1: fixed-width only)
+# Arrow format string -> PyArrow type (Phase 1: fixed-width only, used for input path)
 _FORMAT_TO_TYPE = {
     "l": pa.int64(),
     "i": pa.int32(),
@@ -96,69 +106,3 @@ def addresses_to_array(addrs: dict) -> pa.Array:
 
     # Fixed-width Arrow layout: [validity_bitmap, values]
     return pa.Array.from_buffers(arrow_type, num_rows, [validity_buf, values_buf])
-
-
-# Export registry: maps export_id → pa.Array to keep arrays alive while JVM holds
-# references to their native buffers.  Entries are removed by release_export().
-_live_arrays: dict = {}
-_next_export_id: list = [0]  # single-element mutable list used as an int counter
-
-
-def array_to_addresses(arr: pa.Array) -> dict:
-    """
-    Export a ``pa.Array`` for zero-copy access by JVM.
-
-    Stores ``arr`` in ``_live_arrays`` so its underlying native buffers remain
-    live until the JVM calls ``release_export``.
-
-    Args:
-        arr: result PyArrow array from the UDF
-
-    Returns:
-        dict with keys (jep converts to ``java.util.Map<String, Object>``):
-            export_id      (int)  unique registry key; pass to release_export when done
-            num_rows       (int)  number of rows
-            null_count     (int)  number of null rows
-            validity_addr  (int)  native address of validity bitmap; 0 if no nulls
-            validity_size  (int)  size in bytes of validity bitmap; 0 if no nulls
-            values_addr    (int)  native address of values buffer (0 for empty arrays)
-            values_size    (int)  size in bytes of values buffer
-    """
-    export_id = _next_export_id[0]
-    _next_export_id[0] += 1
-    _live_arrays[export_id] = arr
-
-    bufs = arr.buffers()
-    validity_buf = bufs[0] if len(bufs) > 0 else None
-    values_buf = bufs[1] if len(bufs) > 1 else None
-
-    # Pass non-zero validity address only when there are actual nulls.
-    # When null_count == 0, the JVM creates an all-valid bitmap locally (O(n/8)).
-    null_count = arr.null_count
-    validity_addr = validity_buf.address if (null_count > 0 and validity_buf is not None) else 0
-    validity_size = validity_buf.size if (null_count > 0 and validity_buf is not None) else 0
-    values_addr = values_buf.address if values_buf is not None else 0
-    values_size = values_buf.size if values_buf is not None else 0
-
-    return {
-        "export_id": export_id,
-        "num_rows": len(arr),
-        "null_count": null_count,
-        "validity_addr": validity_addr,
-        "validity_size": validity_size,
-        "values_addr": values_addr,
-        "values_size": values_size,
-    }
-
-
-def release_export(export_id: int) -> None:
-    """
-    Release the exported array for ``export_id``, allowing Python GC.
-
-    Removes the array from ``_live_arrays``.  Must only be called after the
-    JVM has closed all Arrow vectors that reference the array's native buffers.
-
-    Args:
-        export_id: the id returned by ``array_to_addresses``
-    """
-    _live_arrays.pop(export_id, None)

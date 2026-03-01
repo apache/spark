@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.python
 
 import org.apache.spark.sql.Column
+import org.apache.spark.sql.classic.ExpressionUtils
 import org.apache.spark.sql.execution.SparkPlanTest
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -27,7 +28,7 @@ import org.apache.spark.sql.types._
  *
  * These tests verify:
  *   1. Query plan shape: ExtractInProcessPythonUDFs inserts InProcessEvalPython nodes
- *   2. Physical plan shape: InProcessEvalPython → InProcessArrowEvalExec
+ *   2. Physical plan shape: InProcessEvalPython -> InProcessArrowEvalExec
  *   3. Concurrency config validation: InProcessPythonChecks rejects bad configs
  *
  * Note: Tests that require an actual jep installation and CPython runtime are tagged
@@ -39,16 +40,16 @@ class InProcessPythonUDFSuite extends SparkPlanTest with SharedSparkSession {
   import testImplicits._
 
   // --- Helper: build a minimal InProcessPythonUDF expression (no real Python needed) ---
-  // A trivially serialized no-op function — the plan tests only check structure, not execution.
+  // A trivially serialized no-op function -- the plan tests only check structure, not execution.
   private val dummySerializedFunc: Array[Byte] = Array[Byte](0x80.toByte, 0x04.toByte)
 
   private def makeUDF(name: String, inputCol: Column, returnType: DataType): Column = {
     val expr = InProcessPythonUDF(
-      name          = name,
+      name = name,
       serializedFunc = dummySerializedFunc,
-      children      = Seq(inputCol.expr),
-      dataType      = returnType)
-    new Column(expr)
+      children = Seq(inputCol.expr),
+      dataType = returnType)
+    ExpressionUtils.column(expr)
   }
 
   // ---------------------------------------------------------------------------
@@ -133,7 +134,8 @@ class InProcessPythonUDFSuite extends SparkPlanTest with SharedSparkSession {
   }
 
   test("InProcessArrowBridge.arrowFormatString rejects unsupported types") {
-    val unsupported = Seq(StringType, BinaryType, ArrayType(LongType), MapType(StringType, LongType))
+    val unsupported = Seq(
+      StringType, BinaryType, ArrayType(LongType), MapType(StringType, LongType))
     unsupported.foreach { dt =>
       intercept[UnsupportedOperationException] {
         InProcessArrowBridge.arrowFormatString(dt)
@@ -157,7 +159,7 @@ class InProcessPythonUDFSuite extends SparkPlanTest with SharedSparkSession {
 
       val df = spark.range(1, 6)  // [1, 2, 3, 4, 5]
       val udf = InProcessPythonUDF("double", serialized, Seq(df("id").expr), LongType)
-      val result = df.select(new Column(udf)).collect().map(_.getLong(0))
+      val result = df.select(ExpressionUtils.column(udf)).collect().map(_.getLong(0))
       assert(result.toSeq === Seq(2L, 4L, 6L, 8L, 10L))
     }
 
@@ -168,7 +170,7 @@ class InProcessPythonUDFSuite extends SparkPlanTest with SharedSparkSession {
       val data = Seq(Some(1L), None, Some(3L))
       val df = spark.createDataset(data).toDF("v")
       val udf = InProcessPythonUDF("negate", serialized, Seq(df("v").expr), LongType)
-      val result = df.select(new Column(udf)).collect()
+      val result = df.select(ExpressionUtils.column(udf)).collect()
 
       assert(result(0).getLong(0) === -1L)
       assert(result(1).isNullAt(0))
@@ -181,7 +183,6 @@ class InProcessPythonUDFSuite extends SparkPlanTest with SharedSparkSession {
    * Requires Python + cloudpickle on the test machine's PATH.
    */
   private def serializePythonUDF(pythonCode: String): Array[Byte] = {
-    import java.io.{File, FileOutputStream}
     import scala.sys.process._
 
     val script = s"""

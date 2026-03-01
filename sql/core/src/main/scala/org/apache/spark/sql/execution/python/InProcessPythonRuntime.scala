@@ -50,7 +50,7 @@ private[python] object InProcessPythonRuntime extends Logging {
       SharedInterpreter.setConfig(config)
       interp = new SharedInterpreter()
       // Import the bridge entry point into the interpreter's global namespace
-      interp.eval("from pyspark.inprocess.runtime import _inprocess_invoke, _release_export")
+      interp.eval("from pyspark.inprocess.runtime import _inprocess_invoke")
       initialized = true
       logInfo("jep SharedInterpreter ready; bridge module loaded.")
     }
@@ -74,49 +74,39 @@ private[python] object InProcessPythonRuntime extends Logging {
    * shared for the executor process lifetime, so this call is serialized by the
    * single-task-per-executor constraint.
    *
-   * @param serializedUdf  cloudpickle bytes of the Python function (cached inside Python)
-   * @param inputAddrList  list of address maps, one per input column - see
-   *                       [[InProcessArrowBridge.extractAddresses]] for key spec
-   * @param numRows        number of rows in the batch
-   * @return               map with native buffer addresses and export ID - see
-   *                       [[InProcessArrowBridge.foreignToColumn]] for key spec
+   * The JVM pre-allocates [[ArrowArray]] and [[ArrowSchema]] C structs and passes
+   * their native addresses here. Python fills them in-place via
+   * ``arr._export_to_c(output_array_ptr, output_schema_ptr)``. The JVM then calls
+   * [[InProcessArrowBridge.cdiToColumn]] to wrap the filled structs (zero-copy).
+   *
+   * @param serializedUdf    cloudpickle bytes of the Python function (cached inside Python)
+   * @param inputAddrList    list of address maps, one per input column -- see
+   *                         [[InProcessArrowBridge.extractAddresses]] for key spec
+   * @param numRows          number of rows in the batch
+   * @param outputArrayAddr  native address of a JVM-allocated ArrowArray C struct
+   * @param outputSchemaAddr native address of a JVM-allocated ArrowSchema C struct
    */
   def invoke(
       serializedUdf: Array[Byte],
       inputAddrList: JList[JMap[String, AnyRef]],
-      numRows: Int): JMap[String, AnyRef] = {
+      numRows: Int,
+      outputArrayAddr: Long,
+      outputSchemaAddr: Long): Unit = {
     // Lazily initialize on the first executor thread that calls invoke.
     // This ensures the SharedInterpreter is created on the task thread (required by jep).
     if (!initialized) initialize()
     try {
-      interp
-        .invoke("_inprocess_invoke", serializedUdf, inputAddrList, Integer.valueOf(numRows))
-        .asInstanceOf[JMap[String, AnyRef]]
+      interp.invoke(
+        "_inprocess_invoke",
+        serializedUdf,
+        inputAddrList,
+        Integer.valueOf(numRows),
+        java.lang.Long.valueOf(outputArrayAddr),
+        java.lang.Long.valueOf(outputSchemaAddr))
     } catch {
       case e: JepException =>
         throw new RuntimeException(
           s"In-process Python UDF execution failed: ${e.getMessage}", e)
-    }
-  }
-
-  /**
-   * Release the Python-side exported array identified by `exportId`.
-   *
-   * Must be called only after the JVM has closed all [[org.apache.arrow.vector.FieldVector]]s
-   * that reference the array's native buffers (i.e. after
-   * [[InProcessArrowEvalExec]] closes the result [[ArrowColumnVector]]s for
-   * the completed batch).
-   *
-   * Failures are logged as warnings rather than propagated -- a missed release
-   * causes a Python memory leak for this batch but does not corrupt results.
-   */
-  def releaseExport(exportId: Int): Unit = {
-    if (!initialized) return
-    try {
-      interp.invoke("_release_export", Integer.valueOf(exportId))
-    } catch {
-      case e: JepException =>
-        logWarning(s"Failed to release Python export $exportId: ${e.getMessage}", e)
     }
   }
 }

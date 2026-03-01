@@ -21,12 +21,15 @@ import java.util.{ArrayList => JArrayList}
 
 import scala.jdk.CollectionConverters._
 
+import org.apache.arrow.c.{ArrowArray, ArrowSchema}
+
 import org.apache.spark.TaskContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.arrow.ArrowWriter
+import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch}
 
 /**
@@ -39,11 +42,11 @@ import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch}
  *  3. Extract native buffer addresses from each Arrow vector (zero-copy)
  *  4. Pass addresses to CPython via [[InProcessPythonRuntime.invoke]] (in-process, no socket)
  *  5. Python reconstructs PyArrow arrays via `pa.foreign_buffer` (zero-copy)
- *  6. Python executes UDF and returns native buffer addresses of the result array
- *  7. JVM wraps those addresses via `ForeignAllocation` (zero-copy: Python to JVM Arrow)
+ *  6. Python executes UDF and exports result via Arrow C Data Interface (CDI)
+ *  7. JVM calls `Data.importVector` to wrap Python's Arrow buffers (zero-copy)
  *  8. Append result column(s) to the original row and emit
- *  9. After all rows in a batch are consumed, close result columns and release the
- *     Python export so CPython can GC the array
+ *  9. After all rows in a batch are consumed, close result columns; Arrow Java
+ *     invokes the CDI release callback, signalling Python to GC the array
  *
  * Net copies: 1 per batch (row-to-Arrow on input only) vs. the out-of-process path
  * which additionally serializes over a socket.
@@ -68,18 +71,17 @@ case class InProcessArrowEvalExec(
       // One ArrowWriter per partition - reset between batches.
       val writer = ArrowWriter.create(inputSchema, timeZoneId)
 
-      // Track result columns and Python export IDs from the previous batch.
-      // We close the columns (releasing JVM references to Python memory) and then
-      // release the Python exports at the start of each new batch, and at task end.
+      // Track result columns from the previous batch. Close them at the start
+      // of each new batch (and at task end) to trigger Arrow Java's CDI release
+      // callback, which invokes PyArrow's C release function and allows the
+      // backing Python array to be garbage-collected.
       var pendingResultCols: Array[ArrowColumnVector] = Array.empty
-      var pendingExportIds: Array[Int] = Array.empty
 
-      // Release the last batch's resources when the task completes.
+      // Release the last batch's result columns when the task completes.
       val taskCtx = TaskContext.get()
       if (taskCtx != null) {
         taskCtx.addTaskCompletionListener[Unit] { _ =>
           pendingResultCols.foreach(_.close())
-          pendingExportIds.foreach(InProcessPythonRuntime.releaseExport)
         }
       }
 
@@ -91,13 +93,12 @@ case class InProcessArrowEvalExec(
 
         override def next(): InternalRow = {
           if (!batchIter.hasNext) {
-            // Close previous batch's result columns before releasing Python exports.
-            // Closing first ensures the JVM no longer holds any reference to Python's
-            // native buffers before Python is allowed to GC the array.
+            // Close previous batch's result columns. Closing the ArrowColumnVector
+            // closes the underlying FieldVector, which triggers Arrow Java's CDI
+            // release callback. PyArrow's callback decrements the Python array's
+            // reference count, allowing garbage collection.
             pendingResultCols.foreach(_.close())
             pendingResultCols = Array.empty
-            pendingExportIds.foreach(InProcessPythonRuntime.releaseExport)
-            pendingExportIds = Array.empty
 
             // Fill the next Arrow batch using a while loop.
             // ArrowWriter.write() copies each row's fields into off-heap Arrow memory
@@ -116,8 +117,7 @@ case class InProcessArrowEvalExec(
 
             // For each UDF, collect the native buffer addresses of its input columns,
             // invoke Python in-process, and reconstruct the result as an Arrow column
-            // wrapping Python's native memory (zero-copy).
-            val exportIds = new scala.collection.mutable.ArrayBuffer[Int]()
+            // via the Arrow C Data Interface (zero-copy).
             val resultColumns = udfs.map { udf =>
               val inputAddrList = new JArrayList[java.util.Map[String, AnyRef]]()
 
@@ -130,15 +130,25 @@ case class InProcessArrowEvalExec(
                 inputAddrList.add(InProcessArrowBridge.extractAddresses(arrowCol, numRows))
               }
 
-              val resultMap = InProcessPythonRuntime.invoke(
-                udf.serializedFunc, inputAddrList, numRows)
-              val (col, exportId) = InProcessArrowBridge.foreignToColumn(resultMap, udf.dataType)
-              exportIds += exportId
-              col
+              // Pre-allocate output CDI structs on the JVM side. Python fills them
+              // in-place via arr._export_to_c(array_ptr, schema_ptr).
+              val outArray = ArrowArray.allocateNew(ArrowUtils.rootAllocator)
+              val outSchema = ArrowSchema.allocateNew(ArrowUtils.rootAllocator)
+              try {
+                InProcessPythonRuntime.invoke(
+                  udf.serializedFunc, inputAddrList, numRows,
+                  outArray.memoryAddress(), outSchema.memoryAddress())
+                InProcessArrowBridge.cdiToColumn(outArray, outSchema)
+              } finally {
+                // outArray: Data.importVector copies the snapshot and calls close() on
+                // the original (idempotent -- safe to call again here).
+                outArray.close()
+                // outSchema: NOT closed by importVector; must be closed explicitly.
+                outSchema.close()
+              }
             }
 
             pendingResultCols = resultColumns.toArray
-            pendingExportIds = exportIds.toArray
 
             val allColumns: Array[ArrowColumnVector] =
               (0 until root.getFieldVectors.size()).map(i =>
