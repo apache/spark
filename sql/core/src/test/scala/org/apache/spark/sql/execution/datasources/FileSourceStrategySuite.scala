@@ -627,6 +627,21 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test(s"Test ${SQLConf.FILES_PARTITION_STRATEGY.key} works as expected") {
+    val files = {
+      Range(0, 20000 - 10).map(p => PartitionedFile(InternalRow.empty, sp(s"$p"), 0, 50000))
+    } ++ Range(0, 10).map(p => PartitionedFile(InternalRow.empty, sp(s"small_$p"), 0, 5000))
+
+    withSQLConf(SQLConf.FILES_MAX_PARTITION_BYTES.key -> "50000",
+      SQLConf.FILES_OPEN_COST_IN_BYTES.key -> "0",
+      SQLConf.FILES_PARTITION_STRATEGY.key -> "file_based"
+    ) {
+      val partitions = FilePartition.getFilePartitions(
+        spark, files, conf.filesMaxPartitionBytes)
+      assert(!partitions.exists(_.files.length >= 10))
+    }
+  }
+
   // Helpers for checking the arguments passed to the FileFormat.
 
   protected val checkPartitionSchema =

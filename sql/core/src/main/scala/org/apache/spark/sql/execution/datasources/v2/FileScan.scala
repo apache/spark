@@ -167,7 +167,7 @@ trait FileScan extends Scan
           maxSplitBytes = maxSplitBytes,
           partitionValues = partitionValues
         )
-      }.toArray.sortBy(_.length)(implicitly[Ordering[Long]].reverse)
+      }.toArray
     }
 
     if (splitFiles.length == 1) {
