@@ -224,6 +224,27 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
     schemaBuilder.result()
   }
 
+  override def supportsUpsert(): Boolean = true
+
+  override def getUpsertStatement(
+      tableName: String,
+      columns: Array[StructField],
+      isCaseSensitive: Boolean,
+      options: JDBCOptions): String = {
+    val insertColumns = columns.map(_.name).map(quoteIdentifier)
+    val placeholders = columns.map(_ => "?").mkString(",")
+    val upsertKeyColumns = options.upsertKeyColumns.map(quoteIdentifier)
+    val updateColumns = insertColumns.filterNot(upsertKeyColumns.contains)
+    val updateClause =
+      updateColumns.map(x => s"$x = VALUES($x)").mkString(", ")
+
+    s"""
+       |INSERT INTO $tableName (${insertColumns.mkString(", ")})
+       |VALUES ( $placeholders )
+       |ON DUPLICATE KEY UPDATE $updateClause
+       |""".stripMargin
+  }
+
   override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
 
   // See https://dev.mysql.com/doc/mysql-errors/8.0/en/server-error-reference.html
@@ -367,7 +388,7 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
       }
     } catch {
       case _: Exception =>
-        logWarning("Cannot retrieved index info.")
+        logWarning("Cannot retrieve index info.")
     }
     indexMap.values.toArray
   }

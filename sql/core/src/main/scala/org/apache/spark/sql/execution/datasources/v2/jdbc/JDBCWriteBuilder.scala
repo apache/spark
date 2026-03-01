@@ -42,7 +42,8 @@ case class JDBCWriteBuilder(schema: StructType, options: JdbcOptionsInWrite) ext
         val conn = dialect.createConnectionFactory(options)(-1)
         JdbcUtils.truncateTable(conn, options)
       }
-      JdbcUtils.saveTable(data, Some(schema), SQLConf.get.caseSensitiveAnalysis, options)
+      JdbcUtils.saveTable(
+        data, Some(schema), SQLConf.get.caseSensitiveAnalysis, upsert = false, options)
     }
   }
 }

@@ -7242,6 +7242,11 @@
           "Update column nullability for MySQL and MS SQL Server."
         ]
       },
+      "UPSERT" : {
+        "message" : [
+          "Upsert not supported by JDBC dialect <class>."
+        ]
+      },
       "WRITE_FOR_BINARY_SOURCE" : {
         "message" : [
           "Write for the binary file data source."

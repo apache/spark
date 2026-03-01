@@ -168,6 +168,28 @@ private case class PostgresDialect()
     case _ => None
   }
 
+  override def supportsUpsert(): Boolean = true
+
+  override def getUpsertStatement(
+      tableName: String,
+      columns: Array[StructField],
+      isCaseSensitive: Boolean,
+      options: JDBCOptions): String = {
+    val insertColumns = columns.map(_.name).map(quoteIdentifier)
+    val placeholders = columns.map(_ => "?").mkString(",")
+    val upsertKeyColumns = options.upsertKeyColumns.map(quoteIdentifier)
+    val updateColumns = insertColumns.filterNot(upsertKeyColumns.contains)
+    val updateClause =
+      updateColumns.map(x => s"$x = EXCLUDED.$x").mkString(", ")
+
+    s"""
+       |INSERT INTO $tableName (${insertColumns.mkString(", ")})
+       |VALUES ( $placeholders )
+       |ON CONFLICT (${upsertKeyColumns.mkString(", ")})
+       |DO UPDATE SET $updateClause
+       |""".stripMargin
+  }
+
   override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
 
   /**
