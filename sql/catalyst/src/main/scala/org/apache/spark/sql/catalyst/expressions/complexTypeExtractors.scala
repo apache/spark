@@ -315,6 +315,192 @@ case class GetArrayStructFields(
 }
 
 /**
+ * For a child whose data type is a nested array ending in structs (e.g., `array<array<struct>>`),
+ * extracts the `ordinal`-th fields of all innermost struct elements, preserving the outer array
+ * nesting structure.
+ *
+ * For example, given `array<array<struct<a: int, b: string>>>` and ordinal 0 (field "a"),
+ * this returns `array<array<int>>`.
+ *
+ * This expression supports arbitrary nesting depth (determined from the input type at runtime),
+ * without requiring higher-order functions.
+ *
+ * @param child The nested array expression (must be `array<...<array<struct>>>`)
+ * @param field The struct field to extract
+ * @param ordinal The ordinal of the field within the innermost struct
+ * @param numFields The number of fields in the innermost struct
+ * @param containsNull Whether the innermost array can contain nulls
+ */
+case class GetNestedArrayStructFields(
+    child: Expression,
+    field: StructField,
+    ordinal: Int,
+    numFields: Int,
+    containsNull: Boolean) extends UnaryExpression with ExtractValue {
+
+  /**
+   * Computes the depth of array nesting (number of ArrayType levels).
+   * For `array<struct>`, depth is 1.
+   * For `array<array<struct>>`, depth is 2.
+   */
+  @transient
+  private lazy val arrayDepth: Int = computeArrayDepth(child.dataType)
+
+  private def computeArrayDepth(dt: DataType): Int = dt match {
+    case ArrayType(elementType: ArrayType, _) => 1 + computeArrayDepth(elementType)
+    case ArrayType(_: StructType, _) => 1
+    case _ => throw new IllegalArgumentException(
+      s"GetNestedArrayStructFields requires array<...<struct>>, got: $dt")
+  }
+
+  /**
+   * Returns the output type: same array nesting with innermost struct replaced by field type.
+   * E.g., `array<array<struct<a:int, b:string>>>` with field "a" -> `array<array<int>>`
+   */
+  override def dataType: DataType = {
+    def buildOutputType(dt: DataType, depth: Int): DataType = {
+      if (depth == 1) {
+        // Innermost array level - replace struct with field type
+        val ArrayType(_, elemContainsNull) = dt: @unchecked
+        ArrayType(field.dataType, elemContainsNull || containsNull)
+      } else {
+        val ArrayType(elemType, elemContainsNull) = dt: @unchecked
+        ArrayType(buildOutputType(elemType, depth - 1), elemContainsNull)
+      }
+    }
+    buildOutputType(child.dataType, arrayDepth)
+  }
+
+  override def toString: String = s"$child.${field.name}"
+  override def sql: String = s"${child.sql}.${quoteIdentifier(field.name)}"
+
+  protected override def nullSafeEval(input: Any): Any = {
+    extractNested(input.asInstanceOf[ArrayData], arrayDepth)
+  }
+
+  /**
+   * Recursively traverses nested arrays, extracting the field at the innermost struct level.
+   */
+  private def extractNested(array: ArrayData, depth: Int): ArrayData = {
+    val length = array.numElements()
+    val result = new Array[Any](length)
+    var i = 0
+    while (i < length) {
+      if (array.isNullAt(i)) {
+        result(i) = null
+      } else if (depth == 1) {
+        // At innermost array level, extract struct field
+        val row = array.getStruct(i, numFields)
+        if (row.isNullAt(ordinal)) {
+          result(i) = null
+        } else {
+          result(i) = row.get(ordinal, field.dataType)
+        }
+      } else {
+        // Recurse into nested array
+        val nestedArray = array.getArray(i)
+        result(i) = extractNested(nestedArray, depth - 1)
+      }
+      i += 1
+    }
+    new GenericArrayData(result)
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val arrayClass = classOf[GenericArrayData].getName
+    nullSafeCodeGen(ctx, ev, eval => {
+      generateNestedLoop(ctx, eval, ev, arrayDepth)
+    })
+  }
+
+  /**
+   * Generates nested loop code for extracting fields from nested arrays.
+   * This is the entry point that assigns to ev.value at the end.
+   */
+  private def generateNestedLoop(
+      ctx: CodegenContext,
+      inputArray: String,
+      ev: ExprCode,
+      depth: Int): String = {
+    val resultVar = ctx.freshName("finalResult")
+    val arrayClass = classOf[GenericArrayData].getName
+    s"""
+      ArrayData $resultVar = null;
+      ${generateInnerExtraction(ctx, inputArray, resultVar, depth)}
+      ${ev.value} = $resultVar;
+    """
+  }
+
+  /**
+   * Generates extraction code for a given nesting depth.
+   * Recursively builds nested loops, assigning to resultVar at the end.
+   */
+  private def generateInnerExtraction(
+      ctx: CodegenContext,
+      inputArray: String,
+      resultVar: String,
+      depth: Int): String = {
+    val n = ctx.freshName("n")
+    val values = ctx.freshName("values")
+    val j = ctx.freshName("j")
+    val arrayClass = classOf[GenericArrayData].getName
+
+    if (depth == 1) {
+      // Base case: innermost array with struct elements
+      val row = ctx.freshName("row")
+      val nullSafeFieldEval = if (field.nullable) {
+        s"""
+         if ($row.isNullAt($ordinal)) {
+           $values[$j] = null;
+         } else
+        """
+      } else {
+        ""
+      }
+      s"""
+        final int $n = $inputArray.numElements();
+        final Object[] $values = new Object[$n];
+        for (int $j = 0; $j < $n; $j++) {
+          if ($inputArray.isNullAt($j)) {
+            $values[$j] = null;
+          } else {
+            final InternalRow $row = $inputArray.getStruct($j, $numFields);
+            $nullSafeFieldEval {
+              $values[$j] = ${CodeGenerator.getValue(row, field.dataType, ordinal.toString)};
+            }
+          }
+        }
+        $resultVar = new $arrayClass($values);
+      """
+    } else {
+      // Recursive case: nested array
+      val innerArray = ctx.freshName("innerArray")
+      val innerResult = ctx.freshName("innerResult")
+
+      // Generate code that extracts from each nested array element
+      s"""
+        final int $n = $inputArray.numElements();
+        final Object[] $values = new Object[$n];
+        for (int $j = 0; $j < $n; $j++) {
+          if ($inputArray.isNullAt($j)) {
+            $values[$j] = null;
+          } else {
+            ArrayData $innerArray = $inputArray.getArray($j);
+            ArrayData $innerResult = null;
+            ${generateInnerExtraction(ctx, innerArray, innerResult, depth - 1)}
+            $values[$j] = $innerResult;
+          }
+        }
+        $resultVar = new $arrayClass($values);
+      """
+    }
+  }
+
+  override protected def withNewChildInternal(newChild: Expression): GetNestedArrayStructFields =
+    copy(child = newChild)
+}
+
+/**
  * Returns the field at `ordinal` in the Array `child`.
  *
  * We need to do type checking here as `ordinal` expression maybe unresolved.

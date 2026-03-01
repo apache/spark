@@ -144,6 +144,10 @@ object SchemaPruning extends SQLConfHelper {
         RootField(StructField(att.name, att.dataType, att.nullable, att.metadata),
           derivedFromAtt = true) :: Nil
       case SelectedField(field) => RootField(field, derivedFromAtt = false) :: Nil
+      // Handle multi-field expressions like ArraysZip and NestedArraysZip that combine
+      // multiple field accesses into a single expression. unapplySeq returns all fields.
+      case expr if SelectedField.unapplySeq(expr).exists(_.size > 1) =>
+        SelectedField.unapplySeq(expr).get.map(f => RootField(f, derivedFromAtt = false))
       // Root field accesses by `IsNotNull` and `IsNull` are special cases as the expressions
       // don't actually use any nested fields. These root field accesses might be excluded later
       // if there are any nested fields accesses in the query plan.

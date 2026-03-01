@@ -38,7 +38,7 @@ import org.apache.spark.sql.util.SchemaUtils._
 object SchemaPruning extends Rule[LogicalPlan] {
   import org.apache.spark.sql.catalyst.expressions.SchemaPruning._
 
-  override def apply(plan: LogicalPlan): LogicalPlan =
+  override def apply(plan: LogicalPlan): LogicalPlan = {
     plan transformDown {
       case op @ ScanOperation(projects, filtersStayUp, filtersPushDown,
         l @ LogicalRelationWithTable(hadoopFsRelation: HadoopFsRelation, _)) =>
@@ -50,6 +50,7 @@ object SchemaPruning extends Rule[LogicalPlan] {
             buildPrunedRelation(l, prunedHadoopRelation, prunedMetadataSchema)
           }).getOrElse(op)
     }
+  }
 
   /**
    * This method returns optional logical plan. `None` is returned if no nested field is required or
