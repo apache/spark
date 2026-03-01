@@ -218,27 +218,50 @@ object ConstantPropagation extends Rule[LogicalPlan] {
   // substituted into `1 + 1 = 1` if 'c' isn't nullable. If 'c' is nullable then the enclosing
   // NOT prevents us to do the substitution as NOT flips the context (`nullIsFalse`) of what a
   // null result of the enclosed expression means.
-  //
-  // Also, we shouldn't replace attributes with non-binary-stable data types, since this can lead
-  // to incorrect results. For example:
-  // `CREATE TABLE t (c STRING COLLATE UTF8_LCASE);`
-  // `INSERT INTO t VALUES ('HELLO'), ('hello');`
-  // `SELECT * FROM t WHERE c = 'hello' AND c = 'HELLO' COLLATE UNICODE;`
-  // If we replace `c` with `'hello'`, we get `'hello' = 'HELLO' COLLATE UNICODE` for the right
-  // condition, which is false, while the original `c = 'HELLO' COLLATE UNICODE` is true for
-  // 'HELLO' and false for 'hello'.
   private def safeToReplace(ar: AttributeReference, nullIsFalse: Boolean) =
-    (!ar.nullable || nullIsFalse) && isBinaryStable(ar.dataType)
+    !ar.nullable || nullIsFalse
 
   private def replaceConstants(
       condition: Expression,
       equalityPredicates: AttributeMap[(Literal, BinaryComparison)]): Expression = {
     val constantsMap = AttributeMap(equalityPredicates.map { case (attr, (lit, _)) => attr -> lit })
     val predicates = equalityPredicates.values.map(_._2).toSet
-    condition.transformWithPruning(_.containsPattern(BINARY_COMPARISON)) {
-      case b: BinaryComparison if !predicates.contains(b) => b transform {
-        case a: AttributeReference => constantsMap.getOrElse(a, a)
+    def replaceInComparison(b: BinaryComparison): Expression = {
+      lazy val collationSafeReplacement = isSameCollationAttrRefComparison(b)
+      b transform {
+        case a: AttributeReference
+          if isBinaryStable(a.dataType) || collationSafeReplacement =>
+          constantsMap.getOrElse(a, a)
       }
+    }
+    condition.transformWithPruning(_.containsPattern(BINARY_COMPARISON)) {
+      case b: BinaryComparison if !predicates.contains(b) => replaceInComparison(b)
+    }
+  }
+
+  /**
+   * Binary-stable `AttributeReference`s can always be replaced safely. Non-binary-stable
+   * `AttributeReference`s (i.e., those with a non-`UTF8_BINARY` `StringType`) are only replaced
+   * when both sides of the comparison are `AttributeReference`s (or `CollationKey`-wrapped
+   * `AttributeReference`s) with the same `StringType`, preventing substitution inside
+   * expressions that change the effective collation (e.g., a `Cast`). For example, given a
+   * column `c STRING COLLATE UTF8_LCASE`:
+   *
+   *   `c = 'hello' AND c = 'HELLO' COLLATE UNICODE`
+   *
+   * `c` is added to `constantsMap`. In the right-hand comparison, `c` is wrapped with a
+   * `Cast` to `UNICODE`, so we don't have an `AttributeReference` vs. `AttributeReference`
+   * comparison and `c` is not replaced inside the `Cast`, preserving correctness.
+   */
+  private def isSameCollationAttrRefComparison(b: BinaryComparison): Boolean = {
+    (b.left, b.right) match {
+      case (AttributeReference(_, st1: StringType, _, _),
+      AttributeReference(_, st2: StringType, _, _)) =>
+        st1 == st2
+      case (CollationKey(AttributeReference(_, st1: StringType, _, _)),
+      CollationKey(AttributeReference(_, st2: StringType, _, _))) =>
+        st1 == st2
+      case _ => false
     }
   }
 }
