@@ -129,7 +129,7 @@ private[spark] case class ChainedPythonFunctions(funcs: Seq[PythonFunction])
 private[spark] class PythonException(
     msg: String,
     cause: Throwable,
-    errorClass: Option[String],
+    errorClass: String,
     messageParameters: Map[String, String],
     context: Array[QueryContext])
   extends RuntimeException(msg, cause) with SparkThrowable {
@@ -143,7 +143,7 @@ private[spark] class PythonException(
     this(
       SparkThrowableHelper.getMessage(errorClass, messageParameters, summary),
       cause,
-      Option(errorClass),
+      errorClass,
       messageParameters,
       context
     )
@@ -151,7 +151,7 @@ private[spark] class PythonException(
 
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 
-  override def getCondition: String = errorClass.orNull
+  override def getCondition: String = errorClass
   override def getQueryContext: Array[QueryContext] = context
 }
 
