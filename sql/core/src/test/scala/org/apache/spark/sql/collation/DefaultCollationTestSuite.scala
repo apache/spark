@@ -353,6 +353,35 @@ abstract class DefaultCollationTestSuite extends QueryTest with SharedSparkSessi
     }
   }
 
+  test("ctas with nullif and window function") {
+    val testTable1 = "t1"
+    val testTable2 = "t2"
+    withTable(testTable1, testTable2) {
+      sql(
+        s"""CREATE TABLE $testTable1 (
+           |  c1 STRING,
+           |  c2 STRING
+           |)""".stripMargin)
+
+      sql(s"INSERT INTO $testTable1 VALUES ('livestream', 'A')")
+
+      sql(
+        s"""CREATE TABLE $testTable2
+           |DEFAULT COLLATION UTF8_LCASE
+           |AS
+           |SELECT
+           |  NULLIF(c1, 'LIVESTREAM') AS result,
+           |  ROW_NUMBER() OVER (PARTITION BY c2 ORDER BY c1) AS rownum
+           |FROM $testTable1
+           |""".stripMargin)
+
+      checkAnswer(
+        sql(s"SELECT * FROM $testTable2"),
+        Row("livestream", 1)
+      )
+    }
+  }
+
   test("add column") {
     withTable(testTable) {
       sql(s"CREATE TABLE $testTable (c1 STRING COLLATE UTF8_LCASE) USING $dataSource")

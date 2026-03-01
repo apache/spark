@@ -1508,6 +1508,62 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
   }
 
+  test("Window functions with implicit collation rule") {
+    val table = "table"
+    withTable(table) {
+      sql(s"CREATE TABLE $table(s1 string, s2 string collate utf8_lcase, i int)")
+      sql(s"INSERT INTO $table VALUES ('aA', 'aA', 2), ('Aa', 'Aa', 1)," +
+        s"('ab', 'ab', 3), ('aa', 'aa', 1)")
+
+      checkAnswer(
+        sql(s"select s1 collate unicode = " +
+          s"(first(s1) over (partition by s1 order by i)) from $table;"),
+        Seq(Row(true), Row(true), Row(true), Row(true)))
+      checkAnswer(
+        sql(s"select s1 = " +
+          s"(first(s1 collate unicode) over (partition by s1 order by i)) from $table;"),
+        Seq(Row(true), Row(true), Row(true), Row(true)))
+      checkAnswer(
+        sql(s"select s2 = " +
+          s"(first(s2) over (partition by s2 order by i)) from $table;"),
+        Seq(Row(true), Row(true), Row(true), Row(true)))
+    }
+  }
+
+  test("CommonExpressionRef inherits different collation strengths") {
+    val table = "table"
+    // Implicit collation strength
+    withTable(table) {
+      sql(s"CREATE TABLE $table (c1 STRING COLLATE UTF8_LCASE)")
+      sql(s"INSERT INTO $table VALUES ('test'), ('OTHER')")
+
+      checkAnswer(
+        sql(s"SELECT NULLIF(c1, 'TEST') FROM $table"),
+        Seq(Row(null), Row("OTHER"))
+      )
+    }
+
+    // Explicit collation strength
+    withTable(table) {
+      sql(s"CREATE TABLE $table (c1 STRING COLLATE UNICODE)")
+      sql(s"INSERT INTO $table VALUES ('test'), ('OTHER')")
+      checkAnswer(
+        sql(s"SELECT NULLIF('test' COLLATE UTF8_LCASE, c1) FROM $table"),
+        Seq(Row(null), Row("test"))
+      )
+    }
+
+    // Default collation strength
+    withTable(table) {
+      sql(s"CREATE TABLE $table (c1 STRING COLLATE UNICODE_CI)")
+      sql(s"INSERT INTO $table VALUES ('TEST'), ('OTHER')")
+      checkAnswer(
+        sql(s"SELECT NULLIF('test', c1) FROM $table"),
+        Seq(Row(null), Row("test"))
+      )
+    }
+  }
+
   test("hash join should be used for collated strings if sort merge join is not forced") {
     val t1 = "T_1"
     val t2 = "T_2"
