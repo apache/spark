@@ -18,7 +18,7 @@
 package org.apache.spark.storage
 
 import java.io.IOException
-import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
@@ -109,6 +109,7 @@ private[storage] class BlockManagerDecommissioner(
           // We only migrate a shuffle block when both index file and data file exist.
           if (blocks.isEmpty) {
             logInfo(log"Ignore deleted shuffle block ${MDC(SHUFFLE_BLOCK_INFO, shuffleBlockInfo)}")
+            deletedShuffles.incrementAndGet()
           } else {
             logInfo(log"Got migration sub-blocks ${MDC(BLOCK_IDS, blocks)}. Trying to migrate " +
               log"${MDC(SHUFFLE_BLOCK_INFO, shuffleBlockInfo)} to ${MDC(PEER, peer)} " +
@@ -133,6 +134,7 @@ private[storage] class BlockManagerDecommissioner(
                   logDebug(s"Migrated sub-block $blockId")
                 }
               }
+              migratedShufflesSize.addAndGet(blocks.map(b => b._2.size()).sum)
               logInfo(log"Migrated ${MDC(SHUFFLE_BLOCK_INFO, shuffleBlockInfo)} (" +
                 log"size: ${MDC(SIZE, Utils.bytesToString(blocks.map(b => b._2.size()).sum))}) " +
                 log"to ${MDC(PEER, peer)} in " +
@@ -147,6 +149,7 @@ private[storage] class BlockManagerDecommissioner(
                 if (bm.migratableResolver.getMigrationBlocks(shuffleBlockInfo).size < blocks.size) {
                   logWarning(log"Skipping block ${MDC(SHUFFLE_BLOCK_INFO, shuffleBlockInfo)}, " +
                     log"block deleted.")
+                  deletedShuffles.incrementAndGet()
                 } else if (fallbackStorage.isDefined
                     // Confirm peer is not the fallback BM ID because fallbackStorage would already
                     // have been used in the try-block above so there's no point trying again
@@ -205,6 +208,15 @@ private[storage] class BlockManagerDecommissioner(
   // Shuffles which have migrated. This used to know when we are "done", being done can change
   // if a new shuffle file is created by a running task.
   private[storage] val numMigratedShuffles = new AtomicInteger(0)
+
+  // Total size of migrated shuffle files
+  private[storage] val migratedShufflesSize = new AtomicLong(0)
+
+  // Total size of all shuffle files discovered (migrated + remaining)
+  private[storage] val totalShufflesSize = new AtomicLong(0)
+
+  // Number of shuffle blocks that were deleted during migration
+  private[storage] val deletedShuffles = new AtomicInteger(0)
 
   // Shuffles which are queued for migration & number of retries so far.
   // Visible in storage for testing.
@@ -314,6 +326,19 @@ private[storage] class BlockManagerDecommissioner(
       .sortBy(b => (b.shuffleId, b.mapId))
     shufflesToMigrate.addAll(newShufflesToMigrate.map(x => (x, 0)).asJava)
     migratingShuffles ++= newShufflesToMigrate
+    // Track total size of newly discovered shuffle blocks
+    newShufflesToMigrate.foreach { shuffleBlockInfo =>
+      try {
+        val blocks = bm.migratableResolver.getMigrationBlocks(shuffleBlockInfo)
+        val blockSize = blocks.map(_._2.size()).sum
+        totalShufflesSize.addAndGet(blockSize)
+        logDebug(s"Added ${Utils.bytesToString(blockSize)} for $shuffleBlockInfo to total size")
+      } catch {
+        case e: Exception =>
+          logWarning(s"Failed to get size for shuffle block $shuffleBlockInfo: ${e.getMessage}")
+          // Continue processing other blocks even if one fails
+      }
+    }
     val remainedShuffles = migratingShuffles.size - numMigratedShuffles.get()
     logInfo(log"${MDC(COUNT, newShufflesToMigrate.size)} of " +
       log"${MDC(TOTAL, localShuffles.size)} local shuffles are added. " +
@@ -443,11 +468,12 @@ private[storage] class BlockManagerDecommissioner(
    *  This provides a timeStamp which, if there have been no tasks running since that time
    *  we can know that all potential blocks that can be have been migrated off.
    */
-  private[storage] def lastMigrationInfo(): (Long, Boolean) = {
+  private[storage] def lastMigrationInfo(): MigrationInfo = {
+    val shuffleMigrationStat = buildShuffleStat()
     if (stopped || (stoppedRDD && stoppedShuffle)) {
       // Since we don't have anything left to migrate ever (since we don't restart once
       // stopped), return that we're done with a validity timestamp that doesn't expire.
-      (Long.MaxValue, true)
+      MigrationInfo(Long.MaxValue, true, shuffleMigrationStat)
     } else {
       // Chose the min of the active times. See the function description for more information.
       val lastMigrationTime = if (!stoppedRDD && !stoppedShuffle) {
@@ -461,7 +487,46 @@ private[storage] class BlockManagerDecommissioner(
       // Technically we could have blocks left if we encountered an error, but those blocks will
       // never be migrated, so we don't care about them.
       val blocksMigrated = (!shuffleBlocksLeft || stoppedShuffle) && (!rddBlocksLeft || stoppedRDD)
-      (lastMigrationTime, blocksMigrated)
+      MigrationInfo(lastMigrationTime, blocksMigrated, shuffleMigrationStat)
     }
   }
+
+  private def buildShuffleStat(): MigrationStat = {
+    MigrationStat(migratingShuffles.size - numMigratedShuffles.get(),
+      migratedShufflesSize.get(), numMigratedShuffles.get(),
+      migratingShuffles.size, totalShufflesSize.get(), deletedShuffles.get())
+  }
 }
+
+/**
+ * Migration information containing the current state of block migration during decommissioning.
+ *
+ * @param lastMigrationTime timestamp of the last migration activity, used to determine if
+ *                         migration is complete when no tasks are running
+ * @param allBlocksMigrated whether all blocks have been successfully migrated
+ * @param shuffleMigrationStat detailed statistics about shuffle block migration progress
+ */
+private[spark] case class MigrationInfo(lastMigrationTime: Long,
+    allBlocksMigrated: Boolean,
+    shuffleMigrationStat: MigrationStat
+)
+
+/**
+ * Statistics tracking the progress of shuffle block migration during decommissioning.
+ *
+ * This provides comprehensive metrics about the migration process, including the current
+ * state, overall progress, and efficiency indicators.
+ *
+ * @param numBlocksLeft number of shuffle blocks remaining to be migrated
+ * @param totalMigratedSize total size in bytes of all successfully migrated shuffle blocks
+ * @param numMigratedBlock total number of shuffle blocks that have been successfully migrated
+ * @param totalBlocks total number of shuffle blocks discovered during the migration process
+ * @param totalSize total size in bytes of all shuffle blocks (migrated + remaining)
+ * @param deletedBlocks number of shuffle blocks that were deleted during migration
+ */
+private[spark] case class MigrationStat(numBlocksLeft: Int,
+    totalMigratedSize: Long,
+    numMigratedBlock: Int,
+    totalBlocks: Int,
+    totalSize: Long,
+    deletedBlocks: Int)
