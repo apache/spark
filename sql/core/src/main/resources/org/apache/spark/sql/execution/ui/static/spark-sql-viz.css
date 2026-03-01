@@ -28,6 +28,11 @@ svg g.cluster rect {
   stroke-width: 1px;
 }
 
+svg g.cluster > g.label {
+  font-size: 0.75em;
+  font-style: italic;
+}
+
 svg g.node rect {
   fill: #C3EBFF;
   stroke: #3EC0FF;
@@ -37,6 +42,7 @@ svg g.node rect {
 /* Highlight the SparkPlan node name */
 svg text :first-child:not(.stageId-and-taskId-metrics) {
   font-weight: bold;
+  font-size: 0.85em;
 }
 
 svg text {
@@ -79,6 +85,11 @@ svg path.linked {
 /* Detail side panel */
 #plan-viz-details-panel .card {
   font-size: 0.75rem;
+}
+
+#plan-viz-details-panel .card-body {
+  max-height: 80vh;
+  overflow-y: auto;
 }
 
 #plan-viz-details-panel .card-header {

@@ -51,18 +51,23 @@ case class SparkPlanGraph(
    * providing full metrics on demand via JavaScript.
    */
   def makeNodeDetailsJson(metrics: Map[Long, String]): String = {
-    val entries = allNodes.collect {
-      case node if !node.isInstanceOf[SparkPlanGraphCluster] =>
-        val metricsJson = node.metrics.flatMap { m =>
-          metrics.get(m.accumulatorId).map { v =>
-            val escaped = StringEscapeUtils.escapeJson(v)
-            val nameEscaped = StringEscapeUtils.escapeJson(m.name)
-            s"""{"name":"$nameEscaped","value":"$escaped"}"""
-          }
-        }.mkString("[", ",", "]")
-        val desc = StringEscapeUtils.escapeJson(node.desc)
-        s"""  "node${node.id}":{"name":"${StringEscapeUtils.escapeJson(node.name)}",""" +
-          s""""desc":"$desc","metrics":$metricsJson}"""
+    val entries = allNodes.map { node =>
+      val metricsJson = node.metrics.flatMap { m =>
+        metrics.get(m.accumulatorId).map { v =>
+          val n = StringEscapeUtils.escapeJson(m.name)
+          val mv = StringEscapeUtils.escapeJson(v)
+          s"""{"name":"$n","value":"$mv","type":"${m.metricType}"}"""
+        }
+      }.mkString("[", ",", "]")
+      val (prefix, extra) = node match {
+        case cluster: SparkPlanGraphCluster =>
+          val childIds = cluster.nodes
+            .map(n => s""""node${n.id}"""").mkString("[", ",", "]")
+          ("cluster", s""","children":$childIds""")
+        case _ => ("node", "")
+      }
+      s"""  "$prefix${node.id}":{"name":"${StringEscapeUtils.escapeJson(node.name)}",""" +
+        s""""metrics":$metricsJson$extra}"""
     }
     entries.mkString("{\n", ",\n", "\n}")
   }
@@ -192,8 +197,8 @@ class SparkPlanGraphNode(
     val nodeId = s"node$id"
     val tooltip = StringEscapeUtils.escapeJava(desc)
     // Compact label: show only operator name; metrics shown in side panel on click
-    val labelStr = s"<b>${StringEscapeUtils.escapeJava(name)}</b>"
-    s"""  $id [id="$nodeId" labelType="html" label="$labelStr" tooltip="$tooltip"];"""
+    val labelStr = StringEscapeUtils.escapeJava(name)
+    s"""  $id [id="$nodeId" label="$labelStr" tooltip="$tooltip"];"""
 
   }
 }
@@ -211,16 +216,25 @@ class SparkPlanGraphCluster(
 
   override def makeDotNode(metricsValue: Map[Long, String]): String = {
     val duration = metrics.filter(_.name.startsWith(WholeStageCodegenExec.PIPELINE_DURATION_METRIC))
+    // Extract short label: "(1)" from "WholeStageCodegen (1)"
+    val shortName = "\\(\\d+\\)".r.findFirstIn(name).getOrElse(name)
     val labelStr = if (duration.nonEmpty) {
       require(duration.length == 1)
       val id = duration(0).accumulatorId
       if (metricsValue.contains(id)) {
-        name + "\n \n" + duration(0).name + ": " + metricsValue(id)
+        // For multi-line values like "total (min, med, max)\n10.0 s (...)",
+        // extract just the total number from the data line
+        val raw = metricsValue(id)
+        val lines = raw.split("\n")
+        val dataLine = if (lines.length > 1) lines(1).trim else lines(0).trim
+        // Extract just the total value (first token before any parenthesized breakdown)
+        val total = dataLine.split("\\s*\\(")(0).trim
+        shortName + " / " + total
       } else {
-        name
+        shortName
       }
     } else {
-      name
+      shortName
     }
     val clusterId = s"cluster$id"
     s"""
