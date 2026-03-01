@@ -1899,7 +1899,7 @@ Here are the configs regarding to RocksDB instance of the state store provider:
   </tr>
   <tr>
     <td>spark.sql.streaming.stateStore.rocksdb.compression</td>
-    <td>Compression type used in RocksDB. The string is converted RocksDB compression type through RocksDB Java API getCompressionType(). </td>
+    <td>Compression type used in RocksDB. The string is converted RocksDB compression type through RocksDB Java API getCompressionType(). Supported values: "bzip2", "lz4", "lz4hc", "snappy", "z", "zstd".</td>
     <td>lz4</td>
   </tr>
 </table>
