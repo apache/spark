@@ -24,9 +24,10 @@ import org.apache.parquet.column.values.Utils
 import org.apache.parquet.column.values.deltalengthbytearray.DeltaLengthByteArrayValuesWriter
 import org.apache.parquet.io.api.Binary
 
+import org.apache.spark.sql.catalyst.util.STUtils
 import org.apache.spark.sql.execution.vectorized.{OnHeapColumnVector, WritableColumnVector}
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, StringType}
+import org.apache.spark.sql.types.{DataType, GeographyType, GeometryType, IntegerType, StringType}
 
 /**
  * Read tests for vectorized Delta length byte array  reader.
@@ -101,6 +102,65 @@ class ParquetDeltaLengthByteArrayEncodingSuite
     reader.readIntegers(length, writableColumnVector, 0)
     for (i <- 0 until length) {
       assert(values(i).length == writableColumnVector.getInt(i))
+    }
+  }
+
+  testGeo("geo types single point") { geoType =>
+    assertGeoReadWrite(writer, reader, Array(makePointWkb(1, 1)), geoType)
+  }
+
+  testGeo("geo types with multiple geometries") { geoType =>
+    // Different WKB sizes exercise variable-length encoding.
+    assertGeoReadWrite(writer, reader, Array(
+      makePointWkb(0, 0),
+      makeLineStringWkb((1, 1), (2, 1)),
+      makePointWkb(3, 4)),
+      geoType)
+  }
+
+  testGeo("geo types with mixed length polygons") { geoType =>
+    // Polygons with increasing vertex count.
+    assertGeoReadWrite(writer, reader, Array(
+      makePolygonWkb((1, 2), (3, 4), (5, 6), (1, 2)),
+      makePolygonWkb((1, 2), (3, 4), (5, 6), (7, 8), (9, 10), (1, 2)),
+      makePolygonWkb((1, 2), (3, 4), (5, 6), (7, 8), (9, 10), (11, 12), (13, 14), (1, 2))),
+      geoType)
+  }
+
+  private def assertGeoReadWrite(
+      writer: DeltaLengthByteArrayValuesWriter,
+      reader: VectorizedDeltaLengthByteArrayReader,
+      wkbValues: Array[Array[Byte]],
+      dataType: DataType): Unit = {
+
+    val (isGeometry, srid) = dataType match {
+      case geom: GeometryType => (true, geom.srid)
+      case geog: GeographyType => (false, geog.srid)
+    }
+
+    val length = wkbValues.length
+
+    writeBinaryData(writer, wkbValues)
+    writableColumnVector = new OnHeapColumnVector(length, dataType)
+
+    reader.initFromPage(length, writer.getBytes.toInputStream)
+    if (isGeometry) {
+      reader.readGeometry(length, writableColumnVector, 0)
+    } else {
+      reader.readGeography(length, writableColumnVector, 0)
+    }
+
+    for (i <- 0 until length) {
+      val actualWkb = if (isGeometry) {
+        val geom = writableColumnVector.getGeometry(i)
+        assert(srid === STUtils.stSrid(geom))
+        STUtils.stAsBinary(geom)
+      } else {
+        val geog = writableColumnVector.getGeography(i)
+        assert(srid === STUtils.stSrid(geog))
+        STUtils.stAsBinary(geog)
+      }
+      assert(wkbValues(i) sameElements actualWkb)
     }
   }
 

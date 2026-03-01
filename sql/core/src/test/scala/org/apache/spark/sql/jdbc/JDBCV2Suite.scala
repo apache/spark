@@ -2966,6 +2966,19 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
           fragment = "h2.my_avg2(id)",
           start = 7,
           stop = 20))
+      // Multi-part namespace should also result in UNRESOLVED_ROUTINE
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SELECT * FROM h2.test.people where h2.db_name.schema_name.function_name()")
+        },
+        condition = "UNRESOLVED_ROUTINE",
+        parameters = Map(
+          "routineName" -> "`h2`.`db_name`.`schema_name`.`function_name`",
+          "searchPath" -> "[`system`.`builtin`, `system`.`session`, `h2`.`default`]"),
+        context = ExpectedContext(
+          fragment = "h2.db_name.schema_name.function_name()",
+          start = 35,
+          stop = 72))
     } finally {
       JdbcDialects.unregisterDialect(testH2Dialect)
       JdbcDialects.registerDialect(h2Dialect)
@@ -3065,25 +3078,6 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     assert(jdbcTable.indexExists("people_index") == false)
     val indexes3 = jdbcTable.listIndexes()
     assert(indexes3.isEmpty)
-  }
-
-  test("IDENTIFIER_TOO_MANY_NAME_PARTS: " +
-    "jdbc function doesn't support identifiers consisting of more than 2 parts") {
-    JdbcDialects.unregisterDialect(h2Dialect)
-    try {
-      JdbcDialects.registerDialect(testH2Dialect)
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql("SELECT * FROM h2.test.people where h2.db_name.schema_name.function_name()")
-        },
-        condition = "IDENTIFIER_TOO_MANY_NAME_PARTS",
-        sqlState = "42601",
-        parameters = Map("identifier" -> "`db_name`.`schema_name`.`function_name`", "limit" -> "2")
-      )
-    } finally {
-      JdbcDialects.unregisterDialect(testH2Dialect)
-      JdbcDialects.registerDialect(h2Dialect)
-    }
   }
 
   test("Explain shows executed SQL query") {

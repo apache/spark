@@ -160,7 +160,8 @@ function renderDagViz(forJob) {
   const svg = graphContainer()
     .append("svg")
     .attr("class", jobOrStage)
-    .attr("viewBox", `${-VizConstants.svgMarginX} ${-VizConstants.svgMarginY} ${window.innerWidth || 1920} 1000`);
+    .attr("width", window.innerWidth || 1920)
+    .attr("height", 1000);
   if (forJob) {
     renderDagVizForJob(svg);
   } else {

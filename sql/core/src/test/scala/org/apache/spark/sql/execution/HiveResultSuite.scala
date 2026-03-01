@@ -173,6 +173,51 @@ class HiveResultSuite extends SharedSparkSession {
     assert(hiveResultString(plan2) === Seq("[5 00:00:00.010000000]"))
   }
 
+  test("geometry formatting in hive result") {
+    // Geometry with no SRID.
+    val df = spark.sql(
+      "SELECT ST_GeomFromWKB(X'0101000000000000000000f03f0000000000000040')")
+    val result = hiveResultString(df.queryExecution.executedPlan)
+    assert(result === Seq("POINT(1 2)"))
+    // Geometry with SRID 0.
+    val dfSrid0 = spark.sql(
+      "SELECT ST_GeomFromWKB(X'0101000000000000000000f03f0000000000000040', 0)")
+    val resultSrid0 = hiveResultString(dfSrid0.queryExecution.executedPlan)
+    assert(resultSrid0 === Seq("POINT(1 2)"))
+    // Geometry with SRID 4326.
+    val dfSrid4326 = spark.sql(
+      "SELECT ST_GeomFromWKB(X'0101000000000000000000f03f0000000000000040', 4326)")
+    val resultSrid4326 = hiveResultString(dfSrid4326.queryExecution.executedPlan)
+    assert(resultSrid4326 === Seq("SRID=4326;POINT(1 2)"))
+  }
+
+  test("nested geometry formatting in hive result") {
+    // Geometry with no SRID.
+    val df = spark.sql(
+      "SELECT array(ST_GeomFromWKB(X'0101000000000000000000f03f0000000000000040'))")
+    val result = hiveResultString(df.queryExecution.executedPlan)
+    assert(result === Seq("[\"POINT(1 2)\"]"))
+    // Geometry with SRID 4326.
+    val dfSrid4326 = spark.sql(
+      "SELECT array(ST_GeomFromWKB(X'0101000000000000000000f03f0000000000000040', 4326))")
+    val resultSrid4326 = hiveResultString(dfSrid4326.queryExecution.executedPlan)
+    assert(resultSrid4326 === Seq("[\"SRID=4326;POINT(1 2)\"]"))
+  }
+
+  test("geography formatting in hive result") {
+    val df = spark.sql(
+      "SELECT ST_GeogFromWKB(X'0101000000000000000000f03f0000000000000040')")
+    val result = hiveResultString(df.queryExecution.executedPlan)
+    assert(result === Seq("SRID=4326;POINT(1 2)"))
+  }
+
+  test("nested geography formatting in hive result") {
+    val df = spark.sql(
+      "SELECT array(ST_GeogFromWKB(X'0101000000000000000000f03f0000000000000040'))")
+    val result = hiveResultString(df.queryExecution.executedPlan)
+    assert(result === Seq("[\"SRID=4326;POINT(1 2)\"]"))
+  }
+
   test("SPARK-52650: Use stringifyValue to get UDT string representation") {
     val year = Year.of(18)
     val tpe = new YearUDT()

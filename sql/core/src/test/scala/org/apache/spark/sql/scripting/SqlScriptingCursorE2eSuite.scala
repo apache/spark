@@ -359,7 +359,13 @@ END;""")
     )
   }
 
-  test("Test 20: Cursor sensitivity - cursor captures snapshot when opened") {
+  test("Test 20: Cursor sensitivity - INSENSITIVE cursors capture snapshot at OPEN") {
+    // Spark cursors are INSENSITIVE by default, which means they capture a snapshot when
+    // OPEN is called. The physical plan is generated at OPEN time, locking in file lists,
+    // Delta snapshots, and other data source metadata.
+    //
+    // This test verifies snapshot semantics: rows inserted AFTER OPEN but BEFORE first
+    // FETCH should NOT be visible to the cursor.
     sql("CREATE TABLE cursor_sensitivity_test (id INT, value STRING) USING parquet;")
     sql("INSERT INTO cursor_sensitivity_test VALUES (1, 'row1'), (2, 'row2');")
     val result = sql("""BEGIN
@@ -382,10 +388,10 @@ END;""")
   -- Step 4: OPEN the cursor (captures snapshot - should see rows 1-4)
   OPEN cur;
 
-  -- Step 5: Add more rows after OPEN
+  -- Step 5: Add more rows after OPEN but before first FETCH
   INSERT INTO cursor_sensitivity_test VALUES (5, 'row5'), (6, 'row6');
 
-  -- Step 6: Fetch rows - should see snapshot from OPEN time (4 rows)
+  -- Step 6: Fetch rows - should see snapshot from OPEN time (4 rows only)
   REPEAT
     FETCH cur INTO fetched_id, fetched_value;
     IF NOT nomorerows THEN
@@ -396,11 +402,11 @@ END;""")
   -- Step 7: Close the cursor
   CLOSE cur;
 
-  -- Step 8: Open the cursor again (should capture new snapshot)
+  -- Step 8: Open the cursor again (captures new snapshot with all 6 rows)
   SET nomorerows = false;
   OPEN cur;
 
-  -- Step 9: Fetch rows - demonstrates cursor behavior
+  -- Step 9: Fetch rows - should see all 6 rows now
   REPEAT
     FETCH cur INTO fetched_id, fetched_value;
     IF NOT nomorerows THEN
@@ -408,13 +414,13 @@ END;""")
     END IF;
   UNTIL nomorerows END REPEAT;
 
-  -- Return both counts
+  -- Return both counts (first=4, second=6)
   VALUES (row_count_first_open, row_count_second_open);
 
   CLOSE cur;
 END;""")
     checkAnswer(result, Seq(
-      Row(6, 6)))
+      Row(4, 6)))
   }
 
   test("Test 21: Basic parameterized cursor with positional parameters") {
@@ -1898,6 +1904,45 @@ END;""")
     // EXIT handlers execute and exit - no intermediate results are returned
     // The test succeeds if all cursor operations complete without errors
     checkAnswer(result, Seq(Row("Done")))
+  }
+
+  test("Test 92: Runtime error in cursor query caught at OPEN (snapshot semantics)") {
+    // With snapshot semantics, executeToIterator() is called at OPEN time to capture
+    // the data snapshot. This means query execution begins at OPEN, not at first FETCH.
+    //
+    // IMPORTANT: Runtime errors in the cursor query are now thrown at OPEN time because
+    // that's when execution starts. This is a consequence of implementing INSENSITIVE
+    // cursor semantics where the snapshot must be captured at OPEN.
+    //
+    // This test verifies that runtime errors (e.g., divide by zero) are caught at OPEN.
+    sql("CREATE TABLE cursor_row_error_test (id INT, value INT) USING parquet")
+    sql("INSERT INTO cursor_row_error_test VALUES (1, 10), (2, 0), (3, 5)")
+    try {
+      val result = sql("""BEGIN
+  DECLARE result STRING DEFAULT 'start';
+  DECLARE x INT;
+  DECLARE y INT;
+
+  BEGIN
+    DECLARE cur CURSOR FOR SELECT id, 100 / value AS result FROM cursor_row_error_test ORDER BY id;
+
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+      SET result = result || ' | failed at open';
+
+    SET result = 'declared';
+    OPEN cur;  -- Fails here: executeToIterator() starts execution, hits divide-by-zero
+    SET result = 'opened';  -- Should NOT reach here
+    FETCH cur INTO x, y;
+    SET result = 'fetched: ' || x || ',' || y;  -- Should NOT reach here
+  END;
+
+  SELECT result;
+END;""")
+      // Should show DECLARE succeeded, but OPEN failed due to divide-by-zero
+      checkAnswer(result, Seq(Row("declared | failed at open")))
+    } finally {
+      sql("DROP TABLE IF EXISTS cursor_row_error_test")
+    }
   }
 
 }

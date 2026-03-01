@@ -756,6 +756,7 @@ class MetastoreDataSourcesSuite extends QueryTest
           locationUri = None,
           inputFormat = None,
           outputFormat = None,
+          serdeName = None,
           serde = None,
           compressed = false,
           properties = Map(

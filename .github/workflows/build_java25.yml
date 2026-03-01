@@ -17,11 +17,11 @@
 # under the License.
 #
 
-name: "Build / Python-only (master, Python 3.13, no GIL)"
+name: "Build / Java25 (master, Scala 2.13, Hadoop 3, JDK 25)"
 
 on:
   schedule:
-    - cron: '0 19 */3 * *'
+    - cron: '0 4 * * *'
   workflow_dispatch:
 
 jobs:
@@ -32,17 +32,26 @@ jobs:
     uses: ./.github/workflows/build_and_test.yml
     if: github.repository == 'apache/spark'
     with:
-      java: 17
+      java: 25
       branch: master
       hadoop: hadoop3
       envs: >-
         {
-          "PYSPARK_IMAGE_TO_TEST": "python-313-nogil",
-          "PYTHON_TO_TEST": "python3.13t",
-          "PYTHON_GIL": "0"
+          "PYSPARK_IMAGE_TO_TEST": "python-311",
+          "PYTHON_TO_TEST": "python3.11",
+          "SKIP_MIMA": "true",
+          "SKIP_UNIDOC": "true",
+          "DEDICATED_JVM_SBT_TESTS": "org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormatV1Suite,org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormatV2Suite,org.apache.spark.sql.execution.datasources.orc.OrcSourceV1Suite,org.apache.spark.sql.execution.datasources.orc.OrcSourceV2Suite"
         }
       jobs: >-
         {
+          "build": "true",
           "pyspark": "true",
-          "pyspark-pandas": "true"
+          "sparkr": "true",
+          "tpcds-1g": "true",
+          "docker-integration-tests": "true",
+          "yarn": "true",
+          "k8s-integration-tests": "true",
+          "buf": "true",
+          "ui": "true"
         }

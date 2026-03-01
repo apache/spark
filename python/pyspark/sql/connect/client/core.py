@@ -28,6 +28,7 @@ from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
 
+import concurrent.futures
 import logging
 import threading
 import os
@@ -38,6 +39,7 @@ import uuid
 import sys
 import time
 import traceback
+import weakref
 from typing import (
     Iterable,
     Iterator,
@@ -53,7 +55,6 @@ from typing import (
     cast,
     TYPE_CHECKING,
     Type,
-    Sequence,
 )
 
 import pandas as pd
@@ -86,6 +87,7 @@ import pyspark.sql.connect.proto.base_pb2_grpc as grpc_lib
 import pyspark.sql.connect.types as types
 from pyspark.errors.exceptions.connect import (
     convert_exception,
+    convert_observation_errors,
     SparkConnectException,
     SparkConnectGrpcException,
 )
@@ -751,6 +753,8 @@ class SparkConnectClient(object):
         self._plan_compression_threshold: Optional[int] = None  # Will be fetched lazily
         self._plan_compression_algorithm: Optional[str] = None  # Will be fetched lazily
 
+        self._release_futures: weakref.WeakSet[concurrent.futures.Future] = weakref.WeakSet()
+
         # cleanup ml cache if possible
         atexit.register(self._cleanup_ml_cache)
 
@@ -998,11 +1002,6 @@ class SparkConnectClient(object):
         (_, properties, _) = self.execute_command(cmd)
         resources = properties["get_resources_command_result"]
         return resources
-
-    def _build_observed_metrics(
-        self, metrics: Sequence["pb2.ExecutePlanResponse.ObservedMetrics"]
-    ) -> Iterator[PlanObservedMetrics]:
-        return (PlanObservedMetrics(x.name, [v for v in x.values], list(x.keys)) for x in metrics)
 
     def to_table_as_iterator(
         self, plan: pb2.Plan, observations: Dict[str, Observation]
@@ -1272,7 +1271,8 @@ class SparkConnectClient(object):
         """
         Close the channel.
         """
-        ExecutePlanResponseReattachableIterator.shutdown()
+        concurrent.futures.wait(self._release_futures, timeout=10)
+        ExecutePlanResponseReattachableIterator.shutdown_threadpool_if_idle()
         self._channel.close()
         self._closed = True
 
@@ -1457,7 +1457,6 @@ class SparkConnectClient(object):
         except Exception as error:
             self._handle_error(error)
 
-    @disable_gc
     def _execute(self, req: pb2.ExecutePlanRequest) -> None:
         """
         Execute the passed request `req` and drop all results.
@@ -1487,15 +1486,16 @@ class SparkConnectClient(object):
                         handle_response(b)
                 finally:
                     generator.close()
+                    self._release_futures.update(generator.release_futures)
             else:
                 for attempt in self._retrying():
                     with attempt:
-                        for b in self._stub.ExecutePlan(req, metadata=self._builder.metadata()):
-                            handle_response(b)
+                        with disable_gc():
+                            for b in self._stub.ExecutePlan(req, metadata=self._builder.metadata()):
+                                handle_response(b)
         except Exception as error:
             self._handle_error(error)
 
-    @disable_gc
     def _execute_and_fetch_as_iterator(
         self,
         req: pb2.ExecutePlanRequest,
@@ -1548,23 +1548,32 @@ class SparkConnectClient(object):
                 yield from self._build_metrics(b.metrics)
             if b.observed_metrics:
                 logger.debug("Received observed metric batch.")
-                for observed_metrics in self._build_observed_metrics(b.observed_metrics):
-                    if observed_metrics.name == "__python_accumulator__":
-                        for metric in observed_metrics.metrics:
-                            (aid, update) = pickleSer.loads(LiteralExpression._to_value(metric))
-                            if aid == SpecialAccumulatorIds.SQL_UDF_PROFIER:
-                                self._profiler_collector._update(update)
-                    elif observed_metrics.name in observations:
-                        observation_result = observations[observed_metrics.name]._result
-                        assert observation_result is not None
-                        observation_result.update(
-                            {
-                                key: LiteralExpression._to_value(metric)
-                                for key, metric in zip(
-                                    observed_metrics.keys, observed_metrics.metrics
-                                )
-                            }
-                        )
+                for x in b.observed_metrics:
+                    observed_metrics = PlanObservedMetrics(
+                        x.name, [v for v in x.values], list(x.keys)
+                    )
+                    if x.HasField("root_error_idx"):
+                        if x.name in observations:
+                            converted = convert_observation_errors(x.root_error_idx, list(x.errors))
+                            observations[x.name]._set_error(converted)
+                    else:
+                        if observed_metrics.name == "__python_accumulator__":
+                            for metric in observed_metrics.metrics:
+                                (aid, update) = pickleSer.loads(LiteralExpression._to_value(metric))
+                                if aid == SpecialAccumulatorIds.SQL_UDF_PROFIER:
+                                    self._profiler_collector._update(update)
+                        elif observed_metrics.name in observations:
+                            observation_result = observations[observed_metrics.name]._result
+                            assert observation_result is not None
+                            observation_result.update(
+                                {
+                                    key: LiteralExpression._to_value(metric)
+                                    for key, metric in zip(
+                                        observed_metrics.keys,
+                                        observed_metrics.metrics,
+                                    )
+                                }
+                            )
                     yield observed_metrics
             if b.HasField("schema"):
                 logger.debug("Received the schema.")
@@ -1687,11 +1696,21 @@ class SparkConnectClient(object):
                         yield from handle_response(b)
                 finally:
                     generator.close()
+                    self._release_futures.update(generator.release_futures)
             else:
                 for attempt in self._retrying():
                     with attempt:
-                        for b in self._stub.ExecutePlan(req, metadata=self._builder.metadata()):
-                            yield from handle_response(b)
+                        with disable_gc():
+                            it = iter(
+                                self._stub.ExecutePlan(req, metadata=self._builder.metadata())
+                            )
+                        while True:
+                            try:
+                                with disable_gc():
+                                    b = next(it)
+                                yield from handle_response(b)
+                            except StopIteration:
+                                break
         except KeyboardInterrupt as kb:
             logger.debug(f"Interrupt request received for operation={req.operation_id}")
             if progress is not None:
@@ -1907,6 +1926,58 @@ class SparkConnectClient(object):
                     resp = self._stub.ReleaseSession(req, metadata=self._builder.metadata())
                     self._verify_response_integrity(resp)
                     return
+            raise SparkConnectException("Invalid state during retry exception handling.")
+        except Exception as error:
+            self._handle_error(error)
+
+    def _get_operation_statuses(
+        self,
+        operation_ids: Optional[List[str]] = None,
+        operation_extensions: Optional[List[any_pb2.Any]] = None,
+        request_extensions: Optional[List[any_pb2.Any]] = None,
+    ) -> "pb2.GetStatusResponse":
+        """
+        Get status of operations in the session.
+
+        Parameters
+        ----------
+        operation_ids : list of str, optional
+            List of operation IDs to get status for.
+            If None or empty, returns status of all operations in the session.
+        operation_extensions : list of google.protobuf.any_pb2.Any, optional
+            Per-operation extension messages to include in the OperationStatusRequest to request
+            additional per-operation information.
+        request_extensions : list of google.protobuf.any_pb2.Any, optional
+            Request-level extension messages to include in the GetStatusRequest.
+
+        Returns
+        -------
+        pb2.GetStatusResponse
+            The full GetStatusResponse, including operation_statuses and any extensions.
+        """
+        req = pb2.GetStatusRequest()
+        req.session_id = self._session_id
+        req.client_type = self._builder.userAgent
+        if self._user_id:
+            req.user_context.user_id = self._user_id
+        if self._server_session_id:
+            req.client_observed_server_side_session_id = self._server_session_id
+
+        req.operation_status.SetInParent()
+
+        if operation_ids:
+            req.operation_status.operation_ids.extend(operation_ids)
+        if operation_extensions:
+            req.operation_status.extensions.extend(operation_extensions)
+        if request_extensions:
+            req.extensions.extend(request_extensions)
+
+        try:
+            for attempt in self._retrying():
+                with attempt:
+                    resp = self._stub.GetStatus(req, metadata=self._builder.metadata())
+                    self._verify_response_integrity(resp)
+                    return resp
             raise SparkConnectException("Invalid state during retry exception handling.")
         except Exception as error:
             self._handle_error(error)
@@ -2150,6 +2221,7 @@ class SparkConnectClient(object):
             pb2.AnalyzePlanResponse,
             pb2.FetchErrorDetailsResponse,
             pb2.ReleaseSessionResponse,
+            pb2.GetStatusResponse,
         ],
     ) -> None:
         """

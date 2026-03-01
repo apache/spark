@@ -131,7 +131,20 @@ abstract class EventLogFileWriter(
   }
 
   protected def closeWriter(): Unit = {
+    // 1. Flush first to check the errors
+    writer.foreach(_.flush())
+    if (writer.exists(_.checkError())) {
+      logError("Spark detects errors while flushing event logs.")
+    }
+    hadoopDataStream.foreach(_.hflush())
+
+    // 2. Try to close and check the errors
     writer.foreach(_.close())
+    if (writer.exists(_.checkError())) {
+      logError("Spark detects errors while closing event logs.")
+      // 3. Ensuring the underlying stream is closed at least (best-effort).
+      hadoopDataStream.foreach(_.close())
+    }
   }
 
   protected def renameFile(src: Path, dest: Path, overwrite: Boolean): Unit = {
@@ -237,6 +250,7 @@ class SingleEventLogFileWriter(
    * ".inprogress" suffix.
    */
   override def stop(): Unit = {
+    logInfo(log"Stopping event writer for ${MDC(PATH, logPath)}")
     closeWriter()
     renameFile(new Path(inProgressPath), new Path(logPath), shouldOverwrite)
   }
@@ -354,6 +368,7 @@ class RollingEventLogFilesWriter(
   }
 
   override def stop(): Unit = {
+    logInfo(log"Stopping event writer for ${MDC(PATH, logPath)}")
     closeWriter()
     val appStatusPathIncomplete = getAppStatusFilePath(logDirForAppPath, appId, appAttemptId,
       inProgress = true)

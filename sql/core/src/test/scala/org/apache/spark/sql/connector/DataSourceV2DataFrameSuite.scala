@@ -2155,6 +2155,8 @@ class DataSourceV2DataFrameSuite
     }
 
     try {
+      // drain listener bus before registering the listener.
+      sparkContext.listenerBus.waitUntilEmpty()
       spark.listenerManager.register(listener)
       val t = "testcat.ns1.ns2.tbl"
       withTable(t) {

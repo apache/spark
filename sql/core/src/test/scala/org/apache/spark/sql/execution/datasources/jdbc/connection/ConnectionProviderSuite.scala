@@ -185,28 +185,28 @@ class ConnectionProviderSuite
     val postgresDriver = registerDriver(postgresProvider.driverClass)
     val postgresOptions = options("jdbc:postgresql://localhost/postgres")
     val postgresAppEntry = postgresProvider.appEntry(postgresDriver, postgresOptions)
-    val db2Provider = new DB2ConnectionProvider()
-    val db2Driver = registerDriver(db2Provider.driverClass)
-    val db2Options = options("jdbc:db2://localhost/db2")
-    val db2AppEntry = db2Provider.appEntry(db2Driver, db2Options)
+    val mysqlProvider = new MariaDBConnectionProvider()
+    val mysqlDriver = registerDriver(mysqlProvider.driverClass)
+    val mysqlOptions = options("jdbc:mysql://localhost/db")
+    val mysqlAppEntry = mysqlProvider.appEntry(mysqlDriver, mysqlOptions)
 
     // Make sure no authentication for the databases are set
     val rootConfig = Configuration.getConfiguration
     assert(rootConfig.getAppConfigurationEntry(postgresAppEntry) == null)
-    assert(rootConfig.getAppConfigurationEntry(db2AppEntry) == null)
+    assert(rootConfig.getAppConfigurationEntry(mysqlAppEntry) == null)
 
     postgresProvider.setAuthenticationConfig(postgresDriver, postgresOptions)
     val postgresConfig = Configuration.getConfiguration
 
-    db2Provider.setAuthenticationConfig(db2Driver, db2Options)
-    val db2Config = Configuration.getConfiguration
+    mysqlProvider.setAuthenticationConfig(mysqlDriver, mysqlOptions)
+    val mysqlConfig = Configuration.getConfiguration
 
     // Make sure authentication for the databases are set
     assert(rootConfig != postgresConfig)
-    assert(rootConfig != db2Config)
+    assert(rootConfig != mysqlConfig)
     // The topmost config in the chain is linked with all the subsequent entries
-    assert(db2Config.getAppConfigurationEntry(postgresAppEntry) != null)
-    assert(db2Config.getAppConfigurationEntry(db2AppEntry) != null)
+    assert(mysqlConfig.getAppConfigurationEntry(postgresAppEntry) != null)
+    assert(mysqlConfig.getAppConfigurationEntry(mysqlAppEntry) != null)
 
     Configuration.setConfiguration(null)
   }
