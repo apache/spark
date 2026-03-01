@@ -1103,4 +1103,33 @@ class AnsiTypeCoercionSuite extends TypeCoercionSuiteBase {
     shouldNotCast(ArrayType(ArrayType(IntegerType)),
       AbstractArrayType(StringTypeWithCollation(supportsTrimCollation = true)))
   }
+
+  test("SPARK-54372: ANSI mode should not implicitly cast timestamp to double for avg/sum") {
+    import org.apache.spark.sql.catalyst.expressions.aggregate.{Average, Sum}
+
+    val timestampAttr = AttributeReference("ts", TimestampType)()
+
+    // In ANSI mode, AnsiFunctionArgumentConversion should NOT cast timestamp to double.
+    // The timestamp expression should remain unchanged, allowing the type check in
+    // Average/Sum to fail with a proper error message.
+    ruleTest(
+      AnsiTypeCoercion.AnsiFunctionArgumentConversion,
+      Average(timestampAttr),
+      Average(timestampAttr)  // Should remain unchanged (not cast to double)
+    )
+
+    ruleTest(
+      AnsiTypeCoercion.AnsiFunctionArgumentConversion,
+      Sum(timestampAttr),
+      Sum(timestampAttr)  // Should remain unchanged (not cast to double)
+    )
+
+    // Verify that numeric types still work correctly with avg
+    val intAttr = AttributeReference("i", IntegerType)()
+    ruleTest(
+      AnsiTypeCoercion.AnsiFunctionArgumentConversion,
+      Average(intAttr),
+      Average(intAttr)  // Numeric types should pass through unchanged
+    )
+  }
 }

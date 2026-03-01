@@ -1796,6 +1796,27 @@ class TypeCoercionSuite extends TypeCoercionSuiteBase {
     assert(wp1.isInstanceOf[Project])
     assert(wp1.expressions.forall(!_.exists(_ == t1.output.head)))
   }
+
+  test("SPARK-54372: Non-ANSI mode implicitly casts timestamp to double for avg/sum") {
+    import org.apache.spark.sql.catalyst.expressions.aggregate.{Average, Sum}
+
+    val timestampAttr = AttributeReference("ts", TimestampType)()
+
+    // In non-ANSI mode (Hive compatibility), FunctionArgumentConversion casts timestamp to double.
+    // This is legacy behavior that allows avg(timestamp) to work, but returns a double (epoch
+    // seconds) instead of a timestamp.
+    ruleTest(
+      FunctionArgumentConversion,
+      Average(timestampAttr),
+      Average(Cast(timestampAttr, DoubleType))  // Timestamp should be cast to double
+    )
+
+    ruleTest(
+      FunctionArgumentConversion,
+      Sum(timestampAttr),
+      Sum(Cast(timestampAttr, DoubleType))  // Timestamp should be cast to double
+    )
+  }
 }
 
 
