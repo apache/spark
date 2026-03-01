@@ -332,6 +332,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       ReplaceCurrentLike(catalogManager),
       SpecialDatetimeValues,
       RewriteAsOfJoin,
+      RewritePythonAggregatorUDAF,
       EvalInlineTables,
       ReplaceTranspose,
       RewriteCollationJoin
