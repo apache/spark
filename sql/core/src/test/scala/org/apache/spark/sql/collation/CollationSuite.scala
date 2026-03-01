@@ -689,7 +689,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         },
         condition = "COLLATION_MISMATCH.EXPLICIT",
         parameters = Map(
-          "explicitTypes" -> """"STRING", "STRING COLLATE UNICODE""""
+          "explicitTypes" -> """"STRING COLLATE UTF8_BINARY", "STRING COLLATE UNICODE""""
         )
       )
 
@@ -701,7 +701,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         },
         condition = "COLLATION_MISMATCH.EXPLICIT",
         parameters = Map(
-          "explicitTypes" -> """"STRING", "STRING COLLATE UNICODE""""
+          "explicitTypes" -> """"STRING COLLATE UTF8_BINARY", "STRING COLLATE UNICODE""""
         )
       )
       checkError(
@@ -711,7 +711,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         },
         condition = "COLLATION_MISMATCH.EXPLICIT",
         parameters = Map(
-          "explicitTypes" -> """"STRING COLLATE UNICODE", "STRING""""
+          "explicitTypes" -> """"STRING COLLATE UNICODE", "STRING COLLATE UTF8_BINARY""""
         )
       )
 
@@ -723,7 +723,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         },
         condition = "COLLATION_MISMATCH.EXPLICIT",
         parameters = Map(
-          "explicitTypes" -> """"STRING", "STRING COLLATE UNICODE""""
+          "explicitTypes" -> """"STRING COLLATE UTF8_BINARY", "STRING COLLATE UNICODE""""
         )
       )
 
@@ -1426,9 +1426,6 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
             sql(s"insert into $tableName values (map('aaa', 'AAA'), 1)")
             sql(s"insert into $tableName values (map('BBb', 'bBB'), 2)")
 
-            // `collationSetupError` is created because "COLLATE UTF8_BINARY" is omitted in data
-            // type in checkError
-            val collationSetupError = if (collation != "UTF8_BINARY") collationSetup else ""
             val query = s"select c from $tableName order by m"
             val ctx = "m"
             checkError(
@@ -1436,7 +1433,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
               condition = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
               parameters = Map(
                 "functionName" -> "`sortorder`",
-                "dataType" -> s"\"MAP<STRING$collationSetupError, STRING$collationSetupError>\"",
+                "dataType" -> s"\"MAP<STRING$collationSetup, STRING$collationSetup>\"",
                 "sqlExpr" -> "\"m ASC NULLS FIRST\""
               ),
               context = ExpectedContext(

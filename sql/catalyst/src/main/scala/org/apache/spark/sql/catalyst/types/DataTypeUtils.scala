@@ -18,6 +18,7 @@ package org.apache.spark.sql.catalyst.types
 
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Cast, Literal}
+import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
@@ -280,6 +281,31 @@ object DataTypeUtils {
         case _ =>
           Seq(fieldPath)
       }
+    }
+  }
+
+  /**
+   * Returns true if the given data type is STRING without explicit collation. Even
+   * `STRING COLLATE UTF8_BINARY` is considered as with explicit collation.
+   */
+  def isDefaultStringType(dataType: DataType): Boolean = {
+    dataType match {
+      case st: StringType => st.eq(StringType)
+      case _ => false
+    }
+  }
+
+  /**
+   * Recursively replaces all STRING types that do not have an explicit collation with the same type
+   * but with explicit `UTF8_BINARY` collation.
+   *
+   * Used for cases like `SHOW CREATE TABLE`, where we want to show the exact collation of the
+   * columns, because the default collation of the table may change the type of the column.
+   */
+  def replaceNonCollatedTypesWithExplicitUTF8Binary(dataType: DataType): DataType = {
+    dataType.transformRecursively {
+      case stringType: StringType if isDefaultStringType(stringType) =>
+        StringType(CollationFactory.UTF8_BINARY_COLLATION_ID)
     }
   }
 }
