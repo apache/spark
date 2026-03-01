@@ -21,7 +21,7 @@ import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
 import org.apache.spark.SparkException
-import org.apache.spark.internal.{LogKeys}
+import org.apache.spark.internal.LogKeys
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.catalyst.trees.AlwaysProcess
+import org.apache.spark.sql.catalyst.trees.{AlwaysProcess, TreePattern}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
@@ -144,6 +144,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         SimplifyBinaryComparison,
         ReplaceNullWithFalseInPredicate,
         PruneFilters,
+        PropagateEmptyRelation,
         SimplifyCasts,
         SimplifyCaseConversionExpressions,
         SimplifyDateTimeConversions,
@@ -168,7 +169,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         InferFiltersFromGenerate,
         InferFiltersFromConstraints),
       Batch("Operator Optimization after Inferring Filters", fixedPoint,
-        operatorOptimizationRuleSet: _*),
+          operatorOptimizationRuleSet :+ InferFiltersFromConstraints: _*),
       Batch("Push extra predicate through join", fixedPoint,
         PushExtraPredicateThroughJoin,
         PushDownPredicates))
@@ -1762,26 +1763,73 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
       }
 
     case join @ Join(left, right, joinType, conditionOpt, _) =>
+      // SPARK-55241. Since the PropagateEmptyRelation removes any filter on top of empty relation
+      // but for streaming case it does not convert Join into a Unary node, the
+      // InferFiltersFromConstraint code will try to add new IsNotNulll filter for the Join
+      // condition column, causing the plan to get a new filter added, which breaks idempotency as
+      // PropagateEmptyRelation will again remove it. So to fix this behaviour, in case of streaming
+      // empty left or right legs, we do not infer any new filter
+      val (streamingLeftEmpty, streamingRightEmpty) = if (plan.isStreaming) {
+        (
+          !left.containsPattern(TreePattern.JOIN) && left.collectLeaves().forall(
+            PropagateEmptyRelation.isEmpty),
+          !right.containsPattern(TreePattern.JOIN) && right.collectLeaves().forall(
+            PropagateEmptyRelation.isEmpty)
+        )
+      } else {
+        (false, false)
+      }
+
       joinType match {
         // For inner join, we can infer additional filters for both sides. LeftSemi is kind of an
         // inner join, it just drops the right side in the final output.
-        case _: InnerLike | LeftSemi =>
+        case _: InnerLike | LeftSemi  if !(streamingLeftEmpty && streamingRightEmpty) =>
           val allConstraints = getAllConstraints(left, right, conditionOpt)
-          val newLeft = inferNewFilter(left, allConstraints)
-          val newRight = inferNewFilter(right, allConstraints)
-          join.copy(left = newLeft, right = newRight)
+          val newLeft = if (streamingLeftEmpty) {
+            left
+          } else {
+            inferNewFilter(left, allConstraints)
+          }
+          val newRight = if (streamingRightEmpty) {
+            right
+          } else {
+            inferNewFilter(right, allConstraints)
+          }
+          val isLeftModified = newLeft.ne(left) && newLeft.canonicalized != left.canonicalized
+          val isRightModified = newRight.ne(right) && newRight.canonicalized != right.canonicalized
+          if (isLeftModified || isRightModified) {
+            join.copy(left = if (isLeftModified) {
+              newLeft
+            } else {
+              left
+            }, right = if (isRightModified) {
+              newRight
+            } else {
+              right
+            })
+          } else {
+            join
+          }
 
         // For right outer join, we can only infer additional filters for left side.
-        case RightOuter =>
+        case RightOuter if !streamingLeftEmpty =>
           val allConstraints = getAllConstraints(left, right, conditionOpt)
           val newLeft = inferNewFilter(left, allConstraints)
-          join.copy(left = newLeft)
+          if (newLeft.ne(left) && newLeft.canonicalized != left.canonicalized) {
+            join.copy(left = newLeft)
+          } else {
+            join
+          }
 
         // For left join, we can only infer additional filters for right side.
-        case LeftOuter | LeftAnti =>
+        case LeftOuter | LeftAnti if !streamingRightEmpty =>
           val allConstraints = getAllConstraints(left, right, conditionOpt)
           val newRight = inferNewFilter(right, allConstraints)
-          join.copy(right = newRight)
+          if (newRight.ne(right) && newRight.canonicalized != right.canonicalized) {
+            join.copy(right = newRight)
+          } else {
+            join
+          }
 
         case _ => join
       }

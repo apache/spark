@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
@@ -398,5 +399,57 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     val optimizedQuery = InferFiltersFromConstraints(originalQuery)
     comparePlans(optimizedQuery, correctAnswer)
     comparePlans(InferFiltersFromConstraints(optimizedQuery), correctAnswer)
+  }
+
+  test("SPARK-55185: Idempotency should be achieved, as SPARK-55072 is dependent on this bug") {
+    val rel1 = LocalRelation(
+      Seq($"a".int, $"b".int),
+      InternalRow(1, 1) :: InternalRow(2, 1) :: InternalRow(3, 3) :: InternalRow(7, 8)
+        :: InternalRow(5, 6) :: Nil)
+
+    val nullRel = Project(
+      Seq(
+        Alias(Literal(null, IntegerType), "a")(),
+        Alias(Literal(null, IntegerType), "b")()),
+      OneRowRelation())
+
+    val distinct = Aggregate(Seq($"a", $"b"), Seq($"a"), nullRel.union(rel1))
+    val agg = Aggregate(Seq($"a"), Seq(sum($"a").as("aggFunctionAlias"), $"a"), distinct).analyze
+    val rel2 = LocalRelation(
+      Seq($"c".int, $"d".int),
+      InternalRow(1, 1) :: InternalRow(2, 1) :: InternalRow(3, 3) :: InternalRow(6, 6) ::
+        InternalRow(7, 7) :: InternalRow(9, 9) :: Nil).analyze
+
+    val join = rel2.join(agg, condition =
+      Some(Cast($"d", LongType) === $"aggFunctionAlias" && $"a" === $"c")).analyze
+
+    val optimizer = new SimpleTestOptimizer()
+    val batches = optimizer.defaultBatches
+    val indexBeforeNewFilterInfer =
+      batches.indexWhere(_.name == "Operator Optimization before Inferring Filters")
+    val indexAfterNewFilterInfer =
+      batches.indexWhere(_.name == "Operator Optimization after Inferring Filters")
+    assert(indexAfterNewFilterInfer != -1 && indexBeforeNewFilterInfer != -1)
+    // ensure that InferFiltersFromConstraint rule is present in the batch Operator Optimization
+    // after Inferring Filters
+    val batchOfInterest = batches(indexAfterNewFilterInfer)
+    val optimizerToUse = if (!batchOfInterest.rules.exists(
+      _.ruleName == InferFiltersFromConstraints.ruleName)) {
+      new SimpleTestOptimizer() {
+        override def defaultBatches: Seq[Batch] = {
+          val mutableBatches = super.defaultBatches.toBuffer
+          val afterInferBatch = mutableBatches(indexAfterNewFilterInfer)
+          val mutableRules = afterInferBatch.rules.toBuffer
+          val newRules = mutableRules.append(InferFiltersFromConstraints).toSeq
+          val newAfterInferBatch = new Batch(afterInferBatch.name, afterInferBatch.strategy,
+            newRules: _*)
+          mutableBatches(indexAfterNewFilterInfer) = newAfterInferBatch
+          mutableBatches.toSeq
+        }
+      }
+    } else {
+      optimizer
+    }
+    optimizerToUse.execute(join)
   }
 }
