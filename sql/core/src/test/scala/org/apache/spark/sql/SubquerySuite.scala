@@ -2667,4 +2667,30 @@ class SubquerySuite extends QueryTest
 
     assert(exposedAttribute.exprId == outerReferenceAttribute.exprId)
   }
+
+  test("SPARK-55038: AQE + sort-based aggregation gives wrong results for " +
+    "array_agg(DISTINCT) in correlated subquery") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key -> "1") {
+      // Verify that collect_list produces deterministic (sorted) output so that
+      // equality comparisons on array results work correctly after sort-based
+      // aggregation fallback merges partial buffers.
+      val df = sql(
+        """
+          |WITH agg1 AS (
+          |  SELECT id, array_agg(DISTINCT val) AS vals
+          |  FROM VALUES (1, 'a'), (1, 'b'), (2, 'c') AS t1(id, val)
+          |  GROUP BY id
+          |),
+          |agg2 AS (
+          |  SELECT id, array_agg(DISTINCT val) AS vals
+          |  FROM VALUES (1, 'b'), (1, 'a'), (2, 'c') AS t2(id, val)
+          |  GROUP BY id
+          |)
+          |SELECT agg1.id FROM agg1 JOIN agg2 ON agg1.id = agg2.id AND agg1.vals = agg2.vals
+          |""".stripMargin)
+      assert(df.count() === 2)
+    }
+  }
 }

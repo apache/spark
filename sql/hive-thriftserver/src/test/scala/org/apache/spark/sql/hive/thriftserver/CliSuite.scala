@@ -349,7 +349,7 @@ class CliSuite extends SparkFunSuite {
       "INSERT INTO TABLE t1 SELECT key, val FROM sourceTable;"
         -> "",
       "SELECT collect_list(array(val)) FROM t1;"
-        -> """[["val_238"],["val_86"],["val_311"],["val_27"],["val_165"]]""",
+        -> """[["val_165"],["val_238"],["val_27"],["val_311"],["val_86"]]""",
       "DROP TABLE t1;"
         -> "",
       "DROP TABLE sourceTable;"
@@ -375,7 +375,7 @@ class CliSuite extends SparkFunSuite {
       "INSERT INTO TABLE addJarWithHiveAux SELECT key, val FROM sourceTableForWithHiveAux;"
         -> "",
       "SELECT collect_list(array(val)) FROM addJarWithHiveAux;"
-        -> """[["val_238"],["val_86"],["val_311"],["val_27"],["val_165"]]""",
+        -> """[["val_165"],["val_238"],["val_27"],["val_311"],["val_86"]]""",
       "DROP TABLE addJarWithHiveAux;"
         -> "",
       "DROP TABLE sourceTableForWithHiveAux;"
@@ -498,7 +498,7 @@ class CliSuite extends SparkFunSuite {
       "INSERT INTO TABLE addJarWithSQL SELECT key, val FROM sourceTableForWithSQL;"
         -> "",
       "SELECT collect_list(array(val)) FROM addJarWithSQL;"
-        -> """[["val_238"],["val_86"],["val_311"],["val_27"],["val_165"]]""",
+        -> """[["val_165"],["val_238"],["val_27"],["val_311"],["val_86"]]""",
       "DROP TABLE addJarWithSQL;"
         -> "",
       "DROP TABLE sourceTableForWithSQL;"

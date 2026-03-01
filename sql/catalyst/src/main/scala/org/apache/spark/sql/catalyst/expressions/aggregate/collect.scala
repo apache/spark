@@ -154,7 +154,7 @@ case class CollectList(
   override def prettyName: String = "collect_list"
 
   override def eval(buffer: mutable.ArrayBuffer[Any]): Any = {
-    new GenericArrayData(buffer.toArray)
+    new GenericArrayData(buffer.toArray.sorted(PhysicalDataType.ordering(child.dataType)))
   }
 
   override def toString: String = {
@@ -235,7 +235,7 @@ case class CollectSet(
         }.toArray[Any]
       case _ => buffer.toArray
     }
-    new GenericArrayData(array)
+    new GenericArrayData(array.sorted(PhysicalDataType.ordering(child.dataType)))
   }
 
   override def checkInputDataTypes(): TypeCheckResult = {
