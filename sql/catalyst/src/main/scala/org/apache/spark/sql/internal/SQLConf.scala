@@ -1319,6 +1319,7 @@ object SQLConf {
       .internal()
       .doc("Controls whether we optimize the ASTree that gets generated when parsing " +
         "VALUES lists (UnresolvedInlineTable) by eagerly evaluating it in the AST Builder.")
+      .version("4.0.0")
       .booleanConf
       .createWithDefault(true)
 
@@ -2599,6 +2600,7 @@ object SQLConf {
         "for stateful streaming queries. The default value is the number of cores * 0.25 " +
         "so that this thread pool doesn't take too many resources " +
         "away from the query and affect performance.")
+      .version("4.1.0")
       .intConf
       .checkValue(_ > 0, "Must be greater than 0")
       .createWithDefault(Math.max(Runtime.getRuntime.availableProcessors() / 4, 1))
@@ -2617,6 +2619,7 @@ object SQLConf {
       .doc("Timeout in seconds to wait for tasks to respond to cancellation after " +
         "force shutdown is initiated. This applies after the graceful shutdown timeout " +
         "has been exceeded.")
+      .version("4.2.0")
       .timeConf(TimeUnit.SECONDS)
       .createWithDefault(60L)
 
@@ -3231,6 +3234,7 @@ object SQLConf {
     buildConf("spark.sql.streaming.metadataCache.enabled")
       .internal()
       .doc("Whether the streaming HDFSMetadataLog caches the metadata of the latest two batches.")
+      .version("3.4.0")
       .booleanConf
       .createWithDefault(true)
 
@@ -3243,6 +3247,7 @@ object SQLConf {
         "may show unexpected behavior including duplication, data loss, etc. So use with " +
         "extreme care! The ideal direction is to persuade developers of source(s) to " +
         "support Trigger.AvailableNow.")
+      .version("4.1.0")
       .booleanConf
       .createWithDefault(false)
 
@@ -5065,6 +5070,7 @@ object SQLConf {
     buildConf("spark.sql.optimizer.pullHintsIntoSubqueries")
       .internal()
       .doc("Pull hints into subqueries in EliminateResolvedHint if enabled.")
+      .version("3.4.0")
       .booleanConf
       .createWithDefault(true)
 
