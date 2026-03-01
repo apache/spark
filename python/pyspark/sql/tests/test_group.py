@@ -59,6 +59,7 @@ class GroupTestsMixin:
         df = self.df
         g = df.groupBy()
         self.assertEqual([99, 100], sorted(g.agg({"key": "max", "value": "count"}).collect()[0]))
+        self.assertEqual([99, 100], sorted(g.agg(key="max", value="count").collect()[0]))
         assertDataFrameEqual([Row(**{"AVG(key#0)": 49.5})], g.mean().collect())
 
         from pyspark.sql import functions
