@@ -553,6 +553,7 @@ private class LiveStage(var info: StageInfo) extends LiveEntity {
       schedulingPool = schedulingPool,
 
       rddIds = info.rddInfos.map(_.id),
+      parentIds = info.parentIds,
       accumulatorUpdates = newAccumulatorInfos(info.accumulables.values),
       tasks = None,
       executorSummary = None,
