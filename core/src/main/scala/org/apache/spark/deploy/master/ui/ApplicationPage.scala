@@ -72,8 +72,8 @@ private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") 
             }
             </li>
             <li>
-              <span data-toggle="tooltip" title={ToolTips.APPLICATION_EXECUTOR_LIMIT}
-                    data-placement="top">
+              <span data-bs-toggle="tooltip" title={ToolTips.APPLICATION_EXECUTOR_LIMIT}
+                    data-bs-placement="top">
                 <strong>Executor Limit: </strong>
                 {
                   if (app.getExecutorLimit == Int.MaxValue) "Unlimited" else app.getExecutorLimit

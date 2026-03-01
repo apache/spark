@@ -24,38 +24,38 @@ limitations under the License.
           <tr>
         <th></th>
         <th>RDD Blocks</th>
-        <th><span data-toggle="tooltip" data-placement="top"
+        <th><span data-bs-toggle="tooltip" data-bs-placement="top"
                   title="Memory used / total available memory for storage of data like RDD partitions cached in memory.">Storage Memory</span>
         </th>
         <th>
-          <span data-toggle="tooltip" data-placement="top"
+          <span data-bs-toggle="tooltip" data-bs-placement="top"
                 title="Memory used / total available memory for on heap storage of data like RDD partitions cached in memory.">On Heap Storage Memory</span>
         </th>
         <th>
-          <span data-toggle="tooltip"
+          <span data-bs-toggle="tooltip"
                 title="Memory used / total available memory for off heap storage of data like RDD partitions cached in memory.">Off Heap Storage Memory</span>
         </th>
         <th>Disk Used</th>
         <th>Cores</th>
-        <th><span data-toggle="tooltip" data-placement="top" title="Number of tasks currently executing. Darker shading highlights executors with more active tasks.">Active Tasks</span></th>
-        <th><span data-toggle="tooltip" data-placement="top" title="Number of tasks that have failed on this executor. Darker shading highlights executors with a high proportion of failed tasks.">Failed Tasks</span></th>
+        <th><span data-bs-toggle="tooltip" data-bs-placement="top" title="Number of tasks currently executing. Darker shading highlights executors with more active tasks.">Active Tasks</span></th>
+        <th><span data-bs-toggle="tooltip" data-bs-placement="top" title="Number of tasks that have failed on this executor. Darker shading highlights executors with a high proportion of failed tasks.">Failed Tasks</span></th>
         <th>Complete Tasks</th>
         <th>Total Tasks</th>
-        <th><span data-toggle="tooltip" data-placement="top"
+        <th><span data-bs-toggle="tooltip" data-bs-placement="top"
                   title="Shaded red when garbage collection (GC) time is over 10% of task time">
           Task Time (GC Time)</span></th>
-        <th><span data-toggle="tooltip" data-placement="top"
+        <th><span data-bs-toggle="tooltip" data-bs-placement="top"
                   title="Bytes and records read from Hadoop or from Spark storage.">Input</span></th>
-        <th><span data-toggle="tooltip" data-placement="top"
+        <th><span data-bs-toggle="tooltip" data-bs-placement="top"
                   title="Total shuffle bytes and records read (includes both data read locally and data read from remote executors).">
           Shuffle Read</span></th>
         <th>
-          <span data-toggle="tooltip" data-placement="top"
+          <span data-bs-toggle="tooltip" data-bs-placement="top"
                 title="Bytes and records written to disk in order to be read by a shuffle in a future stage.">
             Shuffle Write</span>
         </th>
         <th>
-          <span data-toggle="tooltip" data-placement="top"
+          <span data-bs-toggle="tooltip" data-bs-placement="top"
                 title="Number of executors excluded by the scheduler due to task failures.">
             Excluded</span>
         </th>
@@ -75,55 +75,55 @@ limitations under the License.
           <th>Status</th>
           <th>RDD Blocks</th>
           <th>
-            <span data-toggle="tooltip" data-placement="top"
+            <span data-bs-toggle="tooltip" data-bs-placement="top"
                   title="Memory used / total available memory for storage of data like RDD partitions cached in memory.">
               Storage Memory</span></th>
           <th>
-            <span data-toggle="tooltip" data-placement="top"
+            <span data-bs-toggle="tooltip" data-bs-placement="top"
                   title="Memory used / total available memory for on heap storage of data like RDD partitions cached in memory.">
               On Heap Storage Memory</span></th>
           <th>
-            <span data-toggle="tooltip" data-placement="top"
+            <span data-bs-toggle="tooltip" data-bs-placement="top"
                   title="Memory used / total available memory for off heap storage of data like RDD partitions cached in memory.">
               Off Heap Storage Memory</span></th>
           <th>
-            <span data-toggle="tooltip" data-placement="top"
+            <span data-bs-toggle="tooltip" data-bs-placement="top"
                   title="Peak onHeap / offHeap memory used by JVM.">
               Peak JVM Memory OnHeap / OffHeap</span></th>
           <th>
-            <span data-toggle="tooltip" data-placement="top"
+            <span data-bs-toggle="tooltip" data-bs-placement="top"
                   title="Peak onHeap / offHeap memory used for execution. This refers to memory used for computation in shuffles, joins, user data structures, etc. See the Memory Management Overview documentation for more details.">
               Peak Execution Memory OnHeap / OffHeap</span></th>
           <th>
-            <span data-toggle="tooltip" data-placement="top"
+            <span data-bs-toggle="tooltip" data-bs-placement="top"
             title="Peak storage onHeap / offHeap memory used for storage of data like RDD partitions cached in memory.">
               Peak Storage Memory OnHeap / OffHeap</span></th>
           <th>
-            <span data-toggle="tooltip" data-placement="top"
+            <span data-bs-toggle="tooltip" data-bs-placement="top"
                   title="Peak direct byte buffer / memory-mapped buffer pool memory used by JVM. This refers to BufferPoolMXBean with form 'java.nio:type=BufferPool,name=direct' and 'java.nio:type=BufferPool,name=mapped'.">
               Peak Pool Memory Direct / Mapped</span></th>
           <th>Disk Used</th>
           <th>Cores</th>
-          <th><span data-toggle="tooltip" data-placement="top" title="Resources currently used by each executor, such as GPU, FPGA, etc.">Resources</span></th>
+          <th><span data-bs-toggle="tooltip" data-bs-placement="top" title="Resources currently used by each executor, such as GPU, FPGA, etc.">Resources</span></th>
           <th>Resource Profile Id</th>
-          <th><span data-toggle="tooltip" data-placement="top" title="Number of tasks currently executing. Darker shading highlights executors with more active tasks.">Active Tasks</span></th>
-          <th><span data-toggle="tooltip" data-placement="top" title="Number of tasks that have failed on this executor. Darker shading highlights executors with a high proportion of failed tasks.">Failed Tasks</span></th>
+          <th><span data-bs-toggle="tooltip" data-bs-placement="top" title="Number of tasks currently executing. Darker shading highlights executors with more active tasks.">Active Tasks</span></th>
+          <th><span data-bs-toggle="tooltip" data-bs-placement="top" title="Number of tasks that have failed on this executor. Darker shading highlights executors with a high proportion of failed tasks.">Failed Tasks</span></th>
           <th>Complete Tasks</th>
           <th>Total Tasks</th>
           <th>
-            <span data-toggle="tooltip" data-placement="top"
+            <span data-bs-toggle="tooltip" data-bs-placement="top"
                   title="Shaded red when garbage collection (GC) time is over 10% of task time">
               Task Time (GC Time)
             </span>
           </th>
-          <th><span data-toggle="tooltip" data-placement="top"
+          <th><span data-bs-toggle="tooltip" data-bs-placement="top"
                     title="Bytes and records read from Hadoop or from Spark storage.">Input</span></th>
           <th>
-            <span data-toggle="tooltip" data-placement="top"
+            <span data-bs-toggle="tooltip" data-bs-placement="top"
                   title="Total shuffle bytes and records read (includes both data read locally and data read from remote executors).">
               Shuffle Read</span></th>
           <th>
-            <span data-toggle="tooltip" data-placement="top"
+            <span data-bs-toggle="tooltip" data-bs-placement="top"
                   title="Bytes and records written to disk in order to be read by a shuffle in a future stage.">
               Shuffle Write</span></th>
           <th>Logs</th>

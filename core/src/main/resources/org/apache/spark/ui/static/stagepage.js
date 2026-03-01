@@ -356,36 +356,36 @@ $(document).ready(function () {
     "<div id='executor_direct_mapped_pool_memory' class='executor-jvm-metrics-checkbox-div'><input type='checkbox' class='toggle-vis' id='executor-box-18' data-column='18' data-metrics-type='executor'> Peak Pool Memory Direct / Mapped</div>" +
     "</div>");
 
-  $('#scheduler_delay').attr("data-toggle", "tooltip")
-    .attr("data-placement", "top")
+  $('#scheduler_delay').attr("data-bs-toggle", "tooltip")
+    .attr("data-bs-placement", "top")
     .attr("title", "Scheduler delay includes time to ship the task from the scheduler to the executor, and time to send " +
       "the task result from the executor to the scheduler. If scheduler delay is large, consider decreasing the size of tasks or decreasing the size of task results.");
-  $('#task_deserialization_time').attr("data-toggle", "tooltip")
-    .attr("data-placement", "top")
+  $('#task_deserialization_time').attr("data-bs-toggle", "tooltip")
+    .attr("data-bs-placement", "top")
     .attr("title", "Time spent deserializing the task closure on the executor, including the time to read the broadcasted task.");
-  $('#shuffle_read_fetch_wait_time').attr("data-toggle", "tooltip")
-    .attr("data-placement", "top")
+  $('#shuffle_read_fetch_wait_time').attr("data-bs-toggle", "tooltip")
+    .attr("data-bs-placement", "top")
     .attr("title", "Time that the task spent blocked waiting for shuffle data to be read from remote machines.");
-  $('#shuffle_remote_reads').attr("data-toggle", "tooltip")
-    .attr("data-placement", "top")
+  $('#shuffle_remote_reads').attr("data-bs-toggle", "tooltip")
+    .attr("data-bs-placement", "top")
     .attr("title", "Total shuffle bytes read from remote executors. This is a subset of the shuffle read bytes; the remaining shuffle data is read locally. ");
-  $('#shuffle_write_time').attr("data-toggle", "tooltip")
-    .attr("data-placement", "top")
+  $('#shuffle_write_time').attr("data-bs-toggle", "tooltip")
+    .attr("data-bs-placement", "top")
     .attr("title", "Time that the task spent writing shuffle data.");
-  $('#result_serialization_time').attr("data-toggle", "tooltip")
-    .attr("data-placement", "top")
+  $('#result_serialization_time').attr("data-bs-toggle", "tooltip")
+    .attr("data-bs-placement", "top")
     .attr("title", "Time spent serializing the task result on the executor before sending it back to the driver.");
-  $('#getting_result_time').attr("data-toggle", "tooltip")
-    .attr("data-placement", "top")
+  $('#getting_result_time').attr("data-bs-toggle", "tooltip")
+    .attr("data-bs-placement", "top")
     .attr("title", "Time that the driver spends fetching task results from workers. If this is large, consider decreasing the amount of data returned from each task.");
-  $('#peak_execution_memory').attr("data-toggle", "tooltip")
-    .attr("data-placement", "top")
+  $('#peak_execution_memory').attr("data-bs-toggle", "tooltip")
+    .attr("data-bs-placement", "top")
     .attr("title", "Execution memory refers to the memory used by internal data structures created during " +
       "shuffles, aggregations and joins when Tungsten is enabled. The value of this accumulator " +
       "should be approximately the sum of the peak sizes across all such data structures created " +
       "in this task. For SQL jobs, this only tracks all unsafe operators, broadcast joins, and " +
       "external sort.");
-  $('[data-toggle="tooltip"]').tooltip();
+  document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(el) { new bootstrap.Tooltip(el); });
   var tasksSummary = $("#parent-container");
   getStandAloneAppId(function (appId) {
     // rendering the UI page
@@ -622,35 +622,35 @@ $(document).ready(function () {
             };
             executorSummaryTableSelector =
               $("#summary-executor-table").DataTable(executorSummaryConf);
-            $('#parent-container [data-toggle="tooltip"]').tooltip();
+            $('#parent-container [data-bs-toggle="tooltip"]').each(function() { new bootstrap.Tooltip(this); });
   
             executorSummaryTableSelector.column(9).visible(dataToShow.showInputData);
             if (dataToShow.showInputData) {
-              $('#executor-summary-input').attr("data-toggle", "tooltip")
-                .attr("data-placement", "top")
+              $('#executor-summary-input').attr("data-bs-toggle", "tooltip")
+                .attr("data-bs-placement", "top")
                 .attr("title", "Bytes and records read from Hadoop or from Spark storage.");
-              $('#executor-summary-input').tooltip(true);
+              new bootstrap.Tooltip(document.getElementById('executor-summary-input'));
             }
             executorSummaryTableSelector.column(10).visible(dataToShow.showOutputData);
             if (dataToShow.showOutputData) {
-              $('#executor-summary-output').attr("data-toggle", "tooltip")
-                .attr("data-placement", "top")
+              $('#executor-summary-output').attr("data-bs-toggle", "tooltip")
+                .attr("data-bs-placement", "top")
                 .attr("title", "Bytes and records written to Hadoop.");
-              $('#executor-summary-output').tooltip(true);
+              new bootstrap.Tooltip(document.getElementById('executor-summary-output'));
             }
             executorSummaryTableSelector.column(11).visible(dataToShow.showShuffleReadData);
             if (dataToShow.showShuffleReadData) {
-              $('#executor-summary-shuffle-read').attr("data-toggle", "tooltip")
-                .attr("data-placement", "top")
+              $('#executor-summary-shuffle-read').attr("data-bs-toggle", "tooltip")
+                .attr("data-bs-placement", "top")
                 .attr("title", "Total shuffle bytes and records read (includes both data read locally and data read from remote executors).");
-              $('#executor-summary-shuffle-read').tooltip(true);
+              new bootstrap.Tooltip(document.getElementById('executor-summary-shuffle-read'));
             }
             executorSummaryTableSelector.column(12).visible(dataToShow.showShuffleWriteData);
             if (dataToShow.showShuffleWriteData) {
-              $('#executor-summary-shuffle-write').attr("data-toggle", "tooltip")
-                .attr("data-placement", "top")
+              $('#executor-summary-shuffle-write').attr("data-bs-toggle", "tooltip")
+                .attr("data-bs-placement", "top")
                 .attr("title", "Bytes and records written to disk in order to be read by a shuffle in a future stage.");
-              $('#executor-summary-shuffle-write').tooltip(true);
+              new bootstrap.Tooltip(document.getElementById('executor-summary-shuffle-write'));
             }
             executorSummaryTableSelector.column(13).visible(dataToShow.showBytesSpilledData);
             executorSummaryTableSelector.column(14).visible(dataToShow.showBytesSpilledData);

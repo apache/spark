@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 
-/* global $ */
-
-$(document).ready(function(){
-  $("[data-toggle=tooltip]").tooltip({container: 'body'});
+document.addEventListener("DOMContentLoaded", function() {
+  document.querySelectorAll("[data-bs-toggle=tooltip]").forEach(function(el) {
+    new bootstrap.Tooltip(el, {container: 'body'});
+  });
 });
 

@@ -98,7 +98,7 @@ class ThriftServerPageSuite extends SparkFunSuite with BeforeAndAfter {
     assert(html.contains("dummy plan"))
 
     // Pagination support
-    assert(html.contains("<label>1 pages. jump to</label>"))
+    assert(html.contains("<label style=\"white-space: nowrap;\">1 pages. jump to</label>"))
 
     // Hiding table support
     assert(html.contains("class=\"collapse-aggregated-sessionstat" +
@@ -124,7 +124,7 @@ class ThriftServerPageSuite extends SparkFunSuite with BeforeAndAfter {
     assert(html.contains("groupid"))
 
     // Pagination support
-    assert(html.contains("<label>1 pages. jump to</label>"))
+    assert(html.contains("<label style=\"white-space: nowrap;\">1 pages. jump to</label>"))
 
     // Hiding table support
     assert(html.contains("collapse-aggregated-sqlsessionstat collapse-table\"" +
