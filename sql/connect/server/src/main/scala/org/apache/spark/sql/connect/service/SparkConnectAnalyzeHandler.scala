@@ -23,13 +23,14 @@ import io.grpc.stub.StreamObserver
 
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.BYTE_SIZE
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.classic.{DataFrame, Dataset}
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput, StorageLevelProtoConverter}
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
-import org.apache.spark.sql.connect.utils.{PipelineAnalysisContextUtils, PlanCompressionUtils}
+import org.apache.spark.sql.connect.utils.PipelineAnalysisContextUtils
 import org.apache.spark.sql.execution.{CodegenMode, CommandExecutionMode, CostMode, ExtendedMode, FormattedMode, SimpleMode}
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.util.ArrayImplicits._
@@ -69,9 +70,23 @@ private[connect] class SparkConnectAnalyzeHandler(
       throw new AnalysisException("ATTEMPT_ANALYSIS_IN_PIPELINE_QUERY_FUNCTION", Map())
     }
 
+    // Log compressed sizes from gRPC Context (set by RequestDecompressionInterceptor)
+    val compressedSize = RequestDecompressionContext.getCompressedSize
+    val otherCompressedSize = RequestDecompressionContext.getOtherCompressedSize
+    if (compressedSize.isDefined || otherCompressedSize.isDefined) {
+      logDebug(
+        log"AnalyzePlan request received with compressed plan: " +
+          log"compressedSize=${MDC(BYTE_SIZE, compressedSize.getOrElse(0L))} bytes" +
+          otherCompressedSize
+            .map { size =>
+              log", otherCompressedSize=${MDC(BYTE_SIZE, size)} bytes"
+            }
+            .getOrElse(log""))
+    }
+
     def transformRelation(rel: proto.Relation) = planner.transformRelation(rel, cachePlan = true)
     def transformRelationPlan(plan: proto.Plan) = {
-      transformRelation(PlanCompressionUtils.decompressPlan(plan).getRoot)
+      transformRelation(plan.getRoot)
     }
 
     def getDataFrameWithoutExecuting(rel: LogicalPlan): DataFrame = {
@@ -227,6 +242,10 @@ private[connect] class SparkConnectAnalyzeHandler(
             .setDdlString(ddl)
             .build())
 
+      // NOTE: When adding a new AnalyzePlanRequest case here, also update
+      // RequestDecompressionInterceptor.decompressAnalyzePlanRequest() to handle
+      // this case. The interceptor has a default case that throws UnsupportedOperationException
+      // for unhandled cases, which will fail tests and block CI if you forget to update it.
       case other => throw InvalidPlanInput(s"Unknown Analyze Method $other!")
     }
 
