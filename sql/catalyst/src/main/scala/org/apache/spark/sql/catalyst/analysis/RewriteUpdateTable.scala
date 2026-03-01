@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeRef
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.plans.logical.{Assignment, Expand, Filter, LogicalPlan, Project, ReplaceData, Union, UpdateTable, WriteDelta}
 import org.apache.spark.sql.catalyst.util.RowDeltaUtils._
-import org.apache.spark.sql.connector.catalog.SupportsRowLevelOperations
+import org.apache.spark.sql.connector.catalog.{SupportsRowLevelOperations, SupportsUpdateV2}
 import org.apache.spark.sql.connector.write.{RowLevelOperationTable, SupportsDelta}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.UPDATE
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExtractV2Table}
@@ -37,7 +37,7 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case u @ UpdateTable(aliasedTable, assignments, cond)
-        if u.resolved && u.rewritable && u.aligned =>
+        if u.resolved && u.aligned =>
 
       EliminateSubqueryAliases(aliasedTable) match {
         case r @ ExtractV2Table(tbl: SupportsRowLevelOperations) =>
@@ -51,6 +51,10 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
             case _ =>
               buildReplaceDataPlan(r, table, assignments, updateCond)
           }
+
+        case ExtractV2Table(_: SupportsUpdateV2) =>
+          // don't rewrite as the table supports updates only with filters
+          u
 
         case _ =>
           u

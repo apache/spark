@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, GeneratedColumn, IdentityColumn, ResolveDefaultColumns, ResolveTableConstraints, V2ExpressionBuilder}
 import org.apache.spark.sql.classic.SparkSession
-import org.apache.spark.sql.connector.catalog.{Identifier, StagingTableCatalog, SupportsDeleteV2, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, TableCapability, TableCatalog, TruncatableTable}
+import org.apache.spark.sql.connector.catalog.{Identifier, StagingTableCatalog, SupportsDeleteV2, SupportsNamespaces, SupportsPartitionManagement, SupportsUpdateV2, SupportsWrite, TableCapability, TableCatalog, TruncatableTable}
 import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue}
@@ -358,6 +358,53 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
             "DELETE")
         case other =>
           throw SparkException.internalError("Unexpected table relation: " + other)
+      }
+
+    case UpdateTable(relation, assignments, conditionOpt) =>
+      relation match {
+        case DataSourceV2ScanRelation(r, _, output, _, _) =>
+          val table = r.table
+          val condition = conditionOpt.getOrElse(TrueLiteral)
+          if (SubqueryExpression.hasSubquery(condition)) {
+            throw QueryCompilationErrors.unsupportedUpdateByConditionWithSubqueryError(condition)
+          }
+          // Convert condition to predicates
+          val predicates = if (condition == TrueLiteral) {
+            Array.empty[Predicate]
+          } else {
+            DataSourceStrategy.normalizeExprs(Seq(condition), output)
+              .flatMap(splitConjunctivePredicates(_).map {
+                f => DataSourceV2Strategy.translateFilterV2(f).getOrElse(
+                  throw QueryCompilationErrors.cannotTranslateExpressionToSourceFilterError(f))
+              }).toArray
+          }
+
+          // Convert assignments to SupportsUpdateV2.Assignment
+          val updateAssignments = assignments.map { assignment =>
+            val colName = assignment.key match {
+              case attr: Attribute => attr.name
+              case other => other.sql
+            }
+            val value = assignment.value.sql
+            new SupportsUpdateV2.Assignment(colName, value)
+          }.toArray
+
+          table match {
+            case t: SupportsUpdateV2 if t.canUpdateWhere(predicates, updateAssignments) =>
+              UpdateTableExec(t, predicates, updateAssignments, refreshCache(r)) :: Nil
+            case t: SupportsUpdateV2 =>
+              throw QueryCompilationErrors.cannotUpdateTableWhereFiltersError(t, predicates)
+            case _ =>
+              throw QueryCompilationErrors.tableDoesNotSupportUpdatesError(table)
+          }
+        case LogicalRelationWithTable(_, catalogTable) =>
+          val tableIdentifier = catalogTable.get.identifier
+          throw QueryCompilationErrors.unsupportedTableOperationError(
+            tableIdentifier,
+            "UPDATE")
+        case other =>
+          throw SparkException.internalError(
+            s"Unexpected relation type for UpdateTable: ${other.getClass.getName}")
       }
 
     case ReplaceData(_: DataSourceV2Relation, _, query, r: DataSourceV2Relation, projections, _,
