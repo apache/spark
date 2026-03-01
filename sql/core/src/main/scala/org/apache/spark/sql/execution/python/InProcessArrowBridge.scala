@@ -17,102 +17,50 @@
 
 package org.apache.spark.sql.execution.python
 
-import java.util.{HashMap => JHashMap, Map => JMap}
-
 import org.apache.arrow.c.{ArrowArray, ArrowSchema, Data}
+import org.apache.arrow.vector.FieldVector
 
-import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.ArrowColumnVector
 
 /**
  * Bridges JVM Arrow column buffers with Python PyArrow arrays for in-process UDF execution.
  *
- * Input path (JVM to Python, zero-copy):
- *   Extracts native memory addresses from ArrowColumnVector's ArrowBuf
- *   and passes them as long integers to Python. Python calls `pa.foreign_buffer(addr, size)`
- *   to wrap the same native memory as a PyArrow Buffer -- no memcpy.
+ * Both input and output paths use the Arrow C Data Interface (CDI) for zero-copy transfer.
  *
- * Output path (Python to JVM, zero-copy via Arrow C Data Interface):
- *   Python exports the result array via the Arrow C Data Interface (CDI):
- *   ``arr._export_to_c(array_ptr, schema_ptr)`` fills ``ArrowArray`` and
- *   ``ArrowSchema`` C structs. The JVM calls ``Data.importVector`` with those
- *   addresses to reconstruct the ``FieldVector`` without copying. When the JVM
- *   closes the vector, Arrow Java invokes the CDI release callback, which
- *   PyArrow uses to release the backing Python array.
+ * Input path (JVM to Python, zero-copy via CDI):
+ *   JVM pre-allocates [[ArrowArray]] and [[ArrowSchema]] C structs and exports each input
+ *   [[FieldVector]] into them via [[Data.exportVector]]. The native addresses are passed to
+ *   Python. Python calls ``pa.Array._import_from_c(array_ptr, schema_ptr)`` to wrap the
+ *   same Arrow buffers as a PyArrow array -- no memcpy. When Python GCs the array, the CDI
+ *   release callback decrements the buffer reference counts; the JVM [[FieldVector]] retains
+ *   its own reference, so buffers remain live until [[ArrowWriter]] resets for the next batch.
  *
- * Phase 1 supported input types: LongType, IntegerType, DoubleType, FloatType,
- * BooleanType, ShortType, ByteType. Output types are determined automatically
- * from the ArrowSchema format string embedded in the CDI structs.
+ * Output path (Python to JVM, zero-copy via CDI):
+ *   JVM pre-allocates [[ArrowArray]] and [[ArrowSchema]] C structs. Python calls
+ *   ``arr._export_to_c(array_ptr, schema_ptr)`` to fill those structs in-place. The JVM
+ *   calls [[Data.importVector]] to reconstruct the [[FieldVector]] without copying. When the
+ *   imported [[FieldVector]] is closed, Arrow Java invokes PyArrow's CDI release callback,
+ *   decrementing the Python array refcount and allowing garbage collection.
+ *
+ * Because CDI carries the full Arrow schema, all Arrow types are supported on both paths.
  */
 private[python] object InProcessArrowBridge {
 
   /**
-   * Arrow format string for a Spark SQL DataType.
-   * Matches the format expected by PyArrow's `pa.lib.ensure_type()`.
-   */
-  def arrowFormatString(dataType: DataType): String = dataType match {
-    case LongType => "l" // int64
-    case IntegerType => "i" // int32
-    case DoubleType => "g" // float64
-    case FloatType => "f" // float32
-    case BooleanType => "b" // bool (bit-packed)
-    case ShortType => "s" // int16
-    case ByteType => "c" // int8
-    case other =>
-      throw new UnsupportedOperationException(
-        s"Phase 1 in-process UDF does not support type: $other. " +
-        s"Supported: LongType, IntegerType, DoubleType, FloatType, " +
-        s"BooleanType, ShortType, ByteType.")
-  }
-
-  /**
-   * Extract native buffer addresses from an [[ArrowColumnVector]] and pack them into a
-   * Java Map for passing to Python via jep.
+   * Export a [[FieldVector]] to pre-allocated Arrow C Data Interface structs.
    *
-   * Returned map keys:
-   *   type_str      - Arrow format string (e.g. "l" for int64)
-   *   num_rows      - row count (Integer)
-   *   validity_addr - native address of validity bitmap (Long); 0 if no nulls
-   *   validity_size - size in bytes of validity bitmap (Long); 0 if no nulls
-   *   values_addr   - native address of values buffer (Long)
-   *   values_size   - size in bytes of values buffer (Long)
+   * Fills ``outArray`` and ``outSchema`` with the CDI representation of ``vector``.
+   * The export is zero-copy: ``outArray``'s buffer pointers reference the same off-heap
+   * memory as ``vector``. The CDI release callback (invoked when the Python-side imported
+   * array is GC'd) decrements the buffer reference counts; the [[FieldVector]] continues
+   * to hold its own reference.
    *
-   * Zero-copy: no data is copied; only addresses are recorded.
+   * Caller must close ``outArray`` and ``outSchema`` after [[InProcessPythonRuntime.invoke]]
+   * returns (by which time Python's ``_import_from_c`` has already consumed the structs).
    */
-  def extractAddresses(col: ArrowColumnVector, numRows: Int): JMap[String, AnyRef] = {
-    val vector = col.getValueVector
-    val typeStr = arrowFormatString(col.dataType())
-
-    val dataBuffer = vector.getDataBuffer
-    val validityBuffer = vector.getValidityBuffer
-
-    val valuesAddr: Long = if (dataBuffer != null && dataBuffer.capacity() > 0) {
-      dataBuffer.memoryAddress()
-    } else {
-      0L
-    }
-    val valuesSize: Long = if (dataBuffer != null) dataBuffer.capacity() else 0L
-
-    // Pass validity_addr=0 when there are no nulls; Python skips creating the bitmap
-    val (validityAddr, validitySize): (Long, Long) =
-      if (vector.getNullCount == 0) {
-        (0L, 0L)
-      } else {
-        val addr = if (validityBuffer != null) validityBuffer.memoryAddress() else 0L
-        val size = if (validityBuffer != null) validityBuffer.capacity() else 0L
-        (addr, size)
-      }
-
-    val map = new JHashMap[String, AnyRef]()
-    map.put("type_str", typeStr)
-    map.put("num_rows", Integer.valueOf(numRows))
-    map.put("validity_addr", java.lang.Long.valueOf(validityAddr))
-    map.put("validity_size", java.lang.Long.valueOf(validitySize))
-    map.put("values_addr", java.lang.Long.valueOf(valuesAddr))
-    map.put("values_size", java.lang.Long.valueOf(valuesSize))
-    map
-  }
+  def exportColumn(vector: FieldVector, outArray: ArrowArray, outSchema: ArrowSchema): Unit =
+    Data.exportVector(ArrowUtils.rootAllocator, vector, null, outArray, outSchema)
 
   /**
    * Reconstruct an [[ArrowColumnVector]] from JVM-allocated Arrow C Data Interface structs.

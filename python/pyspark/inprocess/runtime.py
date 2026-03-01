@@ -23,16 +23,20 @@ In-process Python UDF runtime entry point.
 during executor initialization (see ``InProcessPythonRuntime.initialize()``), then called
 directly from the JVM via ``interp.invoke("_inprocess_invoke", ...)``.
 
+Both input and output use the Arrow C Data Interface (CDI). The JVM pre-allocates
+ArrowArray/ArrowSchema C structs for every input column and for the output, passing
+their native addresses as Python ints. Input arrays are reconstructed via
+``pa.Array._import_from_c`` (zero-copy). The output is written via ``arr._export_to_c``
+into the JVM-owned structs (zero-copy).
+
 jep type conversions (Java -> Python):
-    byte[]           -> bytes
-    List<Map>        -> list[dict]   (Java Long values inside are Python int)
-    Integer          -> int
-    Long             -> int
+    byte[]                -> bytes (or sequence of signed ints; masked to unsigned below)
+    List<Long> (boxed)    -> list of Python ints
+    Long                  -> int
 """
 
+import pyarrow as pa
 import cloudpickle
-
-from pyspark.inprocess.bridge import addresses_to_array
 
 # UDF deserialization cache: cloudpickle bytes -> callable
 # Avoids re-deserializing the same UDF for every batch on this executor.
@@ -41,8 +45,8 @@ _udf_cache: dict = {}
 
 def _inprocess_invoke(
     serialized_udf,
-    input_addrs,
-    num_rows: int,
+    input_array_ptrs,
+    input_schema_ptrs,
     output_array_ptr: int,
     output_schema_ptr: int,
 ) -> None:
@@ -53,18 +57,20 @@ def _inprocess_invoke(
 
     Args:
         serialized_udf:    cloudpickle bytes of the Python function (Java byte[])
-        input_addrs:       list of address dicts, one per input column
-                           (Java List<Map<String,Object>>)
-        num_rows:          number of rows in the batch (Java Integer)
-        output_array_ptr:  native address of a JVM-allocated ArrowArray C struct
+        input_array_ptrs:  native addresses of JVM-allocated input ArrowArray C structs
+                           (Java List<Long> -> Python list of ints)
+        input_schema_ptrs: native addresses of JVM-allocated input ArrowSchema C structs
+                           (Java List<Long> -> Python list of ints)
+        output_array_ptr:  native address of a JVM-allocated output ArrowArray C struct
                            (Java Long -> Python int)
-        output_schema_ptr: native address of a JVM-allocated ArrowSchema C struct
+        output_schema_ptr: native address of a JVM-allocated output ArrowSchema C struct
                            (Java Long -> Python int)
 
     Returns:
-        None -- the result is written directly into the JVM-owned ArrowArray and
-        ArrowSchema structs via ``arr._export_to_c``. No Python-side cleanup needed:
-        lifecycle is managed entirely by Arrow Java and PyArrow's CDI release callback.
+        None -- the result is written directly into the JVM-owned ArrowArray/ArrowSchema
+        structs via ``arr._export_to_c``. No Python-side lifecycle management needed:
+        input arrays are freed when this function returns (CPython refcount drops to 0);
+        output lifecycle is managed by Arrow Java's CDI release callback.
     """
     # jep converts Java byte[] to a sequence of signed Java integers (-128..127).
     # Mask each byte to unsigned (0..255) before constructing Python bytes.
@@ -75,8 +81,14 @@ def _inprocess_invoke(
         _udf_cache[udf_key] = cloudpickle.loads(udf_key)
     udf_func = _udf_cache[udf_key]
 
-    # Reconstruct PyArrow arrays from native buffer addresses (zero-copy)
-    input_arrays = [addresses_to_array(addrs) for addrs in input_addrs]
+    # Reconstruct PyArrow arrays from CDI struct addresses (zero-copy).
+    # _import_from_c takes ownership of the CDI structs; when these local variables
+    # go out of scope at function return, CPython immediately decrements their refcounts
+    # and the CDI release callbacks decrement the buffer references on the JVM side.
+    input_arrays = [
+        pa.Array._import_from_c(int(ap), int(sp))
+        for ap, sp in zip(input_array_ptrs, input_schema_ptrs)
+    ]
 
     # Execute UDF -- receives pa.Array per input column, returns pa.Array
     if len(input_arrays) == 1:

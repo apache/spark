@@ -16,13 +16,16 @@
 # limitations under the License.
 
 """
-Benchmark: out-of-process pandas UDF vs in-process UDF.
+Benchmark: out-of-process pandas UDF vs in-process UDF, two scenarios.
 
-Measures wall-clock time (driver perspective, including collect()) for a
-simple arithmetic operation (x * 2) on a LongType column of varying sizes.
+Scenario A (baseline)  -- 1 column, small batch (10K rows)
+    IPC overhead per batch is small (80 KB), so jep dispatch overhead
+    dominates: inprocess is slightly slower than pandas UDF.
 
-Both UDF types use the same Arrow batch size (spark.sql.execution.arrow.maxRecordsPerBatch)
-so the comparison reflects IPC overhead, not batch-size differences.
+Scenario B (wide/large) -- 10 columns, large batch (1M rows)
+    IPC must serialize ~80 MB of input per batch over a loopback socket;
+    in-process zero-copies the same data via native addresses, so
+    in-process is expected to win.
 
 Usage (via run_inprocess_udf_benchmark.sh):
     bash python/integration/run_inprocess_udf_benchmark.sh
@@ -46,52 +49,158 @@ from pyspark.inprocess.udf import inprocess_udf
 # Configuration
 # ---------------------------------------------------------------------------
 
-ROW_COUNTS   = [100_000, 1_000_000, 5_000_000]
-ITERATIONS   = 5    # timed runs per (udf_type, row_count) combination
-WARMUP_RUNS  = 2    # untimed warmup runs to let the JIT and interpreter settle
-BATCH_SIZE   = 10_000  # spark.sql.execution.arrow.maxRecordsPerBatch
+ITERATIONS  = 5   # timed runs per (udf_type, row_count) combination
+WARMUP_RUNS = 2   # untimed warmup runs
+
+# Scenario A: narrow schema, small batch -- jep overhead dominates
+SCENARIO_A = {
+    "name":       "Scenario A: 1 col, 10K batch (narrow/small -- baseline)",
+    "n_cols":     1,
+    "batch_size": 10_000,
+    "row_counts": [100_000, 1_000_000, 5_000_000],
+}
+
+# Scenario B: wide schema, large batch -- IPC serialization dominates
+SCENARIO_B = {
+    "name":       "Scenario B: 10 cols, 1M batch (wide/large -- in-process wins)",
+    "n_cols":     10,
+    "batch_size": 1_000_000,
+    "row_counts": [1_000_000, 5_000_000, 10_000_000],
+}
+
+# Scenario C: very wide schema -- IPC cost even larger per batch
+SCENARIO_C = {
+    "name":       "Scenario C: 100 cols, 100K batch (very wide -- in-process wins more)",
+    "n_cols":     100,
+    "batch_size": 100_000,
+    "row_counts": [1_000_000, 5_000_000, 10_000_000],
+}
+
+SCENARIOS = [SCENARIO_A, SCENARIO_B, SCENARIO_C]
 
 # ---------------------------------------------------------------------------
-# UDF definitions
+# UDF factories
 # ---------------------------------------------------------------------------
 
-@inprocess_udf(return_type=LongType())
-def inprocess_double(x):
-    return pc.multiply(x, 2)
+def make_inprocess_udf(n_cols):
+    """Sum n_cols LongType Arrow arrays; each arg is a pa.Array."""
+    @inprocess_udf(return_type=LongType())
+    def _sum(*cols):
+        result = cols[0]
+        for c in cols[1:]:
+            result = pc.add(result, c)
+        return result
+    return _sum
 
 
-@pandas_udf(LongType())
-def pandas_double(x):
-    return x * 2
-
+def make_pandas_udf(n_cols):
+    """Sum n_cols LongType pandas Series."""
+    @pandas_udf(LongType())
+    def _sum(*cols):
+        result = cols[0]
+        for c in cols[1:]:
+            result = result + c
+        return result
+    return _sum
 
 # ---------------------------------------------------------------------------
 # Benchmark helpers
 # ---------------------------------------------------------------------------
 
-def _time_once(df, udf_col) -> float:
-    """Return wall-clock seconds for df.select(udf_col).count()."""
-    t0 = time.perf_counter()
-    df.select(udf_col).count()
-    return time.perf_counter() - t0
+def _make_df(spark, n_rows, n_cols):
+    """DataFrame with n_cols LongType columns (all equal to range id)."""
+    base = spark.range(n_rows)
+    return base.select(*[base["id"].alias(f"c{i}") for i in range(n_cols)])
 
 
-def benchmark(df, udf_col, label: str) -> dict:
-    """Warm up then time ITERATIONS runs; return stats in milliseconds."""
-    col = df[df.columns[0]]
-    for _ in range(WARMUP_RUNS):
-        df.select(udf_col(col)).count()
+def _benchmark(spark, scenario):
+    """Run one scenario; return list of result dicts."""
+    n_cols     = scenario["n_cols"]
+    batch_size = scenario["batch_size"]
+    row_counts = scenario["row_counts"]
 
-    samples_ms = [_time_once(df, udf_col(col)) * 1_000 for _ in range(ITERATIONS)]
-    return {
-        "label":  label,
-        "n":      df.count(),
-        "median": statistics.median(samples_ms),
-        "mean":   statistics.mean(samples_ms),
-        "min":    min(samples_ms),
-        "max":    max(samples_ms),
-    }
+    spark.conf.set("spark.sql.execution.arrow.maxRecordsPerBatch", batch_size)
 
+    ip_udf = make_inprocess_udf(n_cols)
+    pd_udf = make_pandas_udf(n_cols)
+
+    results = []
+    for n_rows in row_counts:
+        df = _make_df(spark, n_rows, n_cols)
+        df.cache()
+        df.count()  # materialise cache
+
+        input_cols = [df[f"c{i}"] for i in range(n_cols)]
+
+        def run(udf_fn):
+            t0 = time.perf_counter()
+            df.select(udf_fn(*input_cols)).count()
+            return (time.perf_counter() - t0) * 1_000
+
+        for udf_fn, label in [(ip_udf, "inprocess_udf"), (pd_udf, "pandas_udf   ")]:
+            print(
+                f"  [{n_rows:>10,} rows, {n_cols} col(s)]  "
+                f"{label.strip()}  warming up …",
+                flush=True,
+            )
+            for _ in range(WARMUP_RUNS):
+                run(udf_fn)
+            samples = [run(udf_fn) for _ in range(ITERATIONS)]
+            results.append({
+                "label":  label,
+                "n":      n_rows,
+                "median": statistics.median(samples),
+                "mean":   statistics.mean(samples),
+                "min":    min(samples),
+                "max":    max(samples),
+            })
+
+        df.unpersist()
+
+    return results
+
+
+def _print_results(results, scenario):
+    header = (
+        f"{'UDF type':<14}  {'rows':>10}  {'median ms':>10}  "
+        f"{'mean ms':>9}  {'min ms':>8}  {'max ms':>8}"
+    )
+    sep = "=" * len(header)
+    n_cols     = scenario["n_cols"]
+    batch_size = scenario["batch_size"]
+    data_mb    = n_cols * batch_size * 8 / 1_048_576
+
+    print(f"\n{sep}")
+    print(f"  {scenario['name']}")
+    print(
+        f"  Cols: {n_cols}  |  Batch: {batch_size:,} rows  "
+        f"({data_mb:.0f} MB input/batch)  |  "
+        f"{ITERATIONS} runs + {WARMUP_RUNS} warmup  |  local[1]"
+    )
+    print(sep)
+    print(header)
+    print("-" * len(header))
+
+    prev_n = None
+    for r in results:
+        if prev_n is not None and r["n"] != prev_n:
+            print()
+        print(
+            f"{r['label']:<14}  {r['n']:>10,}  "
+            f"{r['median']:>10.1f}  {r['mean']:>9.1f}  "
+            f"{r['min']:>8.1f}  {r['max']:>8.1f}"
+        )
+        prev_n = r["n"]
+
+    print(sep)
+    print("\n  Speedup (pandas_udf median / inprocess_udf median):")
+    iproc = [r for r in results if "inprocess" in r["label"]]
+    pand  = [r for r in results if "pandas"    in r["label"]]
+    for ip, pd in zip(iproc, pand):
+        speedup = pd["median"] / ip["median"]
+        faster  = "faster" if speedup > 1 else "slower"
+        print(f"    {ip['n']:>10,} rows : {speedup:.2f}x  ({faster})")
+    print()
 
 # ---------------------------------------------------------------------------
 # Main
@@ -108,60 +217,19 @@ def main():
         SparkSession.builder
         .master("local[1]")
         .appName("InProcessUDFBenchmark")
-        .config("spark.sql.execution.arrow.maxRecordsPerBatch", BATCH_SIZE)
-        # Suppress noisy Spark logs
         .config("spark.ui.enabled", "false")
         .getOrCreate()
     )
     spark.sparkContext.setLogLevel("WARN")
 
-    results = []
-    for n_rows in ROW_COUNTS:
-        df = spark.range(n_rows).toDF("v")
-        df.cache()
-        df.count()  # materialise cache
-
-        print(f"\n[{n_rows:>9,} rows]  warming up and timing …", flush=True)
-        results.append(benchmark(df, inprocess_double, "inprocess_udf"))
-        results.append(benchmark(df, pandas_double,    "pandas_udf   "))
-
-        df.unpersist()
+    for scenario in SCENARIOS:
+        print(f"\n{'─' * 60}")
+        print(f"  {scenario['name']}")
+        print(f"{'─' * 60}")
+        results = _benchmark(spark, scenario)
+        _print_results(results, scenario)
 
     spark.stop()
-
-    # ------------------------------------------------------------------
-    # Print results table
-    # ------------------------------------------------------------------
-    header = f"{'UDF type':<14}  {'rows':>9}  {'median ms':>10}  {'mean ms':>9}  {'min ms':>8}  {'max ms':>8}"
-    print("\n" + "=" * len(header))
-    print("  In-process UDF vs pandas UDF — wall-clock time (ms)")
-    print("  Operation : x * 2  (LongType)")
-    print(f"  Batch size: {BATCH_SIZE:,} rows  |  {ITERATIONS} timed runs + {WARMUP_RUNS} warmup  |  local[1]")
-    print("=" * len(header))
-    print(header)
-    print("-" * len(header))
-
-    prev_n = None
-    for r in results:
-        if prev_n is not None and r["n"] != prev_n:
-            print()
-        print(
-            f"{r['label']:<14}  {r['n']:>9,}  "
-            f"{r['median']:>10.1f}  {r['mean']:>9.1f}  "
-            f"{r['min']:>8.1f}  {r['max']:>8.1f}"
-        )
-        prev_n = r["n"]
-
-    print("=" * len(header))
-
-    # Speedup summary
-    print("\n  Speedup (pandas_udf median / inprocess_udf median):")
-    inprocess = [r for r in results if "inprocess" in r["label"]]
-    pandas    = [r for r in results if "pandas"    in r["label"]]
-    for ip, pd in zip(inprocess, pandas):
-        speedup = pd["median"] / ip["median"]
-        print(f"    {ip['n']:>9,} rows : {speedup:.2f}x")
-    print()
 
 
 if __name__ == "__main__":

@@ -117,32 +117,6 @@ class InProcessPythonUDFSuite extends SparkPlanTest with SharedSparkSession {
     }
   }
 
-  test("InProcessArrowBridge.arrowFormatString covers all Phase 1 types") {
-    val cases = Seq(
-      LongType    -> "l",
-      IntegerType -> "i",
-      DoubleType  -> "g",
-      FloatType   -> "f",
-      BooleanType -> "b",
-      ShortType   -> "s",
-      ByteType    -> "c")
-
-    cases.foreach { case (dt, expected) =>
-      val got = InProcessArrowBridge.arrowFormatString(dt)
-      assert(got === expected, s"Expected $expected for $dt, got $got")
-    }
-  }
-
-  test("InProcessArrowBridge.arrowFormatString rejects unsupported types") {
-    val unsupported = Seq(
-      StringType, BinaryType, ArrayType(LongType), MapType(StringType, LongType))
-    unsupported.foreach { dt =>
-      intercept[UnsupportedOperationException] {
-        InProcessArrowBridge.arrowFormatString(dt)
-      }
-    }
-  }
-
   // ---------------------------------------------------------------------------
   // Execution tests (require jep + CPython + PyArrow on the test classpath)
   // Run with: -Dinprocess.tests=true

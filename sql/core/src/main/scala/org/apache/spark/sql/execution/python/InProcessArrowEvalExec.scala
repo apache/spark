@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.python
 
-import java.util.{ArrayList => JArrayList}
-
 import scala.jdk.CollectionConverters._
 
 import org.apache.arrow.c.{ArrowArray, ArrowSchema}
@@ -39,17 +37,17 @@ import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch}
  *  1. Project input rows down to UDF-required columns
  *  2. Write projected rows into Arrow vectors via [[ArrowWriter]]
  *     (one copy: row format to Arrow native memory)
- *  3. Extract native buffer addresses from each Arrow vector (zero-copy)
- *  4. Pass addresses to CPython via [[InProcessPythonRuntime.invoke]] (in-process, no socket)
- *  5. Python reconstructs PyArrow arrays via `pa.foreign_buffer` (zero-copy)
- *  6. Python executes UDF and exports result via Arrow C Data Interface (CDI)
- *  7. JVM calls `Data.importVector` to wrap Python's Arrow buffers (zero-copy)
- *  8. Append result column(s) to the original row and emit
- *  9. After all rows in a batch are consumed, close result columns; Arrow Java
- *     invokes the CDI release callback, signalling Python to GC the array
+ *  3. Export each input column to pre-allocated Arrow CDI structs (zero-copy)
+ *  4. Pass CDI struct addresses to CPython via [[InProcessPythonRuntime.invoke]]
+ *     (in-process, no socket); Python calls ``pa.Array._import_from_c`` (zero-copy)
+ *  5. Python executes UDF and exports result into pre-allocated output CDI structs
+ *  6. JVM calls [[InProcessArrowBridge.cdiToColumn]] / ``Data.importVector`` (zero-copy)
+ *  7. Append result column(s) to the original row and emit
+ *  8. After all rows in a batch are consumed, close result columns; Arrow Java
+ *     invokes the CDI release callback, decrementing the Python array's refcount
  *
  * Net copies: 1 per batch (row-to-Arrow on input only) vs. the out-of-process path
- * which additionally serializes over a socket.
+ * which additionally serializes all columns over a socket.
  *
  * Concurrency: [[InProcessPythonChecks]] enforces spark.executor.cores == spark.task.cpus,
  * guaranteeing exactly one task runs per executor and eliminating GIL contention on
@@ -113,35 +111,39 @@ case class InProcessArrowEvalExec(
             writer.finish()
 
             val root = writer.root
-            val numRows = root.getRowCount
 
-            // For each UDF, collect the native buffer addresses of its input columns,
-            // invoke Python in-process, and reconstruct the result as an Arrow column
-            // via the Arrow C Data Interface (zero-copy).
+            // For each UDF, export input columns to CDI structs (zero-copy), invoke
+            // Python in-process, and reconstruct the result column via CDI (zero-copy).
             val resultColumns = udfs.map { udf =>
-              val inputAddrList = new JArrayList[java.util.Map[String, AnyRef]]()
-
-              udf.children.foreach { case attr: Attribute =>
-                val idx = child.output.indexWhere(_.exprId == attr.exprId)
-                require(idx >= 0,
-                  s"InProcessArrowEvalExec: cannot find input column '${attr}' " +
-                  s"in child output ${child.output.map(_.name).mkString("[", ", ", "]")}")
-                val arrowCol = new ArrowColumnVector(root.getVector(idx))
-                inputAddrList.add(InProcessArrowBridge.extractAddresses(arrowCol, numRows))
-              }
-
-              // Pre-allocate output CDI structs on the JVM side. Python fills them
-              // in-place via arr._export_to_c(array_ptr, schema_ptr).
+              val nInputs = udf.children.size
+              val inArrays =
+                Array.tabulate(nInputs)(_ => ArrowArray.allocateNew(ArrowUtils.rootAllocator))
+              val inSchemas =
+                Array.tabulate(nInputs)(_ => ArrowSchema.allocateNew(ArrowUtils.rootAllocator))
               val outArray = ArrowArray.allocateNew(ArrowUtils.rootAllocator)
               val outSchema = ArrowSchema.allocateNew(ArrowUtils.rootAllocator)
               try {
+                udf.children.zipWithIndex.foreach { case (attr: Attribute, i) =>
+                  val idx = child.output.indexWhere(_.exprId == attr.exprId)
+                  require(idx >= 0,
+                    s"InProcessArrowEvalExec: cannot find input column '${attr}' " +
+                    s"in child output ${child.output.map(_.name).mkString("[", ", ", "]")}")
+                  InProcessArrowBridge.exportColumn(root.getVector(idx), inArrays(i), inSchemas(i))
+                }
+                val inputArrayPtrs = inArrays.map(_.memoryAddress())
+                val inputSchemaPtrs = inSchemas.map(_.memoryAddress())
                 InProcessPythonRuntime.invoke(
-                  udf.serializedFunc, inputAddrList, numRows,
+                  udf.serializedFunc,
+                  inputArrayPtrs, inputSchemaPtrs,
                   outArray.memoryAddress(), outSchema.memoryAddress())
                 InProcessArrowBridge.cdiToColumn(outArray, outSchema)
               } finally {
-                // outArray: Data.importVector copies the snapshot and calls close() on
-                // the original (idempotent -- safe to call again here).
+                // Free the CDI struct memory for input columns. The FieldVectors'
+                // buffer data remains live (ArrowWriter holds its own references).
+                inArrays.foreach(_.close())
+                inSchemas.foreach(_.close())
+                // outArray: Data.importVector copies the snapshot and calls close()
+                // internally (idempotent -- safe to call again here).
                 outArray.close()
                 // outSchema: NOT closed by importVector; must be closed explicitly.
                 outSchema.close()
@@ -154,6 +156,7 @@ case class InProcessArrowEvalExec(
               (0 until root.getFieldVectors.size()).map(i =>
                 new ArrowColumnVector(root.getVector(i))).toArray ++ resultColumns
 
+            val numRows = root.getRowCount
             val columnarBatch = new ColumnarBatch(
               allColumns.asInstanceOf[Array[org.apache.spark.sql.vectorized.ColumnVector]],
               numRows)

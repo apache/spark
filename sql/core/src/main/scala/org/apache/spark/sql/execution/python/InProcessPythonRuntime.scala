@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.python
 
-import java.util.{List => JList, Map => JMap}
+import scala.jdk.CollectionConverters._
 
 import jep.{JepConfig, JepException, SharedInterpreter}
 
@@ -74,33 +74,43 @@ private[python] object InProcessPythonRuntime extends Logging {
    * shared for the executor process lifetime, so this call is serialized by the
    * single-task-per-executor constraint.
    *
-   * The JVM pre-allocates [[ArrowArray]] and [[ArrowSchema]] C structs and passes
-   * their native addresses here. Python fills them in-place via
-   * ``arr._export_to_c(output_array_ptr, output_schema_ptr)``. The JVM then calls
-   * [[InProcessArrowBridge.cdiToColumn]] to wrap the filled structs (zero-copy).
+   * Both input and output use the Arrow C Data Interface. The JVM pre-allocates
+   * [[ArrowArray]] / [[ArrowSchema]] structs for every input column and for the output,
+   * then passes their native addresses here. Python reconstructs input arrays via
+   * ``pa.Array._import_from_c`` (zero-copy) and exports the result via
+   * ``arr._export_to_c(output_array_ptr, output_schema_ptr)`` (zero-copy).
+   *
+   * Input pointer arrays are converted to [[java.util.List]] of boxed [[java.lang.Long]]
+   * before being passed to jep, so Python always receives a plain list of ints regardless
+   * of column count.  (jep converts primitive long[] inconsistently for single-element
+   * arrays -- it may return a scalar instead of an iterable.)
    *
    * @param serializedUdf    cloudpickle bytes of the Python function (cached inside Python)
-   * @param inputAddrList    list of address maps, one per input column -- see
-   *                         [[InProcessArrowBridge.extractAddresses]] for key spec
-   * @param numRows          number of rows in the batch
-   * @param outputArrayAddr  native address of a JVM-allocated ArrowArray C struct
-   * @param outputSchemaAddr native address of a JVM-allocated ArrowSchema C struct
+   * @param inputArrayPtrs   native addresses of JVM-allocated input ArrowArray C structs
+   * @param inputSchemaPtrs  native addresses of JVM-allocated input ArrowSchema C structs
+   * @param outputArrayAddr  native address of a JVM-allocated output ArrowArray C struct
+   * @param outputSchemaAddr native address of a JVM-allocated output ArrowSchema C struct
    */
   def invoke(
       serializedUdf: Array[Byte],
-      inputAddrList: JList[JMap[String, AnyRef]],
-      numRows: Int,
+      inputArrayPtrs: Array[Long],
+      inputSchemaPtrs: Array[Long],
       outputArrayAddr: Long,
       outputSchemaAddr: Long): Unit = {
     // Lazily initialize on the first executor thread that calls invoke.
     // This ensures the SharedInterpreter is created on the task thread (required by jep).
     if (!initialized) initialize()
+    // jep converts primitive long[] inconsistently for single-element arrays (may return a
+    // Python scalar rather than an iterable).  Box to java.util.List<Long> so Python always
+    // receives a plain list of ints regardless of column count.
+    val arrayPtrList = inputArrayPtrs.map(java.lang.Long.valueOf).toSeq.asJava
+    val schemaPtrList = inputSchemaPtrs.map(java.lang.Long.valueOf).toSeq.asJava
     try {
       interp.invoke(
         "_inprocess_invoke",
         serializedUdf,
-        inputAddrList,
-        Integer.valueOf(numRows),
+        arrayPtrList,
+        schemaPtrList,
         java.lang.Long.valueOf(outputArrayAddr),
         java.lang.Long.valueOf(outputSchemaAddr))
     } catch {
