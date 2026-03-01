@@ -27,7 +27,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.arrow.vector.ipc.ArrowStreamReader
 
 import org.apache.spark.SparkEnv
-import org.apache.spark.api.python.{PythonFunction, PythonWorker, PythonWorkerFactory, PythonWorkerUtils, SpecialLengths}
+import org.apache.spark.api.python.{PythonException, PythonFunction, PythonWorker, PythonWorkerFactory, PythonWorkerUtils, SpecialLengths}
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.LogKeys.PYTHON_EXEC
 import org.apache.spark.internal.config.BUFFER_SIZE
@@ -147,8 +147,7 @@ class PythonStreamingSourceRunner(
     val featureBits = dataIn.readInt()
     if (featureBits == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
       val msg = PythonWorkerUtils.readUTF(dataIn)
-      throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
-        action = "checkSupportedFeatures", msg)
+      throw new PythonException(msg, null)
     }
     val admissionControl = (featureBits & (1 << 0)) == 1
     val availableNow = (featureBits & (1 << 1)) == (1 << 1)
@@ -163,8 +162,7 @@ class PythonStreamingSourceRunner(
     val len = dataIn.readInt()
     if (len == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
       val msg = PythonWorkerUtils.readUTF(dataIn)
-      throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
-        action = "getDefaultReadLimit", msg)
+      throw new PythonException(msg, null)
     }
 
     PythonWorkerUtils.readUTF(len, dataIn)
@@ -177,8 +175,7 @@ class PythonStreamingSourceRunner(
     val len = dataIn.readInt()
     if (len == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
       val msg = PythonWorkerUtils.readUTF(dataIn)
-      throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
-        action = "reportLatestOffset", msg)
+      throw new PythonException(msg, null)
     }
 
     if (len == 0) {
@@ -194,8 +191,7 @@ class PythonStreamingSourceRunner(
     val status = dataIn.readInt()
     if (status == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
       val msg = PythonWorkerUtils.readUTF(dataIn)
-      throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
-        action = "prepareForTriggerAvailableNow", msg)
+      throw new PythonException(msg, null)
     }
   }
 
@@ -208,8 +204,7 @@ class PythonStreamingSourceRunner(
     val len = dataIn.readInt()
     if (len == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
       val msg = PythonWorkerUtils.readUTF(dataIn)
-      throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
-        action = "latestOffset", msg)
+      throw new PythonException(msg, null)
     }
     PythonWorkerUtils.readUTF(len, dataIn)
   }
@@ -235,8 +230,7 @@ class PythonStreamingSourceRunner(
     val len = dataIn.readInt()
     if (len == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
       val msg = PythonWorkerUtils.readUTF(dataIn)
-      throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
-        action = "latestOffset", msg)
+      throw new PythonException(msg, null)
     }
     PythonWorkerUtils.readUTF(len, dataIn)
   }
@@ -250,8 +244,7 @@ class PythonStreamingSourceRunner(
     val len = dataIn.readInt()
     if (len == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
       val msg = PythonWorkerUtils.readUTF(dataIn)
-      throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
-        action = "initialOffset", msg)
+      throw new PythonException(msg, null)
     }
     PythonWorkerUtils.readUTF(len, dataIn)
   }
@@ -270,8 +263,7 @@ class PythonStreamingSourceRunner(
     val numPartitions = dataIn.readInt()
     if (numPartitions == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
       val msg = PythonWorkerUtils.readUTF(dataIn)
-      throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
-        action = "planPartitions", msg)
+      throw new PythonException(msg, null)
     }
     for (_ <- 0 until numPartitions) {
       val pickledPartition: Array[Byte] = PythonWorkerUtils.readBytes(dataIn)
@@ -284,11 +276,9 @@ class PythonStreamingSourceRunner(
       case EMPTY_PYARROW_RECORD_BATCHES => Some(Iterator.empty)
       case SpecialLengths.PYTHON_EXCEPTION_THROWN =>
         val msg = PythonWorkerUtils.readUTF(dataIn)
-        throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
-          action = "planPartitions", msg)
+        throw new PythonException(msg, null)
       case _ =>
-        throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
-          action = "planPartitions", s"unknown status code $prefetchedRecordsStatus")
+        throw new PythonException(s"unknown status code $prefetchedRecordsStatus", null)
     }
     (pickledPartitions.toArray, iter)
   }
@@ -303,8 +293,7 @@ class PythonStreamingSourceRunner(
     val status = dataIn.readInt()
     if (status == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
       val msg = PythonWorkerUtils.readUTF(dataIn)
-      throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
-        action = "commitSource", msg)
+      throw new PythonException(msg, null)
     }
   }
 
@@ -335,12 +324,10 @@ class PythonStreamingSourceRunner(
     status match {
       case SpecialLengths.PYTHON_EXCEPTION_THROWN =>
         val msg = PythonWorkerUtils.readUTF(dataIn)
-        throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
-        action = "prefetchArrowBatches", msg)
+        throw new PythonException(msg, null)
       case SpecialLengths.START_ARROW_STREAM =>
       case _ =>
-        throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
-          action = "prefetchArrowBatches", s"unknown status code $status")
+        throw new PythonException(s"unknown status code $status", null)
     }
     val reader = new ArrowStreamReader(dataIn, allocator)
     val root = reader.getVectorSchemaRoot()
