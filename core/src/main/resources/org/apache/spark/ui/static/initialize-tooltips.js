@@ -15,9 +15,13 @@
  * limitations under the License.
  */
 
-document.addEventListener("DOMContentLoaded", function() {
-  document.querySelectorAll("[data-bs-toggle=tooltip]").forEach(function(el) {
-    new bootstrap.Tooltip(el, {container: 'body'});
-  });
-});
+// Lazily initialize Bootstrap 5 Tooltips on first hover via event delegation.
+// This single listener replaces per-page boilerplate and handles dynamic content.
+document.addEventListener("mouseover", function(e) {
+  var el = e.target.closest("[data-bs-toggle=tooltip]");
+  if (el && !bootstrap.Tooltip.getInstance(el)) {
+    var tt = new bootstrap.Tooltip(el, {container: "body"});
+    tt.show();
+  }
+}, {passive: true});
 
