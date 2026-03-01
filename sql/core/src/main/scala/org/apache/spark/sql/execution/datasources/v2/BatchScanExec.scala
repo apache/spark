@@ -24,12 +24,10 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.physical.{KeyGroupedPartitioning, Partitioning, SinglePartition}
-import org.apache.spark.sql.catalyst.util.{truncatedString, InternalRowComparableWrapper}
+import org.apache.spark.sql.catalyst.plans.physical.{KeyedPartitioning, SinglePartition}
+import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.read._
-import org.apache.spark.sql.execution.KeyGroupedPartitionedScan
-import org.apache.spark.sql.execution.joins.StoragePartitionJoinParams
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -41,8 +39,8 @@ case class BatchScanExec(
     runtimeFilters: Seq[Expression],
     ordering: Option[Seq[SortOrder]] = None,
     @transient table: Table,
-    spjParams: StoragePartitionJoinParams = StoragePartitionJoinParams()
-  ) extends DataSourceV2ScanExecBase with KeyGroupedPartitionedScan[InputPartition] {
+    keyGroupedPartitioning: Option[Seq[Expression]] = None
+  ) extends DataSourceV2ScanExecBase {
 
   @transient lazy val batch: Batch = if (scan == null) null else scan.toBatch
 
@@ -51,7 +49,7 @@ case class BatchScanExec(
     case other: BatchScanExec =>
       this.batch != null && this.batch == other.batch &&
           this.runtimeFilters == other.runtimeFilters &&
-          this.spjParams == other.spjParams
+          this.keyGroupedPartitioning == other.keyGroupedPartitioning
     case _ =>
       false
   }
@@ -61,15 +59,14 @@ case class BatchScanExec(
   @transient override lazy val inputPartitions: Seq[InputPartition] =
     batch.planInputPartitions().toImmutableArraySeq
 
-  @transient private lazy val filteredPartitions: Seq[Seq[InputPartition]] = {
+  @transient private lazy val filteredPartitions: Seq[Option[InputPartition]] = {
     val dataSourceFilters = runtimeFilters.flatMap {
       case DynamicPruningExpression(e) => DataSourceV2Strategy.translateRuntimeFilterV2(e)
       case _ => None
     }
 
+    val originalPartitioning = outputPartitioning
     if (dataSourceFilters.nonEmpty) {
-      val originalPartitioning = outputPartitioning
-
       // the cast is safe as runtime filters are only assigned if the scan can be filtered
       val filterableScan = scan.asInstanceOf[SupportsRuntimeV2Filtering]
       filterableScan.filter(dataSourceFilters.toArray)
@@ -78,49 +75,53 @@ case class BatchScanExec(
       val newPartitions = scan.toBatch.planInputPartitions()
 
       originalPartitioning match {
-        case p: KeyGroupedPartitioning =>
+        case k: KeyedPartitioning =>
           if (newPartitions.exists(!_.isInstanceOf[HasPartitionKey])) {
             throw new SparkException("Data source must have preserved the original partitioning " +
                 "during runtime filtering: not all partitions implement HasPartitionKey after " +
                 "filtering")
           }
-          val newPartitionValues = newPartitions.map(partition =>
-              InternalRowComparableWrapper(partition.asInstanceOf[HasPartitionKey], p.expressions))
-            .toSet
-          val oldPartitionValues = p.partitionValues
-            .map(partition => InternalRowComparableWrapper(partition, p.expressions)).toSet
-          // We require the new number of partition values to be equal or less than the old number
-          // of partition values here. In the case of less than, empty partitions will be added for
-          // those missing values that are not present in the new input partitions.
-          if (oldPartitionValues.size < newPartitionValues.size) {
-            throw new SparkException("During runtime filtering, data source must either report " +
-                "the same number of partition values, or a subset of partition values from the " +
-                s"original. Before: ${oldPartitionValues.size} partition values. " +
-                s"After: ${newPartitionValues.size} partition values")
-          }
 
-          if (!newPartitionValues.forall(oldPartitionValues.contains)) {
+          val inputMap = inputPartitions.groupBy(
+            p => k.comparableKeyWrapperFactory(p.asInstanceOf[HasPartitionKey].partitionKey())
+          ).view.mapValues(_.size)
+          val filteredMap = newPartitions.groupBy(
+            p => k.comparableKeyWrapperFactory(p.asInstanceOf[HasPartitionKey].partitionKey())
+          )
+
+          if (!filteredMap.keySet.subsetOf(inputMap.keySet)) {
             throw new SparkException("During runtime filtering, data source must not report new " +
-                "partition values that are not present in the original partitioning.")
+                "partition keys that are not present in the original partitioning.")
           }
 
-          groupPartitions(newPartitions.toImmutableArraySeq)
-            .map(_.groupedParts.map(_.parts)).getOrElse(Seq.empty)
+          inputMap.toSeq
+            .sortBy { case (keyWrapper, _) => keyWrapper.row }(k.keyOrdering)
+            .flatMap { case (keyWrapper, size) =>
+              // We require the new number of partitions to be equal or less than the old number of
+              // partitions for a given key. In the case of less than, empty partitions are added.
+              val fps = filteredMap.getOrElse(keyWrapper, Array.empty)
+
+              if (fps.size > size) {
+                throw new SparkException("During runtime filtering, data source must not report " +
+                  s"new partitions for a given key. Before: $size partitions. " +
+                  s"After: ${fps.size} partitions")
+              }
+
+              fps.map(Some).padTo(size, None)
+            }
 
         case _ =>
           // no validation is needed as the data source did not report any specific partitioning
-          newPartitions.map(Seq(_)).toImmutableArraySeq
+          newPartitions.toSeq.map(Some)
       }
 
     } else {
-      partitions
-    }
-  }
+      (originalPartitioning match {
+        case k: KeyedPartitioning =>
+          inputPartitions.sortBy(_.asInstanceOf[HasPartitionKey].partitionKey())(k.keyOrdering)
 
-  override def outputPartitioning: Partitioning = {
-    super.outputPartitioning match {
-      case k: KeyGroupedPartitioning => getOutputKeyGroupedPartitioning(k, spjParams)
-      case p => p
+        case _ => inputPartitions
+      }).map(Some)
     }
   }
 
@@ -131,28 +132,20 @@ case class BatchScanExec(
       // return an empty RDD with 1 partition if dynamic filtering removed the only split
       sparkContext.parallelize(Array.empty[InternalRow].toImmutableArraySeq, 1)
     } else {
-      val finalPartitions = outputPartitioning match {
-        case p: KeyGroupedPartitioning => getInputPartitionGrouping(
-          p, spjParams, filteredPartitions, p => p.asInstanceOf[HasPartitionKey].partitionKey())
-        case _ => filteredPartitions
-      }
-
       new DataSourceRDD(
-        sparkContext, finalPartitions, readerFactory, supportsColumnar, customMetrics)
+        sparkContext, filteredPartitions, readerFactory, supportsColumnar, customMetrics)
     }
     postDriverMetrics()
     rdd
   }
-
-  override def keyGroupedPartitioning: Option[Seq[Expression]] =
-    spjParams.keyGroupedPartitioning
 
   override def doCanonicalize(): BatchScanExec = {
     this.copy(
       output = output.map(QueryPlan.normalizeExpressions(_, output)),
       runtimeFilters = QueryPlan.normalizePredicates(
         runtimeFilters.filterNot(_ == DynamicPruningExpression(Literal.TrueLiteral)),
-        output))
+        output),
+      keyGroupedPartitioning = keyGroupedPartitioning.map(QueryPlan.normalizePredicates(_, output)))
   }
 
   override def simpleString(maxFields: Int): String = {

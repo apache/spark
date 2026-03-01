@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
 import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.catalyst.plans.physical.KeyGroupedPartitioning
+import org.apache.spark.sql.catalyst.plans.physical.KeyedPartitioning
 import org.apache.spark.sql.connector.catalog.PartitionInternalRow
 import org.apache.spark.sql.types.IntegerType
 
@@ -41,7 +41,7 @@ object InternalRowComparableWrapperBenchmark extends BenchmarkBase {
     val partitionNum = 200_000
     val bucketNum = 4096
     val day = 20240401
-    val partitions = (0 until partitionNum).map { i =>
+    val partitionKeys = (0 until partitionNum).map { i =>
       val bucketId = i % bucketNum
       PartitionInternalRow.apply(Array(day, bucketId));
     }
@@ -51,7 +51,7 @@ object InternalRowComparableWrapperBenchmark extends BenchmarkBase {
       val internalRowComparableWrapperFactory =
         InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(
           Seq(IntegerType, IntegerType))
-      val distinct = partitions
+      val distinct = partitionKeys
         .map(internalRowComparableWrapperFactory)
         .toSet
       assert(distinct.size == bucketNum)
@@ -61,10 +61,10 @@ object InternalRowComparableWrapperBenchmark extends BenchmarkBase {
       // just to mock the data types
       val expressions = (Seq(Literal(day, IntegerType), Literal(0, IntegerType)))
 
-      val leftPartitioning = KeyGroupedPartitioning(expressions, bucketNum, partitions)
-      val rightPartitioning = KeyGroupedPartitioning(expressions, bucketNum, partitions)
+      val leftPartitioning = KeyedPartitioning(expressions, partitionKeys)
+      val rightPartitioning = KeyedPartitioning(expressions, partitionKeys)
       val merged = InternalRowComparableWrapper.mergePartitions(
-        leftPartitioning.partitionValues, rightPartitioning.partitionValues, expressions)
+        leftPartitioning.partitionKeys, rightPartitioning.partitionKeys, expressions)
       assert(merged.size == bucketNum)
     }
 
