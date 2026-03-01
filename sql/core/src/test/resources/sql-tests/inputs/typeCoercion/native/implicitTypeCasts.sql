@@ -56,6 +56,10 @@ SELECT length('four') FROM t;
 SELECT length(date('1996-09-10')) FROM t;
 SELECT length(timestamp('1996-09-10 10:11:12.4')) FROM t;
 
+-- string to time
+SELECT '12:00:00' = TIME'12:00:00' FROM t;
+SELECT '12:00:01' > TIME'12:00:00' FROM t;
+
 -- extract
 SELECT year( '1996-01-10') FROM t;
 SELECT month( '1996-01-10') FROM t;
