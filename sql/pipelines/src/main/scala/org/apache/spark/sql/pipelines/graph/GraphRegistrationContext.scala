@@ -16,10 +16,13 @@
  */
 package org.apache.spark.sql.pipelines.graph
 
+import java.util.concurrent.ConcurrentHashMap
+
 import scala.collection.mutable
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
 /**
  * A mutable context for registering tables, views, and flows in a dataflow graph.
@@ -37,6 +40,8 @@ class GraphRegistrationContext(
   protected val views = new mutable.ListBuffer[View]
   protected val sinks = new mutable.ListBuffer[Sink]
   protected val flows = new mutable.ListBuffer[UnresolvedFlow]
+  // keyed by flow ID
+  private val queryFunctionResults = new ConcurrentHashMap[TableIdentifier, QueryFunctionResult]()
 
   def registerTable(tableDef: Table): Unit = {
     tables += tableDef
@@ -60,6 +65,15 @@ class GraphRegistrationContext(
 
   def registerFlow(flowDef: UnresolvedFlow): Unit = {
     flows += flowDef.copy(sqlConf = defaultSqlConf ++ flowDef.sqlConf)
+  }
+
+  def registerQueryFunctionResult(
+      flowIdentifier: TableIdentifier, result: QueryFunctionResult): Unit = {
+    queryFunctionResults.put(flowIdentifier, result)
+  }
+
+  def getQueryFunctionResult(flowIdentifier: TableIdentifier): Option[QueryFunctionResult] = {
+    Option(queryFunctionResults.get(flowIdentifier))
   }
 
   private def isEmpty: Boolean = {
@@ -189,3 +203,9 @@ object GraphRegistrationContext {
     override def toString: String = "SINK"
   }
 }
+
+sealed trait QueryFunctionResult
+
+case class QueryFunctionSuccess(plan: LogicalPlan) extends QueryFunctionResult
+
+case object QueryFunctionTerminalFailure extends QueryFunctionResult

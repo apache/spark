@@ -120,6 +120,23 @@ case class FlowFunctionResult(
   final def resolved: Boolean = failure.isEmpty // don't override this, override failure
 }
 
+object FlowFunctionResult {
+  def fromFlowAnalysisContext(
+      ctx: FlowAnalysisContext,
+      df: Try[DataFrame],
+      confs: Map[String, String]): FlowFunctionResult = {
+    FlowFunctionResult(
+      requestedInputs = ctx.requestedInputs.toSet,
+      batchInputs = ctx.batchInputs.toSet,
+      streamingInputs = ctx.streamingInputs.toSet,
+      usedExternalInputs = ctx.externalInputs.toSet,
+      dataFrame = df,
+      sqlConf = confs,
+      analysisWarnings = ctx.analysisWarnings.toList
+    )
+  }
+}
+
 /** A [[Flow]] whose output schema and dependencies aren't known. */
 case class UnresolvedFlow(
     identifier: TableIdentifier,
