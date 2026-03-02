@@ -128,6 +128,7 @@ object RowEncoder extends DataTypeErrorsBase {
         }.toImmutableArraySeq)
       case g: GeographyType => GeographyEncoder(g)
       case g: GeometryType => GeometryEncoder(g)
+
       case _ =>
         throw new AnalysisException(
           errorClass = "UNSUPPORTED_DATA_TYPE_FOR_ENCODER",
