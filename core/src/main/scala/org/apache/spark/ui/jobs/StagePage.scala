@@ -363,7 +363,7 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
                |'content': '<div class="task-assignment-timeline-content"
                  |data-bs-toggle="tooltip" data-bs-placement="top"
                  |data-bs-html="true" data-bs-container="body"
-                 |data-title="${"Task " + index + " (attempt " + attempt + ")"}<br>
+                 |data-bs-title="${"Task " + index + " (attempt " + attempt + ")"}<br>
                  |Status: ${taskInfo.status}<br>
                  |Launch Time: ${UIUtils.formatDate(new Date(launchTime))}
                  |${
