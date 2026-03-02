@@ -265,7 +265,6 @@ $(document).ready(function() {
       historySummary.append(apps);
       apps.DataTable(conf);
       sibling.after(historySummary);
-      $('#history-summary [data-bs-toggle="tooltip"]').each(function() { new bootstrap.Tooltip(this); });
     });
   });
 });

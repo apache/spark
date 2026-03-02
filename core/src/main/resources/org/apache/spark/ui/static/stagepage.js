@@ -385,7 +385,6 @@ $(document).ready(function () {
       "should be approximately the sum of the peak sizes across all such data structures created " +
       "in this task. For SQL jobs, this only tracks all unsafe operators, broadcast joins, and " +
       "external sort.");
-  document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(el) { new bootstrap.Tooltip(el); });
   var tasksSummary = $("#parent-container");
   getStandAloneAppId(function (appId) {
     // rendering the UI page
@@ -622,35 +621,30 @@ $(document).ready(function () {
             };
             executorSummaryTableSelector =
               $("#summary-executor-table").DataTable(executorSummaryConf);
-            $('#parent-container [data-bs-toggle="tooltip"]').each(function() { new bootstrap.Tooltip(this); });
   
             executorSummaryTableSelector.column(9).visible(dataToShow.showInputData);
             if (dataToShow.showInputData) {
               $('#executor-summary-input').attr("data-bs-toggle", "tooltip")
                 .attr("data-bs-placement", "top")
                 .attr("title", "Bytes and records read from Hadoop or from Spark storage.");
-              new bootstrap.Tooltip(document.getElementById('executor-summary-input'));
             }
             executorSummaryTableSelector.column(10).visible(dataToShow.showOutputData);
             if (dataToShow.showOutputData) {
               $('#executor-summary-output').attr("data-bs-toggle", "tooltip")
                 .attr("data-bs-placement", "top")
                 .attr("title", "Bytes and records written to Hadoop.");
-              new bootstrap.Tooltip(document.getElementById('executor-summary-output'));
             }
             executorSummaryTableSelector.column(11).visible(dataToShow.showShuffleReadData);
             if (dataToShow.showShuffleReadData) {
               $('#executor-summary-shuffle-read').attr("data-bs-toggle", "tooltip")
                 .attr("data-bs-placement", "top")
                 .attr("title", "Total shuffle bytes and records read (includes both data read locally and data read from remote executors).");
-              new bootstrap.Tooltip(document.getElementById('executor-summary-shuffle-read'));
             }
             executorSummaryTableSelector.column(12).visible(dataToShow.showShuffleWriteData);
             if (dataToShow.showShuffleWriteData) {
               $('#executor-summary-shuffle-write').attr("data-bs-toggle", "tooltip")
                 .attr("data-bs-placement", "top")
                 .attr("title", "Bytes and records written to disk in order to be read by a shuffle in a future stage.");
-              new bootstrap.Tooltip(document.getElementById('executor-summary-shuffle-write'));
             }
             executorSummaryTableSelector.column(13).visible(dataToShow.showBytesSpilledData);
             executorSummaryTableSelector.column(14).visible(dataToShow.showBytesSpilledData);
