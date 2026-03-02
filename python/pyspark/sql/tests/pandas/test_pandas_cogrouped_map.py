@@ -720,12 +720,15 @@ class CogroupedApplyInPandasTestsMixin:
     def test_cogroup_apply_in_pandas_with_logging(self):
         import pandas as pd
 
+        def to_ints(a):
+            return [int(v) for v in a]
+
         def func_with_logging(left_pdf, right_pdf):
             assert isinstance(left_pdf, pd.DataFrame)
             assert isinstance(right_pdf, pd.DataFrame)
             logger = logging.getLogger("test_pandas_cogrouped_map")
             logger.warning(
-                f"pandas cogrouped map: {dict(v1=list(left_pdf['v1']), v2=list(right_pdf['v2']))}"
+                f"pandas cogrouped map: {dict(v1=to_ints(left_pdf['v1']), v2=to_ints(right_pdf['v2']))}"
             )
             return pd.merge(left_pdf, right_pdf, on=["id"])
 
