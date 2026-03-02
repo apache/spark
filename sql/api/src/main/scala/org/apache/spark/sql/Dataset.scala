@@ -3210,6 +3210,10 @@ abstract class Dataset[T] extends Serializable {
    *     .merge()
    * }}}
    *
+   * The `table` argument accepts catalog table identifiers and SQL-on-file style targets such as
+   * `parquet.\`/path/to/table\``. Path-like strings (for example `/path/to/table` and
+   * `s3://bucket/table`) are interpreted using the default data source.
+   *
    * @group basic
    * @since 4.0.0
    */

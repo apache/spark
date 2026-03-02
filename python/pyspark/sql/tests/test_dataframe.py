@@ -941,6 +941,17 @@ class DataFrameTestsMixin:
         finally:
             self.spark.conf.unset("spark.sql.catalog.testcat")
 
+    def test_df_merge_into_path_target(self):
+        source = self.spark.createDataFrame([(1, "Alice"), (2, "Bob")], ["id", "name"])
+        from pyspark.sql.functions import lit
+
+        writer = source.mergeInto("/tmp/target", source.id == lit(1)).whenNotMatched().insertAll()
+        self.assertIsNotNone(writer)
+
+        uri_path = "abfss://container@account.dfs.core.windows.net/layer/table_name"
+        writer = source.mergeInto(uri_path, source.id == lit(1)).whenNotMatched().insertAll()
+        self.assertIsNotNone(writer)
+
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
         pandas_requirement_message or pyarrow_requirement_message,
