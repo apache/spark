@@ -363,7 +363,7 @@ function formatMetricValue(val, metricType, showStageTask) {
 }
 
 function buildStatTable(total, min, med, maxVal,
-    stageId, taskId, showStageTask) {
+  stageId, taskId, showStageTask) {
   var h = '<table class="table table-sm table-bordered mb-0"><thead><tr>';
   if (total !== null) h += "<th>Total</th>";
   h += "<th>Min</th><th>Med</th><th>Max</th>";

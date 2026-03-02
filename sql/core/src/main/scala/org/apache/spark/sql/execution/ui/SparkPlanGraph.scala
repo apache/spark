@@ -216,9 +216,14 @@ class SparkPlanGraphCluster(
   extends SparkPlanGraphNode(id, name, desc, metrics) {
 
   override def makeDotNode(metricsValue: Map[Long, String]): String = {
-    val duration = metrics.filter(_.name.startsWith(WholeStageCodegenExec.PIPELINE_DURATION_METRIC))
+    val duration = metrics.filter(m =>
+      m.name != null && m.name.startsWith(WholeStageCodegenExec.PIPELINE_DURATION_METRIC))
     // Extract short label: "(1)" from "WholeStageCodegen (1)"
-    val shortName = "\\(\\d+\\)".r.findFirstIn(name).getOrElse(name)
+    val shortName = if (name != null) {
+      "\\(\\d+\\)".r.findFirstIn(name).getOrElse(name)
+    } else {
+      ""
+    }
     val labelStr = if (duration.nonEmpty) {
       require(duration.length == 1)
       val durationMetricId = duration(0).accumulatorId
