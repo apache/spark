@@ -30,6 +30,7 @@ import scala.language.existentials
 import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.types.ops.TypeOps
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -62,6 +63,12 @@ object CatalystTypeConverters {
 
   private def getConverterForType(dataType: DataType): CatalystTypeConverter[Any, Any, Any] = {
     TypeUtils.failUnsupportedDataType(dataType, SQLConf.get)
+    TypeOps(dataType).map(ops => new TypeOpsConverter(ops))
+      .getOrElse(getConverterForTypeDefault(dataType))
+  }
+
+  private def getConverterForTypeDefault(
+      dataType: DataType): CatalystTypeConverter[Any, Any, Any] = {
     val converter = dataType match {
       case udt: UserDefinedType[_] => UDTConverter(udt)
       case arrayType: ArrayType => ArrayConverter(arrayType.elementType)
@@ -148,6 +155,17 @@ object CatalystTypeConverters {
     override def toCatalystImpl(scalaValue: Any): Any = scalaValue
     override def toScala(catalystValue: Any): Any = catalystValue
     override def toScalaImpl(row: InternalRow, column: Int): Any = row.get(column, dataType)
+  }
+
+  /**
+   * Adapter that wraps TypeOps to implement CatalystTypeConverter.
+   * Used by the Types Framework to provide type conversion for framework-supported types.
+   */
+  private class TypeOpsConverter(ops: TypeOps)
+      extends CatalystTypeConverter[Any, Any, Any] {
+    override def toCatalystImpl(scalaValue: Any): Any = ops.toCatalystImpl(scalaValue)
+    override def toScala(catalystValue: Any): Any = ops.toScala(catalystValue)
+    override def toScalaImpl(row: InternalRow, column: Int): Any = ops.toScalaImpl(row, column)
   }
 
   private case class UDTConverter[A >: Null](

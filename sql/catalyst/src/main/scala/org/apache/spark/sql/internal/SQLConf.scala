@@ -600,6 +600,16 @@ object SQLConf {
       .booleanConf
       .createWithDefaultFunction(() => Utils.isTesting)
 
+  val TYPES_FRAMEWORK_ENABLED =
+    buildConf("spark.sql.types.framework.enabled")
+      .internal()
+      .doc("When true, use the Types Framework for supported types (currently TimeType). " +
+        "The framework centralizes type-specific operations in Ops classes instead of " +
+        "scattered pattern matching. When false, use legacy scattered implementation.")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefaultFunction(() => Utils.isTesting)
+
   val EXTENDED_EXPLAIN_PROVIDERS = buildConf("spark.sql.extendedExplainProviders")
     .doc("A comma-separated list of classes that implement the" +
       " org.apache.spark.sql.ExtendedExplainGenerator trait. If provided, Spark will print" +
@@ -7102,6 +7112,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def nameResolutionLogLevel: Level = getConf(NAME_RESOLUTION_LOG_LEVEL)
 
   def geospatialEnabled: Boolean = getConf(GEOSPATIAL_ENABLED)
+
+  def typesFrameworkEnabled: Boolean = getConf(TYPES_FRAMEWORK_ENABLED)
 
   def dataSourceV2JoinPushdown: Boolean = getConf(DATA_SOURCE_V2_JOIN_PUSHDOWN)
 

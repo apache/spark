@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BinaryEncoder, B
 import org.apache.spark.sql.errors.DataTypeErrorsBase
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.ops.TypeApiOps
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -70,6 +71,11 @@ object RowEncoder extends DataTypeErrorsBase {
   }
 
   private[sql] def encoderForDataType(dataType: DataType, lenient: Boolean): AgnosticEncoder[_] =
+    TypeApiOps(dataType).map(_.getEncoder)
+      .getOrElse(encoderForDataTypeDefault(dataType, lenient))
+
+  private def encoderForDataTypeDefault(
+      dataType: DataType, lenient: Boolean): AgnosticEncoder[_] =
     dataType match {
       case NullType => NullEncoder
       case BooleanType => BoxedBooleanEncoder

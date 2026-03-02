@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.util.IntervalStringStyles.ANSI_STYLE
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.BinaryOutputStyle
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.ops.TypeApiOps
 import org.apache.spark.unsafe.UTF8StringBuilder
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 import org.apache.spark.util.ArrayImplicits._
@@ -65,7 +66,11 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
       case NoConstraint => castToString(from)
     }
 
-  private def castToString(from: DataType): Any => UTF8String = from match {
+  private def castToString(from: DataType): Any => UTF8String =
+    TypeApiOps(from).map(ops => acceptAny[Any](v => ops.formatUTF8(v)))
+      .getOrElse(castToStringDefault(from))
+
+  private def castToStringDefault(from: DataType): Any => UTF8String = from match {
     case CalendarIntervalType =>
       acceptAny[CalendarInterval](i => UTF8String.fromString(i.toString))
     case BinaryType => acceptAny[Array[Byte]](binaryFormatter.apply)
