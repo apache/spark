@@ -2078,7 +2078,7 @@ class Analyzer(
               }
 
               functionType match {
-                case FunctionType.Builtin | FunctionType.Temporary =>
+                case FunctionType.Local =>
                   throw SparkException.internalError(
                     s"Logic inconsistency: Function ${nameParts.mkString(".")} was " +
                     s"classified as $functionType by full lookup but not found by quick check. " +

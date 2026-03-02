@@ -227,10 +227,6 @@ class SessionCatalog(
       namespace: FunctionIdentifier,
       name: String): FunctionIdentifier = {
     namespace.database match {
-      case Some(CatalogManager.SESSION_NAMESPACE) =>
-        // Temp functions: stored with database="session", catalog="system"
-        tempFunctionIdentifier(name)
-
       case Some(CatalogManager.BUILTIN_NAMESPACE) =>
         // Builtin functions (including extensions): stored unqualified
         FunctionIdentifier(format(name))
@@ -2163,23 +2159,20 @@ class SessionCatalog(
       overrideIfExists: Boolean,
       functionBuilder: Option[FunctionBuilder] = None): Unit = {
     val builder = functionBuilder.getOrElse(makeFunctionBuilder(funcDefinition))
-    // Use composite keys for temporary functions, but not for persistent functions
-    val useComposite = funcDefinition.identifier.database.isEmpty
-    registerFunction(funcDefinition, overrideIfExists, functionRegistry, builder, useComposite)
+    registerFunction(funcDefinition, overrideIfExists, functionRegistry, builder)
   }
 
   private def registerFunction[T](
       funcDefinition: CatalogFunction,
       overrideIfExists: Boolean,
       registry: FunctionRegistryBase[T],
-      functionBuilder: FunctionRegistryBase[T]#FunctionBuilder,
-      useCompositeKey: Boolean): Unit = {
+      functionBuilder: FunctionRegistryBase[T]#FunctionBuilder): Unit = {
     val func = funcDefinition.identifier
 
     // Determine the key to use for registration:
     // - Temporary functions (unqualified): use composite key with TEMP_FUNCTION_DB database
     // - Persistent functions (qualified): keep qualification to avoid conflicts
-    val identToRegister = if (func.database.isEmpty && useCompositeKey) {
+    val identToRegister = if (func.database.isEmpty) {
       // Temporary function: use TEMP_FUNCTION_DB.funcName
       tempFunctionIdentifier(func.funcName)
     } else {
@@ -2192,7 +2185,7 @@ class SessionCatalog(
     // Scala UDFs are still allowed to shadow in legacy mode
     // We throw ROUTINE_ALREADY_EXISTS to indicate the builtin function already exists
     val sessionFirst = conf.sessionFunctionResolutionOrder == "first"
-    if (func.database.isEmpty && useCompositeKey && sessionFirst && !overrideIfExists) {
+    if (func.database.isEmpty && sessionFirst && !overrideIfExists) {
       val funcName = func.funcName
       // Check if function exists in builtin namespace (extensions are stored as builtins)
       val builtinIdent = FunctionIdentifier(format(funcName))
@@ -2235,8 +2228,7 @@ class SessionCatalog(
       function,
       overrideIfExists,
       functionRegistry,
-      makeSQLFunctionBuilder(function),
-      isTableFunction = false)
+      makeSQLFunctionBuilder(function))
   }
 
   /**
@@ -2250,8 +2242,7 @@ class SessionCatalog(
       function,
       overrideIfExists,
       tableFunctionRegistry,
-      makeSQLTableFunctionBuilder(function),
-      isTableFunction = true)
+      makeSQLTableFunctionBuilder(function))
   }
 
   /**
@@ -2296,8 +2287,7 @@ class SessionCatalog(
       function: UserDefinedFunction,
       overrideIfExists: Boolean,
       registry: FunctionRegistryBase[T],
-      functionBuilder: Seq[Expression] => T,
-      isTableFunction: Boolean = false): Unit = {
+      functionBuilder: Seq[Expression] => T): Unit = {
 
     val isTemporary = function.name.database.isEmpty
 
@@ -2327,7 +2317,7 @@ class SessionCatalog(
       // This prevents having both scalar and table temporary functions with the same name,
       // which would make DROP TEMPORARY FUNCTION ambiguous (it would drop both).
       val otherRegistry: FunctionRegistryBase[_] =
-        if (isTableFunction) functionRegistry else tableFunctionRegistry
+        if (registry eq functionRegistry) tableFunctionRegistry else functionRegistry
       if (otherRegistry.functionExists(tempIdentifier) && !overrideIfExists) {
         throw QueryCompilationErrors.functionAlreadyExistsError(function.name)
       }
@@ -2340,14 +2330,11 @@ class SessionCatalog(
       val info = function.toExpressionInfo
       registry.registerFunction(tempIdentifier, info, functionBuilder)
     } else {
-      // Persistent function - the metastore already enforces cross-type uniqueness,
-      // so we only check the target registry here.
-    if (registry.functionExists(function.name) && !overrideIfExists) {
-      throw QueryCompilationErrors.functionAlreadyExistsError(function.name)
-    }
-
-    val info = function.toExpressionInfo
-    registry.registerFunction(function.name, info, functionBuilder)
+      registerFunction(
+        function.toCatalogFunction,
+        overrideIfExists,
+        registry,
+        functionBuilder)
     }
   }
 
@@ -2467,18 +2454,6 @@ class SessionCatalog(
     }
 
   /**
-   * Generic helper for looking up functions with temp/builtin shadowing and view context.
-   * Checks temp function first (with TEMP_FUNCTION_DB database qualifier), then built-in
-   * (without database qualifier). For temp functions, applies view resolution context.
-   *
-   * @param name The function name (unqualified)
-   * @param registry The registry to search (FunctionRegistry or TableFunctionRegistry)
-   * @param checkBuiltinOperators Whether to check built-in operators first (scalar functions only)
-   * @tparam T The registry's type parameter (Expression for FunctionRegistry,
-   *           LogicalPlan for TableFunctionRegistry)
-   * @return ExpressionInfo if function found, None otherwise
-   */
-  /**
    * Looks up functions using PATH-based resolution.
    * Searches through the resolution path (session then builtin) with view context handling.
    *
@@ -2544,7 +2519,15 @@ class SessionCatalog(
       case SessionCatalog.Temp =>
         synchronized {
           if (tableFunction) {
-            if (registry.functionExists(identifier)) registry.lookupFunction(identifier) else None
+            lookupTempFuncWithViewContext(
+              name,
+              _ => false,
+              _ =>
+                if (registry.functionExists(identifier)) {
+                  registry.lookupFunction(identifier)
+                } else {
+                  None
+                })
           } else {
             lookupTempFuncWithViewContext(
               name,
@@ -2669,28 +2652,6 @@ class SessionCatalog(
     resolveFunctionWithFallback(name, arguments, tableFunctionRegistry)
 
   /**
-   * Resolves an unqualified name as a table function, respecting path order. In each namespace
-   * we check for a table function first; if present (including generator functions that exist as
-   * both scalar and table), return it. Only if the namespace has a scalar but no table do we
-   * return "scalar first" so the caller can throw NOT_A_TABLE_FUNCTION.
-   */
-  def resolveBuiltinOrTempTableFunctionRespectingPathOrder(
-      name: String,
-      arguments: Seq[Expression]): Option[Either[LogicalPlan, Unit]] = {
-    val path = resolutionPath()
-    for (namespace <- path) {
-      resolveInNamespace(namespace, name, arguments, tableFunctionRegistry) match {
-        case Some(plan) => return Some(Left(plan))
-        case None =>
-          if (lookupInNamespace(namespace, name, functionRegistry).isDefined) {
-            return Some(Right(()))
-          }
-      }
-    }
-    None
-  }
-
-  /**
    * Resolves functions using PATH-based resolution.
    * Searches through the resolution path, returning the first function found.
    *
@@ -2797,12 +2758,11 @@ class SessionCatalog(
                 makeUserDefinedScalarFuncBuilder(udf))
             } else {
               loadFunctionResources(funcMetadata.resources)
-        registerFunction(
+              registerFunction(
                 funcMetadata,
-          overrideIfExists = false,
+                overrideIfExists = false,
                 functionRegistry,
-                makeFunctionBuilder(funcMetadata),
-                useCompositeKey = false)  // Persistent functions don't use composite keys
+                makeFunctionBuilder(funcMetadata))
             }
             functionRegistry.lookupFunctionBuilder(qualifiedIdent).get
           }
@@ -2830,9 +2790,9 @@ class SessionCatalog(
         failFunctionLookup(qualifiedIdent)
       }
       val udf = UserDefinedFunction.fromCatalogFunction(funcMetadata, parser)
-        registerUserDefinedFunction[LogicalPlan](
+      registerUserDefinedFunction[LogicalPlan](
         udf,
-          overrideIfExists = false,
+        overrideIfExists = false,
         tableFunctionRegistry,
         makeUserDefinedTableFuncBuilder(udf))
       tableFunctionRegistry.lookupFunction(qualifiedIdent, arguments)
@@ -2843,8 +2803,8 @@ class SessionCatalog(
    * Fetch a catalog function from the external catalog.
    */
   private def fetchCatalogFunction(qualifiedIdent: FunctionIdentifier): CatalogFunction = {
-      val db = qualifiedIdent.database.get
-      val funcName = qualifiedIdent.funcName
+    val db = qualifiedIdent.database.get
+    val funcName = qualifiedIdent.funcName
     requireDbExists(db)
     try {
       // Please note that qualifiedIdent is provided by the user. However,
@@ -2853,7 +2813,7 @@ class SessionCatalog(
       // catalogFunction.identifier (difference is on case-sensitivity).
       // At here, we preserve the input from the user.
       externalCatalog.getFunction(db, funcName).copy(identifier = qualifiedIdent)
-        } catch {
+    } catch {
       case _: NoSuchPermanentFunctionException | _: NoSuchFunctionException =>
         failFunctionLookup(qualifiedIdent)
     }

@@ -41,10 +41,8 @@ import org.apache.spark.sql.connector.catalog.{
  */
 sealed trait FunctionType
 object FunctionType {
-  /** Function is a built-in function in the builtin registry. */
-  case object Builtin extends FunctionType
-  /** Function is a temporary function in the session registry. */
-  case object Temporary extends FunctionType
+  /** Function is a built-in or temporary function in the session registry. */
+  case object Local extends FunctionType
   /** Function is a persistent function in the external catalog. */
   case object Persistent extends FunctionType
   /** Function exists only as a table function (cannot be used in scalar context). */
@@ -79,17 +77,18 @@ class FunctionResolution(
    */
   private def resolutionCandidates(nameParts: Seq[String]): Seq[Seq[String]] = {
     if (nameParts.size == 1) {
-      val catalogPath = catalogManager.currentCatalog.name +: catalogManager.currentNamespace
-      val searchPath = SQLConf.get.resolutionSearchPath(catalogPath.toSeq)
+      val catalogPath = if (AnalysisContext.get.catalogAndNamespace.nonEmpty) {
+        AnalysisContext.get.catalogAndNamespace
+      } else {
+        (Seq(catalogManager.currentCatalog.name) ++ catalogManager.currentNamespace).toSeq
+      }
+      val searchPath = SQLConf.get.resolutionSearchPath(catalogPath)
       searchPath.map(_ ++ nameParts)
     } else {
       nameParts.size match {
         case 2 if FunctionResolution.sessionNamespaceKind(nameParts).isDefined =>
           // Partially qualified builtin/session: try persistent first so user schema wins
           Seq(nameParts, Seq(CatalogManager.SYSTEM_CATALOG_NAME) ++ nameParts)
-        case 3 if FunctionResolution.sessionNamespaceKind(nameParts).isDefined =>
-          // Fully qualified system.builtin.func or system.session.func
-          Seq(nameParts)
         case _ =>
           Seq(nameParts)
       }
@@ -107,10 +106,7 @@ class FunctionResolution(
         val expr = v1SessionCatalog.resolveScalarFunction(kind, funcName, unresolvedFunc.arguments)
         if (expr.isEmpty) {
           if (v1SessionCatalog.lookupFunctionInfo(
-              SessionCatalog.Temp, funcName, tableFunction = true).isDefined) {
-            throw QueryCompilationErrors.notAScalarFunctionError(funcName, unresolvedFunc)
-          }
-          if (v1SessionCatalog.lookupBuiltinOrTempTableFunction(funcName).isDefined) {
+              kind, funcName, tableFunction = true).isDefined) {
             throw QueryCompilationErrors.notAScalarFunctionError(funcName, unresolvedFunc)
           }
         }
@@ -132,8 +128,12 @@ class FunctionResolution(
       } catch {
         case e: AnalysisException if e.getCondition == "REQUIRES_SINGLE_PART_NAMESPACE" &&
             nameParts.size == 3 =>
-          val catalogPath = catalogManager.currentCatalog.name +: catalogManager.currentNamespace
-          val searchPath = SQLConf.get.resolutionSearchPath(catalogPath.toSeq)
+          val catalogPath = if (AnalysisContext.get.catalogAndNamespace.nonEmpty) {
+            AnalysisContext.get.catalogAndNamespace
+          } else {
+            (Seq(catalogManager.currentCatalog.name) ++ catalogManager.currentNamespace).toSeq
+          }
+          val searchPath = SQLConf.get.resolutionSearchPath(catalogPath)
           throw QueryCompilationErrors.unresolvedRoutineError(
             unresolvedFunc.nameParts, searchPath.map(toSQLId), unresolvedFunc.origin)
         case _: NoSuchFunctionException =>
@@ -176,8 +176,12 @@ class FunctionResolution(
           case None =>
         }
       }
-      val catalogPath = catalogManager.currentCatalog.name +: catalogManager.currentNamespace
-      val searchPath = SQLConf.get.resolutionSearchPath(catalogPath.toSeq)
+      val catalogPath = if (AnalysisContext.get.catalogAndNamespace.nonEmpty) {
+        AnalysisContext.get.catalogAndNamespace
+      } else {
+        (Seq(catalogManager.currentCatalog.name) ++ catalogManager.currentNamespace).toSeq
+      }
+      val searchPath = SQLConf.get.resolutionSearchPath(catalogPath)
       throw QueryCompilationErrors.unresolvedRoutineError(
         unresolvedFunc.nameParts, searchPath.map(toSQLId), unresolvedFunc.origin)
     }
@@ -223,7 +227,12 @@ class FunctionResolution(
               }
             }
           } catch {
-            case _: Exception => // ignore
+            case _: NoSuchFunctionException | _: NoSuchNamespaceException |
+                 _: CatalogNotFoundException =>
+              // ignore
+            case e: AnalysisException
+                if e.getCondition == "FORBIDDEN_OPERATION" =>
+              // ignore
           }
           None
         case e: AnalysisException
@@ -305,11 +314,11 @@ class FunctionResolution(
     FunctionResolution.sessionNamespaceKind(nameParts) match {
       case Some(SessionCatalog.Extension) | Some(SessionCatalog.Builtin) =>
         if (lookupBuiltinOrTempFunction(nameParts, unresolvedFunc).isDefined) {
-          return FunctionType.Builtin  // Extension and builtin both as Builtin
+          return FunctionType.Local  // Extension and builtin both as Local
         }
       case Some(SessionCatalog.Temp) =>
         if (lookupBuiltinOrTempFunction(nameParts, unresolvedFunc).isDefined) {
-          return FunctionType.Temporary
+          return FunctionType.Local
         }
       case None =>
         // Unqualified or qualified with a catalog
@@ -319,15 +328,15 @@ class FunctionResolution(
           case Some(info) =>
             // Determine if it's extension, temp, or builtin from the ExpressionInfo
             if (info.getDb == CatalogManager.EXTENSION_NAMESPACE) {
-              return FunctionType.Builtin
+              return FunctionType.Local
             } else if (info.getDb == CatalogManager.SESSION_NAMESPACE) {
               if (nameParts.size == 1 && unresolvedFunc.exists(_.isInternal)) {
-                return FunctionType.Builtin
+                return FunctionType.Local
               } else {
-                return FunctionType.Temporary
+                return FunctionType.Local
               }
             } else {
-              return FunctionType.Builtin
+              return FunctionType.Local
             }
           case None =>
         }
