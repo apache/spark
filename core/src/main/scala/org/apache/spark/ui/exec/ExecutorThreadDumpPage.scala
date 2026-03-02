@@ -81,15 +81,19 @@ private[ui] class ExecutorThreadDumpPage(
         {
           // scalastyle:off
           <p></p>
-          <span class="collapse-thead-stack-trace-table collapse-table"
-                data-collapse-name="collapse-thead-stack-trace-table"
-                data-collapse-table="thead-stack-trace-table"
-                data-collapse-button="true">
+          <span class="collapse-table" data-bs-toggle="collapse"
+                data-bs-target="#thead-stack-trace-table"
+                aria-expanded="true" aria-controls="thead-stack-trace-table"
+                data-collapse-name="collapse-thead-stack-trace-table">
             <h4>
               <span class="collapse-table-arrow arrow-open"></span>
               <a>Thread Stack Trace</a>
             </h4>
           </span>
+        }
+        <div class="collapsible-table collapse show" id="thead-stack-trace-table">
+          {
+          // scalastyle:off
           <div class="thead-stack-trace-table-button" style="display: flex; align-items: center;">
             <a class="expandbutton" data-action="expandAllThreadStackTrace">Expand All</a>
             <a class="expandbutton d-none" data-action="collapseAllThreadStackTrace">Collapse All</a>
@@ -106,21 +110,22 @@ private[ui] class ExecutorThreadDumpPage(
             </div>
           </div>
           <p></p>
-        }
-        <table class={UIUtils.TABLE_CLASS_STRIPED + " accordion-group" + " sortable" + " thead-stack-trace-table collapsible-table"}>
-          <thead>
-            <th data-action="collapseAllThreadStackTrace" data-toggle-button="false">Thread ID</th>
-            <th data-action="collapseAllThreadStackTrace" data-toggle-button="false">Thread Name</th>
-            <th data-action="collapseAllThreadStackTrace" data-toggle-button="false">Thread State</th>
-            <th data-action="collapseAllThreadStackTrace" data-toggle-button="false">
-              <span data-bs-toggle="tooltip" data-bs-placement="top"
-                    title="Objects whose lock the thread currently holds">
-                Thread Locks
-              </span>
-            </th>
-          </thead>
-          <tbody>{dumpRows}</tbody>
-        </table>
+          }
+          <table class={UIUtils.TABLE_CLASS_STRIPED + " accordion-group" + " sortable"}>
+            <thead>
+              <th data-action="collapseAllThreadStackTrace" data-toggle-button="false">Thread ID</th>
+              <th data-action="collapseAllThreadStackTrace" data-toggle-button="false">Thread Name</th>
+              <th data-action="collapseAllThreadStackTrace" data-toggle-button="false">Thread State</th>
+              <th data-action="collapseAllThreadStackTrace" data-toggle-button="false">
+                <span data-bs-toggle="tooltip" data-bs-placement="top"
+                      title="Objects whose lock the thread currently holds">
+                  Thread Locks
+                </span>
+              </th>
+            </thead>
+            <tbody>{dumpRows}</tbody>
+          </table>
+        </div>
       </div>
     </div>
     }.getOrElse(Text("Error fetching thread dump"))
@@ -159,15 +164,17 @@ private[ui] class ExecutorThreadDumpPage(
   private def threadDumpSummary(threadDump: Array[ThreadStackTrace]): Seq[Node] = {
     val totalCount = threadDump.length
     <div>
-      <span class="thead-dump-summary collapse-table"
-            data-collapse-name="thead-dump-summary"
-            data-collapse-table="thread-dump-summary-table">
+      <span class="collapse-table" data-bs-toggle="collapse"
+            data-bs-target="#thread-dump-summary-table"
+            aria-expanded="true" aria-controls="thread-dump-summary-table"
+            data-collapse-name="thead-dump-summary">
         <h4>
           <span class="collapse-table-arrow arrow-open"></span>
           <a>Thread Dump Summary: { totalCount }</a>
         </h4>
       </span>
-      <table class={UIUtils.TABLE_CLASS_STRIPED + " accordion-group" + " sortable" + " thread-dump-summary-table collapsible-table"}>
+      <div class="collapsible-table collapse show" id="thread-dump-summary-table">
+      <table class={UIUtils.TABLE_CLASS_STRIPED + " accordion-group" + " sortable"}>
         <thead><th>Thread State</th><th>Count</th><th>Percentage</th></thead>
         <tbody>
           {
@@ -181,6 +188,7 @@ private[ui] class ExecutorThreadDumpPage(
           }
         </tbody>
       </table>
+      </div>
     </div>
   }
   // scalastyle:on

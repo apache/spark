@@ -379,43 +379,46 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
 
     if (shouldShowActiveJobs) {
       content ++=
-        <span id="active" class="collapse-aggregated-activeJobs collapse-table"
-            data-collapse-name="collapse-aggregated-activeJobs"
-            data-collapse-table="aggregated-activeJobs">
+        <span id="active" class="collapse-table" data-bs-toggle="collapse"
+            data-bs-target="#aggregated-activeJobs"
+            aria-expanded="true" aria-controls="aggregated-activeJobs"
+            data-collapse-name="collapse-aggregated-activeJobs">
           <h4>
             <span class="collapse-table-arrow arrow-open"></span>
             <a>Active Jobs ({activeJobs.size})</a>
           </h4>
         </span> ++
-        <div class="aggregated-activeJobs collapsible-table">
+        <div class="collapsible-table collapse show" id="aggregated-activeJobs">
           {activeJobsTable}
         </div>
     }
     if (shouldShowCompletedJobs) {
       content ++=
-        <span id="completed" class="collapse-aggregated-completedJobs collapse-table"
-            data-collapse-name="collapse-aggregated-completedJobs"
-            data-collapse-table="aggregated-completedJobs">
+        <span id="completed" class="collapse-table" data-bs-toggle="collapse"
+            data-bs-target="#aggregated-completedJobs"
+            aria-expanded="true" aria-controls="aggregated-completedJobs"
+            data-collapse-name="collapse-aggregated-completedJobs">
           <h4>
             <span class="collapse-table-arrow arrow-open"></span>
             <a>Completed Jobs ({completedJobNumStr})</a>
           </h4>
         </span> ++
-        <div class="aggregated-completedJobs collapsible-table">
+        <div class="collapsible-table collapse show" id="aggregated-completedJobs">
           {completedJobsTable}
         </div>
     }
     if (shouldShowFailedJobs) {
       content ++=
-        <span id ="failed" class="collapse-aggregated-failedJobs collapse-table"
-            data-collapse-name="collapse-aggregated-failedJobs"
-            data-collapse-table="aggregated-failedJobs">
+        <span id ="failed" class="collapse-table" data-bs-toggle="collapse"
+            data-bs-target="#aggregated-failedJobs"
+            aria-expanded="true" aria-controls="aggregated-failedJobs"
+            data-collapse-name="collapse-aggregated-failedJobs">
           <h4>
             <span class="collapse-table-arrow arrow-open"></span>
             <a>Failed Jobs ({failedJobs.size})</a>
           </h4>
         </span> ++
-      <div class="aggregated-failedJobs collapsible-table">
+      <div class="collapsible-table collapse show" id="aggregated-failedJobs">
         {failedJobsTable}
       </div>
     }

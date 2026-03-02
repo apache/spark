@@ -101,8 +101,8 @@ class SparkConnectServerPageSuite
 
     // Hiding table support
     assert(
-      html.contains("class=\"collapse-aggregated-sessionstat" +
-        " collapse-table\" data-collapse-name=\"collapse-aggregated-sessionstat\""))
+      html.contains("class=\"collapse-table\" data-bs-toggle=\"collapse\"" +
+        " data-bs-target=\"#aggregated-sessionstat\""))
   }
 
   test("Spark Connect Server session page should load successfully") {
@@ -128,7 +128,7 @@ class SparkConnectServerPageSuite
 
     // Hiding table support
     assert(
-      html.contains("collapse-aggregated-sqlsessionstat collapse-table\"" +
-        " data-collapse-name=\"collapse-aggregated-sqlsessionstat\""))
+      html.contains("collapse-table\" data-bs-toggle=\"collapse\"" +
+        " data-bs-target=\"#aggregated-sqlsessionstat\""))
   }
 }

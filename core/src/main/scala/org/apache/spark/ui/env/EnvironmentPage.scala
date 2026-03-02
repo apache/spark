@@ -92,81 +92,90 @@ private[ui] class EnvironmentPage(
       headerClasses = headerClasses)
     val content =
       <span>
-        <span class="collapse-aggregated-runtimeInformation collapse-table"
-            data-collapse-name="collapse-aggregated-runtimeInformation"
-            data-collapse-table="aggregated-runtimeInformation">
+        <span class="collapse-table" data-bs-toggle="collapse"
+            data-bs-target="#aggregated-runtimeInformation"
+            aria-expanded="true" aria-controls="aggregated-runtimeInformation"
+            data-collapse-name="collapse-aggregated-runtimeInformation">
           <h4>
             <span class="collapse-table-arrow arrow-open"></span>
             <a>Runtime Information</a>
           </h4>
         </span>
-        <div class="aggregated-runtimeInformation collapsible-table">
+        <div class="collapsible-table collapse show" id="aggregated-runtimeInformation">
           {runtimeInformationTable}
         </div>
-        <span class="collapse-aggregated-sparkProperties collapse-table"
-            data-collapse-name="collapse-aggregated-sparkProperties"
-            data-collapse-table="aggregated-sparkProperties">
+        <span class="collapse-table" data-bs-toggle="collapse"
+            data-bs-target="#aggregated-sparkProperties"
+            aria-expanded="true" aria-controls="aggregated-sparkProperties"
+            data-collapse-name="collapse-aggregated-sparkProperties">
           <h4>
             <span class="collapse-table-arrow arrow-open"></span>
             <a>Spark Properties</a>
           </h4>
         </span>
-        <div class="aggregated-sparkProperties collapsible-table">
+        <div class="collapsible-table collapse show" id="aggregated-sparkProperties">
           {sparkPropertiesTable}
         </div>
-        <span class="collapse-aggregated-execResourceProfileInformation collapse-table"
-              data-collapse-name="collapse-aggregated-execResourceProfileInformation"
-              data-collapse-table="aggregated-execResourceProfileInformation">
+        <span class="collapse-table" data-bs-toggle="collapse"
+            data-bs-target="#aggregated-execResourceProfileInformation"
+            aria-expanded="true"
+            aria-controls="aggregated-execResourceProfileInformation"
+            data-collapse-name="collapse-aggregated-execResourceProfileInformation">
           <h4>
             <span class="collapse-table-arrow arrow-open"></span>
             <a>Resource Profiles</a>
           </h4>
         </span>
-        <div class="aggregated-execResourceProfileInformation collapsible-table">
+        <div class="collapsible-table collapse show"
+            id="aggregated-execResourceProfileInformation">
           {resourceProfileInformationTable}
         </div>
-        <span class="collapse-aggregated-hadoopProperties collapse-table"
-              data-collapse-name="collapse-aggregated-hadoopProperties"
-              data-collapse-table="aggregated-hadoopProperties">
+        <span class="collapse-table" data-bs-toggle="collapse"
+            data-bs-target="#aggregated-hadoopProperties"
+            aria-expanded="false" aria-controls="aggregated-hadoopProperties"
+            data-collapse-name="collapse-aggregated-hadoopProperties">
           <h4>
             <span class="collapse-table-arrow arrow-closed"></span>
             <a>Hadoop Properties</a>
           </h4>
         </span>
-        <div class="aggregated-hadoopProperties collapsible-table collapsed">
+        <div class="collapsible-table collapse" id="aggregated-hadoopProperties">
           {hadoopPropertiesTable}
         </div>
-        <span class="collapse-aggregated-systemProperties collapse-table"
-            data-collapse-name="collapse-aggregated-systemProperties"
-            data-collapse-table="aggregated-systemProperties">
+        <span class="collapse-table" data-bs-toggle="collapse"
+            data-bs-target="#aggregated-systemProperties"
+            aria-expanded="false" aria-controls="aggregated-systemProperties"
+            data-collapse-name="collapse-aggregated-systemProperties">
           <h4>
             <span class="collapse-table-arrow arrow-closed"></span>
             <a>System Properties</a>
           </h4>
         </span>
-        <div class="aggregated-systemProperties collapsible-table collapsed">
+        <div class="collapsible-table collapse" id="aggregated-systemProperties">
           {systemPropertiesTable}
         </div>
-        <span class="collapse-aggregated-metricsProperties collapse-table"
-              data-collapse-name="collapse-aggregated-metricsProperties"
-              data-collapse-table="aggregated-metricsProperties">
+        <span class="collapse-table" data-bs-toggle="collapse"
+            data-bs-target="#aggregated-metricsProperties"
+            aria-expanded="false" aria-controls="aggregated-metricsProperties"
+            data-collapse-name="collapse-aggregated-metricsProperties">
           <h4>
             <span class="collapse-table-arrow arrow-closed"></span>
             <a>Metrics Properties</a>
           </h4>
         </span>
-        <div class="aggregated-metricsProperties collapsible-table collapsed">
+        <div class="collapsible-table collapse" id="aggregated-metricsProperties">
           {metricsPropertiesTable}
         </div>
-        <span class="collapse-aggregated-classpathEntries collapse-table"
-            data-collapse-name="collapse-aggregated-classpathEntries"
-            data-collapse-table="aggregated-classpathEntries">
+        <span class="collapse-table" data-bs-toggle="collapse"
+            data-bs-target="#aggregated-classpathEntries"
+            aria-expanded="false" aria-controls="aggregated-classpathEntries"
+            data-collapse-name="collapse-aggregated-classpathEntries">
           <h4>
             <span class="collapse-table-arrow arrow-closed"></span>
             <a>Classpath Entries</a>
           </h4>
         </span>
-        <div class="aggregated-classpathEntries collapsible-table collapsed">
+        <div class="collapsible-table collapse" id="aggregated-classpathEntries">
           {classpathEntriesTable}
         </div>
         <script src={UIUtils.prependBaseUri(request, "/static/environmentpage.js")}></script>
