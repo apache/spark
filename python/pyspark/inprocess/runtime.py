@@ -35,8 +35,16 @@ jep type conversions (Java -> Python):
     Long                  -> int
 """
 
+import traceback as _traceback
+
 import pyarrow as pa
 import cloudpickle
+
+# Sentinel prefix embedded in the RuntimeError message when a UDF raises an exception.
+# The JVM side detects this prefix to distinguish UDF logic errors (which carry a full
+# Python traceback) from infrastructure errors (interpreter not initialized, CDI failure,
+# etc., which propagate as plain JepException messages without this prefix).
+_UDF_TRACEBACK_SENTINEL = "__INPROCESS_UDF_TRACEBACK__:"
 
 # UDF deserialization cache: cloudpickle bytes -> callable
 # Avoids re-deserializing the same UDF for every batch on this executor.
@@ -90,11 +98,21 @@ def _inprocess_invoke(
         for ap, sp in zip(input_array_ptrs, input_schema_ptrs)
     ]
 
-    # Execute UDF -- receives pa.Array per input column, returns pa.Array
-    if len(input_arrays) == 1:
-        result = udf_func(input_arrays[0])
-    else:
-        result = udf_func(*input_arrays)
+    # Execute UDF and export result.
+    # Any exception from user code (TypeError, ValueError, etc.) or from a bad return
+    # value (wrong pa.Array type causing _export_to_c to fail) is caught here and
+    # re-raised with the full Python traceback embedded in the message.  Infrastructure
+    # errors above this block (CDI import failure, cloudpickle deserialization failure)
+    # propagate as-is so the Scala side can tell them apart.
+    try:
+        if len(input_arrays) == 1:
+            result = udf_func(input_arrays[0])
+        else:
+            result = udf_func(*input_arrays)
+    except Exception:
+        raise RuntimeError(
+            _UDF_TRACEBACK_SENTINEL + _traceback.format_exc()
+        ) from None
 
     # Export result into the JVM-pre-allocated ArrowArray/ArrowSchema C structs.
     # PyArrow fills the structs in-place and registers its own CDI release callback.

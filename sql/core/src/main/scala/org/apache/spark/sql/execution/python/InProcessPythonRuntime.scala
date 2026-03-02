@@ -21,6 +21,7 @@ import scala.jdk.CollectionConverters._
 
 import jep.{JepConfig, JepException, SharedInterpreter}
 
+import org.apache.spark.api.python.PythonException
 import org.apache.spark.internal.Logging
 
 /**
@@ -141,8 +142,29 @@ private[python] object InProcessPythonRuntime extends Logging {
         java.lang.Long.valueOf(outputSchemaAddr))
     } catch {
       case e: JepException =>
-        throw new RuntimeException(
-          s"In-process Python UDF execution failed: ${e.getMessage}", e)
+        val msg = e.getMessage
+        val sentinelIdx = if (msg != null) msg.indexOf(TRACEBACK_SENTINEL) else -1
+        if (sentinelIdx >= 0) {
+          // UDF logic error: Python raised an exception inside user code.
+          // The Python side embedded the full formatted traceback after the sentinel.
+          val traceback = msg.substring(sentinelIdx + TRACEBACK_SENTINEL.length)
+          throw new PythonException(
+            errorClass = "PYTHON_EXCEPTION",
+            messageParameters = Map(
+              "msg" -> "An exception was thrown from the in-process Python UDF",
+              "traceback" -> traceback),
+            cause = e)
+        } else {
+          // Infrastructure error: interpreter issue, CDI contract violation,
+          // UDF deserialization failure, etc.
+          throw new RuntimeException(
+            s"In-process Python infrastructure error: $msg", e)
+        }
     }
   }
+
+  // Sentinel embedded by the Python bridge in RuntimeError messages when a UDF raises an
+  // exception.  Its presence distinguishes UDF logic errors (full traceback available) from
+  // infrastructure errors (no Python traceback).
+  private val TRACEBACK_SENTINEL = "__INPROCESS_UDF_TRACEBACK__:"
 }

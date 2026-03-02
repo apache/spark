@@ -39,10 +39,10 @@ Most of this phase is already implemented. Two known gaps remain.
 
 **Working items:**
 
-- [ ] Extract full Python traceback from `JepException`: replace `e.getMessage()` (which gives only the exception message) with `e.getPythonErrorMessage()` or equivalent that returns the full formatted Python traceback (file name, line numbers, function call stack).
-- [ ] Throw `PythonException` instead of `RuntimeException` in `InProcessPythonRuntime.invoke`: Spark's existing `PythonException` class (already used by `pandas_udf` failures) carries the formatted traceback and renders it in the Spark UI Task Error tab. Switching to it makes in-process UDF errors as readable as pandas UDF errors.
-- [ ] Categorize errors: distinguish between (a) UDF logic errors (Python `TypeError`, `ValueError`, etc. from user code — show Python traceback prominently) and (b) infrastructure errors (interpreter not initialized, serialization failure — different message, no Python traceback).
-- [ ] Add unit tests: verify that a buggy UDF (e.g., one that raises `ValueError`) produces a task failure whose message includes the Python file, line number, and function name where the error occurred.
+- [x] Extract full Python traceback from `JepException`: `JepException` has no `getPythonErrorMessage()` API. Instead, the Python bridge (`runtime.py`) now catches exceptions from user UDF code, formats the full traceback with `traceback.format_exc()`, and re-raises as `RuntimeError` with a sentinel prefix (`__INPROCESS_UDF_TRACEBACK__:`). The full traceback (file, line, function name, exception type+message) is embedded in the `JepException.getMessage()` string that the Scala side receives.
+- [x] Throw `PythonException` instead of `RuntimeException` in `InProcessPythonRuntime.invoke`: the catch block now detects the sentinel in `JepException.getMessage()`. If found, it extracts the traceback string and throws `PythonException(errorClass="PYTHON_EXCEPTION", ...)` — the same error class used by `pandas_udf` failures, which renders in the Spark UI Task Error tab. If not found (no sentinel = infrastructure error), it throws `RuntimeException` with "In-process Python infrastructure error: ..." message.
+- [x] Categorize errors: UDF logic errors (user code raises `TypeError`, `ValueError`, etc.) carry the sentinel and are thrown as `PythonException`. Infrastructure errors (CDI import failure, cloudpickle deserialization failure, interpreter not initialized) propagate as plain `JepException` without the sentinel and are thrown as `RuntimeException`.
+- [x] Add unit tests: `test_buggy_udf_exposes_python_traceback` in `test_inprocess_udf.py` verifies that a UDF raising `ValueError("intentional test error")` produces a task failure whose message includes `ValueError`, the error text, and the UDF function name.
 
 ---
 

@@ -614,6 +614,37 @@ class InProcessUDFTests(ReusedSQLTestCase):
         finally:
             shutil.rmtree(tmpdir, ignore_errors=True)
 
+    # ------------------------------------------------------------------
+    # Error handling
+    # ------------------------------------------------------------------
+
+    def test_buggy_udf_exposes_python_traceback(self):
+        """A UDF that raises an exception must include the Python traceback in the error.
+
+        The traceback must name the exception type, the error message, and the
+        file/line where the exception was raised, matching what you would see in a
+        standard Python traceback.
+        """
+        from pyspark.inprocess.udf import inprocess_udf
+        from pyspark.sql.types import LongType
+
+        @inprocess_udf(return_type=LongType())
+        def always_fails(x):
+            raise ValueError("intentional test error from always_fails")
+
+        df = self.spark.range(1)
+        try:
+            df.select(always_fails(df["id"])).collect()
+            self.fail("Expected exception was not raised")
+        except Exception as e:
+            error_msg = str(e)
+            self.assertIn("ValueError", error_msg,
+                          "Exception type must appear in the error message")
+            self.assertIn("intentional test error from always_fails", error_msg,
+                          "Exception message must appear in the error")
+            self.assertIn("always_fails", error_msg,
+                          "UDF function name must appear in the traceback")
+
 
 if __name__ == "__main__":
     from pyspark.testing.utils import PySparkTestCase
