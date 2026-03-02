@@ -168,15 +168,32 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
         </span>
       </div>
 
-      <div id="plan-viz-graph">
-        <div>
-          <input type="checkbox" id="stageId-and-taskId-checkbox"></input>
-          <span>Show the Stage ID and Task ID that corresponds to the max metric</span>
+      <div id="plan-viz-content" class="row">
+        <div class="col-8">
+          <div id="plan-viz-graph">
+            <div>
+              <input type="checkbox" id="stageId-and-taskId-checkbox"></input>
+              <span>Show the Stage ID and Task ID that corresponds to the max metric</span>
+            </div>
+          </div>
+        </div>
+        <div class="col-4">
+          <div id="plan-viz-details-panel" class="sticky-top" style="top: 4rem; z-index: 1;">
+            <div class="card">
+              <div class="card-header fw-bold" id="plan-viz-details-title">Details</div>
+              <div class="card-body" id="plan-viz-details-body">
+                <p class="text-muted mb-0">Click a node to view details</p>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
       <div id="plan-viz-metadata" style="display:none">
         <div class="dot-file">
           {graph.makeDotFile(metrics)}
+        </div>
+        <div class="node-details">
+          {graph.makeNodeDetailsJson(metrics)}
         </div>
       </div>
       {planVisualizationResources(request)}

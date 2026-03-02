@@ -36,11 +36,30 @@ class SparkPlanGraphSuite extends SparkFunSuite {
           accumulatorId = 35,
           metricType = "nsTiming")))
     val dotNode = planGraphNode.makeDotNode(Map.empty[Long, String])
-    val expectedDotNode = "  24 [id=\"node24\" labelType=\"html\" label=\"" +
-      "<br><b>Scan JDBCRelation(\\\"test-schema\\\".tickets) [numPartitions=1]</b><br><br>\" " +
+    val expectedDotNode = "  24 [id=\"node24\" label=\"" +
+      "Scan JDBCRelation(\\\"test-schema\\\".tickets) [numPartitions=1]\" " +
       "tooltip=\"Scan JDBCRelation(\\\"test-schema\\\".tickets) [numPartitions=1] [ticket_no#0] " +
       "PushedFilters: [], ReadSchema: struct<ticket_no:string>\"];"
 
     assertResult(expectedDotNode)(dotNode)
+  }
+
+  test("SPARK-55786: makeNodeDetailsJson uses cluster prefix and includes children") {
+    import scala.collection.mutable
+    val childNode = new SparkPlanGraphNode(
+      id = 1, name = "HashAggregate", desc = "HashAggregate(keys=[])",
+      metrics = Seq(SQLPlanMetric("peak memory", 10, "size")))
+    val cluster = new SparkPlanGraphCluster(
+      id = 2, name = "WholeStageCodegen (1)", desc = "WholeStageCodegen (1)",
+      nodes = mutable.ArrayBuffer(childNode),
+      metrics = Seq(SQLPlanMetric("duration", 20, "timing")))
+    val graph = SparkPlanGraph(Seq(cluster), Seq.empty)
+    val json = graph.makeNodeDetailsJson(Map(10L -> "256.0 KiB", 20L -> "5 ms"))
+    assert(json.contains("\"cluster2\""), "cluster should use cluster prefix")
+    assert(json.contains("\"node1\""), "child should use node prefix")
+    assert(json.contains("\"children\":[\"node1\"]"),
+      "cluster should list children")
+    assert(!json.contains("\"node2\""),
+      "cluster should not use node prefix")
   }
 }

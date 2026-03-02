@@ -22,6 +22,10 @@ var PlanVizConstants = {
   svgMarginY: 16
 };
 
+// Track selected node for re-rendering the detail panel on checkbox toggle
+var selectedNodeId = null;
+var cachedNodeDetails = null;
+
 function shouldRenderPlanViz() {
   return planVizContainer().selectAll("svg").empty();
 }
@@ -87,19 +91,21 @@ function setupLayoutForSparkPlanCluster(g, svg) {
     const bbox = labelGroup.node().getBBox();
     const rect = cluster.select("rect");
     const oldWidth = parseFloat(rect.attr("width"));
-    const newWidth = Math.max(oldWidth, bbox.width) + 10;
-    const oldHeight = parseFloat(rect.attr("height"));
-    const newHeight = oldHeight + bbox.height;
-    rect
-      .attr("width", (_ignored_i) => newWidth)
-      .attr("height", (_ignored_i) => newHeight)
-      .attr("x", (_ignored_i) => parseFloat(rect.attr("x")) - (newWidth - oldWidth) / 2)
-      .attr("y", (_ignored_i) => parseFloat(rect.attr("y")) - (newHeight - oldHeight) / 2);
+    const newWidth = Math.max(oldWidth, bbox.width + 20);
+    const height = parseFloat(rect.attr("height"));
 
+    // Expand width if label is wider than cluster
+    if (newWidth > oldWidth) {
+      rect
+        .attr("width", newWidth)
+        .attr("x", parseFloat(rect.attr("x")) - (newWidth - oldWidth) / 2);
+    }
+
+    // Move label to top-right corner
     labelGroup
       .select("g")
       .attr("text-anchor", "end")
-      .attr("transform", "translate(" + (newWidth / 2 - 5) + "," + (-newHeight / 2 + 5) + ")");
+      .attr("transform", "translate(" + (newWidth / 2 - 5) + "," + (-height / 2 + 5) + ")");
   })
 }
 
@@ -113,10 +119,18 @@ var stageAndTaskMetricsPattern = "^(.*)(\\(stage.*task[^)]*\\))(.*)$";
  * and sizes of graph elements, e.g. padding, font style, shape.
  */
 function preprocessGraphLayout(g) {
-  g.graph().ranksep = "70";
+  g.graph().ranksep = "35";
+  g.graph().nodesep = "15";
   g.nodes().forEach(function (v) {
     const node = g.node(v);
-    node.padding = "5";
+    node.padding = "3";
+    if (node.isCluster) {
+      node.clusterLabelPos = "top";
+      node.paddingTop = "35";
+      node.paddingBottom = "10";
+      node.paddingLeft = "10";
+      node.paddingRight = "10";
+    }
 
     var firstSeparator;
     var secondSeparator;
@@ -256,6 +270,10 @@ function onClickAdditionalMetricsCheckbox(checkboxNode) {
     additionalMetrics.hide();
   }
   window.localStorage.setItem("stageId-and-taskId-checked", isChecked);
+  // Re-render the detail panel to update stage/task column visibility
+  if (selectedNodeId && cachedNodeDetails) {
+    updateDetailsPanel(selectedNodeId, cachedNodeDetails);
+  }
 }
 
 function togglePlanViz() { // eslint-disable-line no-unused-vars
@@ -264,18 +282,179 @@ function togglePlanViz() { // eslint-disable-line no-unused-vars
     $(this).toggleClass("arrow-open").toggleClass("arrow-closed")
   });
   if (arrow.classed("arrow-open")) {
-    planVizContainer().style("display", "block");
+    d3.select("#plan-viz-content").style("display", "flex");
   } else {
-    planVizContainer().style("display", "none");
+    d3.select("#plan-viz-content").style("display", "none");
   }
 }
 
 /*
+ * Parse the node details JSON from the hidden metadata div.
+ */
+function getNodeDetails() {
+  var detailsText = d3.select("#plan-viz-metadata .node-details").text().trim();
+  try {
+    return JSON.parse(detailsText);
+  } catch (e) {
+    return {};
+  }
+}
+
+/*
+ * Format a metric value for display in the detail panel.
+ * Detects "total (min, med, max ...)\nVALUE (v1, v2, v3 (...))" patterns
+ * and renders them as a structured sub-table.
+ */
+/*
+ * Format a metric value for display in the detail panel.
+ * Uses metricType to determine layout instead of regex parsing.
+ * Types: "size", "timing", "nsTiming" have total + (min, med, max).
+ *        "average" has (min, med, max) only.
+ *        "sum" is a plain value.
+ */
+function formatMetricValue(val, metricType, showStageTask) {
+  var lines = val.split("\n");
+  if (lines.length < 2) return val;
+
+  // Multi-line: header line + data line
+  var dataLine = lines[1].trim();
+  var hasTotal = (metricType === "size" || metricType === "timing"
+    || metricType === "nsTiming");
+
+  // Parse data: "TOTAL (MIN, MED, MAX (stage X: task Y))" or "(MIN, MED, MAX (...))"
+  var total = null, min, med, maxVal, stageId = "", taskId = "";
+  if (hasTotal) {
+    // Split "7.5 KiB (240.0 B, 240.0 B, 240.0 B (stage 3.0: task 36))"
+    var idx = dataLine.indexOf("(");
+    if (idx < 0) return val;
+    total = dataLine.substring(0, idx).trim();
+    dataLine = dataLine.substring(idx);
+  }
+  // Now dataLine is "(MIN, MED, MAX ...)" — strip outer parens
+  var inner = dataLine.replace(/^\(/, "").replace(/\)$/, "");
+  // Split by comma, but respect parenthesized stage/task
+  var parts = [];
+  var depth = 0, start = 0;
+  for (var i = 0; i < inner.length; i++) {
+    if (inner[i] === "(") depth++;
+    else if (inner[i] === ")") depth--;
+    else if (inner[i] === "," && depth === 0) {
+      parts.push(inner.substring(start, i).trim());
+      start = i + 1;
+    }
+  }
+  parts.push(inner.substring(start).trim());
+
+  min = parts[0] || "";
+  med = parts[1] || "";
+  // Max may contain "(stage X: task Y)"
+  var maxPart = parts[2] || "";
+  var stageMatch = maxPart.match(/^(.+?)\s*\(stage\s+(.+?):\s*task\s+(.+)\)$/);
+  if (stageMatch) {
+    maxVal = stageMatch[1];
+    stageId = stageMatch[2];
+    taskId = stageMatch[3];
+  } else {
+    maxVal = maxPart;
+  }
+
+  return buildStatTable(total, min, med, maxVal,
+    stageId, taskId, showStageTask);
+}
+
+function buildStatTable(total, min, med, maxVal,
+  stageId, taskId, showStageTask) {
+  var h = '<table class="table table-sm table-bordered mb-0"><thead><tr>';
+  if (total !== null) h += "<th>Total</th>";
+  h += "<th>Min</th><th>Med</th><th>Max</th>";
+  if (showStageTask) h += "<th>Stage</th><th>Task</th>";
+  h += "</tr></thead><tbody><tr>";
+  if (total !== null) h += "<td>" + total + "</td>";
+  h += "<td>" + min + "</td><td>" + med +
+    "</td><td>" + maxVal + "</td>";
+  if (showStageTask) {
+    h += "<td>" + stageId + "</td><td>" + taskId + "</td>";
+  }
+  h += "</tr></tbody></table>";
+  return h;
+}
+
+/*
+ * Update the detail side panel with the selected node's information.
+ */
+function updateDetailsPanel(nodeId, nodeDetails) {
+  var titleEl = document.getElementById("plan-viz-details-title");
+  var bodyEl = document.getElementById("plan-viz-details-body");
+  if (!titleEl || !bodyEl) return;
+
+  selectedNodeId = nodeId;
+  cachedNodeDetails = nodeDetails;
+
+  var details = nodeDetails[nodeId];
+  if (!details) {
+    titleEl.textContent = "Details";
+    bodyEl.innerHTML = '<p class="text-muted mb-0">No details available</p>';
+    return;
+  }
+
+  titleEl.textContent = details.name;
+
+  var showStageTask = document.getElementById("stageId-and-taskId-checkbox")
+    && document.getElementById("stageId-and-taskId-checkbox").checked;
+
+  var html = "";
+  if (details.metrics && details.metrics.length > 0) {
+    html += buildMetricsTable(details.metrics, showStageTask);
+  } else if (!details.children) {
+    html += '<p class="text-muted mb-0">No metrics</p>';
+  }
+
+  // For clusters, show child node metrics
+  if (details.children && details.children.length > 0) {
+    details.children.forEach(function (childId) {
+      var child = nodeDetails[childId];
+      if (child) {
+        html += '<h6 class="mt-2 mb-1 fw-bold">' + htmlEscape(child.name) + '</h6>';
+        if (child.metrics && child.metrics.length > 0) {
+          html += buildMetricsTable(child.metrics, showStageTask);
+        } else {
+          html += '<p class="text-muted mb-0">No metrics</p>';
+        }
+      }
+    });
+  }
+  bodyEl.innerHTML = html;
+}
+
+function htmlEscape(str) {
+  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
+/*
+ * Build an HTML metrics table from a metrics array.
+ */
+function buildMetricsTable(metrics, showStageTask) {
+  var html = '<table class="table table-sm table-bordered mb-0">';
+  html += "<thead><tr><th>Metric</th><th>Value</th></tr></thead><tbody>";
+  metrics.forEach(function (m) {
+    var name = htmlEscape(m.name);
+    var val = htmlEscape(m.value);
+    html += "<tr><td>" + name + "</td><td>" +
+      formatMetricValue(val, m.type, showStageTask) + "</td></tr>";
+  });
+  html += "</tbody></table>";
+  return html;
+}
+
+/*
  * Light up the selected node and its linked nodes and edges.
+ * Also updates the detail side panel with the selected node's metrics.
  */
 function setupSelectionForSparkPlanNode(g) {
   const linkedNodes = new Map();
   const linkedEdges = new Map();
+  const nodeDetails = getNodeDetails();
 
   g.edges().forEach(function (e) {
     const edge = g.edge(e);
@@ -288,7 +467,8 @@ function setupSelectionForSparkPlanNode(g) {
   });
 
   linkedNodes.forEach((linkedNodes, selectNode) => {
-    d3.select("#" + selectNode).on("click", () => {
+    d3.select("#" + selectNode).on("click", (event) => {
+      event.stopPropagation();
       planVizContainer().selectAll(".selected").classed("selected", false);
       planVizContainer().selectAll(".linked").classed("linked", false);
       d3.select("#" + selectNode + " rect").classed("selected", true);
@@ -301,7 +481,24 @@ function setupSelectionForSparkPlanNode(g) {
         const arrowShaft = $(arrowHead.node()).parents("g.edgePath").children("path");
         arrowShaft.addClass("linked");
       });
+      updateDetailsPanel(selectNode, nodeDetails);
     });
+  });
+
+  // Add click handlers for clusters (WholeStageCodegen groups)
+  planVizContainer().selectAll("g.cluster").each(function() {
+    const clusterId = d3.select(this).attr("id");
+    if (clusterId && nodeDetails[clusterId]) {
+      d3.select(this).on("click", (event) => {
+        // Skip if click was on a child node
+        if (event.target.closest("g.node")) return;
+        event.stopPropagation();
+        planVizContainer().selectAll(".selected").classed("selected", false);
+        planVizContainer().selectAll(".linked").classed("linked", false);
+        d3.select(this).select(":scope > rect").classed("selected", true);
+        updateDetailsPanel(clusterId, nodeDetails);
+      });
+    }
   });
 }
 
