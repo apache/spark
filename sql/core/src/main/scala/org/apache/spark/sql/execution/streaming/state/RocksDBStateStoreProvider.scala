@@ -659,7 +659,7 @@ private[sql] class RocksDBStateStoreProvider
           CUSTOM_METRIC_LOAD_TIME -> loadMetrics("load"),
           CUSTOM_METRIC_REPLAY_CHANGE_LOG -> loadMetrics("replayChangelog"),
           CUSTOM_METRIC_NUM_REPLAY_CHANGE_LOG_FILES -> loadMetrics("numReplayChangeLogFiles"),
-          CUSTOM_METRIC_LOADED_FROM_CLOUD -> loadMetrics("loadedFromCloud"),
+          CUSTOM_METRIC_LOADED_FROM_CLOUD -> loadMetrics("numCloudLoads"),
           CUSTOM_METRIC_BYTES_COPIED -> rocksDBMetrics.bytesCopied,
           CUSTOM_METRIC_FILES_COPIED -> rocksDBMetrics.filesCopied,
           CUSTOM_METRIC_FILES_REUSED -> rocksDBMetrics.filesReused,

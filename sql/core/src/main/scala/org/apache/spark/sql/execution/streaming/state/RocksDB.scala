@@ -244,8 +244,8 @@ class RocksDB(
   // Was snapshot auto repair performed when loading the current version
   @volatile private var performedSnapshotAutoRepair = false
 
-  // Was a DFS (cloud) fetch performed when loading the current version
-  @volatile private var loadedFromCloud = 0
+  // Number of DFS (cloud) fetches performed when loading the current version
+  @volatile private var numCloudLoads = 0L
 
   @volatile private var fileManagerMetrics = RocksDBFileManagerMetrics.EMPTY_METRICS
 
@@ -611,14 +611,14 @@ class RocksDB(
 
   /**
    * Fetches a snapshot from DFS, sets [[loadedVersion]] to the snapshot version,
-   * and increments [[loadedFromCloud]]. Returns the checkpoint metadata.
+   * and increments [[numCloudLoads]]. Returns the checkpoint metadata.
    * Callers are responsible for calling [[openLocalRocksDB]], setting
    * [[lastSnapshotVersion]], and any load-path-specific [[loadedVersion]] overrides.
    */
   private def fetchCheckpointFromDfs(
       snapshotVersion: Long,
       uniqueId: Option[String] = None): RocksDBCheckpointMetadata = {
-    loadedFromCloud += 1
+    numCloudLoads += 1
     val metadata = fileManager.loadCheckpointFromDfs(
       snapshotVersion, workingDir, rocksDBFileMapping, uniqueId)
     loadedVersion = snapshotVersion
@@ -706,7 +706,7 @@ class RocksDB(
         openLocalRocksDB(metadata)
 
         // By setting this to the snapshot version we successfully loaded,
-        // if auto snapshot repair is enabled and we end up skipping the latest snapshot
+        // if auto snapshot repair is enabled, and we end up skipping the latest snapshot
         // and used an older one, we will create a new snapshot at commit time
         // if the loaded one is old enough.
         lastSnapshotVersion = snapshotVersion
@@ -798,7 +798,7 @@ class RocksDB(
     assert(version >= 0)
     recordedMetrics = None
     performedSnapshotAutoRepair = false
-    loadedFromCloud = 0
+    numCloudLoads = 0L
     // Reset the load metrics before loading
     loadMetrics.clear()
 
@@ -818,7 +818,7 @@ class RocksDB(
     val duration = System.currentTimeMillis() - startTime
     loadMetrics ++= Map(
       "load" -> duration,
-      "loadedFromCloud" -> loadedFromCloud.toLong
+      "numCloudLoads" -> numCloudLoads
     )
     // Register with memory manager after successful load
     updateMemoryUsageIfNeeded()
@@ -849,7 +849,7 @@ class RocksDB(
     assert(snapshotVersionStateStoreCkptId.isDefined == endVersionStateStoreCkptId.isDefined)
     assert(snapshotVersion >= 0 && endVersion >= snapshotVersion)
     recordedMetrics = None
-    loadedFromCloud = 0
+    numCloudLoads = 0L
     loadMetrics.clear()
 
     logInfo(
@@ -876,7 +876,7 @@ class RocksDB(
     // Record the metrics after loading
     loadMetrics ++= Map(
       "loadFromSnapshot" -> (System.currentTimeMillis() - startTime),
-      "loadedFromCloud" -> loadedFromCloud.toLong
+      "numCloudLoads" -> numCloudLoads
     )
 
     this
