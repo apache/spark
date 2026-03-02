@@ -1679,7 +1679,7 @@ class BaseUDFTestsMixin(object):
         @udf
         def my_udf(x):
             logger = PySparkLogger.getLogger("PySparkLogger")
-            logger.warning("PySparkLogger test", x=x)
+            logger.warning("PySparkLogger test", x=str(x))
             return str(x)
 
         with self.sql_conf({"spark.sql.pyspark.worker.logging.enabled": "true"}):
