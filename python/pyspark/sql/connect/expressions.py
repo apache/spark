@@ -299,10 +299,7 @@ class LiteralExpression(Expression):
                 value = str(value)
             elif isinstance(dataType, DateType):
                 assert isinstance(value, (datetime.date, datetime.datetime))
-                if isinstance(value, datetime.date):
-                    value = DateType().toInternal(value)
-                else:
-                    value = DateType().toInternal(value.date())
+                value = DateType().toInternal(value)
             elif isinstance(dataType, TimeType):
                 assert isinstance(value, datetime.time)
                 value = TimeType().toInternal(value)
