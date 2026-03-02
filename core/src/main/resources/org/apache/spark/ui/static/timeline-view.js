@@ -94,7 +94,7 @@ function drawApplicationTimeline(groupArray, eventObjArray, startTime, offset) {
         function() {
           $(getSelectorForJobEntry(getIdForJobEntry(this))).addClass("corresponding-item-hover");
           var el = $($(this).find("div.application-timeline-content")[0])[0];
-          var tt = bootstrap.Tooltip.getInstance(el); if (tt) tt.show();
+          var tt = bootstrap.Tooltip.getOrCreateInstance(el); tt.show();
         },
         function() {
           $(getSelectorForJobEntry(getIdForJobEntry(this))).removeClass("corresponding-item-hover");
@@ -192,7 +192,7 @@ function drawJobTimeline(groupArray, eventObjArray, startTime, offset) {
           $(getSelectorForStageEntry(getStageIdAndAttemptForStageEntry(this)))
             .addClass("corresponding-item-hover");
           $($(this).find("div.job-timeline-content")[0]).each(function() {
-            var tt = bootstrap.Tooltip.getInstance(this); if (tt) tt.show();
+            var tt = bootstrap.Tooltip.getOrCreateInstance(this); tt.show();
           });
         },
         function() {
@@ -321,7 +321,7 @@ function setupExecutorEventAction() {
     $(this).hover(
       function() {
         var el = $($(this).find(".executor-event-content")[0])[0];
-        var tt = bootstrap.Tooltip.getInstance(el); if (tt) tt.show();
+        var tt = bootstrap.Tooltip.getOrCreateInstance(el); tt.show();
       },
       function() {
         var el = $($(this).find(".executor-event-content")[0])[0];
