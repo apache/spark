@@ -19,8 +19,6 @@ package org.apache.spark.sql.catalyst.analysis
 
 import java.util.concurrent.atomic.AtomicBoolean
 
-import scala.util.control.NonFatal
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.FunctionIdentifier
@@ -138,9 +136,6 @@ class FunctionResolution(
           None
         case e: AnalysisException =>
           throw e
-        case NonFatal(e) =>
-          logWarning(s"Persistent lookup failed for ${nameParts.mkString(".")}", e)
-          None
       }
     }
   }
@@ -189,8 +184,8 @@ class FunctionResolution(
         None
       }
     } else {
+      val CatalogAndIdentifier(catalog, ident) = relationResolution.expandIdentifier(nameParts)
       try {
-        val CatalogAndIdentifier(catalog, ident) = relationResolution.expandIdentifier(nameParts)
         if (CatalogV2Util.isSessionCatalog(catalog)) {
           Some(v1SessionCatalog.resolvePersistentTableFunction(
             ident.asFunctionIdentifier, arguments))
@@ -201,8 +196,6 @@ class FunctionResolution(
         case _: NoSuchFunctionException | _: NoSuchNamespaceException |
              _: CatalogNotFoundException =>
           try {
-            val CatalogAndIdentifier(catalog, ident) =
-              relationResolution.expandIdentifier(nameParts)
             if (CatalogV2Util.isSessionCatalog(catalog)) {
               if (v1SessionCatalog.isPersistentFunction(ident.asFunctionIdentifier)) {
                 throw QueryCompilationErrors.notATableFunctionError(ident.name())

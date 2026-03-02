@@ -2464,10 +2464,7 @@ class SessionCatalog(
     kind match {
       case SessionCatalog.Temp =>
         synchronized {
-          lookupTempFuncWithViewContext(
-            name,
-            _ => false,
-            _ => registry.lookupFunction(identifier))
+          handleViewContext(name, registry.lookupFunction(identifier))
         }
       case _ =>
         registry.lookupFunction(identifier)
@@ -2492,10 +2489,7 @@ class SessionCatalog(
       case SessionCatalog.Temp =>
         synchronized {
           if (functionRegistry.functionExists(identifier)) {
-            lookupTempFuncWithViewContext(
-              name,
-              _ => false,
-              _ => Option(functionRegistry.lookupFunction(identifier, arguments)))
+            handleViewContext(name, Option(functionRegistry.lookupFunction(identifier, arguments)))
           } else {
             None
           }
@@ -2521,10 +2515,8 @@ class SessionCatalog(
       case SessionCatalog.Temp =>
         synchronized {
           if (tableFunctionRegistry.functionExists(identifier)) {
-            lookupTempFuncWithViewContext(
-              name,
-              _ => false,
-              _ => Option(tableFunctionRegistry.lookupFunction(identifier, arguments)))
+            handleViewContext(
+              name, Option(tableFunctionRegistry.lookupFunction(identifier, arguments)))
           } else {
             None
           }
@@ -2593,30 +2585,6 @@ class SessionCatalog(
     path.iterator.flatMap { namespace =>
       resolveInNamespace(namespace, name, arguments, registry)
     }.nextOption()
-  }
-
-  /**
-   * Looks up a temporary function with view context handling.
-   * Used by legacy code paths that need explicit control over the isBuiltin check.
-   *
-   * @param name The function name.
-   * @param isBuiltin Function to check if identifier is builtin (skip view context if true).
-   * @param lookupFunc Function to perform the actual lookup.
-   * @tparam T The result type.
-   * @return The lookup result with view context applied.
-   */
-  private def lookupTempFuncWithViewContext[T](
-      name: String,
-      isBuiltin: FunctionIdentifier => Boolean,
-      lookupFunc: FunctionIdentifier => Option[T]): Option[T] = {
-    val funcIdent = FunctionIdentifier(name)
-    if (isBuiltin(funcIdent)) {
-      // Builtin functions are not subject to view context restrictions
-      lookupFunc(funcIdent)
-    } else {
-      // Temp functions must respect view context
-      handleViewContext(name, lookupFunc(funcIdent))
-    }
   }
 
   /**
