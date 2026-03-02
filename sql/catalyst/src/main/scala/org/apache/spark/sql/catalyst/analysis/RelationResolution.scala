@@ -133,7 +133,7 @@ class RelationResolution(
    * other (catalog path) -> PersistentScope.
    */
   private def relationResolutionSearchPath: Seq[RelationResolutionScope] = {
-    val catalogPath = currentCatalog.name +: catalogManager.currentNamespace.toSeq
+    val catalogPath = (currentCatalog.name +: catalogManager.currentNamespace).toSeq
     conf.resolutionSearchPath(catalogPath).flatMap {
       case Seq("system", "session") => Some(SessionScope)
       case Seq("system", "builtin") => None

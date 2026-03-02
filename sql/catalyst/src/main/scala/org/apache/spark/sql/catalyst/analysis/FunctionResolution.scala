@@ -72,7 +72,7 @@ class FunctionResolution(
   private def currentCatalogPath: Seq[String] = {
     val ctx = AnalysisContext.get.catalogAndNamespace
     if (ctx.nonEmpty) ctx
-    else (Seq(catalogManager.currentCatalog.name) ++ catalogManager.currentNamespace).toSeq
+    else (catalogManager.currentCatalog.name +: catalogManager.currentNamespace).toSeq
   }
 
   /**
