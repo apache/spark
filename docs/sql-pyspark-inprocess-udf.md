@@ -133,12 +133,10 @@ export DYLD_LIBRARY_PATH="$(python3 -c 'import jep; import os; print(os.path.dir
 export LD_LIBRARY_PATH="$(python3 -c 'import jep; import os; print(os.path.dirname(jep.__file__))')"
 ```
 
-### Cluster deployment with `--archives`
+### Cluster deployment — prerequisite: build and zip the venv
 
-On a cluster, you typically distribute a pre-built virtual environment to each executor using
-Spark's `--archives` feature. This is the recommended approach for YARN and Kubernetes.
-
-**Step 1: Build and zip the venv**
+Both YARN and Kubernetes support distributing a virtual environment via `--archives`. Build the
+venv on a machine that matches the executor OS and Python version:
 
 ```bash
 python3 -m venv myvenv
@@ -146,22 +144,92 @@ myvenv/bin/pip install "jep>=4.2" pyarrow cloudpickle my-custom-lib
 zip -r myvenv.zip myvenv/
 ```
 
-**Step 2: Submit with `--archives`**
+Adjust `python3.11` in the paths below to match the Python version in your venv.
 
-Spark extracts the zip to a relative path (here `./myvenv/`) on each executor node.
+---
+
+### YARN
+
+Spark extracts `--archives` to a relative path (`./myvenv/`) on each YARN container at task
+launch time. The key extra config compared to local development is
+`spark.executorEnv.PYSPARK_PYTHON`, which tells PySpark's Python worker to use the venv's
+Python executable (ensuring a consistent Python version between the JVM-embedded interpreter
+and any out-of-process fallbacks).
 
 ```bash
 spark-submit \
+  --master yarn \
+  --deploy-mode cluster \
   --archives myvenv.zip#myvenv \
   --conf spark.plugins=org.apache.spark.sql.execution.python.InProcessPythonPlugin \
   --conf spark.executor.cores=1 \
   --conf spark.task.cpus=1 \
+  --conf spark.executorEnv.PYSPARK_PYTHON=./myvenv/bin/python3 \
   --conf spark.executor.extraJavaOptions="-Djava.library.path=./myvenv/lib/python3.11/site-packages/jep" \
   --conf spark.inprocess.python.sitePackages=./myvenv/lib/python3.11/site-packages \
   my_app.py
 ```
 
-Adjust the Python version in the path (`python3.11`) to match the version in your venv.
+If running in **client deploy mode**, the driver also needs the jep native library:
+
+```bash
+  --conf spark.driver.extraJavaOptions="-Djava.library.path=./myvenv/lib/python3.11/site-packages/jep" \
+```
+
+---
+
+### Kubernetes
+
+#### Option A: Custom Docker image (recommended)
+
+Pre-installing jep into the executor image is the simplest approach — no `--archives` or
+`sitePackages` config required because jep is already on the system Python path.
+
+**Dockerfile:**
+
+```dockerfile
+FROM apache/spark:latest
+USER root
+RUN pip install "jep>=4.2" pyarrow cloudpickle my-custom-lib
+# Expose jep native library to the JVM at startup
+ENV JAVA_TOOL_OPTIONS="-Djava.library.path=$(python3 -c 'import jep, os; print(os.path.dirname(jep.__file__))')"
+USER spark
+```
+
+**Submit:**
+
+```bash
+spark-submit \
+  --master k8s://https://<k8s-api-server>:<port> \
+  --deploy-mode cluster \
+  --conf spark.kubernetes.container.image=my-registry/spark-inprocess:latest \
+  --conf spark.plugins=org.apache.spark.sql.execution.python.InProcessPythonPlugin \
+  --conf spark.executor.cores=1 \
+  --conf spark.task.cpus=1 \
+  my_app.py
+```
+
+#### Option B: `--archives` with remote file upload
+
+If you cannot build a custom image, Spark on Kubernetes can distribute archives via a remote
+staging area (e.g. S3 or GCS). Set `spark.kubernetes.file.upload.path` to an object storage
+path that both the driver and executors can access.
+
+```bash
+spark-submit \
+  --master k8s://https://<k8s-api-server>:<port> \
+  --deploy-mode cluster \
+  --conf spark.kubernetes.container.image=apache/spark:latest \
+  --conf spark.kubernetes.file.upload.path=s3a://my-bucket/spark-uploads \
+  --archives myvenv.zip#myvenv \
+  --conf spark.plugins=org.apache.spark.sql.execution.python.InProcessPythonPlugin \
+  --conf spark.executor.cores=1 \
+  --conf spark.task.cpus=1 \
+  --conf spark.executorEnv.PYSPARK_PYTHON=./myvenv/bin/python3 \
+  --conf spark.executor.extraJavaOptions="-Djava.library.path=./myvenv/lib/python3.11/site-packages/jep" \
+  --conf spark.inprocess.python.sitePackages=./myvenv/lib/python3.11/site-packages \
+  my_app.py
+```
 
 ---
 
