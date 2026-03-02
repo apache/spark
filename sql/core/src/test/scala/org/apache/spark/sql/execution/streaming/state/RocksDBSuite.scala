@@ -2920,6 +2920,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
 
         val m1 = db.metricsOpt.get
         assert(m1.loadMetrics("load") > 0)
+        assert(m1.loadMetrics("loadedFromCloud") === 1)
         // since we called load, loadFromSnapshot should not be populated
         assert(!m1.loadMetrics.contains("loadFromSnapshot"))
 
@@ -2956,6 +2957,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         db.refreshRecordedMetricsForTest()
         val m1 = db.metricsOpt.get
         assert(m1.loadMetrics("loadFromSnapshot") > 0)
+        assert(m1.loadMetrics("loadedFromCloud") === 1)
         // since we called loadFromSnapshot, load should not be populated
         assert(!m1.loadMetrics.contains("load"))
         assert(m1.loadMetrics("replayChangelog") > 0)
