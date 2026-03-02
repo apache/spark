@@ -47,7 +47,7 @@ import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.{toPrettySQL, trimTempResolvedColumn, CharVarcharUtils}
+import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, toPrettySQL, trimTempResolvedColumn, CharVarcharUtils}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.connector.catalog.{View => _, _}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
@@ -2036,9 +2036,10 @@ class Analyzer(
               case e: AnalysisException if e.getCondition == "REQUIRES_SINGLE_PART_NAMESPACE" =>
                 // Only convert for 2–3 part names; 4+ parts keep REQUIRES_SINGLE_PART_NAMESPACE
                 if (nameParts.size <= 3) {
-                  val catalogPath = (catalogManager.currentCatalog.name +:
-                    catalogManager.currentNamespace).mkString(".")
-                  val searchPath = SQLConf.get.functionResolutionSearchPath(catalogPath)
+                  val catalogPath =
+                    catalogManager.currentCatalog.name +: catalogManager.currentNamespace
+                  val searchPath = SQLConf.get.resolutionSearchPath(catalogPath.toSeq)
+                    .map(_.map(quoteIfNeeded).mkString("."))
                   throw QueryCompilationErrors.unresolvedRoutineError(
                     nameParts,
                     searchPath,
@@ -2063,9 +2064,10 @@ class Analyzer(
                 case e: AnalysisException if e.getCondition == "REQUIRES_SINGLE_PART_NAMESPACE" =>
                   // Only convert for 3-part names; 4+ parts keep REQUIRES_SINGLE_PART_NAMESPACE
                   if (nameParts.size == 3) {
-                    val catalogPath = (catalogManager.currentCatalog.name +:
-                      catalogManager.currentNamespace).mkString(".")
-                    val searchPath = SQLConf.get.functionResolutionSearchPath(catalogPath)
+                    val catalogPath =
+                      catalogManager.currentCatalog.name +: catalogManager.currentNamespace
+                    val searchPath = SQLConf.get.resolutionSearchPath(catalogPath.toSeq)
+                      .map(_.map(quoteIfNeeded).mkString("."))
                     throw QueryCompilationErrors.unresolvedRoutineError(
                       nameParts,
                       searchPath,
@@ -2090,8 +2092,10 @@ class Analyzer(
                   throw QueryCompilationErrors.notAScalarFunctionError(nameParts.mkString("."), f)
 
                 case FunctionType.NotFound =>
-                  val catalogPath = (catalog.name +: catalogManager.currentNamespace).mkString(".")
-                  val searchPath = SQLConf.get.functionResolutionSearchPath(catalogPath)
+                  val catalogPath =
+                    catalogManager.currentCatalog.name +: catalogManager.currentNamespace
+                  val searchPath = SQLConf.get.resolutionSearchPath(catalogPath.toSeq)
+                    .map(_.map(quoteIfNeeded).mkString("."))
                   throw QueryCompilationErrors.unresolvedRoutineError(
                     nameParts,
                     searchPath,

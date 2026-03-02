@@ -8107,22 +8107,25 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     getConf(SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER)
 
   /**
-   * Returns the function resolution search path for error messages and resolution order.
+   * Returns the resolution search path for error messages and resolution order.
+   * This is the single source of truth for the search path used for functions, tables, and views.
    * Uses [[sessionFunctionResolutionOrder]]: "first" (session first), "second" (session second),
    * "last" (session last). When catalogPath is empty, returns only system namespaces.
    */
-  def functionResolutionSearchPath(catalogPath: String): Seq[String] = {
+  def resolutionSearchPath(catalogPath: Seq[String]): Seq[Seq[String]] = {
     val order = sessionFunctionResolutionOrder
+    val session = Seq("system", "session")
+    val builtin = Seq("system", "builtin")
     order match {
       case "first" =>
-        if (catalogPath.isEmpty) Seq("system.session", "system.builtin")
-        else Seq("system.session", "system.builtin", catalogPath)
+        if (catalogPath.isEmpty) Seq(session, builtin)
+        else Seq(session, builtin, catalogPath)
       case "last" =>
-        if (catalogPath.isEmpty) Seq("system.builtin", "system.session")
-        else Seq("system.builtin", catalogPath, "system.session")
+        if (catalogPath.isEmpty) Seq(builtin, session)
+        else Seq(builtin, catalogPath, session)
       case _ => // "second"
-        if (catalogPath.isEmpty) Seq("system.builtin", "system.session")
-        else Seq("system.builtin", "system.session", catalogPath)
+        if (catalogPath.isEmpty) Seq(builtin, session)
+        else Seq(builtin, session, catalogPath)
     }
   }
 
