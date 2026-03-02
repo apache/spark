@@ -365,8 +365,8 @@ class Catalog(sparkSession: SparkSession) extends catalog.Catalog {
           isTemporary = true)
 
       case _ =>
-        val catalogPath = if (currentCatalog() == CatalogManager.SESSION_CATALOG_NAME) {
-          Seq(currentCatalog()) ++ sparkSession.sessionState.catalogManager.currentNamespace
+        val catalogPath: Seq[String] = if (currentCatalog() == CatalogManager.SESSION_CATALOG_NAME) {
+          (Seq(currentCatalog()) ++ sparkSession.sessionState.catalogManager.currentNamespace).toSeq
         } else {
           Seq.empty[String]
         }
