@@ -17,6 +17,8 @@
 
 from __future__ import annotations
 
+import csv
+import os
 from dataclasses import dataclass
 from typing import Dict, Optional
 
@@ -52,17 +54,48 @@ class SpatialReferenceSystemCache:
 
     # Helper method for building the SRID-to-SRS and stringID-to-SRS mappings.
     def _populate_srs_information_mapping(self) -> None:
-        # Currently, we only support a limited set of SRID / CRS values, even on Scala side. The
-        # SRS list below will be updated soon, and the maps will be populated with more SRS data.
-        srs_list = [
-            SpatialReferenceSystemInformation(0, "SRID:0", False),
-            SpatialReferenceSystemInformation(3857, "EPSG:3857", False),
-            SpatialReferenceSystemInformation(4326, "OGC:CRS84", True),
-        ]
-        # Populate the mappings using the same SRS information objects, avoiding any duplication.
-        for srs in srs_list:
-            self._srid_to_srs[srs.srid] = srs
-            self._string_id_to_srs[srs.string_id] = srs
+        self._load_srs_registry_csv()
+        self._add_spark_specific_entries()
+
+    def _load_srs_registry_csv(self) -> None:
+        """Load SRS entries from the CSV resource file generated from the PROJ EPSG database."""
+        csv_path = os.path.join(os.path.dirname(__file__), "srs_registry.csv")
+        with open(csv_path, "r") as f:
+            reader = csv.reader(f)
+            for row in reader:
+                if not row or row[0].startswith("#") or row[0] == "srid":
+                    continue
+                srid = int(row[0])
+                string_id = row[1]
+                is_geographic = row[2].strip().lower() == "true"
+                srs = SpatialReferenceSystemInformation(srid, string_id, is_geographic)
+                self._srid_to_srs[srid] = srs
+                self._string_id_to_srs[string_id] = srs
+
+    def _add_spark_specific_entries(self) -> None:
+        """Add Spark-specific SRS entries and aliases for storage format compatibility."""
+        # SRID 0: Cartesian coordinate system with no defined SRS (Spark convention).
+        srid0 = SpatialReferenceSystemInformation(0, "SRID:0", False)
+        self._srid_to_srs[0] = srid0
+        self._string_id_to_srs["SRID:0"] = srid0
+
+        # SRIDs 4326, 4267, and 4269 are standardized under OGC rather than EPSG.
+        # Override their primary string IDs and keep the EPSG aliases.
+        # OGC:CRS84 is also used by Parquet, Delta, and Iceberg for SRID 4326.
+        self._add_ogc_override(4326, "OGC:CRS84")
+        self._add_ogc_override(4267, "OGC:CRS27")
+        self._add_ogc_override(4269, "OGC:CRS83")
+
+    def _add_ogc_override(self, srid: int, ogc_string_id: str) -> None:
+        """Override a PROJ EPSG entry with an OGC string ID, keeping the EPSG alias."""
+        existing = self._srid_to_srs.get(srid)
+        if existing is not None:
+            ogc_entry = SpatialReferenceSystemInformation(
+                srid, ogc_string_id, existing.is_geographic
+            )
+            self._srid_to_srs[srid] = ogc_entry
+            self._string_id_to_srs[ogc_string_id] = ogc_entry
+            self._string_id_to_srs[existing.string_id] = ogc_entry
 
     # Returns the SRS corresponding to the input SRID. If not supported, returns `None`.
     def get_srs_by_srid(self, srid: int) -> Optional[SpatialReferenceSystemInformation]:
