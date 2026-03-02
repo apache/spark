@@ -63,8 +63,9 @@ class InProcessUDFWrapper:
     on the JVM side.
     """
 
-    def __init__(self, func: Callable, return_type: DataType) -> None:
+    def __init__(self, func: Callable, return_type: DataType, deterministic: bool = True) -> None:
         self._return_type: DataType = return_type
+        self._deterministic: bool = deterministic
         self._name: str = getattr(func, "__name__", "inprocess_udf")
 
         # Wrap the function to cast its output to the declared return type.
@@ -116,23 +117,28 @@ class InProcessUDFWrapper:
             self._serialized,
             self._return_type.json(),
             jlist,
+            self._deterministic,
         )
 
         return Column(jcol)
 
 
-def inprocess_udf(return_type: DataType) -> Callable:
+def inprocess_udf(return_type: DataType, deterministic: bool = True) -> Callable:
     """
     Decorator to register a Python function as an in-process UDF.
 
     The decorated function receives one ``pa.Array`` per input column and must
     return a single ``pa.Array`` of the declared ``return_type``.
 
-    Phase 1 supported return types:
-        LongType, IntegerType, DoubleType, FloatType, BooleanType, ShortType, ByteType
+    All Arrow types are supported via the Arrow C Data Interface (CDI), including
+    primitives, strings, binary, temporal types, arrays, maps, and structs.
 
     Args:
-        return_type: Spark SQL DataType for the UDF return value
+        return_type:   Spark SQL DataType for the UDF return value
+        deterministic: Whether this UDF produces the same output for the same input.
+                       Set to ``False`` for UDFs that use randomness, external state,
+                       or other sources of non-determinism so the optimizer does not
+                       deduplicate or reorder calls to this UDF.  Default: ``True``.
 
     Returns:
         Decorator that wraps the function as an ``InProcessUDFWrapper``
@@ -143,7 +149,12 @@ def inprocess_udf(return_type: DataType) -> Callable:
         def double(x):
             import pyarrow.compute as pc
             return pc.multiply(x, 2)
+
+        @inprocess_udf(return_type=LongType(), deterministic=False)
+        def random_noise(x):
+            import pyarrow as pa, numpy as np
+            return pa.array(np.random.randint(0, 100, len(x)), type=pa.int64())
     """
     def decorator(func: Callable) -> InProcessUDFWrapper:
-        return InProcessUDFWrapper(func, return_type)
+        return InProcessUDFWrapper(func, return_type, deterministic)
     return decorator

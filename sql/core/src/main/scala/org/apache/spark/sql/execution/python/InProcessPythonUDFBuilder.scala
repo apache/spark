@@ -37,19 +37,23 @@ object InProcessPythonUDFBuilder {
   /**
    * Build a [[Column]] backed by an [[InProcessPythonUDF]] expression.
    *
-   * @param name           display name (Python function ``__name__``)
-   * @param serializedFunc cloudpickle bytes of the Python UDF
-   * @param returnTypeJson JSON string of the Spark SQL return type
-   * @param jColumns       Java List of JVM [[Column]] objects (the UDF inputs)
-   * @return               [[Column]] backed by an [[InProcessPythonUDF]] expression
+   * @param name            display name (Python function ``__name__``)
+   * @param serializedFunc  cloudpickle bytes of the Python UDF
+   * @param returnTypeJson  JSON string of the Spark SQL return type
+   * @param jColumns        Java List of JVM [[Column]] objects (the UDF inputs)
+   * @param deterministic   whether the UDF always returns the same output for the same input;
+   *                        set to false for UDFs that use randomness or external state
+   * @return                [[Column]] backed by an [[InProcessPythonUDF]] expression
    */
   def build(
       name: String,
       serializedFunc: Array[Byte],
       returnTypeJson: String,
-      jColumns: JList[Column]): Column = {
+      jColumns: JList[Column],
+      deterministic: Boolean): Column = {
     val returnType = DataType.fromJson(returnTypeJson)
     val inputExprs = jColumns.asScala.map(col => ColumnNodeExpression(col.node)).toSeq
-    ExpressionUtils.column(InProcessPythonUDF(name, serializedFunc, inputExprs, returnType))
+    ExpressionUtils.column(
+      InProcessPythonUDF(name, serializedFunc, inputExprs, returnType, deterministic))
   }
 }

@@ -373,6 +373,203 @@ class InProcessUDFTests(ReusedSQLTestCase):
         result = [r[0] for r in df.select(scale(df["id"])).collect()]
         self.assertEqual(result, [7, 14, 21])
 
+    # ------------------------------------------------------------------
+    # Non-deterministic flag
+    # ------------------------------------------------------------------
+
+    def test_nondeterministic_udf_executes(self):
+        """A UDF declared deterministic=False executes and returns correct values."""
+        import pyarrow.compute as pc
+        from pyspark.inprocess.udf import inprocess_udf
+        from pyspark.sql.types import LongType
+
+        @inprocess_udf(return_type=LongType(), deterministic=False)
+        def double(x):
+            return pc.multiply(x, 2)
+
+        df = self.spark.range(1, 4)
+        result = [r[0] for r in df.select(double(df["id"])).collect()]
+        self.assertEqual(result, [2, 4, 6])
+
+    def test_nondeterministic_flag_propagates_to_expression(self):
+        """deterministic=False must be reflected in the InProcessPythonUDF expression."""
+        import pyarrow.compute as pc
+        from pyspark.inprocess.udf import inprocess_udf
+        from pyspark.sql.types import LongType
+
+        @inprocess_udf(return_type=LongType(), deterministic=False)
+        def double(x):
+            return pc.multiply(x, 2)
+
+        df = self.spark.range(3)
+        jdf = df.select(double(df["id"]))._jdf
+        # ExtractInProcessPythonUDFs is an optimizer rule, so use optimizedPlan.
+        optimized = jdf.queryExecution().optimizedPlan()
+
+        # Walk the logical plan via children() (no PartialFunction needed)
+        # to locate the InProcessEvalPython node inserted during optimization.
+        def find_node(plan):
+            if plan.getClass().getSimpleName() == "InProcessEvalPython":
+                return plan
+            children = plan.children().toList()
+            for i in range(children.length()):
+                found = find_node(children.apply(i))
+                if found is not None:
+                    return found
+            return None
+
+        inprocess_node = find_node(optimized)
+        self.assertIsNotNone(inprocess_node, "InProcessEvalPython not found in analyzed plan")
+        udfs = inprocess_node.udfs().toList()
+        self.assertGreater(udfs.length(), 0)
+        self.assertFalse(
+            udfs.apply(0).deterministic(),
+            "InProcessPythonUDF with deterministic=False must have deterministic()==False")
+
+    # ------------------------------------------------------------------
+    # String type
+    # ------------------------------------------------------------------
+
+    def test_string_identity(self):
+        """@inprocess_udf with StringType passes strings through unchanged."""
+        from pyspark.inprocess.udf import inprocess_udf
+        from pyspark.sql.types import StringType
+
+        @inprocess_udf(return_type=StringType())
+        def identity(s):
+            return s
+
+        data = [("hello",), ("world",), (None,)]
+        df = self.spark.createDataFrame(data, ["v"])
+        result = [r[0] for r in df.select(identity(df["v"])).collect()]
+        self.assertEqual(result[0], "hello")
+        self.assertEqual(result[1], "world")
+        self.assertIsNone(result[2])
+
+    def test_string_upper(self):
+        """@inprocess_udf with StringType applies utf8_upper transformation."""
+        import pyarrow.compute as pc
+        from pyspark.inprocess.udf import inprocess_udf
+        from pyspark.sql.types import StringType
+
+        @inprocess_udf(return_type=StringType())
+        def upper(s):
+            return pc.utf8_upper(s)
+
+        data = [("hello",), ("world",)]
+        df = self.spark.createDataFrame(data, ["v"])
+        result = [r[0] for r in df.select(upper(df["v"])).collect()]
+        self.assertEqual(result, ["HELLO", "WORLD"])
+
+    # ------------------------------------------------------------------
+    # Binary type
+    # ------------------------------------------------------------------
+
+    def test_binary_identity(self):
+        """@inprocess_udf with BinaryType passes bytes through unchanged."""
+        from pyspark.inprocess.udf import inprocess_udf
+        from pyspark.sql.types import BinaryType
+
+        @inprocess_udf(return_type=BinaryType())
+        def identity(b):
+            return b
+
+        data = [(b"hello",), (b"world",), (None,)]
+        df = self.spark.createDataFrame(data, ["v"])
+        result = [r[0] for r in df.select(identity(df["v"])).collect()]
+        self.assertEqual(bytes(result[0]), b"hello")
+        self.assertEqual(bytes(result[1]), b"world")
+        self.assertIsNone(result[2])
+
+    # ------------------------------------------------------------------
+    # Array type
+    # ------------------------------------------------------------------
+
+    def test_array_identity(self):
+        """@inprocess_udf with ArrayType(LongType()) passes arrays through unchanged."""
+        from pyspark.inprocess.udf import inprocess_udf
+        from pyspark.sql.types import ArrayType, LongType
+
+        @inprocess_udf(return_type=ArrayType(LongType()))
+        def identity(arr):
+            return arr
+
+        data = [([1, 2, 3],), ([4, 5],), (None,)]
+        df = self.spark.createDataFrame(data, ["v"])
+        result = [r[0] for r in df.select(identity(df["v"])).collect()]
+        self.assertEqual(list(result[0]), [1, 2, 3])
+        self.assertEqual(list(result[1]), [4, 5])
+        self.assertIsNone(result[2])
+
+    # ------------------------------------------------------------------
+    # Struct type
+    # ------------------------------------------------------------------
+
+    def test_struct_identity(self):
+        """@inprocess_udf with StructType passes structs through unchanged."""
+        from pyspark.inprocess.udf import inprocess_udf
+        from pyspark.sql.types import StructType, StructField, LongType, DoubleType
+
+        inner = StructType([StructField("a", LongType()), StructField("b", DoubleType())])
+        outer = StructType([StructField("v", inner)])
+
+        @inprocess_udf(return_type=inner)
+        def identity(s):
+            return s
+
+        data = [((1, 2.0),), ((3, 4.0),)]
+        df = self.spark.createDataFrame(data, outer)
+        result = [r[0] for r in df.select(identity(df["v"])).collect()]
+        self.assertEqual(result[0]["a"], 1)
+        self.assertAlmostEqual(result[0]["b"], 2.0)
+        self.assertEqual(result[1]["a"], 3)
+        self.assertAlmostEqual(result[1]["b"], 4.0)
+
+    # ------------------------------------------------------------------
+    # Date type
+    # ------------------------------------------------------------------
+
+    def test_date_identity(self):
+        """@inprocess_udf with DateType passes dates through unchanged."""
+        import datetime
+        from pyspark.inprocess.udf import inprocess_udf
+        from pyspark.sql.types import DateType
+
+        @inprocess_udf(return_type=DateType())
+        def identity(d):
+            return d
+
+        dates = [datetime.date(2024, 1, 1), datetime.date(2024, 6, 15), None]
+        data = [(d,) for d in dates]
+        df = self.spark.createDataFrame(data, ["v"])
+        result = [r[0] for r in df.select(identity(df["v"])).collect()]
+        self.assertEqual(result[0], datetime.date(2024, 1, 1))
+        self.assertEqual(result[1], datetime.date(2024, 6, 15))
+        self.assertIsNone(result[2])
+
+    # ------------------------------------------------------------------
+    # Timestamp type
+    # ------------------------------------------------------------------
+
+    def test_timestamp_identity(self):
+        """@inprocess_udf with TimestampType passes timestamps through unchanged."""
+        import datetime
+        from pyspark.inprocess.udf import inprocess_udf
+        from pyspark.sql.types import TimestampType
+
+        @inprocess_udf(return_type=TimestampType())
+        def identity(ts):
+            return ts
+
+        data = [(datetime.datetime(2024, 3, 15, 10, 30, 0),), (None,)]
+        df = self.spark.createDataFrame(data, ["v"])
+        result = [r[0] for r in df.select(identity(df["v"])).collect()]
+        self.assertIsNone(result[1])
+        # Check date components are preserved (timezone handling may shift hours)
+        self.assertEqual(result[0].year, 2024)
+        self.assertEqual(result[0].month, 3)
+        self.assertEqual(result[0].day, 15)
+
 
 if __name__ == "__main__":
     from pyspark.testing.utils import PySparkTestCase
