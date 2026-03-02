@@ -4446,6 +4446,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val PYTHON_UDF_PANDAS_PREFER_INT_EXTENSION_DTYPE =
+    buildConf("spark.sql.execution.pythonUDF.pandas.preferIntExtensionDtype")
+      .doc("When true, convert integers to Pandas ExtensionDtype (e.g. pandas.Int64Dtype) " +
+        "for Pandas UDF execution. Otherwise, depends on the behavior of " +
+        "pyarrow.Array.to_pandas on each input arrow batch. " +
+        "Enabled by default, to resolve correctness issues caused " +
+        "by precision loss.")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val PYTHON_TABLE_UDF_ARROW_ENABLED =
     buildConf("spark.sql.execution.pythonUDTF.arrow.enabled")
       .doc("Enable Arrow optimization for Python UDTFs.")
