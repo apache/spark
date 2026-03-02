@@ -98,11 +98,11 @@ class ThriftServerPageSuite extends SparkFunSuite with BeforeAndAfter {
     assert(html.contains("dummy plan"))
 
     // Pagination support
-    assert(html.contains("<label>1 pages. jump to</label>"))
+    assert(html.contains("<label style=\"white-space: nowrap;\">1 pages. jump to</label>"))
 
     // Hiding table support
     assert(html.contains("class=\"collapse-aggregated-sessionstat" +
-       " collapse-table\" onclick=\"collapsetable"))
+       " collapse-table\" data-collapse-name=\"collapse-aggregated-sessionstat\""))
   }
 
   test("thriftserver session page should load successfully") {
@@ -124,11 +124,11 @@ class ThriftServerPageSuite extends SparkFunSuite with BeforeAndAfter {
     assert(html.contains("groupid"))
 
     // Pagination support
-    assert(html.contains("<label>1 pages. jump to</label>"))
+    assert(html.contains("<label style=\"white-space: nowrap;\">1 pages. jump to</label>"))
 
     // Hiding table support
     assert(html.contains("collapse-aggregated-sqlsessionstat collapse-table\"" +
-          " onclick=\"collapsetable"))
+          " data-collapse-name=\"collapse-aggregated-sqlsessionstat\""))
   }
 }
 

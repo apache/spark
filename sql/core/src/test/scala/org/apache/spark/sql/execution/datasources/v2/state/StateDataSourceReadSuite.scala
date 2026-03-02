@@ -36,6 +36,7 @@ import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{OutputMode, TimeMode, TransformWithStateSuiteUtils}
 import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.util.Utils
 
 class StateDataSourceNegativeTestSuite extends StateDataSourceTestBase {
   import testImplicits._
@@ -1500,4 +1501,160 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
       }
     }
   }
+}
+
+/**
+ * Test suite that verifies the state data source reader does not create empty state
+ * directories when reading state for all stateful operators.
+ */
+class StateDataSourceNoEmptyDirCreationSuite extends StateDataSourceTestBase {
+
+  /**
+   * Asserts that the cause chain of the given exception contains
+   * an instance of the expected type.
+   */
+  private def assertCauseChainContains(
+      e: Throwable,
+      expectedType: Class[_ <: Throwable]): Unit = {
+    var current: Throwable = e
+    while (current != null) {
+      if (expectedType.isInstance(current)) return
+      current = current.getCause
+    }
+    fail(
+      s"Expected ${expectedType.getSimpleName} in cause chain, " +
+        s"but got: ${e.getClass.getSimpleName}: ${e.getMessage}")
+  }
+
+  /**
+   * Runs a stateful query to create the checkpoint structure, deletes the state directory,
+   * then attempts to read via the state data source and verifies that the state directory
+   * is not recreated.
+   *
+   * @param runQuery function that runs one batch of a stateful query given a checkpoint path
+   * @param readState function that attempts to read state given a checkpoint path
+   * @param expectedCause the exception type expected in the cause chain
+   */
+  private def assertStateDirectoryNotRecreatedOnRead(
+      runQuery: String => Unit,
+      readState: String => Unit,
+      expectedCause: Class[_ <: Throwable] =
+        classOf[StateDataSourceReadStateSchemaFailure]): Unit = {
+    withTempDir { tempDir =>
+      val checkpointPath = tempDir.getAbsolutePath
+
+      // Step 1: Run the stateful query to create the full checkpoint structure
+      runQuery(checkpointPath)
+
+      // Step 2: Delete the state directory
+      val stateDir = new File(tempDir, "state")
+      assert(stateDir.exists(), "State directory should exist after running the query")
+      Utils.deleteRecursively(stateDir)
+      assert(!stateDir.exists(), "State directory should be deleted")
+
+      // Step 3: Attempt to read state - expected to fail since state is deleted
+      val e = intercept[Exception] {
+        readState(checkpointPath)
+      }
+      assertCauseChainContains(e, expectedCause)
+
+      // Step 4: Verify the state directory was NOT recreated by the reader
+      assert(!stateDir.exists(),
+        "State data source reader should not recreate the deleted state directory")
+    }
+  }
+
+  test("streaming aggregation: no empty state dir created on read") {
+    assertStateDirectoryNotRecreatedOnRead(
+      runQuery = checkpointPath => {
+        runLargeDataStreamingAggregationQuery(checkpointPath)
+      },
+      readState = checkpointPath => {
+        spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, checkpointPath)
+          .load()
+          .collect()
+      }
+    )
+  }
+
+  test("drop duplicates: no empty state dir created on read") {
+    assertStateDirectoryNotRecreatedOnRead(
+      runQuery = checkpointPath => {
+        runDropDuplicatesQuery(checkpointPath)
+      },
+      readState = checkpointPath => {
+        spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, checkpointPath)
+          .load()
+          .collect()
+      }
+    )
+  }
+
+  test("flatMapGroupsWithState: no empty state dir created on read") {
+    assertStateDirectoryNotRecreatedOnRead(
+      runQuery = checkpointPath => {
+        runFlatMapGroupsWithStateQuery(checkpointPath)
+      },
+      readState = checkpointPath => {
+        spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, checkpointPath)
+          .load()
+          .collect()
+      }
+    )
+  }
+
+  test("stream-stream join: no empty state dir created on read") {
+    assertStateDirectoryNotRecreatedOnRead(
+      runQuery = checkpointPath => {
+        runStreamStreamJoinQuery(checkpointPath)
+      },
+      readState = checkpointPath => {
+        spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, checkpointPath)
+          .option(StateSourceOptions.JOIN_SIDE, "left")
+          .load()
+          .collect()
+      }
+    )
+  }
+
+  test("transformWithState: no empty state dir created on read") {
+    assertStateDirectoryNotRecreatedOnRead(
+      runQuery = checkpointPath => {
+        runTransformWithStateQuery(checkpointPath)
+      },
+      readState = checkpointPath => {
+        spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, checkpointPath)
+          .option(StateSourceOptions.STATE_VAR_NAME, "countState")
+          .load()
+          .collect()
+      },
+      expectedCause = classOf[IllegalArgumentException]
+    )
+  }
+
+  test("session window aggregation: no empty state dir created on read") {
+    assertStateDirectoryNotRecreatedOnRead(
+      runQuery = checkpointPath => {
+        runSessionWindowAggregationQuery(checkpointPath)
+      },
+      readState = checkpointPath => {
+        spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, checkpointPath)
+          .load()
+          .collect()
+      }
+    )
+  }
+
 }

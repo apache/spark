@@ -90,7 +90,7 @@ private[ui] class ThriftServerSessionPage(parent: ThriftServerTab)
         ).table(sqlTablePage))
       } catch {
         case e@(_: IllegalArgumentException | _: IndexOutOfBoundsException) =>
-          Some(<div class="alert alert-error">
+          Some(<div class="alert alert-danger">
             <p>Error while rendering job table:</p>
             <pre>
               {Utils.exceptionString(e)}
@@ -102,8 +102,8 @@ private[ui] class ThriftServerSessionPage(parent: ThriftServerTab)
     }
     val content =
       <span id="sqlsessionstat" class="collapse-aggregated-sqlsessionstat collapse-table"
-            onClick="collapseTable('collapse-aggregated-sqlsessionstat',
-                'aggregated-sqlsessionstat')">
+            data-collapse-name="collapse-aggregated-sqlsessionstat"
+            data-collapse-table="aggregated-sqlsessionstat">
         <h4>
           <span class="collapse-table-arrow arrow-open"></span>
           <a>SQL Statistics</a>

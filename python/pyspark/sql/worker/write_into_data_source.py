@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 import inspect
-import os
 from typing import IO, Iterable, Iterator
 
 from pyspark.sql.conversion import ArrowTableToRowsConversion
@@ -24,7 +23,6 @@ from pyspark.logger.worker_io import capture_outputs
 from pyspark.serializers import (
     read_bool,
     read_int,
-    write_int,
 )
 from pyspark.sql import Row
 from pyspark.sql.datasource import (
@@ -43,10 +41,8 @@ from pyspark.sql.types import (
     _create_row,
 )
 from pyspark.sql.worker.utils import worker_run
-from pyspark.util import (
-    local_connect_and_auth,
-)
 from pyspark.worker_util import (
+    get_sock_file_to_executor,
     read_command,
     pickleSer,
     utf8_deserializer,
@@ -228,6 +224,11 @@ def _main(infile: IO, outfile: IO) -> None:
         messages = pa.array([pickled])
         yield pa.record_batch([messages], names=[return_col_name])
 
+    # Set the module name so UDF worker can recognize that this is a data source function.
+    # This is needed when simple worker is used because the __module__ will be set to
+    # __main__, which confuses the profiler logic.
+    data_source_write_func.__module__ = "pyspark.sql.worker.write_into_data_source"
+
     # Return the pickled write UDF.
     command = (data_source_write_func, return_type)
     pickleSer._write_with_length(command, outfile)
@@ -241,12 +242,5 @@ def main(infile: IO, outfile: IO) -> None:
 
 
 if __name__ == "__main__":
-    # Read information about how to connect back to the JVM from the environment.
-    conn_info = os.environ.get(
-        "PYTHON_WORKER_FACTORY_SOCK_PATH", int(os.environ.get("PYTHON_WORKER_FACTORY_PORT", -1))
-    )
-    auth_secret = os.environ.get("PYTHON_WORKER_FACTORY_SECRET")
-    (sock_file, _) = local_connect_and_auth(conn_info, auth_secret)
-    write_int(os.getpid(), sock_file)
-    sock_file.flush()
-    main(sock_file, sock_file)
+    with get_sock_file_to_executor() as sock_file:
+        main(sock_file, sock_file)

@@ -1,0 +1,70 @@
+================================================================================================
+single ints
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+Hash For single ints:                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+interpreted version                                2103           2104           0        255.2           3.9       1.0X
+codegen version                                    3186           3186           1        168.5           5.9       0.7X
+codegen version 64-bit                             3198           3206          12        167.9           6.0       0.7X
+codegen HiveHash version                           2550           2553           3        210.5           4.8       0.8X
+
+
+================================================================================================
+single longs
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+Hash For single longs:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+interpreted version                                2893           2901          11        185.6           5.4       1.0X
+codegen version                                    4735           4741           8        113.4           8.8       0.6X
+codegen version 64-bit                             3788           3792           5        141.7           7.1       0.8X
+codegen HiveHash version                           3247           3250           3        165.3           6.0       0.9X
+
+
+================================================================================================
+normal
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+Hash For normal:                          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+interpreted version                                1359           1362           5          1.5         647.8       1.0X
+codegen version                                    1734           1734           0          1.2         826.7       0.8X
+codegen version 64-bit                              722            723           3          2.9         344.1       1.9X
+codegen HiveHash version                           3686           3688           2          0.6        1757.8       0.4X
+
+
+================================================================================================
+array
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+Hash For array:                           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+interpreted version                                 998           1000           2          0.1        7616.1       1.0X
+codegen version                                    3592           3594           4          0.0       27402.0       0.3X
+codegen version 64-bit                             2445           2445           0          0.1       18650.8       0.4X
+codegen HiveHash version                            696            696           0          0.2        5308.3       1.4X
+
+
+================================================================================================
+map
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+Hash For map:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+interpreted version                                   0              0           0         85.3          11.7       1.0X
+codegen version                                     232            232           0          0.0       56599.0       0.0X
+codegen version 64-bit                              155            155           0          0.0       37843.5       0.0X
+codegen HiveHash version                             25             25           0          0.2        6172.1       0.0X
+
+

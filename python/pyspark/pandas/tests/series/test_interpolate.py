@@ -18,6 +18,7 @@ import numpy as np
 import pandas as pd
 
 import pyspark.pandas as ps
+from pyspark.loose_version import LooseVersion
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 
@@ -35,14 +36,25 @@ class SeriesInterpolateMixin:
             (4, "backward", "inside"),
             (5, "both", "inside"),
         ]:
-            self.assert_eq(
-                psobj.interpolate(
-                    limit=limit, limit_direction=limit_direction, limit_area=limit_area
-                ).sort_index(),
-                pobj.interpolate(
-                    limit=limit, limit_direction=limit_direction, limit_area=limit_area
-                ).sort_index(),
-            )
+            # pandas 3.0.0 can raise when limit >= len(obj) in interpolate edge cases.
+            effective_limit = limit
+            if LooseVersion(pd.__version__) >= "3.0.0":
+                effective_limit = min(limit, len(pobj) - 1)
+            with self.subTest(
+                limit=effective_limit, limit_direction=limit_direction, limit_area=limit_area
+            ):
+                self.assert_eq(
+                    psobj.interpolate(
+                        limit=effective_limit,
+                        limit_direction=limit_direction,
+                        limit_area=limit_area,
+                    ).sort_index(),
+                    pobj.interpolate(
+                        limit=effective_limit,
+                        limit_direction=limit_direction,
+                        limit_area=limit_area,
+                    ).sort_index(),
+                )
 
     def test_interpolate(self):
         pser = pd.Series(

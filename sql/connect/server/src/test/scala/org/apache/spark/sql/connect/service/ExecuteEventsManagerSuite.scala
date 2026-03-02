@@ -341,6 +341,64 @@ class ExecuteEventsManagerSuite
     }
   }
 
+  test("terminationReason is None initially") {
+    val events = setupEvents(ExecuteStatus.Pending)
+    assert(events.terminationReason.isEmpty)
+  }
+
+  test("terminationReason is set to Succeeded after postFinished") {
+    val events = setupEvents(ExecuteStatus.Started)
+    assert(events.terminationReason.isEmpty)
+    events.postFinished()
+    assert(events.terminationReason.contains(TerminationReason.Succeeded))
+  }
+
+  test("terminationReason is set to Failed after postFailed") {
+    val events = setupEvents(ExecuteStatus.Started)
+    assert(events.terminationReason.isEmpty)
+    events.postFailed(DEFAULT_ERROR)
+    assert(events.terminationReason.contains(TerminationReason.Failed))
+  }
+
+  test("terminationReason is set to Canceled after postCanceled") {
+    val events = setupEvents(ExecuteStatus.Started)
+    assert(events.terminationReason.isEmpty)
+    events.postCanceled()
+    assert(events.terminationReason.contains(TerminationReason.Canceled))
+  }
+
+  test("terminationReason remains unchanged after postClosed") {
+    val events = setupEvents(ExecuteStatus.Started)
+    events.postFinished()
+    assert(events.terminationReason.contains(TerminationReason.Succeeded))
+    events.postClosed()
+    assert(events.terminationReason.contains(TerminationReason.Succeeded))
+  }
+
+  test("terminationReason: Canceled takes precedence over Succeeded") {
+    val events = setupEvents(ExecuteStatus.Started)
+    events.postFinished()
+    assert(events.terminationReason.contains(TerminationReason.Succeeded))
+    events.postCanceled()
+    assert(events.terminationReason.contains(TerminationReason.Canceled))
+  }
+
+  test("terminationReason: Canceled takes precedence over Failed") {
+    val events = setupEvents(ExecuteStatus.Started)
+    events.postFailed(DEFAULT_ERROR)
+    assert(events.terminationReason.contains(TerminationReason.Failed))
+    events.postCanceled()
+    assert(events.terminationReason.contains(TerminationReason.Canceled))
+  }
+
+  test("terminationReason: Failed takes precedence over Succeeded") {
+    val events = setupEvents(ExecuteStatus.Started)
+    events.postFinished()
+    assert(events.terminationReason.contains(TerminationReason.Succeeded))
+    events.postFailed(DEFAULT_ERROR)
+    assert(events.terminationReason.contains(TerminationReason.Failed))
+  }
+
   test("SPARK-55448: terminal events can be posted when session is Closed") {
     val events = setupEvents(ExecuteStatus.Started, SessionStatus.Closed)
     events.postCanceled()

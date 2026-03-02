@@ -150,9 +150,9 @@ abstract class DockerKrbJDBCIntegrationSuite extends DockerJDBCIntegrationSuite 
     props.setProperty("principal", principal)
 
     val tableName = "write_test"
-    sqlContext.createDataFrame(Seq(("foo", "bar")))
+    spark.createDataFrame(Seq(("foo", "bar")))
       .write.jdbc(jdbcUrl, tableName, props)
-    val df = sqlContext.read.jdbc(jdbcUrl, tableName, props)
+    val df = spark.read.jdbc(jdbcUrl, tableName, props)
 
     val schema = df.schema
     assert(schema.map(_.dataType).toSeq === Seq(StringType, StringType))

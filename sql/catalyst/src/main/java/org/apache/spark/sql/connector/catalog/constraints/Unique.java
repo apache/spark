@@ -28,6 +28,15 @@ import org.apache.spark.sql.connector.expressions.NamedReference;
  * <p>
  * A UNIQUE constraint specifies one or more columns as unique columns. Such constraint is satisfied
  * if and only if no two rows in a table have the same non-null values in the unique columns.
+ * Unlike PRIMARY KEY, UNIQUE allows nullable columns.
+ * <p>
+ * NULL values are treated as distinct from each other (NULLS DISTINCT semantics). Two rows
+ * are considered duplicates only when every column in the unique key has a non-null value and
+ * every value matches. If any column in the unique key is NULL, the row is always considered
+ * unique regardless of other values. In other words, multiple rows with NULL in one or more
+ * unique columns are allowed and do not violate the constraint definition.
+ * <p>
+ * The {@code NULLS NOT DISTINCT} modifier is not currently supported.
  * <p>
  * Spark doesn't enforce UNIQUE constraints but leverages them for query optimization. Each
  * constraint is either valid (the existing data is guaranteed to satisfy the constraint), invalid

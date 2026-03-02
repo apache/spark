@@ -46,7 +46,8 @@ private[ui] class StoragePage(parent: SparkUITab, store: AppStatusStore) extends
     } else {
       <div>
         <span class="collapse-aggregated-rdds collapse-table"
-            onClick="collapseTable('collapse-aggregated-rdds','aggregated-rdds')">
+            data-collapse-name="collapse-aggregated-rdds"
+            data-collapse-table="aggregated-rdds">
           <h4>
             <span class="collapse-table-arrow arrow-open"></span>
             <a>RDDs ({rdds.length})</a>

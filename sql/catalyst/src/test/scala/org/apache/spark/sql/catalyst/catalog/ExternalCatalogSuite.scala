@@ -911,7 +911,7 @@ abstract class ExternalCatalogSuite extends SparkFunSuite {
       tableType = CatalogTableType.EXTERNAL,
       storage = CatalogStorageFormat(
         Some(Utils.createTempDir().toURI),
-        None, None, None, false, Map.empty),
+        None, None, None, None, false, Map.empty),
       schema = new StructType().add("a", "int").add("b", "string"),
       provider = Some(defaultProvider)
     )
@@ -959,7 +959,7 @@ abstract class ExternalCatalogSuite extends SparkFunSuite {
       Map("partCol1" -> "7", "partCol2" -> "8"),
       CatalogStorageFormat(
         Some(tempPath.toURI),
-        None, None, None, false, Map.empty))
+        None, None, None, None, false, Map.empty))
     catalog.createPartitions("db1", "tbl", Seq(partWithExistingDir), ignoreIfExists = false)
 
     tempPath.delete()
@@ -968,7 +968,7 @@ abstract class ExternalCatalogSuite extends SparkFunSuite {
       Map("partCol1" -> "9", "partCol2" -> "10"),
       CatalogStorageFormat(
         Some(tempPath.toURI),
-        None, None, None, false, Map.empty))
+        None, None, None, None, false, Map.empty))
     catalog.createPartitions("db1", "tbl", Seq(partWithNonExistingDir), ignoreIfExists = false)
     assert(tempPath.exists())
   }
@@ -1030,6 +1030,7 @@ abstract class CatalogTestUtils {
     locationUri = None,
     inputFormat = Some(tableInputFormat),
     outputFormat = Some(tableOutputFormat),
+    serdeName = None,
     serde = None,
     compressed = false,
     properties = Map.empty)

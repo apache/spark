@@ -48,7 +48,8 @@ private[ui] class StreamingQueryPage(parent: StreamingQueryTab)
       // scalastyle:off
       content ++=
         <span id="active" class="collapse-aggregated-activeQueries collapse-table"
-            onClick="collapseTable('collapse-aggregated-activeQueries','aggregated-activeQueries')">
+            data-collapse-name="collapse-aggregated-activeQueries"
+            data-collapse-table="aggregated-activeQueries">
           <h5 id="activequeries">
             <span class="collapse-table-arrow arrow-open"></span>
             <a>Active Streaming Queries ({activeQueries.length})</a>
@@ -66,7 +67,8 @@ private[ui] class StreamingQueryPage(parent: StreamingQueryTab)
       // scalastyle:off
       content ++=
         <span id="completed" class="collapse-aggregated-completedQueries collapse-table"
-            onClick="collapseTable('collapse-aggregated-completedQueries','aggregated-completedQueries')">
+            data-collapse-name="collapse-aggregated-completedQueries"
+            data-collapse-table="aggregated-completedQueries">
           <h5 id="completedqueries">
             <span class="collapse-table-arrow arrow-open"></span>
             <a>Completed Streaming Queries ({inactiveQueries.length})</a>
@@ -100,7 +102,7 @@ private[ui] class StreamingQueryPage(parent: StreamingQueryTab)
       ).table(page)
     } catch {
       case e@(_: IllegalArgumentException | _: IndexOutOfBoundsException) =>
-        <div class="alert alert-error">
+        <div class="alert alert-danger">
           <p>Error while rendering execution table:</p>
           <pre>
             {Utils.exceptionString(e)}

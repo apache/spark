@@ -32,14 +32,14 @@ from pyspark.sql.types import (
     FloatType,
     DayTimeIntervalType,
 )
-from pyspark.testing.sqlutils import (
-    ReusedSQLTestCase,
+from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import (
+    assertDataFrameEqual,
     have_pyarrow,
     have_pandas,
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
-from pyspark.testing.utils import assertDataFrameEqual
 
 
 class DataFrameCollectionTestsMixin:
