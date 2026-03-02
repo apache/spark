@@ -41,7 +41,7 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumnsUtils.CURRENT_DEFAULT_COLUMN_METADATA_KEY
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, Identifier, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces._
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -271,7 +271,12 @@ case class DropTableCommand(
 
 case class DropTempViewCommand(ident: Identifier) extends LeafRunnableCommand {
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    assert(ident.namespace().isEmpty || ident.namespace().length == 1)
+    // namespace: empty (unqualified), 1 part (session or global_temp), or 2 parts (system.session)
+    val ns = ident.namespace()
+    assert(ns.isEmpty || ns.length == 1 ||
+      (ns.length == 2 &&
+        ns(0).equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
+        ns(1).equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)))
     val nameParts = (ident.namespace() :+ ident.name()).toImmutableArraySeq
     val catalog = sparkSession.sessionState.catalog
     catalog.getRawLocalOrGlobalTempView(nameParts).foreach { view =>
@@ -281,8 +286,12 @@ case class DropTempViewCommand(ident: Identifier) extends LeafRunnableCommand {
       view.refresh()
       if (ident.namespace().isEmpty) {
         catalog.dropTempView(ident.name())
-      } else {
+      } else if (ident.namespace().length == 1 &&
+          catalog.isGlobalTempViewDB(ident.namespace().head)) {
         catalog.dropGlobalTempView(ident.name())
+      } else {
+        // session, or system.session qualified -> local temp view
+        catalog.dropTempView(ident.name())
       }
     }
     Seq.empty[Row]

@@ -238,20 +238,20 @@ class SparkSqlAstBuilder extends AstBuilder {
         if (viewIdentifier.head.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)) {
           viewIdentifier.last
         } else {
-          throw QueryCompilationErrors.invalidTempObjQualifierError(
-            "VIEW", viewIdentifier.last, viewIdentifier.head)
+          throw QueryParsingErrors.invalidTempObjQualifierError(
+            "VIEW", viewIdentifier.last, viewIdentifier.head, ctx)
         }
       case 3 =>
         if (viewIdentifier(0).equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
             viewIdentifier(1).equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)) {
           viewIdentifier.last
         } else {
-          throw QueryCompilationErrors.invalidTempObjQualifierError(
-            "VIEW", viewIdentifier.last, viewIdentifier.init.mkString("."))
+          throw QueryParsingErrors.invalidTempObjQualifierError(
+            "VIEW", viewIdentifier.last, viewIdentifier.init.mkString("."), ctx)
         }
       case _ =>
-        throw QueryCompilationErrors.invalidTempObjQualifierError(
-          "VIEW", viewIdentifier.last, viewIdentifier.init.mkString("."))
+        throw QueryParsingErrors.invalidTempObjQualifierError(
+          "VIEW", viewIdentifier.last, viewIdentifier.init.mkString("."), ctx)
     }
   }
 
