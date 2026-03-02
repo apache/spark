@@ -63,13 +63,12 @@ object SessionCatalog {
 
   /**
    * Kind of session-scoped function namespace for lookup/resolve.
-   * Used by the kind-based API to avoid 12 separate methods per
-   * (builtin/temp/extension) x (lookup/resolve) x (scalar/table).
+   * Used by the kind-based API to avoid separate methods per
+   * (builtin/temp) x (lookup/resolve) x (scalar/table).
    */
   sealed trait SessionFunctionKind
   case object Builtin extends SessionFunctionKind
   case object Temp extends SessionFunctionKind
-  case object Extension extends SessionFunctionKind
 }
 
 /**
@@ -94,35 +93,17 @@ class SessionCatalog(
   import SessionCatalog._
   import CatalogTypes.TablePartitionSpec
 
-  // Marker database name for temporary functions to distinguish from builtin functions
   /**
    * Database qualifier used to store temporary functions in the function registry.
    * Temporary functions use composite keys to coexist with builtin functions of the same name:
-   * - Builtin functions: FunctionIdentifier(name, None)
-   * - Extension functions: FunctionIdentifier(name, None, None) (Treated as builtin)
+   * - Builtin functions (including extensions): FunctionIdentifier(name, None)
    * - Temp functions: FunctionIdentifier(name, Some(CatalogManager.SESSION_NAMESPACE))
-   * This allows all three to exist in the same registry without conflicts.
    */
   private val TEMP_FUNCTION_DB = CatalogManager.SESSION_NAMESPACE
-  private val EXTENSION_FUNCTION_DB = CatalogManager.EXTENSION_NAMESPACE
-
-  /**
-   * Creates a FunctionIdentifier for an extension function.
-   * Extension functions are treated as builtins and stored unqualified.
-   * This allows them to overwrite existing builtins if registered by power users.
-   *
-   * @param name The function name (unqualified)
-   * @return FunctionIdentifier without qualification (same as builtins)
-   */
-  private def extensionFunctionIdentifier(name: String): FunctionIdentifier =
-    FunctionIdentifier(format(name))
 
   /**
    * Creates a FunctionIdentifier for a temporary function with the TEMP_FUNCTION_DB database
    * qualifier. This enables temporary functions to coexist with builtin functions of the same name.
-   *
-   * @param name The function name (unqualified)
-   * @return FunctionIdentifier with database = TEMP_FUNCTION_DB
    */
   private def tempFunctionIdentifier(name: String): FunctionIdentifier =
     FunctionIdentifier(
@@ -131,21 +112,8 @@ class SessionCatalog(
       Some(CatalogManager.SYSTEM_CATALOG_NAME))
 
   /**
-   * Checks if a FunctionIdentifier represents an extension function by checking for the
-   * EXTENSION_FUNCTION_DB database qualifier.
-   *
-   * @param identifier The FunctionIdentifier to check
-   * @return true if this is an extension function identifier
-   */
-  private def isExtensionFunctionIdentifier(identifier: FunctionIdentifier): Boolean =
-    identifier.database.contains(EXTENSION_FUNCTION_DB)
-
-  /**
    * Checks if a FunctionIdentifier represents a temporary function by checking for the
    * TEMP_FUNCTION_DB database qualifier.
-   *
-   * @param identifier The FunctionIdentifier to check
-   * @return true if this is a temporary function identifier
    */
   private def isTempFunctionIdentifier(identifier: FunctionIdentifier): Boolean =
     identifier.database.contains(TEMP_FUNCTION_DB)
@@ -163,8 +131,7 @@ class SessionCatalog(
    *
    * Resolution order follows the configured path: builtin then session (default "second"),
    * or session then builtin (legacy "first"), or builtin only ("last" - session tried after
-   * persistent in FunctionResolution). Extension functions are stored and resolved in the
-   * builtin namespace; they are not a separate path step.
+   * persistent in FunctionResolution).
    *
    * When resolving a view, the system.session namespace is included in the path, but
    * handleViewContext filters to only return temporary functions that were referred to
@@ -211,41 +178,22 @@ class SessionCatalog(
 
   /**
    * Maps a namespace template to an actual storage identifier for a specific function.
-   * This handles the asymmetry between how builtins, extensions, and temp functions are stored.
    *
    * Storage conventions:
    * - Builtin functions: FunctionIdentifier(name, None, None)
-   * - Extension functions: FunctionIdentifier(name, None, None) (Treated as builtin)
    * - Temp functions: FunctionIdentifier(name, Some("session"), Some("system"))
    * - Other: FunctionIdentifier(name, namespace.database, namespace.catalog)
-   *
-   * @param namespace The namespace template
-   * @param name The function name
-   * @return The actual identifier to use for registry lookup
    */
   private def namespaceToIdentifier(
       namespace: FunctionIdentifier,
       name: String): FunctionIdentifier = {
     namespace.database match {
       case Some(CatalogManager.BUILTIN_NAMESPACE) =>
-        // Builtin functions (including extensions): stored unqualified
         FunctionIdentifier(format(name))
 
-      case other =>
-        // Other namespaces: use full qualification
-        // Note: This branch is for future extensions (e.g., persistent functions in PATH)
-        if (other.isDefined) {
-          logDebug(s"Function lookup in non-standard namespace: $other for function: $name")
-        }
-        FunctionIdentifier(name, namespace.database, namespace.catalog)
+      case _ =>
+        namespace.copy(funcName = name)
     }
-  }
-
-  /**
-   * Checks if a namespace represents extension functions.
-   */
-  private def isExtensionNamespace(namespace: FunctionIdentifier): Boolean = {
-    namespace.database.contains(CatalogManager.EXTENSION_NAMESPACE)
   }
 
   /**
@@ -2397,7 +2345,7 @@ class SessionCatalog(
 
       hasTemp || hasBuiltin
     } else {
-    functionRegistry.functionExists(name) || tableFunctionRegistry.functionExists(name)
+      functionRegistry.functionExists(name) || tableFunctionRegistry.functionExists(name)
     }
   }
 
@@ -2455,7 +2403,7 @@ class SessionCatalog(
 
   /**
    * Looks up functions using PATH-based resolution.
-   * Searches through the resolution path (session then builtin) with view context handling.
+   * Searches through the configured resolution path with view context handling.
    *
    * @param name The function name (unqualified).
    * @param registry The registry to search (FunctionRegistry or TableFunctionRegistry).
@@ -2499,15 +2447,13 @@ class SessionCatalog(
         FunctionIdentifier(format(name))
       case SessionCatalog.Temp =>
         tempFunctionIdentifier(name)
-      case SessionCatalog.Extension =>
-        extensionFunctionIdentifier(name)
     }
 
   /**
    * Kind-based lookup: one entry point for all
-   * (builtin/temp/extension) x (scalar/table).
+   * (builtin/temp) x (scalar/table).
    * Callers that have already determined the kind (e.g. FunctionResolution) use this
-   * instead of 6 separate lookup* methods.
+   * instead of separate lookup* methods.
    */
   def lookupFunctionInfo(
       kind: SessionCatalog.SessionFunctionKind,
@@ -2518,22 +2464,10 @@ class SessionCatalog(
     kind match {
       case SessionCatalog.Temp =>
         synchronized {
-          if (tableFunction) {
-            lookupTempFuncWithViewContext(
-              name,
-              _ => false,
-              _ =>
-                if (registry.functionExists(identifier)) {
-                  registry.lookupFunction(identifier)
-                } else {
-                  None
-                })
-          } else {
-            lookupTempFuncWithViewContext(
-              name,
-              _ => false,
-              _ => registry.lookupFunction(identifier))
-          }
+          lookupTempFuncWithViewContext(
+            name,
+            _ => false,
+            _ => registry.lookupFunction(identifier))
         }
       case _ =>
         registry.lookupFunction(identifier)
@@ -2566,12 +2500,6 @@ class SessionCatalog(
             None
           }
         }
-      case SessionCatalog.Extension =>
-        if (functionRegistry.functionExists(identifier)) {
-          Option(functionRegistry.lookupFunction(identifier, arguments))
-        } else {
-          None
-        }
     }
   }
 
@@ -2601,19 +2529,12 @@ class SessionCatalog(
             None
           }
         }
-      case SessionCatalog.Extension =>
-        if (tableFunctionRegistry.functionExists(identifier)) {
-          Option(tableFunctionRegistry.lookupFunction(identifier, arguments))
-        } else {
-          None
-        }
     }
   }
 
   /**
    * Look up the `ExpressionInfo` of the given function by name.
-   * Resolution order follows the configured path (e.g. builtin then session);
-   * extension functions are stored in the builtin namespace.
+   * Resolution order follows the configured path (e.g. builtin then session).
    * This only supports scalar functions.
    */
   def lookupBuiltinOrTempFunction(name: String): Option[ExpressionInfo] = {
@@ -2622,8 +2543,7 @@ class SessionCatalog(
 
   /**
    * Look up the `ExpressionInfo` of the given function by name.
-   * Resolution order follows the configured path (e.g. builtin then session);
-   * extension functions are stored in the builtin namespace.
+   * Resolution order follows the configured path (e.g. builtin then session).
    */
   def lookupBuiltinOrTempTableFunction(name: String): Option[ExpressionInfo] = synchronized {
     lookupFunctionWithShadowing(name, tableFunctionRegistry, checkBuiltinOperators = false)
@@ -2631,8 +2551,7 @@ class SessionCatalog(
 
   /**
    * Look up a scalar function by name and resolve it to an Expression.
-   * Resolution order follows the configured path (e.g. builtin then session);
-   * extension functions are stored in the builtin namespace.
+   * Resolution order follows the configured path (e.g. builtin then session).
    */
   def resolveBuiltinOrTempFunction(name: String, arguments: Seq[Expression]): Option[Expression] =
     resolveFunctionWithFallback(name, arguments, functionRegistry)
@@ -2754,7 +2673,7 @@ class SessionCatalog(
               registerUserDefinedFunction[Expression](
                 udf,
                 overrideIfExists = false,
-      functionRegistry,
+                functionRegistry,
                 makeUserDefinedScalarFuncBuilder(udf))
             } else {
               loadFunctionResources(funcMetadata.resources)
@@ -2853,16 +2772,14 @@ class SessionCatalog(
   }
 
   /**
-   * List all built-in, extension, and temporary functions with the given pattern.
+   * List all built-in and temporary functions with the given pattern.
    */
   private def listBuiltinAndTempFunctions(pattern: String): Seq[FunctionIdentifier] = {
     val functions = (functionRegistry.listFunction() ++ tableFunctionRegistry.listFunction())
       .filter(f =>
         f.database.isEmpty ||
-        isTempFunctionIdentifier(f) ||
-        isExtensionFunctionIdentifier(f))
-      .map(f => if (isTempFunctionIdentifier(f) || isExtensionFunctionIdentifier(f)) {
-        // Strip namespace qualifier for temp and extension functions
+        isTempFunctionIdentifier(f))
+      .map(f => if (isTempFunctionIdentifier(f)) {
         FunctionIdentifier(f.funcName)
       } else {
         f

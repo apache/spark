@@ -140,13 +140,16 @@ case class DropFunctionCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     if (isTemp) {
-      // Extract the function name, handling qualified names like "system.session.func"
       val funcName = if (identifier.database.isDefined) {
-        // Qualified name - validate it's a valid temporary function namespace (case-insensitive)
         val db = identifier.database.get
         if (!db.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)) {
           throw QueryExecutionErrors.invalidNamespaceNameError(
             Array(CatalogManager.SYSTEM_CATALOG_NAME, db))
+        }
+        if (identifier.catalog.exists(
+            !_.equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME))) {
+          throw QueryExecutionErrors.invalidNamespaceNameError(
+            Array(identifier.catalog.get, db))
         }
         identifier.funcName
       } else {

@@ -25,7 +25,6 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
-import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -69,6 +68,13 @@ class FunctionResolution(
 
   private val trimWarningEnabled = new AtomicBoolean(true)
 
+  /** Returns the current catalog path, preferring the view's context if resolving a view. */
+  private def currentCatalogPath: Seq[String] = {
+    val ctx = AnalysisContext.get.catalogAndNamespace
+    if (ctx.nonEmpty) ctx
+    else (Seq(catalogManager.currentCatalog.name) ++ catalogManager.currentNamespace).toSeq
+  }
+
   /**
    * Produces the ordered list of fully qualified candidate names for resolution.
    *
@@ -77,12 +83,7 @@ class FunctionResolution(
    */
   private def resolutionCandidates(nameParts: Seq[String]): Seq[Seq[String]] = {
     if (nameParts.size == 1) {
-      val catalogPath = if (AnalysisContext.get.catalogAndNamespace.nonEmpty) {
-        AnalysisContext.get.catalogAndNamespace
-      } else {
-        (Seq(catalogManager.currentCatalog.name) ++ catalogManager.currentNamespace).toSeq
-      }
-      val searchPath = SQLConf.get.resolutionSearchPath(catalogPath)
+      val searchPath = SQLConf.get.resolutionSearchPath(currentCatalogPath)
       searchPath.map(_ ++ nameParts)
     } else {
       nameParts.size match {
@@ -100,7 +101,7 @@ class FunctionResolution(
       unresolvedFunc: UnresolvedFunction): Option[Expression] = {
     if (nameParts.length == 3 &&
         nameParts.head.equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME)) {
-      // Try resolving as a session-namespace function (builtin, temp, extension)
+      // Try resolving as a session-namespace function (builtin or temp)
       FunctionResolution.sessionNamespaceKind(nameParts).flatMap { kind =>
         val funcName = nameParts.last
         val expr = v1SessionCatalog.resolveScalarFunction(kind, funcName, unresolvedFunc.arguments)
@@ -126,16 +127,6 @@ class FunctionResolution(
             resolveV2Function(unboundV2Func, unresolvedFunc.arguments, unresolvedFunc)
         })
       } catch {
-        case e: AnalysisException if e.getCondition == "REQUIRES_SINGLE_PART_NAMESPACE" &&
-            nameParts.size == 3 =>
-          val catalogPath = if (AnalysisContext.get.catalogAndNamespace.nonEmpty) {
-            AnalysisContext.get.catalogAndNamespace
-          } else {
-            (Seq(catalogManager.currentCatalog.name) ++ catalogManager.currentNamespace).toSeq
-          }
-          val searchPath = SQLConf.get.resolutionSearchPath(catalogPath)
-          throw QueryCompilationErrors.unresolvedRoutineError(
-            unresolvedFunc.nameParts, searchPath.map(toSQLId), unresolvedFunc.origin)
         case _: NoSuchFunctionException =>
           None
         case _: NoSuchNamespaceException =>
@@ -176,12 +167,7 @@ class FunctionResolution(
           case None =>
         }
       }
-      val catalogPath = if (AnalysisContext.get.catalogAndNamespace.nonEmpty) {
-        AnalysisContext.get.catalogAndNamespace
-      } else {
-        (Seq(catalogManager.currentCatalog.name) ++ catalogManager.currentNamespace).toSeq
-      }
-      val searchPath = SQLConf.get.resolutionSearchPath(catalogPath)
+      val searchPath = SQLConf.get.resolutionSearchPath(currentCatalogPath)
       throw QueryCompilationErrors.unresolvedRoutineError(
         unresolvedFunc.nameParts, searchPath.map(toSQLId), unresolvedFunc.origin)
     }
@@ -300,46 +286,19 @@ class FunctionResolution(
   /**
    * Determines the type/location of a function (builtin, temporary, persistent, etc.).
    * This is used by the LookupFunctions analyzer rule for early validation and optimization.
-   * This method only performs the lookup and classification - it does not throw errors.
+   *
+   * Note: may throw for malformed identifiers (e.g. REQUIRES_SINGLE_PART_NAMESPACE).
    *
    * @param nameParts The function name parts.
    * @param unresolvedFunc Optional UnresolvedFunction node for lookups that may need it.
-   * @return The type of the function (Builtin, Temporary, Persistent, TableOnly, or NotFound).
+   * @return The type of the function (Local, Persistent, TableOnly, or NotFound).
    */
   def lookupFunctionType(
       nameParts: Seq[String],
       unresolvedFunc: Option[UnresolvedFunction] = None): FunctionType = {
 
-    // Check if it's explicitly qualified as extension, builtin, or temp
-    FunctionResolution.sessionNamespaceKind(nameParts) match {
-      case Some(SessionCatalog.Extension) | Some(SessionCatalog.Builtin) =>
-        if (lookupBuiltinOrTempFunction(nameParts, unresolvedFunc).isDefined) {
-          return FunctionType.Local  // Extension and builtin both as Local
-        }
-      case Some(SessionCatalog.Temp) =>
-        if (lookupBuiltinOrTempFunction(nameParts, unresolvedFunc).isDefined) {
-          return FunctionType.Local
-        }
-      case None =>
-        // Unqualified or qualified with a catalog
-        // Use lookupBuiltinOrTempFunction which handles internal functions correctly
-        val funcInfoOpt = lookupBuiltinOrTempFunction(nameParts, unresolvedFunc)
-        funcInfoOpt match {
-          case Some(info) =>
-            // Determine if it's extension, temp, or builtin from the ExpressionInfo
-            if (info.getDb == CatalogManager.EXTENSION_NAMESPACE) {
-              return FunctionType.Local
-            } else if (info.getDb == CatalogManager.SESSION_NAMESPACE) {
-              if (nameParts.size == 1 && unresolvedFunc.exists(_.isInternal)) {
-                return FunctionType.Local
-              } else {
-                return FunctionType.Local
-              }
-            } else {
-              return FunctionType.Local
-            }
-          case None =>
-        }
+    if (lookupBuiltinOrTempFunction(nameParts, unresolvedFunc).isDefined) {
+      return FunctionType.Local
     }
 
     // Check if function exists as table function only
@@ -602,19 +561,11 @@ class FunctionResolution(
  */
 object FunctionResolution {
   /**
-   * Check if a function name is qualified as an extension function.
-   * Valid forms: extension.func or system.extension.func
-   */
-  private def maybeExtensionFunctionName(nameParts: Seq[String]): Boolean = {
-    isQualifiedWithNamespace(nameParts, CatalogManager.EXTENSION_NAMESPACE)
-  }
-
-  /**
    * Check if a function name is qualified as a builtin function.
    * Valid forms: builtin.func or system.builtin.func
    */
   private def maybeBuiltinFunctionName(nameParts: Seq[String]): Boolean = {
-    isQualifiedWithNamespace(nameParts, CatalogManager.BUILTIN_NAMESPACE)
+    isQualifiedWithSystemNamespace(nameParts, CatalogManager.BUILTIN_NAMESPACE)
   }
 
   /**
@@ -622,25 +573,20 @@ object FunctionResolution {
    * Valid forms: session.func or system.session.func
    */
   private def maybeTempFunctionName(nameParts: Seq[String]): Boolean = {
-    isQualifiedWithNamespace(nameParts, CatalogManager.SESSION_NAMESPACE)
+    isQualifiedWithSystemNamespace(nameParts, CatalogManager.SESSION_NAMESPACE)
   }
 
   /**
    * Single qualification result for session namespaces: returns the kind when nameParts
-   * is explicitly qualified as extension, builtin, or session; None otherwise.
-   * Use this instead of calling maybeBuiltinFunctionName/maybeTempFunctionName/
-   * maybeExtensionFunctionName in multiple places so namespace rules live in one place.
+   * is explicitly qualified as builtin or session; None otherwise.
    *
    * @param nameParts The function name parts (e.g. Seq("builtin", "abs"), Seq("session", "my_udf"))
-   * @return Some(Builtin), Some(Temp), or Some(Extension) for 2/3-part session qualification;
-   *         None otherwise
+   * @return Some(Builtin) or Some(Temp) for 2/3-part session qualification; None otherwise
    */
   def sessionNamespaceKind(nameParts: Seq[String])
     : Option[org.apache.spark.sql.catalyst.catalog.SessionCatalog.SessionFunctionKind] = {
     if (nameParts.length <= 1) None
-    else if (maybeExtensionFunctionName(nameParts)) {
-      Some(org.apache.spark.sql.catalyst.catalog.SessionCatalog.Extension)
-    } else if (maybeBuiltinFunctionName(nameParts)) {
+    else if (maybeBuiltinFunctionName(nameParts)) {
       Some(org.apache.spark.sql.catalyst.catalog.SessionCatalog.Builtin)
     } else if (maybeTempFunctionName(nameParts)) {
       Some(org.apache.spark.sql.catalyst.catalog.SessionCatalog.Temp)
@@ -653,10 +599,10 @@ object FunctionResolution {
    * Validates both the namespace prefix AND that a function name is present.
    *
    * @param nameParts The multi-part name to check
-   * @param namespace The namespace to check for (e.g., "extension", "builtin", "session")
+   * @param namespace The namespace to check for (e.g., "builtin", "session")
    * @return true if qualified with the given namespace and has a non-empty function name
    */
-  private def isQualifiedWithNamespace(nameParts: Seq[String], namespace: String): Boolean = {
+  private def isQualifiedWithSystemNamespace(nameParts: Seq[String], namespace: String): Boolean = {
     nameParts.length match {
       case 2 =>
         // Format: namespace.funcName (e.g., "builtin.abs")
