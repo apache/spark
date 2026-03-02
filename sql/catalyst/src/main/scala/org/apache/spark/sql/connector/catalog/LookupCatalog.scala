@@ -19,6 +19,7 @@ package org.apache.spark.sql.connector.catalog
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 
 /**
@@ -119,7 +120,22 @@ private[sql] trait LookupCatalog extends Logging {
         Some((catalogManager.v2SessionCatalog, nameParts.asIdentifier))
       } else {
         try {
-          Some((catalogManager.catalog(nameParts.head), nameParts.tail.asIdentifier))
+          val catalog = catalogManager.catalog(nameParts.head)
+          val ident = nameParts.tail.asIdentifier
+          if (CatalogV2Util.isSessionCatalog(catalog)) {
+            val ns = ident.namespace().toSeq
+            if (ns.nonEmpty && ns.last.equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE)) {
+              throw QueryCompilationErrors.operationNotAllowedOnBuiltinNamespaceError(
+                "CREATE", "OBJECT", ident.name())
+            }
+            // Reject only when namespace is empty (e.g. spark_catalog.t with no database).
+            // Allow multi-part namespace for metadata tables (e.g. default.table.snapshots).
+            if (ident.namespace().isEmpty) {
+              throw QueryCompilationErrors.requiresSinglePartNamespaceError(
+                ident.namespace().toSeq :+ ident.name())
+            }
+          }
+          Some((catalog, ident))
         } catch {
           case _: CatalogNotFoundException =>
             Some((currentCatalog, nameParts.asIdentifier))

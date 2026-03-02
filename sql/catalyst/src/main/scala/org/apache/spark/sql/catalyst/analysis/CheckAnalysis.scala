@@ -303,10 +303,12 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
         u.tableNotFound(u.multipartIdentifier)
 
       case u: UnresolvedFunctionName =>
-        val catalogPath = (currentCatalog.name +: catalogManager.currentNamespace).mkString(".")
+        val catalogPath = currentCatalog.name +: catalogManager.currentNamespace
+        val searchPath = SQLConf.get.resolutionSearchPath(catalogPath.toSeq)
+          .map(_.quoted)
         throw QueryCompilationErrors.unresolvedRoutineError(
           u.multipartIdentifier,
-          Seq("system.builtin", "system.session", catalogPath),
+          searchPath,
           u.origin)
 
       case u: UnresolvedHint =>

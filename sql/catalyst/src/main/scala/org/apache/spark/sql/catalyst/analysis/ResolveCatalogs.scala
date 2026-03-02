@@ -22,6 +22,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, SqlScriptingContextManager}
+import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -136,7 +137,9 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
 
   /**
    * Resolves a function identifier, checking for builtin and temp functions first.
-   * Builtin and temp functions are only registered with unqualified names.
+   * Builtin and temp functions are only registered with unqualified names, but can be
+   * referenced with qualified names like builtin.abs, system.builtin.abs, session.func,
+   * or system.session.func.
    */
   private def resolveFunctionIdentifier(
       nameParts: Seq[String],
@@ -154,9 +157,18 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         val CatalogAndIdentifier(catalog, ident) = nameParts
         ResolvedIdentifier(catalog, ident)
       }
-    } else {
-      val CatalogAndIdentifier(catalog, ident) = nameParts
-      ResolvedIdentifier(catalog, ident)
+    } else FunctionResolution.sessionNamespaceKind(nameParts) match {
+      case Some(SessionCatalog.Builtin) | Some(SessionCatalog.Extension) =>
+        // Explicitly qualified as builtin or extension (extension stored as builtin)
+        val ident = Identifier.of(Array(CatalogManager.BUILTIN_NAMESPACE), nameParts.last)
+        ResolvedIdentifier(FakeSystemCatalog, ident)
+      case Some(SessionCatalog.Temp) =>
+        // Explicitly qualified as temp (e.g., session.func or system.session.func)
+        val ident = Identifier.of(Array(CatalogManager.SESSION_NAMESPACE), nameParts.last)
+        ResolvedIdentifier(FakeSystemCatalog, ident)
+      case None =>
+        val CatalogAndIdentifier(catalog, ident) = nameParts
+        ResolvedIdentifier(catalog, ident)
     }
   }
 

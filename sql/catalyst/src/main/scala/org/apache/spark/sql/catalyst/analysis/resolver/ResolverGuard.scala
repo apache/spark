@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.{
 }
 import org.apache.spark.sql.catalyst.analysis.{
   FunctionRegistry,
+  FunctionResolution,
   GetViewColumnByNameAndOrdinal,
   ResolvedInlineTable,
   UnresolvedAlias,
@@ -38,6 +39,7 @@ import org.apache.spark.sql.catalyst.analysis.{
   UnresolvedStar,
   UnresolvedSubqueryColumnAliases
 }
+import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{
   AggregateExpression,
@@ -345,14 +347,60 @@ class ResolverGuard(catalogManager: CatalogManager) extends SQLConfHelper {
     createNamedStruct.children.forall(checkExpression)
   }
 
-  private def checkUnresolvedFunction(unresolvedFunction: UnresolvedFunction) =
-    unresolvedFunction.nameParts.size == 1 &&
-    !ResolverGuard.UNSUPPORTED_FUNCTION_NAMES.contains(unresolvedFunction.nameParts.head) &&
-    // UDFs are not supported
-    FunctionRegistry.functionSet.contains(
-      FunctionIdentifier(unresolvedFunction.nameParts.head.toLowerCase(Locale.ROOT))
-    ) &&
-    unresolvedFunction.children.forall(checkExpression)
+  /**
+   * Checks if an unresolved function is supported by the single-pass analyzer.
+   *
+   * The single-pass analyzer supports built-in functions. For qualified function names,
+   * we allow them to pass through to the resolver, which will handle them appropriately.
+   * This includes:
+   * - Built-in functions: `builtin.count`, `system.builtin.count`, unqualified `count`
+   * - Session/temp functions: `session.my_func`, `system.session.my_func` (may or may not work)
+   * - Persistent functions: `catalog.db.func` (not currently supported, but not actively blocked)
+   *
+   * We only explicitly reject certain built-in functions that require special handling
+   * (lambdas, generators, etc.) via the UNSUPPORTED_FUNCTION_NAMES list.
+   *
+   * @param unresolvedFunction the unresolved function to check
+   * @return true if the function should be allowed to attempt resolution, false otherwise
+   */
+  private def checkUnresolvedFunction(unresolvedFunction: UnresolvedFunction) = {
+    val nameParts = unresolvedFunction.nameParts
+    val functionName = nameParts.last
+
+    // Reject only when we know it's the builtin: unqualified or explicitly builtin-qualified
+    // (system.builtin.func or builtin.func). Any other qualification (session, catalog.db) we let
+    // through since it's not a forbidden builtin.
+    val shouldReject = if (nameParts.length == 1) {
+      // Unqualified: only allow if it's a known builtin (excluding unsupported ones)
+      ResolverGuard.UNSUPPORTED_FUNCTION_NAMES.contains(functionName) ||
+      !FunctionRegistry.functionSet.contains(
+        FunctionIdentifier(functionName.toLowerCase(Locale.ROOT))
+      )
+    } else if (FunctionResolution.sessionNamespaceKind(nameParts)
+        .contains(SessionCatalog.Builtin)) {
+      // Explicitly builtin-qualified (builtin.func, system.builtin.func): reject if unsupported
+      ResolverGuard.UNSUPPORTED_FUNCTION_NAMES.contains(functionName)
+    } else {
+      // Other qualification (session, catalog.db, etc.): allow through
+      false
+    }
+
+    !shouldReject && unresolvedFunction.children.forall(checkExpression)
+  }
+
+  /**
+   * Returns true if the name is unqualified or explicitly qualified as builtin
+   * (e.g. builtin.func, system.builtin.func).
+   *
+   * @note Reserved for future use (e.g. guard rules that treat builtin-qualified
+   *       names differently).
+   * @param nameParts the parts of the function name
+   * @return true if the name is unqualified, "builtin.func", or "system.builtin.func"
+   */
+  private def isBuiltinOrUnqualified(nameParts: Seq[String]): Boolean = {
+    nameParts.length == 1 ||
+      FunctionResolution.sessionNamespaceKind(nameParts).contains(SessionCatalog.Builtin)
+  }
 
   private def checkLiteral(literal: Literal) = true
 
