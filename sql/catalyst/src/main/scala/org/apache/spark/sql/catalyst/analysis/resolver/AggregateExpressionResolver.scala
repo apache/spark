@@ -148,8 +148,11 @@ class AggregateExpressionResolver(
    *    [[Aggregate.aggregateExpressions]] list. Otherwise, use the [[Alias]] from the outer
    *    [[Aggregate]]. This alias will later be injected into the outer [[Aggregate]];
    *  - Store the name that needs to be used for the [[OuterReference]] in
-   *    [[OuterReference.SINGLE_PASS_SQL_STRING_OVERRIDE]] computed based on the
-   *    [[AggregateExpression]] without [[OuterReference]] pulled out.
+   *    [[OuterReference.SINGLE_PASS_SQL_STRING_OVERRIDE]] and
+   *    [[OuterReference.SINGLE_PASS_OUTER_AGGREGATE_ALIAS_NAME_OVERRIDE]], both computed from the
+   *    pretty-printed original [[AggregateExpression]] (before [[OuterReference]] stripping). The
+   *    former overrides [[OuterReference.sql]] and the latter overrides the alias name assigned by
+   *    [[AliasResolution.resolve]].
    *  - In case we have an [[AggregateExpression]] inside a [[Sort]] operator, we need to handle it
    *    in a special way (see [[handleAggregateExpressionOutsideAggregate]] for more details).
    *  - Return the original [[AggregateExpression]] otherwise. This is done to stay compatible
@@ -178,9 +181,11 @@ class AggregateExpressionResolver(
 
     resolvedOuterAggregateExpression match {
       case outerReference: OuterReference =>
+        val name = toPrettySQL(aggregateExpression)
+        outerReference.setTagValue(OuterReference.SINGLE_PASS_SQL_STRING_OVERRIDE, name)
         outerReference.setTagValue(
-          OuterReference.SINGLE_PASS_SQL_STRING_OVERRIDE,
-          toPrettySQL(aggregateExpression)
+          OuterReference.SINGLE_PASS_OUTER_AGGREGATE_ALIAS_NAME_OVERRIDE,
+          name
         )
         outerReference
       case other => other
