@@ -1,0 +1,278 @@
+================================================================================================
+Platform Byte Access
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+Byte Access:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+putByte: On-heap                                     59             59           0       1691.5           0.6       1.0X
+putByte: Off-heap                                    72             72           0       1392.7           0.7       0.8X
+getByte: On-heap                                     49             49           0       2034.1           0.5       1.2X
+getByte: Off-heap                                    38             38           0       2601.6           0.4       1.5X
+
+
+================================================================================================
+Platform Short Access
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+Short Access:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+putShort: On-heap                                    60             60           1       1678.7           0.6       1.0X
+putShort: Off-heap                                   72             74           1       1379.8           0.7       0.8X
+getShort: On-heap                                    36             36           0       2757.6           0.4       1.6X
+getShort: Off-heap                                   40             40           0       2497.0           0.4       1.5X
+
+
+================================================================================================
+Platform Int Access
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+Int Access:                               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+putInt: On-heap                                      59             63           2       1709.0           0.6       1.0X
+putInt: Off-heap                                     60             65           2       1654.6           0.6       1.0X
+getInt: On-heap                                      34             39           3       2908.1           0.3       1.7X
+getInt: Off-heap                                     45             49           1       2215.4           0.5       1.3X
+
+
+================================================================================================
+Platform Long Access
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+Long Access:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+putLong: On-heap                                    102            104           1        977.3           1.0       1.0X
+putLong: Off-heap                                    87             91           8       1146.5           0.9       1.2X
+getLong: On-heap                                     63             70           4       1594.9           0.6       1.6X
+getLong: Off-heap                                    70             75           8       1420.2           0.7       1.5X
+
+
+================================================================================================
+Platform Float Access
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+Float Access:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+putFloat: On-heap                                    62             66           2       1610.0           0.6       1.0X
+putFloat: Off-heap                                   61             66           2       1635.1           0.6       1.0X
+getFloat: On-heap                                   117            118           0        851.6           1.2       0.5X
+getFloat: Off-heap                                  117            118           0        853.2           1.2       0.5X
+
+
+================================================================================================
+Platform Double Access
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+Double Access:                            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+putDouble: On-heap                                   74             76           1       1342.4           0.7       1.0X
+putDouble: Off-heap                                  75             76           1       1334.9           0.7       1.0X
+getDouble: On-heap                                  125            125           0        801.2           1.2       0.6X
+getDouble: Off-heap                                 124            124           0        808.2           1.2       0.6X
+
+
+================================================================================================
+Platform Boolean Access
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+Boolean Access:                           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+putBoolean: On-heap                                  56             56           0       1795.4           0.6       1.0X
+putBoolean: Off-heap                                 55             55           0       1830.6           0.5       1.0X
+getBoolean: On-heap                                  58             58           0       1733.9           0.6       1.0X
+getBoolean: Off-heap                                 58             58           0       1721.7           0.6       1.0X
+
+
+================================================================================================
+Platform Bulk Operations 4k Ints
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+Bulk Operations 4k Ints:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+copyMemory: Off-heap -> Off-heap                      0              0           0          4.7         211.3       1.0X
+copyMemory: Heap -> Off-heap                          0              0           0          4.9         202.3       1.0X
+copyMemory: Off-heap -> Heap                          0              0           0          4.8         206.3       1.0X
+copyMemory: Heap -> Heap                              0              0           0          4.8         206.4       1.0X
+manual: Heap -> Heap                                  0              0           0          0.8        1180.3       0.2X
+manual: Off-heap -> Heap                              0              0           0          1.4         735.3       0.3X
+setMemory: Off-heap                                   0              0           0          3.3         302.0       0.7X
+
+
+================================================================================================
+Platform Bulk Operations 16k Ints
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+Bulk Operations 16k Ints:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+copyMemory: Off-heap -> Off-heap                      0              0           0          0.5        1843.0       1.0X
+copyMemory: Heap -> Off-heap                          0              0           0          0.7        1364.8       1.4X
+copyMemory: Off-heap -> Heap                          0              0           0          0.6        1804.0       1.0X
+copyMemory: Heap -> Heap                              0              0           0          0.5        1821.4       1.0X
+manual: Heap -> Heap                                  0              0           0          0.2        5038.3       0.4X
+manual: Off-heap -> Heap                              0              0           0          0.3        3695.2       0.5X
+setMemory: Off-heap                                   0              0           0          0.7        1481.5       1.2X
+
+
+================================================================================================
+Platform Bulk Operations 256k Ints
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+Bulk Operations 256k Ints:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+copyMemory: Off-heap -> Off-heap                      1              1           0          0.0       69322.4       1.0X
+copyMemory: Heap -> Off-heap                          1              1           0          0.0       70725.9       1.0X
+copyMemory: Off-heap -> Heap                          1              1           0          0.0       69300.8       1.0X
+copyMemory: Heap -> Heap                              1              1           0          0.0       75505.7       0.9X
+manual: Heap -> Heap                                  1              1           0          0.0       83502.7       0.8X
+manual: Off-heap -> Heap                              1              1           0          0.0       72048.1       1.0X
+setMemory: Off-heap                                   0              0           0          0.0       28129.8       2.5X
+
+
+================================================================================================
+Platform Bulk Operations 1m Ints
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+Bulk Operations 1m Ints:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+copyMemory: Off-heap -> Off-heap                      3              3           0          0.0      263879.8       1.0X
+copyMemory: Heap -> Off-heap                          3              3           0          0.0      259286.5       1.0X
+copyMemory: Off-heap -> Heap                          3              3           0          0.0      259391.7       1.0X
+copyMemory: Heap -> Heap                              3              3           0          0.0      260818.4       1.0X
+manual: Heap -> Heap                                  3              3           0          0.0      315249.3       0.8X
+manual: Off-heap -> Heap                              3              3           0          0.0      294867.6       0.9X
+setMemory: Off-heap                                   2              2           0          0.0      162831.2       1.6X
+
+
+================================================================================================
+Platform Bulk Operations 8m Ints
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+Bulk Operations 8m Ints:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+copyMemory: Off-heap -> Off-heap                     36             41           2          0.0     3623807.8       1.0X
+copyMemory: Heap -> Off-heap                         42             44           1          0.0     4157280.6       0.9X
+copyMemory: Off-heap -> Heap                         42             46           3          0.0     4161878.2       0.9X
+copyMemory: Heap -> Heap                             40             42           1          0.0     4021196.7       0.9X
+manual: Heap -> Heap                                 45             47           1          0.0     4525668.5       0.8X
+manual: Off-heap -> Heap                             44             47           1          0.0     4366098.7       0.8X
+setMemory: Off-heap                                  13             21           4          0.0     1306704.0       2.8X
+
+
+================================================================================================
+Platform Bulk Operations 32m Ints
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+Bulk Operations 32m Ints:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+copyMemory: Off-heap -> Off-heap                    185            187           1          0.0    18450833.7       1.0X
+copyMemory: Heap -> Off-heap                        202            203           1          0.0    20215598.5       0.9X
+copyMemory: Off-heap -> Heap                        203            205           1          0.0    20340287.0       0.9X
+copyMemory: Heap -> Heap                            203            207           3          0.0    20296742.5       0.9X
+manual: Heap -> Heap                                208            209           1          0.0    20783792.9       0.9X
+manual: Off-heap -> Heap                            206            208           1          0.0    20598119.9       0.9X
+setMemory: Off-heap                                 124            126           1          0.0    12387113.4       1.5X
+
+
+================================================================================================
+Platform Memory Allocation 4k Ints
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+Memory Allocation 4k Ints:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+allocateMemory                                        0              0           0      46511.6           0.0       1.0X
+freeMemory                                            0              0           0      44444.4           0.0       1.0X
+reallocateMemory: double in size                      0              0           0       6920.4           0.1       0.1X
+
+
+================================================================================================
+Platform Memory Allocation 16k Ints
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+Memory Allocation 16k Ints:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+allocateMemory                                        0              0           0      36363.6           0.0       1.0X
+freeMemory                                            0              0           0      44444.4           0.0       1.2X
+reallocateMemory: double in size                      0              0           0       1141.6           0.9       0.0X
+
+
+================================================================================================
+Platform Memory Allocation 256k Ints
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+Memory Allocation 256k Ints:              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+allocateMemory                                        0              0           0      36363.6           0.0       1.0X
+freeMemory                                            0              0           0      44444.4           0.0       1.2X
+reallocateMemory: double in size                      0              0           0         19.0          52.7       0.0X
+
+
+================================================================================================
+Platform Memory Allocation 1m Ints
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+Memory Allocation 1m Ints:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+allocateMemory                                        0              0           0      36363.6           0.0       1.0X
+freeMemory                                            0              0           0      44444.4           0.0       1.2X
+reallocateMemory: double in size                      0              0           0          6.5         153.2       0.0X
+
+
+================================================================================================
+Platform Memory Allocation 8m Ints
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+Memory Allocation 8m Ints:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+allocateMemory                                        0              0           0        988.6           1.0       1.0X
+freeMemory                                            0              0           0        679.8           1.5       0.7X
+reallocateMemory: double in size                      5              6           0          0.4        2507.8       0.0X
+
+
+================================================================================================
+Platform Memory Allocation 32m Ints
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+Memory Allocation 32m Ints:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+allocateMemory                                        0              0           0       1018.3           1.0       1.0X
+freeMemory                                            0              0           0        626.6           1.6       0.6X
+reallocateMemory: double in size                     25             26           1          0.1       12466.9       0.0X
+
+
