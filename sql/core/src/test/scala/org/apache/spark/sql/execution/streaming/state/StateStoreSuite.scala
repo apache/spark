@@ -2369,32 +2369,49 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
         true.toString) {
 
       // First run with file checksum enabled. It will generate state and checksum files.
-      // Turn off file checksum, and regenerate only the state files
-      Seq(true, false).foreach { fileChecksumEnabled =>
-        withSQLConf(
-          SQLConf.STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED.key -> fileChecksumEnabled.toString) {
-          tryWithProviderResource(newStoreProviderWithClonedConf(storeId)) { provider =>
-            (1 to numBatches).foreach { i =>
-              putAndCommitStore(
-                provider, loadVersion = i - 1, doMaintenance = false)
-            }
-
-            // This should only create snapshot and no delete
-            provider.doMaintenance()
-
-            // number of files should be the same.
-            // 3 delta/changelog files, 1 snapshot (with checksum files)
-            verifyChecksumFiles(storeId.storeCheckpointLocation().toString,
-              expectedNumFiles = 8, expectedNumChecksumFiles = 4)
+      withSQLConf(
+        SQLConf.STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED.key -> true.toString) {
+        tryWithProviderResource(newStoreProviderWithClonedConf(storeId)) { provider =>
+          (1 to numBatches).foreach { i =>
+            putAndCommitStore(
+              provider, loadVersion = i - 1, doMaintenance = false)
           }
+
+          // This should only create snapshot and no delete
+          provider.doMaintenance()
+
+          // 3 delta/changelog files, 1 snapshot (with checksum files)
+          verifyChecksumFiles(storeId.storeCheckpointLocation().toString,
+            expectedNumFiles = 8, expectedNumChecksumFiles = 4)
+        }
+      }
+
+      // Turn off file checksum and continue from where the first run left off, creating new
+      // versions. Since state files are immutable, the existing files from the first run are
+      // untouched and their checksums remain valid.
+      withSQLConf(
+        SQLConf.STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED.key -> false.toString) {
+        tryWithProviderResource(newStoreProviderWithClonedConf(storeId)) { provider =>
+          (1 to numBatches).foreach { i =>
+            putAndCommitStore(
+              provider, loadVersion = numBatches + i - 1, doMaintenance = false)
+          }
+
+          // This should only create snapshot and no delete
+          provider.doMaintenance()
+
+          // 8 files from first run + 3 new changelog + 1 new snapshot (no checksum files)
+          verifyChecksumFiles(storeId.storeCheckpointLocation().toString,
+            expectedNumFiles = 12, expectedNumChecksumFiles = 4)
         }
       }
 
       withSQLConf(
         SQLConf.STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED.key -> true.toString) {
         // now try to load the store with checksum enabled.
-        // It will verify the overwritten state files with the checksum files.
-        (1 to numBatches).foreach { i =>
+        // Files from the first run verify against their valid checksum sidecars.
+        // Files from the second run have no checksum sidecar and load without verification.
+        (1 to numBatches * 2).foreach { i =>
           tryWithProviderResource(newStoreProviderWithClonedConf(storeId)) { provider =>
             // load from DFS should be successful
             val store = provider.getStore(i)
