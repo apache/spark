@@ -508,9 +508,10 @@ class MapInPandasTestsMixin:
 
         def func_with_logging(iterator):
             logger = logging.getLogger("test_pandas_map")
+            to_ints = lambda a: [int(v) for v in a]
             for pdf in iterator:
                 assert isinstance(pdf, pd.DataFrame)
-                logger.warning(f"pandas map: {list(pdf['id'])}")
+                logger.warning(f"pandas map: {to_ints(pdf['id'])}")
                 yield pdf
 
         with self.sql_conf(
