@@ -1712,6 +1712,149 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase with 
       }
     }
   }
+
+  test("sequential union: union child followed by single source") {
+    import testImplicits._
+
+    withSQLConf(
+      SQLConf.STREAMING_OFFSET_LOG_FORMAT_VERSION.key -> "2",
+      SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "true") {
+
+      withTempDir { checkpointDir =>
+        withTempDir { outputDir =>
+          val checkpointLocation = checkpointDir.getCanonicalPath
+          val outputPath = outputDir.getCanonicalPath
+
+          // Setup: Two Kafka topics for the first child (union)
+          val topic1 = newTopic()
+          testUtils.createTopic(topic1, partitions = 2)
+          val data1 = (0 until 10).map(i => s"topic1_$i")
+          testUtils.sendMessages(topic1, data1.toArray)
+
+          val topic2 = newTopic()
+          testUtils.createTopic(topic2, partitions = 2)
+          val data2 = (0 until 10).map(i => s"topic2_$i")
+          testUtils.sendMessages(topic2, data2.toArray)
+
+          // Setup: Third Kafka topic for the second child
+          val topic3 = newTopic()
+          testUtils.createTopic(topic3, partitions = 2)
+          val data3 = (0 until 10).map(i => s"topic3_$i")
+          testUtils.sendMessages(topic3, data3.toArray)
+
+          // Track write order with timestamps
+          var writeOrder = scala.collection.mutable.ListBuffer[(String, Long)]()
+
+          // Build first child as union of two sources
+          // Use maxOffsetsPerTrigger to force multiple batches
+          val stream1 = spark.readStream
+            .format("kafka")
+            .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+            .option("subscribe", topic1)
+            .option("startingOffsets", "earliest")
+            .option("maxOffsetsPerTrigger", "3")
+            .name("union_source_1")
+            .load()
+            .selectExpr("CAST(value AS STRING) AS value", "timestamp")
+
+          val stream2 = spark.readStream
+            .format("kafka")
+            .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+            .option("subscribe", topic2)
+            .option("startingOffsets", "earliest")
+            .option("maxOffsetsPerTrigger", "3")
+            .name("union_source_2")
+            .load()
+            .selectExpr("CAST(value AS STRING) AS value", "timestamp")
+
+          val unionChild = stream1.union(stream2)
+
+          // Build second child as single source
+          val stream3 = spark.readStream
+            .format("kafka")
+            .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+            .option("subscribe", topic3)
+            .option("startingOffsets", "earliest")
+            .option("maxOffsetsPerTrigger", "3")
+            .name("sequential_source")
+            .load()
+            .selectExpr("CAST(value AS STRING) AS value", "timestamp")
+
+          // Sequential union: union child followed by single source
+          val sequential = unionChild.followedBy(stream3)
+
+          // Write to Parquet sink with batch tracking
+          val query = sequential.writeStream
+            .outputMode("append")
+            .format("parquet")
+            .option("checkpointLocation", checkpointLocation)
+            .option("path", outputPath)
+            .foreachBatch { (batchDF: Dataset[Row], batchId: Long) =>
+              // Track which topics appear in which batch
+              val batchValues = batchDF.select("value").as[String].collect()
+              batchValues.foreach { v =>
+                writeOrder += ((v, batchId))
+              }
+              // Write to parquet
+              batchDF.write.mode("append").parquet(outputPath)
+            }
+            .trigger(Trigger.AvailableNow)
+            .start()
+
+          query.awaitTermination()
+
+          // Debug: Check if SequentialUnionExecution was used
+          val executionClass = query.asInstanceOf[StreamingQueryWrapper]
+            .streamingQuery.getClass.getName
+          println(s"[DEBUG] Execution class: $executionClass")
+          println(s"[DEBUG] Write order: ${writeOrder.toList}")
+
+          // Verify results
+          val result = spark.read.parquet(outputPath)
+            .select("value")
+            .as[String]
+            .collect()
+            .toSet
+
+          // Should have all 30 values (10 from each topic)
+          assert(result.size == 30,
+            s"Expected 30 values but got ${result.size}")
+
+          // Verify all expected values are present
+          val expected = data1.toSet ++ data2.toSet ++ data3.toSet
+          assert(result == expected,
+            s"Result mismatch. Missing: ${expected.diff(result)}, Extra: ${result.diff(expected)}")
+
+          // CRITICAL: Verify ordering semantics
+          val topic1Batches = writeOrder.filter(_._1.startsWith("topic1_")).map(_._2).toSet
+          val topic2Batches = writeOrder.filter(_._1.startsWith("topic2_")).map(_._2).toSet
+          val topic3Batches = writeOrder.filter(_._1.startsWith("topic3_")).map(_._2).toSet
+
+          // 1. Verify topic1 and topic2 are interleaved (processed concurrently in union)
+          val unionBatches = topic1Batches ++ topic2Batches
+          val hasInterleavedData = topic1Batches.intersect(topic2Batches).nonEmpty
+          assert(hasInterleavedData,
+            s"Expected topic1 and topic2 to be interleaved in same batches, " +
+            s"but topic1 batches=$topic1Batches, topic2 batches=$topic2Batches")
+
+          // 2. Verify topic3 only starts AFTER both topic1 and topic2 are exhausted
+          val maxUnionBatch = if (unionBatches.nonEmpty) unionBatches.max else -1L
+          val minTopic3Batch = if (topic3Batches.nonEmpty) topic3Batches.min else Long.MaxValue
+
+          assert(minTopic3Batch > maxUnionBatch,
+            s"Sequential order violated: topic3 first batch ($minTopic3Batch) should be " +
+            s"after union last batch ($maxUnionBatch). " +
+            s"Union batches: $unionBatches, Topic3 batches: $topic3Batches")
+
+          // 3. Verify all topic3 data comes after all union data
+          val allTopic3AfterUnion = topic3Batches.forall(_ > maxUnionBatch)
+          assert(allTopic3AfterUnion,
+            s"All topic3 batches should be after union batches. " +
+            s"Union max: $maxUnionBatch, Topic3 batches: $topic3Batches")
+        }
+      }
+    }
+  }
 }
 
 abstract class KafkaMicroBatchV1SourceSuite extends KafkaMicroBatchSourceSuiteBase {

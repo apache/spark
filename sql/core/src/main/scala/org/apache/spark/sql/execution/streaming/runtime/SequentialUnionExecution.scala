@@ -85,18 +85,40 @@ class SequentialUnionExecution(
       // Extract sources from each child
       val mapping = mutable.Map[Int, Set[SparkDataStream]]()
 
+      // scalastyle:off println
+      println(s"[SEQEXEC] Initializing with ${union.children.size} children")
+      // scalastyle:on println
+
       union.children.zipWithIndex.foreach { case (child, childIdx) =>
         val childSources = child.collect {
-          case s: StreamingExecutionRelation => s.source
-          case r: StreamingDataSourceV2ScanRelation => r.stream
+          case s: StreamingExecutionRelation =>
+            // scalastyle:off println
+            println(s"[SEQEXEC] Child $childIdx: Found StreamingExecutionRelation " +
+              s"${s.source.getClass.getSimpleName}@${System.identityHashCode(s.source)}")
+            // scalastyle:on println
+            s.source
+          case r: StreamingDataSourceV2ScanRelation =>
+            // scalastyle:off println
+            println(s"[SEQEXEC] Child $childIdx: Found StreamingDataSourceV2ScanRelation " +
+              s"${r.stream.getClass.getSimpleName}@${System.identityHashCode(r.stream)}")
+            // scalastyle:on println
+            r.stream
         }.toSet
 
         if (childSources.nonEmpty) {
           mapping(childIdx) = childSources
+          // scalastyle:off println
+          println(s"[SEQEXEC] Child $childIdx has ${childSources.size} sources")
+          // scalastyle:on println
         }
       }
 
       childToSourcesMap = mapping.toMap
+
+      // scalastyle:off println
+      println(s"[SEQEXEC] Final mapping: ${childToSourcesMap.view.mapValues(_.size).toMap}")
+      println(s"[SEQEXEC] All sources from uniqueSources will be checked against this mapping")
+      // scalastyle:on println
     }
   }
 
@@ -105,19 +127,17 @@ class SequentialUnionExecution(
    * This is called from constructNextBatch to determine which
    * sources should receive offsets.
    *
-   * Note: We also consider the NEXT child's sources as "active" if we're about to transition.
-   * This ensures isNewDataAvailable() will return true and trigger another batch construction.
+   * Only sources from the currently active child are considered active.
+   * Inactive sources get startOffset==endOffset (no new data).
    */
   def isSourceActive(source: SparkDataStream): Boolean = {
     val activeChildSources = getActiveChildSources()
-    var isActive = activeChildSources.contains(source)
+    val isActive = activeChildSources.contains(source)
 
-    // Also mark next child's sources as active to collect their offsets early
-    // This ensures they have valid offsets ready when auto-transition happens
-    if (!isActive && !isOnFinalChild) {
-      val nextChildSources = getSourcesForChild(activeChildIndex + 1)
-      isActive = nextChildSources.contains(source)
-    }
+    // scalastyle:off println
+    println(s"[SEQEXEC] isSourceActive: source=${source.getClass.getSimpleName}@" +
+      s"${System.identityHashCode(source)}, activeChild=$activeChildIndex, isActive=$isActive")
+    // scalastyle:on println
 
     isActive
   }
