@@ -16,6 +16,14 @@
 -->
 
 <script id="history-summary-template" type="text/html">
+<div class="row" style="margin-bottom: 10px;">
+  <div class="col-md-12">
+    <label for="log-path-filter" style="margin-right: 10px;">Filter by Log Source:</label>
+    <select id="log-path-filter" class="form-control" style="display: inline-block; width: auto;">
+      <option value="">All Sources</option>
+    </select>
+  </div>
+</div>
 <table id="history-summary-table" class="table table-striped compact">
   <thead>
     <tr>
@@ -32,6 +40,11 @@
       <th>
         <span data-bs-toggle="tooltip" data-bs-placement="top" title="Name of this application.">
           App Name
+        </span>
+      </th>
+      <th>
+        <span data-toggle="tooltip" data-placement="top" title="Log directory where this application's event log is stored.">
+          Log Source
         </span>
       </th>
       {{#hasMultipleAttempts}}

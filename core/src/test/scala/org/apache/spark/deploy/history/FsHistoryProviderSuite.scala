@@ -156,9 +156,13 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
           completed: Boolean): ApplicationInfo = {
 
         val duration = if (end > 0) end - start else 0
+        // Get log dir info from the provider
+        val logPath = new File(testDir, name).getAbsolutePath
+        val (clusterName, clusterFullPath) = provider.getLogDirInfo(logPath)
         new ApplicationInfo(id, name, None, None, None, None,
           List(ApplicationAttemptInfo(None, new Date(start),
-            new Date(end), new Date(lastMod), duration, user, completed, SPARK_VERSION)))
+            new Date(end), new Date(lastMod), duration, user, completed, SPARK_VERSION,
+            Some(clusterName), Some(clusterFullPath))))
       }
 
       // For completed files, lastUpdated would be lastModified time.
@@ -1201,6 +1205,9 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
         !isReadable))
     val mockedProvider = spy[FsHistoryProvider](provider)
     when(mockedProvider.fs).thenReturn(mockedFs)
+    when(mockedProvider.logDirFs).thenReturn(provider.logDirFs.map {
+      case (dir, _) => dir -> mockedFs
+    })
     updateAndCheck(mockedProvider) { list =>
       list.size should be(1)
     }
@@ -1383,11 +1390,11 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
     val appInfo = new ApplicationAttemptInfo(None, new Date(1), new Date(1), new Date(1),
       10, "spark", false, "dummy")
     val attemptInfoWithIndexAsNone = new AttemptInfoWrapper(appInfo, "dummyPath", 10, None,
-      None, None, None, None)
+      None, None, None, None, "test-cluster", "/test/path")
     assertSerDe(serializer, attemptInfoWithIndexAsNone)
 
     val attemptInfoWithIndex = new AttemptInfoWrapper(appInfo, "dummyPath", 10, Some(1),
-      None, None, None, None)
+      None, None, None, None, "test-cluster", "/test/path")
     assertSerDe(serializer, attemptInfoWithIndex)
   }
 
@@ -1892,6 +1899,216 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
       "USER" -> user) ++ extraAttributes
 
     new ExecutorInfo(host, 1, executorLogUrlMap, executorAttributes)
+  }
+
+  test("SPARK-55793: applications from multiple log directories") {
+    val dir2 = Utils.createTempDir(namePrefix = "logDir2")
+    try {
+      val conf = createTestConf()
+        .set(HISTORY_LOG_DIR, s"${testDir.getAbsolutePath},${dir2.getAbsolutePath}")
+      val provider = new FsHistoryProvider(conf)
+
+      // Write app log in first directory
+      val log1 = newLogFile("app1", None, inProgress = false)
+      writeFile(log1, None,
+        SparkListenerApplicationStart("app1", Some("app1-id"), 1L, "test", None),
+        SparkListenerApplicationEnd(5L))
+
+      // Write app log in second directory
+      val logUri2 = SingleEventLogFileWriter.getLogPath(dir2.toURI, "app2", None, None)
+      val log2 = new File(new Path(logUri2).toUri.getPath)
+      writeFile(log2, None,
+        SparkListenerApplicationStart("app2", Some("app2-id"), 2L, "test", None),
+        SparkListenerApplicationEnd(6L))
+
+      updateAndCheck(provider) { list =>
+        list.size should be (2)
+        list.map(_.id).toSet should be (Set("app1-id", "app2-id"))
+
+        // Verify each app has the correct display name derived from its logDir
+        val app1 = list.find(_.id == "app1-id").get
+        val app2 = list.find(_.id == "app2-id").get
+        app1.attempts.head.clusterName.get should be (testDir.getAbsolutePath)
+        app2.attempts.head.clusterName.get should be (dir2.getAbsolutePath)
+      }
+
+      provider.stop()
+    } finally {
+      Utils.deleteRecursively(dir2)
+    }
+  }
+
+  test("SPARK-55793: error in one directory does not affect others") {
+    val dir2 = Utils.createTempDir(namePrefix = "logDir2")
+    try {
+      val conf = createTestConf()
+        .set(HISTORY_LOG_DIR,
+          s"${testDir.getAbsolutePath},/nonexistent/path,${dir2.getAbsolutePath}")
+      val provider = new FsHistoryProvider(conf)
+
+      val log1 = newLogFile("app1", None, inProgress = false)
+      writeFile(log1, None,
+        SparkListenerApplicationStart("app1", Some("app1-id"), 1L, "test", None),
+        SparkListenerApplicationEnd(5L))
+
+      val logUri2 = SingleEventLogFileWriter.getLogPath(dir2.toURI, "app2", None, None)
+      val log2 = new File(new Path(logUri2).toUri.getPath)
+      writeFile(log2, None,
+        SparkListenerApplicationStart("app2", Some("app2-id"), 2L, "test", None),
+        SparkListenerApplicationEnd(6L))
+
+      updateAndCheck(provider) { list =>
+        list.size should be (2)
+      }
+
+      provider.stop()
+    } finally {
+      Utils.deleteRecursively(dir2)
+    }
+  }
+
+  test("SPARK-55793: empty name at head falls back to full path") {
+    val dir2 = Utils.createTempDir(namePrefix = "logDir2")
+    val dir3 = Utils.createTempDir(namePrefix = "logDir3")
+    try {
+      val conf = createTestConf()
+        .set(HISTORY_LOG_DIR,
+          s"${testDir.getAbsolutePath},${dir2.getAbsolutePath},${dir3.getAbsolutePath}")
+        .set(HISTORY_LOG_DIR_NAMES, ",NameB,NameC")
+      val provider = new FsHistoryProvider(conf)
+
+      val log1 = newLogFile("app1", None, inProgress = false)
+      writeFile(log1, None,
+        SparkListenerApplicationStart("app1", Some("app1-id"), 1L, "test", None),
+        SparkListenerApplicationEnd(5L))
+
+      val logUri2 = SingleEventLogFileWriter.getLogPath(dir2.toURI, "app2", None, None)
+      val log2 = new File(new Path(logUri2).toUri.getPath)
+      writeFile(log2, None,
+        SparkListenerApplicationStart("app2", Some("app2-id"), 2L, "test", None),
+        SparkListenerApplicationEnd(6L))
+
+      val logUri3 = SingleEventLogFileWriter.getLogPath(dir3.toURI, "app3", None, None)
+      val log3 = new File(new Path(logUri3).toUri.getPath)
+      writeFile(log3, None,
+        SparkListenerApplicationStart("app3", Some("app3-id"), 3L, "test", None),
+        SparkListenerApplicationEnd(7L))
+
+      updateAndCheck(provider) { list =>
+        val app1 = list.find(_.id == "app1-id").get
+        val app2 = list.find(_.id == "app2-id").get
+        val app3 = list.find(_.id == "app3-id").get
+        app1.attempts.head.clusterName.get should be (testDir.getAbsolutePath)
+        app2.attempts.head.clusterName.get should be ("NameB")
+        app3.attempts.head.clusterName.get should be ("NameC")
+      }
+
+      provider.stop()
+    } finally {
+      Utils.deleteRecursively(dir2)
+      Utils.deleteRecursively(dir3)
+    }
+  }
+
+  test("SPARK-55793: empty name at tail falls back to full path") {
+    val dir2 = Utils.createTempDir(namePrefix = "logDir2")
+    val dir3 = Utils.createTempDir(namePrefix = "logDir3")
+    try {
+      val conf = createTestConf()
+        .set(HISTORY_LOG_DIR,
+          s"${testDir.getAbsolutePath},${dir2.getAbsolutePath},${dir3.getAbsolutePath}")
+        .set(HISTORY_LOG_DIR_NAMES, "NameA,NameB,")
+      val provider = new FsHistoryProvider(conf)
+
+      val log1 = newLogFile("app1", None, inProgress = false)
+      writeFile(log1, None,
+        SparkListenerApplicationStart("app1", Some("app1-id"), 1L, "test", None),
+        SparkListenerApplicationEnd(5L))
+
+      val logUri2 = SingleEventLogFileWriter.getLogPath(dir2.toURI, "app2", None, None)
+      val log2 = new File(new Path(logUri2).toUri.getPath)
+      writeFile(log2, None,
+        SparkListenerApplicationStart("app2", Some("app2-id"), 2L, "test", None),
+        SparkListenerApplicationEnd(6L))
+
+      val logUri3 = SingleEventLogFileWriter.getLogPath(dir3.toURI, "app3", None, None)
+      val log3 = new File(new Path(logUri3).toUri.getPath)
+      writeFile(log3, None,
+        SparkListenerApplicationStart("app3", Some("app3-id"), 3L, "test", None),
+        SparkListenerApplicationEnd(7L))
+
+      updateAndCheck(provider) { list =>
+        val app1 = list.find(_.id == "app1-id").get
+        val app2 = list.find(_.id == "app2-id").get
+        val app3 = list.find(_.id == "app3-id").get
+        app1.attempts.head.clusterName.get should be ("NameA")
+        app2.attempts.head.clusterName.get should be ("NameB")
+        app3.attempts.head.clusterName.get should be (dir3.getAbsolutePath)
+      }
+
+      provider.stop()
+    } finally {
+      Utils.deleteRecursively(dir2)
+      Utils.deleteRecursively(dir3)
+    }
+  }
+
+  test("SPARK-55793: empty name in middle falls back to full path") {
+    val dir2 = Utils.createTempDir(namePrefix = "logDir2")
+    val dir3 = Utils.createTempDir(namePrefix = "logDir3")
+    try {
+      val conf = createTestConf()
+        .set(HISTORY_LOG_DIR,
+          s"${testDir.getAbsolutePath},${dir2.getAbsolutePath},${dir3.getAbsolutePath}")
+        .set(HISTORY_LOG_DIR_NAMES, "NameA,,NameC")
+      val provider = new FsHistoryProvider(conf)
+
+      val log1 = newLogFile("app1", None, inProgress = false)
+      writeFile(log1, None,
+        SparkListenerApplicationStart("app1", Some("app1-id"), 1L, "test", None),
+        SparkListenerApplicationEnd(5L))
+
+      val logUri2 = SingleEventLogFileWriter.getLogPath(dir2.toURI, "app2", None, None)
+      val log2 = new File(new Path(logUri2).toUri.getPath)
+      writeFile(log2, None,
+        SparkListenerApplicationStart("app2", Some("app2-id"), 2L, "test", None),
+        SparkListenerApplicationEnd(6L))
+
+      val logUri3 = SingleEventLogFileWriter.getLogPath(dir3.toURI, "app3", None, None)
+      val log3 = new File(new Path(logUri3).toUri.getPath)
+      writeFile(log3, None,
+        SparkListenerApplicationStart("app3", Some("app3-id"), 3L, "test", None),
+        SparkListenerApplicationEnd(7L))
+
+      updateAndCheck(provider) { list =>
+        val app1 = list.find(_.id == "app1-id").get
+        val app2 = list.find(_.id == "app2-id").get
+        val app3 = list.find(_.id == "app3-id").get
+        app1.attempts.head.clusterName.get should be ("NameA")
+        app2.attempts.head.clusterName.get should be (dir2.getAbsolutePath)
+        app3.attempts.head.clusterName.get should be ("NameC")
+      }
+
+      provider.stop()
+    } finally {
+      Utils.deleteRecursively(dir2)
+      Utils.deleteRecursively(dir3)
+    }
+  }
+
+  test("SPARK-55793: duplicate display names should fail") {
+    val dir2 = Utils.createTempDir(namePrefix = "logDir2")
+    try {
+      val conf = createTestConf()
+        .set(HISTORY_LOG_DIR, s"${testDir.getAbsolutePath},${dir2.getAbsolutePath}")
+        .set(HISTORY_LOG_DIR_NAMES, "SameName,SameName")
+      val e = intercept[IllegalArgumentException] {
+        new FsHistoryProvider(conf)
+      }
+      assert(e.getMessage.contains("Duplicate display names"))
+    } finally {
+      Utils.deleteRecursively(dir2)
+    }
   }
 
   private class SafeModeTestProvider(conf: SparkConf, clock: Clock)

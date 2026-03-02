@@ -39,7 +39,21 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
     val summary =
       <div class="container-fluid">
         <ul class="list-unstyled">
-          {providerConfig.map { case (k, v) => <li><strong>{k}:</strong> {v}</li> }}
+          {providerConfig.map { case (k, v) =>
+            if (k == "Event log directory" && v.contains(",")) {
+              val dirs = v.split(",").map(_.trim)
+              <li>
+                <details>
+                  <summary><strong>{k}:</strong> {dirs.length} directories</summary>
+                  <ul style="margin-top: 4px;">
+                    {dirs.map(d => <li>{d}</li>)}
+                  </ul>
+                </details>
+              </li>
+            } else {
+              <li><strong>{k}:</strong> {v}</li>
+            }
+          }}
         </ul>
         {
           if (eventLogsUnderProcessCount > 0) {
