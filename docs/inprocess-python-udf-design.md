@@ -129,25 +129,33 @@ Leverages Spark's existing `ExecutorPlugin` hook to initialize one embedded CPyt
 per executor JVM process at startup.
 
 ```scala
-class InProcessPythonPlugin extends ExecutorPlugin {
+class InProcessPythonPlugin extends SparkPlugin {
+  override def driverPlugin(): DriverPlugin = null
+  override def executorPlugin(): ExecutorPlugin = new InProcessPythonExecutorPlugin()
+}
+
+private class InProcessPythonExecutorPlugin extends ExecutorPlugin {
   override def init(ctx: PluginContext, extraConf: java.util.Map[String, String]): Unit = {
-    val pythonExec   = extraConf.getOrDefault("spark.pyspark.python", "python3")
-    val sitePackages = extraConf.getOrDefault("spark.inprocess.python.sitePackages", "")
-    val config = new JepConfig()
-      .addIncludePaths(sitePackages)
-      .setRedirectOutputStreams(true)
-    SharedInterpreter.initialize(config)
-    InProcessPythonRuntime.initialize(pythonExec)
+    val sitePackages = ctx.conf()
+      .getOption(InProcessPythonRuntime.SITE_PACKAGES_CONFIG)
+      .map(_.split(",").map(_.trim).filter(_.nonEmpty).toSeq)
+      .getOrElse(Seq.empty)
+    InProcessPythonRuntime.initialize(sitePackages)
   }
 
-  override def shutdown(): Unit = {
-    InProcessPythonRuntime.shutdown()
-  }
+  override def shutdown(): Unit = InProcessPythonRuntime.shutdown()
 }
 ```
 
-**`InProcessPythonRuntime`** (companion object) holds the singleton `SharedInterpreter` reference
-and exposes `invoke(serializedUdf: Array[Byte], input: InProcessInput): InProcessResult`.
+**`InProcessPythonRuntime`** (companion object) holds the singleton `SharedInterpreter` reference.
+It exposes `initialize(sitePackages)` called at executor startup and `invoke(...)` called once per
+Arrow batch by `InProcessArrowEvalExec`.
+
+**`spark.inprocess.python.sitePackages`**: comma-separated directory paths appended to `sys.path`
+inside the interpreter at startup. Required when distributing a Python venv via `--archives` so
+that packages in the venv are importable inside UDFs. Not needed for local development (the active
+venv's site-packages are already on `sys.path`). See the
+[user guide](sql-pyspark-inprocess-udf.html#spark-inprocess-python-sitepackages) for full details.
 
 **Deployment note**: jep requires a native `.so` (`libjep.so` / `libjep.dylib`) on each executor.
 This can be distributed via Spark's `--archives` or bundled into a custom executor Docker image.
@@ -612,7 +620,7 @@ bash python/integration/run_inprocess_udf_tests.sh
 bash python/integration/run_inprocess_udf_tests.sh --no-x
 ```
 
-Expected output: **15 passed in ~6s**.
+Expected output: **25 passed in ~7s**.
 
 ### What the script does
 

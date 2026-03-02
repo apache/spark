@@ -48,8 +48,12 @@ private[python] class InProcessPythonExecutorPlugin extends ExecutorPlugin with 
 
   override def init(ctx: PluginContext, extraConf: JMap[String, String]): Unit = {
     logInfo("Initializing in-process Python runtime (jep SharedInterpreter).")
+    val sitePackages = ctx.conf()
+      .getOption(InProcessPythonRuntime.SITE_PACKAGES_CONFIG)
+      .map(_.split(",").map(_.trim).filter(_.nonEmpty).toSeq)
+      .getOrElse(Seq.empty)
     try {
-      InProcessPythonRuntime.initialize()
+      InProcessPythonRuntime.initialize(sitePackages)
       logInfo("In-process Python runtime initialized successfully.")
     } catch {
       case e: Exception =>

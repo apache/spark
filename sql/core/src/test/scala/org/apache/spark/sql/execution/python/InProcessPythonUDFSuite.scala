@@ -118,6 +118,14 @@ class InProcessPythonUDFSuite extends SparkPlanTest with SharedSparkSession {
   }
 
   // ---------------------------------------------------------------------------
+  // Config constant tests
+  // ---------------------------------------------------------------------------
+
+  test("InProcessPythonRuntime.SITE_PACKAGES_CONFIG has the expected key") {
+    assert(InProcessPythonRuntime.SITE_PACKAGES_CONFIG === "spark.inprocess.python.sitePackages")
+  }
+
+  // ---------------------------------------------------------------------------
   // Execution tests (require jep + CPython + PyArrow on the test classpath)
   // Run with: -Dinprocess.tests=true
   // ---------------------------------------------------------------------------

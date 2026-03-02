@@ -37,20 +37,46 @@ import org.apache.spark.internal.Logging
  */
 private[python] object InProcessPythonRuntime extends Logging {
 
+  /**
+   * Spark config key for extra Python site-packages paths to add to the interpreter's
+   * ``sys.path`` at startup.  Accepts a comma-separated list of absolute directory paths.
+   *
+   * Typical usage with ``--archives``::
+   *
+   *   spark.inprocess.python.sitePackages=./venv.zip/venv/lib/python3.11/site-packages
+   *
+   * The paths are appended in order after the bridge module is imported, so they take
+   * lower priority than the packages already on ``sys.path`` (e.g. pyspark itself).
+   */
+  val SITE_PACKAGES_CONFIG = "spark.inprocess.python.sitePackages"
+
   @volatile private var interp: SharedInterpreter = _
   @volatile private var initialized: Boolean = false
 
   /**
    * Initialize the embedded CPython interpreter. Called once per executor JVM process.
-   * Bootstraps the bridge module so `_inprocess_invoke` is available.
+   * Bootstraps the bridge module so `_inprocess_invoke` is available, then appends
+   * any user-specified site-packages paths to `sys.path`.
+   *
+   * @param sitePackages extra paths to append to ``sys.path`` inside the interpreter,
+   *                     typically the site-packages directory of a distributed venv.
+   *                     Defaults to empty (no extra paths added).
    */
-  def initialize(): Unit = synchronized {
+  def initialize(sitePackages: Seq[String] = Seq.empty): Unit = synchronized {
     if (!initialized) {
       val config = new JepConfig()
       SharedInterpreter.setConfig(config)
       interp = new SharedInterpreter()
       // Import the bridge entry point into the interpreter's global namespace
       interp.eval("from pyspark.inprocess.runtime import _inprocess_invoke")
+      // Append user-specified site-packages paths to sys.path.
+      // Use set() + eval() rather than string interpolation to avoid path-escaping issues.
+      if (sitePackages.nonEmpty) {
+        interp.set("_site_packages", sitePackages.asJava)
+        interp.eval("import sys; sys.path.extend(list(_site_packages)); del _site_packages")
+        logInfo(s"Appended ${sitePackages.size} path(s) to sys.path: " +
+          sitePackages.mkString(", "))
+      }
       initialized = true
       logInfo("jep SharedInterpreter ready; bridge module loaded.")
     }

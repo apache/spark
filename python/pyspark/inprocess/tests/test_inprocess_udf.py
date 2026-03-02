@@ -570,6 +570,50 @@ class InProcessUDFTests(ReusedSQLTestCase):
         self.assertEqual(result[0].month, 3)
         self.assertEqual(result[0].day, 15)
 
+    # ------------------------------------------------------------------
+    # sitePackages / sys.path extension
+    # ------------------------------------------------------------------
+
+    def test_site_packages_path_extension_works_in_interpreter(self):
+        """sys.path.extend() inside the jep interpreter allows importing custom modules.
+
+        spark.inprocess.python.sitePackages uses the same mechanism
+        (sys.path.extend) to make distributed-venv packages importable at executor
+        startup.  This test verifies the mechanism works end-to-end by writing a
+        small helper module into a temporary directory, inserting that directory into
+        sys.path inside a UDF, and asserting the module is importable.
+        """
+        import os
+        import shutil
+        import tempfile
+        from pyspark.inprocess.udf import inprocess_udf
+        from pyspark.sql.types import LongType
+
+        tmpdir = tempfile.mkdtemp()
+        try:
+            # Write a tiny helper module into the temp dir.
+            with open(os.path.join(tmpdir, "_inprocess_test_helper.py"), "w") as f:
+                f.write("MAGIC = 99\n")
+
+            # Capture the path as a plain string so cloudpickle serializes it by value.
+            custom_path = tmpdir
+
+            @inprocess_udf(return_type=LongType())
+            def read_magic(x):
+                import sys
+                import pyarrow as pa
+                if custom_path not in sys.path:
+                    sys.path.insert(0, custom_path)
+                import _inprocess_test_helper
+                # Return a pa.Array (same length as input) filled with the constant.
+                return pa.array([_inprocess_test_helper.MAGIC] * len(x), type=pa.int64())
+
+            df = self.spark.range(1)
+            result = df.select(read_magic(df["id"])).first()[0]
+            self.assertEqual(result, 99)
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
 
 if __name__ == "__main__":
     from pyspark.testing.utils import PySparkTestCase
