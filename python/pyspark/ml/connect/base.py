@@ -155,7 +155,7 @@ class Transformer(Params, metaclass=ABCMeta):
     ) -> Union[DataFrame, pd.DataFrame]:
         """
         Transforms the input dataset.
-        The dataset can be either pandas dataframe or spark dataframe，
+        The dataset can be either pandas dataframe or spark dataframe,
         if it is a spark DataFrame, the result of transformation is a new spark DataFrame
         that contains all existing columns and output columns with names,
         If it is a pandas DataFrame, the result of transformation is a shallow copy

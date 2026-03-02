@@ -565,7 +565,7 @@ class Index(IndexOpsMixin):
         mapper : function, dict, or pd.Series
             Mapping correspondence.
         na_action : {None, 'ignore'}
-            If ‘ignore’, propagate NA values, without passing them to the mapping correspondence.
+            If 'ignore', propagate NA values, without passing them to the mapping correspondence.
 
         Returns
         -------

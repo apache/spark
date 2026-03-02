@@ -505,7 +505,7 @@ def assertSchemaEqual(
     expected : StructType
         The expected schema, for comparison with the actual schema.
     ignoreNullable : bool, default True
-        Specifies whether a column’s nullable property is included when checking for
+        Specifies whether a column's nullable property is included when checking for
         schema equality.
         When set to `True` (default), the nullable property of the columns being compared
         is not taken into account and the columns will be considered equal even if they have
@@ -715,7 +715,7 @@ def assertDataFrameEqual(
         The absolute tolerance, used in asserting approximate equality for float values in actual
         and expected. Set to 1e-8 by default. (See Notes)
     ignoreNullable : bool, default True
-        Specifies whether a column’s nullable property is included when checking for
+        Specifies whether a column's nullable property is included when checking for
         schema equality.
         When set to `True` (default), the nullable property of the columns being compared
         is not taken into account and the columns will be considered equal even if they have

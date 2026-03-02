@@ -250,7 +250,7 @@ _options: List[Option] = [
         key="compute.isin_limit",
         doc=(
             "'compute.isin_limit' sets the limit for filtering by 'Column.isin(list)'. "
-            "If the length of the ‘list’ is above the limit, broadcast join is used instead "
+            "If the length of the 'list' is above the limit, broadcast join is used instead "
             "for better performance."
         ),
         default=80,
