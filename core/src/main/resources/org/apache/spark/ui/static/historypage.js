@@ -206,11 +206,11 @@ $(document).ready(function() {
           },
           {
             name: logPathColumnName,
-            data: 'clusterName',
-            render: (clusterName, type, row) => {
-              if (clusterName && row && row.clusterFullPath) {
-                const safeName = escapeHtml(clusterName);
-                const safePath = escapeHtml(row.clusterFullPath);
+            data: 'logSourceName',
+            render: (logSourceName, type, row) => {
+              if (logSourceName && row && row.logSourceFullPath) {
+                const safeName = escapeHtml(logSourceName);
+                const safePath = escapeHtml(row.logSourceFullPath);
                 return `<span title="${safePath}">${safeName}</span>`;
               }
               return '';
@@ -283,14 +283,14 @@ $(document).ready(function() {
       // Populate log path filter dropdown
       var logPathNames = new Set();
       array.forEach(function(row) {
-        if (row.clusterName) {
-          logPathNames.add(row.clusterName);
+        if (row.logSourceName) {
+          logPathNames.add(row.logSourceName);
         }
       });
 
       var logPathFilter = $('#log-path-filter');
-      Array.from(logPathNames).sort().forEach(function(cluster) {
-        logPathFilter.append($('<option></option>').val(cluster).text(cluster));
+      Array.from(logPathNames).sort().forEach(function(name) {
+        logPathFilter.append($('<option></option>').val(name).text(name));
       });
 
       // Add custom filter function
@@ -302,8 +302,8 @@ $(document).ready(function() {
         if (!selectedPath) {
           return true; // Show all if no filter selected
         }
-        return rowData && typeof rowData.clusterName === 'string' &&
-               rowData.clusterName === selectedPath;
+        return rowData && typeof rowData.logSourceName === 'string' &&
+               rowData.logSourceName === selectedPath;
       });
 
       // Trigger filter on dropdown change

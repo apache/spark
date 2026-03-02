@@ -158,11 +158,11 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
         val duration = if (end > 0) end - start else 0
         // Get log dir info from the provider
         val logPath = new File(testDir, name).getAbsolutePath
-        val (clusterName, clusterFullPath) = provider.getLogDirInfo(logPath)
+        val (logSourceName, logSourceFullPath) = provider.getLogDirInfo(logPath)
         new ApplicationInfo(id, name, None, None, None, None,
           List(ApplicationAttemptInfo(None, new Date(start),
             new Date(end), new Date(lastMod), duration, user, completed, SPARK_VERSION,
-            Some(clusterName), Some(clusterFullPath))))
+            Some(logSourceName), Some(logSourceFullPath))))
       }
 
       // For completed files, lastUpdated would be lastModified time.
@@ -1928,8 +1928,8 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
         // Verify each app has the correct display name derived from its logDir
         val app1 = list.find(_.id == "app1-id").get
         val app2 = list.find(_.id == "app2-id").get
-        app1.attempts.head.clusterName.get should be (testDir.getAbsolutePath)
-        app2.attempts.head.clusterName.get should be (dir2.getAbsolutePath)
+        app1.attempts.head.logSourceName.get should be (testDir.getAbsolutePath)
+        app2.attempts.head.logSourceName.get should be (dir2.getAbsolutePath)
       }
 
       provider.stop()
@@ -1998,9 +1998,9 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
         val app1 = list.find(_.id == "app1-id").get
         val app2 = list.find(_.id == "app2-id").get
         val app3 = list.find(_.id == "app3-id").get
-        app1.attempts.head.clusterName.get should be (testDir.getAbsolutePath)
-        app2.attempts.head.clusterName.get should be ("NameB")
-        app3.attempts.head.clusterName.get should be ("NameC")
+        app1.attempts.head.logSourceName.get should be (testDir.getAbsolutePath)
+        app2.attempts.head.logSourceName.get should be ("NameB")
+        app3.attempts.head.logSourceName.get should be ("NameC")
       }
 
       provider.stop()
@@ -2041,9 +2041,9 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
         val app1 = list.find(_.id == "app1-id").get
         val app2 = list.find(_.id == "app2-id").get
         val app3 = list.find(_.id == "app3-id").get
-        app1.attempts.head.clusterName.get should be ("NameA")
-        app2.attempts.head.clusterName.get should be ("NameB")
-        app3.attempts.head.clusterName.get should be (dir3.getAbsolutePath)
+        app1.attempts.head.logSourceName.get should be ("NameA")
+        app2.attempts.head.logSourceName.get should be ("NameB")
+        app3.attempts.head.logSourceName.get should be (dir3.getAbsolutePath)
       }
 
       provider.stop()
@@ -2084,9 +2084,9 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
         val app1 = list.find(_.id == "app1-id").get
         val app2 = list.find(_.id == "app2-id").get
         val app3 = list.find(_.id == "app3-id").get
-        app1.attempts.head.clusterName.get should be ("NameA")
-        app2.attempts.head.clusterName.get should be (dir2.getAbsolutePath)
-        app3.attempts.head.clusterName.get should be ("NameC")
+        app1.attempts.head.logSourceName.get should be ("NameA")
+        app2.attempts.head.logSourceName.get should be (dir2.getAbsolutePath)
+        app3.attempts.head.logSourceName.get should be ("NameC")
       }
 
       provider.stop()

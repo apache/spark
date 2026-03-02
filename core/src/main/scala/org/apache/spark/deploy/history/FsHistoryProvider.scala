@@ -463,14 +463,14 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     : ApplicationInfoWrapper = {
     val date = new Date(0)
     val lastUpdate = new Date()
-    val (clusterName, clusterFullPath) = getLogDirInfo(logPath)
+    val (logSourceName, logSourceFullPath) = getLogDirInfo(logPath)
     val info = ApplicationAttemptInfo(
       attemptId, date, date, lastUpdate, 0, "spark", false, "unknown",
-      Some(clusterName), Some(clusterFullPath))
+      Some(logSourceName), Some(logSourceFullPath))
     addListing(new ApplicationInfoWrapper(
       ApplicationInfo(appId, appId, None, None, None, None, List.empty),
       List(new AttemptInfoWrapper(info, logPath, 0, Some(1), None, None, None, None,
-        clusterName, clusterFullPath))))
+        logSourceName, logSourceFullPath))))
     load(appId)
   }
 
@@ -673,8 +673,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
                       attempt.viewAcls,
                       attempt.adminAclsGroups,
                       attempt.viewAclsGroups,
-                      attempt.clusterName,
-                      attempt.clusterFullPath)
+                      attempt.logSourceName,
+                      attempt.logSourceFullPath)
                   } else {
                     attempt
                   }
@@ -1740,8 +1740,8 @@ private[history] class AttemptInfoWrapper(
     val viewAcls: Option[String],
     val adminAclsGroups: Option[String],
     val viewAclsGroups: Option[String],
-    val clusterName: String,
-    val clusterFullPath: String)
+    val logSourceName: String,
+    val logSourceFullPath: String)
 
 private[history] class ApplicationInfoWrapper(
     val info: ApplicationInfo,
@@ -1865,7 +1865,7 @@ private[history] class AppListingListener(
     var viewAclsGroups: Option[String] = None
 
     def toView(): AttemptInfoWrapper = {
-      val (clusterName, clusterFullPath) = provider.getLogDirInfo(fullLogPath)
+      val (logSourceName, logSourceFullPath) = provider.getLogDirInfo(fullLogPath)
       val apiInfo = ApplicationAttemptInfo(
         attemptId,
         startTime,
@@ -1875,8 +1875,8 @@ private[history] class AppListingListener(
         sparkUser,
         completed,
         appSparkVersion,
-        Some(clusterName),
-        Some(clusterFullPath))
+        Some(logSourceName),
+        Some(logSourceFullPath))
       new AttemptInfoWrapper(
         apiInfo,
         logPath,
@@ -1886,8 +1886,8 @@ private[history] class AppListingListener(
         viewAcls,
         adminAclsGroups,
         viewAclsGroups,
-        clusterName,
-        clusterFullPath)
+        logSourceName,
+        logSourceFullPath)
     }
 
   }
