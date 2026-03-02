@@ -691,7 +691,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
         "objectType" -> "FUNCTION",
         "objectName" -> "`b`",
         "qualifier" -> "`a`"),
-      queryContext = Array.empty)
+      queryContext = Array(ExpectedContext(sql1, 0, sql1.length - 1)))
 
     val sql2 = "DROP TEMPORARY FUNCTION IF EXISTS a.b"
     checkError(
@@ -701,7 +701,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
         "objectType" -> "FUNCTION",
         "objectName" -> "`b`",
         "qualifier" -> "`a`"),
-      queryContext = Array.empty)
+      queryContext = Array(ExpectedContext(sql2, 0, sql2.length - 1)))
   }
 
   test("SPARK-32374: create temporary view with properties not allowed") {

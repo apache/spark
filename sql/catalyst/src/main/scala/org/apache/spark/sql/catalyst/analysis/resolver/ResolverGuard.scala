@@ -381,8 +381,9 @@ class ResolverGuard(catalogManager: CatalogManager) extends SQLConfHelper {
       // Explicitly builtin-qualified (builtin.func, system.builtin.func): reject if unsupported
       ResolverGuard.UNSUPPORTED_FUNCTION_NAMES.contains(functionName)
     } else {
-      // Other qualification (session, catalog.db, etc.): allow through
-      false
+      // Other qualification (session, catalog.db, etc.): reject because single pass analyzer
+      // does not support user defined functions.
+      true
     }
 
     !shouldReject && unresolvedFunction.children.forall(checkExpression)
