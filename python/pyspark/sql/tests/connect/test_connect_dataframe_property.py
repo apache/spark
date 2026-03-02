@@ -28,6 +28,7 @@ from pyspark.sql.types import (
 )
 from pyspark.sql.utils import is_remote
 from pyspark.sql import functions as SF
+from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.connectutils import should_test_connect, ReusedMixedTestCase
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 from pyspark.testing.utils import (
@@ -98,8 +99,7 @@ class SparkConnectDataFramePropertyTests(ReusedMixedTestCase, PandasOnSparkTestU
 
         sdf1 = sdf.to(schema)
 
-        self.assertEqual(cdf1.schema, sdf1.schema)
-        self.assertEqual(cdf1.collect(), sdf1.collect())
+        assertDataFrameEqual(cdf1, sdf1)
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
@@ -142,8 +142,7 @@ class SparkConnectDataFramePropertyTests(ReusedMixedTestCase, PandasOnSparkTestU
             self.assertFalse(is_remote())
             sdf1 = sdf.mapInPandas(func, schema)
 
-        self.assertEqual(cdf1.schema, sdf1.schema)
-        self.assertEqual(cdf1.collect(), sdf1.collect())
+        assertDataFrameEqual(cdf1, sdf1)
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
@@ -176,8 +175,7 @@ class SparkConnectDataFramePropertyTests(ReusedMixedTestCase, PandasOnSparkTestU
             self.assertFalse(is_remote())
             sdf1 = sdf.mapInArrow(func, schema)
 
-        self.assertEqual(cdf1.schema, sdf1.schema)
-        self.assertEqual(cdf1.collect(), sdf1.collect())
+        assertDataFrameEqual(cdf1, sdf1)
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
@@ -214,8 +212,7 @@ class SparkConnectDataFramePropertyTests(ReusedMixedTestCase, PandasOnSparkTestU
             self.assertFalse(is_remote())
             sdf1 = sdf.groupby("id").applyInPandas(normalize, schema)
 
-        self.assertEqual(cdf1.schema, sdf1.schema)
-        self.assertEqual(cdf1.collect(), sdf1.collect())
+        assertDataFrameEqual(cdf1, sdf1)
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
@@ -247,8 +244,7 @@ class SparkConnectDataFramePropertyTests(ReusedMixedTestCase, PandasOnSparkTestU
             self.assertFalse(is_remote())
             sdf1 = sdf.groupby("id").applyInArrow(normalize, schema)
 
-        self.assertEqual(cdf1.schema, sdf1.schema)
-        self.assertEqual(cdf1.collect(), sdf1.collect())
+        assertDataFrameEqual(cdf1, sdf1)
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
@@ -284,8 +280,7 @@ class SparkConnectDataFramePropertyTests(ReusedMixedTestCase, PandasOnSparkTestU
             self.assertFalse(is_remote())
             sdf3 = sdf1.groupby("id").cogroup(sdf2.groupby("id")).applyInPandas(asof_join, schema)
 
-        self.assertEqual(cdf3.schema, sdf3.schema)
-        self.assertEqual(cdf3.collect(), sdf3.collect())
+        assertDataFrameEqual(cdf3, sdf3)
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
@@ -324,8 +319,7 @@ class SparkConnectDataFramePropertyTests(ReusedMixedTestCase, PandasOnSparkTestU
             self.assertFalse(is_remote())
             sdf3 = sdf1.groupby("id").cogroup(sdf2.groupby("id")).applyInArrow(summarize, schema)
 
-        self.assertEqual(cdf3.schema, sdf3.schema)
-        self.assertEqual(cdf3.collect(), sdf3.collect())
+        assertDataFrameEqual(cdf3, sdf3)
 
     def test_cached_schema_set_op(self):
         data1 = [(1, 2, 3)]

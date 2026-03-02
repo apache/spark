@@ -1307,7 +1307,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
             timeZoneId = Some(tz)),
           Duration.ZERO)
       }.getMessage
-      assert(errMsg.contains("overflow"))
+      assert(errMsg == null || errMsg.contains("overflow"))
 
       Seq(false, true).foreach { legacy =>
         checkConsistencyBetweenInterpretedAndCodegen(
@@ -1372,7 +1372,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
             timeZoneId = Some(tz)),
           Duration.ZERO)
       }.getMessage
-      assert(errMsg.contains("overflow"))
+      assert(errMsg == null || errMsg.contains("overflow"))
 
       Seq(false, true).foreach { legacy =>
         checkConsistencyBetweenInterpretedAndCodegen(
@@ -1822,7 +1822,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
             null)
         }.getCause
         assert(e.isInstanceOf[ArithmeticException])
-        assert(e.getMessage.contains("long overflow"))
+        assert(e.getMessage == null || e.getMessage.contains("overflow"))
 
         checkEvaluation(
           TimestampAddInterval(

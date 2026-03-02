@@ -247,6 +247,7 @@ class ExternalCatalogEventSuite extends SparkFunSuite {
       locationUri = Some(tableUri),
       inputFormat = Some("tableInputFormat"),
       outputFormat = Some("tableOutputFormat"),
+      serdeName = None,
       serde = None,
       compressed = false,
       properties = Map.empty)

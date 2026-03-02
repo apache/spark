@@ -370,6 +370,10 @@ class InMemoryV1Provider
   }
 }
 
+case class SupportedV1WriteMetric(name: String, description: String) extends CustomSumMetric {
+  def this() = this("dummy", "")
+}
+
 class InMemoryTableWithV1Fallback(
     override val name: String,
     override val schema: StructType,
@@ -425,8 +429,6 @@ class InMemoryTableWithV1Fallback(
     }
 
     override def build(): V1Write = new V1Write {
-      case class SupportedV1WriteMetric(name: String, description: String) extends CustomSumMetric
-
       override def supportedCustomMetrics(): Array[CustomMetric] =
         Array(SupportedV1WriteMetric("numOutputRows", "Number of output rows"))
 

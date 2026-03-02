@@ -32,6 +32,7 @@ from pyspark.sql.types import (
     BinaryType,
     DecimalType,
     DoubleType,
+    Geography,
     GeographyType,
     GeometryType,
     IntegerType,
@@ -44,6 +45,8 @@ from pyspark.sql.types import (
     StructType,
     TimestampType,
     UserDefinedType,
+    VariantType,
+    VariantVal,
 )
 from pyspark.testing.objects import ExamplePoint, ExamplePointUDT, PythonOnlyPoint, PythonOnlyUDT
 from pyspark.testing.utils import (
@@ -619,6 +622,79 @@ class ArrowArrayToPandasConversionTests(unittest.TestCase):
         result = ArrowArrayToPandasConversion.convert_numpy(chunked, ExamplePointUDT())
         self.assertEqual(result.iloc[0], ExamplePoint(1.0, 2.0))
         self.assertEqual(result.iloc[1], ExamplePoint(3.0, 4.0))
+
+    def test_variant_convert_numpy(self):
+        import pyarrow as pa
+
+        variant_type = pa.struct(
+            [
+                pa.field("value", pa.binary(), nullable=False),
+                pa.field("metadata", pa.binary(), nullable=False, metadata={b"variant": b"true"}),
+            ]
+        )
+
+        # basic conversion with nulls
+        arr = pa.array(
+            [
+                {"value": b"\x01", "metadata": b"\x02"},
+                None,
+                {"value": b"\x03", "metadata": b"\x04"},
+            ],
+            type=variant_type,
+        )
+        result = ArrowArrayToPandasConversion.convert_numpy(arr, VariantType(), ser_name="v")
+        self.assertIsInstance(result.iloc[0], VariantVal)
+        self.assertEqual(result.iloc[0].value, b"\x01")
+        self.assertEqual(result.iloc[0].metadata, b"\x02")
+        self.assertIsNone(result.iloc[1])
+        self.assertEqual(result.iloc[2].value, b"\x03")
+        self.assertEqual(result.iloc[2].metadata, b"\x04")
+        self.assertEqual(result.name, "v")
+
+        # empty
+        result = ArrowArrayToPandasConversion.convert_numpy(
+            pa.array([], type=variant_type), VariantType()
+        )
+        self.assertEqual(len(result), 0)
+
+    def test_geography_convert_numpy(self):
+        import pyarrow as pa
+
+        geography_type = pa.struct(
+            [
+                pa.field("srid", pa.int32(), nullable=False),
+                pa.field(
+                    "wkb",
+                    pa.binary(),
+                    nullable=False,
+                    metadata={b"geography": b"true", b"srid": b"4326"},
+                ),
+            ]
+        )
+
+        # basic conversion with nulls
+        # POINT(1.0, 2.0) and POINT(17.0, 7.0) in WKB format
+        wkb1 = bytes.fromhex("0101000000000000000000F03F0000000000000040")
+        wkb2 = bytes.fromhex("010100000000000000000031400000000000001c40")
+        arr = pa.array(
+            [
+                {"srid": 4326, "wkb": wkb1},
+                None,
+                {"srid": 4326, "wkb": wkb2},
+            ],
+            type=geography_type,
+        )
+        result = ArrowArrayToPandasConversion.convert_numpy(arr, GeographyType(4326), ser_name="g")
+        self.assertEqual(result.iloc[0], Geography(wkb1, 4326))
+        self.assertIsNone(result.iloc[1])
+        self.assertEqual(result.iloc[2], Geography(wkb2, 4326))
+        self.assertEqual(result.name, "g")
+
+        # empty
+        result = ArrowArrayToPandasConversion.convert_numpy(
+            pa.array([], type=geography_type), GeographyType(4326)
+        )
+        self.assertEqual(len(result), 0)
 
 
 if __name__ == "__main__":

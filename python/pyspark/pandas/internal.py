@@ -50,7 +50,7 @@ from pyspark.pandas.data_type_ops.base import DataTypeOps
 from pyspark.pandas.typedef import (
     Dtype,
     as_spark_type,
-    extension_dtypes,
+    handle_dtype_as_extension_dtype,
     infer_pd_series_spark_type,
     spark_type_to_pandas_dtype,
 )
@@ -162,7 +162,7 @@ class InternalField:
     @property
     def is_extension_dtype(self) -> bool:
         """Return whether the dtype for the field is an extension type or not."""
-        return isinstance(self.dtype, extension_dtypes)
+        return handle_dtype_as_extension_dtype(self.dtype)
 
     def normalize_spark_type(self) -> "InternalField":
         """Return a new InternalField object with normalized Spark data type."""

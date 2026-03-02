@@ -350,4 +350,18 @@ class CountVectorizerSuite extends MLTest with DefaultReadWriteTest {
         assert(features === Vectors.sparse(0, Seq()))
     }
   }
+
+  test("SPARK-55655: CountVectorizer vocabulary ordering is deterministic for tied counts") {
+    val df = Seq(
+      (0, split("a b c d e")),
+      (1, split("e d c b a"))
+    ).toDF("id", "words")
+
+    val cvModel = new CountVectorizer()
+      .setInputCol("words")
+      .setOutputCol("features")
+      .fit(df)
+
+    assert(cvModel.vocabulary === Array("a", "b", "c", "d", "e"))
+  }
 }

@@ -836,12 +836,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("expression" -> expression))
   }
 
-  def windowAggregateFunctionWithFilterNotSupportedError(): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1030",
-      messageParameters = Map.empty)
-  }
-
   def windowFunctionInsideAggregateFunctionNotAllowedError(): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1031",
@@ -1114,6 +1108,18 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "funcName" -> toSQLId(functionName),
         "funcArg" -> toSQLExpr(functionArg),
         "orderingExpr" -> orderExpr.map(order => toSQLExpr(order.child)).mkString(", ")))
+  }
+
+  def functionAndOrderExpressionUnsafeCastError(
+      functionName: String,
+      inputType: DataType,
+      castType: DataType): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_WITHIN_GROUP_EXPRESSION.MISMATCH_WITH_DISTINCT_INPUT_UNSAFE_CAST",
+      messageParameters = Map(
+        "funcName" -> toSQLId(functionName),
+        "inputType" -> toSQLType(inputType),
+        "castType" -> toSQLType(castType)))
   }
 
   def wrongCommandForObjectTypeError(

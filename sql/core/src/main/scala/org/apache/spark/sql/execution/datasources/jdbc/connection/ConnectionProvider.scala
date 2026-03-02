@@ -39,11 +39,16 @@ protected abstract class ConnectionProviderBase extends Logging {
     val providers = mutable.ArrayBuffer[JdbcConnectionProvider]()
 
     val iterator = loader.iterator
-    while (iterator.hasNext) {
+    var keepLoading = true
+    while (keepLoading) {
       try {
-        val provider = iterator.next
-        logDebug(s"Loaded built-in provider: $provider")
-        providers += provider
+        if (iterator.hasNext) {
+          val provider = iterator.next()
+          logDebug(s"Loaded built-in provider: $provider")
+          providers += provider
+        } else {
+          keepLoading = false
+        }
       } catch {
         case t: Throwable =>
           logError("Failed to load built-in provider.")

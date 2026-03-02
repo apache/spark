@@ -201,7 +201,7 @@ public abstract class GeometryModel {
    * If the geometry is empty, it simply appends " EMPTY" in place of the coordinate values:
    *   - POINT EMPTY, LINESTRING M EMPTY, POLYGON ZM EMPTY, etc.
    */
-  protected void toWkt(StringBuilder sb) {
+  protected void appendWkt(StringBuilder sb) {
     sb.append(typeId.getWktName());
     appendDimensionSuffix(sb);
     if (isEmpty()) {
@@ -227,15 +227,22 @@ public abstract class GeometryModel {
 
   /**
    * Appends the geometry-specific WKT (Well-Known Text) content. Note that this utility method
-   * is invoked by `toWkt` when the current geometry is not empty. All GeometryModel subclasses
-   * must implement this method in order to provide their specific WKT content.
+   * is invoked by `appendWkt` when the current geometry is not empty. All the GeometryModel
+   * subclasses must implement this method in order to provide their specific WKT content.
    */
   protected abstract void appendWktContent(StringBuilder sb);
 
+  /**
+   * Returns the WKT (Well-Known Text) representation of this geometry as a String.
+   */
+  public String toWkt() {
+    StringBuilder sb = new StringBuilder();
+    appendWkt(sb);
+    return sb.toString();
+  }
+
   @Override
   public String toString() {
-    StringBuilder sb = new StringBuilder();
-    toWkt(sb);
-    return sb.toString();
+    return toWkt();
   }
 }

@@ -587,6 +587,27 @@ class PyArrowScalarTypeCastTests(_PyArrowCastTestBase):
                 }
             )
 
+            if platform.system() == "Darwin":
+                # macOS ARM differs from Linux ARM for some unsafe casts due to
+                # differences in LLVM code generation between the two platforms.
+                overrides.update(
+                    {
+                        # negative float → uint8/uint16: macOS ARM wraps (255/65535),
+                        # Linux ARM saturates to 0
+                        ("float16:standard", "uint8"): "[0, 1, 255, None]@uint8",
+                        ("float16:standard", "uint16"): "[0, 1, 65535, None]@uint16",
+                        ("float32:standard", "uint8"): "[0, 1, 255, None]@uint8",
+                        ("float64:standard", "uint8"): "[0, 1, 255, None]@uint8",
+                        ("float64:standard", "uint16"): "[0, 1, 65535, None]@uint16",
+                        # negative float → uint32: macOS ARM saturates to 0,
+                        # Linux ARM wraps to 4294967295 (matching x86 golden)
+                        ("float64:standard", "uint32"): "[0, 1, 0, None]@uint32",
+                        # special float → int32: macOS ARM saturates (INT32_MAX/MIN),
+                        # Linux ARM gives -1/0
+                        ("float64:special", "int32"): "[2147483647, -2147483648, 0, None]@int32",
+                    }
+                )
+
         return overrides
 
     # ----- test methods -----
