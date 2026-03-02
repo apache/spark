@@ -437,11 +437,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_ROUTINE",
-  "sqlState" : "42883",
+  "errorClass" : "NOT_A_SCALAR_FUNCTION",
+  "sqlState" : "42887",
   "messageParameters" : {
-    "routineName" : "`range`",
-    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
+    "functionName" : "`range`"
   },
   "queryContext" : [ {
     "objectType" : "",
