@@ -53,7 +53,8 @@ case class ApplicationAttemptInfo private[spark](
     duration: Long,
     sparkUser: String,
     completed: Boolean = false,
-    appSparkVersion: String) {
+    appSparkVersion: String,
+    exitCode: Option[Int] = None) {
 
   def getStartTimeEpoch: Long = startTime.getTime
 
