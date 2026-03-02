@@ -287,7 +287,7 @@ private[spark] object UIUtils extends Logging {
         {if (showVisualization) vizHeaderNodes(request) else Seq.empty}
         {if (useDataTables) dataTablesHeaderNodes(request) else Seq.empty}
         <link rel="shortcut icon"
-              href={prependBaseUri(request, "/static/spark-logo-77x50px-hd.png")}></link>
+              href={prependBaseUri(request, "/static/spark-logo.svg")}></link>
         <title>{appName} - {title}</title>
       </head>
       <body>
@@ -295,7 +295,8 @@ private[spark] object UIUtils extends Logging {
           <div class="navbar-header">
             <div class="navbar-brand">
               <a href={prependBaseUri(request, "/")}>
-                <img src={prependBaseUri(request, "/static/spark-logo-77x50px-hd.png")} />
+                <img src={prependBaseUri(request, "/static/spark-logo.svg")}
+                     alt="Spark Logo" height="36" />
                 <span class="version">{activeTab.appSparkVersion}</span>
               </a>
             </div>
@@ -344,7 +345,7 @@ private[spark] object UIUtils extends Logging {
         {commonHeaderNodes(request)}
         {if (useDataTables) dataTablesHeaderNodes(request) else Seq.empty}
         <link rel="shortcut icon"
-              href={prependBaseUri(request, "/static/spark-logo-77x50px-hd.png")}></link>
+              href={prependBaseUri(request, "/static/spark-logo.svg")}></link>
         <title>{title}</title>
       </head>
       <body>
@@ -353,7 +354,8 @@ private[spark] object UIUtils extends Logging {
             <div class="col-12">
               <h3 style="vertical-align: middle; display: inline-block;">
                 <a style="text-decoration: none" href={prependBaseUri(request, "/")}>
-                  <img src={prependBaseUri(request, "/static/spark-logo-77x50px-hd.png")} />
+                  <img src={prependBaseUri(request, "/static/spark-logo.svg")}
+                       alt="Spark Logo" height="36" />
                   <span class="version"
                         style="margin-right: 15px;">{org.apache.spark.SPARK_VERSION}</span>
                 </a>
