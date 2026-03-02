@@ -41,7 +41,7 @@ object InternalFunctionRegistration {
   }
 
   private def registerFunction(name: String)(builder: Seq[Expression] => Expression): Unit = {
-    FunctionRegistry.internal.createOrReplaceTempFunction(name, builder, "internal")
+    FunctionRegistry.internal.registerFunction(FunctionIdentifier(name), builder, "internal")
   }
 
   private val vectorToArrayUdf = udf { vec: Any =>

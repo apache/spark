@@ -1133,7 +1133,7 @@ CREATE TEMPORARY FUNCTION IDENTIFIER('default.my' || 'DoubleAvg') AS 'test.org.a
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "INVALID_TEMP_OBJ_QUALIFIER",
   "sqlState" : "42602",
@@ -1150,7 +1150,7 @@ DROP TEMPORARY FUNCTION IDENTIFIER('default.my' || 'DoubleAvg')
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "INVALID_TEMP_OBJ_QUALIFIER",
   "sqlState" : "42602",
