@@ -157,9 +157,9 @@ class RocksDB(
   // 2 * 2 = 4 threads. A value of 0 disables the thread pool (sequential execution).
   protected val fileChecksumThreadPoolSize: Option[Int] = {
     val size = conf.fileChecksumThreadPoolSize
-    if (size != 4) {
-      logWarning(s"fileChecksumThreadPoolSize is set to $size, which differs from the " +
-        "recommended default of 4. Reducing below the default may have performance impact.")
+    if (size < 4) {
+      logWarning(s"fileChecksumThreadPoolSize is set to $size, which is below the " +
+        "recommended default of 4. This may have performance impact.")
     }
     Some(size)
   }
