@@ -646,6 +646,16 @@ package object config {
       .bytesConf(ByteUnit.BYTE)
       .createOptional
 
+  private[spark] val STORAGE_SHUFFLE_MANAGER_INIT_WAITING_TIMEOUT =
+    ConfigBuilder("spark.storage.shuffleManager.initWaitingTimeout")
+      .doc("Maximum time to wait for the ShuffleManager to be initialized when receiving " +
+        "shuffle migration requests. If the ShuffleManager is not initialized within this " +
+        "timeout, the migration request will be rejected and the sender should retry.")
+      .version("4.2.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(_ > 0, "Timeout should be positive.")
+      .createWithDefaultString("30s")
+
   private[spark] val STORAGE_REPLICATION_TOPOLOGY_FILE =
     ConfigBuilder("spark.storage.replication.topologyFile")
       .version("2.1.0")
