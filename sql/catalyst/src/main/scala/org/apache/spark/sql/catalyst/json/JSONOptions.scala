@@ -188,6 +188,12 @@ private[sql] class JSONOptions(
   val writeNonAsciiCharacterAsCodePoint: Boolean =
     parameters.get(WRITE_NON_ASCII_CHARACTER_AS_CODEPOINT).map(_.toBoolean).getOrElse(false)
 
+  /**
+   * Whether compressed JSON output files should use the `.jsonl` suffix instead of `.json`.
+   */
+  val useJsonLinesExtensionForCompression: Boolean =
+    parameters.get(USE_JSON_LINES_EXTENSION_FOR_COMPRESSION).map(_.toBoolean).getOrElse(false)
+
   /** Build a Jackson [[JsonFactory]] using JSON options. */
   def buildJsonFactory(): JsonFactory = {
     val streamReadConstraints = StreamReadConstraints
@@ -278,6 +284,7 @@ object JSONOptions extends DataSourceOptions {
   val MULTI_LINE = newOption("multiLine")
   val LINE_SEP = newOption("lineSep")
   val PRETTY = newOption("pretty")
+  val USE_JSON_LINES_EXTENSION_FOR_COMPRESSION = newOption("useJsonLinesExtensionForCompression")
   val INFER_TIMESTAMP = newOption("inferTimestamp")
   val COLUMN_NAME_OF_CORRUPTED_RECORD = newOption("columnNameOfCorruptRecord")
   val TIME_ZONE = newOption("timeZone")

@@ -269,6 +269,12 @@ Data source options of JSON can be set via:
     <td>write</td>
   </tr>
   <tr>
+    <td><code>useJsonLinesExtensionForCompression</code></td>
+    <td><code>false</code></td>
+    <td>Whether to use the <code>.jsonl</code> file suffix instead of <code>.json</code> for compressed JSON output files, for example <code>.jsonl.gz</code> instead of <code>.json.gz</code>.</td>
+    <td>write</td>
+  </tr>
+  <tr>
     <td><code>ignoreNullFields</code></td>
     <td>(value of <code>spark.sql.jsonGenerator.ignoreNullFields</code> configuration)</td>
     <td>Whether to ignore null fields when generating JSON objects.</td>

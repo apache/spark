@@ -1671,6 +1671,35 @@ abstract class JsonSuite
     }
   }
 
+  test("Support using the jsonl suffix for compressed JSON output via option") {
+    withTempDir { dir =>
+      val dir = Utils.createTempDir()
+      dir.delete()
+      val path = dir.getCanonicalPath
+      primitiveFieldAndType.map(record => record.replaceAll("\n", " ")).write.text(path)
+
+      val jsonDF = spark.read.json(path)
+      val jsonDir = new File(dir, "json").getCanonicalPath
+      jsonDF.coalesce(1).write
+        .format("json")
+        .option("compression", "gZiP")
+        .option("useJsonLinesExtensionForCompression", "true")
+        .save(jsonDir)
+
+      val compressedFiles = new File(jsonDir).listFiles()
+      assert(compressedFiles.exists(_.getName.endsWith(".jsonl.gz")))
+
+      val jsonCopy = spark.read
+        .format("json")
+        .load(jsonDir)
+
+      assert(jsonCopy.count == jsonDF.count)
+      val jsonCopySome = jsonCopy.selectExpr("string", "long", "boolean")
+      val jsonDFSome = jsonDF.selectExpr("string", "long", "boolean")
+      checkAnswer(jsonCopySome, jsonDFSome)
+    }
+  }
+
   test("SPARK-13543 Write the output as uncompressed via option()") {
     val extraOptions = Map[String, String](
       "mapreduce.output.fileoutputformat.compress" -> "true",

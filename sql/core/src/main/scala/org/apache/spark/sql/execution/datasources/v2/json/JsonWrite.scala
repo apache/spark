@@ -55,7 +55,12 @@ case class JsonWrite(
       }
 
       override def getFileExtension(context: TaskAttemptContext): String = {
-        ".json" + CodecStreams.getCompressionExtension(context)
+        val compressionExtension = CodecStreams.getCompressionExtension(context)
+        if (parsedOptions.useJsonLinesExtensionForCompression && compressionExtension.nonEmpty) {
+          ".jsonl" + compressionExtension
+        } else {
+          ".json" + compressionExtension
+        }
       }
     }
   }
