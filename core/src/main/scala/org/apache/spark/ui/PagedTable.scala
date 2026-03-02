@@ -285,7 +285,7 @@ private[spark] trait PagedTable[T] {
                  style="width: 60px;" />
           <label style="white-space: nowrap;">items in a page.</label>
 
-          <button type="submit" class="btn btn-spark btn-sm">Go</button>
+          <button type="submit" class="btn btn-outline-secondary btn-sm">Go</button>
         </form>
       </div>
     </div>
