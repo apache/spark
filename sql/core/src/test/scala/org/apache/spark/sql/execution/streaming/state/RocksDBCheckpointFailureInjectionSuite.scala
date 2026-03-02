@@ -192,23 +192,37 @@ class RocksDBCheckpointFailureInjectionSuite extends StreamTest
             assert(injectionState.delayedStreams.nonEmpty)
             injectionState.delayedStreams.foreach(_.close())
           }
-          withDB(
-            remoteDir.getAbsolutePath,
-            version = 2,
-            conf = conf,
-            hadoopConf = hadoopConf,
-            enableStateStoreCheckpointIds = ifEnableStateStoreCheckpointIds,
-            checkpointId = checkpointId2) { db =>
-            if (ifEnableStateStoreCheckpointIds) {
+          if (ifEnableStateStoreCheckpointIds) {
+            withDB(
+              remoteDir.getAbsolutePath,
+              version = 2,
+              conf = conf,
+              hadoopConf = hadoopConf,
+              enableStateStoreCheckpointIds = true,
+              checkpointId = checkpointId2) { db =>
               // If checkpointV2 is used, writing a checkpoint file from a previously failed
               // batch should be ignored.
               assert(new String(db.get("version"), "UTF-8") == "2.2")
-            } else {
-              // Assuming previous 2.zip overwrites, we should see the previous value.
-              // This validation isn't necessary here but we just would like to make sure
-              // FailureInjectionCheckpointFileManager has correct behavior --  allows zip files
-              // to be delayed to be written, so that the test for
-              // ifEnableStateStoreCheckpointIds = true is valid.
+            }
+          } else {
+            // Disable file checksum verification for this read. The successful commit wrote
+            // 2.zip + 2.zip.crc, then the delayed zombie stream overwrote 2.zip with stale
+            // content. With checksum enabled (the default), RocksDBFileManager wraps fm as a
+            // ChecksumCheckpointFileManager, so fm.open() would detect the size/checksum mismatch
+            // on close and throw CHECKPOINT_FILE_CHECKSUM_VERIFICATION_FAILED. We disable it by
+            // passing conf.copy(fileChecksumEnabled = false) so that fm is a plain
+            // CheckpointFileManager that skips verification. The purpose of this branch is only
+            // to validate that FailureInjectionCheckpointFileManager correctly delays and replays
+            // the zombie write, which is what makes the ifEnableStateStoreCheckpointIds = true
+            // case meaningful.
+            withDB(
+              remoteDir.getAbsolutePath,
+              version = 2,
+              conf = conf.copy(fileChecksumEnabled = false),
+              hadoopConf = hadoopConf,
+              enableStateStoreCheckpointIds = false,
+              checkpointId = checkpointId2) { db =>
+              // The zombie write overwrote 2.zip, so we see the stale value.
               assert(new String(db.get("version"), "UTF-8") == "2.1")
             }
           }
