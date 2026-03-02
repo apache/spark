@@ -99,8 +99,7 @@ object SizeEstimator extends Logging {
 
   // Whether Compact Object Headers (JEP 450/519) are enabled.
   // With Compact Object Headers, the object header is 8 bytes on 64-bit JVMs
-  // (the class pointer is encoded inside the mark word), so objectSize = 8
-  // and pointerSize = 4 regardless of UseCompressedOops.
+  // (the class pointer is encoded inside the mark word). See https://openjdk.org/jeps/450
   private var isCompactObjectHeaders = false
 
   private var pointerSize = 4
