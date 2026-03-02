@@ -298,6 +298,7 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
           schedulingPool = null,
 
           rddIds = Nil,
+          parentIds = Nil,
           accumulatorUpdates = Nil,
           tasks = None,
           executorSummary = None,
