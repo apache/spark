@@ -98,22 +98,23 @@ object EncoderUtils {
     case _ => false
   }
 
-  def dataTypeJavaClass(dt: DataType): Class[_] = {
-    TypeOps(dt).map(_.getJavaClass).getOrElse {
-      dt match {
-        case _: DecimalType => classOf[Decimal]
-        case _: DayTimeIntervalType => classOf[PhysicalLongType.InternalType]
-        case _: YearMonthIntervalType => classOf[PhysicalIntegerType.InternalType]
-        case _: TimeType => classOf[PhysicalLongType.InternalType]
-        case _: StringType => classOf[UTF8String]
-        case _: StructType => classOf[InternalRow]
-        case _: ArrayType => classOf[ArrayData]
-        case _: MapType => classOf[MapData]
-        case _: GeographyType => classOf[GeographyVal]
-        case _: GeometryType => classOf[GeometryVal]
-        case ObjectType(cls) => cls
-        case _ => typeJavaMapping.getOrElse(dt, classOf[java.lang.Object])
-      }
+  def dataTypeJavaClass(dt: DataType): Class[_] =
+    TypeOps(dt).map(_.getJavaClass).getOrElse(dataTypeJavaClassDefault(dt))
+
+  private def dataTypeJavaClassDefault(dt: DataType): Class[_] = {
+    dt match {
+      case _: DecimalType => classOf[Decimal]
+      case _: DayTimeIntervalType => classOf[PhysicalLongType.InternalType]
+      case _: YearMonthIntervalType => classOf[PhysicalIntegerType.InternalType]
+      case _: TimeType => classOf[PhysicalLongType.InternalType]
+      case _: StringType => classOf[UTF8String]
+      case _: StructType => classOf[InternalRow]
+      case _: ArrayType => classOf[ArrayData]
+      case _: MapType => classOf[MapData]
+      case _: GeographyType => classOf[GeographyVal]
+      case _: GeometryType => classOf[GeometryVal]
+      case ObjectType(cls) => cls
+      case _ => typeJavaMapping.getOrElse(dt, classOf[java.lang.Object])
     }
   }
 

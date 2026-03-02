@@ -63,37 +63,41 @@ object CatalystTypeConverters {
 
   private def getConverterForType(dataType: DataType): CatalystTypeConverter[Any, Any, Any] = {
     TypeUtils.failUnsupportedDataType(dataType, SQLConf.get)
-    val converter = TypeOps(dataType).map(ops => new TypeOpsConverter(ops)).getOrElse {
-      dataType match {
-        case udt: UserDefinedType[_] => UDTConverter(udt)
-        case arrayType: ArrayType => ArrayConverter(arrayType.elementType)
-        case mapType: MapType => MapConverter(mapType.keyType, mapType.valueType)
-        case structType: StructType => StructConverter(structType)
-        case c: CharType => new CharConverter(c.length)
-        case v: VarcharType => new VarcharConverter(v.length)
-        case _: StringType => StringConverter
-        case g: GeographyType =>
-          new GeographyConverter(g)
-        case g: GeometryType =>
-          new GeometryConverter(g)
-        case DateType if SQLConf.get.datetimeJava8ApiEnabled => LocalDateConverter
-        case DateType => DateConverter
-        case _: TimeType => TimeConverter
-        case TimestampType if SQLConf.get.datetimeJava8ApiEnabled => InstantConverter
-        case TimestampType => TimestampConverter
-        case TimestampNTZType => TimestampNTZConverter
-        case dt: DecimalType => new DecimalConverter(dt)
-        case BooleanType => BooleanConverter
-        case ByteType => ByteConverter
-        case ShortType => ShortConverter
-        case IntegerType => IntConverter
-        case LongType => LongConverter
-        case FloatType => FloatConverter
-        case DoubleType => DoubleConverter
-        case DayTimeIntervalType(_, endField) => DurationConverter(endField)
-        case YearMonthIntervalType(_, endField) => PeriodConverter(endField)
-        case dataType: DataType => IdentityConverter(dataType)
-      }
+    TypeOps(dataType).map(ops => new TypeOpsConverter(ops))
+      .getOrElse(getConverterForTypeDefault(dataType))
+  }
+
+  private def getConverterForTypeDefault(
+      dataType: DataType): CatalystTypeConverter[Any, Any, Any] = {
+    val converter = dataType match {
+      case udt: UserDefinedType[_] => UDTConverter(udt)
+      case arrayType: ArrayType => ArrayConverter(arrayType.elementType)
+      case mapType: MapType => MapConverter(mapType.keyType, mapType.valueType)
+      case structType: StructType => StructConverter(structType)
+      case c: CharType => new CharConverter(c.length)
+      case v: VarcharType => new VarcharConverter(v.length)
+      case _: StringType => StringConverter
+      case g: GeographyType =>
+        new GeographyConverter(g)
+      case g: GeometryType =>
+        new GeometryConverter(g)
+      case DateType if SQLConf.get.datetimeJava8ApiEnabled => LocalDateConverter
+      case DateType => DateConverter
+      case _: TimeType => TimeConverter
+      case TimestampType if SQLConf.get.datetimeJava8ApiEnabled => InstantConverter
+      case TimestampType => TimestampConverter
+      case TimestampNTZType => TimestampNTZConverter
+      case dt: DecimalType => new DecimalConverter(dt)
+      case BooleanType => BooleanConverter
+      case ByteType => ByteConverter
+      case ShortType => ShortConverter
+      case IntegerType => IntConverter
+      case LongType => LongConverter
+      case FloatType => FloatConverter
+      case DoubleType => DoubleConverter
+      case DayTimeIntervalType(_, endField) => DurationConverter(endField)
+      case YearMonthIntervalType(_, endField) => PeriodConverter(endField)
+      case dataType: DataType => IdentityConverter(dataType)
     }
     converter.asInstanceOf[CatalystTypeConverter[Any, Any, Any]]
   }
