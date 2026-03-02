@@ -537,13 +537,13 @@ class PyArrowScalarTypeCastTests(_PyArrowCastTestBase):
         if platform.machine() in ("aarch64", "arm64"):
             overrides.update(
                 {
-                    # float16:standard [0.0, 1.5, -1.5, None] → unsigned int types
+                    # float16:standard [0.0, 1.5, -1.5, None] -> unsigned int types
                     # -1.5 saturates to 0 on ARM, wraps on x86
                     ("float16:standard", "uint8"): "[0, 1, 0, None]@uint8",
                     ("float16:standard", "uint16"): "[0, 1, 0, None]@uint16",
                     ("float16:standard", "uint32"): "[0, 1, 0, None]@uint32",
                     ("float16:standard", "uint64"): "[0, 1, 0, None]@uint64",
-                    # float16:special [inf, nan, None] → integer types
+                    # float16:special [inf, nan, None] -> integer types
                     ("float16:special", "int8"): "[-1, 0, None]@int8",
                     ("float16:special", "int16"): "[-1, 0, None]@int16",
                     ("float16:special", "int32"): "[2147483647, 0, None]@int32",
@@ -552,11 +552,11 @@ class PyArrowScalarTypeCastTests(_PyArrowCastTestBase):
                     ("float16:special", "uint16"): "[65535, 0, None]@uint16",
                     ("float16:special", "uint32"): "[4294967295, 0, None]@uint32",
                     ("float16:special", "uint64"): "[18446744073709551615, 0, None]@uint64",
-                    # float32:standard [0.0, 1.5, -1.5, None] → unsigned int types
+                    # float32:standard [0.0, 1.5, -1.5, None] -> unsigned int types
                     ("float32:standard", "uint8"): "[0, 1, 0, None]@uint8",
                     ("float32:standard", "uint32"): "[0, 1, 0, None]@uint32",
                     ("float32:standard", "uint64"): "[0, 1, 0, None]@uint64",
-                    # float32:special [inf, -inf, nan, None] → integer types
+                    # float32:special [inf, -inf, nan, None] -> integer types
                     ("float32:special", "int8"): "[-1, 0, 0, None]@int8",
                     ("float32:special", "int16"): "[-1, 0, 0, None]@int16",
                     ("float32:special", "int32"): "[2147483647, -2147483648, 0, None]@int32",
@@ -568,11 +568,11 @@ class PyArrowScalarTypeCastTests(_PyArrowCastTestBase):
                     ("float32:special", "uint16"): "[65535, 0, 0, None]@uint16",
                     ("float32:special", "uint32"): "[4294967295, 0, 0, None]@uint32",
                     ("float32:special", "uint64"): "[18446744073709551615, 0, 0, None]@uint64",
-                    # float64:standard [0.0, 1.5, -1.5, None] → unsigned int types
+                    # float64:standard [0.0, 1.5, -1.5, None] -> unsigned int types
                     ("float64:standard", "uint8"): "[0, 1, 0, None]@uint8",
                     ("float64:standard", "uint16"): "[0, 1, 0, None]@uint16",
                     ("float64:standard", "uint64"): "[0, 1, 0, None]@uint64",
-                    # float64:special [inf, -inf, nan, None] → integer types
+                    # float64:special [inf, -inf, nan, None] -> integer types
                     ("float64:special", "int8"): "[-1, 0, 0, None]@int8",
                     ("float64:special", "int16"): "[-1, 0, 0, None]@int16",
                     ("float64:special", "int32"): "[-1, 0, 0, None]@int32",
@@ -592,17 +592,17 @@ class PyArrowScalarTypeCastTests(_PyArrowCastTestBase):
                 # differences in LLVM code generation between the two platforms.
                 overrides.update(
                     {
-                        # negative float → uint8/uint16: macOS ARM wraps (255/65535),
+                        # negative float -> uint8/uint16: macOS ARM wraps (255/65535),
                         # Linux ARM saturates to 0
                         ("float16:standard", "uint8"): "[0, 1, 255, None]@uint8",
                         ("float16:standard", "uint16"): "[0, 1, 65535, None]@uint16",
                         ("float32:standard", "uint8"): "[0, 1, 255, None]@uint8",
                         ("float64:standard", "uint8"): "[0, 1, 255, None]@uint8",
                         ("float64:standard", "uint16"): "[0, 1, 65535, None]@uint16",
-                        # negative float → uint32: macOS ARM saturates to 0,
+                        # negative float -> uint32: macOS ARM saturates to 0,
                         # Linux ARM wraps to 4294967295 (matching x86 golden)
                         ("float64:standard", "uint32"): "[0, 1, 0, None]@uint32",
-                        # special float → int32: macOS ARM saturates (INT32_MAX/MIN),
+                        # special float -> int32: macOS ARM saturates (INT32_MAX/MIN),
                         # Linux ARM gives -1/0
                         ("float64:special", "int32"): "[2147483647, -2147483648, 0, None]@int32",
                     }
