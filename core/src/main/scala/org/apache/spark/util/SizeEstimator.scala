@@ -97,8 +97,8 @@ object SizeEstimator extends Logging {
   // Based on https://wikis.oracle.com/display/HotSpotInternals/CompressedOops
   private var isCompressedOops = false
 
-  // Whether compact object headers (JEP 450/519) are enabled.
-  // With compact object headers, the object header is 8 bytes on 64-bit JVMs
+  // Whether Compact Object Headers (JEP 450/519) are enabled.
+  // With Compact Object Headers, the object header is 8 bytes on 64-bit JVMs
   // (the class pointer is encoded inside the mark word), so objectSize = 8
   // and pointerSize = 4 regardless of UseCompressedOops.
   private var isCompactObjectHeaders = false
@@ -133,7 +133,7 @@ object SizeEstimator extends Logging {
   }
 
   private def getIsCompactObjectHeaders: Boolean = {
-    // This is only used by tests to override the detection of compact object headers.
+    // This is only used by tests to override the detection of Compact Object Headers.
     if (System.getProperty(TEST_USE_COMPACT_OBJECT_HEADERS_KEY) != null) {
       return System.getProperty(TEST_USE_COMPACT_OBJECT_HEADERS_KEY).toBoolean
     }
