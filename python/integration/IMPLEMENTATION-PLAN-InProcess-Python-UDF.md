@@ -62,6 +62,6 @@ Most of this phase is already implemented. Two known gaps remain.
 
 **Working items:**
 
-- [ ] User guide: explain the `@inprocess_udf` decorator, show examples for numeric, string, multi-column, and closure-capture UDFs, and describe when to choose `inprocess_udf` vs `pandas_udf` vs `udf`.
-- [ ] Configuration reference: document all `spark.inprocess.*` configs, required executor sizing (`spark.executor.cores=1`), `spark.plugins` registration, `--archives` venv distribution, and `java.library.path` setup.
-- [ ] Migration guide from `pandas_udf`: side-by-side examples showing how to rewrite a `pandas_udf` as an `inprocess_udf`, with notes on input type change (pandas Series → `pa.Array`) and when migration is beneficial.
+- [x] User guide: explain the `@inprocess_udf` decorator, show examples for numeric, string, multi-column, and closure-capture UDFs, and describe when to choose `inprocess_udf` vs `pandas_udf` vs `udf`. Added Examples section to `docs/sql-pyspark-inprocess-udf.md` covering string, multi-column, closure-capture, and non-deterministic UDF patterns. Comparison table with `udf`/`pandas_udf`/`inprocess_udf` already present.
+- [x] Configuration reference: document all `spark.inprocess.*` configs, required executor sizing (`spark.executor.cores=1`), `spark.plugins` registration, `--archives` venv distribution, and `java.library.path` setup. Fully covered in the Configuration Reference section of `docs/sql-pyspark-inprocess-udf.md` (added in Phase 2).
+- [x] Migration guide from `pandas_udf`: side-by-side examples showing how to rewrite a `pandas_udf` as an `inprocess_udf`, with notes on input type change (pandas Series → `pa.Array`) and when migration is beneficial. Added "Migrating from `pandas_udf`" section to `docs/sql-pyspark-inprocess-udf.md` with numeric, string, and multi-column side-by-side rewrites, a when-to-migrate decision table, and the executor sizing caveat.

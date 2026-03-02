@@ -81,6 +81,83 @@ The function receives a `pa.Array` for each input column and must return a `pa.A
 
 ---
 
+## Examples
+
+### String transformation
+
+```python
+import pyarrow.compute as pc
+from pyspark.inprocess.udf import inprocess_udf
+from pyspark.sql.types import StringType
+
+@inprocess_udf(return_type=StringType())
+def upper(s):
+    return pc.utf8_upper(s)
+
+df = spark.createDataFrame([("hello",), ("world",)], ["text"])
+df.select(upper(df["text"])).show()
+# +------------+
+# |upper(text) |
+# +------------+
+# |HELLO       |
+# |WORLD       |
+# +------------+
+```
+
+### Multi-column UDF
+
+A UDF receives one `pa.Array` argument per input column:
+
+```python
+import pyarrow.compute as pc
+from pyspark.inprocess.udf import inprocess_udf
+from pyspark.sql.types import DoubleType
+
+@inprocess_udf(return_type=DoubleType())
+def weighted_sum(x, y):
+    return pc.add(pc.multiply(x, 0.6), pc.multiply(y, 0.4))
+
+df = spark.createDataFrame([(1.0, 2.0), (3.0, 4.0)], ["x", "y"])
+df.select(weighted_sum(df["x"], df["y"])).show()
+```
+
+### Closure capture
+
+Free variables are captured by cloudpickle and frozen into the serialized UDF. The captured
+value is evaluated once at UDF definition time and shipped with the function to every executor:
+
+```python
+import pyarrow.compute as pc
+from pyspark.inprocess.udf import inprocess_udf
+from pyspark.sql.types import DoubleType
+
+SCALE_FACTOR = 100.0
+
+@inprocess_udf(return_type=DoubleType())
+def scale(x):
+    return pc.multiply(x, SCALE_FACTOR)
+```
+
+### Non-deterministic UDF
+
+Pass `deterministic=False` when the UDF produces different results for the same input (e.g.
+random sampling). This prevents the optimizer from deduplicating or reordering calls:
+
+```python
+import random
+import pyarrow as pa
+import pyarrow.compute as pc
+from pyspark.inprocess.udf import inprocess_udf
+from pyspark.sql.types import DoubleType
+
+@inprocess_udf(return_type=DoubleType(), deterministic=False)
+def add_noise(x):
+    noise = pa.array([random.gauss(0.0, 0.01) for _ in range(len(x))])
+    return pc.add(x, noise)
+```
+
+---
+
 ## Requirements
 
 | Requirement | Detail |
@@ -325,6 +402,98 @@ All Spark SQL types are supported as UDF inputs and outputs:
 | Complex | `ArrayType`, `StructType` |
 
 `MapType` is not currently supported.
+
+---
+
+## Migrating from `pandas_udf`
+
+`inprocess_udf` and `pandas_udf` have nearly identical call-site syntax. The primary change is
+the input/output type: `pandas.Series` becomes `pa.Array`, and pandas operations are replaced
+with their `pyarrow.compute` equivalents.
+
+### Side-by-side examples
+
+#### Numeric transform
+
+```python
+# pandas_udf
+import pandas as pd
+from pyspark.sql.functions import pandas_udf
+from pyspark.sql.types import LongType
+
+@pandas_udf(LongType())
+def double_pandas(x: pd.Series) -> pd.Series:
+    return x * 2
+```
+
+```python
+# inprocess_udf  — replace pd.Series arithmetic with pc.multiply
+import pyarrow.compute as pc
+from pyspark.inprocess.udf import inprocess_udf
+from pyspark.sql.types import LongType
+
+@inprocess_udf(return_type=LongType())
+def double_inprocess(x):          # x is pa.Array, not pd.Series
+    return pc.multiply(x, 2)
+```
+
+#### String transform
+
+```python
+# pandas_udf
+@pandas_udf(StringType())
+def upper_pandas(s: pd.Series) -> pd.Series:
+    return s.str.upper()
+```
+
+```python
+# inprocess_udf  — replace .str.upper() with pc.utf8_upper()
+@inprocess_udf(return_type=StringType())
+def upper_inprocess(s):
+    return pc.utf8_upper(s)
+```
+
+#### Multi-column
+
+```python
+# pandas_udf
+@pandas_udf(DoubleType())
+def score_pandas(x: pd.Series, y: pd.Series) -> pd.Series:
+    return x * 0.6 + y * 0.4
+```
+
+```python
+# inprocess_udf  — chain pc.multiply / pc.add instead of pandas arithmetic
+@inprocess_udf(return_type=DoubleType())
+def score_inprocess(x, y):
+    return pc.add(pc.multiply(x, 0.6), pc.multiply(y, 0.4))
+```
+
+### Call-site syntax
+
+The call site is identical — `inprocess_udf` returns a standard PySpark Column expression:
+
+```python
+df.select(double_inprocess(df["id"])).show()
+df.withColumn("score", score_inprocess(df["x"], df["y"])).show()
+```
+
+### When migration is beneficial
+
+| Scenario | Recommendation |
+|---|---|
+| Simple arithmetic or comparisons | **Migrate** — `pyarrow.compute` is 1:1 with pandas ops |
+| String transforms (`upper`, `lower`, `trim`) | **Migrate** — `pc.utf8_*` covers the common cases |
+| Wide schemas or large batches (high IPC cost) | **Migrate** — speedup is greatest when IPC serialization dominates |
+| Heavy pandas regex (`.str.extract`, `.str.replace`) | **Consider** — PyArrow has equivalents (`pc.extract_regex`, `pc.replace_substring_regex`) but the code change is larger |
+| `pandas.groupby`, `rolling`, `resample` | **Stay on `pandas_udf`** — no Arrow compute equivalents |
+| UDF calls an external library expecting `pd.Series` | **Stay on `pandas_udf`**, or wrap with `pd.Series(array.to_pylist())` at the boundary |
+
+### Executor sizing constraint
+
+Unlike `pandas_udf`, `inprocess_udf` requires exactly one concurrent task per executor
+(see [Requirements](#requirements)). If you cannot set `spark.executor.cores=1` on your
+cluster, stay on `pandas_udf`.
 
 ---
 
