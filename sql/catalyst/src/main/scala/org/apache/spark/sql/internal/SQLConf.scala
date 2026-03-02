@@ -4754,6 +4754,17 @@ object SQLConf {
       .enumConf(StoreAssignmentPolicy)
       .createWithDefault(StoreAssignmentPolicy.ANSI)
 
+  val FILE_SOURCE_INSERT_ENFORCE_NOT_NULL =
+    buildConf("spark.sql.fileSource.insert.enforceNotNull")
+      .internal()
+      .doc("When true, Spark enforces NOT NULL constraints when inserting data into " +
+        "file-based data source tables (e.g., Parquet, ORC, JSON), consistent with the " +
+        "behavior for other data sources and V2 catalog tables. " +
+        "When false (default), null values are silently accepted into NOT NULL columns.")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val ANSI_ENABLED = buildConf(SqlApiConfHelper.ANSI_ENABLED_KEY)
     .doc("When true, Spark SQL uses an ANSI compliant dialect instead of being Hive compliant. " +
       "For example, Spark will throw an exception at runtime instead of returning null results " +
