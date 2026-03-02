@@ -189,6 +189,11 @@ private[spark] object ClosureCleaner extends Logging {
    * @param cleanTransitively whether to clean enclosing closures transitively
    * @param accessedFields    a map from a class to a set of its fields that are accessed by
    *                          the starting closure
+   * @return Some(cleaned closure) if the closure was cleaned, None otherwise.
+   *         On the clone-based path (Java 22+ or when explicitly enabled), the returned
+   *         closure is a new lambda instance with cleaned outer references.
+   *         On the legacy mutation path, the closure is mutated in place and
+   *         Some with the same reference is returned.
    */
   private[spark] def clean[F <: AnyRef](
       func: F,
@@ -620,7 +625,7 @@ private[spark] object ClosureCleaner extends Logging {
       System.getenv("SPARK_CLONE_BASED_CLOSURE_CLEANER") == "1" || javaVersion >= 22
 
     if (useClone) {
-      val factory = makeClonedIndyLambdaFacory(indyLambda.getClass, lambdaProxy)
+      val factory = makeClonedIndyLambdaFactory(indyLambda.getClass, lambdaProxy)
 
       val argsBuffer = new ArrayBuffer[Object]()
       var i = 0
@@ -637,7 +642,7 @@ private[spark] object ClosureCleaner extends Logging {
     }
   }
 
-  private def makeClonedIndyLambdaFacory(
+  private def makeClonedIndyLambdaFactory(
       originalFuncClass: Class[_],
       lambdaProxy: SerializedLambda): MethodHandle = {
     val classLoader = originalFuncClass.getClassLoader
@@ -679,11 +684,11 @@ private[spark] object ClosureCleaner extends Logging {
 
   /**
    * This method is used for full-power lookup for `targetClass` which is used for cloning lambdas
-   * crated at each REPL line. `targetClass` is expected the enclosing class of a lambda.
+   * created at each REPL line. `targetClass` is expected the enclosing class of a lambda.
    * `MethodHandles.privateLookupIn(targetClass, MethodHandles.lookup())` is not
    * helpful for such use case because targetClass and `ClosureCleaner` which
    * `MethodHandles.lookup()` calls are loaded into different class loaders, and the method returns
-   * a lookup which doesn't enough privilege to create a lambda using
+   * a lookup which doesn't have enough privilege to create a lambda using
    * LambdaMetaFactory.altMetafactory.
    */
   private def getFullPowerLookupFor(targetClass: Class[_]): MethodHandles.Lookup = {
