@@ -36,38 +36,38 @@ sealed abstract class PhysicalDataType {
 
 object PhysicalDataType {
   def apply(dt: DataType): PhysicalDataType =
-    TypeOps(dt).map(_.getPhysicalType).getOrElse {
-      dt match {
-        case NullType => PhysicalNullType
-        case ByteType => PhysicalByteType
-        case ShortType => PhysicalShortType
-        case IntegerType => PhysicalIntegerType
-        case LongType => PhysicalLongType
-        case v: VarcharType => PhysicalStringType(v.collationId)
-        case c: CharType => PhysicalStringType(c.collationId)
-        case s: StringType => PhysicalStringType(s.collationId)
-        case FloatType => PhysicalFloatType
-        case DoubleType => PhysicalDoubleType
-        case DecimalType.Fixed(p, s) => PhysicalDecimalType(p, s)
-        case BooleanType => PhysicalBooleanType
-        case BinaryType => PhysicalBinaryType
-        case TimestampType => PhysicalLongType
-        case TimestampNTZType => PhysicalLongType
-        case CalendarIntervalType => PhysicalCalendarIntervalType
-        case DayTimeIntervalType(_, _) => PhysicalLongType
-        case YearMonthIntervalType(_, _) => PhysicalIntegerType
-        case DateType => PhysicalIntegerType
-        case _: TimeType => PhysicalLongType
-        case ArrayType(elementType, containsNull) => PhysicalArrayType(elementType, containsNull)
-        case StructType(fields) => PhysicalStructType(fields)
-        case MapType(keyType, valueType, valueContainsNull) =>
-          PhysicalMapType(keyType, valueType, valueContainsNull)
-        case _: GeometryType => PhysicalGeometryType
-        case _: GeographyType => PhysicalGeographyType
-        case VariantType => PhysicalVariantType
-        case _ => UninitializedPhysicalType
-      }
-    }
+    TypeOps(dt).map(_.getPhysicalType).getOrElse(applyDefault(dt))
+
+  private def applyDefault(dt: DataType): PhysicalDataType = dt match {
+    case NullType => PhysicalNullType
+    case ByteType => PhysicalByteType
+    case ShortType => PhysicalShortType
+    case IntegerType => PhysicalIntegerType
+    case LongType => PhysicalLongType
+    case v: VarcharType => PhysicalStringType(v.collationId)
+    case c: CharType => PhysicalStringType(c.collationId)
+    case s: StringType => PhysicalStringType(s.collationId)
+    case FloatType => PhysicalFloatType
+    case DoubleType => PhysicalDoubleType
+    case DecimalType.Fixed(p, s) => PhysicalDecimalType(p, s)
+    case BooleanType => PhysicalBooleanType
+    case BinaryType => PhysicalBinaryType
+    case TimestampType => PhysicalLongType
+    case TimestampNTZType => PhysicalLongType
+    case CalendarIntervalType => PhysicalCalendarIntervalType
+    case DayTimeIntervalType(_, _) => PhysicalLongType
+    case YearMonthIntervalType(_, _) => PhysicalIntegerType
+    case DateType => PhysicalIntegerType
+    case _: TimeType => PhysicalLongType
+    case ArrayType(elementType, containsNull) => PhysicalArrayType(elementType, containsNull)
+    case StructType(fields) => PhysicalStructType(fields)
+    case MapType(keyType, valueType, valueContainsNull) =>
+      PhysicalMapType(keyType, valueType, valueContainsNull)
+    case _: GeometryType => PhysicalGeometryType
+    case _: GeographyType => PhysicalGeographyType
+    case VariantType => PhysicalVariantType
+    case _ => UninitializedPhysicalType
+  }
 
   def ordering(dt: DataType): Ordering[Any] = apply(dt).ordering.asInstanceOf[Ordering[Any]]
 }

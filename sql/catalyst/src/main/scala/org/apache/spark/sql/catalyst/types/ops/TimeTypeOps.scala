@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Literal, MutableLong, MutableValue}
 import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalLongType}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.types.{DataType, TimeType}
+import org.apache.spark.sql.types.TimeType
 import org.apache.spark.sql.types.ops.TimeTypeApiOps
 
 /**
@@ -49,8 +49,6 @@ import org.apache.spark.sql.types.ops.TimeTypeApiOps
  * @since 4.2.0
  */
 case class TimeTypeOps(override val t: TimeType) extends TimeTypeApiOps(t) with TypeOps {
-
-  override def dataType: DataType = t
 
   // ==================== Physical Type Representation ====================
 

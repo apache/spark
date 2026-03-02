@@ -188,44 +188,44 @@ object Literal {
    * Create a literal with default value for given DataType
    */
   def default(dataType: DataType): Literal =
-    TypeOps(dataType).map(_.getDefaultLiteral).getOrElse {
-      dataType match {
-        case NullType => create(null, NullType)
-        case BooleanType => Literal(false)
-        case ByteType => Literal(0.toByte)
-        case ShortType => Literal(0.toShort)
-        case IntegerType => Literal(0)
-        case LongType => Literal(0L)
-        case FloatType => Literal(0.0f)
-        case DoubleType => Literal(0.0)
-        case dt: DecimalType => Literal(Decimal(0, dt.precision, dt.scale))
-        case DateType => create(0, DateType)
-        case TimestampType => create(0L, TimestampType)
-        case TimestampNTZType => create(0L, TimestampNTZType)
-        case t: TimeType => create(0L, t)
-        case it: DayTimeIntervalType => create(0L, it)
-        case it: YearMonthIntervalType => create(0, it)
-        case c: CharType =>
-          create(CharVarcharCodegenUtils.charTypeWriteSideCheck(
-            UTF8String.fromString(""), c.length), dataType)
-        case v: VarcharType =>
-          create(CharVarcharCodegenUtils.varcharTypeWriteSideCheck(
-            UTF8String.fromString(""), v.length), dataType)
-        case st: StringType => Literal(UTF8String.fromString(""), st)
-        case BinaryType => Literal("".getBytes(StandardCharsets.UTF_8))
-        case CalendarIntervalType => Literal(new CalendarInterval(0, 0, 0))
-        case arr: ArrayType => create(Array(), arr)
-        case map: MapType => create(Map(), map)
-        case struct: StructType =>
-          create(new GenericInternalRow(
-            struct.fields.map(f => default(f.dataType).value)), struct)
-        case udt: UserDefinedType[_] => Literal(default(udt.sqlType).value, udt)
-        case VariantType =>
-          create(VariantExpressionEvalUtils.castToVariant(0, IntegerType), VariantType)
-        case other =>
-          throw QueryExecutionErrors.noDefaultForDataTypeError(dataType)
-      }
-    }
+    TypeOps(dataType).map(_.getDefaultLiteral).getOrElse(defaultDefault(dataType))
+
+  private def defaultDefault(dataType: DataType): Literal = dataType match {
+    case NullType => create(null, NullType)
+    case BooleanType => Literal(false)
+    case ByteType => Literal(0.toByte)
+    case ShortType => Literal(0.toShort)
+    case IntegerType => Literal(0)
+    case LongType => Literal(0L)
+    case FloatType => Literal(0.0f)
+    case DoubleType => Literal(0.0)
+    case dt: DecimalType => Literal(Decimal(0, dt.precision, dt.scale))
+    case DateType => create(0, DateType)
+    case TimestampType => create(0L, TimestampType)
+    case TimestampNTZType => create(0L, TimestampNTZType)
+    case t: TimeType => create(0L, t)
+    case it: DayTimeIntervalType => create(0L, it)
+    case it: YearMonthIntervalType => create(0, it)
+    case c: CharType =>
+      create(CharVarcharCodegenUtils.charTypeWriteSideCheck(UTF8String.fromString(""), c.length),
+        dataType)
+    case v: VarcharType =>
+      create(CharVarcharCodegenUtils.varcharTypeWriteSideCheck(UTF8String.fromString(""), v.length),
+        dataType)
+    case st: StringType => Literal(UTF8String.fromString(""), st)
+    case BinaryType => Literal("".getBytes(StandardCharsets.UTF_8))
+    case CalendarIntervalType => Literal(new CalendarInterval(0, 0, 0))
+    case arr: ArrayType => create(Array(), arr)
+    case map: MapType => create(Map(), map)
+    case struct: StructType =>
+      create(new GenericInternalRow(
+        struct.fields.map(f => default(f.dataType).value)), struct)
+    case udt: UserDefinedType[_] => Literal(default(udt.sqlType).value, udt)
+    case VariantType =>
+      create(VariantExpressionEvalUtils.castToVariant(0, IntegerType), VariantType)
+    case other =>
+      throw QueryExecutionErrors.noDefaultForDataTypeError(dataType)
+  }
 
   private[expressions] def validateLiteralValue(value: Any, dataType: DataType): Unit = {
     def doValidate(v: Any, dataType: DataType): Boolean = dataType match {
