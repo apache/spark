@@ -864,6 +864,11 @@
       "Graphite sink requires '<property>' property."
     ]
   },
+  "STATSD_SINK_INVALID_REGEX" : {
+    "message" : [
+      "StatsD sink has invalid regex '<regex>'."
+    ]
+  },
   "GROUPING_COLUMN_MISMATCH" : {
     "message" : [
       "Column of grouping (<grouping>) can't be found in grouping columns <groupingColumns>."

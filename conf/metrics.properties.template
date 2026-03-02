@@ -139,6 +139,7 @@
 #   period    10            Poll period
 #   unit      seconds       Units of poll period
 #   prefix    EMPTY STRING  Prefix to prepend to metric name
+#   regex     NONE          Optional filter to send only metrics matching this regex string
 
 ## Examples
 # Enable JmxSink for all instances by class name
@@ -149,7 +150,12 @@
 
 # Enable StatsdSink for all instances by class name
 #*.sink.statsd.class=org.apache.spark.metrics.sink.StatsdSink
+#*.sink.statsd.host=127.0.0.1
+#*.sink.statsd.port=8125
+#*.sink.statsd.period=10
+#*.sink.statsd.unit=seconds
 #*.sink.statsd.prefix=spark
+#*.sink.statsd.regex=local-[0-9]+.driver.(CodeGenerator|BlockManager)
 
 # Polling period for the ConsoleSink
 #*.sink.console.period=10
