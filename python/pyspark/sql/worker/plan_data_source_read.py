@@ -219,6 +219,11 @@ def write_read_func_and_partitions(
 
         return records_to_arrow_batches(output_iter, max_arrow_batch_size, return_type, data_source)
 
+    # Set the module name so UDF worker can recognize that this is a data source function.
+    # This is needed when simple worker is used because the __module__ will be set to
+    # __main__, which confuses the profiler logic.
+    data_source_read_func.__module__ = "pyspark.sql.worker.plan_data_source_read"
+
     command = (data_source_read_func, return_type)
     pickleSer._write_with_length(command, outfile)
 
