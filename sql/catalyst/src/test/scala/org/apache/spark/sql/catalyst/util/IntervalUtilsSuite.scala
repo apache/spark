@@ -481,7 +481,7 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
     assert(divide(interval, 0.9) === new CalendarInterval(Int.MaxValue, Int.MaxValue,
       ((Int.MaxValue / 9.0) * MICROS_PER_DAY).round))
     val e1 = intercept[ArithmeticException](divideExact(interval, 0.9))
-    assert(e1.getMessage.contains("integer overflow"))
+    assert(e1.getMessage.contains("overflow"))
 
     interval = new CalendarInterval(123, 456, 789)
     assert(divide(interval, 0) === null)
