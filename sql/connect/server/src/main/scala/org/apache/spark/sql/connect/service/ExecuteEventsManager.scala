@@ -355,10 +355,11 @@ case class ExecuteEventsManager(executeHolder: ExecuteHolder, clock: Clock) {
         is not within statuses $validStatuses for event $eventStatus
         """)
     }
-    if (sessionHolder.eventManager.status != SessionStatus.Started) {
+    if (sessionHolder.eventManager.status != SessionStatus.Started &&
+      sessionHolder.eventManager.status != SessionStatus.Closed) {
       throw new IllegalStateException(s"""
-        sessionId: $sessionId with status $sessionStatus
-        is not Started for event $eventStatus
+        sessionId: $sessionId has status $sessionStatus
+        but expected Started or Closed for event $eventStatus
         """)
     }
     _status = eventStatus
