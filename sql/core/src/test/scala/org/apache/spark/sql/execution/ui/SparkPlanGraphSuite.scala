@@ -44,7 +44,7 @@ class SparkPlanGraphSuite extends SparkFunSuite {
     assertResult(expectedDotNode)(dotNode)
   }
 
-  test("SPARK-55785: makeNodeDetailsJson uses cluster prefix and includes children") {
+  test("SPARK-55786: makeNodeDetailsJson uses cluster prefix and includes children") {
     import scala.collection.mutable
     val childNode = new SparkPlanGraphNode(
       id = 1, name = "HashAggregate", desc = "HashAggregate(keys=[])",

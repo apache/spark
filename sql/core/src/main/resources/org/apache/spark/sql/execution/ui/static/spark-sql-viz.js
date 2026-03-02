@@ -414,7 +414,7 @@ function updateDetailsPanel(nodeId, nodeDetails) {
     details.children.forEach(function (childId) {
       var child = nodeDetails[childId];
       if (child) {
-        html += '<h6 class="mt-2 mb-1 fw-bold">' + child.name + '</h6>';
+        html += '<h6 class="mt-2 mb-1 fw-bold">' + htmlEscape(child.name) + '</h6>';
         if (child.metrics && child.metrics.length > 0) {
           html += buildMetricsTable(child.metrics, showStageTask);
         } else {
@@ -426,6 +426,11 @@ function updateDetailsPanel(nodeId, nodeDetails) {
   bodyEl.innerHTML = html;
 }
 
+function htmlEscape(str) {
+  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
 /*
  * Build an HTML metrics table from a metrics array.
  */
@@ -433,8 +438,8 @@ function buildMetricsTable(metrics, showStageTask) {
   var html = '<table class="table table-sm table-bordered mb-0">';
   html += "<thead><tr><th>Metric</th><th>Value</th></tr></thead><tbody>";
   metrics.forEach(function (m) {
-    var name = m.name.replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    var val = m.value.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    var name = htmlEscape(m.name);
+    var val = htmlEscape(m.value);
     html += "<tr><td>" + name + "</td><td>" +
       formatMetricValue(val, m.type, showStageTask) + "</td></tr>";
   });

@@ -46,8 +46,8 @@ case class SparkPlanGraph(
   }
 
   /**
-   * Generate a JSON string containing node details (metrics, description) for the
-   * detail side panel. This keeps the DOT node labels compact (name only) while
+   * Generate a JSON string containing node details (name, metrics, and optional children)
+   * for the detail side panel. This keeps the DOT node labels compact (name only) while
    * providing full metrics on demand via JavaScript.
    */
   def makeNodeDetailsJson(metrics: Map[Long, String]): String = {
@@ -56,7 +56,8 @@ case class SparkPlanGraph(
         metrics.get(m.accumulatorId).map { v =>
           val n = StringEscapeUtils.escapeJson(m.name)
           val mv = StringEscapeUtils.escapeJson(v)
-          s"""{"name":"$n","value":"$mv","type":"${m.metricType}"}"""
+          val mt = StringEscapeUtils.escapeJson(m.metricType)
+          s"""{"name":"$n","value":"$mv","type":"$mt"}"""
         }
       }.mkString("[", ",", "]")
       val (prefix, extra) = node match {
@@ -220,11 +221,11 @@ class SparkPlanGraphCluster(
     val shortName = "\\(\\d+\\)".r.findFirstIn(name).getOrElse(name)
     val labelStr = if (duration.nonEmpty) {
       require(duration.length == 1)
-      val id = duration(0).accumulatorId
-      if (metricsValue.contains(id)) {
+      val durationMetricId = duration(0).accumulatorId
+      if (metricsValue.contains(durationMetricId)) {
         // For multi-line values like "total (min, med, max)\n10.0 s (...)",
         // extract just the total number from the data line
-        val raw = metricsValue(id)
+        val raw = metricsValue(durationMetricId)
         val lines = raw.split("\n")
         val dataLine = if (lines.length > 1) lines(1).trim else lines(0).trim
         // Extract just the total value (first token before any parenthesized breakdown)
