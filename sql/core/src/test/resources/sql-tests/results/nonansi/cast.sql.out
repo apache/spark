@@ -876,7 +876,6 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
   "sqlState" : "22003",
   "messageParameters" : {
-    "config" : "\"spark.sql.ansi.enabled\"",
     "precision" : "1",
     "scale" : "0",
     "value" : "10.123000"
