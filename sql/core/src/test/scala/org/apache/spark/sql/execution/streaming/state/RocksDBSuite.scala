@@ -42,7 +42,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.execution.streaming.CreateAtomicTestManager
-import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, ChecksumCheckpointFileManager, FileContextBasedCheckpointFileManager, FileSystemBasedCheckpointFileManager}
+import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, FileContextBasedCheckpointFileManager, FileSystemBasedCheckpointFileManager}
 import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager.{CancellableFSDataOutputStream, RenameBasedFSDataOutputStream}
 import org.apache.spark.sql.execution.streaming.runtime.StreamExecution
 import org.apache.spark.sql.internal.SQLConf
@@ -2992,63 +2992,6 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
           assert(!m1.lastCommitLatencyMs.contains("changeLogWriterCommit"))
         }
       }
-    }
-  }
-
-  test("RocksDB: fileChecksumThreadPoolSize propagates to ChecksumCheckpointFileManager") {
-    withTempDir { dir =>
-      val sqlConf = SQLConf.get.clone()
-      sqlConf.setConfString(
-        SQLConf.STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED.key, "true")
-      sqlConf.setConfString(
-        SQLConf.STATE_STORE_ROCKSDB_FILE_CHECKSUM_THREAD_POOL_SIZE.key, "6")
-
-      val dbConf = RocksDBConf(StateStoreConf(sqlConf))
-      assert(dbConf.fileChecksumThreadPoolSize === 6)
-
-      val remoteDir = dir.getCanonicalPath
-      withDB(remoteDir, conf = dbConf) { db =>
-        // Access the fm (lazy val) on fileManager via PrivateMethodTester
-        val fileManagerMethod = PrivateMethod[CheckpointFileManager](Symbol("fm"))
-        val fm = db.fileManager invokePrivate fileManagerMethod()
-
-        // Verify it's a ChecksumCheckpointFileManager with the right thread count
-        assert(fm.isInstanceOf[ChecksumCheckpointFileManager])
-        assert(fm.asInstanceOf[ChecksumCheckpointFileManager].numThreads === 6)
-      }
-    }
-  }
-
-  test("RocksDB: fileChecksumThreadPoolSize of 1 is valid and propagates correctly") {
-    withTempDir { dir =>
-      val sqlConf = SQLConf.get.clone()
-      sqlConf.setConfString(
-        SQLConf.STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED.key, "true")
-      sqlConf.setConfString(
-        SQLConf.STATE_STORE_ROCKSDB_FILE_CHECKSUM_THREAD_POOL_SIZE.key, "1")
-
-      val dbConf = RocksDBConf(StateStoreConf(sqlConf))
-      assert(dbConf.fileChecksumThreadPoolSize === 1)
-
-      val remoteDir = dir.getCanonicalPath
-      withDB(remoteDir, conf = dbConf) { db =>
-        val fileManagerMethod = PrivateMethod[CheckpointFileManager](Symbol("fm"))
-        val fm = db.fileManager invokePrivate fileManagerMethod()
-
-        assert(fm.isInstanceOf[ChecksumCheckpointFileManager])
-        assert(fm.asInstanceOf[ChecksumCheckpointFileManager].numThreads === 1)
-      }
-    }
-  }
-
-  Seq("0", "3").foreach { invalidValue =>
-    test(s"STATE_STORE_ROCKSDB_FILE_CHECKSUM_THREAD_POOL_SIZE: invalid value $invalidValue") {
-      val sqlConf = SQLConf.get.clone()
-      val ex = intercept[IllegalArgumentException] {
-        sqlConf.setConfString(SQLConf.STATE_STORE_ROCKSDB_FILE_CHECKSUM_THREAD_POOL_SIZE.key,
-          invalidValue)
-      }
-      assert(ex.getMessage.contains("Must be 1 or a positive even number"))
     }
   }
 

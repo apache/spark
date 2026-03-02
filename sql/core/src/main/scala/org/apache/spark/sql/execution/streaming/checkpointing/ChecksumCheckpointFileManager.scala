@@ -21,9 +21,10 @@ import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
 import java.util.zip.{CheckedInputStream, CheckedOutputStream, CRC32C}
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService, Future}
 import scala.concurrent.duration.Duration
 import scala.io.Source
+import scala.util.control.NonFatal
 
 import com.fasterxml.jackson.annotation.JsonInclude.Include
 import com.fasterxml.jackson.databind.{DeserializationFeature, ObjectMapper}
@@ -127,14 +128,14 @@ case class ChecksumFile(path: Path) {
  *                              orphan checksum files. If using this, it is your responsibility
  *                              to clean up the potential orphan checksum files.
  * @param numThreads This is the number of threads to use for the thread pool, for reading/writing
- *                   files. Must be 1 or a positive even number.
- *                   Setting this to 1 means operations are performed sequentially (no concurrency
- *                   between main file and checksum file).
- *                   To avoid blocking with concurrent callers, set this to 2 (one thread for main
- *                   file, another for checksum file) per caller thread.
- *                   If file manager is shared by multiple threads, you can set it to
- *                   number of threads using file manager * 2.
- *                   Setting this differently can lead to file operation being blocked waiting for
+ *                   files. Must be a non-negative integer.
+ *                   Setting this to 0 disables the thread pool and runs all operations
+ *                   sequentially on the calling thread (no concurrency).
+ *                   To avoid blocking with a single concurrent caller, set this to 2 (one thread
+ *                   for main file, another for checksum file).
+ *                   If file manager is shared by multiple threads, set it to
+ *                   number of concurrent callers * 2.
+ *                   Setting this too low can lead to file operations being blocked waiting for
  *                   a free thread.
  * @param skipCreationIfFileMissingChecksum (ES-1629547): If true, when a file already exists
  *                   but its checksum file does not exist, fall back to using the underlying
@@ -152,15 +153,33 @@ class ChecksumCheckpointFileManager(
     val numThreads: Int,
     val skipCreationIfFileMissingChecksum: Boolean)
   extends CheckpointFileManager with Logging {
-  assert(numThreads == 1 || numThreads % 2 == 0,
-    "numThreads must be 1 or a multiple of 2, we need 1 for the main file" +
-    "and another for the checksum file")
+  assert(numThreads >= 0, "numThreads must be a non-negative integer")
 
   import ChecksumCheckpointFileManager._
 
-  // This allows us to read/write the main file and checksum file (concurrently if numThreads > 1)
-  private val threadPool = ExecutionContext.fromExecutorService(
-    ThreadUtils.newDaemonFixedThreadPool(numThreads, s"${this.getClass.getSimpleName}-Thread"))
+  // Thread pool for concurrent execution, or None when numThreads == 0 (sequential/inline mode).
+  private val threadPool: Option[ExecutionContextExecutorService] =
+    if (numThreads == 0) None
+    else Some(ExecutionContext.fromExecutorService(
+      ThreadUtils.newDaemonFixedThreadPool(numThreads, s"${this.getClass.getSimpleName}-Thread")))
+
+  // ExecutionContext to pass to stream classes: uses the thread pool or a caller-runs context.
+  private val streamContext: ExecutionContext = threadPool.getOrElse(new ExecutionContext {
+    override def execute(runnable: Runnable): Unit = runnable.run()
+    override def reportFailure(cause: Throwable): Unit = throw cause
+  })
+
+  /**
+   * Schedules a computation on the thread pool, or runs it directly on the calling thread
+   * if numThreads == 0 (sequential mode).
+   */
+  private def scheduleOrRun[T](f: => T): Future[T] = threadPool match {
+    case None =>
+      try Future.successful(f)
+      catch { case NonFatal(t) => Future.failed(t) }
+    case Some(pool) =>
+      Future { f }(pool)
+  }
 
   override def list(path: Path, filter: PathFilter): Array[FileStatus] = {
     underlyingFileMgr.list(path, filter)
@@ -192,26 +211,26 @@ class ChecksumCheckpointFileManager(
       createFunc: Path => CancellableFSDataOutputStream): ChecksumCancellableFSDataOutputStream = {
     assert(!isChecksumFile(path), "Cannot directly create a checksum file")
 
-    val mainFileFuture = Future {
+    val mainFileFuture = scheduleOrRun {
       createFunc(path)
-    }(threadPool)
+    }
 
-    val checksumFileFuture = Future {
+    val checksumFileFuture = scheduleOrRun {
       createFunc(getChecksumPath(path))
-    }(threadPool)
+    }
 
     new ChecksumCancellableFSDataOutputStream(
       awaitResult(mainFileFuture, Duration.Inf),
       path,
       awaitResult(checksumFileFuture, Duration.Inf),
-      threadPool
+      streamContext
     )
   }
 
   override def open(path: Path): FSDataInputStream = {
     assert(!isChecksumFile(path), "Cannot directly open a checksum file")
 
-    val checksumInputStreamFuture = Future {
+    val checksumInputStreamFuture = scheduleOrRun {
       try {
         Some(underlyingFileMgr.open(getChecksumPath(path)))
       } catch {
@@ -222,17 +241,17 @@ class ChecksumCheckpointFileManager(
             log"hence no checksum verification.")
           None
       }
-    }(threadPool)
+    }
 
-    val mainInputStreamFuture = Future {
+    val mainInputStreamFuture = scheduleOrRun {
       underlyingFileMgr.open(path)
-    }(threadPool)
+    }
 
     val mainStream = awaitResult(mainInputStreamFuture, Duration.Inf)
     val checksumStream = awaitResult(checksumInputStreamFuture, Duration.Inf)
 
     checksumStream.map { chkStream =>
-      new ChecksumFSDataInputStream(mainStream, path, chkStream, threadPool)
+      new ChecksumFSDataInputStream(mainStream, path, chkStream, streamContext)
     }.getOrElse(mainStream)
   }
 
@@ -250,13 +269,13 @@ class ChecksumCheckpointFileManager(
       // But if allowConcurrentDelete is enabled, then we can do it concurrently for perf.
       // But the client would be responsible for cleaning up potential orphan checksum files
       // if it happens.
-      val checksumInputStreamFuture = Future {
+      val checksumInputStreamFuture = scheduleOrRun {
         deleteChecksumFile(getChecksumPath(path))
-      }(threadPool)
+      }
 
-      val mainInputStreamFuture = Future {
+      val mainInputStreamFuture = scheduleOrRun {
         underlyingFileMgr.delete(path)
-      }(threadPool)
+      }
 
       awaitResult(mainInputStreamFuture, Duration.Inf)
       awaitResult(checksumInputStreamFuture, Duration.Inf)
@@ -282,18 +301,20 @@ class ChecksumCheckpointFileManager(
   }
 
   override def close(): Unit = {
-    threadPool.shutdown()
-    // Wait a bit for it to finish up in case there is any ongoing work
-    // Can consider making this timeout configurable, if needed
-    val timeoutMs = 500
-    if (!threadPool.awaitTermination(timeoutMs, TimeUnit.MILLISECONDS)) {
-      logWarning(log"Thread pool did not shutdown after ${MDC(TIMEOUT, timeoutMs)} ms," +
-        log" forcing shutdown")
-      threadPool.shutdownNow() // stop the executing tasks
+    threadPool.foreach { pool =>
+      pool.shutdown()
+      // Wait a bit for it to finish up in case there is any ongoing work
+      // Can consider making this timeout configurable, if needed
+      val timeoutMs = 500
+      if (!pool.awaitTermination(timeoutMs, TimeUnit.MILLISECONDS)) {
+        logWarning(log"Thread pool did not shutdown after ${MDC(TIMEOUT, timeoutMs)} ms," +
+          log" forcing shutdown")
+        pool.shutdownNow() // stop the executing tasks
 
-      // Wait a bit for the threads to respond
-      if (!threadPool.awaitTermination(timeoutMs, TimeUnit.MILLISECONDS)) {
-        logError(log"Thread pool did not terminate")
+        // Wait a bit for the threads to respond
+        if (!pool.awaitTermination(timeoutMs, TimeUnit.MILLISECONDS)) {
+          logError(log"Thread pool did not terminate")
+        }
       }
     }
   }
