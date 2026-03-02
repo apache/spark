@@ -63,7 +63,8 @@ object CatalystTypeConverters {
 
   private def getConverterForType(dataType: DataType): CatalystTypeConverter[Any, Any, Any] = {
     TypeUtils.failUnsupportedDataType(dataType, SQLConf.get)
-    TypeOps(dataType).map(ops => new TypeOpsConverter(ops))
+    TypeOps(dataType)
+      .map(ops => new TypeOpsConverter(ops))
       .getOrElse(getConverterForTypeDefault(dataType))
   }
 

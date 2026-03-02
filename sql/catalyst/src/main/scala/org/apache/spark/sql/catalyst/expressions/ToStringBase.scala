@@ -67,7 +67,8 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
     }
 
   private def castToString(from: DataType): Any => UTF8String =
-    TypeApiOps(from).map(ops => acceptAny[Any](v => ops.formatUTF8(v)))
+    TypeApiOps(from)
+      .map(ops => acceptAny[Any](v => ops.formatUTF8(v)))
       .getOrElse(castToStringDefault(from))
 
   private def castToStringDefault(from: DataType): Any => UTF8String = from match {

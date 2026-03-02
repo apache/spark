@@ -71,11 +71,13 @@ object RowEncoder extends DataTypeErrorsBase {
   }
 
   private[sql] def encoderForDataType(dataType: DataType, lenient: Boolean): AgnosticEncoder[_] =
-    TypeApiOps(dataType).map(_.getEncoder)
+    TypeApiOps(dataType)
+      .map(_.getEncoder)
       .getOrElse(encoderForDataTypeDefault(dataType, lenient))
 
   private def encoderForDataTypeDefault(
-      dataType: DataType, lenient: Boolean): AgnosticEncoder[_] =
+      dataType: DataType,
+      lenient: Boolean): AgnosticEncoder[_] =
     dataType match {
       case NullType => NullEncoder
       case BooleanType => BoxedBooleanEncoder

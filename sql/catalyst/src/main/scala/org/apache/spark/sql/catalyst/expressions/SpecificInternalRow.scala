@@ -194,7 +194,8 @@ final class MutableAny extends MutableValue {
 final class SpecificInternalRow(val values: Array[MutableValue]) extends BaseGenericInternalRow {
 
   private[this] def dataTypeToMutableValue(dataType: DataType): MutableValue =
-    TypeOps(dataType).map(_.getMutableValue)
+    TypeOps(dataType)
+      .map(_.getMutableValue)
       .getOrElse(dataTypeToMutableValueDefault(dataType))
 
   private[this] def dataTypeToMutableValueDefault(

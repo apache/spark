@@ -630,8 +630,10 @@ trait Row extends Serializable {
     // Convert a value to json.
     def toJson(value: Any, dataType: DataType): JValue =
       if (value == null) JNull
-      else TypeApiOps(dataType).map(ops => JString(ops.format(value)))
-        .getOrElse(toJsonDefault(value, dataType))
+      else
+        TypeApiOps(dataType)
+          .map(ops => JString(ops.format(value)))
+          .getOrElse(toJsonDefault(value, dataType))
 
     def toJsonDefault(value: Any, dataType: DataType): JValue = (value, dataType) match {
       case (b: Boolean, _) => JBool(b)
