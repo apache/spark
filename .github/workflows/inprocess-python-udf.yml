@@ -1,0 +1,102 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+#
+
+# Run in-process Python UDF integration tests whenever the relevant source
+# files change.  These tests require jep (Java Embedded Python) and cannot
+# run inside the standard PySpark Docker image, so they live in a dedicated
+# workflow with their own environment setup.
+
+name: "In-Process Python UDF Tests"
+
+on:
+  push:
+    branches: ['**']
+    paths:
+      - 'python/pyspark/inprocess/**'
+      - 'sql/core/src/main/scala/org/apache/spark/sql/execution/python/InProcess*.scala'
+      - 'python/integration/run_inprocess_udf_tests.sh'
+      - 'python/integration/benchmark_inprocess_udf.py'
+      - '.github/workflows/inprocess-python-udf.yml'
+  pull_request:
+    paths:
+      - 'python/pyspark/inprocess/**'
+      - 'sql/core/src/main/scala/org/apache/spark/sql/execution/python/InProcess*.scala'
+      - 'python/integration/run_inprocess_udf_tests.sh'
+      - 'python/integration/benchmark_inprocess_udf.py'
+      - '.github/workflows/inprocess-python-udf.yml'
+
+concurrency:
+  group: inprocess-udf-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  inprocess-udf-tests:
+    name: In-Process Python UDF integration tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+    - name: Checkout Spark repository
+      uses: actions/checkout@v4
+
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+
+    # Cache the Maven local repository so subsequent runs reuse compiled JARs.
+    # The cache key includes all pom.xml files so it is invalidated on any
+    # dependency or version change.
+    - name: Cache Maven packages
+      uses: actions/cache@v4
+      with:
+        path: ~/.m2/repository
+        key: ${{ runner.os }}-m2-inprocess-udf-${{ hashFiles('**/pom.xml') }}
+        restore-keys: |
+          ${{ runner.os }}-m2-inprocess-udf-
+
+    # Build the Spark assembly so PySpark can find all JARs under
+    # assembly/target/scala-*/jars/.  Skipping tests and scaladoc keeps
+    # the build as fast as possible; the Maven cache makes subsequent
+    # CI runs significantly faster.
+    - name: Build Spark assembly (skipping tests)
+      run: build/mvn -pl assembly -am -DskipTests -Dscaladoc.skip=true -q package
+
+    - name: Set up Python 3.12
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    # Create an isolated venv with jep and the UDF runtime dependencies.
+    # The venv path (python/.venv-inprocess) is expected by the test runner
+    # script run_inprocess_udf_tests.sh.
+    - name: Install Python dependencies
+      run: |
+        python3 -m venv python/.venv-inprocess
+        python/.venv-inprocess/bin/pip install --quiet "jep>=4.2" pyarrow cloudpickle pytest
+
+    # run_inprocess_udf_tests.sh sets INPROCESS_TESTS=1, configures
+    # PYTHONPATH (venv site-packages + pyspark source), and passes
+    # --driver-class-path / java.library.path via PYSPARK_SUBMIT_ARGS so
+    # the embedded jep interpreter can load libjep.so.
+    # --no-x runs all tests instead of stopping at first failure so the
+    # full failure summary is visible in the CI log.
+    - name: Run integration tests
+      run: bash python/integration/run_inprocess_udf_tests.sh --no-x

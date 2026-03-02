@@ -51,6 +51,7 @@ Direct usage (environment must already be set up):
 
 import os
 import statistics
+import sys
 import time
 
 import pyarrow.compute as pc
@@ -279,6 +280,20 @@ def _benchmark(spark, scenario):
 
 
 def _print_results(results, scenario):
+    """Print benchmark results and check the 1.2× regression threshold.
+
+    For every (row_count) entry in *results*, checks that::
+
+        inprocess_udf median <= 1.2 × pandas_udf median
+
+    A violation indicates that in-process UDF performance has regressed to the
+    point that it is more than 20% *slower* than the pandas_udf baseline.
+    Violations are accumulated and returned so ``main()`` can fail the run after
+    all scenarios have been printed.
+
+    Returns:
+        List[str]: human-readable failure strings, empty when all checks pass.
+    """
     header = (
         f"{'UDF type':<14}  {'rows':>10}  {'median ms':>10}  "
         f"{'mean ms':>9}  {'min ms':>8}  {'max ms':>8}"
@@ -321,6 +336,8 @@ def _print_results(results, scenario):
         )
         prev_n = r["n"]
 
+    _REGRESSION_THRESHOLD = 1.2
+    failures = []
     print(sep)
     print("\n  Speedup (pandas_udf median / inprocess_udf median):")
     iproc = [r for r in results if "inprocess" in r["label"]]
@@ -328,8 +345,17 @@ def _print_results(results, scenario):
     for ip, pd in zip(iproc, pand):
         speedup = pd["median"] / ip["median"]
         faster  = "faster" if speedup > 1 else "slower"
-        print(f"    {ip['n']:>10,} rows : {speedup:.2f}x  ({faster})")
+        status  = ""
+        if ip["median"] > _REGRESSION_THRESHOLD * pd["median"]:
+            status = "  *** REGRESSION ***"
+            failures.append(
+                f"  [{scenario['name']}] {ip['n']:,} rows: "
+                f"inprocess_udf {ip['median']:.1f} ms "
+                f"> {_REGRESSION_THRESHOLD}x pandas_udf {pd['median']:.1f} ms"
+            )
+        print(f"    {ip['n']:>10,} rows : {speedup:.2f}x  ({faster}){status}")
     print()
+    return failures
 
 # ---------------------------------------------------------------------------
 # Main
@@ -351,14 +377,28 @@ def main():
     )
     spark.sparkContext.setLogLevel("WARN")
 
+    all_failures = []
     for scenario in SCENARIOS:
         print(f"\n{'─' * 60}")
         print(f"  {scenario['name']}")
         print(f"{'─' * 60}")
         results = _benchmark(spark, scenario)
-        _print_results(results, scenario)
+        failures = _print_results(results, scenario)
+        all_failures.extend(failures)
 
     spark.stop()
+
+    if all_failures:
+        sep = "=" * 60
+        print(f"\n{sep}")
+        print("  PERFORMANCE REGRESSION DETECTED")
+        print(sep)
+        for msg in all_failures:
+            print(msg)
+        print(sep)
+        sys.exit(1)
+    else:
+        print("All scenarios passed the 1.2x regression threshold.")
 
 
 if __name__ == "__main__":
