@@ -798,8 +798,9 @@ class MicroBatchExecution(
 
   /**
    * Returns true if there is any new data available to be processed.
+   * Can be overridden by subclasses to customize data availability logic.
    */
-  private def isNewDataAvailable(execCtx: MicroBatchExecutionContext): Boolean = {
+  protected def isNewDataAvailable(execCtx: MicroBatchExecutionContext): Boolean = {
     // For real-time mode, we always assume there is new data and run the batch.
     if (trigger.isInstanceOf[RealTimeTrigger]) {
       true

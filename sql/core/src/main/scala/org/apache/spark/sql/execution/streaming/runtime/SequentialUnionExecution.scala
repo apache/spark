@@ -25,7 +25,10 @@ import org.apache.spark.sql.catalyst.plans.logical.{
 }
 import org.apache.spark.sql.catalyst.streaming.WriteToStream
 import org.apache.spark.sql.classic.SparkSession
-import org.apache.spark.sql.connector.read.streaming.{SparkDataStream, SupportsTriggerAvailableNow}
+import org.apache.spark.sql.connector.read.streaming.{
+  SparkDataStream,
+  SupportsTriggerAvailableNow
+}
 import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2ScanRelation
 import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.util.Clock
@@ -61,6 +64,9 @@ class SequentialUnionExecution(
 
   // The original SequentialStreamingUnion node from the logical plan
   @volatile private var sequentialUnion: Option[SequentialStreamingUnion] = None
+
+  // Flag to track if we should transition at the start of the next batch
+  @volatile private var shouldTransitionNext: Boolean = false
 
   /**
    * Initialize the child-to-source mapping by traversing the logical plan.
@@ -115,6 +121,10 @@ class SequentialUnionExecution(
         }.mkString(", ")
         println(s"[SEQEXEC]   Child $idx has ${srcs.size} source(s): $srcDescr")
       }
+
+      // Note: We will prepare and collect offsets for non-final children when they become active.
+      // This is done in transitionToNextChild() for the active child, and in constructNextBatch()
+      // for the first call to ensure proper initialization.
     }
     // scalastyle:on println
   }
@@ -123,12 +133,28 @@ class SequentialUnionExecution(
    * Checks if a source is active in the sequential union.
    * This is called from constructNextBatch to determine which
    * sources should receive offsets.
+   *
+   * Note: We also consider the NEXT child's sources as "active" if we're about to transition.
+   * This ensures isNewDataAvailable() will return true and trigger another batch construction.
    */
   def isSourceActive(source: SparkDataStream): Boolean = {
     val activeChildSources = getActiveChildSources()
-    val isActive = activeChildSources.contains(source)
+    var isActive = activeChildSources.contains(source)
+
+    // Also mark next child's sources as active to collect their offsets early
+    // This ensures they have valid offsets ready when auto-transition happens
+    if (!isActive && !isOnFinalChild) {
+      val nextChildSources = getSourcesForChild(activeChildIndex + 1)
+      isActive = nextChildSources.contains(source)
+      if (isActive) {
+        // scalastyle:off println
+        println(s"[SEQEXEC] Source from next child marked as active for offset collection")
+        // scalastyle:on println
+      }
+    }
+
     val srcId = s"${source.getClass.getSimpleName}@${System.identityHashCode(source)}"
-    val activeSrcIds = activeChildSources.map { s =>
+    val activeSrcIds = getActiveChildSources().map { s =>
       s"${s.getClass.getSimpleName}@${System.identityHashCode(s)}"
     }.mkString(",")
     val msg = s"[SEQEXEC] isSourceActive: source=$srcId, activeChild=$activeChildIndex, " +
@@ -154,6 +180,18 @@ class SequentialUnionExecution(
   }
 
   /**
+   * Gets the start offset for a source from the execution context.
+   */
+  private def getStartOffsetForSource(
+      execCtx: MicroBatchExecutionContext,
+      source: SparkDataStream): Any = {
+    execCtx.startOffsets.get(source) match {
+      case Some(off) => off
+      case None => "None"
+    }
+  }
+
+  /**
    * Checks if the active child's sources are exhausted (no new data available).
    * A source is considered exhausted when endOffset == startOffset.
    */
@@ -162,9 +200,27 @@ class SequentialUnionExecution(
 
     val hasNewData = activeChildSources.exists { source =>
       (execCtx.endOffsets.get(source), execCtx.startOffsets.get(source)) match {
-        case (Some(end), Some(start)) => start != end
-        case (Some(_), None) => true  // First batch has data
-        case _ => false
+        case (Some(end), Some(start)) =>
+          val different = start != end
+          // scalastyle:off println
+          val srcId = s"${source.getClass.getSimpleName}@${System.identityHashCode(source)}"
+          println(s"[SEQEXEC] Checking exhaustion for $srcId: start=$start, end=$end, " +
+            s"hasData=$different")
+          // scalastyle:on println
+          different
+        case (Some(end), None) =>
+          // scalastyle:off println
+          val srcId = s"${source.getClass.getSimpleName}@${System.identityHashCode(source)}"
+          println(s"[SEQEXEC] Checking exhaustion for $srcId: start=None, end=$end, " +
+            s"hasData=true (first batch)")
+          // scalastyle:on println
+          true  // First batch has data
+        case _ =>
+          // scalastyle:off println
+          val srcId = s"${source.getClass.getSimpleName}@${System.identityHashCode(source)}"
+          println(s"[SEQEXEC] Checking exhaustion for $srcId: offsets missing, hasData=false")
+          // scalastyle:on println
+          false
       }
     }
 
@@ -190,8 +246,10 @@ class SequentialUnionExecution(
    */
   private def prepareActiveSourceForAvailableNow(): Unit = {
     // scalastyle:off println
+    println("[SEQEXEC] >>> prepareActiveSourceForAvailableNow ENTER")
     if (isOnFinalChild) {
       println(s"[SEQEXEC] Child $activeChildIndex is final - not preparing with AvailableNow")
+      println("[SEQEXEC] >>> prepareActiveSourceForAvailableNow EXIT (final child)")
       return
     }
 
@@ -203,14 +261,15 @@ class SequentialUnionExecution(
     activeChildSources.foreach {
       case s: SupportsTriggerAvailableNow =>
         val srcId = s"${s.getClass.getSimpleName}@${System.identityHashCode(s)}"
-        println(s"[SEQEXEC]   Calling prepareForTriggerAvailableNow on $srcId")
+        println(s"[SEQEXEC]   >>> BEFORE prepareForTriggerAvailableNow on $srcId")
         s.prepareForTriggerAvailableNow()
-        println(s"[SEQEXEC]   Done preparing ${s.getClass.getSimpleName}")
+        println(s"[SEQEXEC]   >>> AFTER prepareForTriggerAvailableNow on $srcId")
       case s =>
         val msg2 = s"[SEQEXEC]   WARNING: Source ${s.getClass.getSimpleName} " +
           s"does not support AvailableNow"
         println(msg2)
     }
+    println("[SEQEXEC] >>> prepareActiveSourceForAvailableNow EXIT (all sources prepared)")
     // scalastyle:on println
   }
 
@@ -238,22 +297,55 @@ class SequentialUnionExecution(
   override protected def constructNextBatch(
       execCtx: MicroBatchExecutionContext,
       noDataBatchesEnabled: Boolean): Boolean = {
+    // scalastyle:off println
+    println("[SEQEXEC] === CONSTRUCT BATCH START (child=" + activeChildIndex + ") ===")
+    // scalastyle:on println
+
     // Initialize mapping on first use using the logical plan
     if (childToSourcesMap.isEmpty) {
+      // scalastyle:off println
+      println("[SEQEXEC] === INITIALIZING (first batch) ===")
+      // scalastyle:on println
       initializeChildToSourcesMap(logicalPlan)
       // Prepare the initial (first) child with AvailableNow semantics
+      // scalastyle:off println
+      println("[SEQEXEC] === CALLING prepareActiveSourceForAvailableNow (initial) ===")
+      // scalastyle:on println
       prepareActiveSourceForAvailableNow()
+      // scalastyle:off println
+      println("[SEQEXEC] === DONE prepareActiveSourceForAvailableNow (initial) ===")
+      // scalastyle:on println
+    }
+
+    // If we flagged a transition in the previous batch, do it now BEFORE constructing
+    // This ensures the transition happens after the previous batch was fully executed
+    if (shouldTransitionNext) {
+      // scalastyle:off println
+      println(s"[SEQEXEC] === TRANSITION START ===")
+      println(s"[SEQEXEC] Executing queued transition from previous batch")
+      // scalastyle:on println
+      transitionToNextChild()
+      shouldTransitionNext = false
+      // scalastyle:off println
+      println(s"[SEQEXEC] === TRANSITION COMPLETE ===")
+      // scalastyle:on println
     }
 
     // Let parent construct the batch
+    // scalastyle:off println
+    println("[SEQEXEC] === CALLING SUPER.CONSTRUCT ===")
+    // scalastyle:on println
     val batchConstructed = super.constructNextBatch(execCtx, noDataBatchesEnabled)
+    // scalastyle:off println
+    println("[SEQEXEC] === SUPER.CONSTRUCT RETURNED: " + batchConstructed + " ===")
+    // scalastyle:on println
 
     if (batchConstructed) {
-      // TODO: Auto-transition needs more sophisticated logic
-      // Current issue: transitioning after first batch even when more data available
-      // Need to: wait for multiple batches to drain before transitioning
-      // For now, transitions must be done manually or via checkpoint recovery
-
+      // Check if active child is exhausted and queue transition for next batch
+      // Auto-transition works with any trigger type - no MultiBatchExecutor requirement
+      // scalastyle:off println
+      println("[SEQEXEC] === CHECKING IF EXHAUSTED ===")
+      // scalastyle:on println
       val exhausted = isActiveChildExhausted(execCtx)
       // scalastyle:off println
       val msg3 = s"[SEQEXEC] Batch constructed: activeChild=$activeChildIndex, " +
@@ -261,12 +353,43 @@ class SequentialUnionExecution(
       println(msg3)
       // scalastyle:on println
 
-      // if (!isOnFinalChild && exhausted) {
-      //   println(s"[SEQEXEC] Child $activeChildIndex EXHAUSTED, will transition")
-      //   transitionToNextChild()
-      // }
+      if (!isOnFinalChild && exhausted) {
+        // scalastyle:off println
+        println(s"[SEQEXEC] Child $activeChildIndex EXHAUSTED, will transition after this batch")
+        // scalastyle:on println
+        shouldTransitionNext = true
+      }
+    } else {
+      // No batch constructed - check if we should transition to next child
+      // scalastyle:off println
+      println("[SEQEXEC] === NO BATCH CONSTRUCTED, CHECKING IF SHOULD TRANSITION ===")
+      // scalastyle:on println
+      val exhausted = isActiveChildExhausted(execCtx)
+      // scalastyle:off println
+      val msg4 = s"[SEQEXEC] No batch: activeChild=$activeChildIndex, " +
+        s"exhausted=$exhausted, isOnFinalChild=$isOnFinalChild"
+      println(msg4)
+      // scalastyle:on println
+
+      if (!isOnFinalChild && exhausted) {
+        // Active child is exhausted and we're not on the final child
+        // Transition immediately to the next child and try constructing a batch for it
+        // scalastyle:off println
+        println(s"[SEQEXEC] Child $activeChildIndex exhausted, transitioning immediately")
+        // scalastyle:on println
+        transitionToNextChild()
+
+        // Now try to construct a batch for the new child
+        // scalastyle:off println
+        println(s"[SEQEXEC] === RECURSIVE CONSTRUCT AFTER TRANSITION ===")
+        // scalastyle:on println
+        return constructNextBatch(execCtx, noDataBatchesEnabled)
+      }
     }
 
+    // scalastyle:off println
+    println("[SEQEXEC] === CONSTRUCT BATCH END (returning " + batchConstructed + ") ===")
+    // scalastyle:on println
     batchConstructed
   }
 }
