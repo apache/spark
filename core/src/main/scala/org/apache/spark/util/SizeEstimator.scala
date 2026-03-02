@@ -127,7 +127,7 @@ object SizeEstimator extends Logging {
         12
       }
     }
-    pointerSize = if (is64bit && !isCompressedOops && !isCompactObjectHeaders) 8 else 4
+    pointerSize = if (is64bit && !isCompressedOops) 8 else 4
     classInfos.clear()
     classInfos.put(classOf[Object], new ClassInfo(objectSize, Nil))
   }

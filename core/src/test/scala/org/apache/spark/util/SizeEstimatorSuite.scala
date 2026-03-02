@@ -249,9 +249,9 @@ class SizeEstimatorSuite
   }
 
   // Tests for JEP 450/519: Compact Object Headers
-  // With compact object headers, the object header is 8 bytes (vs. 12 with compressed oops,
+  // With Compact Object Headers, the object header is 8 bytes (vs. 12 with Compressed Oops,
   // or 16 without) because the class pointer is encoded inside the mark word.
-  // Object references are still 4 bytes (like compressed oops).
+  // Object references pointers are 4 bytes with Compressed Oops, or 8 bytes without.
 
   test("64-bit arch with compact object headers: simple classes") {
     reinitializeSizeEstimator("amd64", "true", "true")
@@ -301,7 +301,7 @@ class SizeEstimatorSuite
     // objectSize=8, fields=12 => shellSize=20, aligned to 24
     // DummyString("") => DummyString(24) + Array[Char](0)(16) = 40
     assertResult(40)(SizeEstimator.estimate(DummyString("")))
-    // DummyString("a") => 24 + Array[Char](1): 16 + alignSize(2) = 16 + 8 = 24 => 24+24=48
+    // DummyString("a") => 24 + Array[Char](1): 16 + alignSize(2) = 16+8=24 => 24+24=48
     assertResult(48)(SizeEstimator.estimate(DummyString("a")))
   }
 
@@ -318,5 +318,63 @@ class SizeEstimatorSuite
     //   shellSize = alignSizeUp(13, pointerSize=4) = 16
     //   alignSize(16) = 16
     assertResult(16)(SizeEstimator.estimate(new DummyClass6))
+  }
+
+  test("64-bit arch with compact object headers and no compressed oops") {
+    reinitializeSizeEstimator("amd64", "false", "true")
+    // objectSize = 8, pointerSize = 8
+    // DummyClass1: 8-byte header, no fields => 8 bytes
+    assertResult(8)(SizeEstimator.estimate(new DummyClass1))
+    assertResult(16)(SizeEstimator.estimate(new DummyClass2))
+    // DummyClass3: 8-byte header + Int(4) + Double(8) => 20, aligned to 24
+    assertResult(24)(SizeEstimator.estimate(new DummyClass3))
+    // DummyClass4: 8-byte header + Int(4) + pointer(8) => 20, aligned to 24
+    assertResult(24)(SizeEstimator.estimate(new DummyClass4(null)))
+    // DummyClass4 with DummyClass3: 24 + 24 = 48
+    assertResult(48)(SizeEstimator.estimate(new DummyClass4(new DummyClass3)))
+
+    // Primitive wrapper objects
+    // Boolean/Byte/Char/Short/Int/Float wrappers:
+    // 8-byte header + primitive up to 4 bytes => 12, aligned to 16
+    assertResult(16)(SizeEstimator.estimate(java.lang.Boolean.TRUE))
+    assertResult(16)(SizeEstimator.estimate(java.lang.Byte.valueOf("1")))
+    assertResult(16)(SizeEstimator.estimate(java.lang.Character.valueOf('1')))
+    assertResult(16)(SizeEstimator.estimate(java.lang.Short.valueOf("1")))
+    assertResult(16)(SizeEstimator.estimate(java.lang.Integer.valueOf(1)))
+    assertResult(16)(SizeEstimator.estimate(java.lang.Float.valueOf(1.0f)))
+    // Long/Double wrappers: 8-byte header + 8-byte primitive => 16, aligned to 16
+    assertResult(16)(SizeEstimator.estimate(java.lang.Long.valueOf(1)))
+    assertResult(16)(SizeEstimator.estimate(java.lang.Double.valueOf(1.0)))
+
+    // Primitive arrays
+    // Array header = objectSize(8) + length Int(4) = 12, aligned to 16
+    // Array[Byte](10): 16 + alignSize(10*1=10) = 16 + 16 = 32
+    assertResult(32)(SizeEstimator.estimate(new Array[Byte](10)))
+    // Array[Char](10): 16 + alignSize(10*2=20) = 16 + 24 = 40
+    assertResult(40)(SizeEstimator.estimate(new Array[Char](10)))
+    // Array[Int](10): 16 + alignSize(10*4=40) = 16 + 40 = 56
+    assertResult(56)(SizeEstimator.estimate(new Array[Int](10)))
+    // Array[Long](10): 16 + alignSize(10*8=80) = 16 + 80 = 96
+    assertResult(96)(SizeEstimator.estimate(new Array[Long](10)))
+
+    // Strings (DummyString)
+    // DummyString has: pointer(arr,8) + Int(hashCode,4) + Int(hash32,4) = 16 fields
+    // objectSize=8, fields=16 => shellSize=24, aligned to 24
+    // DummyString("") => DummyString(24) + Array[Char](0)(16) = 40
+    assertResult(40)(SizeEstimator.estimate(DummyString("")))
+    // DummyString("a") => 24 + Array[Char](1): 16 + alignSize(2) = 16+8=24 => 24+24=48
+    assertResult(48)(SizeEstimator.estimate(DummyString("a")))
+
+    // Class field blocks rounding
+    // DummyClass5 extends DummyClass1: parent.shellSize=8, adds Boolean(1)
+    //   alignedSize = max(8, alignSizeUp(8,1)+1) = 9, shellSize=9
+    //   shellSize = alignSizeUp(9, pointerSize=8) = 16
+    //   alignSize(16) = 16
+    assertResult(16)(SizeEstimator.estimate(new DummyClass5))
+    // DummyClass6 extends DummyClass5: parent.shellSize=16, adds Boolean(1)
+    //   alignedSize = max(16, alignSizeUp(16,1)+1) = 17, shellSize=17
+    //   shellSize = alignSizeUp(17, pointerSize=8) = 24
+    //   alignSize(24) = 24
+    assertResult(24)(SizeEstimator.estimate(new DummyClass6))
   }
 }
