@@ -382,9 +382,13 @@ class SeriesStatMixin:
         ):
             ps.Series([24.0, 21.0, 25.0, 33.0, 26.0]).quantile(q=1.1)
 
-        with self.assertRaisesRegex(TypeError, "Could not convert object \\(string\\) to numeric"):
+        with self.assertRaisesRegex(
+            TypeError, r"Could not convert (object|str) \(string\) to numeric"
+        ):
             ps.Series(["a", "b", "c"]).quantile()
-        with self.assertRaisesRegex(TypeError, "Could not convert object \\(string\\) to numeric"):
+        with self.assertRaisesRegex(
+            TypeError, r"Could not convert (object|str) \(string\) to numeric"
+        ):
             ps.Series(["a", "b", "c"]).quantile([0.25, 0.5, 0.75])
 
     def test_pct_change(self):
@@ -544,7 +548,9 @@ class SeriesStatMixin:
             ps.Series([]).prod(numeric_only=True)
         with self.assertRaisesRegex(TypeError, "Could not convert object \\(void\\) to numeric"):
             ps.Series([]).prod(min_count=1)
-        with self.assertRaisesRegex(TypeError, "Could not convert object \\(string\\) to numeric"):
+        with self.assertRaisesRegex(
+            TypeError, r"Could not convert (object|str) \(string\) to numeric"
+        ):
             ps.Series(["a", "b", "c"]).prod()
         with self.assertRaisesRegex(
             TypeError, "Could not convert datetime64\\[ns\\] \\(timestamp.*\\) to numeric"
@@ -680,19 +686,19 @@ class SeriesStatMixin:
         )
 
     def test_series_stat_fail(self):
-        with self.assertRaisesRegex(TypeError, "Could not convert object"):
+        with self.assertRaisesRegex(TypeError, "Could not convert (object|str)"):
             ps.Series(["a", "b", "c"]).mean()
-        with self.assertRaisesRegex(TypeError, "Could not convert object"):
+        with self.assertRaisesRegex(TypeError, "Could not convert (object|str)"):
             ps.Series(["a", "b", "c"]).skew()
-        with self.assertRaisesRegex(TypeError, "Could not convert object"):
+        with self.assertRaisesRegex(TypeError, "Could not convert (object|str)"):
             ps.Series(["a", "b", "c"]).kurtosis()
-        with self.assertRaisesRegex(TypeError, "Could not convert object"):
+        with self.assertRaisesRegex(TypeError, "Could not convert (object|str)"):
             ps.Series(["a", "b", "c"]).std()
-        with self.assertRaisesRegex(TypeError, "Could not convert object"):
+        with self.assertRaisesRegex(TypeError, "Could not convert (object|str)"):
             ps.Series(["a", "b", "c"]).var()
-        with self.assertRaisesRegex(TypeError, "Could not convert object"):
+        with self.assertRaisesRegex(TypeError, "Could not convert (object|str)"):
             ps.Series(["a", "b", "c"]).median()
-        with self.assertRaisesRegex(TypeError, "Could not convert object"):
+        with self.assertRaisesRegex(TypeError, "Could not convert (object|str)"):
             ps.Series(["a", "b", "c"]).sem()
 
 

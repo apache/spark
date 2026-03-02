@@ -38,6 +38,10 @@ class TimestampNTZType private () extends DatetimeType {
 
   override def typeName: String = "timestamp_ntz"
 
+  override def equals(obj: Any): Boolean = obj.isInstanceOf[TimestampNTZType]
+
+  override def hashCode(): Int = classOf[TimestampNTZType].getSimpleName.hashCode
+
   private[spark] override def asNullable: TimestampNTZType = this
 }
 

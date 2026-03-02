@@ -86,8 +86,8 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
          |  'group': 'stages',
          |  'start': new Date(${submissionTime}),
          |  'end': new Date(${completionTime}),
-         |  'content': '<div class="job-timeline-content" data-toggle="tooltip"' +
-         |   'data-placement="top" data-html="true"' +
+         |  'content': '<div class="job-timeline-content" data-bs-toggle="tooltip"' +
+         |   'data-bs-placement="top" data-bs-html="true"' +
          |   'data-title="${jsEscapedNameForTooltip} (Stage ${stageId}.${attemptId})<br>' +
          |   'Status: ${status.toUpperCase(Locale.ROOT)}<br>' +
          |   'Submitted: ${UIUtils.formatDate(submissionTime)}' +
@@ -116,10 +116,10 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
            |  'group': 'executors',
            |  'start': new Date(${e.addTime.getTime()}),
            |  'content': '<div class="executor-event-content"' +
-           |    'data-toggle="tooltip" data-placement="top"' +
+           |    'data-bs-toggle="tooltip" data-bs-placement="top"' +
            |    'data-title="Executor ${e.id}<br>' +
            |    'Added at ${UIUtils.formatDate(e.addTime)}"' +
-           |    'data-html="true">Executor ${e.id} added</div>'
+           |    'data-bs-html="true">Executor ${e.id} added</div>'
            |}
          """.stripMargin
       events += addedEvent
@@ -132,7 +132,7 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
              |  'group': 'executors',
              |  'start': new Date(${removeTime.getTime()}),
              |  'content': '<div class="executor-event-content"' +
-             |    'data-toggle="tooltip" data-placement="top"' +
+             |    'data-bs-toggle="tooltip" data-bs-placement="top"' +
              |    'data-title="Executor ${e.id}<br>' +
              |    'Removed at ${UIUtils.formatDate(removeTime)}' +
              |    '${
@@ -141,7 +141,7 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
                           reason.replace("\n", " "))}"""
                       }.getOrElse("")
                    }"' +
-             |    'data-html="true">Executor ${e.id} removed</div>'
+             |    'data-bs-html="true">Executor ${e.id} removed</div>'
              |}
            """.stripMargin
           events += removedEvent
@@ -179,7 +179,7 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
 
     <span class="expand-job-timeline">
       <span class="expand-job-timeline-arrow arrow-closed"></span>
-      <a data-toggle="tooltip" title={ToolTips.STAGE_TIMELINE} data-placement="top">
+      <a data-bs-toggle="tooltip" title={ToolTips.STAGE_TIMELINE} data-bs-placement="top">
         Event Timeline
       </a>
     </span> ++
@@ -215,7 +215,7 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
         </div>
       </div>
     </div> ++
-    <script type="text/javascript">
+    <script type="text/javascript" nonce={CspNonce.get}>
       {Unparsed(s"drawJobTimeline(${groupJsonArrayAsStr}, ${eventArrayAsStr}, " +
       s"${appStartTime}, ${UIUtils.getTimeZoneOffset()});")}
     </script>
@@ -459,7 +459,8 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
     if (shouldShowActiveStages) {
       content ++=
         <span id="active" class="collapse-aggregated-activeStages collapse-table"
-            onClick="collapseTable('collapse-aggregated-activeStages','aggregated-activeStages')">
+            data-collapse-name="collapse-aggregated-activeStages"
+            data-collapse-table="aggregated-activeStages">
           <h4>
             <span class="collapse-table-arrow arrow-open"></span>
             <a>Active Stages ({activeStages.size})</a>
@@ -472,8 +473,8 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
     if (shouldShowPendingStages) {
       content ++=
         <span id="pending" class="collapse-aggregated-pendingOrSkippedStages collapse-table"
-            onClick="collapseTable('collapse-aggregated-pendingOrSkippedStages',
-            'aggregated-pendingOrSkippedStages')">
+            data-collapse-name="collapse-aggregated-pendingOrSkippedStages"
+            data-collapse-table="aggregated-pendingOrSkippedStages">
           <h4>
             <span class="collapse-table-arrow arrow-open"></span>
             <a>Pending Stages ({pendingOrSkippedStages.size})</a>
@@ -486,8 +487,8 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
     if (shouldShowCompletedStages) {
       content ++=
         <span id="completed" class="collapse-aggregated-completedStages collapse-table"
-            onClick="collapseTable('collapse-aggregated-completedStages',
-            'aggregated-completedStages')">
+            data-collapse-name="collapse-aggregated-completedStages"
+            data-collapse-table="aggregated-completedStages">
           <h4>
             <span class="collapse-table-arrow arrow-open"></span>
             <a>Completed Stages ({completedStages.size})</a>
@@ -500,8 +501,8 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
     if (shouldShowSkippedStages) {
       content ++=
         <span id="skipped" class="collapse-aggregated-pendingOrSkippedStages collapse-table"
-            onClick="collapseTable('collapse-aggregated-pendingOrSkippedStages',
-            'aggregated-pendingOrSkippedStages')">
+            data-collapse-name="collapse-aggregated-pendingOrSkippedStages"
+            data-collapse-table="aggregated-pendingOrSkippedStages">
           <h4>
             <span class="collapse-table-arrow arrow-open"></span>
             <a>Skipped Stages ({pendingOrSkippedStages.size})</a>
@@ -514,7 +515,8 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
     if (shouldShowFailedStages) {
       content ++=
         <span id ="failed" class="collapse-aggregated-failedStages collapse-table"
-            onClick="collapseTable('collapse-aggregated-failedStages','aggregated-failedStages')">
+            data-collapse-name="collapse-aggregated-failedStages"
+            data-collapse-table="aggregated-failedStages">
           <h4>
             <span class="collapse-table-arrow arrow-open"></span>
             <a>Failed Stages ({failedStages.size})</a>

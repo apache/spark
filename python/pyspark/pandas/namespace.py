@@ -64,6 +64,7 @@ from pyspark.sql.types import (
     FloatType,
     DoubleType,
     BooleanType,
+    NumericType,
     TimestampType,
     TimestampNTZType,
     DecimalType,
@@ -1269,6 +1270,7 @@ def read_excel(
         return DataFrame(psdf._internal.with_new_sdf(sdf, data_fields=return_data_fields))
 
     if isinstance(sampled, dict):
+        assert sampled is not None
         return {sn: read_excel_on_spark(pdf_or_pser, sn) for sn, pdf_or_pser in sampled.items()}
     else:
         return read_excel_on_spark(cast(Union[pd.DataFrame, pd.Series], sampled), sheet_name)
@@ -2340,10 +2342,10 @@ def get_dummies(
             values = values[1:]
 
         def column_name(v: Any) -> Name:
-            if prefix is None or prefix[i] == "":  # type: ignore[index]
+            if prefix is None or prefix[i] == "":
                 return v
             else:
-                return "{}{}{}".format(prefix[i], prefix_sep, v)  # type: ignore[index]
+                return "{}{}{}".format(prefix[i], prefix_sep, v)
 
         for value in values:
             remaining_columns.append(
@@ -2612,9 +2614,7 @@ def concat(
             concat_psdf = concat_psdf[column_labels]
 
         if ignore_index:
-            concat_psdf.columns = list(  # type: ignore[assignment]
-                map(str, _range(len(concat_psdf.columns)))
-            )
+            concat_psdf.columns = list(map(str, _range(len(concat_psdf.columns))))
 
         if sort:
             concat_psdf = concat_psdf.sort_index()
@@ -3652,6 +3652,8 @@ def to_numeric(arg, errors="raise"):
     1.0
     """
     if isinstance(arg, Series):
+        if isinstance(arg.spark.data_type, (NumericType, BooleanType)):
+            return arg.copy()
         if errors == "coerce":
             spark_session = arg._internal.spark_frame.sparkSession
             if is_ansi_mode_enabled(spark_session):

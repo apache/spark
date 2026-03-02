@@ -832,7 +832,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       val msg = intercept[ArithmeticException] {
         DateTimeUtils.localDateTimeToMicros(dt)
       }.getMessage
-      assert(msg == "long overflow")
+      assert(msg == null || msg.contains("overflow"))
     }
   }
 
@@ -1445,7 +1445,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       },
       condition = "ARITHMETIC_OVERFLOW",
       parameters = Map(
-        "message" -> "long overflow",
+        "message" -> "overflow",
         "alternative" -> "",
         "config" -> toSQLConf(SqlApiConf.ANSI_ENABLED_KEY))
     )

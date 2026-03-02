@@ -177,6 +177,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
       val options = storage.properties + (ParquetOptions.MERGE_SCHEMA ->
         SQLConf.get.getConf(HiveUtils.CONVERT_METASTORE_PARQUET_WITH_SCHEMA_MERGING).toString)
       storage.copy(
+        serdeName = None,
         serde = None,
         properties = options
       )
@@ -184,11 +185,13 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
       val options = storage.properties
       if (SQLConf.get.getConf(SQLConf.ORC_IMPLEMENTATION) == "native") {
         storage.copy(
+          serdeName = None,
           serde = None,
           properties = options
         )
       } else {
         storage.copy(
+          serdeName = None,
           serde = None,
           properties = options
         )

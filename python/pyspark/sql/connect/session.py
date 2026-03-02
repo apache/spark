@@ -622,8 +622,9 @@ class SparkSession:
             safecheck = configs["spark.sql.execution.pandas.convertToArrowArraySafely"]
 
             # Handle the 0-column case separately to preserve row count.
+            # pa.RecordBatch.from_pandas preserves num_rows via pandas index metadata.
             if len(data.columns) == 0:
-                _table = pa.Table.from_struct_array(pa.array([{}] * len(data), type=pa.struct([])))
+                _table = pa.Table.from_batches([pa.RecordBatch.from_pandas(data)])
             else:
                 _table = pa.Table.from_batches(
                     [
@@ -774,7 +775,7 @@ class SparkSession:
             configs["spark.sql.session.localRelationChunkSizeBytes"]  # type: ignore[arg-type]
         )
         max_batch_of_chunks_size_bytes = int(
-            configs["spark.sql.session.localRelationBatchOfChunksSizeBytes"]  # type: ignore[arg-type] # noqa: E501
+            configs["spark.sql.session.localRelationBatchOfChunksSizeBytes"]  # type: ignore[arg-type]
         )
         plan: LogicalPlan = local_relation
         if cache_threshold <= _table.nbytes:

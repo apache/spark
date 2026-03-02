@@ -102,7 +102,7 @@ object DataTypeProtoConverter {
   }
 
   private def toCatalystStringType(t: proto.DataType.String): StringType =
-    StringType(if (t.getCollation.nonEmpty) t.getCollation else "UTF8_BINARY")
+    if (t.getCollation.nonEmpty) StringType(t.getCollation) else StringType
 
   private def toCatalystYearMonthIntervalType(t: proto.DataType.YearMonthInterval) = {
     (t.hasStartField, t.hasEndField) match {
@@ -214,13 +214,15 @@ object DataTypeProtoConverter {
 
       // StringType must be matched after CharType and VarcharType
       case s: StringType =>
+        val stringBuilder = proto.DataType.String.newBuilder()
+        // Send collation only for explicit collations (including explicit UTF8_BINARY).
+        // Default STRING (case object) has no explicit collation and should omit it.
+        if (!s.eq(StringType)) {
+          stringBuilder.setCollation(CollationFactory.fetchCollation(s.collationId).collationName)
+        }
         proto.DataType
           .newBuilder()
-          .setString(
-            proto.DataType.String
-              .newBuilder()
-              .setCollation(CollationFactory.fetchCollation(s.collationId).collationName)
-              .build())
+          .setString(stringBuilder.build())
           .build()
 
       case DateType => ProtoDataTypes.DateType

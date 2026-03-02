@@ -81,7 +81,7 @@ class StoragePageSuite extends SparkFunSuite {
         storagePage.tooltips(x._2) match {
           case Some(tooltip) =>
             <th width={""} class={""}>
-              <span data-toggle="tooltip" title={tooltip}>
+              <span data-bs-toggle="tooltip" title={tooltip}>
                 {Text(x._1)}
               </span>
             </th>

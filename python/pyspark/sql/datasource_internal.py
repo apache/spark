@@ -93,6 +93,30 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
         # We do not consider providing different read limit on simple stream reader.
         return ReadAllAvailable()
 
+    def add_result_to_cache(self, start: dict, end: dict, it: Iterator[Tuple]) -> None:
+        """
+        Validates that read() did not return a non-empty batch with end equal to start,
+        which would cause the same batch to be processed repeatedly. When end != start,
+        appends the result to the cache; when end == start with empty iterator, does not
+        cache (avoids unbounded cache growth).
+        """
+        start_str = json.dumps(start)
+        end_str = json.dumps(end)
+        if end_str != start_str:
+            self.cache.append(PrefetchedCacheEntry(start, end, it))
+            return
+        try:
+            next(it)
+        except StopIteration:
+            return
+        raise PySparkException(
+            errorClass="SIMPLE_STREAM_READER_OFFSET_DID_NOT_ADVANCE",
+            messageParameters={
+                "start_offset": start_str,
+                "end_offset": end_str,
+            },
+        )
+
     def latestOffset(self, start: dict, limit: ReadLimit) -> dict:
         assert start is not None, "start offset should not be None"
         assert isinstance(
@@ -100,7 +124,7 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
         ), "simple stream reader does not support read limit"
 
         (iter, end) = self.simple_reader.read(start)
-        self.cache.append(PrefetchedCacheEntry(start, end, iter))
+        self.add_result_to_cache(start, end, iter)
         return end
 
     def commit(self, end: dict) -> None:

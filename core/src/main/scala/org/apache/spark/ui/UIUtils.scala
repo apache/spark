@@ -232,7 +232,7 @@ private[spark] object UIUtils extends Logging {
     <script src={prependBaseUri(request, "/static/log-view.js")}></script>
     <script src={prependBaseUri(request, "/static/webui.js")}></script>
     <script src={prependBaseUri(request, "/static/scroll-button.js")} type="module"></script>
-    <script>setUIRoot('{UIUtils.uiRoot(request)}')</script>
+    <script nonce={CspNonce.get}>setUIRoot('{UIUtils.uiRoot(request)}')</script>
   }
 
   def vizHeaderNodes(request: HttpServletRequest): Seq[Node] = {
@@ -246,7 +246,7 @@ private[spark] object UIUtils extends Logging {
 
   def dataTablesHeaderNodes(request: HttpServletRequest): Seq[Node] = {
     <link rel="stylesheet"
-          href={prependBaseUri(request, "/static/dataTables.bootstrap4.min.css")}
+          href={prependBaseUri(request, "/static/dataTables.bootstrap5.min.css")}
           type="text/css"/>
     <link rel="stylesheet"
           href={prependBaseUri(request, "/static/jquery.dataTables.min.css")}
@@ -256,7 +256,7 @@ private[spark] object UIUtils extends Logging {
     <script src={prependBaseUri(request, "/static/jquery.dataTables.min.js")}></script>
     <script src={prependBaseUri(request, "/static/jquery.cookies.2.2.0.min.js")}></script>
     <script src={prependBaseUri(request, "/static/jquery.blockUI.min.js")}></script>
-    <script src={prependBaseUri(request, "/static/dataTables.bootstrap4.min.js")}></script>
+    <script src={prependBaseUri(request, "/static/dataTables.bootstrap5.min.js")}></script>
     <script src={prependBaseUri(request, "/static/jquery.mustache.js")}></script>
   }
 
@@ -283,7 +283,7 @@ private[spark] object UIUtils extends Logging {
     <html>
       <head>
         {commonHeaderNodes(request)}
-        <script>setAppBasePath('{activeTab.basePath}')</script>
+        <script nonce={CspNonce.get}>setAppBasePath('{activeTab.basePath}')</script>
         {if (showVisualization) vizHeaderNodes(request) else Seq.empty}
         {if (useDataTables) dataTablesHeaderNodes(request) else Seq.empty}
         <link rel="shortcut icon"
@@ -300,13 +300,13 @@ private[spark] object UIUtils extends Logging {
               </a>
             </div>
           </div>
-          <button class="navbar-toggler" type="button" data-toggle="collapse"
-                  data-target="#navbarCollapse" aria-controls="navbarCollapse"
+          <button class="navbar-toggler" type="button" data-bs-toggle="collapse"
+                  data-bs-target="#navbarCollapse" aria-controls="navbarCollapse"
                   aria-expanded="false" aria-label="Toggle navigation">
             <span class="navbar-toggler-icon"></span>
           </button>
           <div class="collapse navbar-collapse" id="navbarCollapse">
-            <ul class="navbar-nav mr-auto">{header}</ul>
+            <ul class="navbar-nav me-auto">{header}</ul>
             <span class="navbar-text navbar-right d-none d-md-block">
               <strong title={appName} class="text-nowrap">{shortAppName}</strong>
               <span class="text-nowrap">application UI</span>
@@ -429,7 +429,7 @@ private[spark] object UIUtils extends Logging {
         getTooltip(x._2) match {
           case Some(tooltip) =>
             <th width={colWidthAttr} class={getClass(x._2)}>
-              <span data-toggle="tooltip" title={tooltip}>
+              <span data-bs-toggle="tooltip" title={tooltip}>
                 {getHeaderContent(x._1)}
               </span>
             </th>
@@ -507,10 +507,10 @@ private[spark] object UIUtils extends Logging {
       graphs: collection.Seq[RDDOperationGraph], forJob: Boolean): collection.Seq[Node] = {
     <div>
       <span id={if (forJob) "job-dag-viz" else "stage-dag-viz"}
-            class="expand-dag-viz" onclick={s"toggleDagViz($forJob);"}>
+            class="expand-dag-viz" data-forjob={forJob.toString}>
         <span class="expand-dag-viz-arrow arrow-closed"></span>
-        <a data-toggle="tooltip" title={if (forJob) ToolTips.JOB_DAG else ToolTips.STAGE_DAG}
-           data-placement="top">
+        <a data-bs-toggle="tooltip" title={if (forJob) ToolTips.JOB_DAG else ToolTips.STAGE_DAG}
+           data-bs-placement="top">
           DAG Visualization
         </a>
       </span>
@@ -544,7 +544,7 @@ private[spark] object UIUtils extends Logging {
 
   def tooltip(text: String, position: String): Seq[Node] = {
     <sup>
-      (<a data-toggle="tooltip" data-placement={position} title={text}>?</a>)
+      (<a data-bs-toggle="tooltip" data-bs-placement={position} title={text}>?</a>)
     </sup>
   }
 
@@ -703,7 +703,7 @@ private[spark] object UIUtils extends Logging {
   def detailsUINode(isMultiline: Boolean, message: String): Seq[Node] = {
     if (isMultiline) {
       // scalastyle:off
-      <span onclick="this.parentNode.querySelector('.stacktrace-details').classList.toggle('collapsed')"
+      <span data-toggle-details=".stacktrace-details"
             class="expand-details">
         +details
       </span> ++

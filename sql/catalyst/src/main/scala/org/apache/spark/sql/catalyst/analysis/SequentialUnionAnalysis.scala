@@ -23,8 +23,12 @@ import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 
 /**
- * Flattens nested SequentialStreamingUnion nodes into a single level.
+ * Flattens directly nested SequentialStreamingUnion nodes into a single level.
  * This allows chaining: df1.followedBy(df2).followedBy(df3)
+ *
+ * Note: This only handles direct nesting where a SequentialStreamingUnion is an immediate child.
+ * Nesting wrapped in other operators (e.g., Project(SequentialStreamingUnion(...))) is handled
+ * by the optimizer's CombineUnions rule.
  */
 object FlattenSequentialStreamingUnion extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
@@ -36,19 +40,20 @@ object FlattenSequentialStreamingUnion extends Rule[LogicalPlan] {
 }
 
 /**
- * Validates SequentialStreamingUnion constraints:
+ * Validates SequentialStreamingUnion constraints during analysis:
  * - All children must be streaming relations
- * - No nested SequentialStreamingUnions (should be flattened first)
  * - No stateful operations in any child subtrees
  *
  * Note: Minimum 2 children is enforced by the resolved property, not explicit validation.
+ * Note: Nested SequentialStreamingUnions are flattened by analysis (FlattenSequentialStreamingUnion
+ *       for direct nesting) and optimizer (CombineUnions for wrapped nesting). Tests verify this
+ *       flattening behavior.
  */
 object ValidateSequentialStreamingUnion extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
     plan.foreach {
       case su: SequentialStreamingUnion =>
         validateAllStreaming(su)
-        validateNoNesting(su)
         validateNoStatefulDescendants(su)
       case _ =>
     }
@@ -59,14 +64,6 @@ object ValidateSequentialStreamingUnion extends Rule[LogicalPlan] {
     val nonStreamingChildren = su.children.filterNot(_.isStreaming)
     if (nonStreamingChildren.nonEmpty) {
       throw QueryCompilationErrors.notStreamingDatasetError("SequentialStreamingUnion")
-    }
-  }
-
-  private def validateNoNesting(su: SequentialStreamingUnion): Unit = {
-    su.children.foreach { child =>
-      if (child.containsPattern(SEQUENTIAL_STREAMING_UNION)) {
-        throw QueryCompilationErrors.nestedSequentialStreamingUnionError()
-      }
     }
   }
 

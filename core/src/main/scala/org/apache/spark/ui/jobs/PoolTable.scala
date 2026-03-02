@@ -37,11 +37,12 @@ private[ui] class PoolTable(pools: Map[Schedulable, PoolData], parent: StagesTab
         <tr>
           <th>Pool Name</th>
           <th>
-            <span data-toggle="tooltip" data-placement="top" title="Pool's minimum share of CPU
+            <span data-bs-toggle="tooltip" data-bs-placement="top"
+              title="Pool's minimum share of CPU
              cores">Minimum Share</span>
           </th>
           <th>
-            <span data-toggle="tooltip" data-placement="top" title="Pool's share of cluster
+            <span data-bs-toggle="tooltip" data-bs-placement="top" title="Pool's share of cluster
              resources relative to others">Pool Weight</span>
           </th>
           <th>Active Stages</th>

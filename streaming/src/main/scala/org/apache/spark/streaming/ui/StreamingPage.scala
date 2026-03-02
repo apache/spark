@@ -25,7 +25,7 @@ import scala.xml.{Node, Unparsed}
 import jakarta.servlet.http.HttpServletRequest
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.ui.{GraphUIData, JsCollector, UIUtils => SparkUIUtils, WebUIPage}
+import org.apache.spark.ui.{CspNonce, GraphUIData, JsCollector, UIUtils => SparkUIUtils, WebUIPage}
 import org.apache.spark.util.Utils
 
 /**
@@ -117,7 +117,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
          |
          |onClickTimeline = getOnClickTimelineFunction();
          |""".stripMargin
-    <script type="module">{Unparsed(js)}</script>
+    <script type="module" nonce={CspNonce.get}>{Unparsed(js)}</script>
   }
 
   /** Generate basic information of the streaming program */
@@ -156,7 +156,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
       s"timeFormat[$time] = '$formattedTime';"
     }.mkString("\n")
 
-    <script>{Unparsed(js)}</script>
+    <script nonce={CspNonce.get}>{Unparsed(js)}</script>
   }
 
   private def generateTimeTipStrings(times: Seq[Long]): Seq[Node] = {
@@ -166,7 +166,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
       s"timeTipStrings[$time] = timeFormat[$time];"
     }.mkString("\n")
 
-    <script>{Unparsed(js)}</script>
+    <script nonce={CspNonce.get}>{Unparsed(js)}</script>
   }
 
   private def generateStatTable(request: HttpServletRequest): Seq[Node] = {
@@ -281,7 +281,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
                 if (hasStream) {
                   <span class="expand-input-rate">
                     <span class="expand-input-rate-arrow arrow-closed"></span>
-                    <a data-toggle="tooltip" title="Show/hide details of each receiver" data-placement="top">
+                    <a data-bs-toggle="tooltip" title="Show/hide details of each receiver" data-bs-placement="top">
                       <strong>Input Rate</strong>
                     </a>
                   </span>
@@ -459,7 +459,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
       ).table(streamingPage)
     } catch {
       case e @ (_: IllegalArgumentException | _: IndexOutOfBoundsException) =>
-        <div class="alert alert-error">
+        <div class="alert alert-danger">
           <p>Error while rendering streaming table:</p>
           <pre>
             {Utils.exceptionString(e)}
@@ -481,8 +481,8 @@ private[ui] class StreamingPage(parent: StreamingTab)
         <div class="row">
           <div class="col-12">
             <span id="runningBatches" class="collapse-aggregated-runningBatches collapse-table"
-                  onClick="collapseTable('collapse-aggregated-runningBatches',
-                  'aggregated-runningBatches')">
+                  data-collapse-name="collapse-aggregated-runningBatches"
+                  data-collapse-table="aggregated-runningBatches">
               <h4>
                 <span class="collapse-table-arrow arrow-open"></span>
                 <a>Running Batches ({runningBatches.size})</a>
@@ -500,8 +500,8 @@ private[ui] class StreamingPage(parent: StreamingTab)
         <div class="row">
           <div class="col-12">
             <span id="waitingBatches" class="collapse-aggregated-waitingBatches collapse-table"
-                  onClick="collapseTable('collapse-aggregated-waitingBatches',
-                  'aggregated-waitingBatches')">
+                  data-collapse-name="collapse-aggregated-waitingBatches"
+                  data-collapse-table="aggregated-waitingBatches">
               <h4>
                 <span class="collapse-table-arrow arrow-open"></span>
                 <a>Waiting Batches ({waitingBatches.size})</a>
@@ -519,8 +519,8 @@ private[ui] class StreamingPage(parent: StreamingTab)
         <div class="row">
           <div class="col-12">
             <span id="completedBatches" class="collapse-aggregated-completedBatches collapse-table"
-                  onClick="collapseTable('collapse-aggregated-completedBatches',
-                  'aggregated-completedBatches')">
+                  data-collapse-name="collapse-aggregated-completedBatches"
+                  data-collapse-table="aggregated-completedBatches">
               <h4>
                 <span class="collapse-table-arrow arrow-open"></span>
                 <a>Completed Batches (last {completedBatches.size}
