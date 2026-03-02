@@ -755,8 +755,11 @@ class SparkConnectClient(object):
 
         self._release_futures: weakref.WeakSet[concurrent.futures.Future] = weakref.WeakSet()
 
-        # cleanup ml cache if possible
-        atexit.register(self._cleanup_ml_cache)
+        self._release_session_on_exit = os.getenv(
+            "SPARK_CONNECT_RELEASE_SESSION_ON_EXIT", "false"
+        ).lower() in ("true", "1")
+        # cleanup if possible
+        atexit.register(self._on_exit)
 
         self.global_user_context_extensions: List[Tuple[str, any_pb2.Any]] = []
         self.global_user_context_extensions_lock = threading.Lock()
@@ -2280,6 +2283,18 @@ class SparkConnectClient(object):
             return []
         except Exception:
             return []
+
+    def _on_exit(self) -> None:
+        self._cleanup_ml_cache()
+        if self._release_session_on_exit and not self._closed:
+            try:
+                self.release_session()
+            except Exception:
+                pass
+            try:
+                self.close()
+            except Exception:
+                pass
 
     def _cleanup_ml_cache(self) -> None:
         try:
