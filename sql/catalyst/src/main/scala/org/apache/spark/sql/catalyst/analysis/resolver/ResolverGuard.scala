@@ -388,20 +388,6 @@ class ResolverGuard(catalogManager: CatalogManager) extends SQLConfHelper {
     !shouldReject && unresolvedFunction.children.forall(checkExpression)
   }
 
-  /**
-   * Returns true if the name is unqualified or explicitly qualified as builtin
-   * (e.g. builtin.func, system.builtin.func).
-   *
-   * @note Reserved for future use (e.g. guard rules that treat builtin-qualified
-   *       names differently).
-   * @param nameParts the parts of the function name
-   * @return true if the name is unqualified, "builtin.func", or "system.builtin.func"
-   */
-  private def isBuiltinOrUnqualified(nameParts: Seq[String]): Boolean = {
-    nameParts.length == 1 ||
-      FunctionResolution.sessionNamespaceKind(nameParts).contains(SessionCatalog.Builtin)
-  }
-
   private def checkLiteral(literal: Literal) = true
 
   private def checkUnresolvedOrdinal(unresolvedOrdinal: UnresolvedOrdinal) = true

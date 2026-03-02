@@ -121,10 +121,7 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     val connectPlan =
       connectTestRelation.select(callFunction(Seq("default", "hex"), Seq("id".protoAttr)))
 
-    // With function qualification support, this now throws AnalysisException
-    // (wrapped in SparkException) because the function cannot be resolved,
-    // rather than UnsupportedOperationException
-    assertThrows[org.apache.spark.SparkUnsupportedOperationException] {
+    assertThrows[UnsupportedOperationException] {
       analyzePlan(transform(connectPlan))
     }
 

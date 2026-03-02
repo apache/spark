@@ -47,7 +47,7 @@ import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, toPrettySQL, trimTempResolvedColumn, CharVarcharUtils}
+import org.apache.spark.sql.catalyst.util.{toPrettySQL, trimTempResolvedColumn, CharVarcharUtils}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.connector.catalog.{View => _, _}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
@@ -2016,9 +2016,8 @@ class Analyzer(
       plan.resolveExpressionsWithPruning(_.containsAnyPattern(UNRESOLVED_FUNCTION)) {
         case f @ UnresolvedFunction(nameParts, _, _, _, _, _, _) =>
           // For builtin/temp functions, we can do a quick check without catalog lookup
-          val quickCheck = if (nameParts.size == 1) {
-            functionResolution.lookupBuiltinOrTempFunction(nameParts, Some(f))
-          } else if (FunctionResolution.sessionNamespaceKind(nameParts).isDefined) {
+          val quickCheck = if (nameParts.size == 1 ||
+              FunctionResolution.sessionNamespaceKind(nameParts).isDefined) {
             functionResolution.lookupBuiltinOrTempFunction(nameParts, Some(f))
           } else {
             None
@@ -2029,25 +2028,8 @@ class Analyzer(
             f
           } else {
             // Might be a persistent function - compute full name and check cache first
-            val (catalog, ident) = try {
-              val CatalogAndIdentifier(cat, id) = relationResolution.expandIdentifier(nameParts)
-              (cat, id)
-            } catch {
-              case e: AnalysisException if e.getCondition == "REQUIRES_SINGLE_PART_NAMESPACE" =>
-                // Only convert for 2–3 part names; 4+ parts keep REQUIRES_SINGLE_PART_NAMESPACE
-                if (nameParts.size <= 3) {
-                  val catalogPath =
-                    catalogManager.currentCatalog.name +: catalogManager.currentNamespace
-                  val searchPath = SQLConf.get.resolutionSearchPath(catalogPath.toSeq)
-                    .map(_.map(quoteIfNeeded).mkString("."))
-                  throw QueryCompilationErrors.unresolvedRoutineError(
-                    nameParts,
-                    searchPath,
-                    f.origin)
-                } else {
-                  throw e
-                }
-            }
+            val CatalogAndIdentifier(catalog, ident) =
+              relationResolution.expandIdentifier(nameParts)
 
             val fullName = normalizeFuncName(
               (catalog.name +: ident.namespace :+ ident.name).toImmutableArraySeq)
@@ -2057,25 +2039,8 @@ class Analyzer(
               f
             } else {
               // Not in cache - do full lookup to determine type
-              // Session catalog may throw REQUIRES_SINGLE_PART_NAMESPACE for multi-part namespace
-              val functionType = try {
+              val functionType =
                 functionResolution.lookupFunctionType(nameParts, Some(f))
-              } catch {
-                case e: AnalysisException if e.getCondition == "REQUIRES_SINGLE_PART_NAMESPACE" =>
-                  // Only convert for 3-part names; 4+ parts keep REQUIRES_SINGLE_PART_NAMESPACE
-                  if (nameParts.size == 3) {
-                    val catalogPath =
-                      catalogManager.currentCatalog.name +: catalogManager.currentNamespace
-                    val searchPath = SQLConf.get.resolutionSearchPath(catalogPath.toSeq)
-                      .map(_.map(quoteIfNeeded).mkString("."))
-                    throw QueryCompilationErrors.unresolvedRoutineError(
-                      nameParts,
-                      searchPath,
-                      f.origin)
-                  } else {
-                    throw e
-                  }
-              }
 
               functionType match {
                 case FunctionType.Local =>
@@ -2095,7 +2060,7 @@ class Analyzer(
                   val catalogPath =
                     catalogManager.currentCatalog.name +: catalogManager.currentNamespace
                   val searchPath = SQLConf.get.resolutionSearchPath(catalogPath.toSeq)
-                    .map(_.map(quoteIfNeeded).mkString("."))
+                    .map(_.quoted)
                   throw QueryCompilationErrors.unresolvedRoutineError(
                     nameParts,
                     searchPath,

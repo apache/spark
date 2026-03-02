@@ -123,11 +123,6 @@ private[sql] trait LookupCatalog extends Logging {
           val catalog = catalogManager.catalog(nameParts.head)
           val ident = nameParts.tail.asIdentifier
           if (CatalogV2Util.isSessionCatalog(catalog)) {
-            val ns = ident.namespace().toSeq
-            if (ns.nonEmpty && ns.last.equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE)) {
-              throw QueryCompilationErrors.operationNotAllowedOnBuiltinNamespaceError(
-                "CREATE", "OBJECT", ident.name())
-            }
             // Reject only when namespace is empty (e.g. spark_catalog.t with no database).
             // Allow multi-part namespace for metadata tables (e.g. default.table.snapshots).
             if (ident.namespace().isEmpty) {

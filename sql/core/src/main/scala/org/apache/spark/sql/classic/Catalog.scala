@@ -365,13 +365,9 @@ class Catalog(sparkSession: SparkSession) extends catalog.Catalog {
           isTemporary = true)
 
       case _ =>
-        val isSessionCatalog = currentCatalog() == CatalogManager.SESSION_CATALOG_NAME
-        val catalogPath: Seq[String] = if (isSessionCatalog) {
+        val catalogPath =
           (Seq(currentCatalog()) ++
             sparkSession.sessionState.catalogManager.currentNamespace).toSeq
-        } else {
-          Seq.empty[String]
-        }
         val searchPath = sparkSession.sessionState.conf.resolutionSearchPath(catalogPath)
         throw QueryCompilationErrors.unresolvedRoutineError(
           ident,

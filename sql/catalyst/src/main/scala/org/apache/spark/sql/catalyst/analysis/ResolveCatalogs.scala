@@ -22,7 +22,6 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, SqlScriptingContextManager}
-import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -86,8 +85,29 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       assertValidSessionVariableNameParts(nameParts, resolved)
       d.copy(name = resolved)
 
+    case CreateFunction(UnresolvedIdentifier(nameParts, _), _, _, _, _)
+        if isSystemBuiltinName(nameParts) =>
+      throw QueryCompilationErrors.operationNotAllowedOnBuiltinFunctionError(
+        "CREATE", nameParts.last)
+
+    case CreateUserDefinedFunction(UnresolvedIdentifier(nameParts, _),
+        _, _, _, _, _, _, _, _, _, _, _)
+        if isSystemBuiltinName(nameParts) =>
+      throw QueryCompilationErrors.operationNotAllowedOnBuiltinFunctionError(
+        "CREATE", nameParts.last)
+
+    case DropFunction(UnresolvedIdentifier(nameParts, _), _)
+        if isSystemBuiltinName(nameParts) =>
+      throw QueryCompilationErrors.operationNotAllowedOnBuiltinFunctionError(
+        "DROP", nameParts.last)
+
     case d @ DropFunction(u @ UnresolvedIdentifier(nameParts, _), _) =>
       d.copy(child = resolveFunctionIdentifier(nameParts, u.origin))
+
+    case RefreshFunction(UnresolvedIdentifier(nameParts, _))
+        if isSystemBuiltinName(nameParts) =>
+      throw QueryCompilationErrors.operationNotAllowedOnBuiltinFunctionError(
+        "REFRESH", nameParts.last)
 
     case r @ RefreshFunction(u @ UnresolvedIdentifier(nameParts, _)) =>
       r.copy(child = resolveFunctionIdentifier(nameParts, u.origin))
@@ -135,11 +155,16 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
     }
   }
 
+  private def isSystemBuiltinName(nameParts: Seq[String]): Boolean = {
+    nameParts.length == 3 &&
+      nameParts(0).equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
+      nameParts(1).equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE)
+  }
+
   /**
    * Resolves a function identifier, checking for builtin and temp functions first.
-   * Builtin and temp functions are only registered with unqualified names, but can be
-   * referenced with qualified names like builtin.abs, system.builtin.abs, session.func,
-   * or system.session.func.
+   * Only unqualified (1-part) names get special builtin/temp handling; multi-part names
+   * go through standard catalog resolution.
    */
   private def resolveFunctionIdentifier(
       nameParts: Seq[String],
@@ -157,18 +182,9 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         val CatalogAndIdentifier(catalog, ident) = nameParts
         ResolvedIdentifier(catalog, ident)
       }
-    } else FunctionResolution.sessionNamespaceKind(nameParts) match {
-      case Some(SessionCatalog.Builtin) | Some(SessionCatalog.Extension) =>
-        // Explicitly qualified as builtin or extension (extension stored as builtin)
-        val ident = Identifier.of(Array(CatalogManager.BUILTIN_NAMESPACE), nameParts.last)
-        ResolvedIdentifier(FakeSystemCatalog, ident)
-      case Some(SessionCatalog.Temp) =>
-        // Explicitly qualified as temp (e.g., session.func or system.session.func)
-        val ident = Identifier.of(Array(CatalogManager.SESSION_NAMESPACE), nameParts.last)
-        ResolvedIdentifier(FakeSystemCatalog, ident)
-      case None =>
-        val CatalogAndIdentifier(catalog, ident) = nameParts
-        ResolvedIdentifier(catalog, ident)
+    } else {
+      val CatalogAndIdentifier(catalog, ident) = nameParts
+      ResolvedIdentifier(catalog, ident)
     }
   }
 

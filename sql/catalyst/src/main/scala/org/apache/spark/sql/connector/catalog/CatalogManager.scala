@@ -162,10 +162,5 @@ private[sql] object CatalogManager {
   val SESSION_CATALOG_NAME: String = "spark_catalog"
   val SYSTEM_CATALOG_NAME = "system"
   val SESSION_NAMESPACE = "session"
-  /**
-   * Used only for explicit qualification; extension functions are resolved via
-   * the builtin namespace in the default path.
-   */
-  val EXTENSION_NAMESPACE = "extension"
   val BUILTIN_NAMESPACE = "builtin"
 }

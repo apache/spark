@@ -313,7 +313,11 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
       parameters = Map(
         "objectType" -> "FUNCTION",
         "objectName" -> "`func`",
-        "qualifier" -> "`ns`.`db`"))
+        "qualifier" -> "`ns`.`db`"),
+      context = ExpectedContext(
+        fragment = sqlText,
+        start = 0,
+        stop = sqlText.length - 1))
   }
 
   test("INVALID_TEMP_OBJ_QUALIFIER: " +
@@ -330,7 +334,11 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
       parameters = Map(
         "objectType" -> "FUNCTION",
         "objectName" -> "`func`",
-        "qualifier" -> "`db`"))
+        "qualifier" -> "`db`"),
+      context = ExpectedContext(
+        fragment = sqlText,
+        start = 0,
+        stop = sqlText.length - 1))
   }
 
   test("INVALID_TEMP_OBJ_QUALIFIER: Drop temporary function with invalid qualification") {
@@ -342,7 +350,11 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
       parameters = Map(
         "objectType" -> "FUNCTION",
         "objectName" -> "`func`",
-        "qualifier" -> "`db`"))
+        "qualifier" -> "`db`"),
+      context = ExpectedContext(
+        fragment = sqlText,
+        start = 0,
+        stop = sqlText.length - 1))
   }
 
   test("DUPLICATE_KEY: Found duplicate partition keys") {

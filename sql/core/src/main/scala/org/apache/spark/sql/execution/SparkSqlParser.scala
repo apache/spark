@@ -200,8 +200,8 @@ class SparkSqlAstBuilder extends AstBuilder {
           // Otherwise it's an invalid qualifier (e.g., database name)
           val funcName = functionIdentifier.last
           val qualifier = functionIdentifier.head
-          throw QueryCompilationErrors.invalidTempObjQualifierError(
-            "FUNCTION", funcName, qualifier)
+          throw QueryParsingErrors.invalidTempObjQualifierError(
+            "FUNCTION", funcName, qualifier, ctx)
         }
       case 3 =>
         // Check if it's system.session.funcName
@@ -212,15 +212,15 @@ class SparkSqlAstBuilder extends AstBuilder {
           // Invalid three-part qualifier
           val funcName = functionIdentifier.last
           val qualifier = functionIdentifier.init.mkString(".")
-          throw QueryCompilationErrors.invalidTempObjQualifierError(
-            "FUNCTION", funcName, qualifier)
+          throw QueryParsingErrors.invalidTempObjQualifierError(
+            "FUNCTION", funcName, qualifier, ctx)
         }
       case _ =>
         // More than 3 parts - invalid
         val funcName = functionIdentifier.last
         val qualifier = functionIdentifier.init.mkString(".")
-        throw QueryCompilationErrors.invalidTempObjQualifierError(
-          "FUNCTION", funcName, qualifier)
+        throw QueryParsingErrors.invalidTempObjQualifierError(
+          "FUNCTION", funcName, qualifier, ctx)
     }
   }
 

@@ -27,9 +27,6 @@ import org.apache.spark.sql.types.IntegerType
  * Tests builtin/temp/persistent function name disambiguation with qualified names.
  * This tests the system.builtin, system.session, and system.extension namespaces.
  *
- * Includes tests from:
- * 1. function-qualification.sql golden file (SQL-accessible functions)
- * 2. Extension function tests (programmatic registration via SparkSessionExtensions)
  */
 class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
 
@@ -361,9 +358,10 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SECTION 7a: Error Cases - cannot create temp function with builtin namespace") {
+    val sqlText = "CREATE TEMPORARY FUNCTION system.builtin.my_builtin() RETURNS INT RETURN 1"
     checkError(
       exception = intercept[ParseException] {
-        sql("CREATE TEMPORARY FUNCTION system.builtin.my_builtin() RETURNS INT RETURN 1")
+        sql(sqlText)
       },
       condition = "INVALID_TEMP_OBJ_QUALIFIER",
       sqlState = "42602",
@@ -371,14 +369,20 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
         "objectName" -> "`my_builtin`",
         "objectType" -> "FUNCTION",
         "qualifier" -> "`system`.`builtin`"
+      ),
+      context = ExpectedContext(
+        fragment = sqlText,
+        start = 0,
+        stop = sqlText.length - 1
       )
     )
   }
 
   test("SECTION 7b: Error Cases - cannot create temp function with invalid database") {
+    val sqlText = "CREATE TEMPORARY FUNCTION mydb.my_func() RETURNS INT RETURN 1"
     checkError(
       exception = intercept[ParseException] {
-        sql("CREATE TEMPORARY FUNCTION mydb.my_func() RETURNS INT RETURN 1")
+        sql(sqlText)
       },
       condition = "INVALID_TEMP_OBJ_QUALIFIER",
       sqlState = "42602",
@@ -386,6 +390,11 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
         "objectName" -> "`my_func`",
         "objectType" -> "FUNCTION",
         "qualifier" -> "`mydb`"
+      ),
+      context = ExpectedContext(
+        fragment = sqlText,
+        start = 0,
+        stop = sqlText.length - 1
       )
     )
   }
@@ -418,6 +427,18 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
         "objectName" -> "`my_func`"
       )
     )
+  }
+
+  test("SECTION 7d2: 2-part names with 'builtin' schema are not system namespace references") {
+    // `builtin.name` in DDL should be treated as `current_catalog.builtin.name`,
+    // not as a reference to the system builtin namespace.
+    withDatabase("builtin") {
+      sql("CREATE DATABASE IF NOT EXISTS builtin")
+      sql("CREATE FUNCTION builtin.my_test_func AS 'test.org.apache.spark.sql.MyDoubleAvg'")
+      // REFRESH should resolve against the schema, not the system builtin namespace
+      sql("REFRESH FUNCTION builtin.my_test_func")
+      sql("DROP FUNCTION builtin.my_test_func")
+    }
   }
 
   // COMMENT ON FUNCTION is not yet supported in the parser; when added, we should reject
@@ -557,38 +578,34 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
     checkAnswer(sql("SELECT System.Builtin.Count(*) FROM VALUES (1), (2), (3) AS t(a)"), Row(3))
   }
 
-  test("SECTION 10b: COUNT(*) - invalid qualified names rejected") {
-    // Invalid qualifier "foo.bar" should not be treated as count
+  test("SECTION 10b: COUNT(*) - non-builtin qualified names") {
+    // spark_catalog.default.count is not recognized as the builtin count,
+    // so the COUNT(*)->COUNT(1) rewrite does not apply.
     checkError(
       exception = intercept[AnalysisException] {
-        sql("SELECT foo.bar.count(*) FROM VALUES (1), (2), (3) AS t(a)")
+        sql("SELECT spark_catalog.default.count(*) FROM VALUES (1), (2), (3) AS t(a)")
       },
       condition = "UNRESOLVED_ROUTINE",
       parameters = Map(
-        "routineName" -> "`foo`.`bar`.`count`",
+        "routineName" -> "`spark_catalog`.`default`.`count`",
         "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
       ),
       context = ExpectedContext(
-        fragment = "foo.bar.count(*)",
+        fragment = "spark_catalog.default.count(*)",
         start = 7,
-        stop = 22
+        stop = 36
       )
     )
 
-    // Invalid qualifier "catalog.db" should not be treated as count
+    // 2-part name spark_catalog.count is rejected as invalid (empty namespace on session catalog)
     checkError(
       exception = intercept[AnalysisException] {
-        sql("SELECT catalog.db.count(*) FROM VALUES (1), (2), (3) AS t(a)")
+        sql("SELECT spark_catalog.count(*) FROM VALUES (1), (2), (3) AS t(a)")
       },
-      condition = "UNRESOLVED_ROUTINE",
+      condition = "REQUIRES_SINGLE_PART_NAMESPACE",
       parameters = Map(
-        "routineName" -> "`catalog`.`db`.`count`",
-        "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
-      ),
-      context = ExpectedContext(
-        fragment = "catalog.db.count(*)",
-        start = 7,
-        stop = 25
+        "sessionCatalog" -> "spark_catalog",
+        "identifier" -> "`count`"
       )
     )
   }
@@ -761,7 +778,7 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
     checkAnswer(sql("SELECT test_ext_func()"), Row(9999))
   }
 
-  test("SECTION 12b: Extension - resolution order: extension > builtin > session") {
+  test("SECTION 12b: Extension - session function resolves when no builtin conflict") {
     // Test the critical security property: extension comes before builtin before session
     sql("CREATE TEMPORARY FUNCTION session_func() RETURNS INT RETURN 1111")
 
@@ -964,21 +981,17 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SECTION 13g: Multi-part name with invalid namespace yields UNRESOLVED_ROUTINE " +
-    "with search path") {
-    // A 3-part name like x.y.func triggers REQUIRES_SINGLE_PART_NAMESPACE in the session catalog;
-    // LookupFunctions converts it to unresolved routine error with the configured search path.
+  test("SECTION 13g: Multi-part name with invalid namespace yields " +
+    "REQUIRES_SINGLE_PART_NAMESPACE") {
+    // A 3-part name like x.y.func where x is not a known catalog falls back to the session
+    // catalog with a multi-part namespace, which the session catalog does not support.
     checkError(
       exception = intercept[AnalysisException] { sql("SELECT x.y.no_such_xyz()") },
-      condition = "UNRESOLVED_ROUTINE",
+      condition = "REQUIRES_SINGLE_PART_NAMESPACE",
       parameters = Map(
-        "routineName" -> "`x`.`y`.`no_such_xyz`",
-        "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
-      ),
-      context = ExpectedContext(
-        fragment = "x.y.no_such_xyz()",
-        start = 7,
-        stop = 23))
+        "sessionCatalog" -> "spark_catalog",
+        "identifier" -> "`x`.`y`.`no_such_xyz`"
+      ))
   }
 
   test("SECTION 13h: Legacy mode - default behavior allows registration but builtin wins") {
