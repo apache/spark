@@ -2058,8 +2058,8 @@ class Analyzer(
 
                 case FunctionType.NotFound =>
                   val catalogPath =
-                    catalogManager.currentCatalog.name +: catalogManager.currentNamespace
-                  val searchPath = SQLConf.get.resolutionSearchPath(catalogPath.toSeq)
+                    (catalogManager.currentCatalog.name +: catalogManager.currentNamespace).toSeq
+                  val searchPath = SQLConf.get.resolutionSearchPath(catalogPath)
                     .map(_.quoted)
                   throw QueryCompilationErrors.unresolvedRoutineError(
                     nameParts,
