@@ -86,8 +86,8 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
          |  'group': 'stages',
          |  'start': new Date(${submissionTime}),
          |  'end': new Date(${completionTime}),
-         |  'content': '<div class="job-timeline-content" data-toggle="tooltip"' +
-         |   'data-placement="top" data-html="true"' +
+         |  'content': '<div class="job-timeline-content" data-bs-toggle="tooltip"' +
+         |   'data-bs-placement="top" data-bs-html="true"' +
          |   'data-title="${jsEscapedNameForTooltip} (Stage ${stageId}.${attemptId})<br>' +
          |   'Status: ${status.toUpperCase(Locale.ROOT)}<br>' +
          |   'Submitted: ${UIUtils.formatDate(submissionTime)}' +
@@ -116,10 +116,10 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
            |  'group': 'executors',
            |  'start': new Date(${e.addTime.getTime()}),
            |  'content': '<div class="executor-event-content"' +
-           |    'data-toggle="tooltip" data-placement="top"' +
+           |    'data-bs-toggle="tooltip" data-bs-placement="top"' +
            |    'data-title="Executor ${e.id}<br>' +
            |    'Added at ${UIUtils.formatDate(e.addTime)}"' +
-           |    'data-html="true">Executor ${e.id} added</div>'
+           |    'data-bs-html="true">Executor ${e.id} added</div>'
            |}
          """.stripMargin
       events += addedEvent
@@ -132,7 +132,7 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
              |  'group': 'executors',
              |  'start': new Date(${removeTime.getTime()}),
              |  'content': '<div class="executor-event-content"' +
-             |    'data-toggle="tooltip" data-placement="top"' +
+             |    'data-bs-toggle="tooltip" data-bs-placement="top"' +
              |    'data-title="Executor ${e.id}<br>' +
              |    'Removed at ${UIUtils.formatDate(removeTime)}' +
              |    '${
@@ -141,7 +141,7 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
                           reason.replace("\n", " "))}"""
                       }.getOrElse("")
                    }"' +
-             |    'data-html="true">Executor ${e.id} removed</div>'
+             |    'data-bs-html="true">Executor ${e.id} removed</div>'
              |}
            """.stripMargin
           events += removedEvent
@@ -179,7 +179,7 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
 
     <span class="expand-job-timeline">
       <span class="expand-job-timeline-arrow arrow-closed"></span>
-      <a data-toggle="tooltip" title={ToolTips.STAGE_TIMELINE} data-placement="top">
+      <a data-bs-toggle="tooltip" title={ToolTips.STAGE_TIMELINE} data-bs-placement="top">
         Event Timeline
       </a>
     </span> ++

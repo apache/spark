@@ -449,9 +449,8 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
               messageParameters = Map("funcName" -> toSQLExpr(w)))
 
           case agg @ AggregateExpression(listAgg: ListAgg, _, _, _, _)
-            if agg.isDistinct && listAgg.needSaveOrderValue =>
-            throw QueryCompilationErrors.functionAndOrderExpressionMismatchError(
-              listAgg.prettyName, listAgg.child, listAgg.orderExpressions)
+            if agg.isDistinct && listAgg.hasDistinctOrderAmbiguity =>
+              listAgg.throwDistinctOrderError()
 
           case w: WindowExpression =>
             WindowResolution.validateResolvedWindowExpression(w)

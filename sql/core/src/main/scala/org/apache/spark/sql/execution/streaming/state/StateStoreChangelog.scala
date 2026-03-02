@@ -46,6 +46,7 @@ object RecordType extends Enumeration {
   val PUT_RECORD = Value("put_record")
   val DELETE_RECORD = Value("delete_record")
   val MERGE_RECORD = Value("merge_record")
+  val DELETE_RANGE_RECORD = Value("delete_range_record")
 
   // Generate byte representation of each record type
   def getRecordTypeAsByte(recordType: RecordType): Byte = {
@@ -54,6 +55,7 @@ object RecordType extends Enumeration {
       case PUT_RECORD => 0x01.toByte
       case DELETE_RECORD => 0x10.toByte
       case MERGE_RECORD => 0x11.toByte
+      case DELETE_RANGE_RECORD => 0x20.toByte
     }
   }
 
@@ -62,6 +64,7 @@ object RecordType extends Enumeration {
       case PUT_RECORD => "update"
       case DELETE_RECORD => "delete"
       case MERGE_RECORD => "append"
+      case DELETE_RANGE_RECORD => "delete_range"
       case _ => throw StateStoreErrors.unsupportedOperationException(
         "getRecordTypeAsString", recordType.toString)
     }
@@ -74,6 +77,7 @@ object RecordType extends Enumeration {
       case 0x01 => PUT_RECORD
       case 0x10 => DELETE_RECORD
       case 0x11 => MERGE_RECORD
+      case 0x20 => DELETE_RANGE_RECORD
       case _ => throw new RuntimeException(s"Found invalid record type for value=$byte")
     }
   }
@@ -127,6 +131,8 @@ abstract class StateStoreChangelogWriter(
   def delete(key: Array[Byte]): Unit
 
   def merge(key: Array[Byte], value: Array[Byte]): Unit
+
+  def deleteRange(beginKey: Array[Byte], endKey: Array[Byte]): Unit
 
   def abort(): Unit = {
     try {
@@ -189,6 +195,11 @@ class StateStoreChangelogWriterV1(
       "changelog writer v1")
   }
 
+  override def deleteRange(beginKey: Array[Byte], endKey: Array[Byte]): Unit = {
+    throw new UnsupportedOperationException("Operation not supported with state " +
+      "changelog writer v1")
+  }
+
   override def commit(): Unit = {
     try {
       // -1 in the key length field mean EOF.
@@ -242,6 +253,15 @@ class StateStoreChangelogWriterV2(
 
   override def merge(key: Array[Byte], value: Array[Byte]): Unit = {
     writePutOrMergeRecord(key, value, RecordType.MERGE_RECORD)
+  }
+
+  override def deleteRange(beginKey: Array[Byte], endKey: Array[Byte]): Unit = {
+    assert(compressedStream != null)
+    compressedStream.write(RecordType.getRecordTypeAsByte(RecordType.DELETE_RANGE_RECORD))
+    compressedStream.writeInt(beginKey.length)
+    compressedStream.write(beginKey)
+    compressedStream.writeInt(endKey.length)
+    compressedStream.write(endKey)
   }
 
   private def writePutOrMergeRecord(key: Array[Byte],
@@ -556,6 +576,11 @@ class StateStoreChangelogReaderV2(
           val keyBuffer = parseBuffer(input)
           val valueBuffer = parseBuffer(input)
           (RecordType.MERGE_RECORD, keyBuffer, valueBuffer)
+
+        case RecordType.DELETE_RANGE_RECORD =>
+          val beginKeyBuffer = parseBuffer(input)
+          val endKeyBuffer = parseBuffer(input)
+          (RecordType.DELETE_RANGE_RECORD, beginKeyBuffer, endKeyBuffer)
 
         case _ =>
           throw new IOException("Failed to process unknown record type")

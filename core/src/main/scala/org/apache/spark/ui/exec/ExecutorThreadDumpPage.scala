@@ -94,11 +94,11 @@ private[ui] class ExecutorThreadDumpPage(
             <a class="expandbutton" data-action="expandAllThreadStackTrace">Expand All</a>
             <a class="expandbutton d-none" data-action="collapseAllThreadStackTrace">Collapse All</a>
             <a class="downloadbutton" href={"data:text/plain;charset=utf-8," + threadDump.map(_.toString).mkString} download={"threaddump_" + executorId + ".txt"}>Download</a>
-            <div class="form-inline">
-              <div class="bs-example" data-example-id="simple-form-inline">
-                <div class="form-group">
+            <div class="d-flex">
+              <div class="bs-example" data-example-id="simple-d-flex">
+                <div class="mb-3">
                   <div class="input-group">
-                    <label class="mr-2" for="search">Search:</label>
+                    <label class="me-2" for="search">Search:</label>
                     <input type="text" class="form-control" id="search" data-search-input="true"></input>
                   </div>
                 </div>
@@ -113,7 +113,7 @@ private[ui] class ExecutorThreadDumpPage(
             <th data-action="collapseAllThreadStackTrace" data-toggle-button="false">Thread Name</th>
             <th data-action="collapseAllThreadStackTrace" data-toggle-button="false">Thread State</th>
             <th data-action="collapseAllThreadStackTrace" data-toggle-button="false">
-              <span data-toggle="tooltip" data-placement="top"
+              <span data-bs-toggle="tooltip" data-bs-placement="top"
                     title="Objects whose lock the thread currently holds">
                 Thread Locks
               </span>

@@ -2059,23 +2059,92 @@ object PushDownPredicates extends Rule[LogicalPlan] {
  * Pushes [[Filter]] operators through many operators iff:
  * 1) the operator is deterministic
  * 2) the predicate is deterministic and the operator will not change any of rows.
+ * 3) We don't add double evaluation OR double evaluation would be cheap OR we're configured to.
  *
- * This heuristic is valid assuming the expression evaluation cost is minimal.
  */
 object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform applyLocally
 
   val applyLocally: PartialFunction[LogicalPlan, LogicalPlan] = {
+    // Projections are a special case because the filter _may_ contain references to fields added in
+    // the projection that we wish to copy. We shouldn't blindly copy everything
+    // since double evaluation all operations can be expensive (unless the broken behavior is
+    // enabled by the user). The double filter eval regression was added in Spark 3 fixed in 4.2.
+    // The _new_ default algorithm works as follows:
+    // Provided filters are broken up based on their &&s for separate evaluation.
+    // We track which components of the projection are used in the filters.
+    //
+    // 1) The filter does not reference anything in the projection: pushed
+    // 2) Filter which reference _inexpensive_ items in projection: pushed and reference resolved
+    //    resulting in double evaluation, but only of inexpensive items -- worth it to filter
+    //    records sooner.
+    // (Case 1 & 2 are treated as "cheap" predicates)
+    // 3) When an a filter references expensive to compute references we do not push it.
+    // Note that a given filter may contain parts (sepereated by logical ands) from all cases.
+    // We handle each part separately according to the logic above.
+    // Additional restriction:
     // SPARK-13473: We can't push the predicate down when the underlying projection output non-
     // deterministic field(s).  Non-deterministic expressions are essentially stateful. This
     // implies that, for a given input row, the output are determined by the expression's initial
     // state and all the input rows processed before. In another word, the order of input rows
     // matters for non-deterministic expressions, while pushing down predicates changes the order.
     // This also applies to Aggregate.
-    case Filter(condition, project @ Project(fields, grandChild))
+    case f @ Filter(condition, project @ Project(fields, grandChild))
       if fields.forall(_.deterministic) && canPushThroughCondition(grandChild, condition) =>
+      // All of the aliases in the projection
       val aliasMap = getAliasMap(project)
-      project.copy(child = Filter(replaceAlias(condition, aliasMap), grandChild))
+      if (!SQLConf.get.avoidDoubleFilterEval) {
+        // If the user is ok with double evaluation of projections short circuit
+        project.copy(child = Filter(replaceAlias(condition, aliasMap), grandChild))
+      } else {
+        // Break up the filter into its respective components by &&s.
+        val splitCondition = splitConjunctivePredicates(condition)
+        // Find the different aliases each component of the filter uses.
+        val originalAndRewrittenConditionsWithUsedAlias = splitCondition.map { cond =>
+          // Here we get which aliases were used in a given filter so we can see if the filter
+          // referenced an expensive alias v.s. just checking if the filter is expensive.
+          val (replaced, usedAliases) = replaceAliasWhileTracking(cond, aliasMap)
+          (cond, usedAliases, replaced)
+        }
+        // Split the filter's components into cheap and expensive while keeping track of
+        // what each references from the projection.
+        val (cheapWithUsed, expensiveWithUsed) = originalAndRewrittenConditionsWithUsedAlias
+          .partition { case (cond, used, replaced) =>
+            // Didn't use anything? We're good
+            if (used.isEmpty) {
+              true
+            } else if (!used.exists(_._2.child.expensive)) {
+              // If it's cheap we can push it because it might eliminate more data quickly and
+              // it may also be something which could be evaluated at the storage layer.
+              // We may wish to improve this heuristic in the future.
+              true
+            } else {
+              false
+            }
+          }
+        // Short circuit if we do not have any cheap filters return the original filter as is.
+        if (cheapWithUsed.isEmpty) {
+          f
+        } else {
+          val cheap: Seq[Expression] = cheapWithUsed.map(_._3)
+          // Make a base instance which has all of the cheap filters pushed down.
+          // For all filter which do not reference any expensive aliases then
+          // just push the filter while resolving the non-expensive aliases.
+          val combinedCheapFilter = cheap.reduce(And)
+          val baseChild = Filter(combinedCheapFilter, child = grandChild)
+          // Take our projection and place it on top of the pushed filters.
+          val topProjection = project.copy(child = baseChild)
+
+          // If we pushed all the filters we can return the projection
+          if (expensiveWithUsed.isEmpty) {
+            topProjection
+          } else {
+            // Finally add any filters which could not be pushed
+            val remainingConditions = expensiveWithUsed.map(_._1)
+            Filter(remainingConditions.reduce(And), topProjection)
+          }
+        }
+      }
 
     // We can push down deterministic predicate through Aggregate, including throwable predicate.
     // If we can push down a filter through Aggregate, it means the filter only references the

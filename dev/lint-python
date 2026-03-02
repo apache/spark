@@ -330,7 +330,7 @@ function black_test {
     fi
 
     echo "starting black test..."
-    BLACK_REPORT=$( ($BLACK_BUILD --check python/pyspark dev python/packaging) 2>&1)
+    BLACK_REPORT=$( ($BLACK_BUILD --check python/pyspark dev python/packaging python/benchmarks) 2>&1)
     BLACK_STATUS=$?
 
     if [ "$BLACK_STATUS" -ne 0 ]; then

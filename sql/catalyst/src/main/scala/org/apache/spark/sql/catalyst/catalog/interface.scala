@@ -144,6 +144,7 @@ case class CatalogStorageFormat(
     locationUri: Option[URI],
     inputFormat: Option[String],
     outputFormat: Option[String],
+    serdeName: Option[String],
     serde: Option[String],
     compressed: Boolean,
     properties: Map[String, String]) extends MetadataMapSupport {
@@ -158,6 +159,7 @@ case class CatalogStorageFormat(
     val map = mutable.LinkedHashMap[String, JValue]()
 
     locationUri.foreach(l => map += ("Location" -> JString(CatalogUtils.URIToString(l))))
+    serdeName.foreach(s => map += ("Serde Name" -> JString(s)))
     serde.foreach(s => map += ("Serde Library" -> JString(s)))
     inputFormat.foreach(format => map += ("InputFormat" -> JString(format)))
     outputFormat.foreach(format => map += ("OutputFormat" -> JString(format)))
@@ -178,8 +180,8 @@ case class CatalogStorageFormat(
 
 object CatalogStorageFormat {
   /** Empty storage format for default values and copies. */
-  val empty = CatalogStorageFormat(locationUri = None, inputFormat = None,
-    outputFormat = None, serde = None, compressed = false, properties = Map.empty)
+  val empty = CatalogStorageFormat(locationUri = None, inputFormat = None, outputFormat = None,
+    serdeName = None, serde = None, compressed = false, properties = Map.empty)
 }
 
 /**
@@ -614,10 +616,11 @@ case class CatalogTable(
       inputFormat: Option[String] = storage.inputFormat,
       outputFormat: Option[String] = storage.outputFormat,
       compressed: Boolean = false,
+      serdeName: Option[String] = storage.serdeName,
       serde: Option[String] = storage.serde,
       properties: Map[String, String] = storage.properties): CatalogTable = {
     copy(storage = CatalogStorageFormat(
-      locationUri, inputFormat, outputFormat, serde, compressed, properties))
+      locationUri, inputFormat, outputFormat, serdeName, serde, compressed, properties))
   }
 
   def toJsonLinkedHashMap: mutable.LinkedHashMap[String, JValue] = {

@@ -97,7 +97,7 @@ class SparkConnectServerPageSuite
     assert(html.contains("dummy query"))
 
     // Pagination support
-    assert(html.contains("<label>1 pages. jump to</label>"))
+    assert(html.contains("<label style=\"white-space: nowrap;\">1 pages. jump to</label>"))
 
     // Hiding table support
     assert(
@@ -124,7 +124,7 @@ class SparkConnectServerPageSuite
     assert(html.contains("jobtag"))
 
     // Pagination support
-    assert(html.contains("<label>1 pages. jump to</label>"))
+    assert(html.contains("<label style=\"white-space: nowrap;\">1 pages. jump to</label>"))
 
     // Hiding table support
     assert(
