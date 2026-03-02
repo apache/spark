@@ -1547,6 +1547,35 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     }
   }
 
+  test("fileChecksumThreadPoolSize propagates to ChecksumCheckpointFileManager") {
+    Seq(0, 1, 6).foreach { numThreads =>
+      withTempDir { dir =>
+        val sqlConf = SQLConf.get.clone()
+        sqlConf.setConfString(SQLConf.STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED.key, "true")
+        sqlConf.setConfString(
+          SQLConf.STATE_STORE_FILE_CHECKSUM_THREAD_POOL_SIZE.key, numThreads.toString)
+
+        val provider = newStoreProvider(
+          opId = Random.nextInt(), partition = 0, dir = dir.getCanonicalPath,
+          sqlConfOpt = Some(sqlConf))
+        val fileManagerMethod = PrivateMethod[CheckpointFileManager](Symbol("fm"))
+        val fm = provider invokePrivate fileManagerMethod()
+
+        assert(fm.isInstanceOf[ChecksumCheckpointFileManager])
+        assert(fm.asInstanceOf[ChecksumCheckpointFileManager].numThreads === numThreads)
+        provider.close()
+      }
+    }
+  }
+
+  test("STATE_STORE_FILE_CHECKSUM_THREAD_POOL_SIZE: invalid negative value is rejected") {
+    val sqlConf = SQLConf.get.clone()
+    val ex = intercept[IllegalArgumentException] {
+      sqlConf.setConfString(SQLConf.STATE_STORE_FILE_CHECKSUM_THREAD_POOL_SIZE.key, "-1")
+    }
+    assert(ex.getMessage.contains("Must be a non-negative integer"))
+  }
+
   override def newStoreProvider(): HDFSBackedStateStoreProvider = {
     newStoreProvider(opId = Random.nextInt(), partition = 0)
   }

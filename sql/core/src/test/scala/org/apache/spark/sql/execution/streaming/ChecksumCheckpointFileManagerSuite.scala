@@ -251,27 +251,27 @@ abstract class ChecksumCheckpointFileManagerSuite extends CheckpointFileManagerT
     }
   }
 
-  test("numThreads = 1 is valid") {
+  test("numThreads = 0 disables thread pool") {
     withTempHadoopPath { basePath =>
       val fm = new ChecksumCheckpointFileManager(
         createNoChecksumManager(basePath),
         allowConcurrentDelete = true,
-        numThreads = 1,
+        numThreads = 0,
         skipCreationIfFileMissingChecksum = false)
       fm.close()
     }
   }
 
-  test("odd numThreads > 1 is invalid") {
+  test("negative numThreads is invalid") {
     withTempHadoopPath { basePath =>
       val ex = intercept[AssertionError] {
         new ChecksumCheckpointFileManager(
           createNoChecksumManager(basePath),
           allowConcurrentDelete = true,
-          numThreads = 3,
+          numThreads = -1,
           skipCreationIfFileMissingChecksum = false)
       }
-      assert(ex.getMessage.contains("numThreads must be 1 or a multiple of 2"))
+      assert(ex.getMessage.contains("numThreads must be a non-negative integer"))
     }
   }
 }
