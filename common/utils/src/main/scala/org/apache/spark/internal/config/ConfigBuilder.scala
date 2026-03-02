@@ -150,17 +150,18 @@ private object ConfigHelpers {
 private[spark] class TypedConfigBuilder[T](
   val parent: ConfigBuilder,
   val converter: String => T,
-  val stringConverter: T => String) {
+  val stringConverter: T => String,
+  val configEntryType: ConfigEntryType) {
 
   import ConfigHelpers._
 
-  def this(parent: ConfigBuilder, converter: String => T) = {
-    this(parent, converter, { v: T => v.toString })
+  def this(parent: ConfigBuilder, converter: String => T, configEntryType: ConfigEntryType) = {
+    this(parent, converter, { v: T => v.toString }, configEntryType)
   }
 
   /** Apply a transformation to the user-provided values of the config entry. */
   def transform(fn: T => T): TypedConfigBuilder[T] = {
-    new TypedConfigBuilder(parent, s => fn(converter(s)), stringConverter)
+    new TypedConfigBuilder(parent, s => fn(converter(s)), stringConverter, configEntryType)
   }
 
   /** Checks if the user-provided value for the config matches the validator. */
@@ -204,14 +205,15 @@ private[spark] class TypedConfigBuilder[T](
 
   /** Turns the config entry into a sequence of values of the underlying type. */
   def toSequence: TypedConfigBuilder[Seq[T]] = {
-    new TypedConfigBuilder(parent, stringToSeq(_, converter), seqToString(_, stringConverter))
+    new TypedConfigBuilder(parent, stringToSeq(_, converter), seqToString(_, stringConverter),
+      configEntryType)
   }
 
   /** Creates a [[ConfigEntry]] that does not have a default value. */
   def createOptional: OptionalConfigEntry[T] = {
     val entry = new OptionalConfigEntry[T](parent.key, parent._prependedKey,
       parent._prependSeparator, parent._alternatives, converter, stringConverter, parent._doc,
-      parent._public, parent._version)
+      parent._public, parent._version, configEntryType)
     parent._onCreate.foreach(_(entry))
     entry
   }
@@ -227,7 +229,7 @@ private[spark] class TypedConfigBuilder[T](
         val transformedDefault = converter(stringConverter(default))
         val entry = new ConfigEntryWithDefault[T](parent.key, parent._prependedKey,
           parent._prependSeparator, parent._alternatives, transformedDefault, converter,
-          stringConverter, parent._doc, parent._public, parent._version)
+          stringConverter, parent._doc, parent._public, parent._version, configEntryType)
         parent._onCreate.foreach(_ (entry))
         entry
     }
@@ -237,7 +239,7 @@ private[spark] class TypedConfigBuilder[T](
   def createWithDefaultFunction(defaultFunc: () => T): ConfigEntry[T] = {
     val entry = new ConfigEntryWithDefaultFunction[T](parent.key, parent._prependedKey,
       parent._prependSeparator, parent._alternatives, defaultFunc, converter, stringConverter,
-      parent._doc, parent._public, parent._version)
+      parent._doc, parent._public, parent._version, configEntryType)
     parent._onCreate.foreach(_ (entry))
     entry
   }
@@ -249,7 +251,7 @@ private[spark] class TypedConfigBuilder[T](
   def createWithDefaultString(default: String): ConfigEntry[T] = {
     val entry = new ConfigEntryWithDefaultString[T](parent.key, parent._prependedKey,
       parent._prependSeparator, parent._alternatives, default, converter, stringConverter,
-      parent._doc, parent._public, parent._version)
+      parent._doc, parent._public, parent._version, configEntryType)
     parent._onCreate.foreach(_(entry))
     entry
   }
@@ -310,46 +312,49 @@ private[spark] case class ConfigBuilder(key: String) {
 
   def intConf: TypedConfigBuilder[Int] = {
     checkPrependConfig
-    new TypedConfigBuilder(this, toNumber(_, _.toInt, key, "int"))
+    new TypedConfigBuilder(this, toNumber(_, _.toInt, key, "int"), ConfigEntryType.IntEntry)
   }
 
   def longConf: TypedConfigBuilder[Long] = {
     checkPrependConfig
-    new TypedConfigBuilder(this, toNumber(_, _.toLong, key, "long"))
+    new TypedConfigBuilder(this, toNumber(_, _.toLong, key, "long"), ConfigEntryType.LongEntry)
   }
 
   def doubleConf: TypedConfigBuilder[Double] = {
     checkPrependConfig
-    new TypedConfigBuilder(this, toNumber(_, _.toDouble, key, "double"))
+    new TypedConfigBuilder(this, toNumber(_, _.toDouble, key, "double"),
+      ConfigEntryType.DoubleEntry)
   }
 
   def booleanConf: TypedConfigBuilder[Boolean] = {
     checkPrependConfig
-    new TypedConfigBuilder(this, toBoolean(_, key))
+    new TypedConfigBuilder(this, toBoolean(_, key), ConfigEntryType.BooleanEntry)
   }
 
   def stringConf: TypedConfigBuilder[String] = {
-    new TypedConfigBuilder(this, v => v)
+    new TypedConfigBuilder(this, v => v, ConfigEntryType.StringEntry)
   }
 
   def enumConf(e: Enumeration): TypedConfigBuilder[e.Value] = {
     checkPrependConfig
-    new TypedConfigBuilder(this, toEnum(_, e, key))
+    new TypedConfigBuilder(this, toEnum(_, e, key), ConfigEntryType.EnumEntry)
   }
 
   def enumConf[E <: Enum[E]](e: Class[E]): TypedConfigBuilder[E] = {
     checkPrependConfig
-    new TypedConfigBuilder(this, toEnum(_, e, key))
+    new TypedConfigBuilder(this, toEnum(_, e, key), ConfigEntryType.EnumEntry)
   }
 
   def timeConf(unit: TimeUnit): TypedConfigBuilder[Long] = {
     checkPrependConfig
-    new TypedConfigBuilder(this, timeFromString(_, unit, key), timeToString(_, unit))
+    new TypedConfigBuilder(this, timeFromString(_, unit, key), timeToString(_, unit),
+      ConfigEntryType.TimeEntry)
   }
 
   def bytesConf(unit: ByteUnit): TypedConfigBuilder[Long] = {
     checkPrependConfig
-    new TypedConfigBuilder(this, byteFromString(_, unit, key), byteToString(_, unit, key))
+    new TypedConfigBuilder(this, byteFromString(_, unit, key), byteToString(_, unit, key),
+      ConfigEntryType.BytesEntry)
   }
 
   def fallbackConf[T](fallback: ConfigEntry[T]): ConfigEntry[T] = {
@@ -361,7 +366,8 @@ private[spark] case class ConfigBuilder(key: String) {
 
   def regexConf: TypedConfigBuilder[Regex] = {
     checkPrependConfig
-    new TypedConfigBuilder(this, regexFromString(_, this.key), _.toString)
+    new TypedConfigBuilder(this, regexFromString(_, this.key), _.toString,
+      ConfigEntryType.RegexEntry)
   }
 
   private def checkPrependConfig = {

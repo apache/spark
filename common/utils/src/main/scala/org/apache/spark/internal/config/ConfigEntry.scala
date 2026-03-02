@@ -17,6 +17,26 @@
 
 package org.apache.spark.internal.config
 
+/**
+ * Identifies the declared type of a [[ConfigEntry]] at construction time,
+ * avoiding runtime type probing or exception handling when the entry type
+ * needs to be inspected later (e.g. for optimized config access paths).
+ */
+private[spark] sealed trait ConfigEntryType extends Serializable
+
+private[spark] object ConfigEntryType {
+  case object BooleanEntry extends ConfigEntryType
+  case object IntEntry extends ConfigEntryType
+  case object LongEntry extends ConfigEntryType
+  case object DoubleEntry extends ConfigEntryType
+  case object StringEntry extends ConfigEntryType
+  case object EnumEntry extends ConfigEntryType
+  case object TimeEntry extends ConfigEntryType
+  case object BytesEntry extends ConfigEntryType
+  case object RegexEntry extends ConfigEntryType
+  case object OtherEntry extends ConfigEntryType
+}
+
 // ====================================================================================
 //                      The guideline for naming configurations
 // ====================================================================================
@@ -80,7 +100,8 @@ private[spark] abstract class ConfigEntry[T] (
     val stringConverter: T => String,
     val doc: String,
     val isPublic: Boolean,
-    val version: String) {
+    val version: String,
+    val configEntryType: ConfigEntryType) {
 
   import ConfigEntry._
 
@@ -120,7 +141,8 @@ private class ConfigEntryWithDefault[T] (
     stringConverter: T => String,
     doc: String,
     isPublic: Boolean,
-    version: String)
+    version: String,
+    configEntryType: ConfigEntryType)
   extends ConfigEntry(
     key,
     prependedKey,
@@ -130,7 +152,8 @@ private class ConfigEntryWithDefault[T] (
     stringConverter,
     doc,
     isPublic,
-    version
+    version,
+    configEntryType
   ) {
 
   override def defaultValue: Option[T] = Some(_defaultValue)
@@ -152,7 +175,8 @@ private class ConfigEntryWithDefaultFunction[T] (
     stringConverter: T => String,
     doc: String,
     isPublic: Boolean,
-    version: String)
+    version: String,
+    configEntryType: ConfigEntryType)
   extends ConfigEntry(
     key,
     prependedKey,
@@ -162,7 +186,8 @@ private class ConfigEntryWithDefaultFunction[T] (
     stringConverter,
     doc,
     isPublic,
-    version
+    version,
+    configEntryType
   ) {
 
   override def defaultValue: Option[T] = Some(_defaultFunction())
@@ -184,7 +209,8 @@ private class ConfigEntryWithDefaultString[T] (
     stringConverter: T => String,
     doc: String,
     isPublic: Boolean,
-    version: String)
+    version: String,
+    configEntryType: ConfigEntryType)
   extends ConfigEntry(
     key,
     prependedKey,
@@ -194,7 +220,8 @@ private class ConfigEntryWithDefaultString[T] (
     stringConverter,
     doc,
     isPublic,
-    version
+    version,
+    configEntryType
   ) {
 
   override def defaultValue: Option[T] = Some(valueConverter(_defaultValue))
@@ -220,7 +247,8 @@ private[spark] class OptionalConfigEntry[T](
     val rawStringConverter: T => String,
     doc: String,
     isPublic: Boolean,
-    version: String)
+    version: String,
+    configEntryType: ConfigEntryType)
   extends ConfigEntry[Option[T]](
     key,
     prependedKey,
@@ -230,7 +258,8 @@ private[spark] class OptionalConfigEntry[T](
     v => v.map(rawStringConverter).orNull,
     doc,
     isPublic,
-    version
+    version,
+    configEntryType
   ) {
 
   override def defaultValueString: String = ConfigEntry.UNDEFINED
@@ -261,7 +290,8 @@ private[spark] class FallbackConfigEntry[T] (
     fallback.stringConverter,
     doc,
     isPublic,
-    version
+    version,
+    fallback.configEntryType
   ) {
 
   override def defaultValueString: String = s"<value of ${fallback.key}>"
