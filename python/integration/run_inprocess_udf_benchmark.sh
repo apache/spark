@@ -57,6 +57,6 @@ VENV_SITE="$(dirname "$JEP_NATIVE_DIR")"
 export SPARK_HOME
 export INPROCESS_TESTS=1
 export PYTHONPATH="$VENV_SITE:$SPARK_HOME/python:$PY4J_ZIP"
-export PYSPARK_SUBMIT_ARGS="--driver-class-path $JEP_JAR --driver-java-options -Djava.library.path=$JEP_NATIVE_DIR pyspark-shell"
+export PYSPARK_SUBMIT_ARGS="--driver-memory 8g --driver-class-path $JEP_JAR --driver-java-options \"-Djava.library.path=$JEP_NATIVE_DIR -XX:MaxDirectMemorySize=8g\" pyspark-shell"
 
 exec "$VENV_PY" "$SCRIPT_DIR/benchmark_inprocess_udf.py"
