@@ -2284,8 +2284,8 @@ class SessionCatalog(
     }
 
   /**
-   * Looks up functions using PATH-based resolution.
-   * Searches through the configured resolution path with view context handling.
+   * Looks up functions by trying each session namespace in resolution order.
+   * Uses the kind-based lookup; built-in operators are checked first for scalar functions.
    *
    * @param name The function name (unqualified).
    * @param registry The registry to search (FunctionRegistry or TableFunctionRegistry).
@@ -2306,14 +2306,11 @@ class SessionCatalog(
       None
     }
 
+    val tableFunction = registry eq tableFunctionRegistry
     operatorResult.orElse {
-      // Use PATH-based resolution: iterate through namespaces until a match is found.
-      val path = resolutionPath()
-
-      // Use iterator for short-circuit evaluation (stops at first match).
-      path.iterator.flatMap { namespace =>
-        lookupInNamespace(namespace, name, registry)
-      }.nextOption()
+      sessionFunctionKindsInResolutionOrder.iterator
+        .flatMap(kind => lookupFunctionInfo(kind, name, tableFunction))
+        .nextOption()
     }
   }
 
@@ -2445,8 +2442,8 @@ class SessionCatalog(
     resolveFunctionWithFallback(name, arguments, tableFunctionRegistry)
 
   /**
-   * Resolves functions using PATH-based resolution.
-   * Searches through the resolution path, returning the first function found.
+   * Resolves functions by trying each session namespace in resolution order.
+   * Uses the kind-based resolve API.
    *
    * @param name The function name (unqualified).
    * @param arguments The arguments to pass to the function.
@@ -2460,12 +2457,13 @@ class SessionCatalog(
       arguments: Seq[Expression],
       registry: FunctionRegistryBase[T]): Option[T] = {
 
-    // Use PATH-based resolution: iterate through namespaces until a match is found.
-    val path = resolutionPath()
-
-    // Use iterator for short-circuit evaluation (stops at first match).
-    path.iterator.flatMap { namespace =>
-      resolveInNamespace(namespace, name, arguments, registry)
+    val tableFunction = registry eq tableFunctionRegistry
+    sessionFunctionKindsInResolutionOrder.iterator.flatMap { kind =>
+      if (tableFunction) {
+        resolveTableFunction(kind, name, arguments)
+      } else {
+        resolveScalarFunction(kind, name, arguments)
+      }
     }.nextOption()
   }
 
