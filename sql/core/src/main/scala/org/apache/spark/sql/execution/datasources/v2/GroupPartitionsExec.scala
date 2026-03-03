@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
 import org.apache.spark.sql.connector.catalog.functions.Reducer
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.vectorized.ColumnarBatch
 
 /**
  * Physical operator that groups input partitions by their partition keys.
@@ -152,6 +153,17 @@ case class GroupPartitionsExec(
       sparkContext.emptyRDD
     } else {
       new CoalescedRDD(child.execute(), groupedPartitions.size, Some(partitionCoalescer))
+    }
+  }
+
+  override def supportsColumnar: Boolean = child.supportsColumnar
+
+  override protected def doExecuteColumnar(): RDD[ColumnarBatch] = {
+    val partitionCoalescer = new GroupedPartitionCoalescer(groupedPartitions.map(_._2))
+    if (groupedPartitions.isEmpty) {
+      sparkContext.emptyRDD
+    } else {
+      new CoalescedRDD(child.executeColumnar(), groupedPartitions.size, Some(partitionCoalescer))
     }
   }
 
