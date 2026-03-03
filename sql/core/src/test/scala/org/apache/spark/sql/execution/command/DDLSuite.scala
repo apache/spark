@@ -868,13 +868,20 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       sql("ALTER TABLE tab1 RENAME TO tab2")
       checkAnswer(spark.table("tab2"), spark.range(10).toDF())
       val e = intercept[AnalysisException](spark.table("tab1"))
-      checkErrorTableNotFound(e, "`tab1`")
+      checkError(
+        exception = e,
+        condition = "TABLE_OR_VIEW_NOT_FOUND_WITH_SEARCH_PATH",
+        parameters = Map(
+          "relationName" -> "`tab1`",
+          "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"))
       sql("ALTER VIEW tab2 RENAME TO tab1")
       checkAnswer(spark.table("tab1"), spark.range(10).toDF())
       checkError(
         exception = intercept[AnalysisException] { spark.table("tab2") },
-        condition = "TABLE_OR_VIEW_NOT_FOUND",
-        parameters = Map("relationName" -> "`tab2`")
+        condition = "TABLE_OR_VIEW_NOT_FOUND_WITH_SEARCH_PATH",
+        parameters = Map(
+          "relationName" -> "`tab2`",
+          "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]")
       )
     }
   }

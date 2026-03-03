@@ -856,8 +856,12 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("SPARK-28251: Insert into non-existing table error message is user friendly") {
+    // Unqualified name "test" is resolved using the search path; error includes search path.
     assertAnalysisErrorCondition(parsePlan("INSERT INTO test VALUES (1)"),
-      "TABLE_OR_VIEW_NOT_FOUND", Map("relationName" -> "`test`"),
+      "TABLE_OR_VIEW_NOT_FOUND_WITH_SEARCH_PATH",
+      Map(
+        "relationName" -> "`test`",
+        "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"),
       Array(ExpectedContext("test", 12, 15)))
   }
 
