@@ -492,7 +492,7 @@ case class KeyedPartitioning(
       val projectedKeys = projectKeys(joinKeyPositions)._2
       val distinctProjectedKeys = projectedKeys.distinct
       val projectedPartitioning =
-        copy(expressions = projectedExpressions, partitionKeys = distinctProjectedKeys)
+        KeyedPartitioning(projectedExpressions, distinctProjectedKeys, isGrouped = true)
       result.copy(partitioning = projectedPartitioning, joinKeyPositions = Some(joinKeyPositions))
     } else {
       result

@@ -76,7 +76,7 @@ case class GroupPartitionsExec(
         p.transform {
           case k: KeyedPartitioning =>
             val projectedExpressions = joinKeyPositions.fold(k.expressions)(_.map(k.expressions))
-            k.copy(expressions = projectedExpressions, partitionKeys = groupedPartitions.map(_._1))
+            KeyedPartitioning(projectedExpressions, groupedPartitions.map(_._1), isGrouped = true)
         }.asInstanceOf[Partitioning]
       case o => o
     }
