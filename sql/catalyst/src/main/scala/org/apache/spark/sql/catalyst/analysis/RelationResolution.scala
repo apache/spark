@@ -170,9 +170,14 @@ class RelationResolution(
       )
     }
 
-    // Multi-part (but not session-qualified): expand and resolve as persistent only.
+    // Multi-part (but not session-qualified): try temp view first (e.g. global_temp.tbl1), then
+    // persistent.
     if (identifier.length > 1) {
-      return tryResolvePersistent(u, identifier, finalTimeTravelSpec)
+      return resolveTempView(
+        identifier,
+        u.isStreaming,
+        finalTimeTravelSpec.isDefined
+      ).orElse(tryResolvePersistent(u, identifier, finalTimeTravelSpec))
     }
 
     // 1-part name: try each scope in relationResolutionSearchPath order (mirrors
