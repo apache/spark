@@ -379,7 +379,7 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
           partitionId, sourceOptions.storeName)
         val providerId = new StateStoreProviderId(storeId, UUID.randomUUID())
         val manager = new StateSchemaCompatibilityChecker(providerId, hadoopConf,
-          oldSchemaFilePaths = oldSchemaFilePaths)
+          oldSchemaFilePaths = oldSchemaFilePaths, createSchemaDir = false)
         val stateSchema = manager.readSchemaFile()
 
         if (sourceOptions.internalOnlyReadAllColumnFamilies) {

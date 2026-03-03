@@ -386,6 +386,51 @@ object RandomDataGenerator {
             }
           }
         }
+      case gt: GeometryType =>
+        val possibleGeometriesWKB = Seq(
+          "010100000000000000000031400000000000001c40", // POINT (17 7)
+          "010100000000000000000014400000000000001440", // POINT (5 5)
+          "010100000000000000008057400000000000003340" // POINT (93.5 19)
+        )
+
+        val possibleSrids = Seq(4326, 3857, 0)
+
+        Some(() => {
+          val wkbIdx = rand.nextInt(possibleGeometriesWKB.length)
+          val sridIdx = rand.nextInt(possibleSrids.length)
+          val wkb = possibleGeometriesWKB(wkbIdx).grouped(2)
+            .map(Integer.parseInt(_, 16).toByte).toArray
+          val srid = if (gt.srid == GeometryType.MIXED_SRID) {
+            possibleSrids(sridIdx)
+          } else {
+            gt.srid
+          }
+
+          Geometry.fromWKB(wkb, srid)
+        })
+
+      case gt: GeographyType =>
+        val possibleGeometriesWKB = Seq(
+          "010100000000000000000031400000000000001c40", // POINT (17 7)
+          "010100000000000000000014400000000000001440", // POINT (5 5)
+          "010100000000000000008057400000000000003340" // POINT (93.5 19)
+        )
+
+        val possibleSrids = Seq(4326)
+
+        Some(() => {
+          val wkbIdx = rand.nextInt(possibleGeometriesWKB.length)
+          val sridIdx = rand.nextInt(possibleSrids.length)
+          val wkb = possibleGeometriesWKB(wkbIdx).grouped(2)
+            .map(Integer.parseInt(_, 16).toByte).toArray
+          val srid = if (gt.srid == GeographyType.MIXED_SRID) {
+            possibleSrids(sridIdx)
+          } else {
+            gt.srid
+          }
+
+          Geography.fromWKB(wkb, srid)
+        })
       case unsupportedType => None
     }
     // Handle nullability by wrapping the non-null value generator:

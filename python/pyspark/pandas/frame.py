@@ -170,7 +170,7 @@ if TYPE_CHECKING:
 # Two patterns basically seek the footer string from Pandas'
 REPR_PATTERN = re.compile(r"\n\n\[(?P<rows>[0-9]+) rows x (?P<columns>[0-9]+) columns\]$")
 REPR_HTML_PATTERN = re.compile(
-    r"\n\<p\>(?P<rows>[0-9]+) rows × (?P<columns>[0-9]+) columns\<\/p\>\n\<\/div\>$"
+    r"\n\<p\>(?P<rows>[0-9]+) rows × (?P<columns>[0-9]+) columns\<\/p\>\n\<\/div\>$"  # noqa: RUF001
 )
 
 
@@ -663,7 +663,7 @@ class DataFrame(Frame, Generic[T]):
         self,
         internal: InternalFrame,
         check_same_anchor: bool = True,
-        anchor_force_disconnect: bool = False,
+        anchor_force_disconnect: Optional[bool] = None,
     ) -> None:
         """
         Update InternalFrame with the given one.
@@ -686,6 +686,9 @@ class DataFrame(Frame, Generic[T]):
             Force to disconnect the original anchor and create a new one
         """
         from pyspark.pandas.series import Series
+
+        if anchor_force_disconnect is None:
+            anchor_force_disconnect = LooseVersion(pd.__version__) >= "3.0.0"
 
         if hasattr(self, "_psseries"):
             psseries = {}
@@ -2591,10 +2594,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             for the column names.
         index : bool, default True
             Write row names (index).
-        na_rep : str, default ‘NaN’
+        na_rep : str, default 'NaN'
             Missing data representation.
         formatters : list of functions or dict of {str: function}, optional
-            Formatter functions to apply to columns’ elements by position or name. The result of
+            Formatter functions to apply to columns' elements by position or name. The result of
             each function must be a Unicode string. List must be of length equal to the number of
             columns.
         float_format : str, optional
@@ -2607,9 +2610,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         bold_rows : bool, default False
             Make the row labels bold in the output.
         column_format : str, optional
-            The columns format as specified in LaTeX table format e.g. ‘rcl’ for 3 columns. By
-            default, ‘l’ will be used for all columns except columns of numbers, which default
-            to ‘r’.
+            The columns format as specified in LaTeX table format e.g. 'rcl' for 3 columns. By
+            default, 'l' will be used for all columns except columns of numbers, which default
+            to 'r'.
         longtable : bool, optional
             By default the value will be read from the pandas config module. Use a longtable
             environment instead of tabular. Requires adding a usepackage{longtable} to your LaTeX
@@ -2618,14 +2621,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             By default the value will be read from the pandas config module. When set to False
             prevents from escaping latex special characters in column names.
         encoding : str, optional
-            A string representing the encoding to use in the output file, defaults to ‘ascii’ on
-            Python 2 and ‘utf-8’ on Python 3.
-        decimal : str, default ‘.’
-            Character recognized as decimal separator, e.g. ‘,’ in Europe.
+            A string representing the encoding to use in the output file, defaults to 'ascii' on
+            Python 2 and 'utf-8' on Python 3.
+        decimal : str, default '.'
+            Character recognized as decimal separator, e.g. ',' in Europe.
         multicolumn : bool, default True
             Use multicolumn to enhance MultiIndex columns. The default will be read from the config
             module.
-        multicolumn_format : str, default ‘l’
+        multicolumn_format : str, default 'l'
             The alignment for multicolumns, similar to column_format The default will be read from
             the config module.
         multirow : bool, default False
@@ -4899,7 +4902,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         return self._apply_series_op(lambda psser: psser._diff(periods), should_resolve=True)
 
-    # TODO(SPARK-46162): axis should support 1 or 'columns' either at this moment
     def nunique(
         self,
         axis: Axis = 0,
@@ -4914,22 +4916,26 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Parameters
         ----------
-        axis : int, default 0 or 'index'
-            Can only be set to 0 now.
+        axis : {0 or 'index', 1 or 'columns'}, default 0
+            The axis to use. 0 or 'index' for row-wise (count unique values per column),
+            1 or 'columns' for column-wise (count unique values per row).
         dropna : bool, default True
-            Don’t include NaN in the count.
+            Don't include NaN in the count.
         approx: bool, default False
             If False, will use the exact algorithm and return the exact number of unique.
             If True, it uses the HyperLogLog approximate algorithm, which is significantly faster
             for large amounts of data.
             Note: This parameter is specific to pandas-on-Spark and is not found in pandas.
+            For axis=1, this parameter is ignored and exact counting is always used.
         rsd: float, default 0.05
             Maximum estimation error allowed in the HyperLogLog algorithm.
             Note: Just like ``approx`` this parameter is specific to pandas-on-Spark.
+            For axis=1, this parameter is ignored.
 
         Returns
         -------
-        The number of unique values per column as a pandas-on-Spark Series.
+        Series
+            The number of unique values per column (axis=0) or per row (axis=1).
 
         Examples
         --------
@@ -4944,6 +4950,18 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         B    2
         dtype: int64
 
+        >>> df.nunique(axis=1)
+        0    1
+        1    2
+        2    1
+        dtype: int32
+
+        >>> df.nunique(axis=1, dropna=False)
+        0    2
+        1    2
+        2    2
+        dtype: int32
+
         On big data, we recommend using the approximate algorithm to speed up this function.
         The result will be very close to the exact unique count.
 
@@ -4955,29 +4973,52 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         from pyspark.pandas.series import first_series
 
         axis = validate_axis(axis)
-        if axis != 0:
-            raise NotImplementedError('axis should be either 0 or "index" currently.')
-        sdf = self._internal.spark_frame.select(
-            [F.lit(None).cast(StringType()).alias(SPARK_DEFAULT_INDEX_NAME)]
-            + [
-                self._psser_for(label)._nunique(dropna, approx, rsd)
-                for label in self._internal.column_labels
-            ]
-        )
-
-        # The data is expected to be small so it's fine to transpose/use the default index.
-        with ps.option_context("compute.max_rows", 1):
-            internal = self._internal.copy(
-                spark_frame=sdf,
-                index_spark_columns=[scol_for(sdf, SPARK_DEFAULT_INDEX_NAME)],
-                index_names=[None],
-                index_fields=[None],
-                data_spark_columns=[
-                    scol_for(sdf, col) for col in self._internal.data_spark_column_names
-                ],
-                data_fields=None,
+        if axis == 0:
+            sdf = self._internal.spark_frame.select(
+                [F.lit(None).cast(StringType()).alias(SPARK_DEFAULT_INDEX_NAME)]
+                + [
+                    self._psser_for(label)._nunique(dropna, approx, rsd)
+                    for label in self._internal.column_labels
+                ]
             )
-            return first_series(DataFrame(internal).transpose())
+
+            # The data is expected to be small so it's fine to transpose/use the default index.
+            with ps.option_context("compute.max_rows", 1):
+                internal = self._internal.copy(
+                    spark_frame=sdf,
+                    index_spark_columns=[scol_for(sdf, SPARK_DEFAULT_INDEX_NAME)],
+                    index_names=[None],
+                    index_fields=[None],
+                    data_spark_columns=[
+                        scol_for(sdf, col) for col in self._internal.data_spark_column_names
+                    ],
+                    data_fields=None,
+                )
+                return first_series(DataFrame(internal).transpose())
+        elif axis == 1:
+            from pyspark.pandas.series import first_series
+
+            arr = F.array(
+                *[self._internal.spark_column_for(label) for label in self._internal.column_labels]
+            )
+            arr = F.filter(arr, lambda x: x.isNotNull()) if dropna else arr
+
+            sdf = self._internal.spark_frame.select(
+                *self._internal.index_spark_columns,
+                F.size(F.array_distinct(arr)).alias(SPARK_DEFAULT_SERIES_NAME),
+            )
+
+            return first_series(
+                DataFrame(
+                    InternalFrame(
+                        spark_frame=sdf,
+                        index_spark_columns=self._internal.index_spark_columns,
+                        index_names=self._internal.index_names,
+                        index_fields=self._internal.index_fields,
+                        column_labels=[None],
+                    )
+                )
+            )
 
     def round(self, decimals: Union[int, Dict[Name, int], "Series"] = 0) -> "DataFrame":
         """
@@ -7441,7 +7482,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             If a string is given, must be the name of a level If list-like, elements must
             be names or positional indexes of levels.
 
-        axis: {0 or ‘index’, 1 or ‘columns’}, default 0
+        axis: {0 or 'index', 1 or 'columns'}, default 0
 
         Returns
         -------
@@ -7793,7 +7834,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         na_position : {'first', 'last'}, default 'last'
              `first` puts NaNs at the beginning, `last` puts NaNs at the end
         ignore_index : bool, default False
-            If True, the resulting axis will be labeled 0, 1, …, n - 1.
+            If True, the resulting axis will be labeled 0, 1, ..., n - 1.
 
         Returns
         -------
@@ -7901,7 +7942,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         kind : str, default None
             pandas-on-Spark does not allow specifying the sorting algorithm now,
             default None
-        na_position : {‘first’, ‘last’}, default ‘last’
+        na_position : {'first', 'last'}, default 'last'
             first puts NaNs at the beginning, last puts NaNs at the end. Not implemented for
             MultiIndex.
         ignore_index : bool, default False
@@ -8943,12 +8984,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         how: {'left', 'right', 'outer', 'inner'}, default 'left'
             How to handle the operation of the two objects.
 
-            * left: use `left` frame’s index (or column if on is specified).
-            * right: use `right`’s index.
-            * outer: form union of `left` frame’s index (or column if on is specified) with
-              right’s index, and sort it. lexicographically.
-            * inner: form intersection of `left` frame’s index (or column if on is specified)
-              with `right`’s index, preserving the order of the `left`’s one.
+            * left: use `left` frame's index (or column if on is specified).
+            * right: use `right`'s index.
+            * outer: form union of `left` frame's index (or column if on is specified) with
+              right's index, and sort it. lexicographically.
+            * inner: form intersection of `left` frame's index (or column if on is specified)
+              with `right`'s index, preserving the order of the `left`'s one.
         lsuffix : str, default ''
             Suffix to use from left frame's overlapping columns.
         rsuffix : str, default ''
@@ -9014,8 +9055,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         K3   A3  None
 
         Another option to join using the key columns is to use the on parameter. DataFrame.join
-        always uses right’s index but we can use any column in df. This method does not preserve
-        the original DataFrame’s index in the result unlike pandas.
+        always uses right's index but we can use any column in df. This method does not preserve
+        the original DataFrame's index in the result unlike pandas.
 
         >>> join_psdf = psdf1.join(psdf2.set_index('key'), on='key')
         >>> join_psdf.index
@@ -9818,9 +9859,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         For numeric data, the result's index will include ``count``,
         ``mean``, ``std``, ``min``, ``25%``, ``50%``, ``75%``, ``max``.
 
-        For object data (e.g. strings or timestamps), the result’s index will include
+        For object data (e.g. strings or timestamps), the result's index will include
         ``count``, ``unique``, ``top``, and ``freq``.
-        The ``top`` is the most common value. The ``freq`` is the most common value’s frequency.
+        The ``top`` is the most common value. The ``freq`` is the most common value's frequency.
         Timestamps also include the ``first`` and ``last`` items.
 
         Examples
@@ -9974,7 +10015,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             ]
             sdf = internal.spark_frame.select(*exprs_string)
 
-            # Get `count` & `unique` for each columns
+            # Get `count` & `unique` for each column
             counts, uniques = map(lambda x: x[1:], sdf.summary("count", "count_distinct").take(2))
             # Handling Empty DataFrame
             if len(counts) == 0 or counts[0] == "0":
@@ -9983,16 +10024,30 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     data[psser.name] = [0, 0, np.nan, np.nan]
                 return DataFrame(data, index=["count", "unique", "top", "freq"])
 
-            # Get `top` & `freq` for each columns
-            tops = []
-            freqs = []
-            # TODO(SPARK-37711): We should do it in single pass since invoking Spark job
-            #   for every columns is too expensive.
-            for column in exprs_string:
-                top, freq = sdf.groupby(column).count().sort("count", ascending=False).first()
-                tops.append(str(top))
-                freqs.append(str(freq))
-
+            if len(exprs_string) == 1:
+                # Fast path for single column (e.g. Series.describe): avoid unpivot overhead.
+                top, freq = (
+                    sdf.groupby(exprs_string[0]).count().sort("count", ascending=False).first()
+                )
+                tops = [str(top)]
+                freqs = [str(freq)]
+            else:
+                # Get `top` & `freq` for each column in a single pass.
+                # Unpivot all string columns into (idx, str_value) pairs using posexplode,
+                # then find the most frequent value per column via the struct min trick.
+                # The negative count ensures min(struct(neg_count, str_value)) picks the
+                # highest count; among ties, the alphabetically first value (matching pandas).
+                rows = (
+                    sdf.select(F.posexplode(F.array(*exprs_string)).alias("idx", "str_value"))
+                    .groupby("idx", "str_value")
+                    .agg(F.negative(F.count("*")).alias("neg_count"))
+                    .groupby("idx")
+                    .agg(F.min(F.struct("neg_count", "str_value")).alias("s"))
+                    .sort("idx")
+                    .collect()
+                )
+                tops = [str(r.s.str_value) for r in rows]
+                freqs = [str(-r.s.neg_count) for r in rows]
             stats = [counts, uniques, tops, freqs]
             stats_names = ["count", "unique", "top", "freq"]
 
@@ -10213,12 +10268,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         Parameters
         ----------
         labels: array-like, optional
-            New labels / index to conform the axis specified by ‘axis’ to.
+            New labels / index to conform the axis specified by 'axis' to.
         index, columns: array-like, optional
             New labels / index to conform to, should be specified using keywords.
             Preferably an Index object to avoid duplicating data
         axis: int or str, optional
-            Axis to target. Can be either the axis name (‘index’, ‘columns’) or
+            Axis to target. Can be either the axis name ('index', 'columns') or
             number (0, 1).
         copy : bool, default True
             Return a new object, even if the passed indexes are the same.
@@ -10614,7 +10669,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             are not set as `id_vars`.
         var_name : scalar, default 'variable'
             Name to use for the 'variable' column. If None it uses `frame.columns.name` or
-            ‘variable’.
+            'variable'.
         value_name : scalar, default 'value'
             Name to use for the 'value' column.
 
@@ -11791,12 +11846,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         """
         Alter axes labels.
         Function / dict values must be unique (1-to-1). Labels not contained in a dict / Series
-        will be left as-is. Extra labels listed don’t throw an error.
+        will be left as-is. Extra labels listed don't throw an error.
 
         Parameters
         ----------
         mapper : dict-like or function
-            Dict-like or functions transformations to apply to that axis’ values.
+            Dict-like or functions transformations to apply to that axis' values.
             Use either `mapper` and `axis` to specify the axis to target with `mapper`, or `index`
             and `columns`.
         index : dict-like or function
@@ -12273,7 +12328,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         return self._apply_series_op(op, should_resolve=True)
 
-    # TODO(SPARK-46168): axis = 1
     def idxmax(self, axis: Axis = 0) -> "Series":
         """
         Return index of first occurrence of maximum over requested axis.
@@ -12284,8 +12338,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Parameters
         ----------
-        axis : 0 or 'index'
-            Can only be set to 0 now.
+        axis : {0 or 'index', 1 or 'columns'}, default 0
+            The axis to use. 0 or 'index' for row-wise, 1 or 'columns' for column-wise.
 
         Returns
         -------
@@ -12313,6 +12367,15 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         c    2
         dtype: int64
 
+        For axis=1, return the column label of the maximum value in each row:
+
+        >>> psdf.idxmax(axis=1)
+        0    c
+        1    c
+        2    c
+        3    c
+        dtype: object
+
         For Multi-column Index
 
         >>> psdf = ps.DataFrame({'a': [1, 2, 3, 2],
@@ -12333,25 +12396,74 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         c  z    2
         dtype: int64
         """
-        max_cols = map(lambda scol: F.max(scol), self._internal.data_spark_columns)
-        sdf_max = self._internal.spark_frame.select(*max_cols).head()
-        # `sdf_max` looks like below
-        # +------+------+------+
-        # |(a, x)|(b, y)|(c, z)|
-        # +------+------+------+
-        # |     3|   4.0|   400|
-        # +------+------+------+
+        axis = validate_axis(axis)
+        if axis == 0:
+            max_cols = map(lambda scol: F.max(scol), self._internal.data_spark_columns)
+            sdf_max = self._internal.spark_frame.select(*max_cols).head()
+            # `sdf_max` looks like below
+            # +------+------+------+
+            # |(a, x)|(b, y)|(c, z)|
+            # +------+------+------+
+            # |     3|   4.0|   400|
+            # +------+------+------+
 
-        conds = (
-            scol == max_val for scol, max_val in zip(self._internal.data_spark_columns, sdf_max)
-        )
-        cond = reduce(lambda x, y: x | y, conds)
+            conds = (
+                scol == max_val for scol, max_val in zip(self._internal.data_spark_columns, sdf_max)
+            )
+            cond = reduce(lambda x, y: x | y, conds)
 
-        psdf: DataFrame = DataFrame(self._internal.with_filter(cond))
+            psdf: DataFrame = DataFrame(self._internal.with_filter(cond))
 
-        return cast(ps.Series, ps.from_pandas(psdf._to_internal_pandas().idxmax()))
+            return cast(ps.Series, ps.from_pandas(psdf._to_internal_pandas().idxmax()))
+        else:
+            from pyspark.pandas.series import first_series
 
-    # TODO(SPARK-46168): axis = 1
+            column_labels = self._internal.column_labels
+
+            if len(column_labels) == 0:
+                # Check if DataFrame has rows - if yes, raise error; if no, return empty Series
+                # to match pandas behavior
+                if len(self) > 0:
+                    raise ValueError("attempt to get argmax of an empty sequence")
+                else:
+                    return ps.Series([], dtype=np.int64)
+
+            if self._internal.column_labels_level > 1:
+                raise NotImplementedError(
+                    "idxmax with axis=1 does not support MultiIndex columns yet"
+                )
+
+            max_value = F.greatest(
+                *[
+                    F.coalesce(self._internal.spark_column_for(label), F.lit(float("-inf")))
+                    for label in column_labels
+                ],
+                F.lit(float("-inf")),
+            )
+
+            result = None
+            # Iterate over the column labels in reverse order to get the first occurrence of the
+            # maximum value.
+            for label in reversed(column_labels):
+                scol = self._internal.spark_column_for(label)
+                label_value = label[0] if len(label) == 1 else label
+                condition = (scol == max_value) & scol.isNotNull()
+
+                result = (
+                    F.when(condition, F.lit(label_value))
+                    if result is None
+                    else F.when(condition, F.lit(label_value)).otherwise(result)
+                )
+
+            result = F.when(max_value == float("-inf"), F.lit(None)).otherwise(result)
+
+            internal = self._internal.with_new_columns(
+                [result.alias(SPARK_DEFAULT_SERIES_NAME)],
+                column_labels=[None],
+            )
+
+            return first_series(DataFrame(internal))
+
     def idxmin(self, axis: Axis = 0) -> "Series":
         """
         Return index of first occurrence of minimum over requested axis.
@@ -12362,8 +12474,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Parameters
         ----------
-        axis : 0 or 'index'
-            Can only be set to 0 now.
+        axis : {0 or 'index', 1 or 'columns'}, default 0
+            The axis to use. 0 or 'index' for row-wise, 1 or 'columns' for column-wise.
 
         Returns
         -------
@@ -12391,6 +12503,15 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         c    1
         dtype: int64
 
+        For axis=1, return the column label of the minimum value in each row:
+
+        >>> psdf.idxmin(axis=1)
+        0    a
+        1    a
+        2    a
+        3    b
+        dtype: object
+
         For Multi-column Index
 
         >>> psdf = ps.DataFrame({'a': [1, 2, 3, 2],
@@ -12411,17 +12532,67 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         c  z    1
         dtype: int64
         """
-        min_cols = map(lambda scol: F.min(scol), self._internal.data_spark_columns)
-        sdf_min = self._internal.spark_frame.select(*min_cols).head()
+        axis = validate_axis(axis)
+        if axis == 0:
+            min_cols = map(lambda scol: F.min(scol), self._internal.data_spark_columns)
+            sdf_min = self._internal.spark_frame.select(*min_cols).head()
 
-        conds = (
-            scol == min_val for scol, min_val in zip(self._internal.data_spark_columns, sdf_min)
-        )
-        cond = reduce(lambda x, y: x | y, conds)
+            conds = (
+                scol == min_val for scol, min_val in zip(self._internal.data_spark_columns, sdf_min)
+            )
+            cond = reduce(lambda x, y: x | y, conds)
 
-        psdf: DataFrame = DataFrame(self._internal.with_filter(cond))
+            psdf: DataFrame = DataFrame(self._internal.with_filter(cond))
 
-        return cast(ps.Series, ps.from_pandas(psdf._to_internal_pandas().idxmin()))
+            return cast(ps.Series, ps.from_pandas(psdf._to_internal_pandas().idxmin()))
+        else:
+            from pyspark.pandas.series import first_series
+
+            column_labels = self._internal.column_labels
+
+            if len(column_labels) == 0:
+                # Check if DataFrame has rows - if yes, raise error; if no, return empty Series
+                # to match pandas behavior
+                if len(self) > 0:
+                    raise ValueError("attempt to get argmin of an empty sequence")
+                else:
+                    return ps.Series([], dtype=np.int64)
+
+            if self._internal.column_labels_level > 1:
+                raise NotImplementedError(
+                    "idxmin with axis=1 does not support MultiIndex columns yet"
+                )
+
+            min_value = F.least(
+                *[
+                    F.coalesce(self._internal.spark_column_for(label), F.lit(float("inf")))
+                    for label in column_labels
+                ],
+                F.lit(float("inf")),
+            )
+
+            result = None
+            # Iterate over the column labels in reverse order to get the first occurrence of the
+            # minimum value.
+            for label in reversed(column_labels):
+                scol = self._internal.spark_column_for(label)
+                label_value = label[0] if len(label) == 1 else label
+                condition = (scol == min_value) & scol.isNotNull()
+
+                result = (
+                    F.when(condition, F.lit(label_value))
+                    if result is None
+                    else F.when(condition, F.lit(label_value)).otherwise(result)
+                )
+
+            result = F.when(min_value == float("inf"), F.lit(None)).otherwise(result)
+
+            internal = self._internal.with_new_columns(
+                [result.alias(SPARK_DEFAULT_SERIES_NAME)],
+                column_labels=[None],
+            )
+
+            return first_series(DataFrame(internal))
 
     def info(
         self,
@@ -13562,7 +13733,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
     def groupby(
         self,
         by: Union[Name, "Series", List[Union[Name, "Series"]]],
-        axis: Axis = 0,
+        axis: Union[Axis, _NoValueType] = _NoValue,
         as_index: bool = True,
         dropna: bool = True,
     ) -> "DataFrameGroupBy":

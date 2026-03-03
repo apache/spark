@@ -62,7 +62,7 @@ private[ui] class StageTableBase(
     ).table(stagePage)
   } catch {
     case e @ (_ : IllegalArgumentException | _ : IndexOutOfBoundsException) =>
-      <div class="alert alert-error">
+      <div class="alert alert-danger">
         <p>Error while rendering stage table:</p>
         <pre>
           {Utils.exceptionString(e)}

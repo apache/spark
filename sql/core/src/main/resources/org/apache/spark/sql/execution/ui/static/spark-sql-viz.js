@@ -29,7 +29,8 @@ function shouldRenderPlanViz() {
 function renderPlanViz() {
   var svg = planVizContainer()
     .append("svg")
-    .attr("viewBox", `${-PlanVizConstants.svgMarginX} ${-PlanVizConstants.svgMarginY} ${window.innerWidth || 1920} 1000`);
+    .attr("width", window.innerWidth || 1920)
+    .attr("height", 1000);
   var metadata = d3.select("#plan-viz-metadata");
   var dot = metadata.select(".dot-file").text().trim();
   var graph = svg.append("g");

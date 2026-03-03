@@ -3264,7 +3264,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         Parameters
         ----------
         dropna : boolean, default True
-            Don’t include NaN in the counts.
+            Don't include NaN in the counts.
 
         Returns
         -------

@@ -293,10 +293,33 @@ class FrameComputeMixin:
             pd.Series([100], index=["A"]),
         )
 
-        # Assert unsupported axis value yet
-        msg = 'axis should be either 0 or "index" currently.'
-        with self.assertRaisesRegex(NotImplementedError, msg):
-            psdf.nunique(axis=1)
+        # Test axis=1 (row-wise unique count)
+        # Note: Compare values only - Spark's F.size returns int32, pandas returns int64
+        self.assertEqual(psdf.nunique(axis=1).tolist(), pdf.nunique(axis=1).tolist())
+        self.assertEqual(
+            psdf.nunique(axis=1, dropna=False).tolist(), pdf.nunique(axis=1, dropna=False).tolist()
+        )
+
+        # Test axis=1 with more complex data
+        pdf2 = pd.DataFrame({"A": [1, 2, 3], "B": [1, 3, 3], "C": [2, 2, 3]})
+        psdf2 = ps.from_pandas(pdf2)
+        self.assertEqual(psdf2.nunique(axis=1).tolist(), pdf2.nunique(axis=1).tolist())
+
+        # Test axis=1 with all NaN row
+        pdf3 = pd.DataFrame({"A": [1, 2, np.nan], "B": [1, 3, np.nan], "C": [2, 2, np.nan]})
+        psdf3 = ps.from_pandas(pdf3)
+        self.assertEqual(
+            psdf3.nunique(axis=1, dropna=True).tolist(), pdf3.nunique(axis=1, dropna=True).tolist()
+        )
+        self.assertEqual(
+            psdf3.nunique(axis=1, dropna=False).tolist(),
+            pdf3.nunique(axis=1, dropna=False).tolist(),
+        )
+
+        # Test single column DataFrame with axis=1
+        pdf4 = pd.DataFrame({"A": [1, 2, 3]})
+        psdf4 = ps.from_pandas(pdf4)
+        self.assertEqual(psdf4.nunique(axis=1).tolist(), pdf4.nunique(axis=1).tolist())
 
         # multi-index columns
         columns = pd.MultiIndex.from_tuples([("X", "A"), ("Y", "B")], names=["1", "2"])
@@ -305,6 +328,10 @@ class FrameComputeMixin:
 
         self.assert_eq(psdf.nunique(), pdf.nunique())
         self.assert_eq(psdf.nunique(dropna=False), pdf.nunique(dropna=False))
+        self.assertEqual(psdf.nunique(axis=1).tolist(), pdf.nunique(axis=1).tolist())
+        self.assertEqual(
+            psdf.nunique(axis=1, dropna=False).tolist(), pdf.nunique(axis=1, dropna=False).tolist()
+        )
 
     def test_quantile(self):
         pdf, psdf = self.df_pair
@@ -357,9 +384,13 @@ class FrameComputeMixin:
             pdf.quantile([0.25, 0.5, 0.75], numeric_only=True),
         )
 
-        with self.assertRaisesRegex(TypeError, "Could not convert object \\(string\\) to numeric"):
+        with self.assertRaisesRegex(
+            TypeError, r"Could not convert (object|str) \(string\) to numeric"
+        ):
             psdf.quantile(0.5, numeric_only=False)
-        with self.assertRaisesRegex(TypeError, "Could not convert object \\(string\\) to numeric"):
+        with self.assertRaisesRegex(
+            TypeError, r"Could not convert (object|str) \(string\) to numeric"
+        ):
             psdf.quantile([0.25, 0.5, 0.75], numeric_only=False)
 
     def test_product(self):

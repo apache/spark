@@ -54,8 +54,10 @@ object InvalidInputErrors {
     InvalidPlanInput(
       "Deduplicate requires to either deduplicate on all columns or a subset of columns")
 
-  def invalidDeduplicateColumn(colName: String): InvalidPlanInput =
-    InvalidPlanInput(s"Invalid deduplicate column $colName")
+  def invalidDeduplicateColumn(colName: String, fieldNames: String): InvalidPlanInput =
+    InvalidPlanInput(
+      "UNRESOLVED_COLUMN_AMONG_FIELD_NAMES",
+      Map("colName" -> colName, "fieldNames" -> fieldNames))
 
   def functionEvalTypeNotSupported(evalType: Int): InvalidPlanInput =
     InvalidPlanInput(s"Function with EvalType: $evalType is not supported")

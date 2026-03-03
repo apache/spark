@@ -17,13 +17,23 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import org.apache.datasketches.common.SketchesArgumentException
+import org.apache.datasketches.common.{Family, SketchesArgumentException}
 import org.apache.datasketches.memory.{Memory, MemoryBoundsException}
 import org.apache.datasketches.theta.CompactSketch
 
 import org.apache.spark.sql.errors.QueryExecutionErrors
 
 object ThetaSketchUtils {
+  /**
+   * Extracts the Family ID from a DataSketches preamble.
+   * The Family ID is stored at byte offset 2 in all DataSketches preambles.
+   *
+   * @param memory The memory containing the sketch preamble
+   * @return The family ID as an unsigned byte value (0-255)
+   */
+  private def extractFamilyID(memory: Memory): Int = {
+    memory.getByte(2) & 0xFF
+  }
   /*
    * Bounds copied from DataSketches' ThetaUtil. These define the valid range for lgNomEntries,
    * which is the log-base-2 of the nominal number of entries that determines the sketch size.
@@ -75,6 +85,22 @@ object ThetaSketchUtils {
         case _: NullPointerException | _: MemoryBoundsException =>
           throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
       }
+
+    // COMPACT is used for the Theta sketch family
+    val family = try {
+      val familyId = extractFamilyID(memory)
+      Family.idToFamily(familyId)
+    } catch {
+      case _: Exception =>
+        throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
+    }
+
+    if (family != Family.COMPACT) {
+      throw QueryExecutionErrors.thetaInvalidInputSketchBufferFamily(
+        prettyName,
+        expectedFamily = "COMPACT",
+        actualFamily = family.toString)
+    }
 
     try {
       CompactSketch.wrap(memory)

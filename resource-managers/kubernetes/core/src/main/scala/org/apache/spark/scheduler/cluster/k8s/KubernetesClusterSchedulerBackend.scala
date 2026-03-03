@@ -71,9 +71,14 @@ private[spark] class KubernetesClusterSchedulerBackend(
 
   private val PATCH_CONTEXT = PatchContext.of(PatchType.STRATEGIC_MERGE)
 
-  // Allow removeExecutor to be accessible by ExecutorPodsLifecycleManager
   private[k8s] def doRemoveExecutor(executorId: String, reason: ExecutorLossReason): Unit = {
     removeExecutor(executorId, reason)
+    podAllocator match {
+      case allocator: ExecutorPodsAllocator if reason.message.contains("OOM") =>
+        logWarning("OOM is detected.")
+        allocator.setRecoveryMode()
+      case _ => // no-op
+    }
   }
 
   private def setUpExecutorConfigMap(driverPod: Option[Pod]): Unit = {

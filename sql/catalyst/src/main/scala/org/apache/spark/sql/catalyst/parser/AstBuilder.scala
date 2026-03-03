@@ -2456,12 +2456,8 @@ class AstBuilder extends DataTypeAstBuilder
       funcCallCtx.funcName,
       Nil,
       (ident, _) => {
-        if (ident.length > 1) {
-          throw new ParseException(
-            errorClass = "INVALID_SQL_SYNTAX.INVALID_TABLE_VALUED_FUNC_NAME",
-            messageParameters = Map("funcName" -> toSQLId(ident)),
-            ctx = funcCallCtx)
-        }
+        // Allow qualified table-valued function names (e.g., builtin.range, system.session.my_tvf)
+        // Removed artificial restriction on multi-part identifiers
         val funcName = funcCallCtx.funcName.getText
         val args = funcCallCtx.functionTableArgument.asScala.map { e =>
           Option(e.functionArgument).map(extractNamedArgument(_, funcName))
@@ -5238,6 +5234,11 @@ class AstBuilder extends DataTypeAstBuilder
             "Partition column types may not be specified in Create Table As Select (CTAS)",
             ctx)
 
+        case Some(_) if constraints.nonEmpty =>
+          operationNotAllowed(
+            "Constraints may not be specified in a Create Table As Select (CTAS) statement",
+            ctx)
+
         case Some(query) =>
           CreateTableAsSelect(identifier, partitioning, query, tableSpec, Map.empty, ifNotExists)
 
@@ -5315,6 +5316,11 @@ class AstBuilder extends DataTypeAstBuilder
           // non-reference partition columns are not allowed because schema can't be specified
           operationNotAllowed(
             "Partition column types may not be specified in Replace Table As Select (RTAS)",
+            ctx)
+
+        case Some(_) if constraints.nonEmpty =>
+          operationNotAllowed(
+            "Constraints may not be specified in a Replace Table As Select (RTAS) statement",
             ctx)
 
         case Some(query) =>

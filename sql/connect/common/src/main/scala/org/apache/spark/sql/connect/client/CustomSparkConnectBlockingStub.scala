@@ -145,4 +145,17 @@ private[connect] class CustomSparkConnectBlockingStub(
       }
     }
   }
+
+  def getStatus(request: GetStatusRequest): GetStatusResponse = {
+    grpcExceptionConverter.convert(
+      request.getSessionId,
+      request.getUserContext,
+      request.getClientType) {
+      retryHandler.retry {
+        stubState.responseValidator.verifyResponse {
+          stub.getStatus(request)
+        }
+      }
+    }
+  }
 }

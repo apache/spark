@@ -39,6 +39,11 @@ exclude = [
 [tool.ruff.lint]
 extend-select = [
     "G010",  # logging-warn
+    # ambiguous unicode character
+    "RUF001",  # string
+    "RUF002",  # docstring
+    "RUF003",  # comment
+    # ambiguous unicode character end
     "RUF100",  # unused-noqa
 ]
 ignore = [

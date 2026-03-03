@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.{AlwaysProcess, TreeNodeTag}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils.CHAR_VARCHAR_TYPE_STRING_METADATA_KEY
+import org.apache.spark.sql.catalyst.util.UnsafeRowUtils.isBinaryStable
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -217,8 +218,17 @@ object ConstantPropagation extends Rule[LogicalPlan] {
   // substituted into `1 + 1 = 1` if 'c' isn't nullable. If 'c' is nullable then the enclosing
   // NOT prevents us to do the substitution as NOT flips the context (`nullIsFalse`) of what a
   // null result of the enclosed expression means.
+  //
+  // Also, we shouldn't replace attributes with non-binary-stable data types, since this can lead
+  // to incorrect results. For example:
+  // `CREATE TABLE t (c STRING COLLATE UTF8_LCASE);`
+  // `INSERT INTO t VALUES ('HELLO'), ('hello');`
+  // `SELECT * FROM t WHERE c = 'hello' AND c = 'HELLO' COLLATE UNICODE;`
+  // If we replace `c` with `'hello'`, we get `'hello' = 'HELLO' COLLATE UNICODE` for the right
+  // condition, which is false, while the original `c = 'HELLO' COLLATE UNICODE` is true for
+  // 'HELLO' and false for 'hello'.
   private def safeToReplace(ar: AttributeReference, nullIsFalse: Boolean) =
-    !ar.nullable || nullIsFalse
+    (!ar.nullable || nullIsFalse) && isBinaryStable(ar.dataType)
 
   private def replaceConstants(
       condition: Expression,

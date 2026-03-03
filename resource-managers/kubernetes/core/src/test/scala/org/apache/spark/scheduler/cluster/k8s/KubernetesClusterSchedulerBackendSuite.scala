@@ -37,7 +37,7 @@ import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.Fabric8Aliases._
 import org.apache.spark.resource.{ResourceProfile, ResourceProfileManager}
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEndpointRef, RpcEnv}
-import org.apache.spark.scheduler.{ExecutorKilled, LiveListenerBus, TaskSchedulerImpl}
+import org.apache.spark.scheduler.{ExecutorKilled, ExecutorLossReason, LiveListenerBus, TaskSchedulerImpl}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{RegisterExecutor, RemoveExecutor, StopDriver}
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.scheduler.cluster.k8s.ExecutorLifecycleTestUtils.TEST_SPARK_APP_ID
@@ -187,6 +187,19 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
 
     backend.doRemoveExecutor("2", ExecutorKilled)
     verify(driverEndpointRef).send(RemoveExecutor("2", ExecutorKilled))
+  }
+
+  test("SPARK-55639: doRemoveExecutor triggers setRecoveryMode on OOM") {
+    val backend = spy[KubernetesClusterSchedulerBackend](schedulerBackendUnderTest)
+    when(backend.isExecutorActive(any())).thenReturn(false)
+    backend.start()
+
+    val reason = mock(classOf[ExecutorLossReason])
+    when(reason.message).thenReturn("Executor lost due to OOM")
+
+    backend.doRemoveExecutor("1", reason)
+    verify(driverEndpointRef).send(RemoveExecutor("1", reason))
+    verify(podAllocator).setRecoveryMode()
   }
 
   test("Kill executors") {

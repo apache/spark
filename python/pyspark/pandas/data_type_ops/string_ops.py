@@ -32,7 +32,7 @@ from pyspark.pandas.data_type_ops.base import (
     _as_string_type,
     _sanitize_list_like,
 )
-from pyspark.pandas.typedef import extension_dtypes, pandas_on_spark_type
+from pyspark.pandas.typedef import handle_dtype_as_extension_dtype, pandas_on_spark_type
 from pyspark.sql.types import BooleanType
 
 
@@ -124,7 +124,7 @@ class StringOps(DataTypeOps):
             return _as_categorical_type(index_ops, dtype, spark_type)
 
         if isinstance(spark_type, BooleanType):
-            if isinstance(dtype, extension_dtypes):
+            if handle_dtype_as_extension_dtype(dtype):
                 scol = index_ops.spark.column.cast(spark_type)
             else:
                 scol = F.when(index_ops.spark.column.isNull(), F.lit(False)).otherwise(

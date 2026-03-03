@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.expressions.variant._
 import org.apache.spark.sql.catalyst.expressions.xml._
 import org.apache.spark.sql.catalyst.plans.logical.{FunctionBuilderBase, Generate, LogicalPlan, OneRowRelation, PythonWorkerLogs, Range}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -78,10 +79,13 @@ trait FunctionRegistryBase[T] {
   /* Create or replace a temporary function. */
   final def createOrReplaceTempFunction(
       name: String, builder: FunctionBuilder, source: String): Unit = {
-    registerFunction(
-      FunctionIdentifier(name),
-      builder,
-      source)
+    // Regular temporary functions are qualified with CatalogManager.SESSION_NAMESPACE
+    // to enable coexistence with builtin functions of the same name
+    val identifier = FunctionIdentifier(
+      name,
+      Some(CatalogManager.SESSION_NAMESPACE),
+      Some(CatalogManager.SYSTEM_CATALOG_NAME))
+    registerFunction(identifier, builder, source)
   }
 
   @throws[AnalysisException]("If function does not exist")
@@ -485,10 +489,10 @@ object FunctionRegistry {
     expression[Last]("last"),
     expression[Last]("last_value", true),
     expression[Max]("max"),
-    expression[MaxBy]("max_by"),
+    expressionBuilder("max_by", MaxByBuilder),
     expression[Average]("mean", true),
     expression[Min]("min"),
-    expression[MinBy]("min_by"),
+    expressionBuilder("min_by", MinByBuilder),
     expression[Percentile]("percentile"),
     expressionBuilder("percentile_cont", PercentileContBuilder),
     expressionBuilder("percentile_disc", PercentileDiscBuilder),
@@ -831,8 +835,12 @@ object FunctionRegistry {
     expression[ApproxTopKEstimate]("approx_top_k_estimate"),
     expression[TupleDifferenceDouble]("tuple_difference_double"),
     expression[TupleDifferenceInteger]("tuple_difference_integer"),
+    expression[TupleDifferenceThetaDouble]("tuple_difference_theta_double"),
+    expression[TupleDifferenceThetaInteger]("tuple_difference_theta_integer"),
     expression[TupleIntersectionDouble]("tuple_intersection_double"),
     expression[TupleIntersectionInteger]("tuple_intersection_integer"),
+    expression[TupleIntersectionThetaDouble]("tuple_intersection_theta_double"),
+    expression[TupleIntersectionThetaInteger]("tuple_intersection_theta_integer"),
     expression[TupleSketchEstimateDouble]("tuple_sketch_estimate_double"),
     expression[TupleSketchEstimateInteger]("tuple_sketch_estimate_integer"),
     expression[TupleSketchSummaryDouble]("tuple_sketch_summary_double"),
@@ -841,6 +849,8 @@ object FunctionRegistry {
     expression[TupleSketchThetaInteger]("tuple_sketch_theta_integer"),
     expressionBuilder("tuple_union_double", TupleUnionDoubleExpressionBuilder),
     expressionBuilder("tuple_union_integer", TupleUnionIntegerExpressionBuilder),
+    expressionBuilder("tuple_union_theta_double", TupleUnionThetaDoubleExpressionBuilder),
+    expressionBuilder("tuple_union_theta_integer", TupleUnionThetaIntegerExpressionBuilder),
     expression[KllSketchToStringBigint]("kll_sketch_to_string_bigint"),
     expression[KllSketchToStringFloat]("kll_sketch_to_string_float"),
     expression[KllSketchToStringDouble]("kll_sketch_to_string_double"),

@@ -59,7 +59,9 @@ concurrency:
 jobs:
   precondition:
     name: Check changes
-    runs-on: ubuntu-latest
+    # `ubuntu-slim` is lighter than `ubuntu-latest`.
+    # Please see https://docs.github.com/en/actions/how-tos/write-workflows/choose-where-workflows-run/choose-the-runner-for-a-job#standard-github-hosted-runners-for-public-repositories
+    runs-on: ubuntu-slim
     env:
       GITHUB_PREV_SHA: ${{ github.event.before }}
     outputs:
@@ -1444,7 +1446,8 @@ jobs:
         uses: medyagh/setup-minikube@v0.0.21
         with:
           kubernetes-version: "1.35.0"
-          # Github Action limit cpu:2, memory: 6947MB, limit to 2U6G for better resource statistic
+          # GitHub Actions limit 4C/16G, limit to 2C/6G for better resource statistic
+          # https://docs.github.com/en/actions/reference/runners/github-hosted-runners#standard-github-hosted-runners-for-public-repositories
           cpus: 2
           memory: 6144m
       - name: Print K8S pods and nodes info
@@ -1464,7 +1467,7 @@ jobs:
           elif [[ "${{ inputs.branch }}" == 'branch-4.0' ]]; then
             kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.11.0/installer/volcano-development.yaml || true
           else
-            kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.14.0/installer/volcano-development.yaml || true
+            kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.14.1/installer/volcano-development.yaml || true
           fi
           eval $(minikube docker-env)
           build/sbt -Phadoop-3 -Psparkr -Pkubernetes -Pvolcano -Pkubernetes-integration-tests -Dspark.kubernetes.test.volcanoMaxConcurrencyJobNum=1 -Dtest.exclude.tags=local "kubernetes-integration-tests/test"
@@ -1479,7 +1482,9 @@ jobs:
     needs: [precondition]
     if: fromJson(needs.precondition.outputs.required).ui == 'true'
     name: Run Spark UI tests
-    runs-on: ubuntu-latest
+    # `ubuntu-slim` is lighter than `ubuntu-latest`.
+    # Please see https://docs.github.com/en/actions/how-tos/write-workflows/choose-where-workflows-run/choose-the-runner-for-a-job#standard-github-hosted-runners-for-public-repositories
+    runs-on: ubuntu-slim
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v6

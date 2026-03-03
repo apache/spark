@@ -46,11 +46,11 @@ from pyspark.sql.types import (
     UserDefinedType,
 )
 from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
-from pyspark.pandas.typedef import extension_dtypes
 from pyspark.pandas.typedef.typehints import (
     extension_dtypes_available,
     extension_float_dtypes_available,
     extension_object_dtypes_available,
+    handle_dtype_as_extension_dtype,
     spark_type_to_pandas_dtype,
 )
 from pyspark.pandas.utils import is_ansi_mode_enabled
@@ -173,7 +173,7 @@ def _as_categorical_type(
 def _as_bool_type(index_ops: IndexOpsLike, dtype: Dtype) -> IndexOpsLike:
     """Cast `index_ops` to BooleanType Spark type, given `dtype`."""
     spark_type = BooleanType()
-    if isinstance(dtype, extension_dtypes):
+    if handle_dtype_as_extension_dtype(dtype):
         scol = index_ops.spark.column.cast(spark_type)
     else:
         null_value = (
@@ -194,7 +194,7 @@ def _as_string_type(
     representing null Spark column. Note that `null_str` is for non-extension dtypes only.
     """
     spark_type = StringType()
-    if isinstance(dtype, extension_dtypes):
+    if handle_dtype_as_extension_dtype(dtype):
         scol = index_ops.spark.column.cast(spark_type)
     else:
         casted = index_ops.spark.column.cast(spark_type)
@@ -254,7 +254,7 @@ def _is_extension_dtypes(object: Any) -> bool:
     Extention dtype includes Int8Dtype, Int16Dtype, Int32Dtype, Int64Dtype, BooleanDtype,
     StringDtype, Float32Dtype and Float64Dtype.
     """
-    return isinstance(getattr(object, "dtype", None), extension_dtypes)
+    return handle_dtype_as_extension_dtype(getattr(object, "dtype", None))
 
 
 class DataTypeOps(object, metaclass=ABCMeta):
@@ -300,7 +300,10 @@ class DataTypeOps(object, metaclass=ABCMeta):
                 return object.__new__(IntegralOps)
         elif isinstance(spark_type, StringType):
             if extension_object_dtypes_available and isinstance(dtype, StringDtype):
-                return object.__new__(StringExtensionOps)
+                if handle_dtype_as_extension_dtype(dtype):
+                    return object.__new__(StringExtensionOps)
+                else:
+                    return object.__new__(StringOps)
             else:
                 return object.__new__(StringOps)
         elif isinstance(spark_type, BooleanType):

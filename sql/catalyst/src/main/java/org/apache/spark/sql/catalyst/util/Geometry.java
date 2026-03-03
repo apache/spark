@@ -17,12 +17,15 @@
 package org.apache.spark.sql.catalyst.util;
 
 import org.apache.spark.sql.catalyst.util.geo.GeometryModel;
+import org.apache.spark.sql.catalyst.util.geo.WkbParseException;
 import org.apache.spark.sql.catalyst.util.geo.WkbReader;
 import org.apache.spark.sql.catalyst.util.geo.WkbWriter;
+import org.apache.spark.sql.errors.QueryExecutionErrors;
 import org.apache.spark.unsafe.types.GeometryVal;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
 // Catalyst-internal server-side execution wrapper for GEOMETRY.
@@ -80,13 +83,17 @@ public final class Geometry implements Geo {
 
   // Returns a Geometry object with the specified SRID value by parsing the input WKB.
   public static Geometry fromWkb(byte[] wkb, int srid) {
-    WkbReader reader = new WkbReader();
-    reader.read(wkb); // Validate WKB
+    try {
+      WkbReader reader = new WkbReader();
+      reader.read(wkb); // Validate WKB
 
-    byte[] bytes = new byte[HEADER_SIZE + wkb.length];
-    ByteBuffer.wrap(bytes).order(DEFAULT_ENDIANNESS).putInt(srid);
-    System.arraycopy(wkb, 0, bytes, WKB_OFFSET, wkb.length);
-    return fromBytes(bytes);
+      byte[] bytes = new byte[HEADER_SIZE + wkb.length];
+      ByteBuffer.wrap(bytes).order(DEFAULT_ENDIANNESS).putInt(srid);
+      System.arraycopy(wkb, 0, bytes, WKB_OFFSET, wkb.length);
+      return fromBytes(bytes);
+    } catch (WkbParseException e) {
+      throw QueryExecutionErrors.wkbParseError(e.getParseError(), e.getPosition());
+    }
   }
 
   // Overload for the WKB reader where we use the default SRID for Geometry.
@@ -154,14 +161,23 @@ public final class Geometry implements Geo {
 
   @Override
   public byte[] toWkt() {
-    // Once WKT conversion is implemented, it should support various precisions.
-    throw new UnsupportedOperationException("Geometry WKT conversion is not yet supported.");
+    return toWktInternal().getBytes(StandardCharsets.UTF_8);
   }
 
   @Override
   public byte[] toEwkt() {
-    // Once EWKT conversion is implemented, it should support various precisions.
-    throw new UnsupportedOperationException("Geometry EWKT conversion is not yet supported.");
+    if (srid() == DEFAULT_SRID) {
+        return toWkt();
+    }
+    String ewkt = "SRID=" + srid() + ";" + toWktInternal();
+    return ewkt.getBytes(StandardCharsets.UTF_8);
+  }
+
+  private String toWktInternal() {
+    WkbReader reader = new WkbReader();
+    GeometryModel model = reader.read(Arrays.copyOfRange(
+      getBytes(), WKB_OFFSET, getBytes().length));
+    return model.toString();
   }
 
   /** Other instance methods, inherited from the `Geo` interface. */

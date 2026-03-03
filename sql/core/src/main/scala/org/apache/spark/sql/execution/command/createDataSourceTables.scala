@@ -29,7 +29,7 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.CommandExecutionMode
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources.BaseRelation
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructType}
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -107,8 +107,17 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
         table.copy(schema = new StructType(), partitionColumnNames = Nil)
 
       case _ =>
+        // Merge nullability from the user-specified schema into the resolved schema.
+        // DataSource.resolveRelation() calls dataSchema.asNullable which strips NOT NULL
+        // constraints. We restore nullability from the original user schema while keeping
+        // the resolved data types (which may include CharVarchar normalization, metadata, etc.)
+        val resolvedSchema = if (table.schema.nonEmpty) {
+          restoreNullability(dataSource.schema, table.schema)
+        } else {
+          dataSource.schema
+        }
         table.copy(
-          schema = dataSource.schema,
+          schema = resolvedSchema,
           partitionColumnNames = partitionColumnNames,
           // If metastore partition management for file source tables is enabled, we start off with
           // partition provider hive, but no partitions in the metastore. The user has to call
@@ -121,6 +130,39 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
     sessionState.catalog.createTable(newTable, ignoreIfExists)
 
     Seq.empty[Row]
+  }
+
+  /**
+   * Recursively restores nullability from the original user-specified schema into
+   * the resolved schema. The resolved schema's data types are preserved (they may
+   * contain CharVarchar normalization, metadata, etc.), but nullability flags
+   * (top-level and nested) are taken from the original schema.
+   */
+  private def restoreNullability(resolved: StructType, original: StructType): StructType = {
+    val originalFields = original.fields.map(f => f.name -> f).toMap
+    StructType(resolved.fields.map { resolvedField =>
+      originalFields.get(resolvedField.name) match {
+        case Some(origField) =>
+          resolvedField.copy(
+            nullable = origField.nullable,
+            dataType = restoreDataTypeNullability(resolvedField.dataType, origField.dataType))
+        case None => resolvedField
+      }
+    })
+  }
+
+  private def restoreDataTypeNullability(resolved: DataType, original: DataType): DataType = {
+    (resolved, original) match {
+      case (r: StructType, o: StructType) => restoreNullability(r, o)
+      case (ArrayType(rElem, _), ArrayType(oElem, oNull)) =>
+        ArrayType(restoreDataTypeNullability(rElem, oElem), oNull)
+      case (MapType(rKey, rVal, _), MapType(oKey, oVal, oValNull)) =>
+        MapType(
+          restoreDataTypeNullability(rKey, oKey),
+          restoreDataTypeNullability(rVal, oVal),
+          oValNull)
+      case _ => resolved
+    }
   }
 }
 

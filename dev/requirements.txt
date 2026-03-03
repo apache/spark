@@ -19,6 +19,7 @@ unittest-xml-reporting
 openpyxl
 
 # PySpark test dependencies (optional)
+asv
 coverage
 tabulate
 

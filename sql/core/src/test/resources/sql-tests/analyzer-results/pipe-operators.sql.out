@@ -722,7 +722,7 @@ table t
 -- !query analysis
 Filter exists#x [x#x]
 :  +- Project [x#x]
-:     +- Project [a#x, b#x, outer(x#x)]
+:     +- Project [a#x, b#x, outer(x#x) AS x#x]
 :        +- SubqueryAlias spark_catalog.default.other
 :           +- Relation spark_catalog.default.other[a#x,b#x] json
 +- PipeOperator
