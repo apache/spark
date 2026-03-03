@@ -1924,11 +1924,7 @@ class ScalarPandasUDFTestsMixin:
         def my_scalar_pandas_udf(x):
             assert isinstance(x, pd.Series)
             logger = logging.getLogger("test_scalar_pandas")
-
-            def to_ints(a):
-                return [int(v) for v in a]
-
-            logger.warning(f"scalar pandas udf: {to_ints(x)}")
+            logger.warning(f"scalar pandas udf: {list(x)}")
             return pd.Series(["scalar_pandas_" + str(val) for val in x])
 
         with self.sql_conf({"spark.sql.pyspark.worker.logging.enabled": "true"}):
@@ -1959,13 +1955,9 @@ class ScalarPandasUDFTestsMixin:
         @pandas_udf("string", PandasUDFType.SCALAR_ITER)
         def my_scalar_iter_pandas_udf(it):
             logger = logging.getLogger("test_scalar_iter_pandas")
-
-            def to_ints(a):
-                return [int(v) for v in a]
-
             for x in it:
                 assert isinstance(x, pd.Series)
-                logger.warning(f"scalar iter pandas udf: {to_ints(x)}")
+                logger.warning(f"scalar iter pandas udf: {list(x)}")
                 yield pd.Series(["scalar_iter_pandas_" + str(val) for val in x])
 
         with self.sql_conf(

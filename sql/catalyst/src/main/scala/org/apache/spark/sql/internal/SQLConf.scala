@@ -4473,12 +4473,10 @@ object SQLConf {
     buildConf("spark.sql.execution.pythonUDF.pandas.preferIntExtensionDtype")
       .doc("When true, convert integers to Pandas ExtensionDtype (e.g. pandas.Int64Dtype) " +
         "for Pandas UDF execution. Otherwise, depends on the behavior of " +
-        "pyarrow.Array.to_pandas on each input arrow batch. " +
-        "Enabled by default, to resolve correctness issues caused " +
-        "by precision loss.")
+        "pyarrow.Array.to_pandas on each input arrow batch.")
       .version("4.2.0")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   val PYTHON_TABLE_UDF_ARROW_ENABLED =
     buildConf("spark.sql.execution.pythonUDTF.arrow.enabled")
@@ -7886,6 +7884,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     getConf(SQLConf.PANDAS_GROUPED_MAP_ASSIGN_COLUMNS_BY_NAME)
 
   def arrowSafeTypeConversion: Boolean = getConf(SQLConf.PANDAS_ARROW_SAFE_TYPE_CONVERSION)
+
+  def preferIntExtDtype: Boolean = getConf(SQLConf.PYTHON_UDF_PANDAS_PREFER_INT_EXTENSION_DTYPE)
 
   def pysparkWorkerPythonExecutable: Option[String] =
     getConf(SQLConf.PYSPARK_WORKER_PYTHON_EXECUTABLE)

@@ -23,7 +23,6 @@ from pyspark.sql.types import (
     DoubleType,
     StructType,
     StructField,
-    StringType,
     LongType,
     DayTimeIntervalType,
     VariantType,
@@ -473,44 +472,11 @@ class PandasUDFTestsMixin:
             AS tab(a, b)
             """
 
-        df = self.spark.sql(query).repartition(1).sortWithinPartitions("b")
-        expected = df.select("a").collect()
-        results = df.select(identity("a").alias("a")).collect()
-        self.assertEqual(results, expected)
-
-    def test_pandas_udf_int_ext_dtype(self):
-        import pandas as pd
-
-        query = """
-            SELECT * FROM VALUES
-            (9223372036854775707, 1), (NULL, 2)
-            AS tab(a, b)
-            """
-        df = self.spark.sql(query).coalesce(1)
-
-        dtype_udf = pandas_udf(
-            lambda s: pd.Series([str(s.dtype)] * len(s)), returnType=StringType()
-        )
-
-        with self.sql_conf(
-            {
-                "spark.sql.execution.pythonUDF.pandas.preferIntExtensionDtype": True,
-                "spark.sql.execution.arrow.maxRecordsPerBatch": "100",
-            }
-        ):
-            rows = df.select(dtype_udf("a").alias("ta"), dtype_udf("b").alias("tb")).collect()
-            self.assertEqual([row.ta for row in rows], ["Int64", "Int64"])
-            self.assertEqual([row.tb for row in rows], ["Int32", "Int32"])
-
-        with self.sql_conf(
-            {
-                "spark.sql.execution.pythonUDF.pandas.preferIntExtensionDtype": False,
-                "spark.sql.execution.arrow.maxRecordsPerBatch": "100",
-            }
-        ):
-            rows = df.select(dtype_udf("a").alias("ta"), dtype_udf("b").alias("tb")).collect()
-            self.assertEqual([row.ta for row in rows], ["float64", "float64"])
-            self.assertEqual([row.tb for row in rows], ["int32", "int32"])
+        with self.sql_conf({"spark.sql.execution.pythonUDF.pandas.preferIntExtensionDtype": True}):
+            df = self.spark.sql(query).repartition(1).sortWithinPartitions("b")
+            expected = df.select("a").collect()
+            results = df.select(identity("a").alias("a")).collect()
+            self.assertEqual(results, expected)
 
 
 class PandasUDFTests(PandasUDFTestsMixin, ReusedSQLTestCase):

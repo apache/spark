@@ -159,7 +159,7 @@ class RunnerConf(Conf):
     @property
     def prefer_int_ext_dtype(self) -> bool:
         return (
-            self.get("spark.sql.execution.pythonUDF.pandas.preferIntExtensionDtype", "true")
+            self.get("spark.sql.execution.pythonUDF.pandas.preferIntExtensionDtype", "false")
             == "true"
         )
 
@@ -2970,7 +2970,11 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
             else:
                 table = pa.table({})
             # Convert to pandas once for the entire group
-            all_series = ArrowBatchTransformer.to_pandas(table, timezone=ser._timezone)
+            all_series = ArrowBatchTransformer.to_pandas(
+                table,
+                timezone=ser._timezone,
+                prefer_int_ext_dtype=runner_conf.prefer_int_ext_dtype,
+            )
             key_series = [all_series[o] for o in key_offsets]
             value_series = [all_series[o] for o in value_offsets]
             yield from f(key_series, value_series)
@@ -2989,14 +2993,22 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
 
         def mapper(batch_iter):
             # Convert first Arrow batch to pandas to extract keys
-            first_series = ArrowBatchTransformer.to_pandas(next(batch_iter), timezone=ser._timezone)
+            first_series = ArrowBatchTransformer.to_pandas(
+                next(batch_iter),
+                timezone=ser._timezone,
+                prefer_int_ext_dtype=runner_conf.prefer_int_ext_dtype,
+            )
             key_series = [first_series[o] for o in parsed_offsets[0][0]]
 
             # Lazily convert remaining Arrow batches to pandas Series
             def value_series_gen():
                 yield [first_series[o] for o in parsed_offsets[0][1]]
                 for batch in batch_iter:
-                    series = ArrowBatchTransformer.to_pandas(batch, timezone=ser._timezone)
+                    series = ArrowBatchTransformer.to_pandas(
+                        batch,
+                        timezone=ser._timezone,
+                        prefer_int_ext_dtype=runner_conf.prefer_int_ext_dtype,
+                    )
                     yield [series[o] for o in parsed_offsets[0][1]]
 
             yield from f(key_series, value_series_gen())

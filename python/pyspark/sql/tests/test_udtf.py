@@ -1157,7 +1157,7 @@ class BaseUDTFTestsMixin:
         self.spark.udtf.register("test_udtf", TestUDTF)
         # TODO(SPARK-43968): check during compile time instead of runtime
         with self.assertRaisesRegex(
-            PythonException, "AttributeError: '.*' object has no attribute 'corr'"
+            PythonException, "AttributeError: 'int' object has no attribute 'corr'"
         ):
             self.spark.sql(
                 "select * from values (1, 2), (2, 3) t(a, b), lateral test_udtf(a, b)"

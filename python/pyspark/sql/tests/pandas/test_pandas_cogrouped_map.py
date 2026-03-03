@@ -724,12 +724,8 @@ class CogroupedApplyInPandasTestsMixin:
             assert isinstance(left_pdf, pd.DataFrame)
             assert isinstance(right_pdf, pd.DataFrame)
             logger = logging.getLogger("test_pandas_cogrouped_map")
-
-            def to_ints(a):
-                return [int(v) for v in a]
-
             logger.warning(
-                f"pandas cogrouped map: {dict(v1= to_ints(left_pdf['v1']), v2=to_ints(right_pdf['v2']))}"
+                f"pandas cogrouped map: {dict(v1=list(left_pdf['v1']), v2=list(right_pdf['v2']))}"
             )
             return pd.merge(left_pdf, right_pdf, on=["id"])
 

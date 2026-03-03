@@ -167,7 +167,7 @@ object ArrowPythonRunner {
       conf.getConf(SQLConf.PYTHON_UDF_PANDAS_INT_TO_DECIMAL_COERCION_ENABLED, false).toString)
     val preferIntExtDtype = Seq(
       SQLConf.PYTHON_UDF_PANDAS_PREFER_INT_EXTENSION_DTYPE.key ->
-        conf.getConf(SQLConf.PYTHON_UDF_PANDAS_PREFER_INT_EXTENSION_DTYPE, true).toString)
+        conf.preferIntExtDtype.toString)
     val binaryAsBytes = Seq(
       SQLConf.PYSPARK_BINARY_AS_BYTES.key ->
       conf.pysparkBinaryAsBytes.toString)

@@ -420,7 +420,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
     ndarray_as_list : bool, optional
         Whether to convert ndarray as list. Default is False.
     prefer_int_ext_dtype : bool, optional
-        Whether to convert integers to Pandas ExtensionDType. Default is True.
+        Whether to convert integers to Pandas ExtensionDType. Default is False.
     df_for_struct : bool, optional
         If True, convert struct columns to DataFrame instead of Series. Default is False.
     """
@@ -433,7 +433,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         prefers_large_types: bool = False,
         struct_in_pandas: str = "dict",
         ndarray_as_list: bool = False,
-        prefer_int_ext_dtype: bool = True,
+        prefer_int_ext_dtype: bool = False,
         df_for_struct: bool = False,
         input_type: Optional["StructType"] = None,
         arrow_cast: bool = False,
@@ -513,7 +513,7 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
         df_for_struct: bool = False,
         struct_in_pandas: str = "dict",
         ndarray_as_list: bool = False,
-        prefer_int_ext_dtype: bool = True,
+        prefer_int_ext_dtype: bool = False,
         arrow_cast: bool = False,
         input_type: Optional[StructType] = None,
         int_to_decimal_coercion_enabled: bool = False,

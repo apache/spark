@@ -988,12 +988,8 @@ class ApplyInPandasTestsMixin:
         def func_with_logging(pdf):
             assert isinstance(pdf, pd.DataFrame)
             logger = logging.getLogger("test_pandas_grouped_map")
-
-            def to_ints(a):
-                return [int(v) for v in a]
-
             logger.warning(
-                f"pandas grouped map: {dict(id=to_ints(pdf['id']), value=to_ints(pdf['value']))}"
+                f"pandas grouped map: {dict(id=list(pdf['id']), value=list(pdf['value']))}"
             )
             return pdf
 
