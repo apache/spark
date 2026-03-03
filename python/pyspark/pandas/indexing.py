@@ -776,7 +776,7 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
                         if label in selected_column_labels_set
                     ]
                     if selected_column_labels != selected_labels_in_internal_order:
-                        # If requested columns are in different order than the DataFrame’s internal order,
+                        # If requested columns are in different order than the DataFrame's internal order,
                         # it returns early (no-op), matching pandas 3 behavior for that edge case.
                         return
                 value = F.lit(value)
