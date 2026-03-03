@@ -339,8 +339,8 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
         }
 
       case u: UnresolvedFunctionName =>
-        val catalogPath = (currentCatalog.name +: catalogManager.currentNamespace).toSeq
-        val searchPath = SQLConf.get.resolutionSearchPath(catalogPath)
+        val catalogPath = currentCatalog.name +: catalogManager.currentNamespace
+        val searchPath = SQLConf.get.resolutionSearchPath(catalogPath.toSeq)
           .map(_.quoted)
         throw QueryCompilationErrors.unresolvedRoutineError(
           u.multipartIdentifier,

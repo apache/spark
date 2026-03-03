@@ -118,141 +118,16 @@ class SessionCatalog(
   private def isTempFunctionIdentifier(identifier: FunctionIdentifier): Boolean =
     identifier.database.contains(TEMP_FUNCTION_DB)
 
-  // --------------------------------
-  // | PATH-Based Resolution        |
-  // --------------------------------
-  // Functions are resolved by searching through an ordered PATH of namespaces.
-  // This provides a unified, data-driven resolution mechanism instead of hardcoded checks.
-
   /**
-   * Function resolution PATH - ordered list of namespaces to search for unqualified functions.
-   * Each entry is a FunctionIdentifier representing a namespace (catalog + database).
-   * The funcName field is unused (empty string) as these represent namespace templates.
-   *
-   * Resolution order follows the configured path: builtin then session (default "second"),
-   * or session then builtin (legacy "first"), or builtin only ("last" - session tried after
-   * persistent in FunctionResolution).
-   *
-   * When resolving a view, the system.session namespace is included in the path, but
-   * handleViewContext filters to only return temporary functions that were referred to
-   * when the view was created.
-   *
-   * These identifiers are cached for performance since they're accessed frequently.
+   * Session function kinds in resolution order for unqualified lookups.
+   * Matches [[SQLConf.sessionFunctionResolutionOrder]]: "first" (session first), "second" (default),
+   * "last" (builtin only; session is tried after persistent in FunctionResolution).
    */
-  private val SESSION_NAMESPACE_TEMPLATE = FunctionIdentifier(
-    funcName = "",
-    database = Some(CatalogManager.SESSION_NAMESPACE),
-    catalog = Some(CatalogManager.SYSTEM_CATALOG_NAME))
-
-  private val BUILTIN_NAMESPACE_TEMPLATE = FunctionIdentifier(
-    funcName = "",
-    database = Some(CatalogManager.BUILTIN_NAMESPACE),
-    catalog = Some(CatalogManager.SYSTEM_CATALOG_NAME))
-
-  // The resolution path: builtin -> session (session "second")
-  private val RESOLUTION_PATH = Seq(
-    BUILTIN_NAMESPACE_TEMPLATE,
-    SESSION_NAMESPACE_TEMPLATE
-  )
-
-  // Legacy resolution path: session -> builtin (session "first")
-  private val LEGACY_RESOLUTION_PATH = Seq(
-    SESSION_NAMESPACE_TEMPLATE,
-    BUILTIN_NAMESPACE_TEMPLATE
-  )
-
-  // Session last: only builtin (session tried after persistent in FunctionResolution)
-  private val SESSION_LAST_RESOLUTION_PATH = Seq(BUILTIN_NAMESPACE_TEMPLATE)
-
-  /**
-   * Returns the resolution path for function lookup.
-   * @return Ordered sequence of namespace identifiers.
-   */
-  private def resolutionPath(): Seq[FunctionIdentifier] = {
+  private def sessionFunctionKindsInResolutionOrder: Seq[SessionFunctionKind] = {
     conf.sessionFunctionResolutionOrder match {
-      case "first" => LEGACY_RESOLUTION_PATH
-      case "last" => SESSION_LAST_RESOLUTION_PATH
-      case _ => RESOLUTION_PATH // "second" (default)
-    }
-  }
-
-  /**
-   * Maps a namespace template to an actual storage identifier for a specific function.
-   *
-   * Storage conventions:
-   * - Builtin functions: FunctionIdentifier(name, None, None)
-   * - Temp functions: FunctionIdentifier(name, Some("session"), Some("system"))
-   * - Other: FunctionIdentifier(name, namespace.database, namespace.catalog)
-   */
-  private def namespaceToIdentifier(
-      namespace: FunctionIdentifier,
-      name: String): FunctionIdentifier = {
-    namespace.database match {
-      case Some(CatalogManager.BUILTIN_NAMESPACE) =>
-        FunctionIdentifier(format(name))
-
-      case _ =>
-        namespace.copy(funcName = name)
-    }
-  }
-
-  /**
-   * Checks if a namespace represents temporary functions.
-   */
-  private def isSessionNamespace(namespace: FunctionIdentifier): Boolean = {
-    namespace.database.contains(CatalogManager.SESSION_NAMESPACE)
-  }
-
-  /**
-   * Lookup a function in a specific namespace.
-   *
-   * @param namespace Namespace identifier (catalog + database)
-   * @param name Function name (unqualified)
-   * @param registry The registry to search (FunctionRegistry or TableFunctionRegistry)
-   * @tparam T The registry's type parameter (Expression or LogicalPlan)
-   * @return ExpressionInfo if function found in this namespace
-   */
-  private def lookupInNamespace[T](
-      namespace: FunctionIdentifier,
-      name: String,
-      registry: FunctionRegistryBase[T]): Option[ExpressionInfo] = {
-
-    val identifier = namespaceToIdentifier(namespace, name)
-    val result = registry.lookupFunction(identifier)
-
-    // Apply view context filtering for temp functions
-    if (isSessionNamespace(namespace)) {
-      handleViewContext(name, result)
-    } else {
-      result
-    }
-  }
-
-  /**
-   * Resolve a function in a specific namespace by building it with arguments.
-   *
-   * @param namespace Namespace identifier (catalog + database)
-   * @param name Function name (unqualified)
-   * @param arguments Arguments to pass to the function builder
-   * @param registry The registry to search
-   * @tparam T The registry's type parameter
-   * @return Built function instance if found
-   */
-  private def resolveInNamespace[T](
-      namespace: FunctionIdentifier,
-      name: String,
-      arguments: Seq[Expression],
-      registry: FunctionRegistryBase[T]): Option[T] = {
-
-    val identifier = namespaceToIdentifier(namespace, name)
-
-    if (!registry.functionExists(identifier)) {
-      None
-    } else if (isSessionNamespace(namespace)) {
-      // For temp functions, apply view context handling
-      handleViewContext(name, Option(registry.lookupFunction(identifier, arguments)))
-    } else {
-      Some(registry.lookupFunction(identifier, arguments))
+      case "first" => Seq(Temp, Builtin)
+      case "last" => Seq(Builtin)
+      case _ => Seq(Builtin, Temp) // "second"
     }
   }
 
@@ -2471,10 +2346,7 @@ class SessionCatalog(
     kind match {
       case SessionCatalog.Temp =>
         synchronized {
-          lookupTempFuncWithViewContext(
-            name,
-            _ => false,
-            _ => registry.lookupFunction(identifier))
+          handleViewContext(name, registry.lookupFunction(identifier))
         }
       case _ =>
         registry.lookupFunction(identifier)
@@ -2499,10 +2371,7 @@ class SessionCatalog(
       case SessionCatalog.Temp =>
         synchronized {
           if (functionRegistry.functionExists(identifier)) {
-            lookupTempFuncWithViewContext(
-              name,
-              _ => false,
-              _ => Option(functionRegistry.lookupFunction(identifier, arguments)))
+            handleViewContext(name, Option(functionRegistry.lookupFunction(identifier, arguments)))
           } else {
             None
           }
@@ -2528,10 +2397,8 @@ class SessionCatalog(
       case SessionCatalog.Temp =>
         synchronized {
           if (tableFunctionRegistry.functionExists(identifier)) {
-            lookupTempFuncWithViewContext(
-              name,
-              _ => false,
-              _ => Option(tableFunctionRegistry.lookupFunction(identifier, arguments)))
+            handleViewContext(
+              name, Option(tableFunctionRegistry.lookupFunction(identifier, arguments)))
           } else {
             None
           }
@@ -2600,30 +2467,6 @@ class SessionCatalog(
     path.iterator.flatMap { namespace =>
       resolveInNamespace(namespace, name, arguments, registry)
     }.nextOption()
-  }
-
-  /**
-   * Looks up a temporary function with view context handling.
-   * Used by legacy code paths that need explicit control over the isBuiltin check.
-   *
-   * @param name The function name.
-   * @param isBuiltin Function to check if identifier is builtin (skip view context if true).
-   * @param lookupFunc Function to perform the actual lookup.
-   * @tparam T The result type.
-   * @return The lookup result with view context applied.
-   */
-  private def lookupTempFuncWithViewContext[T](
-      name: String,
-      isBuiltin: FunctionIdentifier => Boolean,
-      lookupFunc: FunctionIdentifier => Option[T]): Option[T] = {
-    val funcIdent = FunctionIdentifier(name)
-    if (isBuiltin(funcIdent)) {
-      // Builtin functions are not subject to view context restrictions
-      lookupFunc(funcIdent)
-    } else {
-      // Temp functions must respect view context
-      handleViewContext(name, lookupFunc(funcIdent))
-    }
   }
 
   /**
