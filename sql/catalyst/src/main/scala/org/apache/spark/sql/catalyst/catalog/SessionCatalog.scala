@@ -2458,13 +2458,14 @@ class SessionCatalog(
       registry: FunctionRegistryBase[T]): Option[T] = {
 
     val tableFunction = registry eq tableFunctionRegistry
-    sessionFunctionKindsInResolutionOrder.iterator.flatMap { kind =>
+    val result = sessionFunctionKindsInResolutionOrder.iterator.flatMap { kind =>
       if (tableFunction) {
         resolveTableFunction(kind, name, arguments)
       } else {
         resolveScalarFunction(kind, name, arguments)
       }
     }.nextOption()
+    result.asInstanceOf[Option[T]]
   }
 
   /**
