@@ -226,7 +226,7 @@ def context_provider() -> dict[str, str]:
     def is_pyspark_module(frame: FrameType) -> bool:
         module_name = frame.f_globals.get("__name__", "")
         if module_name == "__main__":
-            if mod := sys.modules.get("__main__", None):
+            if (mod := sys.modules.get("__main__", None)) and mod.__spec__:
                 module_name = mod.__spec__.name
         return module_name.startswith("pyspark.") and ".tests." not in module_name
 
