@@ -32,6 +32,14 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
 
 /**
+ * Trait for test scans that expose pushed partition predicates (e.g. to verify
+ * PartitionPredicate.referencedPartitionColumnOrdinals). Used by DataSourceV2 suites.
+ */
+trait TestPartitionPredicateScan {
+  def getPushedPartitionPredicates: Seq[PartitionPredicate]
+}
+
+/**
  * In-memory table whose scan builder implements enhanced partition filtering using
  * PartitionPredicates pushed in a second pass.
  */
@@ -106,13 +114,23 @@ class InMemoryEnhancedPartitionFilterTable(
         val partRow = p.asInstanceOf[BufferedRows].partitionKey()
         partitionPredicates.forall(_.accept(partRow))
       }
-      InMemoryEnhancedPartitionFilterBatchScan(filteredBySeoncPass, readSchema, tableSchema)
+      InMemoryEnhancedPartitionFilterBatchScan(
+        filteredBySeoncPass, readSchema, tableSchema, partitionPredicates.toSeq)
     }
   }
 
+  /**
+   * Batch scan that stores pushed partition predicates for test inspection
+   * (e.g. to verify PartitionPredicate.referencedPartitionColumnOrdinals).
+   */
   case class InMemoryEnhancedPartitionFilterBatchScan(
       _data: Seq[InputPartition],
       readSchema: StructType,
-      tableSchema: StructType)
+      tableSchema: StructType,
+      pushedPartitionPredicates: Seq[PartitionPredicate] = Seq.empty)
     extends BatchScanBaseClass(_data, readSchema, tableSchema)
+    with TestPartitionPredicateScan {
+
+    override def getPushedPartitionPredicates: Seq[PartitionPredicate] = pushedPartitionPredicates
+  }
 }
