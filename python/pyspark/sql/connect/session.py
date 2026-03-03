@@ -622,8 +622,9 @@ class SparkSession:
             safecheck = configs["spark.sql.execution.pandas.convertToArrowArraySafely"]
 
             # Handle the 0-column case separately to preserve row count.
+            # pa.RecordBatch.from_pandas preserves num_rows via pandas index metadata.
             if len(data.columns) == 0:
-                _table = pa.Table.from_struct_array(pa.array([{}] * len(data), type=pa.struct([])))
+                _table = pa.Table.from_batches([pa.RecordBatch.from_pandas(data)])
             else:
                 _table = pa.Table.from_batches(
                     [
@@ -774,7 +775,7 @@ class SparkSession:
             configs["spark.sql.session.localRelationChunkSizeBytes"]  # type: ignore[arg-type]
         )
         max_batch_of_chunks_size_bytes = int(
-            configs["spark.sql.session.localRelationBatchOfChunksSizeBytes"]  # type: ignore[arg-type] # noqa: E501
+            configs["spark.sql.session.localRelationBatchOfChunksSizeBytes"]  # type: ignore[arg-type]
         )
         plan: LogicalPlan = local_relation
         if cache_threshold <= _table.nbytes:
@@ -943,12 +944,12 @@ class SparkSession:
                 try:
                     self.client.release_session()
                 except Exception as e:
-                    logger.warn(f"session.stop(): Session could not be released. Error: ${e}")
+                    logger.warning(f"session.stop(): Session could not be released. Error: ${e}")
 
             try:
                 self.client.close()
             except Exception as e:
-                logger.warn(f"session.stop(): Client could not be closed. Error: ${e}")
+                logger.warning(f"session.stop(): Client could not be closed. Error: ${e}")
 
             if self is SparkSession._default_session:
                 SparkSession._default_session = None
@@ -964,7 +965,7 @@ class SparkSession:
                     try:
                         PySparkSession._activeSession.stop()
                     except Exception as e:
-                        logger.warn(
+                        logger.warning(
                             "session.stop(): Local Spark Connect Server could not be stopped. "
                             f"Error: ${e}"
                         )

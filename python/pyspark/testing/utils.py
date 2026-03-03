@@ -101,11 +101,14 @@ grpc_requirement_message = "" if have_grpc else "No module named 'grpc'"
 have_grpc_status = have_package("grpc_status")
 grpc_status_requirement_message = "" if have_grpc_status else "No module named 'grpc_status'"
 
+have_zstandard = have_package("zstandard")
+zstandard_requirement_message = "" if have_zstandard else "No module named 'zstandard'"
+
 
 googleapis_common_protos_requirement_message = ""
 
 try:
-    from google.rpc import error_details_pb2
+    from google.rpc import error_details_pb2  # noqa: F401
 except ImportError as e:
     googleapis_common_protos_requirement_message = str(e)
 have_googleapis_common_protos = not googleapis_common_protos_requirement_message
@@ -140,6 +143,7 @@ connect_requirement_message = (
     or grpc_requirement_message
     or googleapis_common_protos_requirement_message
     or grpc_status_requirement_message
+    or zstandard_requirement_message
 )
 
 should_test_connect = not connect_requirement_message
@@ -501,7 +505,7 @@ def assertSchemaEqual(
     expected : StructType
         The expected schema, for comparison with the actual schema.
     ignoreNullable : bool, default True
-        Specifies whether a column’s nullable property is included when checking for
+        Specifies whether a column's nullable property is included when checking for
         schema equality.
         When set to `True` (default), the nullable property of the columns being compared
         is not taken into account and the columns will be considered equal even if they have
@@ -711,7 +715,7 @@ def assertDataFrameEqual(
         The absolute tolerance, used in asserting approximate equality for float values in actual
         and expected. Set to 1e-8 by default. (See Notes)
     ignoreNullable : bool, default True
-        Specifies whether a column’s nullable property is included when checking for
+        Specifies whether a column's nullable property is included when checking for
         schema equality.
         When set to `True` (default), the nullable property of the columns being compared
         is not taken into account and the columns will be considered equal even if they have
@@ -960,7 +964,7 @@ def assertDataFrameEqual(
 
     has_arrow = False
     try:
-        import pyarrow
+        import pyarrow  # noqa: F401
 
         has_arrow = True
     except ImportError:

@@ -22,7 +22,7 @@ import scala.xml.{Node, Unparsed}
 import jakarta.servlet.http.HttpServletRequest
 
 import org.apache.spark.status.api.v1.ApplicationInfo
-import org.apache.spark.ui.{UIUtils, WebUIPage}
+import org.apache.spark.ui.{CspNonce, UIUtils, WebUIPage}
 import org.apache.spark.ui.UIUtils.formatImportJavaScript
 
 private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
@@ -74,7 +74,8 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
               request, "/static/dataTables.rowsGroup.js")}></script> ++
             <script type="module" src={UIUtils.prependBaseUri(
               request, "/static/historypage.js")} ></script> ++
-            <script type="module">{Unparsed(js)}</script> ++ <div id="history-summary"></div>
+            <script type="module" nonce={CspNonce.get}>{Unparsed(js)}</script> ++
+              <div id="history-summary"></div>
           } else if (requestedIncomplete) {
             <h4>No incomplete applications found!</h4>
           } else if (eventLogsUnderProcessCount > 0) {

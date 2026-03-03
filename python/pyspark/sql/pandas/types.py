@@ -317,6 +317,7 @@ def is_geometry(at: "pa.DataType") -> bool:
     return any(
         (
             field.name == "wkb"
+            and field.metadata is not None
             and b"geometry" in field.metadata
             and field.metadata[b"geometry"] == b"true"
         )
@@ -333,6 +334,7 @@ def is_geography(at: "pa.DataType") -> bool:
     return any(
         (
             field.name == "wkb"
+            and field.metadata is not None
             and b"geography" in field.metadata
             and field.metadata[b"geography"] == b"true"
         )
@@ -783,15 +785,12 @@ def _check_series_convert_timestamps_localize(
         return s.dt.tz_convert(to_tz).dt.tz_localize(None)
     elif is_datetime64_dtype(s.dtype) and from_tz != to_tz:
         # `s.dt.tz_localize('tzlocal()')` doesn't work properly when including NaT.
-        return cast(
-            "PandasSeriesLike",
-            s.apply(
-                lambda ts: ts.tz_localize(from_tz, ambiguous=False)
-                .tz_convert(to_tz)
-                .tz_localize(None)
-                if ts is not pd.NaT
-                else pd.NaT
-            ),
+        return s.apply(
+            lambda ts: ts.tz_localize(from_tz, ambiguous=False)  # type: ignore[arg-type, return-value]
+            .tz_convert(to_tz)
+            .tz_localize(None)
+            if ts is not pd.NaT
+            else pd.NaT
         )
     else:
         return s

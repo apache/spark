@@ -31,8 +31,14 @@ import org.apache.spark.sql.scripting.{CursorClosed, CursorDeclared, CursorOpene
  * 1. Parsing the cursor's SQL query text to a LogicalPlan
  * 2. Binding parameters (if USING clause is provided)
  * 3. Analyzing the query (semantic analysis, resolution, type checking)
+ * 4. Generating physical plan and creating the result iterator
  *
- * Does not execute the query or create result iterator - that happens on first FETCH.
+ * CRITICAL: executeToIterator() MUST be called at OPEN time to capture snapshots.
+ * This is the only point where Spark locks in file lists and Delta snapshots.
+ * Simply creating the physical plan is not sufficient - execution must start.
+ *
+ * The iterator is lazy - it doesn't materialize all data, but it does lock in
+ * which files/versions will be scanned.
  *
  * Uses ParameterizedQueryExecutor trait for unified parameter binding with EXECUTE IMMEDIATE.
  *
@@ -73,11 +79,18 @@ case class OpenCursorExec(
     // Uses shared ParameterizedQueryExecutor trait for consistency with EXECUTE IMMEDIATE
     val analyzedQuery = executeParameterizedQuery(cursorDef.queryText, args, paramNames)
 
-    // Transition cursor state to Opened
+    // Generate physical plan and create iterator at OPEN time
+    // CRITICAL: executeToIterator() must be called NOW to capture snapshot
+    val df = org.apache.spark.sql.classic.Dataset.ofRows(
+      session.asInstanceOf[org.apache.spark.sql.classic.SparkSession],
+      analyzedQuery)
+    val resultIterator = df.queryExecution.executedPlan.executeToIterator()
+
+    // Transition cursor state to Opened with iterator
     scriptingContext.updateCursorState(
       cursorRef.normalizedName,
       cursorRef.scopeLabel,
-      CursorOpened(analyzedQuery))
+      CursorOpened(resultIterator, analyzedQuery.output))
 
     Nil
   }

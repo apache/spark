@@ -27,10 +27,6 @@ from pyspark.sql.types import Row
 from pyspark.testing.utils import (
     ReusedPySparkTestCase,
     PySparkErrorTestUtils,
-    have_pandas,
-    pandas_requirement_message,
-    have_pyarrow,
-    pyarrow_requirement_message,
 )
 from pyspark.find_spark_home import _find_spark_home
 

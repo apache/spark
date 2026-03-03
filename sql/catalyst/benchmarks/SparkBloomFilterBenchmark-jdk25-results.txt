@@ -1,0 +1,300 @@
+================================================================================================
+Put Operation - Small Scale
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+Put Operation - 10000 items, FPP: 0.03:   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+BloomFilterImpl V1 - 10000                            0              0           0         24.7          40.5       1.0X
+BloomFilterImplV2 - 10000                             0              0           0         22.4          44.6       0.9X
+
+
+================================================================================================
+Put Operation - Medium Scale
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+Put Operation - 100000 items, FPP: 0.03:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+BloomFilterImpl V1 - 100000                           5              5           0         20.2          49.4       1.0X
+BloomFilterImplV2 - 100000                            5              5           0         20.6          48.5       1.0X
+
+
+================================================================================================
+Put Operation - Large Scale
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+Put Operation - 1000000 items, FPP: 0.03:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+BloomFilterImpl V1 - 1000000                         55             55           0         18.3          54.6       1.0X
+BloomFilterImplV2 - 1000000                          55             55           0         18.3          54.7       1.0X
+
+
+================================================================================================
+MightContain Operation - Small Scale
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+MightContain Operation (Hit Rate: 50.0%) - 10000 items, FPP: 0.03:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------------------------
+BloomFilterImpl V1 - 10000                                                     0              0           0         39.1          25.6       1.0X
+BloomFilterImplV2 - 10000                                                      0              0           0         39.6          25.2       1.0X
+
+
+================================================================================================
+MightContain Operation - Medium Scale
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+MightContain Operation (Hit Rate: 50.0%) - 100000 items, FPP: 0.03:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------------------------
+BloomFilterImpl V1 - 100000                                                     3              3           0         36.7          27.3       1.0X
+BloomFilterImplV2 - 100000                                                      3              3           0         34.2          29.3       0.9X
+
+
+================================================================================================
+MightContain Operation - Large Scale
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+MightContain Operation (Hit Rate: 50.0%) - 1000000 items, FPP: 0.03:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+---------------------------------------------------------------------------------------------------------------------------------------------------
+BloomFilterImpl V1 - 1000000                                                    32             32           0         31.6          31.6       1.0X
+BloomFilterImplV2 - 1000000                                                     34             34           0         29.4          34.0       0.9X
+
+
+================================================================================================
+FPP Impact on Put Operations
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+Put Operation - 100000 items, FPP: 0.01:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+BloomFilterImpl V1 - 100000                           6              7           0         15.4          64.9       1.0X
+BloomFilterImplV2 - 100000                            6              6           0         15.7          63.6       1.0X
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+Put Operation - 100000 items, FPP: 0.03:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+BloomFilterImpl V1 - 100000                           5              5           0         20.2          49.5       1.0X
+BloomFilterImplV2 - 100000                            5              5           0         20.6          48.6       1.0X
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+Put Operation - 100000 items, FPP: 0.05:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+BloomFilterImpl V1 - 100000                           4              4           0         24.4          41.0       1.0X
+BloomFilterImplV2 - 100000                            4              4           0         24.5          40.9       1.0X
+
+
+================================================================================================
+FPP Impact on Query Operations
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+MightContain Operation (Hit Rate: 50.0%) - 100000 items, FPP: 0.01:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------------------------
+BloomFilterImpl V1 - 100000                                                     3              3           0         32.8          30.5       1.0X
+BloomFilterImplV2 - 100000                                                      3              3           0         30.5          32.8       0.9X
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+MightContain Operation (Hit Rate: 50.0%) - 100000 items, FPP: 0.03:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------------------------
+BloomFilterImpl V1 - 100000                                                     3              3           0         36.7          27.3       1.0X
+BloomFilterImplV2 - 100000                                                      3              3           0         34.2          29.2       0.9X
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+MightContain Operation (Hit Rate: 50.0%) - 100000 items, FPP: 0.05:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------------------------
+BloomFilterImpl V1 - 100000                                                     3              3           0         39.3          25.4       1.0X
+BloomFilterImplV2 - 100000                                                      3              3           0         37.1          26.9       0.9X
+
+
+================================================================================================
+Hit Rate Impact Analysis
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+MightContain Operation (Hit Rate: 10.0%) - 100000 items, FPP: 0.03:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------------------------
+BloomFilterImpl V1 - 100000                                                     3              3           0         32.0          31.2       1.0X
+BloomFilterImplV2 - 100000                                                      3              3           0         29.4          34.0       0.9X
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+MightContain Operation (Hit Rate: 50.0%) - 100000 items, FPP: 0.03:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------------------------
+BloomFilterImpl V1 - 100000                                                     3              3           0         36.5          27.4       1.0X
+BloomFilterImplV2 - 100000                                                      3              3           0         34.2          29.2       0.9X
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+MightContain Operation (Hit Rate: 90.0%) - 100000 items, FPP: 0.03:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------------------------
+BloomFilterImpl V1 - 100000                                                     2              2           0         43.1          23.2       1.0X
+BloomFilterImplV2 - 100000                                                      2              2           0         40.7          24.6       0.9X
+
+
+================================================================================================
+Binary Put Operation - Small Scale
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+Binary PUT Operation - 10000 items, FPP: 0.03:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-----------------------------------------------------------------------------------------------------------------------------
+BloomFilterImpl V1 - 10000                                 1              1           0         11.5          86.6       1.0X
+BloomFilterImplV2 - 10000                                  1              1           0         10.2          97.8       0.9X
+
+
+================================================================================================
+Binary Put Operation - Medium Scale
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+Binary PUT Operation - 100000 items, FPP: 0.03:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------
+BloomFilterImpl V1 - 100000                                 9              9           0         10.7          93.1       1.0X
+BloomFilterImplV2 - 100000                                 11             11           0          9.4         106.9       0.9X
+
+
+================================================================================================
+Binary Put Operation - Large Scale
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+Binary PUT Operation - 1000000 items, FPP: 0.03:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------
+BloomFilterImpl V1 - 1000000                               100            100           0         10.0         100.1       1.0X
+BloomFilterImplV2 - 1000000                                118            118           0          8.5         117.9       0.8X
+
+
+================================================================================================
+Binary Query Operation - Small Scale
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+Binary Query Operation (Hit Rate: 50.0%) - 10000 items, FPP: 0.03:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------------------------
+BloomFilterImpl V1 - 10000                                                     1              1           0         16.9          59.0       1.0X
+BloomFilterImplV2 - 10000                                                      1              1           0         16.2          61.7       1.0X
+
+
+================================================================================================
+Binary Query Operation - Medium Scale
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+Binary Query Operation (Hit Rate: 50.0%) - 100000 items, FPP: 0.03:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------------------------
+BloomFilterImpl V1 - 100000                                                     6              6           0         15.5          64.6       1.0X
+BloomFilterImplV2 - 100000                                                      7              7           0         14.8          67.4       1.0X
+
+
+================================================================================================
+Binary Query Operation - Large Scale
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+Binary Query Operation (Hit Rate: 50.0%) - 1000000 items, FPP: 0.03:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+---------------------------------------------------------------------------------------------------------------------------------------------------
+BloomFilterImpl V1 - 1000000                                                    70             70           0         14.3          69.7       1.0X
+BloomFilterImplV2 - 1000000                                                     76             76           0         13.2          75.9       0.9X
+
+
+================================================================================================
+FPP Impact on Binary Put Operations
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+Binary PUT Operation - 100000 items, FPP: 0.01:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------
+BloomFilterImpl V1 - 100000                                11             11           0          9.1         109.9       1.0X
+BloomFilterImplV2 - 100000                                 13             13           0          8.0         125.4       0.9X
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+Binary PUT Operation - 100000 items, FPP: 0.03:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------
+BloomFilterImpl V1 - 100000                                 9              9           0         10.7          93.2       1.0X
+BloomFilterImplV2 - 100000                                 11             11           0          9.4         106.7       0.9X
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+Binary PUT Operation - 100000 items, FPP: 0.05:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------
+BloomFilterImpl V1 - 100000                                 8              8           0         12.2          81.8       1.0X
+BloomFilterImplV2 - 100000                                  9              9           0         10.6          94.2       0.9X
+
+
+================================================================================================
+FPP Impact on Binary Query Operations
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+Binary Query Operation (Hit Rate: 50.0%) - 100000 items, FPP: 0.01:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------------------------
+BloomFilterImpl V1 - 100000                                                     7              7           0         14.6          68.3       1.0X
+BloomFilterImplV2 - 100000                                                      7              7           0         14.0          71.3       1.0X
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+Binary Query Operation (Hit Rate: 50.0%) - 100000 items, FPP: 0.03:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------------------------
+BloomFilterImpl V1 - 100000                                                     6              6           0         15.5          64.5       1.0X
+BloomFilterImplV2 - 100000                                                      7              7           0         14.9          67.2       1.0X
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+Binary Query Operation (Hit Rate: 50.0%) - 100000 items, FPP: 0.05:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------------------------
+BloomFilterImpl V1 - 100000                                                     6              6           0         16.0          62.3       1.0X
+BloomFilterImplV2 - 100000                                                      6              6           0         15.7          63.8       1.0X
+
+
+================================================================================================
+Hit Rate Impact on Binary Operations
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+Binary Query Operation (Hit Rate: 10.0%) - 100000 items, FPP: 0.03:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------------------------
+BloomFilterImpl V1 - 100000                                                     7              7           0         15.3          65.4       1.0X
+BloomFilterImplV2 - 100000                                                      7              7           0         14.9          67.1       1.0X
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+Binary Query Operation (Hit Rate: 50.0%) - 100000 items, FPP: 0.03:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------------------------
+BloomFilterImpl V1 - 100000                                                     6              6           0         15.5          64.7       1.0X
+BloomFilterImplV2 - 100000                                                      7              7           0         14.9          67.1       1.0X
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+Binary Query Operation (Hit Rate: 90.0%) - 100000 items, FPP: 0.03:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------------------------
+BloomFilterImpl V1 - 100000                                                     6              6           0         15.7          63.6       1.0X
+BloomFilterImplV2 - 100000                                                      7              7           0         14.9          67.1       0.9X
+
+

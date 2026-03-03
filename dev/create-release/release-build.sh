@@ -344,7 +344,7 @@ meta:
   _edit_last: '4'
   _wpas_done_all: '1'
 ---
-We are happy to announce the availability of <a href="{{site.baseurl}}/releases/spark-release-${RELEASE_VERSION}.html" title="Spark Release ${RELEASE_VERSION}">Apache Spark ${RELEASE_VERSION}</a>! Visit the <a href="{{site.baseurl}}/releases/spark-release-${RELEASE_VERSION}.html" title="Spark Release ${RELEASE_VERSION}">release notes</a> to read about the new features, or <a href="{{site.baseurl}}/downloads.html">download</a> the release today.
+We are happy to announce the availability of <a href="{{site.baseurl}}/releases/spark-release-${RELEASE_VERSION//./-}.html" title="Spark Release ${RELEASE_VERSION}">Apache Spark ${RELEASE_VERSION}</a>! Visit the <a href="{{site.baseurl}}/releases/spark-release-${RELEASE_VERSION//./-}.html" title="Spark Release ${RELEASE_VERSION}">release notes</a> to read about the new features, or <a href="{{site.baseurl}}/downloads.html">download</a> the release today.
 EOF
   fi
 
@@ -402,7 +402,7 @@ You can find the list of resolved issues and detailed changes in the [JIRA relea
 
 We would like to acknowledge all community members for contributing ${ACKNOWLEDGE}"
 
-    FILENAME="releases/_posts/${RELEASE_DATE}-spark-release-${RELEASE_VERSION}.md"
+    FILENAME="releases/_posts/${RELEASE_DATE}-spark-release-${RELEASE_VERSION//./-}.md"
     mkdir -p releases/_posts
     cat > "$FILENAME" <<EOF
 ---
@@ -565,7 +565,7 @@ EOF
   
   if [[ -n "$OLD_VERSION" ]]; then
     echo "Removing old version: spark-$OLD_VERSION"
-    svn rm "https://dist.apache.org/repos/dist/release/spark/spark-$OLD_VERSION" -m "Remove older $RELEASE_SERIES release after $RELEASE_VERSION"
+    svn rm "https://dist.apache.org/repos/dist/release/spark/spark-$OLD_VERSION" --username "$ASF_USERNAME" --password "$ASF_PASSWORD" --non-interactive -m "Remove older $RELEASE_SERIES release after $RELEASE_VERSION"
   else
     echo "No previous $RELEASE_SERIES version found to remove. Manually remove it if there is."
   fi

@@ -206,6 +206,12 @@
     ],
     "sqlState" : "42K03"
   },
+  "BEAN_ENCODER_INTERFACE_NOT_SUPPORTED" : {
+    "message" : [
+      "Bean encoder does not support interface type <className>."
+    ],
+    "sqlState" : "0A000"
+  },
   "BINARY_ARITHMETIC_OVERFLOW" : {
     "message" : [
       "<value1> <symbol> <value2> caused overflow. Use <functionName> to ignore overflow problem and return NULL."
@@ -1672,6 +1678,12 @@
   "EVENT_TIME_IS_NOT_ON_TIMESTAMP_TYPE" : {
     "message" : [
       "The event time <eventName> has the invalid type <eventType>, but expected \"TIMESTAMP\"."
+    ],
+    "sqlState" : "42K09"
+  },
+  "EVENT_TIME_MUST_BE_TOP_LEVEL_COLUMN" : {
+    "message" : [
+      "The event time in withWatermark must be a top-level column, but '<eventExpr>' is a nested field. To use it, alias it to a top-level column in a select before withWatermark."
     ],
     "sqlState" : "42K09"
   },
@@ -4104,6 +4116,12 @@
     },
     "sqlState" : "42823"
   },
+  "INVALID_TEMP_OBJ_QUALIFIER" : {
+    "message" : [
+      "Temporary <objectType> <objectName> cannot be qualified with <qualifier>. Temporary objects can only be qualified with SESSION or SYSTEM.SESSION."
+    ],
+    "sqlState" : "42602"
+  },
   "INVALID_TEMP_OBJ_REFERENCE" : {
     "message" : [
       "Cannot create the persistent object <objName> of the type <obj> because it references to the temporary object <tempObjName> of the type <tempObj>. Please make the temporary object <tempObjName> persistent, or make the persistent object <objName> temporary."
@@ -4171,6 +4189,12 @@
   "INVALID_USAGE_OF_STAR_OR_REGEX" : {
     "message" : [
       "Invalid usage of <elem> in <prettyName>."
+    ],
+    "sqlState" : "42000"
+  },
+  "INVALID_USAGE_OF_STAR_WITH_TABLE_IDENTIFIER_IN_COUNT" : {
+    "message" : [
+      "count(<tableName>.*) is not allowed. Use count(*) or expand the columns manually, e.g. count(col1, col2)."
     ],
     "sqlState" : "42000"
   },
@@ -4282,6 +4306,11 @@
       "MISMATCH_WITH_DISTINCT_INPUT" : {
         "message" : [
           "The function is invoked with DISTINCT and WITHIN GROUP but expressions <funcArg> and <orderingExpr> do not match. The WITHIN GROUP ordering expression must be picked from the function inputs."
+        ]
+      },
+      "MISMATCH_WITH_DISTINCT_INPUT_UNSAFE_CAST" : {
+        "message" : [
+          "The function <funcName> with DISTINCT and WITHIN GROUP (ORDER BY) is not supported for <inputType> input. Explicitly cast the input to <castType> before passing it to both the function argument and ORDER BY expression."
         ]
       },
       "WITHIN_GROUP_MISSING" : {
@@ -4710,6 +4739,15 @@
     ],
     "sqlState" : "07501"
   },
+  "NESTED_SEQUENTIAL_STREAMING_UNION" : {
+    "message" : [
+      "Nested SequentialStreamingUnion is not supported. <hint>",
+      "SequentialStreamingUnion can only be used at the top level of a streaming query.",
+      "Each source in followedBy() should be a base streaming source or simple transformations,",
+      "not another followedBy() result wrapped in other operators."
+    ],
+    "sqlState" : "42601"
+  },
   "NEW_CHECK_CONSTRAINT_VIOLATION" : {
     "message" : [
       "The new check constraint (<expression>) cannot be added because it would be violated by existing data in table <tableName>. Please ensure all existing rows satisfy the constraint before adding it."
@@ -4871,6 +4909,15 @@
       }
     },
     "sqlState" : "42000"
+  },
+  "NOT_STREAMING_DATASET" : {
+    "message" : [
+      "All sources in <operator> must be streaming relations.",
+      "Ensure all DataFrames are created using spark.readStream() rather than spark.read().",
+      "Example: df1 = spark.readStream.format(\"delta\").load(...); df2 = spark.readStream.format(\"kafka\").load(...)",
+      "Then use: df1.followedBy(df2)"
+    ],
+    "sqlState" : "42K0A"
   },
   "NOT_SUPPORTED_CHANGE_COLUMN" : {
     "message" : [
@@ -5348,7 +5395,7 @@
   },
   "REQUIRES_SINGLE_PART_NAMESPACE" : {
     "message" : [
-      "<sessionCatalog> requires a single-part namespace, but got <namespace>."
+      "<sessionCatalog> requires a single-part namespace, but got identifier <identifier>."
     ],
     "sqlState" : "42K05"
   },
@@ -5469,6 +5516,84 @@
     ],
     "sqlState" : "42601"
   },
+  "SPARK_CONNECT_ILLEGAL_STATE" : {
+    "message" : [
+      "Spark Connect encountered an illegal state condition."
+    ],
+    "subClass" : {
+      "DATA_INTEGRITY_CURSOR_OUT_OF_BOUNDS" : {
+        "message" : [
+          "Cursor out of bounds: <cursor> exceeds batch size <batchSize>."
+        ]
+      },
+      "EXECUTION_STATE_EXECUTE_HOLDER_ALREADY_EXISTS" : {
+        "message" : [
+          "ExecuteHolder with opId=<operationId> already exists!"
+        ]
+      },
+      "EXECUTION_STATE_EXECUTE_HOLDER_ALREADY_EXISTS_GRAPH" : {
+        "message" : [
+          "Pipeline execution for graph ID <graphId> already exists. Stop the existing execution before starting a new one."
+        ]
+      },
+      "EXECUTION_STATE_OPERATION_ORPHANED" : {
+        "message" : [
+          "Operation <key> has been orphaned."
+        ]
+      },
+      "SESSION_MANAGEMENT_SERVICE_NOT_STARTED" : {
+        "message" : [
+          "Attempting to stop the Spark Connect service that has not been started."
+        ]
+      },
+      "SESSION_MANAGEMENT_SESSION_ALREADY_CLOSED" : {
+        "message" : [
+          "Session <key> is already closed."
+        ]
+      },
+      "STATE_CONSISTENCY_CLEANER_ALREADY_SET" : {
+        "message" : [
+          "Cleaner for query <queryKey> has already been set for session <key>."
+        ]
+      },
+      "STATE_CONSISTENCY_EXECUTION_STATE_TRANSITION_INVALID_OPERATION_STATUS_MISMATCH" : {
+        "message" : [
+          "operationId: <operationId> with status <currentStatus> is not within statuses <validStatuses> for event <eventStatus>"
+        ]
+      },
+      "STATE_CONSISTENCY_EXECUTION_STATE_TRANSITION_INVALID_SESSION_NOT_STARTED" : {
+        "message" : [
+          "sessionId: <sessionId> with status <sessionStatus> is not Started for event <eventStatus>"
+        ]
+      },
+      "STATE_CONSISTENCY_NO_BATCHES_AVAILABLE" : {
+        "message" : [
+          "No batches available. Invalid response: <response>."
+        ]
+      },
+      "STATE_CONSISTENCY_SESSION_STATE_TRANSITION_INVALID" : {
+        "message" : [
+          "sessionId: <sessionId> with status <fromState> is not within statuses <validStates> for event <toState>"
+        ]
+      },
+      "STREAMING_QUERY_UNEXPECTED_RETURN_VALUE" : {
+        "message" : [
+          "Unexpected return value <value> from Python worker in <context> for session <key>."
+        ]
+      },
+      "STREAM_LIFECYCLE_ALREADY_COMPLETED" : {
+        "message" : [
+          "Stream <operation> can't be called after stream completed"
+        ]
+      },
+      "STREAM_LIFECYCLE_EVENT_SEND_AFTER_SHUTDOWN" : {
+        "message" : [
+          "Cannot send event after shutdown for session <key>."
+        ]
+      }
+    },
+    "sqlState" : "XXSC0"
+  },
   "SPARK_JOB_CANCELLED" : {
     "message" : [
       "Job <jobId> cancelled <reason>"
@@ -5532,6 +5657,15 @@
       "Star (*) is not allowed in a select list when GROUP BY an ordinal position is used."
     ],
     "sqlState" : "0A000"
+  },
+  "STATEFUL_CHILDREN_NOT_SUPPORTED_IN_SEQUENTIAL_STREAMING_UNION" : {
+    "message" : [
+      "Stateful operations are not supported as direct children of SequentialStreamingUnion. Please apply stateful operations (aggregations, joins, deduplication, etc.) after the SequentialStreamingUnion.",
+      "Incorrect: historical.groupBy(\"key\").count().followedBy(live.groupBy(\"key\").count())",
+      "Correct: historical.followedBy(live).groupBy(\"key\").count()",
+      "This ensures state is preserved across source transitions from historical to live data."
+    ],
+    "sqlState" : "42601"
   },
   "STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_HANDLE_STATE" : {
     "message" : [
@@ -6273,6 +6407,12 @@
     ],
     "sqlState" : "22000"
   },
+  "THETA_INVALID_INPUT_SKETCH_BUFFER_FAMILY" : {
+    "message" : [
+      "Invalid call to <function>: expected <expectedFamily> sketch family but received <actualFamily>. Only valid Theta sketch buffers (produced by `theta_sketch_agg`) are supported as inputs."
+    ],
+    "sqlState" : "22000"
+  },
   "THETA_LG_NOM_ENTRIES_MUST_BE_CONSTANT" : {
     "message" : [
       "Invalid call to <function>; the `lgNomEntries` value must be a constant value, but got a non-constant expression."
@@ -6320,6 +6460,12 @@
   "TUPLE_INVALID_INPUT_SKETCH_BUFFER" : {
     "message" : [
       "Invalid call to <function>; only valid Tuple sketch buffers are supported as inputs (such as those produced by the corresponding `tuple_sketch_agg_*` function)."
+    ],
+    "sqlState" : "22000"
+  },
+  "TUPLE_INVALID_INPUT_SKETCH_BUFFER_FAMILY" : {
+    "message" : [
+      "Invalid call to <function>: expected <expectedFamily> sketch family but received <actualFamily>. Only valid Tuple sketch buffers (produced by `tuple_sketch_agg_*` functions) are supported as inputs."
     ],
     "sqlState" : "22000"
   },
@@ -7709,6 +7855,12 @@
     ],
     "sqlState" : "42601"
   },
+  "WKB_PARSE_ERROR" : {
+    "message" : [
+      "Error parsing WKB: <parseError> at position <pos>"
+    ],
+    "sqlState" : "22023"
+  },
   "WRITE_STREAM_NOT_ALLOWED" : {
     "message" : [
       "`writeStream` can be called only on streaming Dataset/DataFrame."
@@ -7944,11 +8096,6 @@
   "_LEGACY_ERROR_TEMP_1021" : {
     "message" : [
       "count(<targetString>.*) is not allowed. Please use count(*) or expand the columns manually, e.g. count(col1, col2)."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1030" : {
-    "message" : [
-      "Window aggregate function with filter predicate is not supported yet."
     ]
   },
   "_LEGACY_ERROR_TEMP_1031" : {

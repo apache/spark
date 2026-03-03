@@ -59,6 +59,8 @@ from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.sqlutils import (
     SPARK_HOME,
     ReusedSQLTestCase,
+)
+from pyspark.testing.utils import (
     have_pyarrow,
     pyarrow_requirement_message,
 )
@@ -689,6 +691,40 @@ class BasePythonDataSourceTestsMixin:
             " \\['key', 'value'\\] columns",
         ):
             self.spark.read.format("arrowbatch").schema("key int, dummy string").load().show()
+
+        # SPARK-55583: Validate Arrow schema types, not just column count/names.
+        # The data source declares "key string, value string" but read() yields
+        # a RecordBatch with (int32, string), causing an Arrow schema type mismatch.
+        class MismatchedTypeDataSource(DataSource):
+            @classmethod
+            def name(cls):
+                return "arrowbatch_type_mismatch"
+
+            def schema(self):
+                return "key string, value string"
+
+            def reader(self, schema: str):
+                return MismatchedTypeReader()
+
+        class MismatchedTypeReader(DataSourceReader):
+            def read(self, partition):
+                keys = pa.array([1, 2], type=pa.int32())
+                values = pa.array(["a", "b"], type=pa.string())
+                batch = pa.RecordBatch.from_arrays(
+                    [keys, values],
+                    schema=pa.schema([("key", pa.int32()), ("value", pa.string())]),
+                )
+                yield batch
+
+            def partitions(self):
+                return [InputPartition(0)]
+
+        self.spark.dataSource.register(MismatchedTypeDataSource)
+        with self.assertRaisesRegex(
+            PythonException,
+            "DATA_SOURCE_RETURN_SCHEMA_MISMATCH",
+        ):
+            self.spark.read.format("arrowbatch_type_mismatch").load().show()
 
     def test_arrow_batch_sink(self):
         class TestDataSource(DataSource):

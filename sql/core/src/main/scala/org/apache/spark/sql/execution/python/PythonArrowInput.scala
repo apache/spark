@@ -47,8 +47,6 @@ private[python] trait PythonArrowInput[IN] { self: BasePythonRunner[IN, _] =>
 
   protected def timeZoneId: String
 
-  protected def errorOnDuplicatedFieldNames: Boolean
-
   protected def largeVarTypes: Boolean
 
   protected def pythonMetrics: Map[String, SQLMetric]
@@ -65,8 +63,8 @@ private[python] trait PythonArrowInput[IN] { self: BasePythonRunner[IN, _] =>
     ArrowUtils.rootAllocator.newChildAllocator(s"stdout writer for $pythonExec", 0, Long.MaxValue)
 
   protected lazy val root: VectorSchemaRoot = {
-    val arrowSchema = ArrowUtils.toArrowSchema(
-      schema, timeZoneId, errorOnDuplicatedFieldNames, largeVarTypes)
+    ArrowUtils.failDuplicatedFieldNames(schema)
+    val arrowSchema = ArrowUtils.toArrowSchema(schema, timeZoneId, largeVarTypes)
     VectorSchemaRoot.create(arrowSchema, allocator)
   }
 
@@ -288,7 +286,7 @@ private[python] trait GroupedPythonArrowInput { self: RowInputArrowPythonRunner 
             assert(writer == null || writer.isClosed)
             writer = ArrowWriterWrapper.createAndStartArrowWriter(
               schema, timeZoneId, pythonExec,
-              errorOnDuplicatedFieldNames, largeVarTypes, dataOut, context)
+              largeVarTypes, dataOut, context)
             // Set the unloader with compression after creating the writer
             writer.unloader = new VectorUnloader(writer.root, true, self.codec, true)
             nextBatchStart = inputIterator.next()

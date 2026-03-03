@@ -488,6 +488,31 @@ class STExpressionsSuite
     checkEvaluation(ST_AsBinary(geometryExpression), wkb)
   }
 
+  test("ST_GeogFromWKB - expressions") {
+    // Test data: WKB representation of POINT(1 2).
+    val wkb = Hex.unhex("0101000000000000000000F03F0000000000000040".getBytes())
+    val wkbLiteral = Literal.create(wkb, BinaryType)
+    // ST_GeogFromWKB with default SRID.
+    val geographyExpression = ST_GeogFromWKB(wkbLiteral)
+    assert(geographyExpression.dataType.sameType(defaultGeographyType))
+    checkEvaluation(ST_AsBinary(geographyExpression), wkb)
+    checkEvaluation(ST_Srid(geographyExpression), defaultGeographySrid)
+    // ST_GeogFromWKB with NULL input.
+    val nullLiteral = Literal.create(null, BinaryType)
+    val geographyExpressionNull = ST_GeogFromWKB(nullLiteral)
+    checkEvaluation(geographyExpressionNull, null)
+    // ST_GeogFromWKB with invalid WKB.
+    val invalidWkbLiteral = Literal.create(Array[Byte](111), BinaryType)
+    val geographyExpressionInvalidWkb = ST_GeogFromWKB(invalidWkbLiteral)
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        geographyExpressionInvalidWkb.eval()
+      },
+      condition = "WKB_PARSE_ERROR",
+      parameters = Map("parseError" -> "Unexpected end of WKB buffer", "pos" -> "0")
+    )
+  }
+
   test("ST_GeomFromWKB - expressions") {
     // Test data: WKB representation of POINT(1 2).
     val wkb = Hex.unhex("0101000000000000000000F03F0000000000000040".getBytes())
@@ -512,6 +537,16 @@ class STExpressionsSuite
       },
       condition = "ST_INVALID_SRID_VALUE",
       parameters = Map("srid" -> s"$invalidSrid")
+    )
+    // ST_GeomFromWKB with invalid WKB.
+    val invalidWkbLiteral = Literal.create(Array[Byte](111), BinaryType)
+    val geometryExpressionInvalidWkb = new ST_GeomFromWKB(invalidWkbLiteral)
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        geometryExpressionInvalidWkb.eval()
+      },
+      condition = "WKB_PARSE_ERROR",
+      parameters = Map("parseError" -> "Unexpected end of WKB buffer", "pos" -> "0")
     )
   }
 

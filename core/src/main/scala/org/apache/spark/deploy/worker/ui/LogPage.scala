@@ -25,7 +25,7 @@ import jakarta.servlet.http.HttpServletRequest
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{LOG_TYPE, PATH}
-import org.apache.spark.ui.{UIUtils, WebUIPage}
+import org.apache.spark.ui.{CspNonce, UIUtils, WebUIPage}
 import org.apache.spark.util.Utils
 import org.apache.spark.util.logging.RollingFileAppender
 
@@ -91,12 +91,12 @@ private[ui] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with
       </span>
 
     val moreButton =
-      <button type="button" onclick={"loadMore()"} class="log-more-btn btn btn-secondary">
+      <button type="button" class="log-more-btn btn btn-secondary">
         Load More
       </button>
 
     val newButton =
-      <button type="button" onclick={"loadNew()"} class="log-new-btn btn btn-secondary">
+      <button type="button" class="log-new-btn btn btn-secondary">
         Load New
       </button>
 
@@ -120,7 +120,7 @@ private[ui] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with
           {alert}
           <div>{newButton}</div>
         </div>
-        <script>{Unparsed(jsOnload)}</script>
+        <script nonce={CspNonce.get}>{Unparsed(jsOnload)}</script>
       </div>
 
     UIUtils.basicSparkPage(request, content, logType + " log page for " + pageName)

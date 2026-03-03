@@ -109,6 +109,7 @@ abstract class PythonPlannerRunner[T](func: PythonFunction) extends Logging {
     sessionUUID.foreach { uuid =>
       envVars.put("PYSPARK_SPARK_SESSION_UUID", uuid)
     }
+    envVars.put("SPARK_PYTHON_RUNTIME", "PYTHON_WORKER")
 
     EvaluatePython.registerPicklers()
     val pickler = new Pickler(/* useMemo = */ true,

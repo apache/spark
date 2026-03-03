@@ -18,12 +18,18 @@
 """
 Util functions for workers.
 """
+from contextlib import contextmanager
 import importlib
 from inspect import currentframe, getframeinfo
 import os
 import sys
-from typing import Any, IO, Optional
+from typing import Any, Generator, IO, Optional
 import warnings
+
+if "SPARK_TESTING" in os.environ:
+    assert (
+        os.environ.get("SPARK_PYTHON_RUNTIME") == "PYTHON_WORKER"
+    ), "This module can only be imported in python woker"
 
 # 'resource' is a Unix specific module.
 has_resource_module = True
@@ -187,6 +193,25 @@ def setup_broadcasts(infile: IO) -> None:
         broadcast_sock_file.close()
 
 
+@contextmanager
+def get_sock_file_to_executor(timeout: Optional[int] = -1) -> Generator[IO, None, None]:
+    # Read information about how to connect back to the JVM from the environment.
+    conn_info = os.environ.get(
+        "PYTHON_WORKER_FACTORY_SOCK_PATH", int(os.environ.get("PYTHON_WORKER_FACTORY_PORT", -1))
+    )
+    auth_secret = os.environ.get("PYTHON_WORKER_FACTORY_SECRET")
+    sock_file, sock = local_connect_and_auth(conn_info, auth_secret)
+    if timeout is None or timeout > 0:
+        sock.settimeout(timeout)
+    # TODO: Remove the following two lines and use `Process.pid()` when we drop JDK 8.
+    write_int(os.getpid(), sock_file)
+    sock_file.flush()
+    try:
+        yield sock_file
+    finally:
+        sock_file.close()
+
+
 def send_accumulator_updates(outfile: IO) -> None:
     """
     Send the accumulator updates back to JVM.
@@ -221,8 +246,8 @@ class Conf:
             v = utf8_deserializer.loads(infile)
             self._conf[k] = v
 
-    def get(self, key: str, default: Any = "") -> Any:
+    def get(self, key: str, default: Any = "", *, lower_str: bool = True) -> Any:
         val = self._conf.get(key, default)
-        if isinstance(val, str):
+        if isinstance(val, str) and lower_str:
             return val.lower()
         return val

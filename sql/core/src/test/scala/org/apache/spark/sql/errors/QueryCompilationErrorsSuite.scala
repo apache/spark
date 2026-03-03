@@ -712,15 +712,21 @@ class QueryCompilationErrorsSuite
     )
   }
 
-  test("IDENTIFIER_TOO_MANY_NAME_PARTS: " +
+  test("TEMP_VIEW_NAME_TOO_MANY_NAME_PARTS: " +
     "create temp view doesn't support identifiers consisting of more than 2 parts") {
+    val sqlText =
+      "CREATE TEMPORARY VIEW db_name.schema_name.view_name AS SELECT '1' as test_column"
     checkError(
       exception = intercept[ParseException] {
-        sql("CREATE TEMPORARY VIEW db_name.schema_name.view_name AS SELECT '1' as test_column")
+        sql(sqlText)
       },
-      condition = "IDENTIFIER_TOO_MANY_NAME_PARTS",
-      sqlState = "42601",
-      parameters = Map("identifier" -> "`db_name`.`schema_name`.`view_name`", "limit" -> "2")
+      condition = "TEMP_VIEW_NAME_TOO_MANY_NAME_PARTS",
+      sqlState = "428EK",
+      parameters = Map("actualName" -> "`db_name`.`schema_name`.`view_name`"),
+      context = ExpectedContext(
+        fragment = sqlText,
+        start = 0,
+        stop = sqlText.length - 1)
     )
   }
 

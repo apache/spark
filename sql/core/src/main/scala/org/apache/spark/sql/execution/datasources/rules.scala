@@ -39,7 +39,7 @@ import org.apache.spark.sql.execution.datasources.{CreateTable => CreateTableV1}
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.InsertableRelation
-import org.apache.spark.sql.types.{MetadataBuilder, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, DataType, MapType, MetadataBuilder, StructField, StructType}
 import org.apache.spark.sql.util.PartitioningUtils.normalizePartitionSpec
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.util.ArrayImplicits._
@@ -470,7 +470,29 @@ object PreprocessTableInsertion extends ResolveInsertionBase {
       insert.partitionSpec, partColNames, tblName, conf.resolver)
 
     val staticPartCols = normalizedPartSpec.filter(_._2.isDefined).keySet
-    val expectedColumns = insert.table.output.filterNot(a => staticPartCols.contains(a.name))
+    val expectedColumns = {
+      val cols = insert.table.output.filterNot(a => staticPartCols.contains(a.name))
+      // When the legacy config is disabled, restore the original nullability from the
+      // catalog table schema. HadoopFsRelation forces dataSchema.asNullable for safe reads,
+      // which strips NOT NULL constraints (both top-level and nested) from the
+      // LogicalRelation output. We restore nullability so that AssertNotNull checks are
+      // properly injected.
+      if (conf.getConf(SQLConf.FILE_SOURCE_INSERT_ENFORCE_NOT_NULL)) {
+        catalogTable.map { ct =>
+          val catalogFields = ct.schema.fields.map(f => f.name -> f).toMap
+          cols.map { col =>
+            catalogFields.get(col.name) match {
+              case Some(field) =>
+                col.withNullability(field.nullable)
+                  .withDataType(restoreDataTypeNullability(col.dataType, field.dataType))
+              case None => col
+            }
+          }
+        }.getOrElse(cols)
+      } else {
+        cols
+      }
+    }
 
     val partitionsTrackedByCatalog = catalogTable.isDefined &&
       catalogTable.get.partitionColumnNames.nonEmpty &&
@@ -545,6 +567,34 @@ object PreprocessTableInsertion extends ResolveInsertionBase {
           preprocess(i, tblName, new StructType(), catalogTable)
         case _ => i
       }
+  }
+
+  /**
+   * Recursively restores nullability flags from the original data type into the resolved
+   * data type, keeping the resolved type structure intact.
+   */
+  private def restoreDataTypeNullability(resolved: DataType, original: DataType): DataType = {
+    (resolved, original) match {
+      case (r: StructType, o: StructType) =>
+        val origFields = o.fields.map(f => f.name -> f).toMap
+        StructType(r.fields.map { rf =>
+          origFields.get(rf.name) match {
+            case Some(of) =>
+              rf.copy(
+                nullable = of.nullable,
+                dataType = restoreDataTypeNullability(rf.dataType, of.dataType))
+            case None => rf
+          }
+        })
+      case (ArrayType(rElem, _), ArrayType(oElem, oNull)) =>
+        ArrayType(restoreDataTypeNullability(rElem, oElem), oNull)
+      case (MapType(rKey, rVal, _), MapType(oKey, oVal, oValNull)) =>
+        MapType(
+          restoreDataTypeNullability(rKey, oKey),
+          restoreDataTypeNullability(rVal, oVal),
+          oValNull)
+      case _ => resolved
+    }
   }
 }
 

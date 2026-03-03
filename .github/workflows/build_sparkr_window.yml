@@ -31,23 +31,23 @@ jobs:
     if: github.repository == 'apache/spark'
     steps:
     - name: Download winutils Hadoop binary
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
       with:
         repository: cdarlint/winutils
     - name: Move Hadoop winutil into home directory
       run: |
         Move-Item -Path hadoop-3.3.6 -Destination ~\
     - name: Checkout Spark repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
     - name: Cache Maven local repository
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: ~/.m2/repository
         key: build-sparkr-windows-maven-${{ hashFiles('**/pom.xml') }}
         restore-keys: |
           build-sparkr-windows-maven-
     - name: Install Java 17
-      uses: actions/setup-java@v4
+      uses: actions/setup-java@v5
       with:
         distribution: zulu
         java-version: 17
@@ -65,7 +65,7 @@ jobs:
     # includes Python 3.7, which Spark does not support. Therefore, we simply install the proper Python
     # for simplicity, see SPARK-47116.
     - name: Install Python 3.11
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v6
       with:
         python-version: '3.11'
         architecture: x64

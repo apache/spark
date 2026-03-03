@@ -35,7 +35,7 @@ import org.scalactic.source.Position
 import org.scalatest.PrivateMethodTester
 import org.scalatest.Tag
 
-import org.apache.spark.{SparkConf, SparkException, SparkFunSuite, TaskContext}
+import org.apache.spark.{SparkConf, SparkException, SparkFunSuite, SparkIllegalArgumentException, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.catalyst.InternalRow
@@ -1502,7 +1502,8 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         // Verify merge operation worked
         db.load(0)
         db.load(5)
-        assert(toStr(db.get("merge_key", StateStore.DEFAULT_COL_FAMILY_NAME)) === "base,appended")
+        // SPARK-55131: new merge operation concatenates the strings without any separator
+        assert(toStr(db.get("merge_key", StateStore.DEFAULT_COL_FAMILY_NAME)) === "baseappended")
       }
     }
   }
@@ -2178,14 +2179,29 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     }
   }
 
-  test("RocksDB: ensure merge operation correctness") {
+  private def testMergeWithOperatorVersions(testName: String)(testFn: Int => Unit): Unit = {
+    RocksDBConf.MERGE_OPERATOR_VALID_VERSIONS.foreach { version =>
+      test(testName + s" - merge operator version $version") {
+        withSQLConf(SQLConf.STATE_STORE_ROCKSDB_MERGE_OPERATOR_VERSION.key -> version.toString) {
+          testFn(version)
+        }
+      }
+    }
+  }
+
+  private def expectedResultForMerge(inputs: Seq[String], mergeOperatorVersion: Int): String = {
+    mergeOperatorVersion match {
+      case 1 => inputs.mkString(",")
+      case 2 => inputs.mkString("")
+    }
+  }
+
+  testMergeWithOperatorVersions("put then merge") { version =>
     withTempDir { dir =>
-      val remoteDir = Utils.createTempDir().toString
       // minDeltasForSnapshot being 5 ensures that only changelog files are created
       // for the 3 commits below
       val conf = dbConf.copy(minDeltasForSnapshot = 5, compactOnCommit = false)
-      new File(remoteDir).delete() // to make sure that the directory gets created
-      withDB(remoteDir, conf = conf, useColumnFamilies = true) { db =>
+      withDB(dir.getCanonicalPath, conf = conf, useColumnFamilies = true) { db =>
         db.load(0)
         db.put("a", "1")
         db.merge("a", "2")
@@ -2200,12 +2216,14 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         db.commit()
 
         db.load(1)
-        assert(new String(db.get("a")) === "1,2")
-        assert(db.iterator().map(toStr).toSet === Set(("a", "1,2")))
+        val expectedValue = expectedResultForMerge(Seq("1", "2"), version)
+        assert(new String(db.get("a")) === expectedValue)
+        assert(db.iterator().map(toStr).toSet === Set(("a", expectedValue)))
 
         db.load(2)
-        assert(new String(db.get("a")) === "1,2,3")
-        assert(db.iterator().map(toStr).toSet === Set(("a", "1,2,3")))
+        val expectedValue2 = expectedResultForMerge(Seq("1", "2", "3"), version)
+        assert(new String(db.get("a")) === expectedValue2)
+        assert(db.iterator().map(toStr).toSet === Set(("a", expectedValue2)))
 
         db.load(3)
         assert(db.get("a") === null)
@@ -2214,17 +2232,59 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     }
   }
 
-  test("RocksDB: ensure putList / mergeList operation correctness") {
+  test("blind merge without put against non-existence key with operator version 2") {
+    withSQLConf(SQLConf.STATE_STORE_ROCKSDB_MERGE_OPERATOR_VERSION.key -> "2") {
+      withTempDir { dir =>
+        // minDeltasForSnapshot being 5 ensures that only changelog files are created
+        // for the 3 commits below
+        val conf = dbConf.copy(minDeltasForSnapshot = 5, compactOnCommit = false)
+        withDB(dir.getCanonicalPath, conf = conf, useColumnFamilies = true) { db =>
+          db.load(0)
+          // We don't put "a" first here, we call merge against non-existence key
+          // Note that this is only safe with merge operator version 2 - in version 1, reader side
+          // can't distinguish the case where the first byte starts with the size of element, or
+          // delimiter. Merge operator version 2 concatenates the values directly without delimiter
+          // so that the reader side does not need to distinguish the two cases.
+          db.merge("a", "1")
+          db.merge("a", "2")
+          db.commit()
+
+          db.load(1)
+          db.remove("a")
+          db.commit()
+
+          db.load(2)
+          db.merge("a", "3")
+          db.merge("a", "4")
+          db.commit()
+
+          db.load(1)
+          val expectedValue = "12"
+          assert(new String(db.get("a")) === expectedValue)
+          assert(db.iterator().map(toStr).toSet === Set(("a", expectedValue)))
+
+          db.load(2)
+          assert(db.get("a") === null)
+          assert(db.iterator().isEmpty)
+
+          db.load(3)
+          val expectedValue2 = "34"
+          assert(new String(db.get("a")) === expectedValue2)
+          assert(db.iterator().map(toStr).toSet === Set(("a", expectedValue2)))
+        }
+      }
+    }
+  }
+
+  testMergeWithOperatorVersions("putList then mergeList") { version =>
     withTempDir { dir =>
-      val remoteDir = Utils.createTempDir().toString
       // minDeltasForSnapshot being 5 ensures that only changelog files are created
       // for the 3 commits below
       val conf = dbConf.copy(minDeltasForSnapshot = 5, compactOnCommit = false)
-      new File(remoteDir).delete() // to make sure that the directory gets created
-      withDB(remoteDir, conf = conf, useColumnFamilies = true) { db =>
+      withDB(dir.getCanonicalPath, conf = conf, useColumnFamilies = true) { db =>
         db.load(0)
-        db.put("a", "1".getBytes)
-        db.mergeList("a", Seq("2", "3", "4").map(_.getBytes).toList)
+        db.putList("a", Seq("1", "2").map(_.getBytes).toList)
+        db.mergeList("a", Seq("3", "4").map(_.getBytes).toList)
         db.commit()
 
         db.load(1)
@@ -2244,26 +2304,83 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         db.commit()
 
         db.load(1)
-        assert(new String(db.get("a")) === "1,2,3,4")
-        assert(db.iterator().map(toStr).toSet === Set(("a", "1,2,3,4")))
+        val expectedValue = expectedResultForMerge(Seq("1", "2", "3", "4"), version)
+        assert(new String(db.get("a")) === expectedValue)
+        assert(db.iterator().map(toStr).toSet === Set(("a", expectedValue)))
 
         db.load(2)
-        assert(new String(db.get("a")) === "1,2,3,4,5,6")
-        assert(db.iterator().map(toStr).toSet === Set(("a", "1,2,3,4,5,6")))
+        val expectedValue2 = expectedResultForMerge(Seq("1", "2", "3", "4", "5", "6"), version)
+        assert(new String(db.get("a")) === expectedValue2)
+        assert(db.iterator().map(toStr).toSet === Set(("a", expectedValue2)))
 
         db.load(3)
         assert(db.get("a") === null)
         assert(db.iterator().isEmpty)
 
         db.load(4)
-        assert(new String(db.get("a")) === "7,8,9")
-        assert(db.iterator().map(toStr).toSet === Set(("a", "7,8,9")))
+        val expectedValue3 = expectedResultForMerge(Seq("7", "8", "9"), version)
+        assert(new String(db.get("a")) === expectedValue3)
+        assert(db.iterator().map(toStr).toSet === Set(("a", expectedValue3)))
 
         db.load(5)
-        assert(new String(db.get("a")) === "10,11")
-        assert(db.iterator().map(toStr).toSet === Set(("a", "10,11")))
+        val expectedValue4 = expectedResultForMerge(Seq("10", "11"), version)
+        assert(new String(db.get("a")) === expectedValue4)
+        assert(db.iterator().map(toStr).toSet === Set(("a", expectedValue4)))
       }
     }
+  }
+
+  test("blind mergeList without putList against non-existence key with operator version 2") {
+    withSQLConf(SQLConf.STATE_STORE_ROCKSDB_MERGE_OPERATOR_VERSION.key -> "2") {
+      withTempDir { dir =>
+        // minDeltasForSnapshot being 5 ensures that only changelog files are created
+        // for the 3 commits below
+        val conf = dbConf.copy(minDeltasForSnapshot = 5, compactOnCommit = false)
+        withDB(dir.getCanonicalPath, conf = conf, useColumnFamilies = true) { db =>
+          db.load(0)
+          // We don't putList ("a", "b") first here, we call mergeList against non-existence key
+          // Note that this is only safe with merge operator version 2, the same reason we
+          // described in the prior test.
+          db.mergeList("a", Seq("1", "2").map(_.getBytes).toList)
+          db.mergeList("a", Seq("3", "4").map(_.getBytes).toList)
+          db.commit()
+
+          db.load(1)
+          db.remove("a")
+          db.commit()
+
+          db.load(2)
+          db.mergeList("a", Seq("5").map(_.getBytes).toList)
+          db.mergeList("a", Seq("6", "7", "8").map(_.getBytes).toList)
+          db.commit()
+
+          db.load(1)
+          val expectedValue = "1234"
+          assert(new String(db.get("a")) === expectedValue)
+          assert(db.iterator().map(toStr).toSet === Set(("a", expectedValue)))
+
+          db.load(2)
+          assert(db.get("a") === null)
+          assert(db.iterator().isEmpty)
+
+          db.load(3)
+          val expectedValue2 = "5678"
+          assert(new String(db.get("a")) === expectedValue2)
+          assert(db.iterator().map(toStr).toSet === Set(("a", expectedValue2)))
+        }
+      }
+    }
+  }
+
+  test("merge operator version validation") {
+    // Validation happens at SQLConf level
+    val ex = intercept[SparkIllegalArgumentException] {
+      withSQLConf(SQLConf.STATE_STORE_ROCKSDB_MERGE_OPERATOR_VERSION.key -> "99") {
+        // This should fail before we get here
+      }
+    }
+    assert(ex.getMessage.contains("Must be 1 or 2"))
+    assert(ex.getMessage.contains("99"))
   }
 
   testWithStateStoreCheckpointIdsAndColumnFamilies("RocksDBFileManager: delete orphan files",

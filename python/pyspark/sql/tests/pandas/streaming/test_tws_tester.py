@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import os
 import random
 import tempfile
 import unittest
@@ -46,8 +47,8 @@ from pyspark.sql.types import (
 )
 from pyspark.errors import PySparkValueError, PySparkAssertionError
 from pyspark.errors.exceptions.base import IllegalArgumentException
-from pyspark.testing.sqlutils import (
-    ReusedSQLTestCase,
+from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import (
     have_pandas,
     have_pyarrow,
     pandas_requirement_message,
@@ -56,8 +57,8 @@ from pyspark.testing.sqlutils import (
 
 
 @unittest.skipIf(
-    not have_pandas or not have_pyarrow,
-    pandas_requirement_message or pyarrow_requirement_message or "",
+    not have_pandas or not have_pyarrow or os.environ.get("PYTHON_GIL", "?") == "0",
+    pandas_requirement_message or pyarrow_requirement_message or "Not supported in no-GIL mode",
 )
 class TwsTesterTests(ReusedSQLTestCase):
     def test_running_count_processor(self):
@@ -932,8 +933,8 @@ class TwsTesterTests(ReusedSQLTestCase):
 
 
 @unittest.skipIf(
-    not have_pandas or not have_pyarrow,
-    pandas_requirement_message or pyarrow_requirement_message or "",
+    not have_pandas or not have_pyarrow or os.environ.get("PYTHON_GIL", "?") == "0",
+    pandas_requirement_message or pyarrow_requirement_message or "Not supported in no-GIL mode",
 )
 class TwsTesterFuzzTests(ReusedSQLTestCase):
     @classmethod
@@ -1148,12 +1149,6 @@ class TwsTesterFuzzTests(ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.pandas.streaming.test_tws_tester import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

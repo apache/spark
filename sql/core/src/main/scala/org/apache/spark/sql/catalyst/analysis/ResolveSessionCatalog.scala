@@ -37,7 +37,6 @@ import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.types.{DataType, MetadataBuilder, StringType, StructField, StructType}
-import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SparkStringUtils
 
 /**
@@ -301,7 +300,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case DropTable(ResolvedIdentifier(FakeSystemCatalog, ident), _, _) =>
       DropTempViewCommand(ident)
 
-    case DropView(ResolvedIdentifierInSessionCatalog(ident), ifExists) =>
+    case DropView(DropViewInSessionCatalog(ident), ifExists) =>
       DropTableCommand(ident, ifExists, isView = true, purge = false)
 
     case DropView(r @ ResolvedIdentifier(catalog, ident), _) =>
@@ -485,7 +484,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case AlterViewSchemaBinding(ResolvedViewIdentifier(ident), viewSchemaMode) =>
       AlterViewSchemaBindingCommand(ident, viewSchemaMode)
 
-    case CreateView(ResolvedIdentifierInSessionCatalog(ident), userSpecifiedColumns, comment,
+    case CreateView(CreateViewInSessionCatalog(ident), userSpecifiedColumns, comment,
         collation, properties, originalText, child, allowExisting, replace, viewSchemaMode) =>
       CreateViewCommand(
         name = ident,
@@ -576,7 +575,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       }
 
     case CreateFunction(
-        ResolvedIdentifierInSessionCatalog(ident), className, resources, ifExists, replace) =>
+        CreateFunctionInSessionCatalog(ident), className, resources, ifExists, replace) =>
       CreateFunctionCommand(
         FunctionIdentifier(ident.table, ident.database, ident.catalog),
         className,
@@ -589,7 +588,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       throw QueryCompilationErrors.missingCatalogCreateFunctionAbilityError(catalog)
 
     case c @ CreateUserDefinedFunction(
-        ResolvedIdentifierInSessionCatalog(ident), _, _, _, _, _, _, _, _, _, _, _) =>
+        CreateFunctionInSessionCatalog(ident), _, _, _, _, _, _, _, _, _, _, _) =>
       CreateUserDefinedFunctionCommand(
         FunctionIdentifier(ident.table, ident.database, ident.catalog),
         c.inputParamText,
@@ -727,10 +726,10 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     def unapply(resolved: LogicalPlan): Option[TableIdentifier] = resolved match {
       case ResolvedPersistentView(catalog, ident, _) =>
         assert(isSessionCatalog(catalog))
-        assert(ident.namespace().length == 1)
-        Some(TableIdentifier(ident.name, Some(ident.namespace.head), Some(catalog.name)))
+        Some(ident.asTableIdentifier.copy(catalog = Some(catalog.name)))
 
-      case ResolvedTempView(ident, _) => Some(ident.asTableIdentifier)
+      case ResolvedTempView(ident, _) =>
+        Some(TableIdentifier(ident.name(), ident.namespace().headOption))
 
       case _ => None
     }
@@ -763,24 +762,38 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
   object ResolvedV1Identifier {
     def unapply(resolved: LogicalPlan): Option[TableIdentifier] = resolved match {
       case ResolvedIdentifier(catalog, ident) if supportsV1Command(catalog) =>
-        if (ident.namespace().length != 1) {
-          throw QueryCompilationErrors
-            .requiresSinglePartNamespaceError(ident.namespace().toImmutableArraySeq)
-        }
-        Some(TableIdentifier(ident.name, Some(ident.namespace.head), Some(catalog.name)))
+        Some(ident.asTableIdentifier.copy(catalog = Some(catalog.name)))
       case _ => None
     }
   }
 
-  // Use this object to help match commands that do not have a v2 implementation.
-  object ResolvedIdentifierInSessionCatalog{
+  private object CreateViewInSessionCatalog
+    extends ResolvedIdentifierInSessionCatalog("CREATE", "VIEW")
+  private object DropViewInSessionCatalog
+    extends ResolvedIdentifierInSessionCatalog("DROP", "VIEW")
+  private object CreateFunctionInSessionCatalog
+    extends ResolvedIdentifierInSessionCatalog("CREATE", "FUNCTION")
+
+  /**
+   * Extractor for resolved identifiers in the session catalog.
+   * Rejects multi-part namespaces and builtin namespace targets with appropriate errors.
+   *
+   * @param statement the SQL statement (e.g. "CREATE", "DROP") for error messages
+   * @param objectType the object type (e.g. "FUNCTION", "VIEW") for error messages
+   */
+  class ResolvedIdentifierInSessionCatalog(statement: String, objectType: String) {
     def unapply(resolved: LogicalPlan): Option[TableIdentifier] = resolved match {
       case ResolvedIdentifier(catalog, ident) if isSessionCatalog(catalog) =>
         if (ident.namespace().length != 1) {
+          if (ident.namespace().length >= 1 &&
+              ident.namespace().last.equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE)) {
+            throw QueryCompilationErrors.operationNotAllowedOnBuiltinNamespaceError(
+              statement, objectType, ident.name())
+          }
           throw QueryCompilationErrors
-            .requiresSinglePartNamespaceError(ident.namespace().toImmutableArraySeq)
+            .requiresSinglePartNamespaceError(ident.namespace().toSeq :+ ident.name())
         }
-        Some(TableIdentifier(ident.name, Some(ident.namespace.head), Some(catalog.name)))
+        Some(TableIdentifier(ident.name(), Some(ident.namespace().head), Some(catalog.name)))
       case _ => None
     }
   }

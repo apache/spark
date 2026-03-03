@@ -1212,6 +1212,11 @@ class DataFrame(ParentDataFrame):
         res._cached_schema = self._merge_cached_schema(other)
         return res
 
+    def zipWithIndex(self, indexColName: str = "index") -> ParentDataFrame:
+        return self.select(
+            F.col("*"), F._invoke_function("distributed_sequence_id").alias(indexColName)
+        )
+
     def intersect(self, other: ParentDataFrame) -> ParentDataFrame:
         self._check_same_session(other)
         res = DataFrame(
@@ -1901,7 +1906,7 @@ class DataFrame(ParentDataFrame):
             try:
                 self._cached_schema_serialized = CPickleSerializer().dumps(self._schema)
             except Exception as e:
-                logger.warn(f"DataFrame schema pickle dumps failed with exception: {e}.")
+                logger.warning(f"DataFrame schema pickle dumps failed with exception: {e}.")
                 self._cached_schema_serialized = None
         return self._cached_schema
 
@@ -1913,7 +1918,7 @@ class DataFrame(ParentDataFrame):
             try:
                 return CPickleSerializer().loads(self._cached_schema_serialized)
             except Exception as e:
-                logger.warn(f"DataFrame schema pickle loads failed with exception: {e}.")
+                logger.warning(f"DataFrame schema pickle loads failed with exception: {e}.")
         # In case of pickle ser/de failure, fallback to deepcopy approach.
         return copy.deepcopy(_schema)
 

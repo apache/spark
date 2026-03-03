@@ -22,7 +22,7 @@ import scala.xml.{Node, Unparsed}
 import jakarta.servlet.http.HttpServletRequest
 
 import org.apache.spark.internal.config.UI._
-import org.apache.spark.ui.{SparkUI, SparkUITab, UIUtils, WebUIPage}
+import org.apache.spark.ui.{CspNonce, SparkUI, SparkUITab, UIUtils, WebUIPage}
 
 private[ui] class ExecutorsTab(parent: SparkUI) extends SparkUITab(parent, "executors") {
 
@@ -70,7 +70,7 @@ private[ui] class ExecutorsPage(
         <script type="module" src={UIUtils.prependBaseUri(request, "/static/utils.js")}></script> ++
         <script type="module"
                 src={UIUtils.prependBaseUri(request, "/static/executorspage.js")}></script> ++
-        <script type="module">{Unparsed(js)}</script>
+        <script type="module" nonce={CspNonce.get}>{Unparsed(js)}</script>
       }
 
     UIUtils.headerSparkPage(request, "Executors", content, parent, useDataTables = true)

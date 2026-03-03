@@ -29,7 +29,14 @@ from pyspark.errors import (
     SparkUpgradeException,
     PySparkTypeError,
 )
-from pyspark.testing.utils import assertDataFrameEqual, assertSchemaEqual, _context_diff, have_numpy
+from pyspark.testing.utils import (
+    assertDataFrameEqual,
+    assertSchemaEqual,
+    _context_diff,
+    have_numpy,
+    have_pandas,
+    have_pyarrow,
+)
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.sql import Row
 import pyspark.sql.functions as F
@@ -47,7 +54,6 @@ from pyspark.sql.types import (
     IntegerType,
     BooleanType,
 )
-from pyspark.testing.sqlutils import have_pandas, have_pyarrow
 
 
 class UtilsTestsMixin:

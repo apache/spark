@@ -24,7 +24,7 @@ from pyspark.sql.types import (
     StructType,
     Row,
 )
-from pyspark.testing.sqlutils import (
+from pyspark.testing.utils import (
     have_pandas,
     have_pyarrow,
     pandas_requirement_message,

@@ -78,7 +78,7 @@ private[spark] class TaskThreadDumpPage(
               <th>Thread Name</th>
               <th>Thread State</th>
               <th>
-                <span data-toggle="tooltip" data-placement="top"
+                <span data-bs-toggle="tooltip" data-bs-placement="top"
                       title="Objects whose lock the thread currently holds">
                   Thread Locks
                 </span>

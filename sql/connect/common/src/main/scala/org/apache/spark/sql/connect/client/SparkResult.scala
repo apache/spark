@@ -22,6 +22,7 @@ import java.util.Objects
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
+import scala.util.{Failure, Success, Try}
 
 import com.google.protobuf.ByteString
 import org.apache.arrow.memory.BufferAllocator
@@ -86,7 +87,7 @@ private[sql] class SparkResult[T](
   private[this] var arrowSchema: pojo.Schema = _
   private[this] var nextResultIndex: Int = 0
   private val resultMap = mutable.Map.empty[Int, (Long, Seq[ArrowMessage])]
-  private val observedMetrics = mutable.Map.empty[String, Row]
+  private val observedMetrics = mutable.Map.empty[String, Try[Row]]
   private val cleanable =
     SparkResult.cleaner.register(this, new SparkResultCloseable(resultMap, responses))
 
@@ -253,7 +254,7 @@ private[sql] class SparkResult[T](
   }
 
   private def processObservedMetrics(
-      metrics: java.util.List[ObservedMetrics]): Iterable[(String, Row)] = {
+      metrics: java.util.List[ObservedMetrics]): Iterable[(String, Try[Row])] = {
     metrics.asScala.map { metric =>
       metric.getName -> SparkResult.transformObservedMetrics(metric)
     }
@@ -315,7 +316,7 @@ private[sql] class SparkResult[T](
   def getObservedMetrics: Map[String, Row] = {
     // We need to process all responses to get all metrics.
     processResponses()
-    observedMetrics.toMap
+    observedMetrics.view.mapValues(_.get).toMap
   }
 
   /**
@@ -421,18 +422,25 @@ private[sql] object SparkResult {
   private val cleaner: Cleaner = Cleaner.create()
 
   /** Return value is a Seq of pairs, to preserve the order of values. */
-  private[sql] def transformObservedMetrics(metric: ObservedMetrics): Row = {
-    assert(metric.getKeysCount == metric.getValuesCount)
-    var schema = new StructType()
-    val values = mutable.ArrayBuilder.make[Any]
-    values.sizeHint(metric.getKeysCount)
-    (0 until metric.getKeysCount).foreach { i =>
-      val key = metric.getKeys(i)
-      val value = LiteralValueProtoConverter.toScalaValue(metric.getValues(i))
-      schema = schema.add(key, LiteralValueProtoConverter.getDataType(metric.getValues(i)))
-      values += value
+  private[sql] def transformObservedMetrics(metric: ObservedMetrics): Try[Row] = {
+    // Check if the metric contains errors
+    if (metric.hasRootErrorIdx) {
+      Failure(
+        GrpcExceptionConverter
+          .errorsToThrowable(metric.getRootErrorIdx, metric.getErrorsList.asScala.toSeq))
+    } else {
+      assert(metric.getKeysCount == metric.getValuesCount)
+      var schema = new StructType()
+      val values = mutable.ArrayBuilder.make[Any]
+      values.sizeHint(metric.getKeysCount)
+      (0 until metric.getKeysCount).foreach { i =>
+        val key = metric.getKeys(i)
+        val value = LiteralValueProtoConverter.toScalaValue(metric.getValues(i))
+        schema = schema.add(key, LiteralValueProtoConverter.getDataType(metric.getValues(i)))
+        values += value
+      }
+      Success(new GenericRowWithSchema(values.result(), schema))
     }
-    new GenericRowWithSchema(values.result(), schema)
   }
 }
 

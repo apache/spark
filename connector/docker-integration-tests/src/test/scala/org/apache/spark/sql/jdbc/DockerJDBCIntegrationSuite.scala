@@ -210,6 +210,7 @@ abstract class DockerJDBCIntegrationSuite
         assert(response.getState.getRunning)
       }
       jdbcUrl = db.getJdbcUrl(dockerIp, externalPort)
+      sleepBeforeTesting()
       var conn: Connection = null
       eventually(connectionTimeout, interval(1.second)) {
         conn = getConnection()
@@ -254,6 +255,11 @@ abstract class DockerJDBCIntegrationSuite
    * Prepare databases and tables for testing.
    */
   def dataPreparation(connection: Connection): Unit
+
+  /**
+   * Sleep for a while before testing.
+   */
+  def sleepBeforeTesting(): Unit = {}
 
   private def cleanupContainer(): Unit = {
     if (docker != null && container != null && !keepContainer) {

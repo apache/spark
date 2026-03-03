@@ -1234,11 +1234,11 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
   test("SPARK-21145: Restarted queries create new provider instances") {
     try {
       val checkpointLocation = Utils.createTempDir().getAbsoluteFile
-      implicit val spark: SparkSession = SparkSession.builder().master("local[2]").getOrCreate()
+      val spark: SparkSession = SparkSession.builder().master("local[2]").getOrCreate()
       SparkSession.setActiveSession(spark)
       spark.conf.set(SQLConf.SHUFFLE_PARTITIONS.key, "1")
       import spark.implicits._
-      val inputData = MemoryStream[Int]
+      val inputData = MemoryStream[Int](spark)
 
       def runQueryAndGetLoadedProviders(): Seq[StateStoreProvider] = {
         val aggregated = inputData.toDF().groupBy("value").agg(count("*"))

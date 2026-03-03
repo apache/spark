@@ -913,29 +913,19 @@ class PlanParserSuite extends AnalysisTest {
       "select * from range(2)",
       UnresolvedTableValuedFunction("range", Literal(2) :: Nil).select(star()))
 
-    // SPARK-34627
-    val sql1 = "select * from default.range(2)"
-    val fragment1 = "default.range(2)"
-    checkError(
-      exception = parseException(sql1),
-      condition = "INVALID_SQL_SYNTAX.INVALID_TABLE_VALUED_FUNC_NAME",
-      parameters = Map("funcName" -> "`default`.`range`"),
-      context = ExpectedContext(
-        fragment = fragment1,
-        start = 14,
-        stop = 29))
+    // SPARK-34627 - Qualified table-valued functions are now supported
+    assertEqual(
+      "select * from default.range(2)",
+      UnresolvedTableValuedFunction(
+        Seq("default", "range"),
+        Literal(2) :: Nil).select(star()))
 
-    // SPARK-38957
-    val sql2 = "select * from spark_catalog.default.range(2)"
-    val fragment2 = "spark_catalog.default.range(2)"
-    checkError(
-      exception = parseException(sql2),
-      condition = "INVALID_SQL_SYNTAX.INVALID_TABLE_VALUED_FUNC_NAME",
-      parameters = Map("funcName" -> "`spark_catalog`.`default`.`range`"),
-      context = ExpectedContext(
-        fragment = fragment2,
-        start = 14,
-        stop = 43))
+    // SPARK-38957 - Fully qualified table-valued functions are now supported
+    assertEqual(
+      "select * from spark_catalog.default.range(2)",
+      UnresolvedTableValuedFunction(
+        Seq("spark_catalog", "default", "range"),
+        Literal(2) :: Nil).select(star()))
   }
 
   test("SPARK-20311 range(N) as alias") {

@@ -324,6 +324,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     envVars.put("PYTHON_UDF_BATCH_SIZE", batchSizeForPythonUDF.toString)
 
     envVars.put("SPARK_JOB_ARTIFACT_UUID", jobArtifactUUID.getOrElse("default"))
+    envVars.put("SPARK_PYTHON_RUNTIME", "PYTHON_WORKER")
 
     val (worker: PythonWorker, handle: Option[ProcessHandle]) = env.createPythonWorker(
       pythonExec, workerModule, daemonModule, envVars.asScala.toMap, useDaemon)

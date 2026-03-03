@@ -130,10 +130,6 @@ class PandasUDFReturnTypeTests(GoldenFileTestMixin, ReusedSQLTestCase):
             StructType([StructField("_1", IntegerType())]),
         ]
 
-    def repr_value(self, value):
-        # Use extended pandas value representation
-        return self.repr_pandas_value(value)
-
     def test_str_repr(self):
         self.assertEqual(
             len(self.test_types),

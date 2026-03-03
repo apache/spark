@@ -1,0 +1,222 @@
+================================================================================================
+SQL Single Numeric Column Scan
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+SQL Single TINYINT Column Scan:           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Hive built-in ORC                                   613            720         160         25.6          39.0       1.0X
+Native ORC MR                                       804            835          28         19.6          51.1       0.8X
+Native ORC Vectorized                                97            123          22        161.5           6.2       6.3X
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+SQL Single SMALLINT Column Scan:          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Hive built-in ORC                                   694            713          21         22.7          44.1       1.0X
+Native ORC MR                                       750            777          31         21.0          47.7       0.9X
+Native ORC Vectorized                                87            108          19        181.6           5.5       8.0X
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+SQL Single INT Column Scan:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Hive built-in ORC                                   769            798          42         20.4          48.9       1.0X
+Native ORC MR                                       783            800          15         20.1          49.8       1.0X
+Native ORC Vectorized                               107            128          26        146.7           6.8       7.2X
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+SQL Single BIGINT Column Scan:            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Hive built-in ORC                                   755            782          37         20.8          48.0       1.0X
+Native ORC MR                                       872            900          29         18.0          55.4       0.9X
+Native ORC Vectorized                               108            145          33        146.1           6.8       7.0X
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+SQL Single FLOAT Column Scan:             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Hive built-in ORC                                   880            892          11         17.9          55.9       1.0X
+Native ORC MR                                       860            896          49         18.3          54.6       1.0X
+Native ORC Vectorized                               145            159          22        108.2           9.2       6.1X
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+SQL Single DOUBLE Column Scan:            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Hive built-in ORC                                   896            930          45         17.6          57.0       1.0X
+Native ORC MR                                      1070           1073           5         14.7          68.0       0.8X
+Native ORC Vectorized                               227            251          41         69.4          14.4       4.0X
+
+
+================================================================================================
+Int and String Scan
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+Int and String Scan:                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Hive built-in ORC                                  1614           1621          10          6.5         153.9       1.0X
+Native ORC MR                                      1557           1561           5          6.7         148.5       1.0X
+Native ORC Vectorized                               636            702          68         16.5          60.6       2.5X
+
+
+================================================================================================
+Partitioned Table Scan
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+Partitioned Table:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Data column - Hive built-in ORC                     837            886          53         18.8          53.2       1.0X
+Data column - Native ORC MR                        1037           1146         154         15.2          65.9       0.8X
+Data column - Native ORC Vectorized                 109            148          32        144.1           6.9       7.7X
+Partition column - Hive built-in ORC                646            671          29         24.3          41.1       1.3X
+Partition column - Native ORC MR                    611            666          43         25.7          38.8       1.4X
+Partition column - Native ORC Vectorized             42             57          17        372.8           2.7      19.8X
+Both columns - Hive built-in ORC                    964           1023          84         16.3          61.3       0.9X
+Both columns - Native ORC MR                       1117           1127          15         14.1          71.0       0.7X
+Both columns - Native ORC Vectorized                113            154          38        139.5           7.2       7.4X
+
+
+================================================================================================
+Repeated String Scan
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+Repeated String:                          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Hive built-in ORC                                   888            914          23         11.8          84.7       1.0X
+Native ORC MR                                       853            879          30         12.3          81.4       1.0X
+Native ORC Vectorized                               125            139          24         83.9          11.9       7.1X
+
+
+================================================================================================
+String with Nulls Scan
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+String with Nulls Scan (0.0%):            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Hive built-in ORC                                  1437           1450          19          7.3         137.0       1.0X
+Native ORC MR                                      1282           1291          13          8.2         122.3       1.1X
+Native ORC Vectorized                               283            290           8         37.0          27.0       5.1X
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+String with Nulls Scan (50.0%):           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Hive built-in ORC                                  1436           1452          23          7.3         137.0       1.0X
+Native ORC MR                                      1137           1155          26          9.2         108.4       1.3X
+Native ORC Vectorized                               326            359          43         32.2          31.1       4.4X
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+String with Nulls Scan (95.0%):           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Hive built-in ORC                                   730            804         119         14.4          69.6       1.0X
+Native ORC MR                                       733            747          16         14.3          69.9       1.0X
+Native ORC Vectorized                               140            158          28         74.9          13.4       5.2X
+
+
+================================================================================================
+Single Column Scan From Wide Columns
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+Single Column Scan from 100 columns:      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Hive built-in ORC                                   530            561          28          2.0         505.6       1.0X
+Native ORC MR                                        94            109          18         11.2          89.2       5.7X
+Native ORC Vectorized                                36             42           7         29.1          34.4      14.7X
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+Single Column Scan from 200 columns:      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Hive built-in ORC                                   961            979          20          1.1         916.1       1.0X
+Native ORC MR                                       100            120          12         10.5          95.5       9.6X
+Native ORC Vectorized                                41             49           7         25.5          39.3      23.3X
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+Single Column Scan from 300 columns:      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Hive built-in ORC                                  1420           1442          32          0.7        1354.1       1.0X
+Native ORC MR                                       107            113           5          9.8         101.6      13.3X
+Native ORC Vectorized                                50             62           9         21.1          47.3      28.6X
+
+
+================================================================================================
+Struct scan
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+Single Struct Column Scan with 10 Fields:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Hive built-in ORC                                   321            382          59          3.3         306.3       1.0X
+Native ORC MR                                       220            266          54          4.8         209.8       1.5X
+Native ORC Vectorized                               105            155          27         10.0         100.1       3.1X
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+Single Struct Column Scan with 100 Fields:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------
+Hive built-in ORC                                   2095           2099           5          0.5        1998.0       1.0X
+Native ORC MR                                       1740           1754          19          0.6        1659.9       1.2X
+Native ORC Vectorized                               1009           1038          41          1.0         962.1       2.1X
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+Single Struct Column Scan with 300 Fields:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------
+Hive built-in ORC                                   6023           6085          87          0.2        5744.3       1.0X
+Native ORC MR                                       5247           5279          46          0.2        5003.7       1.1X
+Native ORC Vectorized                               5216           5272          79          0.2        4974.4       1.2X
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+Single Struct Column Scan with 600 Fields:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------
+Hive built-in ORC                                  12954          13055         142          0.1       12354.3       1.0X
+Native ORC MR                                      12160          12271         156          0.1       11596.8       1.1X
+Native ORC Vectorized                              12302          12424         173          0.1       11731.8       1.1X
+
+
+================================================================================================
+Nested Struct scan
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+Nested Struct Scan with 10 Elements, 10 Fields:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------
+Hive built-in ORC                                        2388           2397          13          0.4        2277.1       1.0X
+Native ORC MR                                            1901           1924          33          0.6        1812.9       1.3X
+Native ORC Vectorized                                     569            580           8          1.8         542.5       4.2X
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+Nested Struct Scan with 30 Elements, 10 Fields:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------
+Hive built-in ORC                                        6006           6303         419          0.2        5728.2       1.0X
+Native ORC MR                                            4375           4378           5          0.2        4172.0       1.4X
+Native ORC Vectorized                                    1447           1494          67          0.7        1379.7       4.2X
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+Nested Struct Scan with 10 Elements, 30 Fields:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------
+Hive built-in ORC                                        5677           5694          25          0.2        5413.8       1.0X
+Native ORC MR                                            5474           5488          19          0.2        5220.7       1.0X
+Native ORC Vectorized                                    2000           2098         138          0.5        1907.5       2.8X
+
+

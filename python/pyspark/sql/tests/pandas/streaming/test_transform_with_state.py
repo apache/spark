@@ -18,10 +18,10 @@
 import os
 import unittest
 from pyspark import SparkConf
-from pyspark.testing.sqlutils import (
+from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import (
     have_pyarrow,
     pyarrow_requirement_message,
-    ReusedSQLTestCase,
 )
 from pyspark.sql.tests.pandas.streaming.test_pandas_transform_with_state import (
     TransformWithStateTestsMixin,

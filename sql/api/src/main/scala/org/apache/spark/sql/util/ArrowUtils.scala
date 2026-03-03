@@ -324,6 +324,51 @@ private[sql] object ArrowUtils {
     }.asJava)
   }
 
+  /**
+   * Maps schema from Spark to Arrow. NOTE: timeZoneId required for TimestampType in StructType
+   */
+  def toArrowSchema(schema: StructType, timeZoneId: String, largeVarTypes: Boolean): Schema = {
+    new Schema(schema.map { field =>
+      toArrowField(
+        field.name,
+        field.dataType,
+        field.nullable,
+        timeZoneId,
+        largeVarTypes,
+        field.metadata)
+    }.asJava)
+  }
+
+  /**
+   * Check the schema and fail once an insider struct type contains duplicated field names. Note
+   * that the first level accepts duplicated names.
+   */
+  def failDuplicatedFieldNames(schema: StructType): Unit = {
+    schema.fields.foreach { field => failDuplicatedFieldNamesImpl(field.dataType) }
+  }
+
+  /**
+   * Check the schema and fail once a struct type contains duplicated field names.
+   */
+  private def failDuplicatedFieldNamesImpl(dt: DataType): Unit = {
+    dt match {
+      case st: StructType =>
+        if (st.names.toSet.size != st.names.length) {
+          throw ExecutionErrors.duplicatedFieldNameInArrowStructError(
+            st.names.toImmutableArraySeq)
+        }
+        st.fields.foreach { field => failDuplicatedFieldNamesImpl(field.dataType) }
+      case arr: ArrayType =>
+        failDuplicatedFieldNamesImpl(arr.elementType)
+      case map: MapType =>
+        failDuplicatedFieldNamesImpl(map.keyType)
+        failDuplicatedFieldNamesImpl(map.valueType)
+      case udt: UserDefinedType[_] =>
+        failDuplicatedFieldNamesImpl(udt.sqlType)
+      case _ =>
+    }
+  }
+
   def fromArrowSchema(schema: Schema): StructType = {
     StructType(schema.getFields.asScala.map { field =>
       StructField(

@@ -14,18 +14,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from typing import Optional, Type
 
 import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
+from pyspark.loose_version import LooseVersion
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
+using_pandas3 = LooseVersion(pd.__version__) >= "3.0.0"
+
+
 class GroupbyStatTestingFuncMixin:
     # TODO: All statistical functions should leverage this utility
-    def _test_stat_func(self, func, check_exact=True):
+    def _test_stat_func(
+        self, func, check_exact=True, expected_error: Optional[Type[Exception]] = None
+    ):
         pdf, psdf = self.pdf, self.psdf
         for p_groupby_obj, ps_groupby_obj in [
             # Against DataFrameGroupBy
@@ -35,11 +42,17 @@ class GroupbyStatTestingFuncMixin:
             # Against SeriesGroupBy
             (pdf.groupby("A")["B"], psdf.groupby("A")["B"]),
         ]:
-            self.assert_eq(
-                func(p_groupby_obj).sort_index(),
-                func(ps_groupby_obj).sort_index(),
-                check_exact=check_exact,
-            )
+            if expected_error is None:
+                self.assert_eq(
+                    func(p_groupby_obj).sort_index(),
+                    func(ps_groupby_obj).sort_index(),
+                    check_exact=check_exact,
+                )
+            else:
+                with self.assertRaises(expected_error):
+                    func(p_groupby_obj)
+                with self.assertRaises(expected_error):
+                    func(ps_groupby_obj)
 
 
 class GroupbyStatMixin(GroupbyStatTestingFuncMixin):
@@ -60,6 +73,12 @@ class GroupbyStatMixin(GroupbyStatTestingFuncMixin):
 
     def test_mean(self):
         self._test_stat_func(lambda groupby_obj: groupby_obj.mean(numeric_only=True))
+        if LooseVersion(pd.__version__) >= "3.0.0":
+            # pandas < 3 raises an error when numeric_only is False or None
+            self._test_stat_func(
+                lambda groupby_obj: groupby_obj.mean(numeric_only=None),
+                expected_error=ValueError if using_pandas3 else None,
+            )
         psdf = self.psdf
         with self.assertRaises(TypeError):
             psdf.groupby("A")["C"].mean()
@@ -67,14 +86,20 @@ class GroupbyStatMixin(GroupbyStatTestingFuncMixin):
     def test_min(self):
         self._test_stat_func(lambda groupby_obj: groupby_obj.min())
         self._test_stat_func(lambda groupby_obj: groupby_obj.min(min_count=2))
-        self._test_stat_func(lambda groupby_obj: groupby_obj.min(numeric_only=None))
+        self._test_stat_func(
+            lambda groupby_obj: groupby_obj.min(numeric_only=None),
+            expected_error=ValueError if using_pandas3 else None,
+        )
         self._test_stat_func(lambda groupby_obj: groupby_obj.min(numeric_only=True))
         self._test_stat_func(lambda groupby_obj: groupby_obj.min(numeric_only=True, min_count=2))
 
     def test_max(self):
         self._test_stat_func(lambda groupby_obj: groupby_obj.max())
         self._test_stat_func(lambda groupby_obj: groupby_obj.max(min_count=2))
-        self._test_stat_func(lambda groupby_obj: groupby_obj.max(numeric_only=None))
+        self._test_stat_func(
+            lambda groupby_obj: groupby_obj.max(numeric_only=None),
+            expected_error=ValueError if using_pandas3 else None,
+        )
         self._test_stat_func(lambda groupby_obj: groupby_obj.max(numeric_only=True))
         self._test_stat_func(lambda groupby_obj: groupby_obj.max(numeric_only=True, min_count=2))
 
@@ -95,6 +120,10 @@ class GroupbyStatMixin(GroupbyStatTestingFuncMixin):
         self.assert_eq(
             pdf.groupby("A").sum(min_count=3).sort_index(),
             psdf.groupby("A").sum(min_count=3).sort_index(),
+        )
+        self._test_stat_func(
+            lambda groupby_obj: groupby_obj.sum(numeric_only=None),
+            expected_error=ValueError if using_pandas3 else None,
         )
 
     def test_median(self):
@@ -120,6 +149,13 @@ class GroupbyStatMixin(GroupbyStatTestingFuncMixin):
 
         with self.assertRaisesRegex(TypeError, "accuracy must be an integer; however"):
             psdf.groupby("a").median(accuracy="a")
+
+        if LooseVersion(pd.__version__) >= "3.0.0":
+            # pandas < 3 raises an error when numeric_only is False or None
+            self._test_stat_func(
+                lambda groupby_obj: groupby_obj.median(numeric_only=None),
+                expected_error=ValueError if using_pandas3 else None,
+            )
 
 
 class GroupbyStatTests(

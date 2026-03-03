@@ -84,6 +84,7 @@ class HiveDDLSuite
           locationUri = Some(catalog.defaultTablePath(name)),
           inputFormat = serde.get.inputFormat,
           outputFormat = serde.get.outputFormat,
+          serdeName = None,
           serde = serde.get.serde,
           compressed = false,
           properties = Map.empty)
@@ -92,6 +93,7 @@ class HiveDDLSuite
           locationUri = Some(catalog.defaultTablePath(name)),
           inputFormat = Some("org.apache.hadoop.mapred.SequenceFileInputFormat"),
           outputFormat = Some("org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat"),
+          serdeName = None,
           serde = Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"),
           compressed = false,
           properties = Map("serialization.format" -> "1"))
@@ -2653,7 +2655,7 @@ class HiveDDLSuite
           |SELECT word, number from t1
         """.stripMargin)
 
-      val inputData = MemoryStream[Int]
+      val inputData = MemoryStream[Int](spark)
       val joined = inputData.toDS().toDF()
         .join(spark.table("smallTable"), $"value" === $"number")
 

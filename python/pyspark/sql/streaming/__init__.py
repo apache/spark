@@ -20,8 +20,8 @@ from pyspark.sql.streaming.query import StreamingQuery, StreamingQueryManager  #
 from pyspark.sql.streaming.readwriter import DataStreamReader, DataStreamWriter  # noqa: F401
 from pyspark.sql.streaming.listener import StreamingQueryListener  # noqa: F401
 from pyspark.sql.streaming.stateful_processor import (  # noqa: F401
-    StatefulProcessor,  # noqa: F401
-    StatefulProcessorHandle,  # noqa: F401
-)  # noqa: F401
+    StatefulProcessor,
+    StatefulProcessorHandle,
+)
 from pyspark.sql.streaming.tws_tester import TwsTester  # noqa: F401
 from pyspark.errors import StreamingQueryException  # noqa: F401

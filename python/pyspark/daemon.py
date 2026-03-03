@@ -30,6 +30,7 @@ from socket import AF_INET, AF_INET6, SOCK_STREAM, SOMAXCONN
 from signal import SIGHUP, SIGTERM, SIGCHLD, SIG_DFL, SIG_IGN, SIGINT
 
 from pyspark.serializers import read_int, write_int, write_with_length, UTF8Deserializer
+from pyspark.util import enable_faulthandler
 from pyspark.errors import PySparkRuntimeError
 
 
@@ -226,53 +227,54 @@ def manager():
 
                 if pid == 0:
                     # in child process
-                    if poller is not None:
-                        poller.unregister(0)
-                        poller.unregister(listen_sock)
-                    listen_sock.close()
+                    with enable_faulthandler():
+                        if poller is not None:
+                            poller.unregister(0)
+                            poller.unregister(listen_sock)
+                        listen_sock.close()
 
-                    # It should close the standard input in the child process so that
-                    # Python native function executions stay intact.
-                    #
-                    # Note that if we just close the standard input (file descriptor 0),
-                    # the lowest file descriptor (file descriptor 0) will be allocated,
-                    # later when other file descriptors should happen to open.
-                    #
-                    # Therefore, here we redirects it to '/dev/null' by duplicating
-                    # another file descriptor for '/dev/null' to the standard input (0).
-                    # See SPARK-26175.
-                    devnull = open(os.devnull, "r")
-                    os.dup2(devnull.fileno(), 0)
-                    devnull.close()
+                        # It should close the standard input in the child process so that
+                        # Python native function executions stay intact.
+                        #
+                        # Note that if we just close the standard input (file descriptor 0),
+                        # the lowest file descriptor (file descriptor 0) will be allocated,
+                        # later when other file descriptors should happen to open.
+                        #
+                        # Therefore, here we redirects it to '/dev/null' by duplicating
+                        # another file descriptor for '/dev/null' to the standard input (0).
+                        # See SPARK-26175.
+                        devnull = open(os.devnull, "r")
+                        os.dup2(devnull.fileno(), 0)
+                        devnull.close()
 
-                    try:
-                        # Acknowledge that the fork was successful
-                        outfile = sock.makefile(mode="wb")
-                        write_int(os.getpid(), outfile)
-                        outfile.flush()
-                        outfile.close()
-                        authenticated = (
-                            os.environ.get("PYTHON_UNIX_DOMAIN_ENABLED", "false").lower() == "true"
-                            or False
-                        )
-                        while True:
-                            code = worker(sock, authenticated)
-                            if code == 0:
-                                authenticated = True
-                            if not reuse or code:
-                                # wait for closing
-                                try:
-                                    while sock.recv(1024):
+                        try:
+                            # Acknowledge that the fork was successful
+                            outfile = sock.makefile(mode="wb")
+                            write_int(os.getpid(), outfile)
+                            outfile.flush()
+                            outfile.close()
+                            authenticated = (
+                                os.environ.get("PYTHON_UNIX_DOMAIN_ENABLED", "false").lower()
+                                == "true"
+                            )
+                            while True:
+                                code = worker(sock, authenticated)
+                                if code == 0:
+                                    authenticated = True
+                                if not reuse or code:
+                                    # wait for closing
+                                    try:
+                                        while sock.recv(1024):
+                                            pass
+                                    except Exception:
                                         pass
-                                except Exception:
-                                    pass
-                                break
-                            gc.collect()
-                    except BaseException:
-                        traceback.print_exc()
-                        os._exit(1)
-                    else:
-                        os._exit(0)
+                                    break
+                                gc.collect()
+                        except BaseException:
+                            traceback.print_exc()
+                            os._exit(1)
+                        else:
+                            os._exit(0)
                 else:
                     sock.close()
 
