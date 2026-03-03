@@ -991,7 +991,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 CREATE TEMPORARY FUNCTION IDENTIFIER('default.my' || 'DoubleAvg') AS 'test.org.apache.spark.sql.MyDoubleAvg'
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "INVALID_TEMP_OBJ_QUALIFIER",
   "sqlState" : "42602",
@@ -1013,7 +1013,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 DROP TEMPORARY FUNCTION IDENTIFIER('default.my' || 'DoubleAvg')
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "INVALID_TEMP_OBJ_QUALIFIER",
   "sqlState" : "42602",
