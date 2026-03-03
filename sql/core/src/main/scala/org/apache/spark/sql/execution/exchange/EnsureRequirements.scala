@@ -322,10 +322,10 @@ case class EnsureRequirements(
             val attrs = k.expressions.flatMap(_.collectLeaves()).map(_.asInstanceOf[Attribute])
             val keyRowOrdering = RowOrdering.create(distribution.ordering, attrs)
             val keyOrdering = keyRowOrdering.on((t: InternalRowComparableWrapper) => t.row)
-            // Sort 'commonPartitionKeys' and use this mechanism to ensure BatchScan's output
+            // Sort 'expectedPartitionKeys' and use this mechanism to ensure BatchScan's output
             // partitions are ordered
             val sorted = k.partitionKeys.sorted(keyOrdering)
-            GroupPartitionsExec(plan, commonPartitionKeys = Some(sorted.map((_, 1))))
+            GroupPartitionsExec(plan, expectedPartitionKeys = Some(sorted.map((_, 1))))
 
           case _ => plan
         }
@@ -672,12 +672,14 @@ case class EnsureRequirements(
       replicatePartitions: Boolean): SparkPlan = {
     plan match {
       case g: GroupPartitionsExec =>
-        g.copy(
+        val newGroupPartitions = g.copy(
           joinKeyPositions = joinKeyPositions,
-          commonPartitionKeys = Some(mergedPartitionKeys),
+          expectedPartitionKeys = Some(mergedPartitionKeys),
           reducers = reducers,
           applyPartialClustering = applyPartialClustering,
           replicatePartitions = replicatePartitions)
+        newGroupPartitions.copyTagsFrom(g)
+        newGroupPartitions
       case _ =>
         GroupPartitionsExec(plan, joinKeyPositions, Some(mergedPartitionKeys), reducers,
           applyPartialClustering, replicatePartitions)
@@ -689,7 +691,10 @@ case class EnsureRequirements(
    */
   private def withJoinKeyPositions(plan: SparkPlan, positions: Seq[Int]): SparkPlan = {
     plan match {
-      case g: GroupPartitionsExec => g.copy(joinKeyPositions = Some(positions))
+      case g: GroupPartitionsExec =>
+        val newGroupPartitions = g.copy(joinKeyPositions = Some(positions))
+        newGroupPartitions.copyTagsFrom(g)
+        newGroupPartitions
       case _ => GroupPartitionsExec(plan, joinKeyPositions = Some(positions))
     }
   }

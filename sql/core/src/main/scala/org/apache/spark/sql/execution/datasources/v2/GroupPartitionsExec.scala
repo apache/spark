@@ -42,8 +42,8 @@ import org.apache.spark.sql.vectorized.ColumnarBatch
  * @param joinKeyPositions Optional projection to select a subset of the partitioning key
  *                         for join compatibility (e.g., when join keys are a subset of
  *                         partition keys)
- * @param commonPartitionKeys Optional sequence of expected partition key values and their
- *                              split counts, used for partially clustered data
+ * @param expectedPartitionKeys Optional sequence of expected partition key values and their
+ *                              split counts
  * @param reducers Optional reducers to apply to partition keys for grouping compatibility
  * @param applyPartialClustering Whether to apply partial clustering for skewed data
  * @param replicatePartitions Whether to replicate partitions across multiple keys
@@ -51,7 +51,7 @@ import org.apache.spark.sql.vectorized.ColumnarBatch
 case class GroupPartitionsExec(
     child: SparkPlan,
     @transient joinKeyPositions: Option[Seq[Int]] = None,
-    @transient commonPartitionKeys: Option[Seq[(InternalRowComparableWrapper, Int)]] = None,
+    @transient expectedPartitionKeys: Option[Seq[(InternalRowComparableWrapper, Int)]] = None,
     @transient reducers: Option[Seq[Option[Reducer[_, _]]]] = None,
     @transient applyPartialClustering: Boolean = false,
     @transient replicatePartitions: Boolean = false
@@ -83,10 +83,10 @@ case class GroupPartitionsExec(
   }
 
   /**
-   * Distributes partitions based on `commonPartitionKeys` and clustering mode.
+   * Aligns partitions based on `expectedPartitionKeys` and clustering mode.
    */
-  private def distributeByCommonKeys(keyMap: Map[InternalRowComparableWrapper, Seq[Int]]) = {
-    commonPartitionKeys.get.flatMap { case (key, numSplits) =>
+  private def alignToExpectedKeys(keyMap: Map[InternalRowComparableWrapper, Seq[Int]]) = {
+    expectedPartitionKeys.get.flatMap { case (key, numSplits) =>
       val splits = keyMap.getOrElse(key, Seq.empty)
       if (applyPartialClustering && !replicatePartitions) {
         // Distribute splits across expected partitions, padding with empty sequences
@@ -140,8 +140,8 @@ case class GroupPartitionsExec(
 
     val keyToPartitionIndices = reducedKeys.zipWithIndex.groupMap(_._1)(_._2)
 
-    if (commonPartitionKeys.isDefined) {
-      distributeByCommonKeys(keyToPartitionIndices)
+    if (expectedPartitionKeys.isDefined) {
+      alignToExpectedKeys(keyToPartitionIndices)
     } else {
       groupAndSortByKeys(keyToPartitionIndices, projectedDataTypes)
     }
