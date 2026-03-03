@@ -1049,6 +1049,12 @@
     },
     "sqlState" : "21S01"
   },
+  "CREATE_VIEW_WITH_IF_NOT_EXISTS_AND_REPLACE" : {
+    "message" : [
+      "CREATE VIEW <viewName> with both IF NOT EXISTS and REPLACE is not allowed."
+    ],
+    "sqlState" : "42601"
+  },
   "CURSOR_ALREADY_EXISTS" : {
     "message" : [
       "Cannot declare cursor <cursorName> because it already exists in the current scope."
@@ -8015,11 +8021,6 @@
   "_LEGACY_ERROR_TEMP_0051" : {
     "message" : [
       "Empty set in <element> grouping sets is not supported."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0052" : {
-    "message" : [
-      "CREATE VIEW with both IF NOT EXISTS and REPLACE is not allowed."
     ]
   },
   "_LEGACY_ERROR_TEMP_0053" : {

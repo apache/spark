@@ -685,7 +685,8 @@ class SparkSqlAstBuilder extends AstBuilder {
     }
 
     if (ctx.EXISTS != null && ctx.REPLACE != null) {
-      throw QueryParsingErrors.createViewWithBothIfNotExistsAndReplaceError(ctx)
+      throw QueryParsingErrors.createViewWithBothIfNotExistsAndReplaceError(
+        ctx.identifierReference().getText, ctx)
     }
 
     val properties = ctx.propertyList.asScala.headOption.map(visitPropertyKeyValues)
@@ -778,7 +779,8 @@ class SparkSqlAstBuilder extends AstBuilder {
     }
 
     if (ctx.EXISTS != null && ctx.REPLACE != null) {
-      throw QueryParsingErrors.createViewWithBothIfNotExistsAndReplaceError(ctx)
+      throw QueryParsingErrors.createViewWithBothIfNotExistsAndReplaceError(
+        ctx.identifierReference().getText, ctx)
     }
 
     if (ctx.METRICS(0) == null) {
