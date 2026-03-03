@@ -2951,6 +2951,18 @@ object SQLConf {
       .checkValue(v => Set(1, 2).contains(v), "Valid versions are 1 and 2")
       .createWithDefault(1)
 
+  val STREAMING_OFFSET_LOG_V1_TO_V2_AUTO_UPGRADE_ENABLED =
+    buildConf("spark.sql.streaming.offsetLog.v1ToV2.autoUpgrade.enabled")
+      .internal()
+      .doc("When true, automatically upgrades V1 offset logs to V2 format when " +
+        "spark.sql.streaming.offsetLog.formatVersion=2 is set. " +
+        "This is a one-way migration that cannot be rolled back. " +
+        "Users must ensure all batches are committed before enabling this config. " +
+        "Default: false.")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val STREAMING_MAX_NUM_STATE_SCHEMA_FILES =
     buildConf("spark.sql.streaming.stateStore.maxNumStateSchemaFiles")
       .internal()
@@ -7366,6 +7378,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def stateStoreCheckpointFormatVersion: Int = getConf(STATE_STORE_CHECKPOINT_FORMAT_VERSION)
 
   def streamingOffsetLogFormatVersion: Int = getConf(STREAMING_OFFSET_LOG_FORMAT_VERSION)
+
+  def streamingOffsetLogV1ToV2AutoUpgradeEnabled: Boolean =
+    getConf(STREAMING_OFFSET_LOG_V1_TO_V2_AUTO_UPGRADE_ENABLED)
 
   def stateStoreEncodingFormat: String = getConf(STREAMING_STATE_STORE_ENCODING_FORMAT)
 
