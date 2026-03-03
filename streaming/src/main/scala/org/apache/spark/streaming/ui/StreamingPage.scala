@@ -281,7 +281,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
                 if (hasStream) {
                   <span class="expand-input-rate">
                     <span class="expand-input-rate-arrow arrow-closed"></span>
-                    <a data-toggle="tooltip" title="Show/hide details of each receiver" data-placement="top">
+                    <a data-bs-toggle="tooltip" title="Show/hide details of each receiver" data-bs-placement="top">
                       <strong>Input Rate</strong>
                     </a>
                   </span>
@@ -459,7 +459,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
       ).table(streamingPage)
     } catch {
       case e @ (_: IllegalArgumentException | _: IndexOutOfBoundsException) =>
-        <div class="alert alert-error">
+        <div class="alert alert-danger">
           <p>Error while rendering streaming table:</p>
           <pre>
             {Utils.exceptionString(e)}

@@ -1827,9 +1827,20 @@ class Analyzer(
      * Checks if the given function name parts match the expected builtin function name.
      * This is used for special syntax transformations (e.g., COUNT(*) -> COUNT(1)) that
      * should only apply to builtin functions, not to user-defined functions.
+     *
+     * In legacy mode (sessionOrder="first"), temp functions shadow builtins, so an
+     * unqualified name that matches a temp function should NOT be treated as builtin.
      */
     private def matchesFunctionName(nameParts: Seq[String], expectedName: String): Boolean = {
-      FunctionResolution.isUnqualifiedOrBuiltinFunctionName(nameParts, expectedName)
+      if (!FunctionResolution.isUnqualifiedOrBuiltinFunctionName(nameParts, expectedName)) {
+        return false
+      }
+      if (nameParts.size == 1 && conf.sessionFunctionResolutionOrder == "first") {
+        val v1Catalog = catalogManager.v1SessionCatalog
+        !v1Catalog.isTemporaryFunction(FunctionIdentifier(nameParts.head))
+      } else {
+        true
+      }
     }
 
     /**
@@ -3288,16 +3299,14 @@ class Analyzer(
             }
             wsc.copy(partitionSpec = newPartitionSpec, orderSpec = newOrderSpec)
 
-          case WindowExpression(ae: AggregateExpression, _) if ae.filter.isDefined =>
-            throw QueryCompilationErrors.windowAggregateFunctionWithFilterNotSupportedError()
-
           // Extract Windowed AggregateExpression
           case we @ WindowExpression(
-              ae @ AggregateExpression(function, _, _, _, _),
+              ae @ AggregateExpression(function, _, _, filter, _),
               spec: WindowSpecDefinition) =>
             val newChildren = function.children.map(extractExpr)
             val newFunction = function.withNewChildren(newChildren).asInstanceOf[AggregateFunction]
-            val newAgg = ae.copy(aggregateFunction = newFunction)
+            val newFilter = filter.map(extractExpr)
+            val newAgg = ae.copy(aggregateFunction = newFunction, filter = newFilter)
             seenWindowAggregates += newAgg
             WindowExpression(newAgg, spec)
 

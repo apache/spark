@@ -194,12 +194,17 @@ trait WindowEvaluatorFactoryBase {
         def processor = if (functions.exists(_.isInstanceOf[PythonFuncExpression])) {
           null
         } else {
+          val aggFilters = expressions.map {
+            case WindowExpression(ae: AggregateExpression, _) => ae.filter
+            case _ => None
+          }.toArray
           AggregateProcessor(
             functions,
             ordinal,
             childOutput,
             (expressions, schema) =>
-              MutableProjection.create(expressions, schema))
+              MutableProjection.create(expressions, schema),
+            aggFilters)
         }
 
         // Create the factory to produce WindowFunctionFrame.

@@ -621,17 +621,18 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
                     psdf[temp_value_col] = value
                 psdf = psdf.sort_values(temp_natural_order).drop(columns=temp_natural_order)
 
-                psser = psdf._psser_for(column_label)
                 if isinstance(key, Series):
-                    key = F.col(
-                        "`{}`".format(psdf[temp_key_col]._internal.data_spark_column_names[0])
-                    )
+                    key = psdf[temp_key_col].spark.column
                 if isinstance(value, Series):
-                    value = F.col(
-                        "`{}`".format(psdf[temp_value_col]._internal.data_spark_column_names[0])
-                    )
+                    value = psdf[temp_value_col].spark.column
 
-                type(self)(psser)[key] = value
+                if isinstance(self, iLocIndexer):
+                    col_sel = psdf._internal.column_labels.index(column_label)
+                else:
+                    col_sel = column_label
+                type(self)(psdf)[key, col_sel] = value
+
+                psser = psdf._psser_for(column_label)
 
                 if self._psdf_or_psser.name is None:
                     psser = psser.rename()

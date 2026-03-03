@@ -246,8 +246,8 @@ class Conf:
             v = utf8_deserializer.loads(infile)
             self._conf[k] = v
 
-    def get(self, key: str, default: Any = "") -> Any:
+    def get(self, key: str, default: Any = "", *, lower_str: bool = True) -> Any:
         val = self._conf.get(key, default)
-        if isinstance(val, str):
+        if isinstance(val, str) and lower_str:
             return val.lower()
         return val

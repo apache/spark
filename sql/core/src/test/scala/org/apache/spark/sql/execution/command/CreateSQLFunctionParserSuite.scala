@@ -114,7 +114,6 @@ class CreateSQLFunctionParserSuite extends AnalysisTest {
       parser.parsePlan("CREATE OR REPLACE TEMPORARY FUNCTION a() RETURNS INT RETURN 1"),
       createSQLFunctionCommand("a", exprText = Some("1"), replace = true))
 
-    // Now throws an AnalysisException (semantic error) instead of ParseException
     val e1 = intercept[AnalysisException] {
       parser.parsePlan("CREATE TEMPORARY FUNCTION a.b() RETURNS INT RETURN 1")
     }
@@ -124,7 +123,10 @@ class CreateSQLFunctionParserSuite extends AnalysisTest {
       parameters = Map(
         "objectType" -> "FUNCTION",
         "objectName" -> "`b`",
-        "qualifier" -> "`a`"))
+        "qualifier" -> "`a`"),
+      queryContext = Array(
+        ExpectedContext(
+          "CREATE TEMPORARY FUNCTION a.b() RETURNS INT RETURN 1", 0, 51)))
 
     val e2 = intercept[AnalysisException] {
       parser.parsePlan("CREATE TEMPORARY FUNCTION a.b.c() RETURNS INT RETURN 1")
@@ -135,7 +137,10 @@ class CreateSQLFunctionParserSuite extends AnalysisTest {
       parameters = Map(
         "objectType" -> "FUNCTION",
         "objectName" -> "`c`",
-        "qualifier" -> "`a`.`b`"))
+        "qualifier" -> "`a`.`b`"),
+      queryContext = Array(
+        ExpectedContext(
+          "CREATE TEMPORARY FUNCTION a.b.c() RETURNS INT RETURN 1", 0, 53)))
 
     checkParseError(
       "CREATE TEMPORARY FUNCTION IF NOT EXISTS a() RETURNS INT RETURN 1",

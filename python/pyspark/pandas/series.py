@@ -7354,19 +7354,24 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         )
 
     def __getitem__(self, key: Any) -> Any:
-        if type(key) == int and not isinstance(self.index.spark.data_type, (IntegerType, LongType)):
-            warnings.warn(
-                "Series.__getitem__ treating keys as positions is deprecated. "
-                "In a future version, integer keys will always be treated as labels "
-                "(consistent with DataFrame behavior). "
-                "To access a value by position, use `ser.iloc[pos]`",
-                FutureWarning,
+        if LooseVersion(pd.__version__) < "3.0.0":
+            treating_keys_as_positions = type(key) == int and not isinstance(
+                self.index.spark.data_type, (IntegerType, LongType)
             )
+            if treating_keys_as_positions:
+                warnings.warn(
+                    "Series.__getitem__ treating keys as positions is deprecated. "
+                    "In a future version, integer keys will always be treated as labels "
+                    "(consistent with DataFrame behavior). "
+                    "To access a value by position, use `ser.iloc[pos]`",
+                    FutureWarning,
+                )
+        else:
+            treating_keys_as_positions = False
         try:
-            if (isinstance(key, slice) and any(type(n) == int for n in [key.start, key.stop])) or (
-                type(key) == int
-                and not isinstance(self.index.spark.data_type, (IntegerType, LongType))
-            ):
+            if (
+                isinstance(key, slice) and any(type(n) == int for n in [key.start, key.stop])
+            ) or treating_keys_as_positions:
                 # Seems like pandas Series always uses int as positional search when slicing
                 # with ints, searches based on index values when the value is int.
                 return self.iloc[key]

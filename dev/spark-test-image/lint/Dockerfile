@@ -95,7 +95,7 @@ RUN python3.12 -m pip install \
     'pandas' \
     'pandas-stubs' \
     'plotly>=4.8' \
-    'pyarrow>=22.0.0' \
+    'pyarrow>=23.0.0' \
     'pytest-mypy-plugins==1.9.3' \
     'pytest==7.1.3' \
     'scipy>=1.8.0' \

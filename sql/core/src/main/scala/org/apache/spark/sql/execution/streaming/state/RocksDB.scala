@@ -981,6 +981,12 @@ class RocksDB(
               verifyChangelogRecord(kvVerifier, key, Some(value))
               merge(key, value, includesPrefix = useColumnFamilies,
                 deriveCfName = useColumnFamilies, includesChecksum = conf.rowChecksumEnabled)
+
+            case RecordType.DELETE_RANGE_RECORD =>
+              // For deleteRange, 'key' is beginKey and 'value' is endKey
+              verifyChangelogRecord(kvVerifier, key, Some(value))
+              deleteRange(key, value, includesPrefix = useColumnFamilies,
+                includesChecksum = conf.rowChecksumEnabled)
           }
         }
       } finally {
@@ -1438,29 +1444,50 @@ class RocksDB(
    * Delete all keys in the range [beginKey, endKey).
    * Uses RocksDB's native deleteRange for efficient bulk deletion.
    *
-   * @param beginKey The start key of the range (inclusive)
-   * @param endKey   The end key of the range (exclusive)
-   * @param cfName   The column family name
+   * @param beginKey       The start key of the range (inclusive)
+   * @param endKey         The end key of the range (exclusive)
+   * @param cfName         The column family name
+   * @param includesPrefix Whether the keys already include the column family prefix.
+   *                       Set to true during changelog replay to avoid double-encoding.
    */
   def deleteRange(
       beginKey: Array[Byte],
       endKey: Array[Byte],
-      cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
+      cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME,
+      includesPrefix: Boolean = false,
+      includesChecksum: Boolean = false): Unit = {
     updateMemoryUsageIfNeeded()
 
-    val beginKeyWithPrefix = if (useColumnFamilies) {
+    val originalEndKey = if (conf.rowChecksumEnabled && includesChecksum) {
+      KeyValueChecksumEncoder.decodeAndVerifyValueRowWithChecksum(
+        readVerifier, beginKey, endKey, delimiterSize)
+    } else {
+      endKey
+    }
+
+    val beginKeyWithPrefix = if (useColumnFamilies && !includesPrefix) {
       encodeStateRowWithPrefix(beginKey, cfName)
     } else {
       beginKey
     }
 
-    val endKeyWithPrefix = if (useColumnFamilies) {
-      encodeStateRowWithPrefix(endKey, cfName)
+    val endKeyWithPrefix = if (useColumnFamilies && !includesPrefix) {
+      encodeStateRowWithPrefix(originalEndKey, cfName)
     } else {
-      endKey
+      originalEndKey
     }
 
     db.deleteRange(writeOptions, beginKeyWithPrefix, endKeyWithPrefix)
+    changelogWriter.foreach { writer =>
+      val endKeyForChangelog = if (conf.rowChecksumEnabled) {
+        KeyValueChecksumEncoder.encodeValueRowWithChecksum(endKeyWithPrefix,
+          KeyValueChecksum.create(beginKeyWithPrefix, Some(endKeyWithPrefix)))
+      } else {
+        endKeyWithPrefix
+      }
+      writer.deleteRange(beginKeyWithPrefix, endKeyForChangelog)
+    }
+    // TODO: Add metrics update for deleteRange operations
   }
 
   /**

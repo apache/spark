@@ -44,15 +44,18 @@ var onClickTimeline = function() {};
 // Show a tooltip "text" for "node"
 function showBootstrapTooltip(d3Selection, text) {
   d3Selection.each(function() {
-    $(this).tooltip({title: text, trigger: "manual", container: "body"});
-    $(this).tooltip("show");
+    var tt = bootstrap.Tooltip.getInstance(this);
+    if (tt) tt.dispose();
+    tt = new bootstrap.Tooltip(this, {title: text, trigger: "manual", container: "body"});
+    tt.show();
   });
 }
 
 // Hide the tooltip for "node"
 function hideBootstrapTooltip(d3Selection) {
   d3Selection.each(function() {
-    $(this).tooltip("dispose");
+    var tt = bootstrap.Tooltip.getInstance(this);
+    if (tt) tt.dispose();
   });
 }
 

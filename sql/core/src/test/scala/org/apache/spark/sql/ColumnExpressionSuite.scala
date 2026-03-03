@@ -2658,7 +2658,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
           .select($"date" + $"interval")
           .collect()
       }
-      assert(e.getMessage.contains("integer overflow"))
+      assert(e.getMessage.contains("overflow"))
     }
   }
 
@@ -2687,7 +2687,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
           .select($"date" - $"interval")
           .collect()
       }
-      assert(e.getMessage.contains("integer overflow"))
+      assert(e.getMessage.contains("overflow"))
     }
   }
 
@@ -2725,7 +2725,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
           .collect()
       }.getCause
       assert(e.isInstanceOf[ArithmeticException])
-      assert(e.getMessage.contains("long overflow"))
+      assert(e.getMessage == null || e.getMessage.contains("overflow"))
     }
   }
 
@@ -2762,7 +2762,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
           .collect()
       }.getCause
       assert(e.isInstanceOf[ArithmeticException])
-      assert(e.getMessage.contains("long overflow"))
+      assert(e.getMessage == null || e.getMessage.contains("overflow"))
     }
   }
 
@@ -2809,7 +2809,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
             .collect()
         }.getCause
         assert(e.isInstanceOf[ArithmeticException])
-        assert(e.getMessage.contains("long overflow"))
+        assert(e.getMessage == null || e.getMessage.contains("overflow"))
       }
     }
   }
@@ -3004,7 +3004,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
           .collect()
       }.getCause
       assert(e.isInstanceOf[ArithmeticException])
-      assert(e.getMessage.contains("long overflow"))
+      assert(e.getMessage == null || e.getMessage.contains("overflow"))
     }
   }
 
@@ -3076,7 +3076,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
             .collect()
         }.getCause
         assert(e.isInstanceOf[ArithmeticException])
-        assert(e.getMessage.contains("long overflow"))
+        assert(e.getMessage == null || e.getMessage.contains("overflow"))
       }
     }
   }

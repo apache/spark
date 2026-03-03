@@ -1141,7 +1141,14 @@ org.apache.spark.sql.catalyst.parser.ParseException
     "objectName" : "`myDoubleAvg`",
     "objectType" : "FUNCTION",
     "qualifier" : "`default`"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 108,
+    "fragment" : "CREATE TEMPORARY FUNCTION IDENTIFIER('default.my' || 'DoubleAvg') AS 'test.org.apache.spark.sql.MyDoubleAvg'"
+  } ]
 }
 
 
@@ -1158,7 +1165,14 @@ org.apache.spark.sql.catalyst.parser.ParseException
     "objectName" : "`myDoubleAvg`",
     "objectType" : "FUNCTION",
     "qualifier" : "`default`"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 63,
+    "fragment" : "DROP TEMPORARY FUNCTION IDENTIFIER('default.my' || 'DoubleAvg')"
+  } ]
 }
 
 
