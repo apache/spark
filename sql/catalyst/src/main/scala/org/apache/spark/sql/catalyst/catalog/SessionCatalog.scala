@@ -120,8 +120,8 @@ class SessionCatalog(
 
   /**
    * Session function kinds in resolution order for unqualified lookups.
-   * Matches [[SQLConf.sessionFunctionResolutionOrder]]: "first" (session first), "second" (default),
-   * "last" (builtin only; session is tried after persistent in FunctionResolution).
+   * Matches [[SQLConf.sessionFunctionResolutionOrder]]: "first" (session first),
+   * "second" (default), "last" (builtin only; session tried after persistent).
    */
   private def sessionFunctionKindsInResolutionOrder: Seq[SessionFunctionKind] = {
     conf.sessionFunctionResolutionOrder match {
