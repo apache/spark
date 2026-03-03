@@ -231,7 +231,7 @@ private[spark] object SchemaUtils {
         case (x, ys) if ys.length > 1 => s"${x._2.mkString(".")}"
       }
       throw new AnalysisException(
-        errorClass = "_LEGACY_ERROR_TEMP_3058",
+        errorClass = "DUPLICATE_PARTITION_TRANSFORM",
         messageParameters = Map(
           "checkType" -> checkType,
           "duplicateColumns" -> duplicateColumns.mkString(", ")))

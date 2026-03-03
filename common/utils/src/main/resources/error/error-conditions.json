@@ -1593,6 +1593,12 @@
     ],
     "sqlState" : "23505"
   },
+  "DUPLICATE_PARTITION_TRANSFORM" : {
+    "message" : [
+      "Found duplicate column(s) <checkType>: <duplicateColumns>"
+    ],
+    "sqlState" : "42701"
+  },
   "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT" : {
     "message" : [
       "Call to routine <routineName> is invalid because it includes multiple argument assignments to the same parameter name <parameterName>."
@@ -10007,11 +10013,6 @@
   "_LEGACY_ERROR_TEMP_3057" : {
     "message" : [
       "Cannot retrieve row-level operation from <table>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3058" : {
-    "message" : [
-      "Found duplicate column(s) <checkType>: <duplicateColumns>"
     ]
   },
   "_LEGACY_ERROR_TEMP_3059" : {
