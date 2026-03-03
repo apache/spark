@@ -473,10 +473,13 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
 
   test("error handling: disallow IF NOT EXISTS for CREATE TEMPORARY VIEW") {
     withTempView("myabcdview") {
-      val e = intercept[ParseException] {
-        sql("CREATE TEMPORARY VIEW IF NOT EXISTS myabcdview AS SELECT * FROM jt")
-      }
-      assert(e.message.contains("It is not allowed to define a TEMPORARY view with IF NOT EXISTS"))
+      checkError(
+        exception = intercept[ParseException] {
+          sql("CREATE TEMPORARY VIEW IF NOT EXISTS myabcdview AS SELECT * FROM jt")
+        },
+        condition = "TEMP_VIEW_IF_NOT_EXISTS_NOT_ALLOWED",
+        parameters = Map.empty
+      )
     }
   }
 
