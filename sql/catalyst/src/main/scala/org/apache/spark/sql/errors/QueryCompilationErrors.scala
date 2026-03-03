@@ -3567,7 +3567,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def cannotFindCatalogToHandleIdentifierError(quote: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1310",
+      errorClass = "CATALOG_NOT_FOUND_FOR_IDENTIFIER",
       messageParameters = Map("quote" -> quote))
   }
 

@@ -920,6 +920,24 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
     }
   }
 
+  test("insertInto/saveAsTable with unresolvable multi-part identifier") {
+    val df = spark.range(1)
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.write.insertInto("a.b.c.d")
+      },
+      condition = "CATALOG_NOT_FOUND_FOR_IDENTIFIER",
+      parameters = Map("quote" -> "`a`.`b`.`c`.`d`")
+    )
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.write.saveAsTable("a.b.c.d")
+      },
+      condition = "CATALOG_NOT_FOUND_FOR_IDENTIFIER",
+      parameters = Map("quote" -> "`a`.`b`.`c`.`d`")
+    )
+  }
+
   test("saveAsTable with mode Append should not fail if the table not exists " +
     "but a same-name temp view exist") {
     withTable("same_name") {

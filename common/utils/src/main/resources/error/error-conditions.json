@@ -643,6 +643,12 @@
     ],
     "sqlState" : "42P08"
   },
+  "CATALOG_NOT_FOUND_FOR_IDENTIFIER" : {
+    "message" : [
+      "Couldn't find a catalog to handle the identifier <quote>."
+    ],
+    "sqlState" : "42P08"
+  },
   "CHECKPOINT_FILE_CHECKSUM_VERIFICATION_FAILED" : {
     "message" : [
       "Checksum verification failed, the file may be corrupted. File: <fileName>",
@@ -8848,11 +8854,6 @@
   "_LEGACY_ERROR_TEMP_1309" : {
     "message" : [
       "insertInto() can't be used together with partitionBy(). Partition columns have already been defined for the table. It is not necessary to use partitionBy()."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1310" : {
-    "message" : [
-      "Couldn't find a catalog to handle the identifier <quote>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1312" : {
