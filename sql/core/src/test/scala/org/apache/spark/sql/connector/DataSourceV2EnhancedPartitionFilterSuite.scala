@@ -35,6 +35,9 @@ import org.apache.spark.sql.test.SharedSparkSession
 class DataSourceV2EnhancedPartitionFilterSuite
   extends QueryTest with SharedSparkSession with BeforeAndAfter {
 
+  protected val v2Source = classOf[FakeV2ProviderWithCustomSchema].getName
+  protected val partFilterTableName = "testpartfilter.t"
+
   protected def registerCatalog(name: String, clazz: Class[_]): Unit = {
     spark.conf.set(s"spark.sql.catalog.$name", clazz.getName)
   }
@@ -48,15 +51,13 @@ class DataSourceV2EnhancedPartitionFilterSuite
   }
 
   test("first pass partition filter still works (e.g. part_col = value)") {
-    val v2Source = classOf[FakeV2ProviderWithCustomSchema].getName
-    val t = "testpartfilter.t"
-    withTable(t) {
-      sql(s"CREATE TABLE $t (part_col string, data string) USING $v2Source " +
+    withTable(partFilterTableName) {
+      sql(s"CREATE TABLE $partFilterTableName (part_col string, data string) USING $v2Source " +
         "PARTITIONED BY (part_col)")
-      sql(s"INSERT INTO $t VALUES ('a', 'x'), ('b', 'y'), ('c', 'z')")
+      sql(s"INSERT INTO $partFilterTableName VALUES ('a', 'x'), ('b', 'y'), ('c', 'z')")
 
       // Simple partition equality is pushed in the first pass and used to prune partitions
-      val df = sql("SELECT * FROM testpartfilter.t WHERE part_col = 'b'")
+      val df = sql(s"SELECT * FROM $partFilterTableName WHERE part_col = 'b'")
       checkAnswer(df, Seq(Row("b", "y")))
 
       val batchScan = df.queryExecution.executedPlan.collectFirst {
@@ -71,16 +72,14 @@ class DataSourceV2EnhancedPartitionFilterSuite
   }
 
   test("untranslatable partition-only expression handled by second pass (e.g. LIKE)") {
-    val v2Source = classOf[FakeV2ProviderWithCustomSchema].getName
-    val t = "testpartfilter.t"
-    withTable(t) {
-      sql(s"CREATE TABLE $t (part_col string, data string) USING $v2Source " +
+    withTable(partFilterTableName) {
+      sql(s"CREATE TABLE $partFilterTableName (part_col string, data string) USING $v2Source " +
         "PARTITIONED BY (part_col)")
-      sql(s"INSERT INTO $t VALUES ('a', 'x'), ('b', 'y'), ('bc', 'z')")
+      sql(s"INSERT INTO $partFilterTableName VALUES ('a', 'x'), ('b', 'y'), ('bc', 'z')")
 
       // LIKE is not translated to V2 Predicate by V2ExpressionBuilder; it stays in
       // untranslatableExprs and is pushed as PartitionPredicate in the second pass.
-      val df = sql("SELECT * FROM testpartfilter.t WHERE part_col LIKE 'b%'")
+      val df = sql(s"SELECT * FROM $partFilterTableName WHERE part_col LIKE 'b%'")
       checkAnswer(df, Seq(Row("b", "y"), Row("bc", "z")))
 
       val batchScan = df.queryExecution.executedPlan.collectFirst {
@@ -96,17 +95,15 @@ class DataSourceV2EnhancedPartitionFilterSuite
   }
 
   test("first pass partition predicate rejected by source (e.g. IN) applied in second pass") {
-    val v2Source = classOf[FakeV2ProviderWithCustomSchema].getName
-    val t = "testpartfilter.t"
-    withTable(t) {
-      sql(s"CREATE TABLE $t (part_col string, data string) USING $v2Source " +
+    withTable(partFilterTableName) {
+      sql(s"CREATE TABLE $partFilterTableName (part_col string, data string) USING $v2Source " +
         "PARTITIONED BY (part_col)")
-      sql(s"INSERT INTO $t VALUES ('a', 'x'), ('b', 'y'), ('c', 'z')")
+      sql(s"INSERT INTO $partFilterTableName VALUES ('a', 'x'), ('b', 'y'), ('c', 'z')")
 
       // IN is translated to a V2 Predicate in the first pass but rejected by
       // InMemoryTableWithV2Filter.supportsPredicates (which only accepts =, <=>, IS NULL,
       // IS NOT NULL, ALWAYS_TRUE). So it is pushed as PartitionPredicate in the second pass.
-      val df = sql("SELECT * FROM testpartfilter.t WHERE part_col IN ('a', 'b')")
+      val df = sql(s"SELECT * FROM $partFilterTableName WHERE part_col IN ('a', 'b')")
       checkAnswer(df, Seq(Row("a", "x"), Row("b", "y")))
 
       val batchScan = df.queryExecution.executedPlan.collectFirst {
@@ -123,17 +120,15 @@ class DataSourceV2EnhancedPartitionFilterSuite
   }
 
   test("Second-pass PartitionPredicate filter works for UDF filter on partition column") {
-    val v2Source = classOf[FakeV2ProviderWithCustomSchema].getName
-    val t = "testpartfilter.t"
-    withTable(t) {
-      sql(s"CREATE TABLE $t (part_col string, data string) USING $v2Source " +
+    withTable(partFilterTableName) {
+      sql(s"CREATE TABLE $partFilterTableName (part_col string, data string) USING $v2Source " +
         "PARTITIONED BY (part_col)")
-      sql(s"INSERT INTO $t VALUES ('a', 'x'), ('A', 'y'), ('b', 'z')")
+      sql(s"INSERT INTO $partFilterTableName VALUES ('a', 'x'), ('A', 'y'), ('b', 'z')")
 
       spark.udf.register("my_upper", (s: String) =>
         if (s == null) null else s.toUpperCase(Locale.ROOT))
 
-      val df = sql("SELECT * FROM testpartfilter.t WHERE my_upper(part_col) = 'A'")
+      val df = sql(s"SELECT * FROM $partFilterTableName WHERE my_upper(part_col) = 'A'")
       checkAnswer(df, Seq(Row("a", "x"), Row("A", "y")))
 
       val batchScan = df.queryExecution.executedPlan.collectFirst {
@@ -142,8 +137,6 @@ class DataSourceV2EnhancedPartitionFilterSuite
       val scan = batchScan.batch
       val partitions = scan.planInputPartitions()
 
-      // planInputPartitions must return only InputPartitions whose partition values
-      // (as InternalRow) return true for all pushed PartitionPredicate.accept().
       assert(partitions.length === 2,
         "Only partitions satisfying all pushed PartitionPredicates should be read")
       val expectedPartitionKeys = Set("a", "A")
@@ -155,6 +148,29 @@ class DataSourceV2EnhancedPartitionFilterSuite
       }
       val partKeys = partitions.map(_.asInstanceOf[BufferedRows].keyString()).toSet
       assert(partKeys === expectedPartitionKeys)
+    }
+  }
+
+  test("untranslatable data filters are applied after scan (not dropped)") {
+    withTable(partFilterTableName) {
+      sql(s"CREATE TABLE $partFilterTableName (part_col string, data string) USING $v2Source " +
+        "PARTITIONED BY (part_col)")
+      sql(s"INSERT INTO $partFilterTableName VALUES ('a', 'keep'), ('a', 'drop'), ('b', 'other')")
+
+      // UDF on data column does not translate to V2 Predicate; it must be returned as
+      // post-scan filter (dataFiltersFromSecondPass) so Spark applies it.
+      spark.udf.register("is_keep", (s: String) => s != null && s == "keep")
+
+      val df = sql(s"SELECT * FROM $partFilterTableName WHERE part_col = 'a' AND is_keep(data)")
+      checkAnswer(df, Seq(Row("a", "keep")))
+
+      val batchScan = df.queryExecution.executedPlan.collectFirst {
+        case b: BatchScanExec => b
+      }.get
+      val partitions = batchScan.batch.planInputPartitions()
+      assert(partitions.length === 1,
+        "Partition predicate part_col = 'a' should prune to one partition")
+      assert(partitions.head.asInstanceOf[BufferedRows].keyString() === "a")
     }
   }
 }
