@@ -298,7 +298,7 @@ class LiteralExpression(Expression):
                 assert isinstance(value, (str, np.str_))
                 value = str(value)
             elif isinstance(dataType, DateType):
-                assert isinstance(value, (datetime.date, datetime.datetime))
+                assert isinstance(value, datetime.date)
                 value = DateType().toInternal(value)
             elif isinstance(dataType, TimeType):
                 assert isinstance(value, datetime.time)
