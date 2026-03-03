@@ -459,13 +459,6 @@ private[spark] object SparkCoreErrors {
       cause = null)
   }
 
-  def statsdSinkInvalidRegexError(invalidRegex: String): Throwable = {
-    new SparkException(
-      errorClass = "STATSD_SINK_INVALID_REGEX",
-      messageParameters = Map("regex" -> invalidRegex),
-      cause = null)
-  }
-
   def outOfMemoryError(requestedBytes: Long, receivedBytes: Long): OutOfMemoryError = {
     new SparkOutOfMemoryError(
       "UNABLE_TO_ACQUIRE_MEMORY",

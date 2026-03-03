@@ -17,16 +17,14 @@
 
 package org.apache.spark.metrics.sink
 
-import java.net.{DatagramPacket, DatagramSocket, SocketTimeoutException}
+import java.net.{DatagramPacket, DatagramSocket}
 import java.nio.charset.StandardCharsets.UTF_8
 import java.util.Properties
 import java.util.concurrent.TimeUnit._
 
-import scala.collection.JavaConverters._
-
 import com.codahale.metrics._
 
-import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.metrics.sink.StatsdSink._
 
 class StatsdSinkSuite extends SparkFunSuite {
@@ -68,59 +66,6 @@ class StatsdSinkSuite extends SparkFunSuite {
     } finally {
       socket.close()
     }
-  }
-
-  test("StatsD sink with default MetricsFilter") {
-    val props = new Properties
-    props.put(STATSD_KEY_HOST, "127.0.0.1")
-    props.put(STATSD_KEY_PORT, "54321")
-    val registry = new MetricRegistry
-
-    val sink = new StatsdSink(props, registry)
-
-    val gauge = new Gauge[Double] {
-      override def getValue: Double = 1.23
-    }
-    sink.registry.register("gauge", gauge)
-    sink.registry.register("anothergauge", gauge)
-    sink.registry.register("streaminggauge", gauge)
-
-    val metricKeys = sink.registry.getGauges(sink.filter).keySet.asScala
-
-    assert(metricKeys.equals(Set("gauge", "anothergauge", "streaminggauge")),
-      "Should contain all metrics registered")
-  }
-
-  test("StatsD sink with regex MetricsFilter") {
-    val props = new Properties
-    props.put(STATSD_KEY_HOST, "127.0.0.1")
-    props.put(STATSD_KEY_PORT, "54321")
-    props.put(STATSD_KEY_REGEX, "local-[0-9]+.driver.(CodeGenerator|BlockManager)")
-    val registry = new MetricRegistry
-
-    val sink = new StatsdSink(props, registry)
-
-    val gauge = new Gauge[Double] {
-      override def getValue: Double = 1.23
-    }
-    sink.registry.register("gauge", gauge)
-    sink.registry.register("anothergauge", gauge)
-    sink.registry.register("streaminggauge", gauge)
-    sink.registry.register("local-1563838109260.driver.CodeGenerator.generatedMethodSize", gauge)
-    sink.registry.register("local-1563838109260.driver.BlockManager.disk.diskSpaceUsed_MB", gauge)
-    sink.registry.register("local-1563813796998.driver.spark.streaming.nicklocal.latency", gauge)
-    sink.registry.register("myapp.driver.CodeGenerator.generatedMethodSize", gauge)
-    sink.registry.register("myapp.driver.BlockManager.disk.diskSpaceUsed_MB", gauge)
-
-    val metricKeys = sink.registry.getGauges(sink.filter).keySet.asScala
-
-    val filteredMetricKeys = Set(
-      "local-1563838109260.driver.CodeGenerator.generatedMethodSize",
-      "local-1563838109260.driver.BlockManager.disk.diskSpaceUsed_MB"
-    )
-
-    assert(metricKeys.equals(filteredMetricKeys),
-      "Should contain only metrics matching regex filter")
   }
 
   test("metrics StatsD sink with Counter") {
@@ -226,59 +171,5 @@ class StatsdSinkSuite extends SparkFunSuite {
       }
     }
   }
-
-  test("StatsD sink emits only matching metrics") {
-    val socket = new DatagramSocket
-    try {
-      if (socket.getReceiveBufferSize() < socketMinRecvBufferSize) {
-        socket.setReceiveBufferSize(socketMinRecvBufferSize)
-      }
-      socket.setSoTimeout(250)
-
-      val props = new Properties
-      defaultProps.foreach(e => props.put(e._1, e._2))
-      props.put(STATSD_KEY_PORT, socket.getLocalPort.toString)
-      props.put(STATSD_KEY_REGEX, "matchedCounter")
-
-      val registry = new MetricRegistry
-      val sink = new StatsdSink(props, registry)
-
-      val matchingCounter = new Counter
-      matchingCounter.inc(12)
-      val nonMatchingCounter = new Counter
-      nonMatchingCounter.inc(34)
-      sink.registry.register("matchedCounter", matchingCounter)
-      sink.registry.register("otherCounter", nonMatchingCounter)
-
-      sink.report()
-
-      val packet = new DatagramPacket(new Array[Byte](maxPayloadSize), maxPayloadSize)
-      socket.receive(packet)
-      val result = new String(packet.getData, 0, packet.getLength, UTF_8)
-      assert(result === "spark.matchedCounter:12|c",
-        "Only matching metrics should be emitted")
-
-      intercept[SocketTimeoutException] {
-        socket.receive(packet)
-      }
-    } finally {
-      socket.close()
-    }
-  }
-
-  test("StatsD sink with invalid regex") {
-    val props = new Properties
-    props.put(STATSD_KEY_HOST, "127.0.0.1")
-    props.put(STATSD_KEY_PORT, "54321")
-    props.put(STATSD_KEY_REGEX, "foo(")
-    val registry = new MetricRegistry
-
-    checkError(
-      exception = intercept[SparkException] {
-        new StatsdSink(props, registry)
-      },
-      errorClass = "STATSD_SINK_INVALID_REGEX",
-      parameters = Map("regex" -> "foo(")
-    )
-  }
 }
+

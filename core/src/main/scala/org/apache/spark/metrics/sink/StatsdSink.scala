@@ -19,11 +19,9 @@ package org.apache.spark.metrics.sink
 
 import java.util.{Locale, Properties}
 import java.util.concurrent.TimeUnit
-import java.util.regex.Pattern
 
-import com.codahale.metrics.{Metric, MetricFilter, MetricRegistry}
+import com.codahale.metrics.MetricRegistry
 
-import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.MetricsSystem
 
@@ -33,7 +31,6 @@ private[spark] object StatsdSink {
   val STATSD_KEY_PERIOD = "period"
   val STATSD_KEY_UNIT = "unit"
   val STATSD_KEY_PREFIX = "prefix"
-  val STATSD_KEY_REGEX = "regex"
 
   val STATSD_DEFAULT_HOST = "127.0.0.1"
   val STATSD_DEFAULT_PORT = "8125"
@@ -46,37 +43,19 @@ private[spark] class StatsdSink(
     val property: Properties, val registry: MetricRegistry) extends Sink with Logging {
   import StatsdSink._
 
-  private def propertyToOption(prop: String): Option[String] = Option(property.getProperty(prop))
+  val host = property.getProperty(STATSD_KEY_HOST, STATSD_DEFAULT_HOST)
+  val port = property.getProperty(STATSD_KEY_PORT, STATSD_DEFAULT_PORT).toInt
 
-  val host = propertyToOption(STATSD_KEY_HOST).getOrElse(STATSD_DEFAULT_HOST)
-  val port = propertyToOption(STATSD_KEY_PORT).getOrElse(STATSD_DEFAULT_PORT).toInt
-
-  val pollPeriod = propertyToOption(STATSD_KEY_PERIOD).getOrElse(STATSD_DEFAULT_PERIOD).toInt
+  val pollPeriod = property.getProperty(STATSD_KEY_PERIOD, STATSD_DEFAULT_PERIOD).toInt
   val pollUnit =
     TimeUnit.valueOf(
-      propertyToOption(STATSD_KEY_UNIT).getOrElse(STATSD_DEFAULT_UNIT).toUpperCase(Locale.ROOT))
+      property.getProperty(STATSD_KEY_UNIT, STATSD_DEFAULT_UNIT).toUpperCase(Locale.ROOT))
 
-  val prefix = propertyToOption(STATSD_KEY_PREFIX).getOrElse(STATSD_DEFAULT_PREFIX)
-
-  val filter = propertyToOption(STATSD_KEY_REGEX) match {
-    case Some(regex) =>
-      val pattern = try {
-        Pattern.compile(regex)
-      } catch {
-        case _: java.util.regex.PatternSyntaxException =>
-          throw SparkCoreErrors.statsdSinkInvalidRegexError(regex)
-      }
-      new MetricFilter() {
-        override def matches(name: String, metric: Metric): Boolean = {
-          pattern.matcher(name).find()
-        }
-      }
-    case None => MetricFilter.ALL
-  }
+  val prefix = property.getProperty(STATSD_KEY_PREFIX, STATSD_DEFAULT_PREFIX)
 
   MetricsSystem.checkMinimalPollingPeriod(pollUnit, pollPeriod)
 
-  val reporter = new StatsdReporter(registry, host, port, prefix, filter)
+  val reporter = new StatsdReporter(registry, host, port, prefix)
 
   override def start(): Unit = {
     reporter.start(pollPeriod, pollUnit)
@@ -90,3 +69,4 @@ private[spark] class StatsdSink(
 
   override def report(): Unit = reporter.report()
 }
+

@@ -1107,19 +1107,6 @@ This example shows a list of Spark configuration parameters for a Graphite sink:
 "spark.metrics.conf.*.sink.graphite.regex"="optional_regex_to_send_matching_metrics"
 ```
 
-If `regex` is set for either Graphite or StatsD, only matching metric names are emitted.
-
-This example shows a list of Spark configuration parameters for a StatsD sink:
-```
-"spark.metrics.conf.*.sink.statsd.class"="org.apache.spark.metrics.sink.StatsdSink"
-"spark.metrics.conf.*.sink.statsd.host"="statsd_host_name"
-"spark.metrics.conf.*.sink.statsd.port"=8125
-"spark.metrics.conf.*.sink.statsd.period"=10
-"spark.metrics.conf.*.sink.statsd.unit"=seconds
-"spark.metrics.conf.*.sink.statsd.prefix"="optional_prefix"
-"spark.metrics.conf.*.sink.statsd.regex"="optional_regex_to_send_matching_metrics"
-```
-
 Default values of the Spark metrics configuration are as follows:
 ```
 "*.sink.servlet.class" = "org.apache.spark.metrics.sink.MetricsServlet"
