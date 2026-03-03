@@ -609,7 +609,7 @@ case class EnsureRequirements(
           }
         }
 
-        // Now we need to push-down the common partition information to the scan in each child
+        // Now we need to push-down the common partition information to the `GroupPartitionsExec`s.
         newLeft = applyGroupPartitions(left, leftSpec.joinKeyPositions, mergedPartitionKeys,
           leftReducers, applyPartialClustering, replicateLeftSide)
         newRight = applyGroupPartitions(right, rightSpec.joinKeyPositions, mergedPartitionKeys,
@@ -657,7 +657,11 @@ case class EnsureRequirements(
   }
 
   /**
-   * Applies or updates GroupPartitionsExec with the given parameters.
+   * Applies or updates `GroupPartitionsExec` with the given parameters.
+   *
+   * `GroupPartitionsExec` can be either the given plan node (child of the join inserted by
+   * `EnsureRequirement`) if the original child didn't satisfy the distribution requirement; or we
+   * can create a new one specifically for this join.
    */
   private def applyGroupPartitions(
       plan: SparkPlan,
