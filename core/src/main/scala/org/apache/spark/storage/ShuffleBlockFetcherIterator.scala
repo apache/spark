@@ -981,12 +981,7 @@ final class ShuffleBlockFetcherIterator(
         case FailureFetchResult(blockId, mapIndex, address, e) =>
           var error = e
           var errorMsg: String = null
-          if (e.isInstanceOf[OutOfDirectMemoryError]) {
-            val logMessage = log"Block ${MDC(BLOCK_ID, blockId)} fetch failed after " +
-              log"${MDC(MAX_ATTEMPTS, maxAttemptsOnNettyOOM)} retries due to Netty OOM"
-            logError(logMessage)
-            errorMsg = logMessage.message
-          } else if (fallbackStorage.isDefined) {
+          if (fallbackStorage.isDefined) {
             try {
               val buf = fallbackStorage.get.read(blockId)
               results.put(SuccessFetchResult(blockId, mapIndex, address, buf.size(), buf,
@@ -999,6 +994,12 @@ final class ShuffleBlockFetcherIterator(
             }
           }
           if (error != null) {
+            if (error.isInstanceOf[OutOfDirectMemoryError]) {
+              val logMessage = log"Block ${MDC(BLOCK_ID, blockId)} fetch failed after " +
+                log"${MDC(MAX_ATTEMPTS, maxAttemptsOnNettyOOM)} retries due to Netty OOM"
+              logError(logMessage)
+              errorMsg = logMessage.message
+            }
             throwFetchFailedException(blockId, mapIndex, address, error, Some(errorMsg))
           }
 
