@@ -1683,7 +1683,7 @@
   },
   "EVENT_TIME_MUST_BE_TOP_LEVEL_COLUMN" : {
     "message" : [
-      "The event time column <eventExpr> must be a top-level column in the schema."
+      "The event time in withWatermark must be a top-level column, but '<eventExpr>' is a nested field. To use it, alias it to a top-level column in a select before withWatermark."
     ],
     "sqlState" : "42K09"
   },
