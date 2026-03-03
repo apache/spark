@@ -26,7 +26,7 @@ import io.grpc.ForwardingServerCallListener.SimpleForwardingServerCallListener
 
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.LogKeys.{BYTE_SIZE, CLASS_NAME, SESSION_ID, USER_ID}
+import org.apache.spark.internal.LogKeys.{BYTE_SIZE, SESSION_ID, USER_ID}
 import org.apache.spark.sql.connect.utils.{ErrorUtils, PlanCompressionUtils}
 
 /**
@@ -110,14 +110,15 @@ class RequestDecompressionInterceptor extends ServerInterceptor with Logging {
     if (!request.hasPlan) {
       return (request, Seq.empty)
     }
-    val (decompressedReq, size) = decompressPlanGeneric(
-      request,
+    decompressPlan(
+      request.getPlan,
       request.getUserContext.getUserId,
-      request.getSessionId,
-      (r: proto.ExecutePlanRequest) => r.getPlan,
-      (req: proto.ExecutePlanRequest, plan: proto.Plan) => req.toBuilder.setPlan(plan).build())
-
-    (decompressedReq, Seq(size))
+      request.getSessionId) match {
+      case Some((plan, size)) =>
+        (request.toBuilder.setPlan(plan).build(), Seq(Some(size)))
+      case None =>
+        (request, Seq(None))
+    }
   }
 
   private def decompressAnalyzePlanRequest(
@@ -125,12 +126,16 @@ class RequestDecompressionInterceptor extends ServerInterceptor with Logging {
     val userId = request.getUserContext.getUserId
     val sessionId = request.getSessionId
 
-    // Helper to decompress a single-plan analysis type
+    // Helper: decompress a plan and rebuild the request only if compressed
     def decompress(
         req: proto.AnalyzePlanRequest,
-        getPlan: proto.AnalyzePlanRequest => proto.Plan,
-        rebuild: (proto.AnalyzePlanRequest, proto.Plan) => proto.AnalyzePlanRequest) = {
-      decompressPlanGeneric(req, userId, sessionId, getPlan, rebuild)
+        plan: proto.Plan,
+        rebuild: proto.Plan => proto.AnalyzePlanRequest)
+        : (proto.AnalyzePlanRequest, Option[Long]) = {
+      decompressPlan(plan, userId, sessionId) match {
+        case Some((decompressedPlan, size)) => (rebuild(decompressedPlan), Some(size))
+        case None => (req, None)
+      }
     }
 
     // NOTE: All AnalyzePlanRequest cases are explicitly listed here.
@@ -140,66 +145,80 @@ class RequestDecompressionInterceptor extends ServerInterceptor with Logging {
       case proto.AnalyzePlanRequest.AnalyzeCase.SCHEMA =>
         val (req, size) = decompress(
           request,
-          _.getSchema.getPlan,
-          (r, p) => r.toBuilder.setSchema(r.getSchema.toBuilder.setPlan(p)).build())
+          request.getSchema.getPlan,
+          p => request.toBuilder.setSchema(request.getSchema.toBuilder.setPlan(p)).build())
         (req, Seq(size))
 
       case proto.AnalyzePlanRequest.AnalyzeCase.EXPLAIN =>
         val (req, size) = decompress(
           request,
-          _.getExplain.getPlan,
-          (r, p) => r.toBuilder.setExplain(r.getExplain.toBuilder.setPlan(p)).build())
+          request.getExplain.getPlan,
+          p => request.toBuilder.setExplain(request.getExplain.toBuilder.setPlan(p)).build())
         (req, Seq(size))
 
       case proto.AnalyzePlanRequest.AnalyzeCase.TREE_STRING =>
         val (req, size) = decompress(
           request,
-          _.getTreeString.getPlan,
-          (r, p) => r.toBuilder.setTreeString(r.getTreeString.toBuilder.setPlan(p)).build())
+          request.getTreeString.getPlan,
+          p =>
+            request.toBuilder
+              .setTreeString(request.getTreeString.toBuilder.setPlan(p))
+              .build())
         (req, Seq(size))
 
       case proto.AnalyzePlanRequest.AnalyzeCase.IS_LOCAL =>
         val (req, size) = decompress(
           request,
-          _.getIsLocal.getPlan,
-          (r, p) => r.toBuilder.setIsLocal(r.getIsLocal.toBuilder.setPlan(p)).build())
+          request.getIsLocal.getPlan,
+          p => request.toBuilder.setIsLocal(request.getIsLocal.toBuilder.setPlan(p)).build())
         (req, Seq(size))
 
       case proto.AnalyzePlanRequest.AnalyzeCase.IS_STREAMING =>
         val (req, size) = decompress(
           request,
-          _.getIsStreaming.getPlan,
-          (r, p) => r.toBuilder.setIsStreaming(r.getIsStreaming.toBuilder.setPlan(p)).build())
+          request.getIsStreaming.getPlan,
+          p =>
+            request.toBuilder
+              .setIsStreaming(request.getIsStreaming.toBuilder.setPlan(p))
+              .build())
         (req, Seq(size))
 
       case proto.AnalyzePlanRequest.AnalyzeCase.INPUT_FILES =>
         val (req, size) = decompress(
           request,
-          _.getInputFiles.getPlan,
-          (r, p) => r.toBuilder.setInputFiles(r.getInputFiles.toBuilder.setPlan(p)).build())
+          request.getInputFiles.getPlan,
+          p =>
+            request.toBuilder
+              .setInputFiles(request.getInputFiles.toBuilder.setPlan(p))
+              .build())
         (req, Seq(size))
 
       case proto.AnalyzePlanRequest.AnalyzeCase.SEMANTIC_HASH =>
         val (req, size) = decompress(
           request,
-          _.getSemanticHash.getPlan,
-          (r, p) => r.toBuilder.setSemanticHash(r.getSemanticHash.toBuilder.setPlan(p)).build())
+          request.getSemanticHash.getPlan,
+          p =>
+            request.toBuilder
+              .setSemanticHash(request.getSemanticHash.toBuilder.setPlan(p))
+              .build())
         (req, Seq(size))
 
       case proto.AnalyzePlanRequest.AnalyzeCase.SAME_SEMANTICS =>
         // Special case: has two Plan fields (target_plan and other_plan)
         val (reqWithTarget, targetSize) = decompress(
           request,
-          _.getSameSemantics.getTargetPlan,
-          (r, p) =>
-            r.toBuilder.setSameSemantics(r.getSameSemantics.toBuilder.setTargetPlan(p)).build())
-
+          request.getSameSemantics.getTargetPlan,
+          p =>
+            request.toBuilder
+              .setSameSemantics(request.getSameSemantics.toBuilder.setTargetPlan(p))
+              .build())
         val (finalReq, otherSize) = decompress(
           reqWithTarget,
-          _.getSameSemantics.getOtherPlan,
-          (r, p) =>
-            r.toBuilder.setSameSemantics(r.getSameSemantics.toBuilder.setOtherPlan(p)).build())
-
+          reqWithTarget.getSameSemantics.getOtherPlan,
+          p =>
+            reqWithTarget.toBuilder
+              .setSameSemantics(reqWithTarget.getSameSemantics.toBuilder.setOtherPlan(p))
+              .build())
         (finalReq, Seq(targetSize, otherSize))
 
       // Cases with Relation fields - currently not compressed
@@ -228,35 +247,31 @@ class RequestDecompressionInterceptor extends ServerInterceptor with Logging {
     }
   }
 
-  private def decompressPlanGeneric[Req](
-      request: Req,
+  /**
+   * Decompresses a plan if it contains a compressed operation. Returns Some((decompressedPlan,
+   * compressedSize)) if compressed, None otherwise.
+   */
+  private def decompressPlan(
+      plan: proto.Plan,
       userId: String,
-      sessionId: String,
-      getPlan: Req => proto.Plan,
-      rebuild: (Req, proto.Plan) => Req): (Req, Option[Long]) = {
-
-    val plan = getPlan(request)
-
+      sessionId: String): Option[(proto.Plan, Long)] = {
     if (plan.getOpTypeCase != proto.Plan.OpTypeCase.COMPRESSED_OPERATION) {
-      return (request, None)
+      return None
     }
     val compressedSize = plan.getCompressedOperation.getData.size().toLong
-    val requestType = request.getClass.getSimpleName
     logInfo(
-      log"Received compressed plan in ${MDC(CLASS_NAME, requestType)} " +
+      log"Received compressed plan " +
         log"(size=${MDC(BYTE_SIZE, compressedSize)} bytes): " +
         log"userId=${MDC(USER_ID, userId)}, sessionId=${MDC(SESSION_ID, sessionId)}")
 
     val decompressedPlan = PlanCompressionUtils.decompressPlan(plan)
-
     logInfo(
       log"Plan decompression completed " +
         log"(compressed=${MDC(BYTE_SIZE, compressedSize)} bytes -> " +
         log"decompressed=${MDC(BYTE_SIZE, decompressedPlan.getSerializedSize.toLong)} bytes, " +
         log"userId=${MDC(USER_ID, userId)}, sessionId=${MDC(SESSION_ID, sessionId)}")
 
-    val decompressedRequest = rebuild(request, decompressedPlan)
-    (decompressedRequest, Some(compressedSize))
+    Some((decompressedPlan, compressedSize))
   }
 }
 
