@@ -6544,6 +6544,12 @@
     ],
     "sqlState" : "42KD9"
   },
+  "UNABLE_TO_INFER_SCHEMA_FOR_DATA_SOURCE" : {
+    "message" : [
+      "Unable to infer schema for <format> at <fileCatalog>. It must be specified manually."
+    ],
+    "sqlState" : "42KD9"
+  },
   "UNBOUND_SQL_PARAMETER" : {
     "message" : [
       "Found the unbound parameter: <name>. Please, fix `args` and provide a mapping of the parameter to either a SQL literal or collection constructor functions such as `map()`, `array()`, `struct()`."
@@ -8344,11 +8350,6 @@
   "_LEGACY_ERROR_TEMP_1132" : {
     "message" : [
       "A schema needs to be specified when using <className>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1134" : {
-    "message" : [
-      "Unable to infer schema for <format> at <fileCatalog>. It must be specified manually."
     ]
   },
   "_LEGACY_ERROR_TEMP_1135" : {
