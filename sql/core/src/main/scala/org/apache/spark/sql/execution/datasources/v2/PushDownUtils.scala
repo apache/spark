@@ -138,32 +138,33 @@ object PushDownUtils {
         // Data source filters that need to be evaluated again after scanning. which means
         // the data source cannot guarantee the rows returned can pass these filters.
         // As a result we must return it so Spark can plan an extra filter operator.
-        val postScanFilters = r.pushPredicates(translatedFilters.toArray).map { predicate =>
-          DataSourceV2Strategy.rebuildExpressionFromFilter(predicate, translatedFilterToExpr)
+        val firstPassPostScanFilters = r.pushPredicates(translatedFilters.toArray).map {
+          predicate =>
+            DataSourceV2Strategy.rebuildExpressionFromFilter(predicate, translatedFilterToExpr)
         }
 
-        // When partition schema is available (enhanced partition filter enabled
-        // as per SPARK-55596), wrap untranslatable expressions and those returned by
-        // the data source in PartitionPredicate for a second phase of partition filtering.
-        val secondPassFilterExprs = untranslatableExprs.toSeq ++ postScanFilters
-        val secondPassPartitionFilters = partitionSchema match {
+        // When partition schema is available (enhanced partition filter enabled as per
+        // SPARK-55596), calculate PartitionPredicates
+        val secondPassFilterExprs = untranslatableExprs.toSeq ++ firstPassPostScanFilters
+        val (partitionPredicates, untranslatableDataFilters) = partitionSchema match {
           case Some(structType) =>
-            val partitionExprs = DataSourceUtils.getPartitionFiltersAndDataFilters(
-              structType, secondPassFilterExprs)._1
-            partitionExprs.map(expr => new PartitionPredicateImpl(expr, toAttributes(structType)))
+            val (partitionExprs, dataExprs) =
+              DataSourceUtils.getPartitionFiltersAndDataFilters(structType, secondPassFilterExprs)
+            val preds = partitionExprs.map(expr =>
+              new PartitionPredicateImpl(expr, toAttributes(structType)))
+            (preds, dataExprs)
           case None =>
-            Seq.empty[PartitionPredicate]
+            (Seq.empty[PartitionPredicate], secondPassFilterExprs)
         }
 
-        // Pushdown PartitionPredicate in the second pass.
         val finalPostScanFilters = if (r.supportsEnhancedPartitionFiltering()) {
-          val secondPassPostScanFilters = r.pushPredicates(secondPassPartitionFilters.toArray).map {
+          val secondPassPostScanFilters = r.pushPredicates(partitionPredicates.toArray).map {
             predicate =>
               DataSourceV2Strategy.rebuildExpressionFromFilter(predicate, translatedFilterToExpr)
           }
-          postScanFilters ++ secondPassPostScanFilters
+          firstPassPostScanFilters ++ secondPassPostScanFilters ++ untranslatableDataFilters
         } else {
-          postScanFilters
+          firstPassPostScanFilters ++ untranslatableExprs
         }
 
         // Normally translated filters (postScanFilters) are simple filters that can be evaluated
