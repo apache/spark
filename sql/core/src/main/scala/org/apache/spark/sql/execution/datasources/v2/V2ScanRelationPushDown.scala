@@ -876,9 +876,6 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
     case p: Project =>
       val (newChild, isPartiallyPushed) = pushDownLimit(p.child, limit)
       (p.withNewChildren(Seq(newChild)), isPartiallyPushed)
-    // Do not push limit past a Filter (post-scan filter); we need to keep the limit in the plan
-    // so that the limit is applied after the filter for correctness.
-    case _: Filter => (plan, false)
     case other => (other, false)
   }
 

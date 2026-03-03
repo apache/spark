@@ -151,7 +151,7 @@ class DataSourceV2EnhancedPartitionFilterSuite
     }
   }
 
-  test("untranslatable data filters are applied after scan (not dropped)") {
+  test("untranslatable data filters are applied after scan") {
     withTable(partFilterTableName) {
       sql(s"CREATE TABLE $partFilterTableName (part_col string, data string) USING $v2Source " +
         "PARTITIONED BY (part_col)")
