@@ -192,12 +192,6 @@ case class FixedLength(length: Int) extends StringConstraint
 case class MaxLength(length: Int) extends StringConstraint
 
 /**
- * A special [[StringType]] object that represents strings with an explicit `UTF8_BINARY` collation.
- *
- * This type is needed to distinguish between strings that have the default `UTF8_BINARY` collation
- * implicitly (the companion object [[StringType]]) and strings where `UTF8_BINARY` was explicitly
- * specified (e.g., `STRING COLLATE UTF8_BINARY`).
- *
  * Used in the context of UDFs when resolving parameters/return types.
  *
  * For example, if a UDF parameter is defined as `p1 STRING COLLATE UTF8_BINARY`,
