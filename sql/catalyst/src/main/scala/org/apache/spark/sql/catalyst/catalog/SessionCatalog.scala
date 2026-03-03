@@ -2425,7 +2425,9 @@ class SessionCatalog(
    * Resolution order follows the configured path (e.g. builtin then session).
    */
   def resolveBuiltinOrTempFunction(name: String, arguments: Seq[Expression]): Option[Expression] =
-    resolveFunctionWithFallback(name, arguments, functionRegistry)
+    sessionFunctionKindsInResolutionOrder.iterator
+      .flatMap(kind => resolveScalarFunction(kind, name, arguments))
+      .nextOption()
 
   /**
    * Look up a table function by name and resolve it to a LogicalPlan.
@@ -2439,34 +2441,9 @@ class SessionCatalog(
   def resolveBuiltinOrTempTableFunction(
       name: String,
       arguments: Seq[Expression]): Option[LogicalPlan] =
-    resolveFunctionWithFallback(name, arguments, tableFunctionRegistry)
-
-  /**
-   * Resolves functions by trying each session namespace in resolution order.
-   * Uses the kind-based resolve API.
-   *
-   * @param name The function name (unqualified).
-   * @param arguments The arguments to pass to the function.
-   * @param registry The registry to search (FunctionRegistry or TableFunctionRegistry).
-   * @tparam T The registry's type parameter (Expression for FunctionRegistry,
-   *           LogicalPlan for TableFunctionRegistry).
-   * @return Resolved function if found, None otherwise.
-   */
-  private def resolveFunctionWithFallback[T](
-      name: String,
-      arguments: Seq[Expression],
-      registry: FunctionRegistryBase[T]): Option[T] = {
-
-    val tableFunction = registry eq tableFunctionRegistry
-    val result = sessionFunctionKindsInResolutionOrder.iterator.flatMap { kind =>
-      if (tableFunction) {
-        resolveTableFunction(kind, name, arguments)
-      } else {
-        resolveScalarFunction(kind, name, arguments)
-      }
-    }.nextOption()
-    result.asInstanceOf[Option[T]]
-  }
+    sessionFunctionKindsInResolutionOrder.iterator
+      .flatMap(kind => resolveTableFunction(kind, name, arguments))
+      .nextOption()
 
   /**
    * Look up a persistent function's ExpressionInfo by name (for DESCRIBE FUNCTION).
