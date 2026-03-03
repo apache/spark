@@ -101,6 +101,10 @@ table.sortable td {
   position: relative;
 }
 
+.progress-stacked > .progress {
+  height: 100%;
+}
+
 .progress-stacked .progress-bar.progress-started {
   background: linear-gradient(to bottom, #A4EDFF, #94DDFF);
 }
