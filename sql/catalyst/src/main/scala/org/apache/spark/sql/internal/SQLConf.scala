@@ -4745,7 +4745,6 @@ object SQLConf {
 
   val FILE_SOURCE_INSERT_ENFORCE_NOT_NULL =
     buildConf("spark.sql.fileSource.insert.enforceNotNull")
-      .internal()
       .doc("When true, Spark enforces NOT NULL constraints when inserting data into " +
         "file-based data source tables (e.g., Parquet, ORC, JSON), consistent with the " +
         "behavior for other data sources and V2 catalog tables. " +
