@@ -11700,9 +11700,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             new_data_columns = [
                 ranked_struct_col[col_name].alias(col_name) for col_name in column_label_strings
             ]
-            sdf = psdf._internal.spark_frame.select(
-                psdf._internal.index_spark_columns + new_data_columns
-            )
             data_fields = [
                 InternalField(
                     dtype=np.dtype("float64"),
@@ -11710,20 +11707,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 )
                 for label in psdf._internal.column_labels
             ]
-            internal = InternalFrame(
-                spark_frame=sdf,
-                index_spark_columns=[
-                    scol_for(sdf, col) for col in psdf._internal.index_spark_column_names
-                ],
-                index_names=psdf._internal.index_names,
-                index_fields=psdf._internal.index_fields,
-                column_labels=psdf._internal.column_labels,
-                data_spark_columns=[
-                    scol_for(sdf, name_like_string(label)) for label in psdf._internal.column_labels
-                ],
-                data_fields=data_fields,
-                column_label_names=psdf._internal.column_label_names,
-            )
+            internal = psdf._internal.with_new_columns(new_data_columns, data_fields=data_fields)
             return DataFrame(internal)
 
     def filter(
