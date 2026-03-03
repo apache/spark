@@ -1482,7 +1482,10 @@ class AnalysisSuite extends AnalysisTest with Matchers {
          |FROM t1
          |JOIN t2 ON t1.user_id = t2.user_id
          |WHERE t1.dt >= DATE_SUB('2020-12-27', 90)""".stripMargin),
-      "TABLE_OR_VIEW_NOT_FOUND", Map("relationName" -> "`t2`"),
+      "TABLE_OR_VIEW_NOT_FOUND_WITH_SEARCH_PATH",
+      Map(
+        "relationName" -> "`t2`",
+        "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"),
       Array(ExpectedContext("t2", 84, 85)))
   }
 
