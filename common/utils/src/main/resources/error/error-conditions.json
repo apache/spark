@@ -6399,7 +6399,7 @@
     "message" : [
       "It is not allowed to define a TEMPORARY view with IF NOT EXISTS."
     ],
-    "sqlState" : "42601"
+    "sqlState" : "0A000"
   },
   "TEMP_VIEW_NAME_TOO_MANY_NAME_PARTS" : {
     "message" : [
