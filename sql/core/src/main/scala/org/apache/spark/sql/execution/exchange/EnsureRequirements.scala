@@ -477,7 +477,7 @@ case class EnsureRequirements(
       // sources.
       if (isCompatible) {
         val leftPartKeys = leftPartitioning.partitionKeys
-        val rightPartKeys = leftPartitioning.partitionKeys
+        val rightPartKeys = rightPartitioning.partitionKeys
 
         val numLeftPartKeys = MDC(LogKeys.NUM_LEFT_PARTITION_VALUES, leftPartKeys.size)
         val numRightPartKeys = MDC(LogKeys.NUM_RIGHT_PARTITION_VALUES, rightPartKeys.size)
