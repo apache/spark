@@ -2677,9 +2677,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
             eval_type == PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF
             or eval_type == PythonEvalType.SQL_GROUPED_MAP_ARROW_ITER_UDF
         ):
-            ser = ArrowStreamGroupUDFSerializer(
-                assign_cols_by_name=runner_conf.assign_cols_by_name
-            )
+            ser = ArrowStreamGroupUDFSerializer(assign_cols_by_name=runner_conf.assign_cols_by_name)
         elif eval_type in (
             PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
             PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF,
@@ -2708,9 +2706,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
                 int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
             )
         elif eval_type == PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF:
-            ser = CogroupArrowUDFSerializer(
-                assign_cols_by_name=runner_conf.assign_cols_by_name
-            )
+            ser = CogroupArrowUDFSerializer(assign_cols_by_name=runner_conf.assign_cols_by_name)
         elif eval_type == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
             ser = CogroupPandasUDFSerializer(
                 timezone=runner_conf.timezone,
@@ -2748,7 +2744,9 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
                 int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
             )
         elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF:
-            ser = TransformWithStateInPySparkRowSerializer(arrow_max_records_per_batch=runner_conf.arrow_max_records_per_batch)
+            ser = TransformWithStateInPySparkRowSerializer(
+                arrow_max_records_per_batch=runner_conf.arrow_max_records_per_batch
+            )
         elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF:
             ser = TransformWithStateInPySparkRowInitStateSerializer(
                 arrow_max_records_per_batch=runner_conf.arrow_max_records_per_batch
