@@ -267,7 +267,7 @@ class ArrowStreamArrowUDTFSerializer(ArrowStreamUDTFSerializer):
     Serializer for PyArrow-native UDTFs that work directly with PyArrow RecordBatches and Arrays.
     """
 
-    def __init__(self, table_arg_offsets=None):
+    def __init__(self, *, table_arg_offsets=None):
         super().__init__()
         self.table_arg_offsets = table_arg_offsets if table_arg_offsets else []
 
@@ -1655,7 +1655,7 @@ class TransformWithStateInPySparkRowSerializer(ArrowStreamUDFSerializer):
         Limit of the number of records that can be written to a single ArrowRecordBatch in memory.
     """
 
-    def __init__(self, arrow_max_records_per_batch):
+    def __init__(self, *, arrow_max_records_per_batch):
         super().__init__()
         self.arrow_max_records_per_batch = (
             arrow_max_records_per_batch if arrow_max_records_per_batch > 0 else 2**31 - 1
@@ -1754,8 +1754,8 @@ class TransformWithStateInPySparkRowInitStateSerializer(TransformWithStateInPySp
     Same as input parameters in TransformWithStateInPySparkRowSerializer.
     """
 
-    def __init__(self, arrow_max_records_per_batch):
-        super().__init__(arrow_max_records_per_batch)
+    def __init__(self, *, arrow_max_records_per_batch):
+        super().__init__(arrow_max_records_per_batch=arrow_max_records_per_batch)
         self.init_key_offsets = None
 
     def load_stream(self, stream):

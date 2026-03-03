@@ -2748,10 +2748,10 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
                 int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
             )
         elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF:
-            ser = TransformWithStateInPySparkRowSerializer(runner_conf.arrow_max_records_per_batch)
+            ser = TransformWithStateInPySparkRowSerializer(arrow_max_records_per_batch=runner_conf.arrow_max_records_per_batch)
         elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF:
             ser = TransformWithStateInPySparkRowInitStateSerializer(
-                runner_conf.arrow_max_records_per_batch
+                arrow_max_records_per_batch=runner_conf.arrow_max_records_per_batch
             )
         elif eval_type == PythonEvalType.SQL_MAP_ARROW_ITER_UDF:
             ser = ArrowStreamSerializer(write_start_stream=True)
