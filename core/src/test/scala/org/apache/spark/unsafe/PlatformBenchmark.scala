@@ -36,11 +36,11 @@ object PlatformBenchmark extends BenchmarkBase {
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     val count4k = 4 * 1024 // 4k elements
     val str4k = "4k"
-    val count16k = 16 * 1024 // 8k elements
+    val count16k = 16 * 1024 // 16k elements
     val str16k = "16k"
     val count256k = 256 * 1024 // 256k elements
     val str256k = "256k"
-    val count1m = 1 * 1024 * 1024 // 8M elements
+    val count1m = 1 * 1024 * 1024 // 1M elements
     val str1m = "1m"
     val count8m = 8 * 1024 * 1024 // 8M elements
     val str8m = "8m"
