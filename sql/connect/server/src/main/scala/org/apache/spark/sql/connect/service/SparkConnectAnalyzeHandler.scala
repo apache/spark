@@ -85,9 +85,7 @@ private[connect] class SparkConnectAnalyzeHandler(
     }
 
     def transformRelation(rel: proto.Relation) = planner.transformRelation(rel, cachePlan = true)
-    def transformRelationPlan(plan: proto.Plan) = {
-      transformRelation(plan.getRoot)
-    }
+    def transformRelationPlan(plan: proto.Plan) = transformRelation(plan.getRoot)
 
     def getDataFrameWithoutExecuting(rel: LogicalPlan): DataFrame = {
       val qe = session.sessionState.executePlan(rel, CommandExecutionMode.SKIP)
