@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.{KeyedPartitioning, SinglePartition}
-import org.apache.spark.sql.catalyst.util.truncatedString
+import org.apache.spark.sql.catalyst.util.{truncatedString, InternalRowComparableWrapper}
 import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.util.ArrayImplicits._
@@ -82,11 +82,11 @@ case class BatchScanExec(
                 "filtering")
           }
 
-          val inputMap = inputPartitions.groupBy(
-            p => k.comparableKeyWrapperFactory(p.asInstanceOf[HasPartitionKey].partitionKey())
-          ).view.mapValues(_.size)
+          val inputMap = k.partitionKeys.groupBy(identity).view.mapValues(_.size)
+          val comparableKeyWrapperFactory = InternalRowComparableWrapper
+            .getInternalRowComparableWrapperFactory(k.expressionDataTypes)
           val filteredMap = newPartitions.groupBy(
-            p => k.comparableKeyWrapperFactory(p.asInstanceOf[HasPartitionKey].partitionKey())
+            p => comparableKeyWrapperFactory(p.asInstanceOf[HasPartitionKey].partitionKey())
           )
 
           if (!filteredMap.keySet.subsetOf(inputMap.keySet)) {
@@ -95,11 +95,11 @@ case class BatchScanExec(
           }
 
           inputMap.toSeq
-            .sortBy { case (keyWrapper, _) => keyWrapper.row }(k.keyOrdering)
-            .flatMap { case (keyWrapper, size) =>
+            .sortBy(_._1)(k.keyOrdering)
+            .flatMap { case (key, size) =>
               // We require the new number of partitions to be equal or less than the old number of
               // partitions for a given key. In the case of less than, empty partitions are added.
-              val fps = filteredMap.getOrElse(keyWrapper, Array.empty)
+              val fps = filteredMap.getOrElse(key, Array.empty)
 
               if (fps.size > size) {
                 throw new SparkException("During runtime filtering, data source must not report " +
@@ -118,7 +118,7 @@ case class BatchScanExec(
     } else {
       (originalPartitioning match {
         case k: KeyedPartitioning =>
-          inputPartitions.sortBy(_.asInstanceOf[HasPartitionKey].partitionKey())(k.keyOrdering)
+          inputPartitions.sortBy(_.asInstanceOf[HasPartitionKey].partitionKey())(k.keyRowOrdering)
 
         case _ => inputPartitions
       }).map(Some)

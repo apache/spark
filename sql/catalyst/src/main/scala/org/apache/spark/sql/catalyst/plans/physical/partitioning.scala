@@ -402,16 +402,17 @@ case class CoalescedHashPartitioning(from: HashPartitioning, partitions: Seq[Coa
  * }}}
  *
  * @param expressions Partition transform expressions (e.g., `years(col)`, `bucket(10, col)`).
- * @param partitionKeys Partition keys, one per partition. When used as outputPartitioning,
- *                      always in sorted order. When used in KeyGroupedShuffleSpec, may be
- *                      unsorted after projection. May contain duplicates when ungrouped.
+ * @param partitionKeys Partition keys wrapped in InternalRowComparableWrapper for efficient
+ *                      comparison and grouping. One per partition. When used as outputPartitioning,
+ *                      always in sorted order. When used in KeyGroupedShuffleSpec, may be unsorted
+ *                      after projection. May contain duplicates when ungrouped.
  * @param isGrouped Whether partition keys are unique (no duplicates). Computed on first
  *                  creation, then preserved through copy operations to avoid recomputation.
  */
 case class KeyedPartitioning(
     expressions: Seq[Expression],
-    partitionKeys: Seq[InternalRow],
-    isGrouped: Boolean = false) extends Expression with Partitioning with Unevaluable {
+    @transient partitionKeys: Seq[InternalRowComparableWrapper],
+    isGrouped: Boolean) extends Expression with Partitioning with Unevaluable {
   override val numPartitions = partitionKeys.length
 
   override def children: Seq[Expression] = expressions
@@ -424,34 +425,30 @@ case class KeyedPartitioning(
 
   @transient lazy val expressionDataTypes: Seq[DataType] = expressions.map(_.dataType)
 
-  @transient lazy val comparableKeyWrapperFactory =
-    InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(expressionDataTypes)
+  @transient lazy val keyRowOrdering =
+    RowOrdering.createNaturalAscendingOrdering(expressionDataTypes)
 
-  @transient lazy val keyOrdering = RowOrdering.createNaturalAscendingOrdering(expressionDataTypes)
+  @transient lazy val keyOrdering = keyRowOrdering.on((t: InternalRowComparableWrapper) => t.row)
 
   def toGrouped: KeyedPartitioning = {
-    val groupedPartitionKeys =
-      partitionKeys.distinctBy(comparableKeyWrapperFactory).sorted(keyOrdering)
+    val groupedPartitionKeys = partitionKeys.distinct.sorted(keyOrdering)
 
-    KeyedPartitioning(expressions, groupedPartitionKeys, isGrouped = true)
+    new KeyedPartitioning(expressions, groupedPartitionKeys, isGrouped = true)
   }
 
   /**
    * Projects this partitioning's expressions by selecting only the specified positions.
    * Returns the projected expressions and their data types together with the projected keys.
    */
-  def projectKeys(positions: Seq[Int]): (Seq[DataType], Seq[InternalRow]) = {
+  def projectKeys(positions: Seq[Int]): (Seq[DataType], Seq[InternalRowComparableWrapper]) =
     KeyedPartitioning.projectKeys(partitionKeys, expressionDataTypes, positions)
-  }
 
   /**
    * Reduces this partitioning's partition keys by applying the given reducers.
    * Returns the distinct reduced keys.
    */
-  def reduceKeys(reducers: Seq[Option[Reducer[_, _]]]): Seq[InternalRow] = {
-    KeyedPartitioning.reduceKeys(partitionKeys, expressionDataTypes, reducers)
-      .distinctBy(comparableKeyWrapperFactory)
-  }
+  def reduceKeys(reducers: Seq[Option[Reducer[_, _]]]): Seq[InternalRowComparableWrapper] =
+    KeyedPartitioning.reduceKeys(partitionKeys, expressionDataTypes, reducers).distinct
 
   override def satisfies0(required: Distribution): Boolean = {
     super.satisfies0(required) || isGrouped && {
@@ -492,10 +489,8 @@ case class KeyedPartitioning(
       // the returned shuffle spec.
       val joinKeyPositions = result.keyPositions.map(_.nonEmpty).zipWithIndex.filter(_._1).map(_._2)
       val projectedExpressions = joinKeyPositions.map(expressions)
-      val (projectedDataTypes, projectedKeys) = projectKeys(joinKeyPositions)
-      val comparableKeyWrapperFactory =
-        InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(projectedDataTypes)
-      val distinctProjectedKeys = projectedKeys.distinctBy(comparableKeyWrapperFactory)
+      val projectedKeys = projectKeys(joinKeyPositions)._2
+      val distinctProjectedKeys = projectedKeys.distinct
       val projectedPartitioning =
         copy(expressions = projectedExpressions, partitionKeys = distinctProjectedKeys)
       result.copy(partitioning = projectedPartitioning, joinKeyPositions = Some(joinKeyPositions))
@@ -506,16 +501,13 @@ case class KeyedPartitioning(
 
   override def equals(that: Any): Boolean = that match {
     case k: KeyedPartitioning if this.expressions == k.expressions =>
-      partitionKeys.size == k.partitionKeys.size &&
-        partitionKeys.zip(k.partitionKeys).forall { case (l, r) =>
-          comparableKeyWrapperFactory(l).equals(comparableKeyWrapperFactory(r))
-        }
+      this.partitionKeys == k.partitionKeys
 
     case _ => false
   }
 
   override def hashCode(): Int =
-    Objects.hash(expressions, partitionKeys.map(comparableKeyWrapperFactory))
+    Objects.hash(expressions, partitionKeys)
 }
 
 object KeyedPartitioning {
@@ -529,8 +521,9 @@ object KeyedPartitioning {
     val dataTypes = expressions.map(_.dataType)
     val comparableKeyWrapperFactory =
       InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(dataTypes)
-    val isGrouped = partitionKeys.distinctBy(comparableKeyWrapperFactory).size == partitionKeys.size
-    new KeyedPartitioning(expressions, partitionKeys, isGrouped)
+    val comparablePartitionKeys = partitionKeys.map(comparableKeyWrapperFactory)
+    val isGrouped = comparablePartitionKeys.distinct.size == comparablePartitionKeys.size
+    new KeyedPartitioning(expressions, comparablePartitionKeys, isGrouped)
   }
 
   def supportsExpressions(expressions: Seq[Expression]): Boolean = {
@@ -556,16 +549,18 @@ object KeyedPartitioning {
    * Projects a sequence of partition keys by selecting only the specified positions.
    */
   def projectKeys(
-      keys: Seq[InternalRow],
+      keys: Seq[InternalRowComparableWrapper],
       dataTypes: Seq[DataType],
-      positions: Seq[Int]): (Seq[DataType], Seq[InternalRow]) = {
+      positions: Seq[Int]): (Seq[DataType], Seq[InternalRowComparableWrapper]) = {
     val projectedDataTypes = positions.map(dataTypes)
+    val comparableKeyWrapperFactory =
+      InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(projectedDataTypes)
     val positionsWithTypes = positions.zip(projectedDataTypes)
     val projectedKeys = keys.map { key =>
       val projectedKey = positionsWithTypes.map {
-        case (position, dataType) => key.get(position, dataType)
+        case (position, dataType) => key.row.get(position, dataType)
       }.toArray[Any]
-      new GenericInternalRow(projectedKey)
+      comparableKeyWrapperFactory(new GenericInternalRow(projectedKey))
     }
 
     (projectedDataTypes, projectedKeys)
@@ -575,16 +570,18 @@ object KeyedPartitioning {
    * Reduces a sequence of partition keys by applying reducers to each position.
    */
   def reduceKeys(
-      keys: Seq[InternalRow],
+      keys: Seq[InternalRowComparableWrapper],
       dataTypes: Seq[DataType],
-      reducers: Seq[Option[Reducer[_, _]]]): Seq[InternalRow] = {
+      reducers: Seq[Option[Reducer[_, _]]]): Seq[InternalRowComparableWrapper] = {
+    val comparableKeyWrapperFactory =
+      InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(dataTypes)
     keys.map { key =>
-      val keyValues = key.toSeq(dataTypes)
+      val keyValues = key.row.toSeq(dataTypes)
       val reducedKey = keyValues.zip(reducers).map {
         case (v, Some(reducer: Reducer[Any, Any])) => reducer.reduce(v)
         case (v, _) => v
       }.toArray
-      new GenericInternalRow(reducedKey)
+      comparableKeyWrapperFactory(new GenericInternalRow(reducedKey))
     }
   }
 }
@@ -973,11 +970,7 @@ case class KeyGroupedShuffleSpec(
     case otherSpec @ KeyGroupedShuffleSpec(otherPartitioning, otherDistribution, _) =>
       distribution.clustering.length == otherDistribution.clustering.length &&
         numPartitions == other.numPartitions && areKeysCompatible(otherSpec) &&
-          partitioning.partitionKeys.zip(otherPartitioning.partitionKeys).forall {
-            case (left, right) =>
-              partitioning.comparableKeyWrapperFactory(left)
-                .equals(partitioning.comparableKeyWrapperFactory(right))
-          }
+          partitioning.partitionKeys == otherPartitioning.partitionKeys
     case ShuffleSpecCollection(specs) =>
       specs.exists(isCompatibleWith)
     case _ => false

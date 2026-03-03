@@ -49,21 +49,31 @@ import org.apache.spark.sql.types.DataType
  */
 case class GroupPartitionsExec(
     child: SparkPlan,
-    joinKeyPositions: Option[Seq[Int]] = None,
-    commonPartitionKeys: Option[Seq[(InternalRow, Int)]] = None,
-    reducers: Option[Seq[Option[Reducer[_, _]]]] = None,
-    applyPartialClustering: Boolean = false,
-    replicatePartitions: Boolean = false
+    @transient joinKeyPositions: Option[Seq[Int]] = None,
+    @transient commonPartitionKeys: Option[Seq[(InternalRowComparableWrapper, Int)]] = None,
+    @transient reducers: Option[Seq[Option[Reducer[_, _]]]] = None,
+    @transient applyPartialClustering: Boolean = false,
+    @transient replicatePartitions: Boolean = false
   ) extends UnaryExecNode {
 
   override def outputPartitioning: Partitioning = {
     child.outputPartitioning match {
       case p: Partitioning with Expression =>
+        // There can be multiple `KeyedPartitioning` in an output partitioning of a join, but they
+        // can only differ in `expressions`. `partitionKeys` must match so we can calculate it only
+        // once via `groupedPartitions`.
+
+        val keyedPartitionings = p.collect { case k: KeyedPartitioning => k }
+        if (keyedPartitionings.size > 1) {
+          val first = keyedPartitionings.head
+          keyedPartitionings.tail.foreach { k =>
+            assert(k.partitionKeys == first.partitionKeys,
+              "All KeyedPartitioning nodes must have identical partition keys")
+          }
+        }
+
         p.transform {
           case k: KeyedPartitioning =>
-            // There can be multiple `KeyedPartitioning` in an output partitioning of a join, but
-            // they can only differ in `expressions`. `partitionKeys` must match so we can calculate
-            // it only once via `groupedPartitions`.
             val projectedExpressions = joinKeyPositions.fold(k.expressions)(_.map(k.expressions))
             k.copy(expressions = projectedExpressions, partitionKeys = groupedPartitions.map(_._1))
         }.asInstanceOf[Partitioning]
@@ -74,12 +84,9 @@ case class GroupPartitionsExec(
   /**
    * Distributes partitions based on `commonPartitionKeys` and clustering mode.
    */
-  private def distributeByCommonKeys(
-      keyWrapperMap: Map[InternalRowComparableWrapper, Seq[Int]],
-      comparableKeyWrapperFactory: InternalRow => InternalRowComparableWrapper
-  ): Seq[(InternalRow, Seq[Int])] = {
+  private def distributeByCommonKeys(keyMap: Map[InternalRowComparableWrapper, Seq[Int]]) = {
     commonPartitionKeys.get.flatMap { case (key, numSplits) =>
-      val splits = keyWrapperMap.getOrElse(comparableKeyWrapperFactory(key), Seq.empty)
+      val splits = keyMap.getOrElse(key, Seq.empty)
       if (applyPartialClustering && !replicatePartitions) {
         // Distribute splits across expected partitions, padding with empty sequences
         val paddedSplits = splits.map(Seq(_)).padTo(numSplits, Seq.empty)
@@ -95,13 +102,10 @@ case class GroupPartitionsExec(
    * Groups and sorts partitions by their keys in ascending order.
    */
   private def groupAndSortByKeys(
-      keyWrapperMap: Map[InternalRowComparableWrapper, Seq[Int]],
-      dataTypes: Seq[DataType]
-  ): Seq[(InternalRow, Seq[Int])] = {
-    val rowOrdering = RowOrdering.createNaturalAscendingOrdering(dataTypes)
-    keyWrapperMap.toSeq
-      .map { case (keyWrapper, indices) => (keyWrapper.row, indices) }
-      .sorted(rowOrdering.on((t: (InternalRow, _)) => t._1))
+      keyMap: Map[InternalRowComparableWrapper, Seq[Int]],
+      dataTypes: Seq[DataType]) = {
+    val keyOrdering = RowOrdering.createNaturalAscendingOrdering(dataTypes)
+    keyMap.toSeq.sorted(keyOrdering.on((t: (InternalRowComparableWrapper, _)) => t._1.row))
   }
 
   /**
@@ -114,7 +118,7 @@ case class GroupPartitionsExec(
    * Returns a sequence of (partitionKey, inputPartitionIndices) pairs representing
    * how input partitions should be grouped together.
    */
-  lazy val groupedPartitions = {
+  @transient lazy val groupedPartitions = {
     // There must be a `KeyedPartitioning` in child's output partitioning as a
     // `GroupPartitionsExec` node is added to a plan only in that case.
     val keyedPartitioning = child.outputPartitioning
@@ -133,18 +137,12 @@ case class GroupPartitionsExec(
     val reducedKeys = reducers.fold(projectedKeys)(
       KeyedPartitioning.reduceKeys(projectedKeys, projectedDataTypes, _))
 
-    // Create map from partition keys to their indices
-    val comparableKeyWrapperFactory =
-      InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(projectedDataTypes)
-
-    val keyWrapperToPartitionIndices = reducedKeys.zipWithIndex.groupMap {
-      case (key, _) => comparableKeyWrapperFactory(key)
-    }(_._2)
+    val keyToPartitionIndices = reducedKeys.zipWithIndex.groupMap(_._1)(_._2)
 
     if (commonPartitionKeys.isDefined) {
-      distributeByCommonKeys(keyWrapperToPartitionIndices, comparableKeyWrapperFactory)
+      distributeByCommonKeys(keyToPartitionIndices)
     } else {
-      groupAndSortByKeys(keyWrapperToPartitionIndices, projectedDataTypes)
+      groupAndSortByKeys(keyToPartitionIndices, projectedDataTypes)
     }
   }
 

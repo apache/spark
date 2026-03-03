@@ -370,13 +370,12 @@ object ShuffleExchangeExec {
           ascending = true,
           samplePointsPerPartitionHint = SQLConf.get.rangeExchangeSampleSizePerPartition)
       case SinglePartition => new ConstantPartitioner
-      case k @ KeyedPartitioning(expressions, _) =>
+      case k @ KeyedPartitioning(expressions, _, _) =>
         val keyGroupedPartitioning = k.toGrouped
         val valueMap = keyGroupedPartitioning.partitionKeys.zipWithIndex.map {
-          case (partition, index) => (partition.toSeq(expressions.map(_.dataType)), index)
+          case (key, index) => (key.row.toSeq(expressions.map(_.dataType)), index)
         }.toMap
-        new KeyGroupedPartitioner(mutable.Map(valueMap.toSeq: _*),
-          keyGroupedPartitioning.numPartitions)
+        new KeyGroupedPartitioner(mutable.Map.from(valueMap), keyGroupedPartitioning.numPartitions)
       case p => throw SparkException.internalError(s"Exchange not implemented for $newPartitioning")
       // TODO: Handle BroadcastPartitioning.
     }
@@ -403,7 +402,7 @@ object ShuffleExchangeExec {
         val projection = UnsafeProjection.create(sortingExpressions.map(_.child), outputAttributes)
         row => projection(row)
       case SinglePartition => identity
-      case KeyedPartitioning(expressions, _) =>
+      case KeyedPartitioning(expressions, _, _) =>
         row => bindReferences(expressions, outputAttributes).map(_.eval(row))
       case s: ShufflePartitionIdPassThrough =>
         // For ShufflePartitionIdPassThrough, the expression directly evaluates to the partition ID

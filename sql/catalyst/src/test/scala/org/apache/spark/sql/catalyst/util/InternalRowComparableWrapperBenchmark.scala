@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import scala.collection.mutable
+
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
-import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.catalyst.plans.physical.KeyedPartitioning
 import org.apache.spark.sql.connector.catalog.PartitionInternalRow
 import org.apache.spark.sql.types.IntegerType
 
@@ -47,24 +47,22 @@ object InternalRowComparableWrapperBenchmark extends BenchmarkBase {
     }
     val benchmark = new Benchmark("internal row comparable wrapper", partitionNum, output = output)
 
+    val comparableKeyWrapperFactory =
+      InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(
+        Seq(IntegerType, IntegerType))
+    val comparablePartitionKeys = partitionKeys.map(comparableKeyWrapperFactory)
+
     benchmark.addCase("toSet") { _ =>
-      val internalRowComparableWrapperFactory =
-        InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(
-          Seq(IntegerType, IntegerType))
-      val distinct = partitionKeys
-        .map(internalRowComparableWrapperFactory)
-        .toSet
+      val distinct = comparablePartitionKeys.toSet
+
       assert(distinct.size == bucketNum)
     }
 
     benchmark.addCase("mergePartitions") { _ =>
-      // just to mock the data types
-      val expressions = (Seq(Literal(day, IntegerType), Literal(0, IntegerType)))
+      val leftKeySet = mutable.HashSet.from(comparablePartitionKeys)
+      val rightKeySet = mutable.HashSet.from(comparablePartitionKeys)
+      val merged = leftKeySet.union(rightKeySet)
 
-      val leftPartitioning = KeyedPartitioning(expressions, partitionKeys)
-      val rightPartitioning = KeyedPartitioning(expressions, partitionKeys)
-      val merged = InternalRowComparableWrapper.mergePartitions(
-        leftPartitioning.partitionKeys, rightPartitioning.partitionKeys, expressions)
       assert(merged.size == bucketNum)
     }
 
