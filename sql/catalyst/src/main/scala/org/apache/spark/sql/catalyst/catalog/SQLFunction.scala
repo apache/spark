@@ -29,8 +29,7 @@ import org.apache.spark.sql.catalyst.catalog.UserDefinedFunction._
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo, ScalarSubquery}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation, Project}
-import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.types.{DataType, ExplicitUTF8BinaryStringType, StructType}
 
 /**
  * Represent a SQL function.
@@ -155,16 +154,13 @@ case class SQLFunction(
    */
   private def sqlFunctionToProps: Map[String, String] = {
     val props = new mutable.HashMap[String, String]
-    val inputParamText = inputParam.map(
-      DataTypeUtils.replaceNonCollatedTypesWithExplicitUTF8Binary(_)
-        .asInstanceOf[StructType].fields.map(_.toDDL).mkString(", "))
+    val inputParamText = inputParam.map(ExplicitUTF8BinaryStringType.transform(_)
+      .asInstanceOf[StructType].fields.map(_.toDDL).mkString(", "))
     inputParamText.foreach(props.put(INPUT_PARAM, _))
     val returnTypeText = returnType match {
-      case Left(dataType) =>
-        DataTypeUtils.replaceNonCollatedTypesWithExplicitUTF8Binary(dataType).sql
+      case Left(dataType) => ExplicitUTF8BinaryStringType.transform(dataType).sql
       case Right(columns) =>
-        DataTypeUtils.replaceNonCollatedTypesWithExplicitUTF8Binary(columns)
-          .asInstanceOf[StructType].toDDL
+        ExplicitUTF8BinaryStringType.transform(columns).asInstanceOf[StructType].toDDL
     }
     props.put(RETURN_TYPE, returnTypeText)
     exprText.foreach(props.put(EXPRESSION, _))
