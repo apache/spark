@@ -376,7 +376,7 @@ object ShuffleExchangeExec {
           case (key, index) => (key.row.toSeq(expressions.map(_.dataType)), index)
         }.toMap
         new KeyGroupedPartitioner(mutable.Map.from(valueMap), keyGroupedPartitioning.numPartitions)
-      case p => throw SparkException.internalError(s"Exchange not implemented for $newPartitioning")
+      case _ => throw SparkException.internalError(s"Exchange not implemented for $newPartitioning")
       // TODO: Handle BroadcastPartitioning.
     }
     def getPartitionKeyExtractor(): InternalRow => Any = newPartitioning match {
