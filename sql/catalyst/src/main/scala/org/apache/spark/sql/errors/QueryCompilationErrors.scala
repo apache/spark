@@ -1771,11 +1771,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   }
 
   def dataSchemaNotSpecifiedError(format: String, fileCatalog: String): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1134",
-      messageParameters = Map(
-        "format" -> format,
-        "fileCatalog" -> fileCatalog))
+    dataSchemaNotSpecifiedError(format)
   }
 
   def invalidDataSourceError(className: String): Throwable = {
