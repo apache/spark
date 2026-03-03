@@ -4373,6 +4373,12 @@
     },
     "sqlState" : "42000"
   },
+  "JDBC_TABLE_AND_QUERY_BOTH_SPECIFIED" : {
+    "message" : [
+      "Both '<jdbcTableName>' and '<jdbcQueryString>' can not be specified at the same time."
+    ],
+    "sqlState" : "42613"
+  },
   "JOIN_CONDITION_IS_NOT_BOOLEAN_TYPE" : {
     "message" : [
       "The join condition <joinCondition> has the invalid type <conditionType>, expected \"BOOLEAN\"."
@@ -9120,11 +9126,6 @@
   "_LEGACY_ERROR_TEMP_2077" : {
     "message" : [
       "Unsupported field name: <fieldName>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2078" : {
-    "message" : [
-      "Both '<jdbcTableName>' and '<jdbcQueryString>' can not be specified at the same time."
     ]
   },
   "_LEGACY_ERROR_TEMP_2079" : {
