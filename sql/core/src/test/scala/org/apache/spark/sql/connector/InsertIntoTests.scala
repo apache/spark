@@ -270,13 +270,18 @@ trait InsertIntoSQLOnlyTests
     val t1 = s"${catalogAndNamespace}tbl"
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
+      val tableName = if (catalogAndNamespace.isEmpty) {
+        toSQLId(s"spark_catalog.default.$t1")
+      } else {
+        toSQLId(t1)
+      }
       checkError(
         exception = intercept[AnalysisException] {
           sql(s"INSERT INTO $t1 BY NAME SELECT 2L AS id, TRUE AS active, 'b' AS data")
         },
         condition = "INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS",
         parameters = Map(
-          "tableName" -> toSQLId(t1),
+          "tableName" -> tableName,
           "tableColumns" -> "`id`, `data`",
           "dataColumns" -> "`id`, `active`, `data`")
       )
