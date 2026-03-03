@@ -441,7 +441,7 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
                    class="form-control form-control-sm" style="width: 60px;" />
             <label>items in a page.</label>
 
-            <button type="submit" class="btn btn-spark">Go</button>
+            <button type="submit" class="btn btn-outline-secondary">Go</button>
           </form>
         </div>
       </div>

@@ -42,21 +42,7 @@ a:not([href]):not([class]):hover {
   text-decoration:underline
 }
 
-.btn-spark {
-  color:#333333;
-  background-color:#ffffff;
-  background-image:linear-gradient(to bottom, #ffffff, #e6e6e6);
-  background-repeat:repeat-x;
-  border: 1px solid #ced4da;
-  border-bottom-color: #b3b3b3;
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.2), 0 1px 2px rgba(0,0,0,.05);
-}
 
-.btn-spark:hover {
-  background-color: #e6e6e6;
-  background-position:0 -15px;
-  transition:background-position 0.1s linear;
-}
 
 .form-inline label {
   margin-left: 0.25rem;
