@@ -46,7 +46,7 @@ import org.apache.spark.unsafe.types.UTF8String
  *   TimeTypeApiOps for reference implementation
  * @since 4.2.0
  */
-trait TypeApiOps extends Serializable {
+trait TypeApiOps {
 
   /** The DataType this Ops instance handles. */
   def dataType: DataType

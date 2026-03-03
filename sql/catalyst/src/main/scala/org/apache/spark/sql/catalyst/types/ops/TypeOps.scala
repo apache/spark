@@ -58,7 +58,7 @@ import org.apache.spark.sql.types.{DataType, TimeType}
  *   TimeTypeOps for a reference implementation
  * @since 4.2.0
  */
-trait TypeOps extends Serializable {
+trait TypeOps {
 
   /** The DataType this Ops instance handles. */
   def dataType: DataType
