@@ -82,5 +82,16 @@ class PartitionPredicateImpl(
     }
   }
 
-  override def referencedPartitionColumnOrdinals(): Array[Int] = Array.empty[Int]
+  override def referencedPartitionColumnOrdinals(): Array[Int] = {
+    val partitionNames = partitionSchema.map(_.name)
+    val ordinals = catalystExpression.references.flatMap { ref =>
+      val idx = partitionNames.indexWhere(_ == ref.name)
+      if (idx >= 0) {
+        Some(idx)
+      } else {
+        None
+      }
+    }
+    ordinals.toArray.sorted.distinct
+  }
 }

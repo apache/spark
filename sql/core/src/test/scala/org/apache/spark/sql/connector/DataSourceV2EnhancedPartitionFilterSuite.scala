@@ -22,7 +22,10 @@ import java.util.Locale
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.{QueryTest, Row}
-import org.apache.spark.sql.connector.catalog.{BufferedRows, InMemoryTableEnhancedPartitionFilterCatalog}
+import org.apache.spark.sql.connector.catalog.BufferedRows
+import org.apache.spark.sql.connector.catalog.InMemoryTableEnhancedPartitionFilterCatalog
+import org.apache.spark.sql.connector.catalog.TestPartitionPredicateScan
+import org.apache.spark.sql.connector.expressions.filter.PartitionPredicate
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -48,6 +51,21 @@ class DataSourceV2EnhancedPartitionFilterSuite
 
   after {
     spark.sessionState.catalogManager.reset()
+  }
+
+  /**
+   * Collects pushed partition predicates from the plan when the scan is our
+   * test in-memory scan.
+   */
+  private def getPushedPartitionPredicates(
+      df: org.apache.spark.sql.DataFrame): Seq[PartitionPredicate] = {
+    val batchScan = df.queryExecution.executedPlan.collectFirst {
+      case b: BatchScanExec => b
+    }.getOrElse(fail("Expected BatchScanExec in plan"))
+    batchScan.batch match {
+      case s: TestPartitionPredicateScan => s.getPushedPartitionPredicates
+      case _ => Seq.empty
+    }
   }
 
   test("first pass partition filter still works (e.g. part_col = value)") {
@@ -171,6 +189,56 @@ class DataSourceV2EnhancedPartitionFilterSuite
       assert(partitions.length === 1,
         "Partition predicate part_col = 'a' should prune to one partition")
       assert(partitions.head.asInstanceOf[BufferedRows].keyString() === "a")
+    }
+  }
+
+  test("referencedPartitionColumnOrdinals: one non-first partition column in second-pass") {
+    withTable(partFilterTableName) {
+      // Partitioning (p0, p1, p2); filter only on p1 (ordinal 1) via LIKE in second pass.
+      sql(s"CREATE TABLE $partFilterTableName (p0 string, p1 string, p2 string, data string) " +
+        s"USING $v2Source PARTITIONED BY (p0, p1, p2)")
+      sql(s"INSERT INTO $partFilterTableName VALUES " +
+        "('a', 'x', '1', 'd1'), ('a', 'y', '1', 'd2'), " +
+        "('a', 'x', '2', 'd3'), ('b', 'x', '1', 'd4')")
+
+      val df = sql(s"SELECT * FROM $partFilterTableName WHERE p1 LIKE 'x%'")
+      checkAnswer(df, Seq(
+        Row("a", "x", "1", "d1"), Row("a", "x", "2", "d3"), Row("b", "x", "1", "d4")))
+
+      val predicates = getPushedPartitionPredicates(df)
+      assert(predicates.nonEmpty, "Expected at least one pushed PartitionPredicate")
+      predicates.foreach { p =>
+        val ordinals = p.referencedPartitionColumnOrdinals()
+        assert(ordinals.sameElements(Array(1)),
+          s"Predicate on p1 only (ordinal 1) should have ordinals [1], " +
+            s"got ${ordinals.mkString("[", ", ", "]")}")
+      }
+    }
+  }
+
+  test("referencedPartitionColumnOrdinals: two non-first partition columns in second-pass") {
+    withTable(partFilterTableName) {
+      // Partitioning (p0, p1, p2); filter on p1 and p2 (ordinals 1, 2) via UDF.
+      sql(s"CREATE TABLE $partFilterTableName (p0 string, p1 string, p2 string, data string) " +
+        s"USING $v2Source PARTITIONED BY (p0, p1, p2)")
+      sql(s"INSERT INTO $partFilterTableName VALUES " +
+        "('a', 'x', '1', 'd1'), ('a', 'y', '1', 'd2'), " +
+        "('a', 'x', '2', 'd3'), ('b', 'x', '1', 'd4')")
+
+      spark.udf.register("concat2", (a: String, b: String) =>
+        if (a == null || b == null) null else a + b)
+
+      val df = sql(s"SELECT * FROM $partFilterTableName WHERE concat2(p1, p2) = 'x1'")
+      checkAnswer(df, Seq(Row("a", "x", "1", "d1"), Row("b", "x", "1", "d4")))
+
+      val predicates = getPushedPartitionPredicates(df)
+      assert(predicates.nonEmpty, "Expected at least one pushed PartitionPredicate")
+      predicates.foreach { p =>
+        val ordinals = p.referencedPartitionColumnOrdinals()
+        assert(ordinals.sameElements(Array(1, 2)),
+          s"Predicate on p1 and p2 should have ordinals [1, 2], " +
+            s"got ${ordinals.mkString("[", ", ", "]")}")
+      }
     }
   }
 }

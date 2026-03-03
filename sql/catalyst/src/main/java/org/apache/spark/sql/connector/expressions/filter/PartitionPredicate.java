@@ -43,10 +43,10 @@ public abstract class PartitionPredicate extends Predicate {
   /**
    * Evaluates this predicate against a single partition's keys.
    *
-   * @param partitionKey keys of a single partition, represented the values of the partition
-   *                     corresponding to
+   * @param partitionKey keys of a single partition
    *                     {@link org.apache.spark.sql.connector.catalog.Table#partitioning()}
-   * @return true if this partition evaluates to true for this partition expression.
+   * @return true if the partition represented by these keys
+   * evaluates to true for this partition expression.
    */
   public abstract boolean accept(InternalRow partitionKey);
 
