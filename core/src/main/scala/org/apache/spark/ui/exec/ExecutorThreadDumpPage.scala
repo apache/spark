@@ -117,10 +117,8 @@ private[ui] class ExecutorThreadDumpPage(
               <th data-action="collapseAllThreadStackTrace" data-toggle-button="false">Thread Name</th>
               <th data-action="collapseAllThreadStackTrace" data-toggle-button="false">Thread State</th>
               <th data-action="collapseAllThreadStackTrace" data-toggle-button="false">
-                <span data-bs-toggle="tooltip" data-bs-placement="top"
-                      title="Objects whose lock the thread currently holds">
-                  Thread Locks
-                </span>
+                {UIUtils.tooltipSpan(<xml:group>Thread Locks</xml:group>,
+                  "Objects whose lock the thread currently holds")}
               </th>
             </thead>
             <tbody>{dumpRows}</tbody>

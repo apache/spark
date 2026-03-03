@@ -281,9 +281,8 @@ private[ui] class StreamingPage(parent: StreamingTab)
                 if (hasStream) {
                   <span class="expand-input-rate">
                     <span class="expand-input-rate-arrow arrow-closed"></span>
-                    <a data-bs-toggle="tooltip" title="Show/hide details of each receiver" data-bs-placement="top">
-                      <strong>Input Rate</strong>
-                    </a>
+                    {SparkUIUtils.tooltipLink(<xml:group><strong>Input Rate</strong></xml:group>,
+                      "Show/hide details of each receiver")}
                   </span>
                 } else {
                   <strong>Input Rate</strong>
