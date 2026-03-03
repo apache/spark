@@ -85,40 +85,20 @@ class SequentialUnionExecution(
       // Extract sources from each child
       val mapping = mutable.Map[Int, Set[SparkDataStream]]()
 
-      // scalastyle:off println
-      println(s"[SEQEXEC] Initializing with ${union.children.size} children")
-      // scalastyle:on println
-
       union.children.zipWithIndex.foreach { case (child, childIdx) =>
         val childSources = child.collect {
           case s: StreamingExecutionRelation =>
-            // scalastyle:off println
-            println(s"[SEQEXEC] Child $childIdx: Found StreamingExecutionRelation " +
-              s"${s.source.getClass.getSimpleName}@${System.identityHashCode(s.source)}")
-            // scalastyle:on println
             s.source
           case r: StreamingDataSourceV2ScanRelation =>
-            // scalastyle:off println
-            println(s"[SEQEXEC] Child $childIdx: Found StreamingDataSourceV2ScanRelation " +
-              s"${r.stream.getClass.getSimpleName}@${System.identityHashCode(r.stream)}")
-            // scalastyle:on println
             r.stream
         }.toSet
 
         if (childSources.nonEmpty) {
           mapping(childIdx) = childSources
-          // scalastyle:off println
-          println(s"[SEQEXEC] Child $childIdx has ${childSources.size} sources")
-          // scalastyle:on println
         }
       }
 
       childToSourcesMap = mapping.toMap
-
-      // scalastyle:off println
-      println(s"[SEQEXEC] Final mapping: ${childToSourcesMap.view.mapValues(_.size).toMap}")
-      println(s"[SEQEXEC] All sources from uniqueSources will be checked against this mapping")
-      // scalastyle:on println
     }
   }
 
@@ -132,14 +112,7 @@ class SequentialUnionExecution(
    */
   def isSourceActive(source: SparkDataStream): Boolean = {
     val activeChildSources = getActiveChildSources()
-    val isActive = activeChildSources.contains(source)
-
-    // scalastyle:off println
-    println(s"[SEQEXEC] isSourceActive: source=${source.getClass.getSimpleName}@" +
-      s"${System.identityHashCode(source)}, activeChild=$activeChildIndex, isActive=$isActive")
-    // scalastyle:on println
-
-    isActive
+    activeChildSources.contains(source)
   }
 
   /**

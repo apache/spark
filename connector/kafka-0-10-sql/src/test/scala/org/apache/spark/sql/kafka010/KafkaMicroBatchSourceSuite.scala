@@ -1605,21 +1605,23 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase with 
 
           val now = System.currentTimeMillis()
 
-          // Setup: First Kafka topic with historical data at older timestamps
+          // Setup: First Kafka topic with historical data
           val topic1 = newTopic()
           testUtils.createTopic(topic1, partitions = 3)
           val historicalData = (0 until 20).map { i =>
-            // Create JSON with timestamp field
+            // Event times: now+0 to now+19000 (0-19 seconds)
             s"""{"key":"key_$i","value":"key_$i:historical","timestamp":${now + i * 1000}}"""
           }
           testUtils.sendMessages(topic1, historicalData.toArray)
 
-          // Setup: Second Kafka topic with live data at newer timestamps
+          // Setup: Second Kafka topic with live data
+          // Use IDENTICAL timestamps as historical to test pure deduplication
+          // This eliminates watermark eviction concerns
           val topic2 = newTopic()
           testUtils.createTopic(topic2, partitions = 3)
           val liveData = (0 until 20).map { i =>
-            // Same keys but newer timestamps (later) - will be deduplicated
-            s"""{"key":"key_$i","value":"key_$i:live","timestamp":${now + 20000 + i * 1000}}"""
+            // Same keys AND same timestamps - only sequential ordering matters
+            s"""{"key":"key_$i","value":"key_$i:live","timestamp":${now + i * 1000}}"""
           }
           testUtils.sendMessages(topic2, liveData.toArray)
 
@@ -1708,6 +1710,104 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase with 
           // - All values from historical source (sequential ordering + dedup state continuity)
           // - Each key exactly once (deduplication worked)
           // These properties together prove sequential execution with state sharing
+        }
+      }
+    }
+  }
+
+  test("sequential union: watermark progression with advancing event times") {
+    import testImplicits._
+
+    withSQLConf(
+      SQLConf.STREAMING_OFFSET_LOG_FORMAT_VERSION.key -> "2",
+      SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "true") {
+
+      withTempDir { checkpointDir =>
+        withTempDir { outputDir =>
+          val checkpointLocation = checkpointDir.getCanonicalPath
+          val outputPath = outputDir.getCanonicalPath
+
+          val now = System.currentTimeMillis()
+
+          // Setup: Historical data with early timestamps
+          val topic1 = newTopic()
+          testUtils.createTopic(topic1, partitions = 3)
+          val historicalData = (0 until 15).map { i =>
+            // Event times: now+0 to now+14000 (0-14 seconds)
+            s"""{"value":"hist_$i","timestamp":${now + i * 1000}}"""
+          }
+          testUtils.sendMessages(topic1, historicalData.toArray)
+
+          // Setup: Live data with later timestamps (continues from historical)
+          val topic2 = newTopic()
+          testUtils.createTopic(topic2, partitions = 3)
+          val liveData = (15 until 30).map { i =>
+            // Event times: now+15000 to now+29000 (15-29 seconds, continues from historical)
+            s"""{"value":"live_$i","timestamp":${now + i * 1000}}"""
+          }
+          testUtils.sendMessages(topic2, liveData.toArray)
+
+          // Build sequential union with watermark
+          val historicalStream = spark.readStream
+            .format("kafka")
+            .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+            .option("subscribe", topic1)
+            .option("startingOffsets", "earliest")
+            .name("historical_watermark")
+            .load()
+            .selectExpr("CAST(value AS STRING) AS json")
+            .selectExpr(
+              "get_json_object(json, '$.value') as value",
+              "CAST(get_json_object(json, '$.timestamp') AS LONG) as event_time")
+            .selectExpr("value", "CAST(event_time AS TIMESTAMP) as event_time")
+
+          val liveStream = spark.readStream
+            .format("kafka")
+            .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+            .option("subscribe", topic2)
+            .option("startingOffsets", "earliest")
+            .name("live_watermark")
+            .load()
+            .selectExpr("CAST(value AS STRING) AS json")
+            .selectExpr(
+              "get_json_object(json, '$.value') as value",
+              "CAST(get_json_object(json, '$.timestamp') AS LONG) as event_time")
+            .selectExpr("value", "CAST(event_time AS TIMESTAMP) as event_time")
+
+          // Sequential union with watermark - watermark should advance continuously
+          val sequential = historicalStream
+            .followedBy(liveStream)
+            .withWatermark("event_time", "5 seconds")
+
+          // Write to Parquet
+          val query = sequential.writeStream
+            .outputMode("append")
+            .format("parquet")
+            .option("checkpointLocation", checkpointLocation)
+            .option("path", outputPath)
+            .trigger(Trigger.AvailableNow)
+            .start()
+
+          query.awaitTermination()
+
+          // Verify all 30 values are present (watermark didn't drop any data)
+          val result = spark.read.parquet(outputPath)
+            .select("value")
+            .as[String]
+            .collect()
+            .toSet
+
+          assert(result.size == 30,
+            s"Expected 30 values but got ${result.size}")
+
+          // Verify both historical and live data are present
+          val historicalCount = result.count(_.startsWith("hist_"))
+          val liveCount = result.count(_.startsWith("live_"))
+
+          assert(historicalCount == 15,
+            s"Expected 15 historical values but got $historicalCount")
+          assert(liveCount == 15,
+            s"Expected 15 live values but got $liveCount")
         }
       }
     }
@@ -1802,12 +1902,6 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase with 
             .start()
 
           query.awaitTermination()
-
-          // Debug: Check if SequentialUnionExecution was used
-          val executionClass = query.asInstanceOf[StreamingQueryWrapper]
-            .streamingQuery.getClass.getName
-          println(s"[DEBUG] Execution class: $executionClass")
-          println(s"[DEBUG] Write order: ${writeOrder.toList}")
 
           // Verify results
           val result = spark.read.parquet(outputPath)
