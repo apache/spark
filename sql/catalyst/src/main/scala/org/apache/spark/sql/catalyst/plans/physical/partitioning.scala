@@ -405,10 +405,13 @@ case class CoalescedHashPartitioning(from: HashPartitioning, partitions: Seq[Coa
  * @param partitionKeys Partition keys, one per partition. When used as outputPartitioning,
  *                      always in sorted order. When used in KeyGroupedShuffleSpec, may be
  *                      unsorted after projection. May contain duplicates when ungrouped.
+ * @param isGrouped Whether partition keys are unique (no duplicates). Computed on first
+ *                  creation, then preserved through copy operations to avoid recomputation.
  */
 case class KeyedPartitioning(
     expressions: Seq[Expression],
-    partitionKeys: Seq[InternalRow]) extends Expression with Partitioning with Unevaluable {
+    partitionKeys: Seq[InternalRow],
+    isGrouped: Boolean = false) extends Expression with Partitioning with Unevaluable {
   override val numPartitions = partitionKeys.length
 
   override def children: Seq[Expression] = expressions
@@ -426,13 +429,10 @@ case class KeyedPartitioning(
 
   @transient lazy val keyOrdering = RowOrdering.createNaturalAscendingOrdering(expressionDataTypes)
 
-  @transient lazy val isGrouped: Boolean =
-    partitionKeys.distinctBy(comparableKeyWrapperFactory).size == partitionKeys.size
-
   def toGrouped: KeyedPartitioning = {
     val groupedPartitionKeys = partitionKeys.distinctBy(comparableKeyWrapperFactory)
 
-    KeyedPartitioning(expressions, groupedPartitionKeys)
+    KeyedPartitioning(expressions, groupedPartitionKeys, isGrouped = true)
   }
 
   /**
@@ -518,6 +518,20 @@ case class KeyedPartitioning(
 }
 
 object KeyedPartitioning {
+  /**
+   * Creates a KeyedPartitioning with isGrouped computed from the partition keys.
+   * Use this when creating a new KeyedPartitioning from scratch (e.g., from a data source).
+   */
+  def apply(
+      expressions: Seq[Expression],
+      partitionKeys: Seq[InternalRow]): KeyedPartitioning = {
+    val dataTypes = expressions.map(_.dataType)
+    val comparableKeyWrapperFactory =
+      InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(dataTypes)
+    val isGrouped = partitionKeys.distinctBy(comparableKeyWrapperFactory).size == partitionKeys.size
+    new KeyedPartitioning(expressions, partitionKeys, isGrouped)
+  }
+
   def supportsExpressions(expressions: Seq[Expression]): Boolean = {
     def isSupportedTransform(transform: TransformExpression): Boolean = {
       transform.children.size == 1 && isReference(transform.children.head)
@@ -1040,7 +1054,7 @@ case class KeyGroupedShuffleSpec(
         te.copy(children = te.children.map(_ => clustering(positionSet.head)))
       case (_, positionSet) => clustering(positionSet.head)
     }
-    KeyedPartitioning(newExpressions, partitioning.partitionKeys)
+    KeyedPartitioning(newExpressions, partitioning.partitionKeys, partitioning.isGrouped)
   }
 }
 
