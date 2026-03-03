@@ -211,15 +211,16 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
     )
 
     <div>
-      <span class="collapse-sql-properties collapse-table"
-            data-collapse-name="collapse-sql-properties"
-            data-collapse-table="sql-properties">
+      <span class="collapse-table" data-bs-toggle="collapse"
+            data-bs-target="#sql-properties"
+            aria-expanded="false" aria-controls="sql-properties"
+            data-collapse-name="collapse-sql-properties">
         <h4>
           <span class="collapse-table-arrow arrow-closed"></span>
           <a>SQL / DataFrame Properties</a>
         </h4>
       </span>
-      <div class="sql-properties collapsible-table collapsed">
+      <div class="collapsible-table collapse" id="sql-properties">
         {configs}
       </div>
     </div>
@@ -251,15 +252,16 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
     )
 
     <div>
-      <span class="collapse-pandas-on-spark-properties collapse-table"
-            data-collapse-name="collapse-pandas-on-spark-properties"
-            data-collapse-table="pandas-on-spark-properties">
+      <span class="collapse-table" data-bs-toggle="collapse"
+            data-bs-target="#pandas-on-spark-properties"
+            aria-expanded="false" aria-controls="pandas-on-spark-properties"
+            data-collapse-name="collapse-pandas-on-spark-properties">
         <h4>
           <span class="collapse-table-arrow arrow-closed"></span>
           <a>Pandas API Properties</a>
         </h4>
       </span>
-      <div class="pandas-on-spark-properties collapsible-table collapsed">
+      <div class="collapsible-table collapse" id="pandas-on-spark-properties">
         {configs}
       </div>
     </div>

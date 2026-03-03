@@ -458,71 +458,76 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
 
     if (shouldShowActiveStages) {
       content ++=
-        <span id="active" class="collapse-aggregated-activeStages collapse-table"
-            data-collapse-name="collapse-aggregated-activeStages"
-            data-collapse-table="aggregated-activeStages">
+        <span id="active" class="collapse-table" data-bs-toggle="collapse"
+            data-bs-target="#aggregated-activeStages"
+            aria-expanded="true" aria-controls="aggregated-activeStages"
+            data-collapse-name="collapse-aggregated-activeStages">
           <h4>
             <span class="collapse-table-arrow arrow-open"></span>
             <a>Active Stages ({activeStages.size})</a>
           </h4>
         </span> ++
-        <div class="aggregated-activeStages collapsible-table">
+        <div class="collapsible-table collapse show" id="aggregated-activeStages">
           {activeStagesTable.toNodeSeq}
         </div>
     }
     if (shouldShowPendingStages) {
       content ++=
-        <span id="pending" class="collapse-aggregated-pendingOrSkippedStages collapse-table"
-            data-collapse-name="collapse-aggregated-pendingOrSkippedStages"
-            data-collapse-table="aggregated-pendingOrSkippedStages">
+        <span id="pending" class="collapse-table" data-bs-toggle="collapse"
+            data-bs-target="#aggregated-pendingStages"
+            aria-expanded="true" aria-controls="aggregated-pendingStages"
+            data-collapse-name="collapse-aggregated-pendingOrSkippedStages">
           <h4>
             <span class="collapse-table-arrow arrow-open"></span>
             <a>Pending Stages ({pendingOrSkippedStages.size})</a>
           </h4>
         </span> ++
-        <div class="aggregated-pendingOrSkippedStages collapsible-table">
+        <div class="collapsible-table collapse show" id="aggregated-pendingStages">
           {pendingOrSkippedStagesTable.toNodeSeq}
         </div>
     }
     if (shouldShowCompletedStages) {
       content ++=
-        <span id="completed" class="collapse-aggregated-completedStages collapse-table"
-            data-collapse-name="collapse-aggregated-completedStages"
-            data-collapse-table="aggregated-completedStages">
+        <span id="completed" class="collapse-table" data-bs-toggle="collapse"
+            data-bs-target="#aggregated-completedStages"
+            aria-expanded="true" aria-controls="aggregated-completedStages"
+            data-collapse-name="collapse-aggregated-completedStages">
           <h4>
             <span class="collapse-table-arrow arrow-open"></span>
             <a>Completed Stages ({completedStages.size})</a>
           </h4>
         </span> ++
-        <div class="aggregated-completedStages collapsible-table">
+        <div class="collapsible-table collapse show" id="aggregated-completedStages">
           {completedStagesTable.toNodeSeq}
         </div>
     }
     if (shouldShowSkippedStages) {
       content ++=
-        <span id="skipped" class="collapse-aggregated-pendingOrSkippedStages collapse-table"
-            data-collapse-name="collapse-aggregated-pendingOrSkippedStages"
-            data-collapse-table="aggregated-pendingOrSkippedStages">
+        <span id="skipped" class="collapse-table" data-bs-toggle="collapse"
+            data-bs-target="#aggregated-skippedStages"
+            aria-expanded="true" aria-controls="aggregated-skippedStages"
+            data-collapse-name="collapse-aggregated-pendingOrSkippedStages">
           <h4>
             <span class="collapse-table-arrow arrow-open"></span>
             <a>Skipped Stages ({pendingOrSkippedStages.size})</a>
           </h4>
         </span> ++
-        <div class="aggregated-pendingOrSkippedStages collapsible-table">
+        <div class="collapsible-table collapse show" id="aggregated-skippedStages">
           {pendingOrSkippedStagesTable.toNodeSeq}
         </div>
     }
     if (shouldShowFailedStages) {
       content ++=
-        <span id ="failed" class="collapse-aggregated-failedStages collapse-table"
-            data-collapse-name="collapse-aggregated-failedStages"
-            data-collapse-table="aggregated-failedStages">
+        <span id ="failed" class="collapse-table" data-bs-toggle="collapse"
+            data-bs-target="#aggregated-failedStages"
+            aria-expanded="true" aria-controls="aggregated-failedStages"
+            data-collapse-name="collapse-aggregated-failedStages">
           <h4>
             <span class="collapse-table-arrow arrow-open"></span>
             <a>Failed Stages ({failedStages.size})</a>
           </h4>
         </span> ++
-        <div class="aggregated-failedStages collapsible-table">
+        <div class="collapsible-table collapse show" id="aggregated-failedStages">
           {failedStagesTable.toNodeSeq}
         </div>
     }
