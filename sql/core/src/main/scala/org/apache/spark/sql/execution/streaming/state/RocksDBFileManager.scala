@@ -680,13 +680,28 @@ class RocksDBFileManager(
     // Resolve RocksDB files for all the versions and find the max version each file is used
     val fileToMaxUsedVersion = new mutable.HashMap[String, Long]
     sortedSnapshotVersionsAndUniqueIds.foreach { case (version, uniqueId) =>
-      val files = Option(versionToRocksDBFiles.get((version, uniqueId))).getOrElse {
+      var readFromCache = true
+      val cachedFiles = Option(versionToRocksDBFiles.get((version, uniqueId))).getOrElse {
+        readFromCache = false
         val newResolvedFiles = getImmutableFilesFromVersionZip(version, uniqueId)
         versionToRocksDBFiles.put((version, uniqueId), newResolvedFiles)
         newResolvedFiles
       }
-      files.foreach(f => fileToMaxUsedVersion(f.dfsFileName) =
+      cachedFiles.foreach(f => fileToMaxUsedVersion(f.dfsFileName) =
         math.max(version, fileToMaxUsedVersion.getOrElse(f.dfsFileName, version)))
+
+      // For the minimum retained version, fetch metadata from the cloud zip file
+      // to protect files that may differ from the in-memory cache. This handles the case
+      // where a no-overwrite FS prevented a snapshot zip from being overwritten: the
+      // in-memory cache may reference a newer set of SST files (from a retry), while the
+      // cloud zip still references the original SST files.
+      // We do this for the min retained version, to make sure the files from the original
+      // upload for this version are not seen as orphan files.
+      if (version == minVersionToRetain && readFromCache) {
+        val cloudFiles = getImmutableFilesFromVersionZip(version, uniqueId)
+        cloudFiles.foreach(f => fileToMaxUsedVersion(f.dfsFileName) =
+          math.max(version, fileToMaxUsedVersion.getOrElse(f.dfsFileName, version)))
+      }
     }
 
     // Best effort attempt to delete SST files that were last used in to-be-deleted versions
