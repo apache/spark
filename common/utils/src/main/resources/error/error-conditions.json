@@ -1597,7 +1597,7 @@
     "message" : [
       "Found duplicate column(s) <checkType>: <duplicateColumns>"
     ],
-    "sqlState" : "42701"
+    "sqlState" : "42711"
   },
   "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT" : {
     "message" : [
