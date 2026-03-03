@@ -94,23 +94,19 @@ class InMemoryEnhancedPartitionFilterTable(
 
     override def build(): Scan = {
       val allPartitions = data.map(_.asInstanceOf[InputPartition]).toImmutableArraySeq
-      val filteredByFirstPass = if (firstPassPushedPredicates.isEmpty) {
-        allPartitions
-      } else {
-        val partNames =
-          InMemoryEnhancedPartitionFilterTable.this.partCols.map(_.toSeq.quoted)
-            .toImmutableArraySeq
-        val allKeys = allPartitions.map(_.asInstanceOf[BufferedRows].key)
-        val matchingKeys = InMemoryTableWithV2Filter.filtersToKeys(
-          allKeys, partNames, firstPassPushedPredicates.toArray).toSet
-        allPartitions.filter(p =>
-          matchingKeys.contains(p.asInstanceOf[BufferedRows].key))
-      }
-      val filtered = filteredByFirstPass.filter { p =>
+      val partNames =
+        InMemoryEnhancedPartitionFilterTable.this.partCols.map(_.toSeq.quoted)
+          .toImmutableArraySeq
+      val allKeys = allPartitions.map(_.asInstanceOf[BufferedRows].key)
+      val matchingKeys = InMemoryTableWithV2Filter.filtersToKeys(
+        allKeys, partNames, firstPassPushedPredicates.toArray).toSet
+      val filteredByFirstPass = allPartitions.filter(p =>
+        matchingKeys.contains(p.asInstanceOf[BufferedRows].key))
+      val filteredBySeoncPass = filteredByFirstPass.filter { p =>
         val partRow = p.asInstanceOf[BufferedRows].partitionKey()
         partitionPredicates.forall(_.accept(partRow))
       }
-      InMemoryEnhancedPartitionFilterBatchScan(filtered, readSchema, tableSchema)
+      InMemoryEnhancedPartitionFilterBatchScan(filteredBySeoncPass, readSchema, tableSchema)
     }
   }
 

@@ -37,31 +37,34 @@ import org.apache.spark.util.collection.Utils
 object PushDownUtils {
 
   /**
-   * Returns partition schema as a StructType when the table partitioning. Used for
-   * enhanced second-pass partition filtering.  Currently only supported for identity
-   * transforms on simple (single-name) field references.
+   * Returns partition schema as a StructType when the table partitioning.
+   * Currently only supported for identity transforms on simple (single-name) field references.
    *
    * @return Some(StructType) for partition transform types, if supported.
    */
   def getPartitionSchemaForPartitionPredicate(
       relation: DataSourceV2Relation): Option[StructType] = {
-    val partitioning = relation.table.partitioning()
-    if (partitioning.isEmpty) return None
-    val partitionColNames = mutable.ArrayBuffer.empty[String]
-    for (t <- partitioning) {
-      t match {
-        case id: IdentityTransform =>
-          val names = id.ref.fieldNames()
-          if (names.length != 1) return None
-          partitionColNames += names(0)
-        case _ => return None
-      }
+    val partitioning = relation.table.partitioning().toIndexedSeq
+    val partitionColNamesOpt: Seq[Option[String]] = partitioning.map {
+      case id: IdentityTransform =>
+        id.ref.fieldNames().toIndexedSeq match {
+          case Seq(name) => Some(name)
+          case _ => None // Not supported for multiple field names (e.g. nested field)
+        }
+      case _ => None
     }
-    val attrs = partitionColNames.map(name => relation.output.find(_.name == name))
-    if (attrs.exists(_.isEmpty)) None
-    else {
-      val fields = attrs.map(_.get).map(a => StructField(a.name, a.dataType, a.nullable)).toSeq
-      Some(StructType(fields))
+    partitionColNamesOpt match {
+      // Only support identity transform on simple field reference
+      case seq if seq.isEmpty || seq.exists(_.isEmpty) => None
+      case _ =>
+        val partitionColNames = partitionColNamesOpt.map(_.get)
+        val attrs = partitionColNames.map(name => relation.output.find(_.name == name))
+        attrs match {
+          case a if a.exists(_.isEmpty) => None
+          case a =>
+            val fields = a.map(_.get).map(x => StructField(x.name, x.dataType, x.nullable))
+            Some(StructType(fields))
+        }
     }
   }
 
