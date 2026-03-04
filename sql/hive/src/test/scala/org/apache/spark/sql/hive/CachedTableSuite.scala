@@ -115,7 +115,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       sql("UNCACHE TABLE nonexistentTable")
     }
     checkErrorTableNotFoundWithSearchPath(e, "`nonexistentTable`",
-      ExpectedContext("nonexistentTable", 14, 13 + "nonexistentTable".length))
+      ExpectedContext("nonexistentTable", 14, 13 + "nonexistentTable".length), defaultSearchPathForTests)
     sql("UNCACHE TABLE IF EXISTS nonexistentTable")
   }
 

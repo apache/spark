@@ -412,7 +412,7 @@ trait SparkTestSuite
       condition = "TABLE_OR_VIEW_NOT_FOUND",
       parameters = Map("relationName" -> tableName))
 
-  private val defaultSearchPathForTests: String =
+  protected val defaultSearchPathForTests: String =
     "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
 
   protected def checkErrorTableNotFoundWithSearchPath(
@@ -427,7 +427,7 @@ trait SparkTestSuite
       exception: SparkThrowable,
       tableName: String,
       queryContext: ExpectedContext,
-      searchPath: String = defaultSearchPathForTests): Unit =
+      searchPath: String): Unit =
     checkError(exception = exception,
       condition = "TABLE_OR_VIEW_NOT_FOUND_WITH_SEARCH_PATH",
       parameters = Map("relationName" -> tableName, "searchPath" -> searchPath),

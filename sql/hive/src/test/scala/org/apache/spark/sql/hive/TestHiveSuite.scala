@@ -39,7 +39,7 @@ class TestHiveSuite extends TestHiveSingleton with SQLTestUtils {
         sql("SELECT * FROM SRC").queryExecution.analyzed
       }
       checkErrorTableNotFoundWithSearchPath(err, "`SRC`",
-        ExpectedContext("SRC", 14, 13 + "SRC".length))
+        ExpectedContext("SRC", 14, 13 + "SRC".length), defaultSearchPathForTests)
     }
     testHiveSparkSession.reset()
   }
