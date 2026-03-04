@@ -145,7 +145,7 @@ function initOffcanvasFlamegraph(fgData, fgChart, offcanvasEl) {
       $(header).off('click').on('click', function() {
         var arrow = $('#executor-flamegraph-arrow');
         arrow.toggleClass('arrow-open arrow-closed');
-        $(fgChart).toggle(arrow.hasClass('arrow-open'));
+        $(fgChart).toggleClass('d-none', !arrow.hasClass('arrow-open'));
       });
     }
   });
@@ -765,7 +765,7 @@ $(document).ready(function () {
         execDataTable.column('heapHistogramCol:name').visible(getHeapHistogramEnabled());
     
         // This section should be visible once API gives the response.
-        $('.active-process-container').hide();
+        $('.active-process-container').addClass('d-none');
         var endPoint = createRESTEndPointForMiscellaneousProcess(appId);
         $.getJSON(endPoint, function( response, _ignored_status, _ignored_jqXHR ) {
           if (response.length) {
@@ -801,7 +801,7 @@ $(document).ready(function () {
               }
             };
             $("#active-process-table").DataTable(processSummaryConf);
-            $('.active-process-container').show()
+            $('.active-process-container').removeClass('d-none')
           }
         });
 
