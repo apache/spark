@@ -361,7 +361,12 @@ class TypeHintTestsMixin:
             bool: (np.bool_, BooleanType()),
             # datetime
             np.datetime64: (np.datetime64, TimestampType()),
-            datetime.datetime: (np.dtype("datetime64[ns]"), TimestampType()),
+            datetime.datetime: (
+                np.dtype("datetime64[ns]")
+                if LooseVersion(pd.__version__) < LooseVersion("3.0.0")
+                else np.dtype("datetime64[us]"),
+                TimestampType(),
+            ),
             # DateType
             datetime.date: (np.dtype("object"), DateType()),
             # DecimalType
