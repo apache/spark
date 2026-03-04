@@ -1132,7 +1132,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
         DummySparkPlan(_, _, SinglePartition, _, _), _, _), _) =>
           assert(left.expressions == a1 :: Nil)
           assert(attrs == a1 :: Nil)
-          assert(partitionKeys == pks)
+          assert(partitionKeys == pks.map(_.row))
         case other => fail(other.toString)
       }
     }
