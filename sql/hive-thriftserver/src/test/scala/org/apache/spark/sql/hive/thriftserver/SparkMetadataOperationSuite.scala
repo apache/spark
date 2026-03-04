@@ -340,12 +340,10 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
           case _ => assert(radix === 0) // nulls
         }
 
-        val expectedNullable = if (schema(pos).nullable) 1 else 0
-        assert(rowSet.getInt("NULLABLE") === expectedNullable)
+        assert(rowSet.getInt("NULLABLE") === 1)
         assert(rowSet.getString("REMARKS") === pos.toString)
         assert(rowSet.getInt("ORDINAL_POSITION") === pos + 1)
-        val expectedIsNullable = if (schema(pos).nullable) "YES" else "NO"
-        assert(rowSet.getString("IS_NULLABLE") === expectedIsNullable)
+        assert(rowSet.getString("IS_NULLABLE") === "YES")
         assert(rowSet.getString("IS_AUTO_INCREMENT") === "NO")
         pos += 1
       }
