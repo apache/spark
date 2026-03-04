@@ -256,12 +256,12 @@ class PandasToArrowConversion:
         ignore_unexpected_complex_type_values : bool
             Whether to ignore unexpected complex type values in converter (default False)
         is_legacy : bool
-            Whether to use the legacy UDTF pandas conversion path. The legacy path
-            uses broader Arrow exception handling (ArrowException) to allow more
-            implicit type coercions (e.g., int→boolean, dict→struct via ArrowTypeError),
-            and converts errors to UDTF_ARROW_TYPE_CAST_ERROR.
-            The non-legacy path only catches ArrowInvalid for the cast fallback,
-            so type mismatches like string→decimal raise immediately. (default False)
+            Whether to use the legacy pandas-to-Arrow conversion path. The legacy
+            path uses broader Arrow exception handling (ArrowException) to allow
+            more implicit type coercions (e.g., int->boolean, dict->struct via
+            ArrowTypeError). The non-legacy path only catches ArrowInvalid for
+            the cast fallback, so type mismatches like string->decimal raise
+            immediately. (default False)
 
         Returns
         -------
@@ -270,7 +270,7 @@ class PandasToArrowConversion:
         import pyarrow as pa
         import pandas as pd
 
-        from pyspark.errors import PySparkTypeError, PySparkValueError, PySparkRuntimeError
+        from pyspark.errors import PySparkTypeError, PySparkValueError
         from pyspark.sql.pandas.types import to_arrow_type, _create_converter_from_pandas
 
         # Handle empty schema (0 columns)
@@ -343,8 +343,8 @@ class PandasToArrowConversion:
             mask = None if hasattr(series.array, "__arrow_array__") else series.isnull()
 
             if is_legacy:
-                # Legacy UDTF pandas conversion path: broad ArrowException catch so
-                # that both ArrowInvalid AND ArrowTypeError (e.g. dict→struct)
+                # Legacy pandas conversion path: broad ArrowException catch so
+                # that both ArrowInvalid AND ArrowTypeError (e.g. dict->struct)
                 # trigger the cast fallback.
                 try:
                     try:
@@ -357,18 +357,26 @@ class PandasToArrowConversion:
                                 target_type=arrow_type, safe=safecheck
                             )
                         raise
-                except pa.lib.ArrowException:  # convert any Arrow error to user-friendly message
-                    raise PySparkRuntimeError(
-                        errorClass="UDTF_ARROW_TYPE_CAST_ERROR",
-                        messageParameters={
-                            "col_name": field_name,
-                            "col_type": str(series.dtype),
-                            "arrow_type": str(arrow_type),
-                        },
-                    ) from None
+                except pa.lib.ArrowException as e:
+                    error_msg = (
+                        "Exception thrown when converting pandas.Series (%s) "
+                        "with name '%s' to Arrow Array (%s)."
+                        % (series.dtype, field_name, arrow_type)
+                    )
+                    if isinstance(e, TypeError):
+                        raise PySparkTypeError(error_msg) from e
+                    if safecheck:
+                        error_msg += (
+                            " It can be caused by overflows or other "
+                            "unsafe conversions warned by Arrow. Arrow safe "
+                            "type check can be disabled by using SQL config "
+                            "`spark.sql.execution.pandas."
+                            "convertToArrowArraySafely`."
+                        )
+                    raise PySparkValueError(error_msg) from e
             else:
-                # UDF path: only ArrowInvalid triggers the cast fallback.
-                # ArrowTypeError (e.g. string→decimal) must NOT be silently cast.
+                # Non-legacy path: only ArrowInvalid triggers the cast fallback.
+                # ArrowTypeError (e.g. string->decimal) must NOT be silently cast.
                 try:
                     try:
                         return pa.Array.from_pandas(
@@ -380,21 +388,26 @@ class PandasToArrowConversion:
                                 target_type=arrow_type, safe=safecheck
                             )
                         raise
-                except TypeError as e:  # includes pa.lib.ArrowTypeError
+                except TypeError as e:
                     raise PySparkTypeError(
-                        f"Exception thrown when converting pandas.Series ({series.dtype}) "
-                        f"with name '{field_name}' to Arrow Array ({arrow_type})."
+                        f"Cannot convert the output value of the column "
+                        f"'{field_name}' with type '{series.dtype}' to the "
+                        f"specified return type of the column: '{arrow_type}'."
+                        f" Please check if the data types match and try again."
                     ) from e
-                except ValueError as e:  # includes pa.lib.ArrowInvalid
+                except ValueError as e:
                     error_msg = (
-                        f"Exception thrown when converting pandas.Series ({series.dtype}) "
-                        f"with name '{field_name}' to Arrow Array ({arrow_type})."
+                        f"Failed to convert the value of the column "
+                        f"'{field_name}' with type '{series.dtype}' to Arrow "
+                        f"type '{arrow_type}'."
                     )
                     if safecheck:
                         error_msg += (
-                            " It can be caused by overflows or other unsafe conversions "
-                            "warned by Arrow. Arrow safe type check can be disabled by using "
-                            "SQL config `spark.sql.execution.pandas.convertToArrowArraySafely`."
+                            " It can be caused by overflows or other unsafe "
+                            "conversions warned by Arrow. Arrow safe type "
+                            "check can be disabled by using SQL config "
+                            "`spark.sql.execution.pandas."
+                            "convertToArrowArraySafely`."
                         )
                     raise PySparkValueError(error_msg) from e
 
