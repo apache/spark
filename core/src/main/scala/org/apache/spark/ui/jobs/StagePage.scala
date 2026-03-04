@@ -422,8 +422,7 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
           <form id={"form-event-timeline-page"}
                 method="get"
                 action=""
-                class="d-flex float-end justify-content-end align-items-center gap-1"
-                style="margin-bottom: 0px;">
+                class="d-flex float-end justify-content-end align-items-center gap-1 mb-0">
             <label>Tasks: {totalTasks}. {totalPages} Pages. Jump to</label>
             <input type="hidden" name="id" value={stageId.toString} />
             <input type="hidden" name="attempt" value={stageAttemptId.toString} />
