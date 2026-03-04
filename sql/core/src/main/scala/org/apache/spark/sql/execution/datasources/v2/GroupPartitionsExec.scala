@@ -148,10 +148,10 @@ case class GroupPartitionsExec(
   }
 
   override protected def doExecute(): RDD[InternalRow] = {
-    val partitionCoalescer = new GroupedPartitionCoalescer(groupedPartitions.map(_._2))
     if (groupedPartitions.isEmpty) {
       sparkContext.emptyRDD
     } else {
+      val partitionCoalescer = new GroupedPartitionCoalescer(groupedPartitions.map(_._2))
       new CoalescedRDD(child.execute(), groupedPartitions.size, Some(partitionCoalescer))
     }
   }
@@ -159,10 +159,10 @@ case class GroupPartitionsExec(
   override def supportsColumnar: Boolean = child.supportsColumnar
 
   override protected def doExecuteColumnar(): RDD[ColumnarBatch] = {
-    val partitionCoalescer = new GroupedPartitionCoalescer(groupedPartitions.map(_._2))
     if (groupedPartitions.isEmpty) {
       sparkContext.emptyRDD
     } else {
+      val partitionCoalescer = new GroupedPartitionCoalescer(groupedPartitions.map(_._2))
       new CoalescedRDD(child.executeColumnar(), groupedPartitions.size, Some(partitionCoalescer))
     }
   }

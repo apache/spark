@@ -370,10 +370,10 @@ object ShuffleExchangeExec {
           ascending = true,
           samplePointsPerPartitionHint = SQLConf.get.rangeExchangeSampleSizePerPartition)
       case SinglePartition => new ConstantPartitioner
-      case k @ KeyedPartitioning(expressions, _, _) =>
+      case k: KeyedPartitioning =>
         val keyGroupedPartitioning = k.toGrouped
         val valueMap = keyGroupedPartitioning.partitionKeys.zipWithIndex.map {
-          case (key, index) => (key.row.toSeq(expressions.map(_.dataType)), index)
+          case (key, index) => (key.row.toSeq(keyGroupedPartitioning.expressionDataTypes), index)
         }.toMap
         new KeyGroupedPartitioner(mutable.Map.from(valueMap), keyGroupedPartitioning.numPartitions)
       case _ => throw SparkException.internalError(s"Exchange not implemented for $newPartitioning")
