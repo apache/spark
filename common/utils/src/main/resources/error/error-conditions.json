@@ -643,12 +643,6 @@
     ],
     "sqlState" : "42P08"
   },
-  "CATALOG_NOT_FOUND_FOR_IDENTIFIER" : {
-    "message" : [
-      "Couldn't find a catalog to handle the identifier <quote>."
-    ],
-    "sqlState" : "42P08"
-  },
   "CHECKPOINT_FILE_CHECKSUM_VERIFICATION_FAILED" : {
     "message" : [
       "Checksum verification failed, the file may be corrupted. File: <fileName>",

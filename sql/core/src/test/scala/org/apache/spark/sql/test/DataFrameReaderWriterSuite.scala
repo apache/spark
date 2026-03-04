@@ -38,6 +38,7 @@ import org.apache.spark.internal.io.HadoopMapReduceCommitProtocol
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.connector.catalog.CatalogNotFoundException
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, OverwriteByExpression}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
@@ -923,18 +924,22 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
   test("insertInto/saveAsTable with unresolvable multi-part identifier") {
     val df = spark.range(1)
     checkError(
-      exception = intercept[AnalysisException] {
+      exception = intercept[CatalogNotFoundException] {
         df.write.insertInto("a.b.c.d")
       },
-      condition = "CATALOG_NOT_FOUND_FOR_IDENTIFIER",
-      parameters = Map("quote" -> "`a`.`b`.`c`.`d`")
+      condition = "CATALOG_NOT_FOUND",
+      parameters = Map(
+        "catalogName" -> "`a`",
+        "config" -> "\"spark.sql.catalog.a\"")
     )
     checkError(
-      exception = intercept[AnalysisException] {
+      exception = intercept[CatalogNotFoundException] {
         df.write.saveAsTable("a.b.c.d")
       },
-      condition = "CATALOG_NOT_FOUND_FOR_IDENTIFIER",
-      parameters = Map("quote" -> "`a`.`b`.`c`.`d`")
+      condition = "CATALOG_NOT_FOUND",
+      parameters = Map(
+        "catalogName" -> "`a`",
+        "config" -> "\"spark.sql.catalog.a\"")
     )
   }
 

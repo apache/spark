@@ -3565,12 +3565,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map.empty)
   }
 
-  def cannotFindCatalogToHandleIdentifierError(quote: String): Throwable = {
-    new AnalysisException(
-      errorClass = "CATALOG_NOT_FOUND_FOR_IDENTIFIER",
-      messageParameters = Map("quote" -> quote))
-  }
-
   def tableAlreadyExistsError(tableIdent: TableIdentifier): Throwable = {
     new TableAlreadyExistsException(tableIdent.nameParts)
   }
