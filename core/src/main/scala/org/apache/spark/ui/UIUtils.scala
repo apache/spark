@@ -722,7 +722,7 @@ private[spark] object UIUtils extends Logging {
     if (isMultiline) {
       // scalastyle:off
       <span data-toggle-details=".stacktrace-details"
-            class="expand-details">
+            class="expand-details float-end">
         +details
       </span> ++
         <div class="stacktrace-details collapsed">

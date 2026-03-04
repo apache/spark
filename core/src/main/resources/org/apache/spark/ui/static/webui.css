@@ -120,7 +120,6 @@ a.kill-link {
   margin-right: 2px;
   margin-left: 20px;
   color: gray;
-  float: right;
 }
 
 a.name-link {
@@ -131,7 +130,6 @@ span.expand-details {
   font-size: 10pt;
   cursor: pointer;
   color: grey;
-  float: right;
 }
 
 span.rest-uri {
