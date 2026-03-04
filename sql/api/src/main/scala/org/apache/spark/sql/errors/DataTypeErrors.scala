@@ -191,8 +191,7 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
       messageParameters = Map(
         "value" -> value.toPlainString,
         "precision" -> decimalPrecision.toString,
-        "scale" -> decimalScale.toString,
-        "config" -> toSQLConf("spark.sql.ansi.enabled")),
+        "scale" -> decimalScale.toString),
       context = getQueryContext(context),
       summary = getSummary(context))
   }

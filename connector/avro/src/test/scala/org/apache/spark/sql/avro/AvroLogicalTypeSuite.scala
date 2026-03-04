@@ -443,8 +443,7 @@ abstract class AvroLogicalTypeSuite extends QueryTest with SharedSparkSession {
         parameters = Map(
           "value" -> "0",
           "precision" -> "4",
-          "scale" -> "2",
-          "config" -> "\"spark.sql.ansi.enabled\"")
+          "scale" -> "2")
       )
     }
   }
