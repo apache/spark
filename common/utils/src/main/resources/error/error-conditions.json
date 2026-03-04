@@ -8346,11 +8346,6 @@
       "A schema needs to be specified when using <className>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1134" : {
-    "message" : [
-      "Unable to infer schema for <format> at <fileCatalog>. It must be specified manually."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1135" : {
     "message" : [
       "<className> is not a valid Spark SQL Data Source."
