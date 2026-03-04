@@ -111,7 +111,8 @@ class AlterTableSetSerdeSuite extends AlterTableSetSerdeSuiteBase with CommandSu
         sql("ALTER TABLE does_not_exist SET SERDEPROPERTIES ('x' = 'y')")
       }
       checkErrorTableNotFoundWithSearchPath(e3, "`does_not_exist`",
-        ExpectedContext("does_not_exist", 12, 11 + "does_not_exist".length), defaultSearchPathForTests)
+        ExpectedContext("does_not_exist", 12, 11 + "does_not_exist".length),
+        defaultSearchPathForTests)
     }
   }
 
@@ -167,7 +168,8 @@ class AlterTableSetSerdeSuite extends AlterTableSetSerdeSuiteBase with CommandSu
         sql("ALTER TABLE does_not_exist PARTITION (a=1, b=2) SET SERDEPROPERTIES ('x' = 'y')")
       }
       checkErrorTableNotFoundWithSearchPath(e5, "`does_not_exist`",
-        ExpectedContext("does_not_exist", 12, 11 + "does_not_exist".length), defaultSearchPathForTests)
+        ExpectedContext("does_not_exist", 12, 11 + "does_not_exist".length),
+        defaultSearchPathForTests)
     }
   }
 }

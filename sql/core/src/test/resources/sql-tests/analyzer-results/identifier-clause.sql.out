@@ -1037,10 +1037,12 @@ CREATE TEMPORARY VIEW IDENTIFIER('default.v')(c1) AS VALUES(1)
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "TEMP_VIEW_NAME_TOO_MANY_NAME_PARTS",
-  "sqlState" : "428EK",
+  "errorClass" : "INVALID_TEMP_OBJ_QUALIFIER",
+  "sqlState" : "42602",
   "messageParameters" : {
-    "actualName" : "`default`.`v`"
+    "objectName" : "`v`",
+    "objectType" : "VIEW",
+    "qualifier" : "`default`"
   },
   "queryContext" : [ {
     "objectType" : "",

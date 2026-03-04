@@ -1646,8 +1646,9 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     var e = intercept[AnalysisException] {
       sql("select * from in_valid_table")
     }
-    checkErrorTableNotFound(e, "`in_valid_table`",
-      ExpectedContext("in_valid_table", 14, 13 + "in_valid_table".length))
+    checkErrorTableNotFoundWithSearchPath(e, "`in_valid_table`",
+      ExpectedContext("in_valid_table", 14, 13 + "in_valid_table".length),
+      defaultSearchPathForTests)
 
     e = intercept[AnalysisException] {
       sql("select * from no_db.no_table").show()

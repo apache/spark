@@ -76,7 +76,8 @@ trait ShowTblPropertiesSuiteBase extends QueryTest with DDLCommandTestUtils {
       sql("SHOW TBLPROPERTIES BADTABLE")
     }
     checkErrorTableNotFoundWithSearchPath(e, "`BADTABLE`",
-      ExpectedContext("BADTABLE", 19, 18 + "BADTABLE".length), defaultSearchPathForTests)
+      ExpectedContext("BADTABLE", 19, 18 + "BADTABLE".length),
+      defaultSearchPathForTests)
   }
 
   test("SHOW TBLPROPERTIES(KEY) KEY NOT FOUND") {

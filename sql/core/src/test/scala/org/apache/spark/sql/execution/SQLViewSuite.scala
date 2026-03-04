@@ -454,7 +454,10 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  private def assertRelationNotFound(query: String, relation: String, context: ExpectedContext): Unit =
+  private def assertRelationNotFound(
+      query: String,
+      relation: String,
+      context: ExpectedContext): Unit =
     assertRelationNotFound(query, relation, context, useSearchPath = true)
 
   private def assertRelationNotFound(
@@ -481,8 +484,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
 
   test("error handling: fail if the temp view name contains the database prefix") {
     // Fully qualified table name like "database.table" is not allowed for temporary view
+    val sqlText = "CREATE OR REPLACE TEMPORARY VIEW default.myabcdview AS SELECT * FROM jt"
     val e = intercept[ParseException] {
-      sql("CREATE OR REPLACE TEMPORARY VIEW default.myabcdview AS SELECT * FROM jt")
+      sql(sqlText)
     }
     checkError(
       exception = e,
@@ -490,7 +494,8 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
       parameters = Map(
         "objectType" -> "VIEW",
         "objectName" -> "`myabcdview`",
-        "qualifier" -> "`default`"))
+        "qualifier" -> "`default`"),
+      context = ExpectedContext(sqlText, 0, sqlText.length - 1))
   }
 
   test("error handling: disallow IF NOT EXISTS for CREATE TEMPORARY VIEW") {

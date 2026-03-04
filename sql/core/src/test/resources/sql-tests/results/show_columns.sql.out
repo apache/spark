@@ -192,10 +192,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND_WITH_SEARCH_PATH",
   "sqlState" : "42P01",
   "messageParameters" : {
-    "relationName" : "`showcolumn4`"
+    "relationName" : "`showcolumn4`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`showdb`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -210,10 +211,16 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SHOW COLUMNS IN global_temp.showcolumn4
 -- !query schema
-struct<col_name:string>
+struct<>
 -- !query output
-col 5
-col1
+org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`spark_catalog`.`showdb`.`showcolumn4`"
+  }
+}
 
 
 -- !query

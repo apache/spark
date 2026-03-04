@@ -6,10 +6,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND_WITH_SEARCH_PATH",
   "sqlState" : "42P01",
   "messageParameters" : {
-    "relationName" : "`not_exist`"
+    "relationName" : "`not_exist`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -43,10 +44,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND_WITH_SEARCH_PATH",
   "sqlState" : "42P01",
   "messageParameters" : {
-    "relationName" : "`not_exist`"
+    "relationName" : "`not_exist`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -65,10 +67,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND_WITH_SEARCH_PATH",
   "sqlState" : "42P01",
   "messageParameters" : {
-    "relationName" : "`not_exist`"
+    "relationName" : "`not_exist`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -87,10 +90,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND_WITH_SEARCH_PATH",
   "sqlState" : "42P01",
   "messageParameters" : {
-    "relationName" : "`not_exist`"
+    "relationName" : "`not_exist`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -109,10 +113,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND_WITH_SEARCH_PATH",
   "sqlState" : "42P01",
   "messageParameters" : {
-    "relationName" : "`not_exist`"
+    "relationName" : "`not_exist`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -177,10 +182,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND_WITH_SEARCH_PATH",
   "sqlState" : "42P01",
   "messageParameters" : {
-    "relationName" : "`not_\"exists`"
+    "relationName" : "`not_\"exists`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -199,10 +205,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND_WITH_SEARCH_PATH",
   "sqlState" : "42P01",
   "messageParameters" : {
-    "relationName" : "`hello`"
+    "relationName" : "`hello`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -236,10 +243,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND_WITH_SEARCH_PATH",
   "sqlState" : "42P01",
   "messageParameters" : {
-    "relationName" : "`not_exist`"
+    "relationName" : "`not_exist`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -258,10 +266,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND_WITH_SEARCH_PATH",
   "sqlState" : "42P01",
   "messageParameters" : {
-    "relationName" : "`not_exist`"
+    "relationName" : "`not_exist`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -280,10 +289,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND_WITH_SEARCH_PATH",
   "sqlState" : "42P01",
   "messageParameters" : {
-    "relationName" : "`not_exist`"
+    "relationName" : "`not_exist`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -302,10 +312,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND_WITH_SEARCH_PATH",
   "sqlState" : "42P01",
   "messageParameters" : {
-    "relationName" : "`not_exist`"
+    "relationName" : "`not_exist`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",

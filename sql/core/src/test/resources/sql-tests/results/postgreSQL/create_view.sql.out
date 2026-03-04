@@ -670,10 +670,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND_WITH_SEARCH_PATH",
   "sqlState" : "42P01",
   "messageParameters" : {
-    "relationName" : "`v7_temp`"
+    "relationName" : "`v7_temp`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`temp_view_test`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -692,10 +693,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND_WITH_SEARCH_PATH",
   "sqlState" : "42P01",
   "messageParameters" : {
-    "relationName" : "`v10_temp`"
+    "relationName" : "`v10_temp`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`temp_view_test`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -714,10 +716,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND_WITH_SEARCH_PATH",
   "sqlState" : "42P01",
   "messageParameters" : {
-    "relationName" : "`v11_temp`"
+    "relationName" : "`v11_temp`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`temp_view_test`]"
   },
   "queryContext" : [ {
     "objectType" : "",

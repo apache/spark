@@ -41,7 +41,8 @@ trait AlterTableRecoverPartitionsSuiteBase extends command.AlterTableRecoverPart
       sql("ALTER TABLE does_not_exist RECOVER PARTITIONS")
     }
     checkErrorTableNotFoundWithSearchPath(e, "`does_not_exist`",
-      ExpectedContext("does_not_exist", 12, 11 + "does_not_exist".length), defaultSearchPathForTests)
+      ExpectedContext("does_not_exist", 12, 11 + "does_not_exist".length),
+      defaultSearchPathForTests)
   }
 
   test("valid locations") {
