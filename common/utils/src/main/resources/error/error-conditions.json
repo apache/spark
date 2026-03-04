@@ -7849,6 +7849,12 @@
     ],
     "sqlState" : "42K0E"
   },
+  "WINDOW_FUNCTION_NOT_ALLOWED_IN_CLAUSE" : {
+    "message" : [
+      "It is not allowed to use window functions inside <clauseName> clause."
+    ],
+    "sqlState" : "42601"
+  },
   "WINDOW_FUNCTION_WITHOUT_OVER_CLAUSE" : {
     "message" : [
       "Window function <funcName> requires an OVER clause."
@@ -8112,11 +8118,6 @@
     "message" : [
       "<expr> has multiple Window Specifications (<distinctWindowSpec>).",
       "Please file a bug report with this error message, stack trace, and the query."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1034" : {
-    "message" : [
-      "It is not allowed to use window functions inside <clauseName> clause."
     ]
   },
   "_LEGACY_ERROR_TEMP_1035" : {
