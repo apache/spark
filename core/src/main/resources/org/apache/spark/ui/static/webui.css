@@ -494,3 +494,7 @@ a.downloadbutton {
 .offcanvas-resize-handle.resizing {
   background-color: rgba(13, 110, 253, 0.3);
 }
+
+.tab-content {
+  margin-top: 10px;
+}
