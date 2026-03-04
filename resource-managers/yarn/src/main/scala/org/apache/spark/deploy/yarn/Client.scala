@@ -168,6 +168,11 @@ private[spark] class Client(
 
   private var appId: ApplicationId = null
 
+  // Exposed for testing.
+  private[yarn] def setApplicationId(appId: ApplicationId): Unit = {
+    this.appId = appId
+  }
+
   def getApplicationId(): ApplicationId = {
     appId
   }
@@ -1025,11 +1030,16 @@ private[spark] class Client(
     env
   }
 
+  // Exposed for testing.
+  private[yarn] def setStagingDir(stagingDir: String): Unit = {
+    stagingDirPath = new Path(stagingDir)
+  }
+
   /**
    * Set up a ContainerLaunchContext to launch our ApplicationMaster container.
    * This sets up the launch environment, java options, and the command for launching the AM.
    */
-  private def createContainerLaunchContext(): ContainerLaunchContext = {
+  private[yarn] def createContainerLaunchContext(): ContainerLaunchContext = {
     logInfo("Setting up container launch context for our AM")
     val pySparkArchives =
       if (sparkConf.get(IS_PYTHON_APP)) {

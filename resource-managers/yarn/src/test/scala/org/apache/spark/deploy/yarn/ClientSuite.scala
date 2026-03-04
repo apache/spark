@@ -52,6 +52,7 @@ import org.scalatest.matchers.should.Matchers._
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite, TestUtils}
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.config._
+import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.resource.ResourceID
 import org.apache.spark.resource.ResourceUtils.AMOUNT
 import org.apache.spark.util.{SparkConfWithEnv, Utils}
@@ -753,6 +754,58 @@ class ClientSuite extends SparkFunSuite
     val client = createClient(sparkConf)
     val env = client.setupLaunchEnv(new Path("/staging/dir/path"), Seq())
     env("SPARK_USER") should be ("overrideuser")
+  }
+
+  test("YARN AM JavaOptions") {
+    Seq("client", "cluster").foreach { deployMode =>
+      withTempDir { stagingDir =>
+        val sparkConf = new SparkConfWithEnv(
+          Map("SPARK_HOME" -> System.getProperty("spark.test.home")))
+          .set(SUBMIT_DEPLOY_MODE, deployMode)
+          .set(SparkLauncher.DRIVER_DEFAULT_JAVA_OPTIONS, "-Dx=1 -Dy=2")
+          .set(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS, "-Dz=3")
+          .set(AM_DEFAULT_JAVA_OPTIONS, "-Da=1 -Db=2")
+          .set(AM_JAVA_OPTIONS, "-Dc=3")
+
+        val client = createClient(sparkConf)
+        // A dummy ApplicationId impl, only `toString` method will be called
+        // in Client.createContainerLaunchContext
+        client.setApplicationId(new ApplicationId {
+          override def getId: Int = 1
+          override def setId(i: Int): Unit = {}
+          override def getClusterTimestamp: Long = 1770077136288L
+          override def setClusterTimestamp(l: Long): Unit = {}
+          override def build(): Unit = {}
+          override def toString: String = "application_1770077136288_0001"
+        })
+        client.setStagingDir(stagingDir.getAbsolutePath)
+        val containerLaunchContext = client.createContainerLaunchContext()
+
+        val commands = containerLaunchContext.getCommands.asScala
+        deployMode match {
+          case "client" =>
+            // In client mode, spark.yarn.am.defaultJavaOptions and spark.yarn.am.extraJavaOptions
+            // should be set in AM container command JAVA_OPTIONS
+            commands should contain("'-Da=1'")
+            commands should contain("'-Db=2'")
+            commands should contain("'-Dc=3'")
+            commands should not contain "'-Dx=1'"
+            commands should not contain "'-Dy=2'"
+            commands should not contain "'-Dz=3'"
+          case "cluster" =>
+            // In cluster mode, spark.driver.defaultJavaOptions and spark.driver.extraJavaOptions
+            // should be set in AM container command JAVA_OPTIONS
+            commands should not contain "'-Da=1'"
+            commands should not contain "'-Db=2'"
+            commands should not contain "'-Dc=3'"
+            commands should contain ("'-Dx=1'")
+            commands should contain ("'-Dy=2'")
+            commands should contain ("'-Dz=3'")
+          case m =>
+            fail(s"Unexpected deploy mode: $m")
+        }
+      }
+    }
   }
 
   private val matching = Seq(
