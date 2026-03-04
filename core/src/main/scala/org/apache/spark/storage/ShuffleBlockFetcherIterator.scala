@@ -284,18 +284,28 @@ final class ShuffleBlockFetcherIterator(
 
   private[this] def createFallbackStorageRequest(blockId: BlockId, mapIndex: Int): Unit = {
     Future {
-      try {
-        val block = blockManager.getFallbackStorageBlockData(blockId)
-        val request = FallbackStorageRequest(blockId, mapIndex, block)
-        results.put(PreparedFallbackStorageRequestResult(request))
-      } catch {
-        case e: Throwable =>
-          logError(log"Failed to prepare request to read block ${MDC(BLOCK_ID, blockId)} " +
-            log"from fallback storage", e)
-          results.put(
-            FailureFetchResult(blockId, mapIndex, FallbackStorage.FALLBACK_BLOCK_MANAGER_ID, e))
-          // stop processing any further fallback storage requests
-          fallbackStorageReadPool.shutdownNow()
+      if (!isZombie) {
+        try {
+          val block = blockManager.getFallbackStorageBlockData(blockId)
+          val request = FallbackStorageRequest(blockId, mapIndex, block)
+          results.put(PreparedFallbackStorageRequestResult(request))
+        } catch {
+          case e: Throwable =>
+            // the FailureFetchResult will stop iteration of this iterator
+            // task completion listener will shut down the thread pool / execution context
+            // the synchronized protects isZombie and blocks cleanup() from calling
+            // fallbackStorageReadPool.shutdownNow(), which would interrupt results.put
+            // that interrupted exception would kill the executor
+            synchronized {
+              if (!isZombie) {
+                logError(log"Failed to prepare request to read block ${MDC(BLOCK_ID, blockId)} " +
+                  log"from fallback storage", e)
+                val result = FailureFetchResult(
+                  blockId, mapIndex, FallbackStorage.FALLBACK_BLOCK_MANAGER_ID, e)
+                results.putFirst(result)
+              }
+            }
+        }
       }
     }(fallbackStorageReadContext)
   }
@@ -1325,13 +1335,20 @@ final class ShuffleBlockFetcherIterator(
             results.put(result)
           } catch {
             case e: Throwable =>
-              logError(log"Failed to read block ${MDC(BLOCK_ID, request.blockId)} " +
-                log"from fallback storage", e)
-              val result = FailureFetchResult(
-                request.blockId, request.mapIndex, FallbackStorage.FALLBACK_BLOCK_MANAGER_ID, e)
-              results.put(result)
-              // stop processing any further fallback storage requests
-              fallbackStorageReadPool.shutdownNow()
+              // the FailureFetchResult will stop iteration of this iterator
+              // task completion listener will shut down the thread pool / execution context
+              // the synchronized protects isZombie and blocks cleanup() from calling
+              // fallbackStorageReadPool.shutdownNow(), which would interrupt results.put
+              // that interrupted exception would kill the executor
+              synchronized {
+                if (!isZombie) {
+                  logError(log"Failed to read block ${MDC(BLOCK_ID, request.blockId)} " +
+                    log"from fallback storage", e)
+                  val result = FailureFetchResult(
+                    request.blockId, request.mapIndex, FallbackStorage.FALLBACK_BLOCK_MANAGER_ID, e)
+                  results.putFirst(result)
+                }
+              }
           }
         }
       }(fallbackStorageReadContext)
