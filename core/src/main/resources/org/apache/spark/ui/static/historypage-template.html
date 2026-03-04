@@ -16,15 +16,15 @@
 -->
 
 <script id="history-summary-template" type="text/html">
-<div class="row" style="margin-bottom: 10px;">
+<div class="row mb-2">
   <div class="col-md-12">
-    <label for="log-path-filter" style="margin-right: 10px;">Filter by Log Source:</label>
-    <select id="log-path-filter" class="form-control" style="display: inline-block; width: auto;">
+    <label for="log-path-filter" class="me-2">Filter by Log Source:</label>
+    <select id="log-path-filter" class="form-control d-inline-block w-auto">
       <option value="">All Sources</option>
     </select>
   </div>
 </div>
-<table id="history-summary-table" class="table table-striped compact">
+<table id="history-summary-table" class="table table-striped table-hover compact">
   <thead>
     <tr>
       <th>
@@ -43,7 +43,7 @@
         </span>
       </th>
       <th>
-        <span data-toggle="tooltip" data-placement="top" title="Log directory where this application's event log is stored.">
+        <span data-bs-toggle="tooltip" title="Log directory where this application's event log is stored.">
           Log Source
         </span>
       </th>
