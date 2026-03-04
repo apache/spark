@@ -1237,8 +1237,20 @@ class BasePythonDataSourceTestsMixin:
 
                 logs = self.spark.tvf.python_worker_logs()
 
+                # We could get either 1 or 2 "TestJsonWriter.write: abort test" logs because
+                # the operation is time sensitive. When the first partition gets aborted,
+                # the executor will cancel the rest of the tasks. Whether we are able to get
+                # the second log depends on whether the second partition starts before the
+                # cancellation. When we use simple worker, the second log is often missing
+                # because the spawn overhead is large.
+                non_abort_logs = logs.select("level", "msg", "context", "logger").filter(
+                    "msg != 'TestJsonWriter.write: abort test'"
+                )
+                abort_logs = logs.select("level", "msg", "context", "logger").filter(
+                    "msg == 'TestJsonWriter.write: abort test'"
+                )
                 assertDataFrameEqual(
-                    logs.select("level", "msg", "context", "logger"),
+                    non_abort_logs,
                     [
                         Row(
                             level="WARNING",
@@ -1284,18 +1296,21 @@ class BasePythonDataSourceTestsMixin:
                                 {"class_name": "TestJsonDataSource", "func_name": "writer"},
                             ),
                             (
-                                "TestJsonWriter.write: abort test",
-                                {"class_name": "TestJsonWriter", "func_name": "write"},
-                            ),
-                            (
-                                "TestJsonWriter.write: abort test",
-                                {"class_name": "TestJsonWriter", "func_name": "write"},
-                            ),
-                            (
                                 "TestJsonWriter.abort",
                                 {"class_name": "TestJsonWriter", "func_name": "abort"},
                             ),
                         ]
+                    ],
+                )
+                assertDataFrameEqual(
+                    abort_logs.dropDuplicates(["msg"]),
+                    [
+                        Row(
+                            level="WARNING",
+                            msg="TestJsonWriter.write: abort test",
+                            context={"class_name": "TestJsonWriter", "func_name": "write"},
+                            logger="test_datasource_writer",
+                        )
                     ],
                 )
 
@@ -1343,6 +1358,12 @@ class BasePythonDataSourceTestsMixin:
 
 class PythonDataSourceTests(BasePythonDataSourceTestsMixin, ReusedSQLTestCase):
     ...
+
+
+class PythonDataSourceTestsWithSimpleWorker(PythonDataSourceTests):
+    @classmethod
+    def conf(self):
+        return super().conf().set("spark.python.use.daemon", "false")
 
 
 if __name__ == "__main__":

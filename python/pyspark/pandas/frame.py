@@ -11551,9 +11551,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         # dtype: bool
         return first_series(DataFrame(internal))
 
-    # TODO(SPARK-46167): add axis, pct, na_option parameter
+    # TODO(SPARK-46167): add pct, na_option parameter
     def rank(
-        self, method: str = "average", ascending: bool = True, numeric_only: bool = False
+        self,
+        method: Literal["average", "min", "max", "first", "dense"] = "average",
+        ascending: bool = True,
+        numeric_only: bool = False,
+        axis: Axis = 0,
     ) -> "DataFrame":
         """
         Compute numerical data ranks (1 through n) along axis. Equal values are
@@ -11579,6 +11583,15 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
             .. versionchanged:: 4.0.0
                 The default value of ``numeric_only`` is now ``False``.
+
+        axis : {0 or 'index', 1 or 'columns'}, default 0
+            Axis along which to rank:
+
+            * 0 or 'index': rank each column independently
+            * 1 or 'columns': rank each row independently (across columns)
+
+            .. note:: For axis=1, pandas UDF is used which may have performance overhead
+                for very wide DataFrames (100+ columns).
 
 
         Returns
@@ -11644,17 +11657,72 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         1  2.5
         2  2.5
         3  4.0
+
+        Rank across columns with axis=1:
+
+        >>> df = ps.DataFrame({'A': [1, 2, 2, 3], 'B': [4, 3, 2, 1]}, columns=['A', 'B'])
+        >>> df.rank(axis=1).sort_index()
+             A    B
+        0  1.0  2.0
+        1  1.0  2.0
+        2  1.5  1.5
+        3  2.0  1.0
         """
+        axis = validate_axis(axis)
+
         if numeric_only:
             numeric_col_names = [
                 self._psser_for(label).name
                 for label in self._internal.column_labels
                 if isinstance(self._psser_for(label).spark.data_type, (NumericType, BooleanType))
             ]
-        psdf = self[numeric_col_names] if numeric_only else self
-        return psdf._apply_series_op(
-            lambda psser: psser._rank(method=method, ascending=ascending), should_resolve=True
-        )
+            psdf = self[numeric_col_names]
+        else:
+            psdf = self
+
+        if axis == 0:
+            return psdf._apply_series_op(
+                lambda psser: psser._rank(method=method, ascending=ascending), should_resolve=True
+            )
+        else:
+            # Fast path for small dataframes
+            limit = get_option("compute.shortcut_limit")
+            pdf = psdf.head(limit + 1)._to_internal_pandas()
+            if len(pdf) <= limit:
+                pdf_rank = pdf.rank(method=method, ascending=ascending, axis=1, numeric_only=False)
+                return DataFrame(InternalFrame.from_pandas(pdf_rank))
+
+            column_label_strings = [
+                name_like_string(label) for label in psdf._internal.column_labels
+            ]
+
+            @pandas_udf(  # type: ignore[call-overload]
+                returnType=StructType(
+                    [
+                        StructField(col_name, DoubleType(), nullable=True)
+                        for col_name in column_label_strings
+                    ]
+                )
+            )
+            def rank_axis_1(*cols: pd.Series) -> pd.DataFrame:
+                pdf_row = pd.concat(cols, axis=1, keys=column_label_strings)
+                return pdf_row.rank(method=method, ascending=ascending, axis=1).rename(
+                    columns=dict(zip(pdf_row.columns, column_label_strings))
+                )
+
+            ranked_struct_col = rank_axis_1(*psdf._internal.data_spark_columns)
+            new_data_columns = [
+                ranked_struct_col[col_name].alias(col_name) for col_name in column_label_strings
+            ]
+            data_fields = [
+                InternalField(
+                    dtype=np.dtype("float64"),
+                    struct_field=StructField(name_like_string(label), DoubleType(), nullable=True),
+                )
+                for label in psdf._internal.column_labels
+            ]
+            internal = psdf._internal.with_new_columns(new_data_columns, data_fields=data_fields)
+            return DataFrame(internal)
 
     def filter(
         self,

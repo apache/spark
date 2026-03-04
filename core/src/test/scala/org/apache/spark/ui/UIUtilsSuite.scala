@@ -165,7 +165,7 @@ class UIUtilsSuite extends SparkFunSuite {
         <thead>
           <th width="" class="">{header(0)}</th>
           <th width="" class="">
-              <span data-bs-toggle="tooltip" title="tooltip">
+              <span data-bs-toggle="tooltip" data-bs-placement="top" title="tooltip">
                 {header(1)}
               </span>
           </th>

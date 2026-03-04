@@ -364,9 +364,9 @@ private[spark] trait PagedTable[T] {
 
           <th>
             <a href={headerLink}>
-              <span data-bs-toggle="tooltip" data-bs-placement="top" title={tooltip.getOrElse("")}>
-                {header}&nbsp;{Unparsed(arrow)}
-              </span>
+              {UIUtils.tooltipSpan(
+                <xml:group>{header}&nbsp;{Unparsed(arrow)}</xml:group>,
+                tooltip.getOrElse(""))}
             </a>
           </th>
         } else {
@@ -379,17 +379,14 @@ private[spark] trait PagedTable[T] {
 
             <th>
               <a href={headerLink}>
-                <span data-bs-toggle="tooltip"
-                  data-bs-placement="top" title={tooltip.getOrElse("")}>
-                  {header}
-                </span>
+                {UIUtils.tooltipSpan(<xml:group>{header}</xml:group>,
+                  tooltip.getOrElse(""))}
               </a>
             </th>
           } else {
             <th>
-              <span data-bs-toggle="tooltip" data-bs-placement="top" title={tooltip.getOrElse("")}>
-                {header}
-              </span>
+              {UIUtils.tooltipSpan(<xml:group>{header}</xml:group>,
+                tooltip.getOrElse(""))}
             </th>
           }
         }

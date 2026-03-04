@@ -474,3 +474,20 @@ a.downloadbutton {
   bottom: 50%;
   transform: translateY(50%);
 }
+
+/* Offcanvas resize handle */
+.offcanvas-resize-handle {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 6px;
+  height: 100%;
+  cursor: ew-resize;
+  background: transparent;
+  z-index: 1060;
+  transition: background-color 0.15s;
+}
+.offcanvas-resize-handle:hover,
+.offcanvas-resize-handle.resizing {
+  background-color: rgba(13, 110, 253, 0.3);
+}
