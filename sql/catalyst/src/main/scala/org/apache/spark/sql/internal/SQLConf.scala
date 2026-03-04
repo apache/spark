@@ -3687,10 +3687,10 @@ object SQLConf {
   val STATE_STORE_FILE_CHECKSUM_THREAD_POOL_SIZE =
     buildConf("spark.sql.streaming.stateStore.fileChecksumThreadPoolSize")
       .internal()
-      .doc("Number of threads used to compute file checksums concurrently when uploading " +
-        "state store checkpoints (e.g. main file and checksum file). " +
-        "Set to 0 to disable the thread pool and run operations sequentially on the calling " +
-        "thread. WARNING: Reducing below the default value of 4 may have performance impact.")
+      .doc("Number of threads used to read/write files and their corresponding checksum files " +
+        "concurrently. Set to 0 to disable the thread pool and run operations sequentially on " +
+        "the calling thread. WARNING: Reducing below the default value of 4 may have " +
+        "performance impact.")
       .version("4.2.0")
       .intConf
       .checkValue(x => x >= 0, "Must be a non-negative integer (0 to disable thread pool)")
