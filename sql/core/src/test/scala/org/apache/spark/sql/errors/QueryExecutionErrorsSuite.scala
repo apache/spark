@@ -1292,6 +1292,24 @@ class QueryExecutionErrorsSuite
       parameters = Map("dataType" -> "PhysicalCalendarIntervalType"))
   }
 
+  test("SPARK-49634: Numeric value out of range") {
+    val query = "select cast('123.45' as decimal(4, 2))"
+
+    checkError(
+      exception = intercept[SparkArithmeticException] {
+         spark.sql(query).show()
+      },
+      condition = "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
+      parameters = Map(
+        "value" -> "123.45",
+        "precision" -> "4",
+        "scale" -> "2"
+      ),
+      context = ExpectedContext(
+        fragment = query.substring(7), start = 7, stop = 37
+      )
+    )
+  }
 }
 
 class FakeFileSystemSetPermission extends LocalFileSystem {
