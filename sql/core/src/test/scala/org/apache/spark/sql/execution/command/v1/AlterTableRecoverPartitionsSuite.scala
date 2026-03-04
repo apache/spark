@@ -40,7 +40,7 @@ trait AlterTableRecoverPartitionsSuiteBase extends command.AlterTableRecoverPart
     val e = intercept[AnalysisException] {
       sql("ALTER TABLE does_not_exist RECOVER PARTITIONS")
     }
-    checkErrorTableNotFound(e, "`does_not_exist`",
+    checkErrorTableNotFoundWithSearchPath(e, "`does_not_exist`",
       ExpectedContext("does_not_exist", 12, 11 + "does_not_exist".length))
   }
 

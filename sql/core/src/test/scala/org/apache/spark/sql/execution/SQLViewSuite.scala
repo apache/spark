@@ -439,7 +439,8 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
     assertRelationNotFound(
       "CREATE OR REPLACE VIEW myabcdview AS SELECT * FROM db_not_exist234.jt",
       "`db_not_exist234`.`jt`",
-      ExpectedContext("db_not_exist234.jt", 51, 50 + "db_not_exist234.jt".length))
+      ExpectedContext("db_not_exist234.jt", 51, 50 + "db_not_exist234.jt".length),
+      useSearchPath = false)
 
     // A table that does not exist
     assertRelationNotFound(
@@ -453,12 +454,28 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  private def assertRelationNotFound(query: String, relation: String, context: ExpectedContext):
-  Unit = {
+  private def assertRelationNotFound(query: String, relation: String, context: ExpectedContext): Unit =
+    assertRelationNotFound(query, relation, context, useSearchPath = true)
+
+  private def assertRelationNotFound(
+      query: String,
+      relation: String,
+      context: ExpectedContext,
+      useSearchPath: Boolean): Unit = {
     val e = intercept[AnalysisException] {
       sql(query)
     }
-    checkErrorTableNotFound(e, relation, context)
+    if (useSearchPath) {
+      checkError(
+        exception = e,
+        condition = "TABLE_OR_VIEW_NOT_FOUND_WITH_SEARCH_PATH",
+        parameters = Map(
+          "relationName" -> relation,
+          "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"),
+        queryContext = Array(context))
+    } else {
+      checkErrorTableNotFound(e, relation, context)
+    }
   }
 
 
@@ -467,8 +484,13 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
     val e = intercept[ParseException] {
       sql("CREATE OR REPLACE TEMPORARY VIEW default.myabcdview AS SELECT * FROM jt")
     }
-    assert(e.message.contains(
-      "CREATE TEMPORARY VIEW or the corresponding Dataset APIs only accept single-part view names"))
+    checkError(
+      exception = e,
+      condition = "INVALID_TEMP_OBJ_QUALIFIER",
+      parameters = Map(
+        "objectType" -> "VIEW",
+        "objectName" -> "`myabcdview`",
+        "qualifier" -> "`default`"))
   }
 
   test("error handling: disallow IF NOT EXISTS for CREATE TEMPORARY VIEW") {
@@ -672,7 +694,8 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
     assertRelationNotFound(
       "ALTER VIEW default.testView AS SELECT 1, 2",
       "`default`.`testView`",
-      ExpectedContext("default.testView", 11, 10 + "default.testView".length))
+      ExpectedContext("default.testView", 11, 10 + "default.testView".length),
+      useSearchPath = false)
   }
 
   test("ALTER VIEW AS should try to alter temp view first if view name has no database part") {

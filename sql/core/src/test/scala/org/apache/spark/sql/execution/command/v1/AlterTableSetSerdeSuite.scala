@@ -110,7 +110,7 @@ class AlterTableSetSerdeSuite extends AlterTableSetSerdeSuiteBase with CommandSu
       val e3 = intercept[AnalysisException] {
         sql("ALTER TABLE does_not_exist SET SERDEPROPERTIES ('x' = 'y')")
       }
-      checkErrorTableNotFound(e3, "`does_not_exist`",
+      checkErrorTableNotFoundWithSearchPath(e3, "`does_not_exist`",
         ExpectedContext("does_not_exist", 12, 11 + "does_not_exist".length))
     }
   }
@@ -166,7 +166,7 @@ class AlterTableSetSerdeSuite extends AlterTableSetSerdeSuiteBase with CommandSu
       val e5 = intercept[AnalysisException] {
         sql("ALTER TABLE does_not_exist PARTITION (a=1, b=2) SET SERDEPROPERTIES ('x' = 'y')")
       }
-      checkErrorTableNotFound(e5, "`does_not_exist`",
+      checkErrorTableNotFoundWithSearchPath(e5, "`does_not_exist`",
         ExpectedContext("does_not_exist", 12, 11 + "does_not_exist".length))
     }
   }

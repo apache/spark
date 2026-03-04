@@ -75,7 +75,7 @@ trait ShowTblPropertiesSuiteBase extends QueryTest with DDLCommandTestUtils {
     val e = intercept[AnalysisException] {
       sql("SHOW TBLPROPERTIES BADTABLE")
     }
-    checkErrorTableNotFound(e, "`BADTABLE`",
+    checkErrorTableNotFoundWithSearchPath(e, "`BADTABLE`",
       ExpectedContext("BADTABLE", 19, 18 + "BADTABLE".length))
   }
 
