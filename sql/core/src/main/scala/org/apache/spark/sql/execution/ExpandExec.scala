@@ -57,11 +57,9 @@ case class ExpandExec(
     val numOutputRows = longMetric("numOutputRows")
 
     child.execute().mapPartitionsWithIndexInternal { (index, iter) =>
-      val groups = projections.map(projection)
       groups.foreach(_.initialize(index))
-      val groupIterator = groups.iterator
       iter.flatMap { input =>
-        groupIterator.map { group =>
+        groups.iterator.map { group =>
           numOutputRows += 1
           group(input)
         }
