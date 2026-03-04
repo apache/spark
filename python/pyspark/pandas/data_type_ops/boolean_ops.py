@@ -360,6 +360,10 @@ class BooleanOps(DataTypeOps):
         return operand
 
     def eq(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        _sanitize_list_like(right)
+        if isinstance(right, str):
+            return column_op(lambda c: F.lit(False))(left)
+
         if is_ansi_mode_enabled(left._internal.spark_frame.sparkSession):
             # Handle bool vs. non-bool numeric comparisons
             left_is_bool = _is_boolean_type(left)
@@ -376,6 +380,12 @@ class BooleanOps(DataTypeOps):
                     )
 
         return super().eq(left, right)
+
+    def ne(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        _sanitize_list_like(right)
+        if isinstance(right, str):
+            return column_op(lambda c: F.lit(True))(left)
+        return super(BooleanOps, self).ne(left, right)
 
     def lt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
