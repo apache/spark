@@ -112,8 +112,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map(
         "value" -> value.toPlainString,
         "precision" -> decimalPrecision.toString,
-        "scale" -> decimalScale.toString,
-        "config" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
+        "scale" -> decimalScale.toString),
       context = getQueryContext(context),
       summary = getSummary(context))
   }

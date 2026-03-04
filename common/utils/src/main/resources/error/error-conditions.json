@@ -5033,7 +5033,7 @@
       },
       "WITH_SUGGESTION" : {
         "message" : [
-          "<value> cannot be represented as Decimal(<precision>, <scale>). If necessary set <config> to \"false\" to bypass this error, and return NULL instead."
+          "<value> cannot be represented as Decimal(<precision>, <scale>)."
         ]
       }
     },
