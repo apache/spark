@@ -431,9 +431,7 @@ private[spark] object UIUtils extends Logging {
         getTooltip(x._2) match {
           case Some(tooltip) =>
             <th width={colWidthAttr} class={getClass(x._2)}>
-              <span data-bs-toggle="tooltip" title={tooltip}>
-                {getHeaderContent(x._1)}
-              </span>
+              {tooltipSpan(getHeaderContent(x._1), tooltip)}
             </th>
           case None => <th width={colWidthAttr} class={getClass(x._2)}>{getHeaderContent(x._1)}</th>
         }
@@ -517,10 +515,8 @@ private[spark] object UIUtils extends Logging {
       <span id={if (forJob) "job-dag-viz" else "stage-dag-viz"}
             class="expand-dag-viz" data-forjob={forJob.toString}>
         <span class="expand-dag-viz-arrow arrow-closed"></span>
-        <a data-bs-toggle="tooltip" title={if (forJob) ToolTips.JOB_DAG else ToolTips.STAGE_DAG}
-           data-bs-placement="top">
-          DAG Visualization
-        </a>
+        {tooltipLink(<xml:group>DAG Visualization</xml:group>,
+          if (forJob) ToolTips.JOB_DAG else ToolTips.STAGE_DAG)}
       </span>
       <div id="dag-viz-graph"></div>
       <div id="dag-viz-metadata" style="display:none">
@@ -554,6 +550,22 @@ private[spark] object UIUtils extends Logging {
     <sup>
       (<a data-bs-toggle="tooltip" data-bs-placement={position} title={text}>?</a>)
     </sup>
+  }
+
+  /** Wrap content in a span with a Bootstrap 5 tooltip. */
+  def tooltipSpan(content: Seq[Node], text: String,
+      placement: String = "top"): Seq[Node] = {
+    <span data-bs-toggle="tooltip" data-bs-placement={placement} title={text}>
+      {content}
+    </span>
+  }
+
+  /** Create a link with a Bootstrap 5 tooltip. */
+  def tooltipLink(content: Seq[Node], text: String,
+      placement: String = "top"): Seq[Node] = {
+    <a data-bs-toggle="tooltip" data-bs-placement={placement} title={text}>
+      {content}
+    </a>
   }
 
   /**

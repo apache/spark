@@ -199,9 +199,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
 
     <span class="expand-application-timeline">
       <span class="expand-application-timeline-arrow arrow-closed"></span>
-      <a data-bs-toggle="tooltip" title={ToolTips.JOB_TIMELINE} data-bs-placement="top">
-        Event Timeline
-      </a>
+      {UIUtils.tooltipLink(<xml:group>Event Timeline</xml:group>, ToolTips.JOB_TIMELINE)}
     </span> ++
     <div id="application-timeline" class="collapsed">
       {
