@@ -22,17 +22,7 @@ import scala.collection.mutable
 import org.apache.spark.api.python.{PythonWorker, PythonWorkerFactory}
 import org.apache.spark.internal.Logging
 
-/**
- * A key for the [[PythonWorkerFactory]] cache inside [[PythonWorkerManager]].
- * @param pythonExec
- *   The python executable to run the Python worker.
- * @param workerModule
- *   The worker module to be called in the worker, e.g., "pyspark.worker".
- * @param daemonModule
- *   The daemon module name to reuse the worker, e.g., "pyspark.daemon".
- * @param envVars
- *   The environment variables for the worker.
- */
+// Cache key for PythonWorkerFactory: (pythonExec, workerModule, daemonModule, envVars).
 private case class PythonWorkersKey(
     pythonExec: String,
     workerModule: String,

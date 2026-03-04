@@ -20,7 +20,7 @@ package org.apache.spark
 import org.apache.spark.api.python.PythonWorker
 
 // Tests for PythonWorkerManager.
-class PythonWorkerManagerSuite extends SparkFunSuite {
+class PythonWorkerManagerSuite extends SparkFunSuite with SharedSparkContext {
 
   // A non-existent Python executable used to make create() fail fast (IOException on pb.start())
   // without the 10-second accept() timeout that a real-but-wrong module would incur.
