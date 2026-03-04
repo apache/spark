@@ -155,8 +155,8 @@ abstract class RowLevelOperationSuiteBase
 
   // executes an operation and extracts conditions from ReplaceData or WriteDelta
   protected def executeAndKeepConditions(func: => Unit): (Expression, Option[Expression]) = {
-    val qes = withQueryExecutionsCaptured(spark)(func)
-    qes.head.optimizedPlan.collectFirst {
+    val Seq(qe) = withQueryExecutionsCaptured(spark)(func)
+    qe.optimizedPlan.collectFirst {
       case rd: ReplaceData => (rd.condition, rd.groupFilterCondition)
       case wd: WriteDelta => (wd.condition, None)
     }.getOrElse(fail("couldn't find row-level operation in optimized plan"))
