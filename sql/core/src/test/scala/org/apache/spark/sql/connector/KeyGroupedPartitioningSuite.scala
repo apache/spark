@@ -3077,4 +3077,23 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
       assert(groupPartitions.map(_.outputPartitioning.numPartitions) === Seq(6, 5, 5, 6))
     }
   }
+
+  test("SPARK-55092: Empty partitioned table") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      val items_partitions = Array(identity("id"))
+      createTable(items, itemsColumns, items_partitions)
+
+      val purchases_partitions = Array(identity("item_id"))
+      createTable(purchases, purchasesColumns, purchases_partitions)
+
+      val df = createJoinTestDF(Seq("id" -> "item_id"))
+      checkAnswer(df, Seq.empty)
+
+      val shuffles = collectShuffles(df.queryExecution.executedPlan)
+      assert(shuffles.size === 2, "empty tables should not report KeyedPartitioning")
+
+      val groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
+      assert(groupPartitions.isEmpty, "empty tables should not report KeyedPartitioning")
+    }
+  }
 }

@@ -92,7 +92,7 @@ trait DataSourceV2ScanExecBase extends LeafExecNode {
   override def outputPartitioning: physical.Partitioning = {
     keyGroupedPartitioning match {
       case Some(exprs) if conf.v2BucketingEnabled && KeyedPartitioning.supportsExpressions(exprs) &&
-          inputPartitions.length > 0 && inputPartitions.forall(_.isInstanceOf[HasPartitionKey]) =>
+          inputPartitions.nonEmpty && inputPartitions.forall(_.isInstanceOf[HasPartitionKey]) =>
         val dataTypes = exprs.map(_.dataType)
         val rowOrdering = RowOrdering.createNaturalAscendingOrdering(dataTypes)
         val partitionKeys =
