@@ -302,7 +302,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
     // Temp view resolved by name (e.g. session.v or system.session.v) -> drop by table name only
     case DropView(ResolvedTempView(ident, _), ifExists) =>
-      DropTableCommand(TableIdentifier(ident.name(), None), ifExists, isView = true, purge = false)
+      val db = if (ident.namespace().nonEmpty) Some(ident.namespace().head) else None
+      DropTableCommand(TableIdentifier(ident.name(), db), ifExists, isView = true, purge = false)
 
     case DropView(DropViewInSessionCatalog(ident), ifExists) =>
       DropTableCommand(ident, ifExists, isView = true, purge = false)
@@ -733,9 +734,10 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         Some(ident.asTableIdentifier.copy(catalog = Some(catalog.name)))
 
       case ResolvedTempView(ident, _) =>
-        // Temp views are keyed by table name only in the v1 catalog; use None for database
-        // so that DESCRIBE/DROP etc. treat this as a temp view (e.g. session.desc_v -> desc_v).
-        Some(TableIdentifier(ident.name(), None))
+        // Global temp views have a namespace (e.g. global_temp); preserve it so ALTER VIEW
+        // and DROP VIEW find the view. Local temp views are keyed by table name only.
+        val db = if (ident.namespace().nonEmpty) Some(ident.namespace().head) else None
+        Some(TableIdentifier(ident.name(), db))
 
       case _ => None
     }

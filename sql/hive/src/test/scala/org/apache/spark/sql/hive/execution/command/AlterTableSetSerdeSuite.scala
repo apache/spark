@@ -66,7 +66,7 @@ class AlterTableSetSerdeSuite extends v1.AlterTableSetSerdeSuiteBase with Comman
       }
       checkErrorTableNotFoundWithSearchPath(e, "`does_not_exist`",
         ExpectedContext("does_not_exist", 12, 11 + "does_not_exist".length),
-        defaultSearchPathForTests)
+        "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`ns`]")
     }
   }
 
@@ -115,7 +115,7 @@ class AlterTableSetSerdeSuite extends v1.AlterTableSetSerdeSuiteBase with Comman
       }
       checkErrorTableNotFoundWithSearchPath(e, "`does_not_exist`",
         ExpectedContext("does_not_exist", 12, 11 + "does_not_exist".length),
-        defaultSearchPathForTests)
+        "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`ns`]")
     }
   }
 }
