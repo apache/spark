@@ -581,7 +581,7 @@ private[ui] class JobPagedTable(
       val killLinkUri = s"$basePath/jobs/job/kill/?id=${job.jobId}"
       <a href={killLinkUri}
          data-kill-message={s"Are you sure you want to kill job ${job.jobId} ?"}
-         class="kill-link">(kill)</a>
+         class="kill-link float-end">(kill)</a>
     } else {
       Seq.empty
     }

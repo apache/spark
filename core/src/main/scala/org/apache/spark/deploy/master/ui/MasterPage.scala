@@ -319,7 +319,7 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
         <input type="hidden" name="terminate" value="true"/>
         <a href="#"
            data-kill-message={s"Are you sure you want to kill application ${app.id} ?"}
-           class="kill-link">(kill)</a>
+           class="kill-link float-end">(kill)</a>
       </form>
     }
     <tr>
@@ -368,7 +368,7 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
         <input type="hidden" name="terminate" value="true"/>
         <a href="#"
            data-kill-message={s"Are you sure you want to kill driver ${driver.id} ?"}
-           class="kill-link">(kill)</a>
+           class="kill-link float-end">(kill)</a>
       </form>
     }
     <tr>
