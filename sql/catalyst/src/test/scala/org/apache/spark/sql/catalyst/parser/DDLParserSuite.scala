@@ -2289,6 +2289,21 @@ class DDLParserSuite extends AnalysisTest {
         stop = 106))
   }
 
+  test("merge into table: inserted value count must match field count") {
+    val sqlText =
+      """MERGE INTO t1 USING t2 ON t1.id = t2.id
+        |WHEN NOT MATCHED THEN INSERT (col1, col2) VALUES (1)""".stripMargin
+    checkError(
+      exception = parseException(sqlText),
+      condition = "MERGE_INSERT_VALUE_COUNT_MISMATCH",
+      sqlState = "21S01",
+      parameters = Map("expectedCount" -> "2", "actualCount" -> "1"),
+      context = ExpectedContext(
+        fragment = sqlText,
+        start = 0,
+        stop = sqlText.length - 1))
+  }
+
   test("show views") {
     comparePlans(
       parsePlan("SHOW VIEWS"),
