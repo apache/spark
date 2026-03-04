@@ -46,6 +46,7 @@ import org.apache.hadoop.yarn.util.Records
 import org.mockito.ArgumentMatchers.{any, anyBoolean, eq => meq}
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
+import org.scalatest.PrivateMethodTester
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
 
@@ -59,7 +60,8 @@ import org.apache.spark.util.{SparkConfWithEnv, Utils}
 
 class ClientSuite extends SparkFunSuite
     with Matchers
-    with ResourceRequestTestHelper {
+    with ResourceRequestTestHelper
+    with PrivateMethodTester {
   private def doReturn(value: Any) = org.mockito.Mockito.doReturn(value, Seq.empty: _*)
 
   import Client._
@@ -768,9 +770,12 @@ class ClientSuite extends SparkFunSuite
           .set(AM_JAVA_OPTIONS, "-Dc=3")
 
         val client = createClient(sparkConf)
+        val appIdField = classOf[Client]
+          .getDeclaredField("org$apache$spark$deploy$yarn$Client$$appId")
+        appIdField.setAccessible(true)
         // A dummy ApplicationId impl, only `toString` method will be called
         // in Client.createContainerLaunchContext
-        client.setApplicationId(new ApplicationId {
+        appIdField.set(client, new ApplicationId {
           override def getId: Int = 1
           override def setId(i: Int): Unit = {}
           override def getClusterTimestamp: Long = 1770077136288L
@@ -778,8 +783,13 @@ class ClientSuite extends SparkFunSuite
           override def build(): Unit = {}
           override def toString: String = "application_1770077136288_0001"
         })
-        client.setStagingDir(stagingDir.getAbsolutePath)
-        val containerLaunchContext = client.createContainerLaunchContext()
+        val stagingDirPathField = classOf[Client]
+          .getDeclaredField("org$apache$spark$deploy$yarn$Client$$stagingDirPath")
+        stagingDirPathField.setAccessible(true)
+        stagingDirPathField.set(client, new Path(stagingDir.getAbsolutePath))
+        val _createContainerLaunchContext =
+          PrivateMethod[ContainerLaunchContext](Symbol("createContainerLaunchContext"))
+        val containerLaunchContext = client invokePrivate _createContainerLaunchContext()
 
         val commands = containerLaunchContext.getCommands.asScala
         deployMode match {
