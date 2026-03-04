@@ -124,6 +124,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   private[history] val fs: FileSystem = new Path(logDirs.head).getFileSystem(hadoopConf)
 
   // Map from logDir to its FileSystem, for multi-path support.
+  // Visible for testing
   private[history] val logDirFs: Map[String, FileSystem] = logDirs.map { dir =>
     dir -> new Path(dir).getFileSystem(hadoopConf)
   }.toMap
