@@ -317,8 +317,7 @@ private[spark] object UIUtils extends Logging {
         <div class="container-fluid">
           <div class="row">
             <div class="col-12">
-              <h3 style="vertical-align: bottom; white-space: nowrap; overflow: hidden;
-                text-overflow: ellipsis;">
+              <h3 class="align-bottom text-nowrap overflow-hidden text-truncate">
                 {title}
                 {helpButton}
               </h3>
@@ -352,12 +351,11 @@ private[spark] object UIUtils extends Logging {
         <div class="container-fluid">
           <div class="row">
             <div class="col-12">
-              <h3 style="vertical-align: middle; display: inline-block;">
-                <a style="text-decoration: none" href={prependBaseUri(request, "/")}>
+              <h3 class="align-middle d-inline-block">
+                <a class="text-decoration-none" href={prependBaseUri(request, "/")}>
                   <img src={prependBaseUri(request, "/static/spark-logo.svg")}
                        alt="Spark Logo" height="36" />
-                  <span class="version"
-                        style="margin-right: 15px;">{org.apache.spark.SPARK_VERSION}</span>
+                  <span class="version me-3">{org.apache.spark.SPARK_VERSION}</span>
                 </a>
                 {title}
               </h3>

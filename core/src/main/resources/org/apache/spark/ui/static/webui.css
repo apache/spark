@@ -15,6 +15,9 @@
  * limitations under the License.
  */
 
+/* Utility: cursor pointer (not in BS5) */
+.cursor-pointer { cursor: pointer; }
+
 html {
   font-size: 14px;
 }

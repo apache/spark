@@ -314,7 +314,7 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
   private def appRow(app: ApplicationInfo): Seq[Node] = {
     val killLink = if (parent.killEnabled &&
       (app.state == ApplicationState.RUNNING || app.state == ApplicationState.WAITING)) {
-      <form action="app/kill/" method="POST" style="display:inline">
+      <form action="app/kill/" method="POST" class="d-inline">
         <input type="hidden" name="id" value={app.id}/>
         <input type="hidden" name="terminate" value="true"/>
         <a href="#"
@@ -363,7 +363,7 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
     val killLink = if (parent.killEnabled &&
       (driver.state == DriverState.RUNNING ||
         driver.state == DriverState.SUBMITTED)) {
-      <form action="driver/kill/" method="POST" style="display:inline">
+      <form action="driver/kill/" method="POST" class="d-inline">
         <input type="hidden" name="id" value={driver.id}/>
         <input type="hidden" name="terminate" value="true"/>
         <a href="#"
