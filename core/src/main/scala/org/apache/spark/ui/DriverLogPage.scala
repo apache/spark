@@ -66,7 +66,7 @@ private[ui] class DriverLogPage(
       </button>
 
     val alert =
-      <div class="no-new-alert alert alert-info" style="display: none;">
+      <div class="no-new-alert alert alert-info d-none">
         End of Log
       </div>
 

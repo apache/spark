@@ -519,7 +519,7 @@ private[spark] object UIUtils extends Logging {
           if (forJob) ToolTips.JOB_DAG else ToolTips.STAGE_DAG)}
       </span>
       <div id="dag-viz-graph"></div>
-      <div id="dag-viz-metadata" style="display:none">
+      <div id="dag-viz-metadata" class="d-none">
         {
           graphs.map { g =>
             val stageId = g.rootCluster.id.replaceAll(RDDOperationGraph.STAGE_CLUSTER_PREFIX, "")

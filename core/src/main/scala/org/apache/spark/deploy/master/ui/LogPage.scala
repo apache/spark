@@ -51,7 +51,7 @@ private[ui] class LogPage(parent: MasterWebUI) extends WebUIPage("logPage") with
       </button>
 
     val alert =
-      <div class="no-new-alert alert alert-info" style="display: none;">
+      <div class="no-new-alert alert alert-info d-none">
         End of Log
       </div>
 
