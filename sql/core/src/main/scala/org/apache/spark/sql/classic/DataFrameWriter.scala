@@ -34,7 +34,7 @@ import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.catalog.TableWritePrivilege._
 import org.apache.spark.sql.connector.expressions.{ClusterByTransform, FieldReference, IdentityTransform, Transform}
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.command.{DDLUtils, SaveAsV1TableCommand}
 import org.apache.spark.sql.execution.datasources.{DataSource, DataSourceUtils}
@@ -331,7 +331,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
       case AsTableIdentifier(tableIdentifier) =>
         insertIntoCommand(tableIdentifier)
       case other =>
-        throw QueryCompilationErrors.cannotFindCatalogToHandleIdentifierError(other.quoted)
+        throw QueryExecutionErrors.catalogNotFoundError(other.head)
     }
   }
 
@@ -455,7 +455,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
         saveAsV1TableCommand(tableIdentifier)
 
       case other =>
-        throw QueryCompilationErrors.cannotFindCatalogToHandleIdentifierError(other.quoted)
+        throw QueryExecutionErrors.catalogNotFoundError(other.head)
     }
   }
 

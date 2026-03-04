@@ -38,6 +38,7 @@ import org.apache.spark.internal.io.HadoopMapReduceCommitProtocol
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.connector.catalog.CatalogNotFoundException
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, OverwriteByExpression}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
@@ -918,6 +919,28 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
       // the plan with encoders. Therefore this check fails
       assert(!df.queryExecution.logical.resolved, "Should've created an unresolved plan")
     }
+  }
+
+  test("insertInto/saveAsTable with unresolvable multi-part identifier") {
+    val df = spark.range(1)
+    checkError(
+      exception = intercept[CatalogNotFoundException] {
+        df.write.insertInto("a.b.c.d")
+      },
+      condition = "CATALOG_NOT_FOUND",
+      parameters = Map(
+        "catalogName" -> "`a`",
+        "config" -> "\"spark.sql.catalog.a\"")
+    )
+    checkError(
+      exception = intercept[CatalogNotFoundException] {
+        df.write.saveAsTable("a.b.c.d")
+      },
+      condition = "CATALOG_NOT_FOUND",
+      parameters = Map(
+        "catalogName" -> "`a`",
+        "config" -> "\"spark.sql.catalog.a\"")
+    )
   }
 
   test("saveAsTable with mode Append should not fail if the table not exists " +

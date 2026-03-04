@@ -8850,11 +8850,6 @@
       "insertInto() can't be used together with partitionBy(). Partition columns have already been defined for the table. It is not necessary to use partitionBy()."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1310" : {
-    "message" : [
-      "Couldn't find a catalog to handle the identifier <quote>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1312" : {
     "message" : [
       "'<operation>' does not support bucketBy right now."
