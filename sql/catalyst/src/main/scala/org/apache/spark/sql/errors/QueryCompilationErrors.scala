@@ -859,7 +859,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def windowFunctionNotAllowedError(clauseName: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1034",
+      errorClass = "WINDOW_FUNCTION_NOT_ALLOWED_IN_CLAUSE",
       messageParameters = Map("clauseName" -> clauseName))
   }
 
