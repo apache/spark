@@ -59,7 +59,8 @@ case class BatchScanExec(
   @transient override lazy val inputPartitions: Seq[InputPartition] =
     batch.planInputPartitions().toImmutableArraySeq
 
-  @transient private lazy val filteredPartitions: Seq[Option[InputPartition]] = {
+  // Visible for testing
+  @transient private[sql] lazy val filteredPartitions: Seq[Option[InputPartition]] = {
     val dataSourceFilters = runtimeFilters.flatMap {
       case DynamicPruningExpression(e) => DataSourceV2Strategy.translateRuntimeFilterV2(e)
       case _ => None

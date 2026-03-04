@@ -336,6 +336,35 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
     collect(plan) { case s: BatchScanExec => s }
   }
 
+  /**
+   * Helper method to verify that filteredPartitions contains the expected number of
+   * Some and None values. This is used to verify that dynamic partition filtering
+   * properly fills filtered-out partitions with None.
+   */
+  private def assertFilteredPartitions(
+      scans: Seq[BatchScanExec],
+      expectedTotalPartitions: Seq[Int],
+      expectedFilteredOutPartitions: Seq[Int]): Unit = {
+    assert(scans.size === expectedTotalPartitions.size,
+      s"Expected ${expectedTotalPartitions.size} scans but got ${scans.size}")
+
+    scans.zip(expectedTotalPartitions).zip(expectedFilteredOutPartitions).foreach {
+      case ((scan, expectedTotal), expectedFiltered) =>
+        val filtered = scan.filteredPartitions
+        assert(filtered.size === expectedTotal,
+          s"Expected $expectedTotal total partitions but got ${filtered.size}")
+
+        val noneCount = filtered.count(_.isEmpty)
+        assert(noneCount === expectedFiltered,
+          s"Expected $expectedFiltered None values but got $noneCount")
+
+        val someCount = filtered.count(_.isDefined)
+        assert(someCount === (expectedTotal - expectedFiltered),
+          s"Expected ${expectedTotal - expectedFiltered} Some values but got $someCount")
+    }
+  }
+
+
   test("partitioned join: exact distribution (same number of buckets) from both sides") {
     val customers_partitions = Array(bucket(4, "customer_id"))
     val orders_partitions = Array(bucket(4, "customer_id"))
@@ -1212,15 +1241,40 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
           // with empty partitions and the job should still succeed
           var df = sql(s"SELECT sum(p.price) from testcat.ns.$items i, testcat.ns.$purchases p " +
               "WHERE i.id = p.item_id AND i.price > 40.0")
+
+          var shuffles = collectShuffles(df.queryExecution.executedPlan)
+          assert(shuffles.isEmpty, "should not add shuffle for both sides of the join")
+          var scans = collectScans(df.queryExecution.executedPlan)
+          assert(scans.forall(_.outputPartitioning.numPartitions === 5))
+          var groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
+          assert(groupPartitions.forall(_.outputPartitioning.numPartitions === 3))
+
           checkAnswer(df, Seq(Row(131)))
+
+          // Verify that filteredPartitions contains None for filtered-out partitions.
+          // After DPF with filter i.price > 40.0, only id=1 survives on items side.
+          // The purchases side should be pruned to only item_id=1.
+          // purchases: 5 total partitions (3 for id=1, 1 for id=2, 1 for id=3)
+          // After DPF: 3 Some (id=1), 2 None (id=2, id=3)
+          assertFilteredPartitions(scans, Seq(5, 5), Seq(0, 2))
 
           // dynamic filtering doesn't change partitioning so storage-partitioned join should kick
           // in
           df = sql(s"SELECT sum(p.price) from testcat.ns.$items i, testcat.ns.$purchases p " +
               "WHERE i.id = p.item_id AND i.price >= 10.0")
-          val shuffles = collectShuffles(df.queryExecution.executedPlan)
+
+          shuffles = collectShuffles(df.queryExecution.executedPlan)
           assert(shuffles.isEmpty, "should not add shuffle for both sides of the join")
+          scans = collectScans(df.queryExecution.executedPlan)
+          assert(scans.forall(_.outputPartitioning.numPartitions === 5))
+          groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
+          assert(groupPartitions.forall(_.outputPartitioning.numPartitions === 3))
+
           checkAnswer(df, Seq(Row(303.5)))
+
+          // With filter i.price >= 10.0, all ids (1, 2, 3) survive,
+          // so no partitions should be filtered out
+          assertFilteredPartitions(scans, Seq(5, 5), Seq(0, 0))
         }
       }
     }
@@ -1275,14 +1329,25 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
 
             checkAnswer(df, Seq(Row(213.5)))
             val shuffles = collectShuffles(df.queryExecution.executedPlan)
+            val scans = collectScans(df.queryExecution.executedPlan)
+            val groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
+            assert(scans.map(_.outputPartitioning.numPartitions) === Seq(14, 6))
             if (pushDownValues) {
               assert(shuffles.isEmpty, "should not add shuffle for both sides of the join")
-              val groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
               assert(groupPartitions.forall(_.outputPartitioning.numPartitions === expected))
             } else {
               assert(shuffles.nonEmpty,
                 "should contain shuffle when not pushing down partition values")
+              assert(groupPartitions.isEmpty)
             }
+
+            // Verify filteredPartitions for DPF.
+            // After filter p.price < 45.0, purchases has item_ids {1, 2, 3, 5}.
+            // Items side should be pruned to these ids. Since items has {1, 2, 3, 4},
+            // id=4 should be filtered out.
+            // purchases: 14 total, all kept (0 None) - no DPF on probe side
+            // items: 6 total, id=4 filtered (1 None)
+            assertFilteredPartitions(scans, Seq(14, 6), Seq(0, 1))
           }
       }
     }
