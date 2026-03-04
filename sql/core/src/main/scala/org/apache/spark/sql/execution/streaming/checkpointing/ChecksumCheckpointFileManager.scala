@@ -24,7 +24,6 @@ import java.util.zip.{CheckedInputStream, CheckedOutputStream, CRC32C}
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService, Future}
 import scala.concurrent.duration.Duration
 import scala.io.Source
-import scala.util.control.NonFatal
 
 import com.fasterxml.jackson.annotation.JsonInclude.Include
 import com.fasterxml.jackson.databind.{DeserializationFeature, ObjectMapper}
@@ -128,14 +127,14 @@ case class ChecksumFile(path: Path) {
  *                              orphan checksum files. If using this, it is your responsibility
  *                              to clean up the potential orphan checksum files.
  * @param numThreads This is the number of threads to use for the thread pool, for reading/writing
- *                   files. Must be a non-negative integer.
- *                   Setting this to 0 disables the thread pool and runs all operations
- *                   sequentially on the calling thread (no concurrency).
- *                   To avoid blocking with a single concurrent caller, set this to 2 (one thread
- *                   for main file, another for checksum file).
- *                   If file manager is shared by multiple threads, set it to
- *                   number of concurrent callers * 2.
- *                   Setting this too low can lead to file operations being blocked waiting for
+ *                   files. Must be a non-negative integer. Setting this to 0 disables the thread
+ *                   pool and runs all operations sequentially on the calling thread.
+ *                   To avoid blocking, if the file manager instance is being used by a
+ *                   single thread, then you can set this to 2 (one thread for main file, another
+ *                   for checksum file).
+ *                   If file manager is shared by multiple threads, you can set it to
+ *                   number of threads using file manager * 2.
+ *                   Setting this differently can lead to file operation being blocked waiting for
  *                   a free thread.
  * @param skipCreationIfFileMissingChecksum (ES-1629547): If true, when a file already exists
  *                   but its checksum file does not exist, fall back to using the underlying
@@ -154,32 +153,29 @@ class ChecksumCheckpointFileManager(
     val skipCreationIfFileMissingChecksum: Boolean)
   extends CheckpointFileManager with Logging {
   assert(numThreads >= 0, "numThreads must be a non-negative integer")
+  if (numThreads < 4) {
+    logWarning(s"numThreads is set to $numThreads, which is below the recommended minimum of 4 " +
+      "(2 threads per caller x 2 callers). This may have performance impact.")
+  }
 
   import ChecksumCheckpointFileManager._
 
-  // Thread pool for concurrent execution, or None when numThreads == 0 (sequential/inline mode).
-  private val threadPool: Option[ExecutionContextExecutorService] =
+  // This allows us to concurrently read/write the main file and checksum file
+  private val threadPoolOpt: Option[ExecutionContextExecutorService] =
     if (numThreads == 0) None
     else Some(ExecutionContext.fromExecutorService(
       ThreadUtils.newDaemonFixedThreadPool(numThreads, s"${this.getClass.getSimpleName}-Thread")))
 
-  // ExecutionContext to pass to stream classes: uses the thread pool or a caller-runs context.
-  private val streamContext: ExecutionContext = threadPool.getOrElse(new ExecutionContext {
-    override def execute(runnable: Runnable): Unit = runnable.run()
-    override def reportFailure(cause: Throwable): Unit = throw cause
-  })
-
-  /**
-   * Schedules a computation on the thread pool, or runs it directly on the calling thread
-   * if numThreads == 0 (sequential mode).
-   */
-  private def scheduleOrRun[T](f: => T): Future[T] = threadPool match {
-    case None =>
-      try Future.successful(f)
-      catch { case NonFatal(t) => Future.failed(t) }
-    case Some(pool) =>
-      Future { f }(pool)
-  }
+  // ExecutionContext used for I/O operations on ChecksumFSDataInputStream and
+  // ChecksumCancellableFSDataOutputStream: uses the thread pool when numThreads > 0, or
+  // runs operations synchronously on the calling thread when numThreads == 0.
+  private val executionContext: ExecutionContext = threadPoolOpt.getOrElse(
+    // This will execute the runnable synchronously on the calling thread
+    new ExecutionContext {
+      override def execute(runnable: Runnable): Unit = runnable.run()
+      override def reportFailure(cause: Throwable): Unit = throw cause
+    }
+  )
 
   override def list(path: Path, filter: PathFilter): Array[FileStatus] = {
     underlyingFileMgr.list(path, filter)
@@ -211,26 +207,26 @@ class ChecksumCheckpointFileManager(
       createFunc: Path => CancellableFSDataOutputStream): ChecksumCancellableFSDataOutputStream = {
     assert(!isChecksumFile(path), "Cannot directly create a checksum file")
 
-    val mainFileFuture = scheduleOrRun {
+    val mainFileFuture = Future {
       createFunc(path)
-    }
+    }(executionContext)
 
-    val checksumFileFuture = scheduleOrRun {
+    val checksumFileFuture = Future {
       createFunc(getChecksumPath(path))
-    }
+    }(executionContext)
 
     new ChecksumCancellableFSDataOutputStream(
       awaitResult(mainFileFuture, Duration.Inf),
       path,
       awaitResult(checksumFileFuture, Duration.Inf),
-      streamContext
+      executionContext
     )
   }
 
   override def open(path: Path): FSDataInputStream = {
     assert(!isChecksumFile(path), "Cannot directly open a checksum file")
 
-    val checksumInputStreamFuture = scheduleOrRun {
+    val checksumInputStreamFuture = Future {
       try {
         Some(underlyingFileMgr.open(getChecksumPath(path)))
       } catch {
@@ -241,17 +237,17 @@ class ChecksumCheckpointFileManager(
             log"hence no checksum verification.")
           None
       }
-    }
+    }(executionContext)
 
-    val mainInputStreamFuture = scheduleOrRun {
+    val mainInputStreamFuture = Future {
       underlyingFileMgr.open(path)
-    }
+    }(executionContext)
 
     val mainStream = awaitResult(mainInputStreamFuture, Duration.Inf)
     val checksumStream = awaitResult(checksumInputStreamFuture, Duration.Inf)
 
     checksumStream.map { chkStream =>
-      new ChecksumFSDataInputStream(mainStream, path, chkStream, streamContext)
+      new ChecksumFSDataInputStream(mainStream, path, chkStream, executionContext)
     }.getOrElse(mainStream)
   }
 
@@ -269,13 +265,13 @@ class ChecksumCheckpointFileManager(
       // But if allowConcurrentDelete is enabled, then we can do it concurrently for perf.
       // But the client would be responsible for cleaning up potential orphan checksum files
       // if it happens.
-      val checksumInputStreamFuture = scheduleOrRun {
+      val checksumInputStreamFuture = Future {
         deleteChecksumFile(getChecksumPath(path))
-      }
+      }(executionContext)
 
-      val mainInputStreamFuture = scheduleOrRun {
+      val mainInputStreamFuture = Future {
         underlyingFileMgr.delete(path)
-      }
+      }(executionContext)
 
       awaitResult(mainInputStreamFuture, Duration.Inf)
       awaitResult(checksumInputStreamFuture, Duration.Inf)
@@ -301,7 +297,7 @@ class ChecksumCheckpointFileManager(
   }
 
   override def close(): Unit = {
-    threadPool.foreach { pool =>
+    threadPoolOpt.foreach { pool =>
       pool.shutdown()
       // Wait a bit for it to finish up in case there is any ongoing work
       // Can consider making this timeout configurable, if needed

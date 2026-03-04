@@ -1547,35 +1547,6 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     }
   }
 
-  test("fileChecksumThreadPoolSize propagates to ChecksumCheckpointFileManager") {
-    Seq(0, 1, 6).foreach { numThreads =>
-      withTempDir { dir =>
-        val sqlConf = SQLConf.get.clone()
-        sqlConf.setConfString(SQLConf.STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED.key, "true")
-        sqlConf.setConfString(
-          SQLConf.STATE_STORE_FILE_CHECKSUM_THREAD_POOL_SIZE.key, numThreads.toString)
-
-        val provider = newStoreProvider(
-          opId = Random.nextInt(), partition = 0, dir = dir.getCanonicalPath,
-          sqlConfOpt = Some(sqlConf))
-        val fileManagerMethod = PrivateMethod[CheckpointFileManager](Symbol("fm"))
-        val fm = provider invokePrivate fileManagerMethod()
-
-        assert(fm.isInstanceOf[ChecksumCheckpointFileManager])
-        assert(fm.asInstanceOf[ChecksumCheckpointFileManager].numThreads === numThreads)
-        provider.close()
-      }
-    }
-  }
-
-  test("STATE_STORE_FILE_CHECKSUM_THREAD_POOL_SIZE: invalid negative value is rejected") {
-    val sqlConf = SQLConf.get.clone()
-    val ex = intercept[IllegalArgumentException] {
-      sqlConf.setConfString(SQLConf.STATE_STORE_FILE_CHECKSUM_THREAD_POOL_SIZE.key, "-1")
-    }
-    assert(ex.getMessage.contains("Must be a non-negative integer"))
-  }
-
   override def newStoreProvider(): HDFSBackedStateStoreProvider = {
     newStoreProvider(opId = Random.nextInt(), partition = 0)
   }
@@ -2490,6 +2461,107 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
             store.abort()
           }
         }
+      }
+    }
+  }
+
+  test("fileChecksumThreadPoolSize propagates to ChecksumCheckpointFileManager") {
+    Seq(0, 1, 6).foreach { numThreads =>
+      val storeId = StateStoreId(newDir(), 0L, 0)
+      withSQLConf(
+        SQLConf.STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED.key -> "true",
+        SQLConf.STATE_STORE_FILE_CHECKSUM_THREAD_POOL_SIZE.key -> numThreads.toString) {
+        tryWithProviderResource(newStoreProviderWithClonedConf(storeId)) { provider =>
+          val fmMethod = PrivateMethod[CheckpointFileManager](Symbol("fm"))
+          val fm = provider match {
+            case hdfs: HDFSBackedStateStoreProvider =>
+              hdfs.fm
+            case rocksdb: RocksDBStateStoreProvider =>
+              rocksdb.rocksDB.fileManager invokePrivate fmMethod()
+            case _ =>
+              fail(s"Unexpected provider type: ${provider.getClass.getName}")
+          }
+          assert(fm.isInstanceOf[ChecksumCheckpointFileManager])
+          assert(fm.asInstanceOf[ChecksumCheckpointFileManager].numThreads === numThreads)
+        }
+      }
+    }
+  }
+
+  test("STATE_STORE_FILE_CHECKSUM_THREAD_POOL_SIZE: invalid negative value is rejected") {
+    val sqlConf = SQLConf.get.clone()
+    val ex = intercept[IllegalArgumentException] {
+      sqlConf.setConfString(SQLConf.STATE_STORE_FILE_CHECKSUM_THREAD_POOL_SIZE.key, "-1")
+    }
+    assert(ex.getMessage.contains("Must be a non-negative integer"))
+  }
+
+  test("fileChecksumThreadPoolSize = 0 supports sequential I/O (load, write, commit, reload)") {
+    val storeId = StateStoreId(newDir(), 0L, 0)
+    withSQLConf(
+      SQLConf.STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED.key -> "true",
+      SQLConf.STATE_STORE_FILE_CHECKSUM_THREAD_POOL_SIZE.key -> "0") {
+      // Write some state with sequential mode enabled
+      tryWithProviderResource(newStoreProviderWithClonedConf(storeId)) { provider =>
+        val store = provider.getStore(0)
+        put(store, "a", 0, 1)
+        put(store, "b", 0, 2)
+        store.commit()
+        provider.doMaintenance()
+      }
+
+      // Reload and verify state is intact
+      tryWithProviderResource(newStoreProviderWithClonedConf(storeId)) { provider =>
+        val store = provider.getStore(1)
+        assert(get(store, "a", 0) === Some(1))
+        assert(get(store, "b", 0) === Some(2))
+        store.abort()
+      }
+    }
+  }
+
+  test("fileChecksumThreadPoolSize = 0: concurrent store commit and maintenance both complete") {
+    val storeId = StateStoreId(newDir(), 0L, 0)
+    withSQLConf(
+      SQLConf.STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED.key -> "true",
+      SQLConf.STATE_STORE_FILE_CHECKSUM_THREAD_POOL_SIZE.key -> "0") {
+      tryWithProviderResource(newStoreProviderWithClonedConf(storeId)) { provider =>
+        // Build up a few versions so maintenance has something to work with
+        (0L until 3L).foreach { version =>
+          putAndCommitStore(provider, version, doMaintenance = false)
+        }
+
+        // Load the store and prepare the write before maintenance starts, so that
+        // store.commit() (the actual file I/O) is what overlaps with doMaintenance().
+        val store = provider.getStore(3)
+        put(store, "3", 3, 300)
+
+        val errors = new ConcurrentLinkedQueue[Throwable]()
+        val maintenanceStartedLatch = new CountDownLatch(1)
+        val maintenanceDoneLatch = new CountDownLatch(1)
+
+        val maintenanceThread = new Thread(() => {
+          try {
+            maintenanceStartedLatch.countDown()
+            provider.doMaintenance()
+          } catch {
+            case t: Throwable => errors.add(t)
+          } finally {
+            maintenanceDoneLatch.countDown()
+          }
+        })
+        maintenanceThread.setDaemon(true)
+        maintenanceThread.start()
+
+        // Wait until maintenance is running, then commit to simulate concurrency.
+        assert(maintenanceStartedLatch.await(30, TimeUnit.SECONDS),
+          "Maintenance thread did not start within 30 seconds")
+        store.commit()
+
+        assert(maintenanceDoneLatch.await(30, TimeUnit.SECONDS),
+          "Maintenance did not complete within 30 seconds")
+        assert(errors.isEmpty,
+          s"Maintenance failed with: ${Option(errors.peek()).map(_.getMessage).orNull}")
       }
     }
   }
