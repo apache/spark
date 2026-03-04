@@ -228,7 +228,7 @@ class PandasToArrowConversion:
         assign_cols_by_name: bool = False,
         int_to_decimal_coercion_enabled: bool = False,
         ignore_unexpected_complex_type_values: bool = False,
-        is_udtf: bool = False,
+        is_legacy: bool = False,
     ) -> "pa.RecordBatch":
         """
         Convert a pandas DataFrame or list of Series/DataFrames to an Arrow RecordBatch.
@@ -255,14 +255,13 @@ class PandasToArrowConversion:
             Whether to enable int to decimal coercion (default False)
         ignore_unexpected_complex_type_values : bool
             Whether to ignore unexpected complex type values in converter (default False)
-        is_udtf : bool
-            Whether this conversion is for a UDTF. UDTFs use broader Arrow exception
-            handling to allow more type coercions (e.g., struct field casting via
-            ArrowTypeError), and convert errors to UDTF_ARROW_TYPE_CAST_ERROR.
-            # TODO(SPARK-55502): Unify UDTF and regular UDF conversion paths to
-            #   eliminate the is_udtf flag.
-            Regular UDFs only catch ArrowInvalid to preserve legacy behavior where
-            e.g. string->decimal must raise an error. (default False)
+        is_legacy : bool
+            Whether to use the legacy UDTF pandas conversion path. The legacy path
+            uses broader Arrow exception handling (ArrowException) to allow more
+            implicit type coercions (e.g., int→boolean, dict→struct via ArrowTypeError),
+            and converts errors to UDTF_ARROW_TYPE_CAST_ERROR.
+            The non-legacy path only catches ArrowInvalid for the cast fallback,
+            so type mismatches like string→decimal raise immediately. (default False)
 
         Returns
         -------
@@ -318,7 +317,7 @@ class PandasToArrowConversion:
                     assign_cols_by_name=assign_cols_by_name,
                     int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
                     ignore_unexpected_complex_type_values=ignore_unexpected_complex_type_values,
-                    is_udtf=is_udtf,
+                    is_legacy=is_legacy,
                 )
                 # Wrap the nested RecordBatch as a single StructArray column
                 return ArrowBatchTransformer.wrap_struct(nested_batch).column(0)
@@ -343,9 +342,10 @@ class PandasToArrowConversion:
 
             mask = None if hasattr(series.array, "__arrow_array__") else series.isnull()
 
-            if is_udtf:
-                # UDTF path: broad ArrowException catch so that both ArrowInvalid
-                # AND ArrowTypeError (e.g. dict→struct) trigger the cast fallback.
+            if is_legacy:
+                # Legacy UDTF pandas conversion path: broad ArrowException catch so
+                # that both ArrowInvalid AND ArrowTypeError (e.g. dict→struct)
+                # trigger the cast fallback.
                 try:
                     try:
                         return pa.Array.from_pandas(
