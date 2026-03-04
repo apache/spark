@@ -690,14 +690,14 @@ class RocksDBFileManager(
       cachedFiles.foreach(f => fileToMaxUsedVersion(f.dfsFileName) =
         math.max(version, fileToMaxUsedVersion.getOrElse(f.dfsFileName, version)))
 
-      // For the minimum retained version, fetch metadata from the cloud zip file
+      // For ckpt v1, for the min retained version, fetch metadata from cloud zip
       // to protect files that may differ from the in-memory cache. This handles the case
       // where a no-overwrite FS prevented a snapshot zip from being overwritten: the
       // in-memory cache may reference a newer set of SST files (from a retry), while the
       // cloud zip still references the original SST files.
       // We do this for the min retained version, to make sure the files from the original
       // upload for this version are not seen as orphan files.
-      if (version == minVersionToRetain && readFromCache) {
+      if (uniqueId.isEmpty && version == minVersionToRetain && readFromCache) {
         val cloudFiles = getImmutableFilesFromVersionZip(version, uniqueId)
         cloudFiles.foreach(f => fileToMaxUsedVersion(f.dfsFileName) =
           math.max(version, fileToMaxUsedVersion.getOrElse(f.dfsFileName, version)))
