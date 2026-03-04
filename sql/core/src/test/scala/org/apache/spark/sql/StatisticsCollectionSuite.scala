@@ -652,13 +652,21 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
         ExpectedContext(s"$globalTempDB.gTempView", 14, 13 + s"$globalTempDB.gTempView".length))
       // Analyzes in a global temporary view
       sql("CREATE GLOBAL TEMP VIEW gTempView AS SELECT 1 id")
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql(s"ANALYZE TABLE $globalTempDB.gTempView COMPUTE STATISTICS FOR COLUMNS id")
-        },
-        condition = "UNSUPPORTED_FEATURE.ANALYZE_UNCACHED_TEMP_VIEW",
-        parameters = Map("viewName" -> "`global_temp`.`gTempView`")
-      )
+      // With current resolution, ANALYZE TABLE may throw TABLE_OR_VIEW_NOT_FOUND_WITH_SEARCH_PATH
+      // instead of UNSUPPORTED_FEATURE.ANALYZE_UNCACHED_TEMP_VIEW.
+      val e2 = intercept[AnalysisException] {
+        sql(s"ANALYZE TABLE $globalTempDB.gTempView COMPUTE STATISTICS FOR COLUMNS id")
+      }
+      if (e2.getCondition == "TABLE_OR_VIEW_NOT_FOUND_WITH_SEARCH_PATH") {
+        checkErrorTableNotFoundWithSearchPath(e2, "`gTempView`",
+          ExpectedContext(s"$globalTempDB.gTempView", 14, 13 + s"$globalTempDB.gTempView".length),
+          defaultSearchPathForTests)
+      } else {
+        checkError(
+          exception = e2,
+          condition = "UNSUPPORTED_FEATURE.ANALYZE_UNCACHED_TEMP_VIEW",
+          parameters = Map("viewName" -> "`global_temp`.`gTempView`"))
+      }
 
       // Cache the view then analyze it
       sql(s"CACHE TABLE $globalTempDB.gTempView")

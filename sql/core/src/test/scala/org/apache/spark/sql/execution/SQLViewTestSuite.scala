@@ -206,13 +206,12 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
           exception = intercept[AnalysisException] {
             sql(s"ALTER VIEW $viewName1 AS SELECT * FROM $viewName2")
           },
-          condition = "RECURSIVE_VIEW",
+          condition = "INVALID_TEMP_OBJ_REFERENCE",
           parameters = Map(
-            "viewIdent" -> tableIdentifier("v1").quotedString,
-            "newPath" -> (s"${tableIdentifier("v1").quotedString} " +
-              s"-> ${tableIdentifier("v2").quotedString} " +
-              s"-> ${tableIdentifier("v1").quotedString}"))
-        )
+            "obj" -> "VIEW",
+            "objName" -> tableIdentifier("v1").quotedString,
+            "tempObj" -> "VIEW",
+            "tempObjName" -> "`v2`"))
       }
     }
   }
@@ -320,8 +319,9 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
           val e = intercept[AnalysisException] {
             sql(s"SELECT * FROM $viewName").collect()
           }
-          checkErrorTableNotFound(e, "`t`",
-            ExpectedContext("VIEW", tableIdentifier("testview").unquotedString, 14, 14, "t"))
+          checkErrorTableNotFoundWithSearchPath(e, "`t`",
+            ExpectedContext("VIEW", tableIdentifier("testview").unquotedString, 14, 14, "t"),
+            defaultSearchPathForTests)
         }
       }
     }
