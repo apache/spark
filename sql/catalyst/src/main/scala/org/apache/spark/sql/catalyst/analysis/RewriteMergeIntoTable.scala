@@ -175,7 +175,11 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
     // predicates of the ON condition can be used to filter the target table (planning & runtime)
     // only if there is no NOT MATCHED BY SOURCE clause
     val (pushableCond, groupFilterCond) = if (notMatchedBySourceActions.isEmpty) {
-      (cond, buildGroupFilterCondition(relation, source, cond))
+      if (groupFilterEnabled) {
+        (cond, Some(toGroupFilterCondition(relation, source, cond)))
+      } else {
+        (cond, None)
+      }
     } else {
       (TrueLiteral, None)
     }
@@ -237,21 +241,19 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
   }
 
   // converts a MERGE condition into an EXISTS subquery for runtime filtering
-  private def buildGroupFilterCondition(
+  private def toGroupFilterCondition(
       relation: DataSourceV2Relation,
       source: LogicalPlan,
-      cond: Expression): Option[Expression] = {
+      cond: Expression): Expression = {
 
-    Option.when(groupFilterEnabled) {
-      val condWithOuterRefs = cond transformUp {
-        case attr: Attribute if relation.outputSet.contains(attr) => OuterReference(attr)
-        case other => other
-      }
-      val outerRefs = condWithOuterRefs.collect {
-        case OuterReference(e) => e
-      }
-      Exists(Filter(condWithOuterRefs, source), outerRefs)
+    val condWithOuterRefs = cond transformUp {
+      case attr: Attribute if relation.outputSet.contains(attr) => OuterReference(attr)
+      case other => other
     }
+    val outerRefs = condWithOuterRefs.collect {
+      case OuterReference(e) => e
+    }
+    Exists(Filter(condWithOuterRefs, source), outerRefs)
   }
 
   // build a rewrite plan for sources that support row deltas
