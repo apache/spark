@@ -3216,6 +3216,34 @@ abstract class Dataset[T] extends Serializable {
   def mergeInto(table: String, condition: Column): MergeIntoWriter[T]
 
   /**
+   * Merges a set of updates, insertions, and deletions based on a source Dataset into a target
+   * table that is referenced by its storage path.
+   *
+   * This is a convenience wrapper around [[mergeInto]] that constructs a provider-and-path
+   * identifier of the form <code>format.`path`</code>, so that merge targets can be addressed
+   * directly by physical location, without first registering them in the catalog.
+   *
+   * Scala Examples:
+   * {{{
+   *   spark.table("source")
+   *     .mergeIntoPath("/data/layer/table_name", "delta", $"source.id" === $"target.id")
+   *     .whenMatched($"salary" === 100)
+   *     .delete()
+   *     .whenNotMatched()
+   *     .insertAll()
+   *     .whenNotMatchedBySource($"salary" === 100)
+   *     .update(Map(
+   *       "salary" -> lit(200)
+   *     ))
+   *     .merge()
+   * }}}
+   *
+   * @group basic
+   * @since 4.2.0
+   */
+  def mergeIntoPath(path: String, format: String, condition: Column): MergeIntoWriter[T]
+
+  /**
    * Interface for saving the content of the streaming Dataset out into external storage.
    *
    * @group basic

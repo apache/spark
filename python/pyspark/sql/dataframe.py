@@ -6370,10 +6370,10 @@ class DataFrame:
 
         Examples
         --------
-        >>> from pyspark.sql.functions import expr
+        >>> from pyspark.sql.functions import col
         >>> source = spark.createDataFrame(
         ...     [(14, "Tom"), (23, "Alice"), (16, "Bob")], ["id", "name"])
-        >>> (source.mergeInto("target", "id")  # doctest: +SKIP
+        >>> (source.mergeInto("target", col("id"))  # doctest: +SKIP
         ...     .whenMatched().update({ "name": source.name })
         ...     .whenNotMatched().insertAll()
         ...     .whenNotMatchedBySource().delete()
@@ -6384,6 +6384,49 @@ class DataFrame:
         This method does not support streaming queries.
         """
         ...
+
+    @dispatch_df_method
+    def mergeIntoPath(
+        self,
+        path: str,
+        condition: Column,
+        format: str = "delta",
+    ) -> MergeIntoWriter:
+        """
+        Merges a set of updates, insertions, and deletions into a target table referenced
+        by its storage path.
+
+        This is a convenience wrapper around :meth:`mergeInto` that constructs a
+        provider-and-path identifier of the form ``"format.`path`"`` so that merge
+        targets can be addressed directly by physical location, without first
+        registering them in the catalog.
+
+        .. versionadded:: 4.2.0
+
+        Parameters
+        ----------
+        path : str
+            Target table path to merge into.
+        condition : :class:`Column`
+            The condition that determines whether a row in the target table matches one in the
+            source DataFrame.
+        format : str, optional
+            Table provider / format name, for example ``"delta"``.
+
+        Returns
+        -------
+        :class:`MergeIntoWriter`
+            MergeIntoWriter to use further to specify how to merge the source DataFrame
+            into the target table.
+        """
+        if not path:
+            raise ValueError("path must be a non-empty string")
+        if not format:
+            raise ValueError("format must be a non-empty string")
+
+        safe_path = path.replace("`", "``")
+        table_ident = f"{format}.`{safe_path}`"
+        return MergeIntoWriter(self, table_ident, condition)
 
     @dispatch_df_method
     def pandas_api(

@@ -1675,6 +1675,21 @@ class Dataset[T] private[sql](
   }
 
   /** @inheritdoc */
+  def mergeIntoPath(path: String, format: String, condition: Column): MergeIntoWriter[T] = {
+    // TODO: streaming could be adapted to use this interface
+    if (isStreaming) {
+      logicalPlan.failAnalysis(
+        errorClass = "CALL_ON_STREAMING_DATASET_UNSUPPORTED",
+        messageParameters = Map("methodName" -> toSQLId("mergeIntoPath")))
+    }
+    require(path != null && path.nonEmpty, "path must be a non-empty string")
+    require(format != null && format.nonEmpty, "format must be a non-empty string")
+    val safePath = path.replace("`", "``")
+    val tableIdent = s"$format.`$safePath`"
+    new MergeIntoWriter[T](tableIdent, this, condition)
+  }
+
+  /** @inheritdoc */
   def mergeInto(table: String, condition: Column): MergeIntoWriter[T] = {
     if (isStreaming) {
       logicalPlan.failAnalysis(
