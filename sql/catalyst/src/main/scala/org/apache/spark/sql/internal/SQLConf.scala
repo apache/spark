@@ -1544,6 +1544,12 @@ object SQLConf {
     .timeConf(TimeUnit.SECONDS)
     .createWithDefaultString(s"${5 * 60}")
 
+  val MAX_BROADCAST_TABLE_SIZE = buildConf("spark.sql.maxBroadcastTableSize")
+    .doc("The maximum table size in bytes that can be broadcast in broadcast joins.")
+    .version("4.0.0")
+    .bytesConf(ByteUnit.BYTE)
+    .createWithDefault(8L << 30)
+
   val INTERRUPT_ON_CANCEL = buildConf("spark.sql.execution.interruptOnCancel")
     .doc("When true, all running tasks will be interrupted if one cancels a query.")
     .version("4.0.0")
@@ -6143,6 +6149,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     val timeoutValue = getConf(BROADCAST_TIMEOUT)
     if (timeoutValue < 0) Long.MaxValue else timeoutValue
   }
+
+  def maxBroadcastTableSizeInBytes: Long = getConf(MAX_BROADCAST_TABLE_SIZE)
 
   def defaultDataSourceName: String = getConf(DEFAULT_DATA_SOURCE_NAME)
 
