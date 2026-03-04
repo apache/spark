@@ -5150,6 +5150,12 @@
     ],
     "sqlState" : "428FT"
   },
+  "PARTITION_BY_NOT_ALLOWED_WITH_INSERT_INTO" : {
+    "message" : [
+      "partitionBy() cannot be used with insertInto(). Partition columns for table <tableName> are determined by the table definition."
+    ],
+    "sqlState" : "42601"
+  },
   "PARTITION_COLUMN_NOT_FOUND_IN_SCHEMA" : {
     "message" : [
       "Partition column <column> not found in schema <schema>. Please provide the existing column for partitioning."
@@ -8845,11 +8851,6 @@
   "_LEGACY_ERROR_TEMP_1307" : {
     "message" : [
       "There is a 'path' option set and save() is called with a path parameter. Either remove the path option, or call save() without the parameter. To ignore this check, set '<config>' to 'true'."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1309" : {
-    "message" : [
-      "insertInto() can't be used together with partitionBy(). Partition columns have already been defined for the table. It is not necessary to use partitionBy()."
     ]
   },
   "_LEGACY_ERROR_TEMP_1310" : {

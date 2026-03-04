@@ -3559,10 +3559,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "createMode" -> toDSOption(createMode)))
   }
 
-  def partitionByDoesNotAllowedWhenUsingInsertIntoError(): Throwable = {
+  def partitionByDoesNotAllowedWhenUsingInsertIntoError(tableName: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1309",
-      messageParameters = Map.empty)
+      errorClass = "PARTITION_BY_NOT_ALLOWED_WITH_INSERT_INTO",
+      messageParameters = Map("tableName" -> tableName))
   }
 
   def cannotFindCatalogToHandleIdentifierError(quote: String): Throwable = {
