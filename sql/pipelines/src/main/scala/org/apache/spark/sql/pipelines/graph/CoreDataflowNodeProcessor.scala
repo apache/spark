@@ -17,10 +17,6 @@
 
 package org.apache.spark.sql.pipelines.graph
 
-import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue}
-
-import scala.jdk.CollectionConverters._
-
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.pipelines.graph.DataflowGraphTransformer.{
@@ -32,26 +28,19 @@ import org.apache.spark.sql.pipelines.graph.DataflowGraphTransformer.{
  * Processor that is responsible for analyzing each flow and sort the nodes in
  * topological order
  */
-class CoreDataflowNodeProcessor(rawGraph: DataflowGraph) {
-
+class CoreDataflowNodeProcessor(rawGraph: DataflowGraph, context: GraphAnalysisContext) {
   private val flowResolver = new FlowResolver(rawGraph)
 
-  // Map of input identifier to resolved [[Input]].
-  private val resolvedInputs = new ConcurrentHashMap[TableIdentifier, Input]()
-  // Map & queue of resolved flows identifiers
-  // queue is there to track the topological order while map is used to store the id -> flow
-  // mapping
-  private val resolvedFlowNodesMap = new ConcurrentHashMap[TableIdentifier, ResolvedFlow]()
-  private val resolvedFlowNodesQueue = new ConcurrentLinkedQueue[ResolvedFlow]()
-
-  private def processUnresolvedFlow(flow: UnresolvedFlow): ResolvedFlow = {
+  private def processUnresolvedFlow(
+      flow: UnresolvedFlow,
+      context: GraphAnalysisContext): ResolvedFlow = {
     val resolvedFlow = flowResolver.attemptResolveFlow(
       flow,
       rawGraph.inputIdentifiers,
-      resolvedInputs.asScala.toMap
+      context.resolvedInputsByIdentifier
     )
-    resolvedFlowNodesQueue.add(resolvedFlow)
-    resolvedFlowNodesMap.put(flow.identifier, resolvedFlow)
+    context.resolvedFlowsQueue.add(resolvedFlow)
+    context.resolvedFlowsMap.put(flow.identifier, resolvedFlow)
     resolvedFlow
   }
 
@@ -65,8 +54,8 @@ class CoreDataflowNodeProcessor(rawGraph: DataflowGraph) {
    */
   def processNode(node: GraphElement, upstreamNodes: Seq[GraphElement]): Seq[GraphElement] = {
     node match {
-      case flow: UnresolvedFlow => Seq(processUnresolvedFlow(flow))
-      case failedFlow: ResolutionFailedFlow => Seq(processUnresolvedFlow(failedFlow.flow))
+      case flow: UnresolvedFlow => Seq(processUnresolvedFlow(flow, context))
+      case failedFlow: ResolutionFailedFlow => Seq(processUnresolvedFlow(failedFlow.flow, context))
       case table: Table =>
         // Ensure all upstreamNodes for a table are flows
         val flowsToTable = upstreamNodes.map {
@@ -78,7 +67,7 @@ class CoreDataflowNodeProcessor(rawGraph: DataflowGraph) {
             )
         }
         val resolvedFlowsToTable = flowsToTable.map { flow =>
-          resolvedFlowNodesMap.get(flow.identifier)
+          context.resolvedFlowsMap.get(flow.identifier)
         }
         // We mark all tables as virtual to ensure resolution uses incoming flows
         // rather than previously materialized tables.
@@ -88,14 +77,14 @@ class CoreDataflowNodeProcessor(rawGraph: DataflowGraph) {
           incomingFlowIdentifiers = flowsToTable.map(_.identifier).toSet,
           availableFlows = resolvedFlowsToTable
         )
-        resolvedInputs.put(table.identifier, virtualTableInput)
+        context.putResolvedInput(virtualTableInput)
         Seq(table)
       case view: View =>
         // For view, add the flow to resolvedInputs and return empty.
         require(upstreamNodes.size == 1, "Found multiple flows to view")
         upstreamNodes.head match {
           case f: Flow =>
-            resolvedInputs.put(view.identifier, resolvedFlowNodesMap.get(f.destinationIdentifier))
+            context.putResolvedInput(context.resolvedFlowsMap.get(f.destinationIdentifier))
             Seq(view)
           case _ =>
             throw new IllegalArgumentException(
@@ -120,6 +109,7 @@ private class FlowResolver(rawGraph: DataflowGraph) {
       flowToResolve: UnresolvedFlow,
       allInputs: Set[TableIdentifier],
       availableResolvedInputs: Map[TableIdentifier, Input]): ResolvedFlow = {
+
     val flowFunctionResult = flowToResolve.func.call(
       allInputs = allInputs,
       availableInputs = availableResolvedInputs.values.toList,
@@ -184,11 +174,17 @@ private class FlowResolver(rawGraph: DataflowGraph) {
         case f =>
           f.dataFrame.failed.toOption.collectFirst {
             case e: UnresolvedDatasetException => e
+            case e: QueryFunctionResultNotAvailableException => e
             case _ => None
           } match {
             case Some(e: UnresolvedDatasetException) =>
               throw TransformNodeRetryableException(
-                e.identifier,
+                Some(e.identifier),
+                new ResolutionFailedFlow(flowToResolve, flowFunctionResult)
+              )
+            case Some(_: QueryFunctionResultNotAvailableException) =>
+              throw TransformNodeRetryableException(
+                None,
                 new ResolutionFailedFlow(flowToResolve, flowFunctionResult)
               )
             case _ =>

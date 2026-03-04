@@ -228,14 +228,16 @@ case class DataflowGraph(
   def resolved: Boolean =
     flows.forall(f => resolvedFlow.contains(f.identifier))
 
-  def resolve(): DataflowGraph =
+  def resolve(contextOpt: Option[GraphAnalysisContext] = None): DataflowGraph = {
+    val context = contextOpt.getOrElse(new GraphAnalysisContext())
     DataflowGraphTransformer.withDataflowGraphTransformer(this) { transformer =>
       val coreDataflowNodeProcessor =
-        new CoreDataflowNodeProcessor(rawGraph = this)
+        new CoreDataflowNodeProcessor(rawGraph = this, context)
       transformer
-        .transformDownNodes(coreDataflowNodeProcessor.processNode)
+        .transformDownNodes(coreDataflowNodeProcessor.processNode, context)
         .getDataflowGraph
     }
+  }
 }
 
 object DataflowGraph {

@@ -35,6 +35,12 @@ case class UnresolvedDatasetException(identifier: TableIdentifier)
       s"pipeline but could not be resolved."
     )
 
+case class QueryFunctionResultNotAvailableException()
+    extends AnalysisException("Query function result is not yet available.")
+
+case class QueryFunctionTerminalFailureException()
+  extends AnalysisException("Query function failed in a way that further analysis won't fix.")
+
 /**
  * Exception raised when a flow fails to read from a table defined within the pipeline
  *
