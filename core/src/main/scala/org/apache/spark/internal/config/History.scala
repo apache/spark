@@ -31,10 +31,12 @@ private[spark] object History {
     .doc("Directory where app logs are stored. Multiple directories can be specified " +
       "as a comma-separated list to monitor event logs from multiple paths.")
     .stringConf
+    .checkValue(v => v.split(",").map(_.trim).exists(_.nonEmpty),
+      "must specify at least one non-empty directory")
     .createWithDefault(DEFAULT_LOG_DIR)
 
   val HISTORY_LOG_DIR_NAMES = ConfigBuilder("spark.history.fs.logDirectory.names")
-    .version("4.1.0")
+    .version("4.2.0")
     .doc("Optional comma-separated list of display names for the log directories specified " +
       "in spark.history.fs.logDirectory. Names correspond to directories by position. " +
       "If not set, the full path is shown in the UI.")

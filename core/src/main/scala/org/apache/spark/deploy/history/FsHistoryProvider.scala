@@ -108,10 +108,6 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   private val logDirs = conf.get(History.HISTORY_LOG_DIR)
     .split(",").map(_.trim).filter(_.nonEmpty).toSeq
-  require(logDirs.nonEmpty, "spark.history.fs.logDirectory must specify at least one directory.")
-
-  // For backward compatibility, keep logDir pointing to the first directory.
-  private val logDir = logDirs.head
 
   private val historyUiAclsEnable = conf.get(History.HISTORY_SERVER_UI_ACLS_ENABLE)
   private val historyUiAdminAcls = conf.get(History.HISTORY_SERVER_UI_ADMIN_ACLS)
@@ -125,10 +121,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   private val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
   // Visible for testing
-  private[history] val fs: FileSystem = new Path(logDir).getFileSystem(hadoopConf)
+  private[history] val fs: FileSystem = new Path(logDirs.head).getFileSystem(hadoopConf)
 
   // Map from logDir to its FileSystem, for multi-path support.
-  // Visible for testing
   private[history] val logDirFs: Map[String, FileSystem] = logDirs.map { dir =>
     dir -> new Path(dir).getFileSystem(hadoopConf)
   }.toMap
@@ -162,7 +157,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     val dirFs = logDirFs(dir)
     val normalized = path.makeQualified(dirFs.getUri, dirFs.getWorkingDirectory)
     (normalized, logDirToDisplayName(dir), dir)
-  }.sortBy(-_._1.depth()) // Sort by depth descending for longest prefix match
+  }
 
   // Used by check event thread and clean log thread.
   // Scheduled thread pool size must be one, otherwise it will have concurrent issues about fs
@@ -202,9 +197,6 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         conf.get(EVENT_LOG_ROLLING_MAX_FILES_TO_RETAIN),
         conf.get(EVENT_LOG_COMPACTION_SCORE_THRESHOLD))
   }
-
-  // For backward compatibility
-  private val fileCompactor = fileCompactors(logDir)
 
   // Used to store the paths, which are being processed. This enable the replay log tasks execute
   // asynchronously and make sure that checkForLogs would not process a path repeatedly.
@@ -852,7 +844,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       }
     }.getOrElse {
       // Fall back to the first directory (preserves original behavior)
-      (fs, new Path(logDir, logPathName))
+      (fs, new Path(logDirs.head, logPathName))
     }
   }
 
@@ -871,7 +863,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         val dirStr = dirPath.toUri.getPath
         pathStr == dirStr || pathStr.startsWith(dirStr.stripSuffix("/") + "/")
       }
-    }.map(_._3).getOrElse(logDir)
+    }.map(_._3).getOrElse(logDirs.head)
   }
 
   /**
@@ -893,20 +885,20 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       val logPathFs = fsForPath(path)
       val normalized = path.makeQualified(logPathFs.getUri, logPathFs.getWorkingDirectory)
 
-      // Find the longest matching prefix (already sorted by depth)
+      // Find the matching log directory
       normalizedLogDirs.find { case (dirPath, _, _) =>
         isDescendantOf(normalized, dirPath)
       } match {
         case Some((_, displayName, fullPath)) => (displayName, fullPath)
         case None =>
           // Fallback to first directory
-          (logDirToDisplayName(logDir), logDir)
+          (logDirToDisplayName(logDirs.head), logDirs.head)
       }
     } catch {
       case e: Exception =>
         logWarning(log"Failed to resolve log dir info for path ${MDC(PATH, logPath)}: " +
           log"${MDC(ERROR, e.getMessage)}")
-        (logDirToDisplayName(logDir), logDir)
+        (logDirToDisplayName(logDirs.head), logDirs.head)
     }
   }
 
