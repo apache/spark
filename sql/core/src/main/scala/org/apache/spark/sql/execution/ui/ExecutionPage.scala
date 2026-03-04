@@ -168,17 +168,21 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
         </span>
       </div>
 
-      <div class="row">
+      <div id="plan-viz-content" class="row">
         <div class="col-8">
           <div id="plan-viz-graph">
             <div>
               <input type="checkbox" id="stageId-and-taskId-checkbox"></input>
               <span>Show the Stage ID and Task ID that corresponds to the max metric</span>
             </div>
+            <div>
+              <input type="checkbox" id="detailed-labels-checkbox"></input>
+              <span>Show metrics in graph nodes (detailed mode)</span>
+            </div>
           </div>
         </div>
         <div class="col-4">
-          <div id="plan-viz-details-panel" class="sticky-top" style="top: 1rem;">
+          <div id="plan-viz-details-panel" class="sticky-top" style="top: 4rem; z-index: 1;">
             <div class="card">
               <div class="card-header fw-bold" id="plan-viz-details-title">Details</div>
               <div class="card-body" id="plan-viz-details-body">
