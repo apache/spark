@@ -20,6 +20,7 @@ import io.fabric8.kubernetes.client.KubernetesClient
 import org.mockito.{Mock, MockitoAnnotations}
 import org.mockito.Mockito.when
 import org.scalatest.BeforeAndAfter
+
 import org.apache.spark._
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.internal.config._

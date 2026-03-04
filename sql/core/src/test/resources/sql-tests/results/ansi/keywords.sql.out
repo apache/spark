@@ -219,6 +219,7 @@ PRIMARY	true
 PRINCIPALS	false
 PROPERTIES	false
 PURGE	false
+QUALIFY	false
 QUARTER	false
 QUERY	false
 RANGE	false
