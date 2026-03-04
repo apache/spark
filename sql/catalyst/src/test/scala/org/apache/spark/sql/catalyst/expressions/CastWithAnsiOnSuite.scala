@@ -864,8 +864,7 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
         parameters = Map(
           "value" -> "86399.123456000",
           "precision" -> "2",
-          "scale" -> "0",
-          "config" -> """"spark.sql.ansi.enabled""""
+          "scale" -> "0"
         ),
         queryContext = Array(ExpectedContext(fragment = "", start = -1, stop = -1))
       )
