@@ -154,8 +154,7 @@ class QueryExecutionAnsiErrorsSuite extends SharedSparkSession {
       parameters = Map(
         "value" -> "66666666666666.666",
         "precision" -> "8",
-        "scale" -> "1",
-        "config" -> ansiConf),
+        "scale" -> "1"),
       context = ExpectedContext(
         fragment = "CAST('66666666666666.666' AS DECIMAL(8, 1))",
         start = 7,
@@ -170,8 +169,7 @@ class QueryExecutionAnsiErrorsSuite extends SharedSparkSession {
       parameters = Map(
         "value" -> "66666666666666.666",
         "precision" -> "8",
-        "scale" -> "1",
-        "config" -> ansiConf),
+        "scale" -> "1"),
       context = ExpectedContext(
         fragment = "cast",
         callSitePattern = getCurrentClassCallSitePattern))
