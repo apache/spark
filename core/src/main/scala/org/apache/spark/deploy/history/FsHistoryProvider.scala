@@ -566,7 +566,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       try {
         checkForLogsInDir(dir, newLastScanTime, allNotStale)
       } catch {
-        case e: Exception =>
+        case e: IOException =>
           logError(log"Error checking for logs in directory ${MDC(HISTORY_DIR, dir)}", e)
       }
     }
