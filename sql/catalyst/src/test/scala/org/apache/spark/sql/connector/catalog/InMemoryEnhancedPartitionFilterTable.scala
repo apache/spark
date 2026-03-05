@@ -70,6 +70,11 @@ class InMemoryEnhancedPartitionFilterTable(
     private val partitionPredicates: Buffer[PartitionPredicate] = ArrayBuffer.empty
     private val firstPassPushedPredicates: Buffer[Predicate] = ArrayBuffer.empty
 
+    private val rejectPartitionPredicates =
+      InMemoryEnhancedPartitionFilterTable.this.properties.getOrDefault(
+        InMemoryEnhancedPartitionFilterTable.RejectPartitionPredicatesKey, "false")
+        .toBoolean
+
     override def supportsEnhancedPartitionFiltering(): Boolean = true
 
     override def pushPredicates(predicates: Array[Predicate]): Array[Predicate] = {
@@ -81,7 +86,11 @@ class InMemoryEnhancedPartitionFilterTable(
 
       predicates.foreach {
         case p: PartitionPredicate =>
-          partitionPredicates += p
+          if (rejectPartitionPredicates) {
+            returned += p
+          } else {
+            partitionPredicates += p
+          }
         case p if referencesOnlyPartitionCols(p) &&
             InMemoryTableWithV2Filter.supportsPredicates(Array(p)) =>
           firstPassPushedPredicates += p
@@ -133,4 +142,11 @@ class InMemoryEnhancedPartitionFilterTable(
 
     override def getPushedPartitionPredicates: Seq[PartitionPredicate] = pushedPartitionPredicates
   }
+}
+
+object InMemoryEnhancedPartitionFilterTable {
+  /**
+   * Table property: when "true", reject all PartitionPredicates (for testing).
+   */
+  private[catalog] val RejectPartitionPredicatesKey = "reject-partition-predicates"
 }

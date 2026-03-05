@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression, NamedExpression, SchemaPruning}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression, ExpressionSet, NamedExpression, SchemaPruning}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.expressions.IdentityTransform
@@ -160,7 +160,7 @@ object PushDownUtils {
             (Seq.empty[PartitionPredicate], secondPassFilterExprs)
         }
 
-        val finalPostScanFilters = if (r.supportsEnhancedPartitionFiltering()) {
+        val combinedPostScanFilters = if (r.supportsEnhancedPartitionFiltering()) {
           val secondPassPostScanFilters = r.pushPredicates(partitionPredicates.toArray).map {
             predicate =>
               DataSourceV2Strategy.rebuildExpressionFromFilter(predicate, translatedFilterToExpr)
@@ -169,12 +169,16 @@ object PushDownUtils {
         } else {
           firstPassPostScanFilters ++ untranslatableExprs
         }
+        // Deduplicate by semantic equality so a filter rejected in both first and second pass
+        // does not appear twice (ExpressionSet uses canonicalized form for equality).
+        val finalPostScanFilters =
+          ExpressionSet(combinedPostScanFilters).toIndexedSeq.toArray.toImmutableArraySeq
 
         // Normally translated filters (postScanFilters) are simple filters that can be evaluated
         // faster, while the untranslated filters are complicated filters that take more time to
         // evaluate, so we want to evaluate the postScanFilters filters first.
         (Right(r.pushedPredicates.toImmutableArraySeq),
-          finalPostScanFilters.toImmutableArraySeq)
+          finalPostScanFilters)
       case r: SupportsPushDownCatalystFilters =>
         val postScanFilters = r.pushFilters(filters)
         (Right(r.pushedFilters.toImmutableArraySeq), postScanFilters)

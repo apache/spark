@@ -19,15 +19,22 @@ package org.apache.spark.sql.connector
 
 import java.util.Locale
 
+import scala.jdk.CollectionConverters._
+
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.{QueryTest, Row}
-import org.apache.spark.sql.connector.catalog.BufferedRows
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, In, Literal}
+import org.apache.spark.sql.connector.catalog.{BufferedRows, Identifier, TableCatalog}
+import org.apache.spark.sql.connector.catalog.InMemoryEnhancedPartitionFilterTable
 import org.apache.spark.sql.connector.catalog.InMemoryTableEnhancedPartitionFilterCatalog
 import org.apache.spark.sql.connector.catalog.TestPartitionPredicateScan
 import org.apache.spark.sql.connector.expressions.filter.PartitionPredicate
-import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, PushDownUtils}
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.{StringType, StructField, StructType}
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Tests for enhanced partition filter pushdown with tables whose scan builder handles
@@ -239,6 +246,41 @@ class DataSourceV2EnhancedPartitionFilterSuite
           s"Predicate on p1 and p2 should have ordinals [1, 2], " +
             s"got ${ordinals.mkString("[", ", ", "]")}")
       }
+    }
+  }
+
+  test("post-scan filters deduplicated when same filter rejected in both first and second pass") {
+    // Use a table with reject-partition-predicates so the scan rejects all
+    // PartitionPredicates. A partition-only filter is rejected in the first
+    // pass (e.g. not in supportsPredicates) then re-sent as PartitionPredicate and rejected again,
+    // so without deduplication the same expression would appear twice in finalPostScanFilters.
+    withTable(partFilterTableName) {
+      sql(s"CREATE TABLE $partFilterTableName (part_col string, data string) USING $v2Source " +
+        "PARTITIONED BY (part_col) " +
+        "TBLPROPERTIES('reject-partition-predicates' = 'true')")
+
+      val catalog = spark.sessionState.catalogManager.catalog("testpartfilter")
+        .asInstanceOf[TableCatalog]
+      val table = catalog.loadTable(Identifier.of(Array(), "t"))
+        .asInstanceOf[InMemoryEnhancedPartitionFilterTable]
+      val options = new CaseInsensitiveStringMap(Map.empty[String, String].asJava)
+      val builder = table.newScanBuilder(options)
+
+      val partitionSchema = StructType(StructField("part_col", StringType) :: Nil)
+      val partColAttr = AttributeReference("part_col", StringType)()
+      val litA = Literal(UTF8String.fromString("a"), StringType)
+      // IN is translated to V2 but rejected by supportsPredicates (only =, <=>, etc.);
+      // then re-sent as PartitionPredicate and rejected again when property is set.
+      val filterExpr: Expression = In(partColAttr, Seq(litA))
+
+      val (_, postScanFilters) =
+        PushDownUtils.pushFilters(builder, Seq(filterExpr), Some(partitionSchema))
+
+      // Without deduplication the same filter would appear twice; ExpressionSet dedups to one.
+      assert(postScanFilters.size === 1,
+        s"Post-scan filters should be deduplicated, got ${postScanFilters.size}: $postScanFilters")
+      assert(postScanFilters.head.semanticEquals(filterExpr),
+        s"Single post-scan filter should equal original: ${postScanFilters.head}")
     }
   }
 }
