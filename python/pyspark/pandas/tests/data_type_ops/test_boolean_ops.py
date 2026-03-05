@@ -364,6 +364,10 @@ class BooleanOpsTestsMixin:
         psser, other_psser = psdf["this"], psdf["that"]
         self.assert_eq(pser == other_pser, psser == other_psser)
         self.assert_eq(pser == pser, psser == psser)
+        # SPARK-54665: Comparison between boolean Series and string literals
+        self.assert_eq(pser == "True", psser == "True")
+        self.assert_eq(pser == "False", psser == "False")
+        self.assert_eq(pser == "any string", psser == "any string")
 
     def test_ne(self):
         pdf, psdf = self.bool_pdf, self.bool_psdf
@@ -371,6 +375,10 @@ class BooleanOpsTestsMixin:
         psser, other_psser = psdf["this"], psdf["that"]
         self.assert_eq(pser != other_pser, psser != other_psser)
         self.assert_eq(pser != pser, psser != psser)
+        # SPARK-54665: Comparison between boolean Series and string literals
+        self.assert_eq(pser != "True", psser != "True")
+        self.assert_eq(pser != "False", psser != "False")
+        self.assert_eq(pser != "any string", psser != "any string")
 
     def test_lt(self):
         pdf, psdf = self.bool_pdf, self.bool_psdf
@@ -794,6 +802,10 @@ class BooleanExtensionOpsTestsMixin:
         other_pser, other_psser = pdf["that"], psdf["that"]
         self.check_extension(pser == other_pser, psser == other_psser)
         self.check_extension(pser == pser, psser == psser)
+        # SPARK-54665: Comparison between boolean Series and string literals
+        self.check_extension(pser == "True", psser == "True")
+        self.check_extension(pser == "False", psser == "False")
+        self.check_extension(pser == "any string", psser == "any string")
 
     def test_ne(self):
         pdf, psdf = self.boolean_pdf, self.boolean_psdf
@@ -801,6 +813,10 @@ class BooleanExtensionOpsTestsMixin:
         other_pser, other_psser = pdf["that"], psdf["that"]
         self.check_extension(pser != other_pser, psser != other_psser)
         self.check_extension(pser != pser, psser != psser)
+        # SPARK-54665: Comparison between boolean Series and string literals
+        self.check_extension(pser != "True", psser != "True")
+        self.check_extension(pser != "False", psser != "False")
+        self.check_extension(pser != "any string", psser != "any string")
 
     def test_lt(self):
         pdf, psdf = self.boolean_pdf, self.boolean_psdf
