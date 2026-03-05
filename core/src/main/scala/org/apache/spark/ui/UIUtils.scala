@@ -546,14 +546,16 @@ private[spark] object UIUtils extends Logging {
 
   def tooltip(text: String, position: String): Seq[Node] = {
     <sup>
-      (<a data-bs-toggle="tooltip" data-bs-placement={position} title={text}>?</a>)
+      (<a data-bs-toggle="tooltip" title={text}>?</a>)
     </sup>
   }
 
   /** Wrap content in a span with a Bootstrap 5 tooltip. */
   def tooltipSpan(content: Seq[Node], text: String,
       placement: String = "top"): Seq[Node] = {
-    <span data-bs-toggle="tooltip" data-bs-placement={placement} title={text}>
+    val bsPlacement = if (placement == "top") null else placement
+    <span data-bs-toggle="tooltip"
+        data-bs-placement={bsPlacement} title={text}>
       {content}
     </span>
   }
@@ -561,7 +563,9 @@ private[spark] object UIUtils extends Logging {
   /** Create a link with a Bootstrap 5 tooltip. */
   def tooltipLink(content: Seq[Node], text: String,
       placement: String = "top"): Seq[Node] = {
-    <a data-bs-toggle="tooltip" data-bs-placement={placement} title={text}>
+    val bsPlacement = if (placement == "top") null else placement
+    <a data-bs-toggle="tooltip"
+        data-bs-placement={bsPlacement} title={text}>
       {content}
     </a>
   }
