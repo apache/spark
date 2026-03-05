@@ -17,11 +17,14 @@
 
 package org.apache.spark.ui.env
 
-import scala.xml.Node
+import scala.jdk.CollectionConverters._
+import scala.xml.{Node, Unparsed}
 
+import com.fasterxml.jackson.databind.ObjectMapper
 import jakarta.servlet.http.HttpServletRequest
 
 import org.apache.spark.SparkConf
+import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.status.AppStatusStore
 import org.apache.spark.ui._
 
@@ -38,8 +41,23 @@ private[ui] class EnvironmentPage(
     </div>
 
   def render(request: HttpServletRequest): Seq[Node] = {
+    val defaultsMap = new java.util.HashMap[String, String]()
+    ConfigEntry.knownConfigs.asScala.foreach { case (key, entry) =>
+      try {
+        val dvs = entry.defaultValueString
+        if (dvs != ConfigEntry.UNDEFINED) {
+          defaultsMap.put(key, dvs)
+        }
+      } catch {
+        case _: Exception =>
+      }
+    }
+    val defaultsJson = new ObjectMapper().writeValueAsString(defaultsMap)
+      .replace("</", "<\\/")
+
     val content =
       <span>
+        <div id="spark-config-defaults" class="d-none">{Unparsed(defaultsJson)}</div>
         <div class="d-flex align-items-start">
           <div class="nav flex-column nav-pills me-3" id="envTabs" role="tablist"
                aria-orientation="vertical" style="min-width: 200px;">
