@@ -62,32 +62,63 @@ case class EnsureRequirements(
     assert(requiredChildOrderings.length == originalChildren.length)
     // Ensure that the operator's children satisfy their output distribution requirements.
     var children = originalChildren.zip(requiredChildDistributions).map {
-      case (child, distribution) if child.outputPartitioning.satisfies(distribution) =>
-        distribution match {
-          case o: OrderedDistribution =>
-            ensureOrdering(child, child.outputPartitioning, o)
-          case _ => child
-        }
-      case (c @ GroupedPartitions(p), distribution) if p.satisfies(distribution) =>
-        distribution match {
-          case o: OrderedDistribution =>
-            ensureOrdering(c, p, o)
-          case _ => GroupPartitionsExec(c)
-        }
       case (child, BroadcastDistribution(mode)) =>
         BroadcastExchangeExec(mode, child)
-      case (child, distribution) =>
-        val numPartitions = distribution.requiredNumPartitions
-          .getOrElse(conf.numShufflePartitions)
-        distribution match {
-          case _: StatefulOpClusteredDistribution =>
-            ShuffleExchangeExec(
-              distribution.createPartitioning(numPartitions), child,
-              REQUIRED_BY_STATEFUL_OPERATOR)
 
-          case _ =>
-            ShuffleExchangeExec(
-              distribution.createPartitioning(numPartitions), child, shuffleOrigin)
+      case (child, distribution) =>
+        // Split child's partitioning into categories
+        val (other, grouped, nonGrouped) = splitKeyedPartitionings(child.outputPartitioning)
+
+        // If non-KeyedPartitioning already satisfies, no changes needed
+        if (other.exists(_.satisfies(distribution))) {
+          child
+        } else {
+          // Check KeyedPartitioning satisfaction conditions
+          val groupedSatisfies = grouped.exists(_.satisfies(distribution))
+          val nonGroupedSatisfiesAsIs = nonGrouped.exists(_.nonGroupedSatisfies(distribution))
+          val nonGroupedSatisfiesWhenGrouped = nonGrouped.exists(_.groupedSatisfies(distribution))
+
+          // Check if any KeyedPartitioning satisfies the distribution
+          if (groupedSatisfies || nonGroupedSatisfiesAsIs || nonGroupedSatisfiesWhenGrouped) {
+            distribution match {
+              case o: OrderedDistribution =>
+                // OrderedDistribution requires grouped KeyedPartitioning with sorted keys.
+                // Find any KeyedPartitioning that satisfies via groupedSatisfies.
+                val satisfyingKeyedPartitioning =
+                  (grouped ++ nonGrouped).find(_.groupedSatisfies(distribution)).get
+                val attrs = satisfyingKeyedPartitioning.expressions.flatMap(_.collectLeaves())
+                  .map(_.asInstanceOf[Attribute])
+                val keyRowOrdering = RowOrdering.create(o.ordering, attrs)
+                val keyOrdering = keyRowOrdering.on((t: InternalRowComparableWrapper) => t.row)
+                val sorted = satisfyingKeyedPartitioning.partitionKeys.sorted(keyOrdering)
+                GroupPartitionsExec(child, expectedPartitionKeys = Some(sorted.map((_, 1))))
+
+              case _ if groupedSatisfies =>
+                // Grouped KeyedPartitioning already satisfies
+                child
+
+              case _ if nonGroupedSatisfiesAsIs =>
+                // Non-grouped KeyedPartitioning satisfies without grouping
+                child
+
+              case _ =>
+                // Non-grouped KeyedPartitioning satisfies only after grouping
+                GroupPartitionsExec(child)
+            }
+          } else {
+            // No partitioning satisfies - need shuffle
+            val numPartitions = distribution.requiredNumPartitions
+              .getOrElse(conf.numShufflePartitions)
+            distribution match {
+              case _: StatefulOpClusteredDistribution =>
+                ShuffleExchangeExec(
+                  distribution.createPartitioning(numPartitions), child,
+                  REQUIRED_BY_STATEFUL_OPERATOR)
+              case _ =>
+                ShuffleExchangeExec(
+                  distribution.createPartitioning(numPartitions), child, shuffleOrigin)
+            }
+          }
         }
     }
 
@@ -306,31 +337,6 @@ case class EnsureRequirements(
         .getOrElse((leftKeys, rightKeys))
     } else {
       (leftKeys, rightKeys)
-    }
-  }
-
-  private def ensureOrdering(
-      plan: SparkPlan,
-      partitioning: Partitioning,
-      distribution: OrderedDistribution) = {
-    partitioning match {
-      case p: Partitioning with Expression =>
-        val satisfyingKeyedPartitioning =
-          p.collectFirst { case k: KeyedPartitioning if k.satisfies(distribution) => k }
-        satisfyingKeyedPartitioning match {
-          case Some(k) =>
-            val attrs = k.expressions.flatMap(_.collectLeaves()).map(_.asInstanceOf[Attribute])
-            val keyRowOrdering = RowOrdering.create(distribution.ordering, attrs)
-            val keyOrdering = keyRowOrdering.on((t: InternalRowComparableWrapper) => t.row)
-            // Sort 'expectedPartitionKeys' and use this mechanism to ensure BatchScan's output
-            // partitions are ordered
-            val sorted = k.partitionKeys.sorted(keyOrdering)
-            GroupPartitionsExec(plan, expectedPartitionKeys = Some(sorted.map((_, 1))))
-
-          case _ => plan
-        }
-
-      case _ => plan
     }
   }
 
@@ -778,6 +784,45 @@ case class EnsureRequirements(
     result.toSeq
   }
 
+  /**
+   * Splits a partitioning into three categories:
+   * 1. Non-KeyedPartitioning (HashPartitioning, RangePartitioning, etc.)
+   * 2. Grouped KeyedPartitioning (isGrouped = true)
+   * 3. Non-grouped KeyedPartitioning (isGrouped = false)
+   *
+   * @param partitioning The partitioning to split
+   * @return A tuple of (other, grouped, nonGrouped) where:
+   *         - other: Option containing non-KeyedPartitioning(s)
+   *         - grouped: Seq of grouped KeyedPartitionings
+   *         - nonGrouped: Seq of non-grouped KeyedPartitionings
+   */
+  private def splitKeyedPartitionings(partitioning: Partitioning) = {
+    val otherPartitionings = ArrayBuffer.empty[Partitioning]
+    val groupedKeyedPartitionings = ArrayBuffer.empty[KeyedPartitioning]
+    val nonGroupedKeyedPartitionings = ArrayBuffer.empty[KeyedPartitioning]
+
+    def split(p: Partitioning): Unit = p match {
+      case c: PartitioningCollection => c.partitionings.foreach(split)
+      case k: KeyedPartitioning =>
+        if (k.isGrouped) {
+          groupedKeyedPartitionings += k
+        } else {
+          nonGroupedKeyedPartitionings += k
+        }
+      case o => otherPartitionings += o
+    }
+
+    split(partitioning)
+
+    val other = otherPartitionings.length match {
+      case 0 => None
+      case 1 => Some(otherPartitionings.head)
+      case _ => Some(PartitioningCollection(otherPartitionings.toSeq))
+    }
+
+    (other, groupedKeyedPartitionings.toSeq, nonGroupedKeyedPartitionings.toSeq)
+  }
+
   def apply(plan: SparkPlan): SparkPlan = {
     val newPlan = plan.transformUp {
       case operator @ ShuffleExchangeExec(upper: HashPartitioning, child, shuffleOrigin, _)
@@ -827,23 +872,3 @@ case class EnsureRequirements(
     }
   }
 }
-
-object GroupedPartitions {
-  def unapply(plan: SparkPlan): Option[Partitioning with Expression] = {
-    groupPartitions(plan.outputPartitioning)
-  }
-
-  private def groupPartitions(p: Partitioning): Option[Partitioning with Expression] = {
-    p match {
-      case c: PartitioningCollection =>
-        c.partitionings.flatMap(groupPartitions) match {
-          case Nil => None
-          case p :: Nil => Some(p)
-          case ps => Some(PartitioningCollection(ps))
-        }
-      case k: KeyedPartitioning => Some(k.toGrouped)
-      case _ => None
-    }
-  }
-}
-

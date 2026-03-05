@@ -382,6 +382,27 @@ case class CoalescedHashPartitioning(from: HashPartitioning, partitions: Seq[Coa
  *   each partition having a distinct key. This occurs when: (1) a data source natively produces
  *   unique partition keys, or (2) `GroupPartitionsExec` coalesces partitions with duplicate keys.
  *
+ * == Distribution Satisfaction and Grouping ==
+ * The `satisfies()` method returns true if this partitioning can satisfy a distribution,
+ * regardless of whether the partitioning is actually grouped. The method delegates to:
+ * - `nonGroupedSatisfies()`: Returns true for basic distributions (UnspecifiedDistribution,
+ *   AllTuples when single partition)
+ * - `groupedSatisfies()`: Returns true for distributions requiring grouped partitioning
+ *   (ClusteredDistribution, OrderedDistribution)
+ *
+ * If `satisfies()` returns true but `isGrouped == false`, the partitioning does NOT actually
+ * satisfy the distribution yet. The `EnsureRequirements` rule must insert `GroupPartitionsExec` to
+ * coalesce duplicate partition keys before the distribution requirement is truly satisfied.
+ *
+ * For example, an ungrouped KeyedPartitioning with keys `[1, 2, 2, 3]` will return
+ * `satisfies(ClusteredDistribution(...)) == true` because it can satisfy the distribution after
+ * grouping. However, `EnsureRequirements` must add `GroupPartitionsExec` to produce grouped keys
+ * `[1, 2, 3]` before the distribution is actually satisfied.
+ *
+ * Similarly, for `OrderedDistribution`, even if `satisfies()` returns true, `GroupPartitionsExec`
+ * must be added to both group the partitions AND sort the partition keys according to the
+ * ordering requirement.
+ *
  * == Example ==
  * Consider a data source with partition transform `[years(ts_col)]` and 4 input splits:
  *
@@ -391,6 +412,7 @@ case class CoalescedHashPartitioning(from: HashPartitioning, partitions: Seq[Coa
  *   partitionKeys:         [0, 1, 2, 2]    // partitions 2 and 3 have the same key
  *   numPartitions:         4
  *   isGrouped:             false
+ *   satisfies(ClusteredDistribution(...)) == true   // CAN satisfy after grouping
  * }}}
  *
  * '''After GroupPartitionsExec''' (grouped):
@@ -399,6 +421,7 @@ case class CoalescedHashPartitioning(from: HashPartitioning, partitions: Seq[Coa
  *   partitionKeys:         [0, 1, 2]       // duplicates removed, partitions coalesced
  *   numPartitions:         3
  *   isGrouped:             true
+ *   satisfies(ClusteredDistribution(...)) == true   // ACTUALLY satisfies now
  * }}}
  *
  * @param expressions Partition transform expressions (e.g., `years(col)`, `bucket(10, col)`).
@@ -451,33 +474,37 @@ case class KeyedPartitioning(
     KeyedPartitioning.reduceKeys(partitionKeys, expressionDataTypes, reducers).distinct
 
   override def satisfies0(required: Distribution): Boolean = {
-    super.satisfies0(required) || isGrouped && {
-      required match {
-        case c @ ClusteredDistribution(requiredClustering, requireAllClusterKeys, _) =>
-          if (requireAllClusterKeys) {
-            // Checks whether this partitioning is partitioned on exactly same clustering keys of
-            // `ClusteredDistribution`.
-            c.areAllClusterKeysMatched(expressions)
+    nonGroupedSatisfies(required) || groupedSatisfies(required)
+  }
+
+  def nonGroupedSatisfies(required: Distribution): Boolean = super.satisfies0(required)
+
+  def groupedSatisfies(required: Distribution): Boolean = {
+    required match {
+      case c @ ClusteredDistribution(requiredClustering, requireAllClusterKeys, _) =>
+        if (requireAllClusterKeys) {
+          // Checks whether this partitioning is partitioned on exactly same clustering keys of
+          // `ClusteredDistribution`.
+          c.areAllClusterKeysMatched(expressions)
+        } else {
+          // We'll need to find leaf attributes from the partition expressions first.
+          val attributes = expressions.flatMap(_.collectLeaves())
+
+          if (SQLConf.get.v2BucketingAllowJoinKeysSubsetOfPartitionKeys) {
+            // check that join keys (required clustering keys)
+            // overlap with partition keys (KeyedPartitioning attributes)
+            requiredClustering.exists(x => attributes.exists(_.semanticEquals(x))) &&
+              expressions.forall(_.collectLeaves().size == 1)
           } else {
-            // We'll need to find leaf attributes from the partition expressions first.
-            val attributes = expressions.flatMap(_.collectLeaves())
-
-            if (SQLConf.get.v2BucketingAllowJoinKeysSubsetOfPartitionKeys) {
-              // check that join keys (required clustering keys)
-              // overlap with partition keys (KeyedPartitioning attributes)
-              requiredClustering.exists(x => attributes.exists(_.semanticEquals(x))) &&
-                expressions.forall(_.collectLeaves().size == 1)
-            } else {
-              attributes.forall(x => requiredClustering.exists(_.semanticEquals(x)))
-            }
+            attributes.forall(x => requiredClustering.exists(_.semanticEquals(x)))
           }
+        }
 
-        case o @ OrderedDistribution(_) if SQLConf.get.v2BucketingAllowSorting =>
-          o.areAllClusterKeysMatched(expressions)
+      case o @ OrderedDistribution(_) if SQLConf.get.v2BucketingAllowSorting =>
+        o.areAllClusterKeysMatched(expressions)
 
-        case _ =>
-          false
-      }
+      case _ =>
+        false
     }
   }
 
@@ -931,8 +958,6 @@ case class KeyGroupedShuffleSpec(
     partitioning: KeyedPartitioning,
     distribution: ClusteredDistribution,
     joinKeyPositions: Option[Seq[Int]] = None) extends ShuffleSpec {
-
-  assert(partitioning.isGrouped)
 
   /**
    * A sequence where each element is a set of positions of the partition expression to the cluster
