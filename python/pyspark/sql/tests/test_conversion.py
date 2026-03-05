@@ -34,6 +34,7 @@ from pyspark.sql.types import (
     DoubleType,
     Geography,
     GeographyType,
+    Geometry,
     GeometryType,
     IntegerType,
     LongType,
@@ -693,6 +694,45 @@ class ArrowArrayToPandasConversionTests(unittest.TestCase):
         # empty
         result = ArrowArrayToPandasConversion.convert_numpy(
             pa.array([], type=geography_type), GeographyType(4326)
+        )
+        self.assertEqual(len(result), 0)
+
+    def test_geometry_convert_numpy(self):
+        import pyarrow as pa
+
+        geometry_type = pa.struct(
+            [
+                pa.field("srid", pa.int32(), nullable=False),
+                pa.field(
+                    "wkb",
+                    pa.binary(),
+                    nullable=False,
+                    metadata={b"geometry": b"true", b"srid": b"0"},
+                ),
+            ]
+        )
+
+        # basic conversion with nulls
+        # POINT(1.0, 2.0) and POINT(17.0, 7.0) in WKB format
+        wkb1 = bytes.fromhex("0101000000000000000000F03F0000000000000040")
+        wkb2 = bytes.fromhex("010100000000000000000031400000000000001c40")
+        arr = pa.array(
+            [
+                {"srid": 0, "wkb": wkb1},
+                None,
+                {"srid": 0, "wkb": wkb2},
+            ],
+            type=geometry_type,
+        )
+        result = ArrowArrayToPandasConversion.convert_numpy(arr, GeometryType(0), ser_name="g")
+        self.assertEqual(result.iloc[0], Geometry(wkb1, 0))
+        self.assertIsNone(result.iloc[1])
+        self.assertEqual(result.iloc[2], Geometry(wkb2, 0))
+        self.assertEqual(result.name, "g")
+
+        # empty
+        result = ArrowArrayToPandasConversion.convert_numpy(
+            pa.array([], type=geometry_type), GeometryType(0)
         )
         self.assertEqual(len(result), 0)
 

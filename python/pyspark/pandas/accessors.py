@@ -78,7 +78,7 @@ class PandasOnSparkFrameMethods:
 
             - 'distributed-sequence' : a sequence that increases one by one,
               by group-by and group-map approach in a distributed manner.
-            - 'distributed' : a monotonically increasing sequence simply by using PySpark’s
+            - 'distributed' : a monotonically increasing sequence simply by using PySpark's
               monotonically_increasing_id function in a fully distributed manner.
 
         column : string or tuple of string

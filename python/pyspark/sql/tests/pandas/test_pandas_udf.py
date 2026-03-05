@@ -472,10 +472,11 @@ class PandasUDFTestsMixin:
             AS tab(a, b)
             """
 
-        df = self.spark.sql(query).repartition(1).sortWithinPartitions("b")
-        expected = df.select("a").collect()
-        results = df.select(identity("a").alias("a")).collect()
-        self.assertEqual(results, expected)
+        with self.sql_conf({"spark.sql.execution.pythonUDF.pandas.preferIntExtensionDtype": True}):
+            df = self.spark.sql(query).repartition(1).sortWithinPartitions("b")
+            expected = df.select("a").collect()
+            results = df.select(identity("a").alias("a")).collect()
+            self.assertEqual(results, expected)
 
 
 class PandasUDFTests(PandasUDFTestsMixin, ReusedSQLTestCase):

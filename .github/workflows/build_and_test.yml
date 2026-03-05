@@ -104,6 +104,27 @@ jobs:
             sparkr=`./dev/is-changed.py -m sparkr`
             tpcds=`./dev/is-changed.py -m sql`
             docker=`./dev/is-changed.py -m docker-integration-tests`
+            # Skip PySpark, SparkR, TPC-DS when only static UI resources (JS/CSS/HTML) changed.
+            # These tests are unaffected by UI static resource modifications.
+            changed_files=$(git diff --name-only "$APACHE_SPARK_REF" HEAD 2>/dev/null)
+            if [ -n "$changed_files" ]; then
+              static_only=true
+              for f in $changed_files; do
+                case "$f" in
+                  */resources/*/static/*) ;;
+                  *) static_only=false; break ;;
+                esac
+              done
+            else
+              static_only=false
+            fi
+            if [ "$static_only" = "true" ]; then
+              pyspark=false
+              pandas=false
+              sparkr=false
+              tpcds=false
+              docker=false
+            fi
             buf=true
             ui=true
             docs=true

@@ -27,6 +27,7 @@ from decimal import Decimal
 from typing import Any, Callable, Dict, Iterable, List, Optional, Union, TYPE_CHECKING
 
 from pyspark.errors import PySparkTypeError, UnsupportedOperationException, PySparkValueError
+from pyspark.loose_version import LooseVersion
 from pyspark.sql.types import (
     cast,
     BooleanType,
@@ -863,6 +864,7 @@ def _to_corrected_pandas_type(dt: DataType) -> Optional[Any]:
     inferred incorrectly.
     """
     import numpy as np
+    import pandas as pd
 
     if type(dt) == ByteType:
         return np.int8
@@ -879,11 +881,20 @@ def _to_corrected_pandas_type(dt: DataType) -> Optional[Any]:
     elif type(dt) == BooleanType:
         return bool
     elif type(dt) == TimestampType:
-        return np.dtype("datetime64[ns]")
+        if LooseVersion(pd.__version__) < "3.0.0":
+            return np.dtype("datetime64[ns]")
+        else:
+            return np.dtype("datetime64[us]")
     elif type(dt) == TimestampNTZType:
-        return np.dtype("datetime64[ns]")
+        if LooseVersion(pd.__version__) < "3.0.0":
+            return np.dtype("datetime64[ns]")
+        else:
+            return np.dtype("datetime64[us]")
     elif type(dt) == DayTimeIntervalType:
-        return np.dtype("timedelta64[ns]")
+        if LooseVersion(pd.__version__) < "3.0.0":
+            return np.dtype("timedelta64[ns]")
+        else:
+            return np.dtype("timedelta64[us]")
     else:
         return None
 

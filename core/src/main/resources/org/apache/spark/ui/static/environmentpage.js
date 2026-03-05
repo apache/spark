@@ -18,6 +18,23 @@
 /* global $ */
 
 $(document).ready(function(){
+  // Tab state persistence
+  var storedTab = localStorage.getItem("env-active-tab");
+  if (storedTab) {
+    var el = document.getElementById(storedTab);
+    if (el) {
+      bootstrap.Tab.getOrCreateInstance(el).show();
+    }
+  }
+
+  document.querySelectorAll('#envTabs button[data-bs-toggle="pill"]')
+    .forEach(function(tabEl) {
+      tabEl.addEventListener("shown.bs.tab", function(event) {
+        localStorage.setItem("env-active-tab", event.target.id);
+      });
+    });
+
+  // Column filter functionality
   $('th').on('click', function(e) {
     let inputBox = $(this).find('.env-table-filter-input');
     if (inputBox.length === 0) {
@@ -53,9 +70,9 @@ $(document).ready(function(){
         }
       }
       if (showRow) {
-        $(this).show();
+        $(this).removeClass('d-none');
       } else {
-        $(this).hide();
+        $(this).addClass('d-none');
       }
     });
   });
