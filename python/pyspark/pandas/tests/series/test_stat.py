@@ -553,7 +553,7 @@ class SeriesStatMixin:
         ):
             ps.Series(["a", "b", "c"]).prod()
         with self.assertRaisesRegex(
-            TypeError, "Could not convert datetime64\\[ns\\] \\(timestamp.*\\) to numeric"
+            TypeError, r"Could not convert datetime64\[[nu]s\] \(timestamp.*\) to numeric"
         ):
             ps.Series([pd.Timestamp("2016-01-01") for _ in range(3)]).prod()
         with self.assertRaisesRegex(NotImplementedError, "Series does not support columns axis."):

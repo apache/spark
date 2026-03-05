@@ -1127,7 +1127,8 @@ class AstBuilder extends DataTypeAstBuilder
                 .asScala.map(attr => UnresolvedAttribute(visitMultipartIdentifier(attr)))
             val values = clause.notMatchedAction().expression().asScala.map(expression)
             if (columns.size != values.size) {
-              throw QueryParsingErrors.insertedValueNumberNotMatchFieldNumberError(clause)
+              throw QueryParsingErrors.insertedValueNumberNotMatchColumnNumberError(
+                columns.size, values.size, clause)
             }
             InsertAction(condition, columns.zip(values).map(kv => Assignment(kv._1, kv._2)).toSeq)
           }

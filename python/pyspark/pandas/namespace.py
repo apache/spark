@@ -1766,9 +1766,16 @@ def to_datetime(
                 "The 'infer_datetime_format' keyword is not supported in pandas 3.0.0 and later."
             )
 
+    ret_type: type
+    if LooseVersion(pd.__version__) < "3.0.0":
+        ret_type = Series[np.datetime64]
+    else:
+        # The unit is unpredictable.
+        ret_type = None
+
     def pandas_to_datetime(
         pser_or_pdf: Union[pd.DataFrame, pd.Series], cols: Optional[List[str]] = None
-    ) -> Series[np.datetime64]:
+    ) -> ret_type:
         if isinstance(pser_or_pdf, pd.DataFrame):
             pser_or_pdf = pser_or_pdf[cols]
         return pd.to_datetime(pser_or_pdf, **kwargs)
@@ -2029,17 +2036,22 @@ def to_timedelta(
     TimedeltaIndex(['0 days', '1 days', '2 days', '3 days', '4 days'],
                    dtype='timedelta64[ns]', freq=None)
     """
-
-    def pandas_to_timedelta(pser: pd.Series) -> np.timedelta64:
-        return pd.to_timedelta(
-            arg=pser,
-            unit=unit,
-            errors=errors,
-        )
-
     if isinstance(arg, Series):
-        return arg.transform(pandas_to_timedelta)
+        ret_dtype: Union[type, Dtype]
+        if LooseVersion(pd.__version__) < "3.0.0":
+            ret_dtype = np.timedelta64
+        else:
+            # The unit is unpredictable.
+            ret_dtype = None
 
+        def pandas_to_timedelta(pser: pd.Series) -> ret_dtype:
+            return pd.to_timedelta(
+                arg=pser,
+                unit=unit,
+                errors=errors,
+            )
+
+        return arg.transform(pandas_to_timedelta)
     else:
         return pd.to_timedelta(
             arg=arg,

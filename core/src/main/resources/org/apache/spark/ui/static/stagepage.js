@@ -28,7 +28,6 @@ export {setTaskThreadDumpEnabled};
 
 function setTooltip(selector, text) {
   $(selector).attr("data-bs-toggle", "tooltip")
-    .attr("data-bs-placement", "top")
     .attr("title", text);
 }
 

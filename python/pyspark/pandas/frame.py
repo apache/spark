@@ -14086,7 +14086,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
             # TODO(SPARK-46859): specify the return type if possible
             def compute_function(pdf: pd.DataFrame):  # type: ignore[no-untyped-def]
-                pdf = pdf.drop(columns=[tmp_agg_column_name])
+                if LooseVersion(pd.__version__) < "3.0.0":
+                    pdf = pdf.drop(columns=[tmp_agg_column_name])
                 pdf = pdf.set_index(tmp_idx_column_name, drop=True)
                 pdf = pdf.sort_index()
                 pdf = getattr(pdf, method)(*args, **kwargs)

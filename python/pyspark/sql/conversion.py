@@ -115,6 +115,7 @@ class ArrowBatchTransformer:
         schema: Optional["StructType"] = None,
         struct_in_pandas: str = "dict",
         ndarray_as_list: bool = False,
+        prefer_int_ext_dtype: bool = False,
         df_for_struct: bool = False,
     ) -> List[Union["pd.Series", "pd.DataFrame"]]:
         """
@@ -132,6 +133,8 @@ class ArrowBatchTransformer:
             How to represent struct in pandas ("dict", "row", etc.)
         ndarray_as_list : bool
             Whether to convert ndarray as list.
+        prefer_int_ext_dtype : bool, optional
+            Whether to convert integers to Pandas ExtensionDType.
         df_for_struct : bool
             If True, convert struct columns to DataFrame instead of Series.
 
@@ -156,6 +159,7 @@ class ArrowBatchTransformer:
                 timezone=timezone,
                 struct_in_pandas=struct_in_pandas,
                 ndarray_as_list=ndarray_as_list,
+                prefer_int_ext_dtype=prefer_int_ext_dtype,
                 df_for_struct=df_for_struct,
             )
             for i in range(batch.num_columns)
@@ -1427,6 +1431,7 @@ class ArrowArrayToPandasConversion:
         timezone: Optional[str] = None,
         struct_in_pandas: str = "dict",
         ndarray_as_list: bool = False,
+        prefer_int_ext_dtype: bool = False,
         df_for_struct: bool = False,
     ) -> Union["pd.Series", "pd.DataFrame"]:
         """
@@ -1447,6 +1452,8 @@ class ArrowArrayToPandasConversion:
             Default is "dict".
         ndarray_as_list : bool, optional
             Whether to convert numpy ndarrays to Python lists. Default is False.
+        prefer_int_ext_dtype : bool, optional
+            Whether to convert integers to Pandas ExtensionDType.
         df_for_struct : bool, optional
             If True, convert struct columns to a DataFrame with columns corresponding
             to struct fields instead of a Series. Default is False.
@@ -1465,6 +1472,7 @@ class ArrowArrayToPandasConversion:
                 timezone=timezone,
                 struct_in_pandas=struct_in_pandas,
                 ndarray_as_list=ndarray_as_list,
+                prefer_int_ext_dtype=prefer_int_ext_dtype,
                 df_for_struct=df_for_struct,
             )
 
@@ -1599,6 +1607,7 @@ class ArrowArrayToPandasConversion:
             UserDefinedType,
             VariantType,
             GeographyType,
+            GeometryType,
         )
         if df_for_struct and isinstance(spark_type, StructType):
             return all(isinstance(f.dataType, supported_types) for f in spark_type.fields)
@@ -1615,6 +1624,7 @@ class ArrowArrayToPandasConversion:
         timezone: Optional[str] = None,
         struct_in_pandas: Optional[str] = None,
         ndarray_as_list: bool = False,
+        prefer_int_ext_dtype: bool = False,
         df_for_struct: bool = False,
     ) -> Union["pd.Series", "pd.DataFrame"]:
         import pyarrow as pa
@@ -1637,6 +1647,7 @@ class ArrowArrayToPandasConversion:
                         timezone=timezone,
                         struct_in_pandas=struct_in_pandas,
                         ndarray_as_list=ndarray_as_list,
+                        prefer_int_ext_dtype=prefer_int_ext_dtype,
                         df_for_struct=False,  # always False for child fields
                     )
                     for field_arr, field in zip(arr.flatten(), spark_type)
@@ -1657,22 +1668,22 @@ class ArrowArrayToPandasConversion:
 
         # conversion methods are selected based on benchmark python/benchmarks/bench_arrow.py
         if isinstance(spark_type, ByteType):
-            if arr.null_count > 0:
+            if prefer_int_ext_dtype:
                 series = arr.to_pandas(types_mapper=pd.ArrowDtype).astype(pd.Int8Dtype())
             else:
                 series = arr.to_pandas()
         elif isinstance(spark_type, ShortType):
-            if arr.null_count > 0:
+            if prefer_int_ext_dtype:
                 series = arr.to_pandas(types_mapper=pd.ArrowDtype).astype(pd.Int16Dtype())
             else:
                 series = arr.to_pandas()
         elif isinstance(spark_type, IntegerType):
-            if arr.null_count > 0:
+            if prefer_int_ext_dtype:
                 series = arr.to_pandas(types_mapper=pd.ArrowDtype).astype(pd.Int32Dtype())
             else:
                 series = arr.to_pandas()
         elif isinstance(spark_type, LongType):
-            if arr.null_count > 0:
+            if prefer_int_ext_dtype:
                 series = arr.to_pandas(types_mapper=pd.ArrowDtype).astype(pd.Int64Dtype())
             else:
                 series = arr.to_pandas()
@@ -1715,13 +1726,17 @@ class ArrowArrayToPandasConversion:
             series = series.map(
                 lambda v: Geography.fromWKB(v["wkb"], v["srid"]) if v is not None else None
             )
+        elif isinstance(spark_type, GeometryType):
+            series = arr.to_pandas()
+            series = series.map(
+                lambda v: Geometry.fromWKB(v["wkb"], v["srid"]) if v is not None else None
+            )
         # elif isinstance(
         #     spark_type,
         #     (
         #         ArrayType,
         #         MapType,
         #         StructType,
-        #         GeometryType,
         #     ),
         # ):
         # TODO(SPARK-55324): Support complex types
