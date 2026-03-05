@@ -76,7 +76,8 @@ case class GroupPartitionsExec(
         p.transform {
           case k: KeyedPartitioning =>
             val projectedExpressions = joinKeyPositions.fold(k.expressions)(_.map(k.expressions))
-            KeyedPartitioning(projectedExpressions, groupedPartitions.map(_._1), isGrouped = true)
+            KeyedPartitioning(projectedExpressions, groupedPartitions.map(_._1),
+              isGrouped = isGrouped)
         }.asInstanceOf[Partitioning]
       case o => o
     }
@@ -86,7 +87,9 @@ case class GroupPartitionsExec(
    * Aligns partitions based on `expectedPartitionKeys` and clustering mode.
    */
   private def alignToExpectedKeys(keyMap: Map[InternalRowComparableWrapper, Seq[Int]]) = {
-    expectedPartitionKeys.get.flatMap { case (key, numSplits) =>
+    var isGrouped = true
+    val alignedPartitions = expectedPartitionKeys.get.flatMap { case (key, numSplits) =>
+      if (numSplits > 1) isGrouped = false
       val splits = keyMap.getOrElse(key, Seq.empty)
       if (applyPartialClustering && !replicatePartitions) {
         // Distribute splits across expected partitions, padding with empty sequences
@@ -97,6 +100,7 @@ case class GroupPartitionsExec(
         Seq.fill(numSplits)((key, splits))
       }
     }
+    (alignedPartitions, isGrouped)
   }
 
   /**
@@ -116,10 +120,12 @@ case class GroupPartitionsExec(
    * 3. Grouping input partition indices by their (possibly projected/reduced) keys
    * 4. Sorting or distributing based on whether partial clustering is enabled
    *
-   * Returns a sequence of (partitionKey, inputPartitionIndices) pairs representing
-   * how input partitions should be grouped together.
+   * Returns a tuple of (partitions, isGrouped) where:
+   * - partitions: sequence of (partitionKey, inputPartitionIndices) pairs representing
+   *   how input partitions should be grouped together
+   * - isGrouped: whether the output partitioning is grouped (no duplicates in partition keys)
    */
-  @transient lazy val groupedPartitions = {
+  @transient private lazy val groupedPartitionsTuple = {
     // There must be a `KeyedPartitioning` in child's output partitioning as a
     // `GroupPartitionsExec` node is added to a plan only in that case.
     val keyedPartitioning = child.outputPartitioning
@@ -143,9 +149,14 @@ case class GroupPartitionsExec(
     if (expectedPartitionKeys.isDefined) {
       alignToExpectedKeys(keyToPartitionIndices)
     } else {
-      groupAndSortByKeys(keyToPartitionIndices, projectedDataTypes)
+      (groupAndSortByKeys(keyToPartitionIndices, projectedDataTypes), true)
     }
   }
+
+  @transient lazy val groupedPartitions: Seq[(InternalRowComparableWrapper, Seq[Int])] =
+    groupedPartitionsTuple._1
+
+  @transient lazy val isGrouped: Boolean = groupedPartitionsTuple._2
 
   override protected def doExecute(): RDD[InternalRow] = {
     if (groupedPartitions.isEmpty) {
