@@ -26,13 +26,13 @@ QUALIFY m > 2 AND m < 10
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`key`",
-    "proposal" : "`testdata`.`val`, `testdata`.`cate`, `testdata`.`val_date`, `testdata`.`val_long`, `testdata`.`val_double`"
+    "proposal" : "`cate`, `val`, `val_date`, `val_long`, `val_double`"
   },
   "queryContext" : [ {
     "objectType" : "",
