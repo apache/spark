@@ -529,7 +529,13 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
 
         operator match {
           case RelationTimeTravel(u: UnresolvedRelation, _, _) =>
-            u.tableNotFound(u.multipartIdentifier)
+            if (u.multipartIdentifier.length == 1) {
+              val catalogPath = (currentCatalog.name +: catalogManager.currentNamespace).toSeq
+              val searchPath = SQLConf.get.resolutionSearchPath(catalogPath).map(toSQLId)
+              u.tableNotFound(u.multipartIdentifier, searchPath)
+            } else {
+              u.tableNotFound(u.multipartIdentifier)
+            }
 
           case etw: EventTimeWatermark =>
             etw.eventTime.dataType match {
