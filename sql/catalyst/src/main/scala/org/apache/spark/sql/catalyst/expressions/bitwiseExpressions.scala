@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
+import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, FunctionRegistry}
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types._
 
 /**
@@ -214,38 +214,144 @@ case class BitwiseNot(child: Expression)
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the number of bits that are set in the argument expr as an" +
-    " unsigned 64-bit integer, or NULL if the argument is NULL.",
+  usage = "_FUNC_(expr[, bits]) - Returns the number of bits that are set in the argument expr." +
+    " If bits is specified, treats expr as a bits-bit signed integer in 2's complement." +
+    " If bits is not specified, uses the natural bit width of the input type.",
   examples = """
     Examples:
       > SELECT _FUNC_(0);
        0
+      > SELECT _FUNC_(9, 64);
+       2
+      > SELECT _FUNC_(-7, 8);
+       6
+      > SELECT _FUNC_(-7, 64);
+       62
   """,
   since = "3.0.0",
   group = "bitwise_funcs")
-case class BitwiseCount(child: Expression)
+object BitCountExpressionBuilder extends ExpressionBuilder {
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    expressions.length match {
+      case 1 => new BitwiseCount(expressions.head)
+      case 2 =>
+        val bitsExpr = expressions(1)
+        if (!bitsExpr.foldable || bitsExpr.dataType != IntegerType) {
+          throw QueryCompilationErrors.nonFoldableArgumentError(funcName, "bits", IntegerType)
+        }
+        val bitsVal = bitsExpr.eval()
+        if (bitsVal == null) {
+          throw QueryCompilationErrors.nonFoldableArgumentError(funcName, "bits", IntegerType)
+        }
+        val bits = bitsVal.asInstanceOf[Int]
+        if (bits < 1 || bits > 64) {
+          throw QueryCompilationErrors.bitsRangeError(funcName, bits)
+        }
+        BitwiseCount(expressions.head, bits)
+      case n =>
+        throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(1, 2), n)
+    }
+  }
+}
+
+case class BitwiseCount(child: Expression, bits: Int)
   extends UnaryExpression with ExpectsInputTypes {
+  require(bits >= 1 && bits <= 64, s"bits must be in [1, 64], got $bits")
+
+  def this(child: Expression) = this(child, child.dataType match {
+    case BooleanType => 1
+    case ByteType => 8
+    case ShortType => 16
+    case IntegerType => 32
+    case _ => 64 // LongType
+  })
+
   override def nullIntolerant: Boolean = true
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(IntegralType, BooleanType))
 
   override def dataType: DataType = IntegerType
 
-  override def toString: String = s"bit_count($child)"
+  private lazy val isNaturalWidth: Boolean = bits == (child.dataType match {
+    case BooleanType => 1
+    case ByteType => 8
+    case ShortType => 16
+    case IntegerType => 32
+    case _ => 64
+  })
+
+  override def toString: String =
+    if (isNaturalWidth) s"bit_count($child)" else s"bit_count($child, $bits)"
 
   override def prettyName: String = "bit_count"
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = child.dataType match {
-    case BooleanType => defineCodeGen(ctx, ev, c => s"($c) ? 1 : 0")
-    case _ => defineCodeGen(ctx, ev, c => s"java.lang.Long.bitCount($c)")
+  override def sql: String =
+    if (isNaturalWidth) s"${prettyName}(${child.sql})"
+    else s"${prettyName}(${child.sql}, $bits)"
+
+  private lazy val needsRangeCheck: Boolean = !isNaturalWidth
+
+  private def checkRange(longVal: Long): Unit = {
+    if (needsRangeCheck) {
+      val lower = -(1L << (bits - 1))
+      val upper = (1L << (bits - 1)) - 1
+      if (longVal < lower || longVal > upper) {
+        throw QueryExecutionErrors.bitsValueOutOfRangeError("bit_count", longVal, bits)
+      }
+    }
   }
 
-  protected override def nullSafeEval(input: Any): Any = child.dataType match {
-    case BooleanType => if (input.asInstanceOf[Boolean]) 1 else 0
-    case ByteType => java.lang.Long.bitCount(input.asInstanceOf[Byte])
-    case ShortType => java.lang.Long.bitCount(input.asInstanceOf[Short])
-    case IntegerType => java.lang.Long.bitCount(input.asInstanceOf[Int])
-    case LongType => java.lang.Long.bitCount(input.asInstanceOf[Long])
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val maskStr = if (bits == 64) "-1L" else s"((1L << $bits) - 1)"
+    if (needsRangeCheck) {
+      val lower = -(1L << (bits - 1))
+      val upper = (1L << (bits - 1)) - 1
+      val checkClass =
+        "org.apache.spark.sql.errors.QueryExecutionErrors"
+      child.dataType match {
+        case BooleanType => defineCodeGen(ctx, ev, c =>
+          s"""(int) java.lang.Long.bitCount(($c ? 1L : 0L) & $maskStr)""")
+        case ByteType | ShortType | IntegerType => nullSafeCodeGen(ctx, ev, c =>
+          s"""
+             |long ${ev.value}_long = (long) $c;
+             |if (${ev.value}_long < ${lower}L || ${ev.value}_long > ${upper}L) {
+             |  throw (RuntimeException) $checkClass.bitsValueOutOfRangeError(
+             |    "bit_count", ${ev.value}_long, $bits);
+             |}
+             |${ev.value} = (int) java.lang.Long.bitCount(${ev.value}_long & $maskStr);
+           """.stripMargin)
+        case LongType => nullSafeCodeGen(ctx, ev, c =>
+          s"""
+             |if ($c < ${lower}L || $c > ${upper}L) {
+             |  throw (RuntimeException) $checkClass.bitsValueOutOfRangeError(
+             |    "bit_count", $c, $bits);
+             |}
+             |${ev.value} = (int) java.lang.Long.bitCount($c & $maskStr);
+           """.stripMargin)
+      }
+    } else {
+      child.dataType match {
+        case BooleanType => defineCodeGen(ctx, ev,
+          c => s"(int) java.lang.Long.bitCount(($c ? 1L : 0L) & $maskStr)")
+        case ByteType | ShortType | IntegerType => defineCodeGen(ctx, ev,
+          c => s"(int) java.lang.Long.bitCount(((long) $c) & $maskStr)")
+        case LongType => defineCodeGen(ctx, ev,
+          c => s"(int) java.lang.Long.bitCount($c & $maskStr)")
+      }
+    }
+  }
+
+  protected override def nullSafeEval(input: Any): Any = {
+    val mask = if (bits == 64) -1L else (1L << bits) - 1
+    val longVal = child.dataType match {
+      case BooleanType => if (input.asInstanceOf[Boolean]) 1L else 0L
+      case ByteType => input.asInstanceOf[Byte].toLong
+      case ShortType => input.asInstanceOf[Short].toLong
+      case IntegerType => input.asInstanceOf[Int].toLong
+      case LongType => input.asInstanceOf[Long]
+    }
+    checkRange(longVal)
+    java.lang.Long.bitCount(longVal & mask).toInt
   }
 
   override protected def withNewChildInternal(newChild: Expression): BitwiseCount =

@@ -1476,6 +1476,15 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "paramType" -> toSQLType(paramType)))
   }
 
+  def bitsRangeError(funcName: String, invalidValue: Int): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_PARAMETER_VALUE.BITS_RANGE",
+      messageParameters = Map(
+        "parameter" -> toSQLId("bits"),
+        "functionName" -> toSQLId(funcName),
+        "invalidValue" -> invalidValue.toString))
+  }
+
   def literalTypeUnsupportedForSourceTypeError(field: String, source: Expression): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_EXTRACT_FIELD",

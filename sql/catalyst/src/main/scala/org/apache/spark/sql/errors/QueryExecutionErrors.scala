@@ -2972,6 +2972,21 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "invalidValue" -> pos.toString))
   }
 
+  def bitsValueOutOfRangeError(
+      funcName: String, value: Long, bits: Int): Throwable = {
+    val lower = -(1L << (bits - 1))
+    val upper = (1L << (bits - 1)) - 1
+    new SparkIllegalArgumentException(
+      errorClass = "INVALID_PARAMETER_VALUE.BITS_VALUE_OUT_OF_RANGE",
+      messageParameters = Map(
+        "parameter" -> toSQLId("expr"),
+        "functionName" -> toSQLId(funcName),
+        "bits" -> bits.toString,
+        "lower" -> lower.toString,
+        "upper" -> upper.toString,
+        "invalidValue" -> value.toString))
+  }
+
   def variantSizeLimitError(sizeLimit: Int, functionName: String): Throwable = {
     new SparkRuntimeException(
       errorClass = "VARIANT_SIZE_LIMIT",
