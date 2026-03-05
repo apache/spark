@@ -819,7 +819,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         .map { id => app.attempts.filter(_.info.attemptId == Some(id)) }
         .getOrElse(app.attempts)
         .foreach { attempt =>
-          val (logFs, logPath) = resolveLogPath(attempt.logPath)
+          val (logFs, logPath) = resolveLogPath(attempt.logPath, attempt.logSourceFullPath)
           val reader = EventLogFileReader(logFs, logPath, attempt.lastIndex)
           reader.zipEventLogFiles(zipStream)
         }
@@ -831,8 +831,27 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   /**
    * Resolve the log path by searching across all log directories.
    * Returns the FileSystem and full Path for the given log path name.
+   *
+   * If logSourceFullPath is available, it is used first to avoid ambiguity
+   * when the same filename exists in multiple directories.
+   * Falls back to scanning all directories if the source path is not found.
    */
-  private def resolveLogPath(logPathName: String): (FileSystem, Path) = {
+  private def resolveLogPath(
+      logPathName: String, logSourceFullPath: String): (FileSystem, Path) = {
+    // Try the known source directory first
+    if (logSourceFullPath.nonEmpty) {
+      try {
+        val sourceFs = logDirFs(logSourceFullPath)
+        val fullPath = new Path(logSourceFullPath, logPathName)
+        if (sourceFs.exists(fullPath)) {
+          return (sourceFs, fullPath)
+        }
+      } catch {
+        case _: Exception => // fall through to scan
+      }
+    }
+
+    // Fall back to scanning all directories
     logDirs.iterator.map { dir =>
       val dirFs = logDirFs(dir)
       val fullPath = new Path(dir, logPathName)
@@ -1258,8 +1277,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     var countDeleted = 0
     toDelete.foreach { attempt =>
       logInfo(log"Deleting expired event log for ${MDC(PATH, attempt.logPath)}")
-      val (logFs, logPath) = resolveLogPath(attempt.logPath)
-      listing.delete(classOf[LogInfo], logPath.toString())
+      val (logFs, logPath) = resolveLogPath(attempt.logPath, attempt.logSourceFullPath)
       cleanAppData(app.id, attempt.info.attemptId, logPath.toString())
       if (deleteLog(logFs, logPath)) {
         countDeleted += 1
@@ -1488,7 +1506,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       metadata: AppStatusStoreMetadata): KVStore = {
     var retried = false
     var hybridStore: HybridStore = null
-    val (logFs, logPath) = resolveLogPath(attempt.logPath)
+    val (logFs, logPath) = resolveLogPath(attempt.logPath, attempt.logSourceFullPath)
     val reader = EventLogFileReader(logFs, logPath,
       attempt.lastIndex)
 
@@ -1564,7 +1582,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     var retried = false
     var newStorePath: File = null
     while (newStorePath == null) {
-      val (logFs, logPath) = resolveLogPath(attempt.logPath)
+      val (logFs, logPath) = resolveLogPath(attempt.logPath, attempt.logSourceFullPath)
       val reader = EventLogFileReader(logFs, logPath,
         attempt.lastIndex)
       val isCompressed = reader.compressionCodec.isDefined
@@ -1600,7 +1618,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     while (store == null) {
       try {
         val s = new InMemoryStore()
-        val (logFs, logPath) = resolveLogPath(attempt.logPath)
+        val (logFs, logPath) = resolveLogPath(attempt.logPath, attempt.logSourceFullPath)
         val reader = EventLogFileReader(logFs, logPath,
           attempt.lastIndex)
         rebuildAppStore(s, reader, attempt.info.lastUpdated.getTime())

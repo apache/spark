@@ -2111,6 +2111,43 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
     }
   }
 
+  test("SPARK-55793: same log file name across dirs resolves correctly with logSourceFullPath") {
+    val dir2 = Utils.createTempDir(namePrefix = "logDir2")
+    try {
+      val conf = createTestConf().set(HISTORY_LOG_DIR,
+        s"${testDir.getAbsolutePath},${dir2.getAbsolutePath}")
+      val provider = new FsHistoryProvider(conf)
+
+      val collidingLogName = "shared-event-log"
+      val log1 = new File(testDir, collidingLogName)
+      writeFile(log1, None,
+        SparkListenerApplicationStart("app1", Some("app1-id"), 1L, "test", None),
+        SparkListenerApplicationEnd(5L))
+      val log2 = new File(dir2, collidingLogName)
+      writeFile(log2, None,
+        SparkListenerApplicationStart("app2", Some("app2-id"), 2L, "test", None),
+        SparkListenerApplicationEnd(6L))
+
+      updateAndCheck(provider) { list =>
+        list.size should be(2)
+        list.map(_.id).toSet should be(Set("app1-id", "app2-id"))
+      }
+
+      val attempt = provider.getAttempt("app2-id", None)
+      attempt.logSourceFullPath should endWith(dir2.getAbsolutePath)
+
+      val resolveLogPathMethod =
+        PrivateMethod[(FileSystem, Path)](Symbol("resolveLogPath"))
+      val (_, resolvedPath) = provider invokePrivate
+        resolveLogPathMethod(attempt.logPath, attempt.logSourceFullPath)
+      resolvedPath.toUri.getPath should be(log2.getAbsolutePath)
+
+      provider.stop()
+    } finally {
+      Utils.deleteRecursively(dir2)
+    }
+  }
+
   private class SafeModeTestProvider(conf: SparkConf, clock: Clock)
     extends FsHistoryProvider(conf, clock) {
 

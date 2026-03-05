@@ -174,6 +174,8 @@ Security options for the Spark History Server are covered more detail in the
     (e.g., <code>hdfs:///logs/prod,s3a://bucket/logs/staging</code>).
     Directories can be on the same or different filesystems.
     The directories should be disjoint (not nested within each other).
+    If event log files with the same name exist in different directories,
+    each file is indexed separately based on its source directory.
     When multiple directories are configured, all existing
     <code>spark.history.fs.*</code> settings apply globally across all directories
     (there are no per-directory configurations).
