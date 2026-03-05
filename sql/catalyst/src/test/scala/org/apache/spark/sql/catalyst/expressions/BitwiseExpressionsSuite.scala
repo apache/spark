@@ -175,6 +175,27 @@ class BitwiseExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(BitwiseCount(Literal(-9223372036854775808L)), 1)
   }
 
+  test("BitCount should respect input integer type bit width") {
+    // BIT_COUNT(-1) should return the number of bits in the type, not always 64
+    checkEvaluation(BitwiseCount(Literal((-1).toByte)), 8)
+    checkEvaluation(BitwiseCount(Literal((-1).toShort)), 16)
+    checkEvaluation(BitwiseCount(Literal(-1)), 32)
+    checkEvaluation(BitwiseCount(Literal(-1L)), 64)
+
+    // Additional cases with specific negative values
+    checkEvaluation(BitwiseCount(Literal(Int.MinValue)), 1)
+    checkEvaluation(BitwiseCount(Literal(-65536)), 16)
+    checkEvaluation(BitwiseCount(Literal(-256)), 24)
+    checkEvaluation(BitwiseCount(Literal(Byte.MinValue)), 1)
+    checkEvaluation(BitwiseCount(Literal((-256).toShort)), 8)
+    checkEvaluation(BitwiseCount(Literal(Short.MinValue)), 1)
+    checkEvaluation(BitwiseCount(Literal(Long.MinValue)), 1)
+
+    DataTypeTestUtils.integralType.foreach { dt =>
+      checkConsistencyBetweenInterpretedAndCodegen(BitwiseCount, dt)
+    }
+  }
+
   test("BitGet") {
     val nullLongLiteral = Literal.create(null, LongType)
     val nullIntLiteral = Literal.create(null, IntegerType)
