@@ -24,10 +24,12 @@ by constructing the complete binary protocol that ``worker.py``'s
 """
 
 import io
+import os
 import json
 import struct
 import sys
-from typing import Any, Callable, Optional
+import tempfile
+from typing import Any, Callable, Iterator, Optional
 
 import numpy as np
 import pyarrow as pa
@@ -112,15 +114,13 @@ def _build_udf_payload(
     write_long(0, buf)  # result_id
 
 
-def _build_scalar_arrow_data(
-    arrow_batch: pa.RecordBatch,
-    num_batches: int,
-    buf: io.BytesIO,
-) -> None:
-    """Write a plain Arrow IPC stream with *num_batches* copies of *arrow_batch*."""
-    writer = pa.RecordBatchStreamWriter(buf, arrow_batch.schema)
-    for _ in range(num_batches):
-        writer.write_batch(arrow_batch)
+def _build_scalar_arrow_data(batch_iter: Iterator[pa.RecordBatch], buf: io.BufferedIOBase) -> None:
+    """Write a plain Arrow IPC stream from an iterator of Arrow batches."""
+    first_batch = next(batch_iter)
+    writer = pa.RecordBatchStreamWriter(buf, first_batch.schema)
+    writer.write_batch(first_batch)
+    for batch in batch_iter:
+        writer.write_batch(batch)
     writer.close()
 
 
@@ -142,10 +142,45 @@ def _build_scalar_worker_input(
     write_int(0, buf)  # EvalConf    (0 key-value pairs)
 
     _build_udf_payload(udf_func, return_type, arg_offsets, buf)
-    _build_scalar_arrow_data(arrow_batch, num_batches, buf)
+    _build_scalar_arrow_data((arrow_batch for _ in range(num_batches)), buf)
     write_int(-4, buf)  # SpecialLengths.END_OF_STREAM
 
     return buf.getvalue()
+
+
+def _stream_scalar_worker_input(
+    eval_type: int,
+    udf_func: Callable[..., Any],
+    return_type: StructType,
+    arg_offsets: list[int],
+    arrow_batch: pa.RecordBatch,
+    num_batches: int,
+    infile: io.BufferedIOBase,
+) -> None:
+    """Stream scalar worker input without materializing the full payload in memory."""
+    _build_preamble(infile)
+    write_int(eval_type, infile)
+    write_int(0, infile)  # RunnerConf
+    write_int(0, infile)  # EvalConf
+    _build_udf_payload(udf_func, return_type, arg_offsets, infile)
+    _build_scalar_arrow_data((arrow_batch for _ in range(num_batches)), infile)
+    write_int(-4, infile)  # SpecialLengths.END_OF_STREAM
+
+
+def _run_worker_from_replayed_file(write_input: Callable[[io.BufferedIOBase], None]) -> None:
+    """Write input to a temp file, then replay it through ``worker_main``."""
+    fd, path = tempfile.mkstemp(prefix="spark-bench-replay-", suffix=".bin")
+    try:
+        with os.fdopen(fd, "w+b") as infile:
+            write_input(infile)
+            infile.flush()
+            infile.seek(0)
+            worker_main(infile, io.BytesIO())
+    finally:
+        try:
+            os.remove(path)
+        except FileNotFoundError:
+            pass
 
 
 def _build_grouped_arrow_data(
@@ -351,7 +386,11 @@ class GroupedMapPandasUDFBench:
     # -- benchmarks ---------------------------------------------------------
 
     def _run(self, input_bytes):
-        worker_main(io.BytesIO(input_bytes), io.BytesIO())
+        caller = sys._getframe(1).f_code.co_name
+        if caller.startswith("peakmem_"):
+            _run_worker_from_replayed_file(lambda infile: infile.write(input_bytes))
+        else:
+            worker_main(io.BytesIO(input_bytes), io.BytesIO())
 
     def time_small_groups_few_cols(self):
         """1k rows/group, 5 cols, 1500 groups."""
@@ -377,20 +416,12 @@ class GroupedMapPandasUDFBench:
         """100k rows/group, 5 cols, 350 groups, split at 10k rows/batch."""
         self._run(self._large_few_input)
 
-    def peakmem_large_groups_few_cols(self):
-        """100k rows/group, 5 cols, 350 groups."""
-        self._run(self._large_few_input)
-
     def time_large_groups_many_cols(self):
         """100k rows/group, 50 cols, 40 groups, split at 10k rows/batch."""
         self._run(self._large_many_input)
 
     def peakmem_large_groups_many_cols(self):
         """100k rows/group, 50 cols, 40 groups, split at 10k rows/batch."""
-        self._run(self._large_many_input)
-
-    def peakmem_large_groups_many_cols(self):
-        """100k rows/group, 50 cols, 40 groups."""
         self._run(self._large_many_input)
 
     def time_mixed_types(self):
@@ -423,7 +454,7 @@ class ScalarArrowUDFBench:
 
         # ---- varying batch size (mixed types, identity UDF) ----
         # JVM splits at maxRecordsPerBatch (default 10k), so large cases use
-        # 10k rows with proportionally more batches to keep total rows constant.
+        # larger rows with proportionally fewer batches to keep total rows constant.
         for name, (rows, n_cols, num_batches) in {
             "small_few": (1_000, 5, 1_500),
             "small_many": (1_000, 50, 200),
@@ -484,7 +515,11 @@ class ScalarArrowUDFBench:
     # -- benchmarks ---------------------------------------------------------
 
     def _run(self, input_bytes):
-        worker_main(io.BytesIO(input_bytes), io.BytesIO())
+        caller = sys._getframe(1).f_code.co_name
+        if caller.startswith("peakmem_"):
+            _run_worker_from_replayed_file(lambda infile: infile.write(input_bytes))
+        else:
+            worker_main(io.BytesIO(input_bytes), io.BytesIO())
 
     def time_small_batches_few_cols(self):
         """1k rows/batch, 5 cols, 1500 batches."""
@@ -561,13 +596,13 @@ class ScalarArrowIterUDFBench:
             setattr(
                 self,
                 f"_{name}_input",
-                _build_scalar_worker_input(
+                (
                     eval_type,
+                    batch,
+                    num_batches,
                     lambda it: (c for c in it),
                     ret_type,
                     [0],
-                    batch,
-                    num_batches=num_batches,
                 ),
             )
 
@@ -583,13 +618,13 @@ class ScalarArrowIterUDFBench:
             for a, b in it:
                 yield pc.add(a, pc.multiply(b, 2))
 
-        self._compute_input = _build_scalar_worker_input(
+        self._compute_input = (
             eval_type,
+            compute_batch,
+            500,
             arrow_compute_iter,
             DoubleType(),
             [0, 1],
-            compute_batch,
-            num_batches=500,
         )
 
         # ---- mixed types: string manipulation ----
@@ -601,19 +636,44 @@ class ScalarArrowIterUDFBench:
             for s in it:
                 yield pc.utf8_upper(s)
 
-        self._mixed_input = _build_scalar_worker_input(
+        self._mixed_input = (
             eval_type,
+            mixed_batch,
+            1_300,
             upper_str_iter,
             StringType(),
             [1],  # str_col
-            mixed_batch,
-            num_batches=1_300,
         )
 
     # -- benchmarks ---------------------------------------------------------
 
-    def _run(self, input_bytes):
-        worker_main(io.BytesIO(input_bytes), io.BytesIO())
+    def _run(self, input_conf):
+        eval_type, batch, num_batches, udf_func, return_type, arg_offsets = input_conf
+        caller = sys._getframe(1).f_code.co_name
+        if caller.startswith("peakmem_"):
+
+            def write_input(infile: io.BufferedIOBase) -> None:
+                _stream_scalar_worker_input(
+                    eval_type,
+                    udf_func,
+                    return_type,
+                    arg_offsets,
+                    batch,
+                    num_batches,
+                    infile,
+                )
+
+            _run_worker_from_replayed_file(write_input)
+        else:
+            input_bytes = _build_scalar_worker_input(
+                eval_type,
+                udf_func,
+                return_type,
+                arg_offsets,
+                batch,
+                num_batches,
+            )
+            worker_main(io.BytesIO(input_bytes), io.BytesIO())
 
     def time_small_batches_few_cols(self):
         """1k rows/batch, 5 cols, 1500 batches."""
