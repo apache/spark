@@ -206,12 +206,11 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
           exception = intercept[AnalysisException] {
             sql(s"ALTER VIEW $viewName1 AS SELECT * FROM $viewName2")
           },
-          condition = "INVALID_TEMP_OBJ_REFERENCE",
+          condition = "RECURSIVE_VIEW",
           parameters = Map(
-            "obj" -> "VIEW",
-            "objName" -> tableIdentifier("v1").quotedString,
-            "tempObj" -> "VIEW",
-            "tempObjName" -> "`v2`"))
+            "viewIdent" -> ".*`v1`.*",
+            "newPath" -> ".*`v1`.*`v2`.*`v1`.*"),
+          matchPVals = true)
       }
     }
   }
@@ -389,13 +388,13 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
       // Then, drop the view using DROP TABLE.
       sql(s"DROP TABLE $viewName")
       // Finally, verify that the view is dropped.
-      checkError(
+      checkErrorTableNotFoundWithSearchPath(
         exception = intercept[AnalysisException] {
           sql(s"SELECT * FROM $viewName")
         },
-        condition = "TABLE_OR_VIEW_NOT_FOUND",
-        parameters = Map("relationName" -> toSQLId(viewName.split("\\.").toSeq)),
-        ExpectedContext(s"$viewName", 14, 13 + viewName.length))
+        toSQLId(viewName.split("\\.").toSeq),
+        ExpectedContext(s"$viewName", 14, 13 + viewName.length),
+        defaultSearchPathForTests)
     }
   }
 

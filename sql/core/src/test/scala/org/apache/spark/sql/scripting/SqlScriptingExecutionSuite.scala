@@ -2033,14 +2033,15 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     }
     checkError(
       exception = exception,
-      condition = "TABLE_OR_VIEW_NOT_FOUND",
+      condition = "TABLE_OR_VIEW_NOT_FOUND_WITH_SEARCH_PATH",
       sqlState = Some("42P01"),
-      parameters = Map("relationName" -> toSQLId("test_table_non_existing")),
-      context = ExpectedContext(
+      parameters = Map(
+        "relationName" -> toSQLId("test_table_non_existing"),
+        "searchPath" -> defaultSearchPathForTests),
+      queryContext = Array(ExpectedContext(
         fragment = "test_table_non_existing",
         start = 63,
-        stop = 85)
-    )
+        stop = 85)))
   }
 
   test("continue handler body without BEGIN-END propagates error properly") {
@@ -2058,14 +2059,15 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     }
     checkError(
       exception = exception,
-      condition = "TABLE_OR_VIEW_NOT_FOUND",
+      condition = "TABLE_OR_VIEW_NOT_FOUND_WITH_SEARCH_PATH",
       sqlState = Some("42P01"),
-      parameters = Map("relationName" -> toSQLId("test_table_non_existing")),
-      context = ExpectedContext(
+      parameters = Map(
+        "relationName" -> toSQLId("test_table_non_existing"),
+        "searchPath" -> defaultSearchPathForTests),
+      queryContext = Array(ExpectedContext(
         fragment = "test_table_non_existing",
         start = 67,
-        stop = 89)
-    )
+        stop = 89)))
   }
 
   test("exit handler body without BEGIN-END executes properly") {

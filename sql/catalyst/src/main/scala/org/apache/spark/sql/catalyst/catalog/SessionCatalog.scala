@@ -877,6 +877,10 @@ class SessionCatalog(
     } else if (format(name.database.get) == globalTempDatabase) {
       globalTempViewManager.get(table).map(_.tableMeta)
         .getOrElse(throw new NoSuchTableException(globalTempDatabase, table))
+    } else if (format(name.database.get) == CatalogManager.SESSION_NAMESPACE) {
+      // session.viewName or system.session.viewName: resolve as local temp view by table name
+      tempViews.get(table).map(_.tableMeta)
+        .getOrElse(throw new NoSuchTableException(CatalogManager.SESSION_NAMESPACE, table))
     } else {
       getTableMetadata(name)
     }

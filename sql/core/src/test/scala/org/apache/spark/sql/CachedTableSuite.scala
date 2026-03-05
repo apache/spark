@@ -2557,6 +2557,11 @@ class CachedTableSuite extends QueryTest
   }
 
   test("uncache non-existent table") {
+    // Reset to default catalog/namespace so search path in error is predictable (not affected
+    // by a previous test that may have run USE testcat.ns1.ns2).
+    sql("USE spark_catalog")
+    sql("USE default")
+
     checkErrorTableNotFoundWithSearchPath(
       intercept[AnalysisException] { spark.catalog.uncacheTable("non_existent") },
       "`non_existent`")

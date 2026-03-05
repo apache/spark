@@ -2294,14 +2294,14 @@ class DataSourceV2SQLSuiteV1Filter
          """.stripMargin)
 
       // UPDATE non-existing table
-      checkError(
+      checkErrorTableNotFoundWithSearchPath(
         exception = analysisException("UPDATE dummy SET name='abc'"),
-        condition = "TABLE_OR_VIEW_NOT_FOUND",
-        parameters = Map("relationName" -> "`dummy`"),
-        context = ExpectedContext(
+        "`dummy`",
+        ExpectedContext(
           fragment = "dummy",
           start = 7,
-          stop = 11))
+          stop = 11),
+        "[`system`.`builtin`, `system`.`session`, `testcat`.`ns1`.`ns2`]")
 
       // UPDATE non-existing column
       checkError(
@@ -2785,11 +2785,11 @@ class DataSourceV2SQLSuiteV1Filter
       checkTableComment("t", "NULL")
     }
     val sql1 = "COMMENT ON TABLE abc IS NULL"
-    checkError(
+    checkErrorTableNotFoundWithSearchPath(
       exception = analysisException(sql1),
-      condition = "TABLE_OR_VIEW_NOT_FOUND",
-      parameters = Map("relationName" -> "`abc`"),
-      context = ExpectedContext(fragment = "abc", start = 17, stop = 19))
+      "`abc`",
+      ExpectedContext(fragment = "abc", start = 17, stop = 19),
+      defaultSearchPathForTests)
 
     // V2 non-session catalog is used.
     withTable("testcat.ns1.ns2.t") {
@@ -3429,18 +3429,18 @@ class DataSourceV2SQLSuiteV1Filter
       val res11 = sql("SELECT * FROM t TIMESTAMP AS OF (SELECT MIN(ts) FROM t)").collect()
       assert(res11 === Array(Row(5), Row(6)))
 
-      checkError(
+      checkErrorTableNotFoundWithSearchPath(
         exception = intercept[AnalysisException] {
           // `current_date()` is a valid expression for time travel timestamp, but the test uses
           // a fake time travel implementation that only supports two hardcoded timestamp values.
           sql("SELECT * FROM t TIMESTAMP AS OF current_date()").collect()
         },
-        condition = "TABLE_OR_VIEW_NOT_FOUND",
-        parameters = Map("relationName" -> "`t`"),
-        context = ExpectedContext(
+        "`t`",
+        ExpectedContext(
           fragment = "t",
           start = 14,
-          stop = 14))
+          stop = 14),
+        "[`system`.`builtin`, `system`.`session`, `testcat`]")
 
       checkError(
         exception = analysisException("SELECT * FROM t TIMESTAMP AS OF INTERVAL 1 DAY"),
@@ -3513,33 +3513,33 @@ class DataSourceV2SQLSuiteV1Filter
         sqlState = None,
         parameters = Map("relationId" -> "`x`"))
 
-      checkError(
+      checkErrorTableNotFoundWithSearchPath(
         exception = analysisException("SELECT * FROM non_exist VERSION AS OF 1"),
-        condition = "TABLE_OR_VIEW_NOT_FOUND",
-        parameters = Map("relationName" -> "`non_exist`"),
-        context = ExpectedContext(
+        "`non_exist`",
+        ExpectedContext(
           fragment = "non_exist",
           start = 14,
-          stop = 22))
+          stop = 22),
+        "[`system`.`builtin`, `system`.`session`, `testcat`]")
 
       val subquery1 = "SELECT 1 FROM non_exist"
-      checkError(
+      checkErrorTableNotFoundWithSearchPath(
         exception = analysisException(s"SELECT * FROM t TIMESTAMP AS OF ($subquery1)"),
-        condition = "TABLE_OR_VIEW_NOT_FOUND",
-        parameters = Map("relationName" -> "`non_exist`"),
+        "`non_exist`",
         ExpectedContext(
           fragment = "non_exist",
           start = 47,
-          stop = 55))
+          stop = 55),
+        "[`system`.`builtin`, `system`.`session`, `testcat`]")
       // Nested subquery should also report error correctly.
-      checkError(
+      checkErrorTableNotFoundWithSearchPath(
         exception = analysisException(s"SELECT * FROM t TIMESTAMP AS OF (SELECT ($subquery1))"),
-        condition = "TABLE_OR_VIEW_NOT_FOUND",
-        parameters = Map("relationName" -> "`non_exist`"),
+        "`non_exist`",
         ExpectedContext(
           fragment = "non_exist",
           start = 55,
-          stop = 63))
+          stop = 63),
+        "[`system`.`builtin`, `system`.`session`, `testcat`]")
 
       val subquery2 = "SELECT col"
       checkError(

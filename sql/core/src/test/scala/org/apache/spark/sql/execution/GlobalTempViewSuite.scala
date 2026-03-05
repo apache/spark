@@ -42,9 +42,9 @@ class GlobalTempViewSuite extends QueryTest with SharedSparkSession {
 
       // If there is no database in table name, we should try local temp view first, if not found,
       // try table/view in current database, which is "default" in this case. So we expect
-      // NoSuchTableException here.
+      // table not found with search path.
       var e = intercept[AnalysisException](spark.table("src"))
-      checkErrorTableNotFound(e, "`src`")
+      checkErrorTableNotFoundWithSearchPath(e, "`src`")
 
       // Use qualified name to refer to the global temp view explicitly.
       checkAnswer(spark.table(s"$globalTempDB.src"), Row(1, "a"))

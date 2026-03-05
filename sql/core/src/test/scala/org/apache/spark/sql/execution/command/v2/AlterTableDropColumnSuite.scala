@@ -41,14 +41,13 @@ class AlterTableDropColumnSuite
   test("table does not exist") {
     withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id int) $defaultUsing")
-      checkError(
+      checkErrorTableNotFoundWithSearchPath(
         exception = intercept[AnalysisException] {
           sql("ALTER TABLE does_not_exist DROP COLUMN id")
         },
-        condition = "TABLE_OR_VIEW_NOT_FOUND",
-        parameters = Map("relationName" -> "`does_not_exist`"),
-        context = ExpectedContext(fragment = "does_not_exist", start = 12, stop = 25)
-      )
+        "`does_not_exist`",
+        ExpectedContext(fragment = "does_not_exist", start = 12, stop = 25),
+        s"[`system`.`builtin`, `system`.`session`, `$catalog`.`ns`]")
     }
   }
 
