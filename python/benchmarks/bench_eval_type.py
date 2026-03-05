@@ -385,60 +385,59 @@ class GroupedMapPandasUDFBench:
 
     # -- benchmarks ---------------------------------------------------------
 
-    def _run(self, input_bytes):
-        caller = sys._getframe(1).f_code.co_name
-        if caller.startswith("peakmem_"):
-            _run_worker_from_replayed_file(lambda infile: infile.write(input_bytes))
-        else:
-            worker_main(io.BytesIO(input_bytes), io.BytesIO())
+    def _run_time(self, input_bytes):
+        worker_main(io.BytesIO(input_bytes), io.BytesIO())
+
+    def _run_peakmem(self, input_bytes):
+        _run_worker_from_replayed_file(lambda infile: infile.write(input_bytes))
 
     def time_small_groups_few_cols(self):
         """1k rows/group, 5 cols, 1500 groups."""
-        self._run(self._small_few_input)
+        self._run_time(self._small_few_input)
 
     def peakmem_small_groups_few_cols(self):
         """1k rows/group, 5 cols, 1500 groups."""
-        self._run(self._small_few_input)
+        self._run_peakmem(self._small_few_input)
 
     def time_small_groups_many_cols(self):
         """1k rows/group, 50 cols, 200 groups."""
-        self._run(self._small_many_input)
+        self._run_time(self._small_many_input)
 
     def peakmem_small_groups_many_cols(self):
         """1k rows/group, 50 cols, 200 groups."""
-        self._run(self._small_many_input)
+        self._run_peakmem(self._small_many_input)
 
     def time_large_groups_few_cols(self):
         """100k rows/group, 5 cols, 350 groups, split at 10k rows/batch."""
-        self._run(self._large_few_input)
+        self._run_time(self._large_few_input)
 
     def peakmem_large_groups_few_cols(self):
         """100k rows/group, 5 cols, 350 groups, split at 10k rows/batch."""
-        self._run(self._large_few_input)
+        self._run_peakmem(self._large_few_input)
 
     def time_large_groups_many_cols(self):
         """100k rows/group, 50 cols, 40 groups, split at 10k rows/batch."""
-        self._run(self._large_many_input)
+        self._run_time(self._large_many_input)
 
     def peakmem_large_groups_many_cols(self):
         """100k rows/group, 50 cols, 40 groups, split at 10k rows/batch."""
-        self._run(self._large_many_input)
+        self._run_peakmem(self._large_many_input)
 
     def time_mixed_types(self):
         """Mixed column types, 1-arg UDF, 3 rows/group, 1300 groups."""
-        self._run(self._mixed_input)
+        self._run_time(self._mixed_input)
 
     def peakmem_mixed_types(self):
         """Mixed column types, 1-arg UDF, 3 rows/group, 1300 groups."""
-        self._run(self._mixed_input)
+        self._run_peakmem(self._mixed_input)
 
     def time_mixed_types_two_args(self):
         """Mixed column types, 2-arg UDF with key, 3 rows/group, 1600 groups."""
-        self._run(self._two_args_input)
+        self._run_time(self._two_args_input)
 
     def peakmem_mixed_types_two_args(self):
         """Mixed column types, 2-arg UDF with key, 3 rows/group, 1600 groups."""
-        self._run(self._two_args_input)
+        self._run_peakmem(self._two_args_input)
 
 
 # ---------------------------------------------------------------------------
@@ -514,60 +513,59 @@ class ScalarArrowUDFBench:
 
     # -- benchmarks ---------------------------------------------------------
 
-    def _run(self, input_bytes):
-        caller = sys._getframe(1).f_code.co_name
-        if caller.startswith("peakmem_"):
-            _run_worker_from_replayed_file(lambda infile: infile.write(input_bytes))
-        else:
-            worker_main(io.BytesIO(input_bytes), io.BytesIO())
+    def _run_time(self, input_bytes):
+        worker_main(io.BytesIO(input_bytes), io.BytesIO())
+
+    def _run_peakmem(self, input_bytes):
+        _run_worker_from_replayed_file(lambda infile: infile.write(input_bytes))
 
     def time_small_batches_few_cols(self):
         """1k rows/batch, 5 cols, 1500 batches."""
-        self._run(self._small_few_input)
+        self._run_time(self._small_few_input)
 
     def peakmem_small_batches_few_cols(self):
         """1k rows/batch, 5 cols, 1500 batches."""
-        self._run(self._small_few_input)
+        self._run_peakmem(self._small_few_input)
 
     def time_small_batches_many_cols(self):
         """1k rows/batch, 50 cols, 200 batches."""
-        self._run(self._small_many_input)
+        self._run_time(self._small_many_input)
 
     def peakmem_small_batches_many_cols(self):
         """1k rows/batch, 50 cols, 200 batches."""
-        self._run(self._small_many_input)
+        self._run_peakmem(self._small_many_input)
 
     def time_large_batches_few_cols(self):
         """10k rows/batch, 5 cols, 3500 batches."""
-        self._run(self._large_few_input)
+        self._run_time(self._large_few_input)
 
     def peakmem_large_batches_few_cols(self):
         """10k rows/batch, 5 cols, 3500 batches."""
-        self._run(self._large_few_input)
+        self._run_peakmem(self._large_few_input)
 
     def time_large_batches_many_cols(self):
         """10k rows/batch, 50 cols, 400 batches."""
-        self._run(self._large_many_input)
+        self._run_time(self._large_many_input)
 
     def peakmem_large_batches_many_cols(self):
         """10k rows/batch, 50 cols, 400 batches."""
-        self._run(self._large_many_input)
+        self._run_peakmem(self._large_many_input)
 
     def time_compute(self):
         """10k rows/batch, 3 cols, 500 batches, arithmetic UDF."""
-        self._run(self._compute_input)
+        self._run_time(self._compute_input)
 
     def peakmem_compute(self):
         """10k rows/batch, 3 cols, 500 batches, arithmetic UDF."""
-        self._run(self._compute_input)
+        self._run_peakmem(self._compute_input)
 
     def time_mixed_types(self):
         """Mixed column types, string UDF, 3 rows/batch, 1300 batches."""
-        self._run(self._mixed_input)
+        self._run_time(self._mixed_input)
 
     def peakmem_mixed_types(self):
         """Mixed column types, string UDF, 3 rows/batch, 1300 batches."""
-        self._run(self._mixed_input)
+        self._run_peakmem(self._mixed_input)
 
 
 # ---------------------------------------------------------------------------
@@ -647,78 +645,78 @@ class ScalarArrowIterUDFBench:
 
     # -- benchmarks ---------------------------------------------------------
 
-    def _run(self, input_conf):
+    def _run_time(self, input_conf):
         eval_type, batch, num_batches, udf_func, return_type, arg_offsets = input_conf
-        caller = sys._getframe(1).f_code.co_name
-        if caller.startswith("peakmem_"):
+        input_bytes = _build_scalar_worker_input(
+            eval_type,
+            udf_func,
+            return_type,
+            arg_offsets,
+            batch,
+            num_batches,
+        )
+        worker_main(io.BytesIO(input_bytes), io.BytesIO())
 
-            def write_input(infile: io.BufferedIOBase) -> None:
-                _stream_scalar_worker_input(
-                    eval_type,
-                    udf_func,
-                    return_type,
-                    arg_offsets,
-                    batch,
-                    num_batches,
-                    infile,
-                )
+    def _run_peakmem(self, input_conf):
+        eval_type, batch, num_batches, udf_func, return_type, arg_offsets = input_conf
 
-            _run_worker_from_replayed_file(write_input)
-        else:
-            input_bytes = _build_scalar_worker_input(
+        def write_input(infile: io.BufferedIOBase) -> None:
+            _stream_scalar_worker_input(
                 eval_type,
                 udf_func,
                 return_type,
                 arg_offsets,
                 batch,
                 num_batches,
+                infile,
             )
-            worker_main(io.BytesIO(input_bytes), io.BytesIO())
+
+        _run_worker_from_replayed_file(write_input)
 
     def time_small_batches_few_cols(self):
         """1k rows/batch, 5 cols, 1500 batches."""
-        self._run(self._small_few_input)
+        self._run_time(self._small_few_input)
 
     def peakmem_small_batches_few_cols(self):
         """1k rows/batch, 5 cols, 1500 batches."""
-        self._run(self._small_few_input)
+        self._run_peakmem(self._small_few_input)
 
     def time_small_batches_many_cols(self):
         """1k rows/batch, 50 cols, 200 batches."""
-        self._run(self._small_many_input)
+        self._run_time(self._small_many_input)
 
     def peakmem_small_batches_many_cols(self):
         """1k rows/batch, 50 cols, 200 batches."""
-        self._run(self._small_many_input)
+        self._run_peakmem(self._small_many_input)
 
     def time_large_batches_few_cols(self):
         """10k rows/batch, 5 cols, 3500 batches."""
-        self._run(self._large_few_input)
+        self._run_time(self._large_few_input)
 
     def peakmem_large_batches_few_cols(self):
         """10k rows/batch, 5 cols, 3500 batches."""
-        self._run(self._large_few_input)
+        self._run_peakmem(self._large_few_input)
 
     def time_large_batches_many_cols(self):
         """10k rows/batch, 50 cols, 400 batches."""
-        self._run(self._large_many_input)
+        self._run_time(self._large_many_input)
 
     def peakmem_large_batches_many_cols(self):
         """10k rows/batch, 50 cols, 400 batches."""
-        self._run(self._large_many_input)
+        self._run_peakmem(self._large_many_input)
 
     def time_compute(self):
         """10k rows/batch, 3 cols, 500 batches, arithmetic UDF."""
-        self._run(self._compute_input)
+        self._run_time(self._compute_input)
 
     def peakmem_compute(self):
         """10k rows/batch, 3 cols, 500 batches, arithmetic UDF."""
-        self._run(self._compute_input)
+        self._run_peakmem(self._compute_input)
 
     def time_mixed_types(self):
         """Mixed column types, string UDF, 3 rows/batch, 1300 batches."""
-        self._run(self._mixed_input)
+        self._run_time(self._mixed_input)
 
     def peakmem_mixed_types(self):
         """Mixed column types, string UDF, 3 rows/batch, 1300 batches."""
-        self._run(self._mixed_input)
+        self._run_peakmem(self._mixed_input)
