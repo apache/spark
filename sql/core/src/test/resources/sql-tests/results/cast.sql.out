@@ -1146,7 +1146,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
+  "errorClass" : "NUMERIC_VALUE_OUT_OF_RANGE.DEFAULT",
   "sqlState" : "22003",
   "messageParameters" : {
     "precision" : "4",
@@ -1610,7 +1610,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
+  "errorClass" : "NUMERIC_VALUE_OUT_OF_RANGE.DEFAULT",
   "sqlState" : "22003",
   "messageParameters" : {
     "precision" : "1",
@@ -2297,7 +2297,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
+  "errorClass" : "NUMERIC_VALUE_OUT_OF_RANGE.DEFAULT",
   "sqlState" : "22003",
   "messageParameters" : {
     "precision" : "1",
@@ -2321,7 +2321,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
+  "errorClass" : "NUMERIC_VALUE_OUT_OF_RANGE.DEFAULT",
   "sqlState" : "22003",
   "messageParameters" : {
     "precision" : "3",
@@ -2345,7 +2345,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
+  "errorClass" : "NUMERIC_VALUE_OUT_OF_RANGE.DEFAULT",
   "sqlState" : "22003",
   "messageParameters" : {
     "precision" : "5",
