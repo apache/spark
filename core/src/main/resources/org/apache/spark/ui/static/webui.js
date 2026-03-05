@@ -29,6 +29,39 @@ function setAppBasePath(path) {
 }
 /* eslint-enable no-unused-vars */
 
+/* eslint-disable no-unused-vars */
+/**
+ * Show a Bootstrap 5 Toast notification (non-blocking replacement for alert()).
+ * @param {string} message - The message to display
+ * @param {string} [type="danger"] - Bootstrap color: "danger", "warning", "success", "info"
+ */
+function showToast(message, type) {
+  type = type || "danger";
+  var container = document.getElementById("spark-toast-container");
+  if (!container) {
+    container = document.createElement("div");
+    container.id = "spark-toast-container";
+    container.className = "toast-container position-fixed top-0 end-0 p-3";
+    container.style.zIndex = "1090";
+    document.body.appendChild(container);
+  }
+  var toastEl = document.createElement("div");
+  toastEl.className = "toast align-items-center text-bg-" + type + " border-0";
+  toastEl.setAttribute("role", "alert");
+  toastEl.innerHTML =
+    '<div class="d-flex">' +
+    '<div class="toast-body">' + message + '</div>' +
+    '<button type="button" class="btn-close btn-close-white me-2 m-auto" ' +
+    'data-bs-dismiss="toast"></button></div>';
+  container.appendChild(toastEl);
+  var toast = new bootstrap.Toast(toastEl, { autohide: false });
+  toast.show();
+  toastEl.addEventListener("hidden.bs.toast", function () {
+    toastEl.remove();
+  });
+}
+/* eslint-enable no-unused-vars */
+
 // Persist BS5 collapse state in localStorage
 $(function() {
   $(document).on("shown.bs.collapse hidden.bs.collapse", ".collapsible-table", function(e) {

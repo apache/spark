@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-/* global $, Mustache, uiRoot */
+/* global $, Mustache, uiRoot, showToast */
 
 import {
   ConvertDurationString, createRESTEndPointForExecutorsPage, createTemplateURI, errorMessageCell,
@@ -826,8 +826,8 @@ $(document).ready(function () {
             },
             "dataSrc": (jsons) => jsons.aaData,
             "error": function (_ignored_jqXHR, _ignored_textStatus, _ignored_errorThrown) {
-              alert("Unable to connect to the server. Looks like the Spark " +
-                "application must have ended. Please Switch to the history UI.");
+              showToast("Unable to connect to the server. Looks like the Spark " +
+                "application must have ended. Please switch to the history UI.", "warning");
               $("#active-tasks-table_processing").css("display","none");
             }
           },
