@@ -40,7 +40,7 @@ import org.apache.spark.ui.scope.RDDOperationGraph
 
 /** Utility functions for generating XML pages with spark content. */
 private[spark] object UIUtils extends Logging {
-  val TABLE_CLASS_NOT_STRIPED = "table table-bordered table-sm"
+  val TABLE_CLASS_NOT_STRIPED = "table table-bordered table-hover table-sm"
   val TABLE_CLASS_STRIPED = TABLE_CLASS_NOT_STRIPED + " table-striped"
   val TABLE_CLASS_STRIPED_SORTABLE = TABLE_CLASS_STRIPED + " sortable"
 
@@ -246,7 +246,7 @@ private[spark] object UIUtils extends Logging {
 
   def dataTablesHeaderNodes(request: HttpServletRequest): Seq[Node] = {
     <link rel="stylesheet"
-          href={prependBaseUri(request, "/static/dataTables.bootstrap4.min.css")}
+          href={prependBaseUri(request, "/static/dataTables.bootstrap5.min.css")}
           type="text/css"/>
     <link rel="stylesheet"
           href={prependBaseUri(request, "/static/jquery.dataTables.min.css")}
@@ -256,7 +256,7 @@ private[spark] object UIUtils extends Logging {
     <script src={prependBaseUri(request, "/static/jquery.dataTables.min.js")}></script>
     <script src={prependBaseUri(request, "/static/jquery.cookies.2.2.0.min.js")}></script>
     <script src={prependBaseUri(request, "/static/jquery.blockUI.min.js")}></script>
-    <script src={prependBaseUri(request, "/static/dataTables.bootstrap4.min.js")}></script>
+    <script src={prependBaseUri(request, "/static/dataTables.bootstrap5.min.js")}></script>
     <script src={prependBaseUri(request, "/static/jquery.mustache.js")}></script>
   }
 
@@ -287,7 +287,7 @@ private[spark] object UIUtils extends Logging {
         {if (showVisualization) vizHeaderNodes(request) else Seq.empty}
         {if (useDataTables) dataTablesHeaderNodes(request) else Seq.empty}
         <link rel="shortcut icon"
-              href={prependBaseUri(request, "/static/spark-logo-77x50px-hd.png")}></link>
+              href={prependBaseUri(request, "/static/spark-logo.svg")}></link>
         <title>{appName} - {title}</title>
       </head>
       <body>
@@ -295,18 +295,19 @@ private[spark] object UIUtils extends Logging {
           <div class="navbar-header">
             <div class="navbar-brand">
               <a href={prependBaseUri(request, "/")}>
-                <img src={prependBaseUri(request, "/static/spark-logo-77x50px-hd.png")} />
+                <img src={prependBaseUri(request, "/static/spark-logo.svg")}
+                     alt="Spark Logo" height="36" />
                 <span class="version">{activeTab.appSparkVersion}</span>
               </a>
             </div>
           </div>
-          <button class="navbar-toggler" type="button" data-toggle="collapse"
-                  data-target="#navbarCollapse" aria-controls="navbarCollapse"
+          <button class="navbar-toggler" type="button" data-bs-toggle="collapse"
+                  data-bs-target="#navbarCollapse" aria-controls="navbarCollapse"
                   aria-expanded="false" aria-label="Toggle navigation">
             <span class="navbar-toggler-icon"></span>
           </button>
           <div class="collapse navbar-collapse" id="navbarCollapse">
-            <ul class="navbar-nav mr-auto">{header}</ul>
+            <ul class="navbar-nav me-auto">{header}</ul>
             <span class="navbar-text navbar-right d-none d-md-block">
               <strong title={appName} class="text-nowrap">{shortAppName}</strong>
               <span class="text-nowrap">application UI</span>
@@ -316,8 +317,7 @@ private[spark] object UIUtils extends Logging {
         <div class="container-fluid">
           <div class="row">
             <div class="col-12">
-              <h3 style="vertical-align: bottom; white-space: nowrap; overflow: hidden;
-                text-overflow: ellipsis;">
+              <h3 class="align-bottom text-nowrap overflow-hidden text-truncate">
                 {title}
                 {helpButton}
               </h3>
@@ -344,18 +344,18 @@ private[spark] object UIUtils extends Logging {
         {commonHeaderNodes(request)}
         {if (useDataTables) dataTablesHeaderNodes(request) else Seq.empty}
         <link rel="shortcut icon"
-              href={prependBaseUri(request, "/static/spark-logo-77x50px-hd.png")}></link>
+              href={prependBaseUri(request, "/static/spark-logo.svg")}></link>
         <title>{title}</title>
       </head>
       <body>
         <div class="container-fluid">
           <div class="row">
             <div class="col-12">
-              <h3 style="vertical-align: middle; display: inline-block;">
-                <a style="text-decoration: none" href={prependBaseUri(request, "/")}>
-                  <img src={prependBaseUri(request, "/static/spark-logo-77x50px-hd.png")} />
-                  <span class="version"
-                        style="margin-right: 15px;">{org.apache.spark.SPARK_VERSION}</span>
+              <h3 class="align-middle d-inline-block">
+                <a class="text-decoration-none" href={prependBaseUri(request, "/")}>
+                  <img src={prependBaseUri(request, "/static/spark-logo.svg")}
+                       alt="Spark Logo" height="36" />
+                  <span class="version me-3">{org.apache.spark.SPARK_VERSION}</span>
                 </a>
                 {title}
               </h3>
@@ -429,9 +429,7 @@ private[spark] object UIUtils extends Logging {
         getTooltip(x._2) match {
           case Some(tooltip) =>
             <th width={colWidthAttr} class={getClass(x._2)}>
-              <span data-toggle="tooltip" title={tooltip}>
-                {getHeaderContent(x._1)}
-              </span>
+              {tooltipSpan(getHeaderContent(x._1), tooltip)}
             </th>
           case None => <th width={colWidthAttr} class={getClass(x._2)}>{getHeaderContent(x._1)}</th>
         }
@@ -470,17 +468,23 @@ private[spark] object UIUtils extends Logging {
       if (skipped > 0) s" ($skipped skipped)" else ""
     } + killTaskReasonText
 
+    val progressLabel = s"$completed/$total" +
+      (if (failed == 0 && skipped == 0 && started > 0) s" ($started running)" else "") +
+      (if (failed > 0) s" ($failed failed)" else "") +
+      (if (skipped > 0) s" ($skipped skipped)" else "") +
+      killTaskReasonText
+
     // scalastyle:off line.size.limit
-    <div class="progress">
-      <span style="display: flex; align-items: center; justify-content: center; position:absolute; width:100%; height:100%; text-align:center;" title={progressTitle}>
-        { s"$completed/$total" +
-            (if (failed == 0 && skipped == 0 && started > 0) s" ($started running)" else "") +
-            (if (failed > 0) s" ($failed failed)" else "") +
-            (if (skipped > 0) s" ($skipped skipped)" else "") +
-            killTaskReasonText }
+    <div class="progress-stacked" title={progressTitle}>
+      <span class="position-absolute w-100 h-100 d-flex align-items-center justify-content-center">
+        {progressLabel}
       </span>
-      <div class="progress-bar progress-completed" style={completeWidth}></div>
-      <div class="progress-bar progress-started" style={startWidth}></div>
+      <div class="progress" role="progressbar" aria-label="Completed" aria-valuenow={ratio.toInt.toString} aria-valuemin="0" aria-valuemax="100" style={completeWidth}>
+        <div class="progress-bar progress-completed"></div>
+      </div>
+      <div class="progress" role="progressbar" aria-label="Running" aria-valuenow={startRatio.toInt.toString} aria-valuemin="0" aria-valuemax="100" style={startWidth}>
+        <div class="progress-bar progress-started"></div>
+      </div>
     </div>
     // scalastyle:on line.size.limit
   }
@@ -509,13 +513,11 @@ private[spark] object UIUtils extends Logging {
       <span id={if (forJob) "job-dag-viz" else "stage-dag-viz"}
             class="expand-dag-viz" data-forjob={forJob.toString}>
         <span class="expand-dag-viz-arrow arrow-closed"></span>
-        <a data-toggle="tooltip" title={if (forJob) ToolTips.JOB_DAG else ToolTips.STAGE_DAG}
-           data-placement="top">
-          DAG Visualization
-        </a>
+        {tooltipLink(<xml:group>DAG Visualization</xml:group>,
+          if (forJob) ToolTips.JOB_DAG else ToolTips.STAGE_DAG)}
       </span>
       <div id="dag-viz-graph"></div>
-      <div id="dag-viz-metadata" style="display:none">
+      <div id="dag-viz-metadata" class="d-none">
         {
           graphs.map { g =>
             val stageId = g.rootCluster.id.replaceAll(RDDOperationGraph.STAGE_CLUSTER_PREFIX, "")
@@ -544,8 +546,28 @@ private[spark] object UIUtils extends Logging {
 
   def tooltip(text: String, position: String): Seq[Node] = {
     <sup>
-      (<a data-toggle="tooltip" data-placement={position} title={text}>?</a>)
+      (<a data-bs-toggle="tooltip" title={text}>?</a>)
     </sup>
+  }
+
+  /** Wrap content in a span with a Bootstrap 5 tooltip. */
+  def tooltipSpan(content: Seq[Node], text: String,
+      placement: String = "top"): Seq[Node] = {
+    val bsPlacement = if (placement == "top") null else placement
+    <span data-bs-toggle="tooltip"
+        data-bs-placement={bsPlacement} title={text}>
+      {content}
+    </span>
+  }
+
+  /** Create a link with a Bootstrap 5 tooltip. */
+  def tooltipLink(content: Seq[Node], text: String,
+      placement: String = "top"): Seq[Node] = {
+    val bsPlacement = if (placement == "top") null else placement
+    <a data-bs-toggle="tooltip"
+        data-bs-placement={bsPlacement} title={text}>
+      {content}
+    </a>
   }
 
   /**
@@ -704,7 +726,7 @@ private[spark] object UIUtils extends Logging {
     if (isMultiline) {
       // scalastyle:off
       <span data-toggle-details=".stacktrace-details"
-            class="expand-details">
+            class="expand-details float-end">
         +details
       </span> ++
         <div class="stacktrace-details collapsed">

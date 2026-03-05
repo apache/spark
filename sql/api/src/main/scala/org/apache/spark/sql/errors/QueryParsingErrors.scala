@@ -55,8 +55,15 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
     new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0004", ctx.source)
   }
 
-  def insertedValueNumberNotMatchFieldNumberError(ctx: NotMatchedClauseContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0006", ctx.notMatchedAction())
+  def insertedValueNumberNotMatchColumnNumberError(
+      expectedCount: Int,
+      actualCount: Int,
+      ctx: NotMatchedClauseContext): Throwable = {
+    new ParseException(
+      errorClass = "MERGE_INSERT_VALUE_COUNT_MISMATCH",
+      messageParameters =
+        Map("expectedCount" -> expectedCount.toString, "actualCount" -> actualCount.toString),
+      ctx.notMatchedAction())
   }
 
   def mergeStatementWithoutWhenClauseError(ctx: MergeIntoTableContext): Throwable = {
@@ -672,6 +679,20 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
 
   def defineTempFuncWithIfNotExistsError(ctx: ParserRuleContext): Throwable = {
     new ParseException(errorClass = "INVALID_SQL_SYNTAX.CREATE_TEMP_FUNC_WITH_IF_NOT_EXISTS", ctx)
+  }
+
+  def invalidTempObjQualifierError(
+      objectType: String,
+      objectName: String,
+      qualifier: String,
+      ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      "INVALID_TEMP_OBJ_QUALIFIER",
+      Map(
+        "objectType" -> objectType,
+        "objectName" -> toSQLId(objectName),
+        "qualifier" -> toSQLId(qualifier)),
+      ctx)
   }
 
   def unsupportedFunctionNameError(funcName: Seq[String], ctx: ParserRuleContext): Throwable = {

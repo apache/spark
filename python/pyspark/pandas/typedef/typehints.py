@@ -300,9 +300,15 @@ def spark_type_to_pandas_dtype(
     ):
         return np.dtype("object")
     elif isinstance(spark_type, types.DayTimeIntervalType):
-        return np.dtype("timedelta64[ns]")
+        if LooseVersion(pd.__version__) < "3.0.0":
+            return np.dtype("timedelta64[ns]")
+        else:
+            return np.dtype("timedelta64[us]")
     elif isinstance(spark_type, (types.TimestampType, types.TimestampNTZType)):
-        return np.dtype("datetime64[ns]")
+        if LooseVersion(pd.__version__) < "3.0.0":
+            return np.dtype("datetime64[ns]")
+        else:
+            return np.dtype("datetime64[us]")
     else:
         from pyspark.pandas.utils import default_session
 
@@ -620,7 +626,7 @@ def infer_return_type(f: Callable) -> Union[SeriesType, DataFrameType, ScalarTyp
 
     if hasattr(tpe, "__origin__") and issubclass(tpe.__origin__, SeriesType):
         tpe = tpe.__args__[0]
-        if issubclass(tpe, NameTypeHolder):
+        if isinstance(tpe, type) and issubclass(tpe, NameTypeHolder):
             tpe = tpe.tpe
         dtype, spark_type = pandas_on_spark_type(tpe)
         return SeriesType(dtype, spark_type)
@@ -712,7 +718,10 @@ def create_type_for_series_type(param: Any) -> Type[SeriesType]:
         new_class = type(NameTypeHolder.short_name, (NameTypeHolder,), {})
         new_class.tpe = param  # type: ignore[assignment]
     else:
-        new_class = param.type if isinstance(param, np.dtype) else param
+        if LooseVersion(pd.__version__) < "3.0.0":
+            new_class = param.type if isinstance(param, np.dtype) else param
+        else:
+            new_class = param
 
     return SeriesType[new_class]  # type: ignore[valid-type]
 
@@ -872,11 +881,18 @@ def _new_type_holders(
                 holder_clazz.short_name, (holder_clazz,), {}
             )
             new_param.name = param.start
-            if isinstance(param.stop, ExtensionDtype):
-                new_param.tpe = param.stop  # type: ignore[assignment]
+            if LooseVersion(pd.__version__) < "3.0.0":
+                if isinstance(param.stop, ExtensionDtype):
+                    new_param.tpe = param.stop  # type: ignore[assignment]
+                else:
+                    # When the given argument is a numpy's dtype instance.
+                    new_param.tpe = (
+                        param.stop.type  # type: ignore[assignment]
+                        if isinstance(param.stop, np.dtype)
+                        else param.stop
+                    )
             else:
-                # When the given argument is a numpy's dtype instance.
-                new_param.tpe = param.stop.type if isinstance(param.stop, np.dtype) else param.stop  # type: ignore[assignment]
+                new_param.tpe = param.stop
             new_params.append(new_param)
         return tuple(new_params)
     elif is_unnamed_params:
@@ -886,10 +902,17 @@ def _new_type_holders(
             new_type: Type[Union[NameTypeHolder, IndexNameTypeHolder]] = type(
                 holder_clazz.short_name, (holder_clazz,), {}
             )
-            if isinstance(param, ExtensionDtype):
-                new_type.tpe = param  # type: ignore[assignment]
+            if LooseVersion(pd.__version__) < "3.0.0":
+                if isinstance(param, ExtensionDtype):
+                    new_type.tpe = param  # type: ignore[assignment]
+                else:
+                    new_type.tpe = (
+                        param.type  # type: ignore[assignment]
+                        if isinstance(param, np.dtype)
+                        else param
+                    )
             else:
-                new_type.tpe = param.type if isinstance(param, np.dtype) else param  # type: ignore[assignment]
+                new_type.tpe = param
             new_types.append(new_type)
         return tuple(new_types)
     else:

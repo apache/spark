@@ -19,7 +19,7 @@
 import json
 import copy
 from itertools import chain
-from typing import Iterator, List, Sequence, Tuple, Type, Dict
+from typing import Iterator, List, Optional, Sequence, Tuple, Type, Dict
 
 from pyspark.sql.datasource import (
     DataSource,
@@ -143,7 +143,7 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
             assert self.cache[-1].end == end
         return [SimpleInputPartition(start, end)]
 
-    def getCache(self, start: dict, end: dict) -> Iterator[Tuple]:
+    def getCache(self, start: dict, end: dict) -> Optional[Iterator[Tuple]]:
         start_idx = -1
         end_idx = -1
         for idx, entry in enumerate(self.cache):
@@ -155,7 +155,7 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
                 end_idx = idx
                 break
         if start_idx == -1 or end_idx == -1:
-            return None  # type: ignore[return-value]
+            return None
         # Chain all the data iterator between start offset and end offset
         # need to copy here to avoid exhausting the original data iterator.
         entries = [copy.copy(entry.iterator) for entry in self.cache[start_idx : end_idx + 1]]

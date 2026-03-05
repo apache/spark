@@ -300,7 +300,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case DropTable(ResolvedIdentifier(FakeSystemCatalog, ident), _, _) =>
       DropTempViewCommand(ident)
 
-    case DropView(ResolvedIdentifierInSessionCatalog(ident), ifExists) =>
+    case DropView(DropViewInSessionCatalog(ident), ifExists) =>
       DropTableCommand(ident, ifExists, isView = true, purge = false)
 
     case DropView(r @ ResolvedIdentifier(catalog, ident), _) =>
@@ -484,7 +484,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case AlterViewSchemaBinding(ResolvedViewIdentifier(ident), viewSchemaMode) =>
       AlterViewSchemaBindingCommand(ident, viewSchemaMode)
 
-    case CreateView(ResolvedIdentifierInSessionCatalog(ident), userSpecifiedColumns, comment,
+    case CreateView(CreateViewInSessionCatalog(ident), userSpecifiedColumns, comment,
         collation, properties, originalText, child, allowExisting, replace, viewSchemaMode) =>
       CreateViewCommand(
         name = ident,
@@ -575,7 +575,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       }
 
     case CreateFunction(
-        ResolvedIdentifierInSessionCatalog(ident), className, resources, ifExists, replace) =>
+        CreateFunctionInSessionCatalog(ident), className, resources, ifExists, replace) =>
       CreateFunctionCommand(
         FunctionIdentifier(ident.table, ident.database, ident.catalog),
         className,
@@ -588,7 +588,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       throw QueryCompilationErrors.missingCatalogCreateFunctionAbilityError(catalog)
 
     case c @ CreateUserDefinedFunction(
-        ResolvedIdentifierInSessionCatalog(ident), _, _, _, _, _, _, _, _, _, _, _) =>
+        CreateFunctionInSessionCatalog(ident), _, _, _, _, _, _, _, _, _, _, _, _) =>
       CreateUserDefinedFunctionCommand(
         FunctionIdentifier(ident.table, ident.database, ident.catalog),
         c.inputParamText,
@@ -596,6 +596,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         c.exprText,
         c.queryText,
         c.comment,
+        c.collation,
         c.isDeterministic,
         c.containsSQL,
         c.language,
@@ -605,7 +606,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         c.replace)
 
     case CreateUserDefinedFunction(
-        ResolvedIdentifier(catalog, _), _, _, _, _, _, _, _, _, _, _, _) =>
+        ResolvedIdentifier(catalog, _), _, _, _, _, _, _, _, _, _, _, _, _) =>
       throw QueryCompilationErrors.missingCatalogCreateFunctionAbilityError(catalog)
   }
 
@@ -767,11 +768,33 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     }
   }
 
-  // Use this object to help match commands that do not have a v2 implementation.
-  object ResolvedIdentifierInSessionCatalog {
+  private object CreateViewInSessionCatalog
+    extends ResolvedIdentifierInSessionCatalog("CREATE", "VIEW")
+  private object DropViewInSessionCatalog
+    extends ResolvedIdentifierInSessionCatalog("DROP", "VIEW")
+  private object CreateFunctionInSessionCatalog
+    extends ResolvedIdentifierInSessionCatalog("CREATE", "FUNCTION")
+
+  /**
+   * Extractor for resolved identifiers in the session catalog.
+   * Rejects multi-part namespaces and builtin namespace targets with appropriate errors.
+   *
+   * @param statement the SQL statement (e.g. "CREATE", "DROP") for error messages
+   * @param objectType the object type (e.g. "FUNCTION", "VIEW") for error messages
+   */
+  class ResolvedIdentifierInSessionCatalog(statement: String, objectType: String) {
     def unapply(resolved: LogicalPlan): Option[TableIdentifier] = resolved match {
       case ResolvedIdentifier(catalog, ident) if isSessionCatalog(catalog) =>
-        Some(ident.asTableIdentifier.copy(catalog = Some(catalog.name)))
+        if (ident.namespace().length != 1) {
+          if (ident.namespace().length >= 1 &&
+              ident.namespace().last.equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE)) {
+            throw QueryCompilationErrors.operationNotAllowedOnBuiltinNamespaceError(
+              statement, objectType, ident.name())
+          }
+          throw QueryCompilationErrors
+            .requiresSinglePartNamespaceError(ident.namespace().toSeq :+ ident.name())
+        }
+        Some(TableIdentifier(ident.name(), Some(ident.namespace().head), Some(catalog.name)))
       case _ => None
     }
   }

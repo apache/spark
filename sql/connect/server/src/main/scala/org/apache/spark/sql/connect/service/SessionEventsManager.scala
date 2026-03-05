@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connect.service
 
 import org.apache.spark.scheduler.SparkListenerEvent
+import org.apache.spark.sql.connect.IllegalStateErrors
 import org.apache.spark.util.{Clock}
 
 sealed abstract class SessionStatus(value: Int)
@@ -82,10 +83,11 @@ case class SessionEventsManager(sessionHolder: SessionHolder, clock: Clock) {
       validStatuses: List[SessionStatus],
       eventStatus: SessionStatus): Unit = {
     if (validStatuses.find(s => s == status).isEmpty) {
-      throw new IllegalStateException(s"""
-        sessionId: $sessionId with status ${status}
-        is not within statuses $validStatuses for event $eventStatus
-        """)
+      throw IllegalStateErrors.sessionStateTransitionInvalid(
+        sessionHolder.sessionId,
+        status,
+        eventStatus,
+        validStatuses)
     }
     _status = eventStatus
   }

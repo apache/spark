@@ -692,6 +692,40 @@ class BasePythonDataSourceTestsMixin:
         ):
             self.spark.read.format("arrowbatch").schema("key int, dummy string").load().show()
 
+        # SPARK-55583: Validate Arrow schema types, not just column count/names.
+        # The data source declares "key string, value string" but read() yields
+        # a RecordBatch with (int32, string), causing an Arrow schema type mismatch.
+        class MismatchedTypeDataSource(DataSource):
+            @classmethod
+            def name(cls):
+                return "arrowbatch_type_mismatch"
+
+            def schema(self):
+                return "key string, value string"
+
+            def reader(self, schema: str):
+                return MismatchedTypeReader()
+
+        class MismatchedTypeReader(DataSourceReader):
+            def read(self, partition):
+                keys = pa.array([1, 2], type=pa.int32())
+                values = pa.array(["a", "b"], type=pa.string())
+                batch = pa.RecordBatch.from_arrays(
+                    [keys, values],
+                    schema=pa.schema([("key", pa.int32()), ("value", pa.string())]),
+                )
+                yield batch
+
+            def partitions(self):
+                return [InputPartition(0)]
+
+        self.spark.dataSource.register(MismatchedTypeDataSource)
+        with self.assertRaisesRegex(
+            PythonException,
+            "DATA_SOURCE_RETURN_SCHEMA_MISMATCH",
+        ):
+            self.spark.read.format("arrowbatch_type_mismatch").load().show()
+
     def test_arrow_batch_sink(self):
         class TestDataSource(DataSource):
             @classmethod
@@ -1203,8 +1237,20 @@ class BasePythonDataSourceTestsMixin:
 
                 logs = self.spark.tvf.python_worker_logs()
 
+                # We could get either 1 or 2 "TestJsonWriter.write: abort test" logs because
+                # the operation is time sensitive. When the first partition gets aborted,
+                # the executor will cancel the rest of the tasks. Whether we are able to get
+                # the second log depends on whether the second partition starts before the
+                # cancellation. When we use simple worker, the second log is often missing
+                # because the spawn overhead is large.
+                non_abort_logs = logs.select("level", "msg", "context", "logger").filter(
+                    "msg != 'TestJsonWriter.write: abort test'"
+                )
+                abort_logs = logs.select("level", "msg", "context", "logger").filter(
+                    "msg == 'TestJsonWriter.write: abort test'"
+                )
                 assertDataFrameEqual(
-                    logs.select("level", "msg", "context", "logger"),
+                    non_abort_logs,
                     [
                         Row(
                             level="WARNING",
@@ -1250,18 +1296,21 @@ class BasePythonDataSourceTestsMixin:
                                 {"class_name": "TestJsonDataSource", "func_name": "writer"},
                             ),
                             (
-                                "TestJsonWriter.write: abort test",
-                                {"class_name": "TestJsonWriter", "func_name": "write"},
-                            ),
-                            (
-                                "TestJsonWriter.write: abort test",
-                                {"class_name": "TestJsonWriter", "func_name": "write"},
-                            ),
-                            (
                                 "TestJsonWriter.abort",
                                 {"class_name": "TestJsonWriter", "func_name": "abort"},
                             ),
                         ]
+                    ],
+                )
+                assertDataFrameEqual(
+                    abort_logs.dropDuplicates(["msg"]),
+                    [
+                        Row(
+                            level="WARNING",
+                            msg="TestJsonWriter.write: abort test",
+                            context={"class_name": "TestJsonWriter", "func_name": "write"},
+                            logger="test_datasource_writer",
+                        )
                     ],
                 )
 
@@ -1309,6 +1358,12 @@ class BasePythonDataSourceTestsMixin:
 
 class PythonDataSourceTests(BasePythonDataSourceTestsMixin, ReusedSQLTestCase):
     ...
+
+
+class PythonDataSourceTestsWithSimpleWorker(PythonDataSourceTests):
+    @classmethod
+    def conf(self):
+        return super().conf().set("spark.python.use.daemon", "false")
 
 
 if __name__ == "__main__":

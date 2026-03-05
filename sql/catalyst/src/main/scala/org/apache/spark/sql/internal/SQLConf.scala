@@ -600,6 +600,16 @@ object SQLConf {
       .booleanConf
       .createWithDefaultFunction(() => Utils.isTesting)
 
+  val TYPES_FRAMEWORK_ENABLED =
+    buildConf("spark.sql.types.framework.enabled")
+      .internal()
+      .doc("When true, use the Types Framework for supported types (currently TimeType). " +
+        "The framework centralizes type-specific operations in Ops classes instead of " +
+        "scattered pattern matching. When false, use legacy scattered implementation.")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefaultFunction(() => Utils.isTesting)
+
   val EXTENDED_EXPLAIN_PROVIDERS = buildConf("spark.sql.extendedExplainProviders")
     .doc("A comma-separated list of classes that implement the" +
       " org.apache.spark.sql.ExtendedExplainGenerator trait. If provided, Spark will print" +
@@ -2326,6 +2336,19 @@ object SQLConf {
         "resolution of user-defined sql table valued functions, consistent with view resolution.")
       .booleanConf
       .createWithDefault(true)
+
+  val SESSION_FUNCTION_RESOLUTION_ORDER =
+    buildConf("spark.sql.functionResolution.sessionOrder")
+      .internal()
+      .version("4.2.0")
+      .doc("Order of the session (temporary) function namespace when resolving unqualified " +
+        "function names. Valid values: 'first', 'second', 'last'. " +
+        "'first': session -> builtin -> persistent (SQL temp creation blocked if " +
+        "conflicts with builtin). 'second': builtin -> session -> persistent (default). " +
+        "'last': builtin -> persistent (current schema) -> session.")
+      .stringConf
+      .checkValues(Set("first", "second", "last"))
+      .createWithDefault("second")
 
   // Whether to retain group by columns or not in GroupedData.agg.
   val DATAFRAME_RETAIN_GROUP_COLUMNS = buildConf("spark.sql.retainGroupColumns")
@@ -4446,6 +4469,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val PYTHON_UDF_PANDAS_PREFER_INT_EXTENSION_DTYPE =
+    buildConf("spark.sql.execution.pythonUDF.pandas.preferIntExtensionDtype")
+      .doc("When true, convert integers to Pandas ExtensionDtype (e.g. pandas.Int64Dtype) " +
+        "for Pandas UDF execution. Otherwise, depends on the behavior of " +
+        "pyarrow.Array.to_pandas on each input arrow batch.")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val PYTHON_TABLE_UDF_ARROW_ENABLED =
     buildConf("spark.sql.execution.pythonUDTF.arrow.enabled")
       .doc("Enable Arrow optimization for Python UDTFs.")
@@ -4753,6 +4785,16 @@ object SQLConf {
       .version("3.0.0")
       .enumConf(StoreAssignmentPolicy)
       .createWithDefault(StoreAssignmentPolicy.ANSI)
+
+  val FILE_SOURCE_INSERT_ENFORCE_NOT_NULL =
+    buildConf("spark.sql.fileSource.insert.enforceNotNull")
+      .doc("When true, Spark enforces NOT NULL constraints when inserting data into " +
+        "file-based data source tables (e.g., Parquet, ORC, JSON), consistent with the " +
+        "behavior for other data sources and V2 catalog tables. " +
+        "When false (default), null values are silently accepted into NOT NULL columns.")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(false)
 
   val ANSI_ENABLED = buildConf(SqlApiConfHelper.ANSI_ENABLED_KEY)
     .doc("When true, Spark SQL uses an ANSI compliant dialect instead of being Hive compliant. " +
@@ -7103,6 +7145,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def geospatialEnabled: Boolean = getConf(GEOSPATIAL_ENABLED)
 
+  def typesFrameworkEnabled: Boolean = getConf(TYPES_FRAMEWORK_ENABLED)
+
   def dataSourceV2JoinPushdown: Boolean = getConf(DATA_SOURCE_V2_JOIN_PUSHDOWN)
 
   def dynamicPartitionPruningEnabled: Boolean = getConf(DYNAMIC_PARTITION_PRUNING_ENABLED)
@@ -7851,6 +7895,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def arrowSafeTypeConversion: Boolean = getConf(SQLConf.PANDAS_ARROW_SAFE_TYPE_CONVERSION)
 
+  def preferIntExtDtype: Boolean = getConf(SQLConf.PYTHON_UDF_PANDAS_PREFER_INT_EXTENSION_DTYPE)
+
   def pysparkWorkerPythonExecutable: Option[String] =
     getConf(SQLConf.PYSPARK_WORKER_PYTHON_EXECUTABLE)
 
@@ -8113,6 +8159,32 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def legacyEvalCurrentTime: Boolean = getConf(SQLConf.LEGACY_EVAL_CURRENT_TIME)
 
   def legacyOutputSchema: Boolean = getConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA)
+
+  def sessionFunctionResolutionOrder: String =
+    getConf(SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER)
+
+  /**
+   * Returns the resolution search path for error messages and resolution order.
+   * This is the single source of truth for the search path used for functions, tables, and views.
+   * Uses [[sessionFunctionResolutionOrder]]: "first" (session first), "second" (session second),
+   * "last" (session last). When catalogPath is empty, returns only system namespaces.
+   */
+  def resolutionSearchPath(catalogPath: Seq[String]): Seq[Seq[String]] = {
+    val order = sessionFunctionResolutionOrder
+    val session = Seq("system", "session")
+    val builtin = Seq("system", "builtin")
+    order match {
+      case "first" =>
+        if (catalogPath.isEmpty) Seq(session, builtin)
+        else Seq(session, builtin, catalogPath)
+      case "last" =>
+        if (catalogPath.isEmpty) Seq(builtin, session)
+        else Seq(builtin, catalogPath, session)
+      case _ => // "second"
+        if (catalogPath.isEmpty) Seq(builtin, session)
+        else Seq(builtin, session, catalogPath)
+    }
+  }
 
   override def legacyParameterSubstitutionConstantsOnly: Boolean =
     getConf(SQLConf.LEGACY_PARAMETER_SUBSTITUTION_CONSTANTS_ONLY)

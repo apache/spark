@@ -314,7 +314,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
     assertNotBucketed("insertInto")
 
     if (partitioningColumns.isDefined) {
-      throw QueryCompilationErrors.partitionByDoesNotAllowedWhenUsingInsertIntoError()
+      throw QueryCompilationErrors.partitionByDoesNotAllowedWhenUsingInsertIntoError(tableName)
     }
 
     val session = df.sparkSession

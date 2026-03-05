@@ -216,6 +216,12 @@ object AnalysisContext {
     try f finally { set(originContext) }
   }
 
+  def withAnalysisContext[A](function: SQLFunction)(f: => A): A = {
+    val originContext = value.get()
+    val context = originContext.copy(collation = function.collation)
+    set(context)
+    try f finally { set(originContext) }
+  }
 
   def withNewAnalysisContext[A](f: => A): A = {
     val originContext = value.get()
@@ -1824,22 +1830,45 @@ class Analyzer(
     }
 
     /**
+     * Checks if the given function name parts match the expected builtin function name.
+     * This is used for special syntax transformations (e.g., COUNT(*) -> COUNT(1)) that
+     * should only apply to builtin functions, not to user-defined functions.
+     *
+     * In legacy mode (sessionOrder="first"), temp functions shadow builtins, so an
+     * unqualified name that matches a temp function should NOT be treated as builtin.
+     */
+    private def matchesFunctionName(nameParts: Seq[String], expectedName: String): Boolean = {
+      if (!FunctionResolution.isUnqualifiedOrBuiltinFunctionName(nameParts, expectedName)) {
+        return false
+      }
+      if (nameParts.size == 1 && conf.sessionFunctionResolutionOrder == "first") {
+        val v1Catalog = catalogManager.v1SessionCatalog
+        !v1Catalog.isTemporaryFunction(FunctionIdentifier(nameParts.head))
+      } else {
+        true
+      }
+    }
+
+    /**
      * Expands the matching attribute.*'s in `child`'s output.
      */
     def expandStarExpression(expr: Expression, child: LogicalPlan): Expression = {
       expr.transformUp {
         case f0: UnresolvedFunction if !f0.isDistinct &&
-          f0.nameParts.map(_.toLowerCase(Locale.ROOT)) == Seq("count") &&
+          matchesFunctionName(f0.nameParts, "count") &&
           isCountStarExpansionAllowed(f0.arguments) =>
           // Transform COUNT(*) into COUNT(1).
-          f0.copy(nameParts = Seq("count"), arguments = Seq(Literal(1)))
+          // We do not normalize the name to "count"; we keep the original name parts
+          // (e.g. builtin.count, system.builtin.count) so that resolution still sees
+          // the same qualification.
+          f0.copy(arguments = Seq(Literal(1)))
         case f1: UnresolvedFunction if containsStar(f1.arguments) =>
           // SPECIAL CASE: We want to block count(tblName.*) because in spark, count(tblName.*) will
           // be expanded while count(*) will be converted to count(1). They will produce different
           // results and confuse users if there are any null values. For count(t1.*, t2.*), it is
           // still allowed, since it's well-defined in spark.
           if (!conf.allowStarWithSingleTableIdentifierInCount &&
-              f1.nameParts == Seq("count") &&
+              matchesFunctionName(f1.nameParts, "count") &&
               f1.arguments.length == 1) {
             f1.arguments.foreach {
               case u: UnresolvedStar if u.isQualifiedByTable(child.output, resolver) =>
@@ -1987,8 +2016,13 @@ class Analyzer(
    * only performs simple existence check according to the function identifier to quickly identify
    * undefined functions without triggering relation resolution, which may incur potentially
    * expensive partition/schema discovery process in some cases.
-   * In order to avoid duplicate external functions lookup, the external function identifier will
-   * store in the local hash set externalFunctionNameSet.
+   *
+   * To avoid duplicate external catalog lookups, this rule maintains a per-plan cache of
+   * persistent function names (externalFunctionNameSet). Builtin and temporary functions are
+   * validated on every occurrence since they're fast in-memory lookups, but persistent functions
+   * are cached after the first validation to avoid repeated external catalog calls for the same
+   * function within a single plan.
+   *
    * @see [[ResolveFunctions]]
    * @see https://issues.apache.org/jira/browse/SPARK-19737
    */
@@ -1998,24 +2032,57 @@ class Analyzer(
 
       plan.resolveExpressionsWithPruning(_.containsAnyPattern(UNRESOLVED_FUNCTION)) {
         case f @ UnresolvedFunction(nameParts, _, _, _, _, _, _) =>
-          if (functionResolution.lookupBuiltinOrTempFunction(nameParts, Some(f)).isDefined) {
+          // For builtin/temp functions, we can do a quick check without catalog lookup
+          val quickCheck = if (nameParts.size == 1 ||
+              FunctionResolution.sessionNamespaceKind(nameParts).isDefined) {
+            functionResolution.lookupBuiltinOrTempFunction(nameParts, Some(f))
+          } else {
+            None
+          }
+
+          if (quickCheck.isDefined) {
+            // It's a builtin or temp function - no need for catalog lookup or caching
             f
           } else {
+            // Might be a persistent function - compute full name and check cache first
             val CatalogAndIdentifier(catalog, ident) =
               relationResolution.expandIdentifier(nameParts)
-            val fullName =
-              normalizeFuncName((catalog.name +: ident.namespace :+ ident.name).toImmutableArraySeq)
+
+            val fullName = normalizeFuncName(
+              (catalog.name +: ident.namespace :+ ident.name).toImmutableArraySeq)
+
             if (externalFunctionNameSet.contains(fullName)) {
-              f
-            } else if (catalog.asFunctionCatalog.functionExists(ident)) {
-              externalFunctionNameSet.add(fullName)
+              // Already validated this function exists - skip lookup
               f
             } else {
-              val catalogPath = (catalog.name() +: catalogManager.currentNamespace).mkString(".")
-              throw QueryCompilationErrors.unresolvedRoutineError(
-                nameParts,
-                Seq("system.builtin", "system.session", catalogPath),
-                f.origin)
+              // Not in cache - do full lookup to determine type
+              val functionType =
+                functionResolution.lookupFunctionType(nameParts, Some(f))
+
+              functionType match {
+                case FunctionType.Local =>
+                  throw SparkException.internalError(
+                    s"Logic inconsistency: Function ${nameParts.mkString(".")} was " +
+                    s"classified as $functionType by full lookup but not found by quick check. " +
+                    s"Check sessionNamespaceKind logic.")
+
+                case FunctionType.Persistent =>
+                  externalFunctionNameSet.add(fullName)
+                  f
+
+                case FunctionType.TableOnly =>
+                  throw QueryCompilationErrors.notAScalarFunctionError(nameParts.mkString("."), f)
+
+                case FunctionType.NotFound =>
+                  val catalogPath =
+                    catalogManager.currentCatalog.name +: catalogManager.currentNamespace
+                  val searchPath = SQLConf.get.resolutionSearchPath(catalogPath.toSeq)
+                    .map(_.quoted)
+                  throw QueryCompilationErrors.unresolvedRoutineError(
+                    nameParts,
+                    searchPath,
+                    f.origin)
+              }
             }
           }
       }
@@ -2057,38 +2124,26 @@ class Analyzer(
       // Resolve table-valued function references.
       case u: UnresolvedTableValuedFunction if u.functionArgs.forall(_.resolved) =>
         withPosition(u) {
-          try {
-            val resolvedFunc = functionResolution.resolveBuiltinOrTempTableFunction(
-                u.name, u.functionArgs).getOrElse {
-              val CatalogAndIdentifier(catalog, ident) =
-                relationResolution.expandIdentifier(u.name)
-              if (CatalogV2Util.isSessionCatalog(catalog)) {
-                v1SessionCatalog.resolvePersistentTableFunction(
-                  ident.asFunctionIdentifier, u.functionArgs)
-              } else {
-                throw QueryCompilationErrors.missingCatalogTableValuedFunctionsAbilityError(
-                  catalog)
-              }
-            }
-            resolvedFunc.transformAllExpressionsWithPruning(
-              _.containsPattern(FUNCTION_TABLE_RELATION_ARGUMENT_EXPRESSION))  {
-              case t: FunctionTableSubqueryArgumentExpression =>
-                resolvedFunc match {
-                  case Generate(_: PythonUDTF, _, _, _, _, _) =>
-                  case Generate(_: UnresolvedPolymorphicPythonUDTF, _, _, _, _, _) =>
-                  case _ =>
-                    assert(!t.hasRepartitioning,
-                      "Cannot evaluate the table-valued function call because it included the " +
-                        "PARTITION BY clause, but only Python table functions support this " +
-                        "clause")
-                }
-                t
-            }
-          } catch {
-            case _: NoSuchFunctionException =>
+          val resolvedFunc = functionResolution.resolveTableFunction(u.name, u.functionArgs)
+            .getOrElse {
               u.failAnalysis(
                 errorClass = "UNRESOLVABLE_TABLE_VALUED_FUNCTION",
                 messageParameters = Map("name" -> toSQLId(u.name)))
+            }
+
+          resolvedFunc.transformAllExpressionsWithPruning(
+            _.containsPattern(FUNCTION_TABLE_RELATION_ARGUMENT_EXPRESSION))  {
+            case t: FunctionTableSubqueryArgumentExpression =>
+              resolvedFunc match {
+                case Generate(_: PythonUDTF, _, _, _, _, _) =>
+                case Generate(_: UnresolvedPolymorphicPythonUDTF, _, _, _, _, _) =>
+                case _ =>
+                  assert(!t.hasRepartitioning,
+                    "Cannot evaluate the table-valued function call because it included the " +
+                      "PARTITION BY clause, but only Python table functions support this " +
+                      "clause")
+              }
+              t
           }
         }
 
@@ -2167,18 +2222,12 @@ class Analyzer(
           ruleId) {
           case u @ UnresolvedFunction(nameParts, arguments, _, _, _, _, _)
               if functionResolution.hasLambdaAndResolvedArguments(arguments) => withPosition(u) {
-            functionResolution.resolveBuiltinOrTempFunction(nameParts, arguments, u).map {
+            functionResolution.resolveFunction(u) match {
               case func: HigherOrderFunction => func
               case other => other.failAnalysis(
                 errorClass = "INVALID_LAMBDA_FUNCTION_CALL.NON_HIGHER_ORDER_FUNCTION",
                 messageParameters = Map(
                   "class" -> other.getClass.getCanonicalName))
-            }.getOrElse {
-              throw QueryCompilationErrors.unresolvedRoutineError(
-                nameParts,
-                // We don't support persistent high-order functions yet.
-                Seq("system.builtin", "system.session"),
-                u.origin)
             }
           }
 
@@ -2297,8 +2346,10 @@ class Analyzer(
         e: SubqueryExpression,
         outer: LogicalPlan)(
         f: (LogicalPlan, Seq[Expression]) => SubqueryExpression): SubqueryExpression = {
-      val newSubqueryPlan = AnalysisContext.withOuterPlan(outer) {
-        executeSameContext(e.plan)
+      val newSubqueryPlan = SQLFunctionContext.withNewContext {
+        AnalysisContext.withOuterPlan(outer) {
+          executeSameContext(e.plan)
+        }
       }
 
       // If the subquery plan is fully resolved, pull the outer references and record
@@ -2443,7 +2494,9 @@ class Analyzer(
           Analyzer.retainResolutionConfigsForAnalysis(newConf = newConf, existingConf = conf)
         }
         SQLConf.withExistingConf(newConf) {
-          executeSameContext(plan)
+          AnalysisContext.withAnalysisContext(f.function) {
+            executeSameContext(plan)
+          }
         }
       }
       // Fail the analysis eagerly if a SQL function cannot be resolved using its input.
@@ -2742,7 +2795,9 @@ class Analyzer(
         val resolved = SQLConf.withExistingConf(newConf) {
           val plan = v1SessionCatalog.makeSQLTableFunctionPlan(name, function, inputs, output)
           SQLFunctionContext.withSQLFunction {
-            executeSameContext(plan)
+            AnalysisContext.withAnalysisContext(function) {
+              executeSameContext(plan)
+            }
           }
         }
         // Remove unnecessary lateral joins that are used to resolve the SQL function.
@@ -4027,27 +4082,28 @@ object CleanupAliases extends Rule[LogicalPlan] with AliasHelper {
  */
 object ValidateEventTimeWatermarkColumn extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
-    if (!conf.getConf(SQLConf.STREAMING_VALIDATE_EVENT_TIME_WATERMARK_COLUMN)) {
-      return plan
-    }
-    plan.resolveOperatorsWithPruning(
-      _.containsPattern(EVENT_TIME_WATERMARK)) {
-      case etw: EventTimeWatermark =>
-        etw.eventTime match {
-          case u: UnresolvedAttribute if u.nameParts.length > 1 =>
-            // Try to resolve the multi-part name against the child output.
-            // An alias-qualified column (e.g. "a.eventTime") resolves to an Attribute,
-            // while a nested struct field (e.g. "struct_col.field") resolves to an
-            // Alias(ExtractValue(...)) which is not an Attribute.
-            etw.child.resolve(u.nameParts, conf.resolver) match {
-              case Some(_: Attribute) => etw
-              case _ =>
-                etw.failAnalysis(
-                  errorClass = "EVENT_TIME_MUST_BE_TOP_LEVEL_COLUMN",
-                  messageParameters = Map("eventExpr" -> u.sql))
-            }
-          case _ => etw
-        }
+    if (conf.getConf(SQLConf.STREAMING_VALIDATE_EVENT_TIME_WATERMARK_COLUMN)) {
+      plan.resolveOperatorsWithPruning(_.containsPattern(EVENT_TIME_WATERMARK)) {
+        case etw: EventTimeWatermark =>
+          etw.eventTime match {
+            case u: UnresolvedAttribute if u.nameParts.length > 1 =>
+              // Try to resolve the multi-part name against the child output.
+              // An alias-qualified column (e.g. "a.eventTime") resolves to an Attribute,
+              // while a nested struct field (e.g. "struct_col.field") resolves to an
+              // Alias(ExtractValue(...)) which is not an Attribute.
+              etw.child.resolve(u.nameParts, conf.resolver) match {
+                case Some(_: Attribute) => etw
+                case _ =>
+                  etw.failAnalysis(
+                    errorClass = "EVENT_TIME_MUST_BE_TOP_LEVEL_COLUMN",
+                    messageParameters = Map("eventExpr" -> u.sql)
+                  )
+              }
+            case _ => etw
+          }
+      }
+    } else {
+      plan
     }
   }
 }

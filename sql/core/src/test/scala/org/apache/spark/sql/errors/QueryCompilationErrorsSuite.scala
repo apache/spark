@@ -1112,6 +1112,26 @@ class QueryCompilationErrorsSuite
         ExpectedContext(fragment = "aggregate(array(1,2,3), x -> x + 1, 0)", start = 7, stop = 44)
     )
   }
+
+  test("UNABLE_TO_INFER_SCHEMA_FOR_DATA_SOURCE: empty data source at path") {
+    withTempDir { dir =>
+      // Create _spark_metadata with a valid empty log entry (version header only, no files)
+      val metadataDir = new java.io.File(dir, "_spark_metadata")
+      metadataDir.mkdir()
+      java.nio.file.Files.write(
+        new java.io.File(metadataDir, "0").toPath, "v1".getBytes)
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.read.format("json").load(dir.getCanonicalPath).collect()
+        },
+        condition = "UNABLE_TO_INFER_SCHEMA_FOR_DATA_SOURCE",
+        parameters = Map(
+          "format" -> "JSON",
+          "fileCatalog" -> "")
+      )
+    }
+  }
 }
 
 class MyCastToString extends SparkUserDefinedFunction(

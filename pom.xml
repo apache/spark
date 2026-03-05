@@ -142,7 +142,7 @@
     <!-- After 10.17.1.0, the minimum required version is JDK19 -->
     <derby.version>10.16.1.1</derby.version>
     <parquet.version>1.17.0</parquet.version>
-    <orc.version>2.2.2</orc.version>
+    <orc.version>2.3.0</orc.version>
     <orc.classifier>shaded-protobuf</orc.classifier>
     <jetty.version>12.1.5</jetty.version>
     <jakartaservlet.version>6.0.0</jakartaservlet.version>
@@ -183,7 +183,7 @@
     <scalafmt.validateOnly>true</scalafmt.validateOnly>
     <scalafmt.changedOnly>true</scalafmt.changedOnly>
     <!-- Should be consistent with SparkBuild.scala and docs -->
-    <fasterxml.jackson.version>2.21.0</fasterxml.jackson.version>
+    <fasterxml.jackson.version>2.21.1</fasterxml.jackson.version>
     <ws.xmlschema.version>2.3.1</ws.xmlschema.version>
     <snappy.version>1.1.10.8</snappy.version>
     <netlib.ludovic.dev.version>3.1.1</netlib.ludovic.dev.version>
@@ -888,7 +888,7 @@
       <dependency>
         <groupId>at.yawk.lz4</groupId>
         <artifactId>lz4-java</artifactId>
-        <version>1.10.3</version>
+        <version>1.10.4</version>
       </dependency>
       <dependency>
         <groupId>com.github.luben</groupId>

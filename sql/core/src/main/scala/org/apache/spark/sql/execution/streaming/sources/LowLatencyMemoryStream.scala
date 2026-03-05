@@ -278,21 +278,20 @@ class LowLatencyMemoryStreamPartitionReader(
     throw new IllegalStateException("Task context was not set!")
   }
   override def nextWithTimeout(
-      startTime: java.lang.Long, timeout: java.lang.Long): RecordStatus = {
+      startTimeMs: java.lang.Long, timeoutMs: java.lang.Long): RecordStatus = {
     // SPARK-55699: Use the reference time passed in by the caller instead of getting the latest
     // time from LowLatencyClock, to avoid inconsistent reading when LowLatencyClock is a
     // manual clock.
-    val startReadTime = startTime
     var elapsedTimeMs = 0L
     current = getRecordWithTimestamp
     while (current.isEmpty) {
       val POLL_TIME = 10L
-      if (elapsedTimeMs >= timeout) {
+      if (elapsedTimeMs >= timeoutMs) {
         return RecordStatus.newStatusWithoutArrivalTime(false)
       }
       Thread.sleep(POLL_TIME)
       current = getRecordWithTimestamp
-      elapsedTimeMs = (clock.nanoTime() - startReadTime) / 1000 / 1000
+      elapsedTimeMs = clock.getTimeMillis() - startTimeMs
     }
     currentOffset += 1
     RecordStatus.newStatusWithArrivalTimeMs(current.get._2)

@@ -88,15 +88,16 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
             showFailedJobs = true)
 
         _content ++=
-          <span id="running" class="collapse-aggregated-runningExecutions collapse-table"
-                data-collapse-name="collapse-aggregated-runningExecutions"
-                data-collapse-table="aggregated-runningExecutions">
+          <span id="running" class="collapse-table" data-bs-toggle="collapse"
+                data-bs-target="#aggregated-runningExecutions"
+                aria-expanded="true" aria-controls="aggregated-runningExecutions"
+                data-collapse-name="collapse-aggregated-runningExecutions">
             <h4>
               <span class="collapse-table-arrow arrow-open"></span>
               <a>Running Queries ({running.size})</a>
             </h4>
           </span> ++
-            <div class="aggregated-runningExecutions collapsible-table">
+            <div class="collapsible-table collapse show" id="aggregated-runningExecutions">
               {runningPageTable}
             </div>
       }
@@ -114,15 +115,17 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
           showFailedJobs = false)
 
         _content ++=
-          <span id="completed" class="collapse-aggregated-completedExecutions collapse-table"
-                data-collapse-name="collapse-aggregated-completedExecutions"
-                data-collapse-table="aggregated-completedExecutions">
+          <span id="completed" class="collapse-table" data-bs-toggle="collapse"
+                data-bs-target="#aggregated-completedExecutions"
+                aria-expanded="true" aria-controls="aggregated-completedExecutions"
+                data-collapse-name="collapse-aggregated-completedExecutions">
             <h4>
               <span class="collapse-table-arrow arrow-open"></span>
               <a>Completed Queries ({completed.size})</a>
             </h4>
           </span> ++
-            <div class="aggregated-completedExecutions collapsible-table">
+            <div class="collapsible-table collapse show"
+                id="aggregated-completedExecutions">
               {completedPageTable}
             </div>
       }
@@ -141,15 +144,17 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
             showFailedJobs = true)
 
         _content ++=
-          <span id="failed" class="collapse-aggregated-failedExecutions collapse-table"
-                data-collapse-name="collapse-aggregated-failedExecutions"
-                data-collapse-table="aggregated-failedExecutions">
+          <span id="failed" class="collapse-table" data-bs-toggle="collapse"
+                data-bs-target="#aggregated-failedExecutions"
+                aria-expanded="true" aria-controls="aggregated-failedExecutions"
+                data-collapse-name="collapse-aggregated-failedExecutions">
             <h4>
               <span class="collapse-table-arrow arrow-open"></span>
               <a>Failed Queries ({failed.size})</a>
             </h4>
           </span> ++
-            <div class="aggregated-failedExecutions collapsible-table">
+            <div class="collapsible-table collapse show"
+                id="aggregated-failedExecutions">
               {failedPageTable}
             </div>
       }
@@ -221,7 +226,7 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
         executionIdToSubExecutions).table(executionPage)
     } catch {
       case e@(_: IllegalArgumentException | _: IndexOutOfBoundsException) =>
-        <div class="alert alert-error">
+        <div class="alert alert-danger">
           <p>Error while rendering execution table:</p>
           <pre>
             {Utils.exceptionString(e)}
