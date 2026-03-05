@@ -62,5 +62,5 @@ ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
 # TODO: Add BASIC_PIP_PKGS and CONNECT_PIP_PKGS when it supports Python 3.14 free threaded
 # TODO: Add lxml, grpcio, grpcio-status back when they support Python 3.14 free threaded
-RUN python3.14t -m pip install 'numpy>=2.1' 'pyarrow>=19.0.0' 'six==1.16.0' 'pandas==2.3.3' 'pystack>=1.6.0' scipy coverage matplotlib openpyxl jinja2 psutil && \
+RUN python3.14t -m pip install 'numpy>=2.1' 'pyarrow>=23.0.0' 'six==1.16.0' 'pandas==2.3.3' 'pystack>=1.6.0' scipy coverage matplotlib openpyxl jinja2 psutil && \
     python3.14t -m pip cache purge

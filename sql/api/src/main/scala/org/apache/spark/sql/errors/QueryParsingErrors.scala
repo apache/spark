@@ -674,6 +674,20 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
     new ParseException(errorClass = "INVALID_SQL_SYNTAX.CREATE_TEMP_FUNC_WITH_IF_NOT_EXISTS", ctx)
   }
 
+  def invalidTempObjQualifierError(
+      objectType: String,
+      objectName: String,
+      qualifier: String,
+      ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      "INVALID_TEMP_OBJ_QUALIFIER",
+      Map(
+        "objectType" -> objectType,
+        "objectName" -> toSQLId(objectName),
+        "qualifier" -> toSQLId(qualifier)),
+      ctx)
+  }
+
   def unsupportedFunctionNameError(funcName: Seq[String], ctx: ParserRuleContext): Throwable = {
     new ParseException(
       errorClass = "INVALID_SQL_SYNTAX.MULTI_PART_NAME",

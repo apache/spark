@@ -297,8 +297,8 @@ class SliceBytesArrowOutputProcessorImpl(
     }
   }
 
-  private def getBatchBytes(root: VectorSchemaRoot): Int = {
-    var batchBytes = 0
+  private def getBatchBytes(root: VectorSchemaRoot): Long = {
+    var batchBytes = 0L
     root.getFieldVectors.asScala.foreach { vector =>
       batchBytes += vector.getBufferSize
     }

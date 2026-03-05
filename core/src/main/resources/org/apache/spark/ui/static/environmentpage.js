@@ -53,9 +53,9 @@ $(document).ready(function(){
         }
       }
       if (showRow) {
-        $(this).show();
+        $(this).removeClass('d-none');
       } else {
-        $(this).hide();
+        $(this).addClass('d-none');
       }
     });
   });

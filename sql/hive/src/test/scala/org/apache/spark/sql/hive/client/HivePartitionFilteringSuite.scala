@@ -63,6 +63,7 @@ class HivePartitionFilteringSuite(version: String)
     locationUri = None,
     inputFormat = Some(classOf[TextInputFormat].getName),
     outputFormat = Some(classOf[HiveIgnoreKeyTextOutputFormat[_, _]].getName),
+    serdeName = None,
     serde = Some(classOf[LazySimpleSerDe].getName()),
     compressed = false,
     properties = Map.empty

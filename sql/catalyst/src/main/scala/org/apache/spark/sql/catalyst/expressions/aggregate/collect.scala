@@ -21,6 +21,7 @@ import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, Growable}
 import scala.util.{Left, Right}
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
@@ -31,6 +32,7 @@ import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, TypeUtil
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLExpr
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.errors.DataTypeErrors.{toSQLId, toSQLType}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
@@ -590,6 +592,161 @@ case class ListAgg(
       return true
     }
     false
+  }
+
+  /**
+   * Returns true if the order value may be ambiguous after DISTINCT deduplication.
+   *
+   * For LISTAGG(DISTINCT child) WITHIN GROUP (ORDER BY order_expr), correctness requires
+   * a functional dependency (child -> order_expr, where equality is defined by GROUP BY
+   * semantics): each distinct child value must map to exactly one order value. Otherwise,
+   * after deduplication on child, the order value is ambiguous.
+   *
+   * When child = Cast(order_expr, T) where T is STRING or BINARY (LISTAGG's accepted input
+   * types), the functional dependency (child -> order_expr) is satisfied since casting to
+   * string/binary is injective for the types we allow. However, the cast must also be
+   * equality-preserving (order_expr -> child): GROUP BY-equal order values must produce
+   * GROUP BY-equal child values. Otherwise, the DISTINCT rewrite (which groups by child) may
+   * split values that should be in the same group, causing over-counting.
+   * For example, Float/Double violate this because -0.0 and 0.0 are GROUP BY-equal but cast
+   * to different strings. This is checked by [[isCastEqualityPreserving]] and
+   * [[isCastTargetEqualityPreserving]].
+   *
+   * Currently only detects these conditions for Cast.
+   * TODO(SPARK-55718): extend to detect other functional dependencies.
+   *
+   * Returns false when the order expression matches the child (i.e., [[needSaveOrderValue]]
+   * is false). Otherwise, the behavior depends on the
+   * [[SQLConf.LISTAGG_ALLOW_DISTINCT_CAST_WITH_ORDER]] config:
+   *  - If enabled, delegates to [[checkOrderValueDeterminism]] to determine whether the
+   *    order value is uniquely determined by the child.
+   *  - If disabled, any mismatch is considered ambiguous.
+   *
+   * @return true if ambiguity exists, false if the order value is deterministic
+   * @see [[throwDistinctOrderError]] to throw the appropriate error when this returns true
+   */
+  def hasDistinctOrderAmbiguity: Boolean = {
+    needSaveOrderValue && {
+      if (SQLConf.get.listaggAllowDistinctCastWithOrder) {
+        checkOrderValueDeterminism match {
+          case OrderDeterminismResult.Deterministic => false
+          case _ => true
+        }
+      } else {
+        true
+      }
+    }
+  }
+
+  def throwDistinctOrderError(): Nothing = {
+    if (SQLConf.get.listaggAllowDistinctCastWithOrder) {
+      checkOrderValueDeterminism match {
+        case OrderDeterminismResult.NonDeterministicMismatch =>
+          throwFunctionAndOrderExpressionMismatchError()
+        case OrderDeterminismResult.NonDeterministicCast(inputType, castType) =>
+          throwFunctionAndOrderExpressionUnsafeCastError(inputType, castType)
+        case OrderDeterminismResult.Deterministic =>
+          throw SparkException.internalError(
+            "ListAgg.throwDistinctOrderError should not be called when the cast is safe")
+      }
+    } else {
+      throwFunctionAndOrderExpressionMismatchError()
+    }
+  }
+
+  private def throwFunctionAndOrderExpressionMismatchError() = {
+    throw QueryCompilationErrors.functionAndOrderExpressionMismatchError(
+      prettyName, child, orderExpressions)
+  }
+
+  private def throwFunctionAndOrderExpressionUnsafeCastError(
+      inputType: DataType, castType: DataType) = {
+    throw QueryCompilationErrors.functionAndOrderExpressionUnsafeCastError(
+      prettyName, inputType, castType)
+  }
+
+  /**
+   * Checks whether the order value is uniquely determined by the child value.
+   *
+   * Currently only handles the case where child = Cast(order_expr, T). If the cast is
+   * equality-preserving, the order value is deterministic (each child string maps back to
+   * exactly one original value). Otherwise, returns
+   * [[OrderDeterminismResult.NonDeterministicMismatch]].
+   *
+   * @see [[hasDistinctOrderAmbiguity]]
+   */
+  private def checkOrderValueDeterminism: OrderDeterminismResult = {
+    if (orderExpressions.size != 1) return OrderDeterminismResult.NonDeterministicMismatch
+    child match {
+      case Cast(castChild, castType, _, _)
+        if orderExpressions.head.child.semanticEquals(castChild) =>
+          if (isCastEqualityPreserving(castChild.dataType) &&
+              isCastTargetEqualityPreserving(castType)) {
+            OrderDeterminismResult.Deterministic
+          } else {
+            OrderDeterminismResult.NonDeterministicCast(castChild.dataType, castType)
+          }
+      case _ => OrderDeterminismResult.NonDeterministicMismatch
+    }
+  }
+
+  /**
+   * Returns true if casting `dt` to string/binary preserves equality semantics: values that
+   * are GROUP BY-equal must cast to equal results, and different results must imply different
+   * original values. Types like Float/Double are unsafe because IEEE 754 negative zero (-0.0)
+   * and positive zero (0.0) are equal but produce different string representations.
+   *
+   * @see [[checkOrderValueDeterminism]]
+   */
+  private def isCastEqualityPreserving(dt: DataType): Boolean = dt match {
+    case _: IntegerType | LongType | ShortType | ByteType => true
+    case _: DecimalType => true
+    case _: DateType | TimestampNTZType => true
+    case _: TimeType => true
+    case _: CalendarIntervalType => true
+    case _: YearMonthIntervalType => true
+    case _: DayTimeIntervalType => true
+    case BooleanType => true
+    case BinaryType => true
+    case st: StringType => st.isUTF8BinaryCollation
+    case _: DoubleType | FloatType => false
+    // During DST fall-back, two distinct UTC epochs can format to the same local time string
+    // because the default format omits the timezone offset. TimestampNTZType is safe (uses UTC).
+    case _: TimestampType => false
+    case _ => false
+  }
+
+  /**
+   * Returns true if the cast target type preserves equality semantics for DISTINCT
+   * deduplication. A non-binary-equality collation on the target [[StringType]] can cause
+   * different source values to become equal after casting (e.g., "ABC" and "abc" are different
+   * under UTF8_BINARY but equal under UTF8_LCASE).
+   *
+   * @see [[checkOrderValueDeterminism]]
+   */
+  private def isCastTargetEqualityPreserving(dt: DataType): Boolean = dt match {
+    case st: StringType => st.isUTF8BinaryCollation
+    case BinaryType => true
+    case _ => false
+  }
+
+  /**
+   * Result of checking whether the order value is uniquely determined by the child value
+   * after DISTINCT deduplication. Currently only handles Cast.
+   */
+  private sealed trait OrderDeterminismResult
+
+  private object OrderDeterminismResult {
+    /** The order value is uniquely determined by the child value. */
+    case object Deterministic extends OrderDeterminismResult
+
+    /** Non-deterministic: cannot establish a child -> order functional dependency. */
+    case object NonDeterministicMismatch extends OrderDeterminismResult
+
+    /** Non-deterministic: the cast does not preserve equality semantics. */
+    case class NonDeterministicCast(
+        inputType: DataType,
+        castType: DataType) extends OrderDeterminismResult
   }
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =

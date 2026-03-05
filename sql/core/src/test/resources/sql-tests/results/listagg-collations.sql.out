@@ -80,3 +80,78 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "orderingExpr" : "\"collate(c1, utf8_binary)\""
   }
 }
+
+
+-- !query
+SELECT listagg(DISTINCT CAST(col AS STRING)) WITHIN GROUP (ORDER BY col) FROM VALUES ('ABC'), ('abc'), ('ABC') AS t(col)
+-- !query schema
+struct<listagg(DISTINCT CAST(col AS STRING), NULL) WITHIN GROUP (ORDER BY col ASC NULLS FIRST):string>
+-- !query output
+ABCabc
+
+
+-- !query
+SELECT listagg(DISTINCT CAST(col AS STRING COLLATE UTF8_LCASE)) WITHIN GROUP (ORDER BY col) FROM VALUES ('ABC'), ('abc'), ('ABC') AS t(col)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INVALID_WITHIN_GROUP_EXPRESSION.MISMATCH_WITH_DISTINCT_INPUT_UNSAFE_CAST",
+  "sqlState" : "42K0K",
+  "messageParameters" : {
+    "castType" : "\"STRING COLLATE UTF8_LCASE\"",
+    "funcName" : "`listagg`",
+    "inputType" : "\"STRING\""
+  }
+}
+
+
+-- !query
+SELECT listagg(DISTINCT CAST(col AS STRING)) WITHIN GROUP (ORDER BY col) FROM VALUES (X'414243'), (X'616263'), (X'414243') AS t(col)
+-- !query schema
+struct<listagg(DISTINCT CAST(col AS STRING), NULL) WITHIN GROUP (ORDER BY col ASC NULLS FIRST):string>
+-- !query output
+ABCabc
+
+
+-- !query
+SELECT listagg(DISTINCT CAST(col AS STRING COLLATE UTF8_LCASE)) WITHIN GROUP (ORDER BY col) FROM VALUES (X'414243'), (X'616263'), (X'414243') AS t(col)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INVALID_WITHIN_GROUP_EXPRESSION.MISMATCH_WITH_DISTINCT_INPUT_UNSAFE_CAST",
+  "sqlState" : "42K0K",
+  "messageParameters" : {
+    "castType" : "\"STRING COLLATE UTF8_LCASE\"",
+    "funcName" : "`listagg`",
+    "inputType" : "\"BINARY\""
+  }
+}
+
+
+-- !query
+SELECT listagg(DISTINCT CAST(col AS BINARY)) WITHIN GROUP (ORDER BY col) FROM VALUES ('ABC'), ('abc'), ('ABC') AS t(col)
+-- !query schema
+struct<listagg(DISTINCT CAST(col AS BINARY), NULL) WITHIN GROUP (ORDER BY col ASC NULLS FIRST):binary>
+-- !query output
+ABCabc
+
+
+-- !query
+SELECT listagg(DISTINCT CAST(col AS BINARY)) WITHIN GROUP (ORDER BY col) FROM (SELECT col COLLATE UTF8_LCASE AS col FROM VALUES ('ABC'), ('abc'), ('ABC') AS t(col))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INVALID_WITHIN_GROUP_EXPRESSION.MISMATCH_WITH_DISTINCT_INPUT_UNSAFE_CAST",
+  "sqlState" : "42K0K",
+  "messageParameters" : {
+    "castType" : "\"BINARY\"",
+    "funcName" : "`listagg`",
+    "inputType" : "\"STRING COLLATE UTF8_LCASE\""
+  }
+}
