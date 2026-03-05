@@ -38,6 +38,22 @@ select bit_count(-9223372036854775808L);
 select bit_count("bit count");
 select bit_count('a');
 
+-- two-argument bit_count (Trino-compatible)
+select bit_count(9, 64);
+select bit_count(9, 8);
+select bit_count(-7, 64);
+select bit_count(-7, 8);
+select bit_count(0, 8);
+select bit_count(-1, 8);
+select bit_count(-1, 64);
+
+-- two-argument bit_count error cases
+select bit_count(9, 0);
+select bit_count(9, 65);
+select bit_count(9, null);
+select bit_count(9, 'a');
+select bit_count(9, 8, 3);
+
 -- test for bit_xor
 --
 CREATE OR REPLACE TEMPORARY VIEW bitwise_test AS SELECT * FROM VALUES

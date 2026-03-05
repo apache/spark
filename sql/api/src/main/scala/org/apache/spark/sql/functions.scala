@@ -3219,6 +3219,16 @@ object functions {
   def bit_count(e: Column): Column = Column.fn("bit_count", e)
 
   /**
+   * Returns the number of bits that are set in the argument expr.
+   * If bits is specified, treats expr as a bits-bit signed integer in 2's complement
+   * representation before counting set bits.
+   *
+   * @group bitwise_funcs
+   * @since 4.1.0
+   */
+  def bit_count(e: Column, bits: Column): Column = Column.fn("bit_count", e, bits)
+
+  /**
    * Returns the value of the bit (0 or 1) at the specified position. The positions are numbered
    * from right to left, starting at zero. The position argument cannot be negative.
    *
