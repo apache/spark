@@ -55,8 +55,15 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
     new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0004", ctx.source)
   }
 
-  def insertedValueNumberNotMatchFieldNumberError(ctx: NotMatchedClauseContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0006", ctx.notMatchedAction())
+  def insertedValueNumberNotMatchColumnNumberError(
+      expectedCount: Int,
+      actualCount: Int,
+      ctx: NotMatchedClauseContext): Throwable = {
+    new ParseException(
+      errorClass = "MERGE_INSERT_VALUE_COUNT_MISMATCH",
+      messageParameters =
+        Map("expectedCount" -> expectedCount.toString, "actualCount" -> actualCount.toString),
+      ctx.notMatchedAction())
   }
 
   def mergeStatementWithoutWhenClauseError(ctx: MergeIntoTableContext): Throwable = {
