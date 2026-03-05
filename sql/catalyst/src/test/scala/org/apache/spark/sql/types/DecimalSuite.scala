@@ -66,14 +66,14 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
 
     checkError(
       exception = intercept[SparkArithmeticException](Decimal(170L, 2, 1)),
-      condition = "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
+      condition = "NUMERIC_VALUE_OUT_OF_RANGE.DEFAULT",
       parameters = Map(
         "value" -> "0",
         "precision" -> "2",
         "scale" -> "1"))
     checkError(
       exception = intercept[SparkArithmeticException](Decimal(170L, 2, 0)),
-      condition = "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
+      condition = "NUMERIC_VALUE_OUT_OF_RANGE.DEFAULT",
       parameters = Map(
         "value" -> "0",
         "precision" -> "2",
@@ -96,7 +96,7 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
         "scale" -> "1"))
     checkError(
       exception = intercept[SparkArithmeticException](Decimal(1e17.toLong, 17, 0)),
-      condition = "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
+      condition = "NUMERIC_VALUE_OUT_OF_RANGE.DEFAULT",
       parameters = Map(
         "value" -> "0",
         "precision" -> "17",

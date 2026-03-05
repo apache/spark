@@ -5031,7 +5031,7 @@
           "The <roundedValue> rounded half up from <originalValue> cannot be represented as Decimal(<precision>, <scale>)."
         ]
       },
-      "WITH_SUGGESTION" : {
+      "DEFAULT" : {
         "message" : [
           "<value> cannot be represented as Decimal(<precision>, <scale>)."
         ]

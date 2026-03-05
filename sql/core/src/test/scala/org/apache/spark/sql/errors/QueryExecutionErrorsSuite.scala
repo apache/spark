@@ -1299,7 +1299,7 @@ class QueryExecutionErrorsSuite
       exception = intercept[SparkArithmeticException] {
          spark.sql(query).show()
       },
-      condition = "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
+      condition = "NUMERIC_VALUE_OUT_OF_RANGE.DEFAULT",
       parameters = Map(
         "value" -> "123.45",
         "precision" -> "4",

@@ -860,7 +860,7 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
         exception = intercept[SparkArithmeticException](
           cast(largeTime, DecimalType(2, 0)).eval()
         ),
-        condition = "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
+        condition = "NUMERIC_VALUE_OUT_OF_RANGE.DEFAULT",
         parameters = Map(
           "value" -> "86399.123456000",
           "precision" -> "2",
