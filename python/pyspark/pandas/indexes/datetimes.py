@@ -160,8 +160,9 @@ class DatetimeIndex(Index):
             raise TypeError("Index.name must be a hashable type")
 
         if isinstance(data, (Series, Index)):
-            if dtype is None:
-                dtype = "datetime64[ns]"
+            if LooseVersion(pd.__version__) < "3.0.0":
+                if dtype is None:
+                    dtype = "datetime64[ns]"
             return cast(DatetimeIndex, Index(data, dtype=dtype, copy=copy, name=name))
 
         return cast(DatetimeIndex, ps.from_pandas(pd.DatetimeIndex(**kwargs)))
