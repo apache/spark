@@ -371,7 +371,7 @@ class PandasUDFTestsMixin:
         ):
             self.assertRaisesRegex(
                 PythonException,
-                "Cannot convert the output value",
+                "Failed to convert the value",
                 df.withColumn("decimal_val", int_to_decimal_udf("id")).collect,
             )
 

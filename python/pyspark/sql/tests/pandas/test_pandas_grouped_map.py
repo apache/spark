@@ -398,7 +398,7 @@ class ApplyInPandasTestsMixin:
         with self.sql_conf(
             {"spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled": False}
         ):
-            with self.assertRaisesRegex(PythonException, "Cannot convert the output value"):
+            with self.assertRaisesRegex(PythonException, "Failed to convert the value"):
                 (
                     self.data.groupby("id")
                     .applyInPandas(

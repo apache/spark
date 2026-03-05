@@ -322,7 +322,7 @@ class CogroupedApplyInPandasTestsMixin:
         with self.sql_conf(
             {"spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled": False}
         ):
-            with self.assertRaisesRegex(PythonException, "Cannot convert the output value"):
+            with self.assertRaisesRegex(PythonException, "Failed to convert the value"):
                 (
                     left.groupby("id")
                     .cogroup(right.groupby("id"))
