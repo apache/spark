@@ -49,15 +49,28 @@ class GlobalTempViewManager(database: String) {
   }
 
   /**
-   * Creates a global temp view, or issue an exception if the view already exists and
-   * `overrideIfExists` is false.
+   * Creates a global temp view.
+   *
+   * Issue an `AnalysisException` when `ignoreIfExists` and `overrideIfExists` both are true
+   * because they are mutually exclusive.
+   *
+   * If the view already exists: (1) when `ignoreIfExists` is ture, performs no-op;
+   * (2) otherwise do replacement or issue an exception according to `overrideIfExists`.
    */
   def create(
       name: String,
       viewDefinition: TemporaryViewRelation,
+      ignoreIfExists: Boolean,
       overrideIfExists: Boolean): Unit = synchronized {
-    if (!overrideIfExists && viewDefinitions.contains(name)) {
-      throw new TempTableAlreadyExistsException(name)
+    if (ignoreIfExists && overrideIfExists) {
+      throw QueryCompilationErrors.createViewWithBothIfNotExistsAndReplaceError()
+    }
+    if (viewDefinitions.contains(name)) {
+      if (ignoreIfExists) {
+        return
+      } else if (!overrideIfExists) {
+        throw new TempTableAlreadyExistsException(name)
+      }
     }
     viewDefinitions.put(name, viewDefinition)
   }

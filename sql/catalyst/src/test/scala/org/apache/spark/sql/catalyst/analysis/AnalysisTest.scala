@@ -43,23 +43,25 @@ trait AnalysisTest extends PlanTest {
       catalog: SessionCatalog,
       name: String,
       plan: LogicalPlan,
+      ignoreIfExists: Boolean,
       overrideIfExists: Boolean): Unit = {
     val identifier = TableIdentifier(name)
     val metadata = createTempViewMetadata(identifier, plan.schema)
     val viewDefinition = TemporaryViewRelation(metadata, Some(plan))
-    catalog.createTempView(name, viewDefinition, overrideIfExists)
+    catalog.createTempView(name, viewDefinition, ignoreIfExists, overrideIfExists)
   }
 
   protected def createGlobalTempView(
       catalog: SessionCatalog,
       name: String,
       plan: LogicalPlan,
+      ignoreIfExists: Boolean,
       overrideIfExists: Boolean): Unit = {
     val globalDb = Some(SQLConf.get.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE))
     val identifier = TableIdentifier(name, globalDb)
     val metadata = createTempViewMetadata(identifier, plan.schema)
     val viewDefinition = TemporaryViewRelation(metadata, Some(plan))
-    catalog.createGlobalTempView(name, viewDefinition, overrideIfExists)
+    catalog.createGlobalTempView(name, viewDefinition, ignoreIfExists, overrideIfExists)
   }
 
   private def createTempViewMetadata(
@@ -79,13 +81,18 @@ trait AnalysisTest extends PlanTest {
     catalog.createDatabase(
       CatalogDatabase("default", "", new URI("loc"), Map.empty),
       ignoreIfExists = false)
-    createTempView(catalog, "TaBlE", TestRelations.testRelation, overrideIfExists = true)
-    createTempView(catalog, "TaBlE2", TestRelations.testRelation2, overrideIfExists = true)
-    createTempView(catalog, "TaBlE3", TestRelations.testRelation3, overrideIfExists = true)
-    createGlobalTempView(catalog, "TaBlE4", TestRelations.testRelation4, overrideIfExists = true)
-    createGlobalTempView(catalog, "TaBlE5", TestRelations.testRelation5, overrideIfExists = true)
+    createTempView(catalog, "TaBlE", TestRelations.testRelation,
+      ignoreIfExists = false, overrideIfExists = true)
+    createTempView(catalog, "TaBlE2", TestRelations.testRelation2,
+      ignoreIfExists = false, overrideIfExists = true)
+    createTempView(catalog, "TaBlE3", TestRelations.testRelation3,
+      ignoreIfExists = false, overrideIfExists = true)
+    createGlobalTempView(catalog, "TaBlE4", TestRelations.testRelation4,
+      ignoreIfExists = false, overrideIfExists = true)
+    createGlobalTempView(catalog, "TaBlE5", TestRelations.testRelation5,
+      ignoreIfExists = false, overrideIfExists = true)
     createTempView(catalog, "streamingTable", TestRelations.streamingRelation,
-      overrideIfExists = true)
+      ignoreIfExists = false, overrideIfExists = true)
     new Analyzer(catalog) {
       catalogManager.tempVariableManager.create(
         Seq("testA", "testVarA"),
