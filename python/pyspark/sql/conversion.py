@@ -1607,6 +1607,7 @@ class ArrowArrayToPandasConversion:
             UserDefinedType,
             VariantType,
             GeographyType,
+            GeometryType,
         )
         if df_for_struct and isinstance(spark_type, StructType):
             return all(isinstance(f.dataType, supported_types) for f in spark_type.fields)
@@ -1725,13 +1726,17 @@ class ArrowArrayToPandasConversion:
             series = series.map(
                 lambda v: Geography.fromWKB(v["wkb"], v["srid"]) if v is not None else None
             )
+        elif isinstance(spark_type, GeometryType):
+            series = arr.to_pandas()
+            series = series.map(
+                lambda v: Geometry.fromWKB(v["wkb"], v["srid"]) if v is not None else None
+            )
         # elif isinstance(
         #     spark_type,
         #     (
         #         ArrayType,
         #         MapType,
         #         StructType,
-        #         GeometryType,
         #     ),
         # ):
         # TODO(SPARK-55324): Support complex types
