@@ -115,7 +115,7 @@ class ArrowBatchTransformer:
         schema: Optional["StructType"] = None,
         struct_in_pandas: str = "dict",
         ndarray_as_list: bool = False,
-        prefer_int_ext_dtype: bool = True,
+        prefer_int_ext_dtype: bool = False,
         df_for_struct: bool = False,
     ) -> List[Union["pd.Series", "pd.DataFrame"]]:
         """
