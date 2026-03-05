@@ -157,6 +157,13 @@ class RunnerConf(Conf):
         )
 
     @property
+    def prefer_int_ext_dtype(self) -> bool:
+        return (
+            self.get("spark.sql.execution.pythonUDF.pandas.preferIntExtensionDtype", "false")
+            == "true"
+        )
+
+    @property
     def timezone(self) -> Optional[str]:
         return self.get("spark.sql.session.timeZone", None, lower_str=False)
 
@@ -1489,6 +1496,7 @@ def read_udtf(pickleSer, infile, eval_type, runner_conf):
                 runner_conf.timezone,
                 runner_conf.safecheck,
                 input_type=input_type,
+                prefer_int_ext_dtype=runner_conf.prefer_int_ext_dtype,
                 int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
             )
         else:
@@ -2693,6 +2701,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
                 runner_conf.timezone,
                 runner_conf.safecheck,
                 runner_conf.assign_cols_by_name,
+                runner_conf.prefer_int_ext_dtype,
                 runner_conf.int_to_decimal_coercion_enabled,
             )
         elif (
@@ -2703,6 +2712,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
                 runner_conf.timezone,
                 runner_conf.safecheck,
                 runner_conf.assign_cols_by_name,
+                runner_conf.prefer_int_ext_dtype,
                 runner_conf.int_to_decimal_coercion_enabled,
             )
         elif eval_type == PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF:
@@ -2712,6 +2722,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
                 runner_conf.timezone,
                 runner_conf.safecheck,
                 runner_conf.assign_cols_by_name,
+                prefer_int_ext_dtype=runner_conf.prefer_int_ext_dtype,
                 int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
                 arrow_cast=True,
             )
@@ -2720,6 +2731,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
                 runner_conf.timezone,
                 runner_conf.safecheck,
                 runner_conf.assign_cols_by_name,
+                runner_conf.prefer_int_ext_dtype,
                 eval_conf.state_value_schema,
                 runner_conf.arrow_max_records_per_batch,
                 runner_conf.use_large_var_types,
@@ -2730,6 +2742,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
                 runner_conf.timezone,
                 runner_conf.safecheck,
                 runner_conf.assign_cols_by_name,
+                runner_conf.prefer_int_ext_dtype,
                 runner_conf.arrow_max_records_per_batch,
                 runner_conf.arrow_max_bytes_per_batch,
                 int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
@@ -2739,6 +2752,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
                 runner_conf.timezone,
                 runner_conf.safecheck,
                 runner_conf.assign_cols_by_name,
+                runner_conf.prefer_int_ext_dtype,
                 runner_conf.arrow_max_records_per_batch,
                 runner_conf.arrow_max_bytes_per_batch,
                 int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
@@ -2795,6 +2809,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
                 df_for_struct,
                 struct_in_pandas,
                 ndarray_as_list,
+                runner_conf.prefer_int_ext_dtype,
                 True,
                 input_type,
                 int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
@@ -2955,7 +2970,11 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
             else:
                 table = pa.table({})
             # Convert to pandas once for the entire group
-            all_series = ArrowBatchTransformer.to_pandas(table, timezone=ser._timezone)
+            all_series = ArrowBatchTransformer.to_pandas(
+                table,
+                timezone=ser._timezone,
+                prefer_int_ext_dtype=runner_conf.prefer_int_ext_dtype,
+            )
             key_series = [all_series[o] for o in key_offsets]
             value_series = [all_series[o] for o in value_offsets]
             yield from f(key_series, value_series)
@@ -2974,14 +2993,22 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
 
         def mapper(batch_iter):
             # Convert first Arrow batch to pandas to extract keys
-            first_series = ArrowBatchTransformer.to_pandas(next(batch_iter), timezone=ser._timezone)
+            first_series = ArrowBatchTransformer.to_pandas(
+                next(batch_iter),
+                timezone=ser._timezone,
+                prefer_int_ext_dtype=runner_conf.prefer_int_ext_dtype,
+            )
             key_series = [first_series[o] for o in parsed_offsets[0][0]]
 
             # Lazily convert remaining Arrow batches to pandas Series
             def value_series_gen():
                 yield [first_series[o] for o in parsed_offsets[0][1]]
                 for batch in batch_iter:
-                    series = ArrowBatchTransformer.to_pandas(batch, timezone=ser._timezone)
+                    series = ArrowBatchTransformer.to_pandas(
+                        batch,
+                        timezone=ser._timezone,
+                        prefer_int_ext_dtype=runner_conf.prefer_int_ext_dtype,
+                    )
                     yield [series[o] for o in parsed_offsets[0][1]]
 
             yield from f(key_series, value_series_gen())
