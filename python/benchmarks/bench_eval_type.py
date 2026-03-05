@@ -583,6 +583,9 @@ class ScalarArrowIterUDFBench:
     def setup(self):
         eval_type = PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF
 
+        def identity_iter(it):
+            return (c for c in it)
+
         # ---- varying batch size (mixed types, identity UDF) ----
         for name, (rows, n_cols, num_batches) in {
             "small_few": (1_000, 5, 1_500),
@@ -591,14 +594,27 @@ class ScalarArrowIterUDFBench:
             "large_many": (10_000, 50, 400),
         }.items():
             batch, ret_type = _make_typed_batch(rows, n_cols)
+            udf_func = identity_iter
             setattr(
                 self,
-                f"_{name}_input",
+                f"_{name}_time_input",
+                _build_scalar_worker_input(
+                    eval_type,
+                    udf_func,
+                    ret_type,
+                    [0],
+                    batch,
+                    num_batches=num_batches,
+                ),
+            )
+            setattr(
+                self,
+                f"_{name}_peakmem_input",
                 (
                     eval_type,
                     batch,
                     num_batches,
-                    lambda it: (c for c in it),
+                    udf_func,
                     ret_type,
                     [0],
                 ),
@@ -616,7 +632,15 @@ class ScalarArrowIterUDFBench:
             for a, b in it:
                 yield pc.add(a, pc.multiply(b, 2))
 
-        self._compute_input = (
+        self._compute_time_input = _build_scalar_worker_input(
+            eval_type,
+            arrow_compute_iter,
+            DoubleType(),
+            [0, 1],
+            compute_batch,
+            num_batches=500,
+        )
+        self._compute_peakmem_input = (
             eval_type,
             compute_batch,
             500,
@@ -634,7 +658,15 @@ class ScalarArrowIterUDFBench:
             for s in it:
                 yield pc.utf8_upper(s)
 
-        self._mixed_input = (
+        self._mixed_time_input = _build_scalar_worker_input(
+            eval_type,
+            upper_str_iter,
+            StringType(),
+            [1],  # str_col
+            mixed_batch,
+            num_batches=1_300,
+        )
+        self._mixed_peakmem_input = (
             eval_type,
             mixed_batch,
             1_300,
@@ -645,16 +677,7 @@ class ScalarArrowIterUDFBench:
 
     # -- benchmarks ---------------------------------------------------------
 
-    def _run_time(self, input_conf):
-        eval_type, batch, num_batches, udf_func, return_type, arg_offsets = input_conf
-        input_bytes = _build_scalar_worker_input(
-            eval_type,
-            udf_func,
-            return_type,
-            arg_offsets,
-            batch,
-            num_batches,
-        )
+    def _run_time(self, input_bytes):
         worker_main(io.BytesIO(input_bytes), io.BytesIO())
 
     def _run_peakmem(self, input_conf):
@@ -675,48 +698,48 @@ class ScalarArrowIterUDFBench:
 
     def time_small_batches_few_cols(self):
         """1k rows/batch, 5 cols, 1500 batches."""
-        self._run_time(self._small_few_input)
+        self._run_time(self._small_few_time_input)
 
     def peakmem_small_batches_few_cols(self):
         """1k rows/batch, 5 cols, 1500 batches."""
-        self._run_peakmem(self._small_few_input)
+        self._run_peakmem(self._small_few_peakmem_input)
 
     def time_small_batches_many_cols(self):
         """1k rows/batch, 50 cols, 200 batches."""
-        self._run_time(self._small_many_input)
+        self._run_time(self._small_many_time_input)
 
     def peakmem_small_batches_many_cols(self):
         """1k rows/batch, 50 cols, 200 batches."""
-        self._run_peakmem(self._small_many_input)
+        self._run_peakmem(self._small_many_peakmem_input)
 
     def time_large_batches_few_cols(self):
         """10k rows/batch, 5 cols, 3500 batches."""
-        self._run_time(self._large_few_input)
+        self._run_time(self._large_few_time_input)
 
     def peakmem_large_batches_few_cols(self):
         """10k rows/batch, 5 cols, 3500 batches."""
-        self._run_peakmem(self._large_few_input)
+        self._run_peakmem(self._large_few_peakmem_input)
 
     def time_large_batches_many_cols(self):
         """10k rows/batch, 50 cols, 400 batches."""
-        self._run_time(self._large_many_input)
+        self._run_time(self._large_many_time_input)
 
     def peakmem_large_batches_many_cols(self):
         """10k rows/batch, 50 cols, 400 batches."""
-        self._run_peakmem(self._large_many_input)
+        self._run_peakmem(self._large_many_peakmem_input)
 
     def time_compute(self):
         """10k rows/batch, 3 cols, 500 batches, arithmetic UDF."""
-        self._run_time(self._compute_input)
+        self._run_time(self._compute_time_input)
 
     def peakmem_compute(self):
         """10k rows/batch, 3 cols, 500 batches, arithmetic UDF."""
-        self._run_peakmem(self._compute_input)
+        self._run_peakmem(self._compute_peakmem_input)
 
     def time_mixed_types(self):
         """Mixed column types, string UDF, 3 rows/batch, 1300 batches."""
-        self._run_time(self._mixed_input)
+        self._run_time(self._mixed_time_input)
 
     def peakmem_mixed_types(self):
         """Mixed column types, string UDF, 3 rows/batch, 1300 batches."""
-        self._run_peakmem(self._mixed_input)
+        self._run_peakmem(self._mixed_peakmem_input)
