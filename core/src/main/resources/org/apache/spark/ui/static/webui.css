@@ -220,23 +220,23 @@ span.expand-dag-viz, .collapse-table {
   font-weight: normal;
 }
 
-.arrow-open {
-  width: 0;
-  height: 0;
-  border-left: 5px solid transparent;
-  border-right: 5px solid transparent;
-  border-top: 5px solid #08c;
+.arrow-open,
+.arrow-closed {
   display: inline-block;
+  width: 0.5em;
+  height: 0.5em;
+  border-right: 2px solid #08c;
+  border-bottom: 2px solid #08c;
+  transition: transform 0.2s ease;
+}
+
+.arrow-open {
+  transform: rotate(45deg);
   margin-bottom: 2px;
 }
 
 .arrow-closed {
-  width: 0;
-  height: 0;
-  border-top: 5px solid transparent;
-  border-bottom: 5px solid transparent;
-  border-left: 5px solid #08c;
-  display: inline-block;
+  transform: rotate(-45deg);
   margin-left: 2px;
   margin-right: 3px;
 }
