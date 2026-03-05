@@ -1271,6 +1271,15 @@ class SparkConnectClient(object):
         """
         Close the channel.
         """
+        # Calling channel.close() during Python shutdown can cause a deadlock.
+        # gRPC internally attempts to spawn a new thread, but thread creation
+        # is strictly blocked during interpreter shutdown in Python 3.12+.
+        if self._closed:
+            return
+        if sys.is_finalizing():
+            self._closed = True
+            return
+
         concurrent.futures.wait(self._release_futures, timeout=10)
         ExecutePlanResponseReattachableIterator.shutdown_threadpool_if_idle()
         self._channel.close()

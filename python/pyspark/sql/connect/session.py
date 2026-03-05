@@ -48,6 +48,7 @@ import pandas as pd
 import pyarrow as pa
 from pandas.api.types import is_datetime64_dtype, is_timedelta64_dtype
 import urllib
+import sys
 
 from pyspark.sql.connect.dataframe import DataFrame
 from pyspark.sql.dataframe import DataFrame as ParentDataFrame
@@ -872,6 +873,11 @@ class SparkSession:
 
     def __del__(self) -> None:
         try:
+            # Skip cleanup if Python is shutting down.
+            # This prevents a deadlock when closing the gRPC channel.
+            if sys.is_finalizing():
+                return
+
             # StreamingQueryManager has client states that needs to be cleaned up
             if hasattr(self, "_sqm"):
                 self._sqm.close()
