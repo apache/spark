@@ -5026,7 +5026,7 @@
       ""
     ],
     "subClass" : {
-      "WITHOUT_SUGGESTION" : {
+      "WITH_ROUND_ATTEMPT" : {
         "message" : [
           "The <roundedValue> rounded half up from <originalValue> cannot be represented as Decimal(<precision>, <scale>)."
         ]
