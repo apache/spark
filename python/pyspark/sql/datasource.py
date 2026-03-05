@@ -578,7 +578,7 @@ class DataSourceReader(ABC):
         """
         return filters
 
-    def partitions(self) -> Sequence[InputPartition]:
+    def partitions(self) -> Sequence[Union[InputPartition, None]]:
         """
         Returns an iterator of partitions for this data source.
 
@@ -626,13 +626,12 @@ class DataSourceReader(ABC):
         >>> def partitions(self):
         ...     return [RangeInputPartition(1, 3), RangeInputPartition(5, 10)]
         """
-        raise PySparkNotImplementedError(
-            errorClass="NOT_IMPLEMENTED",
-            messageParameters={"feature": "partitions"},
-        )
+        return [None]
 
     @abstractmethod
-    def read(self, partition: InputPartition) -> Union[Iterator[Tuple], Iterator["RecordBatch"]]:
+    def read(
+        self, partition: Union[InputPartition, None]
+    ) -> Union[Iterator[Tuple], Iterator["RecordBatch"]]:
         """
         Generates data for a given partition and returns an iterator of tuples or rows.
 
@@ -643,7 +642,7 @@ class DataSourceReader(ABC):
 
         Parameters
         ----------
-        partition : object
+        partition : InputPartition or None
             The partition to read. It must be one of the partition values returned by
             :meth:`DataSourceReader.partitions`.
 
@@ -805,7 +804,7 @@ class DataSourceStreamReader(ABC):
         """
         return None
 
-    def partitions(self, start: dict, end: dict) -> Sequence[InputPartition]:
+    def partitions(self, start: dict, end: dict) -> Sequence[Union[InputPartition, None]]:
         """
         Returns a list of InputPartition given the start and end offsets. Each InputPartition
         represents a data split that can be processed by one Spark task. This may be called with
@@ -821,17 +820,16 @@ class DataSourceStreamReader(ABC):
 
         Returns
         -------
-        sequence of :class:`InputPartition`\\s
+        sequence of :class:`InputPartition`\\s or None
             A sequence of partitions for this data source. Each partition value
-            must be an instance of `InputPartition` or a subclass of it.
+            must be either None, or an instance of `InputPartition` or a subclass of it.
         """
-        raise PySparkNotImplementedError(
-            errorClass="NOT_IMPLEMENTED",
-            messageParameters={"feature": "partitions"},
-        )
+        return [None]
 
     @abstractmethod
-    def read(self, partition: InputPartition) -> Union[Iterator[Tuple], Iterator["RecordBatch"]]:
+    def read(
+        self, partition: Union[InputPartition, None]
+    ) -> Union[Iterator[Tuple], Iterator["RecordBatch"]]:
         """
         Generates data for a given partition and returns an iterator of tuples or rows.
 
@@ -847,7 +845,7 @@ class DataSourceStreamReader(ABC):
 
         Parameters
         ----------
-        partition : :class:`InputPartition`
+        partition : :class:`InputPartition` or None
             The partition to read. It must be one of the partition values returned by
             :meth:`DataSourceStreamReader.partitions`.
 
