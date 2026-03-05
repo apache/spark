@@ -6407,6 +6407,12 @@
     ],
     "sqlState" : "42P07"
   },
+  "TEMP_VIEW_IF_NOT_EXISTS_NOT_ALLOWED" : {
+    "message" : [
+      "It is not allowed to define a TEMPORARY view with IF NOT EXISTS."
+    ],
+    "sqlState" : "0A000"
+  },
   "TEMP_VIEW_NAME_TOO_MANY_NAME_PARTS" : {
     "message" : [
       "CREATE TEMPORARY VIEW or the corresponding Dataset APIs only accept single-part view names, but got: <actualName>."
@@ -8039,11 +8045,6 @@
   "_LEGACY_ERROR_TEMP_0052" : {
     "message" : [
       "CREATE VIEW with both IF NOT EXISTS and REPLACE is not allowed."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0053" : {
-    "message" : [
-      "It is not allowed to define a TEMPORARY view with IF NOT EXISTS."
     ]
   },
   "_LEGACY_ERROR_TEMP_0056" : {

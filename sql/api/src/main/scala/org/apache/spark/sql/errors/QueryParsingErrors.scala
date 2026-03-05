@@ -645,7 +645,7 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
   }
 
   def defineTempViewWithIfNotExistsError(ctx: CreateViewContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0053", ctx)
+    new ParseException(errorClass = "TEMP_VIEW_IF_NOT_EXISTS_NOT_ALLOWED", ctx)
   }
 
   def notAllowedToAddDBPrefixForTempViewError(
