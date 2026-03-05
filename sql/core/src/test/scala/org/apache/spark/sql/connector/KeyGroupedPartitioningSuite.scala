@@ -2985,7 +2985,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
     }
   }
 
-  test("SPARK-55092: Don't group partitions for join when not needed") {
+  test("SPARK-55092: Scans should not group partitions") {
     val items_partitions = Array(identity("id"))
     createTable(items, itemsColumns, items_partitions)
 
@@ -2996,57 +2996,35 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
 
     val purchases_partitions = Array(years("time"))
     createTable(purchases, purchasesColumns, purchases_partitions)
+
     sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
       "(1, 42.0, cast('2020-01-01' as timestamp)), " +
       "(3, 19.5, cast('2020-02-01' as timestamp))")
 
-    withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
-      val df = createJoinTestDF(Seq("id" -> "item_id"), extraColumns = Seq("year(p.time)"))
-
-      val shuffles = collectShuffles(df.queryExecution.executedPlan)
-      assert(shuffles.size == 1, "only shuffle one side not report partitioning")
-
-      val scans = collectScans(df.queryExecution.executedPlan)
-      assert(scans(0).inputRDD.partitions.length === 3,
-        "items scan should not group")
-      assert(scans(1).inputRDD.partitions.length === 2,
-        "purchases scan should not group")
-
-      checkAnswer(df, Seq(Row(1, "aa", 40.0, 42.0, 2020)))
-    }
-
-    withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "false") {
-      val df = createJoinTestDF(Seq("id" -> "item_id"), extraColumns = Seq("year(p.time)"))
-
-      val shuffles = collectShuffles(df.queryExecution.executedPlan)
-      assert(shuffles.size == 2, "only shuffle one side not report partitioning")
-
-      val scans = collectScans(df.queryExecution.executedPlan)
-      assert(scans(0).inputRDD.partitions.length === 3,
-        "items scan should not group as it is shuffled")
-      assert(scans(1).inputRDD.partitions.length === 2,
-        "purchases scan should not group as it is shuffled")
-
-      checkAnswer(df, Seq(Row(1, "aa", 40.0, 42.0, 2020)))
-    }
-  }
-
-  test("SPARK-55092: Don't group partitions for aggregate when not needed") {
-    val items_partitions = Array(identity("id"))
-    createTable(items, itemsColumns, items_partitions)
-
-    sql(s"INSERT INTO testcat.ns.$items VALUES " +
-      "(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
-      "(4, 'bb', 10.0, cast('2021-01-01' as timestamp)), " +
-      "(4, 'cc', 15.5, cast('2021-02-01' as timestamp))")
-
     val df = sql(s"SELECT * FROM testcat.ns.$items")
     val scans = collectScans(df.queryExecution.executedPlan)
     assert(scans(0).inputRDD.partitions.length === 3,
-      "items scan should not group")
+      "items scan should not group partitions")
+
+    Seq((true, 1), (false, 2)).foreach { case (bucketingShuffle, expectedShuffleCount) =>
+      withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> bucketingShuffle.toString) {
+        val df = createJoinTestDF(Seq("id" -> "item_id"))
+
+        val shuffles = collectShuffles(df.queryExecution.executedPlan)
+        assert(shuffles.size == expectedShuffleCount)
+
+        val scans = collectScans(df.queryExecution.executedPlan)
+        assert(scans(0).inputRDD.partitions.length === 3,
+          "items scan should not group partitions")
+        assert(scans(1).inputRDD.partitions.length === 2,
+          "purchases scan should not group partitions")
+
+        checkAnswer(df, Seq(Row(1, "aa", 40.0, 42.0)))
+      }
+    }
   }
 
-  test("SPARK-55092: Multi table join granular partition grouping") {
+  test("SPARK-55535: Multi table join granular partition grouping") {
     withSQLConf(
       SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
       SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
@@ -3096,7 +3074,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
     }
   }
 
-  test("SPARK-55092: Multi table join partial clustering") {
+  test("SPARK-55535: Multi table join partial clustering") {
     withSQLConf(SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "true") {
       val items_partitions = Array(identity("id"))
       createTable(items, itemsColumns, items_partitions)
@@ -3143,7 +3121,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
     }
   }
 
-  test("SPARK-55092: Empty partitioned table") {
+  test("SPARK-55535: Empty partitioned table") {
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       val items_partitions = Array(identity("id"))
       createTable(items, itemsColumns, items_partitions)
@@ -3155,10 +3133,38 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
       checkAnswer(df, Seq.empty)
 
       val shuffles = collectShuffles(df.queryExecution.executedPlan)
-      assert(shuffles.size === 2, "empty tables should not report KeyedPartitioning")
+      assert(shuffles.size === 2,
+        "both legs should be shuffled as empty tables should not report KeyedPartitioning")
 
       val groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
-      assert(groupPartitions.isEmpty, "empty tables should not report KeyedPartitioning")
+      assert(groupPartitions.isEmpty,
+        "no legs should be grouped as empty tables should not report KeyedPartitioning")
+    }
+  }
+
+  test("SPARK-55535: Empty group partitions due filtered partitions") {
+    val items_partitions = Array(identity("id"))
+    createTable(items, itemsColumns, items_partitions)
+
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      s"(1, 'aa', 39.0, cast('2020-01-01' as timestamp))")
+
+    val purchases_partitions = Array(identity("item_id"))
+    createTable(purchases, purchasesColumns, purchases_partitions)
+
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      s"(2, 42.0, cast('2020-01-01' as timestamp))")
+
+    withSQLConf(SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> "true") {
+      val df = createJoinTestDF(Seq("id" -> "item_id"))
+      checkAnswer(df, Seq.empty)
+
+      val shuffles = collectShuffles(df.queryExecution.executedPlan)
+      assert(shuffles.isEmpty, "no legs should be shuffled")
+
+      val groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
+      assert(groupPartitions.forall(_.outputPartitioning.numPartitions == 0),
+        "group partitions should not have any (common) partitions")
     }
   }
 }
