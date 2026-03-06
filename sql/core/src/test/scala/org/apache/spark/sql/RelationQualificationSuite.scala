@@ -77,9 +77,9 @@ class RelationQualificationSuite extends QueryTest with SharedSparkSession {
         condition = "TABLE_OR_VIEW_NOT_FOUND",
         parameters = Map(
           "relationName" -> "`session`.`nonexistent`",
-          "searchPathLine" -> (
-            "Search path: [`system`.`builtin`, `system`.`session`, " +
-            "`spark_catalog`.`default`].")),
+          "searchPath" -> (
+            "[`system`.`builtin`, `system`.`session`, " +
+            "`spark_catalog`.`default`]")),
         context = ExpectedContext("session.nonexistent"))
       // Unqualified nonexistent fails with search path
       val sqlText = "SELECT * FROM nonexistent"
@@ -88,9 +88,9 @@ class RelationQualificationSuite extends QueryTest with SharedSparkSession {
         condition = "TABLE_OR_VIEW_NOT_FOUND",
         parameters = Map(
           "relationName" -> "`nonexistent`",
-          "searchPathLine" -> (
-            "Search path: [`system`.`builtin`, `system`.`session`, " +
-            "`spark_catalog`.`default`].")),
+          "searchPath" -> (
+            "[`system`.`builtin`, `system`.`session`, " +
+            "`spark_catalog`.`default`]")),
         context = ExpectedContext(fragment = "nonexistent", start = 14, stop = 24))
     } finally {
       sql("DROP TABLE IF EXISTS default.persist_t")
@@ -174,9 +174,9 @@ class RelationQualificationSuite extends QueryTest with SharedSparkSession {
         condition = "TABLE_OR_VIEW_NOT_FOUND",
         parameters = Map(
           "relationName" -> "`no_such_table_xyz`",
-          "searchPathLine" -> (
-            "Search path: [`system`.`builtin`, `system`.`session`, " +
-            "`spark_catalog`.`default`].")),
+          "searchPath" -> (
+            "[`system`.`builtin`, `system`.`session`, " +
+            "`spark_catalog`.`default`]")),
         context = ExpectedContext(fragment = "no_such_table_xyz", start = 14, stop = 30))
   }
 
@@ -188,9 +188,9 @@ class RelationQualificationSuite extends QueryTest with SharedSparkSession {
         condition = "TABLE_OR_VIEW_NOT_FOUND",
         parameters = Map(
           "relationName" -> "`no_such_xyz`",
-          "searchPathLine" -> (
-            "Search path: [`system`.`builtin`, `spark_catalog`.`default`, " +
-            "`system`.`session`].")),
+          "searchPath" -> (
+            "[`system`.`builtin`, `spark_catalog`.`default`, " +
+            "`system`.`session`]")),
         context = ExpectedContext(fragment = "no_such_xyz", start = 14, stop = 24))
     }
   }

@@ -834,7 +834,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42883",
   "messageParameters" : {
     "routineName" : "`IDENTIFIER`",
-    "searchPathLine" : "Search path: [`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]."
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1551,7 +1551,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`v`",
-    "searchPathLine" : "Search path: [`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]."
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1614,7 +1614,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`tab`",
-    "searchPathLine" : "Search path: [`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]."
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1653,7 +1653,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`tab`",
-    "searchPathLine" : "Search path: [`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]."
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1692,7 +1692,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`tab`",
-    "searchPathLine" : "Search path: [`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]."
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1747,7 +1747,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`tab_renamed`",
-    "searchPathLine" : "Search path: [`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]."
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2124,7 +2124,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42883",
   "messageParameters" : {
     "routineName" : "`test_udf`",
-    "searchPathLine" : "Search path: [`system`.`builtin`, `system`.`session`, `spark_catalog`.`identifier_clause_test_schema`]."
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`identifier_clause_test_schema`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2455,7 +2455,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`test_view`",
-    "searchPathLine" : "Search path: [`system`.`builtin`, `system`.`session`, `spark_catalog`.`identifier_clause_test_schema`]."
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`identifier_clause_test_schema`]"
   },
   "queryContext" : [ {
     "objectType" : "EXECUTE IMMEDIATE",
@@ -2914,7 +2914,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42883",
   "messageParameters" : {
     "routineName" : "`TIMESTAMPADD`",
-    "searchPathLine" : "Search path: [`system`.`builtin`, `system`.`session`, `spark_catalog`.`identifier_clause_test_schema`]."
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`identifier_clause_test_schema`]"
   },
   "queryContext" : [ {
     "objectType" : "",

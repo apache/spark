@@ -861,9 +861,9 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       "TABLE_OR_VIEW_NOT_FOUND",
       Map(
         "relationName" -> "`test`",
-        "searchPathLine" -> (
-          "Search path: [`system`.`builtin`, `system`.`session`, " +
-          "`spark_catalog`.`default`].")),
+        "searchPath" -> (
+          "[`system`.`builtin`, `system`.`session`, " +
+          "`spark_catalog`.`default`]")),
       Array(ExpectedContext("test", 12, 15)))
   }
 
@@ -1487,9 +1487,9 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       "TABLE_OR_VIEW_NOT_FOUND",
       Map(
         "relationName" -> "`t2`",
-        "searchPathLine" -> (
-          "Search path: [`system`.`builtin`, `system`.`session`, " +
-          "`spark_catalog`.`default`].")),
+        "searchPath" -> (
+          "[`system`.`builtin`, `system`.`session`, " +
+          "`spark_catalog`.`default`]")),
       Array(ExpectedContext("t2", 84, 85)))
   }
 

@@ -1377,7 +1377,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42883",
   "messageParameters" : {
     "routineName" : "`interval`",
-    "searchPathLine" : "Search path: [`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]."
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1398,7 +1398,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42883",
   "messageParameters" : {
     "routineName" : "`interval`",
-    "searchPathLine" : "Search path: [`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]."
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1433,7 +1433,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42883",
   "messageParameters" : {
     "routineName" : "`interval`",
-    "searchPathLine" : "Search path: [`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]."
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1454,7 +1454,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42883",
   "messageParameters" : {
     "routineName" : "`interval`",
-    "searchPathLine" : "Search path: [`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]."
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",

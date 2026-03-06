@@ -191,7 +191,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42883",
   "messageParameters" : {
     "routineName" : "`random_not_exist_func`",
-    "searchPathLine" : "Search path: [`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]."
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",

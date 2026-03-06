@@ -136,7 +136,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`show_t*`",
-    "searchPathLine" : "Search path: [`system`.`session`, `spark_catalog`.`showdb`]."
+    "searchPath" : "[`system`.`session`, `spark_catalog`.`showdb`]"
   },
   "queryContext" : [ {
     "objectType" : "",

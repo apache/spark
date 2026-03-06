@@ -559,7 +559,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`v7_temp`",
-    "searchPathLine" : "Search path: [`system`.`builtin`, `system`.`session`, `spark_catalog`.`temp_view_test`]."
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`temp_view_test`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -580,7 +580,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`v10_temp`",
-    "searchPathLine" : "Search path: [`system`.`builtin`, `system`.`session`, `spark_catalog`.`temp_view_test`]."
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`temp_view_test`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -601,7 +601,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`v11_temp`",
-    "searchPathLine" : "Search path: [`system`.`builtin`, `system`.`session`, `spark_catalog`.`temp_view_test`]."
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`temp_view_test`]"
   },
   "queryContext" : [ {
     "objectType" : "",

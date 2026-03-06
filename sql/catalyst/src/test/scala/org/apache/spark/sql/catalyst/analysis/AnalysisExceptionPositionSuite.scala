@@ -50,7 +50,7 @@ class AnalysisExceptionPositionSuite extends AnalysisTest {
     assertAnalysisErrorCondition(
       parsePlan("SHOW COLUMNS FROM unknown IN db"),
       "TABLE_OR_VIEW_NOT_FOUND",
-      Map("relationName" -> "`db`.`unknown`"),
+      Map("relationName" -> "`db`.`unknown`", "searchPath" -> ""),
       Array(ExpectedContext("unknown", 18, 24))
     )
     verifyTableOrViewPosition("ALTER TABLE unknown RENAME TO t", "unknown")
@@ -98,7 +98,8 @@ class AnalysisExceptionPositionSuite extends AnalysisTest {
       "TABLE_OR_VIEW_NOT_FOUND",
       Map(
         "relationName" -> s"`$table`",
-        "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"),
+        "searchPath" -> ("[`system`.`builtin`, `system`.`session`, " +
+          "`spark_catalog`.`default`]")),
       Array(ExpectedContext(table, startPos, startPos + table.length - 1))
     )
   }

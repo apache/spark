@@ -1616,7 +1616,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`outermost`",
-    "searchPathLine" : "Search path: [`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]."
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1839,7 +1839,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`test`",
-    "searchPathLine" : "Search path: [`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]."
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",

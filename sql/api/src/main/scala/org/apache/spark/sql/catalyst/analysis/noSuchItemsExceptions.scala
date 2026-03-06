@@ -117,7 +117,7 @@ class NoSuchTableException private (
       messageParameters = Map(
         "relationName" ->
           (quoteIdentifier(db) + "." + quoteIdentifier(table)),
-        "searchPathLine" -> ""),
+        "searchPath" -> ""),
       cause = None)
   }
 
@@ -126,7 +126,7 @@ class NoSuchTableException private (
       errorClass = "TABLE_OR_VIEW_NOT_FOUND",
       messageParameters = Map(
         "relationName" -> quoteNameParts(name),
-        "searchPathLine" -> ""),
+        "searchPath" -> ""),
       cause = None)
   }
 
@@ -135,7 +135,7 @@ class NoSuchTableException private (
       errorClass = "TABLE_OR_VIEW_NOT_FOUND",
       messageParameters = Map(
         "relationName" -> quoted(tableIdent),
-        "searchPathLine" -> ""),
+        "searchPath" -> ""),
       cause = None)
   }
 }
@@ -224,5 +224,5 @@ class CannotReplaceMissingTableException(
         "relationName"
           -> quoteNameParts(
             (tableIdentifier.namespace :+ tableIdentifier.name).toImmutableArraySeq),
-        "searchPathLine" -> ""),
+        "searchPath" -> ""),
       cause = cause)

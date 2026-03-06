@@ -109,7 +109,7 @@ class StreamRelationSuite extends SharedSparkSession with AnalysisTest {
       expectedErrorCondition = "TABLE_OR_VIEW_NOT_FOUND",
       expectedMessageParameters = Map(
         "relationName" -> "`stream`",
-        "searchPath" -> searchPath),
+        "searchPath" -> searchPath)),
       queryContext = Array(ExpectedContext("STREAM(`stream`)", 14, 29))
     )
     assertAnalysisErrorCondition(
@@ -117,7 +117,7 @@ class StreamRelationSuite extends SharedSparkSession with AnalysisTest {
       expectedErrorCondition = "TABLE_OR_VIEW_NOT_FOUND",
       expectedMessageParameters = Map(
         "relationName" -> "`stream`",
-        "searchPath" -> searchPath),
+        "searchPath" -> searchPath)),
       queryContext = Array(ExpectedContext("STREAM `stream`", 14, 28))
     )
   }

@@ -3993,7 +3993,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`store_returns`",
-    "searchPathLine" : "Search path: [`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]."
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -4033,7 +4033,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`store_returns`",
-    "searchPathLine" : "Search path: [`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]."
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -4134,7 +4134,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`web_sales`",
-    "searchPathLine" : "Search path: [`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]."
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -4240,7 +4240,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`web_sales`",
-    "searchPathLine" : "Search path: [`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]."
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -4273,7 +4273,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`date_dim`",
-    "searchPathLine" : "Search path: [`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]."
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -4305,7 +4305,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`date_dim`",
-    "searchPathLine" : "Search path: [`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]."
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -4347,7 +4347,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`web_sales`",
-    "searchPathLine" : "Search path: [`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]."
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -4383,7 +4383,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`web_sales`",
-    "searchPathLine" : "Search path: [`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]."
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -4449,7 +4449,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`store_sales`",
-    "searchPathLine" : "Search path: [`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]."
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -4517,7 +4517,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`store_sales`",
-    "searchPathLine" : "Search path: [`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]."
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -4592,7 +4592,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`web_sales`",
-    "searchPathLine" : "Search path: [`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]."
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -4669,7 +4669,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`web_sales`",
-    "searchPathLine" : "Search path: [`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]."
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -4743,7 +4743,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`store_sales`",
-    "searchPathLine" : "Search path: [`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]."
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",

@@ -834,7 +834,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42883",
   "messageParameters" : {
     "routineName" : "`IDENTIFIER`",
-    "searchPathLine" : "Search path: [`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]."
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2539,7 +2539,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42883",
   "messageParameters" : {
     "routineName" : "`TIMESTAMPADD`",
-    "searchPathLine" : "Search path: [`system`.`builtin`, `system`.`session`, `spark_catalog`.`identifier_clause_test_schema`]."
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`identifier_clause_test_schema`]"
   },
   "queryContext" : [ {
     "objectType" : "",

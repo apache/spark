@@ -949,16 +949,17 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       name: Seq[String],
       searchPath: Seq[String],
       origin: Origin): Throwable = {
-    val searchPathLine = if (searchPath.isEmpty) {
+    // Payload is data only: path list or empty string. Template adds "Search path: " label.
+    val searchPathValue = if (searchPath.isEmpty) {
       ""
     } else {
-      "Search path: " + searchPath.mkString("[", ", ", "]") + "."
+      searchPath.mkString("[", ", ", "]")
     }
     new AnalysisException(
       errorClass = "TABLE_OR_VIEW_NOT_FOUND",
       messageParameters = Map(
         "relationName" -> toSQLId(name),
-        "searchPathLine" -> searchPathLine
+        "searchPath" -> searchPathValue
       ),
       origin = origin)
   }
