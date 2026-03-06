@@ -35,6 +35,7 @@ import jakarta.ws.rs.core.{MediaType, MultivaluedMap, Response}
 import org.eclipse.jetty.server.Request
 import org.glassfish.jersey.internal.util.collection.MultivaluedStringMap
 
+import org.apache.spark.SparkContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.ui.scope.RDDOperationGraph
 
@@ -290,14 +291,13 @@ private[spark] object UIUtils extends Logging {
               href={prependBaseUri(request, "/static/spark-logo.svg")}></link>
         <title>{appName} - {title}</title>
       </head>
-      <body>
+      <body class="d-flex flex-column min-vh-100">
         <nav class="navbar navbar-expand-md navbar-light bg-light mb-4">
           <div class="navbar-header">
             <div class="navbar-brand">
               <a href={prependBaseUri(request, "/")}>
                 <img src={prependBaseUri(request, "/static/spark-logo.svg")}
                      alt="Spark Logo" height="36" />
-                <span class="version">{activeTab.appSparkVersion}</span>
               </a>
             </div>
           </div>
@@ -314,7 +314,7 @@ private[spark] object UIUtils extends Logging {
             </span>
           </div>
         </nav>
-        <div class="container-fluid">
+        <div class="container-fluid flex-fill">
           <div class="row">
             <div class="col-12">
               <h3 class="align-bottom text-nowrap overflow-hidden text-truncate">
@@ -329,6 +329,7 @@ private[spark] object UIUtils extends Logging {
             </div>
           </div>
         </div>
+        {sparkFooter(Some(activeTab))}
       </body>
     </html>
   }
@@ -347,8 +348,8 @@ private[spark] object UIUtils extends Logging {
               href={prependBaseUri(request, "/static/spark-logo.svg")}></link>
         <title>{title}</title>
       </head>
-      <body>
-        <div class="container-fluid">
+      <body class="d-flex flex-column min-vh-100">
+        <div class="container-fluid flex-fill">
           <div class="row">
             <div class="col-12">
               <h3 class="align-middle d-inline-block">
@@ -367,8 +368,30 @@ private[spark] object UIUtils extends Logging {
             </div>
           </div>
         </div>
+        {sparkFooter()}
       </body>
     </html>
+  }
+
+  private def sparkFooter(tab: Option[SparkUITab] = None): Seq[Node] = {
+    val user = tab.map(_.sparkUser).getOrElse(System.getProperty("user.name", ""))
+    val version = tab.map(_.appSparkVersion).getOrElse(org.apache.spark.SPARK_VERSION)
+    val startTimeOpt = tab.map(_.appStartTime).orElse(SparkContext.getActive.map(_.startTime))
+
+    // scalastyle:off
+    <footer class="footer mt-auto py-2 bg-body-tertiary border-top">
+      <div class="container-fluid">
+        <div class="d-flex justify-content-between align-items-center small text-body-secondary">
+          <span>{version}</span>
+          {startTimeOpt.map { t =>
+            <span>Started: {formatDate(new Date(t))}</span>
+            <span id="footer-uptime" data-start-time={t.toString}></span>
+          }.getOrElse(Seq.empty)}
+          <span>{user}</span>
+        </div>
+      </div>
+    </footer>
+    // scalastyle:on
   }
 
   /** Returns an HTML table constructed by generating a row for each object in a sequence. */

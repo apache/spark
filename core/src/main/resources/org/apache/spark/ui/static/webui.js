@@ -107,3 +107,16 @@ $(function() {
     clickPhysicalPlanDetails();
   });
 });
+
+// Footer uptime counter
+$(function() {
+  var el = document.getElementById("footer-uptime");
+  if (!el) return;
+  function update() {
+    var ms = Date.now() - Number(el.dataset.startTime);
+    var m = Math.floor(ms / 60000), h = Math.floor(m / 60), d = Math.floor(h / 24);
+    el.textContent = "Uptime: " + (d > 0 ? d + "d " : "") + (h % 24) + "h " + (m % 60) + "m";
+  }
+  update();
+  setInterval(update, 60000);
+});
