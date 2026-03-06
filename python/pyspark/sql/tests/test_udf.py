@@ -210,7 +210,9 @@ class BaseUDFTestsMixin(object):
         self.spark.catalog.registerFunction("double_int", lambda x: x * 2, IntegerType())
         [row] = self.spark.sql("SELECT double_int(1), double_int(2)").collect()
         self.assertEqual(tuple(row), (2, 4))
-        [row] = self.spark.sql("SELECT double_int(double_int(1)), double_int(double_int(2) + 2)").collect()
+        [row] = self.spark.sql(
+            "SELECT double_int(double_int(1)), double_int(double_int(2) + 2)"
+        ).collect()
         self.assertEqual(tuple(row), (4, 12))
         self.spark.catalog.registerFunction("add", lambda x, y: x + y, IntegerType())
         [row] = self.spark.sql("SELECT double_int(add(1, 2)), add(double_int(2), 1)").collect()
