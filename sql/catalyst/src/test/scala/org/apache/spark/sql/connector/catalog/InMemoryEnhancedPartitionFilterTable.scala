@@ -23,8 +23,7 @@ import scala.collection.mutable.{ArrayBuffer, Buffer}
 
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
 import org.apache.spark.sql.connector.expressions.Transform
-import org.apache.spark.sql.connector.expressions.filter.PartitionPredicate
-import org.apache.spark.sql.connector.expressions.filter.Predicate
+import org.apache.spark.sql.connector.expressions.filter.{And, PartitionPredicate, Predicate}
 import org.apache.spark.sql.connector.read.{InputPartition, Scan, ScanBuilder, SupportsPushDownRequiredColumns, SupportsPushDownV2Filters}
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, WriteBuilder}
 import org.apache.spark.sql.types.StructType
@@ -92,7 +91,7 @@ class InMemoryEnhancedPartitionFilterTable(
             partitionPredicates += p
           }
         case p if referencesOnlyPartitionCols(p) &&
-            InMemoryTableWithV2Filter.supportsPredicates(Array(p)) =>
+            supportsPredicatesForFirstPass(Array(p)) =>
           firstPassPushedPredicates += p
         case p =>
           returned += p
@@ -115,16 +114,87 @@ class InMemoryEnhancedPartitionFilterTable(
         InMemoryEnhancedPartitionFilterTable.this.partCols.map(_.toSeq.quoted)
           .toImmutableArraySeq
       val allKeys = allPartitions.map(_.asInstanceOf[BufferedRows].key)
-      val matchingKeys = InMemoryTableWithV2Filter.filtersToKeys(
+      val matchingKeys = filtersToKeysForFirstPass(
         allKeys, partNames, firstPassPushedPredicates.toArray).toSet
       val filteredByFirstPass = allPartitions.filter(p =>
         matchingKeys.contains(p.asInstanceOf[BufferedRows].key))
-      val filteredBySeoncPass = filteredByFirstPass.filter { p =>
+      val filteredBySecondPass = filteredByFirstPass.filter { p =>
         val partRow = p.asInstanceOf[BufferedRows].partitionKey()
         partitionPredicates.forall(_.accept(partRow))
       }
       InMemoryEnhancedPartitionFilterBatchScan(
-        filteredBySeoncPass, readSchema, tableSchema, partitionPredicates.toSeq)
+        filteredBySecondPass, readSchema, tableSchema, partitionPredicates.toSeq)
+    }
+
+    /**
+     * Like InMemoryTableWithV2Filter.supportsPredicatesForFirstPass but
+     * accept predicate names as produced by V2ExpressionBuilder (eg, "IS_NOT_NULL", "IS_NULL").
+     */
+    private def supportsPredicatesForFirstPass(predicates: Array[Predicate]): Boolean = {
+      predicates.flatMap(splitAndForFirstPass).forall {
+        case p: Predicate if p.name().equals("=") => true
+        case p: Predicate if p.name().equals("<=>") => true
+        case p: Predicate if p.name().equals("IS NULL") || p.name().equals("IS_NULL") => true
+        case p: Predicate if p.name().equals("IS NOT NULL") || p.name().equals("IS_NOT_NULL") =>
+          true
+        case p: Predicate if p.name().equals("ALWAYS_TRUE") => true
+        case _ => false
+      }
+    }
+
+    private def splitAndForFirstPass(filter: Predicate): Seq[Predicate] = {
+      filter match {
+        case and: And =>
+          splitAndForFirstPass(and.left()) ++ splitAndForFirstPass(and.right())
+        case _ => filter :: Nil
+      }
+    }
+
+    /**
+     * Like InMemoryTableWithV2Filter.filtersToKeys but accepts predicate names
+     * as produced by V2ExpressionBuilder (e.g. "IS_NOT_NULL", "IS_NULL").
+     */
+    private def filtersToKeysForFirstPass(
+        keys: Iterable[Seq[Any]],
+        partitionNames: Seq[String],
+        filters: Array[Predicate]): Iterable[Seq[Any]] = {
+      keys.filter { partValues =>
+        filters.flatMap(splitAndForFirstPass).forall {
+          case p: Predicate if p.name().equals("=") =>
+            p.children()(1).asInstanceOf[org.apache.spark.sql.connector.expressions.LiteralValue[_]]
+              .value == InMemoryBaseTable.extractValue(
+              p.children()(0).toString, partitionNames, partValues)
+          case p: Predicate if p.name().equals("<=>") =>
+            val attrVal = InMemoryBaseTable.extractValue(
+              p.children()(0).toString, partitionNames, partValues)
+            val value = p.children()(1)
+              .asInstanceOf[org.apache.spark.sql.connector.expressions.LiteralValue[_]].value
+            if (attrVal == null && value == null) true
+            else if (attrVal == null || value == null) false
+            else value == attrVal
+          case p: Predicate if p.name().equals("IS NULL") || p.name().equals("IS_NULL") =>
+            val attr = p.children()(0).toString
+            null == InMemoryBaseTable.extractValue(attr, partitionNames, partValues)
+          case p: Predicate if p.name().equals("IS NOT NULL") || p.name().equals("IS_NOT_NULL") =>
+            val attr = p.children()(0).toString
+            null != InMemoryBaseTable.extractValue(attr, partitionNames, partValues)
+          case p: Predicate if p.name().equals("ALWAYS_TRUE") => true
+          case p: Predicate if p.name().equals("IN") =>
+            if (p.children().length > 1) {
+              val filterRef = p.children()(0).toString
+              val matchingValues = p.children().drop(1).map(
+                _.asInstanceOf[org.apache.spark.sql.connector.expressions.LiteralValue[_]].value
+              ).toSet
+              val partVal = InMemoryBaseTable.extractValue(
+                filterRef, partitionNames, partValues)
+              matchingValues.contains(partVal)
+            } else {
+              true
+            }
+          case f =>
+            throw new IllegalArgumentException(s"Unsupported filter type: $f")
+        }
+      }
     }
   }
 

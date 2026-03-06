@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.internal.connector
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.SparkException
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.connector.expressions.filter.PartitionPredicate
@@ -37,47 +38,67 @@ class PartitionPredicateImpl(
     PartitionPredicate.NAME,
     org.apache.spark.sql.connector.expressions.Expression.EMPTY_EXPRESSION) with Logging {
 
+  // Static validation at construction
+  if (partitionSchema.isEmpty) {
+    throw SparkException.internalError(
+      s"Cannot evaluate partition predicate ${catalystExpression.sql}: partition schema is empty")
+  }
+  private val refNames = catalystExpression.references.map(_.name).toSet
+  private val partitionNames = partitionSchema.map(_.name).toSet
+  if (!refNames.subsetOf(partitionNames)) {
+    throw SparkException.internalError(
+      s"Cannot evaluate partition predicate ${catalystExpression.sql}: expression references " +
+      s"${refNames.mkString(", ")} not all in partition columns ${partitionNames.mkString(", ")}")
+  }
+
   /** The wrapped partition filter Catalyst Expression. */
   def expression: Expression = catalystExpression
+
+  override def equals(obj: Any): Boolean = obj match {
+    case other: PartitionPredicateImpl =>
+      catalystExpression.semanticEquals(other.catalystExpression) &&
+        partitionSchema == other.partitionSchema
+    case _ => false
+  }
+
+  override def hashCode(): Int = {
+    31 * catalystExpression.semanticHash() + partitionSchema.hashCode()
+  }
 
   override def toString(): String =
     s"PartitionPredicate(${catalystExpression.sql})"
 
+  /** Bound predicate, computed once and reused for all partition rows. */
+  private lazy val boundPredicate: InternalRow => Boolean = {
+    val boundExpr = catalystExpression.transform {
+      case a: AttributeReference =>
+        val index = partitionSchema.indexWhere(_.name == a.name)
+        BoundReference(index, partitionSchema(index).dataType, nullable = true)
+    }
+    val predicate = Predicate.createInterpreted(boundExpr)
+    predicate.eval(_)
+  }
+
   override def accept(partitionValues: InternalRow): Boolean = {
-    // defensive checks
-    if (partitionSchema.isEmpty) {
-      logWarning(s"Cannot evaluate partition predicate ${catalystExpression.sql}: " +
-        s"partition schema is empty, including partition")
-      return true
-    }
     if (partitionValues.numFields != partitionSchema.length) {
-      logWarning(s"Cannot evaluate partition predicate ${catalystExpression.sql}: " +
-        s"partition value field count (${partitionValues.numFields}) does not match schema " +
-        s"(${partitionSchema.length}), including partition")
-      return true
-    }
-    val refNames = catalystExpression.references.map(_.name).toSet
-    val partitionNames = partitionSchema.map(_.name).toSet
-    if (!refNames.subsetOf(partitionNames)) {
-      logWarning(s"Cannot evaluate partition predicate ${catalystExpression.sql}: " +
-        s"expression references ${refNames.mkString(", ")} not all in partition columns " +
-        s"${partitionNames.mkString(", ")}, including partition")
+      logWarning(
+        log"Cannot evaluate partition predicate " +
+        log"${MDC(LogKeys.EXPR, catalystExpression.sql)}: " +
+        log"partition value field count " +
+        log"(${MDC(LogKeys.COUNT, partitionValues.numFields)}) does not " +
+        log"match schema (${MDC(LogKeys.NUM_PARTITIONS, partitionSchema.length)}), " +
+        log"including partition")
       return true
     }
 
-    // evaluate the catalyst partition filter expression
     try {
-      val boundExpr = catalystExpression.transform {
-        case a: AttributeReference =>
-          val index = partitionSchema.indexWhere(_.name == a.name)
-          BoundReference(index, partitionSchema(index).dataType, nullable = true)
-      }
-      val boundPredicate = Predicate.createInterpreted(boundExpr)
-      boundPredicate.eval(partitionValues)
+      boundPredicate(partitionValues)
     } catch {
       case e: Exception =>
-        logWarning(s"Failed to evaluate partition predicate ${catalystExpression.sql}, " +
-          s"including partition", e)
+        logWarning(
+          log"Failed to evaluate partition predicate " +
+          log"${MDC(LogKeys.EXPR, catalystExpression.sql)}, including partition",
+          e)
         true
     }
   }
