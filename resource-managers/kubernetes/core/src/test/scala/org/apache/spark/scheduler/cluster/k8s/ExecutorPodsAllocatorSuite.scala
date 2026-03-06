@@ -1002,6 +1002,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
       .set(s"$prefix.option.claimName", "OnDemand")
       .set(s"$prefix.option.sizeLimit", "200Gi")
       .set(s"$prefix.option.storageClass", "gp3")
+      .set(KUBERNETES_ALLOCATION_BATCH_CONCURRENCY.key, "1")
 
     when(executorBuilder.buildFromFeatures(any(classOf[KubernetesExecutorConf]), meq(secMgr),
       meq(kubernetesClient), any(classOf[ResourceProfile])))
@@ -1028,6 +1029,48 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     intercept[KubernetesClientException] {
       podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 1))
     }
+    assert(podsAllocatorUnderTest.invokePrivate(counter).get() === 0)
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 0)
+  }
+
+  test("SPARK-41410: PVC creation failure in parallel path should not increase PVC counter") {
+    val prefix = "spark.kubernetes.executor.volumes.persistentVolumeClaim.spark-local-dir-1"
+    val confWithPVC = conf.clone
+      .set(KUBERNETES_DRIVER_OWN_PVC.key, "true")
+      .set(KUBERNETES_DRIVER_REUSE_PVC.key, "true")
+      .set(KUBERNETES_DRIVER_WAIT_TO_REUSE_PVC.key, "true")
+      .set(EXECUTOR_INSTANCES.key, "1")
+      .set(s"$prefix.mount.path", "/spark-local-dir")
+      .set(s"$prefix.mount.readOnly", "false")
+      .set(s"$prefix.option.claimName", "OnDemand")
+      .set(s"$prefix.option.sizeLimit", "200Gi")
+      .set(s"$prefix.option.storageClass", "gp3")
+      .set(KUBERNETES_ALLOCATION_BATCH_CONCURRENCY.key, "2")
+
+    when(executorBuilder.buildFromFeatures(any(classOf[KubernetesExecutorConf]), meq(secMgr),
+      meq(kubernetesClient), any(classOf[ResourceProfile])))
+      .thenAnswer((invocation: InvocationOnMock) => {
+        val k8sConf: KubernetesExecutorConf = invocation.getArgument(0)
+        KubernetesExecutorSpec(
+          executorPodWithIdAndVolume(k8sConf.executorId.toInt, k8sConf.resourceProfileId),
+          Seq(persistentVolumeClaim("pvc-0", "gp3", "200Gi")))
+      })
+
+    podsAllocatorUnderTest = new ExecutorPodsAllocator(
+      confWithPVC, secMgr, executorBuilder,
+      kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
+    podsAllocatorUnderTest.setExecutorPodsLifecycleManager(lifecycleManager)
+    podsAllocatorUnderTest.start(TEST_SPARK_APP_ID, schedulerBackend)
+
+    val startTime = Instant.now.toEpochMilli
+    waitForExecutorPodsClock.setTime(startTime)
+
+    val counter = PrivateMethod[AtomicInteger](Symbol("PVC_COUNTER"))()
+    assert(podsAllocatorUnderTest.invokePrivate(counter).get() === 0)
+
+    when(pvcResource.create()).thenThrow(new KubernetesClientException("PVC fails to create"))
+    // In parallel path, exceptions are caught inside Future and do not propagate
+    podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 1))
     assert(podsAllocatorUnderTest.invokePrivate(counter).get() === 0)
     assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 0)
   }
