@@ -30,7 +30,8 @@ import org.apache.spark.sql.connector.expressions.filter.Predicate;
  * <b>Two-call contract when enhanced partition filtering is supported:</b> When
  * {@link #supportsEnhancedPartitionFiltering()} returns true, {@link #pushPredicates(Predicate[])}
  * will be called <i>twice</i> on the same {@link ScanBuilder} instance: first with translated V2
- * predicates, then with {@link org.apache.spark.sql.connector.expressions.filter.PartitionPredicate}
+ * predicates, then with
+ * {@link org.apache.spark.sql.connector.expressions.filter.PartitionPredicate}
  * instances. The second call occurs only after the first call completes. The implementation must
  * accumulate state across both calls, and {@link #pushedPredicates()} must return predicates from
  * both calls.
@@ -47,7 +48,8 @@ public interface SupportsPushDownV2Filters extends ScanBuilder {
    * That is, predicates must be interpreted as ANDed together.
    * <p>
    * When {@link #supportsEnhancedPartitionFiltering()} returns true, this method will be called
-   * a second time with {@link org.apache.spark.sql.connector.expressions.filter.PartitionPredicate}
+   * a second time with
+   * {@link org.apache.spark.sql.connector.expressions.filter.PartitionPredicate}
    * instances (the second call occurs only after the first completes). The implementation must
    * accumulate state across both calls so that {@link #pushedPredicates()} can return predicates
    * from both.
