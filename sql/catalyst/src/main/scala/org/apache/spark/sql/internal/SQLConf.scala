@@ -88,7 +88,7 @@ object SQLConf {
     sqlConfEntries.get(key)
   }
 
-  private[internal] def getConfigEntries(): util.Collection[ConfigEntry[_]] = {
+  private[sql] def getConfigEntries(): util.Collection[ConfigEntry[_]] = {
     sqlConfEntries.values()
   }
 
@@ -248,6 +248,7 @@ object SQLConf {
       .doc(
         "When true, prefer the column from the underlying relation over the lateral column alias " +
         "reference with the same name (see SPARK-53734).")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(true)
 
@@ -289,6 +290,7 @@ object SQLConf {
         "When true, SubqueryAlias always propagates metadata columns from its child. " +
         "When false, SubqueryAlias only propagates metadata columns if the child is a " +
         "LeafNode or another SubqueryAlias (legacy behavior).")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(true)
 
@@ -321,6 +323,7 @@ object SQLConf {
         "This feature is currently under development."
       )
       .version("4.0.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
 
@@ -339,6 +342,7 @@ object SQLConf {
         "This feature is currently under development."
       )
       .version("4.1.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
 
@@ -351,6 +355,7 @@ object SQLConf {
         "defined in the ResolverGuard"
       )
       .version("4.0.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
 
@@ -363,6 +368,7 @@ object SQLConf {
         "value is true). Otherwise, return the result of the fixed-point analyzer."
       )
       .version("4.0.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(Utils.isTesting)
 
@@ -376,6 +382,7 @@ object SQLConf {
         "dual run mode by comparing a random value with the value of this flag."
       )
       .version("4.1.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .doubleConf
       .createWithDefault(if (Utils.isTesting) 1.0 else 0.001)
 
@@ -388,6 +395,7 @@ object SQLConf {
         "supported by the single-pass Analyzer. This is important to make dual-runs unnoticeable " +
         "in production.")
       .version("4.1.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(Utils.isTesting)
 
@@ -401,6 +409,7 @@ object SQLConf {
         "are supported in single-pass but not in fixed-point, this flag should only be used to " +
         "hide false positive logical plan mismatches during testing.")
       .version("4.1.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
 
@@ -414,6 +423,7 @@ object SQLConf {
         "internally to validate resolved expression trees in the same manner."
       )
       .version("4.0.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(true)
 
@@ -431,6 +441,7 @@ object SQLConf {
         "and avoids any blocking calls (catalog RPCs or table metadata reads)."
       )
       .version("4.0.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(true)
 
@@ -441,6 +452,7 @@ object SQLConf {
         "When set to true, ResolverGuard will throw a descriptive error on unsupported features."
       )
       .version("4.1.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
 
@@ -449,6 +461,7 @@ object SQLConf {
       .internal()
       .doc("When true, run `extendedResolutionChecks` after the main analysis.")
       .version("4.1.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(true)
 
@@ -533,6 +546,7 @@ object SQLConf {
       s"plan after a rule or batch is applied. The value can be " +
       s"${VALID_LOG_LEVELS.mkString(", ")}.")
     .version("3.1.0")
+    .withBindingPolicy(ConfigBindingPolicy.SESSION)
     .enumConf(classOf[Level])
     .createWithDefault(Level.TRACE)
 
@@ -566,6 +580,7 @@ object SQLConf {
       "the resolved expression tree in the single-pass bottom-up Resolver. The value can be " +
       s"${VALID_LOG_LEVELS.mkString(", ")}.")
     .version("4.0.0")
+    .withBindingPolicy(ConfigBindingPolicy.SESSION)
     .enumConf(classOf[Level])
     .createWithDefault(Level.TRACE)
 
@@ -2192,6 +2207,7 @@ object SQLConf {
     buildConf("spark.sql.dropTableOnView.enabled")
       .doc("When true, DROP TABLE command will work on VIEW as well.")
       .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(true)
 
@@ -2247,6 +2263,7 @@ object SQLConf {
         "when the underlying table schema evolves. When disabled, view comments will be " +
         "overwritten with table comments on every schema sync.")
       .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(true)
 
@@ -2985,6 +3002,7 @@ object SQLConf {
         "empty when first starting a streaming query. This prevents prevents sharing checkpoint " +
         "directories between different queries.")
       .version("4.1.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(true)
 
@@ -3005,6 +3023,7 @@ object SQLConf {
         "operation, on query restart. If so, it will fail the query and require the " +
         "repartitioning to be complete before restarting the query.")
       .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(true)
 
@@ -3016,6 +3035,7 @@ object SQLConf {
         "checkpoint data already exists, which would cause data duplication in " +
         "exactly-once sinks.")
       .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(true)
 
@@ -3087,6 +3107,7 @@ object SQLConf {
         "starting a streaming query. The checkpoint will use this merge operator version for " +
         "the entire lifetime of the query.")
       .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .intConf
       .checkValue(v => v == 1 || v == 2, "Must be 1 or 2")
       .createWithDefault(2)
@@ -3498,6 +3519,7 @@ object SQLConf {
     buildConf("spark.sql.streaming.validateEventTimeWatermarkColumn")
       .doc("When true, check that eventTime in withWatermark is a top-level column.")
       .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(true)
 
@@ -4128,6 +4150,7 @@ object SQLConf {
     buildConf("spark.sql.pyspark.toJSON.returnDataFrame")
       .doc("When true, DataFrame.toJSON in PySpark Classic returns a Dataframe instead of RDD.")
       .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
 
@@ -4148,6 +4171,7 @@ object SQLConf {
         "with the option to choose between \"perf\" and \"memory\" types, " +
         "or unsetting the config disables the profiler. This is disabled by default.")
       .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .stringConf
       .transform(_.toLowerCase(Locale.ROOT))
       .checkValues(Set("perf", "memory"))
@@ -4620,6 +4644,7 @@ object SQLConf {
       .doc("SQL Scripting CONTINUE HANDLER feature enables CONTINUE exception handlers " +
         "which are essential for cursor iteration with NOT FOUND conditions.")
       .version("4.1.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
 
@@ -4629,6 +4654,7 @@ object SQLConf {
       .doc("SQL Scripting CURSOR feature enables declarative cursors with " +
         "DECLARE CURSOR, OPEN, FETCH, and CLOSE statements.")
       .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
 
@@ -5617,6 +5643,7 @@ object SQLConf {
         "names that differ only in casing (e.g., COLNAME and colname become the same). This is" +
         "the legacy behavior. When false, column name casing is preserved correctly.")
       .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
 
@@ -6938,6 +6965,7 @@ object SQLConf {
         "nested fields than the target table's nested types. This is experimental and" +
         "the semantics may change.")
       .version("4.1.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
 
@@ -6946,6 +6974,7 @@ object SQLConf {
       .internal()
       .doc("When true, the TIME data type is supported.")
       .version("4.1.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(Utils.isTesting)
 

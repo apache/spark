@@ -275,6 +275,7 @@ private[spark] object UI {
   val UI_SHOW_ERROR_STACKS = ConfigBuilder("spark.ui.showErrorStacks")
     .doc("Whether to display stack traces in the UI error pages.")
     .version("4.2.0")
+    .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
     .booleanConf
     .createWithDefault(true)
 }
