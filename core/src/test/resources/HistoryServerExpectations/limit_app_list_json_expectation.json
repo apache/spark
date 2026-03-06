@@ -5,6 +5,7 @@
     "duration" : 2006,
     "endTime" : "2025-12-27T14:15:12.221GMT",
     "endTimeEpoch" : 1766844912221,
+    "exitCode" : 0,
     "lastUpdated" : "",
     "lastUpdatedEpoch" : 0,
     "sparkUser" : "<script>alert('XSS')</script>",

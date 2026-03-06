@@ -28,6 +28,22 @@
   "name" : "Spark shell"
 }, {
   "attempts" : [ {
+    "appSparkVersion" : "1.4.0-SNAPSHOT",
+    "completed" : true,
+    "duration" : 10,
+    "endTime" : "2015-05-06T13:03:00.890GMT",
+    "endTimeEpoch" : 1430917380890,
+    "exitCode" : 1,
+    "lastUpdated" : "",
+    "lastUpdatedEpoch" : 0,
+    "sparkUser" : "irashid",
+    "startTime" : "2015-05-06T13:03:00.880GMT",
+    "startTimeEpoch" : 1430917380880
+  } ],
+  "id" : "local-1430917381536",
+  "name" : "Spark shell"
+}, {
+  "attempts" : [ {
     "appSparkVersion" : "",
     "attemptId" : "2",
     "completed" : true,
