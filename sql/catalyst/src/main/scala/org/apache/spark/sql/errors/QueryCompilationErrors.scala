@@ -3525,10 +3525,11 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def unsupportedTableChangesInAutoSchemaEvolutionError(
       changes: Array[TableChange], tableName: Seq[String]): Throwable = {
     val sanitizedTableName = tableName.map(_.replaceAll("\"", ""))
+    val changesDesc = changes.map(_.toString).mkString("; ")
     new AnalysisException(
       errorClass = "UNSUPPORTED_TABLE_CHANGES_IN_AUTO_SCHEMA_EVOLUTION",
       messageParameters = Map(
-        "changes" -> changes.mkString(","), "tableName" -> toSQLId(sanitizedTableName)))
+        "changes" -> changesDesc, "tableName" -> toSQLId(sanitizedTableName)))
   }
 
   def pathOptionNotSetCorrectlyWhenReadingError(): Throwable = {

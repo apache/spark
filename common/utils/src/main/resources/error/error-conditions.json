@@ -7664,9 +7664,9 @@
     },
     "sqlState" : "0A000"
   },
-  "UNSUPPORTED_TABLE_CHANGE_IN_AUTO_SCHEMA_EVOLUTION" : {
+  "UNSUPPORTED_TABLE_CHANGES_IN_AUTO_SCHEMA_EVOLUTION" : {
     "message" : [
-      "The table changes <changes> are not supported by the catalog on table <tableName>."
+      "Operation could not apply the following schema changes to table <tableName> because the catalog did not support or only partially applied them: <changes>."
     ],
     "sqlState" : "42000"
   },
