@@ -161,7 +161,7 @@ function preprocessGraphLayout(g) {
       curve: d3.curveBasis,
       label: edgeObj.label || "",
       style: "fill: none",
-      labelStyle: "font-size: 10px; fill: #6c757d;"
+      labelStyle: "font-size: 10px;"
     })
   })
 }

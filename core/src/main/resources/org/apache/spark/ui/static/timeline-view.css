@@ -333,3 +333,40 @@ span.expand-task-assignment-timeline {
   list-style: none;
   margin-left: 15px;
 }
+
+/* Dark mode overrides for vis-timeline container */
+[data-bs-theme="dark"] .vis-timeline {
+  border-color: var(--bs-border-color);
+}
+
+[data-bs-theme="dark"] .vis-timeline .vis-panel.vis-bottom,
+[data-bs-theme="dark"] .vis-timeline .vis-panel.vis-center,
+[data-bs-theme="dark"] .vis-timeline .vis-panel.vis-top,
+[data-bs-theme="dark"] .vis-timeline .vis-panel.vis-left,
+[data-bs-theme="dark"] .vis-timeline .vis-panel.vis-right {
+  border-color: var(--bs-border-color);
+}
+
+[data-bs-theme="dark"] .vis-timeline .vis-time-axis .vis-text {
+  color: var(--bs-body-color);
+}
+
+[data-bs-theme="dark"] .vis-timeline .vis-time-axis .vis-grid.vis-minor {
+  border-color: var(--bs-border-color);
+}
+
+[data-bs-theme="dark"] .vis-timeline .vis-time-axis .vis-grid.vis-major {
+  border-color: var(--bs-border-color);
+}
+
+[data-bs-theme="dark"] .vis-timeline .vis-labelset .vis-label {
+  color: var(--bs-body-color);
+}
+
+[data-bs-theme="dark"] .vis-timeline .vis-labelset .vis-label .vis-inner {
+  color: var(--bs-body-color);
+}
+
+[data-bs-theme="dark"] .vis-timeline .vis-item .vis-item-content {
+  color: var(--bs-body-color);
+}

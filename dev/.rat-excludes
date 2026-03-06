@@ -143,4 +143,5 @@ core/src/main/resources/org/apache/spark/ui/static/package.json
 testCommitLog
 .*\.har
 spark-logo.svg
+spark-logo-rev.svg
 .nojekyll

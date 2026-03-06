@@ -316,7 +316,7 @@ function totalDurationStyle(totalGCTime, totalDuration) {
 }
 
 function totalDurationColor(totalGCTime, totalDuration) {
-  return (totalGCTime > GCTimePercent * totalDuration) ? "white" : "black";
+  return (totalGCTime > GCTimePercent * totalDuration) ? "white" : "var(--bs-body-color)";
 }
 
 var sumOptionalColumns = [3, 4];
