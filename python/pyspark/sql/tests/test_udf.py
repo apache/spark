@@ -192,12 +192,12 @@ class BaseUDFTestsMixin(object):
             df.agg(sum(udf_random_col())).collect()
 
     def test_chained_udf(self):
-        self.spark.catalog.registerFunction("double", lambda x: x + x, IntegerType())
-        [row] = self.spark.sql("SELECT double(1)").collect()
+        self.spark.catalog.registerFunction("double_int", lambda x: x + x, IntegerType())
+        [row] = self.spark.sql("SELECT double_int(1)").collect()
         self.assertEqual(row[0], 2)
-        [row] = self.spark.sql("SELECT double(double(1))").collect()
+        [row] = self.spark.sql("SELECT double_int(double_int(1))").collect()
         self.assertEqual(row[0], 4)
-        [row] = self.spark.sql("SELECT double(double(1) + 1)").collect()
+        [row] = self.spark.sql("SELECT double_int(double_int(1) + 1)").collect()
         self.assertEqual(row[0], 6)
 
     def test_single_udf_with_repeated_argument(self):
@@ -207,13 +207,13 @@ class BaseUDFTestsMixin(object):
         self.assertEqual(tuple(row), (2,))
 
     def test_multiple_udfs(self):
-        self.spark.catalog.registerFunction("double", lambda x: x * 2, IntegerType())
-        [row] = self.spark.sql("SELECT double(1), double(2)").collect()
+        self.spark.catalog.registerFunction("double_int", lambda x: x * 2, IntegerType())
+        [row] = self.spark.sql("SELECT double_int(1), double_int(2)").collect()
         self.assertEqual(tuple(row), (2, 4))
-        [row] = self.spark.sql("SELECT double(double(1)), double(double(2) + 2)").collect()
+        [row] = self.spark.sql("SELECT double_int(double_int(1)), double_int(double_int(2) + 2)").collect()
         self.assertEqual(tuple(row), (4, 12))
         self.spark.catalog.registerFunction("add", lambda x, y: x + y, IntegerType())
-        [row] = self.spark.sql("SELECT double(add(1, 2)), add(double(2), 1)").collect()
+        [row] = self.spark.sql("SELECT double_int(add(1, 2)), add(double_int(2), 1)").collect()
         self.assertEqual(tuple(row), (6, 5))
 
     def test_udf_in_filter_on_top_of_outer_join(self):
