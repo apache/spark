@@ -97,8 +97,8 @@ class InvalidInputErrorsSuite extends PlanTest with SparkConnectPlanTest {
       }),
     TestCase(
       name = "Deduplicate needs input",
-      expectedErrorCondition = "INTERNAL_ERROR",
-      expectedParameters = Map("message" -> "Deduplicate needs a plan input"),
+      expectedErrorCondition = "SPARK_CONNECT_INVALID_PLAN_INPUT.DEDUPLICATE_NEEDS_INPUT",
+      expectedParameters = Map.empty,
       invalidInput = {
         val deduplicate = proto.Deduplicate
           .newBuilder()
@@ -109,9 +109,10 @@ class InvalidInputErrorsSuite extends PlanTest with SparkConnectPlanTest {
       }),
     TestCase(
       name = "Catalog not set",
-      expectedErrorCondition = "INTERNAL_ERROR",
+      expectedErrorCondition =
+        "SPARK_CONNECT_INVALID_PLAN_INPUT.INVALID_ONE_OF_FIELD_NOT_SET",
       expectedParameters =
-        Map("message" -> "This oneOf field in spark.connect.Catalog is not set: CATTYPE_NOT_SET"),
+        Map("fullName" -> "spark.connect.Catalog", "name" -> "CATTYPE_NOT_SET"),
       invalidInput = {
         val catalog = proto.Catalog
           .newBuilder()
@@ -126,12 +127,16 @@ class InvalidInputErrorsSuite extends PlanTest with SparkConnectPlanTest {
   // Run all test cases
   testCases.foreach { testCase =>
     test(s"${testCase.name}") {
+      val exception = intercept[InvalidPlanInput] {
+        transform(testCase.invalidInput)
+      }
       checkError(
-        exception = intercept[InvalidPlanInput] {
-          transform(testCase.invalidInput)
-        },
+        exception = exception,
         condition = testCase.expectedErrorCondition,
         parameters = testCase.expectedParameters)
+      if (testCase.expectedErrorCondition.startsWith("SPARK_CONNECT_INVALID_PLAN_INPUT")) {
+        assert(exception.getSqlState == "XXSC1")
+      }
     }
   }
 
