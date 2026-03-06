@@ -205,7 +205,7 @@ jobs:
           export TEST_MODULES=`echo "$MODULES_TO_TEST" | sed -e "s%#%/%g"`
           ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pjvm-profiler -Pspark-ganglia-lgpl -Pkinesis-asl -Djava.version=${JAVA_VERSION/-ea} clean install
           
-          if [ "$MODULES_TO_TEST" != *"hive-thriftserver"* ]; then
+          if [ "$MODULES_TO_TEST" != "connect" ]; then
             echo "Clean up the assembly module before maven testing"
             ./build/mvn $MAVEN_CLI_OPTS clean -pl assembly
           fi
