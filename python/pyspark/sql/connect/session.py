@@ -622,8 +622,9 @@ class SparkSession:
             safecheck = configs["spark.sql.execution.pandas.convertToArrowArraySafely"]
 
             # Handle the 0-column case separately to preserve row count.
+            # pa.RecordBatch.from_pandas preserves num_rows via pandas index metadata.
             if len(data.columns) == 0:
-                _table = pa.Table.from_struct_array(pa.array([{}] * len(data), type=pa.struct([])))
+                _table = pa.Table.from_batches([pa.RecordBatch.from_pandas(data)])
             else:
                 _table = pa.Table.from_batches(
                     [

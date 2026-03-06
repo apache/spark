@@ -740,6 +740,98 @@ class PipelineCommand(google.protobuf.message.Message):
             self, oneof_group: typing_extensions.Literal["details", b"details"]
         ) -> typing_extensions.Literal["relation_flow_details", "extension"] | None: ...
 
+    class ExecuteOutputFlows(google.protobuf.message.Message):
+        """Request to execute all flows for a single output (dataset or sink) remotely."""
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        DEFINE_OUTPUT_FIELD_NUMBER: builtins.int
+        DEFINE_FLOWS_FIELD_NUMBER: builtins.int
+        FULL_REFRESH_FIELD_NUMBER: builtins.int
+        STORAGE_FIELD_NUMBER: builtins.int
+        EXTENSION_FIELD_NUMBER: builtins.int
+        @property
+        def define_output(self) -> global___PipelineCommand.DefineOutput:
+            """The output (table or materialized view or sink) definition."""
+        @property
+        def define_flows(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+            global___PipelineCommand.DefineFlow
+        ]:
+            """The flows to execute for this table."""
+        full_refresh: builtins.bool
+        """Whether to perform a full refresh instead of an incremental update."""
+        storage: builtins.str
+        """Storage location for pipeline checkpoints and metadata."""
+        @property
+        def extension(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+            google.protobuf.any_pb2.Any
+        ]:
+            """Reserved field for protocol extensions."""
+        def __init__(
+            self,
+            *,
+            define_output: global___PipelineCommand.DefineOutput | None = ...,
+            define_flows: collections.abc.Iterable[global___PipelineCommand.DefineFlow]
+            | None = ...,
+            full_refresh: builtins.bool | None = ...,
+            storage: builtins.str | None = ...,
+            extension: collections.abc.Iterable[google.protobuf.any_pb2.Any] | None = ...,
+        ) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_define_output",
+                b"_define_output",
+                "_full_refresh",
+                b"_full_refresh",
+                "_storage",
+                b"_storage",
+                "define_output",
+                b"define_output",
+                "full_refresh",
+                b"full_refresh",
+                "storage",
+                b"storage",
+            ],
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_define_output",
+                b"_define_output",
+                "_full_refresh",
+                b"_full_refresh",
+                "_storage",
+                b"_storage",
+                "define_flows",
+                b"define_flows",
+                "define_output",
+                b"define_output",
+                "extension",
+                b"extension",
+                "full_refresh",
+                b"full_refresh",
+                "storage",
+                b"storage",
+            ],
+        ) -> None: ...
+        @typing.overload
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_define_output", b"_define_output"]
+        ) -> typing_extensions.Literal["define_output"] | None: ...
+        @typing.overload
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_full_refresh", b"_full_refresh"]
+        ) -> typing_extensions.Literal["full_refresh"] | None: ...
+        @typing.overload
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_storage", b"_storage"]
+        ) -> typing_extensions.Literal["storage"] | None: ...
+
     class StartRun(google.protobuf.message.Message):
         """Resolves all datasets and flows and start a pipeline update. Should be called after all
         graph elements are registered.
@@ -1051,6 +1143,7 @@ class PipelineCommand(google.protobuf.message.Message):
     DEFINE_SQL_GRAPH_ELEMENTS_FIELD_NUMBER: builtins.int
     GET_QUERY_FUNCTION_EXECUTION_SIGNAL_STREAM_FIELD_NUMBER: builtins.int
     DEFINE_FLOW_QUERY_FUNCTION_RESULT_FIELD_NUMBER: builtins.int
+    EXECUTE_OUTPUT_FLOWS_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     @property
     def create_dataflow_graph(self) -> global___PipelineCommand.CreateDataflowGraph: ...
@@ -1073,6 +1166,8 @@ class PipelineCommand(google.protobuf.message.Message):
         self,
     ) -> global___PipelineCommand.DefineFlowQueryFunctionResult: ...
     @property
+    def execute_output_flows(self) -> global___PipelineCommand.ExecuteOutputFlows: ...
+    @property
     def extension(self) -> google.protobuf.any_pb2.Any:
         """Reserved field for protocol extensions.
         Used to support forward-compatibility by carrying additional command types
@@ -1092,6 +1187,7 @@ class PipelineCommand(google.protobuf.message.Message):
         | None = ...,
         define_flow_query_function_result: global___PipelineCommand.DefineFlowQueryFunctionResult
         | None = ...,
+        execute_output_flows: global___PipelineCommand.ExecuteOutputFlows | None = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
     ) -> None: ...
     def HasField(
@@ -1111,6 +1207,8 @@ class PipelineCommand(google.protobuf.message.Message):
             b"define_sql_graph_elements",
             "drop_dataflow_graph",
             b"drop_dataflow_graph",
+            "execute_output_flows",
+            b"execute_output_flows",
             "extension",
             b"extension",
             "get_query_function_execution_signal_stream",
@@ -1136,6 +1234,8 @@ class PipelineCommand(google.protobuf.message.Message):
             b"define_sql_graph_elements",
             "drop_dataflow_graph",
             b"drop_dataflow_graph",
+            "execute_output_flows",
+            b"execute_output_flows",
             "extension",
             b"extension",
             "get_query_function_execution_signal_stream",
@@ -1156,6 +1256,7 @@ class PipelineCommand(google.protobuf.message.Message):
             "define_sql_graph_elements",
             "get_query_function_execution_signal_stream",
             "define_flow_query_function_result",
+            "execute_output_flows",
             "extension",
         ]
         | None

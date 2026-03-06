@@ -867,8 +867,8 @@ class Frame(object, metaclass=ABCMeta):
             File path. If not specified, the result is returned as
             a string.
         lines: bool, default True
-            If ‘orient’ is ‘records’ write out line delimited JSON format.
-            Will throw ValueError if incorrect ‘orient’ since others are not
+            If 'orient' is 'records' write out line delimited JSON format.
+            Will throw ValueError if incorrect 'orient' since others are not
             list like. It should be always True for now.
         orient: str, default 'records'
              It should be always 'records' for now.
@@ -1590,7 +1590,7 @@ class Frame(object, metaclass=ABCMeta):
         self, axis: Optional[Axis] = None, skipna: bool = True, numeric_only: bool = None
     ) -> Union[Scalar, "Series"]:
         """
-        Return unbiased kurtosis using Fisher’s definition of kurtosis (kurtosis of normal == 0.0).
+        Return unbiased kurtosis using Fisher's definition of kurtosis (kurtosis of normal == 0.0).
         Normalized by N-1.
 
         Parameters
@@ -1795,8 +1795,8 @@ class Frame(object, metaclass=ABCMeta):
 
         Parameters
         ----------
-        axis: {0 or ‘index’, 1 or ‘columns’}, default 0
-            If 0 or ‘index’ counts are generated for each column. If 1 or ‘columns’ counts are
+        axis: {0 or 'index', 1 or 'columns'}, default 0
+            If 0 or 'index' counts are generated for each column. If 1 or 'columns' counts are
             generated for each row.
         numeric_only: bool, default False
             If True, include only float, int, boolean columns. This parameter is mainly for
@@ -2397,7 +2397,7 @@ class Frame(object, metaclass=ABCMeta):
     def groupby(
         self: FrameLike,
         by: Union[Name, "Series", List[Union[Name, "Series"]]],
-        axis: Axis = 0,
+        axis: Union[Axis, _NoValueType] = _NoValue,
         as_index: bool = True,
         dropna: bool = True,
     ) -> "GroupBy[FrameLike]":
@@ -2518,9 +2518,16 @@ class Frame(object, metaclass=ABCMeta):
             raise ValueError("Grouper for '{}' not 1-dimensional".format(type(by).__name__))
         if not len(new_by):
             raise ValueError("No group keys passed!")
-        axis = validate_axis(axis)
-        if axis != 0:
-            raise NotImplementedError('axis should be either 0 or "index" currently.')
+
+        if LooseVersion(pd.__version__) < "3.0.0":
+            if axis is _NoValue:
+                axis = 0
+            axis = validate_axis(axis)  # type: ignore[arg-type]
+            if axis != 0:
+                raise NotImplementedError('axis should be either 0 or "index" currently.')
+        else:
+            if axis is not _NoValue:
+                raise TypeError("The 'axis' keyword is not supported in pandas 3.0.0 and later.")
 
         return self._build_groupby(by=new_by, as_index=as_index, dropna=dropna)
 

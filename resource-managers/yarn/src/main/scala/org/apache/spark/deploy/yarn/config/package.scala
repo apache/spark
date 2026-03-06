@@ -301,8 +301,17 @@ package object config extends Logging {
     .intConf
     .createWithDefault(1)
 
+  private[spark] val AM_DEFAULT_JAVA_OPTIONS = ConfigBuilder("spark.yarn.am.defaultJavaOptions")
+    .doc("Default Java options for the client-mode AM to prepend to " +
+      "`spark.yarn.am.extraJavaOptions`. This is intended to be set by administrators.")
+    .version("4.2.0")
+    .stringConf
+    .createOptional
+
   private[spark] val AM_JAVA_OPTIONS = ConfigBuilder("spark.yarn.am.extraJavaOptions")
-    .doc("Extra Java options for the client-mode AM.")
+    .withPrepended(AM_DEFAULT_JAVA_OPTIONS.key)
+    .doc("Extra Java options for the client-mode AM. " +
+      s"`${AM_DEFAULT_JAVA_OPTIONS.key}` will be prepended to this configuration.")
     .version("1.3.0")
     .stringConf
     .createOptional

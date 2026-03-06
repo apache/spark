@@ -85,8 +85,29 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       assertValidSessionVariableNameParts(nameParts, resolved)
       d.copy(name = resolved)
 
+    case CreateFunction(UnresolvedIdentifier(nameParts, _), _, _, _, _)
+        if isSystemBuiltinName(nameParts) =>
+      throw QueryCompilationErrors.operationNotAllowedOnBuiltinFunctionError(
+        "CREATE", nameParts.last)
+
+    case CreateUserDefinedFunction(UnresolvedIdentifier(nameParts, _),
+        _, _, _, _, _, _, _, _, _, _, _, _)
+        if isSystemBuiltinName(nameParts) =>
+      throw QueryCompilationErrors.operationNotAllowedOnBuiltinFunctionError(
+        "CREATE", nameParts.last)
+
+    case DropFunction(UnresolvedIdentifier(nameParts, _), _)
+        if isSystemBuiltinName(nameParts) =>
+      throw QueryCompilationErrors.operationNotAllowedOnBuiltinFunctionError(
+        "DROP", nameParts.last)
+
     case d @ DropFunction(u @ UnresolvedIdentifier(nameParts, _), _) =>
       d.copy(child = resolveFunctionIdentifier(nameParts, u.origin))
+
+    case RefreshFunction(UnresolvedIdentifier(nameParts, _))
+        if isSystemBuiltinName(nameParts) =>
+      throw QueryCompilationErrors.operationNotAllowedOnBuiltinFunctionError(
+        "REFRESH", nameParts.last)
 
     case r @ RefreshFunction(u @ UnresolvedIdentifier(nameParts, _)) =>
       r.copy(child = resolveFunctionIdentifier(nameParts, u.origin))
@@ -134,9 +155,16 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
     }
   }
 
+  private def isSystemBuiltinName(nameParts: Seq[String]): Boolean = {
+    nameParts.length == 3 &&
+      nameParts(0).equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
+      nameParts(1).equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE)
+  }
+
   /**
    * Resolves a function identifier, checking for builtin and temp functions first.
-   * Builtin and temp functions are only registered with unqualified names.
+   * Only unqualified (1-part) names get special builtin/temp handling; multi-part names
+   * go through standard catalog resolution.
    */
   private def resolveFunctionIdentifier(
       nameParts: Seq[String],

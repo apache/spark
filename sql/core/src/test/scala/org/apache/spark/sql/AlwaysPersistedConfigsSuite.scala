@@ -158,7 +158,7 @@ class AlwaysPersistedConfigsSuite extends QueryTest with SharedSparkSession {
     val catalogTable = new CatalogTable(
       identifier = TableIdentifier(testViewName),
       tableType = CatalogTableType.VIEW,
-      storage = CatalogStorageFormat(None, None, None, None, false, Map.empty),
+      storage = CatalogStorageFormat(None, None, None, None, None, false, Map.empty),
       schema = new StructType(),
       properties = Map.empty[String, String]
     )

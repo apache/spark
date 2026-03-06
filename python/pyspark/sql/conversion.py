@@ -115,6 +115,7 @@ class ArrowBatchTransformer:
         schema: Optional["StructType"] = None,
         struct_in_pandas: str = "dict",
         ndarray_as_list: bool = False,
+        prefer_int_ext_dtype: bool = False,
         df_for_struct: bool = False,
     ) -> List[Union["pd.Series", "pd.DataFrame"]]:
         """
@@ -132,6 +133,8 @@ class ArrowBatchTransformer:
             How to represent struct in pandas ("dict", "row", etc.)
         ndarray_as_list : bool
             Whether to convert ndarray as list.
+        prefer_int_ext_dtype : bool, optional
+            Whether to convert integers to Pandas ExtensionDType.
         df_for_struct : bool
             If True, convert struct columns to DataFrame instead of Series.
 
@@ -156,6 +159,7 @@ class ArrowBatchTransformer:
                 timezone=timezone,
                 struct_in_pandas=struct_in_pandas,
                 ndarray_as_list=ndarray_as_list,
+                prefer_int_ext_dtype=prefer_int_ext_dtype,
                 df_for_struct=df_for_struct,
             )
             for i in range(batch.num_columns)
@@ -262,7 +266,7 @@ class PandasToArrowConversion:
             # TODO(SPARK-55502): Unify UDTF and regular UDF conversion paths to
             #   eliminate the is_udtf flag.
             Regular UDFs only catch ArrowInvalid to preserve legacy behavior where
-            e.g. string→decimal must raise an error. (default False)
+            e.g. string->decimal must raise an error. (default False)
 
         Returns
         -------
@@ -304,7 +308,7 @@ class PandasToArrowConversion:
             """Convert a single column (Series or DataFrame) to an Arrow Array.
 
             Uses field.name for error messages instead of series.name to avoid
-            copying the Series via rename() — a ~20% overhead on the hot path.
+            copying the Series via rename() - a ~20% overhead on the hot path.
             """
             if isinstance(col, pd.DataFrame):
                 assert isinstance(field.dataType, StructType)
@@ -1427,6 +1431,7 @@ class ArrowArrayToPandasConversion:
         timezone: Optional[str] = None,
         struct_in_pandas: str = "dict",
         ndarray_as_list: bool = False,
+        prefer_int_ext_dtype: bool = False,
         df_for_struct: bool = False,
     ) -> Union["pd.Series", "pd.DataFrame"]:
         """
@@ -1447,6 +1452,8 @@ class ArrowArrayToPandasConversion:
             Default is "dict".
         ndarray_as_list : bool, optional
             Whether to convert numpy ndarrays to Python lists. Default is False.
+        prefer_int_ext_dtype : bool, optional
+            Whether to convert integers to Pandas ExtensionDType.
         df_for_struct : bool, optional
             If True, convert struct columns to a DataFrame with columns corresponding
             to struct fields instead of a Series. Default is False.
@@ -1465,6 +1472,7 @@ class ArrowArrayToPandasConversion:
                 timezone=timezone,
                 struct_in_pandas=struct_in_pandas,
                 ndarray_as_list=ndarray_as_list,
+                prefer_int_ext_dtype=prefer_int_ext_dtype,
                 df_for_struct=df_for_struct,
             )
 
@@ -1597,6 +1605,9 @@ class ArrowArrayToPandasConversion:
             TimestampType,
             TimestampNTZType,
             UserDefinedType,
+            VariantType,
+            GeographyType,
+            GeometryType,
         )
         if df_for_struct and isinstance(spark_type, StructType):
             return all(isinstance(f.dataType, supported_types) for f in spark_type.fields)
@@ -1613,6 +1624,7 @@ class ArrowArrayToPandasConversion:
         timezone: Optional[str] = None,
         struct_in_pandas: Optional[str] = None,
         ndarray_as_list: bool = False,
+        prefer_int_ext_dtype: bool = False,
         df_for_struct: bool = False,
     ) -> Union["pd.Series", "pd.DataFrame"]:
         import pyarrow as pa
@@ -1635,6 +1647,7 @@ class ArrowArrayToPandasConversion:
                         timezone=timezone,
                         struct_in_pandas=struct_in_pandas,
                         ndarray_as_list=ndarray_as_list,
+                        prefer_int_ext_dtype=prefer_int_ext_dtype,
                         df_for_struct=False,  # always False for child fields
                     )
                     for field_arr, field in zip(arr.flatten(), spark_type)
@@ -1653,50 +1666,24 @@ class ArrowArrayToPandasConversion:
 
         series: pd.Series
 
-        # TODO(SPARK-55332): Create benchmark for pa.array -> pd.series integer conversion
-        # 1, benchmark a nullable integral array
-        # a = pa.array(list(range(10000000)) + [9223372036854775707, None], type=pa.int64())
-        # %timeit a.to_pandas(types_mapper=pd.ArrowDtype)
-        # 11.9 μs ± 407 ns per loop (mean ± std. dev. of 7 runs, 100,000 loops each)
-        # %timeit a.to_pandas(types_mapper=pd.ArrowDtype).astype(pd.Int64Dtype())
-        # 589 ms ± 9.35 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
-        # %timeit pd.Series(a.to_pylist(), dtype=pd.Int64Dtype())
-        # 2.94 s ± 19.1 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
-        # %timeit a.to_pandas(integer_object_nulls=True).astype(pd.Int64Dtype())
-        # 2.05 s ± 22.9 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
-        # pd.Series(a, dtype=pd.Int64Dtype())
-        # fails due to internal np.float64 coercion
-        # OverflowError: Python int too large to convert to C long
-        #
-        # 2, benchmark a nullable integral array
-        # b = pa.array(list(range(10000000)) + [9223372036854775707, 1], type=pa.int64())
-        # %timeit b.to_pandas(types_mapper=pd.ArrowDtype).astype(np.int64)
-        # 30.2 μs ± 831 ns per loop (mean ± std. dev. of 7 runs, 10,000 loops each)
-        # %timeit pd.Series(b.to_pandas(types_mapper=pd.ArrowDtype), dtype=np.int64)
-        # 33.3 μs ± 928 ns per loop (mean ± std. dev. of 7 runs, 10,000 loops each)
-        # %timeit pd.Series(b, dtype=np.int64) <- lose the name
-        # 11.9 μs ± 125 ns per loop (mean ± std. dev. of 7 runs, 100,000 loops each)
-        # %timeit b.to_pandas()
-        # 7.56 μs ± 96.5 ns per loop (mean ± std. dev. of 7 runs, 100,000 loops each)
-        # %timeit b.to_pandas().astype(np.int64) <- astype is non-trivial
-        # 19.1 μs ± 242 ns per loop (mean ± std. dev. of 7 runs, 100,000 loops each)
+        # conversion methods are selected based on benchmark python/benchmarks/bench_arrow.py
         if isinstance(spark_type, ByteType):
-            if arr.null_count > 0:
+            if prefer_int_ext_dtype:
                 series = arr.to_pandas(types_mapper=pd.ArrowDtype).astype(pd.Int8Dtype())
             else:
                 series = arr.to_pandas()
         elif isinstance(spark_type, ShortType):
-            if arr.null_count > 0:
+            if prefer_int_ext_dtype:
                 series = arr.to_pandas(types_mapper=pd.ArrowDtype).astype(pd.Int16Dtype())
             else:
                 series = arr.to_pandas()
         elif isinstance(spark_type, IntegerType):
-            if arr.null_count > 0:
+            if prefer_int_ext_dtype:
                 series = arr.to_pandas(types_mapper=pd.ArrowDtype).astype(pd.Int32Dtype())
             else:
                 series = arr.to_pandas()
         elif isinstance(spark_type, LongType):
-            if arr.null_count > 0:
+            if prefer_int_ext_dtype:
                 series = arr.to_pandas(types_mapper=pd.ArrowDtype).astype(pd.Int64Dtype())
             else:
                 series = arr.to_pandas()
@@ -1729,15 +1716,27 @@ class ArrowArrayToPandasConversion:
                 if v is not None
                 else None
             )
+        elif isinstance(spark_type, VariantType):
+            series = arr.to_pandas()
+            series = series.map(
+                lambda v: VariantVal(v["value"], v["metadata"]) if v is not None else None
+            )
+        elif isinstance(spark_type, GeographyType):
+            series = arr.to_pandas()
+            series = series.map(
+                lambda v: Geography.fromWKB(v["wkb"], v["srid"]) if v is not None else None
+            )
+        elif isinstance(spark_type, GeometryType):
+            series = arr.to_pandas()
+            series = series.map(
+                lambda v: Geometry.fromWKB(v["wkb"], v["srid"]) if v is not None else None
+            )
         # elif isinstance(
         #     spark_type,
         #     (
         #         ArrayType,
         #         MapType,
         #         StructType,
-        #         VariantType,
-        #         GeographyType,
-        #         GeometryType,
         #     ),
         # ):
         # TODO(SPARK-55324): Support complex types

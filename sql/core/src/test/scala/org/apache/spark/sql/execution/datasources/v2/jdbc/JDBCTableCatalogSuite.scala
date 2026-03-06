@@ -528,7 +528,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
         },
         condition = "UNSUPPORTED_TABLE_CHANGE_IN_JDBC_CATALOG",
         parameters = Map(
-          "change" -> "org.apache.spark.sql.connector.catalog.TableChange\\$UpdateColumnComment.*",
+          "change" -> "ALTER COLUMN .* COMMENT",
           "tableName" -> "`test`.`alt_table`"
         ),
         matchPVals = true)

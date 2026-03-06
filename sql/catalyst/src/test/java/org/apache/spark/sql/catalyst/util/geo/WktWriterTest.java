@@ -31,9 +31,9 @@ public class WktWriterTest extends WkbTestBase {
   /** Tests for: POINT */
 
   @Test
-  public void testEmptyPointToString() {
+  public void testEmptyPointToWkt() {
     Point point = new Point(new double[]{Double.NaN, Double.NaN}, 0);
-    String wkt = point.toString();
+    String wkt = point.toWkt();
     Assertions.assertEquals("POINT EMPTY", wkt);
   }
 
@@ -41,63 +41,63 @@ public class WktWriterTest extends WkbTestBase {
   public void testPointWithZeroCoordinate() {
     // 0.0 should be normalized to "0".
     Point point = new Point(new double[]{0.0, 0.0}, 0);
-    Assertions.assertEquals("POINT(0 0)", point.toString());
+    Assertions.assertEquals("POINT(0 0)", point.toWkt());
   }
 
   @Test
   public void testPointWithNegativeZeroCoordinate() {
     // -0.0 should be normalized to "0" (not "-0" or "-0.0").
     Point point = new Point(new double[]{-0.0, -0.0}, 0);
-    Assertions.assertEquals("POINT(0 0)", point.toString());
+    Assertions.assertEquals("POINT(0 0)", point.toWkt());
   }
 
   @Test
   public void testPointWithLargeIntegerCoordinateBeyondLongRange() {
     // For very large values WKT should use scientific notation.
     Point point = new Point(new double[]{1.2e19, -3.4e19}, 0);
-    String wkt = point.toString();
+    String wkt = point.toWkt();
     Assertions.assertEquals("POINT(1.2E19 -3.4E19)", wkt);
   }
 
   @Test
   public void testPointWithDoubleMaxValue() {
     Point point = new Point(new double[]{Double.MAX_VALUE, -Double.MAX_VALUE}, 0);
-    String wkt = point.toString();
+    String wkt = point.toWkt();
     Assertions.assertEquals("POINT(1.7976931348623157E308 -1.7976931348623157E308)", wkt);
   }
 
   @Test
-  public void testPointToString() {
+  public void testPointToWkt() {
     Point point = new Point(new double[]{1.0, 2.0}, 0);
-    String wkt = point.toString();
+    String wkt = point.toWkt();
     Assertions.assertEquals("POINT(1 2)", wkt);
   }
 
   @Test
-  public void testPointZToString() {
+  public void testPointZToWkt() {
     Point point = new Point(new double[]{1.0, 2.0, 3.0}, 0, true, false);
-    String wkt = point.toString();
+    String wkt = point.toWkt();
     Assertions.assertEquals("POINT Z (1 2 3)", wkt);
   }
 
   @Test
-  public void testPointMToString() {
+  public void testPointMToWkt() {
     Point point = new Point(new double[]{1.0, 2.0, 4.0}, 0, false, true);
-    String wkt = point.toString();
+    String wkt = point.toWkt();
     Assertions.assertEquals("POINT M (1 2 4)", wkt);
   }
 
   @Test
-  public void testPointZMToString() {
+  public void testPointZMToWkt() {
     Point point = new Point(new double[]{1.0, 2.0, 3.0, 4.0}, 0, true, true);
-    String wkt = point.toString();
+    String wkt = point.toWkt();
     Assertions.assertEquals("POINT ZM (1 2 3 4)", wkt);
   }
 
   @Test
-  public void testPointWithNegativeCoordinatesToString() {
+  public void testPointWithNegativeCoordinatesToWkt() {
     Point point = new Point(new double[]{-180.0, -90.0}, 0);
-    String wkt = point.toString();
+    String wkt = point.toWkt();
     Assertions.assertEquals("POINT(-180 -90)", wkt);
   }
 
@@ -113,54 +113,54 @@ public class WktWriterTest extends WkbTestBase {
   /** Tests for: LINESTRING */
 
   @Test
-  public void testEmptyLineStringToString() {
+  public void testEmptyLineStringToWkt() {
     LineString lineString = new LineString(Arrays.asList(), 0, false, false);
-    String wkt = lineString.toString();
+    String wkt = lineString.toWkt();
     Assertions.assertEquals("LINESTRING EMPTY", wkt);
   }
 
   @Test
-  public void testLineStringToString() {
+  public void testLineStringToWkt() {
     List<Point> points = Arrays.asList(
         new Point(new double[]{0.0, 0.0}, 0),
         new Point(new double[]{1.0, 1.0}, 0),
         new Point(new double[]{2.0, 2.0}, 0)
     );
     LineString lineString = new LineString(points, 0, false, false);
-    String wkt = lineString.toString();
+    String wkt = lineString.toWkt();
     Assertions.assertEquals("LINESTRING(0 0,1 1,2 2)", wkt);
   }
 
   @Test
-  public void testLineStringZToString() {
+  public void testLineStringZToWkt() {
     List<Point> points = Arrays.asList(
         new Point(new double[]{0.0, 0.0, 0.0}, 0, true, false),
         new Point(new double[]{1.0, 1.0, 1.0}, 0, true, false)
     );
     LineString lineString = new LineString(points, 0, true, false);
-    String wkt = lineString.toString();
+    String wkt = lineString.toWkt();
     Assertions.assertEquals("LINESTRING Z (0 0 0,1 1 1)", wkt);
   }
 
   @Test
-  public void testLineStringMToString() {
+  public void testLineStringMToWkt() {
     List<Point> points = Arrays.asList(
         new Point(new double[]{0.0, 0.0, 10.0}, 0, false, true),
         new Point(new double[]{1.0, 1.0, 20.0}, 0, false, true)
     );
     LineString lineString = new LineString(points, 0, false, true);
-    String wkt = lineString.toString();
+    String wkt = lineString.toWkt();
     Assertions.assertEquals("LINESTRING M (0 0 10,1 1 20)", wkt);
   }
 
   @Test
-  public void testLineStringZMToString() {
+  public void testLineStringZMToWkt() {
     List<Point> points = Arrays.asList(
         new Point(new double[]{0.0, 0.0, 0.0, 10.0}, 0, true, true),
         new Point(new double[]{1.0, 1.0, 1.0, 20.0}, 0, true, true)
     );
     LineString lineString = new LineString(points, 0, true, true);
-    String wkt = lineString.toString();
+    String wkt = lineString.toWkt();
     Assertions.assertEquals("LINESTRING ZM (0 0 0 10,1 1 1 20)", wkt);
   }
 
@@ -173,21 +173,21 @@ public class WktWriterTest extends WkbTestBase {
     );
     LineString lineString = new LineString(points, 0, false, false);
     IllegalArgumentException e = Assertions.assertThrows(
-        IllegalArgumentException.class, lineString::toString);
+        IllegalArgumentException.class, lineString::toWkt);
     Assertions.assertEquals("Coordinate value must not be NaN.", e.getMessage());
   }
 
   /** Tests for: POLYGON */
 
   @Test
-  public void testEmptyPolygonToString() {
+  public void testEmptyPolygonToWkt() {
     Polygon polygon = new Polygon(Arrays.asList(), 0, false, false);
-    String wkt = polygon.toString();
+    String wkt = polygon.toWkt();
     Assertions.assertEquals("POLYGON EMPTY", wkt);
   }
 
   @Test
-  public void testPolygonToString() {
+  public void testPolygonToWkt() {
     List<Point> ringPoints = Arrays.asList(
         new Point(new double[]{0.0, 0.0}, 0),
         new Point(new double[]{4.0, 0.0}, 0),
@@ -197,12 +197,12 @@ public class WktWriterTest extends WkbTestBase {
     );
     Ring ring = new Ring(ringPoints);
     Polygon polygon = new Polygon(Arrays.asList(ring), 0, false, false);
-    String wkt = polygon.toString();
+    String wkt = polygon.toWkt();
     Assertions.assertEquals("POLYGON((0 0,4 0,4 4,0 4,0 0))", wkt);
   }
 
   @Test
-  public void testPolygonWithHoleToString() {
+  public void testPolygonWithHoleToWkt() {
     // Exterior ring
     List<Point> exteriorPoints = Arrays.asList(
         new Point(new double[]{0.0, 0.0}, 0),
@@ -224,13 +224,13 @@ public class WktWriterTest extends WkbTestBase {
     Ring interiorRing = new Ring(interiorPoints);
 
     Polygon polygon = new Polygon(Arrays.asList(exteriorRing, interiorRing), 0, false, false);
-    String wkt = polygon.toString();
+    String wkt = polygon.toWkt();
     Assertions.assertEquals(
         "POLYGON((0 0,10 0,10 10,0 10,0 0),(2 2,8 2,8 8,2 8,2 2))", wkt);
   }
 
   @Test
-  public void testPolygonZToString() {
+  public void testPolygonZToWkt() {
     List<Point> ringPoints = Arrays.asList(
         new Point(new double[]{0.0, 0.0, 0.0}, 0, true, false),
         new Point(new double[]{4.0, 0.0, 0.0}, 0, true, false),
@@ -240,7 +240,7 @@ public class WktWriterTest extends WkbTestBase {
     );
     Ring ring = new Ring(ringPoints);
     Polygon polygon = new Polygon(Arrays.asList(ring), 0, true, false);
-    String wkt = polygon.toString();
+    String wkt = polygon.toWkt();
     Assertions.assertEquals("POLYGON Z ((0 0 0,4 0 0,4 4 0,0 4 0,0 0 0))", wkt);
   }
 
@@ -255,53 +255,53 @@ public class WktWriterTest extends WkbTestBase {
     Ring ring = new Ring(ringPoints);
     Polygon polygon = new Polygon(List.of(ring), 0, false, false);
     IllegalArgumentException e = Assertions.assertThrows(
-        IllegalArgumentException.class, polygon::toString);
+        IllegalArgumentException.class, polygon::toWkt);
     Assertions.assertEquals("Coordinate value must not be NaN.", e.getMessage());
   }
 
   /** Tests for: MULTIPOINT */
 
   @Test
-  public void testEmptyMultiPointToString() {
+  public void testEmptyMultiPointToWkt() {
     MultiPoint multiPoint = new MultiPoint(Arrays.asList(), 0, false, false);
-    String wkt = multiPoint.toString();
+    String wkt = multiPoint.toWkt();
     Assertions.assertEquals("MULTIPOINT EMPTY", wkt);
   }
 
   @Test
-  public void testMultiPointToString() {
+  public void testMultiPointToWkt() {
     List<Point> points = Arrays.asList(
         new Point(new double[]{0.0, 0.0}, 0),
         new Point(new double[]{1.0, 1.0}, 0),
         new Point(new double[]{2.0, 2.0}, 0)
     );
     MultiPoint multiPoint = new MultiPoint(points, 0, false, false);
-    String wkt = multiPoint.toString();
+    String wkt = multiPoint.toWkt();
     Assertions.assertEquals("MULTIPOINT((0 0),(1 1),(2 2))", wkt);
   }
 
   @Test
-  public void testMultiPointZToString() {
+  public void testMultiPointZToWkt() {
     List<Point> points = Arrays.asList(
         new Point(new double[]{0.0, 0.0, 0.0}, 0, true, false),
         new Point(new double[]{1.0, 1.0, 1.0}, 0, true, false)
     );
     MultiPoint multiPoint = new MultiPoint(points, 0, true, false);
-    String wkt = multiPoint.toString();
+    String wkt = multiPoint.toWkt();
     Assertions.assertEquals("MULTIPOINT Z ((0 0 0),(1 1 1))", wkt);
   }
 
   /** Tests for: MULTILINESTRING */
 
   @Test
-  public void testEmptyMultiLineStringToString() {
+  public void testEmptyMultiLineStringToWkt() {
     MultiLineString multiLineString = new MultiLineString(Arrays.asList(), 0, false, false);
-    String wkt = multiLineString.toString();
+    String wkt = multiLineString.toWkt();
     Assertions.assertEquals("MULTILINESTRING EMPTY", wkt);
   }
 
   @Test
-  public void testMultiLineStringToString() {
+  public void testMultiLineStringToWkt() {
     List<Point> ls1Points = Arrays.asList(
         new Point(new double[]{0.0, 0.0}, 0),
         new Point(new double[]{1.0, 1.0}, 0)
@@ -315,12 +315,12 @@ public class WktWriterTest extends WkbTestBase {
     LineString ls2 = new LineString(ls2Points, 0, false, false);
 
     MultiLineString multiLineString = new MultiLineString(Arrays.asList(ls1, ls2), 0, false, false);
-    String wkt = multiLineString.toString();
+    String wkt = multiLineString.toWkt();
     Assertions.assertEquals("MULTILINESTRING((0 0,1 1),(2 2,3 3))", wkt);
   }
 
   @Test
-  public void testMultiLineStringZToString() {
+  public void testMultiLineStringZToWkt() {
     List<Point> ls1Points = Arrays.asList(
         new Point(new double[]{0.0, 0.0, 0.0}, 0, true, false),
         new Point(new double[]{1.0, 1.0, 1.0}, 0, true, false)
@@ -334,21 +334,21 @@ public class WktWriterTest extends WkbTestBase {
     LineString ls2 = new LineString(ls2Points, 0, true, false);
 
     MultiLineString multiLineString = new MultiLineString(Arrays.asList(ls1, ls2), 0, true, false);
-    String wkt = multiLineString.toString();
+    String wkt = multiLineString.toWkt();
     Assertions.assertEquals("MULTILINESTRING Z ((0 0 0,1 1 1),(2 2 2,3 3 3))", wkt);
   }
 
   /** Tests for: MULTIPOLYGON */
 
   @Test
-  public void testEmptyMultiPolygonToString() {
+  public void testEmptyMultiPolygonToWkt() {
     MultiPolygon multiPolygon = new MultiPolygon(Arrays.asList(), 0, false, false);
-    String wkt = multiPolygon.toString();
+    String wkt = multiPolygon.toWkt();
     Assertions.assertEquals("MULTIPOLYGON EMPTY", wkt);
   }
 
   @Test
-  public void testMultiPolygonToString() {
+  public void testMultiPolygonToWkt() {
     // First polygon
     List<Point> poly1Points = Arrays.asList(
         new Point(new double[]{0.0, 0.0}, 0),
@@ -370,13 +370,13 @@ public class WktWriterTest extends WkbTestBase {
     Polygon poly2 = new Polygon(Arrays.asList(new Ring(poly2Points)), 0, false, false);
 
     MultiPolygon multiPolygon = new MultiPolygon(Arrays.asList(poly1, poly2), 0, false, false);
-    String wkt = multiPolygon.toString();
+    String wkt = multiPolygon.toWkt();
     Assertions.assertEquals(
         "MULTIPOLYGON(((0 0,1 0,1 1,0 1,0 0)),((2 2,3 2,3 3,2 3,2 2)))", wkt);
   }
 
   @Test
-  public void testMultiPolygonZToString() {
+  public void testMultiPolygonZToWkt() {
     List<Point> poly1Points = Arrays.asList(
         new Point(new double[]{0.0, 0.0, 0.0}, 0, true, false),
         new Point(new double[]{1.0, 0.0, 0.0}, 0, true, false),
@@ -387,21 +387,21 @@ public class WktWriterTest extends WkbTestBase {
     Polygon poly1 = new Polygon(Arrays.asList(new Ring(poly1Points)), 0, true, false);
 
     MultiPolygon multiPolygon = new MultiPolygon(Arrays.asList(poly1), 0, true, false);
-    String wkt = multiPolygon.toString();
+    String wkt = multiPolygon.toWkt();
     Assertions.assertEquals("MULTIPOLYGON Z (((0 0 0,1 0 0,1 1 0,0 1 0,0 0 0)))", wkt);
   }
 
   /** Tests for: GEOMETRYCOLLECTION */
 
   @Test
-  public void testEmptyGeometryCollectionToString() {
+  public void testEmptyGeometryCollectionToWkt() {
     GeometryCollection collection = new GeometryCollection(Arrays.asList(), 0, false, false);
-    String wkt = collection.toString();
+    String wkt = collection.toWkt();
     Assertions.assertEquals("GEOMETRYCOLLECTION EMPTY", wkt);
   }
 
   @Test
-  public void testGeometryCollectionToString() {
+  public void testGeometryCollectionToWkt() {
     Point point = new Point(new double[]{1.0, 2.0}, 0);
 
     List<Point> lsPoints = Arrays.asList(
@@ -412,12 +412,12 @@ public class WktWriterTest extends WkbTestBase {
 
     GeometryCollection collection = new GeometryCollection(
         Arrays.asList(point, lineString), 0, false, false);
-    String wkt = collection.toString();
+    String wkt = collection.toWkt();
     Assertions.assertEquals("GEOMETRYCOLLECTION(POINT(1 2),LINESTRING(0 0,1 1))", wkt);
   }
 
   @Test
-  public void testGeometryCollectionZToString() {
+  public void testGeometryCollectionZToWkt() {
     Point point = new Point(new double[]{1.0, 2.0, 3.0}, 0, true, false);
 
     List<Point> lsPoints = Arrays.asList(
@@ -428,13 +428,13 @@ public class WktWriterTest extends WkbTestBase {
 
     GeometryCollection collection = new GeometryCollection(
         Arrays.asList(point, lineString), 0, true, false);
-    String wkt = collection.toString();
+    String wkt = collection.toWkt();
     Assertions.assertEquals(
         "GEOMETRYCOLLECTION Z (POINT Z (1 2 3),LINESTRING Z (0 0 0,1 1 1))", wkt);
   }
 
   @Test
-  public void testNestedGeometryCollectionToString() {
+  public void testNestedGeometryCollectionToWkt() {
     Point point = new Point(new double[]{1.0, 2.0}, 0);
 
     List<Point> lsPoints = Arrays.asList(
@@ -448,7 +448,7 @@ public class WktWriterTest extends WkbTestBase {
 
     GeometryCollection outerCollection = new GeometryCollection(
         Arrays.asList(innerCollection, lineString), 0, false, false);
-    String wkt = outerCollection.toString();
+    String wkt = outerCollection.toWkt();
     Assertions.assertEquals(
         "GEOMETRYCOLLECTION(GEOMETRYCOLLECTION(POINT(1 2)),LINESTRING(0 0,1 1))", wkt);
   }
@@ -863,6 +863,8 @@ public class WktWriterTest extends WkbTestBase {
       String wkbHex = testCase[1];
       byte[] wkbBytes = hexToBytes(wkbHex);
       GeometryModel geom = reader.read(wkbBytes);
+      Assertions.assertEquals(expectedWkt, geom.toWkt());
+      // The `toString` method returns the same WKT as `toWkt`.
       Assertions.assertEquals(expectedWkt, geom.toString());
     }
   }

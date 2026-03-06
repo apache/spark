@@ -20,6 +20,7 @@ import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
+from pyspark.loose_version import LooseVersion
 from pyspark.pandas.groupby import is_multi_agg_with_relabel
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 
@@ -92,28 +93,29 @@ class GroupByTestsMixin:
             psdf.a.groupby(psdf.b).sum().sort_index(), pdf.a.groupby(pdf.b).sum().sort_index()
         )
 
-        for axis in [0, "index"]:
-            self.assert_eq(
-                psdf.groupby("a", axis=axis).a.sum().sort_index(),
-                pdf.groupby("a", axis=axis).a.sum().sort_index(),
-            )
-            self.assert_eq(
-                psdf.groupby("a", axis=axis)["a"].sum().sort_index(),
-                pdf.groupby("a", axis=axis)["a"].sum().sort_index(),
-            )
-            self.assert_eq(
-                psdf.groupby("a", axis=axis)[["a"]].sum().sort_index(),
-                pdf.groupby("a", axis=axis)[["a"]].sum().sort_index(),
-            )
-            self.assert_eq(
-                psdf.groupby("a", axis=axis)[["a", "c"]].sum().sort_index(),
-                pdf.groupby("a", axis=axis)[["a", "c"]].sum().sort_index(),
-            )
+        if LooseVersion(pd.__version__) < "3.0.0":
+            for axis in [0, "index"]:
+                self.assert_eq(
+                    psdf.groupby("a", axis=axis).a.sum().sort_index(),
+                    pdf.groupby("a", axis=axis).a.sum().sort_index(),
+                )
+                self.assert_eq(
+                    psdf.groupby("a", axis=axis)["a"].sum().sort_index(),
+                    pdf.groupby("a", axis=axis)["a"].sum().sort_index(),
+                )
+                self.assert_eq(
+                    psdf.groupby("a", axis=axis)[["a"]].sum().sort_index(),
+                    pdf.groupby("a", axis=axis)[["a"]].sum().sort_index(),
+                )
+                self.assert_eq(
+                    psdf.groupby("a", axis=axis)[["a", "c"]].sum().sort_index(),
+                    pdf.groupby("a", axis=axis)[["a", "c"]].sum().sort_index(),
+                )
 
-            self.assert_eq(
-                psdf.a.groupby(psdf.b, axis=axis).sum().sort_index(),
-                pdf.a.groupby(pdf.b, axis=axis).sum().sort_index(),
-            )
+                self.assert_eq(
+                    psdf.a.groupby(psdf.b, axis=axis).sum().sort_index(),
+                    pdf.a.groupby(pdf.b, axis=axis).sum().sort_index(),
+                )
 
         self.assertRaises(ValueError, lambda: psdf.groupby("a", as_index=False).a)
         self.assertRaises(ValueError, lambda: psdf.groupby("a", as_index=False)["a"])
@@ -124,10 +126,16 @@ class GroupByTestsMixin:
 
         self.assertRaises(TypeError, lambda: psdf.a.groupby(psdf.b, as_index=False))
 
-        self.assertRaises(NotImplementedError, lambda: psdf.groupby("a", axis=1))
-        self.assertRaises(NotImplementedError, lambda: psdf.groupby("a", axis="columns"))
-        self.assertRaises(ValueError, lambda: psdf.groupby("a", "b"))
-        self.assertRaises(TypeError, lambda: psdf.a.groupby(psdf.a, psdf.b))
+        if LooseVersion(pd.__version__) < "3.0.0":
+            self.assertRaises(NotImplementedError, lambda: psdf.groupby("a", axis=1))
+            self.assertRaises(NotImplementedError, lambda: psdf.groupby("a", axis="columns"))
+            self.assertRaises(ValueError, lambda: psdf.groupby("a", "b"))
+            self.assertRaises(TypeError, lambda: psdf.a.groupby(psdf.a, psdf.b))
+        else:
+            with self.assertRaises(TypeError):
+                psdf.groupby("a", axis=1)
+            with self.assertRaises(TypeError):
+                psdf.a.groupby(psdf.b, axis=1)
 
         # we can't use column name/names as a parameter `by` for `SeriesGroupBy`.
         self.assertRaises(KeyError, lambda: psdf.a.groupby(by="a"))

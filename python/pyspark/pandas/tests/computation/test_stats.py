@@ -149,11 +149,11 @@ class StatsTestsMixin:
         self.assert_eq(psdf[["E"]].abs(), pdf[["E"]].abs())
 
         with self.assertRaisesRegex(
-            TypeError, "bad operand type for abs\\(\\): object \\(string\\)"
+            TypeError, r"bad operand type for abs\(\): (object|str) \(string\)"
         ):
             psdf.abs()
         with self.assertRaisesRegex(
-            TypeError, "bad operand type for abs\\(\\): object \\(string\\)"
+            TypeError, r"bad operand type for abs\(\): (object|str) \(string\)"
         ):
             psdf.D.abs()
 
@@ -299,10 +299,14 @@ class StatsTestsMixin:
             psdf[["i", "b"]].sum(numeric_only=False), pdf[["i", "b"]].sum(numeric_only=False)
         )
 
-        with self.assertRaisesRegex(TypeError, "Could not convert object \\(string\\) to numeric"):
+        with self.assertRaisesRegex(
+            TypeError, r"Could not convert (object|str) \(string\) to numeric"
+        ):
             psdf.sum(numeric_only=False)
 
-        with self.assertRaisesRegex(TypeError, "Could not convert object \\(string\\) to numeric"):
+        with self.assertRaisesRegex(
+            TypeError, r"Could not convert (object|str) \(string\) to numeric"
+        ):
             psdf.s.sum()
 
 

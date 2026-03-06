@@ -32,6 +32,7 @@ import org.apache.spark.{SparkEnv, SparkSQLException}
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_MILLIS
+import org.apache.spark.sql.connect.IllegalStateErrors
 import org.apache.spark.sql.connect.config.Connect.{CONNECT_EXECUTE_MANAGER_ABANDONED_TOMBSTONES_SIZE, CONNECT_EXECUTE_MANAGER_DETACHED_TIMEOUT, CONNECT_EXECUTE_MANAGER_MAINTENANCE_INTERVAL}
 import org.apache.spark.sql.connect.execution.ExecuteGrpcResponseSender
 import org.apache.spark.util.ThreadUtils
@@ -157,12 +158,12 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
     // getting an INVALID_HANDLE.OPERATION_ABANDONED error on a retry.
     if (abandoned) {
       abandonedTombstones.put(key, executeHolder.getExecuteInfo)
-      executeHolder.sessionHolder.closeOperation(executeHolder.operationId)
+      executeHolder.sessionHolder.closeOperation(executeHolder)
     }
 
     // Remove the execution from the map *after* putting it in abandonedTombstones.
     executions.remove(key)
-    executeHolder.sessionHolder.closeOperation(executeHolder.operationId)
+    executeHolder.sessionHolder.closeOperation(executeHolder)
 
     updateLastExecutionTime()
 
@@ -225,7 +226,7 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
     } else if (executeHolder.isOrphan()) {
       logWarning(log"Reattach to an orphan operation.")
       removeExecuteHolder(executeHolder.key)
-      throw new IllegalStateException("Operation was orphaned because of an internal error.")
+      throw IllegalStateErrors.operationOrphaned(executeHolder.key.toString)
     }
 
     val responseSender =

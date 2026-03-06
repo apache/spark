@@ -35,6 +35,10 @@ class TimestampType private () extends DatetimeType {
    */
   override def defaultSize: Int = 8
 
+  override def equals(obj: Any): Boolean = obj.isInstanceOf[TimestampType]
+
+  override def hashCode(): Int = classOf[TimestampType].getSimpleName.hashCode
+
   private[spark] override def asNullable: TimestampType = this
 }
 

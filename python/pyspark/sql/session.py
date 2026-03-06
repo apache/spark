@@ -584,8 +584,6 @@ class SparkSession(SparkConversionMixin):
             -----
             This method will update the default and/or active session if they are not set.
             """
-            from pyspark.core.context import SparkContext
-
             opts = dict(self._options)
             # Connect mode
             if "SPARK_REMOTE" in os.environ or "spark.remote" in opts:
@@ -609,6 +607,8 @@ class SparkSession(SparkConversionMixin):
                 return cast(SparkSession, RemoteSparkSession.builder.config(map=opts).create())
             # Classic mode
             else:
+                from pyspark.core.context import SparkContext
+
                 with self._lock:
                     # Build SparkConf from options
                     sparkConf = SparkConf()

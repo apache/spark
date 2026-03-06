@@ -323,6 +323,17 @@ class ColumnarBatchSuite extends SparkFunSuite {
       reference += 4
       idx += 3
 
+      val intSrc = Array(0, 1, 32767, -32768, 65535, -1, 12345, -12345)
+      val count = intSrc.length
+      val byteBuffer = ByteBuffer.allocate(count * 4).order(ByteOrder.LITTLE_ENDIAN)
+      intSrc.foreach(byteBuffer.putInt)
+      val byteArray = byteBuffer.array()
+      column.putShortsFromIntsLittleEndian(idx, count, byteArray, 0)
+      (0 until count).foreach { i =>
+        reference += intSrc(i).toShort
+      }
+      idx += count
+
       while (idx < column.capacity) {
         val single = random.nextBoolean()
         if (single) {

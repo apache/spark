@@ -993,10 +993,12 @@ CREATE TEMPORARY FUNCTION IDENTIFIER('default.my' || 'DoubleAvg') AS 'test.org.a
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_SQL_SYNTAX.CREATE_TEMP_FUNC_WITH_DATABASE",
-  "sqlState" : "42000",
+  "errorClass" : "INVALID_TEMP_OBJ_QUALIFIER",
+  "sqlState" : "42602",
   "messageParameters" : {
-    "database" : "`default`"
+    "objectName" : "`myDoubleAvg`",
+    "objectType" : "FUNCTION",
+    "qualifier" : "`default`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1013,11 +1015,12 @@ DROP TEMPORARY FUNCTION IDENTIFIER('default.my' || 'DoubleAvg')
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
-  "sqlState" : "42000",
+  "errorClass" : "INVALID_TEMP_OBJ_QUALIFIER",
+  "sqlState" : "42602",
   "messageParameters" : {
-    "name" : "`default`.`myDoubleAvg`",
-    "statement" : "DROP TEMPORARY FUNCTION"
+    "objectName" : "`myDoubleAvg`",
+    "objectType" : "FUNCTION",
+    "qualifier" : "`default`"
   },
   "queryContext" : [ {
     "objectType" : "",

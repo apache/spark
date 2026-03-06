@@ -3159,6 +3159,27 @@ class DataSourceV2SQLSuiteV1Filter
       queryContext = Array(ExpectedContext(fragment = "3.14", start = 12, stop = 15)))
   }
 
+  test("SET CATALOG with special characters with backticks in identifier") {
+    assertCurrentCatalog(SESSION_CATALOG_NAME)
+
+    // Test catalog name with special characters like %, @, -, $, #
+    val catalogName = "te%s@t-c$a#t"
+    registerCatalog(catalogName, classOf[InMemoryCatalog])
+    // Use backtick-quoted identifier
+    sql(s"SET CATALOG `$catalogName`")
+    assertCurrentCatalog(catalogName)
+  }
+
+  test("SET CATALOG with backtick character in identifier") {
+    assertCurrentCatalog(SESSION_CATALOG_NAME)
+
+    val catalogName = "test`quote"
+    registerCatalog(catalogName, classOf[InMemoryCatalog])
+    // Use double backticks to escape the backtick in the name
+    sql("SET CATALOG `test``quote`")
+    assertCurrentCatalog(catalogName)
+  }
+
   test("SPARK-35973: ShowCatalogs") {
     val schema = new StructType()
       .add("catalog", StringType, nullable = false)
