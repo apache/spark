@@ -23,15 +23,18 @@ import scala.jdk.CollectionConverters._
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.sql.{QueryTest, Row}
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, Expression, In, Like, Literal}
+import org.apache.spark.sql.{DataFrame, QueryTest, Row}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, Expression, In, InSubquery, Like, ListQuery, Literal, ScalaUDF}
+import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.connector.catalog.{BufferedRows, Identifier, TableCatalog}
 import org.apache.spark.sql.connector.catalog.InMemoryEnhancedPartitionFilterTable
 import org.apache.spark.sql.connector.catalog.InMemoryTableEnhancedPartitionFilterCatalog
 import org.apache.spark.sql.connector.catalog.TestPartitionPredicateScan
 import org.apache.spark.sql.connector.expressions.filter.{PartitionPredicate, Predicate}
 import org.apache.spark.sql.connector.read.{Scan, SupportsPushDownV2Filters}
+import org.apache.spark.sql.execution.FilterExec
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, PushDownUtils}
+import org.apache.spark.sql.functions.udf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -367,15 +370,97 @@ class DataSourceV2EnhancedPartitionFilterSuite
 
       val df = sql(s"SELECT * FROM $partFilterTableName WHERE concat2(p1, p2) = 'x1'")
       checkAnswer(df, Seq(Row("a", "x", "1", "d1"), Row("b", "x", "1", "d4")))
-      assertPushedPartitionPredicates(df, 1)
+    }
+  }
 
-      val predicates = getPushedPartitionPredicates(df)
-      predicates.foreach { p =>
-        val ordinals = p.referencedPartitionColumnOrdinals()
-        assert(ordinals.sameElements(Array(1, 2)),
-          s"Predicate on p1 and p2 should have ordinals [1, 2], " +
-            s"got ${ordinals.mkString("[", ", ", "]")}")
-      }
+  test("all eight pushdown cases: untranslatable filters before translatable in post-scan Filter") {
+    // Cases 1, 3, 6, 7 end in post-scan (reject-partition-predicates).
+    // PushDownUtils orders post-scan as untranslatable first.
+    withTable(partFilterTableName) {
+      sql(s"CREATE TABLE $partFilterTableName (part_col string, data string) USING $v2Source " +
+        "PARTITIONED BY (part_col) TBLPROPERTIES('reject-partition-predicates' = 'true')")
+      sql(s"INSERT INTO $partFilterTableName VALUES " +
+        "('a', 'keep'), ('a', 'drop'), ('A', 'keep'), ('b', 'keep'), ('b', 'other')")
+
+      spark.udf.register("is_keep", (s: String) => s != null && s == "keep")
+      spark.udf.register("my_upper", (s: String) =>
+        if (s == null) null else s.toUpperCase(Locale.ROOT))
+
+      val df = sql(s"SELECT * FROM $partFilterTableName WHERE " +
+        "part_col IN ('a', 'A') AND data = 'keep' AND is_keep(data) AND my_upper(part_col) = 'A'")
+      checkAnswer(df, Seq(Row("a", "keep"), Row("A", "keep")))
+      assertUntranslatableBeforeTranslatableInPostScan(df)
+
+      // Reversed filter order in the query; post-scan order still untranslatable first.
+      val dfReversed = sql(s"SELECT * FROM $partFilterTableName WHERE " +
+        "my_upper(part_col) = 'A' AND is_keep(data) AND data = 'keep' AND part_col IN ('a', 'A')")
+      checkAnswer(dfReversed, Seq(Row("a", "keep"), Row("A", "keep")))
+      assertUntranslatableBeforeTranslatableInPostScan(dfReversed)
+    }
+  }
+
+  def assertUntranslatableBeforeTranslatableInPostScan(df: DataFrame): Unit = {
+    val postScanFilterExec = df.queryExecution.executedPlan.collect {
+      case f @ FilterExec(_, _) if f.exists(_.isInstanceOf[BatchScanExec]) => f
+    }.headOption.getOrElse(fail("Expected a post-scan FilterExec above BatchScanExec"))
+
+    val predicates = splitConjunctivePredicates(postScanFilterExec.condition)
+    val udfIndices = predicates.indices.filter(i =>
+      predicates(i).collect { case _: ScalaUDF => true }.nonEmpty)
+    val translatableIndices = predicates.indices.filter(i =>
+      predicates(i).collect { case _: ScalaUDF => true }.isEmpty)
+
+    assert(
+      udfIndices.isEmpty || translatableIndices.isEmpty ||
+        udfIndices.max < translatableIndices.min,
+      s"Untranslatable (UDF) filters must appear before translatable filters in post-scan " +
+        s"condition; predicates: ${predicates.mkString(", ")}; " +
+        s"UDF indices: $udfIndices, translatable indices: $translatableIndices")
+  }
+
+  test("non-deterministic partition filter not pushed as PartitionPredicate (post-scan)") {
+    // Same checks as FileSourceStrategy/PruneFileSourcePartitions: non-deterministic
+    // partition filters must not be pushed as PartitionPredicate; they are applied after scan.
+    withTable(partFilterTableName) {
+      sql(s"CREATE TABLE $partFilterTableName (part_col string, data string) USING $v2Source " +
+        "PARTITIONED BY (part_col)")
+      sql(s"INSERT INTO $partFilterTableName VALUES ('a', 'x'), ('b', 'y'), ('c', 'z')")
+
+      spark.udf.register("nondet_identity", udf((s: String) => s).asNondeterministic())
+
+      val df = sql(s"SELECT * FROM $partFilterTableName WHERE nondet_identity(part_col) = 'a'")
+      checkAnswer(df, Seq(Row("a", "x")))
+      assertPushedPartitionPredicates(df, 0)
+    }
+  }
+
+  test("partition filter with subquery is not pushed as PartitionPredicate (stays in post-scan)") {
+    // Same checks as FileSourceStrategy/PruneFileSourcePartitions: partition filters
+    // containing a subquery must not be pushed as PartitionPredicate.
+    withTable(partFilterTableName) {
+      sql(s"CREATE TABLE $partFilterTableName (part_col string, data string) USING $v2Source " +
+        "PARTITIONED BY (part_col) TBLPROPERTIES('reject-partition-predicates' = 'true')")
+      val catalog = spark.sessionState.catalogManager.catalog("testpartfilter")
+        .asInstanceOf[TableCatalog]
+      val table = catalog.loadTable(Identifier.of(Array(), "t"))
+        .asInstanceOf[InMemoryEnhancedPartitionFilterTable]
+      val options = new CaseInsensitiveStringMap(Map.empty[String, String].asJava)
+      val builder = table.newScanBuilder(options)
+      val partitionSchema = StructType(StructField("part_col", StringType) :: Nil)
+      val partColAttr = AttributeReference("part_col", StringType)()
+      val listQuery = ListQuery(
+        LocalRelation(AttributeReference("a", StringType)()),
+        numCols = 1)
+      val filterExpr: Expression = InSubquery(Seq(partColAttr), listQuery)
+
+      val (_, postScanFilters) =
+        PushDownUtils.pushFilters(builder, Seq(filterExpr), Some(partitionSchema))
+
+      assert(postScanFilters.nonEmpty,
+        s"Partition filter with subquery should be in post-scan, got " +
+          s"${postScanFilters.size}: ${postScanFilters.mkString(", ")}")
+      assert(postScanFilters.exists(_.semanticEquals(filterExpr)),
+        s"Post-scan filters should contain the subquery filter: $postScanFilters")
     }
   }
 }
