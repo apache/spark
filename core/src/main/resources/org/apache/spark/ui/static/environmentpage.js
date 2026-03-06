@@ -132,12 +132,31 @@ $(document).ready(function () {
       ], { paging: false, searching: false, info: false });
       updateBadge("runtime-tab", runtimeData.length);
 
-      // Spark Properties
+      // Spark Properties — highlight non-default values
+      var defaultsEl = document.getElementById("spark-config-defaults");
+      var configDefaults = {};
+      if (defaultsEl) {
+        try { configDefaults = JSON.parse(defaultsEl.textContent); } catch (e) { /* ignore */ }
+      }
+
       var sparkProps = response.sparkProperties || [];
-      initDataTable("spark-props", "spark-props-table", sparkProps, [
-        { title: "Name", width: "35%" },
-        { title: "Value", width: "65%" }
-      ]);
+      var sparkPropsWithDefaults = sparkProps.map(function (prop) {
+        var d = Object.prototype.hasOwnProperty.call(configDefaults, prop[0]) ? configDefaults[prop[0]] : "";
+        return [prop[0], prop[1], d];
+      });
+
+      initDataTable("spark-props", "spark-props-table", sparkPropsWithDefaults, [
+        { title: "Name", width: "30%" },
+        { title: "Value", width: "35%" },
+        { title: "Default Value", width: "35%" }
+      ], {
+        createdRow: function (row, data) {
+          if (Object.prototype.hasOwnProperty.call(configDefaults, data[0]) && data[1] !== configDefaults[data[0]]) {
+            $(row).addClass("table-warning");
+          }
+        }
+      });
+
       updateBadge("spark-props-tab", sparkProps.length);
 
       // Resource Profiles
