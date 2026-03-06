@@ -32,6 +32,15 @@ try:
 except ImportError:
     pass
 
+try:
+    from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
+
+    require_minimum_pyarrow_version()
+    import pyarrow as pa
+except ImportError:
+    pass
+
+from pyspark.loose_version import LooseVersion
 import pyspark.pandas as ps
 from pyspark.pandas.frame import DataFrame
 from pyspark.pandas.indexes import Index
@@ -47,7 +56,6 @@ def _assert_pandas_equal(
     right: Union[pd.DataFrame, pd.Series, pd.Index],
     checkExact: bool,
 ):
-    from pandas.core.dtypes.common import is_numeric_dtype
     from pandas.testing import assert_frame_equal, assert_index_equal, assert_series_equal
 
     if isinstance(left, pd.DataFrame) and isinstance(right, pd.DataFrame):
@@ -440,9 +448,9 @@ class PandasOnSparkTestUtils:
                 )
             else:
                 if not isinstance(left, (pd.DataFrame, pd.Index, pd.Series)):
-                    left = left.to_pandas()
+                    left = self._ignore_arrow_dtypes(left.to_pandas())
                 if not isinstance(right, (pd.DataFrame, pd.Index, pd.Series)):
-                    right = right.to_pandas()
+                    right = self._ignore_arrow_dtypes(right.to_pandas())
 
                 if not check_row_order:
                     if isinstance(left, pd.DataFrame) and len(left.columns) > 0:
@@ -455,8 +463,8 @@ class PandasOnSparkTestUtils:
                 else:
                     _assert_pandas_equal(left, right, checkExact=check_exact)
 
-        lobj = self._to_pandas(left)
-        robj = self._to_pandas(right)
+        lobj = self._ignore_arrow_dtypes(self._to_pandas(left))
+        robj = self._ignore_arrow_dtypes(self._to_pandas(right))
         if isinstance(lobj, (pd.DataFrame, pd.Series, pd.Index)):
             if almost:
                 _assert_pandas_almost_equal(lobj, robj, rtol=rtol, atol=atol)
@@ -481,6 +489,25 @@ class PandasOnSparkTestUtils:
         if isinstance(obj, (DataFrame, Series, Index)):
             return obj.to_pandas()
         else:
+            return obj
+
+    @staticmethod
+    def _ignore_arrow_dtypes(obj: Any):
+        if LooseVersion(pd.__version__) < "3.0.0":
+            return obj
+        else:
+            if isinstance(obj, pd.DataFrame):
+                arrow_boolean_columns = [
+                    name
+                    for name, col in obj.items()
+                    if isinstance(col.dtype, pd.ArrowDtype)
+                    and col.dtype.pyarrow_dtype == pa.bool_()
+                ]
+                if arrow_boolean_columns:
+                    return obj.astype({name: "boolean" for name in arrow_boolean_columns})
+            elif isinstance(obj, (pd.Series, pd.Index)):
+                if isinstance(obj.dtype, pd.ArrowDtype) and obj.dtype.pyarrow_dtype == pa.bool_():
+                    return obj.astype("boolean")
             return obj
 
 

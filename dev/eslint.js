@@ -21,6 +21,9 @@ module.exports = {
     "es6": true,
     "jest": true
   },
+  "globals": {
+    "bootstrap": "readonly"
+  },
   "extends": "eslint:recommended",
   "rules": {
     "indent": [

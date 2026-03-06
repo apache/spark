@@ -177,6 +177,6 @@ private[spark] class JsCollector(req: HttpServletRequest) {
          |    ${statements.mkString("\n")}
          |});""".stripMargin
 
-    <script type="module">{Unparsed(js)}</script>
+    <script type="module" nonce={CspNonce.get}>{Unparsed(js)}</script>
   }
 }

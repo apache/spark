@@ -23,10 +23,12 @@ import os
 import re
 import sys
 import subprocess
+from contextlib import contextmanager
 
 from sparktestsupport import SPARK_HOME, USER_HOME, ERROR_CODES
 from sparktestsupport.shellutils import exit_from_command_with_retcode, run_cmd, rm_r, which
 from sparktestsupport.utils import (
+    determine_dangling_python_tests,
     determine_modules_for_files,
     determine_modules_to_test,
     identify_changed_files_from_git_commits,
@@ -75,6 +77,18 @@ def set_title_and_block(title, err_block):
     print(line_str)
     print(title)
     print(line_str)
+
+
+@contextmanager
+def group_in_github_actions(title):
+    if "GITHUB_ACTIONS" in os.environ:
+        print(f"::group::{title}", flush=True)
+        try:
+            yield
+        finally:
+            print("::endgroup::", flush=True)
+    else:
+        yield
 
 
 def run_apache_rat_checks():
@@ -165,6 +179,7 @@ def exec_sbt(sbt_args=()):
     for line in iter(sbt_proc.stdout.readline, b""):
         if not sbt_output_filter.match(line):
             print(line.decode("utf-8"), end="")
+    print()  # print a new line because the code above does not guarantee a new line
     retcode = sbt_proc.wait()
 
     if retcode != 0:
@@ -254,7 +269,8 @@ def build_spark_sbt(extra_profiles):
 
     print("[info] Building Spark using SBT with these arguments: ", " ".join(profiles_and_goals))
 
-    exec_sbt(profiles_and_goals)
+    with group_in_github_actions("sbt build spark"):
+        exec_sbt(profiles_and_goals)
 
 
 def build_spark_unidoc_sbt(extra_profiles):
@@ -281,7 +297,9 @@ def build_spark_assembly_sbt(extra_profiles, checkstyle=False):
         "[info] Building Spark assembly using SBT with these arguments: ",
         " ".join(profiles_and_goals),
     )
-    exec_sbt(profiles_and_goals)
+
+    with group_in_github_actions("sbt build spark assembly"):
+        exec_sbt(profiles_and_goals)
 
     if checkstyle:
         run_java_style_checks(build_profiles)
@@ -545,6 +563,14 @@ def main():
                 changed_files = identify_changed_files_from_git_commits(
                     os.environ["GITHUB_SHA"], target_ref=os.environ["GITHUB_PREV_SHA"]
                 )
+
+            dangling_python_tests = determine_dangling_python_tests(changed_files)
+            if dangling_python_tests:
+                print(
+                    f"[error] Found the following dangling Python tests {', '.join(dangling_python_tests)}"
+                )
+                print("[error] Please add the tests to the appropriate module.")
+                sys.exit(1)
 
             modules_to_test = determine_modules_to_test(
                 determine_modules_for_files(changed_files), deduplicated=False

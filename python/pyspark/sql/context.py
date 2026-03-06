@@ -38,7 +38,7 @@ from pyspark.sql.session import _monkey_patch_RDD, SparkSession
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.readwriter import DataFrameReader
 from pyspark.sql.streaming import DataStreamReader
-from pyspark.sql.udf import UDFRegistration  # noqa: F401
+from pyspark.sql.udf import UDFRegistration
 from pyspark.sql.udtf import UDTFRegistration
 from pyspark.errors.exceptions.captured import install_exception_handler
 from pyspark.sql.types import AtomicType, DataType, StructType

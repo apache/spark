@@ -56,6 +56,8 @@ from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     SPARK_HOME,
+)
+from pyspark.testing.utils import (
     have_pyarrow,
     have_pandas,
     pandas_requirement_message,

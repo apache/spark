@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.catalyst.expressions.InSubquery
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 
@@ -165,6 +166,69 @@ class GroupBasedDeleteFromTableSuite extends DeleteFromTableSuiteBase {
         Row(2, 150, "software") :: Row(3, 120, "hr") :: Nil)
 
       checkReplacedPartitions(Seq("hr"))
+    }
+  }
+
+  test("delete does not double plan table (group filter enabled)") {
+    withSQLConf(SQLConf.RUNTIME_ROW_LEVEL_OPERATION_GROUP_FILTER_ENABLED.key -> "true") {
+      createAndInitTable("id INT, salary INT, dep STRING",
+        """{ "id": 1, "salary": 300, "dep": 'hr' }
+          |{ "id": 2, "salary": 150, "dep": 'software' }
+          |{ "id": 3, "salary": 120, "dep": 'hr' }
+          |""".stripMargin)
+
+      val (cond, groupFilterCond) = executeAndKeepConditions {
+        sql(
+          s"""DELETE FROM $tableNameAsString
+             |WHERE id IN (SELECT id FROM $tableNameAsString WHERE salary > 200)
+             |""".stripMargin)
+      }
+
+      cond match {
+        case InSubquery(_, query) => assertNoScanPlanning(query.plan)
+        case _ => fail(s"unexpected condition: $cond")
+      }
+
+      groupFilterCond match {
+        case Some(InSubquery(_, query)) => assertNoScanPlanning(query.plan)
+        case _ => fail(s"unexpected group filter: $groupFilterCond")
+      }
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Row(2, 150, "software") :: Row(3, 120, "hr") :: Nil)
+
+      checkReplacedPartitions(Seq("hr"))
+    }
+  }
+
+  test("delete does not double plan table (group filter disabled)") {
+    withSQLConf(SQLConf.RUNTIME_ROW_LEVEL_OPERATION_GROUP_FILTER_ENABLED.key -> "false") {
+      createAndInitTable("id INT, salary INT, dep STRING",
+        """{ "id": 1, "salary": 300, "dep": 'hr' }
+          |{ "id": 2, "salary": 150, "dep": 'software' }
+          |{ "id": 3, "salary": 120, "dep": 'hr' }
+          |""".stripMargin)
+
+      val (cond, groupFilterCond) = executeAndKeepConditions {
+        sql(
+          s"""DELETE FROM $tableNameAsString
+             |WHERE id IN (SELECT id FROM $tableNameAsString WHERE salary > 200)
+             |""".stripMargin)
+      }
+
+      cond match {
+        case InSubquery(_, query) => assertNoScanPlanning(query.plan)
+        case _ => fail(s"unexpected condition: $cond")
+      }
+
+      assert(groupFilterCond.isEmpty, "group filter must be empty")
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Row(2, 150, "software") :: Row(3, 120, "hr") :: Nil)
+
+      checkReplacedPartitions(Seq("software", "hr"))
     }
   }
 }

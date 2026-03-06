@@ -282,6 +282,13 @@ public abstract class WritableColumnVector extends ColumnVector {
   public abstract void putShorts(int rowId, int count, short[] src, int srcIndex);
 
   /**
+   * Sets values from [src[srcIndex], src[srcIndex + count * 4]) to [rowId, rowId + count)
+   * Each 4-byte little endian int is truncated to a short.
+   */
+  public abstract void putShortsFromIntsLittleEndian(
+      int rowId, int count, byte[] src, int srcIndex);
+
+  /**
    * Sets values from [src[srcIndex], src[srcIndex + count * 2]) to [rowId, rowId + count)
    * The data in src must be 2-byte platform native endian shorts.
    */
@@ -955,6 +962,7 @@ public abstract class WritableColumnVector extends ColumnVector {
 
   protected boolean isArray() {
     return type instanceof ArrayType || type instanceof BinaryType || type instanceof StringType ||
+      type instanceof GeometryType || type instanceof GeographyType ||
       DecimalType.isByteArrayDecimalType(type);
   }
 

@@ -42,7 +42,7 @@ class ZippedWithIndexRDD[T: ClassTag](prev: RDD[T]) extends RDD[(T, Long)](prev)
 
   private def getAncestorWithSamePartitionSizes(rdd: RDD[_]): RDD[_] = {
     rdd match {
-      case c: RDD[_] if c.getStorageLevel != StorageLevel.NONE => c
+      case c: RDD[_] if c.isCheckpointed || c.getStorageLevel != StorageLevel.NONE => c
       case m: MapPartitionsRDD[_, _] if m.preservesPartitionSizes =>
         getAncestorWithSamePartitionSizes(m.prev)
       case m: MapPartitionsWithEvaluatorRDD[_, _] if m.preservesPartitionSizes =>

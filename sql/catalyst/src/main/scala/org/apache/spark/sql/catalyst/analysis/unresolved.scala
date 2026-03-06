@@ -178,6 +178,8 @@ case class UnresolvedInlineTable(
     rows: Seq[Seq[Expression]])
   extends UnresolvedLeafNode {
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(INLINE_TABLE_EVAL)
+
   lazy val expressionsResolved: Boolean = rows.forall(_.forall(_.resolved))
 }
 

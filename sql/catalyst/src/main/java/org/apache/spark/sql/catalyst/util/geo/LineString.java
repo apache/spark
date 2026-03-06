@@ -48,17 +48,12 @@ class LineString extends GeometryModel {
   }
 
   @Override
-  public String toString() {
-    if (isEmpty()) {
-      return "LINESTRING EMPTY";
-    }
-    StringBuilder sb = new StringBuilder("LINESTRING (");
+  protected void appendWktContent(StringBuilder sb) {
     for (int i = 0; i < points.size(); i++) {
-      if (i > 0) sb.append(", ");
-      Point p = points.get(i);
-      sb.append(p.getX()).append(" ").append(p.getY());
+      if (i > 0) {
+        sb.append(",");
+      }
+      points.get(i).appendWktContent(sb);
     }
-    sb.append(")");
-    return sb.toString();
   }
 }

@@ -39,6 +39,7 @@ import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryParsingErrors}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources._
@@ -177,6 +178,51 @@ class SparkSqlAstBuilder extends AstBuilder {
   private val configKeyDef = """([a-zA-Z_\d\\.:]+)\s*$""".r
   private val configValueDef = """([^;]*);*""".r
   private val strLiteralDef = """(".*?[^\\]"|'.*?[^\\]'|[^ \n\r\t"']+)""".r
+
+  /**
+   * Extract the actual function name from a potentially qualified temporary function name.
+   * Supports: funcName, session.funcName, system.session.funcName
+   * Throws an error for any other qualification pattern.
+   */
+  private def extractTempFunctionName(
+      functionIdentifier: Seq[String],
+      ctx: ParserRuleContext,
+      forDrop: Boolean = false): String = {
+    functionIdentifier.length match {
+      case 1 =>
+        // Simple unqualified name
+        functionIdentifier.head
+      case 2 =>
+        // Check if it's session.funcName
+        if (functionIdentifier.head.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)) {
+          functionIdentifier.last
+        } else {
+          // Otherwise it's an invalid qualifier (e.g., database name)
+          val funcName = functionIdentifier.last
+          val qualifier = functionIdentifier.head
+          throw QueryParsingErrors.invalidTempObjQualifierError(
+            "FUNCTION", funcName, qualifier, ctx)
+        }
+      case 3 =>
+        // Check if it's system.session.funcName
+        if (functionIdentifier(0).equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
+            functionIdentifier(1).equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)) {
+          functionIdentifier.last
+        } else {
+          // Invalid three-part qualifier
+          val funcName = functionIdentifier.last
+          val qualifier = functionIdentifier.init.mkString(".")
+          throw QueryParsingErrors.invalidTempObjQualifierError(
+            "FUNCTION", funcName, qualifier, ctx)
+        }
+      case _ =>
+        // More than 3 parts - invalid
+        val funcName = functionIdentifier.last
+        val qualifier = functionIdentifier.init.mkString(".")
+        throw QueryParsingErrors.invalidTempObjQualifierError(
+          "FUNCTION", funcName, qualifier, ctx)
+    }
+  }
 
   private def withCatalogIdentClause(
       ctx: CatalogIdentifierReferenceContext,
@@ -639,7 +685,8 @@ class SparkSqlAstBuilder extends AstBuilder {
     }
 
     if (ctx.EXISTS != null && ctx.REPLACE != null) {
-      throw QueryParsingErrors.createViewWithBothIfNotExistsAndReplaceError(ctx)
+      throw QueryParsingErrors.createViewWithBothIfNotExistsAndReplaceError(
+        ctx.identifierReference().getText, ctx)
     }
 
     val properties = ctx.propertyList.asScala.headOption.map(visitPropertyKeyValues)
@@ -698,12 +745,12 @@ class SparkSqlAstBuilder extends AstBuilder {
       }
 
       withIdentClause(ctx.identifierReference(), Seq(qPlan), (ident, otherPlans) => {
-        val tableIdentifier = ident.asTableIdentifier
-        if (tableIdentifier.database.isDefined) {
+        if (ident.length > 1) {
           // Temporary view names should NOT contain database prefix like "database.table"
           throw QueryParsingErrors
-            .notAllowedToAddDBPrefixForTempViewError(tableIdentifier.nameParts, ctx)
+            .notAllowedToAddDBPrefixForTempViewError(ident, ctx)
         }
+        val tableIdentifier = TableIdentifier(ident.head)
 
         CreateViewCommand(
           tableIdentifier,
@@ -732,7 +779,8 @@ class SparkSqlAstBuilder extends AstBuilder {
     }
 
     if (ctx.EXISTS != null && ctx.REPLACE != null) {
-      throw QueryParsingErrors.createViewWithBothIfNotExistsAndReplaceError(ctx)
+      throw QueryParsingErrors.createViewWithBothIfNotExistsAndReplaceError(
+        ctx.identifierReference().getText, ctx)
     }
 
     if (ctx.METRICS(0) == null) {
@@ -809,14 +857,10 @@ class SparkSqlAstBuilder extends AstBuilder {
           throw QueryParsingErrors.defineTempFuncWithIfNotExistsError(ctx)
         }
 
-        if (functionIdentifier.length > 2) {
-          throw QueryParsingErrors.unsupportedFunctionNameError(functionIdentifier, ctx)
-        } else if (functionIdentifier.length == 2) {
-          // Temporary function names should not contain database prefix like "database.function"
-          throw QueryParsingErrors.specifyingDBInCreateTempFuncError(functionIdentifier.head, ctx)
-        }
+        // Extract the actual function name, handling session qualification
+        val funcName = extractTempFunctionName(functionIdentifier, ctx)
         CreateFunctionCommand(
-          FunctionIdentifier(functionIdentifier.last),
+          FunctionIdentifier(funcName),
           string(visitStringLit(ctx.className)),
           resources.toSeq,
           true,
@@ -877,7 +921,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       val exprText = Option(ctx.expression()).map(source)
       val queryText = Option(ctx.query()).map(source)
 
-      val (containsSQL, deterministic, comment, optionalLanguage) =
+      val (containsSQL, deterministic, comment, collation, optionalLanguage) =
         visitRoutineCharacteristics(ctx.routineCharacteristics())
       val language: RoutineLanguage = optionalLanguage.getOrElse(LanguageSQL)
       val isTableFunc = ctx.TABLE() != null || returnTypeText.equalsIgnoreCase("table")
@@ -891,6 +935,7 @@ class SparkSqlAstBuilder extends AstBuilder {
             exprText,
             queryText,
             comment,
+            collation,
             deterministic,
             containsSQL,
             language,
@@ -903,20 +948,16 @@ class SparkSqlAstBuilder extends AstBuilder {
             throw QueryParsingErrors.defineTempFuncWithIfNotExistsError(ctx)
           }
 
-          if (functionIdentifier.length > 2) {
-            throw QueryParsingErrors.unsupportedFunctionNameError(functionIdentifier, ctx)
-          } else if (functionIdentifier.length == 2) {
-            // Temporary function names should not contain database prefix like "database.function"
-            throw QueryParsingErrors.specifyingDBInCreateTempFuncError(functionIdentifier.head, ctx)
-          }
-
+          // Extract the actual function name, handling session qualification
+          val funcName = extractTempFunctionName(functionIdentifier, ctx)
           CreateUserDefinedFunctionCommand(
-            functionIdentifier.asFunctionIdentifier,
+            FunctionIdentifier(funcName),
             inputParamText,
             returnTypeText,
             exprText,
             queryText,
             comment,
+            collation,
             deterministic,
             containsSQL,
             language,
@@ -942,7 +983,7 @@ class SparkSqlAstBuilder extends AstBuilder {
    * rights: [SQL SECURITY INVOKER | SQL SECURITY DEFINER]
    */
   override def visitRoutineCharacteristics(ctx: RoutineCharacteristicsContext)
-  : (Option[Boolean], Option[Boolean], Option[String], Option[RoutineLanguage]) =
+  : (Option[Boolean], Option[Boolean], Option[String], Option[String], Option[RoutineLanguage]) =
     withOrigin(ctx) {
       checkDuplicateClauses(ctx.routineLanguage(), "LANGUAGE", ctx)
       checkDuplicateClauses(ctx.specificName(), "SPECIFIC", ctx)
@@ -950,6 +991,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       checkDuplicateClauses(ctx.nullCall(), "NULL CALL", ctx)
       checkDuplicateClauses(ctx.deterministic(), "DETERMINISTIC", ctx)
       checkDuplicateClauses(ctx.commentSpec(), "COMMENT", ctx)
+      checkDuplicateClauses(ctx.collationSpec(), "DEFAULT COLLATION", ctx)
       checkDuplicateClauses(ctx.rightsClause(), "SQL SECURITY RIGHTS", ctx)
 
       val language: Option[RoutineLanguage] = ctx
@@ -967,13 +1009,14 @@ class SparkSqlAstBuilder extends AstBuilder {
 
       val deterministic = ctx.deterministic().asScala.headOption.map(visitDeterminism)
       val comment = visitCommentSpecList(ctx.commentSpec())
+      val collation = ctx.collationSpec().asScala.headOption.map(visitCollationSpec)
 
       ctx.specificName().asScala.headOption.foreach(checkSpecificName)
       ctx.nullCall().asScala.headOption.foreach(checkNullCall)
       ctx.rightsClause().asScala.headOption.foreach(checkRightsClause)
       val containsSQL: Option[Boolean] =
         ctx.sqlDataAccess().asScala.headOption.map(visitDataAccess)
-      (containsSQL, deterministic, comment, language)
+      (containsSQL, deterministic, comment, collation, language)
     }
 
   /**
@@ -1031,11 +1074,10 @@ class SparkSqlAstBuilder extends AstBuilder {
     val identCtx = ctx.identifierReference()
     if (isTemp) {
       withIdentClause(identCtx, functionName => {
-        if (functionName.length > 1) {
-          throw QueryParsingErrors.invalidNameForDropTempFunc(functionName, ctx)
-        }
+        // Extract the actual function name, handling session qualification
+        val funcName = extractTempFunctionName(functionName, ctx, forDrop = true)
         DropFunctionCommand(
-          identifier = FunctionIdentifier(functionName.head),
+          identifier = FunctionIdentifier(funcName),
           ifExists = ctx.EXISTS != null,
           isTemp = true)
       })

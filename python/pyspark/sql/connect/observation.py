@@ -51,8 +51,13 @@ class Observation:
                 )
         self._name = name
         self._result: Optional[Dict[str, Any]] = None
+        self._error: Optional[BaseException] = None
 
     __init__.__doc__ = PySparkObservation.__init__.__doc__
+
+    def _set_error(self, exc: BaseException) -> None:
+        """Set the error that occurred while collecting observed metrics (used by the client)."""
+        self._error = exc
 
     def _on(self, df: DataFrame, *exprs: Column) -> DataFrame:
         if self._result is not None:
@@ -74,6 +79,8 @@ class Observation:
 
     @property
     def get(self) -> Dict[str, Any]:
+        if self._error is not None:
+            raise self._error
         if self._result is None:
             raise PySparkAssertionError(errorClass="NO_OBSERVE_BEFORE_GET", messageParameters={})
 

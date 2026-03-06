@@ -20,8 +20,6 @@ import textwrap
 from typing import Any, BinaryIO, Callable, Iterator
 import unittest
 
-from parameterized import parameterized
-
 from pyspark import cloudpickle
 from pyspark.ml.dl_util import FunctionPickler
 
@@ -47,8 +45,8 @@ class TestFunctionPickler(unittest.TestCase):
         fn_output = fn(*args, **kwargs)
         self.assertEqual(fn_output, output_value)
 
-    @parameterized.expand(
-        [
+    def test_pickle_fn_and_save(self):
+        for _, file_path_to_save, save_dir in [
             ("See if it pickles correctly with no path specified", "", ""),
             ("See if it pickles correctly with path specified", "silly_bear", ""),
             (
@@ -56,24 +54,24 @@ class TestFunctionPickler(unittest.TestCase):
                 "silly_bear",
                 "tmp_dir",
             ),
-        ]
-    )
-    def test_pickle_fn_and_save(self, _: str, file_path_to_save: str, save_dir: str):
-        x, y = 1, 3  # args of test_function
-        if save_dir != "":
-            os.makedirs(save_dir, exist_ok=True)
-        pickled_fn_path = FunctionPickler.pickle_fn_and_save(
-            TestFunctionPickler._test_function, file_path_to_save, save_dir, x, y
-        )
-        if file_path_to_save != "":
-            self.assertEqual(file_path_to_save, pickled_fn_path)
+        ]:
+            x, y = 1, 3  # args of test_function
+            if save_dir != "":
+                os.makedirs(save_dir, exist_ok=True)
+            pickled_fn_path = FunctionPickler.pickle_fn_and_save(
+                TestFunctionPickler._test_function, file_path_to_save, save_dir, x, y
+            )
+            if file_path_to_save != "":
+                self.assertEqual(file_path_to_save, pickled_fn_path)
 
-        with open(pickled_fn_path, "rb") as f:
-            self._check_if_test_function_pickled(f, TestFunctionPickler._test_function, 10, x, y)
-        os.remove(pickled_fn_path)
+            with open(pickled_fn_path, "rb") as f:
+                self._check_if_test_function_pickled(
+                    f, TestFunctionPickler._test_function, 10, x, y
+                )
+            os.remove(pickled_fn_path)
 
-        if save_dir != "":
-            os.rmdir(save_dir)
+            if save_dir != "":
+                os.rmdir(save_dir)
 
     def test_getting_output_from_pickle_file(self):
         a, b = 2, 0  # arguments for _test_function
@@ -128,8 +126,8 @@ class TestFunctionPickler(unittest.TestCase):
         self.assertEqual(contents_one, contents_two)
         return contents_one == contents_two
 
-    @parameterized.expand(
-        [
+    def test_create_fn_run_script(self):
+        for _, prefix_test, suffix_test in [
             ("Check if it creates the correct file with no prefix nor suffix", "", ""),
             (
                 "Check if it creates the correct file with only prefix + body",
@@ -146,32 +144,30 @@ class TestFunctionPickler(unittest.TestCase):
                 "print('hello')\n",
                 "print('goodbye')\n",
             ),
-        ]
-    )
-    def test_create_fn_run_script(self, mesg: str, prefix_test: str, suffix_test: str):
-        arg1, arg2 = 3, 4
-        pickled_fn_path = FunctionPickler.pickle_fn_and_save(
-            TestFunctionPickler._test_function, "", "", arg1, arg2
-        )
-        fn_out_path = "output.pickled"
-        reference_path = "ref_result_file.py"
-        test_path = "test_result.py"
-        body_for_reference = self._create_code_snippet_body(pickled_fn_path, fn_out_path)
-
-        with self.create_reference_file(
-            body_for_reference, prefix=prefix_test, suffix=suffix_test, fname=reference_path
-        ) as _:
-            executable_file_path = FunctionPickler.create_fn_run_script(
-                pickled_fn_path,
-                fn_out_path,
-                test_path,
-                prefix_code=prefix_test,
-                suffix_code=suffix_test,
+        ]:
+            arg1, arg2 = 3, 4
+            pickled_fn_path = FunctionPickler.pickle_fn_and_save(
+                TestFunctionPickler._test_function, "", "", arg1, arg2
             )
-            self.assertTrue(self._are_two_files_identical(reference_path, executable_file_path))
-            os.remove(executable_file_path)
+            fn_out_path = "output.pickled"
+            reference_path = "ref_result_file.py"
+            test_path = "test_result.py"
+            body_for_reference = self._create_code_snippet_body(pickled_fn_path, fn_out_path)
 
-        os.remove(pickled_fn_path)
+            with self.create_reference_file(
+                body_for_reference, prefix=prefix_test, suffix=suffix_test, fname=reference_path
+            ) as _:
+                executable_file_path = FunctionPickler.create_fn_run_script(
+                    pickled_fn_path,
+                    fn_out_path,
+                    test_path,
+                    prefix_code=prefix_test,
+                    suffix_code=suffix_test,
+                )
+                self.assertTrue(self._are_two_files_identical(reference_path, executable_file_path))
+                os.remove(executable_file_path)
+
+            os.remove(pickled_fn_path)
 
 
 if __name__ == "__main__":

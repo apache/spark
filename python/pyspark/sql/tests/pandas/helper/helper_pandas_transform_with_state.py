@@ -39,7 +39,7 @@ from pyspark.sql.types import (
     ArrayType,
     MapType,
 )
-from pyspark.testing.sqlutils import have_pandas
+from pyspark.testing.utils import have_pandas
 
 if have_pandas:
     import pandas as pd

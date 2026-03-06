@@ -88,15 +88,16 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
             showFailedJobs = true)
 
         _content ++=
-          <span id="running" class="collapse-aggregated-runningExecutions collapse-table"
-                onClick="collapseTable('collapse-aggregated-runningExecutions',
-                'aggregated-runningExecutions')">
+          <span id="running" class="collapse-table" data-bs-toggle="collapse"
+                data-bs-target="#aggregated-runningExecutions"
+                aria-expanded="true" aria-controls="aggregated-runningExecutions"
+                data-collapse-name="collapse-aggregated-runningExecutions">
             <h4>
               <span class="collapse-table-arrow arrow-open"></span>
               <a>Running Queries ({running.size})</a>
             </h4>
           </span> ++
-            <div class="aggregated-runningExecutions collapsible-table">
+            <div class="collapsible-table collapse show" id="aggregated-runningExecutions">
               {runningPageTable}
             </div>
       }
@@ -114,15 +115,17 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
           showFailedJobs = false)
 
         _content ++=
-          <span id="completed" class="collapse-aggregated-completedExecutions collapse-table"
-                onClick="collapseTable('collapse-aggregated-completedExecutions',
-                'aggregated-completedExecutions')">
+          <span id="completed" class="collapse-table" data-bs-toggle="collapse"
+                data-bs-target="#aggregated-completedExecutions"
+                aria-expanded="true" aria-controls="aggregated-completedExecutions"
+                data-collapse-name="collapse-aggregated-completedExecutions">
             <h4>
               <span class="collapse-table-arrow arrow-open"></span>
               <a>Completed Queries ({completed.size})</a>
             </h4>
           </span> ++
-            <div class="aggregated-completedExecutions collapsible-table">
+            <div class="collapsible-table collapse show"
+                id="aggregated-completedExecutions">
               {completedPageTable}
             </div>
       }
@@ -141,26 +144,22 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
             showFailedJobs = true)
 
         _content ++=
-          <span id="failed" class="collapse-aggregated-failedExecutions collapse-table"
-                onClick="collapseTable('collapse-aggregated-failedExecutions',
-                'aggregated-failedExecutions')">
+          <span id="failed" class="collapse-table" data-bs-toggle="collapse"
+                data-bs-target="#aggregated-failedExecutions"
+                aria-expanded="true" aria-controls="aggregated-failedExecutions"
+                data-collapse-name="collapse-aggregated-failedExecutions">
             <h4>
               <span class="collapse-table-arrow arrow-open"></span>
               <a>Failed Queries ({failed.size})</a>
             </h4>
           </span> ++
-            <div class="aggregated-failedExecutions collapsible-table">
+            <div class="collapsible-table collapse show"
+                id="aggregated-failedExecutions">
               {failedPageTable}
             </div>
       }
       _content
     }
-    content ++=
-      <script>
-        function clickDetail(details) {{
-          details.parentNode.querySelector('.stage-details').classList.toggle('collapsed')
-        }}
-      </script>
     val summary: NodeSeq =
       <div>
         <ul class="list-unstyled">
@@ -227,7 +226,7 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
         executionIdToSubExecutions).table(executionPage)
     } catch {
       case e@(_: IllegalArgumentException | _: IndexOutOfBoundsException) =>
-        <div class="alert alert-error">
+        <div class="alert alert-danger">
           <p>Error while rendering execution table:</p>
           <pre>
             {Utils.exceptionString(e)}
@@ -350,9 +349,7 @@ private[ui] class ExecutionPagedTable(
 
     def executionLinks(executionData: Seq[Long]): Seq[Node] = {
       val details = if (executionData.nonEmpty) {
-        val onClickScript = "this.parentNode.parentNode.nextElementSibling.nextElementSibling" +
-          ".classList.toggle('collapsed')"
-        <span onclick={onClickScript} class="expand-details">
+        <span class="expand-details" data-toggle-sub-execution="true">
           +details
         </span>
       } else {
@@ -474,7 +471,7 @@ private[ui] class ExecutionPagedTable(
 
   private def descriptionCell(execution: SQLExecutionUIData): Seq[Node] = {
     val details = if (execution.details != null && execution.details.nonEmpty) {
-      <span onclick="this.parentNode.querySelector('.stage-details').classList.toggle('collapsed')"
+      <span data-toggle-details=".stage-details"
             class="expand-details">
         +details
       </span> ++

@@ -23,12 +23,12 @@ from pyspark.ml.linalg import DenseVector
 from pyspark.ml.functions import array_to_vector, vector_to_array, predict_batch_udf
 from pyspark.sql.functions import array, struct, col
 from pyspark.sql.types import ArrayType, DoubleType, IntegerType, StructType, StructField, FloatType
-from pyspark.testing.sqlutils import (
+from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import (
     have_pandas,
     have_pyarrow,
     pandas_requirement_message,
     pyarrow_requirement_message,
-    ReusedSQLTestCase,
 )
 
 

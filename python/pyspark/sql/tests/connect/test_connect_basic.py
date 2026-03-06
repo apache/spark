@@ -36,6 +36,7 @@ from pyspark.sql.types import (
     ArrayType,
     Row,
 )
+from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.utils import eventually
 from pyspark.testing.connectutils import (
     should_test_connect,
@@ -320,14 +321,12 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         cdf3 = cdf1.join(cdf2, cdf1["value"] == cdf2["value"])
         sdf3 = sdf1.join(sdf2, sdf1["value"] == sdf2["value"])
 
-        self.assertEqual(cdf3.schema, sdf3.schema)
-        self.assertEqual(cdf3.collect(), sdf3.collect())
+        assertDataFrameEqual(cdf3, sdf3)
 
         cdf4 = cdf1.join(cdf2, cdf1["value"].eqNullSafe(cdf2["value"]))
         sdf4 = sdf1.join(sdf2, sdf1["value"].eqNullSafe(sdf2["value"]))
 
-        self.assertEqual(cdf4.schema, sdf4.schema)
-        self.assertEqual(cdf4.collect(), sdf4.collect())
+        assertDataFrameEqual(cdf4, sdf4)
 
         cdf5 = cdf1.join(
             cdf2, (cdf1["value"] == cdf2["value"]) & (cdf1["value"].eqNullSafe(cdf2["value"]))
@@ -336,20 +335,17 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             sdf2, (sdf1["value"] == sdf2["value"]) & (sdf1["value"].eqNullSafe(sdf2["value"]))
         )
 
-        self.assertEqual(cdf5.schema, sdf5.schema)
-        self.assertEqual(cdf5.collect(), sdf5.collect())
+        assertDataFrameEqual(cdf5, sdf5)
 
         cdf6 = cdf1.join(cdf2, cdf1["value"] == cdf2["value"]).select(cdf1.value)
         sdf6 = sdf1.join(sdf2, sdf1["value"] == sdf2["value"]).select(sdf1.value)
 
-        self.assertEqual(cdf6.schema, sdf6.schema)
-        self.assertEqual(cdf6.collect(), sdf6.collect())
+        assertDataFrameEqual(cdf6, sdf6)
 
         cdf7 = cdf1.join(cdf2, cdf1["value"] == cdf2["value"]).select(cdf2.value)
         sdf7 = sdf1.join(sdf2, sdf1["value"] == sdf2["value"]).select(sdf2.value)
 
-        self.assertEqual(cdf7.schema, sdf7.schema)
-        self.assertEqual(cdf7.collect(), sdf7.collect())
+        assertDataFrameEqual(cdf7, sdf7)
 
     def test_join_with_cte(self):
         cte_query = "with dt as (select 1 as ida) select ida as id from dt"
@@ -362,8 +358,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         cdf2 = self.connect.sql(cte_query)
         cdf3 = cdf1.join(cdf2, cdf1.id == cdf2.id)
 
-        self.assertEqual(sdf3.schema, cdf3.schema)
-        self.assertEqual(sdf3.collect(), cdf3.collect())
+        assertDataFrameEqual(cdf3, sdf3)
 
     def test_with_columns_renamed(self):
         # SPARK-41312: test DataFrame.withColumnsRenamed()
@@ -1621,7 +1616,7 @@ class SparkConnectGCTests(SparkConnectSQLTestCase):
                     )
 
                 # Execute the query, and assert the results are correct.
-                self.assertEqual(cdf.collect(), sdf.collect())
+                assertDataFrameEqual(cdf, sdf)
 
                 # Verify the metadata of arrow batch chunks.
                 def split_into_batches(chunks):

@@ -273,12 +273,12 @@ class NamespaceTestsMixin:
             pd.to_timedelta(np.arange(5), unit="s"),
         )
         self.assert_eq(
-            ps.to_timedelta(ps.Series([1, 2]), unit="d"),
-            pd.to_timedelta(pd.Series([1, 2]), unit="d"),
+            ps.to_timedelta(ps.Series([1, 2]), unit="D"),
+            pd.to_timedelta(pd.Series([1, 2]), unit="D"),
         )
         self.assert_eq(
-            ps.to_timedelta(pd.Series([1, 2]), unit="d"),
-            pd.to_timedelta(pd.Series([1, 2]), unit="d"),
+            ps.to_timedelta(pd.Series([1, 2]), unit="D"),
+            pd.to_timedelta(pd.Series([1, 2]), unit="D"),
         )
 
     def test_timedelta_range(self):
@@ -606,6 +606,11 @@ class NamespaceTestsMixin:
             "'ignore' is not implemented yet, when the `arg` is Series.",
             lambda: ps.to_numeric(psser, errors="ignore"),
         )
+
+        # SPARK-54666: Series with numeric dtype should be returned as-is.
+        pser = pd.Series([-1554478299, 2])
+        psser = ps.from_pandas(pser)
+        self.assert_eq(pd.to_numeric(pser), ps.to_numeric(psser))
 
     def test_json_normalize(self):
         # Basic test case with a simple JSON structure

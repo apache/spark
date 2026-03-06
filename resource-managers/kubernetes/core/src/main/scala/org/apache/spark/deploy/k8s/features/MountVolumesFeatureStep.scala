@@ -23,7 +23,7 @@ import io.fabric8.kubernetes.api.model._
 
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.Config.KUBERNETES_USE_LEGACY_PVC_ACCESS_MODE
-import org.apache.spark.deploy.k8s.Constants.{ENV_EXECUTOR_ID, SPARK_APP_ID_LABEL}
+import org.apache.spark.deploy.k8s.Constants.{DEFAULT_PVC_ACCESS_MODE, ENV_EXECUTOR_ID, SPARK_APP_ID_LABEL}
 
 private[spark] class MountVolumesFeatureStep(conf: KubernetesConf)
   extends KubernetesFeatureConfigStep {
@@ -33,7 +33,7 @@ private[spark] class MountVolumesFeatureStep(conf: KubernetesConf)
   val accessMode = if (conf.get(KUBERNETES_USE_LEGACY_PVC_ACCESS_MODE)) {
     "ReadWriteOnce"
   } else {
-    PVC_ACCESS_MODE
+    DEFAULT_PVC_ACCESS_MODE
   }
 
   override def configurePod(pod: SparkPod): SparkPod = {
@@ -142,5 +142,4 @@ private[spark] object MountVolumesFeatureStep {
   val PVC_ON_DEMAND = "OnDemand"
   val PVC = "PersistentVolumeClaim"
   val PVC_POSTFIX = "-pvc"
-  val PVC_ACCESS_MODE = "ReadWriteOncePod"
 }

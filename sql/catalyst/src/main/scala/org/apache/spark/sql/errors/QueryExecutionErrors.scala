@@ -676,6 +676,15 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     stInvalidSridValueError(srid.toString)
   }
 
+  def wkbParseError(msg: String, pos: String): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(errorClass = "WKB_PARSE_ERROR",
+      messageParameters = Map("parseError" -> msg, "pos" -> pos))
+  }
+
+  def wkbParseError(msg: String, pos: Long): SparkIllegalArgumentException = {
+    wkbParseError(msg, pos.toString)
+  }
+
   def withSuggestionIntervalArithmeticOverflowError(
       suggestedFunc: String,
       context: QueryContext): ArithmeticException = {
@@ -3257,5 +3266,29 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "function" -> toSQLId(function),
         "mode" -> mode,
         "validModes" -> validModes.mkString(", ")))
+  }
+
+  def tupleInvalidInputSketchBufferFamily(
+      function: String,
+      expectedFamily: String,
+      actualFamily: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "TUPLE_INVALID_INPUT_SKETCH_BUFFER_FAMILY",
+      messageParameters = Map(
+        "function" -> toSQLId(function),
+        "expectedFamily" -> expectedFamily,
+        "actualFamily" -> actualFamily))
+  }
+
+  def thetaInvalidInputSketchBufferFamily(
+      function: String,
+      expectedFamily: String,
+      actualFamily: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "THETA_INVALID_INPUT_SKETCH_BUFFER_FAMILY",
+      messageParameters = Map(
+        "function" -> toSQLId(function),
+        "expectedFamily" -> expectedFamily,
+        "actualFamily" -> actualFamily))
   }
 }

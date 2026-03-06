@@ -40,6 +40,8 @@ message PipelineCommand {
     DefineSqlGraphElements define_sql_graph_elements = 6;
     GetQueryFunctionExecutionSignalStream get_query_function_execution_signal_stream = 7;
     DefineFlowQueryFunctionResult define_flow_query_function_result = 8;
+    ExecuteOutputFlows execute_output_flows = 9;
+
     // Reserved field for protocol extensions.
     // Used to support forward-compatibility by carrying additional command types
     // that are not yet defined in this version of the proto. During planning, the
@@ -163,6 +165,25 @@ message PipelineCommand {
       // Fully qualified flow name that uniquely identify a flow in the Dataflow graph.
       optional string flow_name = 1;
     }
+  }
+
+  // Request to execute all flows for a single output (dataset or sink) remotely.
+  message ExecuteOutputFlows {
+
+    // The output (table or materialized view or sink) definition.
+    optional DefineOutput define_output = 1;
+
+    // The flows to execute for this table.
+    repeated DefineFlow define_flows = 2;
+
+    // Whether to perform a full refresh instead of an incremental update.
+    optional bool full_refresh = 3;
+
+    // Storage location for pipeline checkpoints and metadata.
+    optional string storage = 4;
+
+    // Reserved field for protocol extensions.
+    repeated google.protobuf.Any extension = 999;
   }
 
   // Resolves all datasets and flows and start a pipeline update. Should be called after all

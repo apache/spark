@@ -47,23 +47,28 @@ class Ring {
     if (points.size() < 4) {
       return false;
     }
-    Point first = points.get(0);
-    Point last = points.get(points.size() - 1);
-    return coordinatesEqual(first.getCoordinates(), last.getCoordinates());
+    return coordinatesEqual(points.get(0), points.get(points.size() - 1));
   }
 
   /**
-   * Compares two coordinate arrays for equality.
+   * Compares two points for coordinate equality (X and Y only).
+   * Z and M coordinates are NOT considered, per OGC standards.
    */
-  private static boolean coordinatesEqual(double[] coords1, double[] coords2) {
-    if (coords1.length != coords2.length) {
-      return false;
-    }
-    for (int i = 0; i < coords1.length; i++) {
-      if (coords1[i] != coords2[i]) {
-        return false;
+  private static boolean coordinatesEqual(Point p1, Point p2) {
+    return p1.getX() == p2.getX() && p1.getY() == p2.getY();
+  }
+
+  /**
+   * Appends the ring coordinates wrapped in parentheses for WKT output.
+   */
+  void appendCoordinatesToWkt(StringBuilder sb) {
+    sb.append("(");
+    for (int i = 0; i < points.size(); i++) {
+      if (i > 0) {
+        sb.append(",");
       }
+      points.get(i).appendWktContent(sb);
     }
-    return true;
+    sb.append(")");
   }
 }

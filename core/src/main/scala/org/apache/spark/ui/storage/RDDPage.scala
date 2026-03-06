@@ -61,11 +61,11 @@ private[ui] class RDDPage(parent: SparkUITab, store: AppStatusStore) extends Web
       _blockTable.table(blockPage)
     } catch {
       case e @ (_ : IllegalArgumentException | _ : IndexOutOfBoundsException) =>
-        <div class="alert alert-error">{e.getMessage}</div>
+        <div class="alert alert-danger">{e.getMessage}</div>
     }
 
     val jsForScrollingDownToBlockTable =
-      <script>
+      <script nonce={CspNonce.get}>
         {
           Unparsed {
             """

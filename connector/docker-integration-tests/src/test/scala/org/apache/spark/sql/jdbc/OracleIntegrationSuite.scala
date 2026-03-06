@@ -186,7 +186,7 @@ class OracleIntegrationSuite extends SharedJDBCIntegrationSuite
   test("SPARK-16625: Importing Oracle numeric types") {
     Seq("true", "false").foreach { flag =>
       withSQLConf((SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key, flag)) {
-        val df = sqlContext.read.jdbc(jdbcUrl, "numerics", new Properties)
+        val df = spark.read.jdbc(jdbcUrl, "numerics", new Properties)
         checkAnswer(df, Seq(Row(BigDecimal.valueOf(4), BigDecimal.valueOf(1.23),
           BigDecimal.valueOf(9999999999L), BigDecimal.valueOf(7456100))))
       }
@@ -200,7 +200,7 @@ class OracleIntegrationSuite extends SharedJDBCIntegrationSuite
     // write the dataframe to the oracle table tbl
     df1.write.jdbc(jdbcUrl, "tbl2", new Properties)
     // read the table from the oracle
-    val dfRead = sqlContext.read.jdbc(jdbcUrl, "tbl2", new Properties)
+    val dfRead = spark.read.jdbc(jdbcUrl, "tbl2", new Properties)
     // get the rows
     val rows = dfRead.collect()
     // verify the data type is inserted
@@ -293,7 +293,7 @@ class OracleIntegrationSuite extends SharedJDBCIntegrationSuite
   }
 
   test("SPARK-20557: column type TIMESTAMP with TIME ZONE should be recognized") {
-    val dfRead = sqlContext.read.jdbc(jdbcUrl, "ts_with_timezone", new Properties)
+    val dfRead = spark.read.jdbc(jdbcUrl, "ts_with_timezone", new Properties)
     val rows = dfRead.collect()
     val types = rows(0).toSeq.map(x => x.getClass.toString)
     assert(types(1).equals("class java.sql.Timestamp"))
@@ -309,14 +309,14 @@ class OracleIntegrationSuite extends SharedJDBCIntegrationSuite
 
     withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> localSessionTimeZone.getID) {
       checkAnswer(
-        sqlContext.read.jdbc(jdbcUrl, "ts_with_timezone", new Properties),
+        spark.read.jdbc(jdbcUrl, "ts_with_timezone", new Properties),
         rsOfTsWithTimezone)
     }
   }
 
   test("Column TIMESTAMP with TIME ZONE(JVM timezone)") {
     withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> TimeZone.getDefault.getID) {
-      val dfRead = sqlContext.read.jdbc(jdbcUrl, "ts_with_timezone", new Properties)
+      val dfRead = spark.read.jdbc(jdbcUrl, "ts_with_timezone", new Properties)
       Seq(PST, UTC).foreach(timeZone => {
         withDefaultTimeZone(timeZone) {
           checkAnswer(dfRead, rsOfTsWithTimezone)
@@ -415,7 +415,7 @@ class OracleIntegrationSuite extends SharedJDBCIntegrationSuite
     dfWrite.write.mode(SaveMode.Append).jdbc(jdbcUrl, tableName, props)
 
     // read records from oracle_types
-    val dfRead = sqlContext.read.jdbc(jdbcUrl, tableName, new Properties)
+    val dfRead = spark.read.jdbc(jdbcUrl, tableName, new Properties)
     val rows = dfRead.collect()
     assert(rows.length == 1)
 

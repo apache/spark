@@ -160,7 +160,7 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
 
     <div>
       <div>
-        <span style="cursor: pointer;" onclick="togglePlanViz();">
+        <span data-action="togglePlanViz">
           <h4>
             <span id="plan-viz-graph-arrow" class="arrow-open"></span>
             <a>Plan Visualization</a>
@@ -168,15 +168,36 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
         </span>
       </div>
 
-      <div id="plan-viz-graph">
-        <div>
-          <input type="checkbox" id="stageId-and-taskId-checkbox"></input>
-          <span>Show the Stage ID and Task ID that corresponds to the max metric</span>
+      <div id="plan-viz-content" class="row">
+        <div class="col-8">
+          <div id="plan-viz-graph">
+            <div>
+              <input type="checkbox" id="stageId-and-taskId-checkbox"></input>
+              <span>Show the Stage ID and Task ID that corresponds to the max metric</span>
+            </div>
+            <div>
+              <input type="checkbox" id="detailed-labels-checkbox"></input>
+              <span>Show metrics in graph nodes (detailed mode)</span>
+            </div>
+          </div>
+        </div>
+        <div class="col-4">
+          <div id="plan-viz-details-panel" class="sticky-top" style="top: 4rem; z-index: 1;">
+            <div class="card">
+              <div class="card-header fw-bold" id="plan-viz-details-title">Details</div>
+              <div class="card-body" id="plan-viz-details-body">
+                <p class="text-muted mb-0">Click a node to view details</p>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
       <div id="plan-viz-metadata" style="display:none">
         <div class="dot-file">
           {graph.makeDotFile(metrics)}
+        </div>
+        <div class="node-details">
+          {graph.makeNodeDetailsJson(metrics)}
         </div>
       </div>
       {planVisualizationResources(request)}
@@ -188,7 +209,7 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
 
   private def physicalPlanDescription(physicalPlanDescription: String): Seq[Node] = {
     <div>
-      <span style="cursor: pointer;" onclick="clickPhysicalPlanDetails();">
+      <span data-action="clickPhysicalPlanDetails">
         <h4>
           <span id="physical-plan-details-arrow" class="arrow-closed"></span>
           <a>Plan Details</a>
@@ -211,14 +232,16 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
     )
 
     <div>
-      <span class="collapse-sql-properties collapse-table"
-            onClick="collapseTable('collapse-sql-properties', 'sql-properties')">
+      <span class="collapse-table" data-bs-toggle="collapse"
+            data-bs-target="#sql-properties"
+            aria-expanded="false" aria-controls="sql-properties"
+            data-collapse-name="collapse-sql-properties">
         <h4>
           <span class="collapse-table-arrow arrow-closed"></span>
           <a>SQL / DataFrame Properties</a>
         </h4>
       </span>
-      <div class="sql-properties collapsible-table collapsed">
+      <div class="collapsible-table collapse" id="sql-properties">
         {configs}
       </div>
     </div>
@@ -250,15 +273,16 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
     )
 
     <div>
-      <span class="collapse-pandas-on-spark-properties collapse-table"
-            onClick="collapseTable('collapse-pandas-on-spark-properties',
-             'pandas-on-spark-properties')">
+      <span class="collapse-table" data-bs-toggle="collapse"
+            data-bs-target="#pandas-on-spark-properties"
+            aria-expanded="false" aria-controls="pandas-on-spark-properties"
+            data-collapse-name="collapse-pandas-on-spark-properties">
         <h4>
           <span class="collapse-table-arrow arrow-closed"></span>
           <a>Pandas API Properties</a>
         </h4>
       </span>
-      <div class="pandas-on-spark-properties collapsible-table collapsed">
+      <div class="collapsible-table collapse" id="pandas-on-spark-properties">
         {configs}
       </div>
     </div>

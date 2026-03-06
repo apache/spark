@@ -2180,7 +2180,7 @@ class AFTSurvivalRegression(
             0.9,
             0.95,
             0.99,
-        ],  # noqa: B005
+        ],
         quantilesCol: Optional[str] = None,
         aggregationDepth: int = 2,
         maxBlockSizeInMB: float = 0.0,
@@ -2220,7 +2220,7 @@ class AFTSurvivalRegression(
             0.9,
             0.95,
             0.99,
-        ],  # noqa: B005
+        ],
         quantilesCol: Optional[str] = None,
         aggregationDepth: int = 2,
         maxBlockSizeInMB: float = 0.0,

@@ -33,14 +33,14 @@ from pyspark.sql.types import (
     StructType,
     VarcharType,
 )
-from pyspark.testing.sqlutils import (
+from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import (
+    assertDataFrameEqual,
     have_pandas,
     have_pyarrow,
     pandas_requirement_message,
     pyarrow_requirement_message,
-    ReusedSQLTestCase,
 )
-from pyspark.testing.utils import assertDataFrameEqual
 from pyspark.util import PythonEvalType
 
 

@@ -19,6 +19,7 @@ from pyspark.sql import Row, Observation, functions as F
 from pyspark.sql.types import StructType, LongType
 from pyspark.errors import (
     PySparkAssertionError,
+    PySparkException,
     PySparkTypeError,
     PySparkValueError,
 )
@@ -237,6 +238,24 @@ class DataFrameObservationTestsMixin:
         assertDataFrameEqual(df, [Row(id=id) for id in range(10)])
 
         self.assertEqual(observation.get, {"map": {"count": 10}})
+
+    def test_observation_errors_propagated_to_client(self):
+        observation = Observation("test_observation")
+        observed_df = self.spark.range(10).observe(
+            observation,
+            F.sum("id").alias("sum_id"),
+            F.raise_error(F.lit("test error")).alias("raise_error"),
+        )
+        actual = observed_df.collect()
+        self.assertEqual(
+            [row.asDict() for row in actual],
+            [{"id": i} for i in range(10)],
+        )
+
+        with self.assertRaises(PySparkException) as cm:
+            _ = observation.get
+
+        self.assertIn("test error", str(cm.exception))
 
 
 class DataFrameObservationTests(

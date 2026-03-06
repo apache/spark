@@ -23,7 +23,7 @@ import java.time._
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions.ToStringBase
-import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, FractionTimeFormatter, TimeFormatter, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, FractionTimeFormatter, STUtils, TimeFormatter, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.HIVE_STYLE
 import org.apache.spark.sql.catalyst.util.IntervalUtils.{durationToMicros, periodToMonths, toDayTimeIntervalString, toYearMonthIntervalString}
 import org.apache.spark.sql.execution.command.{DescribeCommandBase, ExecutedCommandExec, ShowTablesCommand, ShowViewsCommand}
@@ -149,6 +149,14 @@ object HiveResult extends SQLConfHelper {
         startField,
         endField)
     case (v: VariantVal, VariantType) => v.toString
+    case (g: Geometry, dt: GeometryType) =>
+      val internalGeom = STUtils.serializeGeomFromWKB(g, dt)
+      val s = STUtils.stAsEwkt(internalGeom).toString
+      if (nested) "\"" + s + "\"" else s
+    case (g: Geography, dt: GeographyType) =>
+      val internalGeog = STUtils.serializeGeogFromWKB(g, dt)
+      val s = STUtils.stAsEwkt(internalGeog).toString
+      if (nested) "\"" + s + "\"" else s
     case (other, u: UserDefinedType[_]) => u.stringifyValue(other)
   }
 }

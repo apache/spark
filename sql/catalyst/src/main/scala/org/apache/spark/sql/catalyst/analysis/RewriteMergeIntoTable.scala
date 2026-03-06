@@ -175,7 +175,11 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
     // predicates of the ON condition can be used to filter the target table (planning & runtime)
     // only if there is no NOT MATCHED BY SOURCE clause
     val (pushableCond, groupFilterCond) = if (notMatchedBySourceActions.isEmpty) {
-      (cond, Some(toGroupFilterCondition(relation, source, cond)))
+      if (groupFilterEnabled) {
+        (cond, Some(toGroupFilterCondition(relation, source, cond)))
+      } else {
+        (cond, None)
+      }
     } else {
       (TrueLiteral, None)
     }

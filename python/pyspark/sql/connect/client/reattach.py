@@ -148,15 +148,15 @@ class ExecutePlanResponseReattachableIterator(Generator):
             if not self._has_next():
                 raise StopIteration()
 
-        ret = self._current
-        assert ret is not None
+            ret = self._current
+            assert ret is not None
 
-        self._last_returned_response_id = ret.response_id
-        if ret.HasField("result_complete"):
-            self._release_all()
-        else:
-            self._release_until(self._last_returned_response_id)
-        self._current = None
+            self._last_returned_response_id = ret.response_id
+            if ret.HasField("result_complete"):
+                self._release_all()
+            else:
+                self._release_until(self._last_returned_response_id)
+            self._current = None
         return ret
 
     def _has_next(self) -> bool:

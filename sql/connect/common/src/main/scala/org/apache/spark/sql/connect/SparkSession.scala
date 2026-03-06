@@ -742,12 +742,12 @@ class SparkSession private[sql] (
   }
 
   private def processRegisteredObservedMetrics(metrics: java.util.List[ObservedMetrics]): Unit = {
-    metrics.asScala.map { metric =>
+    metrics.asScala.foreach { metric =>
       // Here we only process metrics that belong to a registered Observation object.
       // All metrics, whether registered or not, will be collected by `SparkResult`.
       val observationOrNull = observationRegistry.remove(metric.getPlanId)
       if (observationOrNull != null) {
-        val metricsResult = Try(SparkResult.transformObservedMetrics(metric))
+        val metricsResult = SparkResult.transformObservedMetrics(metric)
         observationOrNull.setMetricsAndNotify(metricsResult)
       }
     }

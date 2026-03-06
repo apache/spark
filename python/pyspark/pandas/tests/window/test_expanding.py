@@ -23,17 +23,18 @@ from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 
 class ExpandingTestingFuncMixin:
-    def _test_expanding_func(self, ps_func, pd_func=None):
+    def _test_expanding_func(self, ps_func, pd_func=None, *, int_almost=False, float_almost=False):
         if not pd_func:
             pd_func = ps_func
         if isinstance(pd_func, str):
             pd_func = self.convert_str_to_lambda(pd_func)
         if isinstance(ps_func, str):
             ps_func = self.convert_str_to_lambda(ps_func)
+
         pser = pd.Series([1, 2, 3, 7, 9, 8], index=np.random.rand(6), name="a")
         psser = ps.from_pandas(pser)
-        self.assert_eq(ps_func(psser.expanding(2)), pd_func(pser.expanding(2)), almost=True)
-        self.assert_eq(ps_func(psser.expanding(2)), pd_func(pser.expanding(2)), almost=True)
+        self.assert_eq(ps_func(psser.expanding(2)), pd_func(pser.expanding(2)), almost=int_almost)
+        self.assert_eq(ps_func(psser.expanding(2)), pd_func(pser.expanding(2)), almost=int_almost)
 
         # Multiindex
         pser = pd.Series(
@@ -46,14 +47,16 @@ class ExpandingTestingFuncMixin:
             {"a": [1.0, 2.0, 3.0, 2.0], "b": [4.0, 2.0, 3.0, 1.0]}, index=np.random.rand(4)
         )
         psdf = ps.from_pandas(pdf)
-        self.assert_eq(ps_func(psdf.expanding(2)), pd_func(pdf.expanding(2)))
-        self.assert_eq(ps_func(psdf.expanding(2)).sum(), pd_func(pdf.expanding(2)).sum())
+        self.assert_eq(ps_func(psdf.expanding(2)), pd_func(pdf.expanding(2)), almost=float_almost)
+        self.assert_eq(
+            ps_func(psdf.expanding(2)).sum(), pd_func(pdf.expanding(2)).sum(), almost=float_almost
+        )
 
         # Multiindex column
         columns = pd.MultiIndex.from_tuples([("a", "x"), ("a", "y")])
         pdf.columns = columns
         psdf.columns = columns
-        self.assert_eq(ps_func(psdf.expanding(2)), pd_func(pdf.expanding(2)))
+        self.assert_eq(ps_func(psdf.expanding(2)), pd_func(pdf.expanding(2)), almost=float_almost)
 
 
 class ExpandingMixin(ExpandingTestingFuncMixin):

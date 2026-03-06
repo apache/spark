@@ -499,8 +499,8 @@ private[spark] object Config extends Logging {
       .doc("Value to set for the controller.kubernetes.io/pod-deletion-cost" +
         " annotation when Spark asks a deployment-based allocator to remove executor pods. This " +
         "helps Kubernetes pick the same pods Spark selected when the deployment scales down." +
-        s" This should only be enabled when both $KUBERNETES_ALLOCATION_PODS_ALLOCATOR is set to " +
-        s"deployment, and $DYN_ALLOCATION_ENABLED is enabled.")
+        s" This should only be enabled when both ${KUBERNETES_ALLOCATION_PODS_ALLOCATOR.key} is " +
+        s"set to deployment, and ${DYN_ALLOCATION_ENABLED.key} is enabled.")
       .version("4.2.0")
       .intConf
       .createOptional
@@ -520,6 +520,17 @@ private[spark] object Config extends Logging {
       .timeConf(TimeUnit.MILLISECONDS)
       .checkValue(value => value > 100, "Allocation batch delay must be greater than 0.1s.")
       .createWithDefaultString("1s")
+
+  val KUBERNETES_ALLOCATION_RECOVERY_MODE_ENABLED =
+    ConfigBuilder("spark.kubernetes.allocation.recoveryMode.enabled")
+      .doc("When Spark driver detects an executor termination due to OOM, Spark starts to " +
+        "allocate the recovery-mode executors which accept only a single task per executor JVM. " +
+        "In other words, the recovery-mode executors replace the OOM-terminated executors to " +
+        "survive from the resource-hungry tasks for the remaining tasks and stages. " +
+        "If set to `false`, Spark will not use the recovery-mode executors.")
+      .version("4.2.0")
+      .booleanConf
+      .createOptional
 
   val KUBERNETES_ALLOCATION_MAXIMUM =
     ConfigBuilder("spark.kubernetes.allocation.maximum")
