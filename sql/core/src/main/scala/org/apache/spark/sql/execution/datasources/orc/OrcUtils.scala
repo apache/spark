@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.orc
 
+import java.io.FileNotFoundException
 import java.nio.charset.StandardCharsets.UTF_8
 import java.util.Locale
 
@@ -72,8 +73,8 @@ object OrcUtils extends Logging {
     paths
   }
 
-  def readSchema(file: Path, conf: Configuration, ignoreCorruptFiles: Boolean)
-      : Option[TypeDescription] = {
+  def readSchema(file: Path, conf: Configuration, ignoreCorruptFiles: Boolean,
+      ignoreMissingFiles: Boolean = false): Option[TypeDescription] = {
     val fs = file.getFileSystem(conf)
     val readerOptions = OrcFile.readerOptions(conf).filesystem(fs)
     try {
@@ -86,6 +87,13 @@ object OrcUtils extends Logging {
         Some(schema)
       }
     } catch {
+      case e: FileNotFoundException =>
+        if (ignoreMissingFiles) {
+          logWarning(log"Skipped missing file: ${MDC(PATH, file)}", e)
+          None
+        } else {
+          throw QueryExecutionErrors.cannotReadFooterForFileError(file, e)
+        }
       case e: org.apache.orc.FileFormatException =>
         if (ignoreCorruptFiles) {
           logWarning(log"Skipped the footer in the corrupted file: ${MDC(PATH, file)}", e)
@@ -159,9 +167,11 @@ object OrcUtils extends Logging {
    * This is visible for testing.
    */
   def readOrcSchemasInParallel(
-    files: Seq[FileStatus], conf: Configuration, ignoreCorruptFiles: Boolean): Seq[StructType] = {
+    files: Seq[FileStatus], conf: Configuration, ignoreCorruptFiles: Boolean,
+    ignoreMissingFiles: Boolean): Seq[StructType] = {
     ThreadUtils.parmap(files, "readingOrcSchemas", 8) { currentFile =>
-      OrcUtils.readSchema(currentFile.getPath, conf, ignoreCorruptFiles).map(toCatalystSchema)
+      OrcUtils.readSchema(currentFile.getPath, conf, ignoreCorruptFiles, ignoreMissingFiles)
+        .map(toCatalystSchema)
     }.flatten
   }
 
