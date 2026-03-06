@@ -1770,14 +1770,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "actualSchema" -> actualSchema.toDDL))
   }
 
-  def dataSchemaNotSpecifiedError(format: String, fileCatalog: String): Throwable = {
-    new AnalysisException(
-      errorClass = "UNABLE_TO_INFER_SCHEMA_FOR_DATA_SOURCE",
-      messageParameters = Map(
-        "format" -> format,
-        "fileCatalog" -> fileCatalog))
-  }
-
   def invalidDataSourceError(className: String): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1135",
