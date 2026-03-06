@@ -3183,8 +3183,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def truncateTableOnExternalTablesError(tableIdentWithDB: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1266",
-      messageParameters = Map("tableIdentWithDB" -> tableIdentWithDB))
+      errorClass = "CANNOT_TRUNCATE_EXTERNAL_TABLE",
+      messageParameters = Map("tableName" -> tableIdentWithDB))
   }
 
   def truncateTablePartitionNotSupportedForNotPartitionedTablesError(

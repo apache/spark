@@ -547,6 +547,12 @@
     ],
     "sqlState" : "58030"
   },
+  "CANNOT_TRUNCATE_EXTERNAL_TABLE" : {
+    "message" : [
+      "Operation not allowed: TRUNCATE TABLE on external tables: <tableName>."
+    ],
+    "sqlState" : "0A000"
+  },
   "CANNOT_UPDATE_FIELD" : {
     "message" : [
       "Cannot update <table> field <fieldName> type:"
@@ -8748,11 +8754,6 @@
   "_LEGACY_ERROR_TEMP_1264" : {
     "message" : [
       "LOAD DATA target table <tableIdentWithDB> is not partitioned, but a partition spec was provided."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1266" : {
-    "message" : [
-      "Operation not allowed: TRUNCATE TABLE on external tables: <tableIdentWithDB>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1267" : {
