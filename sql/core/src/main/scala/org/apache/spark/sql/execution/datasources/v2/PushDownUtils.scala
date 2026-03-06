@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression, ExpressionSet, NamedExpression, SchemaPruning, V2ExpressionUtils}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression, ExpressionSet, NamedExpression, PythonUDF, SchemaPruning, SubqueryExpression, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.expressions.IdentityTransform
@@ -66,6 +66,16 @@ object PushDownUtils {
         }
     }
   }
+
+  /**
+   * Returns true if the given filter expression is safe to push as a partition predicate
+   * in the second pass of enhanced partition filtering: it must be deterministic, contain
+   * no subquery, and no PythonUDF.
+   */
+  def isPartitionPushableFilter(f: Expression): Boolean =
+    f.deterministic &&
+      !SubqueryExpression.hasSubquery(f) &&
+      !f.exists(_.isInstanceOf[PythonUDF])
 
   /**
    * Deduplicates expressions by semantic equality, preserving first-occurrence order.
@@ -160,7 +170,6 @@ object PushDownUtils {
           // If the scan supports enhanced partition filtering, convert to PartitionPredicates
           // (see SPARK-55596). PartitionPredicates are pushed to the scan in a second pass.
           case (Some(structType), true) =>
-            //
             val (postScanPartitionFilters, postScanDataFilters) =
               DataSourceUtils.getPartitionFiltersAndDataFilters(
                 structType, returnedFirstPassFilters.toIndexedSeq)
@@ -169,12 +178,15 @@ object PushDownUtils {
                 structType, untranslatableExprs.toSeq)
 
             // Push second-pass partition filters as PartitionPredicates
-            val allPartitionPredicates = (postScanPartitionFilters ++
-              untranslatablePartitionFilters)
+            val allPartitionFilters = postScanPartitionFilters ++ untranslatablePartitionFilters
+            val (partitionFiltersForPush, partitionFiltersNotPushed) =
+              allPartitionFilters.partition(isPartitionPushableFilter)
+            val partitionPredicatesForPush = partitionFiltersForPush
               .map(expr => new PartitionPredicateImpl(expr, toAttributes(structType)))
             val returnedSecondPassPartitionFilters =
-              r.pushPredicates(allPartitionPredicates.toArray).map { predicate =>
+              r.pushPredicates(partitionPredicatesForPush.toArray).map { predicate =>
                 V2ExpressionUtils.toCatalyst(predicate).getOrElse(
+                  // should not happen
                   DataSourceV2Strategy.rebuildExpressionFromFilter(
                     predicate, translatedFilterToExpr))
               }
@@ -183,13 +195,11 @@ object PushDownUtils {
             // evaluated faster, while the untranslated filters are complicated filters that take
             // more time to evaluate, so we want to evaluate the postScanFilters filters first.
             val untranslatableSet = ExpressionSet(untranslatableExprs)
-            val returnedPostScanPartitionFilters =
-              returnedSecondPassPartitionFilters.filter(e => !untranslatableSet.contains(e))
-            val returnedUntranslatablePartitionFilters =
-              returnedSecondPassPartitionFilters.filter(untranslatableSet.contains)
-            val postScanFilters = postScanDataFilters ++ returnedPostScanPartitionFilters ++
-              untranslatableDataFilters ++ returnedUntranslatablePartitionFilters
-            postScanFilters.toArray.toImmutableArraySeq
+            val allPostScanFilters = postScanDataFilters ++ returnedSecondPassPartitionFilters ++
+              untranslatableDataFilters ++ partitionFiltersNotPushed
+            val (untranslatableFilters, translatableFilters) =
+              allPostScanFilters.partition(untranslatableSet.contains)
+            untranslatableFilters ++ translatableFilters
           case _ =>
             // Normally translated filters (postScanFilters) are simple filters that can be
             // evaluated faster, while the untranslated filters are complicated filters that take

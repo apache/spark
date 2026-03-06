@@ -54,20 +54,6 @@ class PartitionPredicateImpl(
   /** The wrapped partition filter Catalyst Expression. */
   def expression: Expression = catalystExpression
 
-  override def equals(obj: Any): Boolean = obj match {
-    case other: PartitionPredicateImpl =>
-      catalystExpression.semanticEquals(other.catalystExpression) &&
-        partitionSchema == other.partitionSchema
-    case _ => false
-  }
-
-  override def hashCode(): Int = {
-    31 * catalystExpression.semanticHash() + partitionSchema.hashCode()
-  }
-
-  override def toString(): String =
-    s"PartitionPredicate(${catalystExpression.sql})"
-
   /** Bound predicate, computed once and reused for all partition rows. */
   private lazy val boundPredicate: InternalRow => Boolean = {
     val boundExpr = catalystExpression.transform {
@@ -115,4 +101,18 @@ class PartitionPredicateImpl(
     }
     ordinals.toArray.sorted.distinct
   }
+
+  override def equals(obj: Any): Boolean = obj match {
+    case other: PartitionPredicateImpl =>
+      catalystExpression.semanticEquals(other.catalystExpression) &&
+        partitionSchema == other.partitionSchema
+    case _ => false
+  }
+
+  override def hashCode(): Int = {
+    31 * catalystExpression.semanticHash() + partitionSchema.hashCode()
+  }
+
+  override def toString(): String =
+    s"PartitionPredicate(${catalystExpression.sql})"
 }
