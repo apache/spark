@@ -589,9 +589,10 @@ object LiteralValueProtoConverter {
                 Map.empty)
             }
           case _ =>
+            val literalCase = literal.getLiteralTypeCase
             throw InvalidPlanInput(
               "SPARK_CONNECT_INVALID_PLAN_INPUT.UNSUPPORTED_LITERAL_TYPE",
-              Map("typeInfo" -> s"${literal.getLiteralTypeCase.name}(${literal.getLiteralTypeCase.getNumber})"))
+              Map("typeInfo" -> s"${literalCase.name}(${literalCase.getNumber})"))
         }
         builder.build()
       }

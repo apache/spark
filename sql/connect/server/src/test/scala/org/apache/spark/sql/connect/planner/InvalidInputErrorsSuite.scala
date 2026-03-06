@@ -135,7 +135,7 @@ class InvalidInputErrorsSuite extends PlanTest with SparkConnectPlanTest {
         condition = testCase.expectedErrorCondition,
         parameters = testCase.expectedParameters)
       if (testCase.expectedErrorCondition.startsWith("SPARK_CONNECT_INVALID_PLAN_INPUT")) {
-        assert(exception.getSqlState == "XXSC1")
+        assert(exception.getSqlState == "42000")
       }
     }
   }
@@ -144,7 +144,7 @@ class InvalidInputErrorsSuite extends PlanTest with SparkConnectPlanTest {
     val ex = InvalidInputErrors.noHandlerFoundForExtension("foo.bar.Ext")
     assert(ex.getCondition.contains("NO_HANDLER_FOR_EXTENSION"))
     assert(ex.getMessage.contains("foo.bar.Ext"))
-    assert(ex.getSqlState == "XXSC1")
+    assert(ex.getSqlState == "42000")
   }
 
   test("notFoundCachedLocalRelation") {
@@ -152,7 +152,7 @@ class InvalidInputErrorsSuite extends PlanTest with SparkConnectPlanTest {
     assert(ex.getCondition.contains("NOT_FOUND_CACHED_LOCAL_RELATION"))
     assert(ex.getMessage.contains("abc123"))
     assert(ex.getMessage.contains("sess-uuid"))
-    assert(ex.getSqlState == "XXSC1")
+    assert(ex.getSqlState == "42000")
   }
 
   test("localRelationSizeLimitExceeded") {
@@ -160,14 +160,14 @@ class InvalidInputErrorsSuite extends PlanTest with SparkConnectPlanTest {
     assert(ex.getCondition.contains("LOCAL_RELATION_SIZE_LIMIT_EXCEEDED"))
     assert(ex.getMessage.contains("1000"))
     assert(ex.getMessage.contains("500"))
-    assert(ex.getSqlState == "XXSC1")
+    assert(ex.getSqlState == "42000")
   }
 
   test("functionEvalTypeNotSupported") {
     val ex = InvalidInputErrors.functionEvalTypeNotSupported(42)
     assert(ex.getCondition.contains("FUNCTION_EVAL_TYPE_NOT_SUPPORTED"))
     assert(ex.getMessage.contains("42"))
-    assert(ex.getSqlState == "XXSC1")
+    assert(ex.getSqlState == "42000")
   }
 
   test("streamingQueryRunIdMismatch") {
@@ -176,7 +176,7 @@ class InvalidInputErrorsSuite extends PlanTest with SparkConnectPlanTest {
     assert(ex.getMessage.contains("q1"))
     assert(ex.getMessage.contains("run1"))
     assert(ex.getMessage.contains("run2"))
-    assert(ex.getSqlState == "XXSC1")
+    assert(ex.getSqlState == "42000")
   }
 
   // Helper case class to define test cases

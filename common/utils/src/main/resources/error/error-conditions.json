@@ -5938,7 +5938,7 @@
         ]
       }
     },
-    "sqlState" : "XXSC1"
+    "sqlState" : "42000"
   },
   "SPARK_JOB_CANCELLED" : {
     "message" : [

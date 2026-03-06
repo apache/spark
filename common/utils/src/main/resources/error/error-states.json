@@ -7536,12 +7536,6 @@
         "standard": "N",
         "usedBy": ["Spark"]
     },
-    "XXSC1": {
-        "description": "Connect Server - Invalid Plan Input",
-        "origin": "Spark",
-        "standard": "N",
-        "usedBy": ["Spark"]
-    },
     "XXKD0": {
         "description": "Analysis - Bad plan",
         "origin": "Databricks",
