@@ -7589,6 +7589,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         axis: Optional[Axis] = 0,
         index: Union[Name, List[Name]] = None,
         columns: Union[Name, List[Name]] = None,
+        errors: str = "raise",
     ) -> "DataFrame":
         """
         Drop specified labels from columns.
@@ -7614,6 +7615,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         columns : single label or list-like
             Alternative to specifying axis (``labels, axis=1``
             is equivalent to ``columns=labels``).
+        errors : {{'ignore', 'raise'}}, default 'raise'
+            If 'ignore', suppress error and only existing labels are dropped.
+
+            .. versionadded:: 4.1.0
 
         Returns
         -------
@@ -7677,14 +7682,16 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         -----
         Currently, dropping rows of a MultiIndex DataFrame is not supported yet.
         """
+        if errors not in ("raise", "ignore"):
+            raise ValueError("errors must be either 'raise' or 'ignore'")
         if labels is not None:
             if index is not None or columns is not None:
                 raise ValueError("Cannot specify both 'labels' and 'index'/'columns'")
             axis = validate_axis(axis)
             if axis == 1:
-                return self.drop(index=index, columns=labels)
+                return self.drop(index=index, columns=labels, errors=errors)
             else:
-                return self.drop(index=labels, columns=columns)
+                return self.drop(index=labels, columns=columns, errors=errors)
         else:
             if index is None and columns is None:
                 raise ValueError("Need to specify at least one of 'labels' or 'columns' or 'index'")
@@ -7737,8 +7744,17 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                         for col in columns
                         if label[: len(col)] == col
                     )
+                    if errors == "raise":
+                        missing = [
+                            col
+                            for col in columns
+                            if not any(label[: len(col)] == col for label in internal.column_labels)
+                        ]
+                        if missing:
+                            raise KeyError(missing)
+
                     if len(drop_column_labels) == 0:
-                        raise KeyError(columns)
+                        return DataFrame(internal)
 
                     keep_columns_and_labels = [
                         (column, label)
