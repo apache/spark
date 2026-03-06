@@ -62,9 +62,6 @@ case class EnsureRequirements(
     assert(requiredChildOrderings.length == originalChildren.length)
     // Ensure that the operator's children satisfy their output distribution requirements.
     var children = originalChildren.zip(requiredChildDistributions).map {
-      case (child, BroadcastDistribution(mode)) =>
-        BroadcastExchangeExec(mode, child)
-
       case (child, distribution) =>
         // Split child's partitioning into categories
         val (other, grouped, nonGrouped) = splitKeyedPartitionings(child.outputPartitioning)
@@ -106,10 +103,12 @@ case class EnsureRequirements(
                 GroupPartitionsExec(child)
             }
           } else {
-            // No partitioning satisfies - need shuffle
+            // No partitioning satisfies - need broadcast or shuffle
             val numPartitions = distribution.requiredNumPartitions
               .getOrElse(conf.numShufflePartitions)
             distribution match {
+              case BroadcastDistribution(mode) =>
+                BroadcastExchangeExec(mode, child)
               case _: StatefulOpClusteredDistribution =>
                 ShuffleExchangeExec(
                   distribution.createPartitioning(numPartitions), child,
