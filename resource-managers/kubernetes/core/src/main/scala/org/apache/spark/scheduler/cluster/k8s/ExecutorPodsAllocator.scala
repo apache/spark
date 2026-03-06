@@ -21,6 +21,8 @@ import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable
+import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.duration.Duration
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
@@ -36,7 +38,7 @@ import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.config._
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.scheduler.cluster.SchedulerBackendUtils.DEFAULT_NUMBER_EXECUTORS
-import org.apache.spark.util.{Clock, Utils}
+import org.apache.spark.util.{Clock, ThreadUtils, Utils}
 
 class ExecutorPodsAllocator(
     conf: SparkConf,
@@ -68,6 +70,14 @@ class ExecutorPodsAllocator(
   protected val podAllocationSize = conf.get(KUBERNETES_ALLOCATION_BATCH_SIZE)
 
   protected val podAllocationDelay = conf.get(KUBERNETES_ALLOCATION_BATCH_DELAY)
+
+  protected val podAllocationConcurrency = conf.get(KUBERNETES_ALLOCATION_BATCH_CONCURRENCY)
+
+  // Thread pool for parallel pod creation, only created when concurrency > 1
+  protected lazy val podCreationThreadPool =
+    ThreadUtils.newDaemonFixedThreadPool(podAllocationConcurrency, "k8s-pod-creator")
+  protected lazy val podCreationExecutionContext: ExecutionContext =
+    ExecutionContext.fromExecutorService(podCreationThreadPool)
 
   protected val podAllocationMaximum = conf.get(KUBERNETES_ALLOCATION_MAXIMUM)
 
@@ -438,6 +448,116 @@ class ExecutorPodsAllocator(
       applicationId: String,
       resourceProfileId: Int,
       pvcsInUse: Seq[String]): Unit = {
+    if (podAllocationConcurrency > 1) {
+      requestNewExecutorsParallel(numExecutorsToAllocate, applicationId,
+        resourceProfileId, pvcsInUse)
+    } else {
+      requestNewExecutorsSerial(numExecutorsToAllocate, applicationId,
+        resourceProfileId, pvcsInUse)
+    }
+  }
+
+  /**
+   * Builds a single executor pod spec, incrementing the executor ID counter.
+   * This is shared by both serial and parallel pod creation paths.
+   *
+   * @return (executorId, pod, associatedResources)
+   */
+  private def buildExecutorPod(
+      applicationId: String,
+      resourceProfileId: Int,
+      reusablePVCs: mutable.Buffer[PersistentVolumeClaim]): (Long, Pod, Seq[HasMetadata]) = {
+    val newExecutorId = EXECUTOR_ID_COUNTER.incrementAndGet()
+    if (newExecutorId >= podAllocationMaximum) {
+      throw new SparkException(s"Exceed the pod creation limit: $podAllocationMaximum")
+    }
+    val executorConf = KubernetesConf.createExecutorConf(
+      conf,
+      newExecutorId.toString,
+      applicationId,
+      driverPod,
+      resourceProfileId)
+    val resolvedExecutorSpec = executorBuilder.buildFromFeatures(executorConf, secMgr,
+      kubernetesClient, rpIdToResourceProfile(resourceProfileId))
+    val executorPod = resolvedExecutorSpec.pod
+    val podWithAttachedContainer = new PodBuilder(executorPod.pod)
+      .editOrNewSpec()
+      .addToContainers(executorPod.container)
+      .endSpec()
+      .build()
+    val resources = replacePVCsIfNeeded(
+      podWithAttachedContainer, resolvedExecutorSpec.executorKubernetesResources, reusablePVCs)
+    (newExecutorId, podWithAttachedContainer, resources)
+  }
+
+  /**
+   * Creates the executor pod via K8s API and sets up owner references and PVCs.
+   * Returns the executor ID on success. Throws on PVC creation failure after cleanup.
+   * Pod creation failures are caught internally and return None.
+   */
+  private def createExecutorPodAndPVCs(
+      newExecutorId: Long,
+      podWithAttachedContainer: Pod,
+      resources: Seq[HasMetadata]): Option[Long] = {
+    val optCreatedExecutorPod = try {
+      Some(kubernetesClient
+        .pods()
+        .inNamespace(namespace)
+        .resource(podWithAttachedContainer)
+        .create())
+    } catch {
+      case NonFatal(e) =>
+        val failureCount = registerPodCreationFailure()
+        logError(log"Failed to create executor pod ${MDC(LogKeys.EXECUTOR_ID, newExecutorId)}. " +
+          log"Total failures: ${MDC(LogKeys.TOTAL, failureCount)}", e)
+        None
+    }
+
+    optCreatedExecutorPod.flatMap { createdExecutorPod =>
+      try {
+        addOwnerReference(createdExecutorPod, resources)
+        resources
+          .filter(_.getKind == "PersistentVolumeClaim")
+          .foreach { resource =>
+            if (conf.get(KUBERNETES_DRIVER_OWN_PVC) && driverPod.nonEmpty) {
+              addOwnerReference(driverPod.get, Seq(resource))
+            }
+            val pvc = resource.asInstanceOf[PersistentVolumeClaim]
+            logInfo(log"Trying to create PersistentVolumeClaim " +
+              log"${MDC(LogKeys.PVC_METADATA_NAME, pvc.getMetadata.getName)} with " +
+              log"StorageClass ${MDC(LogKeys.CLASS_NAME, pvc.getSpec.getStorageClassName)}")
+            kubernetesClient
+              .persistentVolumeClaims()
+              .inNamespace(namespace)
+              .resource(pvc)
+              .create()
+            PVC_COUNTER.incrementAndGet()
+          }
+        logDebug(s"Requested executor with id $newExecutorId from Kubernetes.")
+        Some(newExecutorId)
+      } catch {
+        case NonFatal(e) =>
+          val failureCount = registerPodCreationFailure()
+          logError(log"Failed to add owner reference or create PVC for executor pod " +
+            log"${MDC(LogKeys.EXECUTOR_ID, newExecutorId)}. " +
+            log"Total failures: ${MDC(LogKeys.TOTAL, failureCount)}", e)
+          kubernetesClient.pods()
+            .inNamespace(namespace)
+            .resource(createdExecutorPod)
+            .delete()
+          throw e
+      }
+    }
+  }
+
+  /**
+   * Serial pod creation: builds and creates executor pods one at a time.
+   */
+  private def requestNewExecutorsSerial(
+      numExecutorsToAllocate: Int,
+      applicationId: String,
+      resourceProfileId: Int,
+      pvcsInUse: Seq[String]): Unit = {
     // Check reusable PVCs for this executor allocation batch
     val reusablePVCs = getReusablePVCs(applicationId, pvcsInUse)
     for ( _ <- 0 until numExecutorsToAllocate) {
@@ -446,77 +566,94 @@ class ExecutorPodsAllocator(
           log"Wait to reuse one of the existing ${MDC(LogKeys.COUNT, PVC_COUNTER.get())} PVCs.")
         return
       }
-      val newExecutorId = EXECUTOR_ID_COUNTER.incrementAndGet()
-      if (newExecutorId >= podAllocationMaximum) {
-        throw new SparkException(s"Exceed the pod creation limit: $podAllocationMaximum")
+      val (newExecutorId, podWithAttachedContainer, resources) =
+        buildExecutorPod(applicationId, resourceProfileId, reusablePVCs)
+      createExecutorPodAndPVCs(newExecutorId, podWithAttachedContainer, resources).foreach { _ =>
+        newlyCreatedExecutors(newExecutorId) = (resourceProfileId, clock.getTimeMillis())
       }
-      val executorConf = KubernetesConf.createExecutorConf(
-        conf,
-        newExecutorId.toString,
-        applicationId,
-        driverPod,
-        resourceProfileId)
-      val resolvedExecutorSpec = executorBuilder.buildFromFeatures(executorConf, secMgr,
-        kubernetesClient, rpIdToResourceProfile(resourceProfileId))
-      val executorPod = resolvedExecutorSpec.pod
-      val podWithAttachedContainer = new PodBuilder(executorPod.pod)
-        .editOrNewSpec()
-        .addToContainers(executorPod.container)
-        .endSpec()
-        .build()
-      val resources = replacePVCsIfNeeded(
-        podWithAttachedContainer, resolvedExecutorSpec.executorKubernetesResources, reusablePVCs)
-      val optCreatedExecutorPod = try {
-        Some(kubernetesClient
-          .pods()
-          .inNamespace(namespace)
-          .resource(podWithAttachedContainer)
-          .create())
-      } catch {
-        case NonFatal(e) =>
-          // Register failure with global tracker if lifecycle manager is available
-          val failureCount = registerPodCreationFailure()
-          logError(log"Failed to create executor pod ${MDC(LogKeys.EXECUTOR_ID, newExecutorId)}. " +
-            log"Total failures: ${MDC(LogKeys.TOTAL, failureCount)}", e)
-          None
+    }
+  }
+
+  /**
+   * Parallel pod creation: builds pod specs serially (they depend on shared mutable state like
+   * EXECUTOR_ID_COUNTER and reusablePVCs), then creates them via K8s API in parallel using a
+   * thread pool sized by `spark.kubernetes.allocation.batch.concurrency`.
+   */
+  private def requestNewExecutorsParallel(
+      numExecutorsToAllocate: Int,
+      applicationId: String,
+      resourceProfileId: Int,
+      pvcsInUse: Seq[String]): Unit = {
+    val batchStartTime = clock.getTimeMillis()
+
+    // Check reusable PVCs for this executor allocation batch
+    val reusablePVCs = getReusablePVCs(applicationId, pvcsInUse)
+
+    // Phase 1: Build all pod specs serially
+    val podSpecs = mutable.ArrayBuffer.empty[(Long, Pod, Seq[HasMetadata])]
+    var i = 0
+    while (i < numExecutorsToAllocate) {
+      if (reusablePVCs.isEmpty && podAllocOnPVC && maxPVCs <= PVC_COUNTER.get()) {
+        logInfo(
+          log"Wait to reuse one of the existing ${MDC(LogKeys.COUNT, PVC_COUNTER.get())} PVCs.")
+        // Stop building more specs; proceed to create whatever we've built so far
+        i = numExecutorsToAllocate
+      } else {
+        podSpecs += buildExecutorPod(applicationId, resourceProfileId, reusablePVCs)
+        i += 1
       }
-      optCreatedExecutorPod.foreach { createdExecutorPod =>
+    }
+    if (podSpecs.isEmpty) return
+
+    val podBuildTotalMs = clock.getTimeMillis() - batchStartTime
+
+    // Phase 2: Create pods via K8s API in parallel
+    val k8sApiStartTime = clock.getTimeMillis()
+
+    implicit val ec: ExecutionContext = podCreationExecutionContext
+
+    val futures = podSpecs.map { case (newExecutorId, podWithAttachedContainer, resources) =>
+      Future {
         try {
-          addOwnerReference(createdExecutorPod, resources)
-          resources
-            .filter(_.getKind == "PersistentVolumeClaim")
-            .foreach { resource =>
-              if (conf.get(KUBERNETES_DRIVER_OWN_PVC) && driverPod.nonEmpty) {
-                addOwnerReference(driverPod.get, Seq(resource))
-              }
-              val pvc = resource.asInstanceOf[PersistentVolumeClaim]
-              logInfo(log"Trying to create PersistentVolumeClaim " +
-                log"${MDC(LogKeys.PVC_METADATA_NAME, pvc.getMetadata.getName)} with " +
-                log"StorageClass ${MDC(LogKeys.CLASS_NAME, pvc.getSpec.getStorageClassName)}")
-              kubernetesClient
-                .persistentVolumeClaims()
-                .inNamespace(namespace)
-                .resource(pvc)
-                .create()
-              PVC_COUNTER.incrementAndGet()
-            }
-          newlyCreatedExecutors(newExecutorId) = (resourceProfileId, clock.getTimeMillis())
-          logDebug(s"Requested executor with id $newExecutorId from Kubernetes.")
+          val result = createExecutorPodAndPVCs(newExecutorId, podWithAttachedContainer, resources)
+          result.map(execId => (execId, resourceProfileId, clock.getTimeMillis()))
         } catch {
-          case NonFatal(e) =>
-            // Register failure with global tracker if lifecycle manager is available
-            val failureCount = registerPodCreationFailure()
-            logError(log"Failed to add owner reference or create PVC for executor pod " +
-              log"${MDC(LogKeys.EXECUTOR_ID, newExecutorId)}. " +
-              log"Total failures: ${MDC(LogKeys.TOTAL, failureCount)}", e)
-            kubernetesClient.pods()
-              .inNamespace(namespace)
-              .resource(createdExecutorPod)
-              .delete()
-            throw e
+          // createExecutorPodAndPVCs already logs the error and registers the failure
+          // before rethrowing. We catch here only to prevent a failed Future from
+          // short-circuiting Future.sequence, so that other concurrent pods can proceed.
+          case NonFatal(_) => None
         }
       }
     }
+
+    val results = try {
+      val allResults = ThreadUtils.awaitResult(
+        Future.sequence(futures), Duration(podCreationTimeout, TimeUnit.MILLISECONDS))
+      allResults.flatten
+    } catch {
+      case NonFatal(e) =>
+        logError(log"Timed out waiting for parallel pod creation to complete " +
+          log"after ${MDC(LogKeys.TIMEOUT, podCreationTimeout)} ms", e)
+        Seq.empty
+    }
+
+    // Phase 3: Register successful creations
+    results.foreach { case (execId, rpId, timestamp) =>
+      newlyCreatedExecutors(execId) = (rpId, timestamp)
+    }
+
+    val succeeded = results.size
+    val failed = podSpecs.size - succeeded
+    val batchTotalMs = clock.getTimeMillis() - batchStartTime
+    val k8sApiWallMs = clock.getTimeMillis() - k8sApiStartTime
+    logDebug(s"[POD-ALLOC-TIMING] Batch creation completed (parallel, " +
+      s"concurrency=$podAllocationConcurrency): " +
+      s"requested=$numExecutorsToAllocate, succeeded=$succeeded, " +
+      s"failed=$failed, " +
+      s"batchTotalMs=$batchTotalMs, " +
+      s"podBuildTotalMs=$podBuildTotalMs, " +
+      s"k8sApiWallClockMs=$k8sApiWallMs, " +
+      s"totalNewlyCreatedUnconfirmed=${newlyCreatedExecutors.size}")
   }
 
   protected def replacePVCsIfNeeded(
@@ -574,6 +711,11 @@ class ExecutorPodsAllocator(
   }
 
   override def stop(applicationId: String): Unit = {
+    if (podAllocationConcurrency > 1) {
+      Utils.tryLogNonFatalError {
+        podCreationThreadPool.shutdownNow()
+      }
+    }
     Utils.tryLogNonFatalError {
       kubernetesClient
         .pods()
