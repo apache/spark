@@ -169,12 +169,11 @@ private[storage] class BlockManagerDecommissioner(
                   && e.getCause.getMessage
                   .contains(shuffleManagerNotInitializedException)) {
                   // Target executor's ShuffleManager is not yet initialized.
-                  // This is transient, so requeue without incrementing failure count
-                  // and keep the migration thread running for this peer.
+                  // Still increment retry count to guarantee termination if the
+                  // target permanently fails to initialize.
                   logWarning(log"Target executor's ShuffleManager not initialized for " +
                     log"${MDC(SHUFFLE_BLOCK_INFO, shuffleBlockInfo)}. Will retry.")
                   needRetry = true
-                  newRetryCount = retryCount
                 } else {
                   logError(log"Error occurred during migrating " +
                     log"${MDC(SHUFFLE_BLOCK_INFO, shuffleBlockInfo)}", e)

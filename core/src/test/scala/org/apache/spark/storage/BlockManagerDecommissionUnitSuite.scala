@@ -279,7 +279,7 @@ class BlockManagerDecommissionUnitSuite extends SparkFunSuite with Matchers {
     // Set up the mocks so we return one shuffle block
     val conf = sparkConf
       .clone
-      .set(config.STORAGE_DECOMMISSION_MAX_REPLICATION_FAILURE_PER_BLOCK, 1)
+      .set(config.STORAGE_DECOMMISSION_MAX_REPLICATION_FAILURE_PER_BLOCK, 3)
     val bm = mock(classOf[BlockManager])
     val migratableShuffleBlockResolver = mock(classOf[MigratableResolver])
     registerShuffleBlocks(migratableShuffleBlockResolver, Set((1, 1L, 1)))

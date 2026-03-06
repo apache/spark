@@ -197,9 +197,12 @@ private[spark] class BlockManager(
   // user jars to define custom ShuffleManagers, as such `_shuffleManager` will be null here
   // (except for tests) and we ask for the instance from the SparkEnv.
   private lazy val shuffleManager = {
-    // Wait for ShuffleManager to be initialized before handling shuffle operations.
-    waitForShuffleManagerInit()
-    Option(_shuffleManager).getOrElse(SparkEnv.get.shuffleManager)
+    Option(_shuffleManager).getOrElse {
+      // Wait for ShuffleManager to be initialized before handling shuffle operations.
+      // Exception will be thrown if it is not initialized within the configured timeout.
+      waitForShuffleManagerInit()
+      SparkEnv.get.shuffleManager
+    }
   }
 
   // Similarly, we also initialize MemoryManager later after DriverPlugin is loaded, to
@@ -338,7 +341,7 @@ private[spark] class BlockManager(
       if (!SparkEnv.get.waitForShuffleManagerInit(shuffleManagerInitWaitingTimeoutMs)) {
         logWarning(log"ShuffleManager not initialized within " +
           log"${MDC(TIMEOUT, shuffleManagerInitWaitingTimeoutMs)}ms " +
-          log"while handling shuffle operations}")
+          log"while handling shuffle operations")
         throw new ShuffleManagerNotInitializedException(shuffleManagerInitWaitingTimeoutMs)
       }
     }
