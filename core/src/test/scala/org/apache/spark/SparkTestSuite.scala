@@ -423,7 +423,7 @@ trait SparkTestSuite
       condition = "TABLE_OR_VIEW_NOT_FOUND",
       parameters = Map(
         "relationName" -> tableName,
-        "searchPath" -> searchPath)))
+        "searchPath" -> searchPath))
 
   protected def checkErrorTableNotFoundWithSearchPath(
       exception: SparkThrowable,
@@ -434,7 +434,7 @@ trait SparkTestSuite
       condition = "TABLE_OR_VIEW_NOT_FOUND",
       parameters = Map(
         "relationName" -> tableName,
-        "searchPath" -> searchPath)),
+        "searchPath" -> searchPath),
       queryContext = Array(queryContext))
 
   protected def checkErrorTableAlreadyExists(
