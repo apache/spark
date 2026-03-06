@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.expressions.IdentityTransform
 import org.apache.spark.sql.connector.expressions.SortOrder
-import org.apache.spark.sql.connector.expressions.filter.{PartitionPredicate, Predicate}
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownFilters, SupportsPushDownLimit, SupportsPushDownOffset, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters}
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, DataSourceUtils}
 import org.apache.spark.sql.internal.SQLConf
@@ -69,6 +68,16 @@ object PushDownUtils {
   }
 
   /**
+   * Deduplicates expressions by semantic equality, preserving first-occurrence order.
+   */
+  private def dedupeBySemanticEquality(exprs: Seq[Expression]): Seq[Expression] = {
+    exprs.foldLeft((Seq.empty[Expression], ExpressionSet())) {
+      case ((acc, set), expr) =>
+        if (set.contains(expr)) (acc, set) else (acc :+ expr, set + expr)
+    }._1
+  }
+
+  /**
    * Pushes down filters to the data source reader.
    *
    * @param partitionSchema The schema of
@@ -82,7 +91,8 @@ object PushDownUtils {
       scanBuilder: ScanBuilder,
       filters: Seq[Expression],
       partitionSchema: Option[StructType])
-      : (Either[Seq[sources.Filter], Seq[Predicate]], Seq[Expression]) = {
+      : (Either[Seq[sources.Filter],
+        Seq[org.apache.spark.sql.connector.expressions.filter.Predicate]], Seq[Expression]) = {
     scanBuilder match {
       case r: SupportsPushDownFilters =>
         // A map from translated data source leaf node filters to original catalyst filter
@@ -118,15 +128,16 @@ object PushDownUtils {
           (postScanFilters ++ untranslatableExprs).toImmutableArraySeq)
 
       case r: SupportsPushDownV2Filters =>
-        // A map from translated data source leaf node filters to original catalyst filter
-        // expressions. For a `And`/`Or` predicate, it is possible that the predicate is partially
-        // pushed down. This map can be used to construct a catalyst filter expression from the
-        // input filter, or a superset(partial push down filter) of the input filter.
-        val translatedFilterToExpr = mutable.HashMap.empty[Predicate, Expression]
-        val translatedFilters = mutable.ArrayBuffer.empty[Predicate]
-        // Catalyst filter expression that can't be translated to data source filters.
+        // Divide the filters into those translatable and untranslatable to data source filters.
+        // For the translated filters, we will try to push them down to the data source,
+        // and the data source will return the filters that it cannot guarantee to be true
+        // for all returned rows.
+        val translatedFilterToExpr =
+          mutable.HashMap.empty[org.apache.spark.sql.connector.expressions.filter.Predicate,
+            Expression]
+        val translatedFilters =
+          mutable.ArrayBuffer.empty[org.apache.spark.sql.connector.expressions.filter.Predicate]
         val untranslatableExprs = mutable.ArrayBuffer.empty[Expression]
-
         for (filterExpr <- filters) {
           val translated =
             DataSourceV2Strategy.translateFilterV2WithMapping(
@@ -138,47 +149,55 @@ object PushDownUtils {
           }
         }
 
-        // Data source filters that need to be evaluated again after scanning. which means
-        // the data source cannot guarantee the rows returned can pass these filters.
-        // As a result we must return it so Spark can plan an extra filter operator.
-        val firstPassPostScanFilters = r.pushPredicates(translatedFilters.toArray).map {
+        // Post-scan filters candidates: those the data source rejected in the first pass
+        // and need to be evaluated by Spark after the scan.
+        val returnedFirstPassFilters = r.pushPredicates(translatedFilters.toArray).map {
           predicate =>
             DataSourceV2Strategy.rebuildExpressionFromFilter(predicate, translatedFilterToExpr)
         }
 
-        // When partition schema is available (enhanced partition filter enabled as per
-        // SPARK-55596), calculate PartitionPredicates
-        val secondPassFilterExprs = untranslatableExprs.toSeq ++ firstPassPostScanFilters
-        val (partitionPredicates, untranslatableDataFilters) = partitionSchema match {
-          case Some(structType) =>
-            val (partitionExprs, dataExprs) =
-              DataSourceUtils.getPartitionFiltersAndDataFilters(structType, secondPassFilterExprs)
-            val preds = partitionExprs.map(expr =>
-              new PartitionPredicateImpl(expr, toAttributes(structType)))
-            (preds, dataExprs)
-          case None =>
-            (Seq.empty[PartitionPredicate], secondPassFilterExprs)
+        val finalPostScanFilters = (partitionSchema, r.supportsEnhancedPartitionFiltering()) match {
+          // If the scan supports enhanced partition filtering, convert to PartitionPredicates
+          // (see SPARK-55596). PartitionPredicates are pushed to the scan in a second pass.
+          case (Some(structType), true) =>
+            //
+            val (postScanPartitionFilters, postScanDataFilters) =
+              DataSourceUtils.getPartitionFiltersAndDataFilters(
+                structType, returnedFirstPassFilters.toIndexedSeq)
+            val (untranslatablePartitionFilters, untranslatableDataFilters) =
+              DataSourceUtils.getPartitionFiltersAndDataFilters(
+                structType, untranslatableExprs.toSeq)
+
+            // Push second-pass partition filters as PartitionPredicates
+            val allPartitionPredicates = (postScanPartitionFilters ++
+              untranslatablePartitionFilters)
+              .map(expr => new PartitionPredicateImpl(expr, toAttributes(structType)))
+            val returnedSecondPassPartitionFilters =
+              r.pushPredicates(allPartitionPredicates.toArray).map {
+              predicate =>
+                DataSourceV2Strategy.rebuildExpressionFromFilter(
+                  predicate, translatedFilterToExpr)
+            }
+
+            // Normally translated filters (postScanFilters) are simple filters that can be
+            // evaluated faster, while the untranslated filters are complicated filters that take
+            // more time to evaluate, so we want to evaluate the postScanFilters filters first.
+            val untranslatableSet = ExpressionSet(untranslatableExprs)
+            val returnedPostScanPartitionFilters =
+              returnedSecondPassPartitionFilters.filter(e => !untranslatableSet.contains(e))
+            val returnedUntranslatablePartitionFilters =
+              returnedSecondPassPartitionFilters.filter(untranslatableSet.contains)
+            val postScanFilters = postScanDataFilters ++ returnedPostScanPartitionFilters ++
+              untranslatableDataFilters ++ returnedUntranslatablePartitionFilters
+            postScanFilters.toArray.toImmutableArraySeq
+          case _ =>
+            // Normally translated filters (postScanFilters) are simple filters that can be
+            // evaluated faster, while the untranslated filters are complicated filters that take
+            // more time to evaluate, so we want to evaluate the postScanFilters filters first.
+            (returnedFirstPassFilters ++ untranslatableExprs).toImmutableArraySeq
         }
 
-        val combinedPostScanFilters = if (r.supportsEnhancedPartitionFiltering()) {
-          val secondPassPostScanFilters = r.pushPredicates(partitionPredicates.toArray).map {
-            predicate =>
-              DataSourceV2Strategy.rebuildExpressionFromFilter(predicate, translatedFilterToExpr)
-          }
-          firstPassPostScanFilters ++ secondPassPostScanFilters ++ untranslatableDataFilters
-        } else {
-          firstPassPostScanFilters ++ untranslatableExprs
-        }
-        // Deduplicate by semantic equality so a filter rejected in both first and second pass
-        // does not appear twice (ExpressionSet uses canonicalized form for equality).
-        val finalPostScanFilters =
-          ExpressionSet(combinedPostScanFilters).toIndexedSeq.toArray.toImmutableArraySeq
-
-        // Normally translated filters (postScanFilters) are simple filters that can be evaluated
-        // faster, while the untranslated filters are complicated filters that take more time to
-        // evaluate, so we want to evaluate the postScanFilters filters first.
-        (Right(r.pushedPredicates.toImmutableArraySeq),
-          finalPostScanFilters)
+        (Right(r.pushedPredicates.toImmutableArraySeq), finalPostScanFilters)
       case r: SupportsPushDownCatalystFilters =>
         val postScanFilters = r.pushFilters(filters)
         (Right(r.pushedFilters.toImmutableArraySeq), postScanFilters)

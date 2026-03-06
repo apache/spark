@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.connector.expressions.filter;
 
+import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.connector.expressions.Expression;
 
@@ -29,6 +30,7 @@ import org.apache.spark.sql.connector.expressions.Expression;
  * </p>
  * @since 4.2.0
  */
+@Evolving
 public abstract class PartitionPredicate extends Predicate {
 
   /**
