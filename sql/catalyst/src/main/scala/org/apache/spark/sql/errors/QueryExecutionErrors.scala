@@ -547,7 +547,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   def unexpectedOperatorInCorrelatedSubquery(
       op: LogicalPlan, pos: String = ""): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2027",
+      errorClass = "UNEXPECTED_OPERATOR_IN_CORRELATED_SUBQUERY",
       messageParameters = Map("op" -> op.toString(), "pos" -> pos))
   }
 
