@@ -157,6 +157,7 @@ span.rest-uri {
 
 pre {
   background-color: var(--bs-tertiary-bg);
+  color: var(--bs-body-color);
   font-size: 12px;
   line-height: 18px;
   padding: 6px;

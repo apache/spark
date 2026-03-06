@@ -280,9 +280,13 @@ private[spark] object UIUtils extends Logging {
     }
     val helpButton: Seq[Node] = helpText.map(tooltip(_, "top")).getOrElse(Seq.empty)
 
-    <html>
+    <html data-bs-theme="light">
       <head>
         {commonHeaderNodes(request)}
+        <script nonce={CspNonce.get}>{Unparsed(
+          "document.documentElement.setAttribute('data-bs-theme'," +
+          "localStorage.getItem('spark-theme')||" +
+          "(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light'))")}</script>
         <script nonce={CspNonce.get}>setAppBasePath('{activeTab.basePath}')</script>
         {if (showVisualization) vizHeaderNodes(request) else Seq.empty}
         {if (useDataTables) dataTablesHeaderNodes(request) else Seq.empty}
@@ -295,7 +299,7 @@ private[spark] object UIUtils extends Logging {
           <div class="navbar-header">
             <div class="navbar-brand">
               <a href={prependBaseUri(request, "/")}>
-                <img src={prependBaseUri(request, "/static/spark-logo.svg")}
+                <img class="spark-logo" src={prependBaseUri(request, "/static/spark-logo.svg")}
                      alt="Spark Logo" height="36" />
                 <span class="version">{activeTab.appSparkVersion}</span>
               </a>
@@ -312,6 +316,8 @@ private[spark] object UIUtils extends Logging {
               <strong title={appName} class="text-nowrap">{shortAppName}</strong>
               <span class="text-nowrap">application UI</span>
             </span>
+            <button id="theme-toggle" class="btn btn-sm btn-link text-decoration-none fs-5 ms-2 p-0"
+                    type="button" title="Toggle dark mode"></button>
           </div>
         </nav>
         <div class="container-fluid">
@@ -339,9 +345,13 @@ private[spark] object UIUtils extends Logging {
       content: => Seq[Node],
       title: String,
       useDataTables: Boolean = false): Seq[Node] = {
-    <html>
+    <html data-bs-theme="light">
       <head>
         {commonHeaderNodes(request)}
+        <script nonce={CspNonce.get}>{Unparsed(
+          "document.documentElement.setAttribute('data-bs-theme'," +
+          "localStorage.getItem('spark-theme')||" +
+          "(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light'))")}</script>
         {if (useDataTables) dataTablesHeaderNodes(request) else Seq.empty}
         <link rel="shortcut icon"
               href={prependBaseUri(request, "/static/spark-logo.svg")}></link>
@@ -353,11 +363,14 @@ private[spark] object UIUtils extends Logging {
             <div class="col-12">
               <h3 class="align-middle d-inline-block">
                 <a class="text-decoration-none" href={prependBaseUri(request, "/")}>
-                  <img src={prependBaseUri(request, "/static/spark-logo.svg")}
+                  <img class="spark-logo" src={prependBaseUri(request, "/static/spark-logo.svg")}
                        alt="Spark Logo" height="36" />
                   <span class="version me-3">{org.apache.spark.SPARK_VERSION}</span>
                 </a>
                 {title}
+                <button id="theme-toggle"
+                        class="btn btn-sm btn-link text-decoration-none fs-5 ms-2 p-0 align-middle"
+                        type="button" title="Toggle dark mode"></button>
               </h3>
             </div>
           </div>

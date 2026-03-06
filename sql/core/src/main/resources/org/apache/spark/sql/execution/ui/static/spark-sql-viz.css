@@ -112,8 +112,8 @@ svg path.linked {
 }
 
 #plan-viz-details-panel .card-header {
-  background-color: #C3EBFF;
-  border-bottom-color: #3EC0FF;
+  background-color: var(--spark-sql-node-fill);
+  border-bottom-color: var(--spark-sql-cluster-stroke);
 }
 
 #plan-viz-details-panel .table th,
@@ -128,5 +128,11 @@ svg path.linked {
 /* Edge labels showing row counts */
 .edgeLabel text {
   font-size: 10px;
-  fill: #6c757d;
+  fill: var(--bs-secondary-color);
+}
+
+/* SVG text color for dark mode support */
+#plan-viz-graph .node text,
+#plan-viz-graph g.cluster text {
+  fill: var(--bs-body-color);
 }
