@@ -22,8 +22,10 @@ import java.net.URI
 import java.nio.file.{Files, Paths}
 import java.util.Properties
 import java.util.concurrent.ConcurrentHashMap
+
 import scala.collection.mutable.{HashMap => MutableHashMap}
 import scala.jdk.CollectionConverters._
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path, PathFilter}
 import org.apache.hadoop.mapreduce.MRJobConfig
@@ -47,6 +49,7 @@ import org.mockito.invocation.InvocationOnMock
 import org.scalatest.PrivateMethodTester
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
+
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite, TestUtils}
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.config._
