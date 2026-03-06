@@ -88,7 +88,12 @@ trait V2WriteCommand
     schemaEvolutionEnabled && changesForSchemaEvolution.nonEmpty
 
   lazy val changesForSchemaEvolution: Array[TableChange] =
-    ResolveSchemaEvolution.schemaChanges(table.schema, query.schema, isByName)
+    table match {
+      case r: DataSourceV2Relation =>
+        ResolveSchemaEvolution.schemaChanges(r.table, table.schema, query.schema, isByName)
+      case _ =>
+        Array.empty
+    }
 
   protected def areCompatible(inAttrs: Seq[Attribute], outAttrs: Seq[Attribute]): Boolean = {
     inAttrs.size == outAttrs.size && inAttrs.zip(outAttrs).forall {
@@ -962,7 +967,7 @@ case class MergeIntoTable(
         assignments.forall { assignment =>
           assignment.resolved ||
             (assignment.value.resolved && sourcePaths.exists {
-              path => MergeIntoTable.isEqual(assignment, path)
+              path => MergeIntoTable.isEqual(assignment, path, sourceTable.outputSet)
             })
         }
       }
@@ -973,8 +978,14 @@ case class MergeIntoTable(
     MergeIntoTable.sourceSchemaForSchemaEvolution(this)
 
   lazy val changesForSchemaEvolution: Array[TableChange] =
-    ResolveSchemaEvolution.schemaChanges(
-      targetTable.schema, sourceSchemaForEvolution, isByName = true)
+    EliminateSubqueryAliases(targetTable) match {
+      case r: DataSourceV2Relation =>
+        ResolveSchemaEvolution.schemaChanges(
+          r.table, targetTable.schema, sourceSchemaForEvolution, isByName = true
+        )
+      case _ =>
+        Array.empty
+    }
 
   override def left: LogicalPlan = targetTable
   override def right: LogicalPlan = sourceTable
@@ -1021,6 +1032,8 @@ object MergeIntoTable {
       case _ => false
     }
 
+    val sourceOutputSet = merge.sourceTable.outputSet
+
     def filterSchema(sourceSchema: StructType, basePath: Seq[String]): StructType =
       StructType(sourceSchema.flatMap { field =>
         val fieldPath = basePath :+ field.name
@@ -1028,7 +1041,7 @@ object MergeIntoTable {
         field.dataType match {
           // Specifically assigned to in one clause:
           // always keep, including all nested attributes
-          case _ if assignments.exists(isEqual(_, fieldPath)) => Some(field)
+          case _ if assignments.exists(isEqual(_, fieldPath, sourceOutputSet)) => Some(field)
           // If this is a struct and one of the children is being assigned to in a merge clause,
           // keep it and continue filtering children.
           case struct: StructType if assignments.exists(assign =>
@@ -1068,12 +1081,16 @@ object MergeIntoTable {
   // Helper method to check if an assignment key is equal to a source column
   // and if the assignment value is that same source column.
   // Example: UPDATE SET target.a = source.a
-  private def isEqual(assignment: Assignment, sourceFieldPath: Seq[String]): Boolean = {
+  private def isEqual(
+      assignment: Assignment,
+      sourceFieldPath: Seq[String],
+      sourceOutputSet: AttributeSet): Boolean = {
     // key must be a non-qualified field path that may be added to target schema via evolution
     val assignmenKeyExpr = extractFieldPath(assignment.key, allowUnresolved = true)
     // value should always be resolved (from source)
     val assignmentValueExpr = extractFieldPath(assignment.value, allowUnresolved = false)
-    assignmenKeyExpr == assignmentValueExpr &&
+    val valueFromSource = assignment.value.references.subsetOf(sourceOutputSet)
+    assignmenKeyExpr == assignmentValueExpr && valueFromSource &&
       assignmenKeyExpr == sourceFieldPath
   }
 }

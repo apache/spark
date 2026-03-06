@@ -26,12 +26,13 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.COMMAND
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, TableCatalog, TableChange}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsTypeEvolution, Table, TableCatalog, TableChange}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+import org.apache.spark.sql.connector.catalog.TableChange.UpdateColumnType
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{ArrayType, AtomicType, DataType, MapType, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, AtomicType, DataType, MapType, NullType, StructField, StructType}
 
 
 /**
@@ -117,7 +118,7 @@ object ResolveSchemaEvolution extends Logging {
         val newSchema = CatalogV2Util.v2ColumnsToStructType(newTable.columns())
         // Check if there are any remaining changes not applied.
         val remainingChanges =
-          schemaChanges(newSchema, referencedSourceSchema, isByName = isByName)
+          schemaChanges(relation.table, newSchema, referencedSourceSchema, isByName = isByName)
         if (remainingChanges.nonEmpty) {
           throw QueryCompilationErrors.unsupportedTableChangesInAutoSchemaEvolutionError(
             remainingChanges, i.toQualifiedNameParts(c))
@@ -135,13 +136,15 @@ object ResolveSchemaEvolution extends Logging {
    * by name. When false, fields are matched by position.
    */
   def schemaChanges(
+      relation: Table,
       originalTarget: StructType,
       originalSource: StructType,
       isByName: Boolean): Array[TableChange] =
-    schemaChanges(originalTarget, originalSource, originalTarget, originalSource,
+    schemaChanges(relation, originalTarget, originalSource, originalTarget, originalSource,
       fieldPath = Array(), isByName = isByName)
 
   private def schemaChanges(
+      table: Table,
       current: DataType,
       newType: DataType,
       originalTarget: StructType,
@@ -152,29 +155,34 @@ object ResolveSchemaEvolution extends Logging {
       case (StructType(currentFields), StructType(newFields)) =>
         if (isByName) {
           schemaChangesByName(
-            currentFields, newFields, originalTarget, originalSource, fieldPath)
+            table, currentFields, newFields, originalTarget, originalSource, fieldPath)
         } else {
           schemaChangesByPosition(
-            currentFields, newFields, originalTarget, originalSource, fieldPath)
+            table, currentFields, newFields, originalTarget, originalSource, fieldPath)
         }
 
       case (ArrayType(currentElementType, _), ArrayType(newElementType, _)) =>
-        schemaChanges(currentElementType, newElementType,
+        schemaChanges(table, currentElementType, newElementType,
           originalTarget, originalSource, fieldPath ++ Seq("element"), isByName)
 
       case (MapType(currentKeyType, currentElementType, _),
       MapType(updateKeyType, updateElementType, _)) =>
-        schemaChanges(currentKeyType, updateKeyType, originalTarget, originalSource,
+        schemaChanges(table, currentKeyType, updateKeyType, originalTarget, originalSource,
           fieldPath ++ Seq("key"), isByName) ++
-          schemaChanges(currentElementType, updateElementType,
+          schemaChanges(table, currentElementType, updateElementType,
             originalTarget, originalSource, fieldPath ++ Seq("value"), isByName)
-
-      case (currentType: AtomicType, newType: AtomicType) if currentType != newType =>
-        Array(TableChange.updateColumnType(fieldPath, newType))
 
       case (currentType, newType) if currentType == newType =>
         // No change needed
         Array.empty[TableChange]
+
+      case (_, NullType) =>
+        // Don't try to change to NullType.
+        Array.empty[TableChange]
+
+      case (_: AtomicType | NullType, newType: AtomicType) =>
+        Array(TableChange.updateColumnType(fieldPath, newType))
+          .filter(canChangeType(table, _))
 
       case _ =>
         // Do not support change between atomic and complex types for now
@@ -188,6 +196,7 @@ object ResolveSchemaEvolution extends Logging {
    * differences. Nested struct fields are also matched by name.
    */
   private def schemaChangesByName(
+      table: Table,
       currentFields: Array[StructField],
       newFields: Array[StructField],
       originalTarget: StructType,
@@ -198,7 +207,7 @@ object ResolveSchemaEvolution extends Logging {
     // Update existing field types
     val updates = currentFields.collect {
       case currentField: StructField if newFieldMap.contains(currentField.name) =>
-        schemaChanges(currentField.dataType, newFieldMap(currentField.name).dataType,
+        schemaChanges(table, currentField.dataType, newFieldMap(currentField.name).dataType,
           originalTarget, originalSource, fieldPath ++ Seq(currentField.name), isByName = true)
     }.flatten
 
@@ -216,6 +225,7 @@ object ResolveSchemaEvolution extends Logging {
    * differences. Nested struct fields are also matched by position.
    */
   private def schemaChangesByPosition(
+      table: Table,
       currentFields: Array[StructField],
       newFields: Array[StructField],
       originalTarget: StructType,
@@ -223,7 +233,7 @@ object ResolveSchemaEvolution extends Logging {
       fieldPath: Array[String]): Array[TableChange] = {
     // Update existing field types by pairing fields at the same position.
     val updates = currentFields.zip(newFields).flatMap { case (currentField, newField) =>
-      schemaChanges(currentField.dataType, newField.dataType,
+      schemaChanges(table, currentField.dataType, newField.dataType,
         originalTarget, originalSource,
         fieldPath ++ Seq(currentField.name), isByName = false)
     }
@@ -244,4 +254,10 @@ object ResolveSchemaEvolution extends Logging {
       CaseInsensitiveMap(fieldMap)
     }
   }
+
+  private def canChangeType(table: Table, change: TableChange): Boolean =
+    (table, change) match {
+      case (t: SupportsTypeEvolution, c: UpdateColumnType) => t.canChangeType(c)
+      case _ => false
+    }
 }
