@@ -233,7 +233,7 @@ $(document).ready(function() {
             aTargets: [0, 1, 2],
             fnCreatedCell: (nTd, _ignored_sData, _ignored_oData, _ignored_iRow, _ignored_iCol) => {
               if (hasMultipleAttempts) {
-                $(nTd).css('background-color', '#fff');
+                $(nTd).css('background-color', 'var(--bs-body-bg)');
               }
             }
           },
