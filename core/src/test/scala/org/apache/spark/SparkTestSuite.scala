@@ -420,7 +420,7 @@ trait SparkTestSuite
       tableName: String,
       searchPath: String = defaultSearchPathForTests): Unit =
     checkError(exception = exception,
-      condition = "TABLE_OR_VIEW_NOT_FOUND_WITH_SEARCH_PATH",
+      condition = "TABLE_OR_VIEW_NOT_FOUND",
       parameters = Map("relationName" -> tableName, "searchPath" -> searchPath))
 
   protected def checkErrorTableNotFoundWithSearchPath(
@@ -429,7 +429,7 @@ trait SparkTestSuite
       queryContext: ExpectedContext,
       searchPath: String): Unit =
     checkError(exception = exception,
-      condition = "TABLE_OR_VIEW_NOT_FOUND_WITH_SEARCH_PATH",
+      condition = "TABLE_OR_VIEW_NOT_FOUND",
       parameters = Map("relationName" -> tableName, "searchPath" -> searchPath),
       queryContext = Array(queryContext))
 

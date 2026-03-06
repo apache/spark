@@ -85,14 +85,13 @@ package object analysis {
     }
 
     def tableNotFound(name: Seq[String]): Nothing = {
-      throw new AnalysisException(
-        errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-        messageParameters = Map("relationName" ->  quoteNameParts(name)),
-        origin = t.origin)
+      throw QueryCompilationErrors.tableOrViewNotFoundWithSearchPath(
+        name, Seq.empty, t.origin)
     }
 
     def tableNotFound(name: Seq[String], searchPath: Seq[String]): Nothing = {
-      throw QueryCompilationErrors.tableOrViewNotFoundWithSearchPath(name, searchPath, t.origin)
+      throw QueryCompilationErrors.tableOrViewNotFoundWithSearchPath(
+        name, searchPath, t.origin)
     }
 
     def schemaNotFound(name: Seq[String]): Nothing = {

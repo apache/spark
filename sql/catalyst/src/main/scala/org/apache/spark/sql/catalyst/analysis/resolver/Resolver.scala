@@ -522,14 +522,10 @@ class Resolver(
           relationsWithResolvedMetadata
         case None =>
           val multipartId = unresolvedRelation.multipartIdentifier
-          if (multipartId.length == 1) {
-            val catalogPath = (catalogManager.currentCatalog.name() +:
-              catalogManager.currentNamespace).toSeq
-            val searchPath = SQLConf.get.resolutionSearchPath(catalogPath).map(toSQLId)
-            unresolvedRelation.tableNotFound(multipartId, searchPath)
-          } else {
-            unresolvedRelation.tableNotFound(multipartId)
-          }
+          val catalogPath = (catalogManager.currentCatalog.name() +:
+            catalogManager.currentNamespace).toSeq
+          val searchPath = SQLConf.get.resolutionSearchPath(catalogPath).map(toSQLId)
+          unresolvedRelation.tableNotFound(multipartId, searchPath)
       }
 
       resolve(resolvedRelation)

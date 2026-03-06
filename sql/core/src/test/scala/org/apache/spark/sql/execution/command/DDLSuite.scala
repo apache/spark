@@ -870,7 +870,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       val e = intercept[AnalysisException](spark.table("tab1"))
       checkError(
         exception = e,
-        condition = "TABLE_OR_VIEW_NOT_FOUND_WITH_SEARCH_PATH",
+        condition = "TABLE_OR_VIEW_NOT_FOUND",
         parameters = Map(
           "relationName" -> "`tab1`",
           "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"))
@@ -878,7 +878,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       checkAnswer(spark.table("tab1"), spark.range(10).toDF())
       checkError(
         exception = intercept[AnalysisException] { spark.table("tab2") },
-        condition = "TABLE_OR_VIEW_NOT_FOUND_WITH_SEARCH_PATH",
+        condition = "TABLE_OR_VIEW_NOT_FOUND",
         parameters = Map(
           "relationName" -> "`tab2`",
           "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]")

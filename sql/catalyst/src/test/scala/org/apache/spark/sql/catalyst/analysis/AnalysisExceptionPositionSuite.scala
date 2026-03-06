@@ -95,7 +95,7 @@ class AnalysisExceptionPositionSuite extends AnalysisTest {
     assert(startPos != -1)
     assertAnalysisErrorCondition(
       parsePlan(sql),
-      "TABLE_OR_VIEW_NOT_FOUND_WITH_SEARCH_PATH",
+      "TABLE_OR_VIEW_NOT_FOUND",
       Map(
         "relationName" -> s"`$table`",
         "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"),

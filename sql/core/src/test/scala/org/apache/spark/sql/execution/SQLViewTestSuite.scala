@@ -393,7 +393,7 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
       }
       val tableName = toSQLId(viewName.split("\\.").toSeq)
       val context = ExpectedContext(s"$viewName", 14, 13 + viewName.length)
-      if (e.getCondition == "TABLE_OR_VIEW_NOT_FOUND_WITH_SEARCH_PATH") {
+      if (e.getCondition == "TABLE_OR_VIEW_NOT_FOUND") {
         checkErrorTableNotFoundWithSearchPath(e, tableName, context, defaultSearchPathForTests)
       } else {
         checkErrorTableNotFound(e, tableName, context)

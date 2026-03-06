@@ -213,8 +213,7 @@ class Catalog(sparkSession: SparkSession) extends catalog.Catalog {
       }
     } catch {
       case e: AnalysisException
-        if e.getCondition == "TABLE_OR_VIEW_NOT_FOUND" ||
-           e.getCondition == "TABLE_OR_VIEW_NOT_FOUND_WITH_SEARCH_PATH" => false
+        if e.getCondition == "TABLE_OR_VIEW_NOT_FOUND" => false
     }
   }
 

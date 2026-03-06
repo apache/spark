@@ -471,7 +471,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
     if (useSearchPath) {
       checkError(
         exception = e,
-        condition = "TABLE_OR_VIEW_NOT_FOUND_WITH_SEARCH_PATH",
+        condition = "TABLE_OR_VIEW_NOT_FOUND",
         parameters = Map(
           "relationName" -> relation,
           "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"),

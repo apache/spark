@@ -116,21 +116,26 @@ class NoSuchTableException private (
       errorClass = "TABLE_OR_VIEW_NOT_FOUND",
       messageParameters = Map(
         "relationName" ->
-          (quoteIdentifier(db) + "." + quoteIdentifier(table))),
+          (quoteIdentifier(db) + "." + quoteIdentifier(table)),
+        "searchPathLine" -> ""),
       cause = None)
   }
 
   def this(name: Seq[String]) = {
     this(
       errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-      messageParameters = Map("relationName" -> quoteNameParts(name)),
+      messageParameters = Map(
+        "relationName" -> quoteNameParts(name),
+        "searchPathLine" -> ""),
       cause = None)
   }
 
   def this(tableIdent: Identifier) = {
     this(
       errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-      messageParameters = Map("relationName" -> quoted(tableIdent)),
+      messageParameters = Map(
+        "relationName" -> quoted(tableIdent),
+        "searchPathLine" -> ""),
       cause = None)
   }
 }
@@ -218,5 +223,6 @@ class CannotReplaceMissingTableException(
       messageParameters = Map(
         "relationName"
           -> quoteNameParts(
-            (tableIdentifier.namespace :+ tableIdentifier.name).toImmutableArraySeq)),
+            (tableIdentifier.namespace :+ tableIdentifier.name).toImmutableArraySeq),
+        "searchPathLine" -> ""),
       cause = cause)

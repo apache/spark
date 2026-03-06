@@ -75,16 +75,22 @@ class RelationQualificationSuite extends QueryTest with SharedSparkSession {
       checkError(
         exception = intercept[AnalysisException] { sql("SELECT * FROM session.nonexistent") },
         condition = "TABLE_OR_VIEW_NOT_FOUND",
-        parameters = Map("relationName" -> "`session`.`nonexistent`"),
+        parameters = Map(
+          "relationName" -> "`session`.`nonexistent`",
+          "searchPathLine" -> (
+            "Search path: [`system`.`builtin`, `system`.`session`, " +
+            "`spark_catalog`.`default`].")),
         context = ExpectedContext("session.nonexistent"))
       // Unqualified nonexistent fails with search path
       val sqlText = "SELECT * FROM nonexistent"
       checkError(
         exception = intercept[AnalysisException] { sql(sqlText) },
-        condition = "TABLE_OR_VIEW_NOT_FOUND_WITH_SEARCH_PATH",
+        condition = "TABLE_OR_VIEW_NOT_FOUND",
         parameters = Map(
           "relationName" -> "`nonexistent`",
-          "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"),
+          "searchPathLine" -> (
+            "Search path: [`system`.`builtin`, `system`.`session`, " +
+            "`spark_catalog`.`default`].")),
         context = ExpectedContext(fragment = "nonexistent", start = 14, stop = 24))
     } finally {
       sql("DROP TABLE IF EXISTS default.persist_t")
@@ -163,13 +169,15 @@ class RelationQualificationSuite extends QueryTest with SharedSparkSession {
 
   test("SECTION 10: Unresolved table error includes search path for unqualified name") {
     val sqlText = "SELECT * FROM no_such_table_xyz"
-    checkError(
-      exception = intercept[AnalysisException] { sql(sqlText) },
-      condition = "TABLE_OR_VIEW_NOT_FOUND_WITH_SEARCH_PATH",
-      parameters = Map(
-        "relationName" -> "`no_such_table_xyz`",
-        "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"),
-      context = ExpectedContext(fragment = "no_such_table_xyz", start = 14, stop = 30))
+      checkError(
+        exception = intercept[AnalysisException] { sql(sqlText) },
+        condition = "TABLE_OR_VIEW_NOT_FOUND",
+        parameters = Map(
+          "relationName" -> "`no_such_table_xyz`",
+          "searchPathLine" -> (
+            "Search path: [`system`.`builtin`, `system`.`session`, " +
+            "`spark_catalog`.`default`].")),
+        context = ExpectedContext(fragment = "no_such_table_xyz", start = 14, stop = 30))
   }
 
   test("SECTION 11: Relation resolution search path reflects sessionOrder config") {
@@ -177,10 +185,12 @@ class RelationQualificationSuite extends QueryTest with SharedSparkSession {
       val sqlText = "SELECT * FROM no_such_xyz"
       checkError(
         exception = intercept[AnalysisException] { sql(sqlText) },
-        condition = "TABLE_OR_VIEW_NOT_FOUND_WITH_SEARCH_PATH",
+        condition = "TABLE_OR_VIEW_NOT_FOUND",
         parameters = Map(
           "relationName" -> "`no_such_xyz`",
-          "searchPath" -> "[`system`.`builtin`, `spark_catalog`.`default`, `system`.`session`]"),
+          "searchPathLine" -> (
+            "Search path: [`system`.`builtin`, `spark_catalog`.`default`, " +
+            "`system`.`session`].")),
         context = ExpectedContext(fragment = "no_such_xyz", start = 14, stop = 24))
     }
   }

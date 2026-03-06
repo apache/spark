@@ -106,7 +106,7 @@ class StreamRelationSuite extends SharedSparkSession with AnalysisTest {
     val searchPath = defaultSearchPathForTests
     assertAnalysisErrorCondition(
       inputPlan = parsePlan("SELECT * FROM STREAM(`stream`)"),
-      expectedErrorCondition = "TABLE_OR_VIEW_NOT_FOUND_WITH_SEARCH_PATH",
+      expectedErrorCondition = "TABLE_OR_VIEW_NOT_FOUND",
       expectedMessageParameters = Map(
         "relationName" -> "`stream`",
         "searchPath" -> searchPath),
@@ -114,7 +114,7 @@ class StreamRelationSuite extends SharedSparkSession with AnalysisTest {
     )
     assertAnalysisErrorCondition(
       inputPlan = parsePlan("SELECT * FROM STREAM `stream`"),
-      expectedErrorCondition = "TABLE_OR_VIEW_NOT_FOUND_WITH_SEARCH_PATH",
+      expectedErrorCondition = "TABLE_OR_VIEW_NOT_FOUND",
       expectedMessageParameters = Map(
         "relationName" -> "`stream`",
         "searchPath" -> searchPath),

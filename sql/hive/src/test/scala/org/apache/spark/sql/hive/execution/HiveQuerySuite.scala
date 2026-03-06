@@ -1379,7 +1379,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
           exception = intercept[AnalysisException] {
             sql("select * from test_b")
           },
-          condition = "TABLE_OR_VIEW_NOT_FOUND_WITH_SEARCH_PATH",
+          condition = "TABLE_OR_VIEW_NOT_FOUND",
           parameters = Map(
             "relationName" -> "`test_b`",
             "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`a`]"),
@@ -1395,7 +1395,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
           exception = intercept[AnalysisException] {
             s2.sql("select * from test_a")
           },
-          condition = "TABLE_OR_VIEW_NOT_FOUND_WITH_SEARCH_PATH",
+          condition = "TABLE_OR_VIEW_NOT_FOUND",
           parameters = Map(
             "relationName" -> "`test_a`",
             "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`b`]"),
