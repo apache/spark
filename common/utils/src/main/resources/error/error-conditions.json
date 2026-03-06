@@ -5909,12 +5909,7 @@
       },
       "UNSUPPORTED_LITERAL_TYPE" : {
         "message" : [
-          "Unsupported Literal Type: <kindCase>"
-        ]
-      },
-      "UNSUPPORTED_LITERAL_TYPE_WITH_NUMBER" : {
-        "message" : [
-          "Unsupported Literal Type: <name>(<number>)"
+          "Unsupported Literal Type: <typeInfo>"
         ]
       },
       "UNSUPPORTED_USER_DEFINED_FUNCTION_IMPLEMENTATION" : {

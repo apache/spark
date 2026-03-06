@@ -425,7 +425,7 @@ object LiteralValueProtoConverter {
       case _ =>
         throw InvalidPlanInput(
           "SPARK_CONNECT_INVALID_PLAN_INPUT.UNSUPPORTED_LITERAL_TYPE",
-          Map("kindCase" -> dataType.getKindCase.toString))
+          Map("typeInfo" -> dataType.getKindCase.toString))
     }
     v => if (v.hasNull) null else converter(v)
   }
@@ -590,10 +590,8 @@ object LiteralValueProtoConverter {
             }
           case _ =>
             throw InvalidPlanInput(
-              "SPARK_CONNECT_INVALID_PLAN_INPUT.UNSUPPORTED_LITERAL_TYPE_WITH_NUMBER",
-              Map(
-                "name" -> literal.getLiteralTypeCase.name,
-                "number" -> literal.getLiteralTypeCase.getNumber.toString))
+              "SPARK_CONNECT_INVALID_PLAN_INPUT.UNSUPPORTED_LITERAL_TYPE",
+              Map("typeInfo" -> s"${literal.getLiteralTypeCase.name}(${literal.getLiteralTypeCase.getNumber})"))
         }
         builder.build()
       }

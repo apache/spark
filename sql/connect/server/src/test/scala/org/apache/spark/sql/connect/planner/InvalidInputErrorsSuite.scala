@@ -21,7 +21,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput}
-import org.apache.spark.sql.connect.planner.SparkConnectPlanTest
+import org.apache.spark.sql.connect.planner.{InvalidInputErrors, SparkConnectPlanTest}
 import org.apache.spark.sql.types._
 
 class InvalidInputErrorsSuite extends PlanTest with SparkConnectPlanTest {
@@ -138,6 +138,45 @@ class InvalidInputErrorsSuite extends PlanTest with SparkConnectPlanTest {
         assert(exception.getSqlState == "XXSC1")
       }
     }
+  }
+
+  test("noHandlerFoundForExtension") {
+    val ex = InvalidInputErrors.noHandlerFoundForExtension("foo.bar.Ext")
+    assert(ex.getCondition.contains("NO_HANDLER_FOR_EXTENSION"))
+    assert(ex.getMessage.contains("foo.bar.Ext"))
+    assert(ex.getSqlState == "XXSC1")
+  }
+
+  test("notFoundCachedLocalRelation") {
+    val ex = InvalidInputErrors.notFoundCachedLocalRelation("abc123", "sess-uuid")
+    assert(ex.getCondition.contains("NOT_FOUND_CACHED_LOCAL_RELATION"))
+    assert(ex.getMessage.contains("abc123"))
+    assert(ex.getMessage.contains("sess-uuid"))
+    assert(ex.getSqlState == "XXSC1")
+  }
+
+  test("localRelationSizeLimitExceeded") {
+    val ex = InvalidInputErrors.localRelationSizeLimitExceeded(1000L, 500L)
+    assert(ex.getCondition.contains("LOCAL_RELATION_SIZE_LIMIT_EXCEEDED"))
+    assert(ex.getMessage.contains("1000"))
+    assert(ex.getMessage.contains("500"))
+    assert(ex.getSqlState == "XXSC1")
+  }
+
+  test("functionEvalTypeNotSupported") {
+    val ex = InvalidInputErrors.functionEvalTypeNotSupported(42)
+    assert(ex.getCondition.contains("FUNCTION_EVAL_TYPE_NOT_SUPPORTED"))
+    assert(ex.getMessage.contains("42"))
+    assert(ex.getSqlState == "XXSC1")
+  }
+
+  test("streamingQueryRunIdMismatch") {
+    val ex = InvalidInputErrors.streamingQueryRunIdMismatch("q1", "run1", "run2")
+    assert(ex.getCondition.contains("STREAMING_QUERY_RUN_ID_MISMATCH"))
+    assert(ex.getMessage.contains("q1"))
+    assert(ex.getMessage.contains("run1"))
+    assert(ex.getMessage.contains("run2"))
+    assert(ex.getSqlState == "XXSC1")
   }
 
   // Helper case class to define test cases
