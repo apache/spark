@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression, ExpressionSet, NamedExpression, SchemaPruning}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression, ExpressionSet, NamedExpression, SchemaPruning, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.expressions.IdentityTransform
@@ -173,11 +173,11 @@ object PushDownUtils {
               untranslatablePartitionFilters)
               .map(expr => new PartitionPredicateImpl(expr, toAttributes(structType)))
             val returnedSecondPassPartitionFilters =
-              r.pushPredicates(allPartitionPredicates.toArray).map {
-              predicate =>
-                DataSourceV2Strategy.rebuildExpressionFromFilter(
-                  predicate, translatedFilterToExpr)
-            }
+              r.pushPredicates(allPartitionPredicates.toArray).map { predicate =>
+                V2ExpressionUtils.toCatalyst(predicate).getOrElse(
+                  DataSourceV2Strategy.rebuildExpressionFromFilter(
+                    predicate, translatedFilterToExpr))
+              }
 
             // Normally translated filters (postScanFilters) are simple filters that can be
             // evaluated faster, while the untranslated filters are complicated filters that take

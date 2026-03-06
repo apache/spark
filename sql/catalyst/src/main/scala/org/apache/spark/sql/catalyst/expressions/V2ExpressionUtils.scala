@@ -34,6 +34,7 @@ import org.apache.spark.sql.connector.expressions.{BucketTransform, Cast => V2Ca
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue}
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.internal.connector.PartitionPredicateImpl
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
 
@@ -213,6 +214,7 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
     case l: V2Literal[_] => Some(Literal(l.value, l.dataType))
     case r: NamedReference => Some(UnresolvedAttribute(r.fieldNames.toImmutableArraySeq))
     case c: V2Cast => toCatalyst(c.expression).map(Cast(_, c.dataType, ansiEnabled = true))
+    case p: PartitionPredicateImpl => Some(p.expression)
     case e: GeneralScalarExpression => convertScalarExpr(e)
     case _ => None
   }
