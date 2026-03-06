@@ -2301,7 +2301,7 @@ class DataSourceV2SQLSuiteV1Filter
           fragment = "dummy",
           start = 7,
           stop = 11),
-        "[`system`.`builtin`, `system`.`session`, `testcat`.`ns1`.`ns2`]")
+        defaultSearchPathForTests)
 
       // UPDATE non-existing column
       checkError(

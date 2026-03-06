@@ -421,7 +421,21 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         output,
         pattern.map(_.asInstanceOf[UnresolvedPartitionSpec].spec))
 
-    case ShowColumns(ResolvedV1TableOrViewIdentifier(ident), ns, output) =>
+    case ShowColumns(ResolvedViewIdentifier(ident), ns, output) =>
+      val resolver = conf.resolver
+      val db = ns match {
+        case Some(nsSeq) if ident.database.exists(!resolver(_, nsSeq.head)) =>
+          throw QueryCompilationErrors.showColumnsWithConflictNamespacesError(
+            Seq(nsSeq.head), Seq(ident.database.get))
+        case _ => ns.map(_.head)
+      }
+      // Use unqualified table name when namespace comes from FROM clause so analyzer output
+      // matches expected format (e.g. "SHOW COLUMNS IN showcolumn4 FROM global_temp").
+      val tableNameForCommand =
+        if (db.isDefined && ident.database == db) TableIdentifier(ident.table, None) else ident
+      ShowColumnsCommand(db, tableNameForCommand, output)
+
+    case ShowColumns(ResolvedV1TableIdentifier(ident), ns, output) =>
       val v1TableName = ident
       val resolver = conf.resolver
       val db = ns match {

@@ -47,7 +47,7 @@ class AlterTableDropColumnSuite
         },
         "`does_not_exist`",
         ExpectedContext(fragment = "does_not_exist", start = 12, stop = 25),
-        s"[`system`.`builtin`, `system`.`session`, `$catalog`.`ns`]")
+        defaultSearchPathForTests)
     }
   }
 

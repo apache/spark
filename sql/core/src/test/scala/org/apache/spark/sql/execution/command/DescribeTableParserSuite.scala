@@ -102,8 +102,9 @@ class DescribeTableParserSuite extends SharedSparkSession with AnalysisTest {
     assert(startPos != -1)
     assertAnalysisErrorCondition(
       parsePlan(sqlStatement),
-      "TABLE_OR_VIEW_NOT_FOUND",
-      Map("relationName" -> s"`$tbl`"),
+      "TABLE_OR_VIEW_NOT_FOUND_WITH_SEARCH_PATH",
+      Map("relationName" -> s"`$tbl`",
+        "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"),
       Array(ExpectedContext(tbl, startPos, startPos + tbl.length - 1))
     )
   }

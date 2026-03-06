@@ -1350,8 +1350,8 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           sql("insert into t values(false, default)")
         },
-        condition = "TABLE_OR_VIEW_NOT_FOUND",
-        parameters = Map("relationName" -> "`t`"),
+        condition = "TABLE_OR_VIEW_NOT_FOUND_WITH_SEARCH_PATH",
+        parameters = Map("relationName" -> "`t`", "searchPath" -> defaultSearchPathForTests),
         context = ExpectedContext("t", 12, 12)
       )
     }
