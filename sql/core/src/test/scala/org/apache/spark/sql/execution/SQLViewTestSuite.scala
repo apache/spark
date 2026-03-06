@@ -388,13 +388,16 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
       // Then, drop the view using DROP TABLE.
       sql(s"DROP TABLE $viewName")
       // Finally, verify that the view is dropped.
-      checkErrorTableNotFoundWithSearchPath(
-        exception = intercept[AnalysisException] {
-          sql(s"SELECT * FROM $viewName")
-        },
-        toSQLId(viewName.split("\\.").toSeq),
-        ExpectedContext(s"$viewName", 14, 13 + viewName.length),
-        defaultSearchPathForTests)
+      val e = intercept[AnalysisException] {
+        sql(s"SELECT * FROM $viewName")
+      }
+      val tableName = toSQLId(viewName.split("\\.").toSeq)
+      val context = ExpectedContext(s"$viewName", 14, 13 + viewName.length)
+      if (e.getCondition == "TABLE_OR_VIEW_NOT_FOUND_WITH_SEARCH_PATH") {
+        checkErrorTableNotFoundWithSearchPath(e, tableName, context, defaultSearchPathForTests)
+      } else {
+        checkErrorTableNotFound(e, tableName, context)
+      }
     }
   }
 
