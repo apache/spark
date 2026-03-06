@@ -7664,6 +7664,12 @@
     },
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_TABLE_CHANGE" : {
+    "message" : [
+      "Unsupported table change: <message>"
+    ],
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_TABLE_CHANGES_IN_AUTO_SCHEMA_EVOLUTION" : {
     "message" : [
       "Operation could not apply the following schema changes to table <tableName> because the catalog did not support or only partially applied them: <changes>."
@@ -9013,11 +9019,6 @@
   "_LEGACY_ERROR_TEMP_2041" : {
     "message" : [
       "<methodName> is not implemented."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2045" : {
-    "message" : [
-      "Unsupported table change: <message>"
     ]
   },
   "_LEGACY_ERROR_TEMP_2046" : {
