@@ -420,6 +420,14 @@ class V2ExpressionBuilder(
       } else {
         None
       }
+    case cpe: CustomPredicateExpression =>
+      val childExprs = cpe.arguments.flatMap(generateExpression(_))
+      if (childExprs.length == cpe.arguments.length) {
+        Some(new V2Predicate(
+          cpe.descriptor.canonicalName(), childExprs.toArray[V2Expression]))
+      } else {
+        None
+      }
     case _ => None
   }
 

@@ -30,7 +30,7 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.ScalarSubquery
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Project}
-import org.apache.spark.sql.connector.catalog.{PartitionInternalRow, SupportsRead, Table, TableCapability, TableProvider}
+import org.apache.spark.sql.connector.catalog.{CustomPredicateDescriptor, PartitionInternalRow, SupportsCustomPredicates, SupportsRead, Table, TableCapability, TableProvider}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, Literal, NamedReference, NullOrdering, SortDirection, SortOrder, Transform}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
@@ -990,6 +990,38 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
     }
   }
 
+  test("SPARK-55869: SupportsCustomPredicates resolves and pushes custom predicate functions") {
+    val cls = classOf[DataSourceV2WithCustomPredicates]
+    withTempView("t1") {
+      spark.read.format(cls.getName).load().createTempView("t1")
+      // my_search is a custom predicate declared by the table.
+      // It should be resolved during analysis and pushed to the data source.
+      val df = sql("SELECT * FROM t1 WHERE my_search(i, j)")
+      val batch = df.queryExecution.executedPlan.collect {
+        case d: BatchScanExec =>
+          d.batch.asInstanceOf[AdvancedBatchWithV2Filter]
+      }.head
+      assert(batch.predicates.exists(_.name() == "COM.TEST.MY_SEARCH"),
+        "Custom predicate 'my_search' should be pushed with canonical name")
+    }
+  }
+
+  test("SPARK-55869: Custom predicates work alongside standard predicates") {
+    val cls = classOf[DataSourceV2WithCustomPredicates]
+    withTempView("t1") {
+      spark.read.format(cls.getName).load().createTempView("t1")
+      val df = sql("SELECT * FROM t1 WHERE my_search(i, j) AND i > 3")
+      val batch = df.queryExecution.executedPlan.collect {
+        case d: BatchScanExec =>
+          d.batch.asInstanceOf[AdvancedBatchWithV2Filter]
+      }.head
+      assert(batch.predicates.exists(_.name() == "COM.TEST.MY_SEARCH"),
+        "Custom predicate should be pushed")
+      assert(batch.predicates.exists(_.name() == ">"),
+        "Standard predicate '>' should also be pushed")
+    }
+  }
+
   test("SPARK-47463: Pushed down v2 filter with if expression") {
     withTempView("t1") {
       spark.read.format(classOf[AdvancedDataSourceV2WithV2Filter].getName).load()
@@ -1758,6 +1790,54 @@ class InvalidDataSource extends TestingV2Source {
   throw new IllegalArgumentException("test error")
 
   override def getTable(options: CaseInsensitiveStringMap): Table = null
+}
+
+class DataSourceV2WithCustomPredicates extends TestingV2Source {
+  override def getTable(options: CaseInsensitiveStringMap): Table = {
+    new SimpleBatchTable with SupportsCustomPredicates {
+      override def customPredicates(): Array[CustomPredicateDescriptor] = {
+        Array(
+          new CustomPredicateDescriptor(
+            "com.test.MY_SEARCH",
+            "my_search",
+            Array(IntegerType, IntegerType),
+            true)
+        )
+      }
+
+      override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+        new CustomPredicateScanBuilder()
+      }
+    }
+  }
+}
+
+class CustomPredicateScanBuilder extends ScanBuilder
+  with Scan with SupportsPushDownV2Filters
+  with SupportsPushDownRequiredColumns {
+
+  var requiredSchema = TestingV2Source.schema
+  var predicates = Array.empty[Predicate]
+
+  override def pruneColumns(requiredSchema: StructType): Unit = {
+    this.requiredSchema = requiredSchema
+  }
+
+  override def readSchema(): StructType = requiredSchema
+
+  override def pushPredicates(predicates: Array[Predicate]): Array[Predicate] = {
+    val (supported, unsupported) = predicates.partition { p =>
+      p.name() == "COM.TEST.MY_SEARCH" || p.name() == ">"
+    }
+    this.predicates = supported
+    unsupported
+  }
+
+  override def pushedPredicates(): Array[Predicate] = predicates
+
+  override def build(): Scan = this
+
+  override def toBatch: Batch = new AdvancedBatchWithV2Filter(predicates, requiredSchema)
 }
 
 class AdvancedDataSourceV2WithPredicateCapabilities extends TestingV2Source {

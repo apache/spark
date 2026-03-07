@@ -130,8 +130,9 @@ public class V2ExpressionSQLBuilder {
         case "LTRIM" -> visitTrim("LEADING", expressionsToStringArray(e.children()));
         case "RTRIM" -> visitTrim("TRAILING", expressionsToStringArray(e.children()));
         case "OVERLAY" -> visitOverlay(expressionsToStringArray(e.children()));
-        // TODO supports other expressions
-        default -> visitUnexpectedExpr(expr);
+        // Custom predicates use dot-qualified canonical names (e.g. "COM.MYCO.FUNC").
+        // Render unknown names as SQL function calls.
+        default -> visitSQLFunction(name, e.children());
       };
     } else if (expr instanceof Min min) {
       return visitAggregateFunction("MIN", false, min.children());
