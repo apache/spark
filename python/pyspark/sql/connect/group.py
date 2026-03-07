@@ -41,7 +41,7 @@ from pyspark.sql.types import NumericType, StructType
 import pyspark.sql.connect.plan as plan
 from pyspark.sql.column import Column
 from pyspark.sql.connect.functions import builtin as F
-from pyspark.errors import PySparkNotImplementedError, PySparkTypeError
+from pyspark.errors import PySparkNotImplementedError, PySparkTypeError, PySparkValueError
 from pyspark.sql.streaming.stateful_processor import StatefulProcessor
 
 if TYPE_CHECKING:
@@ -128,8 +128,19 @@ class GroupedData:
     def agg(self, __exprs: Dict[str, str]) -> "DataFrame":
         ...
 
-    def agg(self, *exprs: Union[Column, Dict[str, str]]) -> "DataFrame":
+    @overload
+    def agg(self, **kwargs: str) -> "DataFrame":
+        ...
+
+    def agg(self, *exprs: Union[Column, Dict[str, str]], **kwargs: str) -> "DataFrame":
         from pyspark.sql.connect.dataframe import DataFrame
+
+        if kwargs:
+            if exprs:
+                raise PySparkValueError(
+                    "Cannot use both positional arguments and keyword arguments"
+                )
+            exprs = (kwargs,)
 
         assert exprs, "exprs should not be empty"
         if len(exprs) == 1 and isinstance(exprs[0], dict):
