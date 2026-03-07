@@ -187,6 +187,20 @@ class GroupedData(PandasGroupedOpsMixin):
             # Columns
             assert all(isinstance(c, Column) for c in exprs), "all exprs should be Column"
             exprs = cast(Tuple[Column, ...], exprs)
+
+            # Check if any column is a UDAF column (has _udaf_func attribute)
+            # Note: We must check __dict__ directly instead of using hasattr() because
+            # Column.__getattr__ returns self[item] for any attribute (for struct field access),
+            # which means hasattr() always returns True for Column objects.
+            from pyspark.sql.udaf import _handle_udaf_aggregation_in_grouped_data
+
+            udaf_cols = [c for c in exprs if "_udaf_func" in getattr(c, "__dict__", {})]
+            if udaf_cols:
+                return _handle_udaf_aggregation_in_grouped_data(
+                    self._df, self._jgd, exprs, udaf_cols
+                )
+
+            # Normal column aggregation
             jdf = self._jgd.agg(exprs[0]._jc, _to_seq(self.session._sc, [c._jc for c in exprs[1:]]))
         return DataFrame(jdf, self.session)
 
