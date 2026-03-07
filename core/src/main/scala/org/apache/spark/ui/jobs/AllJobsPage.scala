@@ -322,25 +322,6 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
       <div>
         <ul class="list-unstyled">
           <li>
-
-            <strong>User:</strong>
-            {parent.getSparkUser}
-          </li>
-          <li>
-            <strong>Started At:</strong>
-            {UIUtils.formatDate(startDate)}
-          </li>
-          <li>
-            <strong>Total Uptime:</strong>
-            {
-              if (endTime < 0 && parent.sc.isDefined) {
-                UIUtils.formatDuration(System.currentTimeMillis() - startTime)
-              } else if (endTime > 0) {
-                UIUtils.formatDuration(endTime - startTime)
-              }
-            }
-          </li>
-          <li>
             <strong>Scheduling Mode: </strong>
             {schedulingMode}
           </li>
