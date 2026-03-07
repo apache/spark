@@ -722,6 +722,85 @@ class ExecutorSuite extends SparkFunSuite
     }
   }
 
+  test("SPARK-55661: TaskRunner.run() setup failure should send StatusUpdate " +
+    "to prevent driver resource leak") {
+    val conf = new SparkConf
+    val serializer = new JavaSerializer(conf)
+    val env = createMockEnv(conf, serializer)
+    val serializedTask = serializer.newInstance().serialize(new FakeTask(0, 0))
+    val taskDescription = createFakeTaskDescription(serializedTask)
+
+    val mockExecutorBackend = mock[ExecutorBackend]
+    val statusCaptor = ArgumentCaptor.forClass(classOf[ByteBuffer])
+
+    withExecutor("id", "localhost", env) { executor =>
+      val mockClosureSerializer = mock[JavaSerializer]
+      when(mockClosureSerializer.newInstance())
+        .thenThrow(new RuntimeException("simulated setup failure in TaskRunner"))
+        .thenReturn(serializer.newInstance())
+      when(env.closureSerializer).thenReturn(mockClosureSerializer)
+
+      executor.launchTask(mockExecutorBackend, taskDescription)
+
+      eventually(timeout(5.seconds), interval(10.milliseconds)) {
+        assert(executor.numRunningTasks === 0)
+      }
+
+      verify(mockExecutorBackend).statusUpdate(
+        meq(0L),
+        meq(TaskState.FAILED),
+        statusCaptor.capture()
+      )
+
+      val failureData = statusCaptor.getValue
+      val failReason = serializer.newInstance()
+        .deserialize[ExceptionFailure](failureData)
+      assert(failReason.exception.isDefined)
+      assert(failReason.exception.get.getMessage ===
+        "simulated setup failure in TaskRunner")
+    }
+  }
+
+  test("SPARK-55661: TaskRunner.run() setup failure on killed task should send " +
+    "StatusUpdate(KILLED) to prevent driver resource leak") {
+    val conf = new SparkConf
+    val serializer = new JavaSerializer(conf)
+    val env = createMockEnv(conf, serializer)
+    val serializedTask = serializer.newInstance().serialize(new FakeTask(0, 0))
+    val taskDescription = createFakeTaskDescription(serializedTask)
+
+    val mockExecutorBackend = mock[ExecutorBackend]
+    val statusCaptor = ArgumentCaptor.forClass(classOf[ByteBuffer])
+
+    withExecutor("id", "localhost", env) { executor =>
+      val mockClosureSerializer = mock[JavaSerializer]
+      when(mockClosureSerializer.newInstance())
+        .thenThrow(new RuntimeException("simulated setup failure in TaskRunner"))
+        .thenReturn(serializer.newInstance())
+      when(env.closureSerializer).thenReturn(mockClosureSerializer)
+
+      executor.killMarks.put(taskDescription.taskId,
+        (true, "stage cancelled", System.currentTimeMillis()))
+
+      executor.launchTask(mockExecutorBackend, taskDescription)
+
+      eventually(timeout(5.seconds), interval(10.milliseconds)) {
+        assert(executor.numRunningTasks === 0)
+      }
+
+      verify(mockExecutorBackend).statusUpdate(
+        meq(0L),
+        meq(TaskState.KILLED),
+        statusCaptor.capture()
+      )
+
+      val failureData = statusCaptor.getValue
+      val failReason = serializer.newInstance()
+        .deserialize[TaskKilled](failureData)
+      assert(failReason.reason === "stage cancelled")
+    }
+  }
+
   private def createMockEnv(conf: SparkConf, serializer: JavaSerializer): SparkEnv = {
     val mockEnv = mock[SparkEnv]
     val mockRpcEnv = mock[RpcEnv]
