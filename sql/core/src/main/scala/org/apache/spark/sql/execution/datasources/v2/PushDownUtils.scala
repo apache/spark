@@ -78,10 +78,15 @@ object PushDownUtils {
 
       case r: SupportsPushDownV2Filters =>
         // Query extra predicate capabilities once for this scan builder instance
-        val extraCaps: Set[String] = r match {
-          case caps: SupportsPushDownPredicateCapabilities =>
-            caps.supportedPredicateNames().asScala.toSet
-          case _ => Set.empty[String]
+        val extraCaps: Set[String] = if (
+            SQLConf.get.extendedPredicatePushdownEnabled) {
+          r match {
+            case caps: SupportsPushDownPredicateCapabilities =>
+              caps.supportedPredicateNames().asScala.toSet
+            case _ => Set.empty[String]
+          }
+        } else {
+          Set.empty[String]
         }
 
         // A map from translated data source leaf node filters to original catalyst filter

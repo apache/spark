@@ -186,6 +186,20 @@ import org.apache.spark.sql.connector.expressions.GeneralScalarExpression;
  *  </li>
  * </ol>
  *
+ * <p>Data sources may also declare <em>custom predicate functions</em> via
+ * {@link org.apache.spark.sql.connector.catalog.SupportsCustomPredicates}.
+ * Custom predicates use dot-qualified canonical names to avoid collisions
+ * with built-in predicate names. For example:
+ * <pre>{@code
+ * Predicate("com.mycompany.INDEXQUERY", [col_ref, literal])
+ * Predicate("com.mycompany.MY_SEARCH", [col1, col2])
+ * }</pre>
+ *
+ * <p>Custom predicate names must contain at least one '.' character.
+ * Spark's built-in names are unqualified upper-case tokens, so there is
+ * no collision risk. Data sources match on {@code predicate.name()}
+ * directly in their {@code pushPredicates()} implementation.
+ *
  * @since 3.3.0
  */
 @Evolving

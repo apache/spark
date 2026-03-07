@@ -2103,6 +2103,7 @@ class Analyzer(
      * Checks temp views (via catalog lookup) and already-resolved DataSourceV2Relations.
      */
     private def collectCustomPredicateNames(plan: LogicalPlan): Set[String] = {
+      if (!conf.extendedPredicatePushdownEnabled) return Set.empty
       val names = mutable.Set.empty[String]
       plan.foreach {
         case u: UnresolvedRelation =>

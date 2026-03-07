@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.{CustomPredicateDescriptor, SupportsCustomPredicates}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Resolves function calls against custom predicates declared by DSv2 tables.
@@ -32,7 +33,9 @@ import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
  */
 object ResolveCustomPredicates extends Rule[LogicalPlan] {
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    if (!SQLConf.get.extendedPredicatePushdownEnabled) return plan
+    plan.resolveOperatorsUp {
     case f @ Filter(condition, child) if hasUnresolvedFunctions(condition) =>
       collectCustomPredicates(child) match {
         case Some(descriptors) if descriptors.nonEmpty =>
@@ -53,6 +56,7 @@ object ResolveCustomPredicates extends Rule[LogicalPlan] {
           Filter(resolved, child)
         case _ => f
       }
+  }
   }
 
   private def hasUnresolvedFunctions(expr: Expression): Boolean = {
