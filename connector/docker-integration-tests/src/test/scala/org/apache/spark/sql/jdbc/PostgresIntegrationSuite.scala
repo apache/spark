@@ -40,7 +40,7 @@ import org.apache.spark.tags.DockerTest
  * }}}
  */
 @DockerTest
-class PostgresIntegrationSuite extends SharedJDBCIntegrationSuite {
+class PostgresIntegrationSuite extends SharedJDBCIntegrationSuite with UpsertTests {
   override val db = new PostgresDatabaseOnDocker
 
   override def dataPreparation(conn: Connection): Unit = {
@@ -183,7 +183,17 @@ class PostgresIntegrationSuite extends SharedJDBCIntegrationSuite {
     conn.prepareStatement("CREATE DOMAIN myint AS integer CHECK (VALUE > 0)").executeUpdate()
     conn.prepareStatement("CREATE TABLE domain_table (c1 myint)").executeUpdate()
     conn.prepareStatement("INSERT INTO domain_table VALUES (1)").executeUpdate()
+
+    conn.prepareStatement("CREATE TABLE upsert (id integer, ts timestamp, v1 double precision, " +
+      "v2 double precision, CONSTRAINT pk PRIMARY KEY (id, ts))").executeUpdate()
+    conn.prepareStatement("INSERT INTO upsert VALUES " +
+      "(1, '1996-01-01 01:23:45', 1.234, 1.234567), " +
+      "(1, '1996-01-01 01:23:46', 1.235, 1.234568), " +
+      "(2, '1996-01-01 01:23:45', 2.345, 2.345678), " +
+      "(2, '1996-01-01 01:23:46', 2.346, 2.345679)").executeUpdate()
   }
+
+  override val createTableOption = "; ALTER TABLE new_upsert_table ADD PRIMARY KEY (id, ts)"
 
   test("Type mapping for various types") {
     val df = spark.read.jdbc(jdbcUrl, "bar", new Properties)
@@ -316,6 +326,17 @@ class PostgresIntegrationSuite extends SharedJDBCIntegrationSuite {
         DateTimeUtils.toJavaTimestamp(1471022551949271L),
         DateTimeUtils.toJavaTimestamp(62551949000L)))
     }
+  }
+
+  test("SPARK-20557: column type TIMESTAMP with TIME ZONE and TIME with TIME ZONE " +
+    "should be recognized") {
+    // When using JDBC to read the columns of TIMESTAMP with TIME ZONE and TIME with TIME ZONE
+    // the actual types are java.sql.Types.TIMESTAMP and java.sql.Types.TIME
+    val dfRead = sqlContext.read.jdbc(jdbcUrl, "ts_with_timezone", new Properties)
+    val rows = dfRead.collect()
+    val types = rows(0).toSeq.map(x => x.getClass.toString)
+    assert(types(1).equals("class java.sql.Timestamp"))
+    assert(types(2).equals("class java.sql.Timestamp"))
   }
 
   test("SPARK-22291: Conversion error when transforming array types of " +

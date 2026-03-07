@@ -28,7 +28,7 @@ import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.expressions.{Expression, NullOrdering, SortDirection}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.MsSqlServerDialect.{GEOGRAPHY, GEOMETRY}
 import org.apache.spark.sql.types._
@@ -173,6 +173,54 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
       Some(JdbcType("SMALLINT", java.sql.Types.SMALLINT))
     case ByteType => Some(JdbcType("SMALLINT", java.sql.Types.TINYINT))
     case _ => None
+  }
+
+  override def supportsUpsert(): Boolean = true
+
+  override def getUpsertStatement(
+      tableName: String,
+      columns: Array[StructField],
+      isCaseSensitive: Boolean,
+      options: JDBCOptions): String = {
+    val insertColumns = columns.map(_.name).map(quoteIdentifier)
+    val inputs = columns
+      .map(_.dataType)
+      .map(t => JdbcUtils.getJdbcType(t, this).databaseTypeDefinition)
+      .zipWithIndex.map {
+        case (t, idx) => s"DECLARE @param$idx $t; SET @param$idx = ?;"
+      }.mkString("\n")
+    val values = columns.indices.map(i => s"@param$i").mkString(", ")
+    val keyColumns = columns.zipWithIndex.filter {
+      case (col, _) => options.upsertKeyColumns.contains(col.name)
+    }
+    val updateColumns = columns.zipWithIndex.filterNot {
+      case (col, _) => options.upsertKeyColumns.contains(col.name)
+    }
+    val whereClause = keyColumns.map {
+      case (key, idx) => s"${quoteIdentifier(key.name)} = @param$idx"
+    }.mkString(" AND ")
+    val updateClause = updateColumns.map {
+      case (col, idx) => s"${quoteIdentifier(col.name)} = @param$idx"
+    }.mkString(", ")
+
+    s"""
+       |$inputs
+       |
+       |INSERT $tableName (${insertColumns.mkString(", ")})
+       |SELECT $values
+       |WHERE NOT EXISTS (
+       |    SELECT 1
+       |    FROM $tableName WITH (UPDLOCK, SERIALIZABLE)
+       |    WHERE $whereClause
+       |)
+       |
+       |IF (@@ROWCOUNT = 0)
+       |BEGIN
+       |    UPDATE TOP (1) $tableName
+       |    SET $updateClause
+       |    WHERE $whereClause
+       |END
+       |""".stripMargin
   }
 
   override def isCascadingTruncateTable(): Option[Boolean] = Some(false)

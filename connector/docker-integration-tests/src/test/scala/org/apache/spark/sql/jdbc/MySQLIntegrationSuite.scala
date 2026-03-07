@@ -39,7 +39,7 @@ import org.apache.spark.tags.DockerTest
  * }}}
  */
 @DockerTest
-class MySQLIntegrationSuite extends SharedJDBCIntegrationSuite {
+class MySQLIntegrationSuite extends SharedJDBCIntegrationSuite with UpsertTests {
   override val db = new MySQLDatabaseOnDocker
 
   override def dataPreparation(conn: Connection): Unit = {
@@ -97,7 +97,17 @@ class MySQLIntegrationSuite extends SharedJDBCIntegrationSuite {
     conn.prepareStatement("CREATE TABLE TBL_GEOMETRY (col0 GEOMETRY)").executeUpdate()
     conn.prepareStatement("INSERT INTO TBL_GEOMETRY VALUES (ST_GeomFromText('POINT(0 0)'))")
       .executeUpdate()
+
+    conn.prepareStatement("CREATE TABLE upsert (id INTEGER, ts TIMESTAMP, v1 DOUBLE, v2 DOUBLE, " +
+      "PRIMARY KEY pk (id, ts))").executeUpdate()
+    conn.prepareStatement("INSERT INTO upsert VALUES " +
+      "(1, '1996-01-01 01:23:45', 1.234, 1.234567), " +
+      "(1, '1996-01-01 01:23:46', 1.235, 1.234568), " +
+      "(2, '1996-01-01 01:23:45', 2.345, 2.345678), " +
+      "(2, '1996-01-01 01:23:46', 2.346, 2.345679)").executeUpdate()
   }
+
+  override val createTableOption = "; ALTER TABLE new_upsert_table ADD PRIMARY KEY (id, ts)"
 
   def testConnection(): Unit = {
     Using.resource(getConnection()) { conn =>
@@ -278,7 +288,6 @@ class MySQLIntegrationSuite extends SharedJDBCIntegrationSuite {
     assert(sql("select x, y from queryOption").collect().toSet == expectedResult)
   }
 
-
   test("SPARK-47478: all boolean synonyms read-write roundtrip") {
     val df = spark.read.jdbc(jdbcUrl, "bools", new Properties)
     checkAnswer(df, Row(true, true, true))
@@ -377,7 +386,7 @@ class MySQLOverMariaConnectorIntegrationSuite extends MySQLIntegrationSuite {
   override val db = new MySQLDatabaseOnDocker {
     override def getJdbcUrl(ip: String, port: Int): String =
       s"jdbc:mysql://$ip:$port/mysql?user=root&password=rootpass&allowPublicKeyRetrieval=true" +
-        s"&useSSL=false&permitMysqlScheme"
+        s"&useSSL=false&permitMysqlScheme&allowMultiQueries=true"
   }
 
   override def testConnection(): Unit = {
