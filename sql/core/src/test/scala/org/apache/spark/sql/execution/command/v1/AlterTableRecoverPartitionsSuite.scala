@@ -42,7 +42,7 @@ trait AlterTableRecoverPartitionsSuiteBase extends command.AlterTableRecoverPart
     }
     checkErrorTableNotFoundWithSearchPath(e, "`does_not_exist`",
       ExpectedContext("does_not_exist", 12, 11 + "does_not_exist".length),
-      defaultSearchPathForTests)
+      "[`system`.`session`, `spark_catalog`.`default`]")
   }
 
   test("valid locations") {

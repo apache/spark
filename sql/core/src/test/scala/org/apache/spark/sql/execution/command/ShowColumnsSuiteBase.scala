@@ -58,7 +58,9 @@ trait ShowColumnsSuiteBase extends QueryTest with DDLCommandTestUtils {
           sql(s"SHOW COLUMNS IN tbl IN ns1")
         },
         condition = "TABLE_OR_VIEW_NOT_FOUND",
-        parameters = Map("relationName" -> "`ns1`.`tbl`"),
+        parameters = Map(
+          "relationName" -> "`ns1`.`tbl`",
+          "searchPath" -> "[`system`.`session`, `spark_catalog`.`default`]"),
         context = ExpectedContext(fragment = "tbl", start = 16, stop = 18)
       )
     }
