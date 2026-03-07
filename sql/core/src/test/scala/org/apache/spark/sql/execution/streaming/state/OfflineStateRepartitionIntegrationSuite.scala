@@ -23,6 +23,7 @@ import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, Streaming
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{OutputMode, Trigger}
 import org.apache.spark.sql.streaming.util.StreamManualClock
+import org.apache.spark.tags.SlowSQLTest
 
 /**
  * Integration test suite helper class for OfflineStateRepartitionRunner with stateful operators.
@@ -193,10 +194,7 @@ abstract class OfflineStateRepartitionIntegrationSuiteBase extends StateDataSour
   }
 
   def testWithChangelogConfig(testName: String)(testFun: => Unit): Unit = {
-    // TODO[SPARK-55301]: add test with changelog checkpointing disabled after SPARK increases
-    // its test timeout because CI signal "sql - other tests" is timing out after adding the
-    // integration tests
-    Seq(true).foreach { changelogCheckpointingEnabled =>
+    Seq(true, false).foreach { changelogCheckpointingEnabled =>
       test(s"$testName - enableChangelogCheckpointing=$changelogCheckpointingEnabled") {
         withSQLConf(
           "spark.sql.streaming.stateStore.rocksdb.changelogCheckpointing.enabled" ->
@@ -227,6 +225,7 @@ abstract class OfflineStateRepartitionIntegrationSuiteBase extends StateDataSour
 /**
  * Integration test suite for OfflineStateRepartitionRunner with single-column family operators.
  */
+@SlowSQLTest
 class OfflineStateRepartitionCkptV1IntegrationSuite
   extends OfflineStateRepartitionIntegrationSuiteBase {
 
@@ -530,6 +529,7 @@ class OfflineStateRepartitionCkptV1IntegrationSuite
   }
 }
 
+@SlowSQLTest
 class OfflineStateRepartitionCkptV2IntegrationSuite
   extends OfflineStateRepartitionCkptV1IntegrationSuite {
   override def beforeAll(): Unit = {
