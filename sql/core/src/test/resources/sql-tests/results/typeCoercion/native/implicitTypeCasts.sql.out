@@ -264,6 +264,22 @@ struct<length(1996-09-10 10:11:12.4):int>
 
 
 -- !query
+SELECT '12:00:00' = TIME'12:00:00' FROM t
+-- !query schema
+struct<(12:00:00 = TIME '12:00:00'):boolean>
+-- !query output
+true
+
+
+-- !query
+SELECT '12:00:01' > TIME'12:00:00' FROM t
+-- !query schema
+struct<(12:00:01 > TIME '12:00:00'):boolean>
+-- !query output
+true
+
+
+-- !query
 SELECT year( '1996-01-10') FROM t
 -- !query schema
 struct<year(1996-01-10):int>
