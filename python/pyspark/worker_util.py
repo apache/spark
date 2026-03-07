@@ -21,6 +21,7 @@ Util functions for workers.
 from contextlib import contextmanager
 import importlib
 from inspect import currentframe, getframeinfo
+import json
 import os
 import sys
 from typing import Any, Generator, IO, Optional
@@ -43,7 +44,6 @@ from pyspark.util import is_remote_only
 from pyspark.errors import PySparkRuntimeError
 from pyspark.util import local_connect_and_auth
 from pyspark.serializers import (
-    read_bool,
     read_int,
     read_long,
     write_int,
@@ -156,39 +156,42 @@ def setup_spark_files(infile: IO) -> None:
 def setup_broadcasts(infile: IO) -> None:
     """
     Set up broadcasted variables.
+    {
+        "conn_info": int | str | None,
+        "auth_secret": str | None,
+        "broadcast_variables": [
+            {
+                "bid": int,
+                "path": str | None,
+            }
+        ]
+    }
     """
     if not is_remote_only():
         from pyspark.core.broadcast import Broadcast, _broadcastRegistry
 
-    # fetch names and values of broadcast variables
-    needs_broadcast_decryption_server = read_bool(infile)
-    num_broadcast_variables = read_int(infile)
-    if needs_broadcast_decryption_server:
-        # read the decrypted data from a server in the jvm
-        conn_info = read_int(infile)
-        auth_secret = None
-        if conn_info == -1:
-            conn_info = utf8_deserializer.loads(infile)
-        else:
-            auth_secret = utf8_deserializer.loads(infile)
-        (broadcast_sock_file, _) = local_connect_and_auth(conn_info, auth_secret)
+    data = json.loads(utf8_deserializer.loads(infile))
 
-    for _ in range(num_broadcast_variables):
-        bid = read_long(infile)
+    broadcast_sock_file = None
+    if data["broadcast_decryption_server"]:
+        # read the decrypted data from a server in the jvm
+        (broadcast_sock_file, _) = local_connect_and_auth(data["conn_info"], data["auth_secret"])
+
+    for broadcast_variable in data["broadcast_variables"]:
+        bid = broadcast_variable["bid"]
         if bid >= 0:
-            if needs_broadcast_decryption_server:
+            if broadcast_sock_file is not None:
                 read_bid = read_long(broadcast_sock_file)
                 assert read_bid == bid
                 _broadcastRegistry[bid] = Broadcast(sock_file=broadcast_sock_file)
             else:
-                path = utf8_deserializer.loads(infile)
-                _broadcastRegistry[bid] = Broadcast(path=path)
+                _broadcastRegistry[bid] = Broadcast(path=broadcast_variable["path"])
 
         else:
             bid = -bid - 1
             _broadcastRegistry.pop(bid)
 
-    if needs_broadcast_decryption_server:
+    if broadcast_sock_file is not None:
         broadcast_sock_file.write(b"1")
         broadcast_sock_file.close()
 
