@@ -1486,7 +1486,7 @@ private[scheduler] case class BarrierPendingLaunchTask(
     taskLocality: TaskLocality.TaskLocality,
     assignedResources: Map[String, Map[String, Long]]) {
   // Stored the corresponding index of the WorkerOffer which is responsible to launch the task.
-  // Used to revert the assigned resources (e.g., cores, custome resources) when the barrier
+  // Used to revert the assigned resources (e.g., cores, custom resources) when the barrier
   // task set doesn't launch successfully in a single resourceOffers round.
   var assignedOfferIndex: Int = _
   var assignedCores: Int = 0
