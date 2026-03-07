@@ -90,7 +90,7 @@ private[deploy] class DriverRunner(
       override def run(): Unit = {
         var shutdownHook: AnyRef = null
         try {
-          shutdownHook = ShutdownHookManager.addShutdownHook { () =>
+          shutdownHook = ShutdownHookManager.addShutdownHook("DriverRunnerShutdownHook") { () =>
             logInfo(log"Worker shutting down, killing driver ${MDC(DRIVER_ID, driverId)}")
             kill()
           }
