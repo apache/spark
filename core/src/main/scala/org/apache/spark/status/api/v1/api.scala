@@ -306,6 +306,7 @@ class StageData private[spark](
     val schedulingPool: String,
 
     val rddIds: collection.Seq[Int],
+    val parentIds: collection.Seq[Int],
     val accumulatorUpdates: collection.Seq[AccumulableInfo],
     val tasks: Option[Map[Long, TaskData]],
     val executorSummary: Option[Map[String, ExecutorStageSummary]],
