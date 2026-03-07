@@ -6357,7 +6357,9 @@ class DataFrame:
         Parameters
         ----------
         table : str
-            Target table name to merge into.
+            Target table name to merge into. This also accepts SQL-on-file style targets,
+            for example ``parquet.`/path/to/table``` or path-like strings such as
+            ``/path/to/table`` and ``s3://bucket/table``.
         condition : :class:`Column`
             The condition that determines whether a row in the target table matches one in the
             source DataFrame.
