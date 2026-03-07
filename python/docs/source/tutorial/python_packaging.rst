@@ -57,6 +57,7 @@ There are multiple ways to manage Python dependencies in the cluster:
 - Using Conda
 - Using Virtualenv
 - Using PEX
+- Using uv
 
 
 Using PySpark Native Features
@@ -251,3 +252,60 @@ An end-to-end Docker example for deploying a standalone PySpark with ``SparkSess
 can be found `here <https://github.com/criteo/cluster-pack/blob/master/examples/spark-with-S3/README.md>`_
 - it uses cluster-pack, a library on top of PEX that automatizes the intermediate step of having
 to create & upload the PEX manually.
+
+
+Using uv run
+------------
+
+`uv <https://docs.astral.sh/uv/>`_ can run self-contained Python scripts with inline dependency
+declarations and no manual environment management. Dependencies are resolved and installed
+automatically on first run.
+
+To use it, create a wrapper script called ``uv_run``:
+
+.. code-block:: bash
+
+    exec uv run [--python <version>] "$@"
+
+and make it executable with ``chmod +x uv_run``.
+
+You may pass ``--python <version>`` to select a specific Python interpreter
+(see `using different Python versions <https://docs.astral.sh/uv/guides/scripts/#using-different-python-versions>`_):
+
+Set ``PYSPARK_PYTHON`` to the wrapper script:
+
+.. code-block:: bash
+
+    export PYSPARK_PYTHON=./uv_run
+    pyspark app.py
+
+Then, within your Python script, you may declare dependencies using `PEP 723 inline script metadata <https://docs.astral.sh/uv/guides/scripts/#declaring-script-dependencies>`_:
+
+.. code-block:: python
+
+    #!/usr/bin/env -S uv run --script
+    #
+    # /// script
+    # dependencies = [
+    #   "pandas==2.2.3",
+    # ]
+    # ///
+
+    import pandas as pd
+    from pyspark.sql import SparkSession
+    from pyspark.sql.functions import pandas_udf
+
+    spark = SparkSession.builder.master("local[*]").appName("UvRunExample").getOrCreate()
+
+    df = spark.createDataFrame(
+        [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],
+        ("id", "v"),
+    )
+
+    @pandas_udf("double")
+    def mean_udf(v: pd.Series) -> float:
+        return v.mean()
+
+    print(df.groupby("id").agg(mean_udf(df["v"])).collect())
+
+    spark.stop()
