@@ -1344,4 +1344,71 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
         fail(s"Expected Or(And(...), And(..., Or(...))), got: $other")
     }
   }
+
+  test("SPARK-55869: CustomPredicateDescriptor rejects null canonicalName") {
+    val e = intercept[IllegalArgumentException] {
+      new org.apache.spark.sql.connector.catalog.CustomPredicateDescriptor(
+        null, "my_func", Array(IntegerType), true)
+    }
+    assert(e.getMessage.contains("canonicalName must not be null"))
+  }
+
+  test("SPARK-55869: CustomPredicateDescriptor rejects null sqlName") {
+    val e = intercept[IllegalArgumentException] {
+      new org.apache.spark.sql.connector.catalog.CustomPredicateDescriptor(
+        "com.test.FUNC", null, Array(IntegerType), true)
+    }
+    assert(e.getMessage.contains("sqlName must not be null"))
+  }
+
+  test("SPARK-55869: CustomPredicateDescriptor rejects non-dot-qualified name") {
+    val e = intercept[IllegalArgumentException] {
+      new org.apache.spark.sql.connector.catalog.CustomPredicateDescriptor(
+        "FUNC_NO_DOT", "func", Array(IntegerType), true)
+    }
+    assert(e.getMessage.contains("dot-qualified"))
+  }
+
+  test("SPARK-55869: CustomPredicateDescriptor convenience constructor derives sqlName") {
+    val desc = new org.apache.spark.sql.connector.catalog.CustomPredicateDescriptor(
+      "com.mycompany.MY_FUNC", Array(IntegerType), true)
+    assert(desc.canonicalName() == "COM.MYCOMPANY.MY_FUNC")
+    assert(desc.sqlName() == "MY_FUNC")
+  }
+
+  test("SPARK-55869: CustomOperatorParserExtension parseQuery also rewrites") {
+    val ops = Map("INDEXQUERY" -> "indexquery")
+    var captured: String = null
+    val delegate = spark.sessionState.sqlParser
+    val ext = new CustomOperatorParserExtension(
+      new org.apache.spark.sql.catalyst.parser.ParserInterface {
+        override def parsePlan(s: String) = delegate.parsePlan(s)
+        override def parseQuery(sqlText: String) = {
+          captured = sqlText
+          delegate.parseQuery(sqlText)
+        }
+        override def parseExpression(s: String) =
+          delegate.parseExpression(s)
+        override def parseTableIdentifier(s: String) =
+          delegate.parseTableIdentifier(s)
+        override def parseFunctionIdentifier(s: String) =
+          delegate.parseFunctionIdentifier(s)
+        override def parseMultipartIdentifier(s: String) =
+          delegate.parseMultipartIdentifier(s)
+        override def parseTableSchema(s: String) =
+          delegate.parseTableSchema(s)
+        override def parseDataType(s: String) =
+          delegate.parseDataType(s)
+        override def parseRoutineParam(s: String) =
+          delegate.parseRoutineParam(s)
+      }
+    ) {
+      override def customOperators: Map[String, String] = ops
+    }
+    ext.parseQuery(
+      "SELECT * FROM t WHERE col INDEXQUERY 'value'")
+    assert(captured != null, "parseQuery should delegate")
+    assert(captured.contains("indexquery(col, 'value')"),
+      s"parseQuery should rewrite infix operators, got: $captured")
+  }
 }

@@ -1259,6 +1259,67 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
     }
   }
 
+  test("SPARK-55869: Config disabled prevents Layer 1 RLIKE translation") {
+    val cls = classOf[StringDataSourceV2WithPredicateCapabilities]
+    withSQLConf(
+      SQLConf.DATA_SOURCE_EXTENDED_PREDICATE_PUSHDOWN_ENABLED.key -> "false") {
+      withTempView("t1") {
+        spark.read.format(cls.getName).load().createTempView("t1")
+        // With config disabled, RLIKE should NOT be translated even though
+        // the data source declares the capability. Only standard predicates
+        // should be pushed.
+        val df = sql("SELECT * FROM t1 WHERE s1 RLIKE '^[ab]$'")
+        val batch = df.queryExecution.executedPlan.collect {
+          case d: BatchScanExec =>
+            d.batch.asInstanceOf[StringBatchWithV2Filter]
+        }.head
+        assert(!batch.predicates.exists(_.name() == "RLIKE"),
+          "RLIKE should NOT be pushed when config is disabled, " +
+          s"got: ${batch.predicates.map(_.name()).mkString(", ")}")
+      }
+    }
+  }
+
+  test("SPARK-55869: Without capability declaration, RLIKE is not pushed") {
+    // AdvancedDataSourceV2WithV2Filter does NOT implement
+    // SupportsPushDownPredicateCapabilities, so RLIKE should never translate.
+    val cls = classOf[AdvancedDataSourceV2WithV2Filter]
+    withTempView("t1") {
+      spark.read.format(cls.getName).load().createTempView("t1")
+      val df = sql("SELECT * FROM t1 WHERE i > 3 AND " +
+        "cast(i as string) RLIKE '^[4-9]$'")
+      val batch = getBatchWithV2Filter(df)
+      assert(!batch.predicates.exists(_.name() == "RLIKE"),
+        "RLIKE should NOT be pushed without capability declaration, " +
+        s"got: ${batch.predicates.map(_.name()).mkString(", ")}")
+      assert(batch.predicates.exists(_.name() == ">"),
+        "Standard predicate '>' should still be pushed")
+    }
+  }
+
+  test("SPARK-55869: Layer 1 capability-gated ILIKE predicate is pushed") {
+    val cls = classOf[StringDataSourceV2WithILikeCapability]
+    withTempView("t1") {
+      spark.read.format(cls.getName).load().createTempView("t1")
+      // ILIKE with a literal pattern gets constant-folded (Lower('A') -> 'a')
+      // so the Like(Lower(left), Lower(right)) pattern no longer matches.
+      // Use a column reference as the pattern so both Lower() wrappers survive.
+      // s1 ILIKE s1 → case-insensitive match of s1 against pattern s1 → all true
+      // s1 ILIKE s2 → 'a' ILIKE 'x' etc → all false
+      // So test with column-column: s1 ILIKE s1 (all match)
+      val df = sql("SELECT * FROM t1 WHERE s1 ILIKE s1")
+      val batch = df.queryExecution.executedPlan.collect {
+        case d: BatchScanExec =>
+          d.batch.asInstanceOf[StringBatchWithV2Filter]
+      }.head
+      assert(batch.predicates.exists(_.name() == "ILIKE"),
+        s"Capability-gated ILIKE should be pushed, " +
+        s"got: ${batch.predicates.map(_.name()).mkString(", ")}")
+      // All rows match s1 ILIKE s1
+      checkAnswer(df, Seq(Row("a", "x"), Row("b", "y"), Row("c", "z")))
+    }
+  }
+
   test("SPARK-47463: Pushed down v2 filter with if expression") {
     withTempView("t1") {
       spark.read.format(classOf[AdvancedDataSourceV2WithV2Filter].getName).load()
@@ -2271,7 +2332,16 @@ class StringBatchWithV2Filter(
           case _ => null
         }
     }.orNull
-    Array(StringInputPartition(rlikePattern))
+    // Extract ILIKE pattern if pushed
+    val ilikePattern = predicates.collectFirst {
+      case p: Predicate if p.name() == "ILIKE" =>
+        val patternChild = p.children()(1)
+        patternChild match {
+          case lit: LiteralValue[_] => lit.value.toString
+          case _ => null
+        }
+    }.orNull
+    Array(StringInputPartition(rlikePattern, ilikePattern))
   }
 
   override def createReaderFactory(): PartitionReaderFactory =
@@ -2279,7 +2349,55 @@ class StringBatchWithV2Filter(
 }
 
 case class StringInputPartition(
-    rlikePattern: String) extends InputPartition
+    rlikePattern: String,
+    ilikePattern: String = null) extends InputPartition
+
+class StringDataSourceV2WithILikeCapability extends TableProvider {
+  override def inferSchema(options: CaseInsensitiveStringMap): StructType =
+    StringTestingV2Source.schema
+
+  override def getTable(
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: java.util.Map[String, String]): Table = {
+    new Table with SupportsRead {
+      override def schema(): StructType = StringTestingV2Source.schema
+      override def name(): String = "StringILikeTestTable"
+      override def capabilities(): java.util.Set[TableCapability] =
+        java.util.EnumSet.of(BATCH_READ)
+      override def newScanBuilder(
+          options: CaseInsensitiveStringMap): ScanBuilder =
+        new StringScanBuilderWithILikeCapability()
+    }
+  }
+}
+
+class StringScanBuilderWithILikeCapability extends ScanBuilder
+  with Scan with SupportsPushDownV2Filters
+  with SupportsPushDownPredicateCapabilities {
+
+  var predicates = Array.empty[Predicate]
+
+  override def supportedPredicateNames(): java.util.Set[String] =
+    java.util.Set.of("ILIKE")
+
+  override def readSchema(): StructType = StringTestingV2Source.schema
+
+  override def pushPredicates(
+      predicates: Array[Predicate]): Array[Predicate] = {
+    val (supported, unsupported) = predicates.partition { p =>
+      p.name() == "ILIKE"
+    }
+    this.predicates = supported
+    unsupported
+  }
+
+  override def pushedPredicates(): Array[Predicate] = predicates
+
+  override def build(): Scan = this
+
+  override def toBatch: Batch = new StringBatchWithV2Filter(predicates)
+}
 
 class StringReaderFactory extends PartitionReaderFactory {
   override def createReader(
@@ -2287,15 +2405,28 @@ class StringReaderFactory extends PartitionReaderFactory {
     val strPart = partition.asInstanceOf[StringInputPartition]
     new PartitionReader[InternalRow] {
       import org.apache.spark.unsafe.types.UTF8String
-      // Apply RLIKE filter at the source if a pattern was pushed
+      // Apply RLIKE/ILIKE filter at the source if a pattern was pushed
       private val filteredData = {
-        val base = StringTestingV2Source.data
+        var result = StringTestingV2Source.data
         if (strPart.rlikePattern != null) {
           val regex = strPart.rlikePattern.r
-          base.filter { case (s1, _) => regex.findFirstIn(s1).isDefined }
-        } else {
-          base
+          result = result.filter { case (s1, _) =>
+            regex.findFirstIn(s1).isDefined
+          }
         }
+        if (strPart.ilikePattern != null) {
+          // ILIKE is case-insensitive LIKE: convert SQL LIKE pattern
+          // to regex (% -> .*, _ -> ., escape others)
+          val pat = strPart.ilikePattern
+            .replace(".", "\\.")
+            .replace("%", ".*")
+            .replace("_", ".")
+          val regex = s"(?i)^$pat$$".r
+          result = result.filter { case (s1, _) =>
+            regex.findFirstIn(s1).isDefined
+          }
+        }
+        result
       }
       private val iter = filteredData.iterator
       private var current: (String, String) = _
