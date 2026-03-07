@@ -974,17 +974,19 @@ case class CatalogColumnStat(
   def toV2ColStat(colName: String, dataType: DataType): ColumnStatistics = {
     val parsedMin = min.map(CatalogColumnStat.fromExternalString(_, colName, dataType, version))
     val parsedMax = max.map(CatalogColumnStat.fromExternalString(_, colName, dataType, version))
-    val dc = distinctCount.map(v => OptionalLong.of(v.longValue)).getOrElse(OptionalLong.empty())
-    val nc = nullCount.map(v => OptionalLong.of(v.longValue)).getOrElse(OptionalLong.empty())
-    val al = avgLen.map(OptionalLong.of).getOrElse(OptionalLong.empty())
-    val ml = maxLen.map(OptionalLong.of).getOrElse(OptionalLong.empty())
+    val v2DistinctCount =
+      distinctCount.map(v => OptionalLong.of(v.longValue)).getOrElse(OptionalLong.empty())
+    val v2NullCount =
+      nullCount.map(v => OptionalLong.of(v.longValue)).getOrElse(OptionalLong.empty())
+    val v2AvgLen = avgLen.map(OptionalLong.of).getOrElse(OptionalLong.empty())
+    val v2MaxLen = maxLen.map(OptionalLong.of).getOrElse(OptionalLong.empty())
     new ColumnStatistics {
-      override def distinctCount(): OptionalLong = dc
+      override def distinctCount(): OptionalLong = v2DistinctCount
       override def min(): Optional[Object] = Optional.ofNullable(parsedMin.orNull)
       override def max(): Optional[Object] = Optional.ofNullable(parsedMax.orNull)
-      override def nullCount(): OptionalLong = nc
-      override def avgLen(): OptionalLong = al
-      override def maxLen(): OptionalLong = ml
+      override def nullCount(): OptionalLong = v2NullCount
+      override def avgLen(): OptionalLong = v2AvgLen
+      override def maxLen(): OptionalLong = v2MaxLen
     }
   }
 }
