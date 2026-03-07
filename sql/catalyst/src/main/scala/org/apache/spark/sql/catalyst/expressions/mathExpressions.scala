@@ -421,17 +421,24 @@ case class Acosh(child: Expression)
   extends UnaryMathExpression((x: Double) => x match {
     // in case of large values, the square would lead to Infinity; also, - 1 would be ignored due
     // to numeric precision. So log(x + sqrt(x * x - 1)) becomes log(2x) = log(2) + log(x) for
-    // positive values. Since the function is symmetric, for large values we can use
-    // signum(x) + log(2|x|)
-    case x if Math.abs(x) > Math.sqrt(Double.MaxValue) =>
-      Math.signum(x) * (StrictMath.log(2) + StrictMath.log(Math.abs(x)))
+    // positive values.
+    case x if x >= Math.sqrt(Double.MaxValue) =>
+      Math.signum(x) * (StrictMath.log(2) + StrictMath.log(x))
+    case x if x <= - Math.sqrt(Double.MaxValue) + 1 =>
+      Double.NaN
     case _ => StrictMath.log(x + math.sqrt(x * x - 1.0)) }, "ACOSH") {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, c => {
+    nullSafeCodeGen(ctx, ev, c => {
       val sm = "java.lang.StrictMath"
-      s"($sm.abs($c) > ${Math.sqrt(Double.MaxValue)})? " +
-      s"$sm.signum($c) * ($sm.log($sm.abs($c)) + $sm.log(2)) :" +
-      s"$sm.log($c + java.lang.Math.sqrt($c * $c - 1.0))"
+      s"""
+         |if ($c >= ${Math.sqrt(Double.MaxValue)}) {
+         |  ${ev.value} = $sm.log($c) + $sm.log(2);
+         |} else if ($c <= -${Math.sqrt(Double.MaxValue) - 1}) {
+         |  ${ev.value} = java.lang.Double.NaN;
+         |} else {
+         |  ${ev.value} = $sm.log($c + java.lang.Math.sqrt($c * $c - 1.0));
+         |}
+         |""".stripMargin
     })
   }
   override protected def withNewChildInternal(newChild: Expression): Acosh = copy(child = newChild)
@@ -863,13 +870,13 @@ case class Asinh(child: Expression)
     // to numeric precision. So log(x + sqrt(x * x + 1)) becomes log(2x) = log(2) + log(x) for
     // positive values. Since the function is symmetric, for large values we can use
     // signum(x) + log(2|x|)
-    case x if Math.abs(x) > Math.sqrt(Double.MaxValue) =>
+    case x if Math.abs(x) >= Math.sqrt(Double.MaxValue) - 1 =>
       Math.signum(x) * (StrictMath.log(2) + StrictMath.log(Math.abs(x)))
     case _ => StrictMath.log(x + math.sqrt(x * x + 1.0)) }, "ASINH") {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, c => {
       val sm = "java.lang.StrictMath"
-      s"($sm.abs($c) > ${Math.sqrt(Double.MaxValue)})? " +
+      s"$sm.abs($c) >= ${Math.sqrt(Double.MaxValue) - 1} ? " +
       s"$sm.signum($c) * ($sm.log($sm.abs($c)) + $sm.log(2)) :" +
       s"$sm.log($c + java.lang.Math.sqrt($c * $c + 1.0))"
     })
