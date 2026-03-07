@@ -18,6 +18,7 @@
 import functools
 import pyarrow as pa
 from itertools import islice, chain
+from types import NoneType
 from typing import IO, List, Iterator, Iterable, Tuple, Union
 
 from pyspark.errors import PySparkAssertionError, PySparkRuntimeError
@@ -215,7 +216,7 @@ def write_read_func_and_partitions(
             f"but found '{type(partition).__name__}'."
         )
 
-        output_iter = reader.read(partition)  # type: ignore[arg-type]
+        output_iter = reader.read(partition)
 
         # Validate the output iterator.
         if not isinstance(output_iter, Iterator):
@@ -240,29 +241,26 @@ def write_read_func_and_partitions(
 
     if not is_streaming:
         # The partitioning of python batch source read is determined before query execution.
-        try:
-            partitions = reader.partitions()  # type: ignore[call-arg]
-            if not isinstance(partitions, list):
-                raise PySparkRuntimeError(
-                    errorClass="DATA_SOURCE_TYPE_MISMATCH",
-                    messageParameters={
-                        "expected": "'partitions' to return a list",
-                        "actual": f"'{type(partitions).__name__}'",
-                    },
-                )
-            if not all(isinstance(p, InputPartition) for p in partitions):
-                partition_types = ", ".join([f"'{type(p).__name__}'" for p in partitions])
-                raise PySparkRuntimeError(
-                    errorClass="DATA_SOURCE_TYPE_MISMATCH",
-                    messageParameters={
-                        "expected": "elements in 'partitions' to be of type 'InputPartition'",
-                        "actual": partition_types,
-                    },
-                )
-            if len(partitions) == 0:
-                partitions = [None]  # type: ignore[list-item]
-        except NotImplementedError:
-            partitions = [None]  # type: ignore[list-item]
+        partitions = reader.partitions()  # type: ignore[call-arg]
+        if not isinstance(partitions, list):
+            raise PySparkRuntimeError(
+                errorClass="DATA_SOURCE_TYPE_MISMATCH",
+                messageParameters={
+                    "expected": "'partitions' to return a list",
+                    "actual": f"'{type(partitions).__name__}'",
+                },
+            )
+        if not all(isinstance(p, (InputPartition, NoneType)) for p in partitions):
+            partition_types = ", ".join([f"'{type(p).__name__}'" for p in partitions])
+            raise PySparkRuntimeError(
+                errorClass="DATA_SOURCE_TYPE_MISMATCH",
+                messageParameters={
+                    "expected": "elements in 'partitions' to be of type 'InputPartition'",
+                    "actual": partition_types,
+                },
+            )
+        if len(partitions) == 0:
+            partitions = [None]
 
         # Return the serialized partition values.
         write_int(len(partitions), outfile)

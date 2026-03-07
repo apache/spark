@@ -162,7 +162,7 @@ class BasePythonDataSourceTestsMixin:
                 if partition_func is not None:
                     return partition_func()
                 else:
-                    raise NotImplementedError
+                    return [None]
 
             def read(self, partition):
                 return read_func(self.schema, partition)
