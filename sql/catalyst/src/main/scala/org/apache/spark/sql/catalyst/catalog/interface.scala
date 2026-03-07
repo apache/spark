@@ -880,15 +880,15 @@ case class CatalogStatistics(
       }
     }
 
-    val sz = OptionalLong.of(sizeInBytes.longValue)
-    val nr = rowCount.map(v => OptionalLong.of(v.longValue)).getOrElse(OptionalLong.empty())
-    val javaColStats = new java.util.HashMap[NamedReference, ColumnStatistics]()
-    colStatsMap.foreach { case (k, v) => javaColStats.put(k, v) }
+    val v2SizeInBytes = OptionalLong.of(sizeInBytes.longValue)
+    val v2NumRows = rowCount.map(v => OptionalLong.of(v.longValue)).getOrElse(OptionalLong.empty())
+    val v2ColStats = new java.util.HashMap[NamedReference, ColumnStatistics]()
+    colStatsMap.foreach { case (k, v) => v2ColStats.put(k, v) }
 
     new V2Statistics {
-      override def sizeInBytes(): OptionalLong = sz
-      override def numRows(): OptionalLong = nr
-      override def columnStats(): java.util.Map[NamedReference, ColumnStatistics] = javaColStats
+      override def sizeInBytes(): OptionalLong = v2SizeInBytes
+      override def numRows(): OptionalLong = v2NumRows
+      override def columnStats(): java.util.Map[NamedReference, ColumnStatistics] = v2ColStats
     }
   }
 
