@@ -26,7 +26,7 @@ import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, F
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, And => V2And, Not => V2Not, Or => V2Or, Predicate}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{BooleanType, DoubleType, IntegerType, LongType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, BooleanType, DoubleType, IntegerType, LongType, MapType, StringType, StructField, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 
 class DataSourceV2StrategySuite extends SharedSparkSession {
@@ -851,6 +851,192 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
   def testTranslateFilter(catalystFilter: Expression, result: Option[Predicate]): Unit = {
     assertResult(result) {
       DataSourceV2Strategy.translateFilterV2(catalystFilter)
+    }
+  }
+
+  /**
+   * Translate with extra capabilities and verify against the expected [[Predicate]].
+   */
+  def testTranslateFilterWithCaps(
+      catalystFilter: Expression,
+      result: Option[Predicate],
+      extraCapabilities: Set[String]): Unit = {
+    assertResult(result) {
+      DataSourceV2Strategy.translateFilterV2WithMapping(
+        catalystFilter, None, extraCapabilities)
+    }
+  }
+
+  test("capability-gated LIKE predicate translation") {
+    val strCol = $"cstr".string
+    val likeExpr = Like(strCol, Literal("%pattern%"), '\\')
+
+    // Without capability: LIKE should NOT translate
+    testTranslateFilterWithCaps(likeExpr, None, Set.empty)
+
+    // With capability: LIKE should translate
+    testTranslateFilterWithCaps(likeExpr,
+      Some(new Predicate("LIKE", Array(
+        FieldReference("cstr"),
+        LiteralValue(UTF8String.fromString("%pattern%"), StringType)))),
+      Set("LIKE"))
+  }
+
+  test("capability-gated RLIKE predicate translation") {
+    val strCol = $"cstr".string
+    val rlikeExpr = RLike(strCol, Literal("^abc.*"))
+
+    // Without capability: RLIKE should NOT translate
+    testTranslateFilterWithCaps(rlikeExpr, None, Set.empty)
+
+    // With capability: RLIKE should translate
+    testTranslateFilterWithCaps(rlikeExpr,
+      Some(new Predicate("RLIKE", Array(
+        FieldReference("cstr"),
+        LiteralValue(UTF8String.fromString("^abc.*"), StringType)))),
+      Set("RLIKE"))
+  }
+
+  test("capability-gated IS_NAN predicate translation") {
+    val doubleCol = $"cdouble".double
+    val isNanExpr = IsNaN(doubleCol)
+
+    // Without capability: IS_NAN should NOT translate
+    testTranslateFilterWithCaps(isNanExpr, None, Set.empty)
+
+    // With capability: IS_NAN should translate
+    testTranslateFilterWithCaps(isNanExpr,
+      Some(new Predicate("IS_NAN", Array(FieldReference("cdouble")))),
+      Set("IS_NAN"))
+  }
+
+  test("capability-gated ARRAY_CONTAINS predicate translation") {
+    val arrCol = AttributeReference("carr", ArrayType(IntegerType))()
+    val arrContainsExpr = ArrayContains(arrCol, Literal(42))
+
+    // Without capability: should NOT translate
+    testTranslateFilterWithCaps(arrContainsExpr, None, Set.empty)
+
+    // With capability: should translate
+    testTranslateFilterWithCaps(arrContainsExpr,
+      Some(new Predicate("ARRAY_CONTAINS", Array(
+        FieldReference("carr"),
+        LiteralValue(42, IntegerType)))),
+      Set("ARRAY_CONTAINS"))
+  }
+
+  test("capability-gated MAP_CONTAINS_KEY predicate translation") {
+    val mapCol = AttributeReference("cmap", MapType(StringType, IntegerType))()
+    // MapContainsKey RuntimeReplaceable form: ArrayContains(MapKeys(map), key)
+    val mapContainsKeyExpr = ArrayContains(MapKeys(mapCol), Literal("mykey"))
+
+    // Without capability: should NOT translate (not even as ARRAY_CONTAINS)
+    testTranslateFilterWithCaps(mapContainsKeyExpr, None, Set.empty)
+
+    // With MAP_CONTAINS_KEY capability: should translate as MAP_CONTAINS_KEY
+    testTranslateFilterWithCaps(mapContainsKeyExpr,
+      Some(new Predicate("MAP_CONTAINS_KEY", Array(
+        FieldReference("cmap"),
+        LiteralValue(UTF8String.fromString("mykey"), StringType)))),
+      Set("MAP_CONTAINS_KEY"))
+
+    // With both MAP_CONTAINS_KEY and ARRAY_CONTAINS: MAP_CONTAINS_KEY takes precedence
+    testTranslateFilterWithCaps(mapContainsKeyExpr,
+      Some(new Predicate("MAP_CONTAINS_KEY", Array(
+        FieldReference("cmap"),
+        LiteralValue(UTF8String.fromString("mykey"), StringType)))),
+      Set("MAP_CONTAINS_KEY", "ARRAY_CONTAINS"))
+
+    // With only ARRAY_CONTAINS (not MAP_CONTAINS_KEY): should NOT translate
+    // because ArrayContains(MapKeys(map), key) is not a plain ArrayContains on a column
+    testTranslateFilterWithCaps(mapContainsKeyExpr, None, Set("ARRAY_CONTAINS"))
+  }
+
+  test("capability-gated ILIKE predicate translation") {
+    val strCol = $"cstr".string
+    // ILike RuntimeReplaceable form: Like(Lower(left), Lower(right))
+    // This pattern only survives when the pattern is non-literal (non-constant)
+    val ilikeExpr = Like(Lower(strCol), Lower($"cpattern".string), '\\')
+
+    // Without capability: should NOT translate
+    testTranslateFilterWithCaps(ilikeExpr, None, Set.empty)
+
+    // With ILIKE capability: should translate as ILIKE
+    testTranslateFilterWithCaps(ilikeExpr,
+      Some(new Predicate("ILIKE", Array(
+        FieldReference("cstr"),
+        FieldReference("cpattern")))),
+      Set("ILIKE"))
+
+    // With both ILIKE and LIKE: ILIKE takes precedence for Like(Lower, Lower) pattern
+    testTranslateFilterWithCaps(ilikeExpr,
+      Some(new Predicate("ILIKE", Array(
+        FieldReference("cstr"),
+        FieldReference("cpattern")))),
+      Set("ILIKE", "LIKE"))
+
+    // With only LIKE (not ILIKE): should translate as LIKE (falls through to generic LIKE)
+    testTranslateFilterWithCaps(ilikeExpr,
+      Some(new Predicate("LIKE", Array(
+        new GeneralScalarExpression("LOWER", Array[V2Expression](FieldReference("cstr"))),
+        new GeneralScalarExpression("LOWER",
+          Array[V2Expression](FieldReference("cpattern")))))),
+      Set("LIKE"))
+  }
+
+  test("capability-gated predicates combined with AND/OR") {
+    val strCol = $"cstr".string
+    val intCol = $"cint".int
+    val likeExpr = Like(strCol, Literal("%test%"), '\\')
+    val eqExpr = EqualTo(intCol, Literal(1))
+
+    // LIKE inside AND: with capability, both sides should translate
+    testTranslateFilterWithCaps(And(likeExpr, eqExpr),
+      Some(new V2And(
+        new Predicate("LIKE", Array(
+          FieldReference("cstr"),
+          LiteralValue(UTF8String.fromString("%test%"), StringType))),
+        new Predicate("=", Array(
+          FieldReference("cint"),
+          LiteralValue(1, IntegerType))))),
+      Set("LIKE"))
+
+    // LIKE inside AND: without capability, entire AND should fail
+    testTranslateFilterWithCaps(And(likeExpr, eqExpr), None, Set.empty)
+
+    // LIKE inside OR: with capability, both sides should translate
+    testTranslateFilterWithCaps(Or(likeExpr, eqExpr),
+      Some(new V2Or(
+        new Predicate("LIKE", Array(
+          FieldReference("cstr"),
+          LiteralValue(UTF8String.fromString("%test%"), StringType))),
+        new Predicate("=", Array(
+          FieldReference("cint"),
+          LiteralValue(1, IntegerType))))),
+      Set("LIKE"))
+
+    // LIKE inside OR: without capability, entire OR should fail
+    testTranslateFilterWithCaps(Or(likeExpr, eqExpr), None, Set.empty)
+  }
+
+  test("capability-gated predicates do not affect default translations") {
+    val intCol = $"cint".int
+    val strCol = $"cstr".string
+
+    // Standard predicates still work regardless of extraCapabilities
+    Seq(Set.empty[String], Set("LIKE", "RLIKE", "IS_NAN")).foreach { caps =>
+      testTranslateFilterWithCaps(EqualTo(intCol, Literal(1)),
+        Some(new Predicate("=", Array(
+          FieldReference("cint"), LiteralValue(1, IntegerType)))),
+        caps)
+      testTranslateFilterWithCaps(IsNull(intCol),
+        Some(new Predicate("IS_NULL", Array(FieldReference("cint")))),
+        caps)
+      testTranslateFilterWithCaps(StartsWith(strCol, Literal("abc")),
+        Some(new Predicate("STARTS_WITH", Array(
+          FieldReference("cstr"),
+          LiteralValue(UTF8String.fromString("abc"), StringType)))),
+        caps)
     }
   }
 

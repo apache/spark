@@ -18,13 +18,14 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression, NamedExpression, SchemaPruning}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.expressions.SortOrder
 import org.apache.spark.sql.connector.expressions.filter.Predicate
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownFilters, SupportsPushDownLimit, SupportsPushDownOffset, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters}
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownFilters, SupportsPushDownLimit, SupportsPushDownOffset, SupportsPushDownPredicateCapabilities, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.SupportsPushDownCatalystFilters
@@ -76,6 +77,13 @@ object PushDownUtils {
           (postScanFilters ++ untranslatableExprs).toImmutableArraySeq)
 
       case r: SupportsPushDownV2Filters =>
+        // Query extra predicate capabilities once for this scan builder instance
+        val extraCaps: Set[String] = r match {
+          case caps: SupportsPushDownPredicateCapabilities =>
+            caps.supportedPredicateNames().asScala.toSet
+          case _ => Set.empty[String]
+        }
+
         // A map from translated data source leaf node filters to original catalyst filter
         // expressions. For a `And`/`Or` predicate, it is possible that the predicate is partially
         // pushed down. This map can be used to construct a catalyst filter expression from the
@@ -88,7 +96,7 @@ object PushDownUtils {
         for (filterExpr <- filters) {
           val translated =
             DataSourceV2Strategy.translateFilterV2WithMapping(
-              filterExpr, Some(translatedFilterToExpr))
+              filterExpr, Some(translatedFilterToExpr), extraCaps)
           if (translated.isEmpty) {
             untranslatableExprs += filterExpr
           } else {

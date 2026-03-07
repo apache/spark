@@ -972,6 +972,24 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
     }
   }
 
+  test("SPARK-55869: SupportsPushDownPredicateCapabilities enables extended predicates") {
+    val cls = classOf[AdvancedDataSourceV2WithPredicateCapabilities]
+    withTempView("t1") {
+      spark.read.format(cls.getName).load().createTempView("t1")
+      // The data source declares LIKE, RLIKE, IS_NAN capabilities.
+      // "i > 3" uses standard pushdown, verify it still works alongside capabilities.
+      val df = sql("SELECT * FROM t1 WHERE i > 3")
+      checkAnswer(df, (4 until 10).map(i => Row(i, -i)))
+
+      val batch = df.queryExecution.executedPlan.collect {
+        case d: BatchScanExec =>
+          d.batch.asInstanceOf[AdvancedBatchWithV2Filter]
+      }.head
+      assert(batch.predicates.exists(_.name() == ">"),
+        "Standard predicate '>' should be pushed down")
+    }
+  }
+
   test("SPARK-47463: Pushed down v2 filter with if expression") {
     withTempView("t1") {
       spark.read.format(classOf[AdvancedDataSourceV2WithV2Filter].getName).load()
@@ -1740,4 +1758,45 @@ class InvalidDataSource extends TestingV2Source {
   throw new IllegalArgumentException("test error")
 
   override def getTable(options: CaseInsensitiveStringMap): Table = null
+}
+
+class AdvancedDataSourceV2WithPredicateCapabilities extends TestingV2Source {
+  override def getTable(options: CaseInsensitiveStringMap): Table = new SimpleBatchTable {
+    override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+      new AdvancedScanBuilderWithPredicateCapabilities()
+    }
+  }
+}
+
+class AdvancedScanBuilderWithPredicateCapabilities extends ScanBuilder
+  with Scan with SupportsPushDownV2Filters
+  with SupportsPushDownPredicateCapabilities
+  with SupportsPushDownRequiredColumns {
+
+  var requiredSchema = TestingV2Source.schema
+  var predicates = Array.empty[Predicate]
+
+  override def supportedPredicateNames(): java.util.Set[String] = {
+    java.util.Set.of("LIKE", "RLIKE", "IS_NAN")
+  }
+
+  override def pruneColumns(requiredSchema: StructType): Unit = {
+    this.requiredSchema = requiredSchema
+  }
+
+  override def readSchema(): StructType = requiredSchema
+
+  override def pushPredicates(predicates: Array[Predicate]): Array[Predicate] = {
+    val (supported, unsupported) = predicates.partition { p =>
+      Seq(">", "LIKE", "RLIKE", "IS_NAN").contains(p.name())
+    }
+    this.predicates = supported
+    unsupported
+  }
+
+  override def pushedPredicates(): Array[Predicate] = predicates
+
+  override def build(): Scan = this
+
+  override def toBatch: Batch = new AdvancedBatchWithV2Filter(predicates, requiredSchema)
 }

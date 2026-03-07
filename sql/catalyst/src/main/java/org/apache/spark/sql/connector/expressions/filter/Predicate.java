@@ -144,6 +144,48 @@ import org.apache.spark.sql.connector.expressions.GeneralScalarExpression;
  *  </li>
  * </ol>
  *
+ * <p>The following predicate names are <em>extended/opt-in</em> and are only translated when a
+ * data source declares support via
+ * {@link org.apache.spark.sql.connector.read.SupportsPushDownPredicateCapabilities}:
+ * <ol>
+ *  <li>Name: <code>LIKE</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>expr1 LIKE expr2</code> (full pattern matching)</li>
+ *    <li>Since version: 4.1.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>RLIKE</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>expr1 RLIKE expr2</code> (regex matching)</li>
+ *    <li>Since version: 4.1.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>ILIKE</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>expr1 ILIKE expr2</code> (case-insensitive LIKE)</li>
+ *    <li>Since version: 4.1.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>IS_NAN</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>isnan(expr)</code></li>
+ *    <li>Since version: 4.1.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>ARRAY_CONTAINS</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>array_contains(expr1, expr2)</code></li>
+ *    <li>Since version: 4.1.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>MAP_CONTAINS_KEY</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>map_contains_key(expr1, expr2)</code></li>
+ *    <li>Since version: 4.1.0</li>
+ *   </ul>
+ *  </li>
+ * </ol>
+ *
  * @since 3.3.0
  */
 @Evolving

@@ -33,7 +33,10 @@ import org.apache.spark.sql.types.{BooleanType, DataType, IntegerType, StringTyp
 /**
  * The builder to generate V2 expressions from catalyst expressions.
  */
-class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends Logging  {
+class V2ExpressionBuilder(
+    e: Expression,
+    isPredicate: Boolean = false,
+    extraCapabilities: Set[String] = Set.empty) extends Logging  {
 
   def build(): Option[V2Expression] = generateExpression(e, isPredicate)
 
@@ -332,6 +335,60 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
           Some(new V2GetArrayItem(v2ArrayChild, v2Ordinal, failOnError))
         case _ =>
           None
+      }
+    // Extended builtin predicates - only translated when declared via
+    // SupportsPushDownPredicateCapabilities.supportedPredicateNames().
+    // ORDERING: More specific patterns (ILIKE, MAP_CONTAINS_KEY) must come before
+    // their generic counterparts (LIKE, ARRAY_CONTAINS) to match first.
+
+    // RuntimeReplaceable: ILike(col, col2) survives as Like(Lower(col), Lower(col2))
+    // when the pattern is non-literal (LikeSimplification only handles literal patterns).
+    // Must be before generic LIKE case.
+    case Like(Lower(left), Lower(right), _) if extraCapabilities.contains("ILIKE") =>
+      val l = generateExpression(left)
+      val r = generateExpression(right)
+      if (l.isDefined && r.isDefined) {
+        Some(new V2Predicate("ILIKE", Array[V2Expression](l.get, r.get)))
+      } else {
+        None
+      }
+    case l: Like if extraCapabilities.contains("LIKE") =>
+      val left = generateExpression(l.left)
+      val right = generateExpression(l.right)
+      if (left.isDefined && right.isDefined) {
+        Some(new V2Predicate("LIKE", Array[V2Expression](left.get, right.get)))
+      } else {
+        None
+      }
+    case r: RLike if extraCapabilities.contains("RLIKE") =>
+      val left = generateExpression(r.left)
+      val right = generateExpression(r.right)
+      if (left.isDefined && right.isDefined) {
+        Some(new V2Predicate("RLIKE", Array[V2Expression](left.get, right.get)))
+      } else {
+        None
+      }
+    case i: IsNaN if extraCapabilities.contains("IS_NAN") =>
+      generateExpression(i.child).map { v =>
+        new V2Predicate("IS_NAN", Array[V2Expression](v))
+      }
+    // RuntimeReplaceable: MapContainsKey(map, key) survives as ArrayContains(MapKeys(map), key).
+    // Must be before generic ARRAY_CONTAINS case.
+    case ArrayContains(MapKeys(map), key) if extraCapabilities.contains("MAP_CONTAINS_KEY") =>
+      val m = generateExpression(map)
+      val k = generateExpression(key)
+      if (m.isDefined && k.isDefined) {
+        Some(new V2Predicate("MAP_CONTAINS_KEY", Array[V2Expression](m.get, k.get)))
+      } else {
+        None
+      }
+    case a: ArrayContains if extraCapabilities.contains("ARRAY_CONTAINS") =>
+      val left = generateExpression(a.left)
+      val right = generateExpression(a.right)
+      if (left.isDefined && right.isDefined) {
+        Some(new V2Predicate("ARRAY_CONTAINS", Array[V2Expression](left.get, right.get)))
+      } else {
+        None
       }
     // TODO supports other expressions
     case ApplyFunctionExpression(function, children) =>
