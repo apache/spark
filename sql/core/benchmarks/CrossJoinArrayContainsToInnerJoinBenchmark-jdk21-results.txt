@@ -1,0 +1,12 @@
+================================================================================================
+CrossJoinArrayContainsToInnerJoin
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.10+7-LTS on Linux 6.11.0-1018-azure
+AMD EPYC 7763 64-Core Processor
+array_contains optimization (10000 x 1000, array=10):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------------
+cross join + array_contains (rule off)                          552            586          39         18.1          55.2       1.0X
+inner join + explode (rule on)                                   82             87           5        122.2           8.2       6.7X
+
+

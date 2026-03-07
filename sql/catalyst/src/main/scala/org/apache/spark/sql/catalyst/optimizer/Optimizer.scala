@@ -261,6 +261,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
     Batch("Optimize One Row Plan", fixedPoint, OptimizeOneRowPlan),
     // The following batch should be executed after batch "Join Reorder" and "LocalRelation".
     Batch("Check Cartesian Products", Once,
+      CrossJoinArrayContainsToInnerJoin,
       CheckCartesianProducts),
     Batch("RewriteSubquery", Once,
       RewritePredicateSubquery,
