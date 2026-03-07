@@ -6580,6 +6580,12 @@
     ],
     "sqlState" : "42K09"
   },
+  "UNEXPECTED_OPERATOR_IN_CORRELATED_SUBQUERY" : {
+    "message" : [
+      "Unexpected operator <op> in correlated subquery<pos>."
+    ],
+    "sqlState" : "0A000"
+  },
   "UNEXPECTED_POSITIONAL_ARGUMENT" : {
     "message" : [
       "Cannot invoke routine <routineName> because it contains positional argument(s) following the named argument assigned to <parameterName>; please rearrange them so the positional arguments come first and then retry the query again."
@@ -8937,11 +8943,6 @@
   "_LEGACY_ERROR_TEMP_2026" : {
     "message" : [
       "Failed to convert value <value> (class of <cls>) with the type of <dataType> to JSON."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2027" : {
-    "message" : [
-      "Unexpected operator <op> in correlated subquery<pos>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2028" : {
