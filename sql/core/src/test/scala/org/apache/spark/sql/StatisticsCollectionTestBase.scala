@@ -461,7 +461,7 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
     // only columns present in schema are returned; "extra" is skipped
     val colStats = v2Stats.columnStats()
     assert(colStats.size() === 1, "only 'id' is in schema; 'extra' should be skipped")
-    val idV2 = colStats.get(FieldReference.apply("id"))
+    val idV2 = colStats.get(FieldReference.column("id"))
     assert(idV2 != null)
     assert(idV2.distinctCount().getAsLong === 10L)
     assert(idV2.nullCount().getAsLong === 0L)
@@ -477,5 +477,37 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
     assert(v2NoRows.sizeInBytes().getAsLong === 512L)
     assert(!v2NoRows.numRows().isPresent)
     assert(v2NoRows.columnStats().isEmpty)
+
+    // Histogram is round-tripped through toV2ColStat
+    val hist = Histogram(10.0, Array(HistogramBin(1.0, 50.0, 5L), HistogramBin(50.0, 100.0, 5L)))
+    val colStatWithHist = CatalogColumnStat(
+      distinctCount = Some(10),
+      min = Some("1"),
+      max = Some("100"),
+      nullCount = Some(0),
+      avgLen = Some(4),
+      maxLen = Some(4),
+      histogram = Some(hist))
+    val statsWithHist = CatalogStatistics(
+      sizeInBytes = 1024,
+      rowCount = Some(10),
+      colStats = Map("id" -> colStatWithHist))
+    val v2StatsWithHist = statsWithHist.toV2Stats(schema)
+    val idV2WithHist = v2StatsWithHist.columnStats().get(FieldReference.column("id"))
+    assert(idV2WithHist != null)
+    assert(idV2WithHist.histogram().isPresent)
+    val v2Hist = idV2WithHist.histogram().get()
+    assert(v2Hist.height() === 10.0)
+    assert(v2Hist.bins().length === 2)
+    assert(v2Hist.bins()(0).lo() === 1.0)
+    assert(v2Hist.bins()(0).hi() === 50.0)
+    assert(v2Hist.bins()(0).ndv() === 5L)
+    assert(v2Hist.bins()(1).lo() === 50.0)
+    assert(v2Hist.bins()(1).hi() === 100.0)
+    assert(v2Hist.bins()(1).ndv() === 5L)
+
+    // When no histogram: histogram() should be empty
+    val idV2NoHist = colStats.get(FieldReference.column("id"))
+    assert(!idV2NoHist.histogram().isPresent)
   }
 }

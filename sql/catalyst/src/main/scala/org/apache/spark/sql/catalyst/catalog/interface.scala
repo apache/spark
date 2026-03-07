@@ -46,7 +46,7 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.expressions.{ClusterByTransform, FieldReference, NamedReference, Transform}
 import org.apache.spark.sql.connector.read.{Statistics => V2Statistics}
-import org.apache.spark.sql.connector.read.colstats.ColumnStatistics
+import org.apache.spark.sql.connector.read.colstats.{ColumnStatistics, Histogram => V2Histogram, HistogramBin => V2HistogramBin}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -876,7 +876,7 @@ case class CatalogStatistics(
     val typeMap = schema.fields.map(f => f.name -> f.dataType).toMap
     val colStatsMap: Map[NamedReference, ColumnStatistics] = colStats.flatMap { case (name, stat) =>
       typeMap.get(name).map { dt =>
-        FieldReference.apply(name) -> stat.toV2ColStat(name, dt)
+        FieldReference.column(name) -> stat.toV2ColStat(name, dt)
       }
     }
 
@@ -980,6 +980,21 @@ case class CatalogColumnStat(
       nullCount.map(v => OptionalLong.of(v.longValue)).getOrElse(OptionalLong.empty())
     val v2AvgLen = avgLen.map(OptionalLong.of).getOrElse(OptionalLong.empty())
     val v2MaxLen = maxLen.map(OptionalLong.of).getOrElse(OptionalLong.empty())
+    val v2Histogram: Optional[V2Histogram] = histogram match {
+      case Some(h) =>
+        val v2Bins: Array[V2HistogramBin] = h.bins.map { bin =>
+          new V2HistogramBin {
+            override def lo(): Double = bin.lo
+            override def hi(): Double = bin.hi
+            override def ndv(): Long = bin.ndv
+          }
+        }
+        Optional.of(new V2Histogram {
+          override def height(): Double = h.height
+          override def bins(): Array[V2HistogramBin] = v2Bins
+        })
+      case None => Optional.empty()
+    }
     new ColumnStatistics {
       override def distinctCount(): OptionalLong = v2DistinctCount
       override def min(): Optional[Object] = Optional.ofNullable(parsedMin.orNull)
@@ -987,6 +1002,7 @@ case class CatalogColumnStat(
       override def nullCount(): OptionalLong = v2NullCount
       override def avgLen(): OptionalLong = v2AvgLen
       override def maxLen(): OptionalLong = v2MaxLen
+      override def histogram(): Optional[V2Histogram] = v2Histogram
     }
   }
 }
