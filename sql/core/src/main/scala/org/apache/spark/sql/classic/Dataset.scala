@@ -1168,6 +1168,12 @@ class Dataset[T] private[sql](
   }
 
   /** @inheritdoc */
+  def followedBy(other: sql.Dataset[T]): Dataset[T] = withSetOperator {
+    SequentialStreamingUnion(logicalPlan :: other.logicalPlan :: Nil, byName = false,
+      allowMissingCol = false)
+  }
+
+  /** @inheritdoc */
   def unionByName(other: sql.Dataset[T], allowMissingColumns: Boolean): Dataset[T] = {
     withSetOperator {
       // We need to resolve the by-name Union first, as the underlying Unions are already resolved
