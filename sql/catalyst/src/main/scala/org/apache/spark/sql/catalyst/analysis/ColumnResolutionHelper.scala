@@ -111,7 +111,8 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       resolveColumnByName: Seq[String] => Option[Expression],
       getAttrCandidates: () => Seq[Attribute],
       throws: Boolean,
-      includeLastResort: Boolean): Expression = {
+      includeLastResort: Boolean,
+      allowSingleCandidateForViewColumn: Boolean = false): Expression = {
 
     val resolver = conf.resolver
 
@@ -134,11 +135,20 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
             viewName, colName, ordinal, expectedNumCandidates, viewDDL) =>
           val attrCandidates = getAttrCandidates()
           val matched = attrCandidates.filter(a => resolver(a.name, colName))
-          if (matched.length != expectedNumCandidates) {
+          if (matched.length == expectedNumCandidates) {
+            matched(ordinal)
+          } else if (allowSingleCandidateForViewColumn && expectedNumCandidates == 1 &&
+              attrCandidates.length == 1) {
+            // Only when caller passed one candidate by view position (index path).
+            attrCandidates(0)
+          } else if (allowSingleCandidateForViewColumn && expectedNumCandidates == 1 &&
+              ordinal >= 0 && ordinal < attrCandidates.length) {
+            // Only when in index path; resolve by ordinal when names differ.
+            attrCandidates(ordinal)
+          } else {
             throw QueryCompilationErrors.incompatibleViewSchemaChangeError(
               viewName, colName, expectedNumCandidates, matched, viewDDL)
           }
-          matched(ordinal)
 
         case u @ UnresolvedAttribute(nameParts) if !u.containsTag(LogicalPlan.PLAN_ID_TAG) =>
           // UnresolvedAttribute with PLAN_ID_TAG should be resolved in resolveDataFrameColumn
@@ -439,6 +449,29 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       },
       throws,
       includeLastResort = includeLastResort)
+  }
+
+  /**
+   * Resolves expressions in a Project that contains [[GetViewColumnByNameAndOrdinal]].
+   * When view column names (e.g. c1, c2) differ from child output names (e.g. col1, col2
+   * from VALUES), the view column at position `viewColumnIndex` is resolved to
+   * child.output(viewColumnIndex).
+   */
+  def resolveExpressionByPlanChildrenWithViewColumnIndex(
+      e: Expression,
+      project: Project,
+      viewColumnIndex: Int,
+      includeLastResort: Boolean = false,
+      throws: Boolean = true): Expression = {
+    resolveExpression(
+      tryResolveDataFrameColumns(e, project.children),
+      resolveColumnByName = nameParts => {
+        project.resolveChildren(nameParts, conf.resolver)
+      },
+      getAttrCandidates = () => Seq(project.child.output(viewColumnIndex)),
+      throws,
+      includeLastResort = includeLastResort,
+      allowSingleCandidateForViewColumn = true)
   }
 
   // Try to resolve `UnresolvedAttribute` by the children with Plan Ids.

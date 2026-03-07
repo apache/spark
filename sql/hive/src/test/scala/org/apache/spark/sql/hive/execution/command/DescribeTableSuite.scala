@@ -80,7 +80,9 @@ class DescribeTableSuite extends v1.DescribeTableSuiteBase with CommandSuiteBase
           Row("InputFormat", "org.apache.hadoop.mapred.TextInputFormat", ""),
           Row("OutputFormat", "org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat", ""),
           Row("Storage Properties", "[serialization.format=1]", ""),
-          Row("Partition Provider", "Catalog", "")))
+          Row("Partition Columns", "[`id`]", ""),
+          Row("Partition Provider", "Catalog", ""),
+          Row("id", "bigint", null)))
     }
   }
 }

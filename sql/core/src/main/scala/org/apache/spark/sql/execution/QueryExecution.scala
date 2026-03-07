@@ -230,7 +230,7 @@ class QueryExecution(
       assertSupported()
       // clone the plan to avoid sharing the plan instance between different stages like analyzing,
       // optimizing and planning.
-      sparkSession.sharedState.cacheManager.useCachedData(normalized.clone())
+      sparkSession.sharedState.cacheManager.useCachedData(normalized.clone(), sparkSession)
     }
   }
 

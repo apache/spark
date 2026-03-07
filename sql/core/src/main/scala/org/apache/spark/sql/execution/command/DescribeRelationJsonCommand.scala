@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.V1Table
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -293,6 +294,30 @@ case class DescribeRelationJsonCommand(
     filteredTableInfo.map { case (key, value) =>
       addKeyValueToMap(key, value, jsonMap)
     }
+
+    // Ensure view_catalog_and_namespace and view_query_output_columns are in JSON with keys
+    // that match DescribeTableJson case class so parsing yields Some(...) (DescribeTableSuite).
+    if (table.tableType == CatalogTableType.VIEW) {
+      val viewCatalogAndNs = scala.util.Try(table.viewCatalogAndNamespace).getOrElse(Seq.empty)
+      val effectiveNs = if (viewCatalogAndNs.nonEmpty) viewCatalogAndNs else Seq(
+        table.identifier.catalog.getOrElse(CatalogManager.SESSION_CATALOG_NAME),
+        table.identifier.database.getOrElse("default"))
+      if (effectiveNs.nonEmpty) {
+        addKeyValueToMap("view_catalog_and_namespace", JString(effectiveNs.quoted), jsonMap)
+      }
+      val viewCols: JValue = scala.util.Try {
+        if (table.viewQueryColumnNames.nonEmpty) {
+          JArray(table.viewQueryColumnNames.map(JString).toList)
+        } else if (table.schema.nonEmpty) {
+          JArray(table.schema.fieldNames.map(JString).toList)
+        } else {
+          JNull
+        }
+      }.getOrElse(JNull)
+      if (viewCols != JNull) {
+        addKeyValueToMap("view_query_output_columns", viewCols, jsonMap)
+      }
+    }
   }
 
   private def describePartitionInfoJson(
@@ -336,8 +361,9 @@ case class DescribeRelationJsonCommand(
     }
   }
 
-  // Already added to jsonMap in DescribeTableJsonCommand
-  private val excludedKeys = Set("catalog", "schema", "database", "table")
+  // Duplicate/overlap with describeIdentifier; exclude so DESCRIBE AS JSON has single namespace.
+  private val excludedKeys = Set(
+    "catalog", "schema", "database", "table")
 
   override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan = {
     copy(child = newChild)

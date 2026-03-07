@@ -784,8 +784,42 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
                 ))
             }
 
-          case p @ Project(projectList, _) =>
+          case p @ Project(projectList, child) =>
             checkForUnspecifiedWindow(projectList)
+            if (p.resolved) {
+              val resolver = plan.conf.resolver
+              val duplicateNames = p.projectList.map(_.name).distinct.filter { name =>
+                p.projectList.count(e => resolver(e.name, name)) > 1
+              }
+              for (name <- duplicateNames) {
+                val exprs = p.projectList.filter(e => resolver(e.name, name))
+                val exprIds = exprs.map(_.toAttribute.exprId).distinct
+                if (exprIds.size > 1) {
+                  val attrs = p.output.filter(a => resolver(a.name, name))
+                  // Only throw when duplicate names come from the same relation. When they come
+                  // from different sides of a join (e.g. self-join), allow. When the same column
+                  // from a single relation is selected multiple times (e.g. cast(v as char(1)),
+                  // cast(v as varchar(1))), allow.
+                  val sameRelationAmbiguous = child.find(_.isInstanceOf[Join]).collectFirst {
+                    case j: Join =>
+                      val leftIds = j.left.outputSet.map(_.exprId).toSet
+                      val rightIds = j.right.outputSet.map(_.exprId).toSet
+                      val fromLeft = attrs.count(a => leftIds.contains(a.exprId))
+                      val fromRight = attrs.count(a => rightIds.contains(a.exprId))
+                      fromLeft > 1 || fromRight > 1
+                  }.getOrElse {
+                    // No join: allow when all duplicate-named exprs reference the same child attr
+                    val childAttrIds = exprs.flatMap(_.collect {
+                      case a: AttributeReference if child.outputSet.contains(a) => a.exprId
+                    }).toSet
+                    childAttrIds.size > 1
+                  }
+                  if (sameRelationAmbiguous) {
+                    throw QueryCompilationErrors.ambiguousReferenceError(name, attrs)
+                  }
+                }
+              }
+            }
 
           case agg@Aggregate(_, aggregateExpressions, _, _) if
             PlanHelper.specialExpressionsInUnsupportedOperator(agg).isEmpty =>

@@ -80,4 +80,11 @@ trait ParserInterface extends DataTypeParserInterface {
    */
   @throws[ParseException]("Text cannot be parsed to routine parameters")
   def parseRoutineParam(sqlText: String): StructType
+
+  /**
+   * If the given SQL is a CREATE VIEW statement, returns the view query text only (the part
+   * after AS). This allows view expansion to set plan origins relative to the view body.
+   * Returns None if the SQL is not a CREATE VIEW or if extraction is not supported.
+   */
+  def parseViewDefinitionQueryText(viewDDL: String): Option[String] = None
 }

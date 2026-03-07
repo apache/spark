@@ -54,6 +54,10 @@ setCurrentCatalog <- function(catalogName) {
   if (class(catalogName) != "character") {
     stop("catalogName must be a string.")
   }
+  # No-op when already on the requested catalog to avoid errors in some environments
+  if (currentCatalog() == catalogName) {
+    return(invisible(NULL))
+  }
   catalog <- callJMethod(sparkSession, "catalog")
   invisible(handledCallJMethod(catalog, "setCurrentCatalog", catalogName))
 }

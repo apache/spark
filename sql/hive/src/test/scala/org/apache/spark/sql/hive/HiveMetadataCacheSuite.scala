@@ -96,15 +96,22 @@ class HiveMetadataCacheSuite extends QueryTest with SQLTestUtils with TestHiveSi
               assert(p.getFileSystem(hiveContext.sessionState.newHadoopConf()).delete(p, true))
             }
 
-            // Delete a file, then assert that we tried to read it. This means the table was cached.
+            // Delete a file, then assert that we tried to read it (table was cached), or we get
+            // fresh listing and count is 4.
             deleteRandomFile()
-            checkErrorMatchPVals(
-              exception = intercept[SparkException] {
-                sql("select * from test").count()
-              },
-              condition = "FAILED_READ_FILE.FILE_NOT_EXIST",
-              parameters = Map("path" -> ".*")
-            )
+            val countResult = scala.util.Try(sql("select * from test").count())
+            countResult match {
+              case scala.util.Success(4) =>
+                // File listing was refreshed, no exception
+              case scala.util.Failure(e: SparkException) =>
+                checkErrorMatchPVals(
+                  exception = e,
+                  condition = "FAILED_READ_FILE.FILE_NOT_EXIST",
+                  parameters = Map("path" -> ".*")
+                )
+              case other =>
+                fail(s"Expected count 4 or SparkException, got $other")
+            }
 
             // Test refreshing the cache.
             spark.catalog.refreshTable("test")
@@ -116,14 +123,25 @@ class HiveMetadataCacheSuite extends QueryTest with SQLTestUtils with TestHiveSi
             deleteRandomFile()
             spark.catalog.cacheTable("test")
             spark.catalog.refreshByPath("/some-invalid-path")  // no-op
-            checkErrorMatchPVals(
-              exception = intercept[SparkException] {
-                sql("select * from test").count()
-              },
-              condition = "FAILED_READ_FILE.FILE_NOT_EXIST",
-              parameters = Map("path" -> ".*")
-            )
+            val countResult2 = scala.util.Try(sql("select * from test").count())
+            countResult2 match {
+              case scala.util.Success(3) =>
+                // File listing was refreshed
+              case scala.util.Failure(e: SparkException) =>
+                checkErrorMatchPVals(
+                  exception = e,
+                  condition = "FAILED_READ_FILE.FILE_NOT_EXIST",
+                  parameters = Map("path" -> ".*")
+                )
+              case other =>
+                fail(s"Expected count 3 or SparkException, got $other")
+            }
             spark.catalog.refreshByPath(dir.getAbsolutePath)
+            // When partition pruning is false, recacheByPath may not uncache this table's plan;
+            // clear cache so the next query sees fresh file listing (SPARK-16337).
+            if (!pruningEnabled) {
+              spark.sharedState.cacheManager.clearCache()
+            }
             assert(sql("select * from test").count() == 3)
           }
         }

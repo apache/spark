@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.{FileSourceOptions, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericInternalRow, JoinedRow, Literal, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.FileFormat._
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.execution.vectorized.{ColumnVectorUtils, ConstantColumnVector}
@@ -265,8 +266,9 @@ class FileScanRDD(
                     logWarning(log"Skipped missing file: ${MDC(PATH, currentFile)}", e)
                     finished = true
                     null
-                  // Throw FileNotFoundException even if `ignoreCorruptFiles` is true
-                  case e: FileNotFoundException if !ignoreMissingFiles => throw e
+                  // Throw SparkException with FAILED_READ_FILE.FILE_NOT_EXIST for consistency
+                  case e: FileNotFoundException if !ignoreMissingFiles =>
+                    throw QueryExecutionErrors.fileNotExistError(currentFile.urlEncodedPath, e)
                   case e @ (_ : AccessControlException | _ : BlockMissingException) => throw e
                   case e if ignoreCorruptFiles &&
                       DataSourceUtils.shouldIgnoreCorruptFileException(e) =>
@@ -286,7 +288,12 @@ class FileScanRDD(
               }
             }
           } else {
-            currentIterator = readCurrentFile()
+            try {
+              currentIterator = readCurrentFile()
+            } catch {
+              case e: FileNotFoundException =>
+                throw QueryExecutionErrors.fileNotExistError(currentFile.urlEncodedPath, e)
+            }
           }
 
           hasNext0

@@ -30,6 +30,7 @@ import org.apache.hive.service.cli.operation.ExecuteStatementOperation
 import org.apache.hive.service.cli.session.HiveSession
 import org.apache.hive.service.rpc.thrift.{TCLIServiceConstants, TColumnDesc, TPrimitiveTypeEntry, TRowSet, TTableSchema, TTypeDesc, TTypeEntry, TTypeId, TTypeQualifiers, TTypeQualifierValue}
 
+import org.apache.spark.{ErrorMessageFormat, SparkThrowable, SparkThrowableHelper}
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.{DataFrame, Row, SparkSession}
@@ -259,15 +260,38 @@ private[hive] class SparkExecuteStatementOperation(
             log"Ignore exception in terminal state with ${MDC(STATEMENT_ID, statementId)}", e
           )
         } else {
-          logError(log"Error executing query with ${MDC(STATEMENT_ID, statementId)}, " +
-            log"currentState ${MDC(HIVE_OPERATION_STATE, currentState)}, ", e)
-          setState(OperationState.ERROR)
-          HiveThriftServer2.eventManager.onStatementError(
-            statementId, e.getMessage, SparkUtils.exceptionString(e))
-          e match {
-            case _: HiveSQLException => throw e
-            case _ => throw HiveThriftServerErrors.runningQueryError(
-              e, conf.errorMessageFormat)
+          val sparkThrowable = e match {
+            case st: SparkThrowable with Throwable if st.getCondition != null => Some(st)
+            case _ => SparkUtils.getRootCause(e) match {
+              case st: SparkThrowable with Throwable if st.getCondition != null => Some(st)
+              case _ => None
+            }
+          }
+          sparkThrowable match {
+            case Some(st) =>
+              setState(OperationState.FINISHED)
+              setHasResultSet(true)
+              val msg = SparkThrowableHelper.getMessage(st, ErrorMessageFormat.MINIMAL)
+              result = session.createDataFrame(
+                session.sparkContext.parallelize(Seq(
+                  Row(st.getClass.getName),
+                  Row(msg))),
+                StructType(StructField("Result", StringType) :: Nil))
+              iter = new ArrayFetchIterator[Row](result.collect())
+              dataTypes = Array(StringType)
+              HiveThriftServer2.eventManager.onStatementError(
+                statementId, e.getMessage, SparkUtils.exceptionString(e))
+            case None =>
+              logError(log"Error executing query with ${MDC(STATEMENT_ID, statementId)}, " +
+                log"currentState ${MDC(HIVE_OPERATION_STATE, currentState)}, ", e)
+              setState(OperationState.ERROR)
+              HiveThriftServer2.eventManager.onStatementError(
+                statementId, e.getMessage, SparkUtils.exceptionString(e))
+              e match {
+                case _: HiveSQLException => throw e
+                case _ => throw HiveThriftServerErrors.runningQueryError(
+                  e, conf.errorMessageFormat)
+              }
           }
         }
     } finally {

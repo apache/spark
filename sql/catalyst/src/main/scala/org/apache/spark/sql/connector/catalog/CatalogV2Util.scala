@@ -539,11 +539,14 @@ private[sql] object CatalogV2Util {
       collation: Option[String],
       provider: Option[String],
       external: Boolean = false): Map[String, String] = {
+    // Parser's cleanTableOptions merges OPTIONS('path') into location, so location is set when
+    // SQL uses OPTIONS(path '...') or LOCATION '...'. Mark as external when location is set.
+    val effectiveExternal = external || location.nonEmpty
     properties ++
-      options ++ // to make the transition to the "option." prefix easier, add both
+      options ++
       options.map { case (key, value) => TableCatalog.OPTION_PREFIX + key -> value } ++
       convertToProperties(serdeInfo) ++
-      (if (external) Some(TableCatalog.PROP_EXTERNAL -> "true") else None) ++
+      (if (effectiveExternal) Some(TableCatalog.PROP_EXTERNAL -> "true") else None) ++
       provider.map(TableCatalog.PROP_PROVIDER -> _) ++
       comment.map(TableCatalog.PROP_COMMENT -> _) ++
       collation.map(TableCatalog.PROP_COLLATION -> _) ++

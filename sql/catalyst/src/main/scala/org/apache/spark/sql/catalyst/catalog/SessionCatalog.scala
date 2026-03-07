@@ -964,6 +964,13 @@ class SessionCatalog(
   }
 
   private def getTempViewPlan(viewInfo: TemporaryViewRelation): View = viewInfo.plan match {
+    case Some(_) if viewInfo.tableMeta.viewText.isDefined &&
+        !viewInfo.tableMeta.properties
+          .get(CatalogTable.VIEW_STORING_ANALYZED_PLAN).contains("true") =>
+      // Re-parse from viewText so that plan origins use the view body (for error reporting).
+      // When storing analyzed plan, use the stored plan so that overwritten tables yield
+      // FILE_NOT_EXIST when reading (e.g. alter temp view test).
+      fromCatalogTable(viewInfo.tableMeta, isTempView = true)
     case Some(p) => View(desc = viewInfo.tableMeta, isTempView = true, child = p)
     case None => fromCatalogTable(viewInfo.tableMeta, isTempView = true)
   }
@@ -1169,6 +1176,45 @@ class SessionCatalog(
   }
 
 
+  /** Strip leading blank and single-line (--) comment lines, and optional CREATE VIEW header,
+   * so view origin sqlText is the query body only (e.g. for CurrentOrigin tests).
+   */
+  private def stripLeadingCommentLines(sql: String): String = {
+    val lines = sql.split("\n")
+    def isBlankOrComment(line: String): Boolean = {
+      val t = line.trim
+      t.isEmpty || t.startsWith("--")
+    }
+    val noLeadingComments = lines.dropWhile(isBlankOrComment)
+    val noCreateView = if (noLeadingComments.nonEmpty) {
+      val first = noLeadingComments.head.trim.replace("\r", "").toUpperCase(Locale.ROOT)
+      // Match "CREATE [OR REPLACE] [[GLOBAL] TEMPORARY] VIEW ... AS" so origin shows body only.
+      if (first.startsWith("CREATE ") && first.contains("VIEW") &&
+          (first.contains(" AS") || first.endsWith(" AS"))) {
+        noLeadingComments.tail.dropWhile(isBlankOrComment)
+      } else {
+        noLeadingComments
+      }
+    } else {
+      noLeadingComments
+    }
+    var result = noCreateView.mkString("\n").trim.replace("\r\n", "\n").replace("\r", "\n")
+    // If still looks like full DDL (e.g. parser returned full CreateViewCommand.originalText), take
+    // text after the first " AS " / " AS\n" (the CREATE VIEW ... AS) so origin shows the query body
+    // only. Use first occurrence so we don't cut at " AS " inside the body.
+    if (result.toUpperCase(Locale.ROOT).startsWith("CREATE ") && result.contains(" AS")) {
+      val idxSpace = result.indexOf(" AS ")
+      val idxNewline = result.indexOf(" AS\n")
+      val (idx, skip) = Seq((idxSpace, 4), (idxNewline, 3))
+        .filter(_._1 >= 0)
+        .minByOption(_._1)
+        .getOrElse((-1, 0))
+      if (idx >= 0) stripLeadingCommentLines(result.substring(idx + skip).trim) else result
+    } else {
+      result
+    }
+  }
+
   private def castColToType(
     col: Expression,
     toField: StructField,
@@ -1198,9 +1244,25 @@ class SessionCatalog(
       throw SparkException.internalError("Invalid view without text.")
     }
     val viewConfigs = metadata.viewSQLConfigs
+    // When viewText is full DDL (e.g. CREATE VIEW ... AS query), parse only the query part
+    // so that plan origins use the view body (sqlText, line 1) for error reporting.
+    val (textToParse, rawOriginSqlText) = parser.parseViewDefinitionQueryText(viewText) match {
+      case Some(queryText) => (queryText, queryText)
+      case None => (viewText, viewText)
+    }
+    // Strip leading comment lines from origin sqlText so CurrentOrigin shows the query body only.
+    val originSqlText = stripLeadingCommentLines(rawOriginSqlText)
+    // When viewText was not full DDL (e.g. query-only from Spark CREATE VIEW), parse the
+    // stripped body so plan origins get line 1 and positions relative to the query body.
+    val bodyToParse = if (textToParse == viewText && originSqlText != viewText) {
+      originSqlText
+    } else {
+      textToParse
+    }
     val origin = CurrentOrigin.get.copy(
       objectType = Some("VIEW"),
-      objectName = Some(metadata.qualifiedName)
+      objectName = Some(metadata.qualifiedName),
+      sqlText = Some(originSqlText)
     )
     val parsedPlan = SQLConf.withExistingConf(
       View.effectiveSQLConf(
@@ -1210,7 +1272,7 @@ class SessionCatalog(
       )
     ) {
         CurrentOrigin.withOrigin(origin) {
-          parser.parseQuery(viewText)
+          parser.parseQuery(bodyToParse)
         }
     }
     val schemaMode = metadata.viewSchemaMode
@@ -1435,6 +1497,11 @@ class SessionCatalog(
       val qualifiedTableName = QualifiedTableName(
         qualifiedIdent.catalog.get, qualifiedIdent.database.get, qualifiedIdent.table)
       tableRelationCache.invalidate(qualifiedTableName)
+      // Invalidate with lowercased key so Hive getCachedDataSourceTable (uses toLowerCase) sees it.
+      tableRelationCache.invalidate(QualifiedTableName(
+        qualifiedTableName.catalog.toLowerCase(Locale.ROOT),
+        qualifiedTableName.database.toLowerCase(Locale.ROOT),
+        qualifiedTableName.name.toLowerCase(Locale.ROOT)))
     }
   }
 
@@ -2391,8 +2458,17 @@ class SessionCatalog(
       val referredTempFunctionNames = AnalysisContext.get.referredTempFunctionNames
 
       if (isResolvingView) {
-        // When resolving a view, only return a temp function if it's referred by this view.
-        referredTempFunctionNames.contains(name)
+        // When resolving a persisted view's definition, only allow temp functions that were
+        // referred when the view was created. Only apply this when the view actually had
+        // referred temp functions recorded (referredTempFunctionNames.nonEmpty); when it's
+        // empty we allow temp functions so that CACHE TABLE ... AS SELECT and CREATE TEMP
+        // VIEW ... AS SELECT can reference temp functions in the query.
+        if (referredTempFunctionNames.nonEmpty && !referredTempFunctionNames.contains(name)) {
+          false
+        } else {
+          referredTempFunctionNames.add(name)
+          true
+        }
       } else {
         // We are not resolving a view and the function is a temp one, add it to
         // AnalysisContext so if a view is being created, it can be checked.

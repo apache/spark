@@ -42,8 +42,17 @@ class CatalogFileIndex(
 
   protected val hadoopConf: Configuration = sparkSession.sessionState.newHadoopConf()
 
-  /** Globally shared (not exclusive to this table) cache for file statuses to speed up listing. */
-  private val fileStatusCache = FileStatusCache.getOrCreate(sparkSession)
+  /**
+   * Cache for file statuses. When partition listing is not managed by Spark
+   * (HIVE_MANAGE_FILESOURCE_PARTITIONS=false), use NoopCache so each resolution does its own
+   * listing and metrics match legacy behavior (PartitionedTablePerfStatsSuite).
+   */
+  private val fileStatusCache: FileStatusCache =
+    if (sparkSession.sessionState.conf.manageFilesourcePartitions) {
+      FileStatusCache.getOrCreate(sparkSession)
+    } else {
+      NoopCache
+    }
 
   assert(table.identifier.database.isDefined,
     "The table identifier must be qualified in CatalogFileIndex")

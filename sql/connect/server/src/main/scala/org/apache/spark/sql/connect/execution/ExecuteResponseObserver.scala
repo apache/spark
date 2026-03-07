@@ -203,8 +203,9 @@ private[connect] class ExecuteResponseObserver[T <: Message](val executeHolder: 
         errorClass = "INVALID_CURSOR.POSITION_NOT_AVAILABLE",
         messageParameters = Map("index" -> index.toString, "responseId" -> responseId))
     } else if (getLastResponseIndex().exists(index > _)) {
-      // If index > lastIndex, it's out of bounds. This is an internal error.
-      throw IllegalStateErrors.cursorOutOfBounds(index, getLastResponseIndex().get)
+      // Stream finished (e.g. with an error) before producing this index. Return None so the
+      // sender exits its loop and forwards the stored error (or completes) to the client.
+      return None
     }
     ret
   }

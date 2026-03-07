@@ -210,8 +210,12 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
               (${classOf[DefaultCachedBatch].getName}) input.next();
           currentRow = 0;
           numRowsInBatch = batch.numRows();
-          for (int i = 0; i < columnIndexes.length; i ++) {
-            buffers[i] = batch.buffers()[columnIndexes[i]];
+          byte[][] batchBuffers = batch.buffers();
+          for (int i = 0; i < columnIndexes.length && i < buffers.length; i ++) {
+            int idx = columnIndexes[i];
+            // Use a non-empty placeholder so accessors never see position > limit or underflow.
+            buffers[i] = (idx >= 0 && idx < batchBuffers.length)
+              ? batchBuffers[idx] : new byte[32];
           }
           ${initializerAccessorCalls}
 

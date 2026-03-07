@@ -558,10 +558,8 @@ case class TruncateTableCommand(
         }
       }
     }
-    // After deleting the data, refresh the table to make sure we don't keep around a stale
-    // file relation in the metastore cache and cached table data in the cache manager.
+    // Same implementation as REFRESH TABLE (SessionState.doRefreshTable).
     spark.catalog.refreshTable(tableIdentWithDB)
-
     CommandUtils.updateTableStats(spark, table)
     Seq.empty[Row]
   }
@@ -616,8 +614,12 @@ case class DescribeTableCommand(
       if (partitionSpec.nonEmpty) {
         throw QueryCompilationErrors.descPartitionNotAllowedOnTempView(table.identifier)
       }
-      val schema = catalog.getTempViewOrPermanentTableMetadata(table).schema
+      val metadata = catalog.getTempViewOrPermanentTableMetadata(table)
+      val schema = metadata.schema
       describeSchema(schema, result, header = false)
+      if (isExtended) {
+        describeFormattedTableInfo(metadata, result, isTempView = true)
+      }
     } else {
       val metadata = catalog.getTableRawMetadata(table)
       if (metadata.schema.isEmpty) {
@@ -678,16 +680,20 @@ case class DescribeTableCommand(
     }
   }
 
-  private def describeFormattedTableInfo(table: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
-    // The following information has been already shown in the previous outputs
-    val excludedTableInfo = Seq(
-      "Partition Columns",
-      "Schema"
-    )
+  private def describeFormattedTableInfo(
+      table: CatalogTable,
+      buffer: ArrayBuffer[Row],
+      isTempView: Boolean = false): Unit = {
+    // Schema is excluded as it has been already shown in the previous outputs.
+    // Partition Columns is excluded so output matches legacy DESCRIBE (partition info already
+    // shown in # Partition Information above).
+    val excludedTableInfo = Seq("Schema", "Partition Columns")
     append(buffer, "", "", "")
     append(buffer, "# Detailed Table Information", "", "")
-    table.toLinkedHashMap.filter { case (k, _) => !excludedTableInfo.contains(k) }.foreach {
-      s => append(buffer, s._1, s._2, "")
+    val tableInfo = table.toLinkedHashMap.filter { case (k, _) => !excludedTableInfo.contains(k) }
+    tableInfo.foreach { s => append(buffer, s._1, s._2, "") }
+    if (isTempView) {
+      append(buffer, "Is Temporary", "true", "")
     }
   }
 
@@ -909,7 +915,8 @@ case class ShowTablesCommand(
         val tableName = tableIdent.table
         val isTemp = catalog.isTempView(tableIdent)
         if (isExtended) {
-          val information = catalog.getTempViewOrPermanentTableMetadata(tableIdent).simpleString
+          val metadata = catalog.getTempViewOrPermanentTableMetadata(tableIdent)
+          val information = metadata.simpleString(includeViewCatalogAndOutputColumns = true)
           Row(database, tableName, isTemp, s"$information\n")
         } else {
           Row(database, tableName, isTemp)
@@ -1429,8 +1436,8 @@ case class RefreshTableCommand(tableIdent: TableIdentifier)
   extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    // Refresh the given table's metadata. If this table is cached as an InMemoryRelation,
-    // drop the original cached version and make the new version cached lazily.
+    // Catalog.refreshTable uses the same implementation (SessionState.doRefreshTable) so
+    // no recursion; behavior matches original catalog refresh.
     sparkSession.catalog.refreshTable(tableIdent.quotedString)
     Seq.empty[Row]
   }

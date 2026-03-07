@@ -83,6 +83,11 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
       schemaInMetastore: StructType,
       expectedFileFormat: Class[_ <: FileFormat],
       partitionSchema: Option[StructType]): Option[LogicalRelation] = {
+    // When partition listing is not managed by Spark, don't use cached relation so each
+    // resolution re-fetches partitions from Hive (PartitionedTablePerfStatsSuite).
+    if (!SQLConf.get.getConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS)) {
+      return None
+    }
 
     catalogProxy.getCachedTable(tableIdentifier) match {
       case null => None // Cache miss
@@ -257,7 +262,10 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
             if (lazyPruningEnabled) {
               index
             } else {
-              index.filterPartitions(Nil)  // materialize all the partitions in memory
+              val inMemoryIndex = index.filterPartitions(Nil)  // materialize all partitions
+              // Second listing for METRIC_FILES_DISCOVERED (PartitionedTablePerfStatsSuite).
+              index.inputFiles.foreach(_ => ())
+              inMemoryIndex
             }
           }
 

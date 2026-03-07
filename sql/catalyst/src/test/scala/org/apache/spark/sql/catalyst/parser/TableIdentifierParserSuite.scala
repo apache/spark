@@ -48,6 +48,7 @@ class TableIdentifierParserSuite extends SQLKeywordUtils {
     "bucket",
     "buckets",
     "by",
+    "cached",
     "cascade",
     "change",
     "cluster",
