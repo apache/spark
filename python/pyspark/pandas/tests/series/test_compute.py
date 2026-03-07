@@ -240,6 +240,34 @@ class SeriesComputeMixin:
         self.assert_eq(psser, pser)
         self.assert_eq(psdf, pdf)
 
+    def test_drop_with_errors(self):
+        pser = pd.Series([10, 20, 30], index=["a", "b", "c"])
+        psser = ps.from_pandas(pser)
+
+        # errors='ignore' with missing index label
+        self.assert_eq(
+            psser.drop(["a", "x"], errors="ignore"),
+            pser.drop(["a", "x"], errors="ignore"),
+        )
+
+        # errors='ignore' with all-missing index labels
+        self.assert_eq(
+            psser.drop(["x", "y"], errors="ignore"),
+            pser.drop(["x", "y"], errors="ignore"),
+        )
+
+        # errors='ignore' with columns (no-op for Series)
+        self.assert_eq(
+            psser.drop(columns=["a"], errors="ignore"),
+            pser.drop(columns=["a"], errors="ignore"),
+        )
+
+        # Invalid errors value
+        self.assertRaises(
+            ValueError,
+            lambda: psser.drop("a", errors="invalid"),
+        )
+
     def test_pop(self):
         midx = pd.MultiIndex(
             [["lama", "cow", "falcon"], ["speed", "weight", "length"]],
