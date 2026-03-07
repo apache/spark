@@ -881,7 +881,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
         condition = "TABLE_OR_VIEW_NOT_FOUND",
         parameters = Map(
           "relationName" -> "`tab2`",
-          "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`].")
+          "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]")
       )
     }
   }

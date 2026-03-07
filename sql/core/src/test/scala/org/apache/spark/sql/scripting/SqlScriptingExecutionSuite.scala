@@ -2037,7 +2037,8 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
       sqlState = Some("42P01"),
       parameters = Map(
         "relationName" -> toSQLId("test_table_non_existing"),
-        "searchPath" -> defaultSearchPathForTests)),
+        "searchPath" -> defaultSearchPathForTests
+      ),
       queryContext = Array(ExpectedContext(
         fragment = "test_table_non_existing",
         start = 63,
@@ -2063,7 +2064,8 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
       sqlState = Some("42P01"),
       parameters = Map(
         "relationName" -> toSQLId("test_table_non_existing"),
-        "searchPath" -> defaultSearchPathForTests)),
+        "searchPath" -> defaultSearchPathForTests
+      ),
       queryContext = Array(ExpectedContext(
         fragment = "test_table_non_existing",
         start = 67,
