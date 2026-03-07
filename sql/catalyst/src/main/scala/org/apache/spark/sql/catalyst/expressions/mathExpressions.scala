@@ -418,10 +418,18 @@ case class Cosh(child: Expression) extends UnaryMathExpression(math.cosh, "COSH"
   since = "3.0.0",
   group = "math_funcs")
 case class Acosh(child: Expression)
-  extends UnaryMathExpression((x: Double) => StrictMath.log(x + math.sqrt(x * x - 1.0)), "ACOSH") {
+  // fdlibm: when x > 2^28, use log(2x) = log(x) + log(2) for better precision
+  extends UnaryMathExpression((x: Double) => x match {
+    case _ if x > (1 << 28) =>
+      StrictMath.log(x) + StrictMath.log(2.0)
+    case _ => StrictMath.log(x + math.sqrt(x * x - 1.0)) }, "ACOSH") {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev,
-      c => s"java.lang.StrictMath.log($c + java.lang.Math.sqrt($c * $c - 1.0))")
+    defineCodeGen(ctx, ev, c =>
+      s"$c > ${1 << 28}.0 ? " +
+      s"(java.lang.StrictMath.log($c) + " +
+      s"java.lang.StrictMath.log(2.0)) : " +
+      s"java.lang.StrictMath.log(" +
+      s"$c + java.lang.Math.sqrt($c * $c - 1.0))")
   }
   override protected def withNewChildInternal(newChild: Expression): Acosh = copy(child = newChild)
 }
@@ -847,13 +855,22 @@ case class Sinh(child: Expression) extends UnaryMathExpression(math.sinh, "SINH"
   since = "3.0.0",
   group = "math_funcs")
 case class Asinh(child: Expression)
+  // fdlibm: when |x| > 2^28, use sign(x) * (log(|x|) + log(2)) for better precision
   extends UnaryMathExpression((x: Double) => x match {
     case Double.NegativeInfinity => Double.NegativeInfinity
+    case _ if Math.abs(x) > (1 << 28) =>
+      Math.signum(x) * (StrictMath.log(Math.abs(x)) + StrictMath.log(2.0))
     case _ => StrictMath.log(x + math.sqrt(x * x + 1.0)) }, "ASINH") {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, c =>
-      s"$c == Double.NEGATIVE_INFINITY ? Double.NEGATIVE_INFINITY : " +
-      s"java.lang.StrictMath.log($c + java.lang.Math.sqrt($c * $c + 1.0))")
+      s"$c == Double.NEGATIVE_INFINITY ? " +
+      s"Double.NEGATIVE_INFINITY : " +
+      s"Math.abs($c) > ${1 << 28}.0 ? " +
+      s"Math.signum($c) * " +
+      s"(java.lang.StrictMath.log(Math.abs($c)) + " +
+      s"java.lang.StrictMath.log(2.0)) : " +
+      s"java.lang.StrictMath.log(" +
+      s"$c + java.lang.Math.sqrt($c * $c + 1.0))")
   }
   override protected def withNewChildInternal(newChild: Expression): Asinh = copy(child = newChild)
 }

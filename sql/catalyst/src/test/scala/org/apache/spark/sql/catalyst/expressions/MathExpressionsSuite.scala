@@ -249,6 +249,12 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(checkDataTypeAndCast(Asinh(doubleNullLit)), null, EmptyRow)
   }
 
+  test("SPARK-55557: asinh should be numerically stable for large values") {
+    val expected = Math.log(Double.MaxValue) + Math.log(2.0)
+    checkEvaluation(Asinh(Literal(Double.MaxValue)), expected, EmptyRow)
+    checkEvaluation(Asinh(Literal(-Double.MaxValue)), -expected, EmptyRow)
+  }
+
   test("cos") {
     testUnary(Cos, math.cos)
     checkConsistencyBetweenInterpretedAndCodegen(Cos, DoubleType)
@@ -287,6 +293,12 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val doubleNullLit = Literal.create(null, DoubleType)
     checkEvaluation(checkDataTypeAndCast(Acosh(nullLit)), null, EmptyRow)
     checkEvaluation(checkDataTypeAndCast(Acosh(doubleNullLit)), null, EmptyRow)
+  }
+
+  test("SPARK-55557: acosh should be numerically stable for large values") {
+    val expected = Math.log(Double.MaxValue) + Math.log(2.0)
+    checkEvaluation(Acosh(Literal(Double.MaxValue)), expected, EmptyRow)
+    checkEvaluation(Acosh(Literal(Double.PositiveInfinity)), Double.PositiveInfinity)
   }
 
   test("tan") {
