@@ -325,14 +325,19 @@ def spark_type_to_pandas_dtype(
         )
 
 
-def handle_dtype_as_extension_dtype(tpe: Dtype) -> bool:
+def is_str_dtype(tpe: Dtype) -> bool:
     if LooseVersion(pd.__version__) < "3.0.0":
-        return isinstance(tpe, extension_dtypes)
-
+        return False
     if extension_object_dtypes_available:
-        if isinstance(tpe, StringDtype):
-            return tpe.na_value is pd.NA
-    return isinstance(tpe, extension_dtypes)
+        return isinstance(tpe, StringDtype) and tpe.na_value is np.nan
+    return False
+
+
+def handle_dtype_as_extension_dtype(tpe: Dtype) -> bool:
+    if is_str_dtype(tpe):
+        return False
+    else:
+        return isinstance(tpe, extension_dtypes)
 
 
 def pandas_on_spark_type(tpe: Union[str, type, Dtype]) -> Tuple[Dtype, types.DataType]:

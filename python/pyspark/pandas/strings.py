@@ -33,8 +33,12 @@ from typing import (
 
 import numpy as np
 import pandas as pd
+from pandas.api.extensions import no_default
 
+from pyspark._globals import _NoValue, _NoValueType
+from pyspark.loose_version import LooseVersion
 from pyspark.pandas.utils import ansi_mode_context, is_ansi_mode_enabled
+from pyspark.pandas.typedef.typehints import is_str_dtype, SeriesType
 from pyspark.sql.types import StringType, BinaryType, ArrayType, LongType, MapType
 from pyspark.sql import functions as F
 from pyspark.sql.functions import pandas_udf
@@ -1170,13 +1174,18 @@ class StringMethods:
         2    [b, b]
         dtype: object
         """
+        str_dtype = is_str_dtype(self._data.dtype)
 
         # type hint does not support to specify array type yet.
         @pandas_udf(  # type: ignore[call-overload]
             returnType=ArrayType(StringType(), containsNull=True)
         )
         def pudf(s: pd.Series) -> pd.Series:
-            return s.str.findall(pat, flags)
+            ret = s.str.findall(pat, flags)
+            if str_dtype:
+                # ArrayType does not support NaN, so replace with None
+                ret = ret.replace(np.nan, None)
+            return ret
 
         return self._data._with_new_scol(scol=pudf(self._data.spark.column))
 
@@ -1266,11 +1275,12 @@ class StringMethods:
         1                   None
         dtype: object
         """
+        ret_type: SeriesType = SeriesType(self._data.dtype, StringType())
 
-        def pandas_join(s) -> ps.Series[str]:  # type: ignore[no-untyped-def]
+        def pandas_join(s):  # type: ignore[no-untyped-def]
             return s.str.join(sep)
 
-        return self._data.pandas_on_spark.transform_batch(pandas_join)
+        return self._data.pandas_on_spark._transform_batch(pandas_join, ret_type)
 
     def len(self) -> "ps.Series":
         """
@@ -1342,7 +1352,13 @@ class StringMethods:
 
         return self._data.pandas_on_spark.transform_batch(pandas_ljust)
 
-    def match(self, pat: str, case: bool = True, flags: int = 0, na: Any = np.nan) -> "ps.Series":
+    def match(
+        self,
+        pat: str,
+        case: Union[bool, _NoValueType] = _NoValue,
+        flags: Union[int, _NoValueType] = _NoValue,
+        na: Any = _NoValue,
+    ) -> "ps.Series":
         """
         Determine if each string matches a regular expression.
 
@@ -1402,6 +1418,21 @@ class StringMethods:
         4     None
         dtype: object
         """
+
+        if LooseVersion(pd.__version__) < "3.0.0":
+            if case is _NoValue:
+                case = True
+            if flags is _NoValue:
+                flags = 0
+            if na is _NoValue:
+                na = np.nan
+        else:
+            if case is _NoValue:
+                case = no_default  # type: ignore[assignment]
+            if flags is _NoValue:
+                flags = no_default  # type: ignore[assignment]
+            if na is _NoValue:
+                na = no_default
 
         def pandas_match(s) -> ps.Series[bool]:  # type: ignore[no-untyped-def]
             return s.str.match(pat, case, flags, na)
@@ -2035,9 +2066,15 @@ class StringMethods:
         # type hint does not support to specify array type yet.
         return_type = ArrayType(StringType(), containsNull=True)
 
+        str_dtype = is_str_dtype(self._data.dtype)
+
         @pandas_udf(returnType=return_type)  # type: ignore[call-overload]
         def pudf(s: pd.Series) -> pd.Series:
-            return s.str.split(pat, n=n)
+            ret = s.str.split(pat, n=n)
+            if str_dtype:
+                # ArrayType does not support NaN, so replace with None
+                ret = ret.replace(np.nan, None)
+            return ret
 
         psser = self._data._with_new_scol(
             pudf(self._data.spark.column).alias(self._data._internal.data_spark_column_names[0]),
@@ -2189,9 +2226,15 @@ class StringMethods:
         # type hint does not support to specify array type yet.
         return_type = ArrayType(StringType(), containsNull=True)
 
+        str_dtype = is_str_dtype(self._data.dtype)
+
         @pandas_udf(returnType=return_type)  # type: ignore[call-overload]
         def pudf(s: pd.Series) -> pd.Series:
-            return s.str.rsplit(pat, n=n)
+            ret = s.str.rsplit(pat, n=n)
+            if str_dtype:
+                # ArrayType does not support NaN, so replace with None
+                ret = ret.replace(np.nan, None)
+            return ret
 
         psser = self._data._with_new_scol(
             pudf(self._data.spark.column).alias(self._data._internal.data_spark_column_names[0]),
