@@ -945,6 +945,25 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       origin = context)
   }
 
+  def tableOrViewNotFoundWithSearchPath(
+      name: Seq[String],
+      searchPath: Seq[String],
+      origin: Origin): Throwable = {
+    // Payload is data only: path list or empty string. Template adds "Search path: " label.
+    val searchPathValue = if (searchPath.isEmpty) {
+      ""
+    } else {
+      searchPath.mkString("[", ", ", "]")
+    }
+    new AnalysisException(
+      errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+      messageParameters = Map(
+        "relationName" -> toSQLId(name),
+        "searchPath" -> searchPathValue
+      ),
+      origin = origin)
+  }
+
   def notAScalarFunctionError(
       functionName: String,
       u: TreeNode[_]): Throwable = {

@@ -402,7 +402,7 @@ trait SparkTestSuite
       queryContext: ExpectedContext): Unit =
     checkError(exception = exception,
       condition = "TABLE_OR_VIEW_NOT_FOUND",
-      parameters = Map("relationName" -> tableName),
+      parameters = Map("relationName" -> tableName, "searchPath" -> ""),
       queryContext = Array(queryContext))
 
   protected def checkErrorTableNotFound(
@@ -410,7 +410,32 @@ trait SparkTestSuite
       tableName: String): Unit =
     checkError(exception = exception,
       condition = "TABLE_OR_VIEW_NOT_FOUND",
-      parameters = Map("relationName" -> tableName))
+      parameters = Map("relationName" -> tableName, "searchPath" -> ""))
+
+  protected val defaultSearchPathForTests: String =
+    "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
+
+  protected def checkErrorTableNotFoundWithSearchPath(
+      exception: SparkThrowable,
+      tableName: String,
+      searchPath: String = defaultSearchPathForTests): Unit =
+    checkError(exception = exception,
+      condition = "TABLE_OR_VIEW_NOT_FOUND",
+      parameters = Map(
+        "relationName" -> tableName,
+        "searchPath" -> searchPath))
+
+  protected def checkErrorTableNotFoundWithSearchPath(
+      exception: SparkThrowable,
+      tableName: String,
+      queryContext: ExpectedContext,
+      searchPath: String): Unit =
+    checkError(exception = exception,
+      condition = "TABLE_OR_VIEW_NOT_FOUND",
+      parameters = Map(
+        "relationName" -> tableName,
+        "searchPath" -> searchPath),
+      queryContext = Array(queryContext))
 
   protected def checkErrorTableAlreadyExists(
       exception: SparkThrowable,

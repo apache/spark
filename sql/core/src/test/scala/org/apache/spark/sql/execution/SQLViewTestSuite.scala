@@ -208,11 +208,9 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
           },
           condition = "RECURSIVE_VIEW",
           parameters = Map(
-            "viewIdent" -> tableIdentifier("v1").quotedString,
-            "newPath" -> (s"${tableIdentifier("v1").quotedString} " +
-              s"-> ${tableIdentifier("v2").quotedString} " +
-              s"-> ${tableIdentifier("v1").quotedString}"))
-        )
+            "viewIdent" -> ".*`v1`.*",
+            "newPath" -> ".*`v1`.*`v2`.*`v1`.*"),
+          matchPVals = true)
       }
     }
   }
@@ -320,8 +318,9 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
           val e = intercept[AnalysisException] {
             sql(s"SELECT * FROM $viewName").collect()
           }
-          checkErrorTableNotFound(e, "`t`",
-            ExpectedContext("VIEW", tableIdentifier("testview").unquotedString, 14, 14, "t"))
+          checkErrorTableNotFoundWithSearchPath(e, "`t`",
+            ExpectedContext("VIEW", tableIdentifier("testview").unquotedString, 14, 14, "t"),
+            defaultSearchPathForTests)
         }
       }
     }
@@ -389,13 +388,16 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
       // Then, drop the view using DROP TABLE.
       sql(s"DROP TABLE $viewName")
       // Finally, verify that the view is dropped.
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql(s"SELECT * FROM $viewName")
-        },
-        condition = "TABLE_OR_VIEW_NOT_FOUND",
-        parameters = Map("relationName" -> toSQLId(viewName.split("\\.").toSeq)),
-        ExpectedContext(s"$viewName", 14, 13 + viewName.length))
+      val e = intercept[AnalysisException] {
+        sql(s"SELECT * FROM $viewName")
+      }
+      val tableName = toSQLId(viewName.split("\\.").toSeq)
+      val context = ExpectedContext(s"$viewName", 14, 13 + viewName.length)
+      if (e.getCondition == "TABLE_OR_VIEW_NOT_FOUND") {
+        checkErrorTableNotFoundWithSearchPath(e, tableName, context, defaultSearchPathForTests)
+      } else {
+        checkErrorTableNotFound(e, tableName, context)
+      }
     }
   }
 

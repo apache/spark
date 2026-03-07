@@ -778,9 +778,9 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
       val e = intercept[AnalysisException] {
         sql(stmt)
       }
-      checkErrorTableNotFound(e, "`nonexistent`",
+      checkErrorTableNotFoundWithSearchPath(e, "`nonexistent`",
         ExpectedContext("nonexistent", stmt.length - "nonexistent".length,
-          stmt.length - 1))
+          stmt.length - 1), defaultSearchPathForTests)
     }
   }
 

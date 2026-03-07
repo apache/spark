@@ -2186,9 +2186,10 @@ class DataFrameSuite extends QueryTest
     val e = intercept[AnalysisException] {
       sql(s"CREATE TABLE t USING $v2Source AS SELECT * from nonexist")
     }
-    checkErrorTableNotFound(e, "`nonexist`",
+    checkErrorTableNotFoundWithSearchPath(e, "`nonexist`",
       ExpectedContext("nonexist", s"CREATE TABLE t USING $v2Source AS SELECT * from ".length,
-        s"CREATE TABLE t USING $v2Source AS SELECT * from nonexist".length - 1))
+        s"CREATE TABLE t USING $v2Source AS SELECT * from nonexist".length - 1),
+      defaultSearchPathForTests)
   }
 
   test("CalendarInterval reflection support") {

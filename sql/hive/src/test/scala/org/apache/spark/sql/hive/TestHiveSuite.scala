@@ -38,8 +38,8 @@ class TestHiveSuite extends TestHiveSingleton with SQLTestUtils {
       val err = intercept[AnalysisException] {
         sql("SELECT * FROM SRC").queryExecution.analyzed
       }
-      checkErrorTableNotFound(err, "`SRC`",
-        ExpectedContext("SRC", 14, 13 + "SRC".length))
+      checkErrorTableNotFoundWithSearchPath(err, "`SRC`",
+        ExpectedContext("SRC", 14, 13 + "SRC".length), defaultSearchPathForTests)
     }
     testHiveSparkSession.reset()
   }

@@ -178,7 +178,7 @@ ShowColumnsCommand `global_temp`.`showcolumn4`, [col_name#x]
 -- !query
 SHOW COLUMNS IN showcolumn4 FROM global_temp
 -- !query analysis
-ShowColumnsCommand global_temp, `global_temp`.`showcolumn4`, [col_name#x]
+ShowColumnsCommand global_temp, `showcolumn4`, [col_name#x]
 
 
 -- !query

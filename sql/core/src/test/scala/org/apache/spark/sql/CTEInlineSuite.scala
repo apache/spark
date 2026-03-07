@@ -277,8 +277,9 @@ abstract class CTEInlineSuiteBase
            |  select * from v2 where c1 > 0 union select * from v2 where c2 > 0
            |)
          """.stripMargin))
-      checkErrorTableNotFound(ex, "`v1`",
-        ExpectedContext("v1", 29, 30))
+      checkErrorTableNotFoundWithSearchPath(ex, "`v1`",
+        ExpectedContext("v1", 29, 30),
+        defaultSearchPathForTests)
     }
   }
 
@@ -689,7 +690,8 @@ abstract class CTEInlineSuiteBase
         |b as (select * from a)
         |select 2
         |""".stripMargin))
-    checkErrorTableNotFound(e, "`tab_non_exists`", ExpectedContext("tab_non_exists", 26, 39))
+    checkErrorTableNotFoundWithSearchPath(e, "`tab_non_exists`",
+      ExpectedContext("tab_non_exists", 26, 39), defaultSearchPathForTests)
 
     withTable("tab_exists") {
       spark.sql("CREATE TABLE tab_exists(id INT) using parquet")
@@ -702,7 +704,8 @@ abstract class CTEInlineSuiteBase
            |d as (select * from c)
            |select 2
            |""".stripMargin))
-      checkErrorTableNotFound(e, "`tab_non_exists`", ExpectedContext("tab_non_exists", 83, 96))
+      checkErrorTableNotFoundWithSearchPath(e, "`tab_non_exists`",
+        ExpectedContext("tab_non_exists", 83, 96), defaultSearchPathForTests)
     }
   }
 

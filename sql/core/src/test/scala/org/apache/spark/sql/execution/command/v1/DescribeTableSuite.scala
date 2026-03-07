@@ -99,7 +99,9 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
       checkError(
         exception = error,
         condition = "TABLE_OR_VIEW_NOT_FOUND",
-        parameters = Map("relationName" -> s"`$tbl`"),
+        parameters = Map(
+          "relationName" -> s"`$tbl`",
+          "searchPath" -> "[`system`.`session`, `spark_catalog`.`default`]"),
         context = ExpectedContext(tbl, startPos, startPos + tbl.length - 1)
       )
     }

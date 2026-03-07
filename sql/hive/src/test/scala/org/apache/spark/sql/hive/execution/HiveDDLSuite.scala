@@ -1164,7 +1164,9 @@ class HiveDDLSuite
             sql(s"SELECT * FROM view1")
           },
           condition = "TABLE_OR_VIEW_NOT_FOUND",
-          parameters = Map("relationName" -> s"`view1`"),
+          parameters = Map(
+            "relationName" -> s"`view1`",
+            "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"),
           ExpectedContext("view1", 14, 18))
       }
     }

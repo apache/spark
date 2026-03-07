@@ -523,8 +523,9 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val v3 = "CREATE TEMPORARY VIEW a.b AS SELECT 1"
     checkError(
       exception = parseException(v3),
-      condition = "TEMP_VIEW_NAME_TOO_MANY_NAME_PARTS",
-      parameters = Map("actualName" -> "`a`.`b`"),
+      condition = "INVALID_TEMP_OBJ_QUALIFIER",
+      parameters = Map("objectType" -> "VIEW", "objectName" -> "`b`",
+        "qualifier" -> "`a`"),
       context = ExpectedContext(
         fragment = v3,
         start = 0,

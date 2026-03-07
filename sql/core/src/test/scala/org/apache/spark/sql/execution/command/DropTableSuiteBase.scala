@@ -86,8 +86,9 @@ trait DropTableSuiteBase extends QueryTest with DDLCommandTestUtils {
         sql(s"DROP TABLE $catalog.non_existent_db.tbl")
       },
       condition = "TABLE_OR_VIEW_NOT_FOUND",
-      parameters = Map("relationName" -> s"`$catalog`.`non_existent_db`.`tbl`")
-    )
+      parameters = Map(
+        "relationName" -> s"`$catalog`.`non_existent_db`.`tbl`",
+        "searchPath" -> ""))
   }
 
   test("SPARK-33174: DROP TABLE should resolve to a temporary view first") {
