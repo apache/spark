@@ -5612,6 +5612,334 @@
     },
     "sqlState" : "XXSC0"
   },
+  "SPARK_CONNECT_INVALID_PLAN_INPUT" : {
+    "message" : [
+      "The Spark Connect plan input is invalid."
+    ],
+    "subClass" : {
+      "AGGREGATE_NEEDS_PLAN_INPUT" : {
+        "message" : [
+          "Aggregate needs a plan input"
+        ]
+      },
+      "AGGREGATE_WITH_PIVOT_REQUIRES_PIVOT" : {
+        "message" : [
+          "Aggregate with GROUP_TYPE_PIVOT requires a Pivot"
+        ]
+      },
+      "ALIAS_WITH_MULTIPLE_IDENTIFIERS_AND_METADATA" : {
+        "message" : [
+          "Alias expressions with more than 1 identifier must not use optional metadata."
+        ]
+      },
+      "ARRAY_LITERAL_MISSING_DATA_TYPE" : {
+        "message" : [
+          "Data type information is missing in the array literal."
+        ]
+      },
+      "ARRAY_LITERAL_NOT_SET" : {
+        "message" : [
+          "Array literal is not set."
+        ]
+      },
+      "ASSERTION_FAILURE" : {
+        "message" : [
+          "<message>"
+        ]
+      },
+      "CANNOT_FIND_CACHED_LOCAL_RELATION" : {
+        "message" : [
+          "Cannot find a cached local relation for hash: <hash>"
+        ]
+      },
+      "CHUNKED_CACHED_LOCAL_RELATION_WITHOUT_DATA" : {
+        "message" : [
+          "ChunkedCachedLocalRelation should contain data."
+        ]
+      },
+      "DATAFRAME_NOT_FOUND" : {
+        "message" : [
+          "No DataFrame with id <dfId> is found in the session <sessionId>"
+        ]
+      },
+      "DATA_TYPE_UNSUPPORTED_CATALYST_TO_PROTO" : {
+        "message" : [
+          "Does not support convert <typeName> to connect proto types."
+        ]
+      },
+      "DATA_TYPE_UNSUPPORTED_PROTO_TO_CATALYST" : {
+        "message" : [
+          "Does not support convert <kindCase> to catalyst types."
+        ]
+      },
+      "DEDUPLICATE_ALL_COLUMNS_AND_SUBSET" : {
+        "message" : [
+          "Cannot deduplicate on both all columns and a subset of columns"
+        ]
+      },
+      "DEDUPLICATE_NEEDS_INPUT" : {
+        "message" : [
+          "Deduplicate needs a plan input"
+        ]
+      },
+      "DEDUPLICATE_REQUIRES_COLUMNS_OR_ALL" : {
+        "message" : [
+          "Deduplicate requires to either deduplicate on all columns or a subset of columns"
+        ]
+      },
+      "EXCEPT_DOES_NOT_SUPPORT_UNION_BY_NAME" : {
+        "message" : [
+          "Except does not support union_by_name"
+        ]
+      },
+      "EXPECTED_NULL_VALUE" : {
+        "message" : [
+          "Expected null value, but got <literalTypeCase>"
+        ]
+      },
+      "EXPECTING_SCALA_UDF" : {
+        "message" : [
+          "Expecting a Scala UDF, but get <exprType>"
+        ]
+      },
+      "FIELD_CANNOT_BE_EMPTY" : {
+        "message" : [
+          "<fieldName> in <fullName> cannot be empty"
+        ]
+      },
+      "FUNCTION_EVAL_TYPE_NOT_SUPPORTED" : {
+        "message" : [
+          "Function with EvalType: <evalType> is not supported"
+        ]
+      },
+      "GROUPING_EXPRESSION_ABSENT" : {
+        "message" : [
+          "The grouping expression cannot be absent for KeyValueGroupedDataset"
+        ]
+      },
+      "INCOMPATIBLE_LITERAL_DATA_TYPE" : {
+        "message" : [
+          "Incompatible data type <dataTypeKindCase> for literal <literalTypeCase>"
+        ]
+      },
+      "INPUT_DATA_NO_SCHEMA" : {
+        "message" : [
+          "Input data for LocalRelation does not produce a schema."
+        ]
+      },
+      "INTERSECT_DOES_NOT_SUPPORT_UNION_BY_NAME" : {
+        "message" : [
+          "Intersect does not support union_by_name"
+        ]
+      },
+      "INVALID_ENUM" : {
+        "message" : [
+          "This enum value of <fullName> is invalid: <name>(<number>)"
+        ]
+      },
+      "INVALID_JDBC_PARAMS" : {
+        "message" : [
+          "Invalid jdbc params, please specify jdbc url and table."
+        ]
+      },
+      "INVALID_ONE_OF_FIELD_NOT_SET" : {
+        "message" : [
+          "This oneOf field in <fullName> is not set: <name>"
+        ]
+      },
+      "INVALID_ONE_OF_FIELD_NOT_SUPPORTED" : {
+        "message" : [
+          "This oneOf field message in <fullName> is not supported: <name>(<number>)"
+        ]
+      },
+      "INVALID_SQL_WITH_REFERENCES" : {
+        "message" : [
+          "<query> is not a valid relation for SQL with references"
+        ]
+      },
+      "INVALID_WITH_RELATION_REFERENCE" : {
+        "message" : [
+          "Invalid WithRelation reference"
+        ]
+      },
+      "LAMBDA_FUNCTION_ARGUMENT_COUNT_INVALID" : {
+        "message" : [
+          "LambdaFunction requires 1 ~ 3 arguments, but got <got> ones!"
+        ]
+      },
+      "LOCAL_RELATION_CHUNK_SIZE_LIMIT_EXCEEDED" : {
+        "message" : [
+          "One of cached local relation chunks exceeded the limit of <limit> bytes."
+        ]
+      },
+      "LOCAL_RELATION_SIZE_LIMIT_EXCEEDED" : {
+        "message" : [
+          "Cached local relation size (<actualSize> bytes) exceeds the limit (<limit> bytes)."
+        ]
+      },
+      "LOWER_BOUND_REQUIRED_IN_WINDOW_FRAME" : {
+        "message" : [
+          "LowerBound is required in WindowFrame"
+        ]
+      },
+      "MAP_LITERAL_MISSING_DATA_TYPE" : {
+        "message" : [
+          "Data type information is missing in the map literal."
+        ]
+      },
+      "MAP_LITERAL_NOT_SET" : {
+        "message" : [
+          "Map literal is not set."
+        ]
+      },
+      "MULTIPLE_PATHS_NOT_SUPPORTED_FOR_STREAMING_SOURCE" : {
+        "message" : [
+          "Multiple paths are not supported for streaming source"
+        ]
+      },
+      "NA_FILL_VALUES_EMPTY" : {
+        "message" : [
+          "values must contains at least 1 item!"
+        ]
+      },
+      "NA_FILL_VALUES_LENGTH_MISMATCH" : {
+        "message" : [
+          "When values contains more than 1 items, values and cols should have the same length!"
+        ]
+      },
+      "NOT_FOUND_CACHED_LOCAL_RELATION" : {
+        "message" : [
+          "Not found any cached local relation with the hash: <hash> in the session with sessionUUID <sessionUUID>."
+        ]
+      },
+      "NOT_FOUND_CHUNKED_CACHED_LOCAL_RELATION" : {
+        "message" : [
+          "Not found chunked cached local relation block with the hash: <hash> in the session with sessionUUID <sessionUUID>."
+        ]
+      },
+      "NO_HANDLER_FOR_EXTENSION" : {
+        "message" : [
+          "No handler found for extension type: <extensionTypeUrl>"
+        ]
+      },
+      "PREDICATES_NOT_SUPPORTED_FOR_DATA_SOURCE" : {
+        "message" : [
+          "Predicates are not supported for <format> data sources."
+        ]
+      },
+      "PYTHON_UDT_MISSING_FIELDS" : {
+        "message" : [
+          "PythonUserDefinedType requires all the three fields: python_class, serialized_python_class and sql_type."
+        ]
+      },
+      "REDUCE_SHOULD_CARRY_SCALAR_SCALA_UDF" : {
+        "message" : [
+          "reduce should carry a scalar scala udf, but got <got>"
+        ]
+      },
+      "ROW_NOT_SUPPORTED_FOR_UDF" : {
+        "message" : [
+          "Row is not a supported <errorType> type for this UDF."
+        ]
+      },
+      "SCHEMA_REQUIRED_FOR_LOCAL_RELATION" : {
+        "message" : [
+          "Schema for LocalRelation is required when the input data is not provided."
+        ]
+      },
+      "SET_OPERATION_MUST_HAVE_TWO_INPUTS" : {
+        "message" : [
+          "Set operation must have 2 inputs"
+        ]
+      },
+      "SQL_COMMAND_EXPECTS_SQL_OR_WITH_RELATIONS" : {
+        "message" : [
+          "SQL command expects either a SQL or a WithRelations, but got <other>"
+        ]
+      },
+      "STREAMING_QUERY_NOT_FOUND" : {
+        "message" : [
+          "Streaming query <id> is not found"
+        ]
+      },
+      "STREAMING_QUERY_RUN_ID_MISMATCH" : {
+        "message" : [
+          "Run id mismatch for query id <id>. Run id in the request <runId> does not match one on the server <serverRunId>. The query might have restarted."
+        ]
+      },
+      "STRUCT_LITERAL_MISSING_DATA_TYPE" : {
+        "message" : [
+          "Data type information is missing in the struct literal."
+        ]
+      },
+      "STRUCT_LITERAL_NOT_SET" : {
+        "message" : [
+          "Struct literal is not set."
+        ]
+      },
+      "UDT_TYPE_FIELD_INVALID" : {
+        "message" : [
+          "UserDefinedType requires the 'type' field to be 'udt', but got '<udtType>'."
+        ]
+      },
+      "UNION_BY_NAME_ALLOW_MISSING_COL_REQUIRES_BY_NAME" : {
+        "message" : [
+          "UnionByName `allowMissingCol` can be true only if `byName` is true."
+        ]
+      },
+      "UNKNOWN_ANALYZE_METHOD" : {
+        "message" : [
+          "Unknown Analyze Method <other>!"
+        ]
+      },
+      "UNRESOLVED_NAMED_LAMBDA_VARIABLE_REQUIRES_NAME_PART" : {
+        "message" : [
+          "UnresolvedNamedLambdaVariable requires at least one name part!"
+        ]
+      },
+      "UNRESOLVED_STAR_TARGET_INVALID" : {
+        "message" : [
+          "UnresolvedStar requires a unparsed target ending with '.*', but got <target>."
+        ]
+      },
+      "UNRESOLVED_STAR_WITH_BOTH_TARGET_AND_PLAN_ID" : {
+        "message" : [
+          "UnresolvedStar with both target and plan id is not supported."
+        ]
+      },
+      "UNSUPPORTED_LITERAL_TYPE" : {
+        "message" : [
+          "Unsupported Literal Type: <typeInfo>"
+        ]
+      },
+      "UNSUPPORTED_USER_DEFINED_FUNCTION_IMPLEMENTATION" : {
+        "message" : [
+          "Unsupported UserDefinedFunction implementation: <clazz>"
+        ]
+      },
+      "UPPER_BOUND_REQUIRED_IN_WINDOW_FRAME" : {
+        "message" : [
+          "UpperBound is required in WindowFrame"
+        ]
+      },
+      "USING_COLUMNS_OR_JOIN_CONDITION_SET_IN_JOIN" : {
+        "message" : [
+          "Using columns or join conditions cannot be set at the same time in Join"
+        ]
+      },
+      "WINDOW_FUNCTION_REQUIRED" : {
+        "message" : [
+          "WindowFunction is required in WindowExpression"
+        ]
+      },
+      "WITH_COLUMNS_REQUIRE_SINGLE_NAME_PART" : {
+        "message" : [
+          "WithColumns require column name only contains one name part, but got <got>"
+        ]
+      }
+    },
+    "sqlState" : "42000"
+  },
   "SPARK_JOB_CANCELLED" : {
     "message" : [
       "Job <jobId> cancelled <reason>"
