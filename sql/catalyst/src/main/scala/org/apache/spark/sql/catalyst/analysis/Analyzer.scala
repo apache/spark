@@ -26,6 +26,7 @@ import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Random, Success, Try}
 
 import org.apache.spark.{SparkException, SparkThrowable, SparkUnsupportedOperationException}
+import org.apache.spark.internal.config.ConfigBindingPolicy
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis.resolver.{
@@ -239,29 +240,19 @@ object AnalysisContext {
 }
 
 object Analyzer {
-  // List of configurations that should be passed on when resolving views and SQL UDF.
-  private val RETAINED_ANALYSIS_FLAGS = Seq(
-    "spark.sql.view.schemaEvolution.preserveUserComments",
-    // retainedHiveConfigs
-    // TODO: remove these Hive-related configs after the `RelationConversions` is moved to
-    // optimization phase.
-    "spark.sql.hive.convertMetastoreParquet",
-    "spark.sql.hive.convertMetastoreOrc",
-    "spark.sql.hive.convertInsertingPartitionedTable",
-    "spark.sql.hive.convertInsertingUnpartitionedTable",
-    "spark.sql.hive.convertMetastoreCtas",
-    // retainedLoggingConfigs
-    "spark.sql.planChangeLog.level",
-    "spark.sql.expressionTreeChangeLog.level"
-  )
-
   def retainResolutionConfigsForAnalysis(
       newConf: SQLConf,
       existingConf: SQLConf,
       createSparkVersion: String = ""): Unit = {
+    val retainedConfigKeys = SQLConf.getConfigEntries().asScala
+      .filter(entry =>
+        entry.bindingPolicy.contains(ConfigBindingPolicy.SESSION) ||
+        entry.bindingPolicy.contains(ConfigBindingPolicy.NOT_APPLICABLE))
+      .map(_.key)
+      .toSet
+
     val retainedConfigs = existingConf.getAllConfs.filter { case (key, _) =>
-      // Also apply catalog configs
-      RETAINED_ANALYSIS_FLAGS.contains(key) || key.startsWith("spark.sql.catalog.")
+      retainedConfigKeys.contains(key) || key.startsWith("spark.sql.catalog.")
     }
 
     retainedConfigs.foreach { case (k, v) =>
