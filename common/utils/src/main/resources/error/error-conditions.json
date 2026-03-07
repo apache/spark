@@ -2776,6 +2776,12 @@
     },
     "sqlState" : "42K04"
   },
+  "INVALID_COALESCE_HINT_PARAMETER" : {
+    "message" : [
+      "<hintName> Hint expects a partition number as a parameter."
+    ],
+    "sqlState" : "42601"
+  },
   "INVALID_COLUMN_NAME_AS_PATH" : {
     "message" : [
       "The datasource <datasource> cannot save the column <columnName> because its name contains some characters that are not allowed in file paths. Please, use an alias to rename it."
@@ -8166,11 +8172,6 @@
   "_LEGACY_ERROR_TEMP_1047" : {
     "message" : [
       "<hintName> Hint parameters should include an optional integral partitionNum and/or columns, but <invalidParams> can not be recognized as either partitionNum or columns."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1048" : {
-    "message" : [
-      "<hintName> Hint expects a partition number as a parameter."
     ]
   },
   "_LEGACY_ERROR_TEMP_1050" : {
