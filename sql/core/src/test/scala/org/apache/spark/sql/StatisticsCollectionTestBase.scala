@@ -33,9 +33,11 @@ import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Histogram, Histo
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.connector.expressions.FieldReference
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 
 /**
  * The base for statistics test cases that we want to include in both the hive module (for
@@ -424,5 +426,62 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
       assert(relation.stats.rowCount.isEmpty)
       assert(relation.stats.attributeStats.isEmpty)
     }
+  }
+
+  test("CatalogStatistics.toV2Stats") {
+    val schema = StructType(Seq(
+      StructField("id", IntegerType),
+      StructField("name", StringType),
+      StructField("unknown_partition", IntegerType)))
+
+    val idColStat = CatalogColumnStat(
+      distinctCount = Some(10),
+      min = Some("1"),
+      max = Some("100"),
+      nullCount = Some(0),
+      avgLen = Some(4),
+      maxLen = Some(4))
+
+    val catalogStats = CatalogStatistics(
+      sizeInBytes = 1024,
+      rowCount = Some(10),
+      colStats = Map(
+        "id" -> idColStat,
+        // "extra" is not in schema — should be silently skipped
+        "extra" -> CatalogColumnStat(distinctCount = Some(5))))
+
+    // planStatsEnabled = true: numRows and columnStats should be exposed
+    val schemaForConversion = StructType(Seq(
+      StructField("id", IntegerType),
+      StructField("name", StringType)))
+    val v2StatsEnabled = catalogStats.toV2Stats(schemaForConversion, planStatsEnabled = true)
+
+    assert(v2StatsEnabled.sizeInBytes().getAsLong === 1024L)
+    assert(v2StatsEnabled.numRows().isPresent)
+    assert(v2StatsEnabled.numRows().getAsLong === 10L)
+    val colStats = v2StatsEnabled.columnStats()
+    assert(colStats.size() === 1, "only 'id' is in schema; 'extra' should be skipped")
+    val idV2 = colStats.get(FieldReference.apply("id"))
+    assert(idV2 != null)
+    assert(idV2.distinctCount().getAsLong === 10L)
+    assert(idV2.nullCount().getAsLong === 0L)
+    assert(idV2.avgLen().getAsLong === 4L)
+    assert(idV2.maxLen().getAsLong === 4L)
+    assert(idV2.min().isPresent)
+    assert(idV2.min().get() === 1)   // deserialized from "1" as IntegerType
+    assert(idV2.max().get() === 100)
+
+    // planStatsEnabled = false: numRows and columnStats should be empty
+    val v2StatsDisabled = catalogStats.toV2Stats(schemaForConversion, planStatsEnabled = false)
+    assert(v2StatsDisabled.sizeInBytes().getAsLong === 1024L)
+    assert(!v2StatsDisabled.numRows().isPresent)
+    assert(v2StatsDisabled.columnStats().isEmpty)
+
+    // No rowCount: numRows should be empty even when planStatsEnabled
+    val statsNoRows = CatalogStatistics(sizeInBytes = 512, colStats = Map.empty)
+    val v2NoRows = statsNoRows.toV2Stats(schemaForConversion, planStatsEnabled = true)
+    assert(v2NoRows.sizeInBytes().getAsLong === 512L)
+    assert(!v2NoRows.numRows().isPresent)
+    assert(v2NoRows.columnStats().isEmpty)
   }
 }

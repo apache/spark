@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.catalog
 
 import java.net.URI
 import java.time.{ZoneId, ZoneOffset}
-import java.util.Date
+import java.util.{Date, Optional, OptionalLong}
 
 import scala.collection.mutable
 import scala.util.Try
@@ -45,6 +45,8 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.expressions.{ClusterByTransform, FieldReference, NamedReference, Transform}
+import org.apache.spark.sql.connector.read.{Statistics => V2Statistics}
+import org.apache.spark.sql.connector.read.colstats.ColumnStatistics
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -862,6 +864,41 @@ case class CatalogStatistics(
     }
   }
 
+  /**
+   * Convert [[CatalogStatistics]] to v2 connector [[V2Statistics]], matching column stats to
+   * schema columns by name.
+   *
+   * @param schema           combined data + partition schema, used to resolve the DataType for
+   *                         each column when deserializing min/max values
+   * @param planStatsEnabled gate for exposing numRows and columnStats; callers should pass
+   *                         `conf.cboEnabled || conf.planStatsEnabled` to mirror the V1 behavior
+   *                         in [[LogicalRelation.computeStats]]
+   */
+  def toV2Stats(schema: StructType, planStatsEnabled: Boolean): V2Statistics = {
+    val colStatsMap: Map[NamedReference, ColumnStatistics] =
+      if (planStatsEnabled && colStats.nonEmpty) {
+        val typeMap = schema.fields.map(f => f.name -> f.dataType).toMap
+        colStats.flatMap { case (name, stat) =>
+          typeMap.get(name).map { dt =>
+            FieldReference.apply(name) -> stat.toV2ColStat(name, dt)
+          }
+        }
+      } else Map.empty
+
+    val sz = OptionalLong.of(sizeInBytes.longValue)
+    val nr = if (planStatsEnabled) {
+      rowCount.map(v => OptionalLong.of(v.longValue)).getOrElse(OptionalLong.empty())
+    } else OptionalLong.empty()
+    val javaColStats = new java.util.HashMap[NamedReference, ColumnStatistics]()
+    colStatsMap.foreach { case (k, v) => javaColStats.put(k, v) }
+
+    new V2Statistics {
+      override def sizeInBytes(): OptionalLong = sz
+      override def numRows(): OptionalLong = nr
+      override def columnStats(): java.util.Map[NamedReference, ColumnStatistics] = javaColStats
+    }
+  }
+
   /** Readable string representation for the CatalogStatistics. */
   def simpleString: String = {
     val rowCountString = if (rowCount.isDefined) s", ${rowCount.get} rows" else ""
@@ -936,6 +973,27 @@ case class CatalogColumnStat(
       maxLen = maxLen,
       histogram = histogram,
       version = version)
+
+  /**
+   * Convert [[CatalogColumnStat]] to a v2 connector [[ColumnStatistics]].
+   * min/max are deserialized from their external string representation using the column's DataType.
+   */
+  def toV2ColStat(colName: String, dataType: DataType): ColumnStatistics = {
+    val parsedMin = min.map(CatalogColumnStat.fromExternalString(_, colName, dataType, version))
+    val parsedMax = max.map(CatalogColumnStat.fromExternalString(_, colName, dataType, version))
+    val dc = distinctCount.map(v => OptionalLong.of(v.longValue)).getOrElse(OptionalLong.empty())
+    val nc = nullCount.map(v => OptionalLong.of(v.longValue)).getOrElse(OptionalLong.empty())
+    val al = avgLen.map(OptionalLong.of).getOrElse(OptionalLong.empty())
+    val ml = maxLen.map(OptionalLong.of).getOrElse(OptionalLong.empty())
+    new ColumnStatistics {
+      override def distinctCount(): OptionalLong = dc
+      override def min(): Optional[Object] = Optional.ofNullable(parsedMin.orNull)
+      override def max(): Optional[Object] = Optional.ofNullable(parsedMax.orNull)
+      override def nullCount(): OptionalLong = nc
+      override def avgLen(): OptionalLong = al
+      override def maxLen(): OptionalLong = ml
+    }
+  }
 }
 
 object CatalogColumnStat extends Logging {
