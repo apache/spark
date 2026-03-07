@@ -219,8 +219,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       ResolveTableConstraints.validateCatalogForTableConstraint(
         tableSpec.constraints, tableCatalog, ident)
       val statementType = "CREATE TABLE"
-      GeneratedColumn.validateGeneratedColumns(
-        c.tableSchema, tableCatalog, ident, statementType)
+      GeneratedColumn.validateCatalogForGeneratedColumn(columns, tableCatalog, ident)
       IdentityColumn.validateIdentityColumn(c.tableSchema, tableCatalog, ident)
 
       CreateTableExec(
@@ -252,8 +251,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       ResolveTableConstraints.validateCatalogForTableConstraint(
         tableSpec.constraints, tableCatalog, ident)
       val statementType = "REPLACE TABLE"
-      GeneratedColumn.validateGeneratedColumns(
-        c.tableSchema, tableCatalog, ident, statementType)
+      GeneratedColumn.validateCatalogForGeneratedColumn(columns, tableCatalog, ident)
       IdentityColumn.validateIdentityColumn(c.tableSchema, tableCatalog, ident)
 
       val v2Columns = columns.map(_.toV2Column(statementType)).toArray
