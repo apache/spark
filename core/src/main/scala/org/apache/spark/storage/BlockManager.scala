@@ -2049,15 +2049,22 @@ private[spark] class BlockManager(
   }
 
   /**
+   * Remove all blocks belonging to a group.
+   */
+  private[spark] def removeBlockGroup(groupId: BlockId, tellMaster: Boolean): Int = {
+    val blocksToRemove = blockInfoManager.getBlockIdsForGroup(groupId)
+    blocksToRemove.foreach(blockId => removeBlock(blockId, tellMaster))
+    blocksToRemove.size
+  }
+
+  /**
    * Remove all blocks belonging to the given RDD.
    *
    * @return The number of blocks removed.
    */
   def removeRdd(rddId: Int): Int = {
     logInfo(log"Removing RDD ${MDC(RDD_ID, rddId)}")
-    val blocksToRemove = blockInfoManager.rddBlockIds(rddId)
-    blocksToRemove.foreach { blockId => removeBlock(blockId, tellMaster = false) }
-    blocksToRemove.size
+    removeBlockGroup(RDDBlockId(rddId, -1), tellMaster = false)
   }
 
   def decommissionBlockManager(): Unit = storageEndpoint.ask(DecommissionBlockManager)
@@ -2089,9 +2096,7 @@ private[spark] class BlockManager(
    */
   def removeBroadcast(broadcastId: Long, tellMaster: Boolean): Int = {
     logDebug(s"Removing broadcast $broadcastId")
-    val blocksToRemove = blockInfoManager.broadcastBlockIds(broadcastId)
-    blocksToRemove.foreach { blockId => removeBlock(blockId, tellMaster) }
-    blocksToRemove.size
+    removeBlockGroup(BroadcastBlockId(broadcastId), tellMaster)
   }
 
   /**
@@ -2101,9 +2106,7 @@ private[spark] class BlockManager(
    */
   def removeCache(sessionUUID: String): Int = {
     logDebug(s"Removing cache of spark session with UUID: $sessionUUID")
-    val blocksToRemove = blockInfoManager.sessionBlockIds(sessionUUID)
-    blocksToRemove.foreach { blockId => removeBlock(blockId) }
-    blocksToRemove.size
+    removeBlockGroup(CacheId(sessionUUID, "group"), tellMaster = false)
   }
 
   /**
