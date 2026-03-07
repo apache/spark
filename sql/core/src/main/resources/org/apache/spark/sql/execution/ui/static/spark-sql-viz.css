@@ -136,3 +136,7 @@ svg path.linked {
 #plan-viz-graph g.cluster text {
   fill: var(--bs-body-color);
 }
+
+#plan-viz-graph {
+  overflow-x: auto;
+}
