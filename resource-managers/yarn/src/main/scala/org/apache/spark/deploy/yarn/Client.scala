@@ -855,7 +855,7 @@ private[spark] class Client(
    * The archive also contains some Spark configuration. Namely, it saves the contents of
    * SparkConf in a file to be loaded by the AM process.
    *
-   * @param confsToOverride configs that should overriden when creating the final spark conf file
+   * @param confsToOverride configs that should be overridden when creating the final spark conf file
    */
   private def createConfArchive(confsToOverride: Map[String, String]): File = {
     val hadoopConfFiles = new HashMap[String, File]()
