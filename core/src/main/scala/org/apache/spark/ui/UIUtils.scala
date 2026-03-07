@@ -471,12 +471,14 @@ private[spark] object UIUtils extends Logging {
         }
       }
     }
+    <div class="table-responsive">
     <table class={listingTableClass} id={id.map(Text.apply)}>
       <thead>{headerRow}</thead>
       <tbody>
         {data.map(r => generateDataRow(r))}
       </tbody>
     </table>
+    </div>
   }
 
   def makeProgressBar(
