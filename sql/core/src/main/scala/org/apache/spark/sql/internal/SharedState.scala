@@ -120,11 +120,18 @@ private[sql] class SharedState(
    */
   val statusStore: SQLAppStatusStore = {
     val kvStore = sparkContext.statusStore.store.asInstanceOf[ElementTrackingStore]
-    val listener = new SQLAppStatusListener(conf, kvStore, live = true)
-    sparkContext.listenerBus.addToStatusQueue(listener)
-    val statusStore = new SQLAppStatusStore(kvStore, Some(listener))
-    sparkContext.ui.foreach(new SQLTab(statusStore, _))
-    statusStore
+    // Only create SQLAppStatusListener when UI is enabled to avoid memory overhead
+    val uiEnabled = sparkContext.conf.getBoolean("spark.ui.enabled", true)
+    if (uiEnabled) {
+      val listener = new SQLAppStatusListener(conf, kvStore, live = true)
+      sparkContext.listenerBus.addToStatusQueue(listener)
+      val statusStore = new SQLAppStatusStore(kvStore, Some(listener))
+      sparkContext.ui.foreach(new SQLTab(statusStore, _))
+      statusStore
+    } else {
+      // When UI is disabled, create a minimal status store without listener
+      new SQLAppStatusStore(kvStore, None)
+    }
   }
 
   /**
