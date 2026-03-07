@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.V2ExpressionBuilder
 import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, And => V2And, Not => V2Not, Or => V2Or, Predicate}
+import org.apache.spark.sql.connector.util.CustomOperatorParserExtension
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{ArrayType, BooleanType, DoubleType, IntegerType, LongType, MapType, StringType, StructField, StructType}
@@ -1068,5 +1069,109 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
       isPredicate: Boolean = false): Unit = {
     checkV2Conversion(catalystExpr, v2Expr, isPredicate)
     checkCatalystConversion(v2Expr, catalystExpr)
+  }
+
+  // Tests for SPARK-55869 Layer 3: CustomOperatorParserExtension
+
+  private def createTestExtension(
+      ops: Map[String, String]): CustomOperatorParserExtension = {
+    val delegate = spark.sessionState.sqlParser
+    new CustomOperatorParserExtension(delegate) {
+      override def customOperators: Map[String, String] = ops
+    }
+  }
+
+  /** Parse with the extension and extract the SQL that the delegate sees. */
+  private def rewrittenSQL(
+      ops: Map[String, String], sql: String): String = {
+    var captured: String = null
+    val delegate = spark.sessionState.sqlParser
+    val ext = new CustomOperatorParserExtension(
+      new org.apache.spark.sql.catalyst.parser.ParserInterface {
+        override def parsePlan(sqlText: String) = {
+          captured = sqlText
+          delegate.parsePlan(sqlText)
+        }
+        override def parseQuery(sqlText: String) = delegate.parseQuery(sqlText)
+        override def parseExpression(sqlText: String) =
+          delegate.parseExpression(sqlText)
+        override def parseTableIdentifier(sqlText: String) =
+          delegate.parseTableIdentifier(sqlText)
+        override def parseFunctionIdentifier(sqlText: String) =
+          delegate.parseFunctionIdentifier(sqlText)
+        override def parseMultipartIdentifier(sqlText: String) =
+          delegate.parseMultipartIdentifier(sqlText)
+        override def parseTableSchema(sqlText: String) =
+          delegate.parseTableSchema(sqlText)
+        override def parseDataType(sqlText: String) =
+          delegate.parseDataType(sqlText)
+        override def parseRoutineParam(sqlText: String) =
+          delegate.parseRoutineParam(sqlText)
+      }
+    ) {
+      override def customOperators: Map[String, String] = ops
+    }
+    ext.parsePlan(sql)
+    captured
+  }
+
+  test("SPARK-55869: CustomOperatorParserExtension rewrites infix to function call") {
+    val ops = Map("INDEXQUERY" -> "indexquery")
+    val result = rewrittenSQL(ops,
+      "SELECT * FROM t WHERE col INDEXQUERY 'search term'")
+    assert(result.contains("indexquery(col, 'search term')"),
+      s"Expected function call syntax, got: $result")
+  }
+
+  test("SPARK-55869: CustomOperatorParserExtension is case-insensitive") {
+    val ops = Map("INDEXQUERY" -> "indexquery")
+    val result = rewrittenSQL(ops,
+      "SELECT * FROM t WHERE col indexquery 'value'")
+    assert(result.contains("indexquery(col, 'value')"),
+      s"Expected function call syntax, got: $result")
+  }
+
+  test("SPARK-55869: CustomOperatorParserExtension handles identifiers") {
+    val ops = Map("MYSEARCH" -> "my_search")
+    val result = rewrittenSQL(ops,
+      "SELECT * FROM t WHERE col1 MYSEARCH col2")
+    assert(result.contains("my_search(col1, col2)"),
+      s"Expected function call syntax, got: $result")
+  }
+
+  test("SPARK-55869: CustomOperatorParserExtension handles numeric literals") {
+    val ops = Map("NEARBY" -> "nearby")
+    val result = rewrittenSQL(ops,
+      "SELECT * FROM t WHERE col NEARBY 42")
+    assert(result.contains("nearby(col, 42)"),
+      s"Expected function call syntax, got: $result")
+  }
+
+  test("SPARK-55869: CustomOperatorParserExtension preserves string literals") {
+    val ops = Map("INDEXQUERY" -> "indexquery")
+    // The operator keyword inside a string literal should NOT be rewritten
+    val result = rewrittenSQL(ops,
+      "SELECT 'col INDEXQUERY val' FROM t WHERE col INDEXQUERY 'term'")
+    assert(result.contains("indexquery(col, 'term')"),
+      s"Expected function call in WHERE, got: $result")
+    assert(result.contains("'col INDEXQUERY val'"),
+      s"String literal should be preserved, got: $result")
+  }
+
+  test("SPARK-55869: CustomOperatorParserExtension with multiple operators") {
+    val ops = Map("INDEXQUERY" -> "indexquery", "NEARBY" -> "nearby")
+    val result = rewrittenSQL(ops,
+      "SELECT * FROM t WHERE col1 INDEXQUERY 'a' AND col2 NEARBY 5")
+    assert(result.contains("indexquery(col1, 'a')"),
+      s"Expected first operator rewrite, got: $result")
+    assert(result.contains("nearby(col2, 5)"),
+      s"Expected second operator rewrite, got: $result")
+  }
+
+  test("SPARK-55869: CustomOperatorParserExtension with no operators is passthrough") {
+    val ops = Map.empty[String, String]
+    val sql = "SELECT * FROM t WHERE col > 5"
+    val result = rewrittenSQL(ops, sql)
+    assert(result == sql)
   }
 }
