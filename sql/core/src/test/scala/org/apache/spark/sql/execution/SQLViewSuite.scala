@@ -439,8 +439,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
     assertRelationNotFound(
       "CREATE OR REPLACE VIEW myabcdview AS SELECT * FROM db_not_exist234.jt",
       "`db_not_exist234`.`jt`",
-      ExpectedContext("db_not_exist234.jt", 51, 50 + "db_not_exist234.jt".length),
-      useSearchPath = false)
+      ExpectedContext("db_not_exist234.jt", 51, 50 + "db_not_exist234.jt".length))
 
     // A table that does not exist
     assertRelationNotFound(
@@ -474,7 +473,29 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         condition = "TABLE_OR_VIEW_NOT_FOUND",
         parameters = Map(
           "relationName" -> relation,
-          "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"),
+          "searchPath" -> defaultSearchPathForTests),
+        queryContext = Array(context))
+    } else {
+      checkErrorTableNotFound(e, relation, context)
+    }
+  }
+
+  private def assertRelationNotFound(
+      query: String,
+      relation: String,
+      context: ExpectedContext,
+      useSearchPath: Boolean,
+      expectedSearchPath: String): Unit = {
+    val e = intercept[AnalysisException] {
+      sql(query)
+    }
+    if (useSearchPath) {
+      checkError(
+        exception = e,
+        condition = "TABLE_OR_VIEW_NOT_FOUND",
+        parameters = Map(
+          "relationName" -> relation,
+          "searchPath" -> expectedSearchPath),
         queryContext = Array(context))
     } else {
       checkErrorTableNotFound(e, relation, context)
@@ -512,7 +533,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
     assertAnalysisErrorCondition(
       "CREATE OR REPLACE TEMPORARY VIEW myabcdview AS SELECT * FROM db_not_exist234.jt",
       "TABLE_OR_VIEW_NOT_FOUND",
-      Map("relationName" -> "`db_not_exist234`.`jt`"),
+      Map("relationName" -> "`db_not_exist234`.`jt`", "searchPath" -> defaultSearchPathForTests),
       ExpectedContext("db_not_exist234.jt", 61, 60 + "db_not_exist234.jt".length))
 
     // A table that does not exist
@@ -691,16 +712,21 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
   }
 
   test("should not allow ALTER VIEW AS when the view does not exist") {
+    // DDL path (no builtin) is used when resolving view name for ALTER VIEW
+    val ddlSearchPath = "[`system`.`session`, `spark_catalog`.`default`]"
     assertRelationNotFound(
       "ALTER VIEW testView AS SELECT 1, 2",
       "`testView`",
-      ExpectedContext("testView", 11, 10 + "testView".length))
+      ExpectedContext("testView", 11, 10 + "testView".length),
+      useSearchPath = true,
+      expectedSearchPath = ddlSearchPath)
 
     assertRelationNotFound(
       "ALTER VIEW default.testView AS SELECT 1, 2",
       "`default`.`testView`",
       ExpectedContext("default.testView", 11, 10 + "default.testView".length),
-      useSearchPath = false)
+      useSearchPath = true,
+      expectedSearchPath = ddlSearchPath)
   }
 
   test("ALTER VIEW AS should try to alter temp view first if view name has no database part") {
