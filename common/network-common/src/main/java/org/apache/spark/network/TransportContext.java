@@ -83,6 +83,8 @@ public class TransportContext implements Closeable {
   @Nullable private final SSLFactory sslFactory;
   // Number of registered connections to the shuffle service
   private Counter registeredConnections = new Counter();
+  private ChunkFetchRequestHandler.ChunkFetchMetrics chunkFetchMetrics =
+      new ChunkFetchRequestHandler.ChunkFetchMetrics();
 
   /**
    * Force to create MessageEncoder and MessageDecoder so that we can make sure they will be created
@@ -239,7 +241,7 @@ public class TransportContext implements Closeable {
       if (chunkFetchWorkers != null) {
         ChunkFetchRequestHandler chunkFetchHandler = new ChunkFetchRequestHandler(
           channelHandler.getClient(), rpcHandler.getStreamManager(),
-          conf.maxChunksBeingTransferred(), true /* syncModeEnabled */);
+          conf.maxChunksBeingTransferred(), true /* syncModeEnabled */, chunkFetchMetrics);
         pipeline.addLast(chunkFetchWorkers, "chunkFetchHandler", chunkFetchHandler);
       }
       return channelHandler;
@@ -294,7 +296,7 @@ public class TransportContext implements Closeable {
     if (!separateChunkFetchRequest) {
       chunkFetchRequestHandler = new ChunkFetchRequestHandler(
         client, rpcHandler.getStreamManager(),
-        conf.maxChunksBeingTransferred(), false /* syncModeEnabled */);
+        conf.maxChunksBeingTransferred(), false /* syncModeEnabled */, chunkFetchMetrics);
     }
     TransportRequestHandler requestHandler = new TransportRequestHandler(channel, client,
       rpcHandler, conf.maxChunksBeingTransferred(), chunkFetchRequestHandler);
@@ -306,6 +308,10 @@ public class TransportContext implements Closeable {
 
   public Counter getRegisteredConnections() {
     return registeredConnections;
+  }
+
+  public ChunkFetchRequestHandler.ChunkFetchMetrics getChunkFetchMetrics() {
+    return chunkFetchMetrics;
   }
 
   @Override
