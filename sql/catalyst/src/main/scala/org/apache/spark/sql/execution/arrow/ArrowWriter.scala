@@ -387,6 +387,11 @@ private[arrow] class ArrayWriter(
     val valueVector: ListVector,
     val elementWriter: ArrowFieldWriter) extends ArrowFieldWriter {
 
+  // SPARK-55056: Arrow format requires ListArray offset buffer to have N+1 entries.
+  // Even when N=0, the buffer must contain [0]. Initialize offset buffer at construction
+  // to ensure it exists even if no elements are written.
+  valueVector.getOffsetBuffer.setInt(0, 0)
+
   override def setNull(): Unit = {
   }
 
@@ -408,6 +413,8 @@ private[arrow] class ArrayWriter(
 
   override def reset(): Unit = {
     super.reset()
+    // Re-initialize offset buffer after reset (see constructor comment)
+    valueVector.getOffsetBuffer.setInt(0, 0)
     elementWriter.reset()
   }
 }
