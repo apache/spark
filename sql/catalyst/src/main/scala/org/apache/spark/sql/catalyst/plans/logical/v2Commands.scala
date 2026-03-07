@@ -1488,6 +1488,7 @@ case class DropPartitions(
     parts: Seq[PartitionSpec],
     ifExists: Boolean,
     purge: Boolean) extends V2PartitionCommand {
+  override def allowPartialPartitionSpec: Boolean = true
   override protected def withNewChildInternal(newChild: LogicalPlan): DropPartitions =
     copy(table = newChild)
 }
