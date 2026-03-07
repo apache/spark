@@ -1072,7 +1072,9 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
           UnresolvedRelation(TableIdentifier("t", Option("nonexist"))))), None)))
     assertAnalysisErrorCondition(plan,
       expectedErrorCondition = "TABLE_OR_VIEW_NOT_FOUND",
-      Map("relationName" -> "`nonexist`.`t`"))
+      Map(
+        "relationName" -> "`nonexist`.`t`",
+        "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"))
   }
 
   test("SPARK-33909: Check rand functions seed is legal at analyzer side") {

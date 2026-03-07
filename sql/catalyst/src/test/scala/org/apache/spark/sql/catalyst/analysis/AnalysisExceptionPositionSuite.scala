@@ -50,7 +50,9 @@ class AnalysisExceptionPositionSuite extends AnalysisTest {
     assertAnalysisErrorCondition(
       parsePlan("SHOW COLUMNS FROM unknown IN db"),
       "TABLE_OR_VIEW_NOT_FOUND",
-      Map("relationName" -> "`db`.`unknown`", "searchPath" -> ""),
+      Map(
+        "relationName" -> "`db`.`unknown`",
+        "searchPath" -> ("[`system`.`session`, `spark_catalog`.`default`]")),
       Array(ExpectedContext("unknown", 18, 24))
     )
     verifyTableOrViewPosition("ALTER TABLE unknown RENAME TO t", "unknown")
@@ -58,48 +60,56 @@ class AnalysisExceptionPositionSuite extends AnalysisTest {
   }
 
   test("SPARK-34139: UnresolvedRelation should retain sql text position") {
-    verifyTableOrViewPosition("CACHE TABLE unknown", "unknown")
-    verifyTableOrViewPosition("UNCACHE TABLE unknown", "unknown")
-    verifyTableOrViewPosition("DELETE FROM unknown", "unknown")
-    verifyTableOrViewPosition("UPDATE unknown SET name='abc'", "unknown")
-    verifyTableOrViewPosition(
+    verifyTableOrViewPositionWithQueryPath("CACHE TABLE unknown", "unknown")
+    verifyTableOrViewPositionWithQueryPath("UNCACHE TABLE unknown", "unknown")
+    verifyTableOrViewPositionWithQueryPath("DELETE FROM unknown", "unknown")
+    verifyTableOrViewPositionWithQueryPath("UPDATE unknown SET name='abc'", "unknown")
+    verifyTableOrViewPositionWithQueryPath(
       "MERGE INTO unknownTarget AS target USING TaBlE AS source " +
         "ON target.col = source.col WHEN MATCHED THEN DELETE",
       "unknownTarget")
-    verifyTableOrViewPosition(
+    verifyTableOrViewPositionWithQueryPath(
       "MERGE INTO TaBlE AS target USING unknownSource AS source " +
         "ON target.col = source.col WHEN MATCHED THEN DELETE",
       "unknownSource")
-    verifyTablePosition("INSERT INTO TABLE unknown SELECT 1", "unknown")
-    verifyTablePosition("INSERT OVERWRITE TABLE unknown VALUES (1, 'a')", "unknown")
+    verifyTableOrViewPositionWithQueryPath("INSERT INTO TABLE unknown SELECT 1", "unknown")
+    verifyTableOrViewPositionWithQueryPath(
+      "INSERT OVERWRITE TABLE unknown VALUES (1, 'a')",
+      "unknown")
   }
 
   private def verifyTablePosition(sql: String, table: String): Unit = {
-    verifyPosition(sql, table)
+    verifyPosition(sql, table, useQueryPath = false)
   }
 
   private def verifyViewPosition(sql: String, table: String): Unit = {
-    verifyPosition(sql, table)
+    verifyPosition(sql, table, useQueryPath = false)
   }
 
   private def verifyTableOrViewPosition(sql: String, table: String): Unit = {
-    verifyPosition(sql, table)
+    verifyPosition(sql, table, useQueryPath = false)
+  }
+
+  private def verifyTableOrViewPositionWithQueryPath(sql: String, table: String): Unit = {
+    verifyPosition(sql, table, useQueryPath = true)
   }
 
   private def verifyTableOrPermanentViewPosition(sql: String, table: String): Unit = {
-    verifyPosition(sql, table)
+    verifyPosition(sql, table, useQueryPath = false)
   }
 
-  private def verifyPosition(sql: String, table: String): Unit = {
+  private def verifyPosition(sql: String, table: String, useQueryPath: Boolean = false): Unit = {
     val startPos = sql.indexOf(table)
     assert(startPos != -1)
+    val ddlPath = "[`system`.`session`, `spark_catalog`.`default`]"
+    val fullPath = "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
+    val expectedPath = if (useQueryPath) fullPath else ddlPath
     assertAnalysisErrorCondition(
       parsePlan(sql),
       "TABLE_OR_VIEW_NOT_FOUND",
       Map(
         "relationName" -> s"`$table`",
-        "searchPath" -> ("[`system`.`builtin`, `system`.`session`, " +
-          "`spark_catalog`.`default`]")),
+        "searchPath" -> expectedPath),
       Array(ExpectedContext(table, startPos, startPos + table.length - 1))
     )
   }
