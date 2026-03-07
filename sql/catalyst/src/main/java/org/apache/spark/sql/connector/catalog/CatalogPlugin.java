@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.connector.catalog;
 
+import java.io.Closeable;
+
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.internal.SQLConf;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
@@ -42,7 +44,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
  * @since 3.0.0
  */
 @Evolving
-public interface CatalogPlugin {
+public interface CatalogPlugin extends Closeable {
   /**
    * Called to initialize configuration.
    * <p>
@@ -74,4 +76,7 @@ public interface CatalogPlugin {
   default String[] defaultNamespace() {
     return new String[0];
   }
+
+  @Override
+  default void close() {}
 }
