@@ -184,6 +184,40 @@ import org.apache.spark.sql.connector.expressions.GeneralScalarExpression;
  *    <li>Since version: 4.1.0</li>
  *   </ul>
  *  </li>
+ *  <li>Name: <code>ARRAYS_OVERLAP</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>arrays_overlap(arr1, arr2)</code></li>
+ *    <li>Since version: 4.1.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>LIKE_ALL</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>expr LIKE ALL (p1, p2, ...)</code></li>
+ *    <li>Children: <code>[expr, pattern1, pattern2, ...]</code></li>
+ *    <li>Since version: 4.1.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>LIKE_ANY</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>expr LIKE ANY (p1, p2, ...)</code></li>
+ *    <li>Children: <code>[expr, pattern1, pattern2, ...]</code></li>
+ *    <li>Since version: 4.1.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>NOT_LIKE_ALL</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>expr NOT LIKE ALL (p1, p2, ...)</code></li>
+ *    <li>Children: <code>[expr, pattern1, pattern2, ...]</code></li>
+ *    <li>Since version: 4.1.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>NOT_LIKE_ANY</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>expr NOT LIKE ANY (p1, p2, ...)</code></li>
+ *    <li>Children: <code>[expr, pattern1, pattern2, ...]</code></li>
+ *    <li>Since version: 4.1.0</li>
+ *   </ul>
+ *  </li>
  * </ol>
  *
  * <p>Data sources may also declare <em>custom predicate functions</em> via

@@ -386,9 +386,43 @@ class V2ExpressionBuilder(
       val left = generateExpression(a.left)
       val right = generateExpression(a.right)
       if (left.isDefined && right.isDefined) {
-        Some(new V2Predicate("ARRAY_CONTAINS", Array[V2Expression](left.get, right.get)))
+        Some(new V2Predicate("ARRAY_CONTAINS",
+          Array[V2Expression](left.get, right.get)))
       } else {
         None
+      }
+    case a: ArraysOverlap if extraCapabilities.contains("ARRAYS_OVERLAP") =>
+      val left = generateExpression(a.left)
+      val right = generateExpression(a.right)
+      if (left.isDefined && right.isDefined) {
+        Some(new V2Predicate("ARRAYS_OVERLAP",
+          Array[V2Expression](left.get, right.get)))
+      } else {
+        None
+      }
+    case la: LikeAll if extraCapabilities.contains("LIKE_ALL") =>
+      generateExpression(la.child).map { v =>
+        val patternLiterals = la.patterns.map(p =>
+          LiteralValue(p, StringType)).toArray[V2Expression]
+        new V2Predicate("LIKE_ALL", (v +: patternLiterals).toArray)
+      }
+    case nla: NotLikeAll if extraCapabilities.contains("NOT_LIKE_ALL") =>
+      generateExpression(nla.child).map { v =>
+        val patternLiterals = nla.patterns.map(p =>
+          LiteralValue(p, StringType)).toArray[V2Expression]
+        new V2Predicate("NOT_LIKE_ALL", (v +: patternLiterals).toArray)
+      }
+    case la: LikeAny if extraCapabilities.contains("LIKE_ANY") =>
+      generateExpression(la.child).map { v =>
+        val patternLiterals = la.patterns.map(p =>
+          LiteralValue(p, StringType)).toArray[V2Expression]
+        new V2Predicate("LIKE_ANY", (v +: patternLiterals).toArray)
+      }
+    case nla: NotLikeAny if extraCapabilities.contains("NOT_LIKE_ANY") =>
+      generateExpression(nla.child).map { v =>
+        val patternLiterals = nla.patterns.map(p =>
+          LiteralValue(p, StringType)).toArray[V2Expression]
+        new V2Predicate("NOT_LIKE_ANY", (v +: patternLiterals).toArray)
       }
     // TODO supports other expressions
     case ApplyFunctionExpression(function, children) =>

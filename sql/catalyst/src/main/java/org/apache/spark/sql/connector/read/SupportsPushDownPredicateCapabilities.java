@@ -39,6 +39,11 @@ import org.apache.spark.annotation.Evolving;
  *   <li>{@code "IS_NAN"} — NaN check for numeric types</li>
  *   <li>{@code "ARRAY_CONTAINS"} — element membership in arrays</li>
  *   <li>{@code "MAP_CONTAINS_KEY"} — key existence in maps</li>
+ *   <li>{@code "ARRAYS_OVERLAP"} — array intersection check</li>
+ *   <li>{@code "LIKE_ALL"} — match all patterns</li>
+ *   <li>{@code "LIKE_ANY"} — match any pattern</li>
+ *   <li>{@code "NOT_LIKE_ALL"} — match no patterns (negation of LIKE_ALL)</li>
+ *   <li>{@code "NOT_LIKE_ANY"} — not match any (negation of LIKE_ANY)</li>
  * </ul>
  *
  * @since 4.1.0

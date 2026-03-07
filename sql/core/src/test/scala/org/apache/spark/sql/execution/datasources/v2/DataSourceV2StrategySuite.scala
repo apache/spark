@@ -953,6 +953,95 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     testTranslateFilterWithCaps(mapContainsKeyExpr, None, Set("ARRAY_CONTAINS"))
   }
 
+  test("capability-gated ARRAYS_OVERLAP predicate translation") {
+    val arr1 = AttributeReference("carr1", ArrayType(IntegerType))()
+    val arr2 = AttributeReference("carr2", ArrayType(IntegerType))()
+    val expr = ArraysOverlap(arr1, arr2)
+
+    // Without capability: should NOT translate
+    testTranslateFilterWithCaps(expr, None, Set.empty)
+
+    // With capability: should translate
+    testTranslateFilterWithCaps(expr,
+      Some(new Predicate("ARRAYS_OVERLAP", Array(
+        FieldReference("carr1"),
+        FieldReference("carr2")))),
+      Set("ARRAYS_OVERLAP"))
+  }
+
+  test("capability-gated LIKE_ALL predicate translation") {
+    val strCol = $"cstr".string
+    val patterns = Seq(
+      UTF8String.fromString("%a%"),
+      UTF8String.fromString("%b%"))
+    val likeAllExpr = LikeAll(strCol, patterns)
+
+    // Without capability: should NOT translate
+    testTranslateFilterWithCaps(likeAllExpr, None, Set.empty)
+
+    // With capability: should translate
+    testTranslateFilterWithCaps(likeAllExpr,
+      Some(new Predicate("LIKE_ALL", Array(
+        FieldReference("cstr"),
+        LiteralValue(UTF8String.fromString("%a%"), StringType),
+        LiteralValue(UTF8String.fromString("%b%"), StringType)))),
+      Set("LIKE_ALL"))
+  }
+
+  test("capability-gated LIKE_ANY predicate translation") {
+    val strCol = $"cstr".string
+    val patterns = Seq(
+      UTF8String.fromString("%x%"),
+      UTF8String.fromString("%y%"))
+    val likeAnyExpr = LikeAny(strCol, patterns)
+
+    // Without capability: should NOT translate
+    testTranslateFilterWithCaps(likeAnyExpr, None, Set.empty)
+
+    // With capability: should translate
+    testTranslateFilterWithCaps(likeAnyExpr,
+      Some(new Predicate("LIKE_ANY", Array(
+        FieldReference("cstr"),
+        LiteralValue(UTF8String.fromString("%x%"), StringType),
+        LiteralValue(UTF8String.fromString("%y%"), StringType)))),
+      Set("LIKE_ANY"))
+  }
+
+  test("capability-gated NOT_LIKE_ALL predicate translation") {
+    val strCol = $"cstr".string
+    val patterns = Seq(UTF8String.fromString("%z%"))
+    val notLikeAllExpr = NotLikeAll(strCol, patterns)
+
+    // Without capability: should NOT translate
+    testTranslateFilterWithCaps(notLikeAllExpr, None, Set.empty)
+
+    // With capability: should translate
+    testTranslateFilterWithCaps(notLikeAllExpr,
+      Some(new Predicate("NOT_LIKE_ALL", Array(
+        FieldReference("cstr"),
+        LiteralValue(UTF8String.fromString("%z%"), StringType)))),
+      Set("NOT_LIKE_ALL"))
+  }
+
+  test("capability-gated NOT_LIKE_ANY predicate translation") {
+    val strCol = $"cstr".string
+    val patterns = Seq(
+      UTF8String.fromString("a%"),
+      UTF8String.fromString("b%"))
+    val notLikeAnyExpr = NotLikeAny(strCol, patterns)
+
+    // Without capability: should NOT translate
+    testTranslateFilterWithCaps(notLikeAnyExpr, None, Set.empty)
+
+    // With capability: should translate
+    testTranslateFilterWithCaps(notLikeAnyExpr,
+      Some(new Predicate("NOT_LIKE_ANY", Array(
+        FieldReference("cstr"),
+        LiteralValue(UTF8String.fromString("a%"), StringType),
+        LiteralValue(UTF8String.fromString("b%"), StringType)))),
+      Set("NOT_LIKE_ANY"))
+  }
+
   test("capability-gated ILIKE predicate translation") {
     val strCol = $"cstr".string
     // ILike RuntimeReplaceable form: Like(Lower(left), Lower(right))
