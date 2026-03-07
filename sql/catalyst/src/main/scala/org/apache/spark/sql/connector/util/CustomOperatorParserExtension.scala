@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connector.util
 
-import java.util.Locale
+import java.util.{Locale, UUID}
 import java.util.regex.Pattern
 
 import scala.collection.mutable.ArrayBuffer
@@ -97,6 +97,9 @@ abstract class CustomOperatorParserExtension(delegate: ParserInterface)
   override def parseRoutineParam(sqlText: String): StructType =
     delegate.parseRoutineParam(sqlText)
 
+  // Per-instance unique prefix to avoid placeholder collisions with user SQL
+  private val placeholderPrefix = s"__COPLIT_${UUID.randomUUID().toString.replace("-", "")}_"
+
   private def rewriteCustomOperators(sql: String): String = {
     if (customOperators.isEmpty) return sql
 
@@ -140,7 +143,7 @@ abstract class CustomOperatorParserExtension(delegate: ParserInterface)
           }
         }
         val lit = sql.substring(start, i)
-        sb.append(s"__COPLITERAL_${literals.length}__")
+        sb.append(s"${placeholderPrefix}${literals.length}__")
         literals += lit
       } else {
         sb.append(sql.charAt(i))
@@ -154,7 +157,7 @@ abstract class CustomOperatorParserExtension(delegate: ParserInterface)
       sql: String, literals: ArrayBuffer[String]): String = {
     var result = sql
     for (idx <- literals.indices) {
-      result = result.replace(s"__COPLITERAL_${idx}__", literals(idx))
+      result = result.replace(s"${placeholderPrefix}${idx}__", literals(idx))
     }
     result
   }
@@ -179,7 +182,8 @@ abstract class CustomOperatorParserExtension(delegate: ParserInterface)
       """\s+""" +
       s"(?i)$quotedOp" +
       """\s+""" +
-      """(\w+(?:\.\w+)*|`[^`]+`|[0-9]+(?:\.[0-9]+)?|__COPLITERAL_\d+__)"""
+      s"""(\\w+(?:\\.\\w+)*|`[^`]+`|[0-9]+(?:\\.[0-9]+)?""" +
+      s"""|${Pattern.quote(placeholderPrefix)}\\d+__)"""
     )
     val matcher = pattern.matcher(sql)
     val sb = new StringBuffer()

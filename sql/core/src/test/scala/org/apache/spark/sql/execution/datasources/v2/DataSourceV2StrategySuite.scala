@@ -1174,4 +1174,27 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     val result = rewrittenSQL(ops, sql)
     assert(result == sql)
   }
+
+  test("SPARK-55869: CustomOperatorParserExtension placeholder collision resistance") {
+    // SQL containing text that looks like internal placeholders should not be corrupted
+    val ops = Map("INDEXQUERY" -> "indexquery")
+    val result = rewrittenSQL(ops,
+      "SELECT '__COPLIT_' FROM t WHERE col INDEXQUERY 'term'")
+    assert(result.contains("indexquery(col, 'term')"),
+      s"Expected function call syntax, got: $result")
+    assert(result.contains("'__COPLIT_'"),
+      s"Placeholder-like string literal should be preserved, got: $result")
+  }
+
+  test("SPARK-55869: CustomOperatorParserExtension handles complex WHERE clauses") {
+    val ops = Map("INDEXQUERY" -> "indexquery")
+    val result = rewrittenSQL(ops,
+      "SELECT * FROM t WHERE col1 INDEXQUERY 'a' AND col2 > 5 OR col3 INDEXQUERY 'b'")
+    assert(result.contains("indexquery(col1, 'a')"),
+      s"Expected first operator rewrite, got: $result")
+    assert(result.contains("indexquery(col3, 'b')"),
+      s"Expected second operator rewrite, got: $result")
+    assert(result.contains("col2 > 5"),
+      s"Standard predicate should be unchanged, got: $result")
+  }
 }

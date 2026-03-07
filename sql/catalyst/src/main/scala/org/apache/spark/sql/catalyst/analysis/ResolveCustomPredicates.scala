@@ -40,18 +40,19 @@ object ResolveCustomPredicates extends Rule[LogicalPlan] {
       collectCustomPredicates(child) match {
         case Some(descriptors) if descriptors.nonEmpty =>
           val resolved = condition.transformUp {
-            case u: UnresolvedFunction
-                if u.nameParts.length == 1 &&
-                  findDescriptor(descriptors, u.nameParts.head).isDefined =>
-              val descriptor = findDescriptor(descriptors, u.nameParts.head).get
-              val args = if (descriptor.parameterTypes() != null &&
-                  descriptor.parameterTypes().length > 0 &&
-                  descriptor.parameterTypes().length == u.arguments.length) {
-                castArgumentsIfNeeded(u.arguments, descriptor)
-              } else {
-                u.arguments
+            case u: UnresolvedFunction if u.nameParts.length == 1 =>
+              findDescriptor(descriptors, u.nameParts.head) match {
+                case Some(descriptor) =>
+                  val args = if (descriptor.parameterTypes() != null &&
+                      descriptor.parameterTypes().length > 0 &&
+                      descriptor.parameterTypes().length == u.arguments.length) {
+                    castArgumentsIfNeeded(u.arguments, descriptor)
+                  } else {
+                    u.arguments
+                  }
+                  CustomPredicateExpression(descriptor, args)
+                case None => u
               }
-              CustomPredicateExpression(descriptor, args)
           }
           Filter(resolved, child)
         case _ => f
@@ -63,6 +64,13 @@ object ResolveCustomPredicates extends Rule[LogicalPlan] {
     expr.exists(_.isInstanceOf[UnresolvedFunction])
   }
 
+  /**
+   * Collects custom predicate descriptors from the first DSv2 relation found.
+   * Note: only the first relation's descriptors are collected. Multi-table queries
+   * (e.g. joins) where different tables declare different custom predicates are
+   * not currently supported -- users should use function-call syntax with explicit
+   * table references in such cases.
+   */
   private def collectCustomPredicates(
       plan: LogicalPlan): Option[Array[CustomPredicateDescriptor]] = {
     plan.collectFirst {

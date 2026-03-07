@@ -62,12 +62,20 @@ public class CustomPredicateDescriptor {
             String sqlName,
             DataType[] parameterTypes,
             boolean isDeterministic) {
-        assert canonicalName.contains(".") :
-            "Canonical name must be dot-qualified (e.g. 'com.mycompany.FUNC'), got: "
-              + canonicalName;
+        if (canonicalName == null) {
+            throw new IllegalArgumentException("canonicalName must not be null");
+        }
+        if (sqlName == null) {
+            throw new IllegalArgumentException("sqlName must not be null");
+        }
+        if (!canonicalName.contains(".")) {
+            throw new IllegalArgumentException(
+                "Canonical name must be dot-qualified (e.g. 'com.mycompany.FUNC'), got: "
+                  + canonicalName);
+        }
         this.canonicalName = canonicalName.toUpperCase(Locale.ROOT);
         this.sqlName = sqlName.toUpperCase(Locale.ROOT);
-        this.parameterTypes = parameterTypes;
+        this.parameterTypes = parameterTypes != null ? parameterTypes.clone() : null;
         this.isDeterministic = isDeterministic;
     }
 
@@ -84,6 +92,8 @@ public class CustomPredicateDescriptor {
 
     public String canonicalName() { return canonicalName; }
     public String sqlName() { return sqlName; }
-    public DataType[] parameterTypes() { return parameterTypes; }
+    public DataType[] parameterTypes() {
+        return parameterTypes != null ? parameterTypes.clone() : null;
+    }
     public boolean isDeterministic() { return isDeterministic; }
 }

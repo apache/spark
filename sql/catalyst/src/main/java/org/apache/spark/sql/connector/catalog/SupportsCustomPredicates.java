@@ -42,7 +42,7 @@ public interface SupportsCustomPredicates extends Table {
      * Returns custom predicate function descriptors for this table.
      * These are resolved during analysis and pushed down during optimization.
      *
-     * @return array of custom predicate descriptors
+     * @return non-null array of custom predicate descriptors; may be empty
      */
     CustomPredicateDescriptor[] customPredicates();
 }

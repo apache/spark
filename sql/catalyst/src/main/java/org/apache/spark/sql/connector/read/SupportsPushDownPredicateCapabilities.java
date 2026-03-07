@@ -55,7 +55,7 @@ public interface SupportsPushDownPredicateCapabilities extends ScanBuilder {
      * pattern is too complex). This method merely enables Spark to attempt
      * translation.
      *
-     * @return set of upper-cased predicate/expression names
+     * @return non-null set of upper-cased predicate/expression names; may be empty
      */
     Set<String> supportedPredicateNames();
 }

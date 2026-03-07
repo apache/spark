@@ -25,7 +25,7 @@ import scala.jdk.CollectionConverters._
 
 import test.org.apache.spark.sql.connector._
 
-import org.apache.spark.SparkUnsupportedOperationException
+import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.ScalarSubquery
@@ -1022,6 +1022,52 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
     }
   }
 
+  test("SPARK-55869: Custom predicates return correct data alongside standard predicates") {
+    val cls = classOf[DataSourceV2WithCustomPredicates]
+    withTempView("t1") {
+      spark.read.format(cls.getName).load().createTempView("t1")
+      // my_search is always accepted by the scan builder; the ">" predicate filters data.
+      // AdvancedBatchWithV2Filter only applies ">" filtering in planInputPartitions,
+      // so the result should be rows where i > 5.
+      val df = sql("SELECT * FROM t1 WHERE my_search(i, j) AND i > 5")
+      checkAnswer(df, (6 until 10).map(i => Row(i, -i)))
+    }
+  }
+
+  test("SPARK-55869: Config disabled prevents custom predicate resolution") {
+    val cls = classOf[DataSourceV2WithCustomPredicates]
+    withSQLConf(SQLConf.DATA_SOURCE_EXTENDED_PREDICATE_PUSHDOWN_ENABLED.key -> "false") {
+      withTempView("t1") {
+        spark.read.format(cls.getName).load().createTempView("t1")
+        // With extended predicate pushdown disabled, my_search should fail as
+        // an unknown function since ResolveCustomPredicates and LookupFunctions
+        // skip custom predicate handling.
+        val e = intercept[AnalysisException] {
+          sql("SELECT * FROM t1 WHERE my_search(i, j)").collect()
+        }
+        assert(e.getMessage.contains("UNRESOLVED_ROUTINE") ||
+          e.getMessage.contains("my_search"),
+          s"Expected unresolved function error, got: ${e.getMessage}")
+      }
+    }
+  }
+
+  test("SPARK-55869: Rejected custom predicate fails with clear error") {
+    val cls = classOf[DataSourceV2WithRejectingCustomPredicates]
+    withTempView("t1") {
+      spark.read.format(cls.getName).load().createTempView("t1")
+      // The data source rejects the custom predicate in pushPredicates().
+      // EnsureCustomPredicatesPushed should catch this and fail.
+      val e = intercept[SparkException] {
+        sql("SELECT * FROM t1 WHERE my_reject(i, j)").collect()
+      }
+      assert(e.getMessage.contains("my_reject") || e.getMessage.contains("MY_REJECT") ||
+        (e.getCause != null && e.getCause.getMessage.contains("my_reject")) ||
+        (e.getCause != null && e.getCause.getMessage.contains("MY_REJECT")),
+        s"Expected custom predicate rejection error, got: ${e.getMessage}")
+    }
+  }
+
   test("SPARK-47463: Pushed down v2 filter with if expression") {
     withTempView("t1") {
       spark.read.format(classOf[AdvancedDataSourceV2WithV2Filter].getName).load()
@@ -1872,6 +1918,53 @@ class AdvancedScanBuilderWithPredicateCapabilities extends ScanBuilder
     }
     this.predicates = supported
     unsupported
+  }
+
+  override def pushedPredicates(): Array[Predicate] = predicates
+
+  override def build(): Scan = this
+
+  override def toBatch: Batch = new AdvancedBatchWithV2Filter(predicates, requiredSchema)
+}
+
+class DataSourceV2WithRejectingCustomPredicates extends TestingV2Source {
+  override def getTable(options: CaseInsensitiveStringMap): Table = {
+    new SimpleBatchTable with SupportsCustomPredicates {
+      override def customPredicates(): Array[CustomPredicateDescriptor] = {
+        Array(
+          new CustomPredicateDescriptor(
+            "com.test.MY_REJECT",
+            "my_reject",
+            Array(IntegerType, IntegerType),
+            true)
+        )
+      }
+
+      override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+        new RejectingCustomPredicateScanBuilder()
+      }
+    }
+  }
+}
+
+class RejectingCustomPredicateScanBuilder extends ScanBuilder
+  with Scan with SupportsPushDownV2Filters
+  with SupportsPushDownRequiredColumns {
+
+  var requiredSchema = TestingV2Source.schema
+  var predicates = Array.empty[Predicate]
+
+  override def pruneColumns(requiredSchema: StructType): Unit = {
+    this.requiredSchema = requiredSchema
+  }
+
+  override def readSchema(): StructType = requiredSchema
+
+  override def pushPredicates(predicates: Array[Predicate]): Array[Predicate] = {
+    // Accept standard predicates, reject custom ones
+    val (standard, custom) = predicates.partition { p => !p.name().contains(".") }
+    this.predicates = standard
+    custom
   }
 
   override def pushedPredicates(): Array[Predicate] = predicates
