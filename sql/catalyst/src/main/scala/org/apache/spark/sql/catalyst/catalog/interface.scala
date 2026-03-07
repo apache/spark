@@ -866,29 +866,22 @@ case class CatalogStatistics(
 
   /**
    * Convert [[CatalogStatistics]] to v2 connector [[V2Statistics]], matching column stats to
-   * schema columns by name.
+   * schema columns by name. All available statistics are returned unconditionally; callers are
+   * responsible for gating on CBO / planStats settings before using numRows or columnStats.
    *
-   * @param schema           combined data + partition schema, used to resolve the DataType for
-   *                         each column when deserializing min/max values
-   * @param planStatsEnabled gate for exposing numRows and columnStats; callers should pass
-   *                         `conf.cboEnabled || conf.planStatsEnabled` to mirror the V1 behavior
-   *                         in [[LogicalRelation.computeStats]]
+   * @param schema combined data + partition schema, used to resolve the DataType for each column
+   *               when deserializing min/max string values
    */
-  def toV2Stats(schema: StructType, planStatsEnabled: Boolean): V2Statistics = {
-    val colStatsMap: Map[NamedReference, ColumnStatistics] =
-      if (planStatsEnabled && colStats.nonEmpty) {
-        val typeMap = schema.fields.map(f => f.name -> f.dataType).toMap
-        colStats.flatMap { case (name, stat) =>
-          typeMap.get(name).map { dt =>
-            FieldReference.apply(name) -> stat.toV2ColStat(name, dt)
-          }
-        }
-      } else Map.empty
+  def toV2Stats(schema: StructType): V2Statistics = {
+    val typeMap = schema.fields.map(f => f.name -> f.dataType).toMap
+    val colStatsMap: Map[NamedReference, ColumnStatistics] = colStats.flatMap { case (name, stat) =>
+      typeMap.get(name).map { dt =>
+        FieldReference.apply(name) -> stat.toV2ColStat(name, dt)
+      }
+    }
 
     val sz = OptionalLong.of(sizeInBytes.longValue)
-    val nr = if (planStatsEnabled) {
-      rowCount.map(v => OptionalLong.of(v.longValue)).getOrElse(OptionalLong.empty())
-    } else OptionalLong.empty()
+    val nr = rowCount.map(v => OptionalLong.of(v.longValue)).getOrElse(OptionalLong.empty())
     val javaColStats = new java.util.HashMap[NamedReference, ColumnStatistics]()
     colStatsMap.foreach { case (k, v) => javaColStats.put(k, v) }
 

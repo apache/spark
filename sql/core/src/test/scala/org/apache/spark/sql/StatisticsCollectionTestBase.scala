@@ -431,8 +431,7 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
   test("CatalogStatistics.toV2Stats") {
     val schema = StructType(Seq(
       StructField("id", IntegerType),
-      StructField("name", StringType),
-      StructField("unknown_partition", IntegerType)))
+      StructField("name", StringType)))
 
     val idColStat = CatalogColumnStat(
       distinctCount = Some(10),
@@ -450,16 +449,17 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
         // "extra" is not in schema — should be silently skipped
         "extra" -> CatalogColumnStat(distinctCount = Some(5))))
 
-    // planStatsEnabled = true: numRows and columnStats should be exposed
-    val schemaForConversion = StructType(Seq(
-      StructField("id", IntegerType),
-      StructField("name", StringType)))
-    val v2StatsEnabled = catalogStats.toV2Stats(schemaForConversion, planStatsEnabled = true)
+    val v2Stats = catalogStats.toV2Stats(schema)
 
-    assert(v2StatsEnabled.sizeInBytes().getAsLong === 1024L)
-    assert(v2StatsEnabled.numRows().isPresent)
-    assert(v2StatsEnabled.numRows().getAsLong === 10L)
-    val colStats = v2StatsEnabled.columnStats()
+    // sizeInBytes is always populated
+    assert(v2Stats.sizeInBytes().getAsLong === 1024L)
+
+    // numRows is present when rowCount is defined
+    assert(v2Stats.numRows().isPresent)
+    assert(v2Stats.numRows().getAsLong === 10L)
+
+    // only columns present in schema are returned; "extra" is skipped
+    val colStats = v2Stats.columnStats()
     assert(colStats.size() === 1, "only 'id' is in schema; 'extra' should be skipped")
     val idV2 = colStats.get(FieldReference.apply("id"))
     assert(idV2 != null)
@@ -471,15 +471,9 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
     assert(idV2.min().get() === 1)   // deserialized from "1" as IntegerType
     assert(idV2.max().get() === 100)
 
-    // planStatsEnabled = false: numRows and columnStats should be empty
-    val v2StatsDisabled = catalogStats.toV2Stats(schemaForConversion, planStatsEnabled = false)
-    assert(v2StatsDisabled.sizeInBytes().getAsLong === 1024L)
-    assert(!v2StatsDisabled.numRows().isPresent)
-    assert(v2StatsDisabled.columnStats().isEmpty)
-
-    // No rowCount: numRows should be empty even when planStatsEnabled
+    // No rowCount: numRows should be empty
     val statsNoRows = CatalogStatistics(sizeInBytes = 512, colStats = Map.empty)
-    val v2NoRows = statsNoRows.toV2Stats(schemaForConversion, planStatsEnabled = true)
+    val v2NoRows = statsNoRows.toV2Stats(schema)
     assert(v2NoRows.sizeInBytes().getAsLong === 512L)
     assert(!v2NoRows.numRows().isPresent)
     assert(v2NoRows.columnStats().isEmpty)
