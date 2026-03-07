@@ -26,6 +26,15 @@ import org.apache.spark.sql.connector.expressions.filter.Predicate;
  * Please Note that this interface is preferred over {@link SupportsPushDownFilters}, which uses
  * V1 {@link org.apache.spark.sql.sources.Filter} and is less efficient due to the
  * internal -&gt; external data conversion.
+ * <p>
+ * <b>Two-call contract when enhanced partition filtering is supported:</b> When
+ * {@link #supportsEnhancedPartitionFiltering()} returns true, {@link #pushPredicates(Predicate[])}
+ * will be called <i>twice</i> on the same {@link ScanBuilder} instance: first with translated V2
+ * predicates, then with
+ * {@link org.apache.spark.sql.connector.expressions.filter.PartitionPredicate}
+ * instances. The second call occurs only after the first call completes. The implementation must
+ * accumulate state across both calls, and {@link #pushedPredicates()} must return predicates from
+ * both calls.
  *
  * @since 3.3.0
  */
@@ -37,6 +46,21 @@ public interface SupportsPushDownV2Filters extends ScanBuilder {
    * <p>
    * Rows should be returned from the data source if and only if all of the predicates match.
    * That is, predicates must be interpreted as ANDed together.
+   * <p>
+   * When {@link #supportsEnhancedPartitionFiltering()} returns true, this method will be called
+   * a second time with
+   * {@link org.apache.spark.sql.connector.expressions.filter.PartitionPredicate}
+   * instances (the second call occurs only after the first completes). The implementation must
+   * accumulate state across both calls so that {@link #pushedPredicates()} can return predicates
+   * from both.
+   * <p>
+   * For each {@link org.apache.spark.sql.connector.expressions.filter.PartitionPredicate},
+   * the implementation can use
+   * {@link org.apache.spark.sql.connector.expressions.filter.PartitionPredicate#referencedPartitionColumnOrdinals()}
+   * to decide whether to return it for post-scan filtering. For example, data sources with
+   * partition spec evolution may return predicates that reference later-added partition
+   * transforms (incompletely partitioned data) so Spark evaluates them after the scan, while
+   * predicates that reference only initially-added partition transforms may be fully pushed.
    */
   Predicate[] pushPredicates(Predicate[] predicates);
 
@@ -55,9 +79,26 @@ public interface SupportsPushDownV2Filters extends ScanBuilder {
    * Both case 1 and 2 should be considered as pushed predicates and should be returned
    * by this method.
    * <p>
+   * When enhanced partition filtering is supported and {@link #pushPredicates(Predicate[])} was
+   * called twice, this method must return predicates from <i>both</i> calls.
+   * <p>
    * It's possible that there is no predicates in the query and
    * {@link #pushPredicates(Predicate[])} is never called,
    * empty array should be returned for this case.
    */
   Predicate[] pushedPredicates();
+
+  /**
+   * Returns true if this data source supports enhanced partition filtering. When true,
+   * {@link #pushPredicates(Predicate[])} will be called a second time with
+   * {@link org.apache.spark.sql.connector.expressions.filter.PartitionPredicate} instances
+   * (after the first call completes). The implementation must accumulate state across both calls,
+   * and {@link #pushedPredicates()} must return predicates from both calls. See the class-level
+   * Javadoc for the full two-call contract.
+   *
+   * @since 4.2.0
+   */
+  default boolean supportsEnhancedPartitionFiltering() {
+    return false;
+  }
 }
