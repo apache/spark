@@ -475,6 +475,12 @@ class DataFrame(ParentDataFrame):
         res._cached_schema = self._cached_schema
         return res
 
+    def optimizePartitions(self, targetMB: Optional[int] = None) -> "DataFrame":
+        raise PySparkNotImplementedError(
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "optimizePartitions for Spark Connect"},
+        )
+
     def dropDuplicates(self, subset: Optional[List[str]] = None) -> ParentDataFrame:
         if subset is not None and not isinstance(subset, (list, tuple)):
             raise PySparkTypeError(
@@ -2380,6 +2386,7 @@ def _test() -> None:
     if not is_remote_only():
         del pyspark.sql.dataframe.DataFrame.toJSON.__doc__
         del pyspark.sql.dataframe.DataFrame.rdd.__doc__
+        del pyspark.sql.dataframe.DataFrame.optimizePartitions.__doc__
 
     if not have_pandas or not have_pyarrow:
         del pyspark.sql.dataframe.DataFrame.toPandas.__doc__
