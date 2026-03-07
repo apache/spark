@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions.{Cast, CustomPredicateExpression, Expression}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -41,14 +42,20 @@ object ResolveCustomPredicates extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = {
     if (!SQLConf.get.extendedPredicatePushdownEnabled) return plan
+    // Only resolve custom predicates in Filter nodes: custom predicates are
+    // WHERE-only constructs. If a custom predicate name appears elsewhere
+    // (e.g. SELECT list), it stays unresolved → ResolveFunctions reports an error.
     plan.resolveOperatorsUp {
     case f @ Filter(condition, child) if hasUnresolvedFunctions(condition) =>
       val descriptors = collectCustomPredicates(child)
       if (descriptors.nonEmpty) {
         val resolved = condition.transformUp {
+          // Match single-part function names only; multi-part names are catalog lookups
           case u: UnresolvedFunction if u.nameParts.length == 1 =>
             findDescriptor(descriptors, u.nameParts.head) match {
               case Some(descriptor) =>
+                // Insert implicit casts when descriptor declares expected types
+                // and argument count matches; otherwise pass arguments as-is
                 val args = if (descriptor.parameterTypes() != null &&
                     descriptor.parameterTypes().length > 0 &&
                     descriptor.parameterTypes().length == u.arguments.length) {
@@ -94,7 +101,15 @@ object ResolveCustomPredicates extends Rule[LogicalPlan] {
   private def findDescriptor(
       descriptors: Array[CustomPredicateDescriptor],
       name: String): Option[CustomPredicateDescriptor] = {
-    descriptors.find(_.sqlName().equalsIgnoreCase(name))
+    val matches = descriptors.filter(_.sqlName().equalsIgnoreCase(name))
+    if (matches.length > 1) {
+      val names = matches.map(_.canonicalName()).mkString(", ")
+      throw SparkException.internalError(
+        s"Ambiguous custom predicate '$name' matches multiple " +
+        s"descriptors: $names. Use function-call syntax with the " +
+        s"canonical name to disambiguate.")
+    }
+    matches.headOption
   }
 
   private def castArgumentsIfNeeded(

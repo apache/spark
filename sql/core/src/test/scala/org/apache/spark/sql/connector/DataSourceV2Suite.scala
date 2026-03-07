@@ -1286,6 +1286,54 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
     }
   }
 
+  test("SPARK-55869: Custom predicate in SELECT list fails with clear error") {
+    val cls = classOf[DataSourceV2WithCustomPredicates]
+    withTempView("t1") {
+      spark.read.format(cls.getName).load().createTempView("t1")
+      // Custom predicates are only valid in WHERE. In SELECT, the function
+      // should remain unresolved and fail with a clear error.
+      val e = intercept[AnalysisException] {
+        sql("SELECT my_search(i, j) FROM t1").collect()
+      }
+      assert(e.getMessage.contains("UNRESOLVED_ROUTINE") ||
+        e.getMessage.contains("my_search"),
+        s"Expected unresolved function error in SELECT context, got: ${e.getMessage}")
+    }
+  }
+
+  test("SPARK-55869: NOT(RLIKE) capability-gated predicate translates correctly") {
+    val cls = classOf[StringDataSourceV2WithPredicateCapabilities]
+    withTempView("t1") {
+      spark.read.format(cls.getName).load().createTempView("t1")
+      // NOT(RLIKE) should still produce correct results even if the source
+      // doesn't consume the NOT wrapper (it falls back to post-scan filter)
+      val df = sql("SELECT * FROM t1 WHERE NOT (s1 RLIKE '^a$')")
+      // 'a' matches '^a$', so NOT filters it out → only 'b','c' remain
+      checkAnswer(df, Seq(Row("b", "y"), Row("c", "z")))
+    }
+  }
+
+  test("SPARK-55869: Pushed custom predicate carries correct arguments") {
+    val cls = classOf[DataSourceV2WithCustomPredicates]
+    withTempView("t1") {
+      spark.read.format(cls.getName).load().createTempView("t1")
+      val df = sql("SELECT * FROM t1 WHERE my_search(i, j)")
+      val batch = df.queryExecution.executedPlan.collect {
+        case d: BatchScanExec =>
+          d.batch.asInstanceOf[CustomPredicateBatch]
+      }.head
+      val mySearch = batch.predicates.find(_.name() == "COM.TEST.MY_SEARCH")
+      assert(mySearch.isDefined, "my_search predicate should be pushed")
+      // Should have 2 arguments (i and j column references)
+      val args = mySearch.get.children()
+      assert(args.length == 2, s"Expected 2 arguments, got ${args.length}")
+      assert(args(0).isInstanceOf[org.apache.spark.sql.connector.expressions.NamedReference],
+        s"First arg should be NamedReference, got: ${args(0).getClass.getSimpleName}")
+      assert(args(1).isInstanceOf[org.apache.spark.sql.connector.expressions.NamedReference],
+        s"Second arg should be NamedReference, got: ${args(1).getClass.getSimpleName}")
+    }
+  }
+
   test("SPARK-47463: Pushed down v2 filter with if expression") {
     withTempView("t1") {
       spark.read.format(classOf[AdvancedDataSourceV2WithV2Filter].getName).load()

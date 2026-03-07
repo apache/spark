@@ -343,8 +343,9 @@ class V2ExpressionBuilder(
 
     // RuntimeReplaceable: ILike(col, col2) survives as Like(Lower(col), Lower(col2))
     // when the pattern is non-literal (LikeSimplification only handles literal patterns).
-    // Must be before generic LIKE case.
-    case Like(Lower(left), Lower(right), _) if extraCapabilities.contains("ILIKE") =>
+    // Must be before generic LIKE case. Only translate with default escape char.
+    case Like(Lower(left), Lower(right), escapeChar)
+        if extraCapabilities.contains("ILIKE") && escapeChar == '\\' =>
       val l = generateExpression(left)
       val r = generateExpression(right)
       if (l.isDefined && r.isDefined) {
@@ -352,7 +353,10 @@ class V2ExpressionBuilder(
       } else {
         None
       }
-    case l: Like if extraCapabilities.contains("LIKE") =>
+    // Only translate LIKE with default escape char; non-default escapes cannot
+    // be represented in the V2 Predicate and would produce wrong results.
+    case l: Like
+        if extraCapabilities.contains("LIKE") && l.escapeChar == '\\' =>
       val left = generateExpression(l.left)
       val right = generateExpression(l.right)
       if (left.isDefined && right.isDefined) {
@@ -400,29 +404,43 @@ class V2ExpressionBuilder(
       } else {
         None
       }
+    // Multi-pattern LIKE variants: filter out null patterns that can appear in
+    // Catalyst's internal representation but cannot be serialized as LiteralValue.
     case la: LikeAll if extraCapabilities.contains("LIKE_ALL") =>
-      generateExpression(la.child).map { v =>
-        val patternLiterals = la.patterns.map(p =>
-          LiteralValue(p, StringType)).toArray[V2Expression]
-        new V2Predicate("LIKE_ALL", (v +: patternLiterals).toArray)
+      generateExpression(la.child).flatMap { v =>
+        val nonNull = la.patterns.filter(_ != null)
+        if (nonNull.isEmpty) None else {
+          val lits = nonNull.map(p =>
+            LiteralValue(p, StringType)).toArray[V2Expression]
+          Some(new V2Predicate("LIKE_ALL", (v +: lits).toArray))
+        }
       }
     case nla: NotLikeAll if extraCapabilities.contains("NOT_LIKE_ALL") =>
-      generateExpression(nla.child).map { v =>
-        val patternLiterals = nla.patterns.map(p =>
-          LiteralValue(p, StringType)).toArray[V2Expression]
-        new V2Predicate("NOT_LIKE_ALL", (v +: patternLiterals).toArray)
+      generateExpression(nla.child).flatMap { v =>
+        val nonNull = nla.patterns.filter(_ != null)
+        if (nonNull.isEmpty) None else {
+          val lits = nonNull.map(p =>
+            LiteralValue(p, StringType)).toArray[V2Expression]
+          Some(new V2Predicate("NOT_LIKE_ALL", (v +: lits).toArray))
+        }
       }
     case la: LikeAny if extraCapabilities.contains("LIKE_ANY") =>
-      generateExpression(la.child).map { v =>
-        val patternLiterals = la.patterns.map(p =>
-          LiteralValue(p, StringType)).toArray[V2Expression]
-        new V2Predicate("LIKE_ANY", (v +: patternLiterals).toArray)
+      generateExpression(la.child).flatMap { v =>
+        val nonNull = la.patterns.filter(_ != null)
+        if (nonNull.isEmpty) None else {
+          val lits = nonNull.map(p =>
+            LiteralValue(p, StringType)).toArray[V2Expression]
+          Some(new V2Predicate("LIKE_ANY", (v +: lits).toArray))
+        }
       }
     case nla: NotLikeAny if extraCapabilities.contains("NOT_LIKE_ANY") =>
-      generateExpression(nla.child).map { v =>
-        val patternLiterals = nla.patterns.map(p =>
-          LiteralValue(p, StringType)).toArray[V2Expression]
-        new V2Predicate("NOT_LIKE_ANY", (v +: patternLiterals).toArray)
+      generateExpression(nla.child).flatMap { v =>
+        val nonNull = nla.patterns.filter(_ != null)
+        if (nonNull.isEmpty) None else {
+          val lits = nonNull.map(p =>
+            LiteralValue(p, StringType)).toArray[V2Expression]
+          Some(new V2Predicate("NOT_LIKE_ANY", (v +: lits).toArray))
+        }
       }
     // TODO supports other expressions
     case ApplyFunctionExpression(function, children) =>

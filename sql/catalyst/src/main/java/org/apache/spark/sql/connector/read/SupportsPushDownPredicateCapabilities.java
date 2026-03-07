@@ -36,6 +36,7 @@ import org.apache.spark.annotation.Evolving;
  * <ul>
  *   <li>{@code "LIKE"} — full LIKE pattern matching</li>
  *   <li>{@code "RLIKE"} — regex matching</li>
+ *   <li>{@code "ILIKE"} — case-insensitive LIKE (non-literal patterns only)</li>
  *   <li>{@code "IS_NAN"} — NaN check for numeric types</li>
  *   <li>{@code "ARRAY_CONTAINS"} — element membership in arrays</li>
  *   <li>{@code "MAP_CONTAINS_KEY"} — key existence in maps</li>

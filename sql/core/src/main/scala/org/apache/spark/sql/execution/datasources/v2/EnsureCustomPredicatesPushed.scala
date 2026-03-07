@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions.CustomPredicateExpression
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 
 /**
@@ -32,17 +32,18 @@ import org.apache.spark.sql.catalyst.rules.Rule
  */
 object EnsureCustomPredicatesPushed extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
-    plan.foreachUp {
-      case f: Filter =>
-        f.condition.foreach {
+    plan.foreachUp { node =>
+      node.expressions.foreach { expr =>
+        expr.foreach {
           case cpe: CustomPredicateExpression =>
             throw SparkException.internalError(
               s"Custom predicate '${cpe.descriptor.sqlName()}' " +
-              s"(${cpe.descriptor.canonicalName()}) was not pushed to the data source. " +
-              s"The data source must accept this predicate via pushPredicates().")
+              s"(${cpe.descriptor.canonicalName()}) was not pushed to " +
+              s"the data source. The data source must accept this " +
+              s"predicate via pushPredicates().")
           case _ =>
         }
-      case _ =>
+      }
     }
     plan
   }

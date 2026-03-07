@@ -117,23 +117,30 @@ abstract class CustomOperatorParserExtension(delegate: ParserInterface)
   }
 
   /**
-   * Replace string literals with placeholders to avoid rewriting inside them.
-   * Handles single-quoted strings with SQL-style '' escaping.
+   * Replace string literals, double-quoted identifiers, and SQL comments
+   * with placeholders to avoid rewriting inside them. Handles:
+   * - Single-quoted strings with SQL-style '' escaping
+   * - Double-quoted identifiers
+   * - Line comments (-- to end of line)
+   * - Block comments (/* ... */)
    */
   private def maskStringLiterals(
       sql: String, literals: ArrayBuffer[String]): String = {
     val sb = new StringBuilder
     var i = 0
     while (i < sql.length) {
-      if (sql.charAt(i) == '\'') {
+      val ch = sql.charAt(i)
+      if (ch == '\'' || ch == '"') {
+        // Single-quoted string or double-quoted identifier
+        val quote = ch
         val start = i
         i += 1
         var closed = false
         while (i < sql.length && !closed) {
-          if (sql.charAt(i) == '\'') {
+          if (sql.charAt(i) == quote) {
             i += 1
-            if (i < sql.length && sql.charAt(i) == '\'') {
-              // SQL escape: '' means literal single quote, continue
+            if (i < sql.length && sql.charAt(i) == quote) {
+              // SQL escape: '' or "" means literal quote, continue
               i += 1
             } else {
               closed = true
@@ -145,8 +152,30 @@ abstract class CustomOperatorParserExtension(delegate: ParserInterface)
         val lit = sql.substring(start, i)
         sb.append(s"${placeholderPrefix}${literals.length}__")
         literals += lit
+      } else if (ch == '-' && i + 1 < sql.length
+          && sql.charAt(i + 1) == '-') {
+        // Line comment: -- to end of line
+        val start = i
+        i += 2
+        while (i < sql.length && sql.charAt(i) != '\n') { i += 1 }
+        val lit = sql.substring(start, i)
+        sb.append(s"${placeholderPrefix}${literals.length}__")
+        literals += lit
+      } else if (ch == '/' && i + 1 < sql.length
+          && sql.charAt(i + 1) == '*') {
+        // Block comment: /* ... */
+        val start = i
+        i += 2
+        while (i + 1 < sql.length &&
+            !(sql.charAt(i) == '*' && sql.charAt(i + 1) == '/')) {
+          i += 1
+        }
+        if (i + 1 < sql.length) { i += 2 } // skip */
+        val lit = sql.substring(start, i)
+        sb.append(s"${placeholderPrefix}${literals.length}__")
+        literals += lit
       } else {
-        sb.append(sql.charAt(i))
+        sb.append(ch)
         i += 1
       }
     }

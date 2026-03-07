@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.connector.catalog;
 
+import java.util.Arrays;
 import java.util.Locale;
+import java.util.Objects;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.types.DataType;
@@ -99,4 +101,32 @@ public class CustomPredicateDescriptor {
         return parameterTypes != null ? parameterTypes.clone() : null;
     }
     public boolean isDeterministic() { return isDeterministic; }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof CustomPredicateDescriptor)) return false;
+        CustomPredicateDescriptor that = (CustomPredicateDescriptor) o;
+        return isDeterministic == that.isDeterministic
+            && Objects.equals(canonicalName, that.canonicalName)
+            && Objects.equals(sqlName, that.sqlName)
+            && Arrays.equals(parameterTypes, that.parameterTypes);
+    }
+
+    @Override
+    public int hashCode() {
+        int result = Objects.hash(canonicalName, sqlName, isDeterministic);
+        result = 31 * result + Arrays.hashCode(parameterTypes);
+        return result;
+    }
+
+    @Override
+    public String toString() {
+        return "CustomPredicateDescriptor{"
+            + "canonicalName='" + canonicalName + '\''
+            + ", sqlName='" + sqlName + '\''
+            + ", parameterTypes=" + Arrays.toString(parameterTypes)
+            + ", isDeterministic=" + isDeterministic
+            + '}';
+    }
 }

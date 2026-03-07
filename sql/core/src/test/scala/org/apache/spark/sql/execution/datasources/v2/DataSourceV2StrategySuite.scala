@@ -1376,6 +1376,33 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     assert(desc.sqlName() == "MY_FUNC")
   }
 
+  test("SPARK-55869: CustomPredicateDescriptor equals, hashCode, toString") {
+    val d1 = new org.apache.spark.sql.connector.catalog.CustomPredicateDescriptor(
+      "com.test.FUNC", "func", Array(IntegerType), true)
+    val d2 = new org.apache.spark.sql.connector.catalog.CustomPredicateDescriptor(
+      "com.test.FUNC", "func", Array(IntegerType), true)
+    val d3 = new org.apache.spark.sql.connector.catalog.CustomPredicateDescriptor(
+      "com.test.OTHER", "other", Array(StringType), false)
+    assert(d1 == d2)
+    assert(d1.hashCode() == d2.hashCode())
+    assert(d1 != d3)
+    assert(d1.toString.contains("COM.TEST.FUNC"))
+    assert(d1.toString.contains("FUNC"))
+  }
+
+  test("SPARK-55869: NOT(RLIKE) translates to V2 NOT(RLIKE) predicate") {
+    val notRlike = Not(RLike($"col".string, Literal("^abc$")))
+    val result = new V2ExpressionBuilder(
+      notRlike, isPredicate = true,
+      extraCapabilities = Set("RLIKE")).build()
+    assert(result.isDefined, "NOT(RLIKE) should be translated")
+    assert(result.get.isInstanceOf[V2Not],
+      s"Expected V2 Not, got: ${result.get.getClass.getSimpleName}")
+    val inner = result.get.asInstanceOf[V2Not].child()
+    assert(inner.isInstanceOf[Predicate])
+    assert(inner.asInstanceOf[Predicate].name() == "RLIKE")
+  }
+
   test("SPARK-55869: CustomOperatorParserExtension parseQuery also rewrites") {
     val ops = Map("INDEXQUERY" -> "indexquery")
     var captured: String = null

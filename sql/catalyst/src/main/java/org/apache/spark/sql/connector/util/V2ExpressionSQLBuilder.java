@@ -130,10 +130,9 @@ public class V2ExpressionSQLBuilder {
         case "LTRIM" -> visitTrim("LEADING", expressionsToStringArray(e.children()));
         case "RTRIM" -> visitTrim("TRAILING", expressionsToStringArray(e.children()));
         case "OVERLAY" -> visitOverlay(expressionsToStringArray(e.children()));
-        // Custom predicates use dot-qualified canonical names (e.g. "COM.MYCO.FUNC").
-        // Render those as SQL function calls; fail on other unknown names.
-        default -> name.contains(".") ?
-            visitSQLFunction(name, e.children()) : visitUnexpectedExpr(expr);
+        // Catch-all: render unknown names (including custom predicates with
+        // dot-qualified canonical names like "COM.MYCO.FUNC") as SQL function calls.
+        default -> visitSQLFunction(name, e.children());
       };
     } else if (expr instanceof Min min) {
       return visitAggregateFunction("MIN", false, min.children());
