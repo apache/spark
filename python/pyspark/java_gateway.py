@@ -104,8 +104,15 @@ def launch_gateway(conf=None, popen_kwargs=None):
                 proc = Popen(command, **popen_kwargs)
 
             # Wait for the file to appear, or for the process to exit, whichever happens first.
-            while not proc.poll() and not os.path.isfile(conn_info_file):
+            while proc.poll() is None and not os.path.isfile(conn_info_file):
                 time.sleep(0.1)
+
+            return_code = proc.poll()
+            if return_code is not None and return_code != 0:
+                raise PySparkRuntimeError(
+                    errorClass="JAVA_GATEWAY_EXITED",
+                    messageParameters={"command": " ".join(command), "return_code": return_code},
+                )
 
             if not os.path.isfile(conn_info_file):
                 raise PySparkRuntimeError(
