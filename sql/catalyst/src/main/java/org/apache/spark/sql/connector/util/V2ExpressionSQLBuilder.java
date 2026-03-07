@@ -131,8 +131,9 @@ public class V2ExpressionSQLBuilder {
         case "RTRIM" -> visitTrim("TRAILING", expressionsToStringArray(e.children()));
         case "OVERLAY" -> visitOverlay(expressionsToStringArray(e.children()));
         // Custom predicates use dot-qualified canonical names (e.g. "COM.MYCO.FUNC").
-        // Render unknown names as SQL function calls.
-        default -> visitSQLFunction(name, e.children());
+        // Render those as SQL function calls; fail on other unknown names.
+        default -> name.contains(".") ?
+            visitSQLFunction(name, e.children()) : visitUnexpectedExpr(expr);
       };
     } else if (expr instanceof Min min) {
       return visitAggregateFunction("MIN", false, min.children());

@@ -2101,9 +2101,18 @@ class Analyzer(
     /**
      * Collects custom predicate SQL names from DSv2 tables referenced in the plan.
      * Checks temp views (via catalog lookup) and already-resolved DataSourceV2Relations.
+     * Returns an empty set quickly when the feature is disabled or no DSv2 relations exist.
      */
     private def collectCustomPredicateNames(plan: LogicalPlan): Set[String] = {
       if (!conf.extendedPredicatePushdownEnabled) return Set.empty
+      // Quick check: skip traversal if no unresolved relations or DSv2 relations exist
+      val hasRelevantNodes = plan.exists {
+        case _: UnresolvedRelation => true
+        case _: DataSourceV2Relation => true
+        case _ => false
+      }
+      if (!hasRelevantNodes) return Set.empty
+
       val names = mutable.Set.empty[String]
       plan.foreach {
         case u: UnresolvedRelation =>

@@ -177,7 +177,11 @@ abstract class CustomOperatorParserExtension(delegate: ParserInterface)
     // Build pattern for case-insensitive operator match
     // Left: identifier (with optional dots), backtick-quoted
     // Right: identifier, number, backtick-quoted, or literal placeholder
+    // Negative lookbehind ensures the left operand is not preceded by an
+    // arithmetic or comparison operator, which would indicate a complex
+    // expression (e.g. `x + y OP val` should not rewrite `y` as the left arg).
     val pattern = Pattern.compile(
+      """(?<![+\-*/=<>!])""" +
       """(\w+(?:\.\w+)*|`[^`]+`)""" +
       """\s+""" +
       s"(?i)$quotedOp" +

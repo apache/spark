@@ -86,8 +86,11 @@ public class CustomPredicateDescriptor {
             String canonicalName,
             DataType[] parameterTypes,
             boolean isDeterministic) {
-        this(canonicalName, canonicalName.substring(
-            canonicalName.lastIndexOf('.') + 1), parameterTypes, isDeterministic);
+        this(canonicalName,
+            canonicalName != null
+                ? canonicalName.substring(canonicalName.lastIndexOf('.') + 1)
+                : null,
+            parameterTypes, isDeterministic);
     }
 
     public String canonicalName() { return canonicalName; }

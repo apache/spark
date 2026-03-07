@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.sql.catalyst.expressions.{Cast, CustomPredicateExpression, Expression}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -28,6 +30,10 @@ import org.apache.spark.sql.internal.SQLConf
  * Resolves function calls against custom predicates declared by DSv2 tables.
  * Matches unresolved function names against the sqlName of each descriptor.
  *
+ * Custom predicates are only valid in Filter (WHERE) conditions. If a custom
+ * predicate name appears in a non-filter context (e.g. SELECT list), it is
+ * left unresolved so that ResolveFunctions will report a clear error.
+ *
  * This rule must run before ResolveFunctions in the Resolution batch, because
  * ResolveFunctions will throw on unknown function names.
  */
@@ -37,25 +43,26 @@ object ResolveCustomPredicates extends Rule[LogicalPlan] {
     if (!SQLConf.get.extendedPredicatePushdownEnabled) return plan
     plan.resolveOperatorsUp {
     case f @ Filter(condition, child) if hasUnresolvedFunctions(condition) =>
-      collectCustomPredicates(child) match {
-        case Some(descriptors) if descriptors.nonEmpty =>
-          val resolved = condition.transformUp {
-            case u: UnresolvedFunction if u.nameParts.length == 1 =>
-              findDescriptor(descriptors, u.nameParts.head) match {
-                case Some(descriptor) =>
-                  val args = if (descriptor.parameterTypes() != null &&
-                      descriptor.parameterTypes().length > 0 &&
-                      descriptor.parameterTypes().length == u.arguments.length) {
-                    castArgumentsIfNeeded(u.arguments, descriptor)
-                  } else {
-                    u.arguments
-                  }
-                  CustomPredicateExpression(descriptor, args)
-                case None => u
-              }
-          }
-          Filter(resolved, child)
-        case _ => f
+      val descriptors = collectCustomPredicates(child)
+      if (descriptors.nonEmpty) {
+        val resolved = condition.transformUp {
+          case u: UnresolvedFunction if u.nameParts.length == 1 =>
+            findDescriptor(descriptors, u.nameParts.head) match {
+              case Some(descriptor) =>
+                val args = if (descriptor.parameterTypes() != null &&
+                    descriptor.parameterTypes().length > 0 &&
+                    descriptor.parameterTypes().length == u.arguments.length) {
+                  castArgumentsIfNeeded(u.arguments, descriptor)
+                } else {
+                  u.arguments
+                }
+                CustomPredicateExpression(descriptor, args)
+              case None => u
+            }
+        }
+        Filter(resolved, child)
+      } else {
+        f
       }
   }
   }
@@ -65,21 +72,23 @@ object ResolveCustomPredicates extends Rule[LogicalPlan] {
   }
 
   /**
-   * Collects custom predicate descriptors from the first DSv2 relation found.
-   * Note: only the first relation's descriptors are collected. Multi-table queries
-   * (e.g. joins) where different tables declare different custom predicates are
-   * not currently supported -- users should use function-call syntax with explicit
-   * table references in such cases.
+   * Collects custom predicate descriptors from all DSv2 relations in the plan.
+   * Descriptors from multiple tables are merged so that multi-table queries
+   * (e.g. joins) can reference custom predicates from any participating table.
    */
   private def collectCustomPredicates(
-      plan: LogicalPlan): Option[Array[CustomPredicateDescriptor]] = {
-    plan.collectFirst {
+      plan: LogicalPlan): Array[CustomPredicateDescriptor] = {
+    val descriptors = new ArrayBuffer[CustomPredicateDescriptor]()
+    plan.foreach {
       case r: DataSourceV2Relation =>
         r.table match {
-          case t: SupportsCustomPredicates => t.customPredicates()
-          case _ => Array.empty[CustomPredicateDescriptor]
+          case t: SupportsCustomPredicates =>
+            descriptors ++= t.customPredicates()
+          case _ =>
         }
+      case _ =>
     }
+    descriptors.toArray
   }
 
   private def findDescriptor(

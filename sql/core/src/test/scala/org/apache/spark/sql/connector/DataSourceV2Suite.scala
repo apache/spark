@@ -56,6 +56,43 @@ import org.apache.spark.util.ArrayImplicits._
 class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveSparkPlanHelper {
   import testImplicits._
 
+  /**
+   * Rewrites SQL through a CustomOperatorParserExtension and returns
+   * the SQL text that the delegate parser received.
+   */
+  private def rewriteInfixSql(
+      ops: Map[String, String], sqlText: String): String = {
+    import org.apache.spark.sql.connector.util.CustomOperatorParserExtension
+    var captured: String = null
+    val delegate = spark.sessionState.sqlParser
+    val ext = new CustomOperatorParserExtension(
+      new org.apache.spark.sql.catalyst.parser.ParserInterface {
+        override def parsePlan(s: String) = {
+          captured = s; delegate.parsePlan(s)
+        }
+        override def parseQuery(s: String) = delegate.parseQuery(s)
+        override def parseExpression(s: String) =
+          delegate.parseExpression(s)
+        override def parseTableIdentifier(s: String) =
+          delegate.parseTableIdentifier(s)
+        override def parseFunctionIdentifier(s: String) =
+          delegate.parseFunctionIdentifier(s)
+        override def parseMultipartIdentifier(s: String) =
+          delegate.parseMultipartIdentifier(s)
+        override def parseTableSchema(s: String) =
+          delegate.parseTableSchema(s)
+        override def parseDataType(s: String) =
+          delegate.parseDataType(s)
+        override def parseRoutineParam(s: String) =
+          delegate.parseRoutineParam(s)
+      }
+    ) {
+      override def customOperators: Map[String, String] = ops
+    }
+    ext.parsePlan(sqlText)
+    captured
+  }
+
   private def getBatch(query: DataFrame): AdvancedBatch = {
     query.queryExecution.executedPlan.collect {
       case d: BatchScanExec =>
@@ -1013,53 +1050,15 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
   }
 
   test("SPARK-55869: Layer 3 parser extension rewrite executes end-to-end with Layer 2") {
-    import org.apache.spark.sql.connector.util.CustomOperatorParserExtension
     val cls = classOf[DataSourceV2WithCustomPredicates]
+    val ops = Map("MYSEARCH" -> "my_search")
     withTempView("t1") {
       spark.read.format(cls.getName).load().createTempView("t1")
-      // Create a parser extension that rewrites MYSEARCH infix operator
-      val ext = new CustomOperatorParserExtension(spark.sessionState.sqlParser) {
-        override def customOperators: Map[String, String] =
-          Map("MYSEARCH" -> "my_search")
-      }
-      // Use infix operator syntax: "i MYSEARCH j" should be rewritten to "my_search(i, j)"
       val infixSql = "SELECT * FROM t1 WHERE i MYSEARCH j AND i > 5"
-      // Parse through the extension — this rewrites to function call syntax
-      val plan = ext.parsePlan(infixSql)
-      // Execute the rewritten plan via spark.sql on the rewritten SQL.
-      // The extension would have rewritten the SQL before the delegate parsed it.
-      // We verify by capturing the rewritten SQL and executing it.
-      var rewrittenSql: String = null
-      val capturingExt = new CustomOperatorParserExtension(
-        new org.apache.spark.sql.catalyst.parser.ParserInterface {
-          override def parsePlan(sqlText: String) = {
-            rewrittenSql = sqlText
-            spark.sessionState.sqlParser.parsePlan(sqlText)
-          }
-          override def parseQuery(s: String) = spark.sessionState.sqlParser.parseQuery(s)
-          override def parseExpression(s: String) =
-            spark.sessionState.sqlParser.parseExpression(s)
-          override def parseTableIdentifier(s: String) =
-            spark.sessionState.sqlParser.parseTableIdentifier(s)
-          override def parseFunctionIdentifier(s: String) =
-            spark.sessionState.sqlParser.parseFunctionIdentifier(s)
-          override def parseMultipartIdentifier(s: String) =
-            spark.sessionState.sqlParser.parseMultipartIdentifier(s)
-          override def parseTableSchema(s: String) =
-            spark.sessionState.sqlParser.parseTableSchema(s)
-          override def parseDataType(s: String) =
-            spark.sessionState.sqlParser.parseDataType(s)
-          override def parseRoutineParam(s: String) =
-            spark.sessionState.sqlParser.parseRoutineParam(s)
-        }
-      ) {
-        override def customOperators: Map[String, String] =
-          Map("MYSEARCH" -> "my_search")
-      }
-      capturingExt.parsePlan(infixSql)
+      val rewrittenSql = rewriteInfixSql(ops, infixSql)
       assert(rewrittenSql.contains("my_search(i, j)"),
         s"Infix should be rewritten to function call, got: $rewrittenSql")
-      // Execute the rewritten SQL — this flows through Layer 2 resolution + pushdown
+      // Execute the rewritten SQL -- flows through Layer 2 resolution + pushdown
       val df = sql(rewrittenSql)
       val batch = df.queryExecution.executedPlan.collect {
         case d: BatchScanExec =>
@@ -1118,49 +1117,16 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
   }
 
   test("SPARK-55869: Layer 3 CASE expression alongside infix operator rewrite") {
-    import org.apache.spark.sql.connector.util.CustomOperatorParserExtension
     val cls = classOf[DataSourceV2WithCustomPredicates]
+    val ops = Map("MYSEARCH" -> "my_search")
     withTempView("t1") {
       spark.read.format(cls.getName).load().createTempView("t1")
       // CASE expressions can't be infix operands (parser extension handles simple
       // operands only), but they can coexist in the same WHERE clause.
-      // Test: infix operator + CASE in a separate predicate.
-      val ext = new CustomOperatorParserExtension(spark.sessionState.sqlParser) {
-        override def customOperators: Map[String, String] =
-          Map("MYSEARCH" -> "my_search")
-      }
       val infixSql =
         """SELECT * FROM t1 WHERE i MYSEARCH j
           |AND CASE WHEN i > 7 THEN true ELSE false END""".stripMargin
-      // Verify the extension rewrites the infix part but leaves CASE untouched
-      var rewrittenSql: String = null
-      val capturingExt = new CustomOperatorParserExtension(
-        new org.apache.spark.sql.catalyst.parser.ParserInterface {
-          override def parsePlan(sqlText: String) = {
-            rewrittenSql = sqlText
-            spark.sessionState.sqlParser.parsePlan(sqlText)
-          }
-          override def parseQuery(s: String) = spark.sessionState.sqlParser.parseQuery(s)
-          override def parseExpression(s: String) =
-            spark.sessionState.sqlParser.parseExpression(s)
-          override def parseTableIdentifier(s: String) =
-            spark.sessionState.sqlParser.parseTableIdentifier(s)
-          override def parseFunctionIdentifier(s: String) =
-            spark.sessionState.sqlParser.parseFunctionIdentifier(s)
-          override def parseMultipartIdentifier(s: String) =
-            spark.sessionState.sqlParser.parseMultipartIdentifier(s)
-          override def parseTableSchema(s: String) =
-            spark.sessionState.sqlParser.parseTableSchema(s)
-          override def parseDataType(s: String) =
-            spark.sessionState.sqlParser.parseDataType(s)
-          override def parseRoutineParam(s: String) =
-            spark.sessionState.sqlParser.parseRoutineParam(s)
-        }
-      ) {
-        override def customOperators: Map[String, String] =
-          Map("MYSEARCH" -> "my_search")
-      }
-      capturingExt.parsePlan(infixSql)
+      val rewrittenSql = rewriteInfixSql(ops, infixSql)
       assert(rewrittenSql.contains("my_search(i, j)"),
         s"Infix should be rewritten, got: $rewrittenSql")
       assert(rewrittenSql.contains("CASE"),
