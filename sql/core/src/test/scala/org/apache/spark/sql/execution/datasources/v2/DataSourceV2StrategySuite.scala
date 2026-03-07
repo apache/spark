@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedFunction}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.V2ExpressionBuilder
@@ -1285,5 +1285,63 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
       s"Expected second operator rewrite, got: $result")
     assert(result.contains("col2 > 5"),
       s"Standard predicate should be unchanged, got: $result")
+  }
+
+  test("SPARK-55869: CustomOperatorParserExtension nested AND/OR with multiple operators") {
+    val ops = Map("INDEXQUERY" -> "indexquery", "XYZQUERY" -> "xyzquery")
+    val sql =
+      "SELECT * FROM t WHERE (col INDEXQUERY 'value' AND col1 XYZQUERY 'value2') " +
+      "OR (col2 INDEXQUERY 'value' AND " +
+      "(col3 XYZQUERY 'value3' OR col4 INDEXQUERY 'value4'))"
+
+    // Verify rewritten SQL text
+    val result = rewrittenSQL(ops, sql)
+    assert(result.contains("indexquery(col, 'value')"),
+      s"Expected first INDEXQUERY rewrite, got: $result")
+    assert(result.contains("xyzquery(col1, 'value2')"),
+      s"Expected first XYZQUERY rewrite, got: $result")
+    assert(result.contains("indexquery(col2, 'value')"),
+      s"Expected second INDEXQUERY rewrite, got: $result")
+    assert(result.contains("xyzquery(col3, 'value3')"),
+      s"Expected second XYZQUERY rewrite, got: $result")
+    assert(result.contains("indexquery(col4, 'value4')"),
+      s"Expected third INDEXQUERY rewrite, got: $result")
+
+    // Verify the parsed plan has the correct tree structure
+    val ext = createTestExtension(ops)
+    val plan = ext.parsePlan(sql)
+
+    // Extract the filter condition from Project -> Filter -> ...
+    val filterCondition = plan.collect {
+      case f: org.apache.spark.sql.catalyst.plans.logical.Filter =>
+        f.condition
+    }.head
+
+    // The top-level should be OR
+    filterCondition match {
+      case Or(
+        And(left1, right1),
+        And(left2, Or(innerLeft, innerRight))) =>
+        // (col INDEXQUERY 'value' AND col1 XYZQUERY 'value2')
+        assert(left1.isInstanceOf[UnresolvedFunction])
+        assert(left1.asInstanceOf[UnresolvedFunction]
+          .nameParts == Seq("indexquery"))
+        assert(right1.isInstanceOf[UnresolvedFunction])
+        assert(right1.asInstanceOf[UnresolvedFunction]
+          .nameParts == Seq("xyzquery"))
+        // (col2 INDEXQUERY 'value' AND (...))
+        assert(left2.isInstanceOf[UnresolvedFunction])
+        assert(left2.asInstanceOf[UnresolvedFunction]
+          .nameParts == Seq("indexquery"))
+        // (col3 XYZQUERY 'value3' OR col4 INDEXQUERY 'value4')
+        assert(innerLeft.isInstanceOf[UnresolvedFunction])
+        assert(innerLeft.asInstanceOf[UnresolvedFunction]
+          .nameParts == Seq("xyzquery"))
+        assert(innerRight.isInstanceOf[UnresolvedFunction])
+        assert(innerRight.asInstanceOf[UnresolvedFunction]
+          .nameParts == Seq("indexquery"))
+      case other =>
+        fail(s"Expected Or(And(...), And(..., Or(...))), got: $other")
+    }
   }
 }
