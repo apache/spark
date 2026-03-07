@@ -1010,4 +1010,17 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         s"Expression $expr should be context independent foldable")
     }
   }
+
+  test("SPARK-55557: hyperbolic functions should not overflow with large inputs") {
+    checkEvaluation(Asinh(Double.MaxValue), 710.4758600739439)
+    checkEvaluation(Asinh(Math.sqrt(Double.MaxValue)), 355.58450362725193)
+    checkEvaluation(Acosh(Double.MaxValue), 710.4758600739439)
+    checkEvaluation(Acosh(Math.sqrt(Double.MaxValue)), 355.58450362725193)
+    checkEvaluation(Asinh(Double.MinValue), -710.4758600739439)
+    checkEvaluation(Asinh(-Math.sqrt(Double.MaxValue)), -355.58450362725193)
+    checkNaN(Acosh(Double.MinValue))
+    checkNaN(Acosh(-Math.sqrt(Double.MaxValue) + 1))
+    checkNaN(Acosh(-Math.sqrt(Double.MaxValue) + 2))
+  }
+
 }
