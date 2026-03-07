@@ -2109,22 +2109,22 @@ class DataSourceV2SQLSuiteV1Filter
         checkError(
           exception = analysisException(
             s"CREATE TABLE t ($c0 INT) USING $v2Source PARTITIONED BY ($c0, $c1)"),
-          condition = "_LEGACY_ERROR_TEMP_3058",
+          condition = "DUPLICATE_PARTITION_TRANSFORM",
           parameters = Map("checkType" -> "in the partitioning", "duplicateColumns" -> dupCol))
         checkError(
           exception = analysisException(
             s"CREATE TABLE testcat.t ($c0 INT) USING $v2Source PARTITIONED BY ($c0, $c1)"),
-          condition = "_LEGACY_ERROR_TEMP_3058",
+          condition = "DUPLICATE_PARTITION_TRANSFORM",
           parameters = Map("checkType" -> "in the partitioning", "duplicateColumns" -> dupCol))
         checkError(
           exception = analysisException(
             s"CREATE OR REPLACE TABLE t ($c0 INT) USING $v2Source PARTITIONED BY ($c0, $c1)"),
-          condition = "_LEGACY_ERROR_TEMP_3058",
+          condition = "DUPLICATE_PARTITION_TRANSFORM",
           parameters = Map("checkType" -> "in the partitioning", "duplicateColumns" -> dupCol))
         checkError(
           exception = analysisException(s"CREATE OR REPLACE TABLE testcat.t ($c0 INT) " +
             s"USING $v2Source PARTITIONED BY ($c0, $c1)"),
-          condition = "_LEGACY_ERROR_TEMP_3058",
+          condition = "DUPLICATE_PARTITION_TRANSFORM",
           parameters = Map("checkType" -> "in the partitioning", "duplicateColumns" -> dupCol))
       }
     }
