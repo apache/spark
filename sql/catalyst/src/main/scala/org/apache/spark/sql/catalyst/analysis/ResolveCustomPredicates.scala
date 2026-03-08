@@ -44,7 +44,7 @@ object ResolveCustomPredicates extends Rule[LogicalPlan] {
     if (!SQLConf.get.extendedPredicatePushdownEnabled) return plan
     // Only resolve custom predicates in Filter nodes: custom predicates are
     // WHERE-only constructs. If a custom predicate name appears elsewhere
-    // (e.g. SELECT list), it stays unresolved → ResolveFunctions reports an error.
+    // (e.g. SELECT list), it stays unresolved and ResolveFunctions reports an error.
     plan.resolveOperatorsUp {
     case f @ Filter(condition, child) if hasUnresolvedFunctions(condition) =>
       val descriptors = collectCustomPredicates(child)
