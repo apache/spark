@@ -117,12 +117,16 @@ abstract class CustomOperatorParserExtension(delegate: ParserInterface)
   }
 
   /**
-   * Replace string literals, double-quoted identifiers, and SQL comments
-   * with placeholders to avoid rewriting inside them. Handles:
+   * Replace string literals, quoted identifiers, and SQL comments with
+   * placeholders to avoid rewriting inside them. Handles:
    * - Single-quoted strings with SQL-style '' escaping
-   * - Double-quoted identifiers
+   * - Double-quoted identifiers with "" escaping
+   * - Backtick-quoted identifiers
    * - Line comments (-- to end of line)
    * - Block comments (/* ... */)
+   *
+   * Similar to [[org.apache.spark.sql.catalyst.util.StringUtils.stripComment]]
+   * but masks (preserves for restoration) instead of stripping.
    */
   private def maskStringLiterals(
       sql: String, literals: ArrayBuffer[String]): String = {
@@ -130,8 +134,8 @@ abstract class CustomOperatorParserExtension(delegate: ParserInterface)
     var i = 0
     while (i < sql.length) {
       val ch = sql.charAt(i)
-      if (ch == '\'' || ch == '"') {
-        // Single-quoted string or double-quoted identifier
+      if (ch == '\'' || ch == '"' || ch == '`') {
+        // Single-quoted string, double-quoted identifier, or backtick-quoted identifier
         val quote = ch
         val start = i
         i += 1

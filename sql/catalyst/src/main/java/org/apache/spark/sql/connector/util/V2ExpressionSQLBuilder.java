@@ -135,15 +135,8 @@ public class V2ExpressionSQLBuilder {
         case "OVERLAY" -> visitOverlay(expressionsToStringArray(e.children()));
         // Custom predicates use dot-qualified canonical names (e.g. "COM.MYCO.FUNC").
         // Render those as SQL function calls; fail on other unknown names.
-        // Use `name` (not `expr`) in the error to avoid infinite recursion:
-        // String.valueOf(expr) → toString() → build() → visitUnexpectedExpr → ...
-        default -> {
-          if (name.contains(".")) {
-            yield visitSQLFunction(name, e.children());
-          }
-          throw new SparkIllegalArgumentException(
-              "_LEGACY_ERROR_TEMP_3207", Map.of("expr", name));
-        }
+        default -> name.contains(".") ?
+            visitSQLFunction(name, e.children()) : visitUnexpectedExpr(expr);
       };
     } else if (expr instanceof Min min) {
       return visitAggregateFunction("MIN", false, min.children());
@@ -339,9 +332,13 @@ public class V2ExpressionSQLBuilder {
       Map.of("class", this.getClass().getSimpleName(), "funcName", funcName));
   }
 
+  // Use expr.getClass().getSimpleName() instead of String.valueOf(expr) to avoid
+  // infinite recursion: ExpressionWithToString.toString() calls build() which can
+  // reach visitUnexpectedExpr again for unknown expressions.
   protected String visitUnexpectedExpr(Expression expr) throws IllegalArgumentException {
     throw new SparkIllegalArgumentException(
-      "_LEGACY_ERROR_TEMP_3207", Map.of("expr", String.valueOf(expr)));
+      "_LEGACY_ERROR_TEMP_3207",
+      Map.of("expr", expr.getClass().getSimpleName()));
   }
 
   protected String visitOverlay(String[] inputs) {
