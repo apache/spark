@@ -145,4 +145,4 @@ SELECT ST_Srid(ST_SetSrid(ST_GeomFromWKB(X'0101000000000000000000F03F00000000000
 
 ### Data Types Reference
 
-For the full list of supported data types and API usage in Scala, Java, Python, R, and SQL, see [Data Types](sql-ref-datatypes.html).
+For the full list of supported data types and API usage in Scala, Java, Python, and SQL, see [Data Types](sql-ref-datatypes.html).
