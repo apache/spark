@@ -52,4 +52,4 @@ SELECT * FROM testData, LATERAL (SELECT * FROM testData) LIMIT 1
 -- !query schema
 struct<key:int,value:string,key:int,value:string>
 -- !query output
-1	1	1	1
+

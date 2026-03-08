@@ -2177,8 +2177,9 @@ class DataFrameSuite extends QueryTest
     val e = intercept[AnalysisException] {
       sql("WITH t AS (SELECT 1 FROM nonexist.t) SELECT * FROM t")
     }
-    checkErrorTableNotFound(e, "`nonexist`.`t`",
-      ExpectedContext("nonexist.t", 25, 34))
+    checkErrorTableNotFoundWithSearchPath(e, "`nonexist`.`t`",
+      ExpectedContext("nonexist.t", 25, 34),
+      defaultSearchPathForTests)
   }
 
   test("SPARK-32680: Don't analyze CTAS with unresolved query") {

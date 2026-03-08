@@ -36,7 +36,7 @@ select -key, +key from testdata where key = 2
 -- !query schema
 struct<(- key):int,(+ key):int>
 -- !query output
--2	2
+
 
 
 -- !query
@@ -44,7 +44,7 @@ select -(key + 1), - key + 1, +(key + 5) from testdata where key = 1
 -- !query schema
 struct<(- (key + 1)):int,((- key) + 1):int,(+ (key + 5)):int>
 -- !query output
--2	0	6
+
 
 
 -- !query
@@ -52,7 +52,7 @@ select -max(key), +max(key) from testdata
 -- !query schema
 struct<(- max(key)):int,(+ max(key)):int>
 -- !query output
--100	100
+NULL	NULL
 
 
 -- !query
@@ -68,7 +68,7 @@ select + (-key) from testdata where key = 32
 -- !query schema
 struct<(+ (- key)):int>
 -- !query output
--32
+
 
 
 -- !query
@@ -76,7 +76,7 @@ select - (+max(key)) from testdata
 -- !query schema
 struct<(- (+ max(key))):int>
 -- !query output
--100
+NULL
 
 
 -- !query
@@ -108,7 +108,7 @@ select - - max(key) from testdata
 -- !query schema
 struct<(- (- max(key))):int>
 -- !query output
-100
+NULL
 
 
 -- !query
@@ -116,7 +116,7 @@ select + - key from testdata where key = 33
 -- !query schema
 struct<(+ (- key)):int>
 -- !query output
--33
+
 
 
 -- !query

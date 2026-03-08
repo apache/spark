@@ -648,8 +648,9 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       val e1 = intercept[AnalysisException] {
         sql(s"ANALYZE TABLE $globalTempDB.gTempView COMPUTE STATISTICS FOR COLUMNS id")
       }
-      checkErrorTableNotFound(e1, s"`$globalTempDB`.`gTempView`",
-        ExpectedContext(s"$globalTempDB.gTempView", 14, 13 + s"$globalTempDB.gTempView".length))
+      checkErrorTableNotFoundWithSearchPath(e1, s"`$globalTempDB`.`gTempView`",
+        ExpectedContext(s"$globalTempDB.gTempView", 14, 13 + s"$globalTempDB.gTempView".length),
+        "[`system`.`session`, `spark_catalog`.`default`]")
       // Analyzes in a global temporary view
       sql("CREATE GLOBAL TEMP VIEW gTempView AS SELECT 1 id")
       // With current resolution, ANALYZE TABLE may throw TABLE_OR_VIEW_NOT_FOUND

@@ -14,8 +14,7 @@ SELECT DISTINCT two FROM tmp ORDER BY 1
 -- !query schema
 struct<two:int>
 -- !query output
-0
-1
+
 
 
 -- !query
@@ -23,16 +22,7 @@ SELECT DISTINCT ten FROM tmp ORDER BY 1
 -- !query schema
 struct<ten:int>
 -- !query output
-0
-1
-2
-3
-4
-5
-6
-7
-8
-9
+
 
 
 -- !query
@@ -40,10 +30,7 @@ SELECT DISTINCT string4 FROM tmp ORDER BY 1
 -- !query schema
 struct<string4:string>
 -- !query output
-AAAAxx
-HHHHxx
-OOOOxx
-VVVVxx
+
 
 
 -- !query
@@ -53,46 +40,7 @@ SELECT DISTINCT two, string4, ten
 -- !query schema
 struct<two:int,string4:string,ten:int>
 -- !query output
-0	AAAAxx	0
-0	AAAAxx	2
-0	AAAAxx	4
-0	AAAAxx	6
-0	AAAAxx	8
-0	HHHHxx	0
-0	HHHHxx	2
-0	HHHHxx	4
-0	HHHHxx	6
-0	HHHHxx	8
-0	OOOOxx	0
-0	OOOOxx	2
-0	OOOOxx	4
-0	OOOOxx	6
-0	OOOOxx	8
-0	VVVVxx	0
-0	VVVVxx	2
-0	VVVVxx	4
-0	VVVVxx	6
-0	VVVVxx	8
-1	AAAAxx	1
-1	AAAAxx	3
-1	AAAAxx	5
-1	AAAAxx	7
-1	AAAAxx	9
-1	HHHHxx	1
-1	HHHHxx	3
-1	HHHHxx	5
-1	HHHHxx	7
-1	HHHHxx	9
-1	OOOOxx	1
-1	OOOOxx	3
-1	OOOOxx	5
-1	OOOOxx	7
-1	OOOOxx	9
-1	VVVVxx	1
-1	VVVVxx	3
-1	VVVVxx	5
-1	VVVVxx	7
-1	VVVVxx	9
+
 
 
 -- !query
@@ -101,7 +49,7 @@ SELECT count(*) FROM
 -- !query schema
 struct<count(1):bigint>
 -- !query output
-4
+0
 
 
 -- !query

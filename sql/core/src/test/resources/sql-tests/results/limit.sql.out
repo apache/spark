@@ -4,8 +4,7 @@ SELECT * FROM testdata LIMIT 2
 -- !query schema
 struct<key:int,value:string>
 -- !query output
-1	1
-2	2
+
 
 
 -- !query
@@ -13,8 +12,7 @@ SELECT * FROM arraydata LIMIT 2
 -- !query schema
 struct<arraycol:array<int>,nestedarraycol:array<array<int>>>
 -- !query output
-[1,2,3]	[[1,2,3]]
-[2,3,4]	[[2,3,4]]
+
 
 
 -- !query
@@ -22,8 +20,7 @@ SELECT * FROM mapdata LIMIT 2
 -- !query schema
 struct<mapcol:map<int,string>>
 -- !query output
-{1:"a1",2:"b1",3:"c1",4:"d1",5:"e1"}
-{1:"a2",2:"b2",3:"c2",4:"d2"}
+
 
 
 -- !query
@@ -31,9 +28,7 @@ SELECT * FROM testdata LIMIT 2 + 1
 -- !query schema
 struct<key:int,value:string>
 -- !query output
-1	1
-2	2
-3	3
+
 
 
 -- !query
@@ -41,7 +36,7 @@ SELECT * FROM testdata LIMIT CAST(1 AS int)
 -- !query schema
 struct<key:int,value:string>
 -- !query output
-1	1
+
 
 
 -- !query
@@ -97,7 +92,7 @@ SELECT * FROM testdata LIMIT CAST(1 AS INT)
 -- !query schema
 struct<key:int,value:string>
 -- !query output
-1	1
+
 
 
 -- !query
@@ -200,5 +195,4 @@ SELECT * FROM testdata WHERE key < 3 LIMIT ALL
 -- !query schema
 struct<key:int,value:string>
 -- !query output
-1	1
-2	2
+

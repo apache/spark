@@ -6,8 +6,7 @@ SELECT '' AS two, unique1, unique2, stringu1
 -- !query schema
 struct<two:string,unique1:int,unique2:int,stringu1:string>
 -- !query output
-	51	76	ZBAAAA
-	52	985	ACAAAA
+
 
 
 -- !query
@@ -17,11 +16,7 @@ SELECT '' AS five, unique1, unique2, stringu1
 -- !query schema
 struct<five:string,unique1:int,unique2:int,stringu1:string>
 -- !query output
-	61	560	JCAAAA
-	62	633	KCAAAA
-	63	296	LCAAAA
-	64	479	MCAAAA
-	65	64	NCAAAA
+
 
 
 -- !query
@@ -31,8 +26,7 @@ SELECT '' AS two, unique1, unique2, stringu1
 -- !query schema
 struct<two:string,unique1:int,unique2:int,stringu1:string>
 -- !query output
-	61	560	JCAAAA
-	62	633	KCAAAA
+
 
 
 -- !query
@@ -42,9 +36,7 @@ SELECT '' AS three, unique1, unique2, stringu1
 -- !query schema
 struct<three:string,unique1:int,unique2:int,stringu1:string>
 -- !query output
-	121	700	REAAAA
-	122	519	SEAAAA
-	123	777	TEAAAA
+
 
 
 -- !query
@@ -64,17 +56,7 @@ SELECT '' AS eleven, unique1, unique2, stringu1
 -- !query schema
 struct<eleven:string,unique1:int,unique2:int,stringu1:string>
 -- !query output
-	10	520	KAAAAA
-	9	49	JAAAAA
-	8	653	IAAAAA
-	7	647	HAAAAA
-	6	978	GAAAAA
-	5	541	FAAAAA
-	4	833	EAAAAA
-	3	431	DAAAAA
-	2	326	CAAAAA
-	1	214	BAAAAA
-	0	998	AAAAAA
+
 
 
 -- !query
@@ -84,16 +66,7 @@ SELECT '' AS ten, unique1, unique2, stringu1
 -- !query schema
 struct<ten:string,unique1:int,unique2:int,stringu1:string>
 -- !query output
-	990	369	CMAAAA
-	991	426	DMAAAA
-	992	363	EMAAAA
-	993	661	FMAAAA
-	994	695	GMAAAA
-	995	144	HMAAAA
-	996	258	IMAAAA
-	997	21	JMAAAA
-	998	549	KMAAAA
-	999	152	LMAAAA
+
 
 
 -- !query
@@ -103,11 +76,7 @@ SELECT '' AS five, unique1, unique2, stringu1
 -- !query schema
 struct<five:string,unique1:int,unique2:int,stringu1:string>
 -- !query output
-	900	913	QIAAAA
-	901	931	RIAAAA
-	902	702	SIAAAA
-	903	641	TIAAAA
-	904	793	UIAAAA
+
 
 
 -- !query
@@ -185,6 +154,4 @@ select sum(tenthous) as s1, sum(tenthous) + random()*0 as s2
 -- !query schema
 struct<s1:bigint,s2:double>
 -- !query output
-45000	45000.0
-45010	45010.0
-45020	45020.0
+

@@ -19,13 +19,17 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 
 import java.util.HashSet
 
+import scala.jdk.CollectionConverters._
+
 import org.apache.spark.SparkException
+import org.apache.spark.SparkThrowableHelper
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{
   withPosition,
   AnalysisErrorAt,
   FunctionResolution,
   MultiInstanceRelation,
+  NoSuchTableException,
   RelationCache,
   RelationResolution,
   ResolvedInlineTable,
@@ -509,26 +513,49 @@ class Resolver(
    */
   private def resolveRelation(unresolvedRelation: UnresolvedRelation): LogicalPlan = {
     viewResolver.withSourceUnresolvedRelation(unresolvedRelation) {
-      val maybeResolvedRelation =
-        relationMetadataProvider.getRelationWithResolvedMetadata(unresolvedRelation)
+      try {
+        val maybeResolvedRelation =
+          relationMetadataProvider.getRelationWithResolvedMetadata(unresolvedRelation)
 
-      val resolvedRelation = maybeResolvedRelation match {
-        case Some(relationsWithResolvedMetadata) =>
-          planLogger.logPlanResolutionEvent(
-            relationsWithResolvedMetadata,
-            "Relation metadata retrieved"
-          )
+        val resolvedRelation = maybeResolvedRelation match {
+          case Some(relationsWithResolvedMetadata) =>
+            planLogger.logPlanResolutionEvent(
+              relationsWithResolvedMetadata,
+              "Relation metadata retrieved"
+            )
 
-          relationsWithResolvedMetadata
-        case None =>
-          val multipartId = unresolvedRelation.multipartIdentifier
+            relationsWithResolvedMetadata
+          case None =>
+            val multipartId = unresolvedRelation.multipartIdentifier
+            val catalogPath = (catalogManager.currentCatalog.name() +:
+              catalogManager.currentNamespace).toSeq
+            val searchPath = SQLConf.get.resolutionSearchPath(catalogPath).map(toSQLId)
+            unresolvedRelation.tableNotFound(multipartId, searchPath)
+        }
+
+        resolve(resolvedRelation)
+      } catch {
+        case e: NoSuchTableException
+            if e.getCondition == "TABLE_OR_VIEW_NOT_FOUND" &&
+              Option(e.getMessageParameters.get("searchPath")).contains("") =>
+          // Catalog/code paths that throw NoSuchTableException use legacy constructors
+          // with searchPath -> "". Replace with the actual resolution search path.
           val catalogPath = (catalogManager.currentCatalog.name() +:
             catalogManager.currentNamespace).toSeq
-          val searchPath = SQLConf.get.resolutionSearchPath(catalogPath).map(toSQLId)
-          unresolvedRelation.tableNotFound(multipartId, searchPath)
+          val searchPathSeq = SQLConf.get.resolutionSearchPath(catalogPath)
+          val formattedPath = searchPathSeq.map(toSQLId).mkString("[", ", ", "]")
+          val updatedParams =
+            e.getMessageParameters.asScala.toMap.updated("searchPath", formattedPath)
+          val newEx = new AnalysisException(
+            SparkThrowableHelper.getMessage("TABLE_OR_VIEW_NOT_FOUND", updatedParams.asJava),
+            line = None,
+            startPosition = None,
+            cause = None,
+            errorClass = Some("TABLE_OR_VIEW_NOT_FOUND"),
+            messageParameters = updatedParams,
+            context = e.getQueryContext)
+          throw Option(e.origin).fold(newEx)(newEx.withPosition)
       }
-
-      resolve(resolvedRelation)
     }
   }
 

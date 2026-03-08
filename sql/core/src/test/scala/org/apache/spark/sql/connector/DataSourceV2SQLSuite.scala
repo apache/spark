@@ -752,7 +752,7 @@ class DataSourceV2SQLSuiteV1Filter
             s"AS SELECT id, data FROM source")
         },
         condition = "TABLE_OR_VIEW_NOT_FOUND",
-        parameters = Map("relationName" -> "`replaced`"))
+        parameters = Map("relationName" -> "`replaced`", "searchPath" -> ""))
     }
   }
 
@@ -767,7 +767,7 @@ class DataSourceV2SQLSuiteV1Filter
           s" AS SELECT id, data FROM source")
       },
       condition = "TABLE_OR_VIEW_NOT_FOUND",
-      parameters = Map("relationName" -> "`replaced`"))
+      parameters = Map("relationName" -> "`replaced`", "searchPath" -> ""))
   }
 
   test("CreateTableAsSelect: use v2 plan and session catalog when provider is v2") {
@@ -2370,7 +2370,9 @@ class DataSourceV2SQLSuiteV1Filter
              |THEN INSERT *
            """.stripMargin),
         condition = "TABLE_OR_VIEW_NOT_FOUND",
-        parameters = Map("relationName" -> "`testcat`.`ns1`.`ns2`.`dummy`"),
+        parameters = Map(
+          "relationName" -> "`testcat`.`ns1`.`ns2`.`dummy`",
+          "searchPath" -> defaultSearchPathForTests),
         context = ExpectedContext(
           fragment = "testcat.ns1.ns2.dummy",
           start = 12,
@@ -2390,7 +2392,9 @@ class DataSourceV2SQLSuiteV1Filter
              |THEN INSERT *
            """.stripMargin),
         condition = "TABLE_OR_VIEW_NOT_FOUND",
-        parameters = Map("relationName" -> "`testcat`.`ns1`.`ns2`.`dummy`"),
+        parameters = Map(
+          "relationName" -> "`testcat`.`ns1`.`ns2`.`dummy`",
+          "searchPath" -> defaultSearchPathForTests),
         context = ExpectedContext(
           fragment = "testcat.ns1.ns2.dummy",
           start = 51,
@@ -2460,8 +2464,9 @@ class DataSourceV2SQLSuiteV1Filter
 
   test("AlterTable: renaming views are not supported") {
     val e = analysisException(s"ALTER VIEW testcat.ns.tbl RENAME TO ns.view")
-    checkErrorTableNotFound(e, "`testcat`.`ns`.`tbl`",
-      ExpectedContext("testcat.ns.tbl", 11, 10 + "testcat.ns.tbl".length))
+    checkErrorTableNotFoundWithSearchPath(e, "`testcat`.`ns`.`tbl`",
+      ExpectedContext("testcat.ns.tbl", 11, 10 + "testcat.ns.tbl".length),
+      "[`system`.`session`, `spark_catalog`.`default`]")
   }
 
   test("ANALYZE TABLE") {
@@ -2516,8 +2521,9 @@ class DataSourceV2SQLSuiteV1Filter
 
     // Test a scenario where a table does not exist.
     val e = analysisException(s"UNCACHE TABLE $t")
-    checkErrorTableNotFound(e, "`testcat`.`ns1`.`ns2`.`tbl`",
-      ExpectedContext(t, 14, 13 + t.length))
+    checkErrorTableNotFoundWithSearchPath(e, "`testcat`.`ns1`.`ns2`.`tbl`",
+      ExpectedContext(t, 14, 13 + t.length),
+      defaultSearchPathForTests)
 
     // If "IF EXISTS" is set, UNCACHE TABLE will not throw an exception.
     sql(s"UNCACHE TABLE IF EXISTS $t")
@@ -2789,7 +2795,7 @@ class DataSourceV2SQLSuiteV1Filter
       exception = analysisException(sql1),
       "`abc`",
       ExpectedContext(fragment = "abc", start = 17, stop = 19),
-      defaultSearchPathForTests)
+      "[`system`.`session`, `spark_catalog`.`default`]")
 
     // V2 non-session catalog is used.
     withTable("testcat.ns1.ns2.t") {

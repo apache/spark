@@ -262,8 +262,8 @@ trait InsertIntoSQLOnlyTests
           checkErrorTableNotFoundWithSearchPath(e, parsed,
             ExpectedContext(t2, 12, 11 + t2.length), defaultSearchPathForTests)
         } else {
-          checkErrorTableNotFound(e, parsed,
-            ExpectedContext(t2, 12, 11 + t2.length))
+          checkErrorTableNotFoundWithSearchPath(e, parsed,
+            ExpectedContext(t2, 12, 11 + t2.length), defaultSearchPathForTests)
         }
       }
     }

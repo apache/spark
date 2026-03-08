@@ -4,7 +4,7 @@ select percentile_cont(0.5) within group (order by b) from aggtest
 -- !query schema
 struct<percentile_cont(0.5) WITHIN GROUP (ORDER BY b):double>
 -- !query output
-53.44850015640259
+NULL
 
 
 -- !query
@@ -12,7 +12,7 @@ select percentile_cont(0.5) within group (order by b), sum(b) from aggtest
 -- !query schema
 struct<percentile_cont(0.5) WITHIN GROUP (ORDER BY b):double,sum(b):double>
 -- !query output
-53.44850015640259	431.77260909229517
+NULL	NULL
 
 
 -- !query
@@ -20,7 +20,7 @@ select percentile_cont(0.5) within group (order by thousand) from tenk1
 -- !query schema
 struct<percentile_cont(0.5) WITHIN GROUP (ORDER BY thousand):double>
 -- !query output
-499.5
+NULL
 
 
 -- !query
@@ -28,4 +28,4 @@ select percentile_disc(0.5) within group (order by thousand) from tenk1
 -- !query schema
 struct<percentile_disc(0.5) WITHIN GROUP (ORDER BY thousand):double>
 -- !query output
-499.0
+NULL

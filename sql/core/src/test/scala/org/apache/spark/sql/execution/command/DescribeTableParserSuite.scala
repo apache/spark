@@ -100,10 +100,11 @@ class DescribeTableParserSuite extends SharedSparkSession with AnalysisTest {
     val sqlStatement = s"DESCRIBE TABLE $tbl"
     val startPos = sqlStatement.indexOf(tbl)
     assert(startPos != -1)
+    val ddlSearchPath = "[`system`.`session`, `spark_catalog`.`default`]"
     assertAnalysisErrorCondition(
       parsePlan(sqlStatement),
       "TABLE_OR_VIEW_NOT_FOUND",
-      Map("relationName" -> s"`$tbl`"),
+      Map("relationName" -> s"`$tbl`", "searchPath" -> ddlSearchPath),
       Array(ExpectedContext(tbl, startPos, startPos + tbl.length - 1))
     )
   }

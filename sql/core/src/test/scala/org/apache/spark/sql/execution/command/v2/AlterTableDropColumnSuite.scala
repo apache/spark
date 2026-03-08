@@ -47,7 +47,7 @@ class AlterTableDropColumnSuite
         },
         "`does_not_exist`",
         ExpectedContext(fragment = "does_not_exist", start = 12, stop = 25),
-        defaultSearchPathForTests)
+        "[`system`.`session`, `spark_catalog`.`default`]")
     }
   }
 

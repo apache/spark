@@ -173,14 +173,16 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
     val exp1 = intercept[AnalysisException] {
       sql("ALTER TABLE h2.test.not_existing_table RENAME TO test.dst_table")
     }
-    checkErrorTableNotFound(exp1, "`h2`.`test`.`not_existing_table`",
-      ExpectedContext("h2.test.not_existing_table", 12, 11 + "h2.test.not_existing_table".length))
+    checkErrorTableNotFoundWithSearchPath(exp1, "`h2`.`test`.`not_existing_table`",
+      ExpectedContext("h2.test.not_existing_table", 12, 11 + "h2.test.not_existing_table".length),
+      "[`system`.`session`, `spark_catalog`.`default`]")
     val exp2 = intercept[AnalysisException] {
       sql("ALTER TABLE h2.bad_test.not_existing_table RENAME TO test.dst_table")
     }
-    checkErrorTableNotFound(exp2, "`h2`.`bad_test`.`not_existing_table`",
+    checkErrorTableNotFoundWithSearchPath(exp2, "`h2`.`bad_test`.`not_existing_table`",
       ExpectedContext("h2.bad_test.not_existing_table", 12,
-        11 + "h2.bad_test.not_existing_table".length))
+        11 + "h2.bad_test.not_existing_table".length),
+      "[`system`.`session`, `spark_catalog`.`default`]")
     // Rename to an existing table
     withTable("h2.test.dst_table") {
       withConnection { conn =>
@@ -224,7 +226,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       val e = intercept[AnalysisException] {
         spark.table(table).schema
       }
-      checkErrorTableNotFound(e, expected)
+      checkErrorTableNotFoundWithSearchPath(e, expected, defaultSearchPathForTests)
     }
   }
 
@@ -293,8 +295,9 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       val e = intercept[AnalysisException] {
         sql(s"ALTER TABLE $table ADD COLUMNS (C4 STRING)")
       }
-      checkErrorTableNotFound(e, expected,
-        ExpectedContext(table, 12, 11 + table.length))
+      checkErrorTableNotFoundWithSearchPath(e, expected,
+        ExpectedContext(table, 12, 11 + table.length),
+        "[`system`.`session`, `spark_catalog`.`default`]")
     }
   }
 
@@ -332,8 +335,9 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       val e = intercept[AnalysisException] {
         sql(s"ALTER TABLE $table RENAME COLUMN ID TO C")
       }
-      checkErrorTableNotFound(e, expected,
-        ExpectedContext(table, 12, 11 + table.length))
+      checkErrorTableNotFoundWithSearchPath(e, expected,
+        ExpectedContext(table, 12, 11 + table.length),
+        "[`system`.`session`, `spark_catalog`.`default`]")
     }
   }
 
@@ -368,8 +372,9 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       val e = intercept[AnalysisException] {
         sql(s"ALTER TABLE $table DROP COLUMN C1")
       }
-      checkErrorTableNotFound(e, expected,
-        ExpectedContext(table, 12, 11 + table.length))
+      checkErrorTableNotFoundWithSearchPath(e, expected,
+        ExpectedContext(table, 12, 11 + table.length),
+        "[`system`.`session`, `spark_catalog`.`default`]")
     }
   }
 
@@ -417,8 +422,9 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       val e = intercept[AnalysisException] {
         sql(s"ALTER TABLE $table ALTER COLUMN id TYPE DOUBLE")
       }
-      checkErrorTableNotFound(e, expected,
-        ExpectedContext(table, 12, 11 + table.length))
+      checkErrorTableNotFoundWithSearchPath(e, expected,
+        ExpectedContext(table, 12, 11 + table.length),
+        "[`system`.`session`, `spark_catalog`.`default`]")
     }
   }
 
@@ -458,8 +464,9 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       val e = intercept[AnalysisException] {
         sql(s"ALTER TABLE $table ALTER COLUMN ID DROP NOT NULL")
       }
-      checkErrorTableNotFound(e, expected,
-        ExpectedContext(table, 12, 11 + table.length))
+      checkErrorTableNotFoundWithSearchPath(e, expected,
+        ExpectedContext(table, 12, 11 + table.length),
+        "[`system`.`session`, `spark_catalog`.`default`]")
     }
   }
 
@@ -553,8 +560,9 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       val e = intercept[AnalysisException] {
         sql(s"ALTER TABLE $table ALTER COLUMN ID COMMENT 'test'")
       }
-      checkErrorTableNotFound(e, expected,
-        ExpectedContext(table, 12, 11 + table.length))
+      checkErrorTableNotFoundWithSearchPath(e, expected,
+        ExpectedContext(table, 12, 11 + table.length),
+        "[`system`.`session`, `spark_catalog`.`default`]")
     }
   }
 

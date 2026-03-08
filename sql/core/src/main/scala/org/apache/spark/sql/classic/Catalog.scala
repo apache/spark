@@ -187,7 +187,9 @@ class Catalog(sparkSession: SparkSession) extends catalog.Catalog {
     } catch {
       case e: SparkThrowable with Throwable =>
         Catalog.ListTable.ERROR_HANDLING_RULES.get(e.getCondition) match {
-          case Some(Catalog.ListTable.Skip) => None
+          case Some(Catalog.ListTable.Skip) =>
+            // Skip only for qualified lookups (namespace specified); unqualified -> throw
+            if (namespaceName.nonEmpty) None else throw e
           case Some(Catalog.ListTable.ReturnPartialResults) if !isTempView =>
             Some(new Table(
               name = tableName,
