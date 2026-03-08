@@ -56,6 +56,10 @@
   --spark-dag-node-fill: #1b4f72;
 }
 
+#dag-viz-graph {
+  overflow-x: auto;
+}
+
 #dag-viz-graph a, #dag-viz-graph a:hover {
   text-decoration: none;
 }
