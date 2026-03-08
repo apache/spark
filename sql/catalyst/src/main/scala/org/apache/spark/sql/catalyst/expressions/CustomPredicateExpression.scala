@@ -47,7 +47,7 @@ case class CustomPredicateExpression(
   override lazy val deterministic: Boolean = descriptor.isDeterministic
 
   override def eval(input: InternalRow): Any = {
-    throw new SparkException(
+    throw SparkException.internalError(
       s"Custom predicate '${descriptor.sqlName()}' cannot be evaluated by Spark. " +
       s"It must be pushed to the data source '${descriptor.canonicalName()}'.")
   }

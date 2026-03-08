@@ -633,6 +633,10 @@ private[sql] object DataSourceV2Strategy extends Logging {
   /**
    * Tries to translate a Catalyst [[Expression]] into data source [[Filter]].
    *
+   * This convenience method does not pass extraCapabilities, so only default
+   * (always-on) predicates are translated. Callers needing capability-gated
+   * predicates (LIKE, RLIKE, etc.) should use translateFilterV2WithMapping directly.
+   *
    * @return a `Some[Filter]` if the input [[Expression]] is convertible, otherwise a `None`.
    */
   protected[sql] def translateFilterV2(predicate: Expression): Option[Predicate] = {

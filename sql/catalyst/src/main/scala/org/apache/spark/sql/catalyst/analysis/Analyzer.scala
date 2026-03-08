@@ -2102,6 +2102,11 @@ class Analyzer(
      * Collects custom predicate SQL names from DSv2 tables referenced in the plan.
      * Checks temp views (via catalog lookup) and already-resolved DataSourceV2Relations.
      * Returns an empty set quickly when the feature is disabled or no DSv2 relations exist.
+     *
+     * Note: This is called once per LookupFunctions invocation on a partially resolved
+     * plan. If relations are resolved in later iterations, new custom predicate names
+     * will be picked up on the next LookupFunctions pass (the Resolution batch is
+     * fixed-point, so this converges).
      */
     private def collectCustomPredicateNames(plan: LogicalPlan): Set[String] = {
       if (!conf.extendedPredicatePushdownEnabled) return Set.empty

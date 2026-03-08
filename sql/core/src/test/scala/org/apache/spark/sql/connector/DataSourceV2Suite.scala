@@ -1334,6 +1334,24 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
     }
   }
 
+  test("SPARK-55869: Ambiguous cross-table custom predicate fails with clear error") {
+    val cls1 = classOf[DataSourceV2WithCustomPredicates]
+    val cls2 = classOf[DataSourceV2WithConflictingCustomPredicate]
+    withTempView("t1", "t2") {
+      spark.read.format(cls1.getName).load().createTempView("t1")
+      spark.read.format(cls2.getName).load().createTempView("t2")
+      // Both tables declare a custom predicate with sqlName "my_search" but different
+      // canonical names. A join query referencing "my_search" should fail.
+      val e = intercept[SparkException] {
+        sql("SELECT * FROM t1 JOIN t2 ON t1.i = t2.i WHERE my_search(t1.i, t1.j)").collect()
+      }
+      assert(e.getMessage.contains("Ambiguous") || e.getMessage.contains("ambiguous") ||
+        (e.getCause != null && (e.getCause.getMessage.contains("Ambiguous") ||
+          e.getCause.getMessage.contains("ambiguous"))),
+        s"Expected ambiguous predicate error, got: ${e.getMessage}")
+    }
+  }
+
   test("SPARK-47463: Pushed down v2 filter with if expression") {
     withTempView("t1") {
       spark.read.format(classOf[AdvancedDataSourceV2WithV2Filter].getName).load()
@@ -2411,6 +2429,26 @@ class StringScanBuilderWithILikeCapability extends ScanBuilder
   override def build(): Scan = this
 
   override def toBatch: Batch = new StringBatchWithV2Filter(predicates)
+}
+
+class DataSourceV2WithConflictingCustomPredicate extends TestingV2Source {
+  override def getTable(options: CaseInsensitiveStringMap): Table = {
+    new SimpleBatchTable with SupportsCustomPredicates {
+      override def customPredicates(): Array[CustomPredicateDescriptor] = {
+        Array(
+          new CustomPredicateDescriptor(
+            "com.other.MY_SEARCH",
+            "my_search",
+            Array(IntegerType, IntegerType),
+            true)
+        )
+      }
+
+      override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+        new CustomPredicateScanBuilder()
+      }
+    }
+  }
 }
 
 class StringReaderFactory extends PartitionReaderFactory {

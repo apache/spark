@@ -29,6 +29,7 @@ import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Avg,
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, And => V2And, Not => V2Not, Or => V2Or, Predicate => V2Predicate}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, DataType, IntegerType, StringType}
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * The builder to generate V2 expressions from catalyst expressions.
@@ -406,42 +407,15 @@ class V2ExpressionBuilder(
       }
     // Multi-pattern LIKE variants: filter out null patterns that can appear in
     // Catalyst's internal representation but cannot be serialized as LiteralValue.
+    // If all patterns are null, return None to fall back to Spark-side evaluation.
     case la: LikeAll if extraCapabilities.contains("LIKE_ALL") =>
-      generateExpression(la.child).flatMap { v =>
-        val nonNull = la.patterns.filter(_ != null)
-        if (nonNull.isEmpty) None else {
-          val lits = nonNull.map(p =>
-            LiteralValue(p, StringType)).toArray[V2Expression]
-          Some(new V2Predicate("LIKE_ALL", (v +: lits).toArray))
-        }
-      }
+      translateMultiPatternLike(la.child, la.patterns, "LIKE_ALL")
     case nla: NotLikeAll if extraCapabilities.contains("NOT_LIKE_ALL") =>
-      generateExpression(nla.child).flatMap { v =>
-        val nonNull = nla.patterns.filter(_ != null)
-        if (nonNull.isEmpty) None else {
-          val lits = nonNull.map(p =>
-            LiteralValue(p, StringType)).toArray[V2Expression]
-          Some(new V2Predicate("NOT_LIKE_ALL", (v +: lits).toArray))
-        }
-      }
+      translateMultiPatternLike(nla.child, nla.patterns, "NOT_LIKE_ALL")
     case la: LikeAny if extraCapabilities.contains("LIKE_ANY") =>
-      generateExpression(la.child).flatMap { v =>
-        val nonNull = la.patterns.filter(_ != null)
-        if (nonNull.isEmpty) None else {
-          val lits = nonNull.map(p =>
-            LiteralValue(p, StringType)).toArray[V2Expression]
-          Some(new V2Predicate("LIKE_ANY", (v +: lits).toArray))
-        }
-      }
+      translateMultiPatternLike(la.child, la.patterns, "LIKE_ANY")
     case nla: NotLikeAny if extraCapabilities.contains("NOT_LIKE_ANY") =>
-      generateExpression(nla.child).flatMap { v =>
-        val nonNull = nla.patterns.filter(_ != null)
-        if (nonNull.isEmpty) None else {
-          val lits = nonNull.map(p =>
-            LiteralValue(p, StringType)).toArray[V2Expression]
-          Some(new V2Predicate("NOT_LIKE_ANY", (v +: lits).toArray))
-        }
-      }
+      translateMultiPatternLike(nla.child, nla.patterns, "NOT_LIKE_ANY")
     // TODO supports other expressions
     case ApplyFunctionExpression(function, children) =>
       val childrenExpressions = children.flatMap(generateExpression(_))
@@ -472,6 +446,9 @@ class V2ExpressionBuilder(
       } else {
         None
       }
+    // Layer 2 custom predicates: translate to V2 Predicate using the descriptor's
+    // dot-qualified canonical name (e.g. "COM.MYCO.MY_SEARCH") so the data source
+    // can identify it in pushPredicates().
     case cpe: CustomPredicateExpression =>
       val childExprs = cpe.arguments.flatMap(generateExpression(_))
       if (childExprs.length == cpe.arguments.length) {
@@ -481,6 +458,20 @@ class V2ExpressionBuilder(
         None
       }
     case _ => None
+  }
+
+  private def translateMultiPatternLike(
+      child: Expression,
+      patterns: Seq[UTF8String],
+      predName: String): Option[V2Expression] = {
+    generateExpression(child).flatMap { v =>
+      val nonNull = patterns.filter(_ != null)
+      if (nonNull.isEmpty) None else {
+        val lits = nonNull.map(p =>
+          LiteralValue(p, StringType)).toArray[V2Expression]
+        Some(new V2Predicate(predName, (v +: lits).toArray))
+      }
+    }
   }
 
   private def generateAggregateFunc(

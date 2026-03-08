@@ -162,7 +162,10 @@ import org.apache.spark.sql.connector.expressions.GeneralScalarExpression;
  *  </li>
  *  <li>Name: <code>ILIKE</code>
  *   <ul>
- *    <li>SQL semantic: <code>expr1 ILIKE expr2</code> (case-insensitive LIKE)</li>
+ *    <li>SQL semantic: <code>expr1 ILIKE expr2</code> (case-insensitive LIKE).
+ *        Only translated when the pattern is a non-literal expression (e.g. a
+ *        column reference). Literal patterns are constant-folded by the optimizer,
+ *        which removes the <code>Lower()</code> wrappers needed for detection.</li>
  *    <li>Since version: 4.1.0</li>
  *   </ul>
  *  </li>
