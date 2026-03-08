@@ -1031,7 +1031,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
     val cls = classOf[StringDataSourceV2WithPredicateCapabilities]
     withTempView("t1") {
       spark.read.format(cls.getName).load().createTempView("t1")
-      // RLIKE is capability-gated — only translated when declared.
+      // RLIKE is capability-gated - only translated when declared.
       // The StringDataSource actually filters on RLIKE at the source:
       // it extracts the regex pattern from the pushed predicate and
       // applies it in planInputPartitions/createReader.
@@ -1044,7 +1044,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
       assert(batch.predicates.exists(_.name() == "RLIKE"),
         s"Capability-gated RLIKE should be pushed, " +
         s"got: ${batch.predicates.map(_.name()).mkString(", ")}")
-      // The data source consumes the RLIKE filter — only matching rows returned
+      // The data source consumes the RLIKE filter - only matching rows returned
       checkAnswer(df, Seq(Row("a", "x"), Row("b", "y")))
     }
   }
@@ -1076,9 +1076,9 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
     val cls = classOf[StringDataSourceV2WithPredicateCapabilities]
     withTempView("t1") {
       spark.read.format(cls.getName).load().createTempView("t1")
-      // RLIKE with a column reference — the optimizer can't simplify this away.
+      // RLIKE with a column reference - the optimizer can't simplify this away.
       // s2 RLIKE is the capability-gated predicate; CASE determines the pattern.
-      // Use s2 RLIKE concat('^', s1, '$') — but that may also be optimized.
+      // Use s2 RLIKE concat('^', s1, '$') - but that may also be optimized.
       // Simpler: just test RLIKE with two column refs.
       val df = sql(
         """SELECT * FROM t1 WHERE s1 RLIKE '^[ab]$'
@@ -1175,7 +1175,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
         "Custom predicate should be pushed")
       assert(batch.predicates.exists(_.name() == ">"),
         "Standard predicate '>' should also be pushed")
-      // my_search filters i>0, ">" filters i>3 → rows 4-9
+      // my_search filters i>0, ">" filters i>3 -- rows 4-9
       checkAnswer(df, (4 until 10).map(i => Row(i, -i)))
     }
   }
@@ -1270,8 +1270,8 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
       // ILIKE with a literal pattern gets constant-folded (Lower('A') -> 'a')
       // so the Like(Lower(left), Lower(right)) pattern no longer matches.
       // Use a column reference as the pattern so both Lower() wrappers survive.
-      // s1 ILIKE s1 → case-insensitive match of s1 against pattern s1 → all true
-      // s1 ILIKE s2 → 'a' ILIKE 'x' etc → all false
+      // s1 ILIKE s1 - case-insensitive match of s1 against pattern s1 - all true
+      // s1 ILIKE s2 - 'a' ILIKE 'x' etc - all false
       // So test with column-column: s1 ILIKE s1 (all match)
       val df = sql("SELECT * FROM t1 WHERE s1 ILIKE s1")
       val batch = df.queryExecution.executedPlan.collect {
@@ -1308,7 +1308,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
       // NOT(RLIKE) should still produce correct results even if the source
       // doesn't consume the NOT wrapper (it falls back to post-scan filter)
       val df = sql("SELECT * FROM t1 WHERE NOT (s1 RLIKE '^a$')")
-      // 'a' matches '^a$', so NOT filters it out → only 'b','c' remain
+      // 'a' matches '^a$', so NOT filters it out - only 'b','c' remain
       checkAnswer(df, Seq(Row("b", "y"), Row("c", "z")))
     }
   }
