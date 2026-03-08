@@ -187,12 +187,11 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
       decimalScale: Int,
       context: QueryContext): ArithmeticException = {
     new SparkArithmeticException(
-      errorClass = "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
+      errorClass = "NUMERIC_VALUE_OUT_OF_RANGE.DEFAULT",
       messageParameters = Map(
         "value" -> value.toPlainString,
         "precision" -> decimalPrecision.toString,
-        "scale" -> decimalScale.toString,
-        "config" -> toSQLConf("spark.sql.ansi.enabled")),
+        "scale" -> decimalScale.toString),
       context = getQueryContext(context),
       summary = getSummary(context))
   }

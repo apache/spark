@@ -108,12 +108,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       decimalScale: Int,
       context: QueryContext = null): ArithmeticException = {
     new SparkArithmeticException(
-      errorClass = "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
+      errorClass = "NUMERIC_VALUE_OUT_OF_RANGE.DEFAULT",
       messageParameters = Map(
         "value" -> value.toPlainString,
         "precision" -> decimalPrecision.toString,
-        "scale" -> decimalScale.toString,
-        "config" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
+        "scale" -> decimalScale.toString),
       context = getQueryContext(context),
       summary = getSummary(context))
   }
