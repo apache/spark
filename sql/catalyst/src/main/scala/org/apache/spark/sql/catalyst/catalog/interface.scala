@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.catalog
 
 import java.net.URI
 import java.time.{ZoneId, ZoneOffset}
-import java.util.{Date, Optional, OptionalLong}
+import java.util.Date
 
 import scala.collection.mutable
 import scala.util.Try
@@ -862,7 +862,6 @@ case class CatalogStatistics(
     }
   }
 
-
   /** Readable string representation for the CatalogStatistics. */
   def simpleString: String = {
     val rowCountString = if (rowCount.isDefined) s", ${rowCount.get} rows" else ""
@@ -937,7 +936,6 @@ case class CatalogColumnStat(
       maxLen = maxLen,
       histogram = histogram,
       version = version)
-
 }
 
 object CatalogColumnStat extends Logging {

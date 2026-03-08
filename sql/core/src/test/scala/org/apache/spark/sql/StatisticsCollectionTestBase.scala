@@ -36,7 +36,6 @@ import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.test.SQLTestUtils
-import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 
 /**
  * The base for statistics test cases that we want to include in both the hive module (for
@@ -426,5 +425,4 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
       assert(relation.stats.attributeStats.isEmpty)
     }
   }
-
 }
