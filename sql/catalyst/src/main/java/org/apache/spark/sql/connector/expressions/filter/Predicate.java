@@ -144,6 +144,99 @@ import org.apache.spark.sql.connector.expressions.GeneralScalarExpression;
  *  </li>
  * </ol>
  *
+ * <p>The following predicate names are <em>extended/opt-in</em> and are only translated when a
+ * data source declares support via
+ * {@link org.apache.spark.sql.connector.read.SupportsPushDownPredicateCapabilities}:
+ * <ol>
+ *  <li>Name: <code>LIKE</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>expr1 LIKE expr2</code> (full pattern matching)</li>
+ *    <li>Since version: 4.1.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>RLIKE</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>expr1 RLIKE expr2</code> (regex matching)</li>
+ *    <li>Since version: 4.1.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>ILIKE</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>expr1 ILIKE expr2</code> (case-insensitive LIKE).
+ *        Only translated when the pattern is a non-literal expression (e.g. a
+ *        column reference). Literal patterns are constant-folded by the optimizer,
+ *        which removes the <code>Lower()</code> wrappers needed for detection.</li>
+ *    <li>Since version: 4.1.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>IS_NAN</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>isnan(expr)</code></li>
+ *    <li>Since version: 4.1.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>ARRAY_CONTAINS</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>array_contains(expr1, expr2)</code></li>
+ *    <li>Since version: 4.1.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>MAP_CONTAINS_KEY</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>map_contains_key(expr1, expr2)</code></li>
+ *    <li>Since version: 4.1.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>ARRAYS_OVERLAP</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>arrays_overlap(arr1, arr2)</code></li>
+ *    <li>Since version: 4.1.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>LIKE_ALL</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>expr LIKE ALL (p1, p2, ...)</code></li>
+ *    <li>Children: <code>[expr, pattern1, pattern2, ...]</code></li>
+ *    <li>Since version: 4.1.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>LIKE_ANY</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>expr LIKE ANY (p1, p2, ...)</code></li>
+ *    <li>Children: <code>[expr, pattern1, pattern2, ...]</code></li>
+ *    <li>Since version: 4.1.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>NOT_LIKE_ALL</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>expr NOT LIKE ALL (p1, p2, ...)</code></li>
+ *    <li>Children: <code>[expr, pattern1, pattern2, ...]</code></li>
+ *    <li>Since version: 4.1.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>NOT_LIKE_ANY</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>expr NOT LIKE ANY (p1, p2, ...)</code></li>
+ *    <li>Children: <code>[expr, pattern1, pattern2, ...]</code></li>
+ *    <li>Since version: 4.1.0</li>
+ *   </ul>
+ *  </li>
+ * </ol>
+ *
+ * <p>Data sources may also declare <em>custom predicate functions</em> via
+ * {@link org.apache.spark.sql.connector.catalog.SupportsCustomPredicates}.
+ * Custom predicates use dot-qualified canonical names to avoid collisions
+ * with built-in predicate names. For example:
+ * <pre>{@code
+ * Predicate("com.mycompany.INDEXQUERY", [col_ref, literal])
+ * Predicate("com.mycompany.MY_SEARCH", [col1, col2])
+ * }</pre>
+ *
+ * <p>Custom predicate names must contain at least one '.' character.
+ * Spark's built-in names are unqualified upper-case tokens, so there is
+ * no collision risk. Data sources match on {@code predicate.name()}
+ * directly in their {@code pushPredicates()} implementation.
+ *
  * @since 3.3.0
  */
 @Evolving

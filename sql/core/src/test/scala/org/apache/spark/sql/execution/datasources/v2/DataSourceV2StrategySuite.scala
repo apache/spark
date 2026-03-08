@@ -18,15 +18,16 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedFunction}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.V2ExpressionBuilder
 import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, And => V2And, Not => V2Not, Or => V2Or, Predicate}
+import org.apache.spark.sql.connector.util.CustomOperatorParserExtension
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{BooleanType, DoubleType, IntegerType, LongType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, BooleanType, DoubleType, IntegerType, LongType, MapType, StringType, StructField, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 
 class DataSourceV2StrategySuite extends SharedSparkSession {
@@ -854,6 +855,281 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     }
   }
 
+  /**
+   * Translate with extra capabilities and verify against the expected [[Predicate]].
+   */
+  def testTranslateFilterWithCaps(
+      catalystFilter: Expression,
+      result: Option[Predicate],
+      extraCapabilities: Set[String]): Unit = {
+    assertResult(result) {
+      DataSourceV2Strategy.translateFilterV2WithMapping(
+        catalystFilter, None, extraCapabilities)
+    }
+  }
+
+  test("capability-gated LIKE predicate translation") {
+    val strCol = $"cstr".string
+    val likeExpr = Like(strCol, Literal("%pattern%"), '\\')
+
+    // Without capability: LIKE should NOT translate
+    testTranslateFilterWithCaps(likeExpr, None, Set.empty)
+
+    // With capability: LIKE should translate
+    testTranslateFilterWithCaps(likeExpr,
+      Some(new Predicate("LIKE", Array(
+        FieldReference("cstr"),
+        LiteralValue(UTF8String.fromString("%pattern%"), StringType)))),
+      Set("LIKE"))
+  }
+
+  test("capability-gated RLIKE predicate translation") {
+    val strCol = $"cstr".string
+    val rlikeExpr = RLike(strCol, Literal("^abc.*"))
+
+    // Without capability: RLIKE should NOT translate
+    testTranslateFilterWithCaps(rlikeExpr, None, Set.empty)
+
+    // With capability: RLIKE should translate
+    testTranslateFilterWithCaps(rlikeExpr,
+      Some(new Predicate("RLIKE", Array(
+        FieldReference("cstr"),
+        LiteralValue(UTF8String.fromString("^abc.*"), StringType)))),
+      Set("RLIKE"))
+  }
+
+  test("capability-gated IS_NAN predicate translation") {
+    val doubleCol = $"cdouble".double
+    val isNanExpr = IsNaN(doubleCol)
+
+    // Without capability: IS_NAN should NOT translate
+    testTranslateFilterWithCaps(isNanExpr, None, Set.empty)
+
+    // With capability: IS_NAN should translate
+    testTranslateFilterWithCaps(isNanExpr,
+      Some(new Predicate("IS_NAN", Array(FieldReference("cdouble")))),
+      Set("IS_NAN"))
+  }
+
+  test("capability-gated ARRAY_CONTAINS predicate translation") {
+    val arrCol = AttributeReference("carr", ArrayType(IntegerType))()
+    val arrContainsExpr = ArrayContains(arrCol, Literal(42))
+
+    // Without capability: should NOT translate
+    testTranslateFilterWithCaps(arrContainsExpr, None, Set.empty)
+
+    // With capability: should translate
+    testTranslateFilterWithCaps(arrContainsExpr,
+      Some(new Predicate("ARRAY_CONTAINS", Array(
+        FieldReference("carr"),
+        LiteralValue(42, IntegerType)))),
+      Set("ARRAY_CONTAINS"))
+  }
+
+  test("capability-gated MAP_CONTAINS_KEY predicate translation") {
+    val mapCol = AttributeReference("cmap", MapType(StringType, IntegerType))()
+    // MapContainsKey RuntimeReplaceable form: ArrayContains(MapKeys(map), key)
+    val mapContainsKeyExpr = ArrayContains(MapKeys(mapCol), Literal("mykey"))
+
+    // Without capability: should NOT translate (not even as ARRAY_CONTAINS)
+    testTranslateFilterWithCaps(mapContainsKeyExpr, None, Set.empty)
+
+    // With MAP_CONTAINS_KEY capability: should translate as MAP_CONTAINS_KEY
+    testTranslateFilterWithCaps(mapContainsKeyExpr,
+      Some(new Predicate("MAP_CONTAINS_KEY", Array(
+        FieldReference("cmap"),
+        LiteralValue(UTF8String.fromString("mykey"), StringType)))),
+      Set("MAP_CONTAINS_KEY"))
+
+    // With both MAP_CONTAINS_KEY and ARRAY_CONTAINS: MAP_CONTAINS_KEY takes precedence
+    testTranslateFilterWithCaps(mapContainsKeyExpr,
+      Some(new Predicate("MAP_CONTAINS_KEY", Array(
+        FieldReference("cmap"),
+        LiteralValue(UTF8String.fromString("mykey"), StringType)))),
+      Set("MAP_CONTAINS_KEY", "ARRAY_CONTAINS"))
+
+    // With only ARRAY_CONTAINS (not MAP_CONTAINS_KEY): should NOT translate
+    // because ArrayContains(MapKeys(map), key) is not a plain ArrayContains on a column
+    testTranslateFilterWithCaps(mapContainsKeyExpr, None, Set("ARRAY_CONTAINS"))
+  }
+
+  test("capability-gated ARRAYS_OVERLAP predicate translation") {
+    val arr1 = AttributeReference("carr1", ArrayType(IntegerType))()
+    val arr2 = AttributeReference("carr2", ArrayType(IntegerType))()
+    val expr = ArraysOverlap(arr1, arr2)
+
+    // Without capability: should NOT translate
+    testTranslateFilterWithCaps(expr, None, Set.empty)
+
+    // With capability: should translate
+    testTranslateFilterWithCaps(expr,
+      Some(new Predicate("ARRAYS_OVERLAP", Array(
+        FieldReference("carr1"),
+        FieldReference("carr2")))),
+      Set("ARRAYS_OVERLAP"))
+  }
+
+  test("capability-gated LIKE_ALL predicate translation") {
+    val strCol = $"cstr".string
+    val patterns = Seq(
+      UTF8String.fromString("%a%"),
+      UTF8String.fromString("%b%"))
+    val likeAllExpr = LikeAll(strCol, patterns)
+
+    // Without capability: should NOT translate
+    testTranslateFilterWithCaps(likeAllExpr, None, Set.empty)
+
+    // With capability: should translate
+    testTranslateFilterWithCaps(likeAllExpr,
+      Some(new Predicate("LIKE_ALL", Array(
+        FieldReference("cstr"),
+        LiteralValue(UTF8String.fromString("%a%"), StringType),
+        LiteralValue(UTF8String.fromString("%b%"), StringType)))),
+      Set("LIKE_ALL"))
+  }
+
+  test("capability-gated LIKE_ANY predicate translation") {
+    val strCol = $"cstr".string
+    val patterns = Seq(
+      UTF8String.fromString("%x%"),
+      UTF8String.fromString("%y%"))
+    val likeAnyExpr = LikeAny(strCol, patterns)
+
+    // Without capability: should NOT translate
+    testTranslateFilterWithCaps(likeAnyExpr, None, Set.empty)
+
+    // With capability: should translate
+    testTranslateFilterWithCaps(likeAnyExpr,
+      Some(new Predicate("LIKE_ANY", Array(
+        FieldReference("cstr"),
+        LiteralValue(UTF8String.fromString("%x%"), StringType),
+        LiteralValue(UTF8String.fromString("%y%"), StringType)))),
+      Set("LIKE_ANY"))
+  }
+
+  test("capability-gated NOT_LIKE_ALL predicate translation") {
+    val strCol = $"cstr".string
+    val patterns = Seq(UTF8String.fromString("%z%"))
+    val notLikeAllExpr = NotLikeAll(strCol, patterns)
+
+    // Without capability: should NOT translate
+    testTranslateFilterWithCaps(notLikeAllExpr, None, Set.empty)
+
+    // With capability: should translate
+    testTranslateFilterWithCaps(notLikeAllExpr,
+      Some(new Predicate("NOT_LIKE_ALL", Array(
+        FieldReference("cstr"),
+        LiteralValue(UTF8String.fromString("%z%"), StringType)))),
+      Set("NOT_LIKE_ALL"))
+  }
+
+  test("capability-gated NOT_LIKE_ANY predicate translation") {
+    val strCol = $"cstr".string
+    val patterns = Seq(
+      UTF8String.fromString("a%"),
+      UTF8String.fromString("b%"))
+    val notLikeAnyExpr = NotLikeAny(strCol, patterns)
+
+    // Without capability: should NOT translate
+    testTranslateFilterWithCaps(notLikeAnyExpr, None, Set.empty)
+
+    // With capability: should translate
+    testTranslateFilterWithCaps(notLikeAnyExpr,
+      Some(new Predicate("NOT_LIKE_ANY", Array(
+        FieldReference("cstr"),
+        LiteralValue(UTF8String.fromString("a%"), StringType),
+        LiteralValue(UTF8String.fromString("b%"), StringType)))),
+      Set("NOT_LIKE_ANY"))
+  }
+
+  test("capability-gated ILIKE predicate translation") {
+    val strCol = $"cstr".string
+    // ILike RuntimeReplaceable form: Like(Lower(left), Lower(right))
+    // This pattern only survives when the pattern is non-literal (non-constant)
+    val ilikeExpr = Like(Lower(strCol), Lower($"cpattern".string), '\\')
+
+    // Without capability: should NOT translate
+    testTranslateFilterWithCaps(ilikeExpr, None, Set.empty)
+
+    // With ILIKE capability: should translate as ILIKE
+    testTranslateFilterWithCaps(ilikeExpr,
+      Some(new Predicate("ILIKE", Array(
+        FieldReference("cstr"),
+        FieldReference("cpattern")))),
+      Set("ILIKE"))
+
+    // With both ILIKE and LIKE: ILIKE takes precedence for Like(Lower, Lower) pattern
+    testTranslateFilterWithCaps(ilikeExpr,
+      Some(new Predicate("ILIKE", Array(
+        FieldReference("cstr"),
+        FieldReference("cpattern")))),
+      Set("ILIKE", "LIKE"))
+
+    // With only LIKE (not ILIKE): should translate as LIKE (falls through to generic LIKE)
+    testTranslateFilterWithCaps(ilikeExpr,
+      Some(new Predicate("LIKE", Array(
+        new GeneralScalarExpression("LOWER", Array[V2Expression](FieldReference("cstr"))),
+        new GeneralScalarExpression("LOWER",
+          Array[V2Expression](FieldReference("cpattern")))))),
+      Set("LIKE"))
+  }
+
+  test("capability-gated predicates combined with AND/OR") {
+    val strCol = $"cstr".string
+    val intCol = $"cint".int
+    val likeExpr = Like(strCol, Literal("%test%"), '\\')
+    val eqExpr = EqualTo(intCol, Literal(1))
+
+    // LIKE inside AND: with capability, both sides should translate
+    testTranslateFilterWithCaps(And(likeExpr, eqExpr),
+      Some(new V2And(
+        new Predicate("LIKE", Array(
+          FieldReference("cstr"),
+          LiteralValue(UTF8String.fromString("%test%"), StringType))),
+        new Predicate("=", Array(
+          FieldReference("cint"),
+          LiteralValue(1, IntegerType))))),
+      Set("LIKE"))
+
+    // LIKE inside AND: without capability, entire AND should fail
+    testTranslateFilterWithCaps(And(likeExpr, eqExpr), None, Set.empty)
+
+    // LIKE inside OR: with capability, both sides should translate
+    testTranslateFilterWithCaps(Or(likeExpr, eqExpr),
+      Some(new V2Or(
+        new Predicate("LIKE", Array(
+          FieldReference("cstr"),
+          LiteralValue(UTF8String.fromString("%test%"), StringType))),
+        new Predicate("=", Array(
+          FieldReference("cint"),
+          LiteralValue(1, IntegerType))))),
+      Set("LIKE"))
+
+    // LIKE inside OR: without capability, entire OR should fail
+    testTranslateFilterWithCaps(Or(likeExpr, eqExpr), None, Set.empty)
+  }
+
+  test("capability-gated predicates do not affect default translations") {
+    val intCol = $"cint".int
+    val strCol = $"cstr".string
+
+    // Standard predicates still work regardless of extraCapabilities
+    Seq(Set.empty[String], Set("LIKE", "RLIKE", "IS_NAN")).foreach { caps =>
+      testTranslateFilterWithCaps(EqualTo(intCol, Literal(1)),
+        Some(new Predicate("=", Array(
+          FieldReference("cint"), LiteralValue(1, IntegerType)))),
+        caps)
+      testTranslateFilterWithCaps(IsNull(intCol),
+        Some(new Predicate("IS_NULL", Array(FieldReference("cint")))),
+        caps)
+      testTranslateFilterWithCaps(StartsWith(strCol, Literal("abc")),
+        Some(new Predicate("STARTS_WITH", Array(
+          FieldReference("cstr"),
+          LiteralValue(UTF8String.fromString("abc"), StringType)))),
+        caps)
+    }
+  }
+
   private def checkV2Conversion(
       catalystExpr: Expression,
       v2Expr: V2Expression,
@@ -882,5 +1158,284 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
       isPredicate: Boolean = false): Unit = {
     checkV2Conversion(catalystExpr, v2Expr, isPredicate)
     checkCatalystConversion(v2Expr, catalystExpr)
+  }
+
+  // Tests for SPARK-55869 Layer 3: CustomOperatorParserExtension
+
+  private def createTestExtension(
+      ops: Map[String, String]): CustomOperatorParserExtension = {
+    val delegate = spark.sessionState.sqlParser
+    new CustomOperatorParserExtension(delegate) {
+      override def customOperators: Map[String, String] = ops
+    }
+  }
+
+  /** Parse with the extension and extract the SQL that the delegate sees. */
+  private def rewrittenSQL(
+      ops: Map[String, String], sql: String): String = {
+    var captured: String = null
+    val delegate = spark.sessionState.sqlParser
+    val ext = new CustomOperatorParserExtension(
+      new org.apache.spark.sql.catalyst.parser.ParserInterface {
+        override def parsePlan(sqlText: String) = {
+          captured = sqlText
+          delegate.parsePlan(sqlText)
+        }
+        override def parseQuery(sqlText: String) = delegate.parseQuery(sqlText)
+        override def parseExpression(sqlText: String) =
+          delegate.parseExpression(sqlText)
+        override def parseTableIdentifier(sqlText: String) =
+          delegate.parseTableIdentifier(sqlText)
+        override def parseFunctionIdentifier(sqlText: String) =
+          delegate.parseFunctionIdentifier(sqlText)
+        override def parseMultipartIdentifier(sqlText: String) =
+          delegate.parseMultipartIdentifier(sqlText)
+        override def parseTableSchema(sqlText: String) =
+          delegate.parseTableSchema(sqlText)
+        override def parseDataType(sqlText: String) =
+          delegate.parseDataType(sqlText)
+        override def parseRoutineParam(sqlText: String) =
+          delegate.parseRoutineParam(sqlText)
+      }
+    ) {
+      override def customOperators: Map[String, String] = ops
+    }
+    ext.parsePlan(sql)
+    captured
+  }
+
+  test("SPARK-55869: CustomOperatorParserExtension rewrites infix to function call") {
+    val ops = Map("INDEXQUERY" -> "indexquery")
+    val result = rewrittenSQL(ops,
+      "SELECT * FROM t WHERE col INDEXQUERY 'search term'")
+    assert(result.contains("indexquery(col, 'search term')"),
+      s"Expected function call syntax, got: $result")
+  }
+
+  test("SPARK-55869: CustomOperatorParserExtension is case-insensitive") {
+    val ops = Map("INDEXQUERY" -> "indexquery")
+    val result = rewrittenSQL(ops,
+      "SELECT * FROM t WHERE col indexquery 'value'")
+    assert(result.contains("indexquery(col, 'value')"),
+      s"Expected function call syntax, got: $result")
+  }
+
+  test("SPARK-55869: CustomOperatorParserExtension handles identifiers") {
+    val ops = Map("MYSEARCH" -> "my_search")
+    val result = rewrittenSQL(ops,
+      "SELECT * FROM t WHERE col1 MYSEARCH col2")
+    assert(result.contains("my_search(col1, col2)"),
+      s"Expected function call syntax, got: $result")
+  }
+
+  test("SPARK-55869: CustomOperatorParserExtension handles numeric literals") {
+    val ops = Map("NEARBY" -> "nearby")
+    val result = rewrittenSQL(ops,
+      "SELECT * FROM t WHERE col NEARBY 42")
+    assert(result.contains("nearby(col, 42)"),
+      s"Expected function call syntax, got: $result")
+  }
+
+  test("SPARK-55869: CustomOperatorParserExtension preserves string literals") {
+    val ops = Map("INDEXQUERY" -> "indexquery")
+    // The operator keyword inside a string literal should NOT be rewritten
+    val result = rewrittenSQL(ops,
+      "SELECT 'col INDEXQUERY val' FROM t WHERE col INDEXQUERY 'term'")
+    assert(result.contains("indexquery(col, 'term')"),
+      s"Expected function call in WHERE, got: $result")
+    assert(result.contains("'col INDEXQUERY val'"),
+      s"String literal should be preserved, got: $result")
+  }
+
+  test("SPARK-55869: CustomOperatorParserExtension with multiple operators") {
+    val ops = Map("INDEXQUERY" -> "indexquery", "NEARBY" -> "nearby")
+    val result = rewrittenSQL(ops,
+      "SELECT * FROM t WHERE col1 INDEXQUERY 'a' AND col2 NEARBY 5")
+    assert(result.contains("indexquery(col1, 'a')"),
+      s"Expected first operator rewrite, got: $result")
+    assert(result.contains("nearby(col2, 5)"),
+      s"Expected second operator rewrite, got: $result")
+  }
+
+  test("SPARK-55869: CustomOperatorParserExtension with no operators is passthrough") {
+    val ops = Map.empty[String, String]
+    val sql = "SELECT * FROM t WHERE col > 5"
+    val result = rewrittenSQL(ops, sql)
+    assert(result == sql)
+  }
+
+  test("SPARK-55869: CustomOperatorParserExtension placeholder collision resistance") {
+    // SQL containing text that looks like internal placeholders should not be corrupted
+    val ops = Map("INDEXQUERY" -> "indexquery")
+    val result = rewrittenSQL(ops,
+      "SELECT '__COPLIT_' FROM t WHERE col INDEXQUERY 'term'")
+    assert(result.contains("indexquery(col, 'term')"),
+      s"Expected function call syntax, got: $result")
+    assert(result.contains("'__COPLIT_'"),
+      s"Placeholder-like string literal should be preserved, got: $result")
+  }
+
+  test("SPARK-55869: CustomOperatorParserExtension handles complex WHERE clauses") {
+    val ops = Map("INDEXQUERY" -> "indexquery")
+    val result = rewrittenSQL(ops,
+      "SELECT * FROM t WHERE col1 INDEXQUERY 'a' AND col2 > 5 OR col3 INDEXQUERY 'b'")
+    assert(result.contains("indexquery(col1, 'a')"),
+      s"Expected first operator rewrite, got: $result")
+    assert(result.contains("indexquery(col3, 'b')"),
+      s"Expected second operator rewrite, got: $result")
+    assert(result.contains("col2 > 5"),
+      s"Standard predicate should be unchanged, got: $result")
+  }
+
+  test("SPARK-55869: CustomOperatorParserExtension nested AND/OR with multiple operators") {
+    val ops = Map("INDEXQUERY" -> "indexquery", "XYZQUERY" -> "xyzquery")
+    val sql =
+      "SELECT * FROM t WHERE (col INDEXQUERY 'value' AND col1 XYZQUERY 'value2') " +
+      "OR (col2 INDEXQUERY 'value' AND " +
+      "(col3 XYZQUERY 'value3' OR col4 INDEXQUERY 'value4'))"
+
+    // Verify rewritten SQL text
+    val result = rewrittenSQL(ops, sql)
+    assert(result.contains("indexquery(col, 'value')"),
+      s"Expected first INDEXQUERY rewrite, got: $result")
+    assert(result.contains("xyzquery(col1, 'value2')"),
+      s"Expected first XYZQUERY rewrite, got: $result")
+    assert(result.contains("indexquery(col2, 'value')"),
+      s"Expected second INDEXQUERY rewrite, got: $result")
+    assert(result.contains("xyzquery(col3, 'value3')"),
+      s"Expected second XYZQUERY rewrite, got: $result")
+    assert(result.contains("indexquery(col4, 'value4')"),
+      s"Expected third INDEXQUERY rewrite, got: $result")
+
+    // Verify the parsed plan has the correct tree structure
+    val ext = createTestExtension(ops)
+    val plan = ext.parsePlan(sql)
+
+    // Extract the filter condition from Project -> Filter -> ...
+    val filterCondition = plan.collect {
+      case f: org.apache.spark.sql.catalyst.plans.logical.Filter =>
+        f.condition
+    }.head
+
+    // The top-level should be OR
+    filterCondition match {
+      case Or(
+        And(left1, right1),
+        And(left2, Or(innerLeft, innerRight))) =>
+        // (col INDEXQUERY 'value' AND col1 XYZQUERY 'value2')
+        assert(left1.isInstanceOf[UnresolvedFunction])
+        assert(left1.asInstanceOf[UnresolvedFunction]
+          .nameParts == Seq("indexquery"))
+        assert(right1.isInstanceOf[UnresolvedFunction])
+        assert(right1.asInstanceOf[UnresolvedFunction]
+          .nameParts == Seq("xyzquery"))
+        // (col2 INDEXQUERY 'value' AND (...))
+        assert(left2.isInstanceOf[UnresolvedFunction])
+        assert(left2.asInstanceOf[UnresolvedFunction]
+          .nameParts == Seq("indexquery"))
+        // (col3 XYZQUERY 'value3' OR col4 INDEXQUERY 'value4')
+        assert(innerLeft.isInstanceOf[UnresolvedFunction])
+        assert(innerLeft.asInstanceOf[UnresolvedFunction]
+          .nameParts == Seq("xyzquery"))
+        assert(innerRight.isInstanceOf[UnresolvedFunction])
+        assert(innerRight.asInstanceOf[UnresolvedFunction]
+          .nameParts == Seq("indexquery"))
+      case other =>
+        fail(s"Expected Or(And(...), And(..., Or(...))), got: $other")
+    }
+  }
+
+  test("SPARK-55869: CustomPredicateDescriptor rejects null canonicalName") {
+    val e = intercept[IllegalArgumentException] {
+      new org.apache.spark.sql.connector.catalog.CustomPredicateDescriptor(
+        null, "my_func", Array(IntegerType), true)
+    }
+    assert(e.getMessage.contains("canonicalName must not be null"))
+  }
+
+  test("SPARK-55869: CustomPredicateDescriptor rejects null sqlName") {
+    val e = intercept[IllegalArgumentException] {
+      new org.apache.spark.sql.connector.catalog.CustomPredicateDescriptor(
+        "com.test.FUNC", null, Array(IntegerType), true)
+    }
+    assert(e.getMessage.contains("sqlName must not be null"))
+  }
+
+  test("SPARK-55869: CustomPredicateDescriptor rejects non-dot-qualified name") {
+    val e = intercept[IllegalArgumentException] {
+      new org.apache.spark.sql.connector.catalog.CustomPredicateDescriptor(
+        "FUNC_NO_DOT", "func", Array(IntegerType), true)
+    }
+    assert(e.getMessage.contains("dot-qualified"))
+  }
+
+  test("SPARK-55869: CustomPredicateDescriptor convenience constructor derives sqlName") {
+    val desc = new org.apache.spark.sql.connector.catalog.CustomPredicateDescriptor(
+      "com.mycompany.MY_FUNC", Array(IntegerType), true)
+    assert(desc.canonicalName() == "COM.MYCOMPANY.MY_FUNC")
+    assert(desc.sqlName() == "MY_FUNC")
+  }
+
+  test("SPARK-55869: CustomPredicateDescriptor equals, hashCode, toString") {
+    val d1 = new org.apache.spark.sql.connector.catalog.CustomPredicateDescriptor(
+      "com.test.FUNC", "func", Array(IntegerType), true)
+    val d2 = new org.apache.spark.sql.connector.catalog.CustomPredicateDescriptor(
+      "com.test.FUNC", "func", Array(IntegerType), true)
+    val d3 = new org.apache.spark.sql.connector.catalog.CustomPredicateDescriptor(
+      "com.test.OTHER", "other", Array(StringType), false)
+    assert(d1 == d2)
+    assert(d1.hashCode() == d2.hashCode())
+    assert(d1 != d3)
+    assert(d1.toString.contains("COM.TEST.FUNC"))
+    assert(d1.toString.contains("FUNC"))
+  }
+
+  test("SPARK-55869: NOT(RLIKE) translates to V2 NOT(RLIKE) predicate") {
+    val notRlike = Not(RLike($"col".string, Literal("^abc$")))
+    val result = new V2ExpressionBuilder(
+      notRlike, isPredicate = true,
+      extraCapabilities = Set("RLIKE")).build()
+    assert(result.isDefined, "NOT(RLIKE) should be translated")
+    assert(result.get.isInstanceOf[V2Not],
+      s"Expected V2 Not, got: ${result.get.getClass.getSimpleName}")
+    val inner = result.get.asInstanceOf[V2Not].child()
+    assert(inner.isInstanceOf[Predicate])
+    assert(inner.asInstanceOf[Predicate].name() == "RLIKE")
+  }
+
+  test("SPARK-55869: CustomOperatorParserExtension parseQuery also rewrites") {
+    val ops = Map("INDEXQUERY" -> "indexquery")
+    var captured: String = null
+    val delegate = spark.sessionState.sqlParser
+    val ext = new CustomOperatorParserExtension(
+      new org.apache.spark.sql.catalyst.parser.ParserInterface {
+        override def parsePlan(s: String) = delegate.parsePlan(s)
+        override def parseQuery(sqlText: String) = {
+          captured = sqlText
+          delegate.parseQuery(sqlText)
+        }
+        override def parseExpression(s: String) =
+          delegate.parseExpression(s)
+        override def parseTableIdentifier(s: String) =
+          delegate.parseTableIdentifier(s)
+        override def parseFunctionIdentifier(s: String) =
+          delegate.parseFunctionIdentifier(s)
+        override def parseMultipartIdentifier(s: String) =
+          delegate.parseMultipartIdentifier(s)
+        override def parseTableSchema(s: String) =
+          delegate.parseTableSchema(s)
+        override def parseDataType(s: String) =
+          delegate.parseDataType(s)
+        override def parseRoutineParam(s: String) =
+          delegate.parseRoutineParam(s)
+      }
+    ) {
+      override def customOperators: Map[String, String] = ops
+    }
+    ext.parseQuery(
+      "SELECT * FROM t WHERE col INDEXQUERY 'value'")
+    assert(captured != null, "parseQuery should delegate")
+    assert(captured.contains("indexquery(col, 'value')"),
+      s"parseQuery should rewrite infix operators, got: $captured")
   }
 }

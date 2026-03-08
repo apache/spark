@@ -123,15 +123,20 @@ public class V2ExpressionSQLBuilder {
           "COT", "ASIN", "ASINH", "ACOS", "ACOSH", "ATAN", "ATANH", "ATAN2", "CBRT", "DEGREES",
           "RADIANS", "SIGN", "WIDTH_BUCKET", "SUBSTRING", "UPPER", "LOWER", "TRANSLATE",
           "DATE_ADD", "DATE_DIFF", "TRUNC", "AES_ENCRYPT", "AES_DECRYPT", "SHA1", "SHA2", "MD5",
-          "CRC32", "BIT_LENGTH", "CHAR_LENGTH", "CONCAT", "RPAD", "LPAD" ->
+          "CRC32", "BIT_LENGTH", "CHAR_LENGTH", "CONCAT", "RPAD", "LPAD",
+          // Extended capability-gated predicates (SPARK-55869)
+          "LIKE", "RLIKE", "ILIKE", "IS_NAN", "ARRAY_CONTAINS", "MAP_CONTAINS_KEY",
+          "ARRAYS_OVERLAP", "LIKE_ALL", "LIKE_ANY", "NOT_LIKE_ALL", "NOT_LIKE_ANY" ->
           visitSQLFunction(name, e.children());
         case "CASE_WHEN" -> visitCaseWhen(expressionsToStringArray(e.children()));
         case "TRIM" -> visitTrim("BOTH", expressionsToStringArray(e.children()));
         case "LTRIM" -> visitTrim("LEADING", expressionsToStringArray(e.children()));
         case "RTRIM" -> visitTrim("TRAILING", expressionsToStringArray(e.children()));
         case "OVERLAY" -> visitOverlay(expressionsToStringArray(e.children()));
-        // TODO supports other expressions
-        default -> visitUnexpectedExpr(expr);
+        // Custom predicates use dot-qualified canonical names (e.g. "COM.MYCO.FUNC").
+        // Render those as SQL function calls; fail on other unknown names.
+        default -> name.contains(".") ?
+            visitSQLFunction(name, e.children()) : visitUnexpectedExpr(expr);
       };
     } else if (expr instanceof Min min) {
       return visitAggregateFunction("MIN", false, min.children());
@@ -327,9 +332,13 @@ public class V2ExpressionSQLBuilder {
       Map.of("class", this.getClass().getSimpleName(), "funcName", funcName));
   }
 
+  // Use expr.getClass().getSimpleName() instead of String.valueOf(expr) to avoid
+  // infinite recursion: ExpressionWithToString.toString() calls build() which can
+  // reach visitUnexpectedExpr again for unknown expressions.
   protected String visitUnexpectedExpr(Expression expr) throws IllegalArgumentException {
     throw new SparkIllegalArgumentException(
-      "_LEGACY_ERROR_TEMP_3207", Map.of("expr", String.valueOf(expr)));
+      "_LEGACY_ERROR_TEMP_3207",
+      Map.of("expr", expr.getClass().getSimpleName()));
   }
 
   protected String visitOverlay(String[] inputs) {

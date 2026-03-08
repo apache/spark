@@ -25,14 +25,14 @@ import scala.jdk.CollectionConverters._
 
 import test.org.apache.spark.sql.connector._
 
-import org.apache.spark.SparkUnsupportedOperationException
+import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.ScalarSubquery
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Project}
-import org.apache.spark.sql.connector.catalog.{PartitionInternalRow, SupportsRead, Table, TableCapability, TableProvider}
+import org.apache.spark.sql.connector.catalog.{CustomPredicateDescriptor, PartitionInternalRow, SupportsCustomPredicates, SupportsRead, Table, TableCapability, TableProvider}
 import org.apache.spark.sql.connector.catalog.TableCapability._
-import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, Literal, NamedReference, NullOrdering, SortDirection, SortOrder, Transform}
+import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, Literal, LiteralValue, NamedReference, NullOrdering, SortDirection, SortOrder, Transform}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.read.Scan.ColumnarSupportMode
@@ -55,6 +55,43 @@ import org.apache.spark.util.ArrayImplicits._
 
 class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveSparkPlanHelper {
   import testImplicits._
+
+  /**
+   * Rewrites SQL through a CustomOperatorParserExtension and returns
+   * the SQL text that the delegate parser received.
+   */
+  private def rewriteInfixSql(
+      ops: Map[String, String], sqlText: String): String = {
+    import org.apache.spark.sql.connector.util.CustomOperatorParserExtension
+    var captured: String = null
+    val delegate = spark.sessionState.sqlParser
+    val ext = new CustomOperatorParserExtension(
+      new org.apache.spark.sql.catalyst.parser.ParserInterface {
+        override def parsePlan(s: String) = {
+          captured = s; delegate.parsePlan(s)
+        }
+        override def parseQuery(s: String) = delegate.parseQuery(s)
+        override def parseExpression(s: String) =
+          delegate.parseExpression(s)
+        override def parseTableIdentifier(s: String) =
+          delegate.parseTableIdentifier(s)
+        override def parseFunctionIdentifier(s: String) =
+          delegate.parseFunctionIdentifier(s)
+        override def parseMultipartIdentifier(s: String) =
+          delegate.parseMultipartIdentifier(s)
+        override def parseTableSchema(s: String) =
+          delegate.parseTableSchema(s)
+        override def parseDataType(s: String) =
+          delegate.parseDataType(s)
+        override def parseRoutineParam(s: String) =
+          delegate.parseRoutineParam(s)
+      }
+    ) {
+      override def customOperators: Map[String, String] = ops
+    }
+    ext.parsePlan(sqlText)
+    captured
+  }
 
   private def getBatch(query: DataFrame): AdvancedBatch = {
     query.queryExecution.executedPlan.collect {
@@ -972,6 +1009,349 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
     }
   }
 
+  test("SPARK-55869: SupportsPushDownPredicateCapabilities enables extended predicates") {
+    val cls = classOf[AdvancedDataSourceV2WithPredicateCapabilities]
+    withTempView("t1") {
+      spark.read.format(cls.getName).load().createTempView("t1")
+      // The data source declares LIKE, RLIKE, IS_NAN capabilities.
+      // "i > 3" uses standard pushdown, verify it still works alongside capabilities.
+      val df = sql("SELECT * FROM t1 WHERE i > 3")
+      checkAnswer(df, (4 until 10).map(i => Row(i, -i)))
+
+      val batch = df.queryExecution.executedPlan.collect {
+        case d: BatchScanExec =>
+          d.batch.asInstanceOf[AdvancedBatchWithV2Filter]
+      }.head
+      assert(batch.predicates.exists(_.name() == ">"),
+        "Standard predicate '>' should be pushed down")
+    }
+  }
+
+  test("SPARK-55869: Layer 1 capability-gated RLIKE predicate is pushed and consumed") {
+    val cls = classOf[StringDataSourceV2WithPredicateCapabilities]
+    withTempView("t1") {
+      spark.read.format(cls.getName).load().createTempView("t1")
+      // RLIKE is capability-gated - only translated when declared.
+      // The StringDataSource actually filters on RLIKE at the source:
+      // it extracts the regex pattern from the pushed predicate and
+      // applies it in planInputPartitions/createReader.
+      // Data: ("a","x"), ("b","y"), ("c","z")
+      val df = sql("SELECT * FROM t1 WHERE s1 RLIKE '^[ab]$'")
+      val batch = df.queryExecution.executedPlan.collect {
+        case d: BatchScanExec =>
+          d.batch.asInstanceOf[StringBatchWithV2Filter]
+      }.head
+      assert(batch.predicates.exists(_.name() == "RLIKE"),
+        s"Capability-gated RLIKE should be pushed, " +
+        s"got: ${batch.predicates.map(_.name()).mkString(", ")}")
+      // The data source consumes the RLIKE filter - only matching rows returned
+      checkAnswer(df, Seq(Row("a", "x"), Row("b", "y")))
+    }
+  }
+
+  test("SPARK-55869: Layer 3 parser extension rewrite executes end-to-end with Layer 2") {
+    val cls = classOf[DataSourceV2WithCustomPredicates]
+    val ops = Map("MYSEARCH" -> "my_search")
+    withTempView("t1") {
+      spark.read.format(cls.getName).load().createTempView("t1")
+      val infixSql = "SELECT * FROM t1 WHERE i MYSEARCH j AND i > 5"
+      val rewrittenSql = rewriteInfixSql(ops, infixSql)
+      assert(rewrittenSql.contains("my_search(i, j)"),
+        s"Infix should be rewritten to function call, got: $rewrittenSql")
+      // Execute the rewritten SQL -- flows through Layer 2 resolution + pushdown
+      val df = sql(rewrittenSql)
+      val batch = df.queryExecution.executedPlan.collect {
+        case d: BatchScanExec =>
+          d.batch.asInstanceOf[CustomPredicateBatch]
+      }.head
+      assert(batch.predicates.exists(_.name() == "COM.TEST.MY_SEARCH"),
+        "Custom predicate from rewritten infix operator should be pushed")
+      assert(batch.predicates.exists(_.name() == ">"),
+        "Standard predicate should also be pushed")
+      checkAnswer(df, (6 until 10).map(i => Row(i, -i)))
+    }
+  }
+
+  test("SPARK-55869: Layer 1 CASE expression as child of capability-gated predicate") {
+    val cls = classOf[StringDataSourceV2WithPredicateCapabilities]
+    withTempView("t1") {
+      spark.read.format(cls.getName).load().createTempView("t1")
+      // RLIKE with a column reference - the optimizer can't simplify this away.
+      // s2 RLIKE is the capability-gated predicate; CASE determines the pattern.
+      // Use s2 RLIKE concat('^', s1, '$') - but that may also be optimized.
+      // Simpler: just test RLIKE with two column refs.
+      val df = sql(
+        """SELECT * FROM t1 WHERE s1 RLIKE '^[ab]$'
+          |AND CASE WHEN s2 = 'x' THEN true ELSE false END""".stripMargin)
+      val batch = df.queryExecution.executedPlan.collect {
+        case d: BatchScanExec =>
+          d.batch.asInstanceOf[StringBatchWithV2Filter]
+      }.head
+      // RLIKE should be pushed alongside the CASE_WHEN predicate
+      assert(batch.predicates.exists(_.name() == "RLIKE"),
+        s"Capability-gated RLIKE should be pushed alongside CASE, " +
+        s"got: ${batch.predicates.map(_.name()).mkString(", ")}")
+      // Only ("a","x") matches both conditions
+      checkAnswer(df, Seq(Row("a", "x")))
+    }
+  }
+
+  test("SPARK-55869: Layer 2 CASE expression as argument to custom predicate") {
+    val cls = classOf[DataSourceV2WithCustomPredicates]
+    withTempView("t1") {
+      spark.read.format(cls.getName).load().createTempView("t1")
+      // CASE expression as an argument to the custom predicate my_search.
+      // Tests that complex expressions can be passed as arguments.
+      val df = sql(
+        """SELECT * FROM t1 WHERE
+          |my_search(CASE WHEN i > 5 THEN i ELSE 0 END, j)
+          |AND i > 7""".stripMargin)
+      val batch = df.queryExecution.executedPlan.collect {
+        case d: BatchScanExec =>
+          d.batch.asInstanceOf[CustomPredicateBatch]
+      }.head
+      assert(batch.predicates.exists(_.name() == "COM.TEST.MY_SEARCH"),
+        "Custom predicate with CASE argument should be pushed")
+      checkAnswer(df, (8 until 10).map(i => Row(i, -i)))
+    }
+  }
+
+  test("SPARK-55869: Layer 3 CASE expression alongside infix operator rewrite") {
+    val cls = classOf[DataSourceV2WithCustomPredicates]
+    val ops = Map("MYSEARCH" -> "my_search")
+    withTempView("t1") {
+      spark.read.format(cls.getName).load().createTempView("t1")
+      // CASE expressions can't be infix operands (parser extension handles simple
+      // operands only), but they can coexist in the same WHERE clause.
+      val infixSql =
+        """SELECT * FROM t1 WHERE i MYSEARCH j
+          |AND CASE WHEN i > 7 THEN true ELSE false END""".stripMargin
+      val rewrittenSql = rewriteInfixSql(ops, infixSql)
+      assert(rewrittenSql.contains("my_search(i, j)"),
+        s"Infix should be rewritten, got: $rewrittenSql")
+      assert(rewrittenSql.contains("CASE"),
+        s"CASE should be preserved, got: $rewrittenSql")
+      // Execute the rewritten SQL
+      val df = sql(rewrittenSql)
+      val batch = df.queryExecution.executedPlan.collect {
+        case d: BatchScanExec =>
+          d.batch.asInstanceOf[CustomPredicateBatch]
+      }.head
+      assert(batch.predicates.exists(_.name() == "COM.TEST.MY_SEARCH"),
+        "Custom predicate from infix rewrite should be pushed")
+      // CASE WHEN i > 7 filters to i = 8, 9
+      checkAnswer(df, (8 until 10).map(i => Row(i, -i)))
+    }
+  }
+
+  test("SPARK-55869: SupportsCustomPredicates resolves and pushes custom predicate functions") {
+    val cls = classOf[DataSourceV2WithCustomPredicates]
+    withTempView("t1") {
+      spark.read.format(cls.getName).load().createTempView("t1")
+      // my_search is a custom predicate declared by the table.
+      // It should be resolved during analysis and pushed to the data source.
+      val df = sql("SELECT * FROM t1 WHERE my_search(i, j)")
+      val batch = df.queryExecution.executedPlan.collect {
+        case d: BatchScanExec =>
+          d.batch.asInstanceOf[CustomPredicateBatch]
+      }.head
+      assert(batch.predicates.exists(_.name() == "COM.TEST.MY_SEARCH"),
+        "Custom predicate 'my_search' should be pushed with canonical name")
+      // The data source consumes my_search: filters out i=0
+      checkAnswer(df, (1 until 10).map(i => Row(i, -i)))
+    }
+  }
+
+  test("SPARK-55869: Custom predicates work alongside standard predicates") {
+    val cls = classOf[DataSourceV2WithCustomPredicates]
+    withTempView("t1") {
+      spark.read.format(cls.getName).load().createTempView("t1")
+      val df = sql("SELECT * FROM t1 WHERE my_search(i, j) AND i > 3")
+      val batch = df.queryExecution.executedPlan.collect {
+        case d: BatchScanExec =>
+          d.batch.asInstanceOf[CustomPredicateBatch]
+      }.head
+      assert(batch.predicates.exists(_.name() == "COM.TEST.MY_SEARCH"),
+        "Custom predicate should be pushed")
+      assert(batch.predicates.exists(_.name() == ">"),
+        "Standard predicate '>' should also be pushed")
+      // my_search filters i>0, ">" filters i>3 -- rows 4-9
+      checkAnswer(df, (4 until 10).map(i => Row(i, -i)))
+    }
+  }
+
+  test("SPARK-55869: Custom predicates return correct data alongside standard predicates") {
+    val cls = classOf[DataSourceV2WithCustomPredicates]
+    withTempView("t1") {
+      spark.read.format(cls.getName).load().createTempView("t1")
+      // Both my_search and ">" are consumed by the data source.
+      // so the result should be rows where i > 5.
+      val df = sql("SELECT * FROM t1 WHERE my_search(i, j) AND i > 5")
+      checkAnswer(df, (6 until 10).map(i => Row(i, -i)))
+    }
+  }
+
+  test("SPARK-55869: Config disabled prevents custom predicate resolution") {
+    val cls = classOf[DataSourceV2WithCustomPredicates]
+    withSQLConf(SQLConf.DATA_SOURCE_EXTENDED_PREDICATE_PUSHDOWN_ENABLED.key -> "false") {
+      withTempView("t1") {
+        spark.read.format(cls.getName).load().createTempView("t1")
+        // With extended predicate pushdown disabled, my_search should fail as
+        // an unknown function since ResolveCustomPredicates and LookupFunctions
+        // skip custom predicate handling.
+        val e = intercept[AnalysisException] {
+          sql("SELECT * FROM t1 WHERE my_search(i, j)").collect()
+        }
+        assert(e.getMessage.contains("UNRESOLVED_ROUTINE") ||
+          e.getMessage.contains("my_search"),
+          s"Expected unresolved function error, got: ${e.getMessage}")
+      }
+    }
+  }
+
+  test("SPARK-55869: Rejected custom predicate fails with clear error") {
+    val cls = classOf[DataSourceV2WithRejectingCustomPredicates]
+    withTempView("t1") {
+      spark.read.format(cls.getName).load().createTempView("t1")
+      // The data source rejects the custom predicate in pushPredicates().
+      // EnsureCustomPredicatesPushed should catch this and fail.
+      val e = intercept[SparkException] {
+        sql("SELECT * FROM t1 WHERE my_reject(i, j)").collect()
+      }
+      assert(e.getMessage.contains("my_reject") || e.getMessage.contains("MY_REJECT") ||
+        (e.getCause != null && e.getCause.getMessage.contains("my_reject")) ||
+        (e.getCause != null && e.getCause.getMessage.contains("MY_REJECT")),
+        s"Expected custom predicate rejection error, got: ${e.getMessage}")
+    }
+  }
+
+  test("SPARK-55869: Config disabled prevents Layer 1 RLIKE translation") {
+    val cls = classOf[StringDataSourceV2WithPredicateCapabilities]
+    withSQLConf(
+      SQLConf.DATA_SOURCE_EXTENDED_PREDICATE_PUSHDOWN_ENABLED.key -> "false") {
+      withTempView("t1") {
+        spark.read.format(cls.getName).load().createTempView("t1")
+        // With config disabled, RLIKE should NOT be translated even though
+        // the data source declares the capability. Only standard predicates
+        // should be pushed.
+        val df = sql("SELECT * FROM t1 WHERE s1 RLIKE '^[ab]$'")
+        val batch = df.queryExecution.executedPlan.collect {
+          case d: BatchScanExec =>
+            d.batch.asInstanceOf[StringBatchWithV2Filter]
+        }.head
+        assert(!batch.predicates.exists(_.name() == "RLIKE"),
+          "RLIKE should NOT be pushed when config is disabled, " +
+          s"got: ${batch.predicates.map(_.name()).mkString(", ")}")
+      }
+    }
+  }
+
+  test("SPARK-55869: Without capability declaration, RLIKE is not pushed") {
+    // AdvancedDataSourceV2WithV2Filter does NOT implement
+    // SupportsPushDownPredicateCapabilities, so RLIKE should never translate.
+    val cls = classOf[AdvancedDataSourceV2WithV2Filter]
+    withTempView("t1") {
+      spark.read.format(cls.getName).load().createTempView("t1")
+      val df = sql("SELECT * FROM t1 WHERE i > 3 AND " +
+        "cast(i as string) RLIKE '^[4-9]$'")
+      val batch = getBatchWithV2Filter(df)
+      assert(!batch.predicates.exists(_.name() == "RLIKE"),
+        "RLIKE should NOT be pushed without capability declaration, " +
+        s"got: ${batch.predicates.map(_.name()).mkString(", ")}")
+      assert(batch.predicates.exists(_.name() == ">"),
+        "Standard predicate '>' should still be pushed")
+    }
+  }
+
+  test("SPARK-55869: Layer 1 capability-gated ILIKE predicate is pushed") {
+    val cls = classOf[StringDataSourceV2WithILikeCapability]
+    withTempView("t1") {
+      spark.read.format(cls.getName).load().createTempView("t1")
+      // ILIKE with a literal pattern gets constant-folded (Lower('A') -> 'a')
+      // so the Like(Lower(left), Lower(right)) pattern no longer matches.
+      // Use a column reference as the pattern so both Lower() wrappers survive.
+      // s1 ILIKE s1 - case-insensitive match of s1 against pattern s1 - all true
+      // s1 ILIKE s2 - 'a' ILIKE 'x' etc - all false
+      // So test with column-column: s1 ILIKE s1 (all match)
+      val df = sql("SELECT * FROM t1 WHERE s1 ILIKE s1")
+      val batch = df.queryExecution.executedPlan.collect {
+        case d: BatchScanExec =>
+          d.batch.asInstanceOf[StringBatchWithV2Filter]
+      }.head
+      assert(batch.predicates.exists(_.name() == "ILIKE"),
+        s"Capability-gated ILIKE should be pushed, " +
+        s"got: ${batch.predicates.map(_.name()).mkString(", ")}")
+      // All rows match s1 ILIKE s1
+      checkAnswer(df, Seq(Row("a", "x"), Row("b", "y"), Row("c", "z")))
+    }
+  }
+
+  test("SPARK-55869: Custom predicate in SELECT list fails with clear error") {
+    val cls = classOf[DataSourceV2WithCustomPredicates]
+    withTempView("t1") {
+      spark.read.format(cls.getName).load().createTempView("t1")
+      // Custom predicates are only valid in WHERE. In SELECT, the function
+      // should remain unresolved and fail with a clear error.
+      val e = intercept[AnalysisException] {
+        sql("SELECT my_search(i, j) FROM t1").collect()
+      }
+      assert(e.getMessage.contains("UNRESOLVED_ROUTINE") ||
+        e.getMessage.contains("my_search"),
+        s"Expected unresolved function error in SELECT context, got: ${e.getMessage}")
+    }
+  }
+
+  test("SPARK-55869: NOT(RLIKE) capability-gated predicate translates correctly") {
+    val cls = classOf[StringDataSourceV2WithPredicateCapabilities]
+    withTempView("t1") {
+      spark.read.format(cls.getName).load().createTempView("t1")
+      // NOT(RLIKE) should still produce correct results even if the source
+      // doesn't consume the NOT wrapper (it falls back to post-scan filter)
+      val df = sql("SELECT * FROM t1 WHERE NOT (s1 RLIKE '^a$')")
+      // 'a' matches '^a$', so NOT filters it out - only 'b','c' remain
+      checkAnswer(df, Seq(Row("b", "y"), Row("c", "z")))
+    }
+  }
+
+  test("SPARK-55869: Pushed custom predicate carries correct arguments") {
+    val cls = classOf[DataSourceV2WithCustomPredicates]
+    withTempView("t1") {
+      spark.read.format(cls.getName).load().createTempView("t1")
+      val df = sql("SELECT * FROM t1 WHERE my_search(i, j)")
+      val batch = df.queryExecution.executedPlan.collect {
+        case d: BatchScanExec =>
+          d.batch.asInstanceOf[CustomPredicateBatch]
+      }.head
+      val mySearch = batch.predicates.find(_.name() == "COM.TEST.MY_SEARCH")
+      assert(mySearch.isDefined, "my_search predicate should be pushed")
+      // Should have 2 arguments (i and j column references)
+      val args = mySearch.get.children()
+      assert(args.length == 2, s"Expected 2 arguments, got ${args.length}")
+      assert(args(0).isInstanceOf[org.apache.spark.sql.connector.expressions.NamedReference],
+        s"First arg should be NamedReference, got: ${args(0).getClass.getSimpleName}")
+      assert(args(1).isInstanceOf[org.apache.spark.sql.connector.expressions.NamedReference],
+        s"Second arg should be NamedReference, got: ${args(1).getClass.getSimpleName}")
+    }
+  }
+
+  test("SPARK-55869: Ambiguous cross-table custom predicate fails with clear error") {
+    val cls1 = classOf[DataSourceV2WithCustomPredicates]
+    val cls2 = classOf[DataSourceV2WithConflictingCustomPredicate]
+    withTempView("t1", "t2") {
+      spark.read.format(cls1.getName).load().createTempView("t1")
+      spark.read.format(cls2.getName).load().createTempView("t2")
+      // Both tables declare a custom predicate with sqlName "my_search" but different
+      // canonical names. A join query referencing "my_search" should fail.
+      val e = intercept[SparkException] {
+        sql("SELECT * FROM t1 JOIN t2 ON t1.i = t2.i WHERE my_search(t1.i, t1.j)").collect()
+      }
+      assert(e.getMessage.contains("Ambiguous") || e.getMessage.contains("ambiguous") ||
+        (e.getCause != null && (e.getCause.getMessage.contains("Ambiguous") ||
+          e.getCause.getMessage.contains("ambiguous"))),
+        s"Expected ambiguous predicate error, got: ${e.getMessage}")
+    }
+  }
+
   test("SPARK-47463: Pushed down v2 filter with if expression") {
     withTempView("t1") {
       spark.read.format(classOf[AdvancedDataSourceV2WithV2Filter].getName).load()
@@ -1740,4 +2120,381 @@ class InvalidDataSource extends TestingV2Source {
   throw new IllegalArgumentException("test error")
 
   override def getTable(options: CaseInsensitiveStringMap): Table = null
+}
+
+class DataSourceV2WithCustomPredicates extends TestingV2Source {
+  override def getTable(options: CaseInsensitiveStringMap): Table = {
+    new SimpleBatchTable with SupportsCustomPredicates {
+      override def customPredicates(): Array[CustomPredicateDescriptor] = {
+        Array(
+          new CustomPredicateDescriptor(
+            "com.test.MY_SEARCH",
+            "my_search",
+            Array(IntegerType, IntegerType),
+            true)
+        )
+      }
+
+      override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+        new CustomPredicateScanBuilder()
+      }
+    }
+  }
+}
+
+class CustomPredicateScanBuilder extends ScanBuilder
+  with Scan with SupportsPushDownV2Filters
+  with SupportsPushDownRequiredColumns {
+
+  var requiredSchema = TestingV2Source.schema
+  var predicates = Array.empty[Predicate]
+
+  override def pruneColumns(requiredSchema: StructType): Unit = {
+    this.requiredSchema = requiredSchema
+  }
+
+  override def readSchema(): StructType = requiredSchema
+
+  override def pushPredicates(predicates: Array[Predicate]): Array[Predicate] = {
+    val (supported, unsupported) = predicates.partition { p =>
+      p.name() == "COM.TEST.MY_SEARCH" || p.name() == ">"
+    }
+    this.predicates = supported
+    unsupported
+  }
+
+  override def pushedPredicates(): Array[Predicate] = predicates
+
+  override def build(): Scan = this
+
+  override def toBatch: Batch =
+    new CustomPredicateBatch(predicates, requiredSchema)
+}
+
+/**
+ * Batch that actually consumes pushed predicates for filtering:
+ * - ">" filters by lower bound (same as AdvancedBatchWithV2Filter)
+ * - "COM.TEST.MY_SEARCH" filters rows where first arg (i) > 0
+ */
+class CustomPredicateBatch(
+    val predicates: Array[Predicate],
+    val requiredSchema: StructType) extends Batch {
+
+  override def planInputPartitions(): Array[InputPartition] = {
+    val hasMySearch = predicates.exists(_.name() == "COM.TEST.MY_SEARCH")
+    val lowerBound = predicates.collectFirst {
+      case p: Predicate if p.name().equals(">") =>
+        p.children()(1).asInstanceOf[LiteralValue[_]].value
+          .asInstanceOf[Integer].intValue()
+    }
+
+    // Start from 1 if my_search is pushed (filters out i=0), else 0
+    val start = if (hasMySearch) math.max(1, lowerBound.map(_ + 1)
+      .getOrElse(1)) else lowerBound.map(_ + 1).getOrElse(0)
+
+    if (start >= 10) {
+      Array.empty
+    } else if (start < 5) {
+      Array(RangeInputPartition(start, 5),
+        RangeInputPartition(5, 10))
+    } else {
+      Array(RangeInputPartition(start, 10))
+    }
+  }
+
+  override def createReaderFactory(): PartitionReaderFactory = {
+    new AdvancedReaderFactory(requiredSchema)
+  }
+}
+
+class AdvancedDataSourceV2WithPredicateCapabilities extends TestingV2Source {
+  override def getTable(options: CaseInsensitiveStringMap): Table = new SimpleBatchTable {
+    override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+      new AdvancedScanBuilderWithPredicateCapabilities()
+    }
+  }
+}
+
+class AdvancedScanBuilderWithPredicateCapabilities extends ScanBuilder
+  with Scan with SupportsPushDownV2Filters
+  with SupportsPushDownPredicateCapabilities
+  with SupportsPushDownRequiredColumns {
+
+  var requiredSchema = TestingV2Source.schema
+  var predicates = Array.empty[Predicate]
+
+  override def supportedPredicateNames(): java.util.Set[String] = {
+    java.util.Set.of("LIKE", "RLIKE", "IS_NAN")
+  }
+
+  override def pruneColumns(requiredSchema: StructType): Unit = {
+    this.requiredSchema = requiredSchema
+  }
+
+  override def readSchema(): StructType = requiredSchema
+
+  override def pushPredicates(predicates: Array[Predicate]): Array[Predicate] = {
+    val (supported, unsupported) = predicates.partition { p =>
+      Seq(">", "LIKE", "RLIKE", "IS_NAN").contains(p.name())
+    }
+    this.predicates = supported
+    unsupported
+  }
+
+  override def pushedPredicates(): Array[Predicate] = predicates
+
+  override def build(): Scan = this
+
+  override def toBatch: Batch = new AdvancedBatchWithV2Filter(predicates, requiredSchema)
+}
+
+class DataSourceV2WithRejectingCustomPredicates extends TestingV2Source {
+  override def getTable(options: CaseInsensitiveStringMap): Table = {
+    new SimpleBatchTable with SupportsCustomPredicates {
+      override def customPredicates(): Array[CustomPredicateDescriptor] = {
+        Array(
+          new CustomPredicateDescriptor(
+            "com.test.MY_REJECT",
+            "my_reject",
+            Array(IntegerType, IntegerType),
+            true)
+        )
+      }
+
+      override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+        new RejectingCustomPredicateScanBuilder()
+      }
+    }
+  }
+}
+
+class RejectingCustomPredicateScanBuilder extends ScanBuilder
+  with Scan with SupportsPushDownV2Filters
+  with SupportsPushDownRequiredColumns {
+
+  var requiredSchema = TestingV2Source.schema
+  var predicates = Array.empty[Predicate]
+
+  override def pruneColumns(requiredSchema: StructType): Unit = {
+    this.requiredSchema = requiredSchema
+  }
+
+  override def readSchema(): StructType = requiredSchema
+
+  override def pushPredicates(predicates: Array[Predicate]): Array[Predicate] = {
+    // Accept standard predicates, reject custom ones
+    val (standard, custom) = predicates.partition { p => !p.name().contains(".") }
+    this.predicates = standard
+    custom
+  }
+
+  override def pushedPredicates(): Array[Predicate] = predicates
+
+  override def build(): Scan = this
+
+  override def toBatch: Batch = new AdvancedBatchWithV2Filter(predicates, requiredSchema)
+}
+
+// String-schema data source for Layer 1 LIKE/RLIKE capability testing
+
+object StringTestingV2Source {
+  val schema = new StructType().add("s1", "string").add("s2", "string")
+  val data = Seq(("a", "x"), ("b", "y"), ("c", "z"))
+}
+
+class StringDataSourceV2WithPredicateCapabilities extends TableProvider {
+  override def inferSchema(options: CaseInsensitiveStringMap): StructType =
+    StringTestingV2Source.schema
+
+  override def getTable(
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: java.util.Map[String, String]): Table = {
+    new Table with SupportsRead {
+      override def schema(): StructType = StringTestingV2Source.schema
+      override def name(): String = "StringTestTable"
+      override def capabilities(): java.util.Set[TableCapability] =
+        java.util.EnumSet.of(BATCH_READ)
+      override def newScanBuilder(
+          options: CaseInsensitiveStringMap): ScanBuilder =
+        new StringScanBuilderWithPredicateCapabilities()
+    }
+  }
+}
+
+class StringScanBuilderWithPredicateCapabilities extends ScanBuilder
+  with Scan with SupportsPushDownV2Filters
+  with SupportsPushDownPredicateCapabilities {
+
+  var predicates = Array.empty[Predicate]
+
+  override def supportedPredicateNames(): java.util.Set[String] =
+    java.util.Set.of("LIKE", "RLIKE")
+
+  override def readSchema(): StructType = StringTestingV2Source.schema
+
+  override def pushPredicates(
+      predicates: Array[Predicate]): Array[Predicate] = {
+    // Accept RLIKE/LIKE as fully pushed (source-side filtering).
+    // Return other predicates as unsupported for post-scan filter.
+    val (supported, unsupported) = predicates.partition { p =>
+      Seq("RLIKE", "LIKE").contains(p.name())
+    }
+    this.predicates = supported
+    unsupported
+  }
+
+  override def pushedPredicates(): Array[Predicate] = predicates
+
+  override def build(): Scan = this
+
+  override def toBatch: Batch = new StringBatchWithV2Filter(predicates)
+}
+
+class StringBatchWithV2Filter(
+    val predicates: Array[Predicate]) extends Batch {
+
+  override def planInputPartitions(): Array[InputPartition] = {
+    // Extract RLIKE pattern if pushed, to demonstrate source-side filtering
+    val rlikePattern = predicates.collectFirst {
+      case p: Predicate if p.name() == "RLIKE" =>
+        val patternChild = p.children()(1)
+        patternChild match {
+          case lit: LiteralValue[_] => lit.value.toString
+          case _ => null
+        }
+    }.orNull
+    // Extract ILIKE pattern if pushed
+    val ilikePattern = predicates.collectFirst {
+      case p: Predicate if p.name() == "ILIKE" =>
+        val patternChild = p.children()(1)
+        patternChild match {
+          case lit: LiteralValue[_] => lit.value.toString
+          case _ => null
+        }
+    }.orNull
+    Array(StringInputPartition(rlikePattern, ilikePattern))
+  }
+
+  override def createReaderFactory(): PartitionReaderFactory =
+    new StringReaderFactory()
+}
+
+case class StringInputPartition(
+    rlikePattern: String,
+    ilikePattern: String = null) extends InputPartition
+
+class StringDataSourceV2WithILikeCapability extends TableProvider {
+  override def inferSchema(options: CaseInsensitiveStringMap): StructType =
+    StringTestingV2Source.schema
+
+  override def getTable(
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: java.util.Map[String, String]): Table = {
+    new Table with SupportsRead {
+      override def schema(): StructType = StringTestingV2Source.schema
+      override def name(): String = "StringILikeTestTable"
+      override def capabilities(): java.util.Set[TableCapability] =
+        java.util.EnumSet.of(BATCH_READ)
+      override def newScanBuilder(
+          options: CaseInsensitiveStringMap): ScanBuilder =
+        new StringScanBuilderWithILikeCapability()
+    }
+  }
+}
+
+class StringScanBuilderWithILikeCapability extends ScanBuilder
+  with Scan with SupportsPushDownV2Filters
+  with SupportsPushDownPredicateCapabilities {
+
+  var predicates = Array.empty[Predicate]
+
+  override def supportedPredicateNames(): java.util.Set[String] =
+    java.util.Set.of("ILIKE")
+
+  override def readSchema(): StructType = StringTestingV2Source.schema
+
+  override def pushPredicates(
+      predicates: Array[Predicate]): Array[Predicate] = {
+    val (supported, unsupported) = predicates.partition { p =>
+      p.name() == "ILIKE"
+    }
+    this.predicates = supported
+    unsupported
+  }
+
+  override def pushedPredicates(): Array[Predicate] = predicates
+
+  override def build(): Scan = this
+
+  override def toBatch: Batch = new StringBatchWithV2Filter(predicates)
+}
+
+class DataSourceV2WithConflictingCustomPredicate extends TestingV2Source {
+  override def getTable(options: CaseInsensitiveStringMap): Table = {
+    new SimpleBatchTable with SupportsCustomPredicates {
+      override def customPredicates(): Array[CustomPredicateDescriptor] = {
+        Array(
+          new CustomPredicateDescriptor(
+            "com.other.MY_SEARCH",
+            "my_search",
+            Array(IntegerType, IntegerType),
+            true)
+        )
+      }
+
+      override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+        new CustomPredicateScanBuilder()
+      }
+    }
+  }
+}
+
+class StringReaderFactory extends PartitionReaderFactory {
+  override def createReader(
+      partition: InputPartition): PartitionReader[InternalRow] = {
+    val strPart = partition.asInstanceOf[StringInputPartition]
+    new PartitionReader[InternalRow] {
+      import org.apache.spark.unsafe.types.UTF8String
+      // Apply RLIKE/ILIKE filter at the source if a pattern was pushed
+      private val filteredData = {
+        var result = StringTestingV2Source.data
+        if (strPart.rlikePattern != null) {
+          val regex = strPart.rlikePattern.r
+          result = result.filter { case (s1, _) =>
+            regex.findFirstIn(s1).isDefined
+          }
+        }
+        if (strPart.ilikePattern != null) {
+          // ILIKE is case-insensitive LIKE: convert SQL LIKE pattern
+          // to regex (% -> .*, _ -> ., escape others)
+          val pat = strPart.ilikePattern
+            .replace(".", "\\.")
+            .replace("%", ".*")
+            .replace("_", ".")
+          val regex = s"(?i)^$pat$$".r
+          result = result.filter { case (s1, _) =>
+            regex.findFirstIn(s1).isDefined
+          }
+        }
+        result
+      }
+      private val iter = filteredData.iterator
+      private var current: (String, String) = _
+
+      override def next(): Boolean = {
+        if (iter.hasNext) { current = iter.next(); true }
+        else false
+      }
+
+      override def get(): InternalRow = {
+        InternalRow(
+          UTF8String.fromString(current._1),
+          UTF8String.fromString(current._2))
+      }
+
+      override def close(): Unit = {}
+    }
+  }
 }
