@@ -45,8 +45,6 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.expressions.{ClusterByTransform, FieldReference, NamedReference, Transform}
-import org.apache.spark.sql.connector.read.{Statistics => V2Statistics}
-import org.apache.spark.sql.connector.read.colstats.{ColumnStatistics, Histogram => V2Histogram, HistogramBin => V2HistogramBin}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -864,33 +862,6 @@ case class CatalogStatistics(
     }
   }
 
-  /**
-   * Convert [[CatalogStatistics]] to v2 connector [[V2Statistics]], matching column stats to
-   * schema columns by name. All available statistics are returned unconditionally; callers are
-   * responsible for gating on CBO / planStats settings before using numRows or columnStats.
-   *
-   * @param schema combined data + partition schema, used to resolve the DataType for each column
-   *               when deserializing min/max string values
-   */
-  def toV2Stats(schema: StructType): V2Statistics = {
-    val typeMap = schema.fields.map(f => f.name -> f.dataType).toMap
-    val colStatsMap: Map[NamedReference, ColumnStatistics] = colStats.flatMap { case (name, stat) =>
-      typeMap.get(name).map { dt =>
-        FieldReference.column(name) -> stat.toV2ColStat(name, dt)
-      }
-    }
-
-    val v2SizeInBytes = OptionalLong.of(sizeInBytes.longValue)
-    val v2NumRows = rowCount.map(v => OptionalLong.of(v.longValue)).getOrElse(OptionalLong.empty())
-    val v2ColStats = new java.util.HashMap[NamedReference, ColumnStatistics]()
-    colStatsMap.foreach { case (k, v) => v2ColStats.put(k, v) }
-
-    new V2Statistics {
-      override def sizeInBytes(): OptionalLong = v2SizeInBytes
-      override def numRows(): OptionalLong = v2NumRows
-      override def columnStats(): java.util.Map[NamedReference, ColumnStatistics] = v2ColStats
-    }
-  }
 
   /** Readable string representation for the CatalogStatistics. */
   def simpleString: String = {
@@ -967,44 +938,6 @@ case class CatalogColumnStat(
       histogram = histogram,
       version = version)
 
-  /**
-   * Convert [[CatalogColumnStat]] to a v2 connector [[ColumnStatistics]].
-   * min/max are deserialized from their external string representation using the column's DataType.
-   */
-  def toV2ColStat(colName: String, dataType: DataType): ColumnStatistics = {
-    val parsedMin = min.map(CatalogColumnStat.fromExternalString(_, colName, dataType, version))
-    val parsedMax = max.map(CatalogColumnStat.fromExternalString(_, colName, dataType, version))
-    val v2DistinctCount =
-      distinctCount.map(v => OptionalLong.of(v.longValue)).getOrElse(OptionalLong.empty())
-    val v2NullCount =
-      nullCount.map(v => OptionalLong.of(v.longValue)).getOrElse(OptionalLong.empty())
-    val v2AvgLen = avgLen.map(OptionalLong.of).getOrElse(OptionalLong.empty())
-    val v2MaxLen = maxLen.map(OptionalLong.of).getOrElse(OptionalLong.empty())
-    val v2Histogram: Optional[V2Histogram] = histogram match {
-      case Some(h) =>
-        val v2Bins: Array[V2HistogramBin] = h.bins.map { bin =>
-          new V2HistogramBin {
-            override def lo(): Double = bin.lo
-            override def hi(): Double = bin.hi
-            override def ndv(): Long = bin.ndv
-          }
-        }
-        Optional.of(new V2Histogram {
-          override def height(): Double = h.height
-          override def bins(): Array[V2HistogramBin] = v2Bins
-        })
-      case None => Optional.empty()
-    }
-    new ColumnStatistics {
-      override def distinctCount(): OptionalLong = v2DistinctCount
-      override def min(): Optional[Object] = Optional.ofNullable(parsedMin.orNull)
-      override def max(): Optional[Object] = Optional.ofNullable(parsedMax.orNull)
-      override def nullCount(): OptionalLong = v2NullCount
-      override def avgLen(): OptionalLong = v2AvgLen
-      override def maxLen(): OptionalLong = v2MaxLen
-      override def histogram(): Optional[V2Histogram] = v2Histogram
-    }
-  }
 }
 
 object CatalogColumnStat extends Logging {

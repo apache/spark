@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.expressions.FieldReference
 import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
@@ -428,7 +429,7 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
     }
   }
 
-  test("CatalogStatistics.toV2Stats") {
+  test("DataSourceV2Relation.transformV1Stats") {
     val schema = StructType(Seq(
       StructField("id", IntegerType),
       StructField("name", StringType)))
@@ -449,7 +450,7 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
         // "extra" is not in schema — should be silently skipped
         "extra" -> CatalogColumnStat(distinctCount = Some(5))))
 
-    val v2Stats = catalogStats.toV2Stats(schema)
+    val v2Stats = DataSourceV2Relation.transformV1Stats(catalogStats, schema)
 
     // sizeInBytes is always populated
     assert(v2Stats.sizeInBytes().getAsLong === 1024L)
@@ -473,7 +474,7 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
 
     // No rowCount: numRows should be empty
     val statsNoRows = CatalogStatistics(sizeInBytes = 512, colStats = Map.empty)
-    val v2NoRows = statsNoRows.toV2Stats(schema)
+    val v2NoRows = DataSourceV2Relation.transformV1Stats(statsNoRows, schema)
     assert(v2NoRows.sizeInBytes().getAsLong === 512L)
     assert(!v2NoRows.numRows().isPresent)
     assert(v2NoRows.columnStats().isEmpty)
@@ -492,7 +493,7 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
       sizeInBytes = 1024,
       rowCount = Some(10),
       colStats = Map("id" -> colStatWithHist))
-    val v2StatsWithHist = statsWithHist.toV2Stats(schema)
+    val v2StatsWithHist = DataSourceV2Relation.transformV1Stats(statsWithHist, schema)
     val idV2WithHist = v2StatsWithHist.columnStats().get(FieldReference.column("id"))
     assert(idV2WithHist != null)
     assert(idV2WithHist.histogram().isPresent)
