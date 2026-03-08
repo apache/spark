@@ -875,11 +875,25 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     // Without capability: LIKE should NOT translate
     testTranslateFilterWithCaps(likeExpr, None, Set.empty)
 
-    // With capability: LIKE should translate
+    // With capability: LIKE should translate with escape char as 3rd arg
     testTranslateFilterWithCaps(likeExpr,
       Some(new Predicate("LIKE", Array(
         FieldReference("cstr"),
-        LiteralValue(UTF8String.fromString("%pattern%"), StringType)))),
+        LiteralValue(UTF8String.fromString("%pattern%"), StringType),
+        LiteralValue(UTF8String.fromString("\\"), StringType)))),
+      Set("LIKE"))
+  }
+
+  test("capability-gated LIKE with custom escape character") {
+    val strCol = $"cstr".string
+    val likeExpr = Like(strCol, Literal("%pat!%tern%"), '!')
+
+    // Non-default escape char should translate with '!' as 3rd arg
+    testTranslateFilterWithCaps(likeExpr,
+      Some(new Predicate("LIKE", Array(
+        FieldReference("cstr"),
+        LiteralValue(UTF8String.fromString("%pat!%tern%"), StringType),
+        LiteralValue(UTF8String.fromString("!"), StringType)))),
       Set("LIKE"))
   }
 
@@ -1051,18 +1065,20 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     // Without capability: should NOT translate
     testTranslateFilterWithCaps(ilikeExpr, None, Set.empty)
 
-    // With ILIKE capability: should translate as ILIKE
+    // With ILIKE capability: should translate as ILIKE with escape char as 3rd arg
     testTranslateFilterWithCaps(ilikeExpr,
       Some(new Predicate("ILIKE", Array(
         FieldReference("cstr"),
-        FieldReference("cpattern")))),
+        FieldReference("cpattern"),
+        LiteralValue(UTF8String.fromString("\\"), StringType)))),
       Set("ILIKE"))
 
     // With both ILIKE and LIKE: ILIKE takes precedence for Like(Lower, Lower) pattern
     testTranslateFilterWithCaps(ilikeExpr,
       Some(new Predicate("ILIKE", Array(
         FieldReference("cstr"),
-        FieldReference("cpattern")))),
+        FieldReference("cpattern"),
+        LiteralValue(UTF8String.fromString("\\"), StringType)))),
       Set("ILIKE", "LIKE"))
 
     // With only LIKE (not ILIKE): should translate as LIKE (falls through to generic LIKE)
@@ -1070,8 +1086,22 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
       Some(new Predicate("LIKE", Array(
         new GeneralScalarExpression("LOWER", Array[V2Expression](FieldReference("cstr"))),
         new GeneralScalarExpression("LOWER",
-          Array[V2Expression](FieldReference("cpattern")))))),
+          Array[V2Expression](FieldReference("cpattern"))),
+        LiteralValue(UTF8String.fromString("\\"), StringType)))),
       Set("LIKE"))
+  }
+
+  test("capability-gated ILIKE with custom escape character") {
+    val strCol = $"cstr".string
+    val ilikeExpr = Like(Lower(strCol), Lower($"cpattern".string), '#')
+
+    // Non-default escape char should translate with '#' as 3rd arg
+    testTranslateFilterWithCaps(ilikeExpr,
+      Some(new Predicate("ILIKE", Array(
+        FieldReference("cstr"),
+        FieldReference("cpattern"),
+        LiteralValue(UTF8String.fromString("#"), StringType)))),
+      Set("ILIKE"))
   }
 
   test("capability-gated predicates combined with AND/OR") {
@@ -1085,7 +1115,8 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
       Some(new V2And(
         new Predicate("LIKE", Array(
           FieldReference("cstr"),
-          LiteralValue(UTF8String.fromString("%test%"), StringType))),
+          LiteralValue(UTF8String.fromString("%test%"), StringType),
+          LiteralValue(UTF8String.fromString("\\"), StringType))),
         new Predicate("=", Array(
           FieldReference("cint"),
           LiteralValue(1, IntegerType))))),
@@ -1099,7 +1130,8 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
       Some(new V2Or(
         new Predicate("LIKE", Array(
           FieldReference("cstr"),
-          LiteralValue(UTF8String.fromString("%test%"), StringType))),
+          LiteralValue(UTF8String.fromString("%test%"), StringType),
+          LiteralValue(UTF8String.fromString("\\"), StringType))),
         new Predicate("=", Array(
           FieldReference("cint"),
           LiteralValue(1, IntegerType))))),

@@ -151,6 +151,8 @@ import org.apache.spark.sql.connector.expressions.GeneralScalarExpression;
  *  <li>Name: <code>LIKE</code>
  *   <ul>
  *    <li>SQL semantic: <code>expr1 LIKE expr2</code> (full pattern matching)</li>
+ *    <li>Children: <code>[expr, pattern, escapeChar]</code> where escapeChar is a
+ *        single-character string literal (default <code>\</code>)</li>
  *    <li>Since version: 4.1.0</li>
  *   </ul>
  *  </li>
@@ -166,6 +168,8 @@ import org.apache.spark.sql.connector.expressions.GeneralScalarExpression;
  *        Only translated when the pattern is a non-literal expression (e.g. a
  *        column reference). Literal patterns are constant-folded by the optimizer,
  *        which removes the <code>Lower()</code> wrappers needed for detection.</li>
+ *    <li>Children: <code>[expr, pattern, escapeChar]</code> where escapeChar is a
+ *        single-character string literal (default <code>\</code>)</li>
  *    <li>Since version: 4.1.0</li>
  *   </ul>
  *  </li>

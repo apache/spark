@@ -344,24 +344,26 @@ class V2ExpressionBuilder(
 
     // RuntimeReplaceable: ILike(col, col2) survives as Like(Lower(col), Lower(col2))
     // when the pattern is non-literal (LikeSimplification only handles literal patterns).
-    // Must be before generic LIKE case. Only translate with default escape char.
+    // Must be before generic LIKE case.
     case Like(Lower(left), Lower(right), escapeChar)
-        if extraCapabilities.contains("ILIKE") && escapeChar == '\\' =>
+        if extraCapabilities.contains("ILIKE") =>
       val l = generateExpression(left)
       val r = generateExpression(right)
       if (l.isDefined && r.isDefined) {
-        Some(new V2Predicate("ILIKE", Array[V2Expression](l.get, r.get)))
+        // Pass escape char as 3rd arg so the data source can apply correct escaping
+        Some(new V2Predicate("ILIKE", Array[V2Expression](l.get, r.get,
+          new LiteralValue(UTF8String.fromString(escapeChar.toString), StringType))))
       } else {
         None
       }
-    // Only translate LIKE with default escape char; non-default escapes cannot
-    // be represented in the V2 Predicate and would produce wrong results.
-    case l: Like
-        if extraCapabilities.contains("LIKE") && l.escapeChar == '\\' =>
+    // LIKE with escape character passed as 3rd argument so the data source
+    // can apply the correct escaping semantics.
+    case l: Like if extraCapabilities.contains("LIKE") =>
       val left = generateExpression(l.left)
       val right = generateExpression(l.right)
       if (left.isDefined && right.isDefined) {
-        Some(new V2Predicate("LIKE", Array[V2Expression](left.get, right.get)))
+        Some(new V2Predicate("LIKE", Array[V2Expression](left.get, right.get,
+          new LiteralValue(UTF8String.fromString(l.escapeChar.toString), StringType))))
       } else {
         None
       }
