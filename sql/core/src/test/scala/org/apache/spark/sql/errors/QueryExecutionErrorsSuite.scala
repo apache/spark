@@ -54,7 +54,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
 import org.apache.spark.sql.streaming.StreamingQueryException
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{ArrayType, BooleanType, DataType, DecimalType, IntegerType, LongType, MetadataBuilder, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, BooleanType, DataType, DecimalType, IntegerType, LongType, MetadataBuilder, NullType, StructField, StructType}
 import org.apache.spark.sql.vectorized.ColumnarArray
 import org.apache.spark.unsafe.array.ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
 import org.apache.spark.util.ThreadUtils
@@ -1108,6 +1108,16 @@ class QueryExecutionErrorsSuite
       },
       condition = "_LEGACY_ERROR_TEMP_2249",
       parameters = Map("maxBroadcastTableBytes" -> "1024.0 MiB", "dataSize" -> "2048.0 MiB"))
+  }
+
+  test("SPARK-38719: CANNOT_CAST_DATATYPE") {
+    checkError(
+      exception = intercept[SparkException] {
+        throw QueryExecutionErrors.cannotCastFromNullTypeError(IntegerType)
+      },
+      condition = "CANNOT_CAST_DATATYPE",
+      parameters = Map("sourceType" -> NullType.typeName, "targetType" -> IntegerType.typeName),
+      sqlState = "42846")
   }
 
   test("V1 table don't support time travel") {
