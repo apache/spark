@@ -47,9 +47,8 @@ public interface Transaction extends Closeable {
    * The connector is responsible for detecting and resolving conflicting commits or throwing
    * an exception if resolution is not possible.
    * <p>
-   * This method must be called exactly once. Spark calls {@link #close()} immediately after
-   * this method returns, so implementations should not release resources inside
-   * {@code commit()} itself.
+   * This method will be called exactly once per transaction. Spark calls {@link #close()}
+   * immediately after this method returns.
    */
   void commit();
 
