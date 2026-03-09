@@ -18,7 +18,6 @@
 """
 Worker that receives input from Piped RDD.
 """
-import datetime
 import os
 import sys
 import dataclasses
@@ -73,7 +72,7 @@ from pyspark.sql.pandas.serializers import (
     ArrowStreamUDTFSerializer,
     ArrowStreamArrowUDTFSerializer,
 )
-from pyspark.sql.pandas.types import to_arrow_type, TimestampType
+from pyspark.sql.pandas.types import to_arrow_type
 from pyspark.sql.types import (
     ArrayType,
     BinaryType,
@@ -3392,11 +3391,6 @@ def main(infile, outfile):
         if split_index == -1:  # for unit tests
             sys.exit(-1)
         start_faulthandler_periodic_traceback()
-
-        # Use the local timezone to convert the timestamp
-        tz = datetime.datetime.now().astimezone().tzinfo
-        TimestampType.tz_info = tz
-
         check_python_version(infile)
 
         memory_limit_mb = int(os.environ.get("PYSPARK_EXECUTOR_MEMORY_MB", "-1"))
