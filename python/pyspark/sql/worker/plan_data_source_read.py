@@ -18,7 +18,6 @@
 import functools
 import pyarrow as pa
 from itertools import islice, chain
-from types import NoneType
 from typing import IO, List, Iterator, Iterable, Tuple, Union
 
 from pyspark.errors import PySparkAssertionError, PySparkRuntimeError
@@ -250,7 +249,7 @@ def write_read_func_and_partitions(
                     "actual": f"'{type(partitions).__name__}'",
                 },
             )
-        if not all(isinstance(p, (InputPartition, NoneType)) for p in partitions):
+        if not all(isinstance(p, InputPartition) for p in partitions):
             partition_types = ", ".join([f"'{type(p).__name__}'" for p in partitions])
             raise PySparkRuntimeError(
                 errorClass="DATA_SOURCE_TYPE_MISMATCH",
@@ -260,7 +259,7 @@ def write_read_func_and_partitions(
                 },
             )
         if len(partitions) == 0:
-            partitions = [None]
+            partitions = [InputPartition(None)]
 
         # Return the serialized partition values.
         write_int(len(partitions), outfile)
