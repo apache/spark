@@ -65,6 +65,7 @@ from pyspark.sql.types import (
 )
 
 if TYPE_CHECKING:
+    import numpy as np
     import pyarrow as pa
     import pandas as pd
 
@@ -1470,7 +1471,6 @@ class ArrowArrayToPandasConversion:
                 spark_type,
                 ser_name=ser_name,
                 timezone=timezone,
-                struct_in_pandas=struct_in_pandas,
                 ndarray_as_list=ndarray_as_list,
                 prefer_int_ext_dtype=prefer_int_ext_dtype,
                 df_for_struct=df_for_struct,
@@ -1584,6 +1584,42 @@ class ArrowArrayToPandasConversion:
         )
         return converter(ser)
 
+    @staticmethod
+    def _ndarray_to_list(v: "np.ndarray") -> list:
+        """Recursively convert numpy ndarrays to Python lists."""
+        import numpy as np
+
+        return [
+            ArrowArrayToPandasConversion._ndarray_to_list(x) if isinstance(x, np.ndarray) else x
+            for x in v
+        ]
+
+    @staticmethod
+    def _contains_conversion_type(data_type: DataType) -> bool:
+        """
+        Check if data type tree contains types that require post-processing conversion.
+
+        Returns True if the type contains UserDefinedType, VariantType, GeographyType,
+        or GeometryType at any nesting level.
+        """
+        if isinstance(
+            data_type,
+            (UserDefinedType, VariantType, GeographyType, GeometryType),
+        ):
+            return True
+        elif isinstance(data_type, ArrayType):
+            return ArrowArrayToPandasConversion._contains_conversion_type(data_type.elementType)
+        elif isinstance(data_type, MapType):
+            return ArrowArrayToPandasConversion._contains_conversion_type(
+                data_type.keyType
+            ) or ArrowArrayToPandasConversion._contains_conversion_type(data_type.valueType)
+        elif isinstance(data_type, StructType):
+            return any(
+                ArrowArrayToPandasConversion._contains_conversion_type(f.dataType)
+                for f in data_type.fields
+            )
+        return False
+
     @classmethod
     def _prefer_convert_numpy(
         cls,
@@ -1611,8 +1647,14 @@ class ArrowArrayToPandasConversion:
         )
         if df_for_struct and isinstance(spark_type, StructType):
             return all(isinstance(f.dataType, supported_types) for f in spark_type.fields)
+        elif isinstance(spark_type, supported_types):
+            return True
+        elif isinstance(spark_type, ArrayType):
+            return not cls._contains_conversion_type(spark_type)
+        # elif isinstance(spark_type, (MapType, StructType)):
+        #     TODO: Support MapType, StructType
         else:
-            return isinstance(spark_type, supported_types)
+            return False
 
     @classmethod
     def convert_numpy(
@@ -1622,7 +1664,6 @@ class ArrowArrayToPandasConversion:
         *,
         ser_name: Optional[str] = None,
         timezone: Optional[str] = None,
-        struct_in_pandas: Optional[str] = None,
         ndarray_as_list: bool = False,
         prefer_int_ext_dtype: bool = False,
         df_for_struct: bool = False,
@@ -1645,7 +1686,6 @@ class ArrowArrayToPandasConversion:
                         spark_type=field.dataType,
                         ser_name=field.name,
                         timezone=timezone,
-                        struct_in_pandas=struct_in_pandas,
                         ndarray_as_list=ndarray_as_list,
                         prefer_int_ext_dtype=prefer_int_ext_dtype,
                         df_for_struct=False,  # always False for child fields
@@ -1662,7 +1702,14 @@ class ArrowArrayToPandasConversion:
             # This name will be dropped after pa.compute functions.
             ser_name = arr._name
 
-        arr = ArrowArrayConversion.preprocess_time(arr)
+        if isinstance(spark_type, ArrayType):
+            # ArrayType only needs tz localization, not ns coercion.
+            # preprocess_time() coerces to timestamp[ns] which causes PyArrow's
+            # to_pandas() to return raw integers for nested timestamps
+            # instead of datetime objects.
+            arr = ArrowArrayConversion.localize_tz(arr)
+        else:
+            arr = ArrowArrayConversion.preprocess_time(arr)
 
         series: pd.Series
 
@@ -1731,15 +1778,14 @@ class ArrowArrayToPandasConversion:
             series = series.map(
                 lambda v: Geometry.fromWKB(v["wkb"], v["srid"]) if v is not None else None
             )
-        # elif isinstance(
-        #     spark_type,
-        #     (
-        #         ArrayType,
-        #         MapType,
-        #         StructType,
-        #     ),
-        # ):
-        # TODO(SPARK-55324): Support complex types
+        elif isinstance(spark_type, ArrayType):
+            if ndarray_as_list:
+                series = arr.to_pandas(date_as_object=True, integer_object_nulls=True)
+                series = series.map(lambda x: cls._ndarray_to_list(x) if x is not None else None)
+            else:
+                series = arr.to_pandas(date_as_object=True)
+        # elif isinstance(spark_type, (MapType, StructType)):
+        #     TODO: Support MapType, StructType
         else:  # pragma: no cover
             assert False, f"Need converter for {spark_type} but failed to find one."
 
