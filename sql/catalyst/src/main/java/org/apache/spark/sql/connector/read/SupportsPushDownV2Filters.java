@@ -56,7 +56,8 @@ public interface SupportsPushDownV2Filters extends ScanBuilder {
    * <p>
    * For each {@link org.apache.spark.sql.connector.expressions.filter.PartitionPredicate},
    * the implementation can use
-   * {@link org.apache.spark.sql.connector.expressions.filter.PartitionPredicate#referencedPartitionColumnOrdinals()}
+   * {@link org.apache.spark.sql.connector.expressions.filter.PartitionPredicate#
+   * referencedPartitionColumnOrdinals()}
    * to decide whether to return it for post-scan filtering. For example, data sources with
    * partition spec evolution may return predicates that reference later-added partition
    * transforms (incompletely partitioned data) so Spark evaluates them after the scan, while
