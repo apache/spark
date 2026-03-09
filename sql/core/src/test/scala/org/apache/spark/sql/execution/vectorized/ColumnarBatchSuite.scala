@@ -39,6 +39,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapBuilder, DateTimeUtils, GenericArrayData, MapData}
 import org.apache.spark.sql.execution.RowToColumnConverter
+import org.apache.spark.sql.execution.arrow.ArrowAllocatorLeakCheck
 import org.apache.spark.sql.execution.datasources.parquet.VectorizedPlainValuesReader
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ArrowUtils
@@ -49,7 +50,7 @@ import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String, VariantVal}
 import org.apache.spark.util.ArrayImplicits._
 
 @ExtendedSQLTest
-class ColumnarBatchSuite extends SparkFunSuite {
+class ColumnarBatchSuite extends SparkFunSuite with ArrowAllocatorLeakCheck {
 
   private def allocate(capacity: Int, dt: DataType, memMode: MemoryMode): WritableColumnVector = {
     if (memMode == MemoryMode.OFF_HEAP) {

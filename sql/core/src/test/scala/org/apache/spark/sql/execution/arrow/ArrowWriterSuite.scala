@@ -35,7 +35,7 @@ import org.apache.spark.sql.vectorized._
 import org.apache.spark.unsafe.types.{CalendarInterval, GeographyVal, GeometryVal, UTF8String}
 import org.apache.spark.util.MaybeNull
 
-class ArrowWriterSuite extends SparkFunSuite {
+class ArrowWriterSuite extends SparkFunSuite with ArrowAllocatorLeakCheck {
 
   test("simple") {
     def check(
@@ -874,6 +874,8 @@ class ArrowWriterSuite extends SparkFunSuite {
     assert(map2.numElements() == 1)
     assert(map2.keyArray().array().mkString(",") == Array(1).mkString(","))
     assert(stringRepr(map2) == Array("bob", "40").mkString(","))
+
+    writer.root.close()
   }
 
   test("SPARK-55056: triple nested array with empty outer array") {
