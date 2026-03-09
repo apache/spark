@@ -213,6 +213,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
      conf.get(PYTHON_DAEMON_KILL_WORKER_ON_FLUSH_FAILURE)
   protected val hideTraceback: Boolean = false
   protected val simplifiedTraceback: Boolean = false
+  protected val sessionLocalTimeZone = conf.getOption("spark.sql.session.timeZone")
 
   protected def runnerConf: Map[String, String] = Map.empty
   protected def evalConf: Map[String, String] = Map.empty
@@ -301,6 +302,9 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     }
     if (simplifiedTraceback) {
       envVars.put("SPARK_SIMPLIFIED_TRACEBACK", "1")
+    }
+    if (sessionLocalTimeZone.isDefined) {
+      envVars.put("SPARK_SESSION_LOCAL_TIMEZONE", sessionLocalTimeZone.get)
     }
     // SPARK-30299 this could be wrong with standalone mode when executor
     // cores might not be correct because it defaults to all cores on the box.
