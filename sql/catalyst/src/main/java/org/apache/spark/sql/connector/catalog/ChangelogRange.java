@@ -31,7 +31,7 @@ import org.apache.spark.annotation.Evolving;
  *   <li>{@link Unbounded} — no boundaries (used by streaming queries)</li>
  * </ul>
  *
- * @since 4.1.0
+ * @since 4.2.0
  */
 @Evolving
 public sealed interface ChangelogRange

@@ -212,7 +212,7 @@ public interface TableCatalog extends CatalogPlugin {
    * @throws NoSuchTableException If the table doesn't exist
    * @throws UnsupportedOperationException If the catalog does not support CDC
    *
-   * @since 4.1.0
+   * @since 4.2.0
    */
   default Changelog loadChangelog(Identifier ident, ChangelogInfo changelogInfo)
       throws NoSuchTableException {

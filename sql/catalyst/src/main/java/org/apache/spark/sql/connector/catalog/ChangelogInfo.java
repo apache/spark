@@ -26,7 +26,7 @@ import org.apache.spark.annotation.Evolving;
  * parser / DataFrame API to the catalog's
  * {@link TableCatalog#loadChangelog(Identifier, ChangelogInfo)} method.
  *
- * @since 4.1.0
+ * @since 4.2.0
  */
 @Evolving
 public class ChangelogInfo {

@@ -102,7 +102,7 @@ public enum TableCatalogCapability {
    * {@code DataFrameReader.changes()}) targeting this catalog will throw an
    * analysis exception during resolution.
    *
-   * @since 4.1.0
+   * @since 4.2.0
    */
   SUPPORT_CHANGELOG
 }

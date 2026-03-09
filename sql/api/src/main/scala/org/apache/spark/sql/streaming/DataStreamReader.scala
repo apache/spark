@@ -132,7 +132,7 @@ abstract class DataStreamReader {
    *
    * @param tableName
    *   is either a qualified or unqualified name that designates a table.
-   * @since 4.1.0
+   * @since 4.2.0
    */
   def changes(tableName: String): DataFrame
 
