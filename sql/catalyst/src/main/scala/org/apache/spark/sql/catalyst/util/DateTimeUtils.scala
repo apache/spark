@@ -1000,7 +1000,7 @@ object DateTimeUtils extends SparkDateTimeUtils {
       localTimeToNanos(lt)
     } catch {
       case e @ (_: DateTimeException | _: ArithmeticException) =>
-        throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRangeWithoutSuggestion(e)
+        throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRange(e)
     }
   }
 
@@ -1015,9 +1015,9 @@ object DateTimeUtils extends SparkDateTimeUtils {
       nanos
     } catch {
       case e: DateTimeException =>
-        throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRangeWithoutSuggestion(e)
+        throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRange(e)
       case e: ArithmeticException =>
-        throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRangeWithoutSuggestion(
+        throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRange(
           new DateTimeException("Overflow in TIME conversion", e))
     }
   }
