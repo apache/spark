@@ -1526,7 +1526,9 @@ class ArrowConvertersSuite extends SharedSparkSession {
     val batchIter2 = ArrowConverters.toBatchWithSchemaIterator(
       inputRows2.iterator, schema2, 5, 1024 * 1024, null, true, false)
 
-    val iter = batchIter1.toArray ++ batchIter2
+    val arr1 = try { batchIter1.toArray } finally { batchIter1.close() }
+    val arr2 = try { batchIter2.toArray } finally { batchIter2.close() }
+    val iter = arr1 ++ arr2
 
     val ctx = TaskContext.empty()
     intercept[IllegalArgumentException] {

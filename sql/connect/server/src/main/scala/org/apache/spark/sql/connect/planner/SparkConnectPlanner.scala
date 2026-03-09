@@ -3024,10 +3024,14 @@ class SparkConnectPlanner(
           timeZoneId = timeZoneId,
           errorOnDuplicatedFieldNames = false,
           largeVarTypes = largeVarTypes)
-        assert(batches.hasNext)
-        val bytes = batches.next()
-        assert(!batches.hasNext, s"remaining batches: ${batches.size}")
-        bytes
+        try {
+          assert(batches.hasNext)
+          val bytes = batches.next()
+          assert(!batches.hasNext, s"remaining batches: ${batches.size}")
+          bytes
+        } finally {
+          batches.close()
+        }
       }
 
       result.setRelation(

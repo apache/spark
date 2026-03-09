@@ -39,6 +39,7 @@ import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralP
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType, TimeType}
+import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -46,6 +47,16 @@ import org.apache.spark.unsafe.types.UTF8String
  * test cases.
  */
 trait SparkConnectPlanTest extends SharedSparkSession {
+
+  override def afterAll(): Unit = {
+    try {
+      val leaked = ArrowUtils.rootAllocator.getAllocatedMemory
+      assert(leaked == 0, s"Arrow rootAllocator memory leak: $leaked bytes still allocated")
+    } finally {
+      super.afterAll()
+    }
+  }
+
   def transform(rel: proto.Relation): logical.LogicalPlan = {
     SparkConnectPlannerTestUtils.transform(spark, rel)
   }
@@ -95,7 +106,7 @@ trait SparkConnectPlanTest extends SharedSparkSession {
       schema: Option[StructType] = None): proto.Relation = {
     val localRelationBuilder = proto.LocalRelation.newBuilder()
 
-    val bytes = ArrowConverters
+    val iter = ArrowConverters
       .toBatchWithSchemaIterator(
         data.iterator,
         DataTypeUtils.fromAttributes(attrs.map(_.toAttribute)),
@@ -104,7 +115,11 @@ trait SparkConnectPlanTest extends SharedSparkSession {
         timeZoneId,
         true,
         false)
-      .next()
+    val bytes = try {
+      iter.next()
+    } finally {
+      iter.close()
+    }
 
     localRelationBuilder.setData(ByteString.copyFrom(bytes))
     schema.foreach(s => localRelationBuilder.setSchema(s.json))
