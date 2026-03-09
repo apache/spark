@@ -31,25 +31,12 @@ import org.apache.spark.sql.connector.expressions.filter.PartitionPredicate
  * [[org.apache.spark.sql.connector.read.SupportsPushDownV2Filters#pushPredicates pushPredicates]]
  * and may use them for additional partition filtering.
  */
-class PartitionPredicateImpl(
+class PartitionPredicateImpl private (
     private val catalystExpression: Expression,
     private val partitionSchema: Seq[AttributeReference])
   extends PartitionPredicate(
     PartitionPredicate.NAME,
     org.apache.spark.sql.connector.expressions.Expression.EMPTY_EXPRESSION) with Logging {
-
-  // Static validation at construction
-  if (partitionSchema.isEmpty) {
-    throw SparkException.internalError(
-      s"Cannot evaluate partition predicate ${catalystExpression.sql}: partition schema is empty")
-  }
-  private val refNames = catalystExpression.references.map(_.name).toSet
-  private val partitionNames = partitionSchema.map(_.name).toSet
-  if (!refNames.subsetOf(partitionNames)) {
-    throw SparkException.internalError(
-      s"Cannot evaluate partition predicate ${catalystExpression.sql}: expression references " +
-      s"${refNames.mkString(", ")} not all in partition columns ${partitionNames.mkString(", ")}")
-  }
 
   /** The wrapped partition filter Catalyst Expression. */
   def expression: Expression = catalystExpression
@@ -115,4 +102,24 @@ class PartitionPredicateImpl(
 
   override def toString(): String =
     s"PartitionPredicate(${catalystExpression.sql})"
+}
+
+object PartitionPredicateImpl {
+
+  def apply(
+      catalystExpression: Expression,
+      partitionSchema: Seq[AttributeReference]): PartitionPredicateImpl = {
+    if (partitionSchema.isEmpty) {
+      throw SparkException.internalError(
+        s"Cannot evaluate partition predicate ${catalystExpression.sql}: partition schema is empty")
+    }
+    val refNames = catalystExpression.references.map(_.name).toSet
+    val partitionNames = partitionSchema.map(_.name).toSet
+    if (!refNames.subsetOf(partitionNames)) {
+      throw SparkException.internalError(
+        s"Cannot evaluate partition predicate ${catalystExpression.sql}: expression references " +
+        s"${refNames.mkString(", ")} not all in partition columns ${partitionNames.mkString(", ")}")
+    }
+    new PartitionPredicateImpl(catalystExpression, partitionSchema)
+  }
 }

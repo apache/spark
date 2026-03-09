@@ -182,7 +182,7 @@ object PushDownUtils {
             val (partitionFiltersForPush, partitionFiltersNotPushed) =
               allPartitionFilters.partition(isPartitionPushableFilter)
             val partitionPredicatesForPush = partitionFiltersForPush
-              .map(expr => new PartitionPredicateImpl(expr, toAttributes(structType)))
+              .map(expr => PartitionPredicateImpl(expr, toAttributes(structType)))
             val returnedSecondPassPartitionFilters =
               r.pushPredicates(partitionPredicatesForPush.toArray).map { predicate =>
                 V2ExpressionUtils.toCatalyst(predicate).getOrElse(

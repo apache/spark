@@ -24,8 +24,8 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.{PredicateHelper, ScalaUDF}
 import org.apache.spark.sql.connector.catalog.BufferedRows
+import org.apache.spark.sql.connector.catalog.InMemoryEnhancedPartitionFilterTable
 import org.apache.spark.sql.connector.catalog.InMemoryTableEnhancedPartitionFilterCatalog
-import org.apache.spark.sql.connector.catalog.TestPartitionPredicateScan
 import org.apache.spark.sql.connector.expressions.filter.PartitionPredicate
 import org.apache.spark.sql.execution.FilterExec
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
@@ -342,7 +342,8 @@ class DataSourceV2EnhancedPartitionFilterSuite
       case b: BatchScanExec => b
     }.getOrElse(fail("Expected BatchScanExec in plan"))
     batchScan.batch match {
-      case s: TestPartitionPredicateScan => s.getPushedPartitionPredicates
+      case s: InMemoryEnhancedPartitionFilterTable#InMemoryEnhancedPartitionFilterBatchScan =>
+        s.getPushedPartitionPredicates
       case _ => Seq.empty
     }
   }

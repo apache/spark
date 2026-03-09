@@ -31,14 +31,6 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
 
 /**
- * Trait for test scans that expose pushed partition predicates (e.g. to verify
- * PartitionPredicate.referencedPartitionColumnOrdinals). Used by DataSourceV2 suites.
- */
-trait TestPartitionPredicateScan {
-  def getPushedPartitionPredicates: Seq[PartitionPredicate]
-}
-
-/**
  * In-memory table whose scan builder implements enhanced partition filtering using
  * PartitionPredicates pushed in a second pass.
  */
@@ -150,10 +142,9 @@ class InMemoryEnhancedPartitionFilterTable(
       readSchema: StructType,
       tableSchema: StructType,
       pushedPartitionPredicates: Seq[PartitionPredicate] = Seq.empty)
-    extends BatchScanBaseClass(_data, readSchema, tableSchema)
-    with TestPartitionPredicateScan {
+    extends BatchScanBaseClass(_data, readSchema, tableSchema) {
 
-    override def getPushedPartitionPredicates: Seq[PartitionPredicate] = pushedPartitionPredicates
+    def getPushedPartitionPredicates: Seq[PartitionPredicate] = pushedPartitionPredicates
   }
 }
 
