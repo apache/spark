@@ -423,7 +423,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           loadDiskStore(sm, appId, attempt)
 
         case _ =>
-          createInMemoryStore(attempt)
+          createInMemoryStore(appId, attempt)
       }
     } catch {
       case _: FileNotFoundException if this.conf.get(EVENT_LOG_ROLLING_ON_DEMAND_LOAD_ENABLED) =>
@@ -1385,10 +1385,12 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
     try {
       val eventLogFiles = reader.listEventLogFiles
+      val startNs = System.nanoTime()
       logInfo(log"Parsing ${MDC(PATH, reader.rootPath)} to re-build UI...")
       parseAppEventLogs(eventLogFiles, replayBus, !reader.completed)
       trackingStore.close(false)
-      logInfo(log"Finished parsing ${MDC(PATH, reader.rootPath)}")
+      val durationMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNs)
+      logInfo(s"Finished parsing ${reader.rootPath} in ${durationMs} ms")
     } catch {
       case e: Exception =>
         Utils.tryLogNonFatalError {
@@ -1494,8 +1496,18 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       }
     }
 
-    // At this point the disk data either does not exist or was deleted because it failed to
-    // load, so the event log needs to be replayed.
+    // At this point the disk data either does not exist or was deleted because it failed to load.
+    // Prefer a pre-materialized snapshot before falling back to event log replay.
+    HistorySnapshotStore.findSnapshot(conf, appId, attempt.info.attemptId).foreach { snapshot =>
+      try {
+        return createDiskStoreFromSnapshot(dm, appId, attempt, metadata, snapshot)
+      } catch {
+        case e: Exception =>
+          logInfo(s"Failed to import snapshot for $appId/${attempt.info.attemptId}.", e)
+      }
+    }
+
+    // No usable local store or snapshot exists, so the event log needs to be replayed.
 
     // If the hybrid store is enabled, try it first and fail back to RocksDB store.
     if (hybridStoreEnabled) {
@@ -1632,7 +1644,63 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     KVUtils.open(newStorePath, metadata, conf, live = false)
   }
 
-  private def createInMemoryStore(attempt: AttemptInfoWrapper): KVStore = {
+  private def createDiskStoreFromSnapshot(
+      dm: HistoryServerDiskManager,
+      appId: String,
+      attempt: AttemptInfoWrapper,
+      metadata: AppStatusStoreMetadata,
+      manifestPath: Path): KVStore = {
+    var newStorePath: File = null
+    val snapshotSize = HistorySnapshotStore.snapshotSize(conf, manifestPath)
+    while (newStorePath == null) {
+      val lease = dm.leaseExact(snapshotSize)
+      val startNs = System.nanoTime()
+      try {
+        Utils.tryWithResource(KVUtils.open(lease.tmpPath, metadata, conf, live = false)) { store =>
+          HistorySnapshotStore.restoreSnapshot(conf, store, manifestPath)
+        }
+        newStorePath = lease.commit(appId, attempt.info.attemptId)
+        val durationMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNs)
+        logInfo(
+          s"Restored history snapshot $manifestPath for $appId/${attempt.info.attemptId} " +
+            s"into disk store in ${durationMs} ms " +
+            s"(${Utils.bytesToString(snapshotSize)})")
+      } catch {
+        case e: Exception =>
+          lease.rollback()
+          throw e
+      }
+    }
+
+    KVUtils.open(newStorePath, metadata, conf, live = false)
+  }
+
+  private def createInMemoryStore(appId: String, attempt: AttemptInfoWrapper): KVStore = {
+    HistorySnapshotStore.findSnapshot(conf, appId, attempt.info.attemptId).foreach { snapshot =>
+      val store = new InMemoryStore()
+      store.setMetadata(new AppStatusStoreMetadata(AppStatusStore.CURRENT_VERSION))
+      val startNs = System.nanoTime()
+      try {
+        HistorySnapshotStore.restoreSnapshot(conf, store, snapshot)
+        val durationMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNs)
+        val sizeString = try {
+          Utils.bytesToString(HistorySnapshotStore.snapshotSize(conf, snapshot))
+        } catch {
+          case NonFatal(e) =>
+            logWarning(s"Failed to measure history snapshot size at $snapshot.", e)
+            "unknown size"
+        }
+        logInfo(
+          s"Restored history snapshot $snapshot for $appId/${attempt.info.attemptId} " +
+            s"into in-memory store in ${durationMs} ms ($sizeString)")
+        return store
+      } catch {
+        case e: Exception =>
+          logInfo(s"Failed to import snapshot for $appId/${attempt.info.attemptId}.", e)
+          store.close()
+      }
+    }
+
     var retried = false
     var store: KVStore = null
     while (store == null) {

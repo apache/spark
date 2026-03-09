@@ -26,6 +26,7 @@ import java.util.zip.{ZipInputStream, ZipOutputStream}
 
 import scala.concurrent.duration._
 
+import com.google.common.io.ByteStreams
 import org.apache.hadoop.fs.{FileStatus, FileSystem, FSDataInputStream, Path}
 import org.apache.hadoop.hdfs.{DFSInputStream, DistributedFileSystem}
 import org.apache.hadoop.ipc.{CallerContext => HadoopCallerContext}
@@ -47,7 +48,7 @@ import org.apache.spark.io._
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.security.GroupMappingServiceProvider
-import org.apache.spark.status.AppStatusStore
+import org.apache.spark.status.{AppStatusStore, AppStatusStoreMetadata}
 import org.apache.spark.status.KVUtils
 import org.apache.spark.status.KVUtils.KVStoreScalaSerializer
 import org.apache.spark.status.api.v1.{ApplicationAttemptInfo, ApplicationInfo}
@@ -109,6 +110,180 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
     } else {
       assert(serializerOfKVStore.isInstanceOf[KVStoreProtobufSerializer])
     }
+  }
+
+  Seq(true, false).foreach { inMemory =>
+    test(s"load app UI from snapshot when event log is unavailable (inMemory = $inMemory)") {
+      val snapshotDir = Utils.createTempDir()
+      val conf = createTestConf(inMemory = inMemory)
+        .set(SNAPSHOT_ENABLED, true)
+        .set(SNAPSHOT_PATH, snapshotDir.getAbsolutePath)
+      val provider = new FsHistoryProvider(conf)
+
+      val logFile = newLogFile("snap-app", None, inProgress = false)
+      writeFile(logFile, None,
+        SparkListenerApplicationStart(logFile.getName(), Some("snap-app-id"), 1L, "test", None),
+        SparkListenerApplicationEnd(2L))
+
+      updateAndCheck(provider) { list =>
+        list.map(_.id) should contain ("snap-app-id")
+      }
+
+      val liveStore = AppStatusStore.createLiveStore(conf)
+      try {
+        val listener = liveStore.listener.get
+        listener.onApplicationStart(
+          SparkListenerApplicationStart("snap-app", Some("snap-app-id"), 1L, "test", None))
+        listener.onApplicationEnd(SparkListenerApplicationEnd(2L))
+        liveStore.store.count(
+          classOf[org.apache.spark.status.ApplicationInfoWrapper]) should be (1L)
+        liveStore.store.read(
+          classOf[org.apache.spark.status.ApplicationInfoWrapper],
+          "snap-app-id").info.id should be ("snap-app-id")
+        HistorySnapshotStore.writeSnapshot(conf, liveStore.store, "snap-app-id", None)
+      } finally {
+        liveStore.store.close()
+      }
+
+      val snapshotFs = new Path(snapshotDir.getAbsolutePath)
+        .getFileSystem(SparkHadoopUtil.get.newConfiguration(conf))
+      val manifest = HistorySnapshotStore.findSnapshot(conf, "snap-app-id", None)
+      assert(manifest.isDefined)
+      val properties = new java.util.Properties()
+      Utils.tryWithResource(snapshotFs.open(manifest.get)) { in =>
+        properties.load(in)
+      }
+      val appInfoClass = classOf[org.apache.spark.status.ApplicationInfoWrapper].getName
+      properties.getProperty("classNames") should include (appInfoClass)
+      properties.getProperty(s"$appInfoClass.count") should be ("1")
+      val restored = new InMemoryStore()
+      restored.setMetadata(AppStatusStoreMetadata(AppStatusStore.CURRENT_VERSION))
+      try {
+        HistorySnapshotStore.restoreSnapshot(conf, restored, manifest.get)
+        restored.count(classOf[org.apache.spark.status.ApplicationInfoWrapper]) should be (1L)
+        new AppStatusStore(restored).applicationInfo().id should be ("snap-app-id")
+      } finally {
+        restored.close()
+      }
+
+      assert(logFile.delete())
+      val appUi = provider.getAppUI("snap-app-id", None)
+      appUi should not be None
+      appUi.get.ui.store.applicationInfo().id should be ("snap-app-id")
+    }
+  }
+
+  test("history snapshot size accounts for manifest and entity files") {
+    val snapshotDir = Utils.createTempDir()
+    val conf = createTestConf(inMemory = true)
+      .set(SNAPSHOT_ENABLED, true)
+      .set(SNAPSHOT_PATH, snapshotDir.getAbsolutePath)
+
+    val liveStore = AppStatusStore.createLiveStore(conf)
+    try {
+      val listener = liveStore.listener.get
+      listener.onApplicationStart(
+        SparkListenerApplicationStart("snap-size", Some("snap-size-id"), 1L, "test", None))
+      listener.onApplicationEnd(SparkListenerApplicationEnd(2L))
+      HistorySnapshotStore.writeSnapshot(conf, liveStore.store, "snap-size-id", None)
+    } finally {
+      liveStore.store.close()
+    }
+
+    val snapshotFs = new Path(snapshotDir.getAbsolutePath)
+      .getFileSystem(SparkHadoopUtil.get.newConfiguration(conf))
+    val manifest = HistorySnapshotStore.findSnapshot(conf, "snap-size-id", None)
+    assert(manifest.isDefined)
+
+    val properties = new java.util.Properties()
+    Utils.tryWithResource(snapshotFs.open(manifest.get)) { in =>
+      properties.load(in)
+    }
+    val appInfoClass = classOf[org.apache.spark.status.ApplicationInfoWrapper].getName
+    val appInfoFile = new Path(
+      manifest.get.getParent,
+      properties.getProperty(s"$appInfoClass.file"))
+    val expectedSize =
+      snapshotFs.getFileStatus(manifest.get).getLen + snapshotFs.getFileStatus(appInfoFile).getLen
+
+    HistorySnapshotStore.snapshotSize(conf, manifest.get) should be >= expectedSize
+  }
+
+  test("history snapshot restore rejects truncated entity payloads") {
+    val snapshotDir = Utils.createTempDir()
+    val conf = createTestConf(inMemory = true)
+      .set(SNAPSHOT_ENABLED, true)
+      .set(SNAPSHOT_PATH, snapshotDir.getAbsolutePath)
+
+    val liveStore = AppStatusStore.createLiveStore(conf)
+    try {
+      val listener = liveStore.listener.get
+      listener.onApplicationStart(
+        SparkListenerApplicationStart("snap-truncated", Some("snap-truncated-id"), 1L, "test",
+          None))
+      listener.onApplicationEnd(SparkListenerApplicationEnd(2L))
+      HistorySnapshotStore.writeSnapshot(conf, liveStore.store, "snap-truncated-id", None)
+    } finally {
+      liveStore.store.close()
+    }
+
+    val snapshotFs = new Path(snapshotDir.getAbsolutePath)
+      .getFileSystem(SparkHadoopUtil.get.newConfiguration(conf))
+    val manifest = HistorySnapshotStore.findSnapshot(conf, "snap-truncated-id", None)
+    assert(manifest.isDefined)
+
+    val properties = new java.util.Properties()
+    Utils.tryWithResource(snapshotFs.open(manifest.get)) { in =>
+      properties.load(in)
+    }
+    val appInfoClass = classOf[org.apache.spark.status.ApplicationInfoWrapper].getName
+    val entityPath = new Path(manifest.get.getParent, properties.getProperty(s"$appInfoClass.file"))
+    val originalBytes = Utils.tryWithResource(snapshotFs.open(entityPath)) { in =>
+      ByteStreams.toByteArray(in)
+    }
+    assert(originalBytes.length > 4)
+
+    Utils.tryWithResource(snapshotFs.create(entityPath, true)) { out =>
+      out.write(originalBytes, 0, originalBytes.length - 1)
+    }
+
+    val restored = new InMemoryStore()
+    restored.setMetadata(AppStatusStoreMetadata(AppStatusStore.CURRENT_VERSION))
+    try {
+      intercept[EOFException] {
+        HistorySnapshotStore.restoreSnapshot(conf, restored, manifest.get)
+      }
+    } finally {
+      restored.close()
+    }
+  }
+
+  test("history snapshot entity lists cover base, task, and optional UI state") {
+    HistorySnapshotStore.baseEntityClassNames.toSet shouldEqual Set(
+      "org.apache.spark.status.ApplicationInfoWrapper",
+      "org.apache.spark.status.ApplicationEnvironmentInfoWrapper",
+      "org.apache.spark.status.AppSummary",
+      "org.apache.spark.status.ExecutorSummaryWrapper",
+      "org.apache.spark.status.JobDataWrapper",
+      "org.apache.spark.status.StageDataWrapper",
+      "org.apache.spark.status.ExecutorStageSummaryWrapper",
+      "org.apache.spark.status.SpeculationStageSummaryWrapper",
+      "org.apache.spark.status.PoolData",
+      "org.apache.spark.status.ProcessSummaryWrapper",
+      "org.apache.spark.status.ResourceProfileWrapper",
+      "org.apache.spark.status.RDDStorageInfoWrapper",
+      "org.apache.spark.status.RDDOperationGraphWrapper",
+      "org.apache.spark.status.StreamBlockData")
+
+    HistorySnapshotStore.taskEntityClassNames.toSet shouldEqual Set(
+      "org.apache.spark.status.TaskDataWrapper",
+      "org.apache.spark.status.CachedQuantile")
+
+    HistorySnapshotStore.optionalEntityClassNames.toSet shouldEqual Set(
+      "org.apache.spark.sql.execution.ui.SQLExecutionUIData",
+      "org.apache.spark.sql.execution.ui.SparkPlanGraphWrapper",
+      "org.apache.spark.sql.streaming.ui.StreamingQueryData",
+      "org.apache.spark.sql.streaming.ui.StreamingQueryProgressWrapper")
   }
 
   private def testAppLogParsing(inMemory: Boolean, useHybridStore: Boolean = false): Unit = {

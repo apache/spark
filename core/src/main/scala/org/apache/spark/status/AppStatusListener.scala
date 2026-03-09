@@ -19,12 +19,15 @@ package org.apache.spark.status
 
 import java.util.Date
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
+import scala.util.control.NonFatal
 
 import org.apache.spark._
+import org.apache.spark.deploy.history.HistorySnapshotStore
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.config.CPUS_PER_TASK
@@ -35,6 +38,7 @@ import org.apache.spark.status.api.v1
 import org.apache.spark.storage._
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.ui.scope._
+import org.apache.spark.util.Utils
 
 /**
  * A Spark listener that writes application information to a data store. The types written to the
@@ -101,10 +105,8 @@ private[spark] class AppStatusListener(
   }
 
   kvstore.onFlush {
-    if (!live) {
-      val now = System.nanoTime()
-      flush(update(_, now))
-    }
+    val now = System.nanoTime()
+    flush(update(_, now))
   }
 
   override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
@@ -210,6 +212,53 @@ private[spark] class AppStatusListener(
       None,
       Seq(attempt))
     kvstore.write(new ApplicationInfoWrapper(appInfo))
+    flush(update(_, System.nanoTime()))
+  }
+
+  private[spark] def writeSnapshotIfNeeded(): Unit = {
+    if (live && appInfo != null && appInfo.attempts.lastOption.exists(_.completed)) {
+      val attemptId = appInfo.attempts.lastOption.flatMap(_.attemptId)
+      val targetManifestPath = HistorySnapshotStore.manifestPath(conf, appInfo.id, attemptId)
+      val startNs = System.nanoTime()
+      try {
+        HistorySnapshotStore.writeSnapshot(conf, kvstore, appInfo.id, attemptId).foreach {
+          manifestPath =>
+            val durationNs = System.nanoTime() - startNs
+            val snapshotBytes = try {
+              Some(HistorySnapshotStore.snapshotSize(conf, manifestPath))
+            } catch {
+              case NonFatal(e) =>
+                logWarning(
+                  s"Failed to measure history snapshot size for ${appInfo.id}/" +
+                    s"${attemptId.getOrElse("")} at $manifestPath.",
+                  e)
+                None
+            }
+            appStatusSource.foreach { source =>
+              source.SNAPSHOT_WRITES.inc()
+              snapshotBytes.foreach(source.SNAPSHOT_WRITE_BYTES.inc)
+              source.SNAPSHOT_WRITE_TIME.update(durationNs, TimeUnit.NANOSECONDS)
+            }
+            val durationMs = TimeUnit.NANOSECONDS.toMillis(durationNs)
+            val sizeString = snapshotBytes.map(Utils.bytesToString).getOrElse("unknown size")
+            logInfo(
+              s"Wrote history snapshot for ${appInfo.id}/${attemptId.getOrElse("")} to " +
+                s"$manifestPath in ${Utils.msDurationToString(durationMs)} " +
+                s"($sizeString).")
+        }
+      } catch {
+        case NonFatal(e) =>
+          val durationNs = System.nanoTime() - startNs
+          appStatusSource.foreach { source =>
+            source.SNAPSHOT_WRITE_FAILURES.inc()
+            source.SNAPSHOT_WRITE_TIME.update(durationNs, TimeUnit.NANOSECONDS)
+          }
+          logWarning(
+            s"Failed to write history snapshot for ${appInfo.id}/${attemptId.getOrElse("")}" +
+              targetManifestPath.map(path => s" to $path").getOrElse("."),
+            e)
+      }
+    }
   }
 
   override def onExecutorAdded(event: SparkListenerExecutorAdded): Unit = {

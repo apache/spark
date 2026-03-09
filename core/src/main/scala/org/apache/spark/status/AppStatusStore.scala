@@ -813,7 +813,14 @@ private[spark] class AppStatusStore(
   }
 
   def close(): Unit = {
-    store.close()
+    store match {
+      case trackingStore: ElementTrackingStore =>
+        trackingStore.close(closeParent = true, postFlushAction = {
+          listener.foreach(_.writeSnapshotIfNeeded())
+        })
+      case _ =>
+        store.close()
+    }
     cleanUpStorePath()
   }
 

@@ -19,7 +19,7 @@ package org.apache.spark.status
 import java.util.concurrent.atomic.AtomicLong
 
 import AppStatusSource.getCounter
-import com.codahale.metrics.{Counter, Gauge, MetricRegistry}
+import com.codahale.metrics.{Counter, Gauge, MetricRegistry, Timer}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.config.Status.METRICS_APP_STATUS_SOURCE_ENABLED
@@ -77,6 +77,15 @@ private[spark] class AppStatusSource extends Source {
   // This is the count of how many executors have been unexcluded at the application level,
   // does not include stage level unexclusion.
   val UNEXCLUDED_EXECUTORS = getCounter("tasks", "unexcludedExecutors")
+
+  val SNAPSHOT_WRITES = getCounter("historySnapshot", "writes")
+
+  val SNAPSHOT_WRITE_FAILURES = getCounter("historySnapshot", "writeFailures")
+
+  val SNAPSHOT_WRITE_BYTES = getCounter("historySnapshot", "writeBytes")
+
+  val SNAPSHOT_WRITE_TIME: Timer = metricRegistry.timer(
+    MetricRegistry.name("historySnapshot", "writeTime"))
 
 }
 
