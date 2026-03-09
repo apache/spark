@@ -23,6 +23,7 @@
 .generated-mima*
 .idea/
 .idea_modules/
+.kiro/
 .metals
 .project
 .pydevproject
