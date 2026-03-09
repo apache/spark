@@ -233,7 +233,7 @@ private[connect] object ErrorUtils extends Logging {
         if (errorClass != null && errorClass.nonEmpty) {
           val messageParameters = JsonMethods.compact(
             JsonMethods.render(map2jvalue(e.getMessageParameters.asScala.toMap)))
-          if (messageParameters.length <= maxMetadataSize) {
+          if (Utils.sizeInBytes(messageParameters) <= maxMetadataSize) {
             errorInfo.putMetadata("errorClass", errorClass)
             errorInfo.putMetadata("messageParameters", messageParameters)
           } else {
@@ -265,7 +265,8 @@ private[connect] object ErrorUtils extends Logging {
         val maxSize = Math.min(
           SparkEnv.get.conf.get(Connect.CONNECT_JVM_STACK_TRACE_MAX_SIZE),
           maxMetadataSize)
-        errorInfo.putMetadata("stackTrace", Utils.abbreviate(stackTrace.get, maxSize.toInt))
+        errorInfo.putMetadata(
+          "stackTrace", Utils.abbreviateByBytes(stackTrace.get, maxSize.toInt))
       } else {
         errorInfo
       }
