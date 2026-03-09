@@ -50,24 +50,51 @@ def plot_pandas_on_spark(data: Union["ps.DataFrame", "ps.Series"], kind: str, **
 
 def plot_pie(data: Union["ps.DataFrame", "ps.Series"], **kwargs):
     from plotly import express
+    from plotly.subplots import make_subplots
+    import plotly.graph_objs as go
 
     data = PandasOnSparkPlotAccessor.pandas_plot_data_map["pie"](data)
+    subplots = kwargs.pop("subplots", False) 
+
 
     if isinstance(data, pd.Series):
         pdf = data.to_frame()
         return express.pie(pdf, values=pdf.columns[0], names=pdf.index, **kwargs)
     elif isinstance(data, pd.DataFrame):
-        values = kwargs.pop("y", None)
-        default_names = None
-        if values is not None:
-            default_names = data.index
+        if subplots:
+            import math
+            cols = list(data.columns)
+            layout = kwargs.pop("layout", None)
+            if layout is not None:
+                nrows, ncols = layout
+            else:
+                ncols = min(len(cols), 3)  # default max 3 per row
+                nrows = math.ceil(len(cols) / ncols)
+            fig = make_subplots(
+                rows=nrows,
+                cols=ncols,
+                specs=[[{"type": "pie"}] * ncols for _ in range(nrows)],
+                subplot_titles=[str(c) for c in cols],
+            )
+            for i, col in enumerate(cols):
+                fig.add_trace(
+                    go.Pie(labels=data.index, values=data[col], name=str(col)),
+                    row=i // ncols + 1,
+                    col=i % ncols + 1,
+                )
+            return fig
+        else:
+            values = kwargs.pop("y", None)
+            default_names = None
+            if values is not None:
+                default_names = data.index
 
-        return express.pie(
-            data,
-            values=kwargs.pop("values", values),
-            names=kwargs.pop("names", default_names),
-            **kwargs,
-        )
+            return express.pie(
+                data,
+                values=kwargs.pop("values", values),
+                names=kwargs.pop("names", default_names),
+                **kwargs,
+            )
     else:
         raise RuntimeError("Unexpected type: [%s]" % type(data))
 
