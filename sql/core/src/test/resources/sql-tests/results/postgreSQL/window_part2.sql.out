@@ -37,7 +37,16 @@ FROM tenk1 WHERE unique1 < 10
 -- !query schema
 struct<sum(unique1) OVER (ORDER BY four ASC NULLS FIRST RANGE BETWEEN 2 PRECEDING AND 1 PRECEDING):bigint,unique1:int,four:int>
 -- !query output
-
+12	1	1
+12	5	1
+12	9	1
+23	3	3
+23	7	3
+27	2	2
+27	6	2
+NULL	0	0
+NULL	4	0
+NULL	8	0
 
 
 -- !query
@@ -47,7 +56,16 @@ FROM tenk1 WHERE unique1 < 10
 -- !query schema
 struct<sum(unique1) OVER (ORDER BY four DESC NULLS LAST RANGE BETWEEN 2 PRECEDING AND 1 PRECEDING):bigint,unique1:int,four:int>
 -- !query output
-
+10	2	2
+10	6	2
+18	1	1
+18	5	1
+18	9	1
+23	0	0
+23	4	0
+23	8	0
+NULL	3	3
+NULL	7	3
 
 
 -- !query
@@ -57,7 +75,16 @@ FROM tenk1 WHERE unique1 < 10
 -- !query schema
 struct<sum(unique1) OVER (PARTITION BY four ORDER BY unique1 ASC NULLS FIRST RANGE BETWEEN 5 PRECEDING AND 6 FOLLOWING):bigint,unique1:int,four:int>
 -- !query output
-
+10	3	3
+10	7	3
+12	4	0
+12	8	0
+14	9	1
+15	5	1
+4	0	0
+6	1	1
+8	2	2
+8	6	2
 
 
 -- !query

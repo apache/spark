@@ -221,6 +221,12 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
           s"pandas and/or pyarrow were not available in [$pythonExec].") {
           /* Do nothing */
         }
+      case udtfTestCase: SQLQueryTestSuite#UDTFSetTest
+          if testCase.name.contains("Python UDTFs") && !shouldTestPythonUDFs =>
+        ignore(s"${testCase.name} is skipped because " +
+          s"[$pythonExec] and/or pyspark were not available.") {
+          /* Do nothing */
+        }
       case _ =>
         // Create a test case to run this case.
         test(testCase.name) {

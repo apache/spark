@@ -2362,7 +2362,7 @@ select count(*) from tenk1 a where unique1 in
 -- !query schema
 struct<count(1):bigint>
 -- !query output
-0
+1
 
 
 -- !query
@@ -2373,7 +2373,7 @@ select count(*) from tenk1 x where
 -- !query schema
 struct<count(1):bigint>
 -- !query output
-0
+1
 
 
 -- !query
@@ -2384,7 +2384,7 @@ select count(*) from tenk1 x where
 -- !query schema
 struct<count(1):bigint>
 -- !query output
-0
+1
 
 
 -- !query
@@ -2414,7 +2414,7 @@ where t4.thousand = t5.unique1 and ss.x1 = t4.tenthous and ss.x2 = t5.stringu1
 -- !query schema
 struct<count(1):bigint>
 -- !query output
-0
+1000
 
 
 -- !query
@@ -2467,7 +2467,7 @@ select count(*) from
 -- !query schema
 struct<count(1):bigint>
 -- !query output
-0
+10000
 
 
 -- !query
@@ -2556,7 +2556,7 @@ select count(*) from tenk1 a, tenk1 b
 -- !query schema
 struct<count(1):bigint>
 -- !query output
-0
+100000
 
 
 -- !query
@@ -2896,7 +2896,9 @@ SELECT qq, unique1
 -- !query schema
 struct<qq:bigint,unique1:int>
 -- !query output
-
+123	4596
+123	4596
+456	7318
 
 
 -- !query
@@ -3004,7 +3006,7 @@ select count(*) from
 -- !query schema
 struct<count(1):bigint>
 -- !query output
-0
+10
 
 
 -- !query
@@ -3021,7 +3023,7 @@ NULL
 NULL
 NULL
 NULL
-NULL
+0
 
 
 -- !query
@@ -3036,7 +3038,6 @@ order by fault
 struct<unique1:int,q1:bigint,fault:bigint>
 -- !query output
 NULL	123	122
-NULL	123	122
 
 
 -- !query
@@ -3046,8 +3047,7 @@ select q1, unique2, thousand, hundred
 -- !query schema
 struct<q1:bigint,unique2:int,thousand:int,hundred:int>
 -- !query output
-123	NULL	NULL	NULL
-123	NULL	NULL	NULL
+
 
 
 -- !query
@@ -3057,7 +3057,7 @@ select f1, unique2, case when unique2 is null then f1 else 0 end
 -- !query schema
 struct<f1:int,unique2:int,CASE WHEN (unique2 IS NULL) THEN f1 ELSE 0 END:int>
 -- !query output
-0	NULL	0
+0	0	0
 
 
 -- !query
@@ -3177,7 +3177,7 @@ select * from
 -- !query schema
 struct<id:int,unique1:int,unique2:int,two:int,four:int,ten:int,twenty:int,hundred:int,thousand:int,twothousand:int,fivethous:int,tenthous:int,odd:int,even:int,stringu1:string,stringu2:string,string4:string,id:int>
 -- !query output
-1	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	1
+1	1	2838	1	1	1	1	1	1	1	1	1	2	3	BAAAAA	EFEAAA	OOOOxx	1
 
 
 -- !query
@@ -3459,7 +3459,7 @@ from tenk1 a, lateral (select * from int4_tbl b where f1 = a.unique1) x
 -- !query schema
 struct<unique2:int,f1:int>
 -- !query output
-
+9998	0
 
 
 -- !query
@@ -3468,7 +3468,7 @@ from int4_tbl x, lateral (select unique2 from tenk1 where f1 = unique1) ss
 -- !query schema
 struct<unique2:int,f1:int>
 -- !query output
-
+9998	0
 
 
 -- !query
@@ -3477,9 +3477,9 @@ from int4_tbl x left join lateral (select unique1, unique2 from tenk1 where f1 =
 -- !query schema
 struct<unique2:int,f1:int>
 -- !query output
+9998	0
 NULL	-123456
 NULL	-2147483647
-NULL	0
 NULL	123456
 NULL	2147483647
 

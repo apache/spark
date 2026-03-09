@@ -391,7 +391,7 @@ select count(*) from
 -- !query schema
 struct<count(1):bigint>
 -- !query output
-0
+5000
 
 
 -- !query
@@ -399,7 +399,7 @@ select unique1 from tenk1 except select unique2 from tenk1 where unique2 != 10
 -- !query schema
 struct<unique1:int>
 -- !query output
-
+10
 
 
 -- !query
@@ -408,7 +408,7 @@ select count(*) from
 -- !query schema
 struct<count(1):bigint>
 -- !query output
-0
+5000
 
 
 -- !query
@@ -416,7 +416,7 @@ select unique1 from tenk1 except select unique2 from tenk1 where unique2 != 10
 -- !query schema
 struct<unique1:int>
 -- !query output
-
+10
 
 
 -- !query

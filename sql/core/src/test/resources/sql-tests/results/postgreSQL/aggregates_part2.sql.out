@@ -199,7 +199,7 @@ select min(unique1) from tenk1
 -- !query schema
 struct<min(unique1):int>
 -- !query output
-NULL
+0
 
 
 -- !query
@@ -207,7 +207,7 @@ select max(unique1) from tenk1
 -- !query schema
 struct<max(unique1):int>
 -- !query output
-NULL
+9999
 
 
 -- !query
@@ -215,7 +215,7 @@ select max(unique1) from tenk1 where unique1 < 42
 -- !query schema
 struct<max(unique1):int>
 -- !query output
-NULL
+41
 
 
 -- !query
@@ -223,7 +223,7 @@ select max(unique1) from tenk1 where unique1 > 42
 -- !query schema
 struct<max(unique1):int>
 -- !query output
-NULL
+9999
 
 
 -- !query
@@ -239,7 +239,7 @@ select max(tenthous) from tenk1 where thousand = 33
 -- !query schema
 struct<max(tenthous):int>
 -- !query output
-NULL
+9033
 
 
 -- !query
@@ -247,7 +247,7 @@ select min(tenthous) from tenk1 where thousand = 33
 -- !query schema
 struct<min(tenthous):int>
 -- !query output
-NULL
+33
 
 
 -- !query
@@ -255,7 +255,7 @@ select distinct max(unique2) from tenk1
 -- !query schema
 struct<max(unique2):int>
 -- !query output
-NULL
+9999
 
 
 -- !query
@@ -263,7 +263,7 @@ select max(unique2) from tenk1 order by 1
 -- !query schema
 struct<max(unique2):int>
 -- !query output
-NULL
+9999
 
 
 -- !query
@@ -271,7 +271,7 @@ select max(unique2) from tenk1 order by max(unique2)
 -- !query schema
 struct<max(unique2):int>
 -- !query output
-NULL
+9999
 
 
 -- !query
@@ -279,7 +279,7 @@ select max(unique2) from tenk1 order by max(unique2)+1
 -- !query schema
 struct<max(unique2):int>
 -- !query output
-NULL
+9999
 
 
 -- !query
@@ -287,9 +287,9 @@ select t1.max_unique2, g from (select max(unique2) as max_unique2 FROM tenk1) t1
 -- !query schema
 struct<max_unique2:int,g:int>
 -- !query output
-NULL	3
-NULL	2
-NULL	1
+9999	3
+9999	2
+9999	1
 
 
 -- !query
@@ -297,4 +297,4 @@ select max(100) from tenk1
 -- !query schema
 struct<max(100):int>
 -- !query output
-NULL
+100
