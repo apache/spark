@@ -177,6 +177,30 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = null)
   }
 
+  def invalidInputInCastToTimeError(
+      from: DataType,
+      value: Any,
+      context: SQLQueryContext): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "CAST_INVALID_INPUT",
+      messageParameters = Map(
+        "expression" -> toSQLValue(value, from),
+        "sourceType" -> toSQLType(from),
+        "targetType" -> toSQLType(TimeType),
+        "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
+      context = getQueryContext(context),
+      summary = getSummary(context))
+  }
+
+  def invalidTimeValueError(value: Long): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "INVALID_TIME_VALUE",
+      messageParameters = Map(
+        "value" -> value.toString,
+        "min" -> "0",
+        "max" -> "86399999999"))
+  }
+
   def cannotParseDecimalError(): Throwable = {
     new SparkRuntimeException(
       errorClass = "CANNOT_PARSE_DECIMAL",

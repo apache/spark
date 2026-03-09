@@ -122,6 +122,8 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
       // Some MySQL JDBC drivers converts JSON type into Types.VARCHAR with a precision of -1.
       // Explicitly converts it into StringType here.
       Some(StringType)
+    } else if (sqlType == Types.TIME) {
+      Some(TimeType)
     } else if (sqlType == Types.TINYINT) {
       if (md.build().getBoolean("isSigned")) {
         Some(ByteType)
@@ -207,6 +209,7 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
     case FloatType => Option(JdbcType("FLOAT", java.sql.Types.FLOAT))
     case StringType => Option(JdbcType("LONGTEXT", java.sql.Types.LONGVARCHAR))
     case ByteType => Option(JdbcType("TINYINT", java.sql.Types.TINYINT))
+    case TimeType => Option(JdbcType("TIME", java.sql.Types.TIME))
     case _ => JdbcUtils.getCommonJDBCType(dt)
   }
 

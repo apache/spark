@@ -144,6 +144,7 @@ private object MsSqlServerDialect extends JdbcDialect {
         sqlType match {
           case java.sql.Types.SMALLINT => Some(ShortType)
           case java.sql.Types.REAL => Some(FloatType)
+          case java.sql.Types.TIME => Some(TimeType)
           case SpecificTypes.GEOMETRY | SpecificTypes.GEOGRAPHY => Some(BinaryType)
           case _ => None
         }
@@ -157,6 +158,7 @@ private object MsSqlServerDialect extends JdbcDialect {
     case StringType => Some(JdbcType("NVARCHAR(MAX)", java.sql.Types.NVARCHAR))
     case BooleanType => Some(JdbcType("BIT", java.sql.Types.BIT))
     case BinaryType => Some(JdbcType("VARBINARY(MAX)", java.sql.Types.VARBINARY))
+    case TimeType => Some(JdbcType("TIME", java.sql.Types.TIME))
     case ShortType if !SQLConf.get.legacyMsSqlServerNumericMappingEnabled =>
       Some(JdbcType("SMALLINT", java.sql.Types.SMALLINT))
     case _ => None

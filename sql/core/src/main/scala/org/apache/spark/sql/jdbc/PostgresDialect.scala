@@ -65,6 +65,8 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
       Some(StringType)
     } else if ("text".equalsIgnoreCase(typeName)) {
       Some(StringType) // sqlType is  Types.VARCHAR
+    } else if (sqlType == Types.TIME) {
+      Some(TimeType)
     } else if (sqlType == Types.ARRAY) {
       val scale = md.build.getLong("scale").toInt
       // postgres array type names start with underscore
@@ -91,7 +93,8 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
          "interval" | "pg_snapshot" =>
       Some(StringType)
     case "bytea" => Some(BinaryType)
-    case "timestamp" | "timestamptz" | "time" | "timetz" => Some(TimestampType)
+    case "timestamp" | "timestamptz" | "timetz" => Some(TimestampType)
+    case "time" => Some(TimeType)
     case "date" => Some(DateType)
     case "numeric" | "decimal" if precision > 0 => Some(DecimalType.bounded(precision, scale))
     case "numeric" | "decimal" =>
@@ -122,6 +125,7 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
     case FloatType => Some(JdbcType("FLOAT4", Types.FLOAT))
     case DoubleType => Some(JdbcType("FLOAT8", Types.DOUBLE))
     case ShortType | ByteType => Some(JdbcType("SMALLINT", Types.SMALLINT))
+    case TimeType => Some(JdbcType("TIME", Types.TIME))
     case t: DecimalType => Some(
       JdbcType(s"NUMERIC(${t.precision},${t.scale})", java.sql.Types.NUMERIC))
     case ArrayType(et, _) if et.isInstanceOf[AtomicType] =>

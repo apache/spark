@@ -1902,6 +1902,11 @@
         "message" : [
           "Must be evaluable."
         ]
+  },
+  "INVALID_TIME_VALUE" : {
+    "message" : [
+      "The TIME value <value> is out of valid range. Valid TIME values are between <min> and <max> microseconds (00:00:00.000000 to 23:59:59.999999)."
+    ]
       }
     }
   },
