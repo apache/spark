@@ -1600,24 +1600,17 @@ class ArrowArrayToPandasConversion:
         Check if data type tree contains types that require post-processing conversion.
 
         Returns True if the type contains UserDefinedType, VariantType, GeographyType,
-        or GeometryType at any nesting level.
+        GeometryType, MapType, or StructType at any nesting level.
+        MapType and StructType require conversion because PyArrow's to_pandas() produces
+        maps as lists of tuples (not dicts) and structs as dicts (not Rows).
         """
         if isinstance(
             data_type,
-            (UserDefinedType, VariantType, GeographyType, GeometryType),
+            (UserDefinedType, VariantType, GeographyType, GeometryType, MapType, StructType),
         ):
             return True
         elif isinstance(data_type, ArrayType):
             return ArrowArrayToPandasConversion._contains_conversion_type(data_type.elementType)
-        elif isinstance(data_type, MapType):
-            return ArrowArrayToPandasConversion._contains_conversion_type(
-                data_type.keyType
-            ) or ArrowArrayToPandasConversion._contains_conversion_type(data_type.valueType)
-        elif isinstance(data_type, StructType):
-            return any(
-                ArrowArrayToPandasConversion._contains_conversion_type(f.dataType)
-                for f in data_type.fields
-            )
         return False
 
     @classmethod
