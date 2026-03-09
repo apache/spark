@@ -129,6 +129,23 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
       ))
   }
 
+  test("SPARK-49642: DATETIME_FIELD_OUT_OF_BOUNDS does not suggest ANSI config") {
+    checkError(
+      exception = intercept[SparkDateTimeException] {
+        sql("select make_date(2000, 13, 1)").collect()
+      },
+      condition = "DATETIME_FIELD_OUT_OF_BOUNDS.WITHOUT_SUGGESTION",
+      sqlState = "22023",
+      parameters = Map("rangeMessage" -> "Invalid value for MonthOfYear (valid values 1 - 12): 13"))
+    // Ensure message does not contain the removed ANSI bypass suggestion
+    val e = intercept[SparkDateTimeException] {
+      sql("select make_date(2000, 1, 33)").collect()
+    }
+    assert(e.getCondition === "DATETIME_FIELD_OUT_OF_BOUNDS.WITHOUT_SUGGESTION")
+    assert(!e.getMessage.contains("spark.sql.ansi.enabled"))
+    assert(!e.getMessage.contains("to \"false\" to bypass"))
+  }
+
   test("NUMERIC_VALUE_OUT_OF_RANGE: cast string to decimal") {
     checkError(
       exception = intercept[SparkArithmeticException] {

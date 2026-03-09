@@ -53,10 +53,9 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "DATETIME_FIELD_OUT_OF_BOUNDS.WITH_SUGGESTION",
+  "errorClass" : "DATETIME_FIELD_OUT_OF_BOUNDS.WITHOUT_SUGGESTION",
   "sqlState" : "22023",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "rangeMessage" : "Invalid value for MonthOfYear (valid values 1 - 12): 13"
   }
 }
@@ -69,10 +68,9 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "DATETIME_FIELD_OUT_OF_BOUNDS.WITH_SUGGESTION",
+  "errorClass" : "DATETIME_FIELD_OUT_OF_BOUNDS.WITHOUT_SUGGESTION",
   "sqlState" : "22023",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "rangeMessage" : "Invalid value for DayOfMonth (valid values 1 - 28/31): 33"
   }
 }
@@ -1347,10 +1345,9 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "DATETIME_FIELD_OUT_OF_BOUNDS.WITH_SUGGESTION",
+  "errorClass" : "DATETIME_FIELD_OUT_OF_BOUNDS.WITHOUT_SUGGESTION",
   "sqlState" : "22023",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "rangeMessage" : "Invalid value for SecondOfMinute (valid values 0 - 59): 61"
   }
 }
@@ -1379,10 +1376,9 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "DATETIME_FIELD_OUT_OF_BOUNDS.WITH_SUGGESTION",
+  "errorClass" : "DATETIME_FIELD_OUT_OF_BOUNDS.WITHOUT_SUGGESTION",
   "sqlState" : "22023",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "rangeMessage" : "Invalid value for SecondOfMinute (valid values 0 - 59): 99"
   }
 }
@@ -1395,10 +1391,9 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "DATETIME_FIELD_OUT_OF_BOUNDS.WITH_SUGGESTION",
+  "errorClass" : "DATETIME_FIELD_OUT_OF_BOUNDS.WITHOUT_SUGGESTION",
   "sqlState" : "22023",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "rangeMessage" : "Invalid value for SecondOfMinute (valid values 0 - 59): 999"
   }
 }
