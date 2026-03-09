@@ -3515,13 +3515,27 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   }
 
   def unsupportedTableChangesInAutoSchemaEvolutionError(
-      changes: Array[TableChange], tableName: Seq[String]): Throwable = {
-    val sanitizedTableName = tableName.map(_.replaceAll("\"", ""))
+      ident: Identifier,
+      catalogName: String,
+      changes: Array[TableChange]): Throwable = {
+    val tableName = (catalogName +: ident.asMultipartIdentifier).map(_.replaceAll("\"", ""))
     val changesDesc = changes.map(_.toString).mkString("; ")
     new AnalysisException(
-      errorClass = "UNSUPPORTED_TABLE_CHANGES_IN_AUTO_SCHEMA_EVOLUTION",
+      errorClass = "UNSUPPORTED_TABLE_CHANGES_IN_AUTO_SCHEMA_EVOLUTION.CATALOG_PARTIAL",
       messageParameters = Map(
-        "changes" -> changesDesc, "tableName" -> toSQLId(sanitizedTableName)))
+        "tableName" -> toSQLId(tableName), "changes" -> changesDesc))
+  }
+
+  def failedToEvolveSchemaDuringMergeError(
+      ident: Identifier,
+      catalogName: String,
+      cause: Throwable): Throwable = {
+    val tableName = (catalogName +: ident.asMultipartIdentifier).map(_.replaceAll("\"", ""))
+    val detail = Option(cause.getMessage).getOrElse("Unknown error")
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_TABLE_CHANGES_IN_AUTO_SCHEMA_EVOLUTION.EVOLUTION_FAILED",
+      messageParameters = Map("tableName" -> toSQLId(tableName), "detail" -> detail),
+      cause = Some(cause))
   }
 
   def pathOptionNotSetCorrectlyWhenReadingError(): Throwable = {

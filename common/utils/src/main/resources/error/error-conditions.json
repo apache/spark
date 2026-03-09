@@ -7660,8 +7660,20 @@
   },
   "UNSUPPORTED_TABLE_CHANGES_IN_AUTO_SCHEMA_EVOLUTION" : {
     "message" : [
-      "Operation could not apply the following schema changes to table <tableName> because the catalog did not support or only partially applied them: <changes>."
+      "Automatic schema evolution failed for table <tableName>."
     ],
+    "subClass" : {
+      "CATALOG_PARTIAL" : {
+        "message" : [
+          "The catalog did not support or only partially applied the following changes: <changes>."
+        ]
+      },
+      "EVOLUTION_FAILED" : {
+        "message" : [
+          "The catalog returned the error: <detail>"
+        ]
+      }
+    },
     "sqlState" : "42000"
   },
   "UNSUPPORTED_TABLE_CHANGE_IN_JDBC_CATALOG" : {
