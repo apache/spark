@@ -210,7 +210,7 @@ def write_read_func_and_partitions(
         # Deserialize the partition value.
         partition = pickleSer.loads(partition_bytes)
 
-        assert partition is None or isinstance(partition, InputPartition), (
+        assert isinstance(partition, InputPartition), (
             "Expected the partition value to be of type 'InputPartition', "
             f"but found '{type(partition).__name__}'."
         )
