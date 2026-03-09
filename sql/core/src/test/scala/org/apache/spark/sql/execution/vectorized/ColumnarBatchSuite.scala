@@ -48,6 +48,40 @@ import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String, VariantVal}
 import org.apache.spark.util.ArrayImplicits._
 
+/**
+ * A minimal UDT backed by IntegerType, for testing UDT handling in ColumnarRow/ColumnarBatchRow.
+ */
+@SQLUserDefinedType(udt = classOf[TestIntUDT])
+private case class TestIntWrapper(value: Int)
+
+private class TestIntUDT extends UserDefinedType[TestIntWrapper] {
+  override def sqlType: DataType = IntegerType
+  override def serialize(obj: TestIntWrapper): Any = obj.value
+  override def userClass: Class[TestIntWrapper] = classOf[TestIntWrapper]
+  override def deserialize(datum: Any): TestIntWrapper = datum match {
+    case v: Int => TestIntWrapper(v)
+  }
+}
+
+/**
+ * A minimal UDT backed by StructType, for testing UDT handling in ColumnarRow/ColumnarBatchRow.
+ */
+@SQLUserDefinedType(udt = classOf[TestStructWrapperUDT])
+private case class TestStructWrapper(x: Int, y: Long)
+
+private class TestStructWrapperUDT extends UserDefinedType[TestStructWrapper] {
+  override def sqlType: DataType = new StructType()
+    .add("x", IntegerType)
+    .add("y", LongType)
+  override def serialize(obj: TestStructWrapper): Any = {
+    InternalRow(obj.x, obj.y)
+  }
+  override def userClass: Class[TestStructWrapper] = classOf[TestStructWrapper]
+  override def deserialize(datum: Any): TestStructWrapper = datum match {
+    case row: InternalRow => TestStructWrapper(row.getInt(0), row.getLong(1))
+  }
+}
+
 @ExtendedSQLTest
 class ColumnarBatchSuite extends SparkFunSuite {
 
@@ -2070,5 +2104,199 @@ class ColumnarBatchSuite extends SparkFunSuite {
           assert(batchRowCopy.isNullAt(0))
         }
       }
+  }
+
+  test("SPARK-55897: ColumnarRow.get should support UserDefinedType") {
+    // This test reproduces a bug where ColumnarRow.get() throws
+    // SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3155") when called with a
+    // UserDefinedType, because the get() method has no instanceof check for UserDefinedType.
+    // This occurs when GetStructField.nullSafeEval extracts a UDT field from a ColumnarRow
+    // (e.g., nested struct from vectorized Parquet reader) via the interpreted eval path.
+
+    val primitiveUDT = new TestIntUDT()
+    val structUDT = new TestStructWrapperUDT()
+
+    Seq(MemoryMode.ON_HEAP, MemoryMode.OFF_HEAP).foreach { memMode =>
+      // Test 1: ColumnarRow.get() with a primitive-backed UDT (sqlType = IntegerType)
+      // Simulates a struct column with a UDT field, where getStruct() returns a ColumnarRow.
+      val structWithPrimUDT = new StructType()
+        .add("name", StringType)
+        .add("udt_field", IntegerType) // storage type is IntegerType
+      val col1 = allocate(10, structWithPrimUDT, memMode)
+      try {
+        val nameChild = col1.getChild(0)
+        val udtChild = col1.getChild(1)
+        nameChild.putByteArray(0, "hello".getBytes)
+        udtChild.putInt(0, 42)
+
+        val row: InternalRow = col1.getStruct(0) // returns ColumnarRow
+        assert(row.isInstanceOf[org.apache.spark.sql.vectorized.ColumnarRow],
+          "Expected a ColumnarRow from getStruct()")
+
+        // This call should delegate to getInt() via the UDT's sqlType,
+        // but currently throws SparkUnsupportedOperationException.
+        val result = row.get(1, primitiveUDT)
+        assert(result === 42)
+      } finally {
+        col1.close()
+      }
+
+      // Test 2: ColumnarRow.get() with a struct-backed UDT (sqlType = StructType)
+      val structWithStructUDT = new StructType()
+        .add("id", IntegerType)
+        .add("nested_udt", new StructType().add("x", IntegerType).add("y", LongType))
+      val col2 = allocate(10, structWithStructUDT, memMode)
+      try {
+        val idChild = col2.getChild(0)
+        val nestedChild = col2.getChild(1)
+        val xChild = nestedChild.getChild(0)
+        val yChild = nestedChild.getChild(1)
+
+        idChild.putInt(0, 1)
+        xChild.putInt(0, 10)
+        yChild.putLong(0, 20L)
+
+        val row: InternalRow = col2.getStruct(0)
+        assert(row.isInstanceOf[org.apache.spark.sql.vectorized.ColumnarRow])
+
+        // This call should delegate to getStruct() via the UDT's sqlType (StructType),
+        // but currently throws SparkUnsupportedOperationException.
+        val result = row.get(1, structUDT)
+        assert(result != null)
+        assert(result.isInstanceOf[InternalRow])
+        val nestedRow = result.asInstanceOf[InternalRow]
+        assert(nestedRow.getInt(0) === 10)
+        assert(nestedRow.getLong(1) === 20L)
+      } finally {
+        col2.close()
+      }
+    }
+  }
+
+  test("SPARK-55897: ColumnarArray.get should support UserDefinedType") {
+    // ColumnarArray.get() delegates to SpecializedGettersReader.read() with
+    // handleUserDefinedType=false, so it also fails on UDTs. This surfaces when
+    // accessing elements of an array column whose element type is a UDT.
+
+    val primitiveUDT = new TestIntUDT()
+    val structUDT = new TestStructWrapperUDT()
+
+    Seq(MemoryMode.ON_HEAP, MemoryMode.OFF_HEAP).foreach { memMode =>
+      // Test 1: Array of primitive-backed UDT (sqlType = IntegerType)
+      val col1 = allocate(10, new ArrayType(IntegerType, false), memMode)
+      try {
+        val data = col1.arrayData()
+        data.putInt(0, 10)
+        data.putInt(1, 20)
+        data.putInt(2, 30)
+        // Array at index 0: [10, 20], Array at index 1: [30]
+        col1.putArray(0, 0, 2)
+        col1.putArray(1, 2, 1)
+
+        val arr = col1.getArray(0)
+        assert(arr.isInstanceOf[org.apache.spark.sql.vectorized.ColumnarArray])
+
+        // This should delegate to getInt() via the UDT's sqlType,
+        // but currently throws SparkUnsupportedOperationException.
+        val result0 = arr.get(0, primitiveUDT)
+        assert(result0 === 10)
+        val result1 = arr.get(1, primitiveUDT)
+        assert(result1 === 20)
+
+        val arr2 = col1.getArray(1)
+        val result2 = arr2.get(0, primitiveUDT)
+        assert(result2 === 30)
+      } finally {
+        col1.close()
+      }
+
+      // Test 2: Array of struct-backed UDT (sqlType = StructType)
+      val innerStruct = new StructType().add("x", IntegerType).add("y", LongType)
+      val col2 = allocate(10, new ArrayType(innerStruct, false), memMode)
+      try {
+        val data = col2.arrayData()
+        val xChild = data.getChild(0)
+        val yChild = data.getChild(1)
+        xChild.putInt(0, 100)
+        yChild.putLong(0, 200L)
+        xChild.putInt(1, 300)
+        yChild.putLong(1, 400L)
+        // Array at index 0: [(100, 200), (300, 400)]
+        col2.putArray(0, 0, 2)
+
+        val arr = col2.getArray(0)
+
+        // This should delegate to getStruct() via the UDT's sqlType,
+        // but currently throws SparkUnsupportedOperationException.
+        val result = arr.get(0, structUDT)
+        assert(result != null)
+        assert(result.isInstanceOf[InternalRow])
+        val row = result.asInstanceOf[InternalRow]
+        assert(row.getInt(0) === 100)
+        assert(row.getLong(1) === 200L)
+
+        val result2 = arr.get(1, structUDT)
+        val row2 = result2.asInstanceOf[InternalRow]
+        assert(row2.getInt(0) === 300)
+        assert(row2.getLong(1) === 400L)
+      } finally {
+        col2.close()
+      }
+    }
+  }
+
+  test("SPARK-55897: ColumnarBatchRow.get should support UserDefinedType") {
+    // Same bug as ColumnarRow but in ColumnarBatchRow, which is the InternalRow type returned
+    // by ColumnarBatch iteration. This tests the top-level batch row access path.
+
+    val primitiveUDT = new TestIntUDT()
+    val structUDT = new TestStructWrapperUDT()
+
+    Seq(MemoryMode.ON_HEAP, MemoryMode.OFF_HEAP).foreach { memMode =>
+      // Test with a primitive-backed UDT at the top level
+      val col = allocate(10, IntegerType, memMode)
+      try {
+        col.putInt(0, 99)
+        col.putInt(1, 100)
+
+        val batchRow = new ColumnarBatchRow(Array(col))
+        batchRow.rowId = 0
+
+        // This should delegate to getInt() via UDT's sqlType,
+        // but currently throws SparkUnsupportedOperationException.
+        val result = batchRow.get(0, primitiveUDT)
+        assert(result === 99)
+
+        batchRow.rowId = 1
+        val result2 = batchRow.get(0, primitiveUDT)
+        assert(result2 === 100)
+      } finally {
+        col.close()
+      }
+
+      // Test with a struct-backed UDT at the top level
+      val structCol = allocate(10,
+        new StructType().add("x", IntegerType).add("y", LongType), memMode)
+      try {
+        val xChild = structCol.getChild(0)
+        val yChild = structCol.getChild(1)
+        xChild.putInt(0, 5)
+        yChild.putLong(0, 15L)
+
+        val batchRow = new ColumnarBatchRow(Array(structCol))
+        batchRow.rowId = 0
+
+        // This should delegate to getStruct() via UDT's sqlType,
+        // but currently throws SparkUnsupportedOperationException.
+        val result = batchRow.get(0, structUDT)
+        assert(result != null)
+        assert(result.isInstanceOf[InternalRow])
+        val nestedRow = result.asInstanceOf[InternalRow]
+        assert(nestedRow.getInt(0) === 5)
+        assert(nestedRow.getLong(1) === 15L)
+      } finally {
+        structCol.close()
+      }
+    }
   }
 }
