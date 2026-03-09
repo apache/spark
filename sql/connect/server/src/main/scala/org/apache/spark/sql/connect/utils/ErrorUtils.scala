@@ -236,6 +236,10 @@ private[connect] object ErrorUtils extends Logging {
           if (messageParameters.length <= maxMetadataSize) {
             errorInfo.putMetadata("errorClass", errorClass)
             errorInfo.putMetadata("messageParameters", messageParameters)
+          } else {
+            // adds the error class in a separate metadata key, to allow being inspected by
+            // a proxy, without interfering with the FetchErrorDetails client/server flow
+            errorInfo.putMetadata("errorClassFallback", errorClass)
           }
         }
       case _ =>
