@@ -67,8 +67,12 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
       Some(StringType) // sqlType is  Types.VARCHAR
     } else if (sqlType == Types.TIME) {
       Some(TimeType)
+    } else if (sqlType == Types.DATE) {
+      Some(DateType)
+    } else if (sqlType == Types.TIMESTAMP) {
+      Some(TimestampType)
     } else if (sqlType == Types.ARRAY) {
-      val scale = md.build.getLong("scale").toInt
+      val scale = if (md != null) md.build.getLong("scale").toInt else 0
       // postgres array type names start with underscore
       toCatalystType(typeName.drop(1), size, scale).map(ArrayType(_))
     } else None
@@ -125,7 +129,9 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
     case FloatType => Some(JdbcType("FLOAT4", Types.FLOAT))
     case DoubleType => Some(JdbcType("FLOAT8", Types.DOUBLE))
     case ShortType | ByteType => Some(JdbcType("SMALLINT", Types.SMALLINT))
+    case DateType => Some(JdbcType("DATE", Types.DATE))
     case TimeType => Some(JdbcType("TIME", Types.TIME))
+    case TimestampType => Some(JdbcType("TIMESTAMP", Types.TIMESTAMP))
     case t: DecimalType => Some(
       JdbcType(s"NUMERIC(${t.precision},${t.scale})", java.sql.Types.NUMERIC))
     case ArrayType(et, _) if et.isInstanceOf[AtomicType] =>

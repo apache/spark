@@ -145,6 +145,8 @@ private object MsSqlServerDialect extends JdbcDialect {
           case java.sql.Types.SMALLINT => Some(ShortType)
           case java.sql.Types.REAL => Some(FloatType)
           case java.sql.Types.TIME => Some(TimeType)
+          case java.sql.Types.DATE => Some(DateType)
+          case java.sql.Types.TIMESTAMP => Some(TimestampType)
           case SpecificTypes.GEOMETRY | SpecificTypes.GEOGRAPHY => Some(BinaryType)
           case _ => None
         }
@@ -155,6 +157,7 @@ private object MsSqlServerDialect extends JdbcDialect {
   override def getJDBCType(dt: DataType): Option[JdbcType] = dt match {
     case TimestampType => Some(JdbcType("DATETIME", java.sql.Types.TIMESTAMP))
     case TimestampNTZType => Some(JdbcType("DATETIME", java.sql.Types.TIMESTAMP))
+    case DateType => Some(JdbcType("DATE", java.sql.Types.DATE))
     case StringType => Some(JdbcType("NVARCHAR(MAX)", java.sql.Types.NVARCHAR))
     case BooleanType => Some(JdbcType("BIT", java.sql.Types.BIT))
     case BinaryType => Some(JdbcType("VARBINARY(MAX)", java.sql.Types.VARBINARY))

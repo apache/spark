@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.util
 
 import java.time.{DateTimeException, LocalTime}
-import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoField
 
 import org.apache.spark.unsafe.types.UTF8String
@@ -36,16 +35,11 @@ object TimeUtils {
   val MICROS_PER_HOUR: Long = 60 * MICROS_PER_MINUTE
   val MICROS_PER_DAY: Long = 24 * MICROS_PER_HOUR
 
-  // Default formatter for TIME: HH:mm:ss.SSSSSS
-  private val DEFAULT_TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm:ss.SSSSSS")
-  private val TIME_FORMATTER_NO_MICROS = DateTimeFormatter.ofPattern("HH:mm:ss")
-
   /**
    * Converts a string to TIME (microseconds since midnight).
    * Supports formats:
    * - HH:mm:ss.SSSSSS (with microseconds)
    * - HH:mm:ss (without microseconds)
-   * - HH:mm (without seconds)
    *
    * @param s the time string
    * @return microseconds since midnight, or None if parsing fails
@@ -56,24 +50,39 @@ object TimeUtils {
     val str = s.toString.trim
     if (str.isEmpty) return None
 
+    // Reject hour >= 24
+    if (str.startsWith("24:") || str.startsWith("25:") || str.startsWith("26:") ||
+        str.startsWith("27:") || str.startsWith("28:") || str.startsWith("29:")) {
+      return None
+    }
+
+    // Require at least HH:mm:ss format (must have 2 colons)
+    if (str.count(_ == ':') < 2) {
+      return None
+    }
+
     try {
-      // Try parsing with different formats
-      val localTime = if (str.contains(".")) {
-        LocalTime.parse(str, DEFAULT_TIME_FORMATTER)
-      } else if (str.count(_ == ':') == 2) {
-        LocalTime.parse(str, TIME_FORMATTER_NO_MICROS)
-      } else {
-        LocalTime.parse(str)
+      // Parse using LocalTime which handles validation
+      val localTime = LocalTime.parse(str)
+
+      // Additional validation: LocalTime.parse accepts 24:00:00 and wraps to 00:00:00
+      // We need to reject values >= 24:00:00
+      val parts = str.split(':')
+      if (parts.length >= 1) {
+        val hour = parts(0).toInt
+        if (hour >= 24) return None
       }
 
       Some(localTimeToMicros(localTime))
     } catch {
       case _: DateTimeException => None
+      case _: NumberFormatException => None
     }
   }
 
   /**
-   * Converts TIME (microseconds since midnight) to string.
+   * Converts TIME (microseconds since midnight) to string with full precision.
+   * Always includes 6-digit microseconds for consistency.
    *
    * @param micros microseconds since midnight
    * @return formatted time string HH:mm:ss.SSSSSS
@@ -82,8 +91,37 @@ object TimeUtils {
     require(micros >= 0 && micros < MICROS_PER_DAY,
       s"Time value $micros is out of valid range [0, $MICROS_PER_DAY)")
 
-    val localTime = microsToLocalTime(micros)
-    UTF8String.fromString(localTime.format(DEFAULT_TIME_FORMATTER))
+    val hours = (micros / MICROS_PER_HOUR).toInt
+    val minutes = ((micros % MICROS_PER_HOUR) / MICROS_PER_MINUTE).toInt
+    val seconds = ((micros % MICROS_PER_MINUTE) / MICROS_PER_SECOND).toInt
+    val microseconds = (micros % MICROS_PER_SECOND).toInt
+
+    val result = f"$hours%02d:$minutes%02d:$seconds%02d.$microseconds%06d"
+    UTF8String.fromString(result)
+  }
+
+  /**
+   * Converts TIME (microseconds since midnight) to string for SQL CAST.
+   * Omits microseconds if they are zero.
+   *
+   * @param micros microseconds since midnight
+   * @return formatted time string HH:mm:ss or HH:mm:ss.SSSSSS
+   */
+  def timeToStringForCast(micros: Long): UTF8String = {
+    require(micros >= 0 && micros < MICROS_PER_DAY,
+      s"Time value $micros is out of valid range [0, $MICROS_PER_DAY)")
+
+    val hours = (micros / MICROS_PER_HOUR).toInt
+    val minutes = ((micros % MICROS_PER_HOUR) / MICROS_PER_MINUTE).toInt
+    val seconds = ((micros % MICROS_PER_MINUTE) / MICROS_PER_SECOND).toInt
+    val microseconds = (micros % MICROS_PER_SECOND).toInt
+
+    val result = if (microseconds == 0) {
+      f"$hours%02d:$minutes%02d:$seconds%02d"
+    } else {
+      f"$hours%02d:$minutes%02d:$seconds%02d.$microseconds%06d"
+    }
+    UTF8String.fromString(result)
   }
 
   /**

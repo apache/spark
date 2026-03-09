@@ -25,7 +25,7 @@ import org.apache.spark.sql.types._
  * Dialect for Presto/Trino database.
  * Handles Presto-specific type mappings, including the TIME type.
  */
-private case class PrestoDialect() extends JdbcDialect {
+private object PrestoDialect extends JdbcDialect {
 
   override def canHandle(url: String): Boolean = {
     url.startsWith("jdbc:presto:") || url.startsWith("jdbc:trino:")
@@ -44,10 +44,13 @@ private case class PrestoDialect() extends JdbcDialect {
       // Map Presto TIME type to Spark TimeType
       case Types.TIME => Some(TimeType)
 
+      // Map Presto DATE type to Spark DateType
+      case Types.DATE => Some(DateType)
+
       // Map Presto TIMESTAMP to appropriate Spark type
       case Types.TIMESTAMP =>
         // Presto TIMESTAMP is without timezone by default
-        if (md.build().contains("isTimestampNTZ") &&
+        if (md != null && md.build().contains("isTimestampNTZ") &&
             md.build().getBoolean("isTimestampNTZ")) {
           Some(TimestampNTZType)
         } else {

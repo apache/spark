@@ -107,11 +107,11 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
       // MariaDB connector behaviour
       // This could instead be a BinaryType if we'd rather return bit-vectors of up to 64 bits as
       // byte arrays instead of longs.
-      md.putLong("binarylong", 1)
+      if (md != null) md.putLong("binarylong", 1)
       Option(LongType)
     } else if (sqlType == Types.BIT && size > 1) {
       // MySQL connector behaviour
-      md.putLong("binarylong", 1)
+      if (md != null) md.putLong("binarylong", 1)
       Option(LongType)
     } else if (sqlType == Types.BIT && typeName.equals("TINYINT")) {
       Option(BooleanType)
@@ -124,8 +124,12 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
       Some(StringType)
     } else if (sqlType == Types.TIME) {
       Some(TimeType)
+    } else if (sqlType == Types.DATE) {
+      Some(DateType)
+    } else if (sqlType == Types.TIMESTAMP) {
+      Some(TimestampType)
     } else if (sqlType == Types.TINYINT) {
-      if (md.build().getBoolean("isSigned")) {
+      if (md != null && md.build().getBoolean("isSigned")) {
         Some(ByteType)
       } else {
         Some(ShortType)

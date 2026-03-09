@@ -17,11 +17,10 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.time.{LocalDateTime, LocalTime}
+import java.time.LocalDateTime
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 class TimeCastSuite extends SparkFunSuite {
