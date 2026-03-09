@@ -3077,6 +3077,12 @@
     ],
     "sqlState" : "58030"
   },
+  "INVALID_BYTE_LENGTH_LITERAL" : {
+    "message" : [
+      "<bytesStr> is not a valid byte length literal, expected syntax: DIGIT+ ('B' | 'K' | 'M' | 'G')."
+    ],
+    "sqlState" : "42604"
+  },
   "INVALID_BYTE_STRING" : {
     "message" : [
       "The expected format is ByteString, but was <unsupported> (<class>)."
@@ -6730,6 +6736,12 @@
     ],
     "sqlState" : "54023"
   },
+  "TABLESAMPLE_EMPTY_INPUT" : {
+    "message" : [
+      "TABLESAMPLE does not accept empty inputs."
+    ],
+    "sqlState" : "42601"
+  },
   "TASK_WRITE_FAILED" : {
     "message" : [
       "Task failed while writing rows to <path>."
@@ -8006,6 +8018,12 @@
     },
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_TABLESAMPLE_METHOD" : {
+    "message" : [
+      "TABLESAMPLE(<msg>) is not supported."
+    ],
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_TABLE_CHANGE_IN_JDBC_CATALOG" : {
     "message" : [
       "The table change <change> is not supported for the JDBC catalog on table <tableName>. Supported changes include: AddColumn, RenameColumn, DeleteColumn, UpdateColumnType, UpdateColumnNullability."
@@ -8276,21 +8294,6 @@
   "_LEGACY_ERROR_TEMP_0012" : {
     "message" : [
       "DISTRIBUTE BY is not supported."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0014" : {
-    "message" : [
-      "TABLESAMPLE does not accept empty inputs."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0015" : {
-    "message" : [
-      "TABLESAMPLE(<msg>) is not supported."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0016" : {
-    "message" : [
-      "<bytesStr> is not a valid byte length literal, expected syntax: DIGIT+ ('B' | 'K' | 'M' | 'G')."
     ]
   },
   "_LEGACY_ERROR_TEMP_0018" : {
