@@ -158,7 +158,7 @@ object DataType {
   def fromJson(json: String): DataType = parseDataType(parse(json))
 
   private val otherTypes = {
-    Seq(NullType, DateType, TimestampType, BinaryType, IntegerType, BooleanType, LongType,
+    Seq(NullType, DateType, TimeType, TimestampType, BinaryType, IntegerType, BooleanType, LongType,
       DoubleType, FloatType, ShortType, ByteType, StringType, CalendarIntervalType,
       DayTimeIntervalType(DAY),
       DayTimeIntervalType(DAY, HOUR),
