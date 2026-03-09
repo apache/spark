@@ -36,26 +36,16 @@ import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.connect.SparkConnectTestUtils
 import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
-import org.apache.spark.sql.execution.arrow.ArrowConverters
+import org.apache.spark.sql.execution.arrow.{ArrowAllocatorLeakCheck, ArrowConverters}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType, TimeType}
-import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Testing trait for SparkConnect tests with some helper methods to make it easier to create new
  * test cases.
  */
-trait SparkConnectPlanTest extends SharedSparkSession {
-
-  override def afterAll(): Unit = {
-    try {
-      val leaked = ArrowUtils.rootAllocator.getAllocatedMemory
-      assert(leaked == 0, s"Arrow rootAllocator memory leak: $leaked bytes still allocated")
-    } finally {
-      super.afterAll()
-    }
-  }
+trait SparkConnectPlanTest extends SharedSparkSession with ArrowAllocatorLeakCheck {
 
   def transform(rel: proto.Relation): logical.LogicalPlan = {
     SparkConnectPlannerTestUtils.transform(spark, rel)
