@@ -133,6 +133,9 @@ tpcds-sf-1/
 tpcds-sf-1-text/
 tpcds-kit/
 
+# For Claude Code
+/.claude/
+
 # For GitHub Copilot
 .github/copilot-instructions.md
 .github/agents/
