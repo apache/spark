@@ -905,7 +905,7 @@ class DataFrame(ParentDataFrame):
         )._to_table()
         return table[0][0].as_py()
 
-    def withColumns(self, *colsMap: Dict[str, Column]) -> ParentDataFrame:
+    def withColumns(self, *colsMap: Dict[str, "ColumnOrName"]) -> ParentDataFrame:
         # Below code is to help enable kwargs in future.
         assert len(colsMap) == 1
         colsMap = colsMap[0]  # type: ignore[assignment]
@@ -920,7 +920,7 @@ class DataFrame(ParentDataFrame):
         columns: List[Column] = []
         for columnName, column in colsMap.items():
             names.append(columnName)
-            columns.append(column)
+            columns.append(F._to_col(column))
 
         return DataFrame(
             plan.WithColumns(
@@ -931,17 +931,12 @@ class DataFrame(ParentDataFrame):
             session=self._session,
         )
 
-    def withColumn(self, colName: str, col: Column) -> ParentDataFrame:
-        if not isinstance(col, Column):
-            raise PySparkTypeError(
-                errorClass="NOT_COLUMN",
-                messageParameters={"arg_name": "col", "arg_type": type(col).__name__},
-            )
+    def withColumn(self, colName: str, col: "ColumnOrName") -> ParentDataFrame:
         return DataFrame(
             plan.WithColumns(
                 self._plan,
                 columnNames=[colName],
-                columns=[col],
+                columns=[F._to_col(col)],
             ),
             session=self._session,
         )
