@@ -22,6 +22,7 @@ import java.nio.ByteBuffer
 import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue, ThreadPoolExecutor, TimeUnit}
 import java.util.concurrent.locks.ReentrantReadWriteLock
 
+import scala.annotation.tailrec
 import scala.collection
 import scala.collection.mutable.{HashMap, ListBuffer, Map, Set}
 import scala.concurrent.{ExecutionContext, Future}
@@ -1442,6 +1443,43 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
       shuffleId: Int,
       conf: SparkConf,
       canFetchMergeResult: Boolean): (Array[MapStatus], Array[MergeStatus]) = {
+
+    def isBroadcastVariableNotFoundException(e: SparkException): Boolean = {
+      // these exceptions occur when broadcast variable sent to executor got destroyed
+      // before fetching the broadcast blocks finished
+      e.getMessage.equals("Unable to deserialize broadcasted output statuses") &&
+        Option(e.getCause)
+          .filter(_.isInstanceOf[IOException])
+          .flatMap(e => Option(e.getCause))
+          .filter(_.isInstanceOf[SparkException])
+          .map(_.asInstanceOf[SparkException])
+          .exists(e => Some(e.getMessage).exists(msg =>
+            // this exception occurs when broadcast variable does not exist anymore
+            msg.startsWith("[INTERNAL_ERROR_BROADCAST] Failed to get ") &&
+              Option(e.getCondition).exists(_.equals("INTERNAL_ERROR_BROADCAST")) ||
+              // this exception occurs when broadcast variable exists but a block is not found
+              msg.startsWith("Block broadcast_") && msg.endsWith(" does not exist") &&
+                Option(e.getCondition).exists(_.equals("_LEGACY_ERROR_TEMP_3031"))
+          ))
+    }
+
+    @tailrec
+    def retryUnknownBroadcastVariables[T](fetch: => T, label: String)(func: T => Unit): Unit = {
+      // fetch the statuses
+      val t = fetch
+      try {
+        func(t)
+      } catch {
+        case e: SparkException if isBroadcastVariableNotFoundException(e) =>
+          logInfo(s"Retrying getting $label statuses due to unknown broadcast variable")
+          retryUnknownBroadcastVariables(fetch, label)(func)
+        case e: SparkException =>
+          throw new MetadataFetchFailedException(shuffleId, -1,
+            s"Unable to deserialize broadcasted $label statuses" +
+              s" for shuffle $shuffleId: " + e.getCause)
+      }
+    }
+
     if (canFetchMergeResult) {
       val mapOutputStatuses = mapStatuses.get(shuffleId).orNull
       val mergeOutputStatuses = mergeStatuses.get(shuffleId).orNull
@@ -1456,18 +1494,14 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
           if (fetchedMapStatuses == null || fetchedMergeStatuses == null) {
             logInfo(log"Doing the fetch; tracker endpoint = " +
               log"${MDC(RPC_ENDPOINT_REF, trackerEndpoint)}")
-            val fetchedBytes =
-              askTracker[(Array[Byte], Array[Byte])](GetMapAndMergeResultStatuses(shuffleId))
-            try {
+            def ask: Any => (Array[Byte], Array[Byte]) = askTracker[(Array[Byte], Array[Byte])](_)
+            retryUnknownBroadcastVariables(
+              ask(GetMapAndMergeResultStatuses(shuffleId)), "map/merge"
+            ) { case (mapStatusBytes, mergeStatusBytes) =>
               fetchedMapStatuses =
-                MapOutputTracker.deserializeOutputStatuses[MapStatus](fetchedBytes._1, conf)
+                MapOutputTracker.deserializeOutputStatuses[MapStatus](mapStatusBytes, conf)
               fetchedMergeStatuses =
-                MapOutputTracker.deserializeOutputStatuses[MergeStatus](fetchedBytes._2, conf)
-            } catch {
-              case e: SparkException =>
-                throw new MetadataFetchFailedException(shuffleId, -1,
-                  s"Unable to deserialize broadcasted map/merge statuses" +
-                    s" for shuffle $shuffleId: " + e.getCause)
+                MapOutputTracker.deserializeOutputStatuses[MergeStatus](mergeStatusBytes, conf)
             }
             logInfo("Got the map/merge output locations")
             mapStatuses.put(shuffleId, fetchedMapStatuses)
@@ -1491,15 +1525,12 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
           if (fetchedStatuses == null) {
             logInfo(log"Doing the fetch; tracker endpoint =" +
               log" ${MDC(RPC_ENDPOINT_REF, trackerEndpoint)}")
-            val fetchedBytes = askTracker[Array[Byte]](GetMapOutputStatuses(shuffleId))
-            try {
+            def ask: Any => Array[Byte] = askTracker[Array[Byte]](_)
+            retryUnknownBroadcastVariables(
+              ask(GetMapOutputStatuses(shuffleId)), "map"
+            ) { fetchedBytes =>
               fetchedStatuses =
                 MapOutputTracker.deserializeOutputStatuses[MapStatus](fetchedBytes, conf)
-            } catch {
-              case e: SparkException =>
-                throw new MetadataFetchFailedException(shuffleId, -1,
-                  s"Unable to deserialize broadcasted map statuses for shuffle $shuffleId: " +
-                    e.getCause)
             }
             logInfo("Got the map output locations")
             mapStatuses.put(shuffleId, fetchedStatuses)
