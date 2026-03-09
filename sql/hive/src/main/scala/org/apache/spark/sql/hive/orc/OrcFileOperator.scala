@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive.orc
 
 import java.io.{FileNotFoundException, IOException}
 
+import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.hive.ql.io.orc.{OrcFile, Reader}
@@ -77,13 +78,10 @@ private[hive] object OrcFileOperator extends Logging {
       val reader = try {
         Some(OrcFile.createReader(fs, path))
       } catch {
-        case e: FileNotFoundException =>
-          if (ignoreMissingFiles) {
-            logWarning(log"Skipped missing file: ${MDC(PATH, path)}", e)
-            None
-          } else {
-            throw QueryExecutionErrors.cannotReadFooterForFileError(path, e)
-          }
+        case e: Exception if ignoreMissingFiles &&
+            ExceptionUtils.getThrowables(e).exists(_.isInstanceOf[FileNotFoundException]) =>
+          logWarning(log"Skipped missing file: ${MDC(PATH, path)}", e)
+          None
         case e: IOException =>
           if (ignoreCorruptFiles) {
             logWarning(log"Skipped the footer in the corrupted file: ${MDC(PATH, path)}", e)

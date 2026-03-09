@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.orc
 
-import java.io.File
+import java.io.{File, FileNotFoundException}
 import java.nio.charset.StandardCharsets.UTF_8
 import java.sql.{Date, Timestamp}
 import java.time.{Duration, Period}
@@ -486,16 +486,13 @@ abstract class OrcSuite
           fileStatuses, hadoopConf, ignoreCorruptFiles = false, ignoreMissingFiles = true)
         assert(schemas.nonEmpty)
 
-        // ignoreMissingFiles=false: throws on the missing file.
-        // ThreadUtils.parmap wraps the exception one level deep, so unwrap via getCause.
-        checkErrorMatchPVals(
-          exception = intercept[SparkException] {
-            OrcUtils.readOrcSchemasInParallel(
-              fileStatuses, hadoopConf, ignoreCorruptFiles = false, ignoreMissingFiles = false)
-          }.getCause.asInstanceOf[SparkException],
-          condition = "FAILED_READ_FILE.CANNOT_READ_FILE_FOOTER",
-          parameters = Map("path" -> "file:.*")
-        )
+        // ignoreMissingFiles=false: the FileNotFoundException propagates uncaught.
+        // ThreadUtils.parmap wraps it in a SparkException; unwrap to verify the cause.
+        val ex = intercept[SparkException] {
+          OrcUtils.readOrcSchemasInParallel(
+            fileStatuses, hadoopConf, ignoreCorruptFiles = false, ignoreMissingFiles = false)
+        }
+        assert(ex.getCause.isInstanceOf[FileNotFoundException])
       }
     }
   }

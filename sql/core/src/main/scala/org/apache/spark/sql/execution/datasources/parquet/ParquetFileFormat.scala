@@ -520,14 +520,10 @@ object ParquetFileFormat extends Logging {
           ParquetFooterReader.readFooter(
             HadoopInputFile.fromStatus(currentFile, conf), SKIP_ROW_GROUPS)))
       } catch {
-        case e: Exception
-            if ExceptionUtils.getThrowables(e).exists(_.isInstanceOf[FileNotFoundException]) =>
-          if (ignoreMissingFiles) {
-            logWarning(log"Skipped missing file: ${MDC(PATH, currentFile)}", e)
-            None
-          } else {
-            throw QueryExecutionErrors.cannotReadFooterForFileError(currentFile.getPath, e)
-          }
+        case e: Exception if ignoreMissingFiles &&
+            ExceptionUtils.getThrowables(e).exists(_.isInstanceOf[FileNotFoundException]) =>
+          logWarning(log"Skipped missing file: ${MDC(PATH, currentFile)}", e)
+          None
         case e: RuntimeException if ignoreCorruptFiles =>
           logWarning(log"Skipped the footer in the corrupted file: ${MDC(PATH, currentFile)}", e)
           None

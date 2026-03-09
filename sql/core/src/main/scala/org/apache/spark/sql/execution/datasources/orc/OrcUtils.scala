@@ -24,6 +24,7 @@ import java.util.Locale
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
+import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.hive.serde2.io.DateWritable
@@ -87,13 +88,10 @@ object OrcUtils extends Logging {
         Some(schema)
       }
     } catch {
-      case e: FileNotFoundException =>
-        if (ignoreMissingFiles) {
-          logWarning(log"Skipped missing file: ${MDC(PATH, file)}", e)
-          None
-        } else {
-          throw QueryExecutionErrors.cannotReadFooterForFileError(file, e)
-        }
+      case e: Exception if ignoreMissingFiles &&
+          ExceptionUtils.getThrowables(e).exists(_.isInstanceOf[FileNotFoundException]) =>
+        logWarning(log"Skipped missing file: ${MDC(PATH, file)}", e)
+        None
       case e: org.apache.orc.FileFormatException =>
         if (ignoreCorruptFiles) {
           logWarning(log"Skipped the footer in the corrupted file: ${MDC(PATH, file)}", e)
