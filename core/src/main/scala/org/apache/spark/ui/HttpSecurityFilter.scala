@@ -48,48 +48,57 @@ private class HttpSecurityFilter(
     val hreq = req.asInstanceOf[HttpServletRequest]
     val hres = res.asInstanceOf[HttpServletResponse]
     hres.setHeader("Cache-Control", "no-cache, no-store, must-revalidate")
-    hres.setHeader("Content-Security-Policy", "default-src 'self'")
 
-    val requestUser = hreq.getRemoteUser()
+    val cspNonce = CspNonce.generate()
+    try {
+      hres.setHeader("Content-Security-Policy",
+        s"default-src 'self'; script-src 'self' 'nonce-$cspNonce'; " +
+        s"style-src 'self' 'unsafe-inline'; img-src 'self' data:; " +
+        s"object-src 'none'; base-uri 'self';")
 
-    // The doAs parameter allows proxy servers (e.g. Knox) to impersonate other users. For
-    // that to be allowed, the authenticated user needs to be an admin.
-    val effectiveUser = Option(hreq.getParameter("doAs"))
-      .map { proxy =>
-        if (requestUser != proxy && !securityMgr.checkAdminPermissions(requestUser)) {
-          hres.sendError(HttpServletResponse.SC_FORBIDDEN,
-            s"User $requestUser is not allowed to impersonate others.")
-          return
+      val requestUser = hreq.getRemoteUser()
+
+      // The doAs parameter allows proxy servers (e.g. Knox) to impersonate other users. For
+      // that to be allowed, the authenticated user needs to be an admin.
+      val effectiveUser = Option(hreq.getParameter("doAs"))
+        .map { proxy =>
+          if (requestUser != proxy && !securityMgr.checkAdminPermissions(requestUser)) {
+            hres.sendError(HttpServletResponse.SC_FORBIDDEN,
+              s"User $requestUser is not allowed to impersonate others.")
+            return
+          }
+          proxy
         }
-        proxy
+        .getOrElse(requestUser)
+
+      if (!securityMgr.checkUIViewPermissions(effectiveUser)) {
+        hres.sendError(HttpServletResponse.SC_FORBIDDEN,
+          s"User $effectiveUser is not authorized to access this page.")
+        return
       }
-      .getOrElse(requestUser)
 
-    if (!securityMgr.checkUIViewPermissions(effectiveUser)) {
-      hres.sendError(HttpServletResponse.SC_FORBIDDEN,
-        s"User $effectiveUser is not authorized to access this page.")
-      return
+      // SPARK-10589 avoid frame-related click-jacking vulnerability, using X-Frame-Options
+      // (see http://tools.ietf.org/html/rfc7034). By default allow framing only from the
+      // same origin, but allow framing for a specific named URI.
+      // Example: spark.ui.allowFramingFrom = https://example.com/
+      val xFrameOptionsValue = conf.getOption("spark.ui.allowFramingFrom")
+        .map { uri => s"ALLOW-FROM $uri" }
+        .getOrElse("SAMEORIGIN")
+
+      hres.setHeader("X-Frame-Options", xFrameOptionsValue)
+      hres.setHeader("X-XSS-Protection", conf.get(UI_X_XSS_PROTECTION))
+      if (conf.get(UI_X_CONTENT_TYPE_OPTIONS)) {
+        hres.setHeader("X-Content-Type-Options", "nosniff")
+      }
+      if (hreq.getScheme() == "https") {
+        conf.get(UI_STRICT_TRANSPORT_SECURITY).foreach(
+          hres.setHeader("Strict-Transport-Security", _))
+      }
+
+      chain.doFilter(new XssSafeRequest(hreq, effectiveUser), res)
+    } finally {
+      CspNonce.clear()
     }
-
-    // SPARK-10589 avoid frame-related click-jacking vulnerability, using X-Frame-Options
-    // (see http://tools.ietf.org/html/rfc7034). By default allow framing only from the
-    // same origin, but allow framing for a specific named URI.
-    // Example: spark.ui.allowFramingFrom = https://example.com/
-    val xFrameOptionsValue = conf.getOption("spark.ui.allowFramingFrom")
-      .map { uri => s"ALLOW-FROM $uri" }
-      .getOrElse("SAMEORIGIN")
-
-    hres.setHeader("X-Frame-Options", xFrameOptionsValue)
-    hres.setHeader("X-XSS-Protection", conf.get(UI_X_XSS_PROTECTION))
-    if (conf.get(UI_X_CONTENT_TYPE_OPTIONS)) {
-      hres.setHeader("X-Content-Type-Options", "nosniff")
-    }
-    if (hreq.getScheme() == "https") {
-      conf.get(UI_STRICT_TRANSPORT_SECURITY).foreach(
-        hres.setHeader("Strict-Transport-Security", _))
-    }
-
-    chain.doFilter(new XssSafeRequest(hreq, effectiveUser), res)
   }
 
 }

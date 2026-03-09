@@ -374,7 +374,7 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
         assert(rowSet.getInt("NULLABLE") === 0)
         assert(rowSet.getString("REMARKS") === "")
         assert(rowSet.getInt("ORDINAL_POSITION") === 1)
-        assert(rowSet.getString("IS_NULLABLE") === "YES")
+        assert(rowSet.getString("IS_NULLABLE") === "NO")
         assert(rowSet.getString("IS_AUTO_INCREMENT") === "NO")
       }
     }
@@ -402,7 +402,7 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
         assert(rowSet.getInt("NULLABLE") === 0)
         assert(rowSet.getString("REMARKS") === "")
         assert(rowSet.getInt("ORDINAL_POSITION") === 1)
-        assert(rowSet.getString("IS_NULLABLE") === "YES")
+        assert(rowSet.getString("IS_NULLABLE") === "NO")
         assert(rowSet.getString("IS_AUTO_INCREMENT") === "NO")
       }
     }
@@ -428,7 +428,7 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
         assert(rowSet.getInt("NULLABLE") === 0)
         assert(rowSet.getString("REMARKS") === "")
         assert(rowSet.getInt("ORDINAL_POSITION") === 1)
-        assert(rowSet.getString("IS_NULLABLE") === "YES")
+        assert(rowSet.getString("IS_NULLABLE") === "NO")
         assert(rowSet.getString("IS_AUTO_INCREMENT") === "NO")
       }
     }

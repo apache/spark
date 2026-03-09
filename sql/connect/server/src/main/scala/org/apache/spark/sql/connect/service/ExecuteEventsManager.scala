@@ -24,6 +24,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.scheduler.SparkListenerEvent
 import org.apache.spark.sql.catalyst.{QueryPlanningTracker, QueryPlanningTrackerCallback}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.connect.IllegalStateErrors
 import org.apache.spark.sql.connect.common.ProtoUtils
 import org.apache.spark.util.{Clock, Utils}
 
@@ -47,7 +48,55 @@ object ExecuteStatus {
 }
 
 /**
- * Post request Connect events to @link org.apache.spark.scheduler.LiveListenerBus.
+ * Records why an operation terminated so that the reason remains available after the operation
+ * transitions to the closed state.
+ */
+sealed abstract class TerminationReason(val value: Int)
+
+object TerminationReason {
+  case object Succeeded extends TerminationReason(0)
+  case object Failed extends TerminationReason(1)
+  case object Canceled extends TerminationReason(2)
+}
+
+/**
+ * Manage the lifecycle of an operation by tracking its status and termination reason. Post
+ * request Connect events to @link org.apache.spark.scheduler.LiveListenerBus and serve as an
+ * information source for GetStatus RPC.
+ *
+ * {{{
+ *   +---------------------------------------------+
+ *   |     ExecuteEventsManager                    |
+ *   |                                             |
+ *   |  - Tracks operation lifecycle state         |
+ *   |  - Posts events to event bus                |
+ *   |  - Maintains termination info in memory     |
+ *   +---------------------------------------------+
+ *                        |
+ *            +-----------+-----------+
+ *            |                       |
+ *            v                       v
+ *   +------------------+    +------------------+
+ *   |  GetStatus RPC   |    |  Query History   |
+ *   |  (Direct API)    |    |  (Audit Log)     |
+ *   +------------------+    +------------------+
+ *
+ * State Mapping Matrix:
+ *
+ * ExecuteStatus        -> GetStatus API     -> Query History
+ * + TerminationReason
+ * ----------------------------------------------------------------
+ * Pending              -> RUNNING           -> (no event posted)
+ * Started              -> RUNNING           -> STARTED
+ * Analyzed             -> RUNNING           -> COMPILED
+ * ReadyForExecution    -> RUNNING           -> READY
+ * Finished             -> TERMINATING       -> FINISHED
+ * Failed               -> TERMINATING       -> FAILED
+ * Canceled             -> TERMINATING       -> CANCELED
+ * Closed+Succeeded     -> SUCCEEDED         -> CLOSED
+ * Closed+Failed        -> FAILED            -> CLOSED
+ * Closed+Canceled      -> CANCELLED         -> CLOSED
+ * }}}
  *
  * @param executeHolder:
  *   Request for which the events are generated.
@@ -70,7 +119,7 @@ case class ExecuteEventsManager(executeHolder: ExecuteHolder, clock: Clock) {
 
   private def sessionStatus = sessionHolder.eventManager.status
 
-  private var _status: ExecuteStatus = ExecuteStatus.Pending
+  @volatile private var _status: ExecuteStatus = ExecuteStatus.Pending
 
   private var error = Option.empty[Boolean]
 
@@ -78,11 +127,35 @@ case class ExecuteEventsManager(executeHolder: ExecuteHolder, clock: Clock) {
 
   private var producedRowCount = Option.empty[Long]
 
+  @volatile private var _terminationReason: Option[TerminationReason] = None
+
   /**
    * @return
    *   Last event posted by the Connect request
    */
   private[connect] def status: ExecuteStatus = _status
+
+  /**
+   * @return
+   *   The reason for termination, set when the operation finishes, fails, or is canceled. Since
+   *   the closed state itself does not convey why the operation ended, this value preserves that
+   *   information for later use.
+   */
+  private[connect] def terminationReason: Option[TerminationReason] = _terminationReason
+
+  /**
+   * Updates the termination reason only if the new reason has a higher value than the current
+   * one. This established the ordering Canceled > Failed > Succeeded, which is consistent with
+   * ExecuteStatus ordering. This handles the cases when execution is interrupted or fails during
+   * cleanup.
+   */
+  private def updateTerminationReason(newReason: TerminationReason): Unit = {
+    _terminationReason match {
+      case Some(currentReason) if currentReason.value >= newReason.value =>
+      case _ =>
+        _terminationReason = Some(newReason)
+    }
+  }
 
   /**
    * @return
@@ -184,6 +257,7 @@ case class ExecuteEventsManager(executeHolder: ExecuteHolder, clock: Clock) {
         ExecuteStatus.Failed),
       ExecuteStatus.Canceled)
     canceled = Some(true)
+    updateTerminationReason(TerminationReason.Canceled)
     listenerBus
       .post(SparkListenerConnectOperationCanceled(jobTag, operationId, clock.getTimeMillis()))
   }
@@ -203,6 +277,7 @@ case class ExecuteEventsManager(executeHolder: ExecuteHolder, clock: Clock) {
         ExecuteStatus.Finished),
       ExecuteStatus.Failed)
     error = Some(true)
+    updateTerminationReason(TerminationReason.Failed)
     listenerBus.post(
       SparkListenerConnectOperationFailed(
         jobTag,
@@ -224,6 +299,7 @@ case class ExecuteEventsManager(executeHolder: ExecuteHolder, clock: Clock) {
       List(ExecuteStatus.Started, ExecuteStatus.ReadyForExecution),
       ExecuteStatus.Finished)
     producedRowCount = producedRowsCountOpt
+    updateTerminationReason(TerminationReason.Succeeded)
 
     listenerBus
       .post(
@@ -275,16 +351,17 @@ case class ExecuteEventsManager(executeHolder: ExecuteHolder, clock: Clock) {
       validStatuses: List[ExecuteStatus],
       eventStatus: ExecuteStatus): Unit = {
     if (validStatuses.find(s => s == status).isEmpty) {
-      throw new IllegalStateException(s"""
-        operationId: $operationId with status ${status}
-        is not within statuses $validStatuses for event $eventStatus
-        """)
+      throw IllegalStateErrors.executionStateTransitionInvalidOperationStatus(
+        executeHolder.operationId,
+        status,
+        validStatuses,
+        eventStatus)
     }
     if (sessionHolder.eventManager.status != SessionStatus.Started) {
-      throw new IllegalStateException(s"""
-        sessionId: $sessionId with status $sessionStatus
-        is not Started for event $eventStatus
-        """)
+      throw IllegalStateErrors.executionStateTransitionInvalidSessionNotStarted(
+        sessionHolder.sessionId,
+        sessionStatus,
+        eventStatus)
     }
     _status = eventStatus
   }

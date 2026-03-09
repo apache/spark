@@ -29,8 +29,8 @@ from pyspark.sql.types import (
 )
 from pyspark.errors import ParseException, PythonException, PySparkTypeError
 from pyspark.util import PythonEvalType
-from pyspark.testing.sqlutils import (
-    ReusedSQLTestCase,
+from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import (
     have_pandas,
     have_pyarrow,
     pandas_requirement_message,
@@ -390,7 +390,7 @@ class PandasUDFTestsMixin:
             # intToDecimalCoercionEnabled is not required for this case
             with self.sql_conf(
                 {
-                    "spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled": intToDecimalCoercionEnabled  # noqa: E501
+                    "spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled": intToDecimalCoercionEnabled
                 }
             ):
                 result = df.withColumn("decimal_val", high_precision_udf("id")).collect()
@@ -472,10 +472,11 @@ class PandasUDFTestsMixin:
             AS tab(a, b)
             """
 
-        df = self.spark.sql(query).repartition(1).sortWithinPartitions("b")
-        expected = df.select("a").collect()
-        results = df.select(identity("a").alias("a")).collect()
-        self.assertEqual(results, expected)
+        with self.sql_conf({"spark.sql.execution.pythonUDF.pandas.preferIntExtensionDtype": True}):
+            df = self.spark.sql(query).repartition(1).sortWithinPartitions("b")
+            expected = df.select("a").collect()
+            results = df.select(identity("a").alias("a")).collect()
+            self.assertEqual(results, expected)
 
 
 class PandasUDFTests(PandasUDFTestsMixin, ReusedSQLTestCase):

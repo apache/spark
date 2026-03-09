@@ -199,12 +199,14 @@ object OperatorStateMetadataReader {
       stateCheckpointPath: Path,
       hadoopConf: Configuration,
       version: Int,
-      batchId: Long): OperatorStateMetadataReader = {
+      batchId: Long,
+      createMetadataDir: Boolean = true): OperatorStateMetadataReader = {
     version match {
       case 1 =>
         new OperatorStateMetadataV1Reader(stateCheckpointPath, hadoopConf)
       case 2 =>
-        new OperatorStateMetadataV2Reader(stateCheckpointPath, hadoopConf, batchId)
+        new OperatorStateMetadataV2Reader(stateCheckpointPath, hadoopConf, batchId,
+          createMetadataDir)
       case _ =>
         throw new IllegalArgumentException(s"Failed to create reader for operator metadata " +
           s"with version=$version")
@@ -319,7 +321,8 @@ class OperatorStateMetadataV2Writer(
 class OperatorStateMetadataV2Reader(
     stateCheckpointPath: Path,
     hadoopConf: Configuration,
-    batchId: Long) extends OperatorStateMetadataReader {
+    batchId: Long,
+    createMetadataDir: Boolean = true) extends OperatorStateMetadataReader with Logging {
 
   // Check that the requested batchId is available in the checkpoint directory
   val baseCheckpointDir = stateCheckpointPath.getParent.getParent
@@ -331,7 +334,12 @@ class OperatorStateMetadataV2Reader(
   private val metadataDirPath = OperatorStateMetadataV2.metadataDirPath(stateCheckpointPath)
   private lazy val fm = CheckpointFileManager.create(metadataDirPath, hadoopConf)
 
-  fm.mkdirs(metadataDirPath.getParent)
+  if (createMetadataDir && !fm.exists(metadataDirPath.getParent)) {
+    fm.mkdirs(metadataDirPath.getParent)
+  } else if (!createMetadataDir) {
+    logInfo(log"Skipping metadata directory creation (createMetadataDir=false) " +
+      log"at ${MDC(LogKeys.CHECKPOINT_LOCATION, baseCheckpointDir.toString)}")
+  }
 
   override def version: Int = 2
 
@@ -352,7 +360,8 @@ class OperatorStateMetadataV2Reader(
 
   // List the available batches in the operator metadata directory
   private def listOperatorMetadataBatches(): Array[Long] = {
-    if (!fm.exists(metadataDirPath)) {
+    // If parent doesn't exist, return empty array rather than throwing an exception
+    if (!fm.exists(metadataDirPath.getParent) || !fm.exists(metadataDirPath)) {
       return Array.empty
     }
 

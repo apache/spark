@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.connectutils import should_test_connect, ReusedMixedTestCase
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
@@ -62,13 +63,11 @@ class SparkConnectCollectionTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
         cdf = self.connect.sql(query)
         sdf = self.spark.sql(query)
 
-        self.assertEqual(cdf.schema, sdf.schema)
+        assertDataFrameEqual(cdf, sdf)
 
-        self.assertEqual(cdf.collect(), sdf.collect())
-
-        self.assertEqual(
-            cdf.select(CF.date_trunc("year", cdf.date).alias("year")).collect(),
-            sdf.select(SF.date_trunc("year", sdf.date).alias("year")).collect(),
+        assertDataFrameEqual(
+            cdf.select(CF.date_trunc("year", cdf.date).alias("year")),
+            sdf.select(SF.date_trunc("year", sdf.date).alias("year")),
         )
 
     def test_head(self):
@@ -253,13 +252,13 @@ class SparkConnectCollectionTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
         )
 
         # test collect nested struct
-        # +------------------------------------------+--------------------------+----------------------------+ # noqa
-        # |struct(a, struct(a, struct(c, struct(d))))|struct(a, b, struct(c, d))|     struct(e, f, struct(g))| # noqa
-        # +------------------------------------------+--------------------------+----------------------------+ # noqa
-        # |                        {1, {1, {0, {8}}}}|            {1, 4, {0, 8}}|{true, true, {[1, null, 3]}}| # noqa
-        # |                    {2, {2, {-1, {null}}}}|        {2, 5, {-1, null}}|     {false, null, {[1, 3]}}| # noqa
-        # |                     {3, {3, {null, {0}}}}|         {3, 6, {null, 0}}|     {false, null, {[null]}}| # noqa
-        # +------------------------------------------+--------------------------+----------------------------+ # noqa
+        # +------------------------------------------+--------------------------+----------------------------+
+        # |struct(a, struct(a, struct(c, struct(d))))|struct(a, b, struct(c, d))|     struct(e, f, struct(g))|
+        # +------------------------------------------+--------------------------+----------------------------+
+        # |                        {1, {1, {0, {8}}}}|            {1, 4, {0, 8}}|{true, true, {[1, null, 3]}}|
+        # |                    {2, {2, {-1, {null}}}}|        {2, 5, {-1, null}}|     {false, null, {[1, 3]}}|
+        # |                     {3, {3, {null, {0}}}}|         {3, 6, {null, 0}}|     {false, null, {[null]}}|
+        # +------------------------------------------+--------------------------+----------------------------+
         self.assertEqual(
             cdf.select(
                 CF.struct("a", CF.struct("a", CF.struct("c", CF.struct("d")))),

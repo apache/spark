@@ -367,10 +367,6 @@ object InMemoryRelation {
   /* Visible for testing */
   private[columnar] def clearSerializer(): Unit = synchronized { ser = None }
 
-  def convertToColumnarIfPossible(plan: SparkPlan): SparkPlan = {
-    getSerializer(plan.conf).convertToColumnarPlanIfPossible(plan)
-  }
-
   def apply(
       storageLevel: StorageLevel,
       qe: QueryExecution,

@@ -344,7 +344,7 @@ meta:
   _edit_last: '4'
   _wpas_done_all: '1'
 ---
-We are happy to announce the availability of <a href="{{site.baseurl}}/releases/spark-release-${RELEASE_VERSION}.html" title="Spark Release ${RELEASE_VERSION}">Apache Spark ${RELEASE_VERSION}</a>! Visit the <a href="{{site.baseurl}}/releases/spark-release-${RELEASE_VERSION}.html" title="Spark Release ${RELEASE_VERSION}">release notes</a> to read about the new features, or <a href="{{site.baseurl}}/downloads.html">download</a> the release today.
+We are happy to announce the availability of <a href="{{site.baseurl}}/releases/spark-release-${RELEASE_VERSION//./-}.html" title="Spark Release ${RELEASE_VERSION}">Apache Spark ${RELEASE_VERSION}</a>! Visit the <a href="{{site.baseurl}}/releases/spark-release-${RELEASE_VERSION//./-}.html" title="Spark Release ${RELEASE_VERSION}">release notes</a> to read about the new features, or <a href="{{site.baseurl}}/downloads.html">download</a> the release today.
 EOF
   fi
 
@@ -402,7 +402,7 @@ You can find the list of resolved issues and detailed changes in the [JIRA relea
 
 We would like to acknowledge all community members for contributing ${ACKNOWLEDGE}"
 
-    FILENAME="releases/_posts/${RELEASE_DATE}-spark-release-${RELEASE_VERSION}.md"
+    FILENAME="releases/_posts/${RELEASE_DATE}-spark-release-${RELEASE_VERSION//./-}.md"
     mkdir -p releases/_posts
     cat > "$FILENAME" <<EOF
 ---

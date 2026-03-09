@@ -79,7 +79,8 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
     val writeRelation = relation.copy(table = operationTable)
     val query = addOperationColumn(WRITE_WITH_METADATA_OPERATION, updatedAndRemainingRowsPlan)
     val projections = buildReplaceDataProjections(query, relation.output, metadataAttrs)
-    ReplaceData(writeRelation, cond, query, relation, projections, Some(cond))
+    val groupFilterCond = if (groupFilterEnabled) Some(cond) else None
+    ReplaceData(writeRelation, cond, query, relation, projections, groupFilterCond)
   }
 
   // build a rewrite plan for sources that support replacing groups of data (e.g. files, partitions)
@@ -113,7 +114,8 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
     val writeRelation = relation.copy(table = operationTable)
     val query = addOperationColumn(WRITE_WITH_METADATA_OPERATION, updatedAndRemainingRowsPlan)
     val projections = buildReplaceDataProjections(query, relation.output, metadataAttrs)
-    ReplaceData(writeRelation, cond, query, relation, projections, Some(cond))
+    val groupFilterCond = if (groupFilterEnabled) Some(cond) else None
+    ReplaceData(writeRelation, cond, query, relation, projections, groupFilterCond)
   }
 
   // this method assumes the assignments have been already aligned before

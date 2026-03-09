@@ -94,14 +94,14 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
     val evaluatorFactory = new ProjectEvaluatorFactory(projectList, child.output)
     if (conf.usePartitionEvaluator) {
       child.execute().mapPartitionsWithEvaluator(
-        evaluatorFactory, preservesDistribution = true
+        evaluatorFactory, preservesPartitionSizes = true
       )
     } else {
       child.execute().mapPartitionsWithIndexInternal(
         f = (index, iter) => {
           val evaluator = evaluatorFactory.createEvaluator()
           evaluator.eval(index, iter)
-        }, preservesDistribution = true
+        }, preservesPartitionSizes = true
       )
     }
   }

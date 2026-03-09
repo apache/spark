@@ -71,55 +71,60 @@ class DatetimeIndexTestsMixin(DatetimeIndexTestingFuncMixin):
             ps.DatetimeIndex(["2004-01-01", "2002-12-31", "2000-04-01"]).all()
 
     def test_day_name(self):
-        for psidx, pidx in self.idx_pairs:
-            self.assert_eq(psidx.day_name(), pidx.day_name())
+        for i, (psidx, pidx) in enumerate(self.idx_pairs):
+            with self.subTest(i=i):
+                self.assert_eq(psidx.day_name(), pidx.day_name())
 
     def test_month_name(self):
-        for psidx, pidx in self.idx_pairs:
-            self.assert_eq(psidx.month_name(), pidx.month_name())
+        for i, (psidx, pidx) in enumerate(self.idx_pairs):
+            with self.subTest(i=i):
+                self.assert_eq(psidx.month_name(), pidx.month_name())
 
     def test_normalize(self):
-        for psidx, pidx in self.idx_pairs:
-            self.assert_eq(psidx.normalize(), pidx.normalize())
+        for i, (psidx, pidx) in enumerate(self.idx_pairs):
+            with self.subTest(i=i):
+                self.assert_eq(psidx.normalize(), pidx.normalize())
 
     def test_strftime(self):
-        for psidx, pidx in self.idx_pairs:
-            self.assert_eq(
-                psidx.strftime(date_format="%B %d, %Y"), pidx.strftime(date_format="%B %d, %Y")
-            )
+        for i, (psidx, pidx) in enumerate(self.idx_pairs):
+            with self.subTest(i=i):
+                self.assert_eq(
+                    psidx.strftime(date_format="%B %d, %Y"), pidx.strftime(date_format="%B %d, %Y")
+                )
 
     def test_arithmetic_op_exceptions(self):
-        for psidx, pidx in self.idx_pairs:
-            py_datetime = pidx.to_pydatetime()
-            for other in [1, 0.1, psidx, psidx.to_series().reset_index(drop=True), py_datetime]:
-                expected_err_msg = "Addition can not be applied to datetimes."
-                self.assertRaisesRegex(TypeError, expected_err_msg, lambda: psidx + other)
-                self.assertRaisesRegex(TypeError, expected_err_msg, lambda: other + psidx)
+        for i, (psidx, pidx) in enumerate(self.idx_pairs):
+            with self.subTest(i=i):
+                py_datetime = pidx.to_pydatetime()
+                for other in [1, 0.1, psidx, psidx.to_series().reset_index(drop=True), py_datetime]:
+                    expected_err_msg = "Addition can not be applied to datetimes."
+                    self.assertRaisesRegex(TypeError, expected_err_msg, lambda: psidx + other)
+                    self.assertRaisesRegex(TypeError, expected_err_msg, lambda: other + psidx)
 
-                expected_err_msg = "Multiplication can not be applied to datetimes."
-                self.assertRaisesRegex(TypeError, expected_err_msg, lambda: psidx * other)
-                self.assertRaisesRegex(TypeError, expected_err_msg, lambda: other * psidx)
+                    expected_err_msg = "Multiplication can not be applied to datetimes."
+                    self.assertRaisesRegex(TypeError, expected_err_msg, lambda: psidx * other)
+                    self.assertRaisesRegex(TypeError, expected_err_msg, lambda: other * psidx)
 
-                expected_err_msg = "True division can not be applied to datetimes."
-                self.assertRaisesRegex(TypeError, expected_err_msg, lambda: psidx / other)
-                self.assertRaisesRegex(TypeError, expected_err_msg, lambda: other / psidx)
+                    expected_err_msg = "True division can not be applied to datetimes."
+                    self.assertRaisesRegex(TypeError, expected_err_msg, lambda: psidx / other)
+                    self.assertRaisesRegex(TypeError, expected_err_msg, lambda: other / psidx)
 
-                expected_err_msg = "Floor division can not be applied to datetimes."
-                self.assertRaisesRegex(TypeError, expected_err_msg, lambda: psidx // other)
-                self.assertRaisesRegex(TypeError, expected_err_msg, lambda: other // psidx)
+                    expected_err_msg = "Floor division can not be applied to datetimes."
+                    self.assertRaisesRegex(TypeError, expected_err_msg, lambda: psidx // other)
+                    self.assertRaisesRegex(TypeError, expected_err_msg, lambda: other // psidx)
 
-                expected_err_msg = "Modulo can not be applied to datetimes."
-                self.assertRaisesRegex(TypeError, expected_err_msg, lambda: psidx % other)
-                self.assertRaisesRegex(TypeError, expected_err_msg, lambda: other % psidx)
+                    expected_err_msg = "Modulo can not be applied to datetimes."
+                    self.assertRaisesRegex(TypeError, expected_err_msg, lambda: psidx % other)
+                    self.assertRaisesRegex(TypeError, expected_err_msg, lambda: other % psidx)
 
-            expected_err_msg = "Datetime subtraction can only be applied to datetime series."
+                expected_err_msg = "Datetime subtraction can only be applied to datetime series."
 
-            for other in [1, 0.1]:
+                for other in [1, 0.1]:
+                    self.assertRaisesRegex(TypeError, expected_err_msg, lambda: psidx - other)
+                    self.assertRaisesRegex(TypeError, expected_err_msg, lambda: other - psidx)
+
                 self.assertRaisesRegex(TypeError, expected_err_msg, lambda: psidx - other)
-                self.assertRaisesRegex(TypeError, expected_err_msg, lambda: other - psidx)
-
-            self.assertRaisesRegex(TypeError, expected_err_msg, lambda: psidx - other)
-            self.assertRaises(NotImplementedError, lambda: py_datetime - psidx)
+                self.assertRaises(NotImplementedError, lambda: py_datetime - psidx)
 
 
 class DatetimeIndexTests(

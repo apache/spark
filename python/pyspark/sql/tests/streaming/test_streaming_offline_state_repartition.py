@@ -28,8 +28,8 @@ from pyspark.sql.tests.pandas.helper.helper_pandas_transform_with_state import (
     StatefulProcessorCompositeTypeFactory,
 )
 from pyspark.sql.types import LongType, StringType, StructType, StructField
-from pyspark.testing.sqlutils import (
-    ReusedSQLTestCase,
+from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import (
     have_pandas,
     have_pyarrow,
     pandas_requirement_message,

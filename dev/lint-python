@@ -20,7 +20,7 @@ FLAKE8_BUILD="flake8"
 MINIMUM_FLAKE8="3.9.0"
 RUFF_BUILD="ruff"
 MINIMUM_RUFF="0.14.0"
-MINIMUM_MYPY="1.8.0"
+MINIMUM_MYPY="1.19.1"
 MYPY_BUILD="mypy"
 PYTEST_BUILD="pytest"
 
@@ -330,7 +330,7 @@ function black_test {
     fi
 
     echo "starting black test..."
-    BLACK_REPORT=$( ($BLACK_BUILD --check python/pyspark dev python/packaging) 2>&1)
+    BLACK_REPORT=$( ($BLACK_BUILD --check python/pyspark dev python/packaging python/benchmarks) 2>&1)
     BLACK_STATUS=$?
 
     if [ "$BLACK_STATUS" -ne 0 ]; then

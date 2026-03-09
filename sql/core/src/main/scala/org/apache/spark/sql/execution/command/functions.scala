@@ -24,7 +24,8 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, FunctionResource}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, ExpressionInfo}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.StringUtils
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 
 
@@ -139,11 +140,30 @@ case class DropFunctionCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     if (isTemp) {
-      assert(identifier.database.isEmpty)
-      if (FunctionRegistry.builtin.functionExists(identifier)) {
-        throw QueryCompilationErrors.cannotDropBuiltinFuncError(identifier.funcName)
+      val funcName = if (identifier.database.isDefined) {
+        val db = identifier.database.get
+        if (!db.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)) {
+          throw QueryExecutionErrors.invalidNamespaceNameError(
+            Array(CatalogManager.SYSTEM_CATALOG_NAME, db))
+        }
+        if (identifier.catalog.exists(
+            !_.equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME))) {
+          throw QueryExecutionErrors.invalidNamespaceNameError(
+            Array(identifier.catalog.get, db))
+        }
+        identifier.funcName
+      } else {
+        identifier.funcName
       }
-      catalog.dropTempFunction(identifier.funcName, ifExists)
+
+      // Check if temp function exists first - if it does, allow dropping it even if a builtin
+      // with the same name exists (shadowing case)
+      val unqualifiedIdent = FunctionIdentifier(funcName)
+      if (!catalog.isTemporaryFunction(unqualifiedIdent) &&
+          catalog.isBuiltinFunction(unqualifiedIdent)) {
+        throw QueryCompilationErrors.cannotDropBuiltinFuncError(funcName)
+      }
+      catalog.dropTempFunction(funcName, ifExists)
     } else {
       // We are dropping a permanent function.
       catalog.dropFunction(identifier, ignoreIfNotExists = ifExists)

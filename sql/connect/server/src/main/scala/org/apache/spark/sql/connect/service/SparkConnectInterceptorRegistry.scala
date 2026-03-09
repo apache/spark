@@ -39,7 +39,9 @@ object SparkConnectInterceptorRegistry {
     // Adding a new interceptor at compile time works like the example below with the dummy
     // interceptor:
     // interceptor[DummyInterceptor](classOf[DummyInterceptor])
-  )
+
+    // Request decompression interceptor handles compressed requests from clients.
+    interceptor[RequestDecompressionInterceptor](classOf[RequestDecompressionInterceptor]))
 
   /**
    * Given a NettyServerBuilder instance, will chain all interceptors to it in reverse order.

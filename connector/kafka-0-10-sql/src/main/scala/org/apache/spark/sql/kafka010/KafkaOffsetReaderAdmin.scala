@@ -127,7 +127,7 @@ private[kafka010] class KafkaOffsetReaderAdmin(
       logDebug(s"Assigned partitions: $partitions. Seeking to $partitionOffsets")
       partitionOffsets
     }
-    val partitions = consumerStrategy.assignedTopicPartitions(admin)
+    val partitions = withRetries { consumerStrategy.assignedTopicPartitions(admin) }
     // Obtain TopicPartition offsets with late binding support
     offsetRangeLimit match {
       case EarliestOffsetRangeLimit => partitions.map {
@@ -455,9 +455,9 @@ private[kafka010] class KafkaOffsetReaderAdmin(
    * Retries are needed to handle transient failures. For e.g. race conditions between getting
    * assignment and getting position while topics/partitions are deleted can cause NPEs.
    */
-  private def withRetries(body: => Map[TopicPartition, Long]): Map[TopicPartition, Long] = {
+  private def withRetries[T](body: => T): T = {
     synchronized {
-      var result: Option[Map[TopicPartition, Long]] = None
+      var result: Option[T] = None
       var attempt = 1
       var lastException: Throwable = null
       while (result.isEmpty && attempt <= maxOffsetFetchAttempts

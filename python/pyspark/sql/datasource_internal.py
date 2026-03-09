@@ -19,7 +19,7 @@
 import json
 import copy
 from itertools import chain
-from typing import Iterator, List, Sequence, Tuple, Type, Dict
+from typing import Iterator, List, Optional, Sequence, Tuple, Type, Dict
 
 from pyspark.sql.datasource import (
     DataSource,
@@ -93,6 +93,30 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
         # We do not consider providing different read limit on simple stream reader.
         return ReadAllAvailable()
 
+    def add_result_to_cache(self, start: dict, end: dict, it: Iterator[Tuple]) -> None:
+        """
+        Validates that read() did not return a non-empty batch with end equal to start,
+        which would cause the same batch to be processed repeatedly. When end != start,
+        appends the result to the cache; when end == start with empty iterator, does not
+        cache (avoids unbounded cache growth).
+        """
+        start_str = json.dumps(start)
+        end_str = json.dumps(end)
+        if end_str != start_str:
+            self.cache.append(PrefetchedCacheEntry(start, end, it))
+            return
+        try:
+            next(it)
+        except StopIteration:
+            return
+        raise PySparkException(
+            errorClass="SIMPLE_STREAM_READER_OFFSET_DID_NOT_ADVANCE",
+            messageParameters={
+                "start_offset": start_str,
+                "end_offset": end_str,
+            },
+        )
+
     def latestOffset(self, start: dict, limit: ReadLimit) -> dict:
         assert start is not None, "start offset should not be None"
         assert isinstance(
@@ -100,7 +124,7 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
         ), "simple stream reader does not support read limit"
 
         (iter, end) = self.simple_reader.read(start)
-        self.cache.append(PrefetchedCacheEntry(start, end, iter))
+        self.add_result_to_cache(start, end, iter)
         return end
 
     def commit(self, end: dict) -> None:
@@ -119,7 +143,7 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
             assert self.cache[-1].end == end
         return [SimpleInputPartition(start, end)]
 
-    def getCache(self, start: dict, end: dict) -> Iterator[Tuple]:
+    def getCache(self, start: dict, end: dict) -> Optional[Iterator[Tuple]]:
         start_idx = -1
         end_idx = -1
         for idx, entry in enumerate(self.cache):
@@ -131,7 +155,7 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
                 end_idx = idx
                 break
         if start_idx == -1 or end_idx == -1:
-            return None  # type: ignore[return-value]
+            return None
         # Chain all the data iterator between start offset and end offset
         # need to copy here to avoid exhausting the original data iterator.
         entries = [copy.copy(entry.iterator) for entry in self.cache[start_idx : end_idx + 1]]

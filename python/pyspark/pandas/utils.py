@@ -47,7 +47,7 @@ from pyspark.sql import functions as F, Column, DataFrame as PySparkDataFrame, S
 from pyspark.sql.types import DoubleType
 from pyspark.sql.utils import is_remote
 from pyspark.errors import PySparkTypeError, UnsupportedOperationException
-from pyspark import pandas as ps  # noqa: F401
+from pyspark import pandas as ps
 from pyspark.pandas._typing import (
     Axis,
     Label,
@@ -326,7 +326,7 @@ def align_diff_frames(
         ["DataFrame", List[Label], List[Label]], Iterator[Tuple["Series", Label]]
     ],
     this: "DataFrame",
-    that: "DataFrame",
+    that: "DataFrameOrSeries",
     fillna: bool = True,
     how: str = "full",
     preserve_order_column: bool = False,

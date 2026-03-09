@@ -783,6 +783,58 @@ class DataFrame:
         ...
 
     @dispatch_df_method
+    def zipWithIndex(self, indexColName: str = "index") -> "DataFrame":
+        """Returns a new :class:`DataFrame` by appending a column containing consecutive
+        0-based Long indices, similar to :meth:`RDD.zipWithIndex`.
+
+        The index column is appended as the last column of the resulting :class:`DataFrame`.
+
+        .. versionadded:: 4.2.0
+
+        Parameters
+        ----------
+        indexColName : str, default "index"
+            The name of the index column to append.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            A new DataFrame with an appended index column.
+
+        Notes
+        -----
+        If a column with `indexColName` already exists in the schema, the resulting
+        :class:`DataFrame` will have duplicate column names. Selecting the duplicate column
+        by name will throw `AMBIGUOUS_REFERENCE`, and writing the :class:`DataFrame` will
+        throw `COLUMN_ALREADY_EXISTS`.
+
+        Examples
+        --------
+        >>> df = spark.createDataFrame(
+        ...     [("a", 1), ("b", 2), ("c", 3)], ["letter", "number"])
+        >>> df.zipWithIndex().show()
+        +------+------+-----+
+        |letter|number|index|
+        +------+------+-----+
+        |     a|     1|    0|
+        |     b|     2|    1|
+        |     c|     3|    2|
+        +------+------+-----+
+
+        Custom index column name:
+
+        >>> df.zipWithIndex("row_id").show()
+        +------+------+------+
+        |letter|number|row_id|
+        +------+------+------+
+        |     a|     1|     0|
+        |     b|     2|     1|
+        |     c|     3|     2|
+        +------+------+------+
+        """
+        ...
+
+    @dispatch_df_method
     def isLocal(self) -> bool:
         """Returns ``True`` if the :func:`collect` and :func:`take` methods can be run locally
         (without any Spark executors).

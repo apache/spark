@@ -908,7 +908,7 @@ class StringMethods:
         4    False
         dtype: bool
 
-        Returning ‘house’ or ‘dog’ when either expression occurs in a string.
+        Returning 'house' or 'dog' when either expression occurs in a string.
 
         >>> s1.str.contains('house|dog', regex=True)
         0    False
@@ -941,7 +941,7 @@ class StringMethods:
 
         Ensure pat is a not a literal pattern when regex is set to True.
         Note in the following example one might expect only s2[1] and s2[3]
-        to return True. However, ‘.0’ as a regex matches any character followed
+        to return True. However, '.0' as a regex matches any character followed
         by a 0.
 
         >>> s2 = ps.Series(['40','40.0','41','41.0','35'])
@@ -1116,7 +1116,7 @@ class StringMethods:
         --------
         >>> s = ps.Series(['Lion', 'Monkey', 'Rabbit'])
 
-        The search for the pattern ‘Monkey’ returns one match:
+        The search for the pattern 'Monkey' returns one match:
 
         >>> s.str.findall('Monkey')
         0          []
@@ -1124,7 +1124,7 @@ class StringMethods:
         2          []
         dtype: object
 
-        On the other hand, the search for the pattern ‘MONKEY’ doesn’t return
+        On the other hand, the search for the pattern 'MONKEY' doesn't return
         any match:
 
         >>> s.str.findall('MONKEY')
@@ -1134,7 +1134,7 @@ class StringMethods:
         dtype: object
 
         Flags can be added to the pattern or regular expression. For instance,
-        to find the pattern ‘MONKEY’ ignoring the case:
+        to find the pattern 'MONKEY' ignoring the case:
 
         >>> import re
         >>> s.str.findall('MONKEY', flags=re.IGNORECASE)
@@ -1153,7 +1153,7 @@ class StringMethods:
         dtype: object
 
         Regular expressions are supported too. For instance, the search for all
-        the strings ending with the word ‘on’ is shown next:
+        the strings ending with the word 'on' is shown next:
 
         >>> s.str.findall('on$')
         0    [on]
@@ -1259,7 +1259,7 @@ class StringMethods:
         1           [cat, None, dog]
         dtype: object
 
-        Join all lists using a ‘-‘. The list containing None will produce None.
+        Join all lists using a '-'. The list containing None will produce None.
 
         >>> s.str.join('-')
         0    lion-elephant-zebra
@@ -1417,7 +1417,7 @@ class StringMethods:
 
         Parameters
         ----------
-        form : {‘NFC’, ‘NFKC’, ‘NFD’, ‘NFKD’}
+        form : {'NFC', 'NFKC', 'NFD', 'NFKD'}
             Unicode form.
 
         Returns
@@ -1440,7 +1440,7 @@ class StringMethods:
         width : int
             Minimum width of resulting string; additional characters will be
             filled with character defined in `fillchar`.
-        side : {‘left’, ‘right’, ‘both’}, default ‘left’
+        side : {'left', 'right', 'both'}, default 'left'
             Side from which to fill resulting string.
         fillchar : str, default ' '
             Additional character for filling, default is whitespace.
@@ -2308,20 +2308,20 @@ class StringMethods:
 
     def zfill(self, width: int) -> "ps.Series":
         """
-        Pad strings in the Series by prepending ‘0’ characters.
+        Pad strings in the Series by prepending '0' characters.
 
-        Strings in the Series are padded with ‘0’ characters on the left of the
+        Strings in the Series are padded with '0' characters on the left of the
         string to reach a total string length width. Strings in the Series with
         length greater or equal to width are unchanged.
 
-        Differs from :func:`str.zfill` which has special handling for ‘+’/’-‘
+        Differs from :func:`str.zfill` which has special handling for '+'/'-'
         in the string.
 
         Parameters
         ----------
         width : int
             Minimum length of resulting string; strings with length less than
-            width be prepended with ‘0’ characters.
+            width be prepended with '0' characters.
 
         Returns
         -------

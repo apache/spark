@@ -395,7 +395,7 @@ private[client] object GrpcExceptionConverter {
    * FetchErrorDetailsResponse.Error with un-truncated error messages and server-side stacktrace
    * (if set).
    */
-  private def errorsToThrowable(
+  private[client] def errorsToThrowable(
       errorIdx: Int,
       errors: Seq[FetchErrorDetailsResponse.Error]): Throwable = {
 

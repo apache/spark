@@ -34,6 +34,7 @@ from pyspark.sql.connect.logging import logger
 import pyspark.sql.connect.proto as pb2
 import pyspark.sql.connect.proto.base_pb2_grpc as grpc_lib
 from pyspark.errors import PySparkRuntimeError
+from pyspark.util import disable_gc
 
 
 class ExecutePlanResponseReattachableIterator(Generator):
@@ -108,9 +109,10 @@ class ExecutePlanResponseReattachableIterator(Generator):
         # Note: This is not retried, because no error would ever be thrown here, and GRPC will only
         # throw error on first self._has_next().
         self._metadata = metadata
-        self._iterator: Optional[Iterator[pb2.ExecutePlanResponse]] = iter(
-            self._stub.ExecutePlan(self._initial_request, metadata=metadata)
-        )
+        with disable_gc():
+            self._iterator: Optional[Iterator[pb2.ExecutePlanResponse]] = iter(
+                self._stub.ExecutePlan(self._initial_request, metadata=metadata)
+            )
 
         # Current item from this iterator.
         self._current: Optional[pb2.ExecutePlanResponse] = None
@@ -142,18 +144,19 @@ class ExecutePlanResponseReattachableIterator(Generator):
 
     def send(self, value: Any) -> pb2.ExecutePlanResponse:
         # will trigger reattach in case the stream completed without result_complete
-        if not self._has_next():
-            raise StopIteration()
+        with disable_gc():
+            if not self._has_next():
+                raise StopIteration()
 
-        ret = self._current
-        assert ret is not None
+            ret = self._current
+            assert ret is not None
 
-        self._last_returned_response_id = ret.response_id
-        if ret.HasField("result_complete"):
-            self._release_all()
-        else:
-            self._release_until(self._last_returned_response_id)
-        self._current = None
+            self._last_returned_response_id = ret.response_id
+            if ret.HasField("result_complete"):
+                self._release_all()
+            else:
+                self._release_until(self._last_returned_response_id)
+            self._current = None
         return ret
 
     def _has_next(self) -> bool:

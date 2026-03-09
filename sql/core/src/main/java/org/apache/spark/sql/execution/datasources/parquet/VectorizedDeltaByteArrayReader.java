@@ -25,6 +25,8 @@ import org.apache.parquet.column.values.ValuesReader;
 import org.apache.parquet.io.api.Binary;
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
+import org.apache.spark.sql.types.GeographyType;
+import org.apache.spark.sql.types.GeometryType;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -98,6 +100,48 @@ public class VectorizedDeltaByteArrayReader extends VectorizedReaderBase
   @Override
   public void readBinary(int total, WritableColumnVector c, int rowId) {
     readValues(total, c, rowId);
+  }
+
+  @Override
+  public void readGeometry(int total, WritableColumnVector c, int rowId) {
+    assert(c.dataType() instanceof GeometryType);
+    int srid = ((GeometryType) c.dataType()).srid();
+    readGeoData(total, c, rowId, srid, WKBToGeometryConverter.INSTANCE);
+  }
+
+  @Override
+  public void readGeography(int total, WritableColumnVector c, int rowId) {
+    assert(c.dataType() instanceof GeographyType);
+    int srid = ((GeographyType) c.dataType()).srid();
+    readGeoData(total, c, rowId, srid, WKBToGeographyConverter.INSTANCE);
+  }
+
+  private void readGeoData(int total, WritableColumnVector c, int rowId, int srid,
+     WKBConverterStrategy converter) {
+    for (int i = 0; i < total; i++) {
+      int prefixLength = prefixLengthVector.getInt(currentRow);
+      ByteBuffer suffix = suffixReader.getBytes(currentRow);
+      int suffixLength = suffix.limit() - suffix.position();
+      int length = prefixLength + suffixLength;
+
+      byte[] wkb = new byte[length];
+      if (prefixLength > 0) {
+        previous.get(wkb, 0, prefixLength);
+      }
+      suffix.get(wkb, prefixLength, suffixLength);
+
+      // Converts WKB into a physical representation of geometry/geography.
+      byte[] physicalValue = converter.convert(wkb, srid);
+
+      WritableColumnVector arrayData = c.arrayData();
+      int offset = arrayData.getElementsAppended();
+      arrayData.appendBytes(physicalValue.length, physicalValue, 0);
+
+      c.putArray(rowId + i, offset, physicalValue.length);
+      previous = ByteBuffer.wrap(wkb);
+
+      currentRow++;
+    }
   }
 
   /**

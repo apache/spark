@@ -27,7 +27,7 @@ Security features like authentication are not enabled by default. When deploying
 or an untrusted network, it's important to secure access to the cluster to prevent unauthorized applications
 from running on the cluster.
 
-Spark supports multiple deployments types and each one supports different levels of security. Not
+Spark supports multiple deployment types and each one supports different levels of security. Not
 all deployment types will be secure in all environments and none are secure by default. Be
 sure to evaluate your environment, what Spark supports, and take the appropriate measure to secure
 your Spark deployment.

@@ -28,6 +28,7 @@ import io.grpc.stub.StreamObserver
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.ExecutePlanResponse
 import org.apache.spark.internal.{Logging, LogKeys}
+import org.apache.spark.sql.connect.IllegalStateErrors
 import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.pipelines.common.FlowStatus
@@ -86,8 +87,7 @@ class PipelineEventSender(
         })
       }
     } else {
-      throw new IllegalStateException(
-        s"Cannot send event after shutdown for session ${sessionHolder.sessionId}")
+      throw IllegalStateErrors.eventSendAfterShutdown(sessionHolder.key.toString)
     }
   }
 

@@ -40,8 +40,8 @@ from multiprocessing import Manager
 sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), "../dev/"))
 
 
-from sparktestsupport import SPARK_HOME  # noqa (suppress pep8 warnings)
-from sparktestsupport.shellutils import which, subprocess_check_output  # noqa
+from sparktestsupport import SPARK_HOME
+from sparktestsupport.shellutils import which, subprocess_check_output
 from sparktestsupport.modules import all_modules, pyspark_sql  # noqa
 
 

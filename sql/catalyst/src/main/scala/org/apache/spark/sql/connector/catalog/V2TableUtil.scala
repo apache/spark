@@ -95,7 +95,7 @@ private[sql] object V2TableUtil extends SQLConfHelper {
    */
   def extractMetadataColumns(relation: DataSourceV2Relation): Seq[MetadataColumn] = {
     val metaAttrNames = relation.output.filter(_.isMetadataCol).map(_.name)
-    filter(metaAttrNames, metadataColumns(relation.table))
+    if (metaAttrNames.isEmpty) Nil else filter(metaAttrNames, metadataColumns(relation.table))
   }
 
   /**

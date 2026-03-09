@@ -80,6 +80,9 @@ class SessionStateSuite extends SparkFunSuite {
   test("fork new session and inherit function registry and udf") {
     val testFuncName1 = FunctionIdentifier("strlenScala")
     val testFuncName2 = FunctionIdentifier("addone")
+    // Temporary functions registered via spark.udf.register are stored with database="session"
+    val testFuncName1Qualified = FunctionIdentifier(testFuncName1.funcName, Some("session"))
+    val testFuncName2Qualified = FunctionIdentifier(testFuncName2.funcName, Some("session"))
     try {
       activeSession.udf.register(testFuncName1.funcName, (_: String).length + (_: Int))
       val forkedSession = activeSession.cloneSession()
@@ -88,16 +91,19 @@ class SessionStateSuite extends SparkFunSuite {
       assert(forkedSession ne activeSession)
       assert(forkedSession.sessionState.functionRegistry ne
         activeSession.sessionState.functionRegistry)
-      assert(forkedSession.sessionState.functionRegistry.lookupFunction(testFuncName1).nonEmpty)
+      assert(forkedSession.sessionState.functionRegistry
+        .lookupFunction(testFuncName1Qualified).nonEmpty)
 
       // independence
-      forkedSession.sessionState.functionRegistry.dropFunction(testFuncName1)
-      assert(activeSession.sessionState.functionRegistry.lookupFunction(testFuncName1).nonEmpty)
+      forkedSession.sessionState.functionRegistry.dropFunction(testFuncName1Qualified)
+      assert(activeSession.sessionState.functionRegistry
+        .lookupFunction(testFuncName1Qualified).nonEmpty)
       activeSession.udf.register(testFuncName2.funcName, (_: Int) + 1)
-      assert(forkedSession.sessionState.functionRegistry.lookupFunction(testFuncName2).isEmpty)
+      assert(forkedSession.sessionState.functionRegistry
+        .lookupFunction(testFuncName2Qualified).isEmpty)
     } finally {
-      activeSession.sessionState.functionRegistry.dropFunction(testFuncName1)
-      activeSession.sessionState.functionRegistry.dropFunction(testFuncName2)
+      activeSession.sessionState.functionRegistry.dropFunction(testFuncName1Qualified)
+      activeSession.sessionState.functionRegistry.dropFunction(testFuncName2Qualified)
     }
   }
 

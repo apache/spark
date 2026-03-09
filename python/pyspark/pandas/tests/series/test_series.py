@@ -25,6 +25,7 @@ import pandas as pd
 from pyspark.ml.linalg import SparseVector
 
 from pyspark import pandas as ps
+from pyspark.loose_version import LooseVersion
 from pyspark.testing.pandasutils import (
     PandasOnSparkTestCase,
     SPARK_CONF_ARROW_ENABLED,
@@ -148,22 +149,36 @@ class SeriesTestsMixin:
         self.assert_eq(psser.head(-10), pser.head(-10))
 
     def test_last(self):
-        with self.assertRaises(TypeError):
-            self.psser.last("1D")
-
         index = pd.date_range("2018-04-09", periods=4, freq="2D")
         pser = pd.Series([1, 2, 3, 4], index=index)
         psser = ps.from_pandas(pser)
-        self.assert_eq(psser.last("1D"), pser.last("1D"))
+
+        if LooseVersion(pd.__version__) < "3.0.0":
+            self.assert_eq(psser.last("1D"), pser.last("1D"))
+
+            with self.assertRaises(TypeError):
+                self.psser.last("1D")
+        else:
+            with self.assertRaises(AttributeError):
+                psser.last("1D")
+            with self.assertRaises(AttributeError):
+                self.psser.last("1D")
 
     def test_first(self):
-        with self.assertRaises(TypeError):
-            self.psser.first("1D")
-
         index = pd.date_range("2018-04-09", periods=4, freq="2D")
         pser = pd.Series([1, 2, 3, 4], index=index)
         psser = ps.from_pandas(pser)
-        self.assert_eq(psser.first("1D"), pser.first("1D"))
+
+        if LooseVersion(pd.__version__) < "3.0.0":
+            self.assert_eq(psser.first("1D"), pser.first("1D"))
+
+            with self.assertRaises(TypeError):
+                self.psser.first("1D")
+        else:
+            with self.assertRaises(AttributeError):
+                psser.first("1D")
+            with self.assertRaises(AttributeError):
+                self.psser.first("1D")
 
     def test_rename(self):
         pser = pd.Series([1, 2, 3, 4, 5, 6, 7], name="x")
