@@ -221,13 +221,11 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
           offset += count
         }
       case collectLimit: CollectLimitExec =>
-        SQLExecution.withNewExecutionId(
-          dataframe.queryExecution, Some("collectArrow")) {
+        SQLExecution.withNewExecutionId(dataframe.queryExecution, Some("collectArrow")) {
           sendCollectedRows(collectLimit.executeCollect())
         }
       case collectTail: CollectTailExec =>
-        SQLExecution.withNewExecutionId(
-          dataframe.queryExecution, Some("collectArrow")) {
+        SQLExecution.withNewExecutionId(dataframe.queryExecution, Some("collectArrow")) {
           sendCollectedRows(collectTail.executeCollect())
         }
       case _ =>

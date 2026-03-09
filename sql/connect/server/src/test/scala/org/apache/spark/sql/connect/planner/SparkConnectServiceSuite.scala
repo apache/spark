@@ -1009,26 +1009,35 @@ class SparkConnectServiceSuite
   test("SPARK-55887: Use executeCollect for limit to avoid full scan") {
     // Create a range with 100 partitions
     val numPartitions = 100
-    val plan = proto.Plan.newBuilder().setRoot(
-      proto.Relation.newBuilder().setRange(
-        proto.Range.newBuilder()
-          .setStart(0L)
-          .setEnd(10000L)
-          .setStep(1L)
-          .setNumPartitions(numPartitions)))
+    val plan = proto.Plan
+      .newBuilder()
+      .setRoot(
+        proto.Relation
+          .newBuilder()
+          .setRange(
+            proto.Range
+              .newBuilder()
+              .setStart(0L)
+              .setEnd(10000L)
+              .setStep(1L)
+              .setNumPartitions(numPartitions)))
       .build()
 
     // Apply limit(1) - this corresponds to head(1)
-    val limitRelation = proto.Relation.newBuilder()
-      .setLimit(proto.Limit.newBuilder()
-        .setInput(plan.getRoot)
-        .setLimit(1))
+    val limitRelation = proto.Relation
+      .newBuilder()
+      .setLimit(
+        proto.Limit
+          .newBuilder()
+          .setInput(plan.getRoot)
+          .setLimit(1))
       .build()
     val limitPlan = proto.Plan.newBuilder().setRoot(limitRelation).build()
 
     val sessionId = UUID.randomUUID.toString
     val context = proto.UserContext.newBuilder().setUserId("c1").build()
-    val request = proto.ExecutePlanRequest.newBuilder()
+    val request = proto.ExecutePlanRequest
+      .newBuilder()
       .setPlan(limitPlan)
       .setUserContext(context)
       .setSessionId(sessionId)
@@ -1047,11 +1056,13 @@ class SparkConnectServiceSuite
       val instance = new SparkConnectService(false)
       val responses = mutable.Buffer.empty[proto.ExecutePlanResponse]
       var done = false
-      instance.executePlan(request, new StreamObserver[proto.ExecutePlanResponse] {
-        override def onNext(v: proto.ExecutePlanResponse): Unit = responses += v
-        override def onError(t: Throwable): Unit = throw t
-        override def onCompleted(): Unit = { done = true }
-      })
+      instance.executePlan(
+        request,
+        new StreamObserver[proto.ExecutePlanResponse] {
+          override def onNext(v: proto.ExecutePlanResponse): Unit = responses += v
+          override def onError(t: Throwable): Unit = throw t
+          override def onCompleted(): Unit = { done = true }
+        })
 
       // Wait for completion
       Eventually.eventually(timeout(10.seconds)) {
@@ -1066,7 +1077,8 @@ class SparkConnectServiceSuite
       // If execute() is used, it might scan all partitions (100 tasks) for LocalLimit
       // or trigger Shuffle.
       // We expect significantly fewer tasks than numPartitions.
-      assert(numTasks < numPartitions,
+      assert(
+        numTasks < numPartitions,
         s"Expected fewer tasks than partitions ($numPartitions), but got $numTasks")
       assert(numTasks >= 1)
     } finally {
@@ -1077,26 +1089,35 @@ class SparkConnectServiceSuite
   test("SPARK-55887: Use executeCollect for tail to avoid full scan") {
     // Create a range with 100 partitions
     val numPartitions = 100
-    val plan = proto.Plan.newBuilder().setRoot(
-      proto.Relation.newBuilder().setRange(
-        proto.Range.newBuilder()
-          .setStart(0L)
-          .setEnd(10000L)
-          .setStep(1L)
-          .setNumPartitions(numPartitions)))
+    val plan = proto.Plan
+      .newBuilder()
+      .setRoot(
+        proto.Relation
+          .newBuilder()
+          .setRange(
+            proto.Range
+              .newBuilder()
+              .setStart(0L)
+              .setEnd(10000L)
+              .setStep(1L)
+              .setNumPartitions(numPartitions)))
       .build()
 
     // Apply tail(1)
-    val tailRelation = proto.Relation.newBuilder()
-      .setTail(proto.Tail.newBuilder()
-        .setInput(plan.getRoot)
-        .setLimit(1))
+    val tailRelation = proto.Relation
+      .newBuilder()
+      .setTail(
+        proto.Tail
+          .newBuilder()
+          .setInput(plan.getRoot)
+          .setLimit(1))
       .build()
     val tailPlan = proto.Plan.newBuilder().setRoot(tailRelation).build()
 
     val sessionId = UUID.randomUUID.toString
     val context = proto.UserContext.newBuilder().setUserId("c1").build()
-    val request = proto.ExecutePlanRequest.newBuilder()
+    val request = proto.ExecutePlanRequest
+      .newBuilder()
       .setPlan(tailPlan)
       .setUserContext(context)
       .setSessionId(sessionId)
@@ -1115,11 +1136,13 @@ class SparkConnectServiceSuite
       val instance = new SparkConnectService(false)
       val responses = mutable.Buffer.empty[proto.ExecutePlanResponse]
       var done = false
-      instance.executePlan(request, new StreamObserver[proto.ExecutePlanResponse] {
-        override def onNext(v: proto.ExecutePlanResponse): Unit = responses += v
-        override def onError(t: Throwable): Unit = throw t
-        override def onCompleted(): Unit = { done = true }
-      })
+      instance.executePlan(
+        request,
+        new StreamObserver[proto.ExecutePlanResponse] {
+          override def onNext(v: proto.ExecutePlanResponse): Unit = responses += v
+          override def onError(t: Throwable): Unit = throw t
+          override def onCompleted(): Unit = { done = true }
+        })
 
       // Wait for completion
       Eventually.eventually(timeout(10.seconds)) {
@@ -1133,7 +1156,8 @@ class SparkConnectServiceSuite
       // If executeCollect/executeTail is used, it should only scan the last partition (1 task).
       // If execute() is used, it might scan all partitions (100 tasks) or trigger Shuffle.
       // We expect significantly fewer tasks than numPartitions.
-      assert(numTasks < numPartitions,
+      assert(
+        numTasks < numPartitions,
         s"Expected fewer tasks than partitions ($numPartitions), but got $numTasks")
       assert(numTasks >= 1)
     } finally {
