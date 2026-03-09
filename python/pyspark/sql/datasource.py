@@ -818,7 +818,7 @@ class DataSourceStreamReader(ABC):
 
         Returns
         -------
-        sequence of :class:`InputPartition`\\s or None
+        sequence of :class:`InputPartition`\\s
             A sequence of partitions for this data source. Each partition value
             must be an instance of `InputPartition` or a subclass of it.
         """
