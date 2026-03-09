@@ -74,12 +74,19 @@ class InMemoryEnhancedPartitionFilterTable(
         InMemoryEnhancedPartitionFilterTable.RejectPartitionPredicatesKey, "false")
         .toBoolean
 
+    private val rejectDataPredicates =
+      InMemoryEnhancedPartitionFilterTable.this.properties.getOrDefault(
+        InMemoryEnhancedPartitionFilterTable.RejectDataPredicatesKey, "false")
+        .toBoolean
+
     override def supportsEnhancedPartitionFiltering(): Boolean = true
 
     override def pushPredicates(predicates: Array[Predicate]): Array[Predicate] = {
       val partNames = InMemoryEnhancedPartitionFilterTable.this.partCols.flatMap(_.toSeq).toSet
       def referencesOnlyPartitionCols(p: Predicate): Boolean =
         p.references().forall(ref => partNames.contains(ref.fieldNames().mkString(".")))
+      def referencesOnlyDataCols(p: Predicate): Boolean =
+        p.references().forall(ref => !partNames.contains(ref.fieldNames().mkString(".")))
 
       val returned = ArrayBuffer.empty[Predicate]
 
@@ -92,7 +99,13 @@ class InMemoryEnhancedPartitionFilterTable(
           }
         case p if referencesOnlyPartitionCols(p) &&
             InMemoryTableWithV2Filter.supportsPredicates(Array(p)) =>
-          firstPassPushedPredicates += p
+          if (rejectPartitionPredicates) {
+            returned += p
+          } else {
+            firstPassPushedPredicates += p
+          }
+        case p if rejectDataPredicates && referencesOnlyDataCols(p) =>
+          // Reject: we are mocking a data source that can evaluate this data predicate
         case p =>
           returned += p
       }
@@ -149,4 +162,12 @@ object InMemoryEnhancedPartitionFilterTable {
    * Table property: when "true", reject all PartitionPredicates (for testing).
    */
   private[catalog] val RejectPartitionPredicatesKey = "reject-partition-predicates"
+
+  /**
+   * Table property: when "true", reject (do not return) data predicates (we are mocking a data
+   * source that can evaluate this particular data predicate). Used for testing case 2; the test
+   * uses a predicate that always evaluates to true (e.g. IS NOT NULL on non-null data) so we
+   * don't apply the filter.
+   */
+  private[catalog] val RejectDataPredicatesKey = "reject-data-predicates"
 }
