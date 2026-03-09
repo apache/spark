@@ -329,6 +329,114 @@ class _NonGroupedBenchMixin:
         )
 
 
+# -- SQL_ARROW_BATCHED_UDF --------------------------------------------------
+# Arrow-optimized Python UDF: receives individual Python values per row,
+# returns a single Python value.  The wire protocol includes an extra
+# ``input_type`` (StructType JSON) before the UDF payload.
+
+
+def _build_arrow_batched_scenarios():
+    """Build scenarios for SQL_ARROW_BATCHED_UDF.
+
+    Returns a dict mapping scenario name to
+    ``(batch, num_batches, input_struct_type, col0_type)``.
+    ``input_struct_type`` is a StructType matching the batch schema,
+    needed for the wire protocol.
+    """
+    scenarios = {}
+
+    # Row-by-row processing is ~100x slower than columnar Arrow UDFs,
+    # so batch counts are much smaller to keep benchmarks under 60s.
+    for name, (rows, n_cols, num_batches) in {
+        "sm_batch_few_col": (1_000, 5, 20),
+        "sm_batch_many_col": (1_000, 50, 5),
+        "lg_batch_few_col": (10_000, 5, 5),
+        "lg_batch_many_col": (10_000, 50, 2),
+    }.items():
+        batch, col0_type = _make_typed_batch(rows, n_cols)
+        type_cycle = [IntegerType(), StringType(), BinaryType(), BooleanType()]
+        input_struct = StructType(
+            [StructField(f"col_{i}", type_cycle[i % len(type_cycle)]) for i in range(n_cols)]
+        )
+        scenarios[name] = (batch, num_batches, input_struct, col0_type)
+
+    _PURE_ROWS, _PURE_COLS, _PURE_BATCHES = 5_000, 10, 10
+
+    for scenario_name, make_array, spark_type in [
+        ("pure_ints", lambda r: pa.array(np.random.randint(0, 1000, r, dtype=np.int64)),
+         IntegerType()),
+        ("pure_floats", lambda r: pa.array(np.random.rand(r)), DoubleType()),
+        ("pure_strings", lambda r: pa.array([f"s{j}" for j in range(r)]), StringType()),
+    ]:
+        batch = _make_pure_batch(_PURE_ROWS, _PURE_COLS, make_array, spark_type)
+        input_struct = StructType(
+            [StructField(f"col_{i}", spark_type) for i in range(_PURE_COLS)]
+        )
+        scenarios[scenario_name] = (batch, _PURE_BATCHES, input_struct, spark_type)
+
+    # mixed types
+    batch, col0_type = _make_typed_batch(_PURE_ROWS, _PURE_COLS)
+    type_cycle = [IntegerType(), StringType(), BinaryType(), BooleanType()]
+    input_struct = StructType(
+        [StructField(f"col_{i}", type_cycle[i % len(type_cycle)]) for i in range(_PURE_COLS)]
+    )
+    scenarios["mixed_types"] = (batch, _PURE_BATCHES, input_struct, col0_type)
+
+    return scenarios
+
+
+_ARROW_BATCHED_SCENARIOS = _build_arrow_batched_scenarios()
+
+
+# UDFs for SQL_ARROW_BATCHED_UDF operate on individual Python values.
+# arg_offsets=[0] means the UDF receives column 0 value per row.
+_ARROW_BATCHED_UDFS = {
+    "identity_udf": (lambda x: x, None, [0]),
+    "stringify_udf": (lambda x: str(x), StringType(), [0]),
+    "nullcheck_udf": (lambda x: x is not None, BooleanType(), [0]),
+}
+
+
+class _ArrowBatchedBenchMixin:
+    """Provides ``_write_scenario`` for SQL_ARROW_BATCHED_UDF.
+
+    Like ``_NonGroupedBenchMixin`` but writes the extra ``input_type``
+    (StructType JSON) that the wire protocol requires.
+    """
+
+    def _write_scenario(self, scenario, udf_name, buf):
+        batch, num_batches, input_struct, col0_type = self._scenarios[scenario]
+        udf_func, ret_type, arg_offsets = self._udfs[udf_name]
+        if ret_type is None:
+            ret_type = col0_type
+
+        def write_command(b):
+            # input_type is read before UDF payloads for ARROW_BATCHED_UDF
+            _write_utf8(input_struct.json(), b)
+            _build_udf_payload(udf_func, ret_type, arg_offsets, b)
+
+        _write_worker_input(
+            PythonEvalType.SQL_ARROW_BATCHED_UDF,
+            write_command,
+            lambda b: _write_arrow_ipc_batches((batch for _ in range(num_batches)), b),
+            buf,
+        )
+
+
+class ArrowBatchedUDFTimeBench(_ArrowBatchedBenchMixin, _TimeBenchBase):
+    _scenarios = _ARROW_BATCHED_SCENARIOS
+    _udfs = _ARROW_BATCHED_UDFS
+    params = [list(_ARROW_BATCHED_SCENARIOS), list(_ARROW_BATCHED_UDFS)]
+    param_names = ["scenario", "udf"]
+
+
+class ArrowBatchedUDFPeakmemBench(_ArrowBatchedBenchMixin, _PeakmemBenchBase):
+    _scenarios = _ARROW_BATCHED_SCENARIOS
+    _udfs = _ARROW_BATCHED_UDFS
+    params = [list(_ARROW_BATCHED_SCENARIOS), list(_ARROW_BATCHED_UDFS)]
+    param_names = ["scenario", "udf"]
+
+
 # -- SQL_SCALAR_ARROW_UDF ---------------------------------------------------
 # UDF receives individual ``pa.Array`` columns, returns a ``pa.Array``.
 # All UDFs operate on arg_offsets=[0] so they work with any column type.
