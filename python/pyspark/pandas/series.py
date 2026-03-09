@@ -5179,7 +5179,15 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             ), "If 'regex' is True then 'to_replace' must be a string"
 
         if to_replace is None:
-            return self._fillna_with_method(method="ffill")
+            if LooseVersion(pd.__version__) < "3.0.0":
+                return self._fillna_with_method(method="ffill")
+            else:
+                if value is None and regex is False:
+                    raise ValueError(
+                        "Series.replace must specify either 'value', a dict-like "
+                        "'to_replace', or dict-like 'regex'."
+                    )
+
         if not isinstance(to_replace, (str, list, tuple, dict, int, float)):
             raise TypeError("'to_replace' should be one of str, list, tuple, dict, int, float")
 
