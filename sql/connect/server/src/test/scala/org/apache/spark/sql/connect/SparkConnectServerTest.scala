@@ -38,7 +38,7 @@ import org.apache.spark.sql.connect.dsl.MockRemoteSession
 import org.apache.spark.sql.connect.dsl.plans._
 import org.apache.spark.sql.connect.service.{ExecuteHolder, SessionKey, SparkConnectService}
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.util.CloseableIterator
+import org.apache.spark.sql.util.{ArrowUtils, CloseableIterator}
 
 /**
  * Base class and utilities for a test suite that starts and tests the real SparkConnectService
@@ -67,6 +67,8 @@ trait SparkConnectServerTest extends SharedSparkSession {
 
   override def afterAll(): Unit = {
     SparkConnectService.stop()
+    val leaked = ArrowUtils.rootAllocator.getAllocatedMemory
+    assert(leaked == 0, s"Arrow rootAllocator memory leak: $leaked bytes still allocated")
     allocator.close()
     super.afterAll()
   }
