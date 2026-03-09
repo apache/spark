@@ -3982,6 +3982,70 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     }
   }
 
+  testWithChangelogCheckpointingEnabled(
+    "SPARK-55892: Stale reused files in snapshot are replaced during maintenance upload") {
+    // This test verifies that when a snapshot is uploaded after a delay, files that were
+    // reused from old versions (which are now eligible for deletion by another executor's
+    // maintenance) are replaced with new files to be uploaded.
+    //
+    // Scenario:
+    // db1 loads v0 and commits v1. Generates 1.changelog and 1.zip (but not uploaded to DFS)
+    // db2 loads v1 but since no snapshot, it uses 1.changelog and generates snapshot 2.zip
+    // db 1 maintenance uploads snapshot 1.zip to DFS
+    // db 3 loads v2 using 1.zip + 2.changelog and generates 3.zip but not uploaded to DFS
+    // db2 maintenance uploads 2.zip, and deletes files < 2.zip, because minVersionsToRetain = 1
+    // db 3 uploads 3.zip to DFS <-- (with new fix, shouldn't include reused files from 1.zip)
+    // db 4 loads v3 using 3.zip, should be successful (previously cause FileNotFoundException)
+
+    val conf = dbConf.copy(
+      minVersionsToRetain = 1,
+      minDeltasForSnapshot = 0, // Force snapshot on every commit
+      minVersionsToDelete = 0, // Allow immediate deletion of old versions
+      compactOnCommit = false
+    )
+
+    withTempDir { dir =>
+      val remoteDir = dir.getCanonicalPath
+      withDB(remoteDir = remoteDir, conf = conf) { db1 =>
+        db1.load(0)
+        db1.put("key1", "value1")
+        db1.commit() // produce 1.changelog and 1.zip but not uploaded to DFS
+
+        withDB(remoteDir = remoteDir, conf = conf) { db2 =>
+          db2.load(1)
+          db2.put("key2", "value2")
+          db2.commit() // produce 2.changelog and 2.zip but not uploaded to DFS
+
+          db1.doMaintenance() // db1 now uploads 1.zip to DFS
+
+          withDB(remoteDir = remoteDir, conf = conf) { db3 =>
+            db3.load(2) // load using 1.zip from db1
+            db3.put("key3", "value3")
+            db3.commit() // produce 3.changelog and 3.zip but not uploaded to DFS
+
+            // db2 maintenance uploads 2.zip, and deletes files < 2.zip,
+            // so 1.zip and its associated SSTs are deleted
+            db2.doMaintenance()
+
+            // db3 now uploads 3.zip to DFS. Before the fix, it will reuse the SST files
+            // from 1.zip, since 3.zip was created using 1.zip, leading to FileNotFoundException.
+            // With the fix, during this maintenance, we check the reused files and
+            // avoid reusing files that are eligible for deletion.
+            db3.doMaintenance()
+          }
+        }
+      }
+
+      // db4 load(3) should be successful, and no FileNotFoundException
+      withDB(remoteDir = remoteDir, conf = conf) { db4 =>
+        db4.load(3) // load using 3.zip from db3
+        assert(toStr(db4.get("key1")) == "value1") // record created in 1.zip
+        db4.put("key4", "value4")
+        db4.commit()
+      }
+    }
+  }
+
   test("RocksDB task completion listener correctly releases for failed task") {
     // This test verifies that a thread that locks the DB and then fails
     // can rely on the completion listener to release the lock.

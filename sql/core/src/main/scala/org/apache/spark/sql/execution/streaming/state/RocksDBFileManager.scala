@@ -429,6 +429,23 @@ class RocksDBFileManager(
     }
   }
 
+  /** Get the latest snapshot version available in DFS. If none present, it returns 0. */
+  def getLatestSnapshotVersion(): Long = {
+    val path = new Path(dfsRootDir)
+    if (fm.exists(path)) {
+      val files = fm.list(path).map(_.getPath)
+      files.filter(onlyZipFiles.accept)
+        .map { fileName =>
+          fileName.getName.stripSuffix(".zip").split("_") match {
+            case Array(version, _) => version.toLong
+            case Array(version) => version.toLong
+          }
+        }.foldLeft(0L)(math.max)
+    } else {
+      0
+    }
+  }
+
   /** Get all the snapshot versions that can be used to load this version */
   def getEligibleSnapshotsForVersion(version: Long): Seq[Long] = {
     SnapshotLoaderHelper.getEligibleSnapshotsForVersion(
