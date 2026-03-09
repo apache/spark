@@ -94,6 +94,28 @@ private[spark] object History {
     .checkValues(LocalStoreSerializer.values.map(_.toString))
     .createWithDefault(LocalStoreSerializer.JSON.toString)
 
+  val SNAPSHOT_ENABLED = ConfigBuilder("spark.history.snapshot.enabled")
+    .doc("Whether Spark should write a protobuf history snapshot for completed applications " +
+      "and allow the History Server to load that snapshot instead of replaying the event log.")
+    .version("4.1.0")
+    .booleanConf
+    .createWithDefault(false)
+
+  val SNAPSHOT_PATH = ConfigBuilder("spark.history.snapshot.path")
+    .doc("Shared filesystem or object store path where Spark writes protobuf history snapshots " +
+      "for completed applications and the History Server reads them from.")
+    .version("4.1.0")
+    .stringConf
+    .createOptional
+
+  val SNAPSHOT_INCLUDE_TASKS = ConfigBuilder("spark.history.snapshot.includeTasks")
+    .doc("Whether history snapshots should include task rows. Keeping this disabled makes " +
+      "snapshots much smaller, but task-detail pages will not be available from snapshot-backed " +
+      "applications unless the History Server falls back to event-log replay.")
+    .version("4.1.0")
+    .booleanConf
+    .createWithDefault(false)
+
   val MAX_LOCAL_DISK_USAGE = ConfigBuilder("spark.history.store.maxDiskUsage")
     .version("2.3.0")
     .bytesConf(ByteUnit.BYTE)

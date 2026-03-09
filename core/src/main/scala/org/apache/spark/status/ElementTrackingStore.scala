@@ -167,11 +167,19 @@ private[spark] class ElementTrackingStore(store: KVStore, conf: SparkConf) exten
   }
 
   override def close(): Unit = {
-    close(true)
+    close(closeParent = true)
   }
 
   /** A close() method that optionally leaves the parent store open. */
-  def close(closeParent: Boolean): Unit = synchronized {
+  def close(closeParent: Boolean): Unit = {
+    close(closeParent, ())
+  }
+
+  /**
+   * A close() method that optionally leaves the parent store open and allows callers to run
+   * additional logic after all flush triggers have completed but before the parent store closes.
+   */
+  def close(closeParent: Boolean, postFlushAction: => Unit): Unit = synchronized {
     if (stopped) {
       return
     }
@@ -185,6 +193,8 @@ private[spark] class ElementTrackingStore(store: KVStore, conf: SparkConf) exten
     flushTriggers.foreach { trigger =>
       Utils.tryLog(trigger())
     }
+
+    Utils.tryLog(postFlushAction)
 
     if (closeParent) {
       store.close()
