@@ -1006,7 +1006,7 @@ class SparkConnectServiceSuite
     }
   }
 
-  test("SPARK-XXXXX: Use executeCollect for limit to avoid full scan") {
+  test("SPARK-55887: Use executeCollect for limit to avoid full scan") {
     // Create a range with 100 partitions
     val numPartitions = 100
     val plan = proto.Plan.newBuilder().setRoot(
@@ -1074,7 +1074,7 @@ class SparkConnectServiceSuite
     }
   }
 
-  test("SPARK-XXXXX: Use executeCollect for tail to avoid full scan") {
+  test("SPARK-55887: Use executeCollect for tail to avoid full scan") {
     // Create a range with 100 partitions
     val numPartitions = 100
     val plan = proto.Plan.newBuilder().setRoot(
