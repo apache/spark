@@ -33,15 +33,17 @@ import org.apache.spark.sql.connector.catalog.{
   CatalogManager,
   CatalogPlugin,
   CatalogV2Util,
+  ChangelogInfo,
   Identifier,
   LookupCatalog,
   Table,
+  TableCatalogCapability,
   V1Table,
   V2TableWithV1Fallback
 }
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors}
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.execution.datasources.v2.{ChangelogTable, DataSourceV2Relation}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
@@ -156,6 +158,43 @@ class RelationResolution(
           }
         case _ => None
       }
+    }
+  }
+
+  /**
+   * Resolve a CDC (CHANGES) query: look up the catalog, check for SUPPORT_CHANGELOG capability,
+   * call loadChangelog(), wrap in ChangelogTable, and return a DataSourceV2Relation.
+   */
+  def resolveChangelog(
+      u: UnresolvedRelation,
+      changelogInfo: ChangelogInfo): Option[LogicalPlan] = {
+    expandIdentifier(u.multipartIdentifier) match {
+      case CatalogAndIdentifier(catalog, ident) =>
+        val tableCatalog = catalog.asTableCatalog
+        if (!tableCatalog.capabilities().contains(TableCatalogCapability.SUPPORT_CHANGELOG)) {
+          throw new AnalysisException(
+            errorClass = "UNSUPPORTED_FEATURE.CHANGE_DATA_CAPTURE",
+            messageParameters = Map("catalogName" -> tableCatalog.name()))
+        }
+        val changelog = tableCatalog.loadChangelog(ident, changelogInfo)
+        val changelogTable = new ChangelogTable(changelog, changelogInfo)
+        val relation = if (u.isStreaming) {
+          StreamingRelationV2(
+            None,
+            changelogTable.name(),
+            changelogTable,
+            u.options,
+            changelogTable.columns.toAttributes,
+            Some(catalog),
+            Some(ident),
+            None
+          )
+        } else {
+          DataSourceV2Relation.create(
+            changelogTable, Some(catalog), Some(ident), u.options)
+        }
+        Some(SubqueryAlias(catalog.name +: ident.asMultipartIdentifier, relation))
+      case _ => None
     }
   }
 

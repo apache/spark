@@ -46,7 +46,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.PARAMETER
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, CollationFactory, DateTimeUtils, EvaluateUnresolvedInlineTable, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, getZoneId, stringToDate, stringToTime, stringToTimestamp, stringToTimestampWithoutTimeZone}
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsNamespaces, TableCatalog, TableWritePrivilege}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, ChangelogInfo, ChangelogRange, SupportsNamespaces, TableCatalog, TableWritePrivilege}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, Expression => V2Expression, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors, QueryParsingErrors, SqlScriptingErrors}
@@ -2368,6 +2368,163 @@ class AstBuilder extends DataTypeAstBuilder
         "timestamp expression cannot refer to any columns", ctx.timestamp)
     }
     RelationTimeTravel(plan, timestamp, version)
+  }
+
+  /**
+   * Create a changelog (CDC) relation from: table CHANGES FROM VERSION/TIMESTAMP ...
+   */
+  override def visitChangelogTableName(ctx: ChangelogTableNameContext): LogicalPlan =
+    withOrigin(ctx) {
+      val relation = createUnresolvedRelation(ctx.identifierReference, Option(ctx.optionsClause))
+      val changelogInfo = buildChangelogInfo(ctx.changesClause)
+      val result = RelationChanges(relation, changelogInfo)
+      mayApplyAliasPlan(ctx.tableAlias, result)
+    }
+
+  /**
+   * Create a streaming changelog (CDC) relation from: STREAM table CHANGES ...
+   */
+  override def visitStreamChangelogTableName(
+      ctx: StreamChangelogTableNameContext): LogicalPlan = withOrigin(ctx) {
+    val ident = visitMultipartIdentifier(ctx.multipartIdentifier)
+    val relation = createUnresolvedRelation(
+      ctx = ctx,
+      ident = ident,
+      optionsClause = Option(ctx.optionsClause),
+      writePrivileges = Seq.empty,
+      isStreaming = true)
+    val changelogInfo = buildStreamChangelogInfo(ctx.streamChangesClause)
+    val result = RelationChanges(relation, changelogInfo)
+    val table = mayApplyAliasPlan(ctx.tableAlias, result)
+    val tableWithWatermark = table.optionalMap(ctx.watermarkClause)(withWatermark)
+    val sourceNameOpt = extractSourceName(ctx.identifiedByClause)
+    tableWithWatermark.transformUp {
+      case r: UnresolvedRelation =>
+        NamedStreamingRelation.withUserProvidedName(
+          r.copy(isStreaming = true), sourceNameOpt)
+    }
+  }
+
+  /**
+   * Build a [[ChangelogInfo]] from a batch changesClause context.
+   */
+  private def buildChangelogInfo(ctx: ChangesClauseContext): ChangelogInfo = {
+    val startExclusive = ctx.startExclusive != null
+    val endExclusive = ctx.endExclusive != null
+    val startInclusive = !startExclusive
+    val endInclusive = !endExclusive
+
+    val range = if (ctx.startingVersion != null) {
+      // Version-based range
+      val startVersion = visitVersion(ctx.startingVersion).get
+      val endVersion = visitVersion(ctx.endingVersion)
+      new ChangelogRange.VersionRange(
+        startVersion,
+        java.util.Optional.ofNullable(endVersion.orNull),
+        startInclusive,
+        endInclusive)
+    } else {
+      // Timestamp-based range
+      val startTs = expression(ctx.startingTimestamp)
+      if (startTs.references.nonEmpty) {
+        throw QueryParsingErrors.invalidTimeTravelSpec(
+          "timestamp expression cannot refer to any columns", ctx.startingTimestamp)
+      }
+      val endTs = Option(ctx.endingTimestamp).map(expression)
+      if (endTs.exists(_.references.nonEmpty)) {
+        throw QueryParsingErrors.invalidTimeTravelSpec(
+          "timestamp expression cannot refer to any columns", ctx.endingTimestamp)
+      }
+      val startTsValue = resolveTimestampForChanges(startTs)
+      val endTsValue = endTs.map(resolveTimestampForChanges)
+      new ChangelogRange.TimestampRange(
+        startTsValue,
+        endTsValue.map(java.lang.Long.valueOf)
+          .map(java.util.Optional.of[java.lang.Long])
+          .getOrElse(java.util.Optional.empty[java.lang.Long]),
+        startInclusive,
+        endInclusive)
+    }
+
+    // Default deduplication mode and computeUpdates. These can be overridden via WITH options
+    // at a later stage, but the grammar's optionsClause is handled separately.
+    new ChangelogInfo(
+      range,
+      ChangelogInfo.DeduplicationMode.DROP_CARRYOVERS,
+      false)
+  }
+
+  /**
+   * Build a [[ChangelogInfo]] from a streaming streamChangesClause context.
+   */
+  private def buildStreamChangelogInfo(ctx: StreamChangesClauseContext): ChangelogInfo = {
+    val startExclusive = ctx.startExclusive != null
+    val startInclusive = !startExclusive
+
+    val range = if (ctx.startingVersion != null) {
+      val startVersion = visitVersion(ctx.startingVersion).get
+      new ChangelogRange.VersionRange(
+        startVersion,
+        java.util.Optional.empty(),
+        startInclusive,
+        true)
+    } else if (ctx.startingTimestamp != null) {
+      val startTs = expression(ctx.startingTimestamp)
+      if (startTs.references.nonEmpty) {
+        throw QueryParsingErrors.invalidTimeTravelSpec(
+          "timestamp expression cannot refer to any columns", ctx.startingTimestamp)
+      }
+      val startTsValue = resolveTimestampForChanges(startTs)
+      new ChangelogRange.TimestampRange(
+        startTsValue,
+        java.util.Optional.empty(),
+        startInclusive,
+        true)
+    } else {
+      new ChangelogRange.Unbounded()
+    }
+
+    new ChangelogInfo(
+      range,
+      ChangelogInfo.DeduplicationMode.DROP_CARRYOVERS,
+      false)
+  }
+
+  /**
+   * Resolve a timestamp expression to a Long (microseconds since epoch) for CDC queries.
+   */
+  private def resolveTimestampForChanges(ts: Expression): Long = {
+    import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, Unevaluable}
+    import org.apache.spark.sql.catalyst.optimizer.{ComputeCurrentTime, ReplaceExpressions}
+    import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project}
+    import org.apache.spark.sql.types.TimestampType
+
+    assert(ts.resolved && ts.references.isEmpty)
+    if (!Cast.canAnsiCast(ts.dataType, TimestampType)) {
+      throw QueryCompilationErrors.invalidTimestampExprForTimeTravel(
+        "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.INPUT", ts)
+    }
+    val tsToEval = {
+      val fakeProject = Project(Seq(Alias(ts, "ts")()), OneRowRelation())
+      ComputeCurrentTime(ReplaceExpressions(fakeProject)).asInstanceOf[Project]
+        .expressions.head.asInstanceOf[Alias].child
+    }
+    tsToEval.foreach {
+      case _: Unevaluable =>
+        throw QueryCompilationErrors.invalidTimestampExprForTimeTravel(
+          "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.UNEVALUABLE", ts)
+      case e if !e.deterministic =>
+        throw QueryCompilationErrors.invalidTimestampExprForTimeTravel(
+          "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.NON_DETERMINISTIC", ts)
+      case _ =>
+    }
+    val tz = Some(conf.sessionLocalTimeZone)
+    val value = Cast(tsToEval, TimestampType, tz, ansiEnabled = false).eval()
+    if (value == null) {
+      throw QueryCompilationErrors.invalidTimestampExprForTimeTravel(
+        "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.INPUT", ts)
+    }
+    value.asInstanceOf[Long]
   }
 
   /**

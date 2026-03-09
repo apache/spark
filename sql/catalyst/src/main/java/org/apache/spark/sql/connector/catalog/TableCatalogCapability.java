@@ -92,5 +92,17 @@ public enum TableCatalogCapability {
    * {@link TableCatalog#createTable}.
    * See {@link Column#identityColumnSpec()}.
    */
-  SUPPORTS_CREATE_TABLE_WITH_IDENTITY_COLUMNS
+  SUPPORTS_CREATE_TABLE_WITH_IDENTITY_COLUMNS,
+
+  /**
+   * Signals that the TableCatalog supports Change Data Capture (CDC) queries via
+   * {@link TableCatalog#loadChangelog(Identifier, ChangelogInfo)}.
+   * <p>
+   * Without this capability, any CDC query (SQL {@code CHANGES} clause or
+   * {@code DataFrameReader.changes()}) targeting this catalog will throw an
+   * analysis exception during resolution.
+   *
+   * @since 4.1.0
+   */
+  SUPPORT_CHANGELOG
 }
