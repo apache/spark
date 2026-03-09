@@ -28,7 +28,7 @@ import org.apache.arrow.vector.{VectorLoader, VectorSchemaRoot}
 import org.apache.arrow.vector.ipc.JsonFileReader
 import org.apache.arrow.vector.util.{ByteArrayReadableSeekableByteChannel, Validator}
 
-import org.apache.spark.TaskContext
+import org.apache.spark.{TaskContext, TaskContextImpl}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
@@ -42,7 +42,7 @@ import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
 
-class ArrowConvertersSuite extends SharedSparkSession {
+class ArrowConvertersSuite extends SharedSparkSession with ArrowAllocatorLeakCheck {
   import testImplicits._
 
   private var tempDataPath: String = _
@@ -1534,6 +1534,7 @@ class ArrowConvertersSuite extends SharedSparkSession {
     intercept[IllegalArgumentException] {
       ArrowConverters.fromBatchWithSchemaIterator(iter.iterator, ctx)._1.toArray
     }
+    ctx.asInstanceOf[TaskContextImpl].markTaskCompleted(None)
   }
 
   test("roundtrip arrow batches with IPC stream - single batch") {
