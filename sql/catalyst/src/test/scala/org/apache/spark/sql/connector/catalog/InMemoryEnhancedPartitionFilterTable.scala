@@ -134,8 +134,7 @@ class InMemoryEnhancedPartitionFilterTable(
   }
 
   /**
-   * Batch scan that stores pushed partition predicates for test inspection
-   * (e.g. to verify PartitionPredicate.referencedPartitionColumnOrdinals).
+   * Batch scan that stores pushed PartitionPredicates.
    */
   case class InMemoryEnhancedPartitionFilterBatchScan(
       _data: Seq[InputPartition],
@@ -150,15 +149,13 @@ class InMemoryEnhancedPartitionFilterTable(
 
 object InMemoryEnhancedPartitionFilterTable {
   /**
-   * Table property: when "true", reject all PartitionPredicates (for testing).
+   * Table property: when "true", reject all PartitionPredicates.
    */
   private[catalog] val RejectPartitionPredicatesKey = "reject-partition-predicates"
 
   /**
    * Table property: when "true", reject (do not return) data predicates (we are mocking a data
-   * source that can evaluate this particular data predicate). Used for testing case 2; the test
-   * uses a predicate that always evaluates to true (e.g. IS NOT NULL on non-null data) so we
-   * don't apply the filter.
+   * source that can evaluate this particular data predicate).
    */
   private[catalog] val RejectDataPredicatesKey = "reject-data-predicates"
 }
