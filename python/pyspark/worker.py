@@ -18,7 +18,6 @@
 """
 Worker that receives input from Piped RDD.
 """
-import itertools
 import os
 import sys
 import dataclasses
