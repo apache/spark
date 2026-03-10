@@ -24,13 +24,19 @@ import org.scalatest.concurrent.Eventually
 
 import org.apache.spark.{DebugFilesystem, SparkConf}
 import org.apache.spark.internal.config.UNSAFE_EXCEPTION_ON_MEMORY_LEAK
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.{classic, SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
-import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 
+trait SparkSessionProvider {
+  protected def spark: SparkSession
+}
+
 trait SharedSparkSession extends SQLTestUtils with SharedSparkSessionBase {
+
+  override protected def spark: classic.SparkSession =
+    super.spark.asInstanceOf[classic.SparkSession]
 
   /**
    * Suites extending [[SharedSparkSession]] are sharing resources (e.g. SparkSession) in their
@@ -84,6 +90,7 @@ trait SharedSparkSession extends SQLTestUtils with SharedSparkSessionBase {
  */
 trait SharedSparkSessionBase
   extends SQLTestUtilsBase
+  with SparkSessionProvider
   with BeforeAndAfterEach
   with Eventually { self: Suite =>
 

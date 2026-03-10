@@ -21,7 +21,8 @@ import java.nio.charset.StandardCharsets
 import java.time.{Duration, Period}
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.classic.{DataFrame, SparkSession, SQLImplicits}
+import org.apache.spark.sql.classic
+import org.apache.spark.sql.classic.{DataFrame, SQLImplicits}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DayTimeIntervalType.{DAY, HOUR, MINUTE, SECOND}
 import org.apache.spark.sql.types.YearMonthIntervalType.{MONTH, YEAR}
@@ -30,12 +31,11 @@ import org.apache.spark.unsafe.types.CalendarInterval
 /**
  * A collection of sample data used in SQL tests.
  */
-private[sql] trait SQLTestData { self =>
-  protected def spark: SparkSession
-
+private[sql] trait SQLTestData extends SparkSessionProvider { self =>
   // Helper object to import SQL implicits without a concrete SparkSession
   private object internalImplicits extends SQLImplicits {
-    override protected def session: SparkSession = self.spark
+    override protected def session: classic.SparkSession =
+      self.spark.asInstanceOf[classic.SparkSession]
   }
 
   import internalImplicits._
