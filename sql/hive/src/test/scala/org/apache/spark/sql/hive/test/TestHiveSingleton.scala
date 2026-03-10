@@ -18,10 +18,10 @@
 package org.apache.spark.sql.hive.test
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.SparkSessionProvider
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.client.HiveClient
-import org.apache.spark.sql.test.SparkSessionProvider
 
 
 trait TestHiveSingleton extends SparkFunSuite with SparkSessionProvider {

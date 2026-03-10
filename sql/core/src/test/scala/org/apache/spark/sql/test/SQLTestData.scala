@@ -21,6 +21,7 @@ import java.nio.charset.StandardCharsets
 import java.time.{Duration, Period}
 
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.SparkSessionProvider
 import org.apache.spark.sql.classic
 import org.apache.spark.sql.classic.{DataFrame, SQLImplicits}
 import org.apache.spark.sql.types._
