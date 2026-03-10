@@ -308,14 +308,14 @@ object DataSourceV2Relation {
   /**
    * This is used to transform catalog statistics to data source v2 statistics.
    */
-  def transformV1Stats(
+  def toV2Stats(
       v1Statistics: CatalogStatistics,
       schema: StructType): V2Statistics = {
     val typeMap = schema.fields.map(f => f.name -> f.dataType).toMap
     val colStatsMap: Map[NamedReference, ColumnStatistics] =
       v1Statistics.colStats.flatMap { case (name, stat) =>
         typeMap.get(name).map { dt =>
-          FieldReference.column(name) -> transformV1ColStat(stat, name, dt)
+          FieldReference.column(name) -> toV2ColStat(stat, name, dt)
         }
       }
 
@@ -332,7 +332,7 @@ object DataSourceV2Relation {
     }
   }
 
-  private def transformV1ColStat(
+  private def toV2ColStat(
       stat: CatalogColumnStat,
       colName: String,
       dataType: DataType): ColumnStatistics = {

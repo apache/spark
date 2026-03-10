@@ -25,7 +25,7 @@ import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructT
 
 class DataSourceV2RelationSuite extends SparkFunSuite {
 
-  test("DataSourceV2Relation.transformV1Stats") {
+  test("DataSourceV2Relation.toV2Stats") {
     val schema = StructType(Seq(
       StructField("id", IntegerType),
       StructField("name", StringType)))
@@ -46,7 +46,7 @@ class DataSourceV2RelationSuite extends SparkFunSuite {
         // "extra" is not in schema — should be silently skipped
         "extra" -> CatalogColumnStat(distinctCount = Some(5))))
 
-    val v2Stats = DataSourceV2Relation.transformV1Stats(catalogStats, schema)
+    val v2Stats = DataSourceV2Relation.toV2Stats(catalogStats, schema)
 
     // sizeInBytes is always populated
     assert(v2Stats.sizeInBytes().getAsLong === 1024L)
@@ -70,7 +70,7 @@ class DataSourceV2RelationSuite extends SparkFunSuite {
 
     // No rowCount: numRows should be empty
     val statsNoRows = CatalogStatistics(sizeInBytes = 512, colStats = Map.empty)
-    val v2NoRows = DataSourceV2Relation.transformV1Stats(statsNoRows, schema)
+    val v2NoRows = DataSourceV2Relation.toV2Stats(statsNoRows, schema)
     assert(v2NoRows.sizeInBytes().getAsLong === 512L)
     assert(!v2NoRows.numRows().isPresent)
     assert(v2NoRows.columnStats().isEmpty)
@@ -89,7 +89,7 @@ class DataSourceV2RelationSuite extends SparkFunSuite {
       sizeInBytes = 1024,
       rowCount = Some(10),
       colStats = Map("id" -> colStatWithHist))
-    val v2StatsWithHist = DataSourceV2Relation.transformV1Stats(statsWithHist, schema)
+    val v2StatsWithHist = DataSourceV2Relation.toV2Stats(statsWithHist, schema)
     val idV2WithHist = v2StatsWithHist.columnStats().get(FieldReference.column("id"))
     assert(idV2WithHist != null)
     assert(idV2WithHist.histogram().isPresent)
