@@ -499,7 +499,7 @@ class UnivocityParser(
           if (d.scale() < -VariantUtil.MAX_DECIMAL16_PRECISION) {
             // Scale is so extremely negative that setScale(0) would require computing
             // bigTenToThe(|scale|), which is prohibitively expensive. The resulting precision
-            // would also exceed MAX_DECIMAL16_PRECISION, so fall through.
+            // would also exceed MAX_DECIMAL16_PRECISION, so fall through to string.
             if (options.preferDate) parseDate() else parseTimestampNTZ()
           } else {
             if (d.scale() < 0) {
