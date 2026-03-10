@@ -141,6 +141,9 @@ private[v2] trait V2JDBCTest
     )
   }
 
+  // DDL (ALTER TABLE, etc.) uses search path: system.session + current catalog namespace.
+  protected val ddlSearchPathForTests: String = "[`system`.`session`, `spark_catalog`.`default`]"
+
   case class PartitioningInfo(
       numPartitions: String,
       lowerBound: String,
@@ -245,11 +248,12 @@ private[v2] trait V2JDBCTest
     val e = intercept[AnalysisException] {
       sql(s"ALTER TABLE $catalogName.not_existing_table ADD COLUMNS (C4 STRING)")
     }
-    checkErrorTableNotFound(
+    checkErrorTableNotFoundWithSearchPath(
       e,
       s"`$catalogName`.`not_existing_table`",
       ExpectedContext(
-        s"$catalogName.not_existing_table", 12, 11 + s"$catalogName.not_existing_table".length))
+        s"$catalogName.not_existing_table", 12, 11 + s"$catalogName.not_existing_table".length),
+      ddlSearchPathForTests)
   }
 
   test("SPARK-33034: ALTER TABLE ... drop column") {
@@ -282,11 +286,12 @@ private[v2] trait V2JDBCTest
     val e = intercept[AnalysisException] {
       sql(s"ALTER TABLE $catalogName.not_existing_table DROP COLUMN C1")
     }
-    checkErrorTableNotFound(
+    checkErrorTableNotFoundWithSearchPath(
       e,
       s"`$catalogName`.`not_existing_table`",
       ExpectedContext(
-        s"$catalogName.not_existing_table", 12, 11 + s"$catalogName.not_existing_table".length))
+        s"$catalogName.not_existing_table", 12, 11 + s"$catalogName.not_existing_table".length),
+      ddlSearchPathForTests)
   }
 
   test("SPARK-33034: ALTER TABLE ... update column type") {
@@ -309,11 +314,12 @@ private[v2] trait V2JDBCTest
     val e = intercept[AnalysisException] {
       sql(s"ALTER TABLE $catalogName.not_existing_table ALTER COLUMN id TYPE DOUBLE")
     }
-    checkErrorTableNotFound(
+    checkErrorTableNotFoundWithSearchPath(
       e,
       s"`$catalogName`.`not_existing_table`",
       ExpectedContext(
-        s"$catalogName.not_existing_table", 12, 11 + s"$catalogName.not_existing_table".length))
+        s"$catalogName.not_existing_table", 12, 11 + s"$catalogName.not_existing_table".length),
+      ddlSearchPathForTests)
   }
 
   test("SPARK-33034: ALTER TABLE ... rename column") {
@@ -341,11 +347,12 @@ private[v2] trait V2JDBCTest
     val e = intercept[AnalysisException] {
       sql(s"ALTER TABLE $catalogName.not_existing_table RENAME COLUMN ID TO C")
     }
-    checkErrorTableNotFound(
+    checkErrorTableNotFoundWithSearchPath(
       e,
       s"`$catalogName`.`not_existing_table`",
       ExpectedContext(
-        s"$catalogName.not_existing_table", 12, 11 + s"$catalogName.not_existing_table".length))
+        s"$catalogName.not_existing_table", 12, 11 + s"$catalogName.not_existing_table".length),
+      ddlSearchPathForTests)
   }
 
   test("SPARK-33034: ALTER TABLE ... update column nullability") {
@@ -356,11 +363,12 @@ private[v2] trait V2JDBCTest
     val e = intercept[AnalysisException] {
       sql(s"ALTER TABLE $catalogName.not_existing_table ALTER COLUMN ID DROP NOT NULL")
     }
-    checkErrorTableNotFound(
+    checkErrorTableNotFoundWithSearchPath(
       e,
       s"`$catalogName`.`not_existing_table`",
       ExpectedContext(
-        s"$catalogName.not_existing_table", 12, 11 + s"$catalogName.not_existing_table".length))
+        s"$catalogName.not_existing_table", 12, 11 + s"$catalogName.not_existing_table".length),
+      ddlSearchPathForTests)
   }
 
   test("CREATE TABLE with table comment") {
@@ -1219,7 +1227,9 @@ private[v2] trait V2JDBCTest
           sql(sqlStatement).collect()
         },
         condition = "TABLE_OR_VIEW_NOT_FOUND",
-        parameters = Map("relationName" -> s"`$catalogName`.`tbl1`"),
+        parameters = Map(
+          "relationName" -> s"`$catalogName`.`tbl1`",
+          "searchPath" -> defaultSearchPathForTests),
         context = ExpectedContext(tbl, startPos, startPos + tbl.length - 1)
       )
     }

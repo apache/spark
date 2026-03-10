@@ -120,7 +120,8 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       val e = intercept[AnalysisException] {
         sql(s"DROP TABLE $table")
       }
-      checkErrorTableNotFound(e, expected)
+      checkErrorTableNotFoundWithSearchPath(e, expected,
+        "[`system`.`session`, `spark_catalog`.`default`]")
     }
   }
 

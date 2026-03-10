@@ -2835,7 +2835,9 @@ class DataSourceV2SQLSuiteV1Filter
     checkError(
       exception = analysisException(sql2),
       condition = "TABLE_OR_VIEW_NOT_FOUND",
-      parameters = Map("relationName" -> "`testcat`.`abc`"),
+      parameters = Map(
+        "relationName" -> "`testcat`.`abc`",
+        "searchPath" -> "[`system`.`session`, `spark_catalog`.`default`]"),
       context = ExpectedContext(fragment = "testcat.abc", start = 17, stop = 27))
 
     val globalTempDB = spark.conf.get(StaticSQLConf.GLOBAL_TEMP_DATABASE.key)

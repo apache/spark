@@ -94,7 +94,7 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
         checkErrorTableNotFoundWithSearchPath(exc, quoted,
           ExpectedContext(s"${catalogAndNamespace}table_name", 12,
             11 + s"${catalogAndNamespace}table_name".length),
-          defaultSearchPathForTests)
+          "[`system`.`session`, `spark_catalog`.`default`]")
       }
     }
   }
