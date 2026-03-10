@@ -35,9 +35,6 @@ trait SparkSessionProvider {
 
 trait SharedSparkSession extends SQLTestUtils with SharedSparkSessionBase {
 
-  override protected def spark: classic.SparkSession =
-    super.spark.asInstanceOf[classic.SparkSession]
-
   /**
    * Suites extending [[SharedSparkSession]] are sharing resources (e.g. SparkSession) in their
    * tests. That trait initializes the spark session in its [[beforeAll()]] implementation before
@@ -128,7 +125,7 @@ trait SharedSparkSessionBase
   /**
    * The [[TestSparkSession]] to use for all tests in this suite.
    */
-  protected implicit def spark: SparkSession = _spark
+  protected override def spark: classic.SparkSession = _spark
 
   /**
    * The [[TestSQLContext]] to use for all tests in this suite.
@@ -136,7 +133,7 @@ trait SharedSparkSessionBase
   protected implicit def sqlContext: SQLContext = _spark.sqlContext
 
   protected def createSparkSession: TestSparkSession = {
-    SparkSession.cleanupAnyExistingSession()
+    classic.SparkSession.cleanupAnyExistingSession()
     new TestSparkSession(sparkConf)
   }
 
