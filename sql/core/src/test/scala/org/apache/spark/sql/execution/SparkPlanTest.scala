@@ -31,9 +31,7 @@ import org.apache.spark.sql.test.{SparkSessionProvider, SQLTestUtils}
  * class's test helper methods can be used, see [[SortSuite]].
  */
 private[sql] abstract class SparkPlanTest extends SparkFunSuite with SparkSessionProvider {
-
-  override protected def spark: classic.SparkSession =
-    super.spark.asInstanceOf[classic.SparkSession]
+  override protected def spark: classic.SparkSession
 
   /**
    * Runs the plan and makes sure the answer matches the expected result.
