@@ -55,16 +55,51 @@ trait KeepAnalyzedQuery extends Command {
 }
 
 /**
+ * Trait that gathers schema evolution logic shared by V2 write commands and MERGE INTO.
+ */
+trait V2WriteSchemaEvolution extends LogicalPlan {
+  /** The target of the write operation. */
+  def table: LogicalPlan
+
+  /** Whether schema evolution is enabled for the write operation. */
+  def withSchemaEvolution: Boolean
+
+  /**
+   * Whether the plan satisfies requirements to be able to identify schema changes, in particular
+   * the table and source are resolved.
+   */
+  def canEvaluateSchemaEvolution: Boolean
+
+  /**
+   * The set of table changes needed to evolve the target table schema to accommodate the source
+   * query schema. Returns an empty array if no changes are needed or if schema evolution is
+   * disabled.
+   */
+  def pendingSchemaChanges: Array[TableChange]
+
+  /**
+   * Whether schema evolution is enabled for this command based on the `WITH SCHEMA EVOLUTION`
+   * clause and the table's `AUTOMATIC_SCHEMA_EVOLUTION` capability.
+   */
+  lazy val schemaEvolutionEnabled: Boolean = withSchemaEvolution && {
+    table match {
+      case r: DataSourceV2Relation if r.autoSchemaEvolution() => true
+      case _ => false
+    }
+  }
+}
+
+/**
  * Base trait for DataSourceV2 write commands
  */
 trait V2WriteCommand
     extends UnaryCommand
     with KeepAnalyzedQuery
-    with CTEInChildren {
+    with CTEInChildren
+    with V2WriteSchemaEvolution {
   def table: NamedRelation
   def query: LogicalPlan
   def isByName: Boolean
-  def withSchemaEvolution: Boolean
 
   override def child: LogicalPlan = query
 
@@ -77,19 +112,6 @@ trait V2WriteCommand
     table.skipSchemaResolution || areCompatible(query.output, table.output)
   }
 
-  lazy val schemaEvolutionEnabled: Boolean = withSchemaEvolution && {
-    table match {
-      case r: DataSourceV2Relation if r.autoSchemaEvolution() => true
-      case _ => false
-    }
-  }
-
-  lazy val needSchemaEvolution: Boolean =
-    schemaEvolutionEnabled && changesForSchemaEvolution.nonEmpty
-
-  lazy val changesForSchemaEvolution: Array[TableChange] =
-    ResolveSchemaEvolution.schemaChanges(table.schema, query.schema, isByName)
-
   protected def areCompatible(inAttrs: Seq[Attribute], outAttrs: Seq[Attribute]): Boolean = {
     inAttrs.size == outAttrs.size && inAttrs.zip(outAttrs).forall {
       case (inAttr, outAttr) =>
@@ -100,6 +122,15 @@ trait V2WriteCommand
           DataType.equalsIgnoreCompatibleNullability(inType, outType) &&
           (outAttr.nullable || !inAttr.nullable)
     }
+  }
+
+  override lazy val canEvaluateSchemaEvolution: Boolean = table.resolved && query.resolved
+
+  override lazy val pendingSchemaChanges: Array[TableChange] = {
+    assert(canEvaluateSchemaEvolution,
+      "`pendingSchemaChanges` can only be called when `table` and `query` are both resolved.")
+    if (!schemaEvolutionEnabled) Array.empty
+    else ResolveSchemaEvolution.computeSchemaChanges(table.schema, query.schema, isByName)
   }
 
   def withNewQuery(newQuery: LogicalPlan): V2WriteCommand
@@ -120,7 +151,7 @@ case class AppendData(
     query: LogicalPlan,
     writeOptions: Map[String, String],
     isByName: Boolean,
-    withSchemaEvolution: Boolean = false,
+    withSchemaEvolution: Boolean,
     write: Option[Write] = None,
     analyzedQuery: Option[LogicalPlan] = None) extends V2WriteCommand {
   override def withNewQuery(newQuery: LogicalPlan): AppendData = copy(query = newQuery)
@@ -136,8 +167,13 @@ object AppendData {
       df: LogicalPlan,
       writeOptions: Map[String, String] = Map.empty,
       withSchemaEvolution: Boolean = false): AppendData = {
-    new AppendData(table, df, writeOptions, isByName = true,
-      withSchemaEvolution = withSchemaEvolution)
+    new AppendData(
+      table,
+      df,
+      writeOptions,
+      isByName = true,
+      withSchemaEvolution = withSchemaEvolution
+    )
   }
 
   def byPosition(
@@ -145,8 +181,13 @@ object AppendData {
       query: LogicalPlan,
       writeOptions: Map[String, String] = Map.empty,
       withSchemaEvolution: Boolean = false): AppendData = {
-    new AppendData(table, query, writeOptions, isByName = false,
-      withSchemaEvolution = withSchemaEvolution)
+    new AppendData(
+      table,
+      query,
+      writeOptions,
+      isByName = false,
+      withSchemaEvolution = withSchemaEvolution
+    )
   }
 }
 
@@ -159,7 +200,7 @@ case class OverwriteByExpression(
     query: LogicalPlan,
     writeOptions: Map[String, String],
     isByName: Boolean,
-    withSchemaEvolution: Boolean = false,
+    withSchemaEvolution: Boolean,
     write: Option[Write] = None,
     analyzedQuery: Option[LogicalPlan] = None) extends V2WriteCommand {
   override lazy val resolved: Boolean = {
@@ -185,8 +226,14 @@ object OverwriteByExpression {
       deleteExpr: Expression,
       writeOptions: Map[String, String] = Map.empty,
       withSchemaEvolution: Boolean = false): OverwriteByExpression = {
-    OverwriteByExpression(table, deleteExpr, df, writeOptions, isByName = true,
-      withSchemaEvolution = withSchemaEvolution)
+    OverwriteByExpression(
+      table,
+      deleteExpr,
+      df,
+      writeOptions,
+      isByName = true,
+      withSchemaEvolution = withSchemaEvolution
+    )
   }
 
   def byPosition(
@@ -195,8 +242,14 @@ object OverwriteByExpression {
       deleteExpr: Expression,
       writeOptions: Map[String, String] = Map.empty,
       withSchemaEvolution: Boolean = false): OverwriteByExpression = {
-    OverwriteByExpression(table, deleteExpr, query, writeOptions, isByName = false,
-      withSchemaEvolution = withSchemaEvolution)
+    OverwriteByExpression(
+      table,
+      deleteExpr,
+      query,
+      writeOptions,
+      isByName = false,
+      withSchemaEvolution = withSchemaEvolution
+    )
   }
 }
 
@@ -208,7 +261,7 @@ case class OverwritePartitionsDynamic(
     query: LogicalPlan,
     writeOptions: Map[String, String],
     isByName: Boolean,
-    withSchemaEvolution: Boolean = false,
+    withSchemaEvolution: Boolean,
     write: Option[Write] = None) extends V2WriteCommand {
   override def withNewQuery(newQuery: LogicalPlan): OverwritePartitionsDynamic = {
     copy(query = newQuery)
@@ -230,8 +283,13 @@ object OverwritePartitionsDynamic {
       df: LogicalPlan,
       writeOptions: Map[String, String] = Map.empty,
       withSchemaEvolution: Boolean = false): OverwritePartitionsDynamic = {
-    OverwritePartitionsDynamic(table, df, writeOptions, isByName = true,
-      withSchemaEvolution = withSchemaEvolution)
+    OverwritePartitionsDynamic(
+      table,
+      df,
+      writeOptions,
+      isByName = true,
+      withSchemaEvolution = withSchemaEvolution
+    )
   }
 
   def byPosition(
@@ -239,8 +297,13 @@ object OverwritePartitionsDynamic {
       query: LogicalPlan,
       writeOptions: Map[String, String] = Map.empty,
       withSchemaEvolution: Boolean = false): OverwritePartitionsDynamic = {
-    OverwritePartitionsDynamic(table, query, writeOptions, isByName = false,
-      withSchemaEvolution = withSchemaEvolution)
+    OverwritePartitionsDynamic(
+      table,
+      query,
+      writeOptions,
+      isByName = false,
+      withSchemaEvolution = withSchemaEvolution
+    )
   }
 }
 
@@ -891,7 +954,10 @@ case class MergeIntoTable(
     matchedActions: Seq[MergeAction],
     notMatchedActions: Seq[MergeAction],
     notMatchedBySourceActions: Seq[MergeAction],
-    withSchemaEvolution: Boolean) extends BinaryCommand with SupportsSubquery {
+    withSchemaEvolution: Boolean)
+    extends BinaryCommand with V2WriteSchemaEvolution with SupportsSubquery {
+
+  override val table: LogicalPlan = EliminateSubqueryAliases(targetTable)
 
   lazy val aligned: Boolean = {
     val actions = matchedActions ++ notMatchedActions ++ notMatchedBySourceActions
@@ -923,24 +989,10 @@ case class MergeIntoTable(
       case _ => false
     }
 
-  lazy val needSchemaEvolution: Boolean =
-    evaluateSchemaEvolution && changesForSchemaEvolution.nonEmpty
-
-  lazy val evaluateSchemaEvolution: Boolean =
-    schemaEvolutionEnabled &&
-      canEvaluateSchemaEvolution
-
-  lazy val schemaEvolutionEnabled: Boolean = withSchemaEvolution && {
-    EliminateSubqueryAliases(targetTable) match {
-      case r: DataSourceV2Relation if r.autoSchemaEvolution() => true
-      case _ => false
-    }
-  }
-
   // Guard that assignments are either resolved or candidates for evolution before
   // evaluating schema evolution. We need to use resolved assignment values to check
   // candidates, see MergeIntoTable.sourceSchemaForSchemaEvolution for details.
-  lazy val canEvaluateSchemaEvolution: Boolean = {
+  override lazy val canEvaluateSchemaEvolution: Boolean = {
     if ((!targetTable.resolved) || (!sourceTable.resolved)) {
       false
     } else {
@@ -969,12 +1021,14 @@ case class MergeIntoTable(
     }
   }
 
-  private lazy val sourceSchemaForEvolution: StructType =
-    MergeIntoTable.sourceSchemaForSchemaEvolution(this)
-
-  lazy val changesForSchemaEvolution: Array[TableChange] =
-    ResolveSchemaEvolution.schemaChanges(
-      targetTable.schema, sourceSchemaForEvolution, isByName = true)
+  override lazy val pendingSchemaChanges: Array[TableChange] = {
+    assert(canEvaluateSchemaEvolution,
+      "`pendingSchemaChanges` can only be called when `targetTable`, `sourceTable` and " +
+      "assignments are resolved.")
+    if (!schemaEvolutionEnabled) Array.empty
+    else ResolveSchemaEvolution.computeSchemaChanges(
+      targetTable.schema, MergeIntoTable.sourceSchemaForSchemaEvolution(this), isByName = true)
+  }
 
   override def left: LogicalPlan = targetTable
   override def right: LogicalPlan = sourceTable

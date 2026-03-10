@@ -46,7 +46,7 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case m @ MergeIntoTable(aliasedTable, source, cond, matchedActions, notMatchedActions,
       notMatchedBySourceActions, _) if m.resolved && m.rewritable && m.aligned &&
-        !m.needSchemaEvolution && matchedActions.isEmpty && notMatchedActions.size == 1 &&
+        m.pendingSchemaChanges.isEmpty && matchedActions.isEmpty && notMatchedActions.size == 1 &&
         notMatchedBySourceActions.isEmpty =>
 
       EliminateSubqueryAliases(aliasedTable) match {
@@ -80,7 +80,7 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
 
     case m @ MergeIntoTable(aliasedTable, source, cond, matchedActions, notMatchedActions,
         notMatchedBySourceActions, _)
-      if m.resolved && m.rewritable && m.aligned && !m.needSchemaEvolution &&
+      if m.resolved && m.rewritable && m.aligned && m.pendingSchemaChanges.isEmpty &&
         matchedActions.isEmpty && notMatchedBySourceActions.isEmpty =>
 
       EliminateSubqueryAliases(aliasedTable) match {
@@ -122,7 +122,7 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
 
     case m @ MergeIntoTable(aliasedTable, source, cond, matchedActions, notMatchedActions,
         notMatchedBySourceActions, _)
-      if m.resolved && m.rewritable && m.aligned && !m.needSchemaEvolution =>
+      if m.resolved && m.rewritable && m.aligned && m.pendingSchemaChanges.isEmpty =>
 
       EliminateSubqueryAliases(aliasedTable) match {
         case r @ ExtractV2Table(tbl: SupportsRowLevelOperations) =>

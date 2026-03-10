@@ -449,8 +449,7 @@ class Analyzer(
       AddMetadataColumns ::
       DeduplicateRelations ::
       ResolveCollationName ::
-      ResolveMergeIntoSchemaEvolution ::
-      ResolveInsertSchemaEvolution ::
+      ResolveSchemaEvolution ::
       ValidateEventTimeWatermarkColumn ::
       new ResolveReferences(catalogManager) ::
       // Please do not insert any other rules in between. See the TODO comments in rule
@@ -3602,7 +3601,7 @@ class Analyzer(
       _.containsPattern(COMMAND), ruleId) {
       case v2Write: V2WriteCommand
           if v2Write.table.resolved && v2Write.query.resolved && !v2Write.outputResolved &&
-            !v2Write.needSchemaEvolution =>
+            v2Write.pendingSchemaChanges.isEmpty =>
         validateStoreAssignmentPolicy()
         TableOutputResolver.suitableForByNameCheck(v2Write.isByName,
           expected = v2Write.table.output, queryOutput = v2Write.query.output)
