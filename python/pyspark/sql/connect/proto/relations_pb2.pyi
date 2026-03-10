@@ -109,6 +109,7 @@ class Relation(google.protobuf.message.Message):
     UNRESOLVED_TABLE_VALUED_FUNCTION_FIELD_NUMBER: builtins.int
     LATERAL_JOIN_FIELD_NUMBER: builtins.int
     CHUNKED_CACHED_LOCAL_RELATION_FIELD_NUMBER: builtins.int
+    READ_CHANGES_FIELD_NUMBER: builtins.int
     FILL_NA_FIELD_NUMBER: builtins.int
     DROP_NA_FIELD_NUMBER: builtins.int
     REPLACE_FIELD_NUMBER: builtins.int
@@ -219,6 +220,8 @@ class Relation(google.protobuf.message.Message):
     @property
     def chunked_cached_local_relation(self) -> global___ChunkedCachedLocalRelation: ...
     @property
+    def read_changes(self) -> global___ReadChanges: ...
+    @property
     def fill_na(self) -> global___NAFill:
         """NA functions"""
     @property
@@ -305,6 +308,7 @@ class Relation(google.protobuf.message.Message):
         unresolved_table_valued_function: global___UnresolvedTableValuedFunction | None = ...,
         lateral_join: global___LateralJoin | None = ...,
         chunked_cached_local_relation: global___ChunkedCachedLocalRelation | None = ...,
+        read_changes: global___ReadChanges | None = ...,
         fill_na: global___NAFill | None = ...,
         drop_na: global___NADrop | None = ...,
         replace: global___NAReplace | None = ...,
@@ -400,6 +404,8 @@ class Relation(google.protobuf.message.Message):
             b"range",
             "read",
             b"read",
+            "read_changes",
+            b"read_changes",
             "rel_type",
             b"rel_type",
             "repartition",
@@ -527,6 +533,8 @@ class Relation(google.protobuf.message.Message):
             b"range",
             "read",
             b"read",
+            "read_changes",
+            b"read_changes",
             "rel_type",
             b"rel_type",
             "repartition",
@@ -623,6 +631,7 @@ class Relation(google.protobuf.message.Message):
             "unresolved_table_valued_function",
             "lateral_join",
             "chunked_cached_local_relation",
+            "read_changes",
             "fill_na",
             "drop_na",
             "replace",
@@ -2174,6 +2183,57 @@ class ChunkedCachedLocalRelation(google.protobuf.message.Message):
     ) -> typing_extensions.Literal["schemaHash"] | None: ...
 
 global___ChunkedCachedLocalRelation = ChunkedCachedLocalRelation
+
+class ReadChanges(google.protobuf.message.Message):
+    """Reads Change Data Capture (CDC) changes for a named table."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    class OptionsEntry(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        KEY_FIELD_NUMBER: builtins.int
+        VALUE_FIELD_NUMBER: builtins.int
+        key: builtins.str
+        value: builtins.str
+        def __init__(
+            self,
+            *,
+            key: builtins.str = ...,
+            value: builtins.str = ...,
+        ) -> None: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal["key", b"key", "value", b"value"],
+        ) -> None: ...
+
+    UNPARSED_IDENTIFIER_FIELD_NUMBER: builtins.int
+    OPTIONS_FIELD_NUMBER: builtins.int
+    IS_STREAMING_FIELD_NUMBER: builtins.int
+    unparsed_identifier: builtins.str
+    """(Required) Unparsed identifier for the table."""
+    @property
+    def options(
+        self,
+    ) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]:
+        """Options for the CDC query. The map key is case insensitive."""
+    is_streaming: builtins.bool
+    """(Optional) Indicates if this is a streaming CDC read."""
+    def __init__(
+        self,
+        *,
+        unparsed_identifier: builtins.str = ...,
+        options: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
+        is_streaming: builtins.bool = ...,
+    ) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "is_streaming", b"is_streaming", "options", b"options", "unparsed_identifier", b"unparsed_identifier"
+        ],
+    ) -> None: ...
+
+global___ReadChanges = ReadChanges
 
 class CachedRemoteRelation(google.protobuf.message.Message):
     """Represents a remote relation that has been cached on server."""

@@ -22,7 +22,14 @@ from typing import Dict
 from typing import Optional, Union, List, overload, Tuple, cast, Callable
 from typing import TYPE_CHECKING
 
-from pyspark.sql.connect.plan import Read, DataSource, LogicalPlan, WriteOperation, WriteOperationV2
+from pyspark.sql.connect.plan import (
+    Read,
+    ReadChanges,
+    DataSource,
+    LogicalPlan,
+    WriteOperation,
+    WriteOperationV2,
+)
 from pyspark.sql.types import StructType
 from pyspark.sql.utils import to_str
 from pyspark.sql.readwriter import (
@@ -142,6 +149,11 @@ class DataFrameReader(OptionUtils):
         return self._df(Read(tableName, self._options))
 
     table.__doc__ = PySparkDataFrameReader.table.__doc__
+
+    def changes(self, tableName: str) -> "DataFrame":
+        return self._df(ReadChanges(tableName, self._options))
+
+    changes.__doc__ = PySparkDataFrameReader.changes.__doc__
 
     def json(
         self,

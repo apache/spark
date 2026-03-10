@@ -595,6 +595,76 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         self.assertEqual(len(data_source.paths), 1)
         self.assertEqual(data_source.paths[0], "test_path")
 
+    def test_read_changes(self):
+        reader = DataFrameReader(self.connect)
+        df = reader.option("startingVersion", "1").option("endingVersion", "5").changes("myTable")
+        plan = df._plan.to_proto(self.connect)
+        read_changes = plan.root.read_changes
+        self.assertEqual(read_changes.unparsed_identifier, "myTable")
+        self.assertEqual(read_changes.options.get("startingVersion"), "1")
+        self.assertEqual(read_changes.options.get("endingVersion"), "5")
+        self.assertFalse(read_changes.is_streaming)
+
+    def test_read_changes_no_options(self):
+        reader = DataFrameReader(self.connect)
+        df = reader.changes("catalog.schema.myTable")
+        plan = df._plan.to_proto(self.connect)
+        read_changes = plan.root.read_changes
+        self.assertEqual(read_changes.unparsed_identifier, "catalog.schema.myTable")
+        self.assertEqual(len(read_changes.options), 0)
+        self.assertFalse(read_changes.is_streaming)
+
+    def test_read_changes_with_timestamp_options(self):
+        reader = DataFrameReader(self.connect)
+        df = (
+            reader.option("startingTimestamp", "2024-01-01T00:00:00Z")
+            .option("endingTimestamp", "2024-06-01T00:00:00Z")
+            .changes("myTable")
+        )
+        plan = df._plan.to_proto(self.connect)
+        read_changes = plan.root.read_changes
+        self.assertEqual(
+            read_changes.options.get("startingTimestamp"), "2024-01-01T00:00:00Z"
+        )
+        self.assertEqual(
+            read_changes.options.get("endingTimestamp"), "2024-06-01T00:00:00Z"
+        )
+
+    def test_read_changes_oneof_is_read_changes(self):
+        reader = DataFrameReader(self.connect)
+        df = reader.option("startingVersion", "1").changes("myTable")
+        plan = df._plan.to_proto(self.connect)
+        self.assertEqual(plan.root.WhichOneof("rel_type"), "read_changes")
+
+    def test_read_changes_streaming(self):
+        from pyspark.sql.connect.plan import ReadChanges
+
+        plan = ReadChanges(
+            "myTable", {"startingVersion": "10"}, is_streaming=True
+        ).plan(self.connect)
+        read_changes = plan.read_changes
+        self.assertEqual(read_changes.unparsed_identifier, "myTable")
+        self.assertEqual(read_changes.options.get("startingVersion"), "10")
+        self.assertTrue(read_changes.is_streaming)
+
+    def test_read_changes_streaming_via_stream_reader(self):
+        from pyspark.sql.connect.streaming.readwriter import DataStreamReader
+
+        reader = DataStreamReader(self.connect)
+        df = reader.option("startingVersion", "1").changes("myTable")
+        plan = df._plan.to_proto(self.connect)
+        read_changes = plan.root.read_changes
+        self.assertEqual(read_changes.unparsed_identifier, "myTable")
+        self.assertEqual(read_changes.options.get("startingVersion"), "1")
+        self.assertTrue(read_changes.is_streaming)
+
+    def test_read_changes_plan_print(self):
+        from pyspark.sql.connect.plan import ReadChanges
+
+        rc = ReadChanges("myTable", {"startingVersion": "1"})
+        self.assertIn("ReadChanges", rc.print())
+        self.assertIn("myTable", rc.print())
+
     def test_all_the_plans(self):
         df = self.connect.readTable(table_name=self.tbl_name)
         df = df.select(df.col1).filter(df.col2 == 2).sort(df.col3.asc())
