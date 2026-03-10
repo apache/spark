@@ -1874,6 +1874,74 @@ class DDLParserSuite extends AnalysisTest {
     }
   }
 
+  for (isByName <- Seq(true, false)) {
+    val byNameClause = if (isByName) "BY NAME " else ""
+    val sourceQuery = "SELECT * FROM source"
+    val testMsg = s"isByName=$isByName"
+
+    test(s"INSERT INTO REPLACE USING - $testMsg") {
+      val table = "testcat.ns1.ns2.tbl"
+      val insertSQLStmt = s"INSERT INTO $table AS t " +
+        s"${byNameClause}REPLACE USING (col1, col2) ${sourceQuery}"
+
+      parseCompare(
+        sql = insertSQLStmt,
+        expected = InsertIntoStatement(
+          table = UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+          partitionSpec = Map.empty,
+          userSpecifiedCols = Seq.empty,
+          query = Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
+          overwrite = true,
+          ifPartitionNotExists = false,
+          byName = isByName,
+          withSchemaEvolution = false,
+          replaceCriteriaOpt = Some(InsertReplaceUsing(Seq("col1", "col2"))))
+      )
+    }
+
+    test(s"INSERT INTO REPLACE ON - $testMsg") {
+      val table = "testcat.ns1.ns2.tbl"
+      val insertSQLStmt = s"INSERT INTO $table AS t " +
+        s"${byNameClause}REPLACE ON t.col1 = col2 ${sourceQuery}"
+
+      parseCompare(
+        sql = insertSQLStmt,
+        expected = InsertIntoStatement(
+          table = UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+          partitionSpec = Map.empty,
+          userSpecifiedCols = Seq.empty,
+          query = Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
+          overwrite = true,
+          ifPartitionNotExists = false,
+          byName = isByName,
+          withSchemaEvolution = false,
+          replaceCriteriaOpt = Some(InsertReplaceOn(
+            EqualTo(UnresolvedAttribute(Seq("t", "col1")), UnresolvedAttribute("col2")),
+            Some("t"))))
+      )
+    }
+
+    test(s"INSERT WITH SCHEMA EVOLUTION INTO REPLACE USING - $testMsg") {
+      val table = "testcat.ns1.ns2.tbl"
+      val insertSQLStmt = s"INSERT WITH SCHEMA EVOLUTION INTO $table AS t " +
+        s"${byNameClause}REPLACE USING (col1) ${sourceQuery}"
+
+      parseCompare(
+        sql = insertSQLStmt,
+        expected = InsertIntoStatement(
+          table = UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+          partitionSpec = Map.empty,
+          userSpecifiedCols = Seq.empty,
+          query = Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
+          overwrite = true,
+          ifPartitionNotExists = false,
+          byName = isByName,
+          withSchemaEvolution = true,
+          replaceCriteriaOpt = Some(InsertReplaceUsing(Seq("col1"))))
+      )
+    }
+  }
+
   test("delete from table: delete all") {
     parseCompare("DELETE FROM testcat.ns1.ns2.tbl",
       DeleteFromTable(

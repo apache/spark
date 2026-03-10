@@ -883,6 +883,10 @@ class AstBuilder extends DataTypeAstBuilder
    *     [TABLE] tableIdentifier [partitionSpec] ([BY NAME] | [identifierList])
    *   INSERT [WITH SCHEMA EVOLUTION] INTO
    *     [TABLE] tableIdentifier REPLACE whereClause
+   *   INSERT [WITH SCHEMA EVOLUTION] INTO
+   *     [TABLE] tableIdentifier tableAlias [BY NAME] REPLACE USING identifierList
+   *   INSERT [WITH SCHEMA EVOLUTION] INTO
+   *     [TABLE] tableIdentifier tableAlias [BY NAME] REPLACE ON booleanExpression
    *   INSERT OVERWRITE [LOCAL] DIRECTORY STRING [rowFormat] [createFileFormat]
    *   INSERT OVERWRITE [LOCAL] DIRECTORY [STRING] tableProvider [OPTIONS tablePropertyList]
    * }}}
@@ -954,6 +958,44 @@ class AstBuilder extends DataTypeAstBuilder
               deleteExpr,
               writeOptions = schemaEvolutionWriteOption)
           }
+        })
+      case ctx: InsertIntoReplaceUsingContext =>
+        val options = Option(ctx.optionsClause())
+        val byName = ctx.NAME() != null
+        val replaceUsingCols =
+          Option(ctx.identifierList()).map(visitIdentifierList).getOrElse(Nil)
+        withIdentClause(ctx.identifierReference, Seq(query), (ident, otherPlans) => {
+          InsertIntoStatement(
+            table = createUnresolvedRelation(ctx.identifierReference, ident, options,
+              Seq(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE), isStreaming = false),
+            partitionSpec = Map.empty,
+            userSpecifiedCols = Seq.empty,
+            query = otherPlans.head,
+            overwrite = true,
+            ifPartitionNotExists = false,
+            byName = byName,
+            withSchemaEvolution = ctx.EVOLUTION() != null,
+            replaceCriteriaOpt = Some(InsertReplaceUsing(replaceUsingCols)))
+        })
+      case ctx: InsertIntoReplaceOnContext =>
+        val options = Option(ctx.optionsClause())
+        val byName = ctx.NAME() != null
+        val replaceOnCond = expression(ctx.replaceOnCondition)
+        val tableAliasOpt =
+          getTableAliasWithoutColumnAlias(ctx.tableAlias(), "INSERT REPLACE ON")
+        withIdentClause(ctx.identifierReference, Seq(query), (ident, otherPlans) => {
+          val queryWithAlias = otherPlans.head
+          InsertIntoStatement(
+            table = createUnresolvedRelation(ctx.identifierReference, ident, options,
+              Seq(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE), isStreaming = false),
+            partitionSpec = Map.empty,
+            userSpecifiedCols = Seq.empty,
+            query = queryWithAlias,
+            overwrite = true,
+            ifPartitionNotExists = false,
+            byName = byName,
+            withSchemaEvolution = ctx.EVOLUTION() != null,
+            replaceCriteriaOpt = Some(InsertReplaceOn(replaceOnCond, tableAliasOpt)))
         })
       case dir: InsertOverwriteDirContext =>
         val (isLocal, storage, provider) = visitInsertOverwriteDir(dir)

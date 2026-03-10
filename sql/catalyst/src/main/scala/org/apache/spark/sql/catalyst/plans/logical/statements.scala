@@ -174,6 +174,7 @@ case class QualifiedColType(
  * @param byName               If true, reorder the data columns to match the column names of the
  *                             target table.
  * @param withSchemaEvolution  If true, enables automatic schema evolution for the operation.
+ * @param replaceCriteriaOpt  Optional replace criteria for INSERT REPLACE ON/USING operations.
  */
 case class InsertIntoStatement(
     table: LogicalPlan,
@@ -183,7 +184,8 @@ case class InsertIntoStatement(
     overwrite: Boolean,
     ifPartitionNotExists: Boolean,
     byName: Boolean = false,
-    withSchemaEvolution: Boolean = false) extends UnaryParsedStatement {
+    withSchemaEvolution: Boolean = false,
+    replaceCriteriaOpt: Option[InsertReplaceCriteria] = None) extends UnaryParsedStatement {
 
   require(overwrite || !ifPartitionNotExists,
     "IF NOT EXISTS is only valid in INSERT OVERWRITE")
@@ -196,3 +198,27 @@ case class InsertIntoStatement(
   override protected def withNewChildInternal(newChild: LogicalPlan): InsertIntoStatement =
     copy(query = newChild)
 }
+
+/**
+ * Sealed trait representing the replace criteria for INSERT REPLACE ON/USING operations.
+ */
+sealed trait InsertReplaceCriteria
+
+/**
+ * Replace criteria for INSERT INTO ... REPLACE ON <condition>.
+ * Rows matching the condition in the target table are replaced by rows from the source query.
+ *
+ * @param condition      The boolean expression used to match rows for replacement.
+ * @param tableAliasOpt Optional alias for the target table used in the condition.
+ */
+case class InsertReplaceOn(
+    condition: Expression,
+    tableAliasOpt: Option[String]) extends InsertReplaceCriteria
+
+/**
+ * Replace criteria for INSERT INTO ... REPLACE USING (<columns>).
+ * Rows are replaced based on matching values in the specified columns.
+ *
+ * @param columns The list of column names used for matching.
+ */
+case class InsertReplaceUsing(columns: Seq[String]) extends InsertReplaceCriteria
