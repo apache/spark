@@ -438,6 +438,129 @@ class ArrowBatchedUDFPeakmemBench(_ArrowBatchedBenchMixin, _PeakmemBenchBase):
     param_names = ["scenario", "udf"]
 
 
+# -- SQL_MAP_ARROW_ITER_UDF ------------------------------------------------
+# UDF receives ``Iterator[pa.RecordBatch]``, returns ``Iterator[pa.RecordBatch]``.
+# Used by ``mapInArrow``.
+
+
+def _identity_batch_iter(it):
+    yield from it
+
+
+def _sort_batch_iter(it):
+    import pyarrow.compute as pc
+
+    for batch in it:
+        indices = pc.sort_indices(batch.column(0))
+        yield batch.take(indices)
+
+
+def _filter_batch_iter(it):
+    import pyarrow.compute as pc
+
+    for batch in it:
+        mask = pc.is_valid(batch.column(0))
+        yield batch.filter(mask)
+
+
+_MAP_ARROW_ITER_UDFS = {
+    "identity_udf": (_identity_batch_iter, None, [0]),
+    "sort_udf": (_sort_batch_iter, None, [0]),
+    "filter_udf": (_filter_batch_iter, None, [0]),
+}
+
+
+def _build_map_arrow_iter_scenarios():
+    """Build scenarios for SQL_MAP_ARROW_ITER_UDF.
+
+    Same data shapes as non-grouped scenarios but with reduced batch counts
+    to account for the struct wrap/unwrap overhead per batch.
+    """
+    scenarios = {}
+
+    for name, (rows, n_cols, num_batches) in {
+        "sm_batch_few_col": (1_000, 5, 500),
+        "sm_batch_many_col": (1_000, 50, 50),
+        "lg_batch_few_col": (10_000, 5, 500),
+        "lg_batch_many_col": (10_000, 50, 50),
+    }.items():
+        batch, col0_type = _make_typed_batch(rows, n_cols)
+        scenarios[name] = (batch, num_batches, col0_type)
+
+    _PURE_ROWS, _PURE_COLS, _PURE_BATCHES = 5_000, 10, 200
+
+    for scenario_name, make_array, spark_type in [
+        (
+            "pure_ints",
+            lambda r: pa.array(np.random.randint(0, 1000, r, dtype=np.int64)),
+            IntegerType(),
+        ),
+        ("pure_floats", lambda r: pa.array(np.random.rand(r)), DoubleType()),
+        ("pure_strings", lambda r: pa.array([f"s{j}" for j in range(r)]), StringType()),
+        (
+            "pure_ts",
+            lambda r: pa.array(
+                np.arange(0, r, dtype="datetime64[us]"), type=pa.timestamp("us", tz=None)
+            ),
+            TimestampNTZType(),
+        ),
+    ]:
+        batch = _make_pure_batch(_PURE_ROWS, _PURE_COLS, make_array, spark_type)
+        scenarios[scenario_name] = (batch, _PURE_BATCHES, spark_type)
+
+    scenarios["mixed_types"] = (
+        _make_typed_batch(_PURE_ROWS, _PURE_COLS)[0],
+        _PURE_BATCHES,
+        IntegerType(),
+    )
+
+    return scenarios
+
+
+_MAP_ARROW_ITER_SCENARIOS = _build_map_arrow_iter_scenarios()
+
+
+def _wrap_batch_in_struct(batch: pa.RecordBatch) -> pa.RecordBatch:
+    """Wrap all columns into a single struct column, mimicking JVM-side encoding."""
+    struct_array = pa.StructArray.from_arrays(batch.columns, names=batch.schema.names)
+    return pa.RecordBatch.from_arrays([struct_array], names=["_0"])
+
+
+class _MapArrowIterBenchMixin:
+    """Provides ``_write_scenario`` for SQL_MAP_ARROW_ITER_UDF.
+
+    Like ``_NonGroupedBenchMixin`` but wraps input batches in a struct column
+    to match the JVM-side wire format (``flatten_struct`` undoes this).
+    """
+
+    def _write_scenario(self, scenario, udf_name, buf):
+        batch, num_batches, col0_type = self._scenarios[scenario]
+        udf_func, ret_type, arg_offsets = self._udfs[udf_name]
+        if ret_type is None:
+            ret_type = col0_type
+        wrapped = _wrap_batch_in_struct(batch)
+        _write_worker_input(
+            PythonEvalType.SQL_MAP_ARROW_ITER_UDF,
+            lambda b: _build_udf_payload(udf_func, ret_type, arg_offsets, b),
+            lambda b: _write_arrow_ipc_batches((wrapped for _ in range(num_batches)), b),
+            buf,
+        )
+
+
+class MapArrowIterUDFTimeBench(_MapArrowIterBenchMixin, _TimeBenchBase):
+    _scenarios = _MAP_ARROW_ITER_SCENARIOS
+    _udfs = _MAP_ARROW_ITER_UDFS
+    params = [list(_MAP_ARROW_ITER_SCENARIOS), list(_MAP_ARROW_ITER_UDFS)]
+    param_names = ["scenario", "udf"]
+
+
+class MapArrowIterUDFPeakmemBench(_MapArrowIterBenchMixin, _PeakmemBenchBase):
+    _scenarios = _MAP_ARROW_ITER_SCENARIOS
+    _udfs = _MAP_ARROW_ITER_UDFS
+    params = [list(_MAP_ARROW_ITER_SCENARIOS), list(_MAP_ARROW_ITER_UDFS)]
+    param_names = ["scenario", "udf"]
+
+
 # -- SQL_SCALAR_ARROW_UDF ---------------------------------------------------
 # UDF receives individual ``pa.Array`` columns, returns a ``pa.Array``.
 # All UDFs operate on arg_offsets=[0] so they work with any column type.
