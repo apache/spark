@@ -196,8 +196,8 @@ private[storage] class BlockInfoManager(trackingCacheVisibility: Boolean = false
   }
 
   /**
-   * Unregister a write lock on `blockId` for `taskAttemptId`. This method removes the entry
-   * for the task if no locks are left.
+   * Unregister a write lock on `blockId` for `taskAttemptId`. The entry for the task is
+   * cleaned up later by `releaseAllLocksForTask`.
    */
   private def unregisterWriteLockForTask(taskAttemptId: TaskAttemptId, blockId: BlockId): Unit = {
     writeLocksByTask.computeIfPresent(taskAttemptId, (_, blockIds) => {
@@ -519,8 +519,8 @@ private[storage] class BlockInfoManager(trackingCacheVisibility: Boolean = false
     val writeLocks = Option(writeLocksByTask.remove(taskAttemptId)).getOrElse(util.Set.of())
     writeLocks.forEach { blockId =>
       blockInfo(blockId) { (info, condition) =>
-        // Check the existence of `blockId` and also if still be held by this task because `unlock`
-        // may have already released it concurrently. See SPARK-53807 for details.
+        // Check the existence of `blockId` and also if it is still held by this task because
+        // `unlock` may have already released it concurrently. See SPARK-53807 for details.
         if (writeLocks.contains(blockId) && info.writerTask == taskAttemptId) {
           blocksWithReleasedLocks += blockId
           info.writerTask = BlockInfo.NO_WRITER
