@@ -19,6 +19,7 @@
 import grpc
 
 from pyspark.sql.connect.proto import base_pb2 as spark_dot_connect_dot_base__pb2
+from pyspark.sql.connect.proto import pipelines_pb2 as spark_dot_connect_dot_pipelines__pb2
 
 
 class SparkConnectServiceStub(object):
@@ -100,6 +101,12 @@ class SparkConnectServiceStub(object):
             "/spark.connect.SparkConnectService/GetStatus",
             request_serializer=spark_dot_connect_dot_base__pb2.GetStatusRequest.SerializeToString,
             response_deserializer=spark_dot_connect_dot_base__pb2.GetStatusResponse.FromString,
+            _registered_method=True,
+        )
+        self.GetQueryFunctionExecutionSignalStream = channel.unary_stream(
+            "/spark.connect.SparkConnectService/GetQueryFunctionExecutionSignalStream",
+            request_serializer=spark_dot_connect_dot_pipelines__pb2.PipelineCommand.GetQueryFunctionExecutionSignalStream.SerializeToString,
+            response_deserializer=spark_dot_connect_dot_pipelines__pb2.PipelineQueryFunctionExecutionSignal.FromString,
             _registered_method=True,
         )
 
@@ -204,6 +211,17 @@ class SparkConnectServiceServicer(object):
         context.set_details("Method not implemented!")
         raise NotImplementedError("Method not implemented!")
 
+    def GetQueryFunctionExecutionSignalStream(self, request, context):
+        """Opens a server-streaming connection for pipeline flow re-analysis. When a flow function
+        references a dataset defined in the pipeline and triggered eager analysis / execution
+        but that datasets not yet been resolved by the pipeline, the server defers analysis and
+        sends a signal on this stream once the dependency is available, prompting the client to
+        re-execute the flow function.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details("Method not implemented!")
+        raise NotImplementedError("Method not implemented!")
+
 
 def add_SparkConnectServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -266,6 +284,11 @@ def add_SparkConnectServiceServicer_to_server(servicer, server):
             servicer.GetStatus,
             request_deserializer=spark_dot_connect_dot_base__pb2.GetStatusRequest.FromString,
             response_serializer=spark_dot_connect_dot_base__pb2.GetStatusResponse.SerializeToString,
+        ),
+        "GetQueryFunctionExecutionSignalStream": grpc.unary_stream_rpc_method_handler(
+            servicer.GetQueryFunctionExecutionSignalStream,
+            request_deserializer=spark_dot_connect_dot_pipelines__pb2.PipelineCommand.GetQueryFunctionExecutionSignalStream.FromString,
+            response_serializer=spark_dot_connect_dot_pipelines__pb2.PipelineQueryFunctionExecutionSignal.SerializeToString,
         ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -628,6 +651,36 @@ class SparkConnectService(object):
             "/spark.connect.SparkConnectService/GetStatus",
             spark_dot_connect_dot_base__pb2.GetStatusRequest.SerializeToString,
             spark_dot_connect_dot_base__pb2.GetStatusResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True,
+        )
+
+    @staticmethod
+    def GetQueryFunctionExecutionSignalStream(
+        request,
+        target,
+        options=(),
+        channel_credentials=None,
+        call_credentials=None,
+        insecure=False,
+        compression=None,
+        wait_for_ready=None,
+        timeout=None,
+        metadata=None,
+    ):
+        return grpc.experimental.unary_stream(
+            request,
+            target,
+            "/spark.connect.SparkConnectService/GetQueryFunctionExecutionSignalStream",
+            spark_dot_connect_dot_pipelines__pb2.PipelineCommand.GetQueryFunctionExecutionSignalStream.SerializeToString,
+            spark_dot_connect_dot_pipelines__pb2.PipelineQueryFunctionExecutionSignal.FromString,
             options,
             channel_credentials,
             insecure,

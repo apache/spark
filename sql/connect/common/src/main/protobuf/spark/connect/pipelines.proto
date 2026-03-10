@@ -234,8 +234,8 @@ message PipelineCommand {
   // Request from the client to update the flow function evaluation result
   // for a previously un-analyzed flow.
   message DefineFlowQueryFunctionResult {
-    // The fully qualified name of the flow being updated.
-    optional string flow_name = 1;
+    // The fully qualified identifier of the flow being updated.
+    optional ResolvedIdentifier flow_identifier = 1;
 
     // The ID of the graph this flow belongs to.
     optional string dataflow_graph_id = 2;
@@ -322,6 +322,8 @@ message PipelineAnalysisContext {
   optional string definition_path = 2;
   // The name of the Flow involved in this analysis
   optional string flow_name = 3;
+  // The qualified identifier of the Flow involved in this analysis
+  optional ResolvedIdentifier flow_identifier = 4;
 
   // Reserved field for protocol extensions.
   repeated google.protobuf.Any extension = 999;

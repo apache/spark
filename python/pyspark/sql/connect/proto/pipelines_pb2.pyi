@@ -1070,11 +1070,12 @@ class PipelineCommand(google.protobuf.message.Message):
 
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-        FLOW_NAME_FIELD_NUMBER: builtins.int
+        FLOW_IDENTIFIER_FIELD_NUMBER: builtins.int
         DATAFLOW_GRAPH_ID_FIELD_NUMBER: builtins.int
         RELATION_FIELD_NUMBER: builtins.int
-        flow_name: builtins.str
-        """The fully qualified name of the flow being updated."""
+        @property
+        def flow_identifier(self) -> pyspark.sql.connect.proto.common_pb2.ResolvedIdentifier:
+            """The fully qualified identifier of the flow being updated."""
         dataflow_graph_id: builtins.str
         """The ID of the graph this flow belongs to."""
         @property
@@ -1083,7 +1084,7 @@ class PipelineCommand(google.protobuf.message.Message):
         def __init__(
             self,
             *,
-            flow_name: builtins.str | None = ...,
+            flow_identifier: pyspark.sql.connect.proto.common_pb2.ResolvedIdentifier | None = ...,
             dataflow_graph_id: builtins.str | None = ...,
             relation: pyspark.sql.connect.proto.relations_pb2.Relation | None = ...,
         ) -> None: ...
@@ -1092,14 +1093,14 @@ class PipelineCommand(google.protobuf.message.Message):
             field_name: typing_extensions.Literal[
                 "_dataflow_graph_id",
                 b"_dataflow_graph_id",
-                "_flow_name",
-                b"_flow_name",
+                "_flow_identifier",
+                b"_flow_identifier",
                 "_relation",
                 b"_relation",
                 "dataflow_graph_id",
                 b"dataflow_graph_id",
-                "flow_name",
-                b"flow_name",
+                "flow_identifier",
+                b"flow_identifier",
                 "relation",
                 b"relation",
             ],
@@ -1109,14 +1110,14 @@ class PipelineCommand(google.protobuf.message.Message):
             field_name: typing_extensions.Literal[
                 "_dataflow_graph_id",
                 b"_dataflow_graph_id",
-                "_flow_name",
-                b"_flow_name",
+                "_flow_identifier",
+                b"_flow_identifier",
                 "_relation",
                 b"_relation",
                 "dataflow_graph_id",
                 b"dataflow_graph_id",
-                "flow_name",
-                b"flow_name",
+                "flow_identifier",
+                b"flow_identifier",
                 "relation",
                 b"relation",
             ],
@@ -1128,8 +1129,8 @@ class PipelineCommand(google.protobuf.message.Message):
         ) -> typing_extensions.Literal["dataflow_graph_id"] | None: ...
         @typing.overload
         def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_flow_name", b"_flow_name"]
-        ) -> typing_extensions.Literal["flow_name"] | None: ...
+            self, oneof_group: typing_extensions.Literal["_flow_identifier", b"_flow_identifier"]
+        ) -> typing_extensions.Literal["flow_identifier"] | None: ...
         @typing.overload
         def WhichOneof(
             self, oneof_group: typing_extensions.Literal["_relation", b"_relation"]
@@ -1601,6 +1602,7 @@ class PipelineAnalysisContext(google.protobuf.message.Message):
     DATAFLOW_GRAPH_ID_FIELD_NUMBER: builtins.int
     DEFINITION_PATH_FIELD_NUMBER: builtins.int
     FLOW_NAME_FIELD_NUMBER: builtins.int
+    FLOW_IDENTIFIER_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     dataflow_graph_id: builtins.str
     """Unique identifier of the dataflow graph associated with this pipeline."""
@@ -1608,6 +1610,9 @@ class PipelineAnalysisContext(google.protobuf.message.Message):
     """The path of the top-level pipeline file determined at runtime during pipeline initialization."""
     flow_name: builtins.str
     """The name of the Flow involved in this analysis"""
+    @property
+    def flow_identifier(self) -> pyspark.sql.connect.proto.common_pb2.ResolvedIdentifier:
+        """The qualified identifier of the Flow involved in this analysis"""
     @property
     def extension(
         self,
@@ -1621,6 +1626,7 @@ class PipelineAnalysisContext(google.protobuf.message.Message):
         dataflow_graph_id: builtins.str | None = ...,
         definition_path: builtins.str | None = ...,
         flow_name: builtins.str | None = ...,
+        flow_identifier: pyspark.sql.connect.proto.common_pb2.ResolvedIdentifier | None = ...,
         extension: collections.abc.Iterable[google.protobuf.any_pb2.Any] | None = ...,
     ) -> None: ...
     def HasField(
@@ -1630,12 +1636,16 @@ class PipelineAnalysisContext(google.protobuf.message.Message):
             b"_dataflow_graph_id",
             "_definition_path",
             b"_definition_path",
+            "_flow_identifier",
+            b"_flow_identifier",
             "_flow_name",
             b"_flow_name",
             "dataflow_graph_id",
             b"dataflow_graph_id",
             "definition_path",
             b"definition_path",
+            "flow_identifier",
+            b"flow_identifier",
             "flow_name",
             b"flow_name",
         ],
@@ -1647,6 +1657,8 @@ class PipelineAnalysisContext(google.protobuf.message.Message):
             b"_dataflow_graph_id",
             "_definition_path",
             b"_definition_path",
+            "_flow_identifier",
+            b"_flow_identifier",
             "_flow_name",
             b"_flow_name",
             "dataflow_graph_id",
@@ -1655,6 +1667,8 @@ class PipelineAnalysisContext(google.protobuf.message.Message):
             b"definition_path",
             "extension",
             b"extension",
+            "flow_identifier",
+            b"flow_identifier",
             "flow_name",
             b"flow_name",
         ],
@@ -1667,6 +1681,10 @@ class PipelineAnalysisContext(google.protobuf.message.Message):
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["_definition_path", b"_definition_path"]
     ) -> typing_extensions.Literal["definition_path"] | None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_flow_identifier", b"_flow_identifier"]
+    ) -> typing_extensions.Literal["flow_identifier"] | None: ...
     @typing.overload
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["_flow_name", b"_flow_name"]

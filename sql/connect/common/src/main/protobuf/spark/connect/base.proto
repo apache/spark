@@ -1364,4 +1364,12 @@ service SparkConnectService {
 
   // Get status information of different types.
   rpc GetStatus(GetStatusRequest) returns (GetStatusResponse) {}
+
+  // Opens a server-streaming connection for pipeline flow re-analysis. When a flow function
+  // references a dataset defined in the pipeline and triggered eager analysis / execution
+  // but that datasets not yet been resolved by the pipeline, the server defers analysis and
+  // sends a signal on this stream once the dependency is available, prompting the client to
+  // re-execute the flow function.
+  rpc GetQueryFunctionExecutionSignalStream(PipelineCommand.GetQueryFunctionExecutionSignalStream)
+      returns (stream PipelineQueryFunctionExecutionSignal) {}
 }
