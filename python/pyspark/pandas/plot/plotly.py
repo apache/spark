@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 import inspect
+import math
 from typing import TYPE_CHECKING, Union
 
 import pandas as pd
@@ -54,19 +55,22 @@ def plot_pie(data: Union["ps.DataFrame", "ps.Series"], **kwargs):
     import plotly.graph_objs as go
 
     data = PandasOnSparkPlotAccessor.pandas_plot_data_map["pie"](data)
-    subplots = kwargs.pop("subplots", False) 
-
+    subplots = kwargs.pop("subplots", False)
+    layout = kwargs.pop("layout", None)
 
     if isinstance(data, pd.Series):
         pdf = data.to_frame()
         return express.pie(pdf, values=pdf.columns[0], names=pdf.index, **kwargs)
     elif isinstance(data, pd.DataFrame):
         if subplots:
-            import math
             cols = list(data.columns)
-            layout = kwargs.pop("layout", None)
             if layout is not None:
                 nrows, ncols = layout
+                if nrows * ncols < len(cols):
+                    raise ValueError(
+                        "The provided 'layout' is too small for all columns: "
+                        f"{nrows} rows * {ncols} columns < {len(cols)} columns."
+                    )
             else:
                 ncols = min(len(cols), 3)  # default max 3 per row
                 nrows = math.ceil(len(cols) / ncols)
