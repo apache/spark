@@ -6782,6 +6782,24 @@
     ],
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_AUTO_SCHEMA_EVOLUTION_CHANGES" : {
+    "message" : [
+      "Automatic schema evolution failed for table <tableName>."
+    ],
+    "subClass" : {
+      "FAILED_EVOLUTION" : {
+        "message" : [
+          "The catalog returned the error: <detail>"
+        ]
+      },
+      "PARTIAL_EVOLUTION" : {
+        "message" : [
+          "The catalog did not support or only partially applied the following changes: <changes>."
+        ]
+      }
+    },
+    "sqlState" : "42000"
+  },
   "UNSUPPORTED_CALL" : {
     "message" : [
       "Cannot call the method \"<methodName>\" of the class \"<className>\"."
@@ -7657,24 +7675,6 @@
       }
     },
     "sqlState" : "0A000"
-  },
-  "UNSUPPORTED_AUTO_SCHEMA_EVOLUTION_CHANGES" : {
-    "message" : [
-      "Automatic schema evolution failed for table <tableName>."
-    ],
-    "subClass" : {
-      "PARTIAL_EVOLUTION" : {
-        "message" : [
-          "The catalog did not support or only partially applied the following changes: <changes>."
-        ]
-      },
-      "FAILED_EVOLUTION" : {
-        "message" : [
-          "The catalog returned the error: <detail>"
-        ]
-      }
-    },
-    "sqlState" : "42000"
   },
   "UNSUPPORTED_TABLE_CHANGE_IN_JDBC_CATALOG" : {
     "message" : [
