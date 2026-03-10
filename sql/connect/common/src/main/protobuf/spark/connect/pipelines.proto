@@ -321,8 +321,8 @@ message PipelineAnalysisContext {
   // The path of the top-level pipeline file determined at runtime during pipeline initialization.
   optional string definition_path = 2;
   // The name of the Flow involved in this analysis
-  optional string flow_name = 3;
-  // The qualified identifier of the Flow involved in this analysis
+  optional string flow_name = 3 [deprecated = true];
+  // The identifier of the Flow involved in this analysis
   optional ResolvedIdentifier flow_identifier = 4;
 
   // Reserved field for protocol extensions.

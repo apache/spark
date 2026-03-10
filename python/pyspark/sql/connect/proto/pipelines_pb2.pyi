@@ -1617,7 +1617,7 @@ class PipelineAnalysisContext(google.protobuf.message.Message):
     """The name of the Flow involved in this analysis"""
     @property
     def flow_identifier(self) -> pyspark.sql.connect.proto.common_pb2.ResolvedIdentifier:
-        """The qualified identifier of the Flow involved in this analysis"""
+        """The identifier of the Flow involved in this analysis"""
     @property
     def extension(
         self,
