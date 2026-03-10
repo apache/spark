@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-/* global $, Mustache, uiRoot */
+/* global $, uiRoot */
 
 import {
   ConvertDurationString, createRESTEndPointForExecutorsPage, createTemplateURI, errorMessageCell,
@@ -378,7 +378,7 @@ $(document).ready(function () {
   getStandAloneAppId(function (appId) {
     // rendering the UI page
     $.get(createTemplateURI(appId, "stagespage"), function(template) {
-      tasksSummary.append(Mustache.render($(template).filter("#stages-summary-template").html()));
+      tasksSummary.append($(template).filter("#stages-summary-template").html());
 
       $("#additionalMetrics").click(function(){
         $("#arrowtoggle1").toggleClass("arrow-open arrow-closed");

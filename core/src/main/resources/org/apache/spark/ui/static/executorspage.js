@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-/* global $, Mustache, sorttable */
+/* global $, sorttable */
 
 import {
   createRESTEndPointForExecutorsPage, createRESTEndPointForMiscellaneousProcess, createTemplateURI,
@@ -570,7 +570,7 @@ $(document).ready(function () {
       var data = {executors: response, "execSummary": [activeSummary, deadSummary, totalSummary]};
       $.get(createTemplateURI(appId, "executorspage"), function (template) {
 
-        executorsSummary.append(Mustache.render($(template).filter("#executors-summary-template").html(), data));
+        executorsSummary.append($(template).filter("#executors-summary-template").html());
         var selector = "#active-executors-table";
         var conf = {
           "data": response,
