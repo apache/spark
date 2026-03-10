@@ -32,7 +32,7 @@ import org.apache.spark.sql.execution.metric.{CustomMetrics, SQLMetric}
 import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.ArrayImplicits._
 
-class DataSourceRDDPartition(val index: Int, val inputPartitions: Seq[InputPartition])
+class DataSourceRDDPartition(val index: Int, val inputPartition: Option[InputPartition])
   extends Partition with Serializable
 
 /**
@@ -50,9 +50,22 @@ private case class ReaderState(reader: PartitionReader[_], iterator: MetricsIter
 
 // TODO: we should have 2 RDDs: an RDD[InternalRow] for row-based scan, an `RDD[ColumnarBatch]` for
 // columnar scan.
+/**
+ * An RDD that reads data from a V2 data source.
+ *
+ * This RDD handles both row-based and columnar reads, tracks custom metrics from the data source,
+ * and ensures that task completion listeners are added only once per thread to avoid duplicate
+ * metric updates and resource cleanup.
+ *
+ * @param sc The Spark context
+ * @param inputPartitions The input partitions to read from
+ * @param partitionReaderFactory Factory for creating partition readers
+ * @param columnarReads Whether to use columnar reads
+ * @param customMetrics Custom metrics defined by the data source
+ */
 class DataSourceRDD(
     sc: SparkContext,
-    @transient private val inputPartitions: Seq[Seq[InputPartition]],
+    @transient private val inputPartitions: Seq[Option[InputPartition]],
     partitionReaderFactory: PartitionReaderFactory,
     columnarReads: Boolean,
     customMetrics: Map[String, SQLMetric])
@@ -65,7 +78,7 @@ class DataSourceRDD(
 
   override protected def getPartitions: Array[Partition] = {
     inputPartitions.zipWithIndex.map {
-      case (inputPartitions, index) => new DataSourceRDDPartition(index, inputPartitions)
+      case (inputPartition, index) => new DataSourceRDDPartition(index, inputPartition)
     }.toArray
   }
 
@@ -98,62 +111,39 @@ class DataSourceRDD(
       }
     }
 
-    val iterator = new Iterator[Object] {
-      private val inputPartitions = castPartition(split).inputPartitions
-      private var currentIter: Option[Iterator[Object]] = None
-      private var currentIndex: Int = 0
-
-      override def hasNext: Boolean = currentIter.exists(_.hasNext) || advanceToNextIter()
-
-      override def next(): Object = {
-        if (!hasNext) throw new NoSuchElementException("No more elements")
-        currentIter.get.next()
+    castPartition(split).inputPartition.iterator.flatMap { inputPartition =>
+      val (iter, reader) = if (columnarReads) {
+        val batchReader = partitionReaderFactory.createColumnarReader(inputPartition)
+        val iter = new MetricsBatchIterator(
+          new PartitionIterator[ColumnarBatch](batchReader, customMetrics))
+        (iter, batchReader)
+      } else {
+        val rowReader = partitionReaderFactory.createReader(inputPartition)
+        val iter = new MetricsRowIterator(
+          new PartitionIterator[InternalRow](rowReader, customMetrics))
+        (iter, rowReader)
       }
 
-      private def advanceToNextIter(): Boolean = {
-        if (currentIndex >= inputPartitions.length) {
-          false
-        } else {
-          val inputPartition = inputPartitions(currentIndex)
-          currentIndex += 1
-
-          // TODO: SPARK-25083 remove the type erasure hack in data source scan
-          val (iter, reader) = if (columnarReads) {
-            val batchReader = partitionReaderFactory.createColumnarReader(inputPartition)
-            val iter = new MetricsBatchIterator(
-              new PartitionIterator[ColumnarBatch](batchReader, customMetrics))
-            (iter, batchReader)
-          } else {
-            val rowReader = partitionReaderFactory.createReader(inputPartition)
-            val iter = new MetricsRowIterator(
-              new PartitionIterator[InternalRow](rowReader, customMetrics))
-            (iter, rowReader)
-          }
-
-          // Flush metrics and close the previous reader before advancing to the next one.
-          // Pass the accumulated metrics to the new reader so they carry forward correctly.
-          val prevState = taskReaderStates.get(taskAttemptId)
-          if (prevState != null) {
-            val metrics = prevState.reader.currentMetricsValues
-            CustomMetrics.updateMetrics(metrics.toImmutableArraySeq, customMetrics)
-            reader.initMetricsValues(metrics)
-            prevState.reader.close()
-          }
-
-          // Update the map so the completion listener always references the latest reader.
-          taskReaderStates.put(taskAttemptId, ReaderState(reader, iter))
-
-          currentIter = Some(iter)
-          hasNext
-        }
+      // Flush metrics and close the previous reader before advancing to the next one.
+      // Pass the accumulated metrics to the new reader so they carry forward correctly.
+      val prevState = taskReaderStates.get(taskAttemptId)
+      if (prevState != null) {
+        val metrics = prevState.reader.currentMetricsValues
+        CustomMetrics.updateMetrics(metrics.toImmutableArraySeq, customMetrics)
+        reader.initMetricsValues(metrics)
+        prevState.reader.close()
       }
+
+      // Update the map so the completion listener always references the latest reader.
+      taskReaderStates.put(taskAttemptId, ReaderState(reader, iter))
+
+      // TODO: SPARK-25083 remove the type erasure hack in data source scan
+      new InterruptibleIterator(context, iter.asInstanceOf[Iterator[InternalRow]])
     }
-
-    new InterruptibleIterator(context, iterator).asInstanceOf[Iterator[InternalRow]]
   }
 
   override def getPreferredLocations(split: Partition): Seq[String] = {
-    castPartition(split).inputPartitions.flatMap(_.preferredLocations())
+    castPartition(split).inputPartition.toSeq.flatMap(_.preferredLocations())
   }
 }
 
