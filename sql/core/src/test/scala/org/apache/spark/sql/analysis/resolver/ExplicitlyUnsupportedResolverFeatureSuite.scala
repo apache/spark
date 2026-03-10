@@ -45,27 +45,66 @@ class ExplicitlyUnsupportedResolverFeatureSuite extends QueryTest with SharedSpa
     }
   }
 
-  private def checkResolution(sqlText: String, shouldPass: Boolean = false): Unit = {
-    val unresolvedPlan = spark.sessionState.sqlParser.parsePlan(sqlText)
-    checkResolution(unresolvedPlan, shouldPass)
+  test("Generator with LCAs") {
+    checkResolution(
+      "SELECT 1 AS a, a, explode(array(1, 2)) FROM VALUES 1;",
+      expectedMessage = Some("Generator expressions with LCAs are not supported")
+    )
   }
 
-  private def checkResolution(plan: LogicalPlan, shouldPass: Boolean): Unit = {
-    def noopWrapper(body: => Unit) = body
+  test("Referencing generator output in other expressions") {
+    checkResolution(
+      "SELECT explode(array(1, 2, 3)) AS col, col + 1 AS col2;",
+      expectedMessage = Some("Referencing generator output in other expressions")
+    )
+  }
 
-    val wrapper = if (shouldPass) {
-      noopWrapper _
-    } else {
-      intercept[ExplicitlyUnsupportedResolverFeature] _
-    }
+  test("Referencing generator multi-alias output in other expressions") {
+    checkResolution(
+      "SELECT posexplode(array('x', 'y')) AS (pos, val), pos + 1 AS pos2;",
+      expectedMessage = Some("Referencing generator output in other expressions")
+    )
+  }
 
+  test("Generator with window expressions") {
+    checkResolution(
+      "SELECT explode(array(1, 2)), RANK() OVER (ORDER BY col1) FROM VALUES 1;",
+      expectedMessage = Some("Generator expressions with window expressions are not supported")
+    )
+  }
+
+  test("Multiple generators in a single SELECT") {
+    checkResolution(
+      "SELECT explode(array(1, 2)), explode(array('a', 'b')) FROM VALUES 1;",
+      expectedMessage = Some("Multiple generator expressions in a single SELECT are not supported")
+    )
+  }
+
+  private def checkResolution(
+      sqlText: String,
+      shouldPass: Boolean = false,
+      expectedMessage: Option[String] = None): Unit = {
+    val unresolvedPlan = spark.sessionState.sqlParser.parsePlan(sqlText)
+    checkPlanResolution(unresolvedPlan, shouldPass, expectedMessage)
+  }
+
+  private def checkPlanResolution(
+      plan: LogicalPlan,
+      shouldPass: Boolean,
+      expectedMessage: Option[String]): Unit = {
     val resolver = new Resolver(
       spark.sessionState.catalogManager,
       extensions = spark.sessionState.analyzer.singlePassResolverExtensions,
       metadataResolverExtensions = spark.sessionState.analyzer.singlePassMetadataResolverExtensions
     )
-    wrapper {
+
+    if (shouldPass) {
       resolver.lookupMetadataAndResolve(plan)
+    } else {
+      val exception = intercept[ExplicitlyUnsupportedResolverFeature] {
+        resolver.lookupMetadataAndResolve(plan)
+      }
+      assert(exception.getMessage.contains(expectedMessage.get))
     }
   }
 }
