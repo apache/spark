@@ -920,7 +920,13 @@ class SparkSqlAstBuilder extends AstBuilder {
       val inputParamText = Option(ctx.parameters).map(source)
       // Validate return type eagerly for the same reason as parameter data types above:
       // trigger type errors now so they report correct positions.
-      Option(ctx.dataType).foreach(typedVisit[DataType])
+      // Skip validation when the return type is TABLE (for table-valued functions):
+      // "RETURNS TABLE" or "RETURNS TABLE(...)" is not a real data type to validate.
+      Option(ctx.dataType).foreach { dt =>
+        if (!source(dt).equalsIgnoreCase("table")) {
+          typedVisit[DataType](dt)
+        }
+      }
       Option(ctx.returnParams).foreach { params =>
         params.colType().asScala.foreach { colType =>
           typedVisit[DataType](colType.dataType())
