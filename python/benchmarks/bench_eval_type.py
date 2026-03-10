@@ -363,15 +363,16 @@ def _build_arrow_batched_scenarios():
     _PURE_ROWS, _PURE_COLS, _PURE_BATCHES = 5_000, 10, 10
 
     for scenario_name, make_array, spark_type in [
-        ("pure_ints", lambda r: pa.array(np.random.randint(0, 1000, r, dtype=np.int64)),
-         IntegerType()),
+        (
+            "pure_ints",
+            lambda r: pa.array(np.random.randint(0, 1000, r, dtype=np.int64)),
+            IntegerType(),
+        ),
         ("pure_floats", lambda r: pa.array(np.random.rand(r)), DoubleType()),
         ("pure_strings", lambda r: pa.array([f"s{j}" for j in range(r)]), StringType()),
     ]:
         batch = _make_pure_batch(_PURE_ROWS, _PURE_COLS, make_array, spark_type)
-        input_struct = StructType(
-            [StructField(f"col_{i}", spark_type) for i in range(_PURE_COLS)]
-        )
+        input_struct = StructType([StructField(f"col_{i}", spark_type) for i in range(_PURE_COLS)])
         scenarios[scenario_name] = (batch, _PURE_BATCHES, input_struct, spark_type)
 
     # mixed types
