@@ -359,8 +359,8 @@ object DataSourceV2Relation {
     }
     new ColumnStatistics {
       override def distinctCount(): OptionalLong = v2DistinctCount
-      override def min(): Optional[Object] = Optional.ofNullable(parsedMin.orNull)
-      override def max(): Optional[Object] = Optional.ofNullable(parsedMax.orNull)
+      override def min(): Optional[Object] = Optional.ofNullable(parsedMin.map(_.asInstanceOf[Object]).orNull)
+      override def max(): Optional[Object] = Optional.ofNullable(parsedMax.map(_.asInstanceOf[Object]).orNull)
       override def nullCount(): OptionalLong = v2NullCount
       override def avgLen(): OptionalLong = v2AvgLen
       override def maxLen(): OptionalLong = v2MaxLen
