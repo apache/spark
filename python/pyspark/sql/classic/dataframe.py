@@ -1293,18 +1293,6 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
 
         return DataFrame(self._jdf.na().drop(thresh, self._jseq(subset)), self.sparkSession)
 
-    @overload
-    def fillna(
-        self,
-        value: "LiteralType",
-        subset: Optional[Union[str, Tuple[str, ...], List[str]]] = ...,
-    ) -> ParentDataFrame:
-        ...
-
-    @overload
-    def fillna(self, value: Dict[str, "LiteralType"]) -> ParentDataFrame:
-        ...
-
     def fillna(
         self,
         value: Union["LiteralType", Dict[str, "LiteralType"]],
@@ -1914,7 +1902,7 @@ class DataFrameNaFunctions(ParentDataFrameNaFunctions):
         value: Union["LiteralType", Dict[str, "LiteralType"]],
         subset: Optional[List[str]] = None,
     ) -> ParentDataFrame:
-        return self.df.fillna(value=value, subset=subset)  # type: ignore[arg-type]
+        return self.df.fillna(value=value, subset=subset)
 
     @overload
     def replace(

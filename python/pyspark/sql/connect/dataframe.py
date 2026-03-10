@@ -2309,7 +2309,7 @@ class DataFrameNaFunctions(ParentDataFrameNaFunctions):
         value: Union["LiteralType", Dict[str, "LiteralType"]],
         subset: Optional[Union[str, Tuple[str, ...], List[str]]] = None,
     ) -> ParentDataFrame:
-        return self.df.fillna(value=value, subset=subset)  # type: ignore[arg-type]
+        return self.df.fillna(value=value, subset=subset)
 
     def drop(
         self,
