@@ -29,7 +29,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
-import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeTestUtils, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{outstandingZoneIds, LA, UTC}
 import org.apache.spark.sql.catalyst.util.IntervalUtils._
 import org.apache.spark.sql.catalyst.util.TypeUtils.ordinalNumber
@@ -1959,6 +1959,30 @@ class CollectionExpressionsSuite
     }
     checkEvaluation(ElementAt(mb0, Literal(Array[Byte](2, 1), BinaryType)), "2")
     checkEvaluation(ElementAt(mb0, Literal(Array[Byte](3, 4))), null)
+
+    // Int keys
+    val intMap = Literal.create(Map(1 -> 10, 2 -> 20, 3 -> 30), MapType(IntegerType, IntegerType))
+    checkEvaluation(ElementAt(intMap, Literal(1)), 10)
+    checkEvaluation(ElementAt(intMap, Literal(2)), 20)
+    checkEvaluation(ElementAt(intMap, Literal(4)), null)
+
+    // Duplicate keys
+    val keys = new GenericArrayData(Array(1, 2, 1))
+    val values = new GenericArrayData(Array(10, 20, 30))
+    val dupMapData = new ArrayBasedMapData(keys, values)
+    val dupMap = Literal.create(dupMapData, MapType(IntegerType, IntegerType))
+    checkEvaluation(ElementAt(dupMap, Literal(1)), 10)
+    checkEvaluation(ElementAt(dupMap, Literal(2)), 20)
+
+    // Null values
+    val nullValueMap = Literal.create(Map(1 -> null), MapType(IntegerType, StringType))
+    checkEvaluation(ElementAt(nullValueMap, Literal(1)), null)
+
+    // NaN keys
+    val nan = Double.NaN
+    val doubleMap = Literal.create(Map(1.0 -> 10, nan -> 20), MapType(DoubleType, IntegerType))
+    checkEvaluation(ElementAt(doubleMap, Literal(1.0)), 10)
+    checkEvaluation(ElementAt(doubleMap, Literal(nan)), 20)
 
     // test defaultValueOutOfBound
     withSQLConf(SQLConf.ANSI_ENABLED.key -> false.toString) {

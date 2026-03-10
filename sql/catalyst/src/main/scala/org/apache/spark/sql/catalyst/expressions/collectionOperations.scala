@@ -2741,7 +2741,9 @@ case class ElementAt(
         }
       }
     case _: MapType =>
-      (value, ordinal) => getValueEval(value, ordinal, mapKeyType, ordering)
+      (value, ordinal) => {
+        getValueEval(value, ordinal, mapKeyType, ordering)
+      }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {

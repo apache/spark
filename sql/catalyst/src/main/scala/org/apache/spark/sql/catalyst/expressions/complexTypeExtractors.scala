@@ -441,13 +441,60 @@ trait GetArrayItemUtil {
  */
 trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
 
-  // todo: current search is O(n), improve it.
+  @transient private var lastMap: MapData = _
+  @transient private var lastIndex: java.util.HashMap[Any, Int] = _
+
+  /**
+   * Minimum map size to use hash-based lookup.
+   * Below this threshold, the overhead of building a hash index
+   * exceeds the cost of a linear scan.
+   * The value 20 is chosen empirically; break-even is around 15-25
+   * elements for primitive key types.
+   */
+  private val HASH_LOOKUP_THRESHOLD = 20
+
+  private def getOrBuildIndex(map: MapData, keyType: DataType): java.util.HashMap[Any, Int] = {
+    if (lastMap ne map) {
+      val keys = map.keyArray()
+      val len = keys.numElements()
+      val hm = new java.util.HashMap[Any, Int]((len * 1.5).toInt)
+      var i = 0
+      while (i < len) {
+        val k = keys.get(i, keyType)
+        if (!hm.containsKey(k)) hm.put(k, i)
+        i += 1
+      }
+      lastIndex = hm
+      lastMap = map
+    }
+    lastIndex
+  }
+
   def getValueEval(
       value: Any,
       ordinal: Any,
       keyType: DataType,
       ordering: Ordering[Any]): Any = {
     val map = value.asInstanceOf[MapData]
+    val length = map.numElements()
+
+    if (length < HASH_LOOKUP_THRESHOLD || !TypeUtils.typeWithProperEquals(keyType)) {
+      getValueEvalLinear(map, ordinal, keyType, ordering)
+    } else {
+      val idx = getOrBuildIndex(map, keyType).getOrDefault(ordinal, -1)
+      if (idx == -1 || map.valueArray().isNullAt(idx)) {
+        null
+      } else {
+        map.valueArray().get(idx, dataType)
+      }
+    }
+  }
+
+  private def getValueEvalLinear(
+      map: MapData,
+      ordinal: Any,
+      keyType: DataType,
+      ordering: Ordering[Any]): Any = {
     val length = map.numElements()
     val keys = map.keyArray()
     val values = map.valueArray()
@@ -473,38 +520,178 @@ trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
       ctx: CodegenContext,
       ev: ExprCode,
       mapType: MapType): ExprCode = {
+    val keyType = mapType.keyType
+    if (supportsHashLookup(keyType)) {
+      doGetValueGenCodeWithHashOpt(ctx, ev, mapType)
+    } else {
+      doGetValueGenCodeLinear(ctx, ev, mapType)
+    }
+  }
+
+  private def supportsHashLookup(keyType: DataType): Boolean = keyType match {
+    case BooleanType | ByteType | ShortType | IntegerType | LongType |
+         FloatType | DoubleType | DateType | TimestampType |
+         TimestampNTZType | _: YearMonthIntervalType |
+         _: DayTimeIntervalType => true
+    case st: StringType if st.supportsBinaryEquality => true
+    case _ => false
+  }
+
+  private def doGetValueGenCodeLinear(
+      ctx: CodegenContext,
+      ev: ExprCode,
+      mapType: MapType): ExprCode = {
     val index = ctx.freshName("index")
     val length = ctx.freshName("length")
     val keys = ctx.freshName("keys")
-    val key = ctx.freshName("key")
     val values = ctx.freshName("values")
     val keyType = mapType.keyType
-    val nullCheck = if (mapType.valueContainsNull) {
-      s" || $values.isNullAt($index)"
+
+    val keyJavaType = CodeGenerator.javaType(keyType)
+    val loopKey = ctx.freshName("loopKey")
+    val i = ctx.freshName("i")
+
+    val nullValueCheck = if (mapType.valueContainsNull) {
+      s"""
+         |else if ($values.isNullAt($index)) {
+         |  ${ev.isNull} = true;
+         |}
+       """.stripMargin
+    } else {
+      ""
+    }
+
+    nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
+      s"""
+         |final int $length = $eval1.numElements();
+         |final ArrayData $keys = $eval1.keyArray();
+         |final ArrayData $values = $eval1.valueArray();
+         |int $index = -1;
+         |
+         |for (int $i = 0; $i < $length; $i++) {
+         |  $keyJavaType $loopKey = ${CodeGenerator.getValue(keys, keyType, i)};
+         |  if (${ctx.genEqual(keyType, loopKey, eval2)}) {
+         |    $index = $i;
+         |    break;
+         |  }
+         |}
+         |
+         |if ($index < 0) {
+         |  ${ev.isNull} = true;
+         |} $nullValueCheck else {
+         |  ${ev.value} = ${CodeGenerator.getValue(values, dataType, index)};
+         |}
+       """.stripMargin
+    })
+  }
+
+  /**
+   * Generates code for map lookups.
+   * If the map size is small (less than HASH_LOOKUP_THRESHOLD), it uses a linear scan.
+   * If the map size is large, it builds a hash index for O(1) lookup.
+   */
+  private def doGetValueGenCodeWithHashOpt(
+      ctx: CodegenContext,
+      ev: ExprCode,
+      mapType: MapType): ExprCode = {
+    val index = ctx.freshName("index")
+    val length = ctx.freshName("length")
+    val keys = ctx.freshName("keys")
+    val values = ctx.freshName("values")
+    val keyType = mapType.keyType
+
+    val nullValueCheck = if (mapType.valueContainsNull) {
+      s"""
+         |else if ($values.isNullAt($index)) {
+         |  ${ev.isNull} = true;
+         |}
+       """.stripMargin
     } else {
       ""
     }
 
     val keyJavaType = CodeGenerator.javaType(keyType)
+    val lastKeyArray = ctx.addMutableState("ArrayData", "lastKeyArray", v => s"$v = null;")
+    val hashBuckets = ctx.addMutableState("int[]", "hashBuckets", v => s"$v = null;")
+    val hashMask = ctx.addMutableState("int", "hashMask", v => s"$v = 0;")
+
+    def genHash(v: String): String = keyType match {
+      case BooleanType => s"($v ? 1 : 0)"
+      case ByteType | ShortType | IntegerType | DateType | _: YearMonthIntervalType => s"$v"
+      case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType =>
+        s"(int)($v ^ ($v >>> 32))"
+      case FloatType => s"Float.floatToIntBits($v)"
+      case DoubleType =>
+        s"(int)(Double.doubleToLongBits($v) ^ (Double.doubleToLongBits($v) >>> 32))"
+      case _ => s"$v.hashCode()"
+    }
+
     nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
+      val i = ctx.freshName("i")
+      val h = ctx.freshName("h")
+      val cap = ctx.freshName("cap")
+      val idx = ctx.freshName("idx")
+      val candidate = ctx.freshName("candidate")
+      val loopKey = ctx.freshName("loopKey")
+
+      val buildIndex =
+        s"""
+           |int $cap = Math.max(Integer.highestOneBit(Math.max($length * 2 - 1, 1)) << 1, 4);
+           |if ($hashBuckets == null || $hashBuckets.length < $cap) {
+           |  $hashBuckets = new int[$cap];
+           |}
+           |java.util.Arrays.fill($hashBuckets, 0, $cap, -1);
+           |$hashMask = $cap - 1;
+           |for (int $i = 0; $i < $length; $i++) {
+           |  $keyJavaType $loopKey = ${CodeGenerator.getValue(keys, keyType, i)};
+           |  int $h = (${genHash(loopKey)}) & $hashMask;
+           |  while ($hashBuckets[$h] != -1) {
+           |    $h = ($h + 1) & $hashMask;
+           |  }
+           |  $hashBuckets[$h] = $i;
+           |}
+           |$lastKeyArray = $keys;
+         """.stripMargin
+
+      val lookup =
+        s"""
+           |int $h = (${genHash(eval2)}) & $hashMask;
+           |$index = -1;
+           |while ($hashBuckets[$h] != -1) {
+           |  int $idx = $hashBuckets[$h];
+           |  $keyJavaType $candidate = ${CodeGenerator.getValue(keys, keyType, idx)};
+           |  if (${ctx.genEqual(keyType, candidate, eval2)}) {
+           |    $index = $idx;
+           |    break;
+           |  }
+           |  $h = ($h + 1) & $hashMask;
+           |}
+         """.stripMargin
+
       s"""
         final int $length = $eval1.numElements();
         final ArrayData $keys = $eval1.keyArray();
         final ArrayData $values = $eval1.valueArray();
+        int $index = -1;
 
-        int $index = 0;
-        while ($index < $length) {
-          final $keyJavaType $key = ${CodeGenerator.getValue(keys, keyType, index)};
-          if (${ctx.genEqual(keyType, key, eval2)}) {
-            break;
-          } else {
-            $index++;
+        if ($length >= $HASH_LOOKUP_THRESHOLD) {
+          if ($keys != $lastKeyArray) {
+            $buildIndex
+          }
+          $lookup
+        } else {
+          for (int $i = 0; $i < $length; $i++) {
+            $keyJavaType $loopKey = ${CodeGenerator.getValue(keys, keyType, i)};
+            if (${ctx.genEqual(keyType, loopKey, eval2)}) {
+              $index = $i;
+              break;
+            }
           }
         }
 
-        if ($index == $length$nullCheck) {
+        if ($index < 0) {
           ${ev.isNull} = true;
-        } else {
+        } $nullValueCheck else {
           ${ev.value} = ${CodeGenerator.getValue(values, dataType, index)};
         }
       """
@@ -547,15 +734,10 @@ case class GetMapValue(child: Expression, key: Expression)
 
   /**
    * `Null` is returned for invalid ordinals.
-   *
-   * TODO: We could make nullability more precise in foldable cases (e.g., literal input).
-   * But, since the key search is O(n), it takes much time to compute nullability.
-   * If we find efficient key searches, revisit this.
    */
   override def nullable: Boolean = true
   override def dataType: DataType = child.dataType.asInstanceOf[MapType].valueType
 
-  // todo: current search is O(n), improve it.
   override def nullSafeEval(value: Any, ordinal: Any): Any = {
     getValueEval(value, ordinal, keyType, ordering)
   }

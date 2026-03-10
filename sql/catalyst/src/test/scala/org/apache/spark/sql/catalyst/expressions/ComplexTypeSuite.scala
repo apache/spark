@@ -135,6 +135,7 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     val nullMap = Literal.create(null, typeM)
     val nullString = Literal.create(null, StringType)
 
+    // 1. Basic lookup (String keys)
     checkEvaluation(GetMapValue(map, Literal("a")), "b")
     checkEvaluation(GetMapValue(map, nullString), null)
     checkEvaluation(GetMapValue(nullMap, nullString), null)
@@ -143,8 +144,57 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     val nonNullMap = Literal.create(Map("a" -> 1), MapType(StringType, IntegerType, false))
     checkEvaluation(GetMapValue(nonNullMap, Literal("a")), 1)
 
+    // 2. Nested map
     val nestedMap = Literal.create(Map("a" -> Map("b" -> "c")), MapType(StringType, typeM))
     checkEvaluation(GetMapValue(nestedMap, Literal("a")), Map("b" -> "c"))
+
+    // 3. Basic lookup (Int keys)
+    val intMap = Literal.create(Map(1 -> 10, 2 -> 20, 3 -> 30), MapType(IntegerType, IntegerType))
+    checkEvaluation(GetMapValue(intMap, Literal(1)), 10)
+    checkEvaluation(GetMapValue(intMap, Literal(2)), 20)
+    checkEvaluation(GetMapValue(intMap, Literal(3)), 30)
+    checkEvaluation(GetMapValue(intMap, Literal(4)), null)
+
+    val emptyMap = Literal.create(Map.empty[Int, Int], MapType(IntegerType, IntegerType))
+    checkEvaluation(GetMapValue(emptyMap, Literal(1)), null)
+
+    // 4. Special data
+    // Duplicate keys: Spark MapType doesn't enforce uniqueness in the underlying
+    // data structure (ArrayBasedMapData)
+    // We construct it manually to simulate duplicates.
+    val keys = new GenericArrayData(Array(1, 2, 1))
+    val values = new GenericArrayData(Array(10, 20, 30))
+    val dupMapData = new ArrayBasedMapData(keys, values)
+    val dupMap = Literal.create(dupMapData, MapType(IntegerType, IntegerType))
+    // Should return the first match
+    checkEvaluation(GetMapValue(dupMap, Literal(1)), 10)
+    checkEvaluation(GetMapValue(dupMap, Literal(2)), 20)
+
+    // Null values
+    val nullValueMap = Literal.create(Map(1 -> null), MapType(IntegerType, StringType))
+    checkEvaluation(GetMapValue(nullValueMap, Literal(1)), null)
+
+    // NaN keys
+    val nan = Double.NaN
+    val floatNan = Float.NaN
+    val doubleMap = Literal.create(Map(1.0 -> 10, nan -> 20), MapType(DoubleType, IntegerType))
+    checkEvaluation(GetMapValue(doubleMap, Literal(1.0)), 10)
+    checkEvaluation(GetMapValue(doubleMap, Literal(nan)), 20)
+
+    val floatMap = Literal.create(Map(1.0f -> 10, floatNan -> 20), MapType(FloatType, IntegerType))
+    checkEvaluation(GetMapValue(floatMap, Literal(1.0f)), 10)
+    checkEvaluation(GetMapValue(floatMap, Literal(floatNan)), 20)
+
+    // 5. Key types
+    // Long
+    val longMap = Literal.create(Map(1L -> 10, 2L -> 20), MapType(LongType, IntegerType))
+    checkEvaluation(GetMapValue(longMap, Literal(1L)), 10)
+    checkEvaluation(GetMapValue(longMap, Literal(3L)), null)
+
+    // String
+    val stringMap = Literal.create(Map("a" -> "A", "b" -> "B"), MapType(StringType, StringType))
+    checkEvaluation(GetMapValue(stringMap, Literal("a")), "A")
+    checkEvaluation(GetMapValue(stringMap, Literal("c")), null)
   }
 
   test("GetStructField") {
