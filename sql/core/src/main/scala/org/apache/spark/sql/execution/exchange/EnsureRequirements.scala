@@ -71,26 +71,40 @@ case class EnsureRequirements(
           child
         } else {
           // Check KeyedPartitioning satisfaction conditions
-          val groupedSatisfies = grouped.exists(_.satisfies(distribution))
+          val groupedSatisfies = grouped.find(_.satisfies(distribution))
           val nonGroupedSatisfiesAsIs = nonGrouped.exists(_.nonGroupedSatisfies(distribution))
-          val nonGroupedSatisfiesWhenGrouped = nonGrouped.exists(_.groupedSatisfies(distribution))
+          val nonGroupedSatisfiesWhenGrouped = nonGrouped.find(_.groupedSatisfies(distribution))
 
           // Check if any KeyedPartitioning satisfies the distribution
-          if (groupedSatisfies || nonGroupedSatisfiesAsIs || nonGroupedSatisfiesWhenGrouped) {
+          if (groupedSatisfies.isDefined || nonGroupedSatisfiesAsIs
+              || nonGroupedSatisfiesWhenGrouped.isDefined) {
             distribution match {
               case o: OrderedDistribution =>
-                // OrderedDistribution requires grouped KeyedPartitioning with sorted keys.
+                // OrderedDistribution requires grouped KeyedPartitioning with sorted keys
+                // according to the distributions ordering.
                 // Find any KeyedPartitioning that satisfies via groupedSatisfies.
                 val satisfyingKeyedPartitioning =
-                  (grouped ++ nonGrouped).find(_.groupedSatisfies(distribution)).get
+                  groupedSatisfies.orElse(nonGroupedSatisfiesWhenGrouped).get
                 val attrs = satisfyingKeyedPartitioning.expressions.flatMap(_.collectLeaves())
                   .map(_.asInstanceOf[Attribute])
                 val keyRowOrdering = RowOrdering.create(o.ordering, attrs)
                 val keyOrdering = keyRowOrdering.on((t: InternalRowComparableWrapper) => t.row)
-                val sorted = satisfyingKeyedPartitioning.partitionKeys.sorted(keyOrdering)
-                GroupPartitionsExec(child, expectedPartitionKeys = Some(sorted.map((_, 1))))
+                if (satisfyingKeyedPartitioning.partitionKeys.sliding(2).forall {
+                  case Seq(k1, k2) => keyOrdering.lteq(k1, k2)
+                }) {
+                  child
+                } else {
+                  // Avoid grouping with `applyPartialClustering` partition alignment
+                  val sortedGroupedKeys = satisfyingKeyedPartitioning.partitionKeys
+                    .groupBy(identity).view.mapValues(_.size)
+                    .toSeq.sortBy(_._1)(keyOrdering)
+                  GroupPartitionsExec(child,
+                    expectedPartitionKeys = Some(sortedGroupedKeys),
+                    applyPartialClustering = true
+                  )
+                }
 
-              case _ if groupedSatisfies =>
+              case _ if groupedSatisfies.isDefined =>
                 // Grouped KeyedPartitioning already satisfies
                 child
 

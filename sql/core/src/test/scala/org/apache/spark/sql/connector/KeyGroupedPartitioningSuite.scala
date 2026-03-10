@@ -3142,7 +3142,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
     }
   }
 
-  test("SPARK-55535: Empty group partitions due filtered partitions") {
+  test("SPARK-55535: Empty group partitions due to filtered partitions") {
     val items_partitions = Array(identity("id"))
     createTable(items, itemsColumns, items_partitions)
 
@@ -3165,6 +3165,52 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
       val groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
       assert(groupPartitions.forall(_.outputPartitioning.numPartitions == 0),
         "group partitions should not have any (common) partitions")
+    }
+  }
+
+  test("SPARK-55535: Order by on partitions keys") {
+    withSQLConf(SQLConf.V2_BUCKETING_SORTING_ENABLED.key -> "true") {
+      val items_partitions = Array(identity("id"))
+      createTable(items, itemsColumns, items_partitions)
+
+      sql(s"INSERT INTO testcat.ns.$items VALUES " +
+        "(2, 'aa', 10.0, cast('2021-01-01' as timestamp)), " +
+        "(3, 'aa', 20.0, cast('2022-01-01' as timestamp)), " +
+        "(1, 'aa', 40.0, cast('2022-01-01' as timestamp))")
+
+      val df = sql(s"SELECT id FROM testcat.ns.$items i ORDER BY id")
+
+      val expected = (1 to 3).map(Row(_))
+      checkAnswer(df, expected)
+
+      val reverseDf = sql(s"SELECT id FROM testcat.ns.$items i ORDER BY id DESC")
+
+      checkAnswer(reverseDf, expected.reverse)
+
+      sql(s"INSERT INTO testcat.ns.$items VALUES (2, 'aa', 30.0, cast('2021-01-01' as timestamp))")
+
+      val dfWithDuplicate = sql(s"SELECT id FROM testcat.ns.$items i ORDER BY id")
+
+      val expectedWithDuplicate = Seq(1, 2, 2, 3).map(Row(_))
+      checkAnswer(dfWithDuplicate, expectedWithDuplicate)
+
+      val reverseDfWithDuplicate = sql(s"SELECT id FROM testcat.ns.$items i ORDER BY id DESC")
+
+      checkAnswer(reverseDfWithDuplicate, expectedWithDuplicate.reverse)
+
+      Seq(
+        df -> Seq.empty,
+        reverseDf -> Seq(3),
+        dfWithDuplicate -> Seq.empty,
+        reverseDfWithDuplicate -> Seq(4)
+      ).foreach {
+        case (df, expectedPartitions) =>
+          val shuffles = collectAllShuffles(df.queryExecution.executedPlan)
+          assert(shuffles.isEmpty, "should not contain any shuffle")
+
+          val groupPartitions = collectAllGroupPartitions(df.queryExecution.executedPlan)
+          assert(groupPartitions.map(_.outputPartitioning.numPartitions) == expectedPartitions)
+      }
     }
   }
 }
