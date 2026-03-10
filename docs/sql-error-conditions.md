@@ -1536,6 +1536,12 @@ SQLSTATE: none assigned
 
 Protobuf type not yet supported: `<protobufType>`.
 
+### QUALIFY_EXPRESSION_MUST_CONTAIN_WINDOW_FUNCTION
+
+SQLSTATE: none assigned
+
+QUALIFY expression '`<sqlExpr>`' must contain a window function.
+
 ### RECURSIVE_PROTOBUF_SCHEMA
 
 SQLSTATE: none assigned
