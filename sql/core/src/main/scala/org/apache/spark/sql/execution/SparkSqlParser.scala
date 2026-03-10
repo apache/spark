@@ -902,6 +902,10 @@ class SparkSqlAstBuilder extends AstBuilder {
         parameters <- Option(ctx.parameters)
         colDefinition <- parameters.colDefinition().asScala
       } {
+        // Trigger data type validation now (while the original parse tree positions are
+        // available) so that any type errors (e.g. STRUCT without <>) report the correct
+        // line/position. The result is unused; this call is purely for its side effect of
+        // throwing a parse exception with accurate location information.
         typedVisit[DataType](colDefinition.dataType())
         for (option <- colDefinition.colDefinitionOption().asScala) {
           if (option.generationExpression() != null) {
@@ -914,7 +918,8 @@ class SparkSqlAstBuilder extends AstBuilder {
       }
 
       val inputParamText = Option(ctx.parameters).map(source)
-      // Validate return type eagerly for the same reason as parameter data types above.
+      // Validate return type eagerly for the same reason as parameter data types above:
+      // trigger type errors now so they report correct positions.
       Option(ctx.dataType).foreach(typedVisit[DataType])
       Option(ctx.returnParams).foreach { params =>
         params.colType().asScala.foreach { colType =>
