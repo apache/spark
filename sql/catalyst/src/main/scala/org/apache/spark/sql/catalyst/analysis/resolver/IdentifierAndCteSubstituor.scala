@@ -42,7 +42,9 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{
  * We only recurse into the plan if [[IdentifierAndCteSubstitutor.NODES_OF_INTEREST]] are present.
  * This is done so that [[IdentifierAndCteSubstitutor]] is fast and not invasive.
  */
-class IdentifierAndCteSubstitutor {
+class IdentifierAndCteSubstitutor
+    extends ResolverMetricTracker // EDGE
+    {
   private var cteRegistry = new CteRegistry
 
   /**
@@ -54,9 +56,11 @@ class IdentifierAndCteSubstitutor {
    * in isolation.
    */
   def substitutePlan(unresolvedPlan: LogicalPlan): LogicalPlan = {
-    cteRegistry = new CteRegistry
+    recordProfile("substitutePlan") { // EDGE
+      cteRegistry = new CteRegistry
 
-    substitute(unresolvedPlan)
+      substitute(unresolvedPlan)
+    } // EDGE
   }
 
   private def substitute(unresolvedPlan: LogicalPlan): LogicalPlan = {
