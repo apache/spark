@@ -19,26 +19,36 @@ package org.apache.spark.sql.connector.expressions.filter;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.connector.catalog.Table;
 import org.apache.spark.sql.connector.expressions.Expression;
 import org.apache.spark.sql.connector.expressions.NamedReference;
+import org.apache.spark.sql.connector.expressions.PartitionColumnReference;
+import org.apache.spark.sql.connector.read.SupportsPushDownV2Filters;
 
 /**
- * Represents a partition filter expression (an expression targeting only the schema of
- * {@link org.apache.spark.sql.connector.catalog.Table#partitioning()}).
+ * Represents a partition predicate that can be evaluated using {@link Table#partitioning()}.
  * <p>
- * This can be used to evaluate individual partition keys against this partition expression
- * by {@link #accept(InternalRow)}.
+ * Connectors are expected to leverage partition predicates for pruning whenever they have
+ * partition metadata to evaluate them. Use {@link #accept(InternalRow)} to evaluate this
+ * predicate against a single partition's keys.
  * </p>
+ *
  * @since 4.2.0
  */
 @Evolving
 public abstract class PartitionPredicate extends Predicate {
 
   /**
-   * Default predicate name for partition predicates.
+   * Default predicate name for partition predicates. Consistent with other predicate
+   * expression names (e.g. {@code IS_NULL}, {@code AND}) which use upper case.
    */
-  public static final String NAME = "PartitionPredicate";
+  public static final String NAME = "PARTITION_PREDICATE";
 
+  /**
+   * @param name predicate name; subclasses should pass {@link #NAME}.
+   * @param children child expressions; use {@link Expression#EMPTY_EXPRESSION} for implementations
+   *                 that store the predicate in a form that does not expose children.
+   */
   public PartitionPredicate(String name, Expression[] children) {
     super(name, children);
   }
@@ -46,33 +56,30 @@ public abstract class PartitionPredicate extends Predicate {
   /**
    * {@inheritDoc}
    * <p>
-   * Not supported for PartitionPredicate. The partition filter is represented internally
-   * in a form that does not expose column references via children. Use
-   * {@link #referencedPartitionColumnOrdinals()} instead to obtain the partition transform
-   * ordinals referenced by this predicate.
+   * For PartitionPredicate, returns {@link PartitionColumnReference} instances that identify
+   * the partition columns (from {@link Table#partitioning()}) referenced by this predicate.
+   * Each reference's {@link PartitionColumnReference#fieldNames()} gives the partition column
+   * name; {@link PartitionColumnReference#ordinal()} gives the 0-based position, paralleling
+   * {@link #referencedPartitionColumnOrdinals()}.
    *
-   * @throws UnsupportedOperationException always; use {@link #referencedPartitionColumnOrdinals()}
+   * @return array of partition column references (never null)
    */
   @Override
-  public NamedReference[] references() {
-    throw new UnsupportedOperationException(
-      "references() is not supported for PartitionPredicate; " +
-        "use referencedPartitionColumnOrdinals()");
-  }
+  public abstract NamedReference[] references();
 
   /**
    * Evaluates this predicate against a single partition's keys.
    *
-   * @param partitionKey keys of a single partition
-   *                     {@link org.apache.spark.sql.connector.catalog.Table#partitioning()}
-   * @return true if the partition represented by these keys
-   * evaluates to true for this partition expression.
+   * @param partitionKey the full partition key for one partition, ordered according to
+   *                     {@link Table#partitioning()}. Must include all partition columns,
+   *                     not just those referenced by this predicate.
+   * @return true if the partition represented by these keys satisfies this predicate.
    */
   public abstract boolean accept(InternalRow partitionKey);
 
   /**
    * Returns the ordinal position(s) of the partition transform(s) in
-   * {@link org.apache.spark.sql.connector.catalog.Table#partitioning()} that are
+   * {@link Table#partitioning()} that are
    * referenced by this partition filter expression.
    *
    * <p><b>Example:</b> Suppose {@code Table.partitioning()} returns three partition
@@ -85,8 +92,7 @@ public abstract class PartitionPredicate extends Predicate {
    * </ul>
    * <p>
    * Data sources can use this to evaluate PartitionPredicates pushed down by
-   * {@link org.apache.spark.sql.connector.read.SupportsPushDownV2Filters
-   * #pushPredicates(Predicate[])}
+   * {@link SupportsPushDownV2Filters#pushPredicates(Predicate[])}
    * to determine whether the PartitionPredicate can be satisfied completely,
    * or whether it must be returned to Spark for post-scan filtering.
    * <p>
@@ -97,7 +103,7 @@ public abstract class PartitionPredicate extends Predicate {
    * partition transforms (for which data in the table is completely partitioned) do not need
    * to be returned.
    * @return array of 0-based ordinal position(s) of the transform(s) in
-   * {@link org.apache.spark.sql.connector.catalog.Table#partitioning()} referenced by this
+   * {@link Table#partitioning()} referenced by this
    * PartitionPredicate's partition filter expression.
    */
   public abstract int[] referencedPartitionColumnOrdinals();

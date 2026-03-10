@@ -61,14 +61,16 @@ class InMemoryEnhancedPartitionFilterTable(
     private val partitionPredicates: Buffer[PartitionPredicate] = ArrayBuffer.empty
     private val firstPassPushedPredicates: Buffer[Predicate] = ArrayBuffer.empty
 
-    private val rejectPartitionPredicates =
+    // Default true: accept (push down) partition predicates.
+    // Set to false to return them for post-scan.
+    private val acceptPartitionPredicates =
       InMemoryEnhancedPartitionFilterTable.this.properties.getOrDefault(
-        InMemoryEnhancedPartitionFilterTable.RejectPartitionPredicatesKey, "false")
+        InMemoryEnhancedPartitionFilterTable.AcceptPartitionPredicatesKey, "true")
         .toBoolean
 
-    private val rejectDataPredicates =
+    private val acceptDataPredicates =
       InMemoryEnhancedPartitionFilterTable.this.properties.getOrDefault(
-        InMemoryEnhancedPartitionFilterTable.RejectDataPredicatesKey, "false")
+        InMemoryEnhancedPartitionFilterTable.AcceptDataPredicatesKey, "false")
         .toBoolean
 
     override def supportsEnhancedPartitionFiltering(): Boolean = true
@@ -84,20 +86,21 @@ class InMemoryEnhancedPartitionFilterTable(
 
       predicates.foreach {
         case p: PartitionPredicate =>
-          if (rejectPartitionPredicates) {
-            returned += p
-          } else {
+          if (acceptPartitionPredicates) {
             partitionPredicates += p
+          } else {
+            returned += p
           }
         case p if referencesOnlyPartitionCols(p) &&
             InMemoryTableWithV2Filter.supportsPredicates(Array(p)) =>
-          if (rejectPartitionPredicates) {
-            returned += p
-          } else {
+          if (acceptPartitionPredicates) {
             firstPassPushedPredicates += p
+          } else {
+            returned += p
           }
-        case p if rejectDataPredicates && referencesOnlyDataCols(p) =>
-          // Reject: we are mocking a data source that can evaluate this data predicate
+        case p if acceptDataPredicates && referencesOnlyDataCols(p) =>
+          // Accept: we are mocking a data source that can evaluate this data predicate
+          firstPassPushedPredicates += p
         case p =>
           returned += p
       }
@@ -117,9 +120,14 @@ class InMemoryEnhancedPartitionFilterTable(
       val partNames =
         InMemoryEnhancedPartitionFilterTable.this.partCols.map(_.toSeq.quoted)
           .toImmutableArraySeq
+      val partNamesSet = InMemoryEnhancedPartitionFilterTable.this.partCols.flatMap(_.toSeq).toSet
+      // Only partition predicates can be used for partition key filtering (filtersToKeys).
+      val firstPassPartitionPredicates = firstPassPushedPredicates.filter { p =>
+        p.references().forall(ref => partNamesSet.contains(ref.fieldNames().mkString(".")))
+      }
       val allKeys = allPartitions.map(_.asInstanceOf[BufferedRows].key)
       val matchingKeys = InMemoryTableWithV2Filter.filtersToKeys(
-        allKeys, partNames, firstPassPushedPredicates.toArray).toSet
+        allKeys, partNames, firstPassPartitionPredicates.toArray).toSet
       val filteredByFirstPass = allPartitions.filter(p =>
         matchingKeys.contains(p.asInstanceOf[BufferedRows].key))
       val filteredBySecondPass = filteredByFirstPass.filter { p =>
@@ -148,13 +156,13 @@ class InMemoryEnhancedPartitionFilterTable(
 
 object InMemoryEnhancedPartitionFilterTable {
   /**
-   * Table property: when "true", reject all PartitionPredicates.
+   * Table property: when "true", accept (do not return) all PartitionPredicates for pushdown.
    */
-  private[catalog] val RejectPartitionPredicatesKey = "reject-partition-predicates"
+  private[catalog] val AcceptPartitionPredicatesKey = "accept-partition-predicates"
 
   /**
-   * Table property: when "true", reject (do not return) data predicates (we are mocking a data
-   * source that can evaluate this particular data predicate).
+   * Table property: when "true", accept (do not return) data predicates for pushdown (we are
+   * mocking a data source that can evaluate this particular data predicate).
    */
-  private[catalog] val RejectDataPredicatesKey = "reject-data-predicates"
+  private[catalog] val AcceptDataPredicatesKey = "accept-data-predicates"
 }

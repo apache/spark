@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.{PredicateHelper, ScalaUDF}
 import org.apache.spark.sql.connector.catalog.BufferedRows
 import org.apache.spark.sql.connector.catalog.InMemoryEnhancedPartitionFilterTable
 import org.apache.spark.sql.connector.catalog.InMemoryTableEnhancedPartitionFilterCatalog
+import org.apache.spark.sql.connector.expressions.PartitionColumnReference
 import org.apache.spark.sql.connector.expressions.filter.PartitionPredicate
 import org.apache.spark.sql.execution.ExplainUtils.stripAQEPlan
 import org.apache.spark.sql.execution.FilterExec
@@ -87,11 +88,11 @@ class DataSourceV2EnhancedPartitionFilterSuite
     // Translated, Data Filter; 1st Pass Accepted -> Pushed Down (not in post-scan).
     withTable(partFilterTableName) {
       // We mock a data source that can evaluate and reject
-      // this data predicate (reject-data-predicates);
+      // this data predicate (accept-data-predicates);
       // the test uses data IS NOT NULL, which always evaluates to true here.
       // No partition filter pushdown
       sql(s"CREATE TABLE $partFilterTableName (part_col string, data string) USING $v2Source " +
-        "PARTITIONED BY (part_col) TBLPROPERTIES('reject-data-predicates' = 'true')")
+        "PARTITIONED BY (part_col) TBLPROPERTIES('accept-data-predicates' = 'true')")
       sql(s"INSERT INTO $partFilterTableName VALUES ('a', 'x'), ('b', 'y'), ('c', 'z')")
 
       val df = sql(s"SELECT * FROM $partFilterTableName WHERE data IS NOT NULL")
@@ -107,7 +108,7 @@ class DataSourceV2EnhancedPartitionFilterSuite
     withTable(partFilterTableName) {
       sql(s"CREATE TABLE $partFilterTableName (part_col string, data string) USING $v2Source " +
         "PARTITIONED BY (part_col) " +
-        "TBLPROPERTIES('reject-partition-predicates' = 'true')")
+        "TBLPROPERTIES('accept-partition-predicates' = 'false')")
       sql(s"INSERT INTO $partFilterTableName VALUES ('a', 'x'), ('b', 'y'), ('c', 'z')")
 
       // Translated, Partition Filter; 1st Pass Returned, 2nd Pass Returned
@@ -131,7 +132,7 @@ class DataSourceV2EnhancedPartitionFilterSuite
       checkAnswer(df, Seq(Row("a", "x"), Row("b", "y")))
       assertPushedPartitionPredicates(df, 1)
       assertScanReturnsPartitionKeys(df, Set("a", "b"))
-      assertReferencedPartitionColumnOrdinals(df, Array(0))
+      assertReferencedPartitionColumnOrdinals(df, Array(0), Array("part_col"))
     }
   }
 
@@ -172,7 +173,7 @@ class DataSourceV2EnhancedPartitionFilterSuite
     withTable(partFilterTableName) {
       sql(s"CREATE TABLE $partFilterTableName (part_col string, data string) USING $v2Source " +
         "PARTITIONED BY (part_col) " +
-        "TBLPROPERTIES('reject-partition-predicates' = 'true')")
+        "TBLPROPERTIES('accept-partition-predicates' = 'false')")
       sql(s"INSERT INTO $partFilterTableName VALUES ('a', 'x'), ('b', 'y'), ('bc', 'z')")
 
       // Untranslatable, Partition Filter; 2nd Pass Returned
@@ -196,7 +197,7 @@ class DataSourceV2EnhancedPartitionFilterSuite
       checkAnswer(df, Seq(Row("b", "y"), Row("bc", "z")))
       assertPushedPartitionPredicates(df, 1)
       assertScanReturnsPartitionKeys(df, Set("b", "bc"))
-      assertReferencedPartitionColumnOrdinals(df, Array(0))
+      assertReferencedPartitionColumnOrdinals(df, Array(0), Array("part_col"))
     }
   }
 
@@ -215,7 +216,7 @@ class DataSourceV2EnhancedPartitionFilterSuite
       checkAnswer(df, Seq(Row("a", "x"), Row("A", "y")))
       assertPushedPartitionPredicates(df, 1)
       assertScanReturnsPartitionKeys(df, Set("a", "A"))
-      assertReferencedPartitionColumnOrdinals(df, Array(0))
+      assertReferencedPartitionColumnOrdinals(df, Array(0), Array("part_col"))
     }
   }
 
@@ -233,7 +234,7 @@ class DataSourceV2EnhancedPartitionFilterSuite
       checkAnswer(df, Seq(
         Row("a", "x", "1", "d1"), Row("a", "x", "2", "d3"), Row("b", "x", "1", "d4")))
       assertPushedPartitionPredicates(df, 1)
-      assertReferencedPartitionColumnOrdinals(df, Array(1))
+      assertReferencedPartitionColumnOrdinals(df, Array(1), Array("p0", "p1", "p2"))
     }
   }
 
@@ -253,7 +254,7 @@ class DataSourceV2EnhancedPartitionFilterSuite
       val df = sql(s"SELECT * FROM $partFilterTableName WHERE concat2(p1, p2) = 'x1'")
       checkAnswer(df, Seq(Row("a", "x", "1", "d1"), Row("b", "x", "1", "d4")))
       assertPushedPartitionPredicates(df, 1)
-      assertReferencedPartitionColumnOrdinals(df, Array(1, 2))
+      assertReferencedPartitionColumnOrdinals(df, Array(1, 2), Array("p0", "p1", "p2"))
     }
   }
 
@@ -290,11 +291,11 @@ class DataSourceV2EnhancedPartitionFilterSuite
 
    test("all eight pushdown cases: translatable filters before untranslatable " +
      "in post-scan Filter") {
-    // Cases 1, 3, 6, 7 end in post-scan (reject-partition-predicates).
+    // Cases 1, 3, 6, 7 end in post-scan (accept-partition-predicates=false).
     // Post-scan filters are ordered with translatable first.
     withTable(partFilterTableName) {
       sql(s"CREATE TABLE $partFilterTableName (part_col string, data string) USING $v2Source " +
-        "PARTITIONED BY (part_col) TBLPROPERTIES('reject-partition-predicates' = 'true')")
+        "PARTITIONED BY (part_col) TBLPROPERTIES('accept-partition-predicates' = 'false')")
       sql(s"INSERT INTO $partFilterTableName VALUES " +
         "('a', 'keep'), ('a', 'drop'), ('A', 'keep'), ('b', 'keep'), ('b', 'other')")
 
@@ -367,18 +368,51 @@ class DataSourceV2EnhancedPartitionFilterSuite
 
   /**
    * Asserts that each pushed partition predicate's referencedPartitionColumnOrdinals
-   * matches the expected ordinals.
+   * and references() (PartitionColumnReference) match the expected ordinals and
+   * partition column names.
+   *
+   * @param df the query result
+   * @param expectedOrdinals expected 0-based ordinals from Table.partitioning()
+   * @param expectedPartitionColumnNames partition column names by ordinal
+   *        (names(ordinal) is the name for that partition column)
    */
   private def assertReferencedPartitionColumnOrdinals(
       df: DataFrame,
-      expectedOrdinals: Array[Int]): Unit = {
+      expectedOrdinals: Array[Int],
+      expectedPartitionColumnNames: Array[String]): Unit = {
     val predicates = getPushedPartitionPredicates(df)
+    val names = expectedPartitionColumnNames
     predicates.foreach { p =>
       val ordinals = p.referencedPartitionColumnOrdinals()
       assert(ordinals.sameElements(expectedOrdinals),
         s"Expected referencedPartitionColumnOrdinals " +
           s"${expectedOrdinals.mkString("[", ", ", "]")}, " +
           s"got ${ordinals.mkString("[", ", ", "]")}")
+
+      val refs = p.references()
+      assert(refs.length === expectedOrdinals.length,
+        s"Expected references() length ${expectedOrdinals.length}, got ${refs.length}")
+      refs.foreach { ref =>
+        assert(ref.isInstanceOf[PartitionColumnReference],
+          s"Expected PartitionColumnReference, got ${ref.getClass.getName}")
+        val partRef = ref.asInstanceOf[PartitionColumnReference]
+        assert(expectedOrdinals.contains(partRef.ordinal()),
+          s"references() ordinal ${partRef.ordinal()} not in expected $expectedOrdinals")
+        assert(partRef.fieldNames().nonEmpty,
+          s"PartitionColumnReference.ordinal=${partRef.ordinal()} has empty fieldNames")
+        assert(partRef.ordinal() < names.length,
+          s"PartitionColumnReference.ordinal=${partRef.ordinal()} " +
+            s"out of range for names length ${names.length}")
+        val expectedName = names(partRef.ordinal())
+        val actualName = partRef.fieldNames().mkString(".")
+        assert(actualName === expectedName,
+          s"PartitionColumnReference.ordinal=${partRef.ordinal()}: " +
+            s"expected fieldNames '${expectedName}', got '${actualName}'")
+      }
+      val refOrdinals = refs.map(_.asInstanceOf[PartitionColumnReference].ordinal()).sorted
+      assert(refOrdinals.sameElements(expectedOrdinals.sorted),
+        s"references() ordinals ${refOrdinals.mkString("[", ", ", "]")} " +
+          s"should match expected ${expectedOrdinals.sorted.mkString("[", ", ", "]")}")
     }
   }
 
