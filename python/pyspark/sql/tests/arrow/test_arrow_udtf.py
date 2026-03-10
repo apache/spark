@@ -373,9 +373,8 @@ class ArrowUDTFTestsMixin:
         # Should fail with Arrow cast exception since string cannot be cast to int
         with self.assertRaisesRegex(
             PythonException,
-            "PySparkRuntimeError: \\[RESULT_COLUMNS_MISMATCH_FOR_ARROW_UDTF\\] "
-            "Column names of the returned pyarrow.Table or pyarrow.RecordBatch do not match "
-            "specified schema. Expected: int32 Actual: string",
+            "PySparkTypeError: Result type of column 'id' does not match the expected type. "
+            "Expected: int32, got: string.",
         ):
             result_df = StringToIntUDTF()
             result_df.collect()
