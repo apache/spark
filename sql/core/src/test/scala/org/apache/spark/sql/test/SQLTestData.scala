@@ -32,10 +32,11 @@ import org.apache.spark.unsafe.types.CalendarInterval
  * A collection of sample data used in SQL tests.
  */
 private[sql] trait SQLTestData extends SparkSessionProvider { self =>
+  protected def spark: classic.SparkSession = super.spark.asInstanceOf[classic.SparkSession]
+
   // Helper object to import SQL implicits without a concrete SparkSession
   private object internalImplicits extends SQLImplicits {
-    override protected def session: classic.SparkSession =
-      self.spark.asInstanceOf[classic.SparkSession]
+    override protected def session: classic.SparkSession = self.spark
   }
 
   import internalImplicits._

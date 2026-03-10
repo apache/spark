@@ -228,8 +228,7 @@ private[sql] trait SQLTestUtilsBase
   with SQLTestData
   with PlanTestBase { self: Suite =>
 
-  override protected def spark: classic.SparkSession =
-    super[SparkSessionProvider].spark.asInstanceOf[classic.SparkSession]
+  override protected def spark: classic.SparkSession = super.spark
 
   protected def sparkContext = spark.sparkContext
 
