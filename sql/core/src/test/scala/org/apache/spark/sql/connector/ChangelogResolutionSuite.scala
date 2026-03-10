@@ -20,15 +20,12 @@ package org.apache.spark.sql.connector
 import java.util
 
 import org.apache.spark.sql.{AnalysisException, QueryTest}
-import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder}
 import org.apache.spark.sql.execution.datasources.v2.{ChangelogTable, DataSourceV2Relation}
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{LongType, StringType, TimestampType}
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.sql.types.{LongType, StringType}
 
 /**
  * Tests for the CDC (Change Data Capture) analyzer resolution path:
@@ -42,7 +39,7 @@ class ChangelogResolutionSuite extends QueryTest with SharedSparkSession {
   override def beforeAll(): Unit = {
     super.beforeAll()
     spark.conf.set(s"spark.sql.catalog.$cdcCatalogName",
-      classOf[InMemoryCDCCatalog].getName)
+      classOf[InMemoryChangelogCatalog].getName)
     spark.conf.set(s"spark.sql.catalog.$noCdcCatalogName",
       classOf[InMemoryTableCatalog].getName)
   }
@@ -192,60 +189,5 @@ class ChangelogResolutionSuite extends QueryTest with SharedSparkSession {
       condition = "UNSUPPORTED_FEATURE.CHANGE_DATA_CAPTURE_ON_RELATION",
       sqlState = None,
       parameters = Map("relationId" -> "`x`"))
-  }
-}
-
-/**
- * An InMemoryTableCatalog that declares SUPPORT_CHANGELOG and implements loadChangelog().
- */
-class InMemoryCDCCatalog extends InMemoryTableCatalog {
-  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-
-  override def capabilities: java.util.Set[TableCatalogCapability] = {
-    val caps = new java.util.HashSet(super.capabilities)
-    caps.add(TableCatalogCapability.SUPPORT_CHANGELOG)
-    caps
-  }
-
-  override def loadChangelog(
-      ident: Identifier,
-      changelogInfo: ChangelogInfo): Changelog = {
-    if (!tableExists(ident)) {
-      throw new NoSuchTableException(ident.asMultipartIdentifier)
-    }
-    val table = loadTable(ident)
-    new InMemoryChangelog(table.name + "_changelog", table.columns)
-  }
-}
-
-/**
- * A minimal Changelog implementation for testing.
- */
-class InMemoryChangelog(
-    tableName: String,
-    dataColumns: Array[Column]) extends Changelog {
-
-  private val cdcColumns: Array[Column] = dataColumns ++ Array(
-    Column.create("_change_type", StringType),
-    Column.create("_commit_version", LongType),
-    Column.create("_commit_timestamp", TimestampType))
-
-  override def name(): String = tableName
-
-  override def columns(): Array[Column] = cdcColumns
-
-  override def containsCarryoverRows(): Boolean = true
-
-  override def containsIntermediateChanges(): Boolean = false
-
-  override def representsUpdateAsDeleteAndInsert(): Boolean = true
-
-  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
-    // Return a no-op scan builder for testing
-    new ScanBuilder {
-      override def build(): Scan = {
-        throw new UnsupportedOperationException("InMemoryChangelog scan not implemented")
-      }
-    }
   }
 }
