@@ -191,7 +191,6 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
       responseObserver: StreamObserver[proto.ExecutePlanResponse]): ExecuteHolder = {
     val executeHolder = createExecuteHolder(executeKey, request, sessionHolder)
     try {
-      executeHolder.eventsManager.postStarted()
       executeHolder.start()
     } catch {
       // Errors raised before the execution holder has finished spawning a thread are considered
