@@ -702,6 +702,18 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
       context = ExpectedContext(fragment = "STRUCT", start = 50, stop = 55))
   }
 
+  test("INCOMPLETE_TYPE_DEFINITION: error position for multi-line CREATE FUNCTION return params") {
+    val sqlText =
+      """CREATE OR REPLACE FUNCTION my_func(x INT)
+        |RETURNS TABLE(result STRUCT)
+        |  RETURN SELECT x""".stripMargin
+    checkError(
+      exception = parseException(sqlText),
+      condition = "INCOMPLETE_TYPE_DEFINITION.STRUCT",
+      sqlState = "42K01",
+      context = ExpectedContext(fragment = "STRUCT", start = 63, stop = 68))
+  }
+
   test("INCOMPLETE_TYPE_DEFINITION: map type definition is incomplete") {
     // Cast simple map without specifying element type
     checkError(
