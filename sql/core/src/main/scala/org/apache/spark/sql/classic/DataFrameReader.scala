@@ -327,7 +327,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession)
     val multipartIdentifier =
       sparkSession.sessionState.sqlParser.parseMultipartIdentifier(tableName)
     val options = new CaseInsensitiveStringMap(extraOptions.toMap.asJava)
-    val changelogInfo = ChangelogInfoUtils.fromOptions(options)
+    val changelogInfo = ChangelogInfoUtils.fromOptions(
+      options, sparkSession.sessionState.conf.sessionLocalTimeZone)
     val relation = UnresolvedRelation(multipartIdentifier, options)
     Dataset.ofRows(sparkSession, RelationChanges(relation, changelogInfo))
   }

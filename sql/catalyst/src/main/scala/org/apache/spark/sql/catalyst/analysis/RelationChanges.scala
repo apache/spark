@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{RELATION_CHANGES, TreePa
 import org.apache.spark.sql.connector.catalog.ChangelogInfo
 
 /**
- * A logical node used to query Change Data Capture (CDC) changes from the child relation.
+ * A logical node used to query Change Data Capture (CDC) changes for a table relation.
  *
  * This is an unresolved node created by the parser when it encounters a `CHANGES` clause,
  * or by the DataFrame API when `DataFrameReader.changes()` / `DataStreamReader.changes()` is

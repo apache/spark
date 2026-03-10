@@ -21,7 +21,6 @@ import java.util.Optional
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog.{ChangelogInfo, ChangelogRange}
 import org.apache.spark.sql.types.TimestampType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -35,7 +34,9 @@ object ChangelogInfoUtils {
    * Build a [[ChangelogInfo]] from the options specified via `.option()` calls on
    * `DataFrameReader` or `DataStreamReader`.
    */
-  def fromOptions(options: CaseInsensitiveStringMap): ChangelogInfo = {
+  def fromOptions(
+      options: CaseInsensitiveStringMap,
+      sessionLocalTimeZone: String): ChangelogInfo = {
     val startVersion = Option(options.get("startingVersion"))
     val endVersion = Option(options.get("endingVersion"))
     val startTimestamp = Option(options.get("startingTimestamp"))
@@ -78,11 +79,12 @@ object ChangelogInfoUtils {
         startInclusive,
         endInclusive)
     } else if (hasTimestampRange) {
-      val startTsValue = startTimestamp.map(parseTimestamp).getOrElse(
+      val startTsValue = startTimestamp.map(parseTimestamp(_, sessionLocalTimeZone)).getOrElse(
         throw new AnalysisException(
           "INVALID_CDC_OPTION.MISSING_STARTING_TIMESTAMP",
           Map.empty[String, String]))
-      val endTsValue = endTimestamp.map(ts => java.lang.Long.valueOf(parseTimestamp(ts)))
+      val endTsValue = endTimestamp.map(ts =>
+        java.lang.Long.valueOf(parseTimestamp(ts, sessionLocalTimeZone)))
       new ChangelogRange.TimestampRange(
         startTsValue,
         endTsValue.map(Optional.of[java.lang.Long]).getOrElse(Optional.empty[java.lang.Long]),
@@ -96,11 +98,11 @@ object ChangelogInfoUtils {
     new ChangelogInfo(range, deduplicationMode, computeUpdates)
   }
 
-  private def parseTimestamp(timestampStr: String): Long = {
+  private def parseTimestamp(timestampStr: String, sessionLocalTimeZone: String): Long = {
     val value = Cast(
       Literal(timestampStr),
       TimestampType,
-      Some(DateTimeUtils.getZoneId("UTC").toString),
+      Some(sessionLocalTimeZone),
       ansiEnabled = false
     ).eval()
     if (value == null) {

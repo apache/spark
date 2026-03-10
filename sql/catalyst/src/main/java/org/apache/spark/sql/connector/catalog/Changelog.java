@@ -25,7 +25,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 /**
  * The central connector interface for Change Data Capture (CDC).
  * <p>
- * Connectors implement this minimal interface to expose raw change data. Spark handles
+ * Connectors implement this minimal interface to expose change data. Spark handles
  * post-processing (carry-over removal, update detection, net change computation) based on
  * the properties declared by the connector.
  * <p>
@@ -54,7 +54,7 @@ public interface Changelog {
   Column[] columns();
 
   /**
-   * Whether the raw change data may contain identical insert/delete carry-over pairs
+   * Whether the change data may contain identical insert/delete carry-over pairs
    * produced by copy-on-write file rewrites.
    * <p>
    * If {@code false}, the connector guarantees that no carry-over pairs are present and
@@ -63,7 +63,7 @@ public interface Changelog {
   boolean containsCarryoverRows();
 
   /**
-   * Whether the raw change data may contain multiple intermediate states per row identity
+   * Whether the change data may contain multiple intermediate states per row identity
    * within a single commit version.
    * <p>
    * If {@code false}, the connector guarantees at most one change per row identity per
@@ -72,7 +72,7 @@ public interface Changelog {
   boolean containsIntermediateChanges();
 
   /**
-   * Whether updates are represented as raw delete+insert pairs rather than fully
+   * Whether updates are represented as delete+insert pairs rather than fully
    * materialized {@code update_preimage} and {@code update_postimage} entries.
    * <p>
    * If {@code false}, the connector guarantees that update pre/post-images are already
@@ -82,7 +82,7 @@ public interface Changelog {
   boolean representsUpdateAsDeleteAndInsert();
 
   /**
-   * Returns a new {@link ScanBuilder} for reading the raw change data.
+   * Returns a new {@link ScanBuilder} for reading the change data.
    *
    * @param options read options (case-insensitive string map)
    */

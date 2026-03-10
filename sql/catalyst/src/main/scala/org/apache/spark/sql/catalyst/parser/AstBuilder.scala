@@ -2398,11 +2398,7 @@ class AstBuilder extends DataTypeAstBuilder
     val table = mayApplyAliasPlan(ctx.tableAlias, result)
     val tableWithWatermark = table.optionalMap(ctx.watermarkClause)(withWatermark)
     val sourceNameOpt = extractSourceName(ctx.identifiedByClause)
-    tableWithWatermark.transformUp {
-      case r: UnresolvedRelation =>
-        NamedStreamingRelation.withUserProvidedName(
-          r.copy(isStreaming = true), sourceNameOpt)
-    }
+    NamedStreamingRelation.withUserProvidedName(tableWithWatermark, sourceNameOpt)
   }
 
   /**
@@ -2492,39 +2488,10 @@ class AstBuilder extends DataTypeAstBuilder
 
   /**
    * Resolve a timestamp expression to a Long (microseconds since epoch) for CDC queries.
+   * Delegates to shared utility in [[TimeTravelSpec]].
    */
   private def resolveTimestampForChanges(ts: Expression): Long = {
-    import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, Unevaluable}
-    import org.apache.spark.sql.catalyst.optimizer.{ComputeCurrentTime, ReplaceExpressions}
-    import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project}
-    import org.apache.spark.sql.types.TimestampType
-
-    assert(ts.resolved && ts.references.isEmpty)
-    if (!Cast.canAnsiCast(ts.dataType, TimestampType)) {
-      throw QueryCompilationErrors.invalidTimestampExprForTimeTravel(
-        "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.INPUT", ts)
-    }
-    val tsToEval = {
-      val fakeProject = Project(Seq(Alias(ts, "ts")()), OneRowRelation())
-      ComputeCurrentTime(ReplaceExpressions(fakeProject)).asInstanceOf[Project]
-        .expressions.head.asInstanceOf[Alias].child
-    }
-    tsToEval.foreach {
-      case _: Unevaluable =>
-        throw QueryCompilationErrors.invalidTimestampExprForTimeTravel(
-          "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.UNEVALUABLE", ts)
-      case e if !e.deterministic =>
-        throw QueryCompilationErrors.invalidTimestampExprForTimeTravel(
-          "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.NON_DETERMINISTIC", ts)
-      case _ =>
-    }
-    val tz = Some(conf.sessionLocalTimeZone)
-    val value = Cast(tsToEval, TimestampType, tz, ansiEnabled = false).eval()
-    if (value == null) {
-      throw QueryCompilationErrors.invalidTimestampExprForTimeTravel(
-        "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.INPUT", ts)
-    }
-    value.asInstanceOf[Long]
+    TimeTravelSpec.resolveTimestampExpression(ts, conf.sessionLocalTimeZone)
   }
 
   /**
