@@ -1834,6 +1834,8 @@ class RocksDB(
         // and the time when maintenance upload is happening could be very long, such that the
         // reused files could have been deleted by maintenance on another executor due to
         // the existing uploaded snapshots depending on it being deleted.
+        // This would also handle other cases where the fileMapping is referencing a file
+        // that is already deleted in DFS.
         // This could lead to SST file missing, when the state store is being reloaded with
         // this new snapshot.
         val snapshotToUpload = if (conf.checkStaleReusedFilesInSnapshot) {
@@ -1859,6 +1861,9 @@ class RocksDB(
    * maintenance that could have happened on another executor before this snapshot is uploaded.
    * Checking if the file exists in DFS is not sufficient, since that could lead to race
    * with an ongoing maintenance on another executor.
+   *
+   * @param snapshot The snapshot we want to upload
+   * @return The snapshot with stale reused files replaced with new DFS files to be uploaded
    */
   private def replaceStaleReusedFilesInSnapshot(snapshot: RocksDBSnapshot): RocksDBSnapshot = {
     val isReusingFiles = snapshot.fileMapping.exists(_._2.reusedFromVersion.isDefined)
