@@ -48,11 +48,11 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] with Logging {
     case write: V2WriteSchemaEvolution
       if write.canEvaluateSchemaEvolution && write.pendingSchemaChanges.nonEmpty =>
       write.table match {
-        case ExtractV2CatalogAndIdentifier(catalog, ident) =>
+        case relation @ ExtractV2CatalogAndIdentifier(catalog, ident) =>
           catalog.alterTable(ident, write.pendingSchemaChanges: _*)
           val writePrivileges = getWritePrivileges(write)
           val newTable = catalog.loadTable(ident, writePrivileges.asJava)
-          val writeWithNewTarget = replaceWriteTargetTable(write, newTable)
+          val writeWithNewTarget = replaceWriteTargetTable(write, relation, newTable)
 
           // Check if there are any remaining changes not applied.
           if (writeWithNewTarget.pendingSchemaChanges.nonEmpty) {
@@ -79,14 +79,14 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] with Logging {
           s"Attempting schema evolution on a command that does not support it: $write")
     }
 
-  private def replaceWriteTargetTable(write: V2WriteSchemaEvolution, newTable: Table)
-    : V2WriteSchemaEvolution = {
-    val newRelation = write.table match {
-      case r: DataSourceV2Relation =>
-        val newSchema = CatalogV2Util.v2ColumnsToStructType(newTable.columns())
-        r.copy(table = newTable, output = DataTypeUtils.toAttributes(newSchema))
-    }
-    val attrMapping = write.table.output.zip(newRelation.output)
+  private def replaceWriteTargetTable(
+      write: V2WriteSchemaEvolution,
+      relation: DataSourceV2Relation,
+      newTable: Table): V2WriteSchemaEvolution = {
+    val newSchema = CatalogV2Util.v2ColumnsToStructType(newTable.columns())
+    val newRelation =
+      relation.copy(table = newTable, output = DataTypeUtils.toAttributes(newSchema))
+    val attrMapping = relation.output.zip(newRelation.output)
 
     write match {
       case m: MergeIntoTable =>
@@ -126,7 +126,7 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] with Logging {
       newType: DataType,
       originalTarget: StructType,
       originalSource: StructType,
-      fieldPath: Seq[String],
+      fieldPath: List[String],
       isByName: Boolean): Array[TableChange] = {
     (current, newType) match {
       case (StructType(currentFields), StructType(newFields)) =>
@@ -191,7 +191,7 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] with Logging {
       newFields: Array[StructField],
       originalTarget: StructType,
       originalSource: StructType,
-      fieldPath: Seq[String]): Array[TableChange] = {
+      fieldPath: List[String]): Array[TableChange] = {
     val currentFieldMap = toFieldMap(currentFields)
     val newFieldMap = toFieldMap(newFields)
 
@@ -226,7 +226,7 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] with Logging {
       newFields: Array[StructField],
       originalTarget: StructType,
       originalSource: StructType,
-      fieldPath: Seq[String]): Array[TableChange] = {
+      fieldPath: List[String]): Array[TableChange] = {
     // Update existing field types by pairing fields at the same position.
     val updates = currentFields.zip(newFields).flatMap { case (currentField, newField) =>
       computeSchemaChanges(

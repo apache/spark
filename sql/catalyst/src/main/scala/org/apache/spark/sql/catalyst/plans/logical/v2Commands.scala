@@ -77,10 +77,7 @@ trait V2WriteSchemaEvolution extends LogicalPlan {
    */
   def pendingSchemaChanges: Array[TableChange]
 
-  /**
-   * Whether schema evolution is enabled for this command based on the `WITH SCHEMA EVOLUTION`
-   * clause and the table's `AUTOMATIC_SCHEMA_EVOLUTION` capability.
-   */
+  /** Whether schema evolution is enabled for this command and supported by the table. */
   lazy val schemaEvolutionEnabled: Boolean = withSchemaEvolution && {
     table match {
       case r: DataSourceV2Relation if r.autoSchemaEvolution() => true
