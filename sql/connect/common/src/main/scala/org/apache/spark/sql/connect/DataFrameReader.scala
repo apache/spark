@@ -198,7 +198,14 @@ class DataFrameReader private[sql] (sparkSession: SparkSession) extends sql.Data
 
   /** @inheritdoc */
   def changes(tableName: String): DataFrame = {
-    throw ConnectClientUnsupportedErrors.tableCDC()
+    assertNoSpecifiedSchema("changes")
+    sparkSession.newDataFrame { builder =>
+      val changesBuilder = builder.getReadChangesBuilder
+        .setUnparsedIdentifier(tableName)
+      extraOptions.foreach { case (k, v) =>
+        changesBuilder.putOptions(k, v)
+      }
+    }
   }
 
   /** @inheritdoc */
