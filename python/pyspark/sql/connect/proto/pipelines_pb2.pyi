@@ -1578,18 +1578,23 @@ class PipelineQueryFunctionExecutionSignal(google.protobuf.message.Message):
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    FLOW_NAMES_FIELD_NUMBER: builtins.int
+    FLOW_IDENTIFIERS_FIELD_NUMBER: builtins.int
     @property
-    def flow_names(
+    def flow_identifiers(
         self,
-    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        pyspark.sql.connect.proto.common_pb2.ResolvedIdentifier
+    ]: ...
     def __init__(
         self,
         *,
-        flow_names: collections.abc.Iterable[builtins.str] | None = ...,
+        flow_identifiers: collections.abc.Iterable[
+            pyspark.sql.connect.proto.common_pb2.ResolvedIdentifier
+        ]
+        | None = ...,
     ) -> None: ...
     def ClearField(
-        self, field_name: typing_extensions.Literal["flow_names", b"flow_names"]
+        self, field_name: typing_extensions.Literal["flow_identifiers", b"flow_identifiers"]
     ) -> None: ...
 
 global___PipelineQueryFunctionExecutionSignal = PipelineQueryFunctionExecutionSignal

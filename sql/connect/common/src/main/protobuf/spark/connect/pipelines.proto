@@ -311,7 +311,7 @@ message SourceCodeLocation {
 // A signal from the server to the client to execute the query function for one or more flows, and
 // to register their results with the server.
 message PipelineQueryFunctionExecutionSignal {
-  repeated string flow_names = 1;
+  repeated ResolvedIdentifier flow_identifiers = 1;
 }
 
 // Metadata providing context about the pipeline during Spark Connect query analysis.
