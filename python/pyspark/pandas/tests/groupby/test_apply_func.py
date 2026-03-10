@@ -345,14 +345,18 @@ class GroupbyApplyFuncMixin:
         )
         psdf = ps.from_pandas(pdf)
 
+        if LooseVersion(pd.__version__) < "3.0.0":
+            sum_f = sum
+        else:
+            sum_f = np.sum
+
         self.assert_eq(
-            psdf.groupby("d").apply(sum).sort_index(), pdf.groupby("d").apply(sum).sort_index()
+            psdf.groupby("d").apply(sum_f).sort_index(), pdf.groupby("d").apply(sum_f).sort_index()
         )
 
-        with ps.option_context("compute.shortcut_limit", 1):
-            self.assert_eq(
-                psdf.groupby("d").apply(sum).sort_index(), pdf.groupby("d").apply(sum).sort_index()
-            )
+    def test_apply_key_handling_without_shortcut(self):
+        with ps.option_context("compute.shortcut_limit", 0):
+            self.test_apply_key_handling()
 
     def test_apply_with_side_effect(self):
         pdf = pd.DataFrame(
@@ -370,6 +374,11 @@ class GroupbyApplyFuncMixin:
     def _check_apply_with_side_effect(self, psdf, pdf, include_groups):
         acc = ps.utils.default_session().sparkContext.accumulator(0)
 
+        if LooseVersion(pd.__version__) < "3.0.0":
+            sum_f = sum
+        else:
+            sum_f = np.sum
+
         if include_groups:
 
             def sum_with_acc_frame(x) -> ps.DataFrame[np.float64, np.float64]:
@@ -378,18 +387,25 @@ class GroupbyApplyFuncMixin:
                 return np.sum(x)
 
         else:
+            if LooseVersion(pd.__version__) < "3.0.0":
+                ret_type = ps.DataFrame[np.float64]
+            else:
+                ret_type = np.float64
 
-            def sum_with_acc_frame(x) -> ps.DataFrame[np.float64]:
+            def sum_with_acc_frame(x) -> ret_type:
                 nonlocal acc
                 acc += 1
                 return np.sum(x)
 
         actual = psdf.groupby("d").apply(sum_with_acc_frame, include_groups=include_groups)
-        actual.columns = ["d", "v"] if include_groups else ["v"]
+        if LooseVersion(pd.__version__) < "3.0.0":
+            actual.columns = ["d", "v"] if include_groups else ["v"]
+        else:
+            actual = actual.rename()
         self.assert_eq(
             actual._to_pandas().sort_index(),
             pdf.groupby("d")
-            .apply(sum, include_groups=include_groups)
+            .apply(sum_f, include_groups=include_groups)
             .sort_index()
             .reset_index(drop=True),
         )
@@ -406,11 +422,15 @@ class GroupbyApplyFuncMixin:
             ._to_pandas()
             .sort_index(),
             pdf.groupby("d")["v"]
-            .apply(sum, include_groups=include_groups)
+            .apply(sum_f, include_groups=include_groups)
             .sort_index()
             .reset_index(drop=True),
         )
         self.assert_eq(acc.value, 4)
+
+    def test_apply_with_side_effect_without_shortcut(self):
+        with ps.option_context("compute.shortcut_limit", 0):
+            self.test_apply_with_side_effect()
 
     def test_apply_return_series(self):
         # SPARK-36907: Fix DataFrameGroupBy.apply without shortcut.
