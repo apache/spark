@@ -50,4 +50,7 @@ private[sql] object ConnectClientUnsupportedErrors {
 
   def sparkContext(): SparkUnsupportedOperationException =
     unsupportedFeatureException("SESSION_SPARK_CONTEXT")
+
+  def tableCDC(): SparkUnsupportedOperationException =
+    unsupportedFeatureException("TABLE_CDC")
 }

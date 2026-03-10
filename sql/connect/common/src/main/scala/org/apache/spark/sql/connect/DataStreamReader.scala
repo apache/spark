@@ -120,8 +120,7 @@ final class DataStreamReader private[sql] (sparkSession: SparkSession)
 
   /** @inheritdoc */
   def changes(tableName: String): DataFrame = {
-    throw new UnsupportedOperationException(
-      "DataStreamReader.changes() is not yet supported in Spark Connect")
+    throw ConnectClientUnsupportedErrors.tableCDC()
   }
 
   override protected def assertNoSpecifiedSchema(operation: String): Unit = {

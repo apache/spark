@@ -2757,6 +2757,7 @@
     "message" : [
       "Invalid Change Data Capture (CDC) option."
     ],
+    "sqlState" : "42K03",
     "subClass" : {
       "CONFLICTING_RANGE_TYPES" : {
         "message" : [
@@ -6890,6 +6891,11 @@
       "SESSION_SPARK_CONTEXT" : {
         "message" : [
           "Access to the SparkContext."
+        ]
+      },
+      "TABLE_CDC" : {
+        "message" : [
+          "Change Data Capture (CDC) via DataFrameReader.changes() / DataStreamReader.changes()."
         ]
       }
     },

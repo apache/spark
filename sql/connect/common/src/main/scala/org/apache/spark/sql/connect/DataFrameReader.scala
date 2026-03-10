@@ -198,8 +198,7 @@ class DataFrameReader private[sql] (sparkSession: SparkSession) extends sql.Data
 
   /** @inheritdoc */
   def changes(tableName: String): DataFrame = {
-    throw new UnsupportedOperationException(
-      "DataFrameReader.changes() is not yet supported in Spark Connect")
+    throw ConnectClientUnsupportedErrors.tableCDC()
   }
 
   /** @inheritdoc */

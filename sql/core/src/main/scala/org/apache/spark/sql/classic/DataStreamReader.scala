@@ -120,6 +120,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession)
   /** @inheritdoc */
   def changes(tableName: String): DataFrame = {
     require(tableName != null, "The table name can't be null")
+    assertNoSpecifiedSchema("changes")
     val identifier = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(tableName)
     val options = new CaseInsensitiveStringMap(extraOptions.toMap.asJava)
     val changelogInfo = ChangelogInfoUtils.fromOptions(options)

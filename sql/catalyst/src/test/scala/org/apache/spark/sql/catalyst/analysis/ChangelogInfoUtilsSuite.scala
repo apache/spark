@@ -159,4 +159,5 @@ class ChangelogInfoUtilsSuite extends SparkFunSuite {
       condition = "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.OPTION",
       parameters = Map("expr" -> "'not-a-timestamp'"))
   }
+
 }
