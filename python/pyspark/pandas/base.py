@@ -22,7 +22,7 @@ import warnings
 from abc import ABCMeta, abstractmethod
 from functools import wraps, partial
 from itertools import chain
-from typing import Any, Callable, Optional, Sequence, Tuple, Union, cast, TYPE_CHECKING
+from typing import Any, Callable, ClassVar, Optional, Sequence, Tuple, Union, cast, TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
@@ -284,9 +284,8 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
     Assuming there are following attributes or properties and functions.
     """
 
-    # pandas 2.1+ uses __pandas_priority__ to decide whether mixed ops should defer
-    # to the right-hand operand's reflected implementation.
-    __pandas_priority__ = 3500
+    # Keep pandas-on-Spark above pandas Series and Index for reflected ops.
+    __pandas_priority__: ClassVar[int] = pd.Series.__pandas_priority__ + 500  # type: ignore[attr-defined]
 
     @property
     @abstractmethod
