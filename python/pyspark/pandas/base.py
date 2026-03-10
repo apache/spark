@@ -284,6 +284,10 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
     Assuming there are following attributes or properties and functions.
     """
 
+    # pandas 2.1+ uses __pandas_priority__ to decide whether mixed ops should defer
+    # to the right-hand operand's reflected implementation.
+    __pandas_priority__ = 3500
+
     @property
     @abstractmethod
     def _internal(self) -> InternalFrame:

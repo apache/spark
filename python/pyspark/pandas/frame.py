@@ -543,6 +543,10 @@ class DataFrame(Frame, Generic[T]):
     2    None  NaN
     """
 
+    # pandas 2.1+ uses __pandas_priority__ to decide whether mixed ops should defer
+    # to the right-hand operand's reflected implementation.
+    __pandas_priority__ = 4500
+
     def __init__(  # type: ignore[no-untyped-def]
         self, data=None, index=None, columns=None, dtype=None, copy=False
     ):
