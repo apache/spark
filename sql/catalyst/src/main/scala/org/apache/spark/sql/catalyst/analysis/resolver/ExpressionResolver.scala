@@ -28,10 +28,14 @@ import org.apache.spark.sql.catalyst.analysis.{
   withPosition,
   FunctionResolution,
   GetViewColumnByNameAndOrdinal,
+  MultiAlias,
+  NamedParameter,
+  Parameter,
   Star,
   TypeCoercionValidation,
   UnresolvedAlias,
   UnresolvedAttribute,
+  UnresolvedExtractValue,
   UnresolvedFunction,
   UnresolvedHaving,
   UnresolvedOrdinal,
@@ -43,10 +47,14 @@ import org.apache.spark.sql.catalyst.plans.logical.{
   Aggregate,
   Filter,
   LogicalPlan,
+  Pivot,
   Project,
-  Sort
+  RepartitionByExpression,
+  Sort,
+  Unpivot
 }
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
+import org.apache.spark.sql.catalyst.trees.TreePattern.AGGREGATE_EXPRESSION
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.util.Utils
@@ -135,20 +143,25 @@ class ExpressionResolver(
   private val operatorResolutionContextStack = resolver.getOperatorResolutionContextStack
 
   private val aliasResolver = new AliasResolver(this)
+  private val multiAliasResolver = new MultiAliasResolver(this)
   private val timezoneAwareExpressionResolver = new TimezoneAwareExpressionResolver(this)
   private val binaryArithmeticResolver = new BinaryArithmeticResolver(this)
   private val limitLikeExpressionValidator = new LimitLikeExpressionValidator
   private val aggregateExpressionResolver = new AggregateExpressionResolver(resolver, this)
+  private val generatorResolver = new GeneratorResolver(this)
   private val functionResolver = new FunctionResolver(
     this,
     functionResolution,
     aggregateExpressionResolver,
-    binaryArithmeticResolver
+    binaryArithmeticResolver,
+    generatorResolver
   )
   private val subqueryExpressionResolver = new SubqueryExpressionResolver(this, resolver)
   private val ordinalResolver = new OrdinalResolver(resolver)
   private val lcaResolver = new LateralColumnAliasResolver(this, resolver)
   private val semiStructuredExtractResolver = new SemiStructuredExtractResolver(this)
+  private val extractValueResolver = new ExtractValueResolver(this)
+  private val lambdaFunctionResolver = new LambdaFunctionResolver(this)
 
   /**
    * Get the expression tree traversal stack.
@@ -184,6 +197,11 @@ class ExpressionResolver(
    * Get the [[LateralColumnAliasResolver]] to resolve lateral column references.
    */
   def getLcaResolver: LateralColumnAliasResolver = lcaResolver
+
+  /**
+   * Get the [[GeneratorResolver]] to resolve generator expressions and build [[Generate]] nodes.
+   */
+  def getGeneratorResolver: GeneratorResolver = generatorResolver
 
   /**
    * Returns all attributes that have been referenced during the most recent expression tree
@@ -267,6 +285,8 @@ class ExpressionResolver(
             aggregateExpressionResolver.resolve(unresolvedAggregateExpression)
           case unresolvedAggregateFunction: AggregateFunction =>
             resolveExpressionGenericallyWithTypeCoercion(unresolvedAggregateFunction)
+          case unresolvedGenerator: Generator =>
+            generatorResolver.resolve(unresolvedGenerator)
           case unresolvedBinaryArithmetic: BinaryArithmetic =>
             binaryArithmeticResolver.resolve(unresolvedBinaryArithmetic)
           case unresolvedDateAddYMInterval: DateAddYMInterval =>
@@ -305,6 +325,8 @@ class ExpressionResolver(
             resolveExpressionGenericallyWithTimezoneWithTypeCoercion(makeTimestamp)
           case makeTimestamp: MakeTimestampFromDateTime =>
             resolveExpressionGenericallyWithTimezoneWithTypeCoercion(makeTimestamp)
+          case namedParameter: NamedParameter =>
+            resolveNamedParameter(namedParameter)
           case unresolvedRuntimeReplaceable: RuntimeReplaceable =>
             resolveExpressionGenericallyWithTypeCoercion(unresolvedRuntimeReplaceable)
           case unresolvedTimezoneExpression: TimeZoneAwareExpression =>
@@ -315,11 +337,16 @@ class ExpressionResolver(
             resolveCollation(unresolvedCollation)
           case semiStructuredExtract: SemiStructuredExtract =>
             semiStructuredExtractResolver.resolve(semiStructuredExtract)
+          case unresolvedExtractValue: UnresolvedExtractValue =>
+            extractValueResolver.resolve(unresolvedExtractValue)
+          case lambdaFunction: LambdaFunction =>
+            lambdaFunctionResolver.resolve(lambdaFunction)
           case expression: Expression =>
             resolveExpressionGenericallyWithTypeCoercion(expression)
         }
 
         withPosition(unresolvedExpression) {
+          generatorResolver.validateNoNestedGenerator(resolvedExpression)
           validateResolvedExpressionGenerically(resolvedExpression)
         }
 
@@ -380,7 +407,11 @@ class ExpressionResolver(
    *   expressions = [count(col1) as count(col1), 2 AS 2],
    *   hasAggregateExpressionsOutsideWindow = true, // because it contains `count(col1)` in the
    *                                                // project list
-   *   hasLateralColumnAlias = false // because there are no lateral column aliases
+   *   hasLateralColumnAlias = false, // because there are no lateral column aliases
+   *   hasWindowExpressions = false, // because there are no window expressions
+   *   hasGeneratorExpressions = false, // because there are no generator expressions
+   *   hasCorrelatedScalarSubqueryExpressions = false // because there are no correlated scalar
+   *                                                  // subquery expressions
    * )
    */
   def resolveProjectList(
@@ -390,12 +421,12 @@ class ExpressionResolver(
 
     var hasAggregateExpressionsOutsideWindow = false
     var hasLateralColumnAlias = false
+    var hasWindowExpressions = false
+    var hasGeneratorExpressions = false
+    var hasCorrelatedScalarSubqueryExpressions = false
 
     val unresolvedProjectListWithStarsExpanded = traversals.withNewTraversal(operator) {
-      unresolvedProjectList.flatMap {
-        case star: Star => expandStar(star)
-        case other => Seq(other)
-      }
+      expandStarExpressions(unresolvedProjectList)
     }
 
     val resolvedProjectList = unresolvedProjectListWithStarsExpanded.flatMap { expression =>
@@ -410,6 +441,10 @@ class ExpressionResolver(
       hasAggregateExpressionsOutsideWindow |=
       resolvedElementContext.hasAggregateExpressionsOutsideWindow
       hasLateralColumnAlias |= resolvedElementContext.hasLateralColumnAlias
+      hasWindowExpressions |= resolvedElementContext.hasWindowExpressions
+      hasGeneratorExpressions |= resolvedElementContext.hasGeneratorExpressions
+      hasCorrelatedScalarSubqueryExpressions |=
+      resolvedElementContext.hasCorrelatedScalarSubqueryExpressions
 
       Seq(resolvedElement.asInstanceOf[NamedExpression])
     }
@@ -418,7 +453,66 @@ class ExpressionResolver(
       expressions = resolvedProjectList,
       hasAggregateExpressionsOutsideWindow = hasAggregateExpressionsOutsideWindow,
       hasLateralColumnAlias = hasLateralColumnAlias,
+      hasWindowExpressions = hasWindowExpressions,
+      hasGeneratorExpressions = hasGeneratorExpressions,
+      hasCorrelatedScalarSubqueryExpressions = hasCorrelatedScalarSubqueryExpressions,
       aggregateListAliases = Seq.empty
+    )
+  }
+
+  /**
+   * Used to resolve [[Pivot.aggregates]] expressions. Uses `resolveExpressionTreeInOperatorImpl`
+   * with the `resolvingPivotAggregates` flag set to true.
+   */
+  def resolvePivotAggregates(pivot: Pivot): Seq[Expression] = {
+    pivot.aggregates.map { expression =>
+      val (resolved, _) = resolveExpressionTreeInOperatorImpl(
+        unresolvedExpression = expression,
+        parentOperator = pivot,
+        resolvingPivotAggregates = true
+      )
+      resolved
+    }
+  }
+
+  /**
+   * Resolve [[Unpivot.values]] or [[Unpivot.ids]] expressions. This method first expands [[Star]]
+   * expressions, then resolves each expression using [[resolveExpressionTreeInOperatorImpl]].
+   * We set the `shouldPreserveAlias` flag to true since both [[Unpivot.values]] and
+   * [[Unpivot.ids]] are sequences of [[NamedExpression]]s.
+   */
+  def resolveUnpivotArguments(
+      arguments: Seq[Expression],
+      unpivot: LogicalPlan): Seq[NamedExpression] = {
+    val argumentsWithStarsExpanded = traversals.withNewTraversal(unpivot) {
+      expandStarExpressions(arguments)
+    }
+
+    argumentsWithStarsExpanded.map { argument =>
+      val (resolvedExpression, _) = resolveExpressionTreeInOperatorImpl(
+        parentOperator = unpivot,
+        unresolvedExpression = argument,
+        shouldPreserveAlias = true
+      )
+      resolvedExpression.asInstanceOf[NamedExpression]
+    }
+  }
+
+  /**
+   * Resolves [[SortOrder]] expression. Returns the resolved [[SortOrder]] along with a flag
+   * indicating whether the expression has grouping expressions in its subtree.
+   */
+  def resolveSortOrderExpression(
+      sortOrderExpression: SortOrder,
+      sort: Sort): (SortOrder, Boolean) = {
+    val (resolvedExpression, expressionResolutionContext) = resolveExpressionTreeInOperatorImpl(
+      unresolvedExpression = sortOrderExpression,
+      parentOperator = sort
+    )
+
+    (
+      resolvedExpression.asInstanceOf[SortOrder],
+      expressionResolutionContext.hasGroupingAnalyticsExpression
     )
   }
 
@@ -436,6 +530,20 @@ class ExpressionResolver(
    *     if there are any ordinals in grouping expressions.
    *     Example of an invalid query:
    *     {{{ SELECT * FROM VALUES(1) GROUP BY 1; }}}
+   *
+   *   - If there is a [[AliasedGenerator]] in the list we extract all children of
+   *     [[Generator]] and then treat them as separate expressions in the aggregate expressions
+   *     list. For more details see [[GeneratorResolver.extract]].
+   *     This approach has several implications:
+   *     - We can transform [[Generator]] into [[Generate]] node on top of [[Aggregate]]. See
+   *       [[AggregateResolver.buildGenerateOnTopOfAggregate]]
+   *     - Generated aliases will be visible in group by expressions' resolution.
+   *       - group by generated name:
+   *       {{{ SELECT explode(arr) FROM VALUES (array(1, 2)) t(arr) GROUP BY _gen_input_0; }}}
+   *       - group by all:
+   *       {{{ SELECT explode(arr) FROM VALUES (array(1, 2)) t(arr) GROUP BY ALL; }}}
+   *       - group by ordinal:
+   *       {{{ SELECT explode(arr) FROM VALUES (array(1, 2)) t(arr) GROUP BY 1; }}}
    *
    *   - If there is an expression which has aggregate function in its subtree, we add it to the
    *     `expressionsWithAggregateFunctions` list in order to throw if there is any ordinal in
@@ -473,7 +581,11 @@ class ExpressionResolver(
     val expressionIndicesWithAggregateFunctions = new HashSet[Int]
     var hasAttributeOutsideOfAggregateExpressions = false
     var hasStar = false
+    var hasGeneratorExpressions = false
     var hasLateralColumnAlias = false
+    var hasWindowExpressions = false
+    var hasCorrelatedScalarSubqueryExpressions = false
+    val projectListAfterGeneratorExtraction = new mutable.ArrayBuffer[NamedExpression]
 
     val unresolvedAggregateExpressionsWithStarsExpanded =
       traversals.withNewTraversal(unresolvedAggregate) {
@@ -485,42 +597,91 @@ class ExpressionResolver(
         }
       }
 
-    val resolvedAggregateExpressions =
-      unresolvedAggregateExpressionsWithStarsExpanded.zipWithIndex.flatMap {
-        case (expression, index) =>
-          val (resolvedElement, resolvedElementContext) = resolveExpressionTreeInOperatorImpl(
-            expression,
-            unresolvedAggregate,
-            shouldPreserveAlias = true
-          )
+    val resolvedAggregateExpressions = new mutable.ArrayBuffer[NamedExpression]
 
-          hasLateralColumnAlias |= resolvedElementContext.hasLateralColumnAlias
+    unresolvedAggregateExpressionsWithStarsExpanded.foreach { expression =>
+      val (resolvedElement, resolvedElementContext) = resolveExpressionTreeInOperatorImpl(
+        expression,
+        unresolvedAggregate,
+        shouldPreserveAlias = true
+      )
 
-          resolvedElement match {
-            case alias: Alias =>
-              scopes.current.addTopAggregateExpression(alias)
-            case _ =>
-          }
+      hasGeneratorExpressions |= resolvedElementContext.hasGeneratorExpressions
+      hasWindowExpressions |= resolvedElementContext.hasWindowExpressions
+      hasLateralColumnAlias |= resolvedElementContext.hasLateralColumnAlias
+      hasCorrelatedScalarSubqueryExpressions =
+        resolvedElementContext.hasCorrelatedScalarSubqueryExpressions
+      hasAttributeOutsideOfAggregateExpressions |=
+        resolvedElementContext.hasAggregateExpressionsOutsideWindow &&
+        resolvedElementContext.hasAttributeOutsideOfAggregateExpressions
 
-          if (resolvedElementContext.hasAggregateExpressionsOutsideWindow) {
-            expressionIndicesWithAggregateFunctions.add(index)
-            hasAttributeOutsideOfAggregateExpressions |=
-              resolvedElementContext.hasAttributeOutsideOfAggregateExpressions
-          } else {
-            expressionsWithoutAggregates += resolvedElement.asInstanceOf[NamedExpression]
-          }
+      val (projectListEntryAfterGeneratorExtraction, expressionsWithAggregateFlag) =
+        extractGeneratorFromAggregateExpression(resolvedElement, resolvedElementContext)
+      projectListAfterGeneratorExtraction += projectListEntryAfterGeneratorExtraction
 
-          Seq(resolvedElement.asInstanceOf[NamedExpression])
+      expressionsWithAggregateFlag.foreach { case (namedExpr, hasAggregate) =>
+        val index = resolvedAggregateExpressions.length
+        resolvedAggregateExpressions += namedExpr
+
+        if (hasAggregate) {
+          expressionIndicesWithAggregateFunctions.add(index)
+        } else {
+          expressionsWithoutAggregates += namedExpr
+        }
+
+        namedExpr match {
+          case alias: Alias => scopes.current.addTopAggregateExpression(alias)
+          case _ =>
+        }
       }
+    }
 
     ResolvedAggregateExpressions(
-      expressions = resolvedAggregateExpressions,
+      expressions = resolvedAggregateExpressions.toSeq,
       resolvedExpressionsWithoutAggregates = expressionsWithoutAggregates.toSeq,
       hasAttributeOutsideOfAggregateExpressions = hasAttributeOutsideOfAggregateExpressions,
       hasStar = hasStar,
       expressionIndicesWithAggregateFunctions = expressionIndicesWithAggregateFunctions,
-      hasLateralColumnAlias = hasLateralColumnAlias
+      hasGeneratorExpressions = hasGeneratorExpressions,
+      hasLateralColumnAlias = hasLateralColumnAlias,
+      hasWindowExpressions = hasWindowExpressions,
+      hasCorrelatedScalarSubqueryExpressions = hasCorrelatedScalarSubqueryExpressions,
+      projectListAfterGeneratorExtraction = projectListAfterGeneratorExtraction.toSeq
     )
+  }
+
+  /**
+   * Extract [[Generator]] from a resolved aggregate element. Basically, we need to separate the
+   * generator from its children: children will be part of [[Aggregate]] expression list while
+   * [[Generator]] will be part of [[Project]] on top, that later will be rewritten to [[Generate]]
+   * operator.
+   *
+   * Note, that to process [[Generator]]'s children correctly we must know whether it contains
+   * aggregates or not. For this purpose [[TreeNode.containsPattern]] is used.
+   *
+   * Other expressions are just converted to attributes referencing aggregate expressions so the
+   * result [[Project]] has correct output.
+   *
+   * See [[AggregateResolver.buildGenerateOnTopOfAggregate]] and [[GeneratorResolver.extract]] for
+   * more details.
+   */
+  private def extractGeneratorFromAggregateExpression(
+      resolvedElement: Expression,
+      resolvedElementContext: ExpressionResolutionContext
+  ): (NamedExpression, Seq[(NamedExpression, Boolean)]) = {
+    resolvedElement match {
+      case aliasedGenerator: AliasedGenerator =>
+        val (extracted, aliases) = GeneratorResolver.extract(aliasedGenerator)
+        val aliasesWithAggregateFlag = aliases.map { alias =>
+          (alias, alias.child.containsPattern(AGGREGATE_EXPRESSION))
+        }
+        (extracted, aliasesWithAggregateFlag)
+      case namedExpression: NamedExpression =>
+        (
+          namedExpression.toAttribute,
+          Seq((namedExpression, resolvedElementContext.hasAggregateExpressionsOutsideWindow))
+        )
+    }
   }
 
   /**
@@ -599,11 +760,20 @@ class ExpressionResolver(
     }
   }
 
+  /**
+   * Returns new sequence of expressions with all [[Star]]s expanded.
+   */
+  def expandStarExpressions(expressions: Seq[Expression]): Seq[Expression] = expressions.flatMap {
+    case star: Star => expandStar(star)
+    case other => Seq(other)
+  }
+
   private def resolveExpressionTreeInOperatorImpl(
       unresolvedExpression: Expression,
       parentOperator: LogicalPlan,
       shouldPreserveAlias: Boolean = false,
-      resolvingGroupingExpressions: Boolean = false
+      resolvingGroupingExpressions: Boolean = false,
+      resolvingPivotAggregates: Boolean = false
   ): (Expression, ExpressionResolutionContext) = {
     traversals.withNewTraversal(
       parentOperator = parentOperator,
@@ -615,7 +785,8 @@ class ExpressionResolver(
         new ExpressionResolutionContext(
           isRoot = true,
           shouldPreserveAlias = shouldPreserveAlias,
-          resolvingGroupingExpressions = resolvingGroupingExpressions
+          resolvingGroupingExpressions = resolvingGroupingExpressions,
+          resolvingPivotAggregates = resolvingPivotAggregates
         )
       )
 
@@ -639,12 +810,18 @@ class ExpressionResolver(
         aliasResolver.handleResolvedAlias(alias)
       case unresolvedAlias: UnresolvedAlias =>
         aliasResolver.resolve(unresolvedAlias)
+      case multiAlias: MultiAlias =>
+        multiAliasResolver.resolve(multiAlias)
       case unresolvedAttribute: UnresolvedAttribute =>
         resolveAttribute(unresolvedAttribute)
       case attributeReference: AttributeReference =>
         handleResolvedAttributeReference(attributeReference)
       case outerReference: OuterReference =>
         handleResolvedOuterReference(outerReference)
+      case unresolvedNamedLambdaVariable: UnresolvedNamedLambdaVariable =>
+        resolveUnresolvedNamedLambdaVariable(unresolvedNamedLambdaVariable)
+      case namedLambdaVariable: NamedLambdaVariable =>
+        resolveNamedLambdaVariable(namedLambdaVariable)
       case _ =>
         withPosition(unresolvedNamedExpression) {
           throwUnsupportedSinglePassAnalyzerFeature(unresolvedNamedExpression)
@@ -707,7 +884,7 @@ class ExpressionResolver(
           prettyName = Utils.getSimpleName(classOf[UnresolvedHaving]),
           stars = Seq(star)
         )
-      case _: Project | _: Aggregate | _: Filter =>
+      case _: Project | _: Aggregate | _: Filter | _: Unpivot =>
       case _ =>
         throw QueryCompilationErrors.invalidStarUsageError(
           prettyName = currentOperator.nodeName,
@@ -759,6 +936,10 @@ class ExpressionResolver(
    * If the result of the result of the previous step is [[Grouping]] or [[GroupingID]], we set the
    * [[ExpressionResolutionContext.hasGroupingAnalyticsExpression]] flag to `true`.
    *
+   * Check whether the result of the previous step is [[Attribute]] and if so, throw if we are
+   * resolving [[Pivot.aggregates]] and the attribute is not below an [[AggregateExpression]] (see
+   * `checkAggregateExpressionRequiredForPivotError` doc for more details).
+   *
    * In case that attribute is resolved as a literal function (i.e. result is [[CurrentDate]]),
    * perform additional resolution on it.
    *
@@ -796,7 +977,15 @@ class ExpressionResolver(
         )
       }
 
+      candidate match {
+        case _ @ (_: Grouping | _: GroupingID) =>
+          expressionResolutionContextStack.peek().hasGroupingAnalyticsExpression = true
+        case _ =>
+      }
+
       tryAddReferencedAttribute(candidate)
+
+      checkAggregateExpressionRequiredForPivotError(candidate, expressionResolutionContext)
 
       val processedCandidate = processCandidateFromNameTarget(candidate)
 
@@ -819,6 +1008,8 @@ class ExpressionResolver(
   private def resolveMultipartName(multipartName: Seq[String]): NameTarget = {
     val expressionResolutionContext = expressionResolutionContextStack.peek()
     val viewResolutionContext = resolver.getViewResolver.getViewResolutionContext
+    val extractValueExtractionKey =
+      expressionResolutionContext.parentContext.flatMap(_.extractValueExtractionKey)
 
     scopes.resolveMultipartName(
       multipartName = multipartName,
@@ -836,7 +1027,8 @@ class ExpressionResolver(
         resolvingView = viewResolutionContext.isDefined,
         resolvingExecuteImmediate = false,
         referredTempVariableNames =
-          viewResolutionContext.map(_.referredTempVariableNames).getOrElse(Seq.empty)
+          viewResolutionContext.map(_.referredTempVariableNames).getOrElse(Seq.empty),
+        extractValueExtractionKey = extractValueExtractionKey
       )
     )
   }
@@ -886,18 +1078,9 @@ class ExpressionResolver(
       case attribute: Attribute =>
         attribute
       case extractValue: ExtractValue =>
-        coerceRecursiveDataTypes(extractValue)
+        extractValueResolver.handleResolvedExtractValue(extractValue)
       case other =>
         other
-    }
-  }
-
-  /**
-   * Coerces recursive types ([[ExtractValue]] expressions) in a bottom up manner.
-   */
-  private def coerceRecursiveDataTypes(extractValue: ExtractValue): Expression = {
-    extractValue.transformUp {
-      case field => coerceExpressionTypes(field, traversals.current)
     }
   }
 
@@ -934,7 +1117,7 @@ class ExpressionResolver(
   }
 
   private def canResolveNameByHiddenOutput = traversals.current.parentOperator match {
-    case operator @ (_: Filter | _: Sort) => true
+    case operator @ (_: Filter | _: Sort | _: RepartitionByExpression) => true
     case other => false
   }
 
@@ -1034,10 +1217,7 @@ class ExpressionResolver(
         subqueryExpressionResolver.resolveExists(unresolvedExists)
       case in: In if containsStar(in.list) =>
         val inWithExpandedStars = in.copy(
-          list = in.list.flatMap {
-            case star: Star => expandStar(star)
-            case other => Seq(other)
-          }
+          list = expandStarExpressions(in.list)
         )
         resolveExpressionGenericallyWithTypeCoercion(inWithExpandedStars)
       case _ =>
@@ -1175,6 +1355,78 @@ class ExpressionResolver(
     )
   }
 
+  /**
+   * Resolves [[UnresolvedNamedLambdaVariable]] by looking up the variable name in the current
+   * scope's lambda variable map. If the variable is found, it is resolved to the corresponding
+   * [[NamedExpression]]. If nested fields are present, they are extracted using [[ExtractValue]].
+   * If the variable is not found in the lambda variable map, it falls back to resolving it as an
+   * [[UnresolvedAttribute]].
+   *
+   * Note: The parser creates [[UnresolvedNamedLambdaVariable]] for every name inside the lambda
+   * body instead of creating [[UnresolvedAttribute]] in the first place. This special node type
+   * allows the resolver to distinguish between lambda parameters and external references, enabling
+   * the analyzer to resolve [[UnresolvedNamedLambdaVariable]] as lambda arguments first before
+   * falling back to attribute resolution.
+   *
+   * In case of the following query:
+   *
+   * {{{
+   *   SELECT filter(array('a'), x -> x = y) FROM VALUES('a', 'b') t(x, y);
+   * }}}
+   *
+   * The `x` in the function body is resolved from the lambda variable map. The `y` is resolved
+   * from the underlying table `t` since it is not present in the argument list of the above
+   * [[LabmdaFunction]]. Thus, the following plan would look like:
+   *
+   * {{{
+   *   Project [filter(array(a), lambdafunction((lambda x#2 = y#1), lambda x#2, false)) AS ...]
+   *   +- SubqueryAlias t
+   *    +- LocalRelation [x#0, y#1]
+   * }}}
+   */
+  private def resolveUnresolvedNamedLambdaVariable(
+      unresolvedNamedLambdaVariable: UnresolvedNamedLambdaVariable): Expression = {
+    val name = unresolvedNamedLambdaVariable.nameParts.head
+    val nestedFields = unresolvedNamedLambdaVariable.nameParts.tail
+
+    expressionResolutionContextStack
+      .peek()
+      .lambdaVariableMap
+      .flatMap(_.get(name)) match {
+      case Some(lambda) if !nestedFields.isEmpty =>
+        nestedFields.foldLeft(lambda: Expression) { (expr, fieldName) =>
+          ExtractValue(expr, Literal(fieldName), conf.resolver)
+        }
+      case Some(lambda) => lambda
+      case None =>
+        resolveAttribute(UnresolvedAttribute(unresolvedNamedLambdaVariable.nameParts))
+    }
+  }
+
+  /**
+   * [[NamedLambdaVariable]] doesn't need any specific resolution. We just need to map it using
+   * [[ExpressionIdAssigner]].
+   */
+  private def resolveNamedLambdaVariable(namedLambdaVariable: NamedLambdaVariable): Expression = {
+    expressionIdAssigner.mapExpression(namedLambdaVariable)
+  }
+
+  /**
+   * Resolve [[NamedParameter]] by looking up its name in the `parameterNamesToValues` map from
+   * the current operator resolution context. If the name is found in the map, replace the
+   * [[NamedParameter]] with the corresponding expression. Otherwise, throw `UNBOUND_SQL_PARAMETER`.
+   */
+  private def resolveNamedParameter(namedParameter: NamedParameter): Expression = {
+    operatorResolutionContextStack.current.parameterNamesToValues match {
+      case Some(map) =>
+        map.get(namedParameter.name) match {
+          case expression: Expression => expression
+          case null => throwUnboundSqlParameter(namedParameter)
+        }
+      case None => throwUnboundSqlParameter(namedParameter)
+    }
+  }
+
   private def pushResolutionContext(): Unit = {
     val parentContext = expressionResolutionContextStack.peek()
     expressionResolutionContextStack.push(ExpressionResolutionContext.createChild(parentContext))
@@ -1195,6 +1447,23 @@ class ExpressionResolver(
         case _ =>
       }
     case _ =>
+  }
+
+  /**
+   * Throws an error if we are resolving [[Pivot.aggregates]] and the `expression` is an
+   * [[Attribute]] that is not under an [[AggregateExpression]] (Pandas UDF are also not supported,
+   * see [[AggregateExpressionResolver.validateResolvedAggregateExpression]]).
+   */
+  private def checkAggregateExpressionRequiredForPivotError(
+      expression: Expression,
+      expressionResolutionContext: ExpressionResolutionContext): Unit = {
+    expression match {
+      case _: Attribute
+          if expressionResolutionContext.resolvingPivotAggregates &&
+          !expressionResolutionContext.resolvingTreeUnderAggregateExpression =>
+        throw QueryCompilationErrors.aggregateExpressionRequiredForPivotError(expression.sql)
+      case _ =>
+    }
   }
 
   /**
@@ -1255,6 +1524,11 @@ class ExpressionResolver(
 
   /**
    * Validates that a resolved expression has correct input data types and is fully resolved.
+   *
+   * During resolution of an expression tree with [[Generator]], [[AliasedGenerator]],
+   * [[GeneratorOuter]] and [[MultiAlias]] could be valid resolved expressions but have
+   * `expression.resolved == false`. Eventually they will be extracted to [[Generate]] operator by
+   * [[GeneratorResolver]].
    */
   private def validateResolvedExpressionGenerically(resolvedExpression: Expression): Unit = {
     if (resolvedExpression.checkInputDataTypes().isFailure) {
@@ -1264,6 +1538,12 @@ class ExpressionResolver(
     resolvedExpression match {
       case runtimeReplaceable: RuntimeReplaceable if !runtimeReplaceable.replacement.resolved =>
         throwFailedToResolveRuntimeReplaceableExpression(runtimeReplaceable)
+      case GeneratorOuter(generator) if generator.resolved =>
+      case Alias(GeneratorOuter(generator), _) if generator.resolved =>
+      case Alias(generator: Generator, _) if generator.resolved =>
+      case MultiAlias(GeneratorOuter(generator), _) if generator.resolved =>
+      case MultiAlias(generator: Generator, _) if generator.resolved =>
+      case aliasedGenerator: AliasedGenerator if aliasedGenerator.child.resolved =>
       case expression if !expression.resolved =>
         throwSinglePassFailedToResolveExpression(resolvedExpression)
       case _ =>
@@ -1310,6 +1590,13 @@ class ExpressionResolver(
     throw SparkException.internalError(
       s"Cannot resolve the runtime replaceable expression ${toSQLExpr(runtimeReplaceable)}. " +
       s"The replacement is unresolved: ${toSQLExpr(runtimeReplaceable.replacement)}."
+    )
+  }
+
+  private def throwUnboundSqlParameter(parameter: Parameter) = {
+    parameter.failAnalysis(
+      errorClass = "UNBOUND_SQL_PARAMETER",
+      messageParameters = Map("name" -> parameter.name)
     )
   }
 

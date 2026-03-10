@@ -487,8 +487,7 @@ class ExpressionIdAssigner {
    *  - If `allowUpdatesForAttributeReferences` is true, the logic is very similar to [[Alias]]es.
    *  Try to preserve the attribute if the attribute's ID doesn't conflict with
    *  `globalExpressionIds`. Otherwise, reallocate with a new ID and return that instance.
-   *  This is useful for operators that always introduce new attributes (if any) via resolved
-   *  children rather than [[Alias]]es.
+   *  See [[GenerateResolver]] for an example of usage.
    *
    * When remapping the provided expressions, we don't replace them with the previously seen
    * attributes, but replace their IDs ([[NamedExpression.withExprId]]). This is done to preserve

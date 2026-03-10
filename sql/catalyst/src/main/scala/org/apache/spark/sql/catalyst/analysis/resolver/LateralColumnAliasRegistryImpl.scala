@@ -85,7 +85,10 @@ class LateralColumnAliasRegistryImpl extends LateralColumnAliasRegistry with SQL
 
   /**
    * Creates a new LCA resolution scope for each [[Alias]] resolution. Executes the lambda and
-   * registers top-level resolved aliases for later LCA resolution.
+   * registers top-level resolved aliases for later LCA resolution. [[AliasedGenerator]]s (an
+   * [[Alias]] or [[MultiAlias]] above a generator) are intentionally skipped as they are resolved
+   * through a separate path (see [[ConvertsToAliasedGenerator.registerGeneratorOutputNames]]) and
+   * their individual aliases are not available for lateral column alias resolution.
    */
   def withNewLcaScope[T <: NamedExpression](
       aliasKind: AliasKind = AliasKind.Explicit)(body: => T): T = {

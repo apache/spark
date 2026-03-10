@@ -598,6 +598,16 @@ class NameScope(
    *
    * This is achieved using candidate prioritization mechanism in [[pickSuitableCandidates]].
    *
+   * If none of the above resolves the name, we check if the name matches a generator output column
+   * registered in [[ConvertsToAliasedGenerator.registerGeneratorOutputNames]]. This is a temporary
+   * measure that throws [[ExplicitlyUnsupportedResolverFeature]] when a match is found, since
+   * lateral column alias resolution for generator output is not yet implemented. Example:
+   *
+   * {{{
+   * -- `col` references the output of `explode`, which is not yet supported.
+   * SELECT explode(array(1, 2, 3)) AS col, col + 1 FROM VALUES (1);
+   * }}}
+   *
    * We are relying on the [[AttributeSeq]] to perform name resolution, since it requires complex
    * resolution logic involving nested field extraction and multipart name matching. See
    * [[AttributeSeq.resolve]] for more details.

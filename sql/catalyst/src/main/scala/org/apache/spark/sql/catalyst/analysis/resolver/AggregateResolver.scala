@@ -32,7 +32,8 @@ import org.apache.spark.sql.catalyst.expressions.{
   ExprId,
   ExprUtils,
   IntegerLiteral,
-  Literal
+  Literal,
+  NamedExpression
 }
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 
@@ -52,6 +53,9 @@ class AggregateResolver(
   private val operatorResolutionContextStack = operatorResolver.getOperatorResolutionContextStack
   private val lcaResolver = expressionResolver.getLcaResolver
   private val ordinalResolver = expressionResolver.getOrdinalResolver
+  private val generatorResolver = expressionResolver.getGeneratorResolver
+  private val groupingAnalyticsResolver =
+    new GroupingAnalyticsResolver(operatorResolver, expressionResolver)
 
   /**
    * Resolve [[Aggregate]] operator.
@@ -71,7 +75,8 @@ class AggregateResolver(
    *    includes alias references to aggregate expressions, which is done in
    *    [[NameScope.resolveMultipartName]] and replacing [[UnresolvedOrdinals]] with corresponding
    *    expressions from aggregate list, done in [[OrdinalResolver]].
-   * 7. Remove all the unnecessary [[Alias]]es from the grouping (all the aliases) and aggregate
+   * 7. Transform [[Aggregate]] using [[GroupingAnalyticsResolver]] (see its scala doc for details).
+   * 8. Remove all the unnecessary [[Alias]]es from the grouping (all the aliases) and aggregate
    *    (keep the outermost one) expressions. This is needed to stay compatible with the
    *    fixed-point implementation. For example:
    *
@@ -81,8 +86,11 @@ class AggregateResolver(
    *    lists which are uncomparable because they have different expression IDs (thus we have to
    *    strip them).
    *
-   * If the resulting [[Aggregate]] contains lateral columns references, delegate the resolution of
-   * these columns to [[LateralColumnAliasResolver.handleLcaInAggregate]]. Otherwise, validate the
+   * If the resulting [[Aggregate]] contains generator expressions, delegate the resolution to
+   * [[buildGenerateOnTopOfAggregate]]. If the resulting [[Aggregate]] contains lateral columns
+   * references, delegate the resolution of these columns to
+   * [[LateralColumnAliasResolver.handleLcaInAggregate]]. If the resulting [[Aggregate]] contains
+   * window expressions, delegate the resolution to [[buildWindow]]. Otherwise, validate the
    * [[Aggregate]] using the [[ExprUtils.assertValidAggregation]], update the `scopes` with the
    * output of [[Aggregate]] and return the result.
    *
@@ -136,17 +144,40 @@ class AggregateResolver(
           resolvedGroupingExpressions
         }
 
-      val resolvedGroupingExpressionsWithoutAliases = resolvedGroupingExpressions.map(trimAliases)
-      val resolvedAggregateExpressionsWithoutAliases =
-        resolvedAggregateExpressions.expressions.map(trimNonTopLevelAliases)
-
-      val finalAggregate = unresolvedAggregate.copy(
-        groupingExpressions = resolvedGroupingExpressionsWithoutAliases,
-        aggregateExpressions = resolvedAggregateExpressionsWithoutAliases,
+      val resolvedAggregate = unresolvedAggregate.copy(
+        groupingExpressions = resolvedGroupingExpressions,
+        aggregateExpressions = resolvedAggregateExpressions.expressions,
         child = resolvedChildWithMetadataColumns
       )
 
-      if (resolvedAggregateExpressions.hasLateralColumnAlias) {
+      val resolvedAggregateWithGroupingAnalytics =
+        groupingAnalyticsResolver.resolve(aggregate = resolvedAggregate)
+
+      GeneratorResolver.checkCanResolveGeneratorExpressions(
+        hasGeneratorExpressions = resolvedAggregateExpressions.hasGeneratorExpressions,
+        hasLateralColumnAlias = resolvedAggregateExpressions.hasLateralColumnAlias,
+        hasWindowExpressions = resolvedAggregateExpressions.hasWindowExpressions
+      )
+
+      val groupingExpressionsWithoutAliases =
+        resolvedAggregateWithGroupingAnalytics.groupingExpressions.map(trimAliases)
+      val aggregateExpressionsWithoutAliases =
+        resolvedAggregateWithGroupingAnalytics.aggregateExpressions.map(trimNonTopLevelAliases)
+
+      val finalAggregate = resolvedAggregateWithGroupingAnalytics.copy(
+        groupingExpressions = groupingExpressionsWithoutAliases,
+        aggregateExpressions = aggregateExpressionsWithoutAliases
+      )
+
+      if (resolvedAggregateExpressions.hasGeneratorExpressions) {
+        buildGenerateOnTopOfAggregate(
+          resolvedAggregate = finalAggregate,
+          projectListAfterGeneratorExtraction =
+            resolvedAggregateExpressions.projectListAfterGeneratorExtraction,
+          hasLateralColumnAlias = resolvedAggregateExpressions.hasLateralColumnAlias,
+          hasWindowExpressions = resolvedAggregateExpressions.hasWindowExpressions
+        )
+      } else if (resolvedAggregateExpressions.hasLateralColumnAlias) {
         val aggregateWithLcaResolutionResult =
           lcaResolver.handleLcaInAggregate(finalAggregate)
         AggregateResolutionResult(
@@ -182,6 +213,43 @@ class AggregateResolver(
     )
 
     resolvedAggregate.operator
+  }
+
+  /**
+   * Builds [[Project]] and [[Generate]] on top of an [[Aggregate]].
+   *
+   * 1. Validates there is no more than one generator using
+   *    [[GeneratorResolver.validateNoMoreThenOneGenerator]].
+   * 2. Delegates to [[GeneratorResolver.resolveProjectListWithGenerators]] to build the
+   *    [[Project]] with [[Generate]] pair on top.
+   *
+   * Note, that this method relies on the fact that generators are already extracted from the
+   * aggregate expressions and placed into `projectListAfterGeneratorExtraction` (see generator case
+   * in [[ExpressionResolver.resolveAggregateExpressions]]).
+   */
+  private def buildGenerateOnTopOfAggregate(
+      resolvedAggregate: Aggregate,
+      projectListAfterGeneratorExtraction: Seq[NamedExpression],
+      hasLateralColumnAlias: Boolean,
+      hasWindowExpressions: Boolean): AggregateResolutionResult = {
+    generatorResolver.validateNoMoreThenOneGenerator(projectListAfterGeneratorExtraction)
+
+    val project = generatorResolver.resolveProjectListWithGenerators(
+      expressions = projectListAfterGeneratorExtraction,
+      childOperator = resolvedAggregate
+    )
+
+    // TODO: This validation function does a post-traversal. This is discouraged in single-pass
+    //       Analyzer.
+    ExprUtils.assertValidAggregation(resolvedAggregate)
+
+    AggregateResolutionResult(
+      operator = project,
+      outputList = project.projectList,
+      groupingAttributeIds = getGroupingAttributeIds(resolvedAggregate),
+      aggregateListAliases = scopes.current.getTopAggregateExpressionAliases,
+      baseAggregate = resolvedAggregate
+    )
   }
 
   /**

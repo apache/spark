@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.analysis.{
   CleanupAliases,
   FunctionResolution,
   MultiInstanceRelation,
+  NameParameterizedQuery,
   PullOutNondeterministic,
   RelationCache,
   RelationResolution,
@@ -38,6 +39,7 @@ import org.apache.spark.sql.catalyst.analysis.{
   UnresolvedInlineTable,
   UnresolvedRelation,
   UnresolvedSubqueryColumnAliases,
+  UnresolvedTableValuedFunction,
   ValidateSubqueryExpression
 }
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
@@ -115,6 +117,15 @@ class Resolver(
   private val sortResolver = new SortResolver(this, expressionResolver)
   private val joinResolver = new JoinResolver(this, expressionResolver)
   private val havingResolver = new HavingResolver(this, expressionResolver)
+  private val tableValuedFunctionResolver =
+    new TableValuedFunctionResolver(this, expressionResolver, functionResolution)
+  private val nameParameterizedQueryResolver =
+    new NameParameterizedQueryResolver(this, expressionResolver)
+  private val repartitionByExpressionResolver =
+    new RepartitionByExpressionResolver(this, expressionResolver)
+  private val pivotResolver = new PivotResolver(this, expressionResolver)
+  private val unpivotResolver = new UnpivotResolver(this, expressionResolver)
+  private val generateResolver = new GenerateResolver(this, expressionResolver)
 
   /**
    * Sequence of post-resolution rules that should be applied on the result of single-pass
@@ -332,8 +343,20 @@ class Resolver(
             resolveSupervisingCommand(supervisingCommand)
           case repartition: Repartition =>
             resolveRepartition(repartition)
+          case repartitionByExpression: RepartitionByExpression =>
+            repartitionByExpressionResolver.resolve(repartitionByExpression)
           case sample: Sample =>
             resolveSample(sample)
+          case unresolvedTVF: UnresolvedTableValuedFunction =>
+            tableValuedFunctionResolver.resolve(unresolvedTVF)
+          case nameParameterizedQuery: NameParameterizedQuery =>
+            nameParameterizedQueryResolver.resolve(nameParameterizedQuery)
+          case pivot: Pivot =>
+            pivotResolver.resolve(pivot)
+          case unpivot: Unpivot =>
+            unpivotResolver.resolve(unpivot)
+          case generate: Generate =>
+            generateResolver.resolve(generate)
           case _ =>
             tryDelegateResolutionToExtension(unresolvedPlan).getOrElse {
               handleUnmatchedOperator(unresolvedPlan)

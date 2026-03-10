@@ -27,6 +27,10 @@ import org.apache.spark.sql.catalyst.plans.logical.Aggregate
  *  - hasAggregateExpressionsOutsideWindow: True if the resolved project list contains any aggregate
  *                                          expressions which are not window functions.
  *  - hasLateralColumnAlias: True if the resolved project list contains any lateral column aliases.
+ *  - hasWindowExpressions: True if the resolved project list contains any window expressions.
+ *  - hasGeneratorExpressions: True if the resolved project list contains any generator expressions.
+ *  - hasCorrelatedScalarSubqueryExpressions: True if the resolved project list contains any
+ *                                            correlated scalar subqueries.
  *  - aggregateListAliases: List of aliases in aggregate list if there are aggregate expressions in
  *                          the [[Project]].
  *  - baseAggregate: Base [[Aggregate]] node constructed by [[LateralColumnAliasResolver]] while
@@ -36,5 +40,8 @@ case class ResolvedProjectList(
     expressions: Seq[NamedExpression],
     hasAggregateExpressionsOutsideWindow: Boolean,
     hasLateralColumnAlias: Boolean,
+    hasWindowExpressions: Boolean,
+    hasGeneratorExpressions: Boolean,
+    hasCorrelatedScalarSubqueryExpressions: Boolean,
     aggregateListAliases: Seq[Alias],
     baseAggregate: Option[Aggregate] = None)

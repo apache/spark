@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCoercionValidation
 import org.apache.spark.sql.catalyst.expressions.{
   Expression,
   OuterReference,
+  PythonUDAF,
   SubExprUtils
 }
 import org.apache.spark.sql.catalyst.expressions.aggregate.{
@@ -199,6 +200,9 @@ class AggregateExpressionResolver(
       case agg @ AggregateExpression(listAgg: ListAgg, _, _, _, _)
           if agg.isDistinct && listAgg.hasDistinctOrderAmbiguity =>
         listAgg.throwDistinctOrderError()
+      case _ @AggregateExpression(_: PythonUDAF, _, _, _, _)
+          if expressionResolutionContextStack.peek().resolvingPivotAggregates =>
+        throw QueryCompilationErrors.pandasUDFAggregateNotSupportedInPivotError()
       case _ =>
         val expressionResolutionContext = expressionResolutionContextStack.peek()
         if (expressionResolutionContext.windowFunctionNestednessLevel != 1 &&

@@ -45,7 +45,8 @@ import org.apache.spark.sql.catalyst.plans.logical._
  * @param resolvingLimitAll flag that represents whether a LIMIT ALL should be considered in the
  *     current context. This is used for defining infinite recursive CTEs.
  * @param hasGroupingAnalytics Boolean flag indicating whether grouping analytics (i.e., ROLLUP,
- *     CUBE, GROUPING SETS) are present.
+ *     CUBE, GROUPING SETS) are present. Set to true when detected during resolution in
+ *     [[GroupingAnalyticsResolver]].
  */
 class OperatorResolutionContext(
     var unresolvedPlan: Option[LogicalPlan] = None,
