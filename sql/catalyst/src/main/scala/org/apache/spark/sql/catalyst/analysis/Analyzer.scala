@@ -1067,6 +1067,9 @@ class Analyzer(
         val timeTravelSpec = TimeTravelSpec.create(timestamp, version, conf.sessionLocalTimeZone)
         resolveRelation(u, timeTravelSpec).getOrElse(r)
 
+      case r @ RelationChanges(u: UnresolvedRelation, changelogInfo) =>
+        relationResolution.resolveChangelog(u, changelogInfo).getOrElse(r)
+
       case u @ UnresolvedTable(identifier, cmd, suggestAlternative) =>
         lookupTableOrView(identifier).map {
           case v: ResolvedPersistentView =>
