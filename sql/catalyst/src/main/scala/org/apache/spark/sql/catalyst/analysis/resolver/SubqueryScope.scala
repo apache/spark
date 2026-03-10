@@ -17,19 +17,18 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import java.util.{ArrayDeque, ArrayList}
+import java.util.{ArrayDeque, HashMap}
 
-import scala.jdk.CollectionConverters._
-
-import org.apache.spark.sql.catalyst.expressions.Alias
+import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, ExprId}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LogicalPlan}
 
 /**
  * The [[SubqueryScope]] is managed through the whole resolution process of a given
  * [[SubqueryExpression]] plan.
  *
- * The reason why we need this scope is that [[AggregateExpression]]s with [[OuterReference]]s are
- * handled in a special way. Consider this query:
+ * The reason why we need this scope is that:
+ * 1. [[AggregateExpression]]s with [[OuterReference]]s are handled in a special way.
+ * Consider this query:
  *
  * {{{
  * -- t1.col2 is an outer reference
@@ -41,22 +40,42 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LogicalPl
  * During the [[Exists]] resolution inside the HAVING clause we encounter "t1.col2" name, which is
  * resolved to an [[OuterReference]]. There's an [[AggregateExpression]] on top of it. This whole
  * expression is not local to the subquery, and thus it belongs to an outer [[Aggregate]]
- * operator below the `HAVING` clause. We need top pull it up outside of the subquery, and insert
- * it in the [[Aggregate]] operator. So the resolution order is as follows:
+ * operator below the `HAVING` clause. We need to pull it up outside of the subquery, and insert it
+ * in the [[Aggregate]] operator. So the resolution order is as follows:
  *  - Resolve "t1.col2" to an [[OuterReference]] in [[ExpressionResolver.resolveAttribute]];
  *  - Resolve the [[AggregateExpression]] in [[AggregateExpressionResolver.resolve]];
  *  - Detect an outer reference below the aggregate expression, cut the whole subtree with outer
- *    references stripped away, alias it and insert it in this [[SubqueryScope]];
- *  - Replace the aggregate expression with an [[OuterReference]] to the [[AttributeReference]] from
- *    that artificial [[Alias]];
- *  - When the resolution of the [[SubqueryExpression]] is finished,
- *    [[SubqueryRegistry.popScope]] merges the lower scope to the upper one, and all the
- *    outer aggregate expression references are appended to the common
- *    [[lowerAliasedOuterAggregateExpressions]] list.
+ *    references stripped away and:
+ *      - if the expression already exists in this [[SubqueryScope]] replace it with an
+ *      [[OuterReference]] to an already extracted expression;
+ *      - if the expression doesn't exist, alias it, insert it in this [[SubqueryScope]] and
+ *      replace the aggregate expression with an [[OuterReference]] to the [[AttributeReference]]
+ *      to the newly created alias.
  *  - Finally, the resolution of the `HAVING` clause can insert the missing aggregate expression
  *    into the lower [[Aggregate]] operator. During this process we must call
  *    [[ExpressionIdAssigner.mapExpression]] on the new alias, because this auto-generated alias
  *    is new to the query plan, so that [[ExpressionIdAssigner]] remembers it.
+ *
+ * 2. We need to track the outer scope levels of outer references for supporting nested correlated
+ *    subqueries. Consider this query:
+ * {{{
+ *    SELECT *
+ *    FROM t1
+ *    WHERE t1.a = (
+ *      SELECT MAX(t2.a)
+ *      FROM t2
+ *      WHERE t2.a = (
+ *        SELECT MAX(t3.a)
+ *        FROM t3
+ *        WHERE t3.b > t2.b AND t3.c > t1.c
+ *   ) AND t2.b > t1.b
+ * }}}
+ *   We get the [[outerScopeLevel]] map for the outer references during attributes resolution
+ *   which indicates how many subquery levels we need to go up to find the attribute reference.
+ *   We need the outerScopeLevel map when resolving the subquery expressions, where we collect
+ *   the outer references and wrap the ones cannot be resolved in the current subquery scope or
+ *   its parent scopes with [[OuterScopeReference]]. More details can be found in
+ *   `SubqueryExpressionResolver.processOuterReferences`.
  *
  * Notes:
  *  - Spark only supports outer aggregates in the subqueries inside `HAVING`;
@@ -64,38 +83,57 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LogicalPl
  *    local or outer references, the mixed set is disallowed.
  *  - We can have several subquery expressions in HAVING clause, that's why we append outer
  *    aggregate expressions from lower scopes in [[mergeChildScope]].
+ *  - Spark does not support outer aggregates in the subqueries inside `HAVING` with
+ *    nested correlations. E.g.:
+ *    SELECT max(col1) FROM t1 GROUP BY col1 HAVING (
+ *      SELECT * FROM t2 WHERE t2.col2 > (
+ *        SELECT max(t3.col3) FROM t3 WHERE t3.col3 < max(t1.col1))
+ *    is not supported.
  *
  * @param aggregateExpressionsExtractor [[GroupingAndAggregateExpressionsExtractor]] object defined
  *   in case the outer parent operator is a partially resolved HAVING. Used to extract the
  *   aggregate expressions from the outer [[Aggregate]] operator.
  */
 class SubqueryScope(
-    val aggregateExpressionsExtractor: Option[GroupingAndAggregateExpressionsExtractor] = None) {
-  private val outerAliasedAggregateExpressions = new ArrayList[Alias]
-  private val lowerAliasedOuterAggregateExpressions = new ArrayList[Alias]
+    val aggregateExpressionsExtractor: Option[GroupingAndAggregateExpressionsExtractor] = None,
+    private val outerOperatorResolutionContext: OperatorResolutionContext =
+      new OperatorResolutionContext,
+    private val outerReferenceScopeLevels: HashMap[ExprId, Int] = new HashMap[ExprId, Int]) {
 
   /**
-   * Add an `alias` for the outer aggregate expression. [[Alias]] is either fetched from the outer
-   * [[Aggregate]] or auto-generated and will be later inserted into the outer [[Aggregate]]
-   * operator.
+   * Adds an aliased aggregate expression from currently resolved subquery scope to the outer
+   * operator's context in order for it to be pushed down to the outer [[Aggregate]].
    */
-  def addAliasForOuterAggregateExpression(alias: Alias): Unit = {
-    outerAliasedAggregateExpressions.add(alias)
+  def addExtractedAggregateExpression(alias: Alias): Unit = {
+    outerOperatorResolutionContext.addSubqueryAggregateExpression(alias)
   }
 
   /**
-   * Get the outer aggregate expression aliased from the lower subquery scope.
+   * For a given aggregate expression from current subquery scopes returns an [[Alias]] of a
+   * semantically equivalent aggregate expression that was already extracted from another subquery,
+   * if such exists.
    */
-  def getLowerOuterAggregateExpressionAliases: Seq[Alias] = {
-    lowerAliasedOuterAggregateExpressions.asScala.toSeq
+  def getExtractedAggregateExpression(expression: Expression): Option[Alias] = {
+    outerOperatorResolutionContext.getSubqueryAggregateExpression(expression)
   }
 
   /**
-   * Merge `childScope` by extending our `lowerAliasedOuterAggregateExpressions` with
-   * `childScope.outerAliasedAggregateExpressions`.
+   * Records the scope level of an outer reference expression. If the scope level is 1, it means
+   * the outer reference is referencing the attributes from the parent scope of current subquery
+   * scope. If the scope level is beyond 1, it means the current subquery has nested correlations.
    */
-  def mergeChildScope(childScope: SubqueryScope): Unit = {
-    lowerAliasedOuterAggregateExpressions.addAll(childScope.outerAliasedAggregateExpressions)
+  def addOuterReferenceScopeLevel(exprId: ExprId, level: Int): Unit = {
+    outerReferenceScopeLevels.put(exprId, level)
+  }
+
+  /**
+   * Returns the scope level of an outer reference expression if it exists. If the scope level is 1,
+   * it means the outer reference is referencing the attributes from the parent scope of current
+   * subquery scope. If the scope level is beyond 1, it means the current subquery has nested
+   * correlations.
+   */
+  def getOuterReferenceScopeLevel(exprId: ExprId): Option[Int] = {
+    Option(outerReferenceScopeLevels.get(exprId))
   }
 }
 
@@ -118,7 +156,8 @@ class SubqueryRegistry {
    */
   def pushScope(
       parentOperator: LogicalPlan,
-      autoGeneratedAliasProvider: AutoGeneratedAliasProvider): Unit = {
+      autoGeneratedAliasProvider: AutoGeneratedAliasProvider,
+      outerOperatorResolutionContext: OperatorResolutionContext): Unit = {
     val groupingAndAggregateExpressionsExtractor = parentOperator match {
       case Filter(_, aggregate: Aggregate) =>
         Some(new GroupingAndAggregateExpressionsExtractor(aggregate, autoGeneratedAliasProvider))
@@ -127,7 +166,8 @@ class SubqueryRegistry {
 
     stack.push(
       new SubqueryScope(
-        aggregateExpressionsExtractor = groupingAndAggregateExpressionsExtractor
+        aggregateExpressionsExtractor = groupingAndAggregateExpressionsExtractor,
+        outerOperatorResolutionContext = outerOperatorResolutionContext
       )
     )
   }
@@ -136,7 +176,6 @@ class SubqueryRegistry {
    * Pop the current scope from the stack and merge it with the parent scope.
    */
   def popScope(): Unit = {
-    val childScope = stack.pop()
-    currentScope.mergeChildScope(childScope)
+    stack.pop()
   }
 }
