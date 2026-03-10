@@ -997,6 +997,64 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
   }
 
+  test("INSERT INTO ... REPLACE ON is unsupported for V1 tables") {
+    withTable("test_table") {
+      val schema = new StructType().add("i", "int").add("j", "string")
+      val newTable = CatalogTable(
+        identifier = TableIdentifier("test_table", Some("default")),
+        tableType = CatalogTableType.MANAGED,
+        storage = CatalogStorageFormat(
+          locationUri = None,
+          inputFormat = None,
+          outputFormat = None,
+          serdeName = None,
+          serde = None,
+          compressed = false,
+          properties = Map.empty),
+        schema = schema,
+        provider = Some(classOf[SimpleInsertSource].getName))
+
+      spark.sessionState.catalog.createTable(newTable, false)
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("INSERT INTO test_table AS t REPLACE ON t.i = 1 " +
+            "SELECT 1, 'a'")
+        },
+        condition = "UNSUPPORTED_INSERT_REPLACE_ON"
+      )
+    }
+  }
+
+  test("INSERT INTO ... REPLACE USING is unsupported for V1 tables") {
+    withTable("test_table") {
+      val schema = new StructType().add("i", "int").add("j", "string")
+      val newTable = CatalogTable(
+        identifier = TableIdentifier("test_table", Some("default")),
+        tableType = CatalogTableType.MANAGED,
+        storage = CatalogStorageFormat(
+          locationUri = None,
+          inputFormat = None,
+          outputFormat = None,
+          serdeName = None,
+          serde = None,
+          compressed = false,
+          properties = Map.empty),
+        schema = schema,
+        provider = Some(classOf[SimpleInsertSource].getName))
+
+      spark.sessionState.catalog.createTable(newTable, false)
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("INSERT INTO test_table AS t REPLACE USING (i) " +
+            "SELECT 1, 'a'")
+        },
+        condition = "UNSUPPORTED_INSERT_REPLACE_USING"
+      )
+    }
+  }
+
   test("Allow user to insert specified columns into insertable view") {
     sql("INSERT OVERWRITE TABLE jsonTable SELECT a, DEFAULT FROM jt")
     checkAnswer(

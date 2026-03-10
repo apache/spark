@@ -591,6 +591,18 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map.empty)
   }
 
+  def unsupportedInsertReplaceOn(): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_INSERT_REPLACE_ON",
+      messageParameters = Map.empty)
+  }
+
+  def unsupportedInsertReplaceUsing(): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_INSERT_REPLACE_USING",
+      messageParameters = Map.empty)
+  }
+
   def writeIntoViewNotAllowedError(identifier: TableIdentifier, t: TreeNode[_]): Throwable = {
     new AnalysisException(
       errorClass = "VIEW_WRITE_NOT_ALLOWED",
