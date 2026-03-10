@@ -946,13 +946,15 @@ class AstBuilder extends DataTypeAstBuilder
               table,
               df = otherPlans.head,
               deleteExpr,
-              writeOptions = schemaEvolutionWriteOption)
+              writeOptions = schemaEvolutionWriteOption,
+              withSchemaEvolution = ctx.EVOLUTION() != null)
           } else {
             OverwriteByExpression.byPosition(
               table,
               query = otherPlans.head,
               deleteExpr,
-              writeOptions = schemaEvolutionWriteOption)
+              writeOptions = schemaEvolutionWriteOption,
+              withSchemaEvolution = ctx.EVOLUTION() != null)
           }
         })
       case dir: InsertOverwriteDirContext =>

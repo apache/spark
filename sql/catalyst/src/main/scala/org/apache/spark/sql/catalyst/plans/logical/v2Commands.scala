@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.{SparkIllegalArgumentException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AssignmentUtils, EliminateSubqueryAliases, FieldName, NamedRelation, PartitionSpec, ResolvedIdentifier, ResolvedProcedure, TypeCheckResult, UnresolvedAttribute, UnresolvedException, UnresolvedProcedure, ViewSchemaMode}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AssignmentUtils, EliminateSubqueryAliases, FieldName, NamedRelation, PartitionSpec, ResolvedIdentifier, ResolvedProcedure, ResolveSchemaEvolution, TypeCheckResult, UnresolvedAttribute, UnresolvedException, UnresolvedProcedure, ViewSchemaMode}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.catalog.{FunctionResource, RoutineLanguage}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
@@ -38,10 +38,9 @@ import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.write.{DeltaWrite, RowLevelOperation, RowLevelOperationTable, SupportsDelta, Write}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.{DELETE, MERGE, UPDATE}
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
-import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExtractV2Table}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{ArrayType, AtomicType, BooleanType, DataType, IntegerType, MapType, MetadataBuilder, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{BooleanType, DataType, IntegerType, MapType, MetadataBuilder, StringType, StructType}
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
@@ -65,6 +64,7 @@ trait V2WriteCommand
   def table: NamedRelation
   def query: LogicalPlan
   def isByName: Boolean
+  def withSchemaEvolution: Boolean
 
   override def child: LogicalPlan = query
 
@@ -76,6 +76,24 @@ trait V2WriteCommand
     // If the table doesn't require schema match, we don't need to resolve the output columns.
     table.skipSchemaResolution || areCompatible(query.output, table.output)
   }
+
+  lazy val schemaEvolutionEnabled: Boolean = withSchemaEvolution && {
+    table match {
+      case r: DataSourceV2Relation if r.autoSchemaEvolution() => true
+      case _ => false
+    }
+  }
+
+  lazy val needSchemaEvolution: Boolean =
+    schemaEvolutionEnabled && changesForSchemaEvolution.nonEmpty
+
+  lazy val changesForSchemaEvolution: Array[TableChange] =
+    table match {
+      case r: DataSourceV2Relation =>
+        ResolveSchemaEvolution.schemaChanges(r.table, table.schema, query.schema, isByName)
+      case _ =>
+        Array.empty
+    }
 
   protected def areCompatible(inAttrs: Seq[Attribute], outAttrs: Seq[Attribute]): Boolean = {
     inAttrs.size == outAttrs.size && inAttrs.zip(outAttrs).forall {
@@ -107,6 +125,7 @@ case class AppendData(
     query: LogicalPlan,
     writeOptions: Map[String, String],
     isByName: Boolean,
+    withSchemaEvolution: Boolean = false,
     write: Option[Write] = None,
     analyzedQuery: Option[LogicalPlan] = None) extends V2WriteCommand {
   override def withNewQuery(newQuery: LogicalPlan): AppendData = copy(query = newQuery)
@@ -120,15 +139,19 @@ object AppendData {
   def byName(
       table: NamedRelation,
       df: LogicalPlan,
-      writeOptions: Map[String, String] = Map.empty): AppendData = {
-    new AppendData(table, df, writeOptions, isByName = true)
+      writeOptions: Map[String, String] = Map.empty,
+      withSchemaEvolution: Boolean = false): AppendData = {
+    new AppendData(table, df, writeOptions, isByName = true,
+      withSchemaEvolution = withSchemaEvolution)
   }
 
   def byPosition(
       table: NamedRelation,
       query: LogicalPlan,
-      writeOptions: Map[String, String] = Map.empty): AppendData = {
-    new AppendData(table, query, writeOptions, isByName = false)
+      writeOptions: Map[String, String] = Map.empty,
+      withSchemaEvolution: Boolean = false): AppendData = {
+    new AppendData(table, query, writeOptions, isByName = false,
+      withSchemaEvolution = withSchemaEvolution)
   }
 }
 
@@ -141,6 +164,7 @@ case class OverwriteByExpression(
     query: LogicalPlan,
     writeOptions: Map[String, String],
     isByName: Boolean,
+    withSchemaEvolution: Boolean = false,
     write: Option[Write] = None,
     analyzedQuery: Option[LogicalPlan] = None) extends V2WriteCommand {
   override lazy val resolved: Boolean = {
@@ -164,16 +188,20 @@ object OverwriteByExpression {
       table: NamedRelation,
       df: LogicalPlan,
       deleteExpr: Expression,
-      writeOptions: Map[String, String] = Map.empty): OverwriteByExpression = {
-    OverwriteByExpression(table, deleteExpr, df, writeOptions, isByName = true)
+      writeOptions: Map[String, String] = Map.empty,
+      withSchemaEvolution: Boolean = false): OverwriteByExpression = {
+    OverwriteByExpression(table, deleteExpr, df, writeOptions, isByName = true,
+      withSchemaEvolution = withSchemaEvolution)
   }
 
   def byPosition(
       table: NamedRelation,
       query: LogicalPlan,
       deleteExpr: Expression,
-      writeOptions: Map[String, String] = Map.empty): OverwriteByExpression = {
-    OverwriteByExpression(table, deleteExpr, query, writeOptions, isByName = false)
+      writeOptions: Map[String, String] = Map.empty,
+      withSchemaEvolution: Boolean = false): OverwriteByExpression = {
+    OverwriteByExpression(table, deleteExpr, query, writeOptions, isByName = false,
+      withSchemaEvolution = withSchemaEvolution)
   }
 }
 
@@ -185,6 +213,7 @@ case class OverwritePartitionsDynamic(
     query: LogicalPlan,
     writeOptions: Map[String, String],
     isByName: Boolean,
+    withSchemaEvolution: Boolean = false,
     write: Option[Write] = None) extends V2WriteCommand {
   override def withNewQuery(newQuery: LogicalPlan): OverwritePartitionsDynamic = {
     copy(query = newQuery)
@@ -204,15 +233,19 @@ object OverwritePartitionsDynamic {
   def byName(
       table: NamedRelation,
       df: LogicalPlan,
-      writeOptions: Map[String, String] = Map.empty): OverwritePartitionsDynamic = {
-    OverwritePartitionsDynamic(table, df, writeOptions, isByName = true)
+      writeOptions: Map[String, String] = Map.empty,
+      withSchemaEvolution: Boolean = false): OverwritePartitionsDynamic = {
+    OverwritePartitionsDynamic(table, df, writeOptions, isByName = true,
+      withSchemaEvolution = withSchemaEvolution)
   }
 
   def byPosition(
       table: NamedRelation,
       query: LogicalPlan,
-      writeOptions: Map[String, String] = Map.empty): OverwritePartitionsDynamic = {
-    OverwritePartitionsDynamic(table, query, writeOptions, isByName = false)
+      writeOptions: Map[String, String] = Map.empty,
+      withSchemaEvolution: Boolean = false): OverwritePartitionsDynamic = {
+    OverwritePartitionsDynamic(table, query, writeOptions, isByName = false,
+      withSchemaEvolution = withSchemaEvolution)
   }
 }
 
@@ -256,6 +289,7 @@ case class ReplaceData(
     write: Option[Write] = None) extends RowLevelWrite {
 
   override val isByName: Boolean = false
+  override val withSchemaEvolution: Boolean = false
   override def stringArgs: Iterator[Any] = Iterator(table, query, write)
 
   override lazy val references: AttributeSet = query.outputSet
@@ -338,6 +372,7 @@ case class WriteDelta(
     write: Option[DeltaWrite] = None) extends RowLevelWrite {
 
   override val isByName: Boolean = false
+  override val withSchemaEvolution: Boolean = false
   override def stringArgs: Iterator[Any] = Iterator(table, query, write)
 
   override lazy val references: AttributeSet = query.outputSet
@@ -844,11 +879,11 @@ case class UpdateTable(
   override protected def withNewChildInternal(newChild: LogicalPlan): UpdateTable =
     copy(table = newChild)
 
-  def skipSchemaResolution: Boolean = table match {
-    case r: NamedRelation => r.skipSchemaResolution
-    case SubqueryAlias(_, r: NamedRelation) => r.skipSchemaResolution
-    case _ => false
-  }
+  def skipSchemaResolution: Boolean =
+    EliminateSubqueryAliases(table) match {
+      case r: NamedRelation => r.skipSchemaResolution
+      case _ => false
+    }
 }
 
 /**
@@ -887,11 +922,11 @@ case class MergeIntoTable(
   lazy val duplicateResolved: Boolean =
     targetTable.outputSet.intersect(sourceTable.outputSet).isEmpty
 
-  lazy val skipSchemaResolution: Boolean = targetTable match {
-    case r: NamedRelation => r.skipSchemaResolution
-    case SubqueryAlias(_, r: NamedRelation) => r.skipSchemaResolution
-    case _ => false
-  }
+  lazy val skipSchemaResolution: Boolean =
+    EliminateSubqueryAliases(targetTable) match {
+      case r: NamedRelation => r.skipSchemaResolution
+      case _ => false
+    }
 
   lazy val needSchemaEvolution: Boolean =
     evaluateSchemaEvolution && changesForSchemaEvolution.nonEmpty
@@ -932,7 +967,7 @@ case class MergeIntoTable(
         assignments.forall { assignment =>
           assignment.resolved ||
             (assignment.value.resolved && sourcePaths.exists {
-              path => MergeIntoTable.isEqual(assignment, path)
+              path => MergeIntoTable.isEqual(assignment, path, sourceTable.outputSet)
             })
         }
       }
@@ -943,7 +978,14 @@ case class MergeIntoTable(
     MergeIntoTable.sourceSchemaForSchemaEvolution(this)
 
   lazy val changesForSchemaEvolution: Array[TableChange] =
-    MergeIntoTable.schemaChanges(targetTable.schema, sourceSchemaForEvolution)
+    EliminateSubqueryAliases(targetTable) match {
+      case r: DataSourceV2Relation =>
+        ResolveSchemaEvolution.schemaChanges(
+          r.table, targetTable.schema, sourceSchemaForEvolution, isByName = true
+        )
+      case _ =>
+        Array.empty
+    }
 
   override def left: LogicalPlan = targetTable
   override def right: LogicalPlan = sourceTable
@@ -968,73 +1010,6 @@ object MergeIntoTable {
       .toSeq
   }
 
-  def schemaChanges(
-      originalTarget: StructType,
-      originalSource: StructType,
-      fieldPath: Array[String] = Array()): Array[TableChange] = {
-    schemaChanges(originalTarget, originalSource, originalTarget, originalSource, fieldPath)
-  }
-
-  private def schemaChanges(
-      current: DataType,
-      newType: DataType,
-      originalTarget: StructType,
-      originalSource: StructType,
-      fieldPath: Array[String]): Array[TableChange] = {
-    (current, newType) match {
-      case (StructType(currentFields), StructType(newFields)) =>
-        val newFieldMap = toFieldMap(newFields)
-
-        // Update existing field types
-        val updates = {
-          currentFields collect {
-            case currentField: StructField if newFieldMap.contains(currentField.name) =>
-              schemaChanges(currentField.dataType, newFieldMap(currentField.name).dataType,
-                originalTarget, originalSource, fieldPath ++ Seq(currentField.name))
-          }
-        }.flatten
-
-        // Identify the newly added fields and append to the end
-        val currentFieldMap = toFieldMap(currentFields)
-        val adds = newFields.filterNot(f => currentFieldMap.contains(f.name))
-          .map(f => TableChange.addColumn(fieldPath ++ Set(f.name), f.dataType))
-
-        updates ++ adds
-
-      case (ArrayType(currentElementType, _), ArrayType(newElementType, _)) =>
-        schemaChanges(currentElementType, newElementType,
-          originalTarget, originalSource, fieldPath ++ Seq("element"))
-
-      case (MapType(currentKeyType, currentElementType, _),
-      MapType(updateKeyType, updateElementType, _)) =>
-        schemaChanges(currentKeyType, updateKeyType, originalTarget, originalSource,
-          fieldPath ++ Seq("key")) ++
-          schemaChanges(currentElementType, updateElementType,
-            originalTarget, originalSource, fieldPath ++ Seq("value"))
-
-      case (currentType: AtomicType, newType: AtomicType) if currentType != newType =>
-        Array(TableChange.updateColumnType(fieldPath, newType))
-
-      case (currentType, newType) if currentType == newType =>
-        // No change needed
-        Array.empty[TableChange]
-
-      case _ =>
-        // Do not support change between atomic and complex types for now
-        throw QueryExecutionErrors.failedToMergeIncompatibleSchemasError(
-          originalTarget, originalSource, null)
-    }
-  }
-
-  def toFieldMap(fields: Array[StructField]): Map[String, StructField] = {
-    val fieldMap = fields.map(field => field.name -> field).toMap
-    if (SQLConf.get.caseSensitiveAnalysis) {
-      fieldMap
-    } else {
-      CaseInsensitiveMap(fieldMap)
-    }
-  }
-
   // A pruned version of source schema that only contains columns/nested fields
   // explicitly and directly assigned to a target counterpart in MERGE INTO actions,
   // which are relevant for schema evolution.
@@ -1057,6 +1032,8 @@ object MergeIntoTable {
       case _ => false
     }
 
+    val sourceOutputSet = merge.sourceTable.outputSet
+
     def filterSchema(sourceSchema: StructType, basePath: Seq[String]): StructType =
       StructType(sourceSchema.flatMap { field =>
         val fieldPath = basePath :+ field.name
@@ -1064,7 +1041,7 @@ object MergeIntoTable {
         field.dataType match {
           // Specifically assigned to in one clause:
           // always keep, including all nested attributes
-          case _ if assignments.exists(isEqual(_, fieldPath)) => Some(field)
+          case _ if assignments.exists(isEqual(_, fieldPath, sourceOutputSet)) => Some(field)
           // If this is a struct and one of the children is being assigned to in a merge clause,
           // keep it and continue filtering children.
           case struct: StructType if assignments.exists(assign =>
@@ -1104,12 +1081,16 @@ object MergeIntoTable {
   // Helper method to check if an assignment key is equal to a source column
   // and if the assignment value is that same source column.
   // Example: UPDATE SET target.a = source.a
-  private def isEqual(assignment: Assignment, sourceFieldPath: Seq[String]): Boolean = {
+  private def isEqual(
+      assignment: Assignment,
+      sourceFieldPath: Seq[String],
+      sourceOutputSet: AttributeSet): Boolean = {
     // key must be a non-qualified field path that may be added to target schema via evolution
     val assignmenKeyExpr = extractFieldPath(assignment.key, allowUnresolved = true)
     // value should always be resolved (from source)
     val assignmentValueExpr = extractFieldPath(assignment.value, allowUnresolved = false)
-    assignmenKeyExpr == assignmentValueExpr &&
+    val valueFromSource = assignment.value.references.subsetOf(sourceOutputSet)
+    assignmenKeyExpr == assignmentValueExpr && valueFromSource &&
       assignmenKeyExpr == sourceFieldPath
   }
 }
