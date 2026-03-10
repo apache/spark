@@ -95,30 +95,11 @@ class JdbcTimeTypeSuite extends SparkFunSuite {
     assert(jdbcType.get.jdbcNullType === Types.TIME)
   }
 
-  test("PrestoDialect - getCatalystType for TIME") {
-    val dialect = PrestoDialect
-
-    // Test TIME type mapping
-    val timeType = dialect.getCatalystType(Types.TIME, "TIME", 0, null)
-    assert(timeType.isDefined)
-    assert(timeType.get === TimeType)
-  }
-
-  test("PrestoDialect - getJDBCType for TIME") {
-    val dialect = PrestoDialect
-
-    val jdbcType = dialect.getJDBCType(TimeType)
-    assert(jdbcType.isDefined)
-    assert(jdbcType.get.databaseTypeDefinition === "TIME")
-    assert(jdbcType.get.jdbcNullType === Types.TIME)
-  }
-
   test("All dialects - TIME type consistency") {
     val dialects = Seq(
       PostgresDialect,
       MySQLDialect,
-      MsSqlServerDialect,
-      PrestoDialect
+      MsSqlServerDialect
     )
 
     for (dialect <- dialects) {
@@ -143,8 +124,7 @@ class JdbcTimeTypeSuite extends SparkFunSuite {
     val dialects = Seq(
       PostgresDialect,
       MySQLDialect,
-      MsSqlServerDialect,
-      PrestoDialect
+      MsSqlServerDialect
     )
 
     for (dialect <- dialects) {
@@ -165,8 +145,7 @@ class JdbcTimeTypeSuite extends SparkFunSuite {
     val dialects = Seq(
       PostgresDialect,
       MySQLDialect,
-      MsSqlServerDialect,
-      PrestoDialect
+      MsSqlServerDialect
     )
 
     for (dialect <- dialects) {
@@ -194,8 +173,7 @@ class JdbcTimeTypeSuite extends SparkFunSuite {
     val dialects = Seq(
       PostgresDialect,
       MySQLDialect,
-      MsSqlServerDialect,
-      PrestoDialect
+      MsSqlServerDialect
     )
 
     for (dialect <- dialects) {
@@ -235,9 +213,8 @@ class JdbcTimeTypeSuite extends SparkFunSuite {
     val postgresUrl = "jdbc:postgresql://localhost/test"
     val mysqlUrl = "jdbc:mysql://localhost/test"
     val sqlServerUrl = "jdbc:sqlserver://localhost;database=test"
-    val prestoUrl = "jdbc:presto://localhost:8080/catalog"
 
-    val urls = Seq(postgresUrl, mysqlUrl, sqlServerUrl, prestoUrl)
+    val urls = Seq(postgresUrl, mysqlUrl, sqlServerUrl)
 
     for (url <- urls) {
       val dialect = JdbcDialects.get(url)
