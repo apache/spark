@@ -312,14 +312,16 @@ object DataSourceV2Relation {
       v1Statistics: CatalogStatistics,
       schema: StructType): V2Statistics = {
     val typeMap = schema.fields.map(f => f.name -> f.dataType).toMap
-    val colStatsMap: Map[NamedReference, ColumnStatistics] = v1Statistics.colStats.flatMap { case (name, stat) =>
-      typeMap.get(name).map { dt =>
-        FieldReference.column(name) -> transformV1ColStat(stat, name, dt)
+    val colStatsMap: Map[NamedReference, ColumnStatistics] =
+      v1Statistics.colStats.flatMap { case (name, stat) =>
+        typeMap.get(name).map { dt =>
+          FieldReference.column(name) -> transformV1ColStat(stat, name, dt)
+        }
       }
-    }
 
     val v2SizeInBytes = OptionalLong.of(v1Statistics.sizeInBytes.longValue)
-    val v2NumRows = v1Statistics.rowCount.map(v => OptionalLong.of(v.longValue)).getOrElse(OptionalLong.empty())
+    val v2NumRows = v1Statistics.rowCount
+      .map(v => OptionalLong.of(v.longValue)).getOrElse(OptionalLong.empty())
     val v2ColStats = new java.util.HashMap[NamedReference, ColumnStatistics]()
     colStatsMap.foreach { case (k, v) => v2ColStats.put(k, v) }
 
@@ -334,8 +336,10 @@ object DataSourceV2Relation {
       stat: CatalogColumnStat,
       colName: String,
       dataType: DataType): ColumnStatistics = {
-    val parsedMin = stat.min.map(CatalogColumnStat.fromExternalString(_, colName, dataType, stat.version))
-    val parsedMax = stat.max.map(CatalogColumnStat.fromExternalString(_, colName, dataType, stat.version))
+    val parsedMin = stat.min.map(
+      CatalogColumnStat.fromExternalString(_, colName, dataType, stat.version))
+    val parsedMax = stat.max.map(
+      CatalogColumnStat.fromExternalString(_, colName, dataType, stat.version))
     val v2DistinctCount =
       stat.distinctCount.map(v => OptionalLong.of(v.longValue)).getOrElse(OptionalLong.empty())
     val v2NullCount =
@@ -359,8 +363,10 @@ object DataSourceV2Relation {
     }
     new ColumnStatistics {
       override def distinctCount(): OptionalLong = v2DistinctCount
-      override def min(): Optional[Object] = Optional.ofNullable(parsedMin.map(_.asInstanceOf[Object]).orNull)
-      override def max(): Optional[Object] = Optional.ofNullable(parsedMax.map(_.asInstanceOf[Object]).orNull)
+      override def min(): Optional[Object] = Optional.ofNullable(
+        parsedMin.map(_.asInstanceOf[Object]).orNull)
+      override def max(): Optional[Object] = Optional.ofNullable(
+        parsedMax.map(_.asInstanceOf[Object]).orNull)
       override def nullCount(): OptionalLong = v2NullCount
       override def avgLen(): OptionalLong = v2AvgLen
       override def maxLen(): OptionalLong = v2MaxLen
