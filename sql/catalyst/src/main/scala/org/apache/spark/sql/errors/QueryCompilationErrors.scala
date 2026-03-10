@@ -3514,27 +3514,27 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "change" -> change.toString, "tableName" -> toSQLId(sanitizedTableName)))
   }
 
-  def unsupportedTableChangesInAutoSchemaEvolutionError(
+  def unsupportedAutoSchemaEvolutionChangesError(
+      catalog: CatalogPlugin,
       ident: Identifier,
-      catalogName: String,
-      changes: Array[TableChange]): Throwable = {
-    val tableName = (catalogName +: ident.asMultipartIdentifier).map(_.replaceAll("\"", ""))
-    val changesDesc = changes.map(_.toString).mkString("; ")
+      remainingChanges: Seq[TableChange]): Throwable = {
     new AnalysisException(
-      errorClass = "UNSUPPORTED_TABLE_CHANGES_IN_AUTO_SCHEMA_EVOLUTION.CATALOG_PARTIAL",
+      errorClass = "UNSUPPORTED_AUTO_SCHEMA_EVOLUTION_CHANGES.PARTIAL_EVOLUTION",
       messageParameters = Map(
-        "tableName" -> toSQLId(tableName), "changes" -> changesDesc))
+        "tableName" -> toSQLId(ident.toQualifiedNameParts(catalog)),
+        "changes" -> remainingChanges.mkString("; ")))
   }
 
-  def failedToEvolveSchemaDuringMergeError(
+  def failedAutoSchemaEvolutionError(
+      catalog: CatalogPlugin,
       ident: Identifier,
-      catalogName: String,
       cause: Throwable): Throwable = {
-    val tableName = (catalogName +: ident.asMultipartIdentifier).map(_.replaceAll("\"", ""))
     val detail = Option(cause.getMessage).getOrElse("Unknown error")
     new AnalysisException(
-      errorClass = "UNSUPPORTED_TABLE_CHANGES_IN_AUTO_SCHEMA_EVOLUTION.EVOLUTION_FAILED",
-      messageParameters = Map("tableName" -> toSQLId(tableName), "detail" -> detail),
+      errorClass = "UNSUPPORTED_AUTO_SCHEMA_EVOLUTION_CHANGES.FAILED_EVOLUTION",
+      messageParameters = Map(
+        "tableName" -> toSQLId(ident.toQualifiedNameParts(catalog)),
+        "detail" -> detail),
       cause = Some(cause))
   }
 

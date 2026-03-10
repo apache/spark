@@ -7658,17 +7658,17 @@
     },
     "sqlState" : "0A000"
   },
-  "UNSUPPORTED_TABLE_CHANGES_IN_AUTO_SCHEMA_EVOLUTION" : {
+  "UNSUPPORTED_AUTO_SCHEMA_EVOLUTION_CHANGES" : {
     "message" : [
       "Automatic schema evolution failed for table <tableName>."
     ],
     "subClass" : {
-      "CATALOG_PARTIAL" : {
+      "PARTIAL_EVOLUTION" : {
         "message" : [
           "The catalog did not support or only partially applied the following changes: <changes>."
         ]
       },
-      "EVOLUTION_FAILED" : {
+      "FAILED_EVOLUTION" : {
         "message" : [
           "The catalog returned the error: <detail>"
         ]

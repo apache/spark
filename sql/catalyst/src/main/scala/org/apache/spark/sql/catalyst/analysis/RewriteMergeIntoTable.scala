@@ -44,6 +44,7 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
   private final val ROW_FROM_TARGET = "__row_from_target"
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+    // aligned is false when schema evolution is pending (see ResolveRowLevelCommandAssignments)
     case m @ MergeIntoTable(aliasedTable, source, cond, matchedActions, notMatchedActions,
         notMatchedBySourceActions, _) if m.resolved && m.rewritable && m.aligned &&
         matchedActions.isEmpty && notMatchedActions.size == 1 &&

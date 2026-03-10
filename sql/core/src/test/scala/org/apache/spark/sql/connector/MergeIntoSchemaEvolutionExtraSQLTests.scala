@@ -135,8 +135,8 @@ trait MergeIntoSchemaEvolutionExtraSQLTests extends RowLevelOperationSuiteBase {
                |VALUES (s.pk, s.salary, s.dep, s.active)
                |""".stripMargin)
         }
-        assert(ex.getCondition.startsWith("UNSUPPORTED_TABLE_CHANGES_IN_AUTO_SCHEMA_EVOLUTION"),
-          s"Expected error class UNSUPPORTED_TABLE_CHANGES_IN_AUTO_SCHEMA_EVOLUTION but got: " +
+        assert(ex.getCondition.startsWith("UNSUPPORTED_AUTO_SCHEMA_EVOLUTION_CHANGES"),
+          s"Expected error class UNSUPPORTED_AUTO_SCHEMA_EVOLUTION_CHANGES but got: " +
             s"${ex.getCondition}. Message: ${ex.getMessage}")
         assert(ex.getMessageParameters.get("tableName") != null,
           s"Error message should mention table name: ${ex.getMessage}")

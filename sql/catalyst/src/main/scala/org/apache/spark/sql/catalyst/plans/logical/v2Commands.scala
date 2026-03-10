@@ -1096,11 +1096,11 @@ object MergeIntoTable {
   // Example: UPDATE SET target.a = source.a
   private def isEqual(assignment: Assignment, sourceFieldPath: Seq[String]): Boolean = {
     // key must be a non-qualified field path that may be added to target schema via evolution
-    val assignmenKeyExpr = extractFieldPath(assignment.key, allowUnresolved = true)
+    val assignmentKeyExpr = extractFieldPath(assignment.key, allowUnresolved = true)
     // value should always be resolved (from source)
     val assignmentValueExpr = extractFieldPath(assignment.value, allowUnresolved = false)
-    assignmenKeyExpr == assignmentValueExpr &&
-      assignmenKeyExpr == sourceFieldPath
+    assignmentKeyExpr == assignmentValueExpr &&
+      assignmentKeyExpr == sourceFieldPath
   }
 
   private def areSchemaEvolutionReady(
@@ -1115,7 +1115,18 @@ object MergeIntoTable {
 
   // Helper method to check if an assignment key is equal to a source column
   // and if the assignment value is that same source column.
-  // Example: UPDATE SET target.a = source.a
+  //
+  // Top-level example: UPDATE SET target.a = source.a
+  //   key:   AttributeReference("a", ...) -> path Seq("a")
+  //   value: AttributeReference("a", ...) from source -> path Seq("a"), references {a}
+  //
+  // Nested example: UPDATE SET addr.city = source.addr.city
+  //   key:   GetStructField(GetStructField(AttributeReference("addr", ...), 0), 1)
+  //          -> path Seq("addr", "city")
+  //   value: GetStructField(GetStructField(AttributeReference("addr", ...), 0), 1) from source
+  //          -> path Seq("addr", "city"), references {addr}
+  //
+  // references contains only root attributes, so subsetOf(source.outputSet) works for both.
   private def isSameColumnAssignment(assignment: Assignment, source: LogicalPlan): Boolean = {
     // key must be a non-qualified field path that may be added to target schema via evolution
     val keyPath = extractFieldPath(assignment.key, allowUnresolved = true)

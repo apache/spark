@@ -26,9 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.AttributeMap
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.connector.catalog.Identifier
-import org.apache.spark.sql.connector.catalog.Table
-import org.apache.spark.sql.connector.catalog.TableCatalog
+import org.apache.spark.sql.connector.catalog.{Identifier, Table, TableCatalog, TableChange}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.execution.datasources.v2.ExtractV2CatalogAndIdentifier
@@ -46,13 +44,15 @@ object ResolveMergeIntoSchemaEvolution extends Rule[LogicalPlan] {
     case m: MergeIntoTable if m.pendingSchemaChanges.nonEmpty =>
       EliminateSubqueryAliases(m.targetTable) match {
         case ExtractV2CatalogAndIdentifier(catalog, ident) =>
-          val newTable = evolveSchema(m, catalog, ident)
+          evolveSchema(catalog, ident, m.pendingSchemaChanges)
+          val writePrivileges = MergeIntoTable.getWritePrivileges(m)
+          val newTable = catalog.loadTable(ident, writePrivileges.toSet.asJava)
           val mergeWithNewTarget = replaceMergeTarget(m, newTable)
 
           val remainingChanges = mergeWithNewTarget.pendingSchemaChanges
           if (remainingChanges.nonEmpty) {
-            throw QueryCompilationErrors.unsupportedTableChangesInAutoSchemaEvolutionError(
-              ident, catalog.name(), remainingChanges.toArray)
+            throw QueryCompilationErrors.unsupportedAutoSchemaEvolutionChangesError(
+              catalog, ident, remainingChanges)
           }
 
           mergeWithNewTarget
@@ -62,19 +62,17 @@ object ResolveMergeIntoSchemaEvolution extends Rule[LogicalPlan] {
   }
 
   private def evolveSchema(
-      merge: MergeIntoTable,
       catalog: TableCatalog,
-      ident: Identifier): Table = {
+      ident: Identifier,
+      changes: Seq[TableChange]): Unit = {
     try {
-      catalog.alterTable(ident, merge.pendingSchemaChanges: _*)
-      val writePrivileges = MergeIntoTable.getWritePrivileges(merge)
-      catalog.loadTable(ident, writePrivileges.toSet.asJava)
+      catalog.alterTable(ident, changes: _*)
     } catch {
       case e: IllegalArgumentException if !e.isInstanceOf[SparkThrowable] =>
         throw QueryExecutionErrors.unsupportedTableChangeError(e)
       case NonFatal(e) =>
-        throw QueryCompilationErrors.failedToEvolveSchemaDuringMergeError(
-          ident, catalog.name(), e)
+        throw QueryCompilationErrors.failedAutoSchemaEvolutionError(
+          catalog, ident, e)
     }
   }
 
