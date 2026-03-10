@@ -21,7 +21,7 @@ import pickle
 from typing import cast, overload, Callable, Dict, List, Optional, TYPE_CHECKING, Union
 
 from pyspark.serializers import CloudPickleSerializer
-from pyspark.sql.connect.plan import DataSource, LogicalPlan, Read, WriteStreamOperation
+from pyspark.sql.connect.plan import DataSource, LogicalPlan, Read, RelationChanges, WriteStreamOperation
 import pyspark.sql.connect.proto as pb2
 from pyspark.sql.connect.readwriter import OptionUtils, to_str
 from pyspark.sql.connect.streaming.query import StreamingQuery
@@ -413,6 +413,11 @@ class DataStreamReader(OptionUtils):
         return self._df(Read(tableName, self._options, is_streaming=True))
 
     table.__doc__ = PySparkDataStreamReader.table.__doc__
+
+    def changes(self, tableName: str) -> "DataFrame":
+        return self._df(RelationChanges(tableName, self._options, is_streaming=True))
+
+    changes.__doc__ = PySparkDataStreamReader.changes.__doc__
 
 
 DataStreamReader.__doc__ = PySparkDataStreamReader.__doc__

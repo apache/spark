@@ -530,6 +530,32 @@ class DataFrameReader(OptionUtils):
         """
         return self._df(self._jreader.table(tableName))
 
+    def changes(self, tableName: str) -> "DataFrame":
+        """Returns the row-level changes (Change Data Capture) from the specified table
+        as a :class:`DataFrame`. The table's catalog must support CDC via the
+        ``SUPPORT_CHANGELOG`` capability.
+
+        Use :meth:`option` to specify the version/timestamp range and processing options.
+
+        .. versionadded:: 4.2.0
+
+        Parameters
+        ----------
+        tableName : str
+            string, name of the table.
+
+        Returns
+        -------
+        :class:`DataFrame`
+
+        Examples
+        --------
+        >>> spark.read.option("startingVersion", "10").option(
+        ...     "endingVersion", "20"
+        ... ).changes("my_table")  # doctest: +SKIP
+        """
+        return self._df(self._jreader.changes(tableName))
+
     def parquet(self, *paths: str, **options: "OptionalPrimitiveType") -> "DataFrame":
         """
         Loads Parquet files, returning the result as a :class:`DataFrame`.

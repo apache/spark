@@ -919,6 +919,42 @@ class DataStreamReader(OptionUtils):
                 messageParameters={"arg_name": "tableName", "arg_type": type(tableName).__name__},
             )
 
+    def changes(self, tableName: str) -> "DataFrame":
+        """Returns the row-level changes (Change Data Capture) from the specified table
+        as a streaming :class:`DataFrame`. The table's catalog must support CDC via the
+        ``SUPPORT_CHANGELOG`` capability.
+
+        Use :meth:`option` to specify the starting version/timestamp and processing options.
+
+        .. versionadded:: 4.2.0
+
+        Parameters
+        ----------
+        tableName : str
+            string, name of the table.
+
+        Returns
+        -------
+        :class:`DataFrame`
+
+        Notes
+        -----
+        This API is evolving.
+
+        Examples
+        --------
+        >>> spark.readStream.option("startingVersion", "10").changes(
+        ...     "my_table"
+        ... )  # doctest: +SKIP
+        """
+        if isinstance(tableName, str):
+            return self._df(self._jreader.changes(tableName))
+        else:
+            raise PySparkTypeError(
+                errorClass="NOT_STR",
+                messageParameters={"arg_name": "tableName", "arg_type": type(tableName).__name__},
+            )
+
 
 class DataStreamWriter:
     """
