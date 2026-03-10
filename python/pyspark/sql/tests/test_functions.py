@@ -3095,6 +3095,137 @@ class FunctionsTestsMixin:
         union_row = union_result.first()
         self.assertGreaterEqual(union_row["union_estimate"], 5.0)
 
+    def test_items_sketch_functions(self):
+        df = self.spark.createDataFrame([("a",), ("a",), ("a",), ("b",), ("c",)], ["col"])
+
+        # Test items_sketch_agg and items_sketch_get_frequent_items
+        result = df.agg(
+            F.items_sketch_get_frequent_items(
+                F.items_sketch_agg("col"), F.lit("NO_FALSE_POSITIVES")
+            ).alias("freq")
+        )
+        freq_items = result.first()["freq"]
+        self.assertIsNotNone(freq_items)
+        self.assertGreater(len(freq_items), 0)
+        # "a" should be the most frequent item
+        items = [row["item"] for row in freq_items]
+        self.assertIn("a", items)
+
+        # Test items_sketch_get_estimate
+        estimate = df.agg(
+            F.items_sketch_get_estimate(F.items_sketch_agg("col"), F.lit("a"))
+        ).first()[0]
+        self.assertEqual(estimate, 3)
+
+        # Test items_sketch_get_estimate for non-existent item returns 0
+        est_missing = df.agg(
+            F.items_sketch_get_estimate(F.items_sketch_agg("col"), F.lit("zzz"))
+        ).first()[0]
+        self.assertEqual(est_missing, 0)
+
+        # Test items_sketch_agg with custom maxMapSize
+        result_custom = df.agg(
+            F.items_sketch_get_estimate(F.items_sketch_agg("col", 8), F.lit("a"))
+        ).first()[0]
+        self.assertEqual(result_custom, 3)
+
+        # Test items_sketch_merge
+        df1 = self.spark.createDataFrame([("a",), ("a",), ("a",)], ["col"])
+        df2 = self.spark.createDataFrame([("a",), ("b",)], ["col"])
+        sketches = df1.agg(F.items_sketch_agg("col").alias("s1")).crossJoin(
+            df2.agg(F.items_sketch_agg("col").alias("s2"))
+        )
+        merged_estimate = sketches.select(
+            F.items_sketch_get_estimate(F.items_sketch_merge("s1", "s2"), F.lit("a"))
+        ).first()[0]
+        self.assertEqual(merged_estimate, 4)
+
+        # Test items_sketch_merge_agg
+        sketch_df = df1.agg(F.items_sketch_agg("col").alias("sketch")).union(
+            df2.agg(F.items_sketch_agg("col").alias("sketch"))
+        )
+        merged_agg_estimate = sketch_df.agg(
+            F.items_sketch_get_estimate(F.items_sketch_merge_agg("sketch"), F.lit("a"))
+        ).first()[0]
+        self.assertEqual(merged_agg_estimate, 4)
+
+        # Test items_sketch_merge_agg with custom maxMapSize
+        merged_agg_custom = sketch_df.agg(
+            F.items_sketch_get_estimate(F.items_sketch_merge_agg("sketch", 64), F.lit("a"))
+        ).first()[0]
+        self.assertEqual(merged_agg_custom, 4)
+
+        # Test items_sketch_to_string
+        summary = df.agg(F.items_sketch_to_string(F.items_sketch_agg("col"))).first()[0]
+        self.assertIsNotNone(summary)
+        self.assertGreater(len(summary), 0)
+
+    def test_items_sketch_small_capacity(self):
+        # Use maxMapSize=8 (smallest allowed) with skewed data to exercise
+        # approximation behavior and NO_FALSE_POSITIVES vs NO_FALSE_NEGATIVES
+        rows = []
+        for i in range(100):
+            rows.append(("a",))
+        for i in range(50):
+            rows.append(("b",))
+        for i in range(18):
+            rows.append((f"item_{i}",))
+        df = self.spark.createDataFrame(rows, ["col"])
+
+        sketch = df.agg(F.items_sketch_agg("col", 8).alias("sketch"))
+
+        # "a" (100 occurrences) should be detected with high estimate
+        est_a = sketch.select(F.items_sketch_get_estimate("sketch", F.lit("a"))).first()[0]
+        self.assertGreaterEqual(est_a, 90)
+
+        # NO_FALSE_POSITIVES: every returned item is truly frequent
+        nfp = sketch.select(
+            F.items_sketch_get_frequent_items("sketch", F.lit("NO_FALSE_POSITIVES")).alias("freq")
+        ).first()["freq"]
+        nfp_items = [row["item"] for row in nfp]
+        self.assertIn("a", nfp_items)
+
+        # NO_FALSE_NEGATIVES: returns all items that might be frequent
+        nfn = sketch.select(
+            F.items_sketch_get_frequent_items("sketch", F.lit("NO_FALSE_NEGATIVES")).alias("freq")
+        ).first()["freq"]
+        nfn_items = [row["item"] for row in nfn]
+        self.assertIn("a", nfn_items)
+        # NO_FALSE_NEGATIVES should return >= NO_FALSE_POSITIVES items
+        self.assertGreaterEqual(len(nfn), len(nfp))
+
+        # Validate struct fields
+        first_row = nfn[0]
+        self.assertIn("item", first_row.asDict())
+        self.assertIn("estimate", first_row.asDict())
+        self.assertIn("lowerBound", first_row.asDict())
+        self.assertIn("upperBound", first_row.asDict())
+        self.assertGreater(first_row["estimate"], 0)
+        self.assertGreaterEqual(first_row["upperBound"], first_row["estimate"])
+        self.assertLessEqual(first_row["lowerBound"], first_row["estimate"])
+
+    def test_items_sketch_null_handling(self):
+        # All nulls
+        null_df = self.spark.createDataFrame([(None,), (None,)], "col: string")
+        est = null_df.agg(
+            F.items_sketch_get_estimate(F.items_sketch_agg("col"), F.lit("a"))
+        ).first()[0]
+        self.assertEqual(est, 0)
+
+        # Mixed nulls and values
+        mixed_df = self.spark.createDataFrame([("a",), ("a",), (None,), (None,)], "col: string")
+        est_mixed = mixed_df.agg(
+            F.items_sketch_get_estimate(F.items_sketch_agg("col"), F.lit("a"))
+        ).first()[0]
+        self.assertEqual(est_mixed, 2)
+
+        # Single row
+        single_df = self.spark.createDataFrame([("only",)], ["col"])
+        est_single = single_df.agg(
+            F.items_sketch_get_estimate(F.items_sketch_agg("col"), F.lit("only"))
+        ).first()[0]
+        self.assertEqual(est_single, 1)
+
     def test_datetime_functions(self):
         df = self.spark.range(1).selectExpr("'2017-01-22' as dateCol")
         parse_result = df.select(F.to_date(F.col("dateCol"))).first()

@@ -3291,4 +3291,52 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "expectedFamily" -> expectedFamily,
         "actualFamily" -> actualFamily))
   }
+
+  def itemsSketchInvalidMaxMapSize(
+      function: String,
+      min: Int,
+      max: Int,
+      value: Int): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "ITEMS_SKETCH_INVALID_MAX_MAP_SIZE",
+      messageParameters = Map(
+        "function" -> toSQLId(function),
+        "min" -> toSQLValue(min, IntegerType),
+        "max" -> toSQLValue(max, IntegerType),
+        "value" -> toSQLValue(value, IntegerType)))
+  }
+
+  def itemsSketchMaxMapSizeNotPowerOfTwo(function: String, value: Int): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "ITEMS_SKETCH_MAX_MAP_SIZE_NOT_POWER_OF_TWO",
+      messageParameters = Map(
+        "function" -> toSQLId(function),
+        "value" -> toSQLValue(value, IntegerType)))
+  }
+
+  def itemsSketchMaxMapSizeMustBeConstant(function: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "ITEMS_SKETCH_MAX_MAP_SIZE_MUST_BE_CONSTANT",
+      messageParameters = Map("function" -> toSQLId(function)))
+  }
+
+  def itemsSketchInvalidInputBuffer(function: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "ITEMS_SKETCH_INVALID_INPUT_BUFFER",
+      messageParameters = Map("function" -> toSQLId(function)))
+  }
+
+  def itemsSketchUnsupportedDataType(dataType: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "ITEMS_SKETCH_UNSUPPORTED_DATA_TYPE",
+      messageParameters = Map("dataType" -> dataType))
+  }
+
+  def itemsSketchInvalidErrorType(function: String, errorType: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "ITEMS_SKETCH_INVALID_ERROR_TYPE",
+      messageParameters = Map(
+        "function" -> toSQLId(function),
+        "errorType" -> errorType))
+  }
 }
