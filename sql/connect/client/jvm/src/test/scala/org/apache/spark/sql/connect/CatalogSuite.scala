@@ -365,4 +365,36 @@ class CatalogSuite extends ConnectFunSuite with RemoteSparkSession with SQLHelpe
       assert(freshColumns.contains("c3"))
     }
   }
+
+  test("parseMultipartIdentifier matches expected behavior for valid identifiers") {
+    // Duplicated in sql/core CatalogSuite; change both together when adding cases.
+    val testCases: Seq[(String, Seq[String])] = Seq(
+      ("a", Seq("a")),
+      ("a.b", Seq("a", "b")),
+      ("a.b.c", Seq("a", "b", "c")),
+      ("  a  .  b  ", Seq("a", "b")),
+      ("`a`", Seq("a")),
+      ("`a`.`b`", Seq("a", "b")),
+      ("a.`b.c`", Seq("a", "b.c")),
+      ("`a.b`.c", Seq("a.b", "c")),
+      ("`a``b`", Seq("a`b")),
+      ("cat.`db.schema`.tbl", Seq("cat", "db.schema", "tbl")),
+      (
+        "`org.apache.spark.sql.json`.`s3://buck/tmp/abc.json`",
+        Seq("org.apache.spark.sql.json", "s3://buck/tmp/abc.json")),
+      ("default.tab1", Seq("default", "tab1")),
+      ("`default`.`tab1`", Seq("default", "tab1")))
+    testCases.foreach { case (input, expected) =>
+      val actual = spark.catalog.parseMultipartIdentifier(input)
+      assert(
+        actual === expected,
+        s"parseMultipartIdentifier(${input.replace("`", "\\`")}) should match: " +
+          s"expected $expected, got $actual")
+    }
+  }
+
+  test("parseMultipartIdentifier returns empty for null and empty string") {
+    assert(spark.catalog.parseMultipartIdentifier(null) === Seq.empty)
+    assert(spark.catalog.parseMultipartIdentifier("") === Seq.empty)
+  }
 }

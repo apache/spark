@@ -5537,6 +5537,14 @@ object SQLConf {
     .stringConf
     .createWithDefault(SESSION_CATALOG_NAME)
 
+  val USE_DDL_BASED_CATALOG_API = buildConf(SqlApiConfHelper.USE_DDL_BASED_CATALOG_API_KEY)
+    .doc("When true, spark.catalog uses SQL DDL (e.g. DESCRIBE NAMESPACE EXTENDED, SHOW " +
+      "NAMESPACES) instead of the internal catalog resolver for catalog APIs that support it. " +
+      "Set to false to use the original implementation for those APIs.")
+    .version("4.2.0")
+    .booleanConf
+    .createWithDefault(true)
+
   val V2_SESSION_CATALOG_IMPLEMENTATION =
     buildConf(s"spark.sql.catalog.$SESSION_CATALOG_NAME")
       .doc("A catalog implementation that will be used as the v2 interface to Spark's built-in " +
@@ -7157,6 +7165,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def geospatialEnabled: Boolean = getConf(GEOSPATIAL_ENABLED)
 
   def typesFrameworkEnabled: Boolean = getConf(TYPES_FRAMEWORK_ENABLED)
+
+  override def useDDLBasedCatalogAPI: Boolean = getConf(USE_DDL_BASED_CATALOG_API)
 
   def dataSourceV2JoinPushdown: Boolean = getConf(DATA_SOURCE_V2_JOIN_PUSHDOWN)
 

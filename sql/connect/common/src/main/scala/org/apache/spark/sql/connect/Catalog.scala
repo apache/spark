@@ -23,11 +23,73 @@ import org.apache.spark.sql.catalog.{CatalogMetadata, Column, Database, Function
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{PrimitiveBooleanEncoder, StringEncoder}
+import org.apache.spark.sql.catalyst.util.QuotingUtils
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, StorageLevelProtoConverter}
+import org.apache.spark.sql.internal.{DDLBasedCatalog, SqlApiConf}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.storage.StorageLevel
 
-class Catalog(sparkSession: SparkSession) extends catalog.Catalog {
+class Catalog(sparkSession: SparkSession) extends catalog.Catalog with DDLBasedCatalog {
+
+  private def useDDLBasedCatalogAPI: Boolean =
+    SqlApiConf.get.useDDLBasedCatalogAPI
+
+  override def sql(str: String, args: Map[String, Any]): org.apache.spark.sql.DataFrame =
+    sparkSession.sql(str, args)
+
+  /**
+   * Parse a multipart identifier (no catalyst dependency). Split by '.' only when not inside
+   * backtick-quoted segments; unquote and unescape (`` -> `).
+   */
+  override def parseMultipartIdentifier(identifier: String): Seq[String] = {
+    if (identifier == null || identifier.isEmpty) return Seq.empty
+    val parts = scala.collection.mutable.ArrayBuffer.empty[String]
+    var i = 0
+    val n = identifier.length
+    while (i < n) {
+      while (i < n && identifier(i) == ' ') i += 1
+      if (i >= n) return parts.toSeq
+      val partStart = i
+      if (identifier(i) == '`') {
+        i += 1
+        val sb = new StringBuilder
+        var done = false
+        while (i < n && !done) {
+          identifier(i) match {
+            case '`' =>
+              i += 1
+              if (i < n && identifier(i) == '`') {
+                sb.append('`')
+                i += 1
+              } else {
+                parts += sb.toString
+                while (i < n && identifier(i) == ' ') i += 1
+                if (i < n && identifier(i) == '.') i += 1
+                else if (i < n) {
+                  val rest = identifier.substring(i).trim
+                  if (rest.nonEmpty) parts += rest
+                  return parts.toSeq
+                }
+                done = true
+              }
+            case c =>
+              sb.append(c)
+              i += 1
+          }
+        }
+        if (!done) parts += sb.toString
+      } else {
+        while (i < n && identifier(i) != '.') i += 1
+        val part = identifier.substring(partStart, i).trim
+        if (part.nonEmpty) parts += part
+        if (i < n && identifier(i) == '.') i += 1
+      }
+    }
+    parts.toSeq
+  }
+
+  override def quoteIdentifier(identifier: String): String =
+    QuotingUtils.quoteIdentifier(identifier)
 
   /**
    * Returns the current default database in this session.
@@ -197,11 +259,15 @@ class Catalog(sparkSession: SparkSession) extends catalog.Catalog {
    * @since 3.5.0
    */
   override def getDatabase(dbName: String): Database = {
-    sparkSession
-      .newDataset(Catalog.databaseEncoder) { builder =>
-        builder.getCatalogBuilder.getGetDatabaseBuilder.setDbName(dbName)
-      }
-      .head()
+    if (useDDLBasedCatalogAPI) {
+      super.getDatabase(dbName)
+    } else {
+      sparkSession
+        .newDataset(Catalog.databaseEncoder) { builder =>
+          builder.getCatalogBuilder.getGetDatabaseBuilder.setDbName(dbName)
+        }
+        .head()
+    }
   }
 
   /**
@@ -289,11 +355,15 @@ class Catalog(sparkSession: SparkSession) extends catalog.Catalog {
    * @since 3.5.0
    */
   override def databaseExists(dbName: String): Boolean = {
-    sparkSession
-      .newDataset(PrimitiveBooleanEncoder) { builder =>
-        builder.getCatalogBuilder.getDatabaseExistsBuilder.setDbName(dbName)
-      }
-      .head()
+    if (useDDLBasedCatalogAPI) {
+      super.databaseExists(dbName)
+    } else {
+      sparkSession
+        .newDataset(PrimitiveBooleanEncoder) { builder =>
+          builder.getCatalogBuilder.getDatabaseExistsBuilder.setDbName(dbName)
+        }
+        .head()
+    }
   }
 
   /**

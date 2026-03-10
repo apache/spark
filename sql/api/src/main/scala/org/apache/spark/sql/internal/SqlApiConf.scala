@@ -54,6 +54,7 @@ private[sql] trait SqlApiConf {
   def legacyParameterSubstitutionConstantsOnly: Boolean
   def legacyIdentifierClauseOnly: Boolean
   def typesFrameworkEnabled: Boolean
+  def useDDLBasedCatalogAPI: Boolean
 }
 
 private[sql] object SqlApiConf {
@@ -77,6 +78,8 @@ private[sql] object SqlApiConf {
   val PARSER_DFA_CACHE_FLUSH_RATIO_KEY: String =
     SqlApiConfHelper.PARSER_DFA_CACHE_FLUSH_RATIO_KEY
   val MANAGE_PARSER_CACHES_KEY: String = SqlApiConfHelper.MANAGE_PARSER_CACHES_KEY
+  val USE_DDL_BASED_CATALOG_API_KEY: String =
+    SqlApiConfHelper.USE_DDL_BASED_CATALOG_API_KEY
 
   def get: SqlApiConf = SqlApiConfHelper.getConfGetter.get()()
 
@@ -112,4 +115,5 @@ private[sql] object DefaultSqlApiConf extends SqlApiConf {
   override def legacyParameterSubstitutionConstantsOnly: Boolean = false
   override def legacyIdentifierClauseOnly: Boolean = false
   override def typesFrameworkEnabled: Boolean = false
+  override def useDDLBasedCatalogAPI: Boolean = true
 }

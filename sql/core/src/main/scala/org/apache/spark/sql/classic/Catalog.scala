@@ -42,6 +42,7 @@ import org.apache.spark.sql.execution.command.{ShowNamespacesCommand, ShowTables
 import org.apache.spark.sql.execution.command.CommandUtils
 import org.apache.spark.sql.execution.datasources.{DataSource, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.internal.{DDLBasedCatalog, SqlApiConf}
 import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.storage.StorageLevel
@@ -51,9 +52,16 @@ import org.apache.spark.util.ArrayImplicits._
 /**
  * Internal implementation of the user-facing `Catalog`.
  */
-class Catalog(sparkSession: SparkSession) extends catalog.Catalog {
+class Catalog(sparkSession: SparkSession) extends catalog.Catalog with DDLBasedCatalog {
 
   private def sessionCatalog: SessionCatalog = sparkSession.sessionState.catalog
+
+  override def sql(str: String, args: Map[String, Any]): org.apache.spark.sql.DataFrame =
+    sparkSession.sql(str, args)
+  override def parseMultipartIdentifier(identifier: String): Seq[String] =
+    sparkSession.sessionState.sqlParser.parseMultipartIdentifier(identifier)
+  override def quoteIdentifier(identifier: String): String =
+    org.apache.spark.sql.catalyst.util.QuotingUtils.quoteIdentifier(identifier)
 
   /**
    * Helper function for parsing identifiers.
@@ -452,7 +460,11 @@ class Catalog(sparkSession: SparkSession) extends catalog.Catalog {
    * `Database` can be found.
    */
   override def getDatabase(dbName: String): Database = {
-    makeDatabase(None, dbName)
+    if (SqlApiConf.get.useDDLBasedCatalogAPI) {
+      super.getDatabase(dbName)
+    } else {
+      makeDatabase(None, dbName)
+    }
   }
 
   // when catalogName is specified, dbName should be a valid quoted multi-part identifier, or a
@@ -543,11 +555,15 @@ class Catalog(sparkSession: SparkSession) extends catalog.Catalog {
    * Checks if the database with the specified name exists.
    */
   override def databaseExists(dbName: String): Boolean = {
-    try {
-      getDatabase(dbName)
-      true
-    } catch {
-      case _: NoSuchNamespaceException => false
+    if (SqlApiConf.get.useDDLBasedCatalogAPI) {
+      super.databaseExists(dbName)
+    } else {
+      try {
+        getDatabase(dbName)
+        true
+      } catch {
+        case _: NoSuchNamespaceException => false
+      }
     }
   }
 
