@@ -20,6 +20,7 @@ package org.apache.spark.sql.connector.expressions.filter;
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.connector.expressions.Expression;
+import org.apache.spark.sql.connector.expressions.NamedReference;
 
 /**
  * Represents a partition filter expression (an expression targeting only the schema of
@@ -40,6 +41,23 @@ public abstract class PartitionPredicate extends Predicate {
 
   public PartitionPredicate(String name, Expression[] children) {
     super(name, children);
+  }
+
+  /**
+   * {@inheritDoc}
+   * <p>
+   * Not supported for PartitionPredicate. The partition filter is represented internally
+   * in a form that does not expose column references via children. Use
+   * {@link #referencedPartitionColumnOrdinals()} instead to obtain the partition transform
+   * ordinals referenced by this predicate.
+   *
+   * @throws UnsupportedOperationException always; use {@link #referencedPartitionColumnOrdinals()}
+   */
+  @Override
+  public NamedReference[] references() {
+    throw new UnsupportedOperationException(
+      "references() is not supported for PartitionPredicate; " +
+        "use referencedPartitionColumnOrdinals()");
   }
 
   /**
@@ -67,13 +85,14 @@ public abstract class PartitionPredicate extends Predicate {
    * </ul>
    * <p>
    * Data sources can use this to evaluate PartitionPredicates pushed down by
-   * {@link org.apache.spark.sql.connector.read.SupportsRuntimeV2Filtering#filter(Predicate[])}
+   * {@link org.apache.spark.sql.connector.read.SupportsPushDownV2Filters
+   * #pushPredicates(Predicate[])}
    * to determine whether the PartitionPredicate can be satisfied completely,
    * or whether it must be returned to Spark for post-scan filtering.
    * <p>
    * For example, data sources supporting partition spec evolution
    * should return PartitionPredicates that reference later-added partition
-   * transforms (for which data in the the table is incompletely partitioned)
+   * transforms (for which data in the table is incompletely partitioned)
    * to Spark for post-scan filter, while PartitionPredicates that reference initially-added
    * partition transforms (for which data in the table is completely partitioned) do not need
    * to be returned.

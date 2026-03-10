@@ -49,7 +49,7 @@ class PartitionPredicateImpl private (
         BoundReference(index, partitionSchema(index).dataType, nullable = true)
     }
     val predicate = Predicate.createInterpreted(boundExpr)
-    predicate.eval(_)
+    predicate.eval
   }
 
   override def accept(partitionValues: InternalRow): Boolean = {

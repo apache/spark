@@ -102,8 +102,7 @@ class InMemoryEnhancedPartitionFilterTable(
           returned += p
       }
 
-      if (partitionPredicates.nonEmpty) Array.empty[Predicate]
-      else returned.toArray
+      returned.toArray
     }
 
     override def pushedPredicates(): Array[Predicate] =

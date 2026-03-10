@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression, ExpressionSet, NamedExpression, PythonUDF, SchemaPruning, SubqueryExpression, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
@@ -36,10 +37,11 @@ import org.apache.spark.util.collection.Utils
 object PushDownUtils {
 
   /**
-   * Returns partition schema as a StructType when the table partitioning.
-   * Currently only supported for identity transforms on simple (single-name) field references.
+   * Returns a table's partitioning expression schema as a StructType.
+   * Currently a partitioning schema is only returned when all partitioning expressions are
+   * identity transforms on simple (single-name) field references.
    *
-   * @return Some(StructType) for partition transform types, if supported.
+   * @return Some(StructType) for partition transform expression types, if supported.
    */
   def getPartitionSchemaForPartitionPredicate(
       relation: DataSourceV2Relation): Option[StructType] = {
@@ -72,20 +74,10 @@ object PushDownUtils {
    * in the second pass of enhanced partition filtering: it must be deterministic, contain
    * no subquery, and no PythonUDF.
    */
-  def isPartitionPushableFilter(f: Expression): Boolean =
+  private def isPartitionPushableFilter(f: Expression): Boolean =
     f.deterministic &&
       !SubqueryExpression.hasSubquery(f) &&
       !f.exists(_.isInstanceOf[PythonUDF])
-
-  /**
-   * Deduplicates expressions by semantic equality, preserving first-occurrence order.
-   */
-  private def dedupeBySemanticEquality(exprs: Seq[Expression]): Seq[Expression] = {
-    exprs.foldLeft((Seq.empty[Expression], ExpressionSet())) {
-      case ((acc, set), expr) =>
-        if (set.contains(expr)) (acc, set) else (acc :+ expr, set + expr)
-    }._1
-  }
 
   /**
    * Pushes down filters to the data source reader.
@@ -186,20 +178,19 @@ object PushDownUtils {
             val returnedSecondPassPartitionFilters =
               r.pushPredicates(partitionPredicatesForPush.toArray).map { predicate =>
                 V2ExpressionUtils.toCatalyst(predicate).getOrElse(
-                  // should not happen
-                  DataSourceV2Strategy.rebuildExpressionFromFilter(
-                    predicate, translatedFilterToExpr))
+                  throw SparkException.internalError(
+                    "PartitionPredicate has no catalyst expression"))
               }
 
             // Normally translated filters (postScanFilters) are simple filters that can be
             // evaluated faster, while the untranslated filters are complicated filters that take
-            // more time to evaluate, so we want to evaluate the postScanFilters filters first.
+            // more time to evaluate, so we want to evaluate the translatable filters first.
             val untranslatableSet = ExpressionSet(untranslatableExprs)
             val allPostScanFilters = postScanDataFilters ++ returnedSecondPassPartitionFilters ++
               untranslatableDataFilters ++ partitionFiltersNotPushed
             val (untranslatableFilters, translatableFilters) =
               allPostScanFilters.partition(untranslatableSet.contains)
-            untranslatableFilters ++ translatableFilters
+            translatableFilters ++ untranslatableFilters
           case _ =>
             // Normally translated filters (postScanFilters) are simple filters that can be
             // evaluated faster, while the untranslated filters are complicated filters that take

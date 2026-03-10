@@ -27,6 +27,7 @@ import org.apache.spark.sql.connector.catalog.BufferedRows
 import org.apache.spark.sql.connector.catalog.InMemoryEnhancedPartitionFilterTable
 import org.apache.spark.sql.connector.catalog.InMemoryTableEnhancedPartitionFilterCatalog
 import org.apache.spark.sql.connector.expressions.filter.PartitionPredicate
+import org.apache.spark.sql.execution.ExplainUtils.stripAQEPlan
 import org.apache.spark.sql.execution.FilterExec
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.functions.udf
@@ -278,16 +279,19 @@ class DataSourceV2EnhancedPartitionFilterSuite
         "PARTITIONED BY (part_col)")
       sql(s"INSERT INTO $partFilterTableName VALUES ('a', 'x'), ('b', 'y'), ('c', 'z')")
 
-      val df = sql(s"SELECT * FROM $partFilterTableName WHERE part_col IN ('a')")
-      checkAnswer(df, Seq(Row("a", "x")))
-      assertPushedPartitionPredicates(df, 0)
+      withView("subq") {
+        sql("CREATE TEMP VIEW subq AS SELECT 'a' AS c")
+        val df = sql(s"SELECT * FROM $partFilterTableName WHERE part_col IN (SELECT c FROM subq)")
+        checkAnswer(df, Seq(Row("a", "x")))
+        assertPushedPartitionPredicates(df, 0)
+      }
     }
   }
 
-   test("all eight pushdown cases: untranslatable filters before translatable " +
+   test("all eight pushdown cases: translatable filters before untranslatable " +
      "in post-scan Filter") {
     // Cases 1, 3, 6, 7 end in post-scan (reject-partition-predicates).
-    // Post-scan filters are ordered by untranslatable first.
+    // Post-scan filters are ordered with translatable first.
     withTable(partFilterTableName) {
       sql(s"CREATE TABLE $partFilterTableName (part_col string, data string) USING $v2Source " +
         "PARTITIONED BY (part_col) TBLPROPERTIES('reject-partition-predicates' = 'true')")
@@ -302,18 +306,18 @@ class DataSourceV2EnhancedPartitionFilterSuite
         "part_col IN ('a', 'A') AND data = 'keep' AND is_keep(data) AND my_upper(part_col) = 'A'")
       checkAnswer(df, Seq(Row("a", "keep"), Row("A", "keep")))
       assertScanReturnsPartitionKeys(df, Set("a", "A", "b"))
-      assertUntranslatableBeforeTranslatableInPostScan(df)
+      assertTranslatableBeforeUntranslatableInPostScan(df)
 
-      // Reversed filter order in the query; post-scan order still untranslatable first.
+      // Reversed filter order in the query; post-scan order still translatable first.
       val dfReversed = sql(s"SELECT * FROM $partFilterTableName WHERE " +
         "my_upper(part_col) = 'A' AND is_keep(data) AND data = 'keep' AND part_col IN ('a', 'A')")
       checkAnswer(dfReversed, Seq(Row("a", "keep"), Row("A", "keep")))
       assertScanReturnsPartitionKeys(dfReversed, Set("a", "A", "b"))
-      assertUntranslatableBeforeTranslatableInPostScan(dfReversed)
+      assertTranslatableBeforeUntranslatableInPostScan(dfReversed)
     }
   }
 
-  private def assertUntranslatableBeforeTranslatableInPostScan(df: DataFrame): Unit = {
+  private def assertTranslatableBeforeUntranslatableInPostScan(df: DataFrame): Unit = {
     val postScanFilterExec = df.queryExecution.executedPlan.collect {
       case f @ FilterExec(_, _) if f.exists(_.isInstanceOf[BatchScanExec]) => f
     }.headOption.getOrElse(fail("Expected a post-scan FilterExec above BatchScanExec"))
@@ -326,8 +330,8 @@ class DataSourceV2EnhancedPartitionFilterSuite
 
     assert(
       udfIndices.isEmpty || translatableIndices.isEmpty ||
-        udfIndices.max < translatableIndices.min,
-      s"Untranslatable (UDF) filters must appear before translatable filters in post-scan " +
+        translatableIndices.max < udfIndices.min,
+      s"Translatable filters must appear before untranslatable (UDF) filters in post-scan " +
         s"condition; predicates: ${predicates.mkString(", ")}; " +
         s"UDF indices: $udfIndices, translatable indices: $translatableIndices")
   }
@@ -338,7 +342,7 @@ class DataSourceV2EnhancedPartitionFilterSuite
    */
   private def getPushedPartitionPredicates(
       df: DataFrame): Seq[PartitionPredicate] = {
-    val batchScan = df.queryExecution.executedPlan.collectFirst {
+    val batchScan = stripAQEPlan(df.queryExecution.executedPlan).collectFirst {
       case b: BatchScanExec => b
     }.getOrElse(fail("Expected BatchScanExec in plan"))
     batchScan.batch match {
