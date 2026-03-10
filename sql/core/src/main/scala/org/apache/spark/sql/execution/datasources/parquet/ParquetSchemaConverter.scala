@@ -67,7 +67,8 @@ class ParquetToSparkSchemaConverter(
     assumeBinaryIsString = conf.get(SQLConf.PARQUET_BINARY_AS_STRING.key).toBoolean,
     assumeInt96IsTimestamp = conf.get(SQLConf.PARQUET_INT96_AS_TIMESTAMP.key).toBoolean,
     caseSensitive = conf.get(SQLConf.CASE_SENSITIVE.key).toBoolean,
-    conf.get(SQLConf.LEGACY_PARQUET_NANOS_AS_LONG.key).toBoolean)
+    //conf.get(SQLConf.LEGACY_PARQUET_NANOS_AS_LONG.key).toBoolean)
+    nanosAsLong = Try(conf.get(SQLConf.LEGACY_PARQUET_NANOS_AS_LONG.key).toBoolean).getOrElse(false))
 
 
   /**
