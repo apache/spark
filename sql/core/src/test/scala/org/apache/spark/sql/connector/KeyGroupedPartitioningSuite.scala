@@ -29,7 +29,7 @@ import org.apache.spark.sql.connector.catalog.functions._
 import org.apache.spark.sql.connector.distributions.Distributions
 import org.apache.spark.sql.connector.expressions._
 import org.apache.spark.sql.connector.expressions.Expressions._
-import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.{RDDScanExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, GroupPartitionsExec}
 import org.apache.spark.sql.execution.exchange.{ShuffleExchangeExec, ShuffleExchangeLike}
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
@@ -1210,8 +1210,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
     }
   }
 
-  test("SPARK-55848: dropDuplicates after SPJ with partial clustering should produce " +
-      "correct results") {
+  test("SPARK-55848: dropDuplicates after SPJ with partial clustering") {
     val items_partitions = Array(identity("id"))
     createTable(items, itemsColumns, items_partitions)
     // Two rows for id=1 so partial clustering may split them across tasks
@@ -1238,16 +1237,24 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
       // before the dedup, leading to duplicate rows.
       val df = sql(
         s"""
-           |SELECT DISTINCT i.id
+           |${selectWithMergeJoinHint("i", "p")} DISTINCT i.id
            |FROM testcat.ns.$items i
            |JOIN testcat.ns.$purchases p ON i.id = p.item_id
            |""".stripMargin)
       checkAnswer(df, Seq(Row(1), Row(2), Row(3)))
+
+      // One GroupPartitionsExec per join child to align the partially-clustered
+      // partitions, and one above the join to group for the aggregate.
+      val joinGP = collectGroupPartitions(df.queryExecution.executedPlan)
+      assert(joinGP.size === 2,
+        "expected 2 GroupPartitionsExec under the join")
+      val allGP = collectAllGroupPartitions(df.queryExecution.executedPlan)
+      assert(allGP.size === 3,
+        "expected 3 GroupPartitionsExec total (2 under join + 1 above for aggregate)")
     }
   }
 
-  test("SPARK-55848: Window dedup after SPJ with partial clustering should produce " +
-      "correct results") {
+  test("SPARK-55848: Window dedup after SPJ with partial clustering") {
     val items_partitions = Array(identity("id"))
     createTable(items, itemsColumns, items_partitions)
     sql(s"INSERT INTO testcat.ns.$items VALUES " +
@@ -1273,17 +1280,26 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
       val df = sql(
         s"""
            |SELECT id, price FROM (
-           |  SELECT i.id, i.price,
+           |  ${selectWithMergeJoinHint("i", "p")} i.id, i.price,
            |    ROW_NUMBER() OVER (PARTITION BY i.id ORDER BY i.price DESC) AS rn
            |  FROM testcat.ns.$items i
            |  JOIN testcat.ns.$purchases p ON i.id = p.item_id
            |) t WHERE rn = 1
            |""".stripMargin)
       checkAnswer(df, Seq(Row(1, 41.0f), Row(2, 10.0f), Row(3, 15.5f)))
+
+      // One GroupPartitionsExec per join child to align the partially-clustered
+      // partitions, and one above the join to group for the window.
+      val joinGP = collectGroupPartitions(df.queryExecution.executedPlan)
+      assert(joinGP.size === 2,
+        "expected 2 GroupPartitionsExec under the join")
+      val allGP = collectAllGroupPartitions(df.queryExecution.executedPlan)
+      assert(allGP.size === 3,
+        "expected 3 GroupPartitionsExec total (2 under join + 1 above for window)")
     }
   }
 
-  test("SPARK-55848: checkpointed scan with partial clustering and dedup") {
+  test("SPARK-55848: checkpointed partially-clustered join with dedup") {
     withTempDir { dir =>
       spark.sparkContext.setCheckpointDir(dir.getPath)
       val items_partitions = Array(identity("id"))
@@ -1303,18 +1319,32 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
           "(3, 19.5, cast('2020-02-01' as timestamp))")
 
       withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
           SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
           SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> true.toString) {
-        // Checkpoint the items scan, then join with purchases under partial clustering,
-        // and finally dedup.  The checkpointed scan preserves the KeyedPartitioning
-        // with non-grouped keys; the dedup must still produce correct distinct ids.
-        val itemsDf = spark.read.table(s"testcat.ns.$items").checkpoint()
-        val purchasesDf = spark.read.table(s"testcat.ns.$purchases")
-
-        val df = itemsDf.as("i")
-          .join(purchasesDf.as("p"), col("i.id") === col("p.item_id"))
-          .select(col("i.id")).distinct()
+        // Checkpoint the JOIN result (not the scan) so the checkpoint node carries the
+        // partially-clustered KeyGroupedPartitioning. The dedup on top must still insert
+        // the required grouping operator because partially-clustered partitioning does not
+        // satisfy ClusteredDistribution.
+        val joinedDf = sql(
+          s"""${selectWithMergeJoinHint("i", "p")} i.id, i.name, i.price
+             |FROM testcat.ns.$items i
+             |JOIN testcat.ns.$purchases p ON i.id = p.item_id""".stripMargin)
+        val checkpointedDf = joinedDf.checkpoint()
+        val df = checkpointedDf.select("id").distinct()
         checkAnswer(df, Seq(Row(1), Row(2), Row(3)))
+
+        val checkpointScans = collect(df.queryExecution.executedPlan) {
+          case r: RDDScanExec => r
+        }
+        assert(checkpointScans.exists(_.outputPartitioning match {
+          case kp: physical.KeyedPartitioning => !kp.isGrouped
+          case _ => false
+        }), "checkpoint (RDDScanExec) should have ungrouped KeyedPartitioning")
+
+        val allGroupPartitions = collectAllGroupPartitions(df.queryExecution.executedPlan)
+        assert(allGroupPartitions.size === 1,
+          "expected 1 GroupPartitionsExec above the checkpointed join for dedup")
       }
     }
   }
