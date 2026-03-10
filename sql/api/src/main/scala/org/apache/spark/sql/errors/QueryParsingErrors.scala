@@ -209,19 +209,19 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
   }
 
   def emptyInputForTableSampleError(ctx: ParserRuleContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0014", ctx)
+    new ParseException(errorClass = "TABLESAMPLE_EMPTY_INPUT", ctx)
   }
 
   def tableSampleByBytesUnsupportedError(msg: String, ctx: SampleMethodContext): Throwable = {
     new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_0015",
+      errorClass = "UNSUPPORTED_TABLESAMPLE_METHOD",
       messageParameters = Map("msg" -> msg),
       ctx)
   }
 
   def invalidByteLengthLiteralError(bytesStr: String, ctx: SampleByBytesContext): Throwable = {
     new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_0016",
+      errorClass = "INVALID_BYTE_LENGTH_LITERAL",
       messageParameters = Map("bytesStr" -> bytesStr),
       ctx)
   }

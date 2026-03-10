@@ -2747,6 +2747,12 @@
     ],
     "sqlState" : "58030"
   },
+  "INVALID_BYTE_LENGTH_LITERAL" : {
+    "message" : [
+      "<bytesStr> is not a valid byte length literal, expected syntax: DIGIT+ ('B' | 'K' | 'M' | 'G')."
+    ],
+    "sqlState" : "42604"
+  },
   "INVALID_BYTE_STRING" : {
     "message" : [
       "The expected format is ByteString, but was <unsupported> (<class>)."
@@ -6400,6 +6406,12 @@
     ],
     "sqlState" : "54023"
   },
+  "TABLESAMPLE_EMPTY_INPUT" : {
+    "message" : [
+      "TABLESAMPLE does not accept empty inputs."
+    ],
+    "sqlState" : "42601"
+  },
   "TASK_WRITE_FAILED" : {
     "message" : [
       "Task failed while writing rows to <path>."
@@ -7658,6 +7670,12 @@
     },
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_TABLESAMPLE_METHOD" : {
+    "message" : [
+      "TABLESAMPLE(<msg>) is not supported."
+    ],
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_TABLE_CHANGES_IN_AUTO_SCHEMA_EVOLUTION" : {
     "message" : [
       "Operation could not apply the following schema changes to table <tableName> because the catalog did not support or only partially applied them: <changes>."
@@ -7934,21 +7952,6 @@
   "_LEGACY_ERROR_TEMP_0012" : {
     "message" : [
       "DISTRIBUTE BY is not supported."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0014" : {
-    "message" : [
-      "TABLESAMPLE does not accept empty inputs."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0015" : {
-    "message" : [
-      "TABLESAMPLE(<msg>) is not supported."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0016" : {
-    "message" : [
-      "<bytesStr> is not a valid byte length literal, expected syntax: DIGIT+ ('B' | 'K' | 'M' | 'G')."
     ]
   },
   "_LEGACY_ERROR_TEMP_0018" : {
