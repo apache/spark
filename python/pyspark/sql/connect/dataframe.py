@@ -533,15 +533,7 @@ class DataFrame(ParentDataFrame):
         res._cached_schema = self._cached_schema
         return res
 
-    @overload
-    def drop(self, cols: "ColumnOrName") -> ParentDataFrame:
-        ...
-
-    @overload
-    def drop(self, *cols: str) -> ParentDataFrame:
-        ...
-
-    def drop(self, *cols: "ColumnOrName") -> ParentDataFrame:  # type: ignore[misc]
+    def drop(self, *cols: "ColumnOrName") -> ParentDataFrame:
         _cols = list(cols)
         if any(not isinstance(c, (str, Column)) for c in _cols):
             raise PySparkTypeError(
