@@ -7051,6 +7051,11 @@
           "Catalog <catalogName> does not support Change Data Capture (CDC). The catalog must declare the SUPPORT_CHANGELOG capability."
         ]
       },
+      "CHANGE_DATA_CAPTURE_ON_RELATION" : {
+        "message" : [
+          "Change Data Capture (CDC) on the relation: <relationId>."
+        ]
+      },
       "CLAUSE_WITH_PIPE_OPERATORS" : {
         "message" : [
           "The SQL pipe operator syntax using |> does not support <clauses>."

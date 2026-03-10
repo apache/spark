@@ -21,6 +21,7 @@ import java.util
 
 import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder}
@@ -154,6 +155,43 @@ class ChangelogResolutionSuite extends QueryTest with SharedSparkSession {
         .changes(s"$cdcCatalogName.test_table")
     }
     assert(e.getMessage.contains("changes"))
+  }
+
+  test("DataStreamReader - changes() resolves to StreamingRelationV2 with ChangelogTable") {
+    val df = spark.readStream
+      .option("startingVersion", "1")
+      .changes(s"$cdcCatalogName.test_table")
+    val analyzed = df.queryExecution.analyzed
+    val streamRelations = analyzed.collect {
+      case r: StreamingRelationV2 => r
+    }
+    assert(streamRelations.length == 1)
+    assert(streamRelations.head.table.isInstanceOf[ChangelogTable])
+    val colNames = df.schema.fieldNames
+    assert(colNames.contains("_change_type"))
+    assert(colNames.contains("_commit_version"))
+    assert(colNames.contains("_commit_timestamp"))
+  }
+
+  test("DataStreamReader - changes() on catalog without CDC throws") {
+    checkError(
+      intercept[AnalysisException] {
+        spark.readStream
+          .option("startingVersion", "1")
+          .changes(s"$noCdcCatalogName.test_table")
+      },
+      condition = "UNSUPPORTED_FEATURE.CHANGE_DATA_CAPTURE",
+      parameters = Map("catalogName" -> noCdcCatalogName))
+  }
+
+  test("CHANGES clause on CTE relation throws") {
+    checkError(
+      intercept[AnalysisException] {
+        sql("WITH x AS (SELECT 1) SELECT * FROM x CHANGES FROM VERSION 1 TO VERSION 5")
+      },
+      condition = "UNSUPPORTED_FEATURE.CHANGE_DATA_CAPTURE_ON_RELATION",
+      sqlState = None,
+      parameters = Map("relationId" -> "`x`"))
   }
 }
 
