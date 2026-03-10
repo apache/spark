@@ -2757,7 +2757,6 @@
     "message" : [
       "Invalid Change Data Capture (CDC) option."
     ],
-    "sqlState" : "42K03",
     "subClass" : {
       "CONFLICTING_RANGE_TYPES" : {
         "message" : [
@@ -2779,7 +2778,8 @@
           "startingVersion is required when endingVersion is specified for CDC queries."
         ]
       }
-    }
+    },
+    "sqlState" : "42K03"
   },
   "INVALID_CLONE_SESSION_REQUEST" : {
     "message" : [
