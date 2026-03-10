@@ -1210,8 +1210,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
     }
   }
 
-  test("SPARK-55848: dropDuplicates after SPJ with partial clustering should produce " +
-      "correct results") {
+  test("SPARK-55848: dropDuplicates after SPJ with partial clustering") {
     val items_partitions = Array(identity("id"))
     createTable(items, itemsColumns, items_partitions)
     // Two rows for id=1 so partial clustering may split them across tasks
@@ -1238,16 +1237,24 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
       // before the dedup, leading to duplicate rows.
       val df = sql(
         s"""
-           |SELECT DISTINCT i.id
+           |${selectWithMergeJoinHint("i", "p")} DISTINCT i.id
            |FROM testcat.ns.$items i
            |JOIN testcat.ns.$purchases p ON i.id = p.item_id
            |""".stripMargin)
       checkAnswer(df, Seq(Row(1), Row(2), Row(3)))
+
+      // One GroupPartitionsExec per join child to align the partially-clustered
+      // partitions, and one above the join to group for the aggregate.
+      val joinGP = collectGroupPartitions(df.queryExecution.executedPlan)
+      assert(joinGP.size === 2,
+        "expected 2 GroupPartitionsExec under the join")
+      val allGP = collectAllGroupPartitions(df.queryExecution.executedPlan)
+      assert(allGP.size === 3,
+        "expected 3 GroupPartitionsExec total (2 under join + 1 above for aggregate)")
     }
   }
 
-  test("SPARK-55848: Window dedup after SPJ with partial clustering should produce " +
-      "correct results") {
+  test("SPARK-55848: Window dedup after SPJ with partial clustering") {
     val items_partitions = Array(identity("id"))
     createTable(items, itemsColumns, items_partitions)
     sql(s"INSERT INTO testcat.ns.$items VALUES " +
@@ -1273,13 +1280,22 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
       val df = sql(
         s"""
            |SELECT id, price FROM (
-           |  SELECT i.id, i.price,
+           |  ${selectWithMergeJoinHint("i", "p")} i.id, i.price,
            |    ROW_NUMBER() OVER (PARTITION BY i.id ORDER BY i.price DESC) AS rn
            |  FROM testcat.ns.$items i
            |  JOIN testcat.ns.$purchases p ON i.id = p.item_id
            |) t WHERE rn = 1
            |""".stripMargin)
       checkAnswer(df, Seq(Row(1, 41.0f), Row(2, 10.0f), Row(3, 15.5f)))
+
+      // One GroupPartitionsExec per join child to align the partially-clustered
+      // partitions, and one above the join to group for the window.
+      val joinGP = collectGroupPartitions(df.queryExecution.executedPlan)
+      assert(joinGP.size === 2,
+        "expected 2 GroupPartitionsExec under the join")
+      val allGP = collectAllGroupPartitions(df.queryExecution.executedPlan)
+      assert(allGP.size === 3,
+        "expected 3 GroupPartitionsExec total (2 under join + 1 above for window)")
     }
   }
 
@@ -1312,9 +1328,19 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
         val purchasesDf = spark.read.table(s"testcat.ns.$purchases")
 
         val df = itemsDf.as("i")
+          .hint("MERGE")
           .join(purchasesDf.as("p"), col("i.id") === col("p.item_id"))
           .select(col("i.id")).distinct()
         checkAnswer(df, Seq(Row(1), Row(2), Row(3)))
+
+        // One GroupPartitionsExec per join child to align the partially-clustered
+        // partitions, and one above the join to group for the aggregate.
+        val joinGP = collectGroupPartitions(df.queryExecution.executedPlan)
+        assert(joinGP.size === 2,
+          "expected 2 GroupPartitionsExec under the join")
+        val allGP = collectAllGroupPartitions(df.queryExecution.executedPlan)
+        assert(allGP.size === 3,
+          "expected 3 GroupPartitionsExec total (2 under join + 1 above for aggregate)")
       }
     }
   }
