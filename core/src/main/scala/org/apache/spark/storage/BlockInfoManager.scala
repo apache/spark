@@ -202,11 +202,7 @@ private[storage] class BlockInfoManager(trackingCacheVisibility: Boolean = false
   private def unregisterWriteLockForTask(taskAttemptId: TaskAttemptId, blockId: BlockId): Unit = {
     writeLocksByTask.computeIfPresent(taskAttemptId, (_, blockIds) => {
       blockIds.remove(blockId)
-      if (blockIds.isEmpty) {
-        null // Returning null makes the `writeLocksByTask` drop this entry from the map.
-      } else {
-        blockIds
-      }
+      blockIds
     })
   }
 
