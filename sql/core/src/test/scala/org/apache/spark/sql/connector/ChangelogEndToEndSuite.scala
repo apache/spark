@@ -129,10 +129,41 @@ class ChangelogEndToEndSuite extends QueryTest with SharedSparkSession {
       Row(2L, "b")))
   }
 
+  test("DataFrame API - changes() returns change data") {
+    catalog.addChangeRows(ident, Seq(
+      makeChangeRow(1L, "a", "insert", 1L, 1000000L),
+      makeChangeRow(2L, "b", "delete", 2L, 2000000L)))
+
+    val df = spark.read
+      .option("startingVersion", "1")
+      .option("endingVersion", "2")
+      .changes(fullTableName)
+    checkAnswer(df, Seq(
+      Row(1L, "a", "insert", 1L, new Timestamp(1000L)),
+      Row(2L, "b", "delete", 2L, new Timestamp(2000L))))
+  }
+
+  test("DataFrame API - changes() with projection and filter") {
+    catalog.addChangeRows(ident, Seq(
+      makeChangeRow(1L, "a", "insert", 1L, 1000000L),
+      makeChangeRow(2L, "b", "insert", 1L, 1000000L),
+      makeChangeRow(1L, "a2", "insert", 2L, 2000000L)))
+
+    val df = spark.read
+      .option("startingVersion", "1")
+      .changes(fullTableName)
+      .filter("_commit_version = 2")
+      .select("id", "data")
+    checkAnswer(df, Seq(Row(1L, "a2")))
+  }
+
   test("schema includes CDC metadata columns") {
-    val df = sql(
-      s"SELECT * FROM $fullTableName " +
-        "CHANGES FROM VERSION 1 TO VERSION 5")
+    catalog.addChangeRows(ident, Seq(
+      makeChangeRow(1L, "a", "insert", 1L, 1000000L)))
+
+    val df = spark.read
+      .option("startingVersion", "1")
+      .changes(fullTableName)
     val colNames = df.schema.fieldNames
     assert(colNames === Array(
       "id", "data", "_change_type",

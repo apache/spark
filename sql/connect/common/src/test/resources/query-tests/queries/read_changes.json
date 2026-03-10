@@ -1,0 +1,12 @@
+{
+  "common": {
+    "planId": "0"
+  },
+  "readChanges": {
+    "unparsedIdentifier": "myTable",
+    "options": {
+      "startingversion": "1",
+      "endingversion": "5"
+    }
+  }
+}

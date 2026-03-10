@@ -197,6 +197,18 @@ class DataFrameReader private[sql] (sparkSession: SparkSession) extends sql.Data
   }
 
   /** @inheritdoc */
+  def changes(tableName: String): DataFrame = {
+    assertNoSpecifiedSchema("changes")
+    sparkSession.newDataFrame { builder =>
+      val changesBuilder = builder.getReadChangesBuilder
+        .setUnparsedIdentifier(tableName)
+      extraOptions.foreach { case (k, v) =>
+        changesBuilder.putOptions(k, v)
+      }
+    }
+  }
+
+  /** @inheritdoc */
   override def text(path: String): DataFrame = super.text(path)
 
   /** @inheritdoc */
