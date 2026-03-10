@@ -173,13 +173,6 @@ $(document).ready(function() {
       $.fn.dataTable.defaults.paging = false;
     }
 
-    var data = {
-      "uiroot": uiRoot,
-      "applications": array,
-      "hasMultipleAttempts": hasMultipleAttempts,
-      "showCompletedColumns": !requestedIncomplete,
-    };
-
     $.get(uiRoot + "/static/historypage-template.html", function(template) {
       var sibling = historySummary.prev();
       historySummary.detach();

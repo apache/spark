@@ -567,7 +567,6 @@ $(document).ready(function () {
         "allTotalExcluded": deadTotalExcluded
       };
 
-      var data = {executors: response, "execSummary": [activeSummary, deadSummary, totalSummary]};
       $.get(createTemplateURI(appId, "executorspage"), function (template) {
 
         executorsSummary.append($(template).filter("#executors-summary-template").html());
