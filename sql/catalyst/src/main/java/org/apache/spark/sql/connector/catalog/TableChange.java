@@ -810,6 +810,14 @@ public interface TableChange {
       result = 31 * result + Objects.hashCode(newCurrentDefault);
       return result;
     }
+
+    @Override
+    public String toString() {
+      return newCurrentDefault == null
+              ? "ALTER COLUMN " + TableChange.fieldPath(fieldNames) + " DROP DEFAULT"
+              : "ALTER COLUMN " + TableChange.fieldPath(fieldNames) + " SET DEFAULT " +
+                  newCurrentDefault.getSql();
+    }
   }
 
   /**

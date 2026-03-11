@@ -322,9 +322,7 @@ class PandasUDFTestsMixin:
 
         # Since 0.11.0, PyArrow supports the feature to raise an error for unsafe cast.
         with self.sql_conf({"spark.sql.execution.pandas.convertToArrowArraySafely": True}):
-            with self.assertRaisesRegex(
-                Exception, "Exception thrown when converting pandas.Series"
-            ):
+            with self.assertRaisesRegex(Exception, "Failed to convert the value"):
                 df.select(["A"]).withColumn("udf", udf("A")).collect()
 
         # Disabling Arrow safe type check.
@@ -342,9 +340,7 @@ class PandasUDFTestsMixin:
 
         # When enabling safe type check, Arrow 0.11.0+ disallows overflow cast.
         with self.sql_conf({"spark.sql.execution.pandas.convertToArrowArraySafely": True}):
-            with self.assertRaisesRegex(
-                Exception, "Exception thrown when converting pandas.Series"
-            ):
+            with self.assertRaisesRegex(Exception, "Failed to convert the value"):
                 df.withColumn("udf", udf("id")).collect()
 
         # Disabling safe type check, let Arrow do the cast anyway.
@@ -375,7 +371,7 @@ class PandasUDFTestsMixin:
         ):
             self.assertRaisesRegex(
                 PythonException,
-                "Exception thrown when converting pandas.Series",
+                "Failed to convert the value",
                 df.withColumn("decimal_val", int_to_decimal_udf("id")).collect,
             )
 
