@@ -36,12 +36,6 @@ The script produces entries from the following PROJ SQL files:
   - engineering_crs.sql  (EPSG engineering CRS)
   - esri.sql             (ESRI geodetic, projected, compound, vertical, engineering CRS)
 
-Additionally, the following special entries are added:
-  - SRID 0    -> SRID:0     (Spark convention: Cartesian, no defined SRS)
-  - SRID 4267 -> OGC:CRS27  (OGC standardization of NAD27)
-  - SRID 4269 -> OGC:CRS83  (OGC standardization of NAD83)
-  - SRID 4326 -> OGC:CRS84  (OGC standardization of WGS 84)
-
 Prerequisites:
     Python 3.9+ (no third-party packages required)
 
@@ -90,14 +84,6 @@ PROJ_SQL_FILES = [
     "engineering_crs.sql",
     "esri.sql",
 ]
-
-# OGC special cases: these SRIDs are standardized under OGC rather than EPSG.
-# The OGC string IDs override the EPSG ones for these SRIDs.
-OGC_SPECIAL_CASES = {
-    4267: "OGC:CRS27",  # NAD27
-    4269: "OGC:CRS83",  # NAD83
-    4326: "OGC:CRS84",  # WGS 84
-}
 
 # Output paths for the generated CSV, relative to the Spark repo root.
 JAVA_RESOURCE_PATH = os.path.join(
@@ -357,17 +343,6 @@ def main():
     if duplicates:
         print(f"  Removed {duplicates} duplicate SRID(s)")
     all_entries = deduped
-
-    # Add Spark-specific entry: SRID 0 (Cartesian, no defined SRS).
-    all_entries.append((0, "SRID:0", False))
-
-    # Apply OGC special case overrides: replace string IDs for standardized SRIDs.
-    ogc_applied = 0
-    for i, (srid, string_id, is_geographic) in enumerate(all_entries):
-        if srid in OGC_SPECIAL_CASES:
-            all_entries[i] = (srid, OGC_SPECIAL_CASES[srid], is_geographic)
-            ogc_applied += 1
-    print(f"  Applied {ogc_applied} OGC special case override(s)")
 
     # Count entries by authority.
     authority_counts = {}

@@ -2,7 +2,6 @@
 # Source: https://github.com/OSGeo/PROJ/tree/9.7.1/data/sql
 # Do not edit manually. Re-run the script to regenerate.
 srid,string_id,is_geographic
-0,SRID:0,false
 2000,EPSG:2000,false
 2001,EPSG:2001,false
 2002,EPSG:2002,false
@@ -2131,9 +2130,9 @@ srid,string_id,is_geographic
 4264,EPSG:4264,true
 4265,EPSG:4265,true
 4266,EPSG:4266,true
-4267,OGC:CRS27,true
+4267,EPSG:4267,true
 4268,EPSG:4268,true
-4269,OGC:CRS83,true
+4269,EPSG:4269,true
 4270,EPSG:4270,true
 4271,EPSG:4271,true
 4272,EPSG:4272,true
@@ -2185,7 +2184,7 @@ srid,string_id,is_geographic
 4319,EPSG:4319,true
 4322,EPSG:4322,true
 4324,EPSG:4324,true
-4326,OGC:CRS84,true
+4326,EPSG:4326,true
 4327,EPSG:4327,true
 4328,EPSG:4328,false
 4329,EPSG:4329,true
