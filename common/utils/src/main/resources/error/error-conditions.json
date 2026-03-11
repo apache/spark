@@ -2768,6 +2768,11 @@
           "Invalid deduplicationMode: '<mode>'. Expected one of: none, dropCarryovers, netChanges."
         ]
       },
+      "INVALID_TIMESTAMP" : {
+        "message" : [
+          "The timestamp '<timestamp>' cannot be cast to TIMESTAMP type for CDC queries."
+        ]
+      },
       "MISSING_STARTING_TIMESTAMP" : {
         "message" : [
           "startingTimestamp is required when endingTimestamp is specified for CDC queries."

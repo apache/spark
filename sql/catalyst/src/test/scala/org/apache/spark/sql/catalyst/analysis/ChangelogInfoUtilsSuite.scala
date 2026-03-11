@@ -165,8 +165,8 @@ class ChangelogInfoUtilsSuite extends SparkFunSuite with SQLHelper {
         ChangelogInfoUtils.fromOptions(
           makeOptions("startingTimestamp" -> "not-a-timestamp"), testTimeZone)
       },
-      condition = "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.OPTION",
-      parameters = Map("expr" -> "'not-a-timestamp'"))
+      condition = "INVALID_CDC_OPTION.INVALID_TIMESTAMP",
+      parameters = Map("timestamp" -> "not-a-timestamp"))
   }
 
   test("timestamp range respects session time zone") {

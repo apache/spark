@@ -76,7 +76,13 @@ public sealed interface ChangelogRange
    * Used by streaming queries where the connector determines the starting point.
    */
   record Unbounded() implements ChangelogRange {
-    @Override public boolean startingBoundInclusive() { return true; }
-    @Override public boolean endingBoundInclusive() { return true; }
+    @Override public boolean startingBoundInclusive() {
+      throw new UnsupportedOperationException(
+          "Unbounded range has no starting bound.");
+    }
+    @Override public boolean endingBoundInclusive() {
+      throw new UnsupportedOperationException(
+          "Unbounded range has no ending bound.");
+    }
   }
 }

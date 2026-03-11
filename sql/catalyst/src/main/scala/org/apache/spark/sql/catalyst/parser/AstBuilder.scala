@@ -2376,35 +2376,18 @@ class AstBuilder extends DataTypeAstBuilder
   override def visitChangelogTableName(ctx: ChangelogTableNameContext): LogicalPlan =
     withOrigin(ctx) {
       val relation = createUnresolvedRelation(ctx.identifierReference, Option(ctx.optionsClause))
-      val changelogInfo = buildChangelogInfo(ctx.changesClause)
+      val options = resolveOptions(Option(ctx.optionsClause))
+      val changelogInfo = buildChangelogInfo(ctx.changesClause, options)
       val result = RelationChanges(relation, changelogInfo)
       mayApplyAliasPlan(ctx.tableAlias, result)
     }
 
   /**
-   * Create a streaming changelog (CDC) relation from: STREAM table CHANGES ...
+   * Build a [[ChangelogInfo]] from a batch changesClause context and optional WITH options.
    */
-  override def visitStreamChangelogTableName(
-      ctx: StreamChangelogTableNameContext): LogicalPlan = withOrigin(ctx) {
-    val ident = visitMultipartIdentifier(ctx.multipartIdentifier)
-    val relation = createUnresolvedRelation(
-      ctx = ctx,
-      ident = ident,
-      optionsClause = Option(ctx.optionsClause),
-      writePrivileges = Seq.empty,
-      isStreaming = true)
-    val changelogInfo = buildStreamChangelogInfo(ctx.streamChangesClause)
-    val result = RelationChanges(relation, changelogInfo)
-    val table = mayApplyAliasPlan(ctx.tableAlias, result)
-    val tableWithWatermark = table.optionalMap(ctx.watermarkClause)(withWatermark)
-    val sourceNameOpt = extractSourceName(ctx.identifiedByClause)
-    NamedStreamingRelation.withUserProvidedName(tableWithWatermark, sourceNameOpt)
-  }
-
-  /**
-   * Build a [[ChangelogInfo]] from a batch changesClause context.
-   */
-  private def buildChangelogInfo(ctx: ChangesClauseContext): ChangelogInfo = {
+  private def buildChangelogInfo(
+      ctx: ChangesClauseContext,
+      options: CaseInsensitiveStringMap): ChangelogInfo = {
     val startExclusive = ctx.startExclusive != null
     val endExclusive = ctx.endExclusive != null
     val startInclusive = !startExclusive
@@ -2442,18 +2425,17 @@ class AstBuilder extends DataTypeAstBuilder
         endInclusive)
     }
 
-    // Default deduplication mode and computeUpdates. These can be overridden via WITH options
-    // at a later stage, but the grammar's optionsClause is handled separately.
-    new ChangelogInfo(
-      range,
-      ChangelogInfo.DeduplicationMode.DROP_CARRYOVERS,
-      false)
+    val (deduplicationMode, computeUpdates) = resolveChangelogOptions(options)
+    new ChangelogInfo(range, deduplicationMode, computeUpdates)
   }
 
   /**
-   * Build a [[ChangelogInfo]] from a streaming streamChangesClause context.
+   * Build a [[ChangelogInfo]] from a streaming streamChangesClause context and optional
+   * WITH options.
    */
-  private def buildStreamChangelogInfo(ctx: StreamChangesClauseContext): ChangelogInfo = {
+  private def buildStreamChangelogInfo(
+      ctx: StreamChangesClauseContext,
+      options: CaseInsensitiveStringMap): ChangelogInfo = {
     val startExclusive = ctx.startExclusive != null
     val startInclusive = !startExclusive
 
@@ -2480,10 +2462,30 @@ class AstBuilder extends DataTypeAstBuilder
       new ChangelogRange.Unbounded()
     }
 
-    new ChangelogInfo(
-      range,
-      ChangelogInfo.DeduplicationMode.DROP_CARRYOVERS,
-      false)
+    val (deduplicationMode, computeUpdates) = resolveChangelogOptions(options)
+    new ChangelogInfo(range, deduplicationMode, computeUpdates)
+  }
+
+  /**
+   * Extract deduplicationMode and computeUpdates from WITH options for CDC queries.
+   * Defaults: DROP_CARRYOVERS for deduplicationMode, false for computeUpdates.
+   */
+  private def resolveChangelogOptions(
+      options: CaseInsensitiveStringMap)
+      : (ChangelogInfo.DeduplicationMode, Boolean) = {
+    val deduplicationModeStr = Option(options.get("deduplicationMode"))
+      .getOrElse("dropCarryovers").toLowerCase(java.util.Locale.ROOT)
+    val deduplicationMode = deduplicationModeStr match {
+      case "none" => ChangelogInfo.DeduplicationMode.NONE
+      case "dropcarryovers" => ChangelogInfo.DeduplicationMode.DROP_CARRYOVERS
+      case "netchanges" => ChangelogInfo.DeduplicationMode.NET_CHANGES
+      case other =>
+        throw new AnalysisException(
+          "INVALID_CDC_OPTION.INVALID_DEDUPLICATION_MODE",
+          Map("mode" -> other))
+    }
+    val computeUpdates = options.getBoolean("computeUpdates", false)
+    (deduplicationMode, computeUpdates)
   }
 
   /**
@@ -2640,13 +2642,26 @@ class AstBuilder extends DataTypeAstBuilder
       writePrivileges = Seq.empty,
       isStreaming = true)
 
-    val table = mayApplyAliasPlan(ctx.tableAlias, relation)
-    val tableWithWatermark = table.optionalMap(ctx.watermarkClause)(withWatermark)
-    val sourceNameOpt = extractSourceName(ctx.identifiedByClause)
-    tableWithWatermark.transformUp {
-      case r: UnresolvedRelation =>
-        NamedStreamingRelation.withUserProvidedName(
-          r.copy(isStreaming = true), sourceNameOpt)
+    Option(ctx.streamChangesClause) match {
+      case Some(changesCtx) =>
+        // Streaming CDC: wrap in RelationChanges and NamedStreamingRelation
+        val options = resolveOptions(Option(ctx.optionsClause))
+        val changelogInfo = buildStreamChangelogInfo(changesCtx, options)
+        val result = RelationChanges(relation, changelogInfo)
+        val table = mayApplyAliasPlan(ctx.tableAlias, result)
+        val tableWithWatermark = table.optionalMap(ctx.watermarkClause)(withWatermark)
+        val sourceNameOpt = extractSourceName(ctx.identifiedByClause)
+        NamedStreamingRelation.withUserProvidedName(tableWithWatermark, sourceNameOpt)
+      case None =>
+        // Regular streaming relation
+        val table = mayApplyAliasPlan(ctx.tableAlias, relation)
+        val tableWithWatermark = table.optionalMap(ctx.watermarkClause)(withWatermark)
+        val sourceNameOpt = extractSourceName(ctx.identifiedByClause)
+        tableWithWatermark.transformUp {
+          case r: UnresolvedRelation =>
+            NamedStreamingRelation.withUserProvidedName(
+              r.copy(isStreaming = true), sourceNameOpt)
+        }
     }
   }
 

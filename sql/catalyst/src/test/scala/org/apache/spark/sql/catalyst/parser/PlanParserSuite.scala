@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.parser
 import scala.annotation.nowarn
 
 import org.apache.spark.SparkThrowable
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, RelationChanges, RelationTimeTravel, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedInlineTable, UnresolvedRelation, UnresolvedStar, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTVFAliases}
 import org.apache.spark.sql.catalyst.expressions._
@@ -1944,11 +1945,65 @@ class PlanParserSuite extends AnalysisTest {
   }
 
   test("CHANGES clause - with options") {
-    // CHANGES with WITH clause should parse correctly
-    val plan = parsePlan(
+    def assertChangelogInfo(sql: String): ChangelogInfo = {
+      val plan = parsePlan(sql)
+      val project = plan.asInstanceOf[Project]
+      val changes = project.child match {
+        case rc: RelationChanges => rc
+        case sa: SubqueryAlias => sa.child.asInstanceOf[RelationChanges]
+      }
+      changes.changelogInfo
+    }
+
+    // Default: DROP_CARRYOVERS and computeUpdates = false
+    val info1 = assertChangelogInfo(
+      "SELECT * FROM a.b.c CHANGES FROM VERSION 10 TO VERSION 20")
+    assert(info1.deduplicationMode() == ChangelogInfo.DeduplicationMode.DROP_CARRYOVERS)
+    assert(!info1.computeUpdates())
+
+    // deduplicationMode = none
+    val info2 = assertChangelogInfo(
       "SELECT * FROM a.b.c CHANGES FROM VERSION 10 TO VERSION 20 " +
         "WITH (deduplicationMode = 'none')")
-    assert(plan.isInstanceOf[Project])
+    assert(info2.deduplicationMode() == ChangelogInfo.DeduplicationMode.NONE)
+    assert(!info2.computeUpdates())
+
+    // deduplicationMode = netChanges
+    val info3 = assertChangelogInfo(
+      "SELECT * FROM a.b.c CHANGES FROM VERSION 10 TO VERSION 20 " +
+        "WITH (deduplicationMode = 'netChanges')")
+    assert(info3.deduplicationMode() == ChangelogInfo.DeduplicationMode.NET_CHANGES)
+
+    // computeUpdates = true
+    val info4 = assertChangelogInfo(
+      "SELECT * FROM a.b.c CHANGES FROM VERSION 10 TO VERSION 20 " +
+        "WITH (computeUpdates = 'true')")
+    assert(info4.deduplicationMode() == ChangelogInfo.DeduplicationMode.DROP_CARRYOVERS)
+    assert(info4.computeUpdates())
+
+    // Both options together
+    val info5 = assertChangelogInfo(
+      "SELECT * FROM a.b.c CHANGES FROM VERSION 10 TO VERSION 20 " +
+        "WITH (deduplicationMode = 'none', computeUpdates = 'true')")
+    assert(info5.deduplicationMode() == ChangelogInfo.DeduplicationMode.NONE)
+    assert(info5.computeUpdates())
+
+    // Case-insensitive deduplicationMode value
+    val info6 = assertChangelogInfo(
+      "SELECT * FROM a.b.c CHANGES FROM VERSION 10 TO VERSION 20 " +
+        "WITH (deduplicationMode = 'DROPCARRYOVERS')")
+    assert(info6.deduplicationMode() == ChangelogInfo.DeduplicationMode.DROP_CARRYOVERS)
+  }
+
+  test("CHANGES clause - invalid deduplicationMode") {
+    checkError(
+      intercept[AnalysisException] {
+        parsePlan(
+          "SELECT * FROM a.b.c CHANGES FROM VERSION 10 TO VERSION 20 " +
+            "WITH (deduplicationMode = 'invalid')")
+      },
+      condition = "INVALID_CDC_OPTION.INVALID_DEDUPLICATION_MODE",
+      parameters = Map("mode" -> "invalid"))
   }
 
   test("CHANGES clause - aliased table") {

@@ -107,8 +107,8 @@ object ChangelogInfoUtils {
     ).eval()
     if (value == null) {
       throw new AnalysisException(
-        "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.OPTION",
-        Map("expr" -> s"'$timestampStr'"))
+        "INVALID_CDC_OPTION.INVALID_TIMESTAMP",
+        Map("timestamp" -> timestampStr))
     }
     value.asInstanceOf[Long]
   }

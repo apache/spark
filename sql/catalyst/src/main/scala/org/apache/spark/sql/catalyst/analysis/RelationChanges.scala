@@ -29,7 +29,10 @@ import org.apache.spark.sql.connector.catalog.ChangelogInfo
  * called. During analysis, it is resolved by loading a `Changelog` from the catalog and wrapping
  * it in a `ChangelogTable`.
  *
- * @param relation the underlying table relation (typically an [[UnresolvedRelation]])
+ * Note: `relation` is a constructor field, not a tree child (this node extends
+ * [[UnresolvedLeafNode]]). Tree traversals like `transformUp` will not visit `relation`.
+ *
+ * @param relation the table relation (typically an [[UnresolvedRelation]])
  * @param changelogInfo the CDC query parameters (range, deduplication mode, etc.)
  */
 case class RelationChanges(

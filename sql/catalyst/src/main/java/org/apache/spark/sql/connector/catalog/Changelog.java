@@ -54,30 +54,36 @@ public interface Changelog {
   Column[] columns();
 
   /**
-   * Whether the change data may contain identical insert/delete carry-over pairs
+   * Whether the raw change data may contain identical insert/delete carry-over pairs
    * produced by copy-on-write file rewrites.
    * <p>
-   * If {@code false}, the connector guarantees that no carry-over pairs are present and
-   * Spark will skip carry-over removal entirely.
+   * When {@code true} and the CDC query's {@code deduplicationMode} is not {@code none},
+   * Spark will remove carry-over pairs from the raw change data.
+   * If {@code false}, the connector guarantees that no carry-over pairs are present in the
+   * raw change data and Spark will skip carry-over removal entirely.
    */
   boolean containsCarryoverRows();
 
   /**
-   * Whether the change data may contain multiple intermediate states per row identity
+   * Whether the raw change data may contain multiple intermediate states per row identity
    * within a single commit version.
    * <p>
+   * When {@code true} and the CDC query's {@code deduplicationMode} is {@code netChanges},
+   * Spark will collapse multiple changes per row identity into the net effect.
    * If {@code false}, the connector guarantees at most one change per row identity per
-   * commit version, and Spark will skip net change computation.
+   * commit version in the raw change data, and Spark will skip net change computation.
    */
   boolean containsIntermediateChanges();
 
   /**
-   * Whether updates are represented as delete+insert pairs rather than fully
-   * materialized {@code update_preimage} and {@code update_postimage} entries.
+   * Whether updates in the raw change data are represented as delete+insert pairs rather
+   * than fully materialized {@code update_preimage} and {@code update_postimage} entries.
    * <p>
+   * When {@code true} and the CDC query's {@code computeUpdates} option is enabled,
+   * Spark will derive {@code update_preimage}/{@code update_postimage} from insert/delete
+   * pairs in the raw change data.
    * If {@code false}, the connector guarantees that update pre/post-images are already
-   * present in the change data. Spark will not attempt to derive updates from
-   * insert/delete pairs.
+   * present in the raw change data.
    */
   boolean representsUpdateAsDeleteAndInsert();
 

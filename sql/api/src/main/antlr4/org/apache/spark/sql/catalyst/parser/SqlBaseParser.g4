@@ -431,11 +431,9 @@ createPipelineDatasetHeader
     ;
 
 streamRelationPrimary
-    : STREAM multipartIdentifier streamChangesClause
+    : STREAM multipartIdentifier streamChangesClause?
       optionsClause? identifiedByClause?
-      watermarkClause? tableAlias                                      #streamChangelogTableName
-    | STREAM multipartIdentifier optionsClause?
-      identifiedByClause? watermarkClause? tableAlias                  #streamTableName
+      watermarkClause? tableAlias                                      #streamTableName
     | STREAM LEFT_PAREN multipartIdentifier RIGHT_PAREN
       optionsClause? identifiedByClause?
       watermarkClause? tableAlias                                      #streamTableName
@@ -914,6 +912,8 @@ changesClause
             (INCLUSIVE | endExclusive=EXCLUSIVE)?)?
     ;
 
+// Like changesClause but startingVersion/startingTimestamp is optional (streaming can start
+// without an explicit starting point) and there is no ending bound (streaming is open-ended).
 streamChangesClause
     : CHANGES (FROM (SYSTEM_VERSION | VERSION) startingVersion=version
         (INCLUSIVE | startExclusive=EXCLUSIVE)?)?
