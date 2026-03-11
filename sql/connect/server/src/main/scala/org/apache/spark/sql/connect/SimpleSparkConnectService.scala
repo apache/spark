@@ -26,6 +26,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connect.service.SparkConnectService
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.util.ArrowUtils
 
 /**
  * A simple main class method to start the spark connect server as a service for client tests
@@ -37,6 +38,7 @@ import org.apache.spark.sql.internal.SQLConf
  */
 private[sql] object SimpleSparkConnectService {
   private val stopCommand = "q"
+  private val ArrowLeakExitCode = 77
 
   def main(args: Array[String]): Unit = {
     val conf = new SparkConf()
@@ -57,6 +59,18 @@ private[sql] object SimpleSparkConnectService {
         // Wait for 1 min for the server to stop
         SparkConnectService.stop(Some(1), Some(TimeUnit.MINUTES))
         sparkSession.close()
+        // For testing Arrow leak detection only: simulate an unreleased allocation.
+        if (sys.env.contains("SPARK_TEST_ARROW_LEAK")) {
+          val leakyAllocator = ArrowUtils.rootAllocator.newChildAllocator("test-leak", 0, 1024)
+          leakyAllocator.buffer(64) // intentionally never released
+        }
+        val leaked = ArrowUtils.rootAllocator.getAllocatedMemory
+        if (leaked != 0) {
+          // scalastyle:off println
+          println(s"Arrow rootAllocator memory leak detected: $leaked bytes still allocated")
+          // scalastyle:on println
+          exit(ArrowLeakExitCode)
+        }
         exit(0)
       }
     }

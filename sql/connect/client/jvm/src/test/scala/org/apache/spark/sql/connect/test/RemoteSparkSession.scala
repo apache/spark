@@ -52,6 +52,9 @@ object SparkConnectServerUtils {
   // The equivalent command to start the connect server via command line:
   // bin/spark-shell --conf spark.plugins=org.apache.spark.sql.connect.SparkConnectPlugin
 
+  // Must match ArrowLeakExitCode in SimpleSparkConnectService
+  private val ArrowLeakExitCode = 77
+
   // Server port
   val port: Int =
     ConnectCommon.CONNECT_GRPC_BINDING_PORT + util.Random.nextInt(1000)
@@ -156,6 +159,11 @@ object SparkConnectServerUtils {
       }
       val code = sparkConnect.exitValue()
       debug(s"Spark Connect Server is stopped with exit code: $code")
+      if (code == ArrowLeakExitCode) {
+        // Arrow leak detected in server JVM. halt() is the only way to propagate
+        // failure from inside a JVM shutdown hook.
+        Runtime.getRuntime.halt(code)
+      }
       code
     } catch {
       case e: IOException if e.getMessage.contains("Stream closed") =>
