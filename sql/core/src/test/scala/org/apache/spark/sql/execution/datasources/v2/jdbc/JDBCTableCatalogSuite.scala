@@ -114,9 +114,9 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
     sql("DROP TABLE h2.test.to_drop")
     checkAnswer(sql("SHOW TABLES IN h2.test"), Seq(Row("test", "people", false)))
     Seq(
-      ("h2.test.not_existing_table", "`h2`.`test`.`not_existing_table`", "[`h2`, `test`]"),
+      ("h2.test.not_existing_table", "`h2`.`test`.`not_existing_table`", "[`h2`.`test`]"),
       ("h2.bad_test.not_existing_table",
-        "`h2`.`bad_test`.`not_existing_table`", "[`h2`, `bad_test`]")
+        "`h2`.`bad_test`.`not_existing_table`", "[`h2`.`bad_test`]")
     ).foreach { case (table, expected, searchPath) =>
       val e = intercept[AnalysisException] {
         sql(s"DROP TABLE $table")

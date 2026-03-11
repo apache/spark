@@ -1557,6 +1557,19 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   }
 
   def cannotReplaceMissingTableError(
+      tableIdentifier: Identifier,
+      searchPath: Seq[String]): Throwable = {
+    new CannotReplaceMissingTableException(tableIdentifier, None, searchPath)
+  }
+
+  def cannotReplaceMissingTableError(
+      tableIdentifier: Identifier,
+      searchPath: Seq[String],
+      cause: Option[Throwable]): Throwable = {
+    new CannotReplaceMissingTableException(tableIdentifier, cause, searchPath)
+  }
+
+  def cannotReplaceMissingTableError(
       catalogName: String,
       tableIdentifier: Identifier): Throwable = {
     new CannotReplaceMissingTableException(
@@ -1596,7 +1609,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   }
 
   def noSuchTableError(nameParts: Seq[String], searchPath: Seq[String]): Throwable = {
-    val formattedPath = searchPath.map(toSQLId).mkString("[", ", ", "]")
+    val formattedPath =
+      if (searchPath.isEmpty) "" else "[" + searchPath.map(toSQLId).mkString(".") + "]"
     new NoSuchTableException(
       "TABLE_OR_VIEW_NOT_FOUND",
       Map("relationName" -> toSQLId(nameParts), "searchPath" -> formattedPath),

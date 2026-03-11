@@ -27,7 +27,7 @@ private[analysis] object NoSuchItemExceptionHelper {
 
   /** Format a search path for TABLE_OR_VIEW_NOT_FOUND (e.g. [`cat`.`ns`]). */
   def formatSearchPath(searchPath: Seq[String]): String =
-    if (searchPath.isEmpty) "" else searchPath.map(quoteIdentifier).mkString("[", ", ", "]")
+    if (searchPath.isEmpty) "" else "[" + searchPath.map(quoteIdentifier).mkString(".") + "]"
 }
 
 /**
