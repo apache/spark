@@ -5923,15 +5923,7 @@ class DataFrame:
         """
         ...
 
-    @overload
-    def drop(self, cols: "ColumnOrName") -> "DataFrame":
-        ...
-
-    @overload
-    def drop(self, *cols: str) -> "DataFrame":
-        ...
-
-    @dispatch_df_method  # type: ignore[misc]
+    @dispatch_df_method
     def drop(self, *cols: "ColumnOrName") -> "DataFrame":
         """
         Returns a new :class:`DataFrame` without specified columns.
