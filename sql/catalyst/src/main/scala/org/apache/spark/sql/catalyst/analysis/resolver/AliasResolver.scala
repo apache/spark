@@ -17,8 +17,14 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import org.apache.spark.sql.catalyst.analysis.{AliasResolution, UnresolvedAlias}
-import org.apache.spark.sql.catalyst.expressions.{Alias, AliasHelper, Expression, NamedExpression}
+import org.apache.spark.sql.catalyst.analysis.{AliasResolution, MultiAlias, UnresolvedAlias}
+import org.apache.spark.sql.catalyst.expressions.{
+  Alias,
+  AliasHelper,
+  Expression,
+  Generator,
+  NamedExpression
+}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 
 /**
@@ -27,8 +33,13 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 class AliasResolver(expressionResolver: ExpressionResolver)
     extends TreeNodeResolver[UnresolvedAlias, Expression]
     with ResolvesExpressionChildren
+    with ConvertsToAliasedGenerator
     with AliasHelper {
-  private val scopes: NameScopeStack = expressionResolver.getNameScopes
+  override protected val scopes: NameScopeStack = expressionResolver.getNameScopes
+  override protected val traversals: ExpressionTreeTraversalStack =
+    expressionResolver.getExpressionTreeTraversals
+  override protected val expressionIdAssigner: ExpressionIdAssigner =
+    expressionResolver.getExpressionIdAssigner
   private val expressionResolutionContextStack =
     expressionResolver.getExpressionResolutionContextStack
 
@@ -55,6 +66,13 @@ class AliasResolver(expressionResolver: ExpressionResolver)
    * Resulting [[Alias]] must be added to the list of `availableAliases` in the current
    * [[NameScope]].
    *
+   * Collect aggregate expression aliases as source expressions for window resolution.
+   * See `tryCollectAggregateExpressionAliasForWindowResolution` doc for more info.
+   *
+   * In the end try to convert [[Alias]] or [[MultiAlias]] over [[Generator]] into
+   * [[AliasedGenerator]]. This is needed for correct resolution of LCA referencing the output
+   * of the generator. For more info see [[AliasedGenerator]] and
+   * [[LateralColumnAliasRegistryImpl.withNewLcaScope]]
    */
   override def resolve(unresolvedAlias: UnresolvedAlias): NamedExpression =
     scopes.current.lcaRegistry.withNewLcaScope(aliasKind = AliasKind.Implicit) {
@@ -74,16 +92,21 @@ class AliasResolver(expressionResolver: ExpressionResolver)
       val resolvedNode =
         AliasResolution.resolve(aliasWithResolvedChildren).asInstanceOf[NamedExpression]
 
-      resolvedNode match {
+      val resultAlias = resolvedNode match {
         case alias: Alias =>
           val resultAlias = expressionResolver.getExpressionIdAssigner.mapExpression(alias)
           scopes.current.registerAlias(resultAlias)
           resultAlias
+        case multiAlias: MultiAlias =>
+          validateMultiAliasHasGenerator(multiAlias)
+          multiAlias
         case _ =>
           throw QueryCompilationErrors.unsupportedSinglePassAnalyzerFeature(
             s"${resolvedNode.getClass} expression resolution"
           )
       }
+
+      tryCreateAliasedGenerator(resultAlias)
     }
 
   /**
@@ -95,8 +118,14 @@ class AliasResolver(expressionResolver: ExpressionResolver)
    * This is only the case with partially resolved DataFrame logical plans. We need to deprioritize
    * those aliases. See [[ExpressionIdAssigner.mapExpression]] doc for more details.
    *
+   * Collect aggregate expression aliases as source expressions for window resolution.
+   * See `tryCollectAggregateExpressionAliasForWindowResolution` doc for more info.
+   *
+   * In the end try to convert [[Alias]] over [[Generator]] into [[AliasedGenerator]]. This is
+   * needed for correct resolution of LCA referencing the output of the generator. For more info
+   * see [[AliasedGenerator]] and [[LateralColumnAliasRegistryImpl.withNewLcaScope]].
    */
-  def handleResolvedAlias(alias: Alias): Alias = {
+  def handleResolvedAlias(alias: Alias): NamedExpression = {
     scopes.current.lcaRegistry.withNewLcaScope(
       aliasKind = AliasKind.Explicit
     ) {
@@ -111,7 +140,9 @@ class AliasResolver(expressionResolver: ExpressionResolver)
 
       scopes.current.registerAlias(resultAlias)
 
-      collapseAlias(resultAlias)
+      val collapsedAlias = collapseAlias(resultAlias)
+
+      tryCreateAliasedGenerator(collapsedAlias)
     }
   }
 
@@ -166,6 +197,40 @@ class AliasResolver(expressionResolver: ExpressionResolver)
           if !expressionResolutionContextStack.peek().resolvingCreateNamedStruct &&
           !expressionResolutionContextStack.peek().resolvingUnresolvedAlias =>
         mergeAliases(alias)
+      case innerMultiAlias: MultiAlias =>
+        copyAliasWithNewChild(alias, innerMultiAlias.child)
       case _ => alias
     }
+
+  private def copyAliasWithNewChild(alias: Alias, newChild: Expression): Alias = {
+    val metadata = if (alias.metadata.isEmpty) {
+      None
+    } else {
+      Some(alias.metadata)
+    }
+    alias.copy(child = newChild)(
+      exprId = alias.exprId,
+      qualifier = alias.qualifier,
+      explicitMetadata = metadata,
+      nonInheritableMetadataKeys = alias.nonInheritableMetadataKeys
+    )
+  }
+
+  /**
+   * Check if [[MultiAlias]] wraps [[Generator]] and throws an exception otherwise. [[MultiAlias]]
+   * was originally created for [[Generator]]s that could have multiple outputs (e.g. posexplode).
+   */
+  private def validateMultiAliasHasGenerator(multiAlias: MultiAlias): Unit = {
+    multiAlias.child match {
+      case _: Generator =>
+      case child =>
+        multiAlias.failAnalysis(
+          errorClass = "MULTI_ALIAS_WITHOUT_GENERATOR",
+          messageParameters = Map(
+            "expr" -> toSQLExpr(child),
+            "names" -> multiAlias.names.mkString(", ")
+          )
+        )
+    }
+  }
 }

@@ -42,8 +42,11 @@ import org.apache.spark.sql.catalyst.plans.logical._
  * @param parameterNamesToValues Optional map of parameter names to values. Used to resolve
  *     [[NamedParameter]]s in the context of [[NameParameterizedQuery]]. Lazily created only when
  *     parameters are present to avoid overhead for non-parameterized queries.
+ * @param resolvingLimitAll flag that represents whether a LIMIT ALL should be considered in the
+ *     current context. This is used for defining infinite recursive CTEs.
  * @param hasGroupingAnalytics Boolean flag indicating whether grouping analytics (i.e., ROLLUP,
- *     CUBE, GROUPING SETS) are present.
+ *     CUBE, GROUPING SETS) are present. Set to true when detected during resolution in
+ *     [[GroupingAnalyticsResolver]].
  */
 class OperatorResolutionContext(
     var unresolvedPlan: Option[LogicalPlan] = None,
@@ -51,6 +54,7 @@ class OperatorResolutionContext(
     var baseOperator: Option[LogicalPlan] = None,
     val isResolvingTreeUnderHaving: Boolean = false,
     var parameterNamesToValues: Option[LinkedHashMap[String, Expression]] = None,
+    val resolvingLimitAll: Boolean = false,
     var hasGroupingAnalytics: Boolean = false) {
 
   /**
@@ -104,6 +108,23 @@ class OperatorResolutionContextStack {
   stack.push(new OperatorResolutionContext)
 
   /**
+   * Returns whether Limit All should be applied to the current context according to the following
+   * rules:
+   * - [[LimitAll]] sets the flag to true
+   * - Allow-listed operators propagate the flag from the parent context
+   * - All other operators reset the flag to false
+   */
+  private def currentContextIsResolvingLimitAll(plan: LogicalPlan): Boolean = plan match {
+    case _: LimitAll =>
+      true
+    case _: Project | _: Filter | _: Join | _: Union | _: Offset |
+        _: BaseEvalPython | _: Aggregate | _: Window | _: SubqueryAlias =>
+      current.resolvingLimitAll
+    case _ =>
+      false
+  }
+
+  /**
    * Returns the current resolution context from the stack.
    */
   def current: OperatorResolutionContext = {
@@ -130,7 +151,8 @@ class OperatorResolutionContextStack {
       new OperatorResolutionContext(
         unresolvedPlan = Some(unresolvedPlan),
         isResolvingTreeUnderHaving = isResolvingTreeUnderHaving,
-        parameterNamesToValues = current.parameterNamesToValues
+        parameterNamesToValues = current.parameterNamesToValues,
+        resolvingLimitAll = currentContextIsResolvingLimitAll(unresolvedPlan)
       )
     )
   }

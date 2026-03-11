@@ -21,7 +21,18 @@ import java.util.HashSet
 
 import org.apache.spark.sql.catalyst.analysis.{AnalysisErrorAt, NaturalAndUsingJoinResolution}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, ExprId, NamedExpression}
-import org.apache.spark.sql.catalyst.plans.{JoinType, NaturalJoin, UsingJoin}
+import org.apache.spark.sql.catalyst.plans.{
+  Cross,
+  FullOuter,
+  Inner,
+  JoinType,
+  LeftAnti,
+  LeftOuter,
+  LeftSemi,
+  NaturalJoin,
+  RightOuter,
+  UsingJoin
+}
 import org.apache.spark.sql.catalyst.plans.logical.{Join, JoinHint, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.types.BooleanType
@@ -49,16 +60,25 @@ class JoinResolver(resolver: Resolver, expressionResolver: ExpressionResolver)
    *  and resolve join condition.
    *  - Return the resulting [[Project]] or [[Join]] with new children optionally wrapped in
    *    [[WithCTE]]. See [[CteScope]] scaladoc for more info.
+   *  - Since joins interact with Recursive CTEs in such a way that they disallow self references if
+   *    the self reference is on a specific side of the join operator, the appropriate [[CTEScope]]
+   *    is marked as disallowing self references according to the rules defined in
+   *    [[ResolveWithCTE.checkIfSelfReferenceIsPlacedCorrectly]]
    */
   override def resolve(unresolvedJoin: Join): LogicalPlan = {
+    val (allowLeftRecursiveCTE, allowRightRecursiveCTE) =
+      getRecursiveCteAllowance(unresolvedJoin.joinType)
+
     val (resolvedLeftOperator: LogicalPlan, leftNameScope: NameScope) = resolveJoinChild(
       unresolvedJoin = unresolvedJoin,
-      child = unresolvedJoin.left
+      child = unresolvedJoin.left,
+      shouldDisallowRecursiveCtes = !allowLeftRecursiveCTE
     )
 
     val (resolvedRightOperator: LogicalPlan, rightNameScope: NameScope) = resolveJoinChild(
       unresolvedJoin = unresolvedJoin,
-      child = unresolvedJoin.right
+      child = unresolvedJoin.right,
+      shouldDisallowRecursiveCtes = !allowRightRecursiveCTE
     )
 
     ExpressionIdAssigner.assertOutputsHaveNoConflictingExpressionIds(
@@ -82,9 +102,28 @@ class JoinResolver(resolver: Resolver, expressionResolver: ExpressionResolver)
     )
   }
 
+  /**
+   * Determines whether recursive CTE self-references are allowed on the left and right sides
+   * of a join based on the join type. Returns a tuple (allowLeft, allowRight).
+   *
+   * Rules:
+   *  - Inner/Cross: Both sides allow recursive references
+   *  - LeftOuter/LeftSemi/LeftAnti: Left allows, right disallows
+   *  - RightOuter: Left disallows, right allows
+   *  - FullOuter/other: Both sides disallow
+   */
+  private def getRecursiveCteAllowance(joinType: JoinType): (Boolean, Boolean) = joinType match {
+    case Inner | Cross => (true, true)
+    case LeftOuter | LeftSemi | LeftAnti => (true, false)
+    case RightOuter => (false, true)
+    case FullOuter | _ => (false, false)
+  }
+
   private def resolveJoinChild(
       unresolvedJoin: Join,
-      child: LogicalPlan): (LogicalPlan, NameScope) = {
+      child: LogicalPlan,
+      shouldDisallowRecursiveCtes: Boolean): (LogicalPlan, NameScope) = {
+
     expressionIdAssigner.pushMapping()
     scopes.pushScope()
     cteRegistry.pushScopeForMultiChildOperator(
@@ -94,6 +133,9 @@ class JoinResolver(resolver: Resolver, expressionResolver: ExpressionResolver)
 
     try {
       val resolvedChild = resolver.resolve(child)
+      if (shouldDisallowRecursiveCtes) {
+        cteRegistry.currentScope.failIfScopeHasSelfReference()
+      }
       (resolvedChild, scopes.current)
     } finally {
       cteRegistry.popScope()

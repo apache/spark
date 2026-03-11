@@ -30,8 +30,10 @@ import org.apache.spark.sql.catalyst.analysis.{
   GetViewColumnByNameAndOrdinal,
   MultiAlias,
   NamedParameter,
+  NameParameterizedQuery,
   ResolvedInlineTable,
   Star,
+  TableFunctionRegistry,
   UnresolvedAlias,
   UnresolvedAttribute,
   UnresolvedExtractValue,
@@ -42,7 +44,8 @@ import org.apache.spark.sql.catalyst.analysis.{
   UnresolvedRelation,
   UnresolvedStar,
   UnresolvedStarExceptOrReplace,
-  UnresolvedSubqueryColumnAliases
+  UnresolvedSubqueryColumnAliases,
+  UnresolvedTableValuedFunction
 }
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.NamePlaceholder
@@ -120,6 +123,8 @@ class ResolverGuard(
         checkGlobalLimit(globalLimit)
       case localLimit: LocalLimit =>
         checkLocalLimit(localLimit)
+      case limitAll: LimitAll =>
+        checkLimitAll(limitAll)
       case offset: Offset =>
         checkOffset(offset)
       case tail: Tail =>
@@ -158,6 +163,17 @@ class ResolverGuard(
         checkHaving(having)
       case sample: Sample =>
         checkSample(sample)
+      case unresolvedTVF: UnresolvedTableValuedFunction =>
+        recordExperimentalFeatureUsed("UnresolvedTableValuedFunction")
+        checkUnresolvedTableValuedFunction(unresolvedTVF)
+      case nameParameterizedQuery: NameParameterizedQuery =>
+        checkNameParameterizedQuery(nameParameterizedQuery)
+      case repartitionByExpression: RepartitionByExpression =>
+        checkRepartitionByExpression(repartitionByExpression)
+      case pivot: Pivot =>
+        checkPivot(pivot)
+      case unpivot: Unpivot =>
+        checkUnpivot(unpivot)
       case _ =>
         Some(s"${operator.getClass} operator resolution")
     }
@@ -254,7 +270,7 @@ class ResolverGuard(
   }
 
   private def checkUnresolvedWith(unresolvedWith: UnresolvedWith) = {
-    if (unresolvedWith.allowRecursion) {
+    if (false) {
       Some("Recursive CTE")
     } else {
       unresolvedWith.cteRelations
@@ -318,6 +334,9 @@ class ResolverGuard(
 
   private def checkLocalLimit(localLimit: LocalLimit) =
     checkOperator(localLimit.child).orElse(checkExpression(localLimit.limitExpr))
+
+  private def checkLimitAll(limitAll: LimitAll) =
+    checkOperator(limitAll.child)
 
   private def checkOffset(offset: Offset) =
     checkOperator(offset.child).orElse(checkExpression(offset.offsetExpr))
@@ -546,6 +565,71 @@ class ResolverGuard(
     checkOperator(sample.child)
   }
 
+  private def checkUnresolvedTableValuedFunction(unresolvedTVF: UnresolvedTableValuedFunction) = {
+    if (unresolvedTVF.isStreaming) {
+      Some("streaming table valued function")
+    } else if (unresolvedTVF.name.size != 1) {
+      Some("multi-part table valued function name")
+    } else if (!TableFunctionRegistry.functionSet.contains(
+        FunctionIdentifier(unresolvedTVF.name.head.toLowerCase(Locale.ROOT))
+      )) {
+      Some("UDTF")
+    } else if (!ResolverGuard.SUPPORTED_TABLE_VALUED_FUNCTIONS.contains(
+        unresolvedTVF.name.head
+      )) {
+      Some(s"unsupported table valued function ${unresolvedTVF.name.head.toLowerCase(Locale.ROOT)}")
+    } else {
+      unresolvedTVF.functionArgs.collectFirst { case CheckExpression(reason) => reason }
+    }
+  }
+  private def checkNameParameterizedQuery(nameParameterizedQuery: NameParameterizedQuery) = {
+    checkOperator(nameParameterizedQuery.child)
+      .orElse {
+        nameParameterizedQuery.argValues.collectFirst { case CheckExpression(reason) => reason }
+      }
+  }
+
+  private def checkRepartitionByExpression(repartitionByExpression: RepartitionByExpression) = {
+    checkOperator(repartitionByExpression.child)
+      .orElse {
+        repartitionByExpression.partitionExpressions.collectFirst {
+          case CheckExpression(reason) => reason
+        }
+      }
+  }
+
+  private def checkPivot(pivot: Pivot) = {
+    checkOperator(pivot.child)
+      .orElse {
+        checkExpression(pivot.pivotColumn)
+      }
+      .orElse {
+        pivot.pivotValues.collectFirst { case CheckExpression(reason) => reason }
+      }
+      .orElse {
+        pivot.aggregates.collectFirst { case CheckExpression(reason) => reason }
+      }
+      .orElse {
+        pivot.groupByExprsOpt.flatMap { groupByExprs =>
+          groupByExprs.collectFirst { case CheckExpression(reason) => reason }
+        }
+      }
+  }
+
+  private def checkUnpivot(unpivot: Unpivot) = {
+    checkOperator(unpivot.child)
+      .orElse {
+        unpivot.ids.flatMap { ids =>
+          ids.collectFirst { case CheckExpression(reason) => reason }
+        }
+      }
+      .orElse {
+        unpivot.values.flatMap { values =>
+          values.collectFirst { case CheckExpressionSeq(reason) => reason }
+        }
+      }
+  }
+
   /**
    * Most of the expressions come from resolving the [[UnresolvedFunction]], but here we have some
    * popular expressions allowlist for two reasons:
@@ -678,6 +762,12 @@ class ResolverGuard(
       case None => None
     }
   }
+
+  /**
+   * Record an experimental feature usage.
+   */
+  private def recordExperimentalFeatureUsed(reason: String): Unit = {
+  }
 }
 
 object ResolverGuard {
@@ -765,6 +855,24 @@ object ResolverGuard {
     map += ("transform_keys", ())
     map += ("transform_values", ())
     map += ("zip_with", ())
+    map
+  }
+
+  private val SUPPORTED_TABLE_VALUED_FUNCTIONS = {
+    val map = new IdentifierMap[Unit]()
+    map += ("collations", ())
+    map += ("explode", ())
+    map += ("explode_outer", ())
+    map += ("inline", ())
+    map += ("inline_outer", ())
+    map += ("json_tuple", ())
+    map += ("posexplode", ())
+    map += ("posexplode_outer", ())
+    map += ("range", ())
+    map += ("sql_keywords", ())
+    map += ("stack", ())
+    map += ("variant_explode", ())
+    map += ("variant_explode_outer", ())
     map
   }
 }

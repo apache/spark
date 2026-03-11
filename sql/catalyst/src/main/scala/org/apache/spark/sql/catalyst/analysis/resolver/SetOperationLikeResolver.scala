@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.{AnsiTypeCoercion, TypeCoercion, T
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, ExprId}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.errors.DataTypeErrors.cannotMergeIncompatibleDataTypesError
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{DataType, MetadataBuilder}
 
@@ -46,6 +47,12 @@ class SetOperationLikeResolver(resolver: Resolver, expressionResolver: Expressio
    *  - Create a new mapping in [[ExpressionIdAssigner]] for the current operator. We only need the
    *    left child mapping, because that's the only child whose expression IDs get propagated
    *    upwards for [[Union]], [[Intersect]] or [[Except]]. This is an optimization.
+   *  - For [[Union]] operators with two children, check if this is part of a recursive CTE. If so,
+   *    replace the [[Union]] with a [[UnionLoop]] operator. The [[UnionLoop]] output expression IDs
+   *    are created through [[ExpressionIdAssigner]] to ensure they are properly tracked in
+   *    `globalExpressionIds` and define a stable output schema across all iterations of the
+   *    recursive CTE. To assert that only the topmost [[Union]] is transformed into UnionLoop, the
+   *    depth of the first [[Union]] node in each recursive CTE scope is tracked.
    *  - Compute widened data types for child output attributes using
    *    [[getTypeCoercion.findWiderTypeForTwo]] or throw "INCOMPATIBLE_COLUMN_TYPE" if coercion
    *    fails.
@@ -56,7 +63,8 @@ class SetOperationLikeResolver(resolver: Resolver, expressionResolver: Expressio
    *  - Validate that child outputs have same length or throw "NUM_COLUMNS_MISMATCH" otherwise.
    *  - Add [[Project]] with [[Cast]] on children needing attribute data type widening.
    *  - Assert that coerced outputs don't have conflicting expression IDs.
-   *  - Merge transformed outputs using a separate logic for each operator type.
+   *  - Merge transformed outputs using a separate logic for each operator type. For [[UnionLoop]],
+   *    the merged output uses the pre-assigned expression IDs from the [[UnionLoop]] operator.
    *  - Store merged output in current [[NameScope]].
    *  - Validate that the operator doesn't have unsupported data types in the output
    *  - Create a new mapping in [[ExpressionIdAssigner]] using the coerced and validated outputs.
@@ -64,6 +72,8 @@ class SetOperationLikeResolver(resolver: Resolver, expressionResolver: Expressio
    *    [[CteScope]] scaladoc for more info.
    */
   override def resolve(unresolvedOperator: LogicalPlan): LogicalPlan = {
+    cteRegistry.trySetExpectedUnionDepth()
+
     val (resolvedChildren, childScopes) = resolveChildren(unresolvedOperator)
 
     expressionIdAssigner.createMappingFromChildMappings(
@@ -72,12 +82,15 @@ class SetOperationLikeResolver(resolver: Resolver, expressionResolver: Expressio
 
     val childOutputs = childScopes.map(_.output)
 
+    val (withUnionLoopEmplaced, isRecursiveCTE) =
+      tryPlaceUnionLoop(resolvedChildren, childOutputs, unresolvedOperator)
+
     val (coercedChildren, coercedChildOutputs) =
       if (needToCoerceChildOutputs(childOutputs, unresolvedOperator)) {
         coerceChildOutputs(
           resolvedChildren,
           childOutputs,
-          validateAndDeduceTypes(unresolvedOperator, childOutputs)
+          validateAndDeduceTypes(unresolvedOperator, childOutputs, isRecursiveCTE)
         )
       } else {
         (resolvedChildren, childOutputs)
@@ -87,7 +100,7 @@ class SetOperationLikeResolver(resolver: Resolver, expressionResolver: Expressio
       performIndividualOutputExpressionIdDeduplication(
         coercedChildren,
         coercedChildOutputs,
-        unresolvedOperator
+        withUnionLoopEmplaced
       )
 
     val (deduplicatedChildren, deduplicatedChildOutputs) = deduplicateOutputExpressionIds(
@@ -98,15 +111,15 @@ class SetOperationLikeResolver(resolver: Resolver, expressionResolver: Expressio
 
     ExpressionIdAssigner.assertOutputsHaveNoConflictingExpressionIds(deduplicatedChildOutputs)
 
-    val output = mergeChildOutputs(unresolvedOperator, deduplicatedChildOutputs)
+    val output = mergeChildOutputs(withUnionLoopEmplaced, deduplicatedChildOutputs)
     scopes.overwriteCurrent(output = Some(output), hiddenOutput = Some(output))
 
-    OperatorWithUncomparableTypeValidator.validate(unresolvedOperator, output)
+    OperatorWithUncomparableTypeValidator.validate(withUnionLoopEmplaced, output)
 
-    val resolvedOperator = unresolvedOperator.withNewChildren(deduplicatedChildren)
+    val resolvedOperator = withUnionLoopEmplaced.withNewChildren(deduplicatedChildren)
 
     cteRegistry.currentScope.tryPutWithCTE(
-      unresolvedOperator = unresolvedOperator,
+      unresolvedOperator = withUnionLoopEmplaced,
       resolvedOperator = resolvedOperator
     )
   }
@@ -118,6 +131,10 @@ class SetOperationLikeResolver(resolver: Resolver, expressionResolver: Expressio
    * [[ExpressionIdAssigner]] child mapping is collected just or the left child, because that's
    * the only child whose expression IDs get propagated upwards through [[Union]], [[Intersect]] or
    * [[Except]]. This is an optimization to avoid fast-growing expression ID mappings.
+   *
+   * For [[Union]] operators, the first child's resolved output is registered as the anchor output
+   * schema for potential recursive CTEs. This establishes the schema that the recursion branch
+   * must conform to during type coercion, and the output format of any self reference.
    */
   private def resolveChildren(
       unresolvedOperator: LogicalPlan): (Seq[LogicalPlan], Seq[NameScope]) = {
@@ -132,6 +149,9 @@ class SetOperationLikeResolver(resolver: Resolver, expressionResolver: Expressio
 
         try {
           val resolvedChild = resolver.resolve(unresolvedChild)
+          if (childIndex == 0) {
+            tryRegisterAnchorOutput(unresolvedOperator)
+          }
           (resolvedChild, scopes.current)
         } finally {
           cteRegistry.popScope()
@@ -139,6 +159,40 @@ class SetOperationLikeResolver(resolver: Resolver, expressionResolver: Expressio
           expressionIdAssigner.popMapping(collectChildMapping = childIndex == 0)
         }
     }.unzip
+  }
+
+  /**
+   * For [[Union]] operators, registers the current scope's output as the anchor output schema
+   * for recursive CTEs. This establishes the schema that the recursion branch must conform to.
+   */
+  private def tryRegisterAnchorOutput(unresolvedOperator: LogicalPlan): Unit = {
+    unresolvedOperator match {
+      case Union(_, _, _) =>
+        cteRegistry.tryRegisterAnchorOutput(scopes.current.output)
+      case _ =>
+    }
+  }
+
+  /**
+   * Replaces operator node with [[UnionLoop]] if the operator that is being resolved is [[Union]]
+   * with two children and inside a recursive CTE scope.
+   */
+  private def tryPlaceUnionLoop(
+      children: Seq[LogicalPlan],
+      childOutputs: Seq[Seq[Attribute]],
+      unresolvedOperator: LogicalPlan
+  ): (LogicalPlan, Boolean) = {
+    unresolvedOperator match {
+      case union: Union if union.children.size == 2 =>
+        val unionLoop = cteRegistry.tryPlaceUnionLoop(
+          children(0),
+          childOutputs(0),
+          children(1),
+          expressionIdAssigner
+        )
+        (unionLoop.getOrElse(unresolvedOperator), unionLoop.nonEmpty)
+      case _ => (unresolvedOperator, false)
+    }
   }
 
   /**
@@ -340,7 +394,7 @@ class SetOperationLikeResolver(resolver: Resolver, expressionResolver: Expressio
       lhs: DataType,
       rhs: DataType): Boolean = {
     unresolvedPlan match {
-      case _: Union => DataType.equalsStructurally(lhs, rhs, ignoreNullability = true)
+      case _: UnionBase => DataType.equalsStructurally(lhs, rhs, ignoreNullability = true)
       case _: Except | _: Intersect => DataTypeUtils.sameType(lhs, rhs)
       case other =>
         throw SparkException.internalError(
@@ -354,10 +408,13 @@ class SetOperationLikeResolver(resolver: Resolver, expressionResolver: Expressio
    *  - Validates that the number of columns in each child of the set operator is equal.
    *  - Validates that the data types of columns can be widened to a common type.
    *  - Deduces the widened data types for each column.
+   *  - In the case of recursive CTEs (UnionLoop), we follow the logic of the fixed point analyzer
+   *  which only widens the type of the recursion, but never the anchor.
    */
   private def validateAndDeduceTypes(
       unresolvedOperator: LogicalPlan,
-      childOutputs: Seq[Seq[Attribute]]): Seq[DataType] = {
+      childOutputs: Seq[Seq[Attribute]],
+      isRecursiveCTE: Boolean): Seq[DataType] = {
     val childDataTypes = childOutputs.map(attributes => attributes.map(attr => attr.dataType))
 
     val expectedNumColumns = childDataTypes.head.length
@@ -375,7 +432,7 @@ class SetOperationLikeResolver(resolver: Resolver, expressionResolver: Expressio
 
         widenedTypes.zip(childColumnTypes).zipWithIndex.map {
           case ((widenedColumnType, columnTypeForCurrentRow), columnIndex) =>
-            getTypeCoercion
+            val widerType = getTypeCoercion
               .findWiderTypeForTwo(widenedColumnType, columnTypeForCurrentRow)
               .getOrElse {
                 throwIncompatibleColumnTypeError(
@@ -386,7 +443,36 @@ class SetOperationLikeResolver(resolver: Resolver, expressionResolver: Expressio
                   columnTypeForCurrentRow = columnTypeForCurrentRow
                 )
               }
+            if (isRecursiveCTE) {
+              validateRecursiveCteTypeCompatibility(
+                widerType,
+                widenedColumnType,
+                columnTypeForCurrentRow
+              )
+            } else {
+              widerType
+            }
         }
+    }
+  }
+
+  /**
+   * Validates type compatibility for recursive CTEs. For recursive CTEs, we follow the logic
+   * of the fixed point analyzer which only widens the type of the recursion, but never the anchor.
+   * This means the wider type must equal the anchor type (widenedColumnType), otherwise we throw
+   * an error.
+   */
+  private def validateRecursiveCteTypeCompatibility(
+      widerType: DataType,
+      widenedColumnType: DataType,
+      columnTypeForCurrentRow: DataType): DataType = {
+    if (widerType == widenedColumnType) {
+      widerType
+    } else {
+      throw cannotMergeIncompatibleDataTypesError(
+        widenedColumnType,
+        columnTypeForCurrentRow
+      )
     }
   }
 
@@ -441,6 +527,11 @@ class SetOperationLikeResolver(resolver: Resolver, expressionResolver: Expressio
       childOutputs: Seq[Seq[Attribute]]): Seq[Attribute] = {
     unresolvedPlan match {
       case _: Union => Union.mergeChildOutputs(childOutputs)
+      case unionLoop: UnionLoop =>
+        Union.mergeChildOutputs(childOutputs).zip(unionLoop.outputAttrIds).map {
+          case (x, id) =>
+            x.withExprId(id)
+        }
       case _: Except => Except.mergeChildOutputs(childOutputs)
       case _: Intersect => Intersect.mergeChildOutputs(childOutputs)
       case other =>

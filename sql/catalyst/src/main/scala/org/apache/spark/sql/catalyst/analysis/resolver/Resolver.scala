@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.analysis.{
   CleanupAliases,
   FunctionResolution,
   MultiInstanceRelation,
+  NameParameterizedQuery,
   PullOutNondeterministic,
   RelationCache,
   RelationResolution,
@@ -38,6 +39,7 @@ import org.apache.spark.sql.catalyst.analysis.{
   UnresolvedInlineTable,
   UnresolvedRelation,
   UnresolvedSubqueryColumnAliases,
+  UnresolvedTableValuedFunction,
   ValidateSubqueryExpression
 }
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
@@ -115,6 +117,15 @@ class Resolver(
   private val sortResolver = new SortResolver(this, expressionResolver)
   private val joinResolver = new JoinResolver(this, expressionResolver)
   private val havingResolver = new HavingResolver(this, expressionResolver)
+  private val tableValuedFunctionResolver =
+    new TableValuedFunctionResolver(this, expressionResolver, functionResolution)
+  private val nameParameterizedQueryResolver =
+    new NameParameterizedQueryResolver(this, expressionResolver)
+  private val repartitionByExpressionResolver =
+    new RepartitionByExpressionResolver(this, expressionResolver)
+  private val pivotResolver = new PivotResolver(this, expressionResolver)
+  private val unpivotResolver = new UnpivotResolver(this, expressionResolver)
+  private val generateResolver = new GenerateResolver(this, expressionResolver)
 
   /**
    * Sequence of post-resolution rules that should be applied on the result of single-pass
@@ -292,6 +303,8 @@ class Resolver(
             resolveGlobalLimit(unresolvedGlobalLimit)
           case unresolvedLocalLimit: LocalLimit =>
             resolveLocalLimit(unresolvedLocalLimit)
+          case unresolvedLimitAll: LimitAll =>
+            resolveLimitAll(unresolvedLimitAll)
           case unresolvedOffset: Offset =>
             resolveOffset(unresolvedOffset)
           case unresolvedTail: Tail =>
@@ -306,9 +319,11 @@ class Resolver(
             handleResolvedCteRelationDef(cteRelationDef)
           case cteRelationRef: CTERelationRef =>
             handleLeafOperator(cteRelationRef)
+          case unionLoopRef: UnionLoopRef =>
+            handleLeafOperator(unionLoopRef)
           case unresolvedInlineTable: UnresolvedInlineTable =>
             resolveInlineTable(unresolvedInlineTable)
-          case unresolvedSetOperationLike @ (_: Union | _: SetOperation) =>
+          case unresolvedSetOperationLike @ (_: UnionBase | _: SetOperation) =>
             setOperationLikeResolver.resolve(unresolvedSetOperationLike)
           case unresolvedSort: Sort =>
             sortResolver.resolve(unresolvedSort)
@@ -328,8 +343,20 @@ class Resolver(
             resolveSupervisingCommand(supervisingCommand)
           case repartition: Repartition =>
             resolveRepartition(repartition)
+          case repartitionByExpression: RepartitionByExpression =>
+            repartitionByExpressionResolver.resolve(repartitionByExpression)
           case sample: Sample =>
             resolveSample(sample)
+          case unresolvedTVF: UnresolvedTableValuedFunction =>
+            tableValuedFunctionResolver.resolve(unresolvedTVF)
+          case nameParameterizedQuery: NameParameterizedQuery =>
+            nameParameterizedQueryResolver.resolve(nameParameterizedQuery)
+          case pivot: Pivot =>
+            pivotResolver.resolve(pivot)
+          case unpivot: Unpivot =>
+            unpivotResolver.resolve(unpivot)
+          case generate: Generate =>
+            generateResolver.resolve(generate)
           case _ =>
             tryDelegateResolutionToExtension(unresolvedPlan).getOrElse {
               handleUnmatchedOperator(unresolvedPlan)
@@ -356,33 +383,95 @@ class Resolver(
    * (name, subquery) pairs, and an actual child query. First we resolve the CTE definitions
    * strictly in their declaration order, so they become available for other lower definitions
    * (lower both in this WITH clause list and in the plan tree) and for the [[UnresolvedWith]] child
-   * query. After that, we resolve the child query. Optionally, if this is a root [[CteScope]],
-   * we return a [[WithCTE]] operator with all the resolved [[CTERelationDef]]s merged together
-   * from this scope and child scopes. Otherwise, we return the resolved child query so that
-   * the resolved [[CTERelationDefs]] propagate up and will be merged together later.
+   * query.
+   *
+   * For each CTE definition, a new [[CteScope]] is pushed with:
+   *  - `cteName` and `cteId` to identify this specific CTE
+   *  - `allowRecursion` flag indicating if this is a recursive CTE
+   *  - `maxDepth` specifying iteration limit for recursive CTEs
+   *  - `isInsideRecursiveCteScope` set to true for recursive CTEs to force immediate inlining of
+   *  CTE definitions and prevent unnecessary stack traversals.
+   *
+   * The order in which CTE ids are allocated (via [[CTERelationDef.newId]]) can matter to
+   * downstream consumers that key off of [[CTERelationDef.id]] (for example, lineage serializes
+   * CTEs using the numeric id as the "table name").
+   *
+   * For non-recursive CTEs, we preserve the historical depth-first allocation behavior by
+   * allocating ids *after* resolving the CTE plan. This ensures nested WITH clauses inside the
+   * definition consume ids first (inner CTEs get smaller ids than their enclosing CTEs).
+   *
+   * For recursive CTEs, we must allocate the id up-front so that self-references can be
+   * represented during resolution (via [[UnionLoopRef]] / [[UnionLoop]]).
+   *
+   * During CTE resolution, the scope tracks whether the CTE references itself. If self-referenced,
+   * the CTE is validated as a properly structured recursive CTE.
+   *
+   * After resolving all CTE definitions and the child query, if this is a root [[CteScope]] or if
+   * `isInsideRecursiveCteScope` is set (for recursive CTEs), we return a [[WithCTE]] operator with
+   * all the resolved [[CTERelationDef]]s merged together from this scope and child scopes.
+   * Otherwise, we return the resolved child query so that the resolved [[CTERelationDef]]s
+   * propagate up and will be merged together later.
    *
    * See [[CteScope]] scaladoc for all the details on how CTEs are resolved.
    */
   private def resolveWith(unresolvedWith: UnresolvedWith): LogicalPlan = {
     for (cteRelation <- unresolvedWith.cteRelations) {
-      val (cteName, ctePlan, _) = cteRelation
+      val (cteName, ctePlan, maxDepth) = cteRelation
+      val preallocatedCteIdForRecursive: Option[Long] =
+        if (unresolvedWith.allowRecursion) Some(CTERelationDef.newId) else None
 
       expressionIdAssigner.pushMapping()
       scopes.pushScope()
-      cteRegistry.pushScope()
+
+      val recursiveCteParams = if (unresolvedWith.allowRecursion) {
+        Some(
+          RecursiveCteParameters(
+            cteId = preallocatedCteIdForRecursive.get,
+            cteName = cteName,
+            maxDepth = maxDepth
+          )
+        )
+      } else {
+        None
+      }
+
+      cteRegistry.pushScope(
+        recursiveCteParameters = recursiveCteParams,
+        isInsideRecursiveCteScope = unresolvedWith.allowRecursion
+      )
+
+      var referencedRecursively = false
 
       val resolvedCtePlan = try {
-        resolve(ctePlan)
+        val plan = resolve(ctePlan)
+        referencedRecursively = cteRegistry.currentScope.referencedRecursively
+        plan
       } finally {
         cteRegistry.popScope()
         scopes.popScope()
         expressionIdAssigner.popMapping()
       }
 
-      cteRegistry.currentScope.registerCte(cteName, CTERelationDef(resolvedCtePlan))
+      if (referencedRecursively) {
+        checkValidRecursiveCTE(resolvedCtePlan)
+        cteRegistry.currentScope
+          .registerCte(
+            cteName,
+            CTERelationDef(
+              resolvedCtePlan,
+              id = preallocatedCteIdForRecursive.get,
+              maxDepth = maxDepth
+            )
+          )
+      } else {
+        cteRegistry.currentScope
+          .registerCte(cteName, CTERelationDef(resolvedCtePlan))
+      }
     }
 
-    cteRegistry.pushScope()
+    cteRegistry.pushScope(
+      isInsideRecursiveCteScope = cteRegistry.currentScope.isInsideRecursiveCteScope
+    )
 
     val resolvedChild = try {
       resolve(unresolvedWith.child)
@@ -394,6 +483,51 @@ class Resolver(
       unresolvedOperator = unresolvedWith,
       resolvedOperator = resolvedChild
     )
+  }
+
+  /**
+   * Validates that a recursive CTE has the correct structure. Valid structures are:
+   * - [[SubqueryAlias]] -> [[UnionLoop]] (optionally wrapped with [[Project]] or [[WithCTE]])
+   *
+   * Invalid structures:
+   * - [[SubqueryAlias]] -> [[Distinct]] -> [[UnionLoop]]: UNION without ALL is not supported
+   *   (rejects UNION, requires UNION ALL)
+   * - Any other structure: The CTE must have a proper anchor and recursion branch
+   *
+   * @param plan The resolved CTE plan to validate
+   */
+  private def checkValidRecursiveCTE(plan: LogicalPlan): Unit = {
+    plan match {
+      case SubqueryAlias(_, UnionLoop(_, _, _, _, _, _)) =>
+      case SubqueryAlias(_, WithCTE(UnionLoop(_, _, _, _, _, _), _)) =>
+      case SubqueryAlias(_, Project(_, UnionLoop(_, _, _, _, _, _))) =>
+      case SubqueryAlias(_, Project(_, WithCTE(UnionLoop(_, _, _, _, _, _), _))) =>
+      case SubqueryAlias(_, Distinct(UnionLoop(_, _, _, _, _, _))) =>
+        plan.failAnalysis(
+          errorClass = "UNION_NOT_SUPPORTED_IN_RECURSIVE_CTE",
+          messageParameters = Map.empty
+        )
+      case SubqueryAlias(_, WithCTE(Distinct(UnionLoop(_, _, _, _, _, _)), _)) =>
+        plan.failAnalysis(
+          errorClass = "UNION_NOT_SUPPORTED_IN_RECURSIVE_CTE",
+          messageParameters = Map.empty
+        )
+      case SubqueryAlias(_, Project(_, Distinct(UnionLoop(_, _, _, _, _, _)))) =>
+        plan.failAnalysis(
+          errorClass = "UNION_NOT_SUPPORTED_IN_RECURSIVE_CTE",
+          messageParameters = Map.empty
+        )
+      case SubqueryAlias(_, Project(_, WithCTE(Distinct(UnionLoop(_, _, _, _, _, _)), _))) =>
+        plan.failAnalysis(
+          errorClass = "UNION_NOT_SUPPORTED_IN_RECURSIVE_CTE",
+          messageParameters = Map.empty
+        )
+      case _ =>
+        throw new AnalysisException(
+          errorClass = "INVALID_RECURSIVE_CTE",
+          messageParameters = Map.empty
+        )
+    }
   }
 
   /**
@@ -429,9 +563,20 @@ class Resolver(
    * -- The output schema is [a: INT, b: INT]
    * SELECT t.a, t.b FROM VALUES (1, 2) t (a, b);
    * }}}
+   *
+   * For recursive CTEs with column aliases (e.g., `WITH RECURSIVE t(n) AS (...)`), the column
+   * names must be registered in the CTE scope before resolving the child. This allows
+   * self-references within the recursive branch to resolve columns using the provided aliases
+   * rather than the anchor branch's output column names. For non-recursive CTEs, this registration
+   * is a no-op.
    */
   private def resolveSubqueryColumnAliases(
       unresolvedSubqueryColumnAliases: UnresolvedSubqueryColumnAliases): LogicalPlan = {
+
+    cteRegistry.currentScope.tryRegisterColumnNames(
+      unresolvedSubqueryColumnAliases.outputColumnNames
+    )
+
     val resolvedChild = resolve(unresolvedSubqueryColumnAliases.child)
 
     if (unresolvedSubqueryColumnAliases.outputColumnNames.size != scopes.current.output.size) {
@@ -520,6 +665,17 @@ class Resolver(
   }
 
   /**
+   * Resolves [[LimitAll]] operator. [[LimitAll]] is typically a no-op in Spark, but for recursive
+   * CTEs it signals unlimited recursion. The `resolvingLimitAll` flag is set in the
+   * [[OperatorResolutionContext]] when pushing a context and propagated through allow-listed
+   * operators to mark [[CTERelationRef]]s as unlimited. The [[LimitAll]] node itself is removed
+   * from the plan.
+   */
+  private def resolveLimitAll(limitAll: LimitAll): LogicalPlan = {
+    resolve(limitAll.child)
+  }
+
+  /**
    * Resolve [[Offset]]. We have to resolve its child and resolve and validate its offset
    * expression.
    */
@@ -601,17 +757,30 @@ class Resolver(
    */
   private def resolveCteRelationRef(
       unresolvedCteRelationRef: UnresolvedCteRelationRef): LogicalPlan = {
-    val cteRelationRef = cteRegistry.resolveCteName(unresolvedCteRelationRef.name) match {
-      case Some(cteRelationDef) =>
-        planLogger.logPlanResolutionEvent(cteRelationDef, "CTE definition resolved")
+    val cteRelationRef =
+      cteRegistry.resolveCteName(unresolvedCteRelationRef.name) match {
+        case Some(cteRelationDef: CTERelationDef) =>
+          planLogger.logPlanResolutionEvent(cteRelationDef, "CTE definition resolved")
 
-        createCteRelationRef(
-          name = unresolvedCteRelationRef.name,
-          cteRelationDef = cteRelationDef
-        )
-      case None =>
-        unresolvedCteRelationRef.tableNotFound(Seq(unresolvedCteRelationRef.name))
-    }
+          createCteRelationRef(
+            name = unresolvedCteRelationRef.name,
+            cteRelationDef = cteRelationDef
+          )
+        case Some(unionLoopRef: UnionLoopRef) =>
+          SubqueryAlias(identifier = unresolvedCteRelationRef.name, child = unionLoopRef)
+        case Some(
+            unresolvedSubqueryColumnAliases @ UnresolvedSubqueryColumnAliases(_, _: UnionLoopRef)
+            ) =>
+          SubqueryAlias(
+            identifier = unresolvedCteRelationRef.name,
+            child = unresolvedSubqueryColumnAliases
+          )
+        case None =>
+          unresolvedCteRelationRef.tableNotFound(Seq(unresolvedCteRelationRef.name))
+        case Some(other) =>
+          throw SparkException.internalError(
+            s"Unexpected CTE relation type: ${other.getClass.getSimpleName}")
+      }
 
     resolve(cteRelationRef)
   }
@@ -758,7 +927,8 @@ class Resolver(
         output = cteRelationDef.output,
         isStreaming = cteRelationDef.isStreaming,
         recursive = false,
-        maxRows = cteRelationDef.maxRows
+        maxRows = cteRelationDef.maxRows,
+        isUnlimitedRecursion = operatorResolutionContextStack.current.resolvingLimitAll
       )
     )
   }

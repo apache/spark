@@ -97,6 +97,8 @@ class ResolutionValidator {
         validateRelation(range)
       case setOperationLike @ (_: Union | _: SetOperation) =>
         validateSetOperationLike(setOperationLike)
+      case unionLoop: UnionLoop =>
+        validateUnionLoop(unionLoop)
       case sort: Sort =>
         validateSort(sort)
       case join: Join =>
@@ -278,6 +280,12 @@ class ResolutionValidator {
         s"Unexpected output length for ${plan.nodeName} child $child"
       )
     }
+
+    handleOperatorOutput(plan)
+  }
+
+  private def validateUnionLoop(plan: UnionLoop): Unit = {
+    plan.children.foreach(validate)
 
     handleOperatorOutput(plan)
   }

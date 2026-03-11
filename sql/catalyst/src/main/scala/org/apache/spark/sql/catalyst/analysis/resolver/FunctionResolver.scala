@@ -29,7 +29,11 @@ import org.apache.spark.sql.catalyst.expressions.{
   BinaryArithmetic,
   Collate,
   Expression,
+  ExpressionInfo,
   ExpressionWithRandomSeed,
+  Generator,
+  Grouping,
+  GroupingID,
   InheritAnalysisRules,
   ResolvedCollation,
   TryEval,
@@ -41,8 +45,12 @@ import org.apache.spark.sql.catalyst.util.CollationFactory
 
 /**
  * A resolver for [[UnresolvedFunction]]s that resolves functions to concrete [[Expression]]s.
- * It resolves the children of the function first by calling [[ExpressionResolver.resolve]] on them.
- * Examples are following:
+ * In case the function is a higher order function, it delegates the resolution to
+ * [[HigherOrderFunctionResolver]]. Otherwise, the resolution is done in the [[resolveFunction]]
+ * method.
+ * It resolves the children of the function first by calling [[ExpressionResolver.resolve]] on them
+ * if they are not [[UnresolvedStar]]s. If the children are [[Star]]s, it expands them using
+ * [[ExpressionResolver.expandStarExpressions]]. Examples are following:
  *
  *  - Function doesn't contain any [[Star]]:
  *  {{{ SELECT ARRAY(col1) FROM VALUES (1); }}}
@@ -59,21 +67,54 @@ import org.apache.spark.sql.catalyst.util.CollationFactory
  * expression is [[TimeZoneAwareExpression]], apply timezone.
  */
 class FunctionResolver(
-    expressionResolver: ExpressionResolver,
+    protected val expressionResolver: ExpressionResolver,
     functionResolution: FunctionResolution,
     aggregateExpressionResolver: AggregateExpressionResolver,
-    binaryArithmeticResolver: BinaryArithmeticResolver)
+    binaryArithmeticResolver: BinaryArithmeticResolver,
+    generatorResolver: GeneratorResolver)
     extends TreeNodeResolver[UnresolvedFunction, Expression]
     with ProducesUnresolvedSubtree
-    with CoercesExpressionTypes {
+    with CoercesExpressionTypes
+    with FunctionResolverUtils {
 
   private val random = new Random()
   private val traversals = expressionResolver.getExpressionTreeTraversals
   private val expressionResolutionContextStack =
     expressionResolver.getExpressionResolutionContextStack
+  private val higherOrderFunctionResolver =
+    new HigherOrderFunctionResolver(expressionResolver, functionResolution)
 
   /**
-   * Main method used to resolve an [[UnresolvedFunction]]. It resolves it in the following steps:
+   * In case the function is a higher order function, it delegates the resolution to
+   * [[HigherOrderFunctionResolver]]. Otherwise, the resolution is done in the [[resolveFunction]]
+   * method.
+   * Examples of higher order functions are (resolved by [[HigherOrderFunctionResolver]]):
+   *  - `ARRAY_SORT`
+   *  - `MAP_FILTER`
+   *  - `MAP_ZIP_WITH`
+   * Higher order functions take lambda functions as arguments (which are handled in the
+   * [[LambdaFunctionResolver]]).
+   * Examples of non-higher order functions are (resolved by [[resolveFunction]]):
+   *  - `LOWER`
+   *  - `ROUND`
+   *  - `COALESCE`
+   */
+  override def resolve(unresolvedFunction: UnresolvedFunction): Expression = {
+    val expressionInfo = functionResolution.lookupBuiltinOrTempFunction(
+      nameParts = unresolvedFunction.nameParts,
+      unresolvedFunc = Some(unresolvedFunction)
+    )
+
+    if (expressionInfo.exists(_.getGroup == "lambda_funcs")) {
+      higherOrderFunctionResolver.resolve(unresolvedFunction)
+    } else {
+      resolveFunction(unresolvedFunction, expressionInfo)
+    }
+  }
+
+  /**
+   * Main method used to resolve an [[UnresolvedFunction]]. It's used only for non-lambda functions
+   * (for lambda ones, see [[HigherOrderFunctionResolver]]). It resolves it in the following steps:
    *  - Check if the `unresolvedFunction` is an aggregate expression. Set
    *    `resolvingTreeUnderAggregateExpression` to `true` in that case so we can properly resolve
    *    attributes in ORDER BY and HAVING.
@@ -83,6 +124,8 @@ class FunctionResolver(
    *    additional context refer to
    *    [[AggregateExpressionResolver.handleAggregateExpressionWithChildrenResolved]]. This is also
    *    necessary for handling `WINDOW_FUNCTION_WITHOUT_OVER_CLAUSE` exception.
+   *  - Expand all star `*` arguments in the function (see [[handleStarInArguments]] documentation
+   *    for more details).
    *  - Resolve children of the function.
    *  - Resolve the function using [[FunctionResolution.resolveFunction]].
    *  - Perform further resolution and validation on specific nodes:
@@ -111,16 +154,17 @@ class FunctionResolver(
    *        over clause.
    *      - Consequently, if `windowFunctionNestednessLevel != 1` we are resolving something
    *        other than [[WindowExpression]]'s function child which implies a missing over clause.
+   *    - In case the `resolvedFunction` is [[Grouping]] or [[GroupingID]], set
+   *      `hasGroupingAnalyticsExpression` to `true` in the current [[ExpressionResolutionContext]].
+   *    - Use [[GeneratorResolver.handleResolvedGenerator]] to handle [[Generator]] expressions.
    *  - Apply [[TypeCoercion]] rules to the result of previous step. In case that the resulting
    *    expression of the previous step is [[BinaryArithmetic]], skip this one as type coercion is
    *    already applied.
    *  - Apply timezone, if the resulting expression is [[TimeZoneAwareExpression]].
    */
-  override def resolve(unresolvedFunction: UnresolvedFunction): Expression = {
-    val expressionInfo = functionResolution.lookupBuiltinOrTempFunction(
-      nameParts = unresolvedFunction.nameParts,
-      unresolvedFunc = Some(unresolvedFunction)
-    )
+  private def resolveFunction(
+      unresolvedFunction: UnresolvedFunction,
+      expressionInfo: Option[ExpressionInfo]): Expression = {
     val expressionResolutionContext = expressionResolutionContextStack.peek()
 
     if (expressionInfo.exists(_.getGroup == "agg_funcs")) {
@@ -131,9 +175,11 @@ class FunctionResolver(
       expressionResolutionContext.windowFunctionNestednessLevel += 1
     }
 
+    val unresolvedFunctionWithExpandedStarArgs = handleStarInArguments(unresolvedFunction)
+
     val functionWithResolvedChildren =
       withResolvedChildren(
-        unresolvedExpression = unresolvedFunction,
+        unresolvedExpression = unresolvedFunctionWithExpandedStarArgs,
         resolveChild = expressionResolver.resolve _
       ).asInstanceOf[UnresolvedFunction]
 
@@ -200,6 +246,15 @@ class FunctionResolver(
       case windowFunction: WindowFunction
           if (expressionResolutionContext.windowFunctionNestednessLevel != 1) =>
         throwWindowFunctionWithoutOverClause(windowFunction)
+      case generator: Generator =>
+        generatorResolver.handleResolvedGenerator(generator)
+        coerceExpressionTypes(
+          expression = generator,
+          expressionTreeTraversal = traversals.current
+        )
+      case grouping @ (_: Grouping | _: GroupingID) =>
+        expressionResolutionContextStack.peek().hasGroupingAnalyticsExpression = true
+        coerceExpressionTypes(expression = grouping, expressionTreeTraversal = traversals.current)
       case other =>
         coerceExpressionTypes(expression = other, expressionTreeTraversal = traversals.current)
     }

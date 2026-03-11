@@ -33,8 +33,18 @@ import org.apache.spark.sql.catalyst.expressions.NamedExpression
  *  - hasStar: True if there is a star (`*`) in aggregate expressions list.
  *  - expressionIndicesWithAggregateFunctions: Indices of expressions in aggregate expressions list
  *      that have aggregate functions in their subtrees.
+ *  - hasGeneratorExpressions: True if there are generator expressions in the aggregate
+ *      expressions list.
  *  - hasLateralColumnAlias: True if there is a lateral column reference in the aggregate
  *      expressions list.
+ *  - hasWindowExpressions: True if there are window expressions in the aggregate expressions list.
+ *  - hasCorrelatedScalarSubqueryExpressions: True if there are correlated scalar subquery
+ *      expressions in the aggregate expressions list.
+ *  - projectListAfterGeneratorExtraction: Project list used to build [[Generate]] operators when
+ *      generator is present in aggregate list. For generators, contains
+ *      [[AliasedGenerator]] with children rewritten to reference aliases (e.g.,
+ *      `explode(_gen_input_0)`). For regular expressions, contains their attributes. See generator
+ *      case in [[ExpressionResolver.resolveAggregateExpressions]] doc for details.
  */
 case class ResolvedAggregateExpressions(
     expressions: Seq[NamedExpression],
@@ -42,5 +52,9 @@ case class ResolvedAggregateExpressions(
     hasAttributeOutsideOfAggregateExpressions: Boolean,
     hasStar: Boolean,
     expressionIndicesWithAggregateFunctions: HashSet[Int],
-    hasLateralColumnAlias: Boolean
+    hasGeneratorExpressions: Boolean,
+    hasLateralColumnAlias: Boolean,
+    hasWindowExpressions: Boolean,
+    hasCorrelatedScalarSubqueryExpressions: Boolean,
+    projectListAfterGeneratorExtraction: Seq[NamedExpression]
 )

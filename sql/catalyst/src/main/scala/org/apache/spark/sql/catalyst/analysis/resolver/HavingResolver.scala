@@ -49,6 +49,10 @@ class HavingResolver(resolver: Resolver, expressionResolver: ExpressionResolver)
   override def resolve(unresolvedHaving: UnresolvedHaving): LogicalPlan = {
     val resolvedChild = resolver.resolve(unresolvedHaving.child)
 
+    GroupingAnalyticsResolver.restrictGroupingAnalyticsBelowSortAndFilter(
+      operatorResolutionContextStack.current
+    )
+
     resolvedChild match {
       case window: Window if scopes.current.baseAggregate.isDefined =>
         resolveHavingAboveWindow(
