@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.plans.physical
 
-import java.util.Objects
-
 import scala.annotation.tailrec
 import scala.collection.mutable
 
@@ -525,16 +523,6 @@ case class KeyedPartitioning(
       result
     }
   }
-
-  override def equals(that: Any): Boolean = that match {
-    case k: KeyedPartitioning if this.expressions == k.expressions =>
-      this.partitionKeys == k.partitionKeys
-
-    case _ => false
-  }
-
-  override def hashCode(): Int =
-    Objects.hash(expressions, partitionKeys)
 }
 
 object KeyedPartitioning {
