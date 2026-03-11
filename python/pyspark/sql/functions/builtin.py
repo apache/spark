@@ -13068,15 +13068,14 @@ def timestamp_diff(unit: str, start: "ColumnOrName", end: "ColumnOrName") -> Col
 @_try_remote_functions
 def timestamp_add(unit: str, quantity: "ColumnOrName", ts: "ColumnOrName") -> Column:
     """
-    Gets the difference between the timestamps in the specified units by truncating
-    the fraction part.
+    Adds the specified number of units to the given timestamp.
 
     .. versionadded:: 4.0.0
 
     Parameters
     ----------
     unit : literal string
-        This indicates the units of the difference between the given timestamps.
+        This indicates the units of datetime that you want to add.
         Supported options are (case insensitive): "YEAR", "QUARTER", "MONTH", "WEEK",
         "DAY", "HOUR", "MINUTE", "SECOND", "MILLISECOND" and "MICROSECOND".
     quantity : :class:`~pyspark.sql.Column` or column name
@@ -13087,7 +13086,7 @@ def timestamp_add(unit: str, quantity: "ColumnOrName", ts: "ColumnOrName") -> Co
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        the difference between the timestamps.
+        the resulting timestamp after adding the specified number of units.
 
     See Also
     --------
