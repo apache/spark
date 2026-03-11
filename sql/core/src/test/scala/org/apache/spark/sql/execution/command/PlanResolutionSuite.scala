@@ -3045,7 +3045,8 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     Seq(
       "CONSTRAINT pk PRIMARY KEY (id)",
       "CONSTRAINT uk UNIQUE (id)",
-      "CONSTRAINT ck CHECK (id > 0)"
+      "CONSTRAINT ck CHECK (id > 0)",
+      "CONSTRAINT fk FOREIGN KEY (id) REFERENCES other_table(id)"
     ).foreach { constraintDef =>
       val sql = s"CREATE TABLE ctas1 ($constraintDef) AS SELECT 1 AS id"
       assertUnsupported(
@@ -3060,9 +3061,26 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     Seq(
       "CONSTRAINT pk PRIMARY KEY (id)",
       "CONSTRAINT uk UNIQUE (id)",
-      "CONSTRAINT ck CHECK (id > 0)"
+      "CONSTRAINT ck CHECK (id > 0)",
+      "CONSTRAINT fk FOREIGN KEY (id) REFERENCES other_table(id)"
     ).foreach { constraintDef =>
       val sql = s"REPLACE TABLE rtas1 ($constraintDef) AS SELECT 1 AS id"
+      assertUnsupported(
+        sql,
+        Map("message" ->
+          "Constraints may not be specified in a Replace Table As Select (RTAS) statement"),
+        ExpectedContext(fragment = sql, start = 0, stop = sql.length - 1))
+    }
+  }
+
+  test("CREATE OR REPLACE TABLE AS SELECT with constraints") {
+    Seq(
+      "CONSTRAINT pk PRIMARY KEY (id)",
+      "CONSTRAINT uk UNIQUE (id)",
+      "CONSTRAINT ck CHECK (id > 0)",
+      "CONSTRAINT fk FOREIGN KEY (id) REFERENCES other_table(id)"
+    ).foreach { constraintDef =>
+      val sql = s"CREATE OR REPLACE TABLE rtas1 ($constraintDef) AS SELECT 1 AS id"
       assertUnsupported(
         sql,
         Map("message" ->
