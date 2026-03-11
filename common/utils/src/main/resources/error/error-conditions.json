@@ -206,6 +206,12 @@
     ],
     "sqlState" : "42K03"
   },
+  "BEAN_ENCODER_INTERFACE_NOT_SUPPORTED" : {
+    "message" : [
+      "Bean encoder does not support interface type <className>."
+    ],
+    "sqlState" : "0A000"
+  },
   "BINARY_ARITHMETIC_OVERFLOW" : {
     "message" : [
       "<value1> <symbol> <value2> caused overflow. Use <functionName> to ignore overflow problem and return NULL."
@@ -1043,6 +1049,12 @@
     },
     "sqlState" : "21S01"
   },
+  "CREATE_VIEW_WITH_IF_NOT_EXISTS_AND_REPLACE" : {
+    "message" : [
+      "CREATE VIEW <viewName> with both IF NOT EXISTS and REPLACE is not allowed."
+    ],
+    "sqlState" : "42601"
+  },
   "CURSOR_ALREADY_EXISTS" : {
     "message" : [
       "Cannot declare cursor <cursorName> because it already exists in the current scope."
@@ -1677,7 +1689,7 @@
   },
   "EVENT_TIME_MUST_BE_TOP_LEVEL_COLUMN" : {
     "message" : [
-      "The event time column <eventExpr> must be a top-level column in the schema."
+      "The event time in withWatermark must be a top-level column, but '<eventExpr>' is a nested field. To use it, alias it to a top-level column in a select before withWatermark."
     ],
     "sqlState" : "42K09"
   },
@@ -4110,6 +4122,12 @@
     },
     "sqlState" : "42823"
   },
+  "INVALID_TEMP_OBJ_QUALIFIER" : {
+    "message" : [
+      "Temporary <objectType> <objectName> cannot be qualified with <qualifier>. Temporary objects can only be qualified with SESSION or SYSTEM.SESSION."
+    ],
+    "sqlState" : "42602"
+  },
   "INVALID_TEMP_OBJ_REFERENCE" : {
     "message" : [
       "Cannot create the persistent object <objName> of the type <obj> because it references to the temporary object <tempObjName> of the type <tempObj>. Please make the temporary object <tempObjName> persistent, or make the persistent object <objName> temporary."
@@ -4177,6 +4195,12 @@
   "INVALID_USAGE_OF_STAR_OR_REGEX" : {
     "message" : [
       "Invalid usage of <elem> in <prettyName>."
+    ],
+    "sqlState" : "42000"
+  },
+  "INVALID_USAGE_OF_STAR_WITH_TABLE_IDENTIFIER_IN_COUNT" : {
+    "message" : [
+      "count(<tableName>.*) is not allowed. Use count(*) or expand the columns manually, e.g. count(col1, col2)."
     ],
     "sqlState" : "42000"
   },
@@ -4288,6 +4312,11 @@
       "MISMATCH_WITH_DISTINCT_INPUT" : {
         "message" : [
           "The function is invoked with DISTINCT and WITHIN GROUP but expressions <funcArg> and <orderingExpr> do not match. The WITHIN GROUP ordering expression must be picked from the function inputs."
+        ]
+      },
+      "MISMATCH_WITH_DISTINCT_INPUT_UNSAFE_CAST" : {
+        "message" : [
+          "The function <funcName> with DISTINCT and WITHIN GROUP (ORDER BY) is not supported for <inputType> input. Explicitly cast the input to <castType> before passing it to both the function argument and ORDER BY expression."
         ]
       },
       "WITHIN_GROUP_MISSING" : {
@@ -4520,6 +4549,12 @@
       "This could result in the target row being operated on more than once with an update or delete operation and is not allowed."
     ],
     "sqlState" : "23K01"
+  },
+  "MERGE_INSERT_VALUE_COUNT_MISMATCH" : {
+    "message" : [
+      "The number of provided values (<actualCount>) must match the number of expected columns (<expectedCount>) in the INSERT clause of MERGE."
+    ],
+    "sqlState" : "21S01"
   },
   "MERGE_WITHOUT_WHEN" : {
     "message" : [
@@ -5127,6 +5162,12 @@
     ],
     "sqlState" : "428FT"
   },
+  "PARTITION_BY_NOT_ALLOWED_WITH_INSERT_INTO" : {
+    "message" : [
+      "partitionBy() cannot be used with insertInto(). Partition columns for table <tableName> are determined by the table definition."
+    ],
+    "sqlState" : "42601"
+  },
   "PARTITION_COLUMN_NOT_FOUND_IN_SCHEMA" : {
     "message" : [
       "Partition column <column> not found in schema <schema>. Please provide the existing column for partitioning."
@@ -5492,6 +5533,84 @@
       "sortBy must be used together with bucketBy."
     ],
     "sqlState" : "42601"
+  },
+  "SPARK_CONNECT_ILLEGAL_STATE" : {
+    "message" : [
+      "Spark Connect encountered an illegal state condition."
+    ],
+    "subClass" : {
+      "DATA_INTEGRITY_CURSOR_OUT_OF_BOUNDS" : {
+        "message" : [
+          "Cursor out of bounds: <cursor> exceeds batch size <batchSize>."
+        ]
+      },
+      "EXECUTION_STATE_EXECUTE_HOLDER_ALREADY_EXISTS" : {
+        "message" : [
+          "ExecuteHolder with opId=<operationId> already exists!"
+        ]
+      },
+      "EXECUTION_STATE_EXECUTE_HOLDER_ALREADY_EXISTS_GRAPH" : {
+        "message" : [
+          "Pipeline execution for graph ID <graphId> already exists. Stop the existing execution before starting a new one."
+        ]
+      },
+      "EXECUTION_STATE_OPERATION_ORPHANED" : {
+        "message" : [
+          "Operation <key> has been orphaned."
+        ]
+      },
+      "SESSION_MANAGEMENT_SERVICE_NOT_STARTED" : {
+        "message" : [
+          "Attempting to stop the Spark Connect service that has not been started."
+        ]
+      },
+      "SESSION_MANAGEMENT_SESSION_ALREADY_CLOSED" : {
+        "message" : [
+          "Session <key> is already closed."
+        ]
+      },
+      "STATE_CONSISTENCY_CLEANER_ALREADY_SET" : {
+        "message" : [
+          "Cleaner for query <queryKey> has already been set for session <key>."
+        ]
+      },
+      "STATE_CONSISTENCY_EXECUTION_STATE_TRANSITION_INVALID_OPERATION_STATUS_MISMATCH" : {
+        "message" : [
+          "operationId: <operationId> with status <currentStatus> is not within statuses <validStatuses> for event <eventStatus>"
+        ]
+      },
+      "STATE_CONSISTENCY_EXECUTION_STATE_TRANSITION_INVALID_SESSION_NOT_STARTED" : {
+        "message" : [
+          "sessionId: <sessionId> with status <sessionStatus> is not Started for event <eventStatus>"
+        ]
+      },
+      "STATE_CONSISTENCY_NO_BATCHES_AVAILABLE" : {
+        "message" : [
+          "No batches available. Invalid response: <response>."
+        ]
+      },
+      "STATE_CONSISTENCY_SESSION_STATE_TRANSITION_INVALID" : {
+        "message" : [
+          "sessionId: <sessionId> with status <fromState> is not within statuses <validStates> for event <toState>"
+        ]
+      },
+      "STREAMING_QUERY_UNEXPECTED_RETURN_VALUE" : {
+        "message" : [
+          "Unexpected return value <value> from Python worker in <context> for session <key>."
+        ]
+      },
+      "STREAM_LIFECYCLE_ALREADY_COMPLETED" : {
+        "message" : [
+          "Stream <operation> can't be called after stream completed"
+        ]
+      },
+      "STREAM_LIFECYCLE_EVENT_SEND_AFTER_SHUTDOWN" : {
+        "message" : [
+          "Cannot send event after shutdown for session <key>."
+        ]
+      }
+    },
+    "sqlState" : "XXSC0"
   },
   "SPARK_JOB_CANCELLED" : {
     "message" : [
@@ -6663,6 +6782,24 @@
     ],
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_AUTO_SCHEMA_EVOLUTION_CHANGES" : {
+    "message" : [
+      "Automatic schema evolution failed for table <tableName>."
+    ],
+    "subClass" : {
+      "FAILED_EVOLUTION" : {
+        "message" : [
+          "The catalog returned the error: <detail>"
+        ]
+      },
+      "PARTIAL_EVOLUTION" : {
+        "message" : [
+          "The catalog did not support or only partially applied the following changes: <changes>."
+        ]
+      }
+    },
+    "sqlState" : "42000"
+  },
   "UNSUPPORTED_CALL" : {
     "message" : [
       "Cannot call the method \"<methodName>\" of the class \"<className>\"."
@@ -7539,12 +7676,6 @@
     },
     "sqlState" : "0A000"
   },
-  "UNSUPPORTED_TABLE_CHANGE_IN_AUTO_SCHEMA_EVOLUTION" : {
-    "message" : [
-      "The table changes <changes> are not supported by the catalog on table <tableName>."
-    ],
-    "sqlState" : "42000"
-  },
   "UNSUPPORTED_TABLE_CHANGE_IN_JDBC_CATALOG" : {
     "message" : [
       "The table change <change> is not supported for the JDBC catalog on table <tableName>. Supported changes include: AddColumn, RenameColumn, DeleteColumn, UpdateColumnType, UpdateColumnNullability."
@@ -7748,11 +7879,23 @@
     ],
     "sqlState" : "42K0E"
   },
+  "WINDOW_FUNCTION_NOT_ALLOWED_IN_CLAUSE" : {
+    "message" : [
+      "It is not allowed to use window functions inside <clauseName> clause."
+    ],
+    "sqlState" : "42601"
+  },
   "WINDOW_FUNCTION_WITHOUT_OVER_CLAUSE" : {
     "message" : [
       "Window function <funcName> requires an OVER clause."
     ],
     "sqlState" : "42601"
+  },
+  "WKB_PARSE_ERROR" : {
+    "message" : [
+      "Error parsing WKB: <parseError> at position <pos>"
+    ],
+    "sqlState" : "22023"
   },
   "WRITE_STREAM_NOT_ALLOWED" : {
     "message" : [
@@ -7798,11 +7941,6 @@
   "_LEGACY_ERROR_TEMP_0004" : {
     "message" : [
       "Empty source for merge: you should specify a source table/subquery in merge."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0006" : {
-    "message" : [
-      "The number of inserted values cannot match the fields."
     ]
   },
   "_LEGACY_ERROR_TEMP_0012" : {
@@ -7910,11 +8048,6 @@
       "Empty set in <element> grouping sets is not supported."
     ]
   },
-  "_LEGACY_ERROR_TEMP_0052" : {
-    "message" : [
-      "CREATE VIEW with both IF NOT EXISTS and REPLACE is not allowed."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_0053" : {
     "message" : [
       "It is not allowed to define a TEMPORARY view with IF NOT EXISTS."
@@ -7991,11 +8124,6 @@
       "count(<targetString>.*) is not allowed. Please use count(*) or expand the columns manually, e.g. count(col1, col2)."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1030" : {
-    "message" : [
-      "Window aggregate function with filter predicate is not supported yet."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1031" : {
     "message" : [
       "It is not allowed to use a window function inside an aggregate function. Please use the inner window function in a sub-query."
@@ -8010,11 +8138,6 @@
     "message" : [
       "<expr> has multiple Window Specifications (<distinctWindowSpec>).",
       "Please file a bug report with this error message, stack trace, and the query."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1034" : {
-    "message" : [
-      "It is not allowed to use window functions inside <clauseName> clause."
     ]
   },
   "_LEGACY_ERROR_TEMP_1035" : {
@@ -8242,11 +8365,6 @@
   "_LEGACY_ERROR_TEMP_1132" : {
     "message" : [
       "A schema needs to be specified when using <className>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1134" : {
-    "message" : [
-      "Unable to infer schema for <format> at <fileCatalog>. It must be specified manually."
     ]
   },
   "_LEGACY_ERROR_TEMP_1135" : {
@@ -8741,11 +8859,6 @@
   "_LEGACY_ERROR_TEMP_1307" : {
     "message" : [
       "There is a 'path' option set and save() is called with a path parameter. Either remove the path option, or call save() without the parameter. To ignore this check, set '<config>' to 'true'."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1309" : {
-    "message" : [
-      "insertInto() can't be used together with partitionBy(). Partition columns have already been defined for the table. It is not necessary to use partitionBy()."
     ]
   },
   "_LEGACY_ERROR_TEMP_1310" : {

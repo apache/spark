@@ -709,6 +709,31 @@ class DataFrameAggregateSuite extends QueryTest
     )
   }
 
+  test("SPARK-55501: listagg with DISTINCT and ORDER BY") {
+    val df = Seq(1, 2, 10, 1, 9).toDF("a")
+
+    withSQLConf(SQLConf.LISTAGG_ALLOW_DISTINCT_CAST_WITH_ORDER.key -> "true") {
+      checkAnswer(
+        df.selectExpr("listagg(distinct a, ', ') within group (order by a)"),
+        Seq(Row("1, 2, 9, 10"))
+      )
+    }
+
+    withSQLConf(SQLConf.LISTAGG_ALLOW_DISTINCT_CAST_WITH_ORDER.key -> "false") {
+      checkError(
+        exception = intercept[AnalysisException] {
+          df.selectExpr("listagg(distinct a) within group (order by a)")
+        },
+        condition = "INVALID_WITHIN_GROUP_EXPRESSION.MISMATCH_WITH_DISTINCT_INPUT",
+        parameters = Map(
+          "funcName" -> "`listagg`",
+          "funcArg" -> "\"a\"",
+          "orderingExpr" -> "\"a\""
+        )
+      )
+    }
+  }
+
   test("SPARK-31500: collect_set() of BinaryType returns duplicate elements") {
     val bytesTest1 = "test1".getBytes
     val bytesTest2 = "test2".getBytes

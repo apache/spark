@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.execution.datasources.jdbc.connection
 
+import org.scalatest.Ignore
+
+@Ignore // TODO(SPARK-55707): Re-enable DB2 JDBC Driver tests
 class DB2ConnectionProviderSuite extends ConnectionProviderSuiteBase {
   test("setAuthenticationConfig must set authentication all the time") {
     val provider = new DB2ConnectionProvider()

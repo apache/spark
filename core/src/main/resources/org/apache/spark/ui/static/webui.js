@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-/* global $, collapseTableAndButton, loadMore, loadNew, toggleDagViz, togglePlanViz, clickPhysicalPlanDetails */
+/* global $, loadMore, loadNew, toggleDagViz, togglePlanViz, clickPhysicalPlanDetails */
 /* eslint-disable no-unused-vars */
 var uiRoot = "";
 var appBasePath = "";
@@ -29,80 +29,76 @@ function setAppBasePath(path) {
 }
 /* eslint-enable no-unused-vars */
 
-function collapseTablePageLoad(name, table){
-  if (window.localStorage.getItem(name) == "true") {
-    // Set it to false so that the click function can revert it
-    window.localStorage.setItem(name, "false");
-    collapseTable(name, table);
+// Theme toggle (dark/light mode)
+function updateThemeButton(btn, theme) {
+  btn.textContent = "\u25D1";
+  btn.setAttribute("title", theme === "dark" ? "Switch to light mode" : "Switch to dark mode");
+  // Swap logo for dark/light mode
+  document.querySelectorAll("img.spark-logo").forEach(function(img) {
+    var src = img.getAttribute("src") || "";
+    if (theme === "dark") {
+      img.setAttribute("src", src.replace("spark-logo.svg", "spark-logo-rev.svg"));
+    } else {
+      img.setAttribute("src", src.replace("spark-logo-rev.svg", "spark-logo.svg"));
+    }
+  });
+}
+
+function initThemeToggle() {
+  var saved = localStorage.getItem("spark-theme");
+  var theme = saved ||
+    (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+  document.documentElement.setAttribute("data-bs-theme", theme);
+
+  var btn = document.getElementById("theme-toggle");
+  if (btn) {
+    updateThemeButton(btn, theme);
+    btn.addEventListener("click", function() {
+      var current = document.documentElement.getAttribute("data-bs-theme");
+      var next = current === "dark" ? "light" : "dark";
+      document.documentElement.setAttribute("data-bs-theme", next);
+      localStorage.setItem("spark-theme", next);
+      updateThemeButton(btn, next);
+    });
   }
 }
 
-function collapseTable(thisName, table){
-  var status = window.localStorage.getItem(thisName) == "true";
-  status = !status;
-
-  var thisClass = '.' + thisName;
-
-  // Expand the list of additional metrics.
-  var tableDiv = $(thisClass).parent().find('.' + table);
-  $(tableDiv).toggleClass('collapsed');
-
-  // Switch the class of the arrow from open to closed.
-  $(thisClass).find('.collapse-table-arrow').toggleClass('arrow-open');
-  $(thisClass).find('.collapse-table-arrow').toggleClass('arrow-closed');
-
-  window.localStorage.setItem(thisName, "" + status);
-}
-
-// Add a call to collapseTablePageLoad() on each collapsible table
-// to remember if it's collapsed on each page reload
+// Initialize theme toggle
 $(function() {
-  collapseTablePageLoad('collapse-aggregated-metrics','aggregated-metrics');
-  collapseTablePageLoad('collapse-aggregated-executors','aggregated-executors');
-  collapseTablePageLoad('collapse-aggregated-removedExecutors','aggregated-removedExecutors');
-  collapseTablePageLoad('collapse-aggregated-workers','aggregated-workers');
-  collapseTablePageLoad('collapse-aggregated-activeApps','aggregated-activeApps');
-  collapseTablePageLoad('collapse-aggregated-activeDrivers','aggregated-activeDrivers');
-  collapseTablePageLoad('collapse-aggregated-completedApps','aggregated-completedApps');
-  collapseTablePageLoad('collapse-aggregated-completedDrivers','aggregated-completedDrivers');
-  collapseTablePageLoad('collapse-aggregated-runningExecutors','aggregated-runningExecutors');
-  collapseTablePageLoad('collapse-aggregated-runningDrivers','aggregated-runningDrivers');
-  collapseTablePageLoad('collapse-aggregated-finishedExecutors','aggregated-finishedExecutors');
-  collapseTablePageLoad('collapse-aggregated-finishedDrivers','aggregated-finishedDrivers');
-  collapseTablePageLoad('collapse-aggregated-runtimeInformation','aggregated-runtimeInformation');
-  collapseTablePageLoad('collapse-aggregated-sparkProperties','aggregated-sparkProperties');
-  collapseTablePageLoad('collapse-aggregated-hadoopProperties','aggregated-hadoopProperties');
-  collapseTablePageLoad('collapse-aggregated-systemProperties','aggregated-systemProperties');
-  collapseTablePageLoad('collapse-aggregated-metricsProperties','aggregated-metricsProperties');
-  collapseTablePageLoad('collapse-aggregated-classpathEntries','aggregated-classpathEntries');
-  collapseTablePageLoad('collapse-aggregated-environmentVariables','aggregated-environmentVariables');
-  collapseTablePageLoad('collapse-aggregated-activeJobs','aggregated-activeJobs');
-  collapseTablePageLoad('collapse-aggregated-completedJobs','aggregated-completedJobs');
-  collapseTablePageLoad('collapse-aggregated-failedJobs','aggregated-failedJobs');
-  collapseTablePageLoad('collapse-aggregated-poolTable','aggregated-poolTable');
-  collapseTablePageLoad('collapse-aggregated-allActiveStages','aggregated-allActiveStages');
-  collapseTablePageLoad('collapse-aggregated-allPendingStages','aggregated-allPendingStages');
-  collapseTablePageLoad('collapse-aggregated-allCompletedStages','aggregated-allCompletedStages');
-  collapseTablePageLoad('collapse-aggregated-allSkippedStages','aggregated-allSkippedStages');
-  collapseTablePageLoad('collapse-aggregated-allFailedStages','aggregated-allFailedStages');
-  collapseTablePageLoad('collapse-aggregated-activeStages','aggregated-activeStages');
-  collapseTablePageLoad('collapse-aggregated-pendingOrSkippedStages','aggregated-pendingOrSkippedStages');
-  collapseTablePageLoad('collapse-aggregated-completedStages','aggregated-completedStages');
-  collapseTablePageLoad('collapse-aggregated-failedStages','aggregated-failedStages');
-  collapseTablePageLoad('collapse-aggregated-poolActiveStages','aggregated-poolActiveStages');
-  collapseTablePageLoad('collapse-aggregated-tasks','aggregated-tasks');
-  collapseTablePageLoad('collapse-aggregated-rdds','aggregated-rdds');
-  collapseTablePageLoad('collapse-aggregated-waitingBatches','aggregated-waitingBatches');
-  collapseTablePageLoad('collapse-aggregated-runningBatches','aggregated-runningBatches');
-  collapseTablePageLoad('collapse-aggregated-completedBatches','aggregated-completedBatches');
-  collapseTablePageLoad('collapse-aggregated-runningExecutions','aggregated-runningExecutions');
-  collapseTablePageLoad('collapse-aggregated-completedExecutions','aggregated-completedExecutions');
-  collapseTablePageLoad('collapse-aggregated-failedExecutions','aggregated-failedExecutions');
-  collapseTablePageLoad('collapse-aggregated-sessionstat','aggregated-sessionstat');
-  collapseTablePageLoad('collapse-aggregated-sqlstat','aggregated-sqlstat');
-  collapseTablePageLoad('collapse-aggregated-sqlsessionstat','aggregated-sqlsessionstat');
-  collapseTablePageLoad('collapse-aggregated-activeQueries','aggregated-activeQueries');
-  collapseTablePageLoad('collapse-aggregated-completedQueries','aggregated-completedQueries');
+  initThemeToggle();
+});
+
+// Persist BS5 collapse state in localStorage
+$(function() {
+  $(document).on("shown.bs.collapse hidden.bs.collapse", ".collapsible-table", function(e) {
+    var trigger = document.querySelector('[data-bs-target="#' + this.id + '"]');
+    if (trigger) {
+      var name = trigger.getAttribute("data-collapse-name");
+      if (name) {
+        var isShown = e.type === "shown";
+        window.localStorage.setItem(name, "" + !isShown);
+        $(trigger).find('.collapse-table-arrow')
+          .toggleClass('arrow-open', isShown)
+          .toggleClass('arrow-closed', !isShown);
+        trigger.setAttribute("aria-expanded", "" + isShown);
+      }
+    }
+  });
+
+  // Restore collapse state from localStorage on page load
+  $("[data-collapse-name]").each(function() {
+    var name = this.getAttribute("data-collapse-name");
+    var target = this.getAttribute("data-bs-target");
+    if (name && target && window.localStorage.getItem(name) === "true") {
+      var contentEl = document.querySelector(target);
+      if (contentEl) {
+        $(contentEl).removeClass("show");
+        $(this).find('.collapse-table-arrow')
+          .removeClass('arrow-open').addClass('arrow-closed');
+        this.setAttribute("aria-expanded", "false");
+      }
+    }
+  });
 });
 
 $(function() {
@@ -114,17 +110,6 @@ $(function() {
 
 // Event delegation for CSP-compliant inline event handler replacement.
 $(function() {
-  // collapseTable / collapseTableAndButton
-  $(document).on("click", "[data-collapse-name]", function() {
-    var name = $(this).data("collapse-name");
-    var table = $(this).data("collapse-table");
-    if ($(this).data("collapse-button")) {
-      collapseTableAndButton(name, table);
-    } else {
-      collapseTable(name, table);
-    }
-  });
-
   // toggle details (stage-details, stacktrace-details, expand-details)
   $(document).on("click", "[data-toggle-details]", function() {
     var selector = $(this).data("toggle-details");
@@ -160,4 +145,17 @@ $(function() {
   $(document).on("click", "[data-action=clickPhysicalPlanDetails]", function() {
     clickPhysicalPlanDetails();
   });
+});
+
+// Footer uptime counter
+$(function() {
+  var el = document.getElementById("footer-uptime");
+  if (!el) return;
+  function update() {
+    var ms = Date.now() - Number(el.dataset.startTime);
+    var m = Math.floor(ms / 60000), h = Math.floor(m / 60), d = Math.floor(h / 24);
+    el.textContent = "Uptime: " + (d > 0 ? d + "d " : "") + (h % 24) + "h " + (m % 60) + "m";
+  }
+  update();
+  setInterval(update, 60000);
 });

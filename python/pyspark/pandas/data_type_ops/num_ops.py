@@ -276,16 +276,16 @@ class NumericOps(DataTypeOps):
         if not isinstance(right, IndexOpsMixin) and is_list_like(right):
             return super().eq(left, right)
         else:
+            if _should_return_all_false(left, right):
+                left_scol = left._with_new_scol(F.lit(False))
+                if isinstance(right, IndexOpsMixin):
+                    # When comparing with another Series/Index, drop the name
+                    # to align with pandas behavior
+                    return left_scol.rename(None)  # type: ignore[attr-defined]
+                else:
+                    # When comparing with scalar-like, keep the name of left operand
+                    return cast(SeriesOrIndex, left_scol)
             if is_ansi_mode_enabled(left._internal.spark_frame.sparkSession):
-                if _should_return_all_false(left, right):
-                    left_scol = left._with_new_scol(F.lit(False))
-                    if isinstance(right, IndexOpsMixin):
-                        # When comparing with another Series/Index, drop the name
-                        # to align with pandas behavior
-                        return left_scol.rename(None)  # type: ignore[attr-defined]
-                    else:
-                        # When comparing with scalar-like, keep the name of left operand
-                        return cast(SeriesOrIndex, left_scol)
                 if _is_boolean_type(right):  # numeric vs. bool
                     right = transform_boolean_operand_to_numeric(
                         right, spark_type=left.spark.data_type
@@ -294,6 +294,12 @@ class NumericOps(DataTypeOps):
 
     def ne(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
+        if _should_return_all_false(left, right):
+            left_scol = left._with_new_scol(F.lit(True))
+            if isinstance(right, IndexOpsMixin):
+                return left_scol.rename(None)  # type: ignore[attr-defined]
+            else:
+                return cast(SeriesOrIndex, left_scol)
         return pyspark_column_op("__ne__", left, right, fillna=True)
 
     def lt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:

@@ -981,6 +981,12 @@ class RocksDB(
               verifyChangelogRecord(kvVerifier, key, Some(value))
               merge(key, value, includesPrefix = useColumnFamilies,
                 deriveCfName = useColumnFamilies, includesChecksum = conf.rowChecksumEnabled)
+
+            case RecordType.DELETE_RANGE_RECORD =>
+              // For deleteRange, 'key' is beginKey and 'value' is endKey
+              verifyChangelogRecord(kvVerifier, key, Some(value))
+              deleteRange(key, value, includesPrefix = useColumnFamilies,
+                includesChecksum = conf.rowChecksumEnabled)
           }
         }
       } finally {
@@ -1438,29 +1444,50 @@ class RocksDB(
    * Delete all keys in the range [beginKey, endKey).
    * Uses RocksDB's native deleteRange for efficient bulk deletion.
    *
-   * @param beginKey The start key of the range (inclusive)
-   * @param endKey   The end key of the range (exclusive)
-   * @param cfName   The column family name
+   * @param beginKey       The start key of the range (inclusive)
+   * @param endKey         The end key of the range (exclusive)
+   * @param cfName         The column family name
+   * @param includesPrefix Whether the keys already include the column family prefix.
+   *                       Set to true during changelog replay to avoid double-encoding.
    */
   def deleteRange(
       beginKey: Array[Byte],
       endKey: Array[Byte],
-      cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
+      cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME,
+      includesPrefix: Boolean = false,
+      includesChecksum: Boolean = false): Unit = {
     updateMemoryUsageIfNeeded()
 
-    val beginKeyWithPrefix = if (useColumnFamilies) {
+    val originalEndKey = if (conf.rowChecksumEnabled && includesChecksum) {
+      KeyValueChecksumEncoder.decodeAndVerifyValueRowWithChecksum(
+        readVerifier, beginKey, endKey, delimiterSize)
+    } else {
+      endKey
+    }
+
+    val beginKeyWithPrefix = if (useColumnFamilies && !includesPrefix) {
       encodeStateRowWithPrefix(beginKey, cfName)
     } else {
       beginKey
     }
 
-    val endKeyWithPrefix = if (useColumnFamilies) {
-      encodeStateRowWithPrefix(endKey, cfName)
+    val endKeyWithPrefix = if (useColumnFamilies && !includesPrefix) {
+      encodeStateRowWithPrefix(originalEndKey, cfName)
     } else {
-      endKey
+      originalEndKey
     }
 
     db.deleteRange(writeOptions, beginKeyWithPrefix, endKeyWithPrefix)
+    changelogWriter.foreach { writer =>
+      val endKeyForChangelog = if (conf.rowChecksumEnabled) {
+        KeyValueChecksumEncoder.encodeValueRowWithChecksum(endKeyWithPrefix,
+          KeyValueChecksum.create(beginKeyWithPrefix, Some(endKeyWithPrefix)))
+      } else {
+        endKeyWithPrefix
+      }
+      writer.deleteRange(beginKeyWithPrefix, endKeyForChangelog)
+    }
+    // TODO: Add metrics update for deleteRange operations
   }
 
   /**
@@ -1830,7 +1857,20 @@ class RocksDB(
       }
 
       if (mostRecentSnapshot.isDefined) {
-        uploadSnapshot(mostRecentSnapshot.get)
+        // SPARK-55892: We are doing this because the time between when a snapshot was created,
+        // and the time when maintenance upload is happening could be very long, such that the
+        // reused files could have been deleted by maintenance on another executor due to
+        // the existing uploaded snapshots depending on it being deleted.
+        // This would also handle other cases where the fileMapping is referencing a file
+        // that is already deleted in DFS.
+        // This could lead to SST file missing, when the state store is being reloaded with
+        // this new snapshot.
+        val snapshotToUpload = if (conf.checkStaleReusedFilesInSnapshot) {
+          replaceStaleReusedFilesInSnapshot(mostRecentSnapshot.get)
+        } else {
+          mostRecentSnapshot.get
+        }
+        uploadSnapshot(snapshotToUpload)
       }
     }
     val cleanupTime = timeTakenMs {
@@ -1840,6 +1880,42 @@ class RocksDB(
         minVersionsToDelete = conf.minVersionsToDelete)
     }
     logInfo(log"Cleaned old data, time taken: ${MDC(LogKeys.TIME_UNITS, cleanupTime)} ms")
+  }
+
+  /**
+   * This replaces stale reused files in the snapshot with new ones to be uploaded.
+   * Stale means they are potential candidates for deletion by another
+   * maintenance that could have happened on another executor before this snapshot is uploaded.
+   * Checking if the file exists in DFS is not sufficient, since that could lead to race
+   * with an ongoing maintenance on another executor.
+   *
+   * @param snapshot The snapshot we want to upload
+   * @return The snapshot with stale reused files replaced with new DFS files to be uploaded
+   */
+  private def replaceStaleReusedFilesInSnapshot(snapshot: RocksDBSnapshot): RocksDBSnapshot = {
+    val isReusingFiles = snapshot.fileMapping.exists(_._2.reusedFromVersion.isDefined)
+
+    if (isReusingFiles) {
+      val latestSnapshotVersionInDfs = fileManager.getLatestSnapshotVersion()
+      // Any other maintenance wouldn't delete files after this version
+      val maxVersionToDelete = Math.max(latestSnapshotVersionInDfs - conf.minVersionsToRetain, 0)
+
+      val newFileMapping = snapshot.fileMapping.map { case (localFileName, snapshotFile) =>
+        if (snapshotFile.reusedFromVersion.isDefined &&
+          snapshotFile.reusedFromVersion.get <= maxVersionToDelete) {
+          // Don't reuse the file, lets upload a new one
+          val newDfsFileName = fileManager.newDFSFileName(localFileName, snapshot.dfsFileSuffix)
+          val newDfsFile = RocksDBImmutableFile(
+            localFileName, newDfsFileName, snapshotFile.immutableFile.sizeBytes)
+          localFileName -> RocksDBSnapshotFile(newDfsFile, reusedFromVersion = None)
+        } else {
+          localFileName -> snapshotFile
+        }
+      }.toMap
+      snapshot.copy(fileMapping = newFileMapping)
+    } else {
+      snapshot
+    }
   }
 
   /** Release all resources */
@@ -2195,7 +2271,11 @@ case class RocksDBVersionSnapshotInfo(version: Long, dfsFilesUUID: String)
 
 // Encapsulates a RocksDB immutable file, and the information whether it has been previously
 // uploaded to DFS. Already uploaded files can be skipped during SST file upload.
-case class RocksDBSnapshotFile(immutableFile: RocksDBImmutableFile, isUploaded: Boolean)
+case class RocksDBSnapshotFile(
+    immutableFile: RocksDBImmutableFile,
+    reusedFromVersion: Option[Long]) {
+  def isUploaded: Boolean = reusedFromVersion.isDefined
+}
 
 // Encapsulates the mapping of local SST files to DFS files. This mapping prevents
 // re-uploading the same SST file multiple times to DFS, saving I/O and reducing snapshot
@@ -2246,7 +2326,7 @@ class RocksDBFileMapping {
       // We can't reuse the current local file since it was added in the same or newer version
       // as the version we want to load
       (fileVersion, _) => fileVersion >= versionToLoad
-    )
+    ).map(_._1)
   }
 
   /**
@@ -2261,12 +2341,12 @@ class RocksDBFileMapping {
    *       e.g. we load(v1) -> save(v2), the loaded SST files from version 1 can be reused
    *       in version 2 upload.
    *
-   * @return - Option with the DFS file or None
+   * @return - Option with the DFS file and version or None
    */
   private def getDfsFileForSave(
       fileManager: RocksDBFileManager,
       localFile: File,
-      versionToSave: Long): Option[RocksDBImmutableFile] = {
+      versionToSave: Long): Option[(RocksDBImmutableFile, Long)] = {
     getDfsFileWithIncompatibilityCheck(
       fileManager,
       localFile.getName,
@@ -2280,7 +2360,8 @@ class RocksDBFileMapping {
   private def getDfsFileWithIncompatibilityCheck(
       fileManager: RocksDBFileManager,
       localFileName: String,
-      isIncompatible: (Long, RocksDBImmutableFile) => Boolean): Option[RocksDBImmutableFile] = {
+      isIncompatible: (Long, RocksDBImmutableFile) => Boolean
+  ): Option[(RocksDBImmutableFile, Long)] = {
     localFileMappings.get(localFileName).map { case (dfsFileMappedVersion, dfsFile) =>
       val dfsFileSuffix = fileManager.dfsFileSuffix(dfsFile)
       val versionSnapshotInfo = RocksDBVersionSnapshotInfo(dfsFileMappedVersion, dfsFileSuffix)
@@ -2290,7 +2371,7 @@ class RocksDBFileMapping {
         remove(localFileName)
         None
       } else {
-        Some(dfsFile)
+        Some((dfsFile, dfsFileMappedVersion))
       }
     }.getOrElse(None)
   }
@@ -2344,14 +2425,17 @@ class RocksDBFileMapping {
     val dfsFilesSuffix = UUID.randomUUID().toString
     val snapshotFileMapping = localImmutableFiles.map { f =>
       val localFileName = f.getName
-      val existingDfsFile = getDfsFileForSave(fileManager, f, version)
-      val dfsFile = existingDfsFile.getOrElse {
-        val newDfsFileName = fileManager.newDFSFileName(localFileName, dfsFilesSuffix)
-        val newDfsFile = RocksDBImmutableFile(localFileName, newDfsFileName, sizeBytes = f.length())
-        mapToDfsFile(localFileName, newDfsFile, version)
-        newDfsFile
+      val existingDfsFileAndVersion = getDfsFileForSave(fileManager, f, version)
+      val (dfsFile, reusedFromVersion) = existingDfsFileAndVersion match {
+        case Some((file, version)) => (file, Some(version))
+        case None =>
+          val newDfsFileName = fileManager.newDFSFileName(localFileName, dfsFilesSuffix)
+          val newDfsFile =
+            RocksDBImmutableFile(localFileName, newDfsFileName, sizeBytes = f.length())
+          mapToDfsFile(localFileName, newDfsFile, version)
+          (newDfsFile, None)
       }
-      localFileName -> RocksDBSnapshotFile(dfsFile, existingDfsFile.isDefined)
+      localFileName -> RocksDBSnapshotFile(dfsFile, reusedFromVersion)
     }.toMap
 
     syncWithLocalState(localImmutableFiles)
@@ -2399,6 +2483,7 @@ case class RocksDBConf(
     memoryUpdateIntervalMs: Long,
     compressionCodec: String,
     verifyNonEmptyFilesInZip: Boolean,
+    checkStaleReusedFilesInSnapshot: Boolean,
     allowFAllocate: Boolean,
     compression: String,
     reportSnapshotUploadLag: Boolean,
@@ -2514,6 +2599,12 @@ object RocksDBConf {
   private val VERIFY_NON_EMPTY_FILES_IN_ZIP_CONF =
     SQLConfEntry(VERIFY_NON_EMPTY_FILES_IN_ZIP_CONF_KEY, "true")
 
+  // Config to determine whether we should check for stale reused files
+  // during maintenance snapshot upload.
+  val CHECK_STALE_REUSED_FILES_IN_SNAPSHOT_CONF_KEY = "checkStaleReusedFilesInSnapshot"
+  private val CHECK_STALE_REUSED_FILES_IN_SNAPSHOT_CONF =
+    SQLConfEntry(CHECK_STALE_REUSED_FILES_IN_SNAPSHOT_CONF_KEY, "true")
+
   // Configuration to set the merge operator version for backward compatibility.
   // Version 1 (default): Uses comma "," as delimiter for StringAppendOperator
   // Version 2: Uses empty string "" as delimiter (no delimiter, direct concatenation)
@@ -2614,6 +2705,7 @@ object RocksDBConf {
       getPositiveLongConf(MEMORY_UPDATE_INTERVAL_MS_CONF),
       storeConf.compressionCodec,
       getBooleanConf(VERIFY_NON_EMPTY_FILES_IN_ZIP_CONF),
+      getBooleanConf(CHECK_STALE_REUSED_FILES_IN_SNAPSHOT_CONF),
       getBooleanConf(ALLOW_FALLOCATE_CONF),
       getStringConf(COMPRESSION_CONF),
       storeConf.reportSnapshotUploadLag,

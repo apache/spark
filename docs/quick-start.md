@@ -51,13 +51,19 @@ Or if PySpark is installed with pip in your current environment:
 
     pyspark
 
-Spark's primary abstraction is a distributed collection of items called a Dataset. Datasets can be created from Hadoop InputFormats (such as HDFS files) or by transforming other Datasets. Due to Python's dynamic nature, we don't need the Dataset to be strongly-typed in Python. As a result, all Datasets in Python are Dataset[Row], and we call it `DataFrame` to be consistent with the data frame concept in Pandas and R. Let's make a new DataFrame from the text of the README file in the Spark source directory:
+Spark's primary abstracted is called a **Dataset**. A Dataset is a structured set of information. You can create datasets from Hadoop InputFormats (such as HDFS
+files) or by transforming other Datasets. 
+
+Datasets behave differently in some languages. Because Python allows for dynamic typing, Datasets in Python are all `Dataset[Row]` on an implementation level.
+This leads to another key Spark concept: a `DataFrame`, or a Dataset with named columns. If you're familiar with DataFrames from pandas or R, you'll be familiar with how DataFrames work in Spark. In other languages, like Java, the difference between a Dataset and DataFrame is larger, but for now let's proceed with Python. 
+
+Let's make a new DataFrame using the `README.md` file in the Spark souce directory via the command line:
 
 {% highlight python %}
 >>> textFile = spark.read.text("README.md")
 {% endhighlight %}
 
-You can get values from DataFrame directly, by calling some actions, or transform the DataFrame to get a new one. For more details, please read the _[API doc](api/python/index.html#pyspark.sql.DataFrame)_.
+Once you've created the DataFrame, you can perform actions against it, or transform it into another DataFrame. For more details see the [API doc](api/python/index.html#pyspark.sql.DataFrame).
 
 {% highlight python %}
 >>> textFile.count()  # Number of rows in this DataFrame
@@ -67,13 +73,13 @@ You can get values from DataFrame directly, by calling some actions, or transfor
 Row(value=u'# Apache Spark')
 {% endhighlight %}
 
-Now let's transform this DataFrame to a new one. We call `filter` to return a new DataFrame with a subset of the lines in the file.
+Now let's transform this DataFrame to a new one. The `filter` function returns a new DataFrame with a subset of the lines in the file.
 
 {% highlight python %}
 >>> linesWithSpark = textFile.filter(textFile.value.contains("Spark"))
 {% endhighlight %}
 
-We can chain together transformations and actions:
+You can also chain together transformations and actions:
 
 {% highlight python %}
 >>> textFile.filter(textFile.value.contains("Spark")).count()  # How many lines contain "Spark"?
@@ -86,14 +92,17 @@ We can chain together transformations and actions:
 
     ./bin/spark-shell
 
-Spark's primary abstraction is a distributed collection of items called a Dataset. Datasets can be created from Hadoop InputFormats (such as HDFS files) or by transforming other Datasets. Let's make a new Dataset from the text of the README file in the Spark source directory:
+Spark's primary abstracted is called a **Dataset**. A Dataset is a structured set of information. You can create datasets from Hadoop InputFormats (such as HDFS
+files) or by transforming other Datasets.  
+
+Let's make a new DataFrame using the `README.md` file in the Spark souce directory via the command line:
 
 {% highlight scala %}
 scala> val textFile = spark.read.textFile("README.md")
 textFile: org.apache.spark.sql.Dataset[String] = [value: string]
 {% endhighlight %}
 
-You can get values from Dataset directly, by calling some actions, or transform the Dataset to get a new one. For more details, please read the _[API doc](api/scala/org/apache/spark/sql/Dataset.html)_.
+Once you've created the Dataset, you can perform actions and transformations against it.  For more details, see the [API doc](api/scala/org/apache/spark/sql/Dataset.html).
 
 {% highlight scala %}
 scala> textFile.count() // Number of items in this Dataset
@@ -103,7 +112,7 @@ scala> textFile.first() // First item in this Dataset
 res1: String = # Apache Spark
 {% endhighlight %}
 
-Now let's transform this Dataset into a new one. We call `filter` to return a new Dataset with a subset of the items in the file.
+Now let's transform this Dataset into a new one. The `filter` function returns a new Dataset with a subset of the items in the file.
 
 {% highlight scala %}
 scala> val linesWithSpark = textFile.filter(line => line.contains("Spark"))

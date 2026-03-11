@@ -980,14 +980,36 @@ case class MergeIntoTable(
   lazy val duplicateResolved: Boolean =
     targetTable.outputSet.intersect(sourceTable.outputSet).isEmpty
 
+<<<<<<< HEAD
   lazy val skipSchemaResolution: Boolean =
     EliminateSubqueryAliases(targetTable) match {
       case r: NamedRelation => r.skipSchemaResolution
+=======
+  lazy val skipSchemaResolution: Boolean = targetTable match {
+    case r: NamedRelation => r.skipSchemaResolution
+    case SubqueryAlias(_, r: NamedRelation) => r.skipSchemaResolution
+    case _ => false
+  }
+
+  lazy val pendingSchemaChanges: Seq[TableChange] = {
+    if (schemaEvolutionEnabled && schemaEvolutionReady) {
+      val referencedSourceSchema = MergeIntoTable.sourceSchemaForSchemaEvolution(this)
+      MergeIntoTable.schemaChanges(targetTable.schema, referencedSourceSchema).toSeq
+    } else {
+      Seq.empty
+    }
+  }
+
+  lazy val schemaEvolutionEnabled: Boolean = withSchemaEvolution && {
+    EliminateSubqueryAliases(targetTable) match {
+      case r: DataSourceV2Relation if r.autoSchemaEvolution => true
+>>>>>>> spark/master
       case _ => false
     }
 
   // Guard that assignments are either resolved or candidates for evolution before
   // evaluating schema evolution. We need to use resolved assignment values to check
+<<<<<<< HEAD
   // candidates, see MergeIntoTable.sourceSchemaForSchemaEvolution for details.
   override lazy val canEvaluateSchemaEvolution: Boolean = {
     if ((!targetTable.resolved) || (!sourceTable.resolved)) {
@@ -1027,14 +1049,40 @@ case class MergeIntoTable(
       targetTable.schema, MergeIntoTable.sourceSchemaForSchemaEvolution(this), isByName = true)
   }
 
+=======
+  // candidates, see MergeIntoTable.isSchemaEvolutionCandidate for details.
+  lazy val schemaEvolutionReady: Boolean = {
+    targetTable.resolved && sourceTable.resolved && actionsSchemaEvolutionReady
+  }
+
+  private def actionsSchemaEvolutionReady: Boolean = {
+    val actions = matchedActions ++ notMatchedActions
+    actions.forall {
+      case a: UpdateAction => MergeIntoTable.areSchemaEvolutionReady(a.assignments, sourceTable)
+      case a: InsertAction => MergeIntoTable.areSchemaEvolutionReady(a.assignments, sourceTable)
+      case _ => false
+    }
+  }
+
+>>>>>>> spark/master
   override def left: LogicalPlan = targetTable
   override def right: LogicalPlan = sourceTable
+
   override protected def withNewChildrenInternal(
-      newLeft: LogicalPlan, newRight: LogicalPlan): MergeIntoTable =
+      newLeft: LogicalPlan,
+      newRight: LogicalPlan): MergeIntoTable = {
     copy(targetTable = newLeft, sourceTable = newRight)
+  }
 }
 
 object MergeIntoTable {
+
+  def getWritePrivileges(merge: MergeIntoTable): Seq[TableWritePrivilege] = {
+    getWritePrivileges(
+      merge.matchedActions,
+      merge.notMatchedActions,
+      merge.notMatchedBySourceActions)
+  }
 
   def getWritePrivileges(
       matchedActions: Iterable[MergeAction],
@@ -1050,6 +1098,76 @@ object MergeIntoTable {
       .toSeq
   }
 
+<<<<<<< HEAD
+=======
+  def schemaChanges(
+      originalTarget: StructType,
+      originalSource: StructType,
+      fieldPath: Array[String] = Array()): Array[TableChange] = {
+    schemaChanges(originalTarget, originalSource, originalTarget, originalSource, fieldPath)
+  }
+
+  private def schemaChanges(
+      current: DataType,
+      newType: DataType,
+      originalTarget: StructType,
+      originalSource: StructType,
+      fieldPath: Array[String]): Array[TableChange] = {
+    (current, newType) match {
+      case (StructType(currentFields), StructType(newFields)) =>
+        val newFieldMap = toFieldMap(newFields)
+
+        // Update existing field types
+        val updates = {
+          currentFields collect {
+            case currentField: StructField if newFieldMap.contains(currentField.name) =>
+              schemaChanges(currentField.dataType, newFieldMap(currentField.name).dataType,
+                originalTarget, originalSource, fieldPath ++ Seq(currentField.name))
+          }
+        }.flatten
+
+        // Identify the newly added fields and append to the end
+        val currentFieldMap = toFieldMap(currentFields)
+        val adds = newFields.filterNot(f => currentFieldMap.contains(f.name))
+          .map(f => TableChange.addColumn(fieldPath ++ Seq(f.name), f.dataType))
+
+        updates ++ adds
+
+      case (ArrayType(currentElementType, _), ArrayType(newElementType, _)) =>
+        schemaChanges(currentElementType, newElementType,
+          originalTarget, originalSource, fieldPath ++ Seq("element"))
+
+      case (MapType(currentKeyType, currentElementType, _),
+      MapType(updateKeyType, updateElementType, _)) =>
+        schemaChanges(currentKeyType, updateKeyType, originalTarget, originalSource,
+          fieldPath ++ Seq("key")) ++
+          schemaChanges(currentElementType, updateElementType,
+            originalTarget, originalSource, fieldPath ++ Seq("value"))
+
+      case (currentType: AtomicType, newType: AtomicType) if currentType != newType =>
+        Array(TableChange.updateColumnType(fieldPath, newType))
+
+      case (currentType, newType) if currentType == newType =>
+        // No change needed
+        Array.empty[TableChange]
+
+      case _ =>
+        // Do not support change between atomic and complex types for now
+        throw QueryExecutionErrors.failedToMergeIncompatibleSchemasError(
+          originalTarget, originalSource, null)
+    }
+  }
+
+  def toFieldMap(fields: Array[StructField]): Map[String, StructField] = {
+    val fieldMap = fields.map(field => field.name -> field).toMap
+    if (SQLConf.get.caseSensitiveAnalysis) {
+      fieldMap
+    } else {
+      CaseInsensitiveMap(fieldMap)
+    }
+  }
+
+>>>>>>> spark/master
   // A pruned version of source schema that only contains columns/nested fields
   // explicitly and directly assigned to a target counterpart in MERGE INTO actions,
   // which are relevant for schema evolution.
@@ -1121,11 +1239,40 @@ object MergeIntoTable {
   // Example: UPDATE SET target.a = source.a
   private def isEqual(assignment: Assignment, sourceFieldPath: Seq[String]): Boolean = {
     // key must be a non-qualified field path that may be added to target schema via evolution
-    val assignmenKeyExpr = extractFieldPath(assignment.key, allowUnresolved = true)
+    val assignmentKeyExpr = extractFieldPath(assignment.key, allowUnresolved = true)
     // value should always be resolved (from source)
     val assignmentValueExpr = extractFieldPath(assignment.value, allowUnresolved = false)
-    assignmenKeyExpr == assignmentValueExpr &&
-      assignmenKeyExpr == sourceFieldPath
+    assignmentKeyExpr == assignmentValueExpr && assignmentKeyExpr == sourceFieldPath
+  }
+
+  private def areSchemaEvolutionReady(
+      assignments: Seq[Assignment],
+      source: LogicalPlan): Boolean = {
+    assignments.forall(assign => assign.resolved || isSchemaEvolutionCandidate(assign, source))
+  }
+
+  private def isSchemaEvolutionCandidate(assignment: Assignment, source: LogicalPlan): Boolean = {
+    assignment.value.resolved && isSameColumnAssignment(assignment, source)
+  }
+
+  // Helper method to check if an assignment key is equal to a source column
+  // and if the assignment value is that same source column.
+  //
+  // Top-level example: UPDATE SET target.a = source.a
+  //   key:   AttributeReference("a", ...) -> path Seq("a")
+  //   value: AttributeReference("a", ...) from source
+  //
+  // Nested example: UPDATE SET addr.city = source.addr.city
+  //   key:   GetStructField(GetStructField(AttributeReference("addr", ...), 0), 1)
+  //   value: GetStructField(GetStructField(AttributeReference("addr", ...), 0), 1) from source
+  //
+  // references contains only root attributes, so subsetOf(source.outputSet) works for both.
+  private def isSameColumnAssignment(assignment: Assignment, source: LogicalPlan): Boolean = {
+    // key must be a non-qualified field path that may be added to target schema via evolution
+    val keyPath = extractFieldPath(assignment.key, allowUnresolved = true)
+    // value should always be resolved (from source)
+    val valuePath = extractFieldPath(assignment.value, allowUnresolved = false)
+    keyPath == valuePath && assignment.value.references.subsetOf(source.outputSet)
   }
 }
 
@@ -1392,6 +1539,7 @@ case class CreateUserDefinedFunction(
     exprText: Option[String],
     queryText: Option[String],
     comment: Option[String],
+    collation: Option[String],
     isDeterministic: Option[Boolean],
     containsSQL: Option[Boolean],
     language: RoutineLanguage,

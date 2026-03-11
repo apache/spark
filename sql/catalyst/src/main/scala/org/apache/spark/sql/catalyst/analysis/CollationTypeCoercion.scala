@@ -355,6 +355,9 @@ object CollationTypeCoercion extends SQLConfHelper {
     case expr @ (_: NamedExpression | _: SubqueryExpression | _: VariableReference) =>
       Some(addContextToStringType(expr.dataType, Implicit))
 
+    case f: SQLFunctionExpression =>
+      Some(addContextToStringType(f.dataType, Implicit))
+
     case lit: Literal =>
       Some(addContextToStringType(lit.dataType, Default))
 

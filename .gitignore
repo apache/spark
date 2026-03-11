@@ -14,6 +14,7 @@
 .bloop
 .bsp/
 .cache
+.claude/
 .classpath
 .ensime
 .ensime_cache/
@@ -22,6 +23,7 @@
 .generated-mima*
 .idea/
 .idea_modules/
+.kiro/
 .metals
 .project
 .pydevproject

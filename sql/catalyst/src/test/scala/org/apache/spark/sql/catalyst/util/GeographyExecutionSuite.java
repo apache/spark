@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.util;
 
+import org.apache.spark.SparkIllegalArgumentException;
 import org.apache.spark.unsafe.types.GeographyVal;
 import org.junit.jupiter.api.Test;
 
@@ -111,6 +112,17 @@ class GeographyExecutionSuite {
     assertNotNull(geography);
     assertArrayEquals(wkb, geography.toWkb());
     assertEquals(4326, geography.srid());
+  }
+
+  @Test
+  void testFromWkbInvalidWkb() {
+    byte[] invalidWkb = new byte[]{111};
+    SparkIllegalArgumentException exception = assertThrows(
+      SparkIllegalArgumentException.class,
+      () -> Geometry.fromWkb(invalidWkb)
+    );
+    assertEquals("WKB_PARSE_ERROR", exception.getCondition());
+    assertTrue(exception.getMessage().contains("Unexpected end of WKB buffer"));
   }
 
   /** Tests for Geography EWKB parsing. */

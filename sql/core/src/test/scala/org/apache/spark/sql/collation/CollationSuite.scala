@@ -2249,15 +2249,233 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
   }
 
-  test("ConstantPropagation does not replace attributes with non-binary-stable collation") {
-    val tableName = "t1"
-    withTable(tableName) {
-      sql(s"CREATE TABLE $tableName (c STRING COLLATE UTF8_LCASE)")
-      sql(s"INSERT INTO $tableName VALUES ('hello'), ('HELLO')")
+  test("ConstantPropagation: does not replace attributes with non-binary-stable collation") {
+    withTable("t1") {
+      sql("CREATE TABLE t1 (c STRING COLLATE UTF8_LCASE)")
+      sql("INSERT INTO t1 VALUES ('hello'), ('HELLO')")
 
       checkAnswer(
-        sql(s"SELECT * FROM $tableName WHERE c = 'hello' AND c = 'HELLO' COLLATE UNICODE"),
+        sql("SELECT * FROM t1 WHERE 'hello' = c AND c = 'HELLO' COLLATE UNICODE"),
         Row("HELLO")
+      )
+    }
+  }
+
+  test("ConstantPropagation: does not replace non-binary-stable attributes with EqualNullSafe") {
+    withTable("t1") {
+      sql("CREATE TABLE t1 (c STRING COLLATE UTF8_LCASE)")
+      sql("INSERT INTO t1 VALUES ('hello'), ('HELLO'), (NULL)")
+
+      checkAnswer(
+        sql("SELECT * FROM t1 WHERE 'hello' <=> c AND c <=> 'HELLO' COLLATE UNICODE"),
+        Row("HELLO")
+      )
+    }
+  }
+
+  test("ConstantPropagation: replaces binary-stable attributes with contradicting predicates") {
+    withTable("t1") {
+      sql("CREATE TABLE t1 (c STRING)")
+      sql("INSERT INTO t1 VALUES ('hello'), ('world')")
+
+      checkAnswer(
+        sql("SELECT * FROM t1 WHERE c = 'hello' AND c = 'world'"),
+        Seq.empty
+      )
+    }
+  }
+
+  test("ConstantPropagation: replaces binary-stable attributes across collation cast") {
+    withTable("t1") {
+      sql("CREATE TABLE t1 (c STRING)")
+      sql("INSERT INTO t1 VALUES ('hello'), ('HELLO')")
+
+      checkAnswer(
+        sql("SELECT * FROM t1 WHERE c = 'hello' AND c COLLATE UTF8_LCASE = 'HELLO'"),
+        Row("hello")
+      )
+    }
+  }
+
+  test("ConstantPropagation: does not replace non-binary-stable " +
+    "attributes with explicit CAST collation") {
+    withTable("t1") {
+      sql("CREATE TABLE t1 (c STRING COLLATE UTF8_LCASE)")
+      sql("INSERT INTO t1 VALUES ('hello'), ('HELLO')")
+
+      checkAnswer(
+        sql("""SELECT * FROM t1 WHERE c = 'hello'
+              |AND CAST(c AS STRING COLLATE UNICODE) = 'HELLO'""".stripMargin),
+        Row("HELLO")
+      )
+    }
+  }
+
+  test("ConstantPropagation: replaces non-binary-stable attributes in same-collation comparison") {
+    withTable("t1") {
+      sql("CREATE TABLE t1 (col1 STRING COLLATE UTF8_LCASE, col2 STRING COLLATE UTF8_LCASE)")
+      sql("INSERT INTO t1 VALUES ('hello', 'hello'), ('HELLO', 'hello'), ('hello', 'world')")
+
+      checkAnswer(
+        sql("SELECT * FROM t1 WHERE col1 = 'hello' AND col1 = col2"),
+        Seq(Row("hello", "hello"), Row("HELLO", "hello"))
+      )
+    }
+  }
+
+  test("ConstantPropagation: does not replace non-binary-stable attribute " +
+    "in different-collation column comparison") {
+    withTable("t1") {
+      sql("CREATE TABLE t1 (col1 STRING COLLATE UTF8_LCASE, col2 STRING COLLATE UTF8_LCASE)")
+      sql("INSERT INTO t1 VALUES ('hello', 'hello'), ('HELLO', 'HELLO')")
+
+      checkAnswer(
+        sql("SELECT * FROM t1 WHERE col1 = 'hello' AND col1 COLLATE UNICODE = col2"),
+        Seq(Row("HELLO", "HELLO"), Row("hello", "hello"))
+      )
+    }
+  }
+
+  test("ConstantPropagation: attribute is not propagated from inside NOT") {
+    withTable("t1") {
+      sql("CREATE TABLE t1 (c STRING COLLATE UTF8_LCASE)")
+      sql("INSERT INTO t1 VALUES ('hello'), ('HELLO'), ('world')")
+
+      checkAnswer(
+        sql("SELECT * FROM t1 WHERE NOT(c = 'world') AND c = 'HELLO' COLLATE UNICODE"),
+        Row("HELLO")
+      )
+    }
+  }
+
+  test("ConstantPropagation: non-binary-stable attribute is not replaced inside NOT") {
+    withTable("t1") {
+      sql("CREATE TABLE t1 (c STRING COLLATE UTF8_LCASE)")
+      sql("INSERT INTO t1 VALUES ('hello'), ('HELLO')")
+
+      checkAnswer(
+        sql("SELECT * FROM t1 WHERE 'HELLO' = c AND NOT(c = 'HELLO' COLLATE UNICODE)"),
+        Row("hello")
+      )
+    }
+  }
+
+  test("ConstantPropagation: predicates do not propagate across OR branches") {
+    withTable("t1") {
+      sql("CREATE TABLE t1 (c STRING COLLATE UTF8_LCASE)")
+      sql("INSERT INTO t1 VALUES ('hello'), ('HELLO'), ('world')")
+
+      checkAnswer(
+        sql("""SELECT * FROM t1 WHERE (c = 'hello' AND c = 'HELLO' COLLATE UNICODE)
+              |OR c = 'world'""".stripMargin),
+        Seq(Row("HELLO"), Row("world"))
+      )
+    }
+  }
+
+  test("ConstantPropagation: non-binary-stable join matches case-insensitively") {
+    withTable("t1", "t2") {
+      sql("CREATE TABLE t1 (a STRING COLLATE UTF8_LCASE)")
+      sql("CREATE TABLE t2 (b STRING COLLATE UTF8_LCASE)")
+      sql("INSERT INTO t1 VALUES ('hello'), ('HELLO'), ('world')")
+      sql("INSERT INTO t2 VALUES ('hello')")
+
+      checkAnswer(
+        sql("SELECT t1.a FROM t1 JOIN t2 ON t1.a = t2.b WHERE t1.a = 'hello'"),
+        Seq(Row("hello"), Row("HELLO"))
+      )
+    }
+  }
+
+  test("ConstantPropagation: does not replace non-binary-stable attribute " +
+    "in cross-collation join condition") {
+    withTable("t1", "t2") {
+      sql("CREATE TABLE t1 (a STRING COLLATE UTF8_LCASE)")
+      sql("CREATE TABLE t2 (b STRING COLLATE UTF8_LCASE)")
+      sql("INSERT INTO t1 VALUES ('hello'), ('HELLO'), ('world')")
+      sql("INSERT INTO t2 VALUES ('hello')")
+
+      checkAnswer(
+        sql("""SELECT t1.a FROM t1 JOIN t2 ON t1.a = t2.b COLLATE UNICODE
+              |WHERE t1.a = 'hello'""".stripMargin),
+        Row("hello")
+      )
+    }
+  }
+
+  test("ConstantPropagation: does not replace non-binary-stable attribute " +
+    "in cross-collation join filter") {
+    withTable("t1", "t2") {
+      sql("CREATE TABLE t1 (a STRING COLLATE UTF8_LCASE)")
+      sql("CREATE TABLE t2 (b STRING COLLATE UTF8_LCASE)")
+      sql("INSERT INTO t1 VALUES ('hello'), ('HELLO'), ('world')")
+      sql("INSERT INTO t2 VALUES ('hello')")
+
+      checkAnswer(
+        sql("""SELECT t1.a FROM t1 JOIN t2 ON t1.a = t2.b
+              |WHERE t1.a = 'hello' AND t1.a = 'HELLO' COLLATE UNICODE""".stripMargin),
+        Row("HELLO")
+      )
+    }
+  }
+
+  test("ConstantPropagation: binary-stable join correctly replaces attributes") {
+    withTable("t1", "t2") {
+      sql("CREATE TABLE t1 (a STRING)")
+      sql("CREATE TABLE t2 (b STRING)")
+      sql("INSERT INTO t1 VALUES ('hello'), ('HELLO')")
+      sql("INSERT INTO t2 VALUES ('hello')")
+
+      checkAnswer(
+        sql("SELECT t1.a FROM t1 JOIN t2 ON t1.a = t2.b WHERE t1.a = 'hello'"),
+        Row("hello")
+      )
+    }
+  }
+
+  test("ConstantPropagation: binary-stable join replaces attributes " +
+    "across collation cast in join condition") {
+    withTable("t1", "t2") {
+      sql("CREATE TABLE t1 (a STRING)")
+      sql("CREATE TABLE t2 (b STRING)")
+      sql("INSERT INTO t1 VALUES ('hello'), ('HELLO')")
+      sql("INSERT INTO t2 VALUES ('hello')")
+
+      checkAnswer(
+        sql("""SELECT t1.a FROM t1 JOIN t2 ON t1.a = t2.b COLLATE UTF8_LCASE
+              |WHERE t1.a = 'hello'""".stripMargin),
+        Row("hello")
+      )
+    }
+  }
+
+  test("ConstantPropagation: does not replace non-binary-stable attribute " +
+    "in null-safe join filter") {
+    withTable("t1", "t2") {
+      sql("CREATE TABLE t1 (a STRING COLLATE UTF8_LCASE)")
+      sql("CREATE TABLE t2 (b STRING COLLATE UTF8_LCASE)")
+      sql("INSERT INTO t1 VALUES ('hello'), ('HELLO'), (NULL)")
+      sql("INSERT INTO t2 VALUES ('hello'), (NULL)")
+
+      checkAnswer(
+        sql("""SELECT t1.a FROM t1 JOIN t2 ON t1.a <=> t2.b
+              |WHERE t1.a = 'hello' AND t1.a = 'HELLO' COLLATE UNICODE""".stripMargin),
+        Row("HELLO")
+      )
+    }
+  }
+
+  test("ConstantPropagation: non-binary-stable null-safe join condition " +
+    "matches case-insensitively") {
+    withTable("t1", "t2") {
+      sql("CREATE TABLE t1 (a STRING COLLATE UTF8_LCASE)")
+      sql("CREATE TABLE t2 (b STRING COLLATE UTF8_LCASE)")
+      sql("INSERT INTO t1 VALUES ('hello'), ('HELLO'), ('world')")
+      sql("INSERT INTO t2 VALUES ('hello')")
+
+      checkAnswer(
+        sql("SELECT t1.a FROM t1 JOIN t2 ON t1.a <=> t2.b WHERE t1.a = 'hello'"),
+        Seq(Row("hello"), Row("HELLO"))
       )
     }
   }

@@ -2568,7 +2568,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         index : single label or list-like
             Redundant for application on Series, but index can be used instead of labels.
         columns : single label or list-like
-            No change is made to the Series; use ‘index’ or ‘labels’ instead.
+            No change is made to the Series; use 'index' or 'labels' instead.
 
             .. versionadded:: 3.4.0
         level : int or level name, optional
@@ -2977,7 +2977,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         na_position : {'first', 'last'}, default 'last'
              `first` puts NaNs at the beginning, `last` puts NaNs at the end
         ignore_index : bool, default False
-             If True, the resulting axis will be labeled 0, 1, …, n - 1.
+             If True, the resulting axis will be labeled 0, 1, ..., n - 1.
 
              .. versionadded:: 3.4.0
 
@@ -3104,11 +3104,11 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         kind : str, default None
             pandas-on-Spark does not allow specifying the sorting algorithm now,
             default None
-        na_position : {‘first’, ‘last’}, default ‘last’
+        na_position : {'first', 'last'}, default 'last'
             first puts NaNs at the beginning, last puts NaNs at the end. Not implemented for
             MultiIndex.
         ignore_index : bool, default False
-            If True, the resulting axis will be labeled 0, 1, …, n - 1.
+            If True, the resulting axis will be labeled 0, 1, ..., n - 1.
 
             .. versionadded:: 3.4.0
 
@@ -4999,11 +4999,11 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
                 - Dicts can be used to specify different replacement values for different
                   existing values.
-                  For example, {'a': 'b', 'y': 'z'} replaces the value ‘a’ with ‘b’ and ‘y’
-                  with ‘z’. To use a dict in this way the value parameter should be None.
+                  For example, {'a': 'b', 'y': 'z'} replaces the value 'a' with 'b' and 'y'
+                  with 'z'. To use a dict in this way the value parameter should be None.
                 - For a DataFrame a dict can specify that different values should be replaced
                   in different columns. For example, {'a': 1, 'b': 'z'} looks for the value 1
-                  in column ‘a’ and the value ‘z’ in column ‘b’ and replaces these values with
+                  in column 'a' and the value 'z' in column 'b' and replaces these values with
                   whatever is specified in value.
                   The value parameter should not be None in this case.
                   You can treat this as a special case of passing two lists except that you are
@@ -5179,7 +5179,15 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             ), "If 'regex' is True then 'to_replace' must be a string"
 
         if to_replace is None:
-            return self._fillna_with_method(method="ffill")
+            if LooseVersion(pd.__version__) < "3.0.0":
+                return self._fillna_with_method(method="ffill")
+            else:
+                if value is None and regex is False:
+                    raise ValueError(
+                        "Series.replace must specify either 'value', a dict-like "
+                        "'to_replace', or dict-like 'regex'."
+                    )
+
         if not isinstance(to_replace, (str, list, tuple, dict, int, float)):
             raise TypeError("'to_replace' should be one of str, list, tuple, dict, int, float")
 
@@ -6758,9 +6766,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         ----------
         value : scalar
             Values to insert into self.
-        side : {‘left’, ‘right’}, optional
-            If ‘left’, the index of the first suitable location found is given.
-            If ‘right’, return the last such index. If there is no suitable index,
+        side : {'left', 'right'}, optional
+            If 'left', the index of the first suitable location found is given.
+            If 'right', return the last such index. If there is no suitable index,
             return either 0 or N (where N is the length of self).
 
         Returns
@@ -7354,19 +7362,24 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         )
 
     def __getitem__(self, key: Any) -> Any:
-        if type(key) == int and not isinstance(self.index.spark.data_type, (IntegerType, LongType)):
-            warnings.warn(
-                "Series.__getitem__ treating keys as positions is deprecated. "
-                "In a future version, integer keys will always be treated as labels "
-                "(consistent with DataFrame behavior). "
-                "To access a value by position, use `ser.iloc[pos]`",
-                FutureWarning,
+        if LooseVersion(pd.__version__) < "3.0.0":
+            treating_keys_as_positions = type(key) == int and not isinstance(
+                self.index.spark.data_type, (IntegerType, LongType)
             )
+            if treating_keys_as_positions:
+                warnings.warn(
+                    "Series.__getitem__ treating keys as positions is deprecated. "
+                    "In a future version, integer keys will always be treated as labels "
+                    "(consistent with DataFrame behavior). "
+                    "To access a value by position, use `ser.iloc[pos]`",
+                    FutureWarning,
+                )
+        else:
+            treating_keys_as_positions = False
         try:
-            if (isinstance(key, slice) and any(type(n) == int for n in [key.start, key.stop])) or (
-                type(key) == int
-                and not isinstance(self.index.spark.data_type, (IntegerType, LongType))
-            ):
+            if (
+                isinstance(key, slice) and any(type(n) == int for n in [key.start, key.stop])
+            ) or treating_keys_as_positions:
                 # Seems like pandas Series always uses int as positional search when slicing
                 # with ints, searches based on index values when the value is int.
                 return self.iloc[key]

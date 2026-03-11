@@ -40,9 +40,39 @@ case class SparkPlanGraph(
     val dotFile = new StringBuilder
     dotFile.append("digraph G {\n")
     nodes.foreach(node => dotFile.append(node.makeDotNode(metrics) + "\n"))
-    edges.foreach(edge => dotFile.append(edge.makeDotEdge + "\n"))
+    val nodeMap = allNodes.map(n => n.id -> n).toMap
+    edges.foreach(edge => dotFile.append(edge.makeDotEdge(nodeMap, metrics) + "\n"))
     dotFile.append("}")
     dotFile.toString()
+  }
+
+  /**
+   * Generate a JSON string containing node details (name, metrics, and optional children)
+   * for the detail side panel. This keeps the DOT node labels compact (name only) while
+   * providing full metrics on demand via JavaScript.
+   */
+  def makeNodeDetailsJson(metrics: Map[Long, String]): String = {
+    val entries = allNodes.map { node =>
+      val metricsJson = node.metrics.flatMap { m =>
+        metrics.get(m.accumulatorId).map { v =>
+          val n = StringEscapeUtils.escapeJson(m.name)
+          val mv = StringEscapeUtils.escapeJson(v)
+          val mt = StringEscapeUtils.escapeJson(m.metricType)
+          s"""{"name":"$n","value":"$mv","type":"$mt"}"""
+        }
+      }.mkString("[", ",", "]")
+      val (prefix, extra) = node match {
+        case cluster: SparkPlanGraphCluster =>
+          val childIds = cluster.nodes
+            .map(n => s""""node${n.id}"""").mkString("[", ",", "]")
+          ("cluster", s""","children":$childIds""")
+        case _ => ("node", "")
+      }
+      s"""  "$prefix${node.id}":{"name":"${StringEscapeUtils.escapeJson(node.name)}",""" +
+        s""""desc":"${StringEscapeUtils.escapeJson(node.desc)}",""" +
+        s""""metrics":$metricsJson$extra}"""
+    }
+    entries.mkString("{\n", ",\n", "\n}")
   }
 
   /**
@@ -167,35 +197,10 @@ class SparkPlanGraphNode(
     val metrics: collection.Seq[SQLPlanMetric]) {
 
   def makeDotNode(metricsValue: Map[Long, String]): String = {
-    val builder = new mutable.StringBuilder("<b>" + name + "</b>")
-
-    val values = for {
-      metric <- metrics
-      value <- metricsValue.get(metric.accumulatorId)
-    } yield {
-      // The value may contain ":" to extend the name, like `total (min, med, max): ...`
-      if (value.contains(":")) {
-        metric.name + " " + value
-      } else {
-        metric.name + ": " + value
-      }
-    }
     val nodeId = s"node$id"
     val tooltip = StringEscapeUtils.escapeJava(desc)
-    val labelStr = if (values.nonEmpty) {
-      // If there are metrics, display each entry in a separate line.
-      // Note: whitespace between two "\n"s is to create an empty line between the name of
-      // SparkPlan and metrics. If removing it, it won't display the empty line in UI.
-      builder ++= "<br><br>"
-      builder ++= values.mkString("<br>")
-      StringEscapeUtils.escapeJava(builder.toString().replaceAll("\n", "<br>"))
-    } else {
-      // SPARK-30684: when there is no metrics, add empty lines to increase the height of the node,
-      // so that there won't be gaps between an edge and a small node.
-      s"<br><b>${StringEscapeUtils.escapeJava(name)}</b><br><br>"
-    }
-    s"""  $id [id="$nodeId" labelType="html" label="$labelStr" tooltip="$tooltip"];"""
-
+    val labelStr = StringEscapeUtils.escapeJava(name)
+    s"""  $id [id="$nodeId" label="$labelStr" tooltip="$tooltip"];"""
   }
 }
 
@@ -211,17 +216,31 @@ class SparkPlanGraphCluster(
   extends SparkPlanGraphNode(id, name, desc, metrics) {
 
   override def makeDotNode(metricsValue: Map[Long, String]): String = {
-    val duration = metrics.filter(_.name.startsWith(WholeStageCodegenExec.PIPELINE_DURATION_METRIC))
+    val duration = metrics.filter(m =>
+      m.name != null && m.name.startsWith(WholeStageCodegenExec.PIPELINE_DURATION_METRIC))
+    // Extract short label: "(1)" from "WholeStageCodegen (1)"
+    val shortName = if (name != null) {
+      "\\(\\d+\\)".r.findFirstIn(name).getOrElse(name)
+    } else {
+      ""
+    }
     val labelStr = if (duration.nonEmpty) {
       require(duration.length == 1)
-      val id = duration(0).accumulatorId
-      if (metricsValue.contains(id)) {
-        name + "\n \n" + duration(0).name + ": " + metricsValue(id)
+      val durationMetricId = duration(0).accumulatorId
+      if (metricsValue.contains(durationMetricId)) {
+        // For multi-line values like "total (min, med, max)\n10.0 s (...)",
+        // extract just the total number from the data line
+        val raw = metricsValue(durationMetricId)
+        val lines = raw.split("\n")
+        val dataLine = if (lines.length > 1) lines(1).trim else lines(0).trim
+        // Extract just the total value (first token before any parenthesized breakdown)
+        val total = dataLine.split("\\s*\\(")(0).trim
+        shortName + " / " + total
       } else {
-        name
+        shortName
       }
     } else {
-      name
+      shortName
     }
     val clusterId = s"cluster$id"
     s"""
@@ -243,5 +262,20 @@ class SparkPlanGraphCluster(
  */
 case class SparkPlanGraphEdge(fromId: Long, toId: Long) {
 
-  def makeDotEdge: String = s"""  $fromId->$toId;\n"""
+  def makeDotEdge(
+      nodeMap: Map[Long, SparkPlanGraphNode],
+      metricsValue: Map[Long, String]): String = {
+    val label = nodeMap.get(fromId).flatMap { node =>
+      node.metrics
+        .find(_.name == "number of output rows")
+        .flatMap(m => metricsValue.get(m.accumulatorId))
+    }
+    label match {
+      case Some(rows) =>
+        val escapedRows = StringEscapeUtils.escapeJava(rows)
+        s"""  $fromId->$toId [label="$escapedRows" labeltooltip="$escapedRows rows"];\n"""
+      case None =>
+        s"""  $fromId->$toId;\n"""
+    }
+  }
 }

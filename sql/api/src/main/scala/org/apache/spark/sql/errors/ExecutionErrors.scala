@@ -119,13 +119,22 @@ private[sql] trait ExecutionErrors extends DataTypeErrorsBase {
       message: String,
       suggestedFunc: String = "",
       context: QueryContext = null): ArithmeticException = {
+    val canonicalMessage = message match {
+      // For "hot throws", the JIT will produce compiled code that does not
+      // go through the interpreter via deoptimization to throw an exception
+      // but throws a pre-allocated exception object without a stack trace
+      // or message. See https://bugs.openjdk.org/browse/JDK-8367990
+      case null => "overflow"
+      case m if m.contains("overflow") => "overflow"
+      case m => m
+    }
     val alternative = if (suggestedFunc.nonEmpty) {
       s" Use '$suggestedFunc' to tolerate overflow and return NULL instead."
     } else ""
     new SparkArithmeticException(
       errorClass = "ARITHMETIC_OVERFLOW",
       messageParameters = Map(
-        "message" -> message,
+        "message" -> canonicalMessage,
         "alternative" -> alternative,
         "config" -> toSQLConf(SqlApiConf.ANSI_ENABLED_KEY)),
       context = getQueryContext(context),

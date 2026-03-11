@@ -22,7 +22,7 @@ import warnings
 from abc import ABCMeta, abstractmethod
 from functools import wraps, partial
 from itertools import chain
-from typing import Any, Callable, Optional, Sequence, Tuple, Union, cast, TYPE_CHECKING
+from typing import Any, Callable, ClassVar, Optional, Sequence, Tuple, Union, cast, TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
@@ -283,6 +283,9 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
     Assuming there are following attributes or properties and functions.
     """
+
+    # Keep pandas-on-Spark above pandas Series and Index for reflected ops.
+    __pandas_priority__: ClassVar[int] = pd.Series.__pandas_priority__ + 500  # type: ignore[attr-defined]
 
     @property
     @abstractmethod
@@ -1449,7 +1452,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         Parameters
         ----------
         dropna : bool, default True
-            Don’t include NaN in the count.
+            Don't include NaN in the count.
         approx: bool, default False
             If False, will use the exact algorithm and return the exact number of unique.
             If True, it uses the HyperLogLog approximate algorithm, which is significantly faster

@@ -3041,6 +3041,36 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       ExpectedContext(fragment = sql2, start = 0, stop = 61))
   }
 
+  test("CTAS statement with constraints") {
+    Seq(
+      "CONSTRAINT pk PRIMARY KEY (id)",
+      "CONSTRAINT uk UNIQUE (id)",
+      "CONSTRAINT ck CHECK (id > 0)"
+    ).foreach { constraintDef =>
+      val sql = s"CREATE TABLE ctas1 ($constraintDef) AS SELECT 1 AS id"
+      assertUnsupported(
+        sql,
+        Map("message" ->
+          "Constraints may not be specified in a Create Table As Select (CTAS) statement"),
+        ExpectedContext(fragment = sql, start = 0, stop = sql.length - 1))
+    }
+  }
+
+  test("RTAS statement with constraints") {
+    Seq(
+      "CONSTRAINT pk PRIMARY KEY (id)",
+      "CONSTRAINT uk UNIQUE (id)",
+      "CONSTRAINT ck CHECK (id > 0)"
+    ).foreach { constraintDef =>
+      val sql = s"REPLACE TABLE rtas1 ($constraintDef) AS SELECT 1 AS id"
+      assertUnsupported(
+        sql,
+        Map("message" ->
+          "Constraints may not be specified in a Replace Table As Select (RTAS) statement"),
+        ExpectedContext(fragment = sql, start = 0, stop = sql.length - 1))
+    }
+  }
+
   test("create table - basic") {
     val query = "CREATE TABLE my_table (id int, name string)"
     val (desc, allowExisting) = extractTableDesc(query)
