@@ -252,7 +252,7 @@ case class EnsureRequirements(
               // Hence we need to ensure that after this call, the outputPartitioning of the
               // partitioned side's BatchScanExec is grouped by join keys to match,
               // and we do that by pushing down the join keys
-              case Some(KeyGroupedShuffleSpec(_, _, Some(joinKeyPositions))) =>
+              case Some(KeyedShuffleSpec(_, _, Some(joinKeyPositions))) =>
                 withJoinKeyPositions(child, joinKeyPositions)
               case _ => child
             }
@@ -454,7 +454,7 @@ case class EnsureRequirements(
     val specs = Seq(left, right).zip(requiredChildDistribution).map { case (p, d) =>
       if (!d.isInstanceOf[ClusteredDistribution]) return None
       val cd = d.asInstanceOf[ClusteredDistribution]
-      val specOpt = createKeyGroupedShuffleSpec(p.outputPartitioning, cd)
+      val specOpt = createKeyedShuffleSpec(p.outputPartitioning, cd)
       if (specOpt.isEmpty) return None
       specOpt.get
     }
@@ -468,7 +468,7 @@ case class EnsureRequirements(
     // partitionings are not modified (projected) in specs and left and right side partitionings are
     // compatible with each other.
     // Left and right `outputPartitioning` is a `PartitioningCollection` or a `KeyedPartitioning`
-    // otherwise `createKeyGroupedShuffleSpec()` would have returned `None`.
+    // otherwise `createKeyedShuffleSpec()` would have returned `None`.
     var isCompatible =
       left.outputPartitioning.asInstanceOf[Expression].exists(_ == leftPartitioning) &&
       right.outputPartitioning.asInstanceOf[Expression].exists(_ == rightPartitioning) &&
@@ -607,7 +607,7 @@ case class EnsureRequirements(
               val originalPartitioning =
                 partiallyClusteredChild.outputPartitioning.asInstanceOf[Expression]
               // `outputPartitioning` is either a `PartitioningCollection` or a `KeyedPartitioning`
-              // otherwise `createKeyGroupedShuffleSpec()` would have returned `None`.
+              // otherwise `createKeyedShuffleSpec()` would have returned `None`.
               val originalKeyedPartitioning =
                 originalPartitioning.collectFirst { case k: KeyedPartitioning => k }.get
               val projectedOriginalPartitionKeys = partiallyClusteredSpec.joinKeyPositions
@@ -717,14 +717,14 @@ case class EnsureRequirements(
   }
 
   /**
-   * Tries to create a [[KeyGroupedShuffleSpec]] from the input partitioning and distribution, if
-   * the partitioning is a [[KeyedPartitioning]] (either directly or indirectly), and
-   * satisfies the given distribution.
+   * Tries to create a [[KeyedShuffleSpec]] from the input partitioning and distribution, if the
+   * partitioning is a [[KeyedPartitioning]] (either directly or indirectly), and satisfies the
+   * given distribution.
    */
-  private def createKeyGroupedShuffleSpec(
+  private def createKeyedShuffleSpec(
       partitioning: Partitioning,
-      distribution: ClusteredDistribution): Option[KeyGroupedShuffleSpec] = {
-    def tryCreate(partitioning: KeyedPartitioning): Option[KeyGroupedShuffleSpec] = {
+      distribution: ClusteredDistribution): Option[KeyedShuffleSpec] = {
+    def tryCreate(partitioning: KeyedPartitioning): Option[KeyedShuffleSpec] = {
       val attributes = partitioning.expressions.flatMap(_.collectLeaves())
       val clustering = distribution.clustering
 
@@ -737,7 +737,7 @@ case class EnsureRequirements(
       }
 
       if (satisfies) {
-        Some(partitioning.createShuffleSpec(distribution).asInstanceOf[KeyGroupedShuffleSpec])
+        Some(partitioning.createShuffleSpec(distribution).asInstanceOf[KeyedShuffleSpec])
       } else {
         None
       }
@@ -746,7 +746,7 @@ case class EnsureRequirements(
     partitioning match {
       case p: KeyedPartitioning => tryCreate(p)
       case PartitioningCollection(partitionings) =>
-        partitionings.collectFirst(Function.unlift(createKeyGroupedShuffleSpec(_, distribution)))
+        partitionings.collectFirst(Function.unlift(createKeyedShuffleSpec(_, distribution)))
       case _ => None
     }
   }

@@ -358,12 +358,11 @@ case class CoalescedHashPartitioning(from: HashPartitioning, partitions: Seq[Coa
  *    preserved through `GroupPartitionsExec`. The sorted order is critical for storage-partitioned
  *    join compatibility.
  *
- * 2. '''In KeyGroupedShuffleSpec''': When used within `KeyGroupedShuffleSpec`, the `partitionKeys`
- *    may not be in sorted order. This occurs because `KeyGroupedShuffleSpec` can project the
- *    partition keys by join key positions. The `EnsureRequirements` rule ensures that either the
- *    unordered keys from both sides of a join match exactly, or it builds a common ordered set of
- *    keys and pushes them down to `GroupPartitionsExec` on both sides to establish a compatible
- *    ordering.
+ * 2. '''In KeyedShuffleSpec''': When used within `KeyedShuffleSpec`, the `partitionKeys` may not be
+ *    in sorted order. This occurs because `KeyedShuffleSpec` can project the partition keys by join
+ *    key positions. The `EnsureRequirements` rule ensures that either the unordered keys from both
+ *    sides of a join match exactly, or it builds a common ordered set of keys and pushes them down
+ *    to `GroupPartitionsExec` on both sides to establish a compatible ordering.
  *
  * == Partition Keys ==
  * - `partitionKeys`: The partition keys, one per partition. May contain duplicates initially
@@ -425,7 +424,7 @@ case class CoalescedHashPartitioning(from: HashPartitioning, partitions: Seq[Coa
  * @param expressions Partition transform expressions (e.g., `years(col)`, `bucket(10, col)`).
  * @param partitionKeys Partition keys wrapped in InternalRowComparableWrapper for efficient
  *                      comparison and grouping. One per partition. When used as outputPartitioning,
- *                      always in sorted order. When used in KeyGroupedShuffleSpec, may be unsorted
+ *                      always in sorted order. When used in `KeyedShuffleSpec`, may be unsorted
  *                      after projection. May contain duplicates when ungrouped.
  * @param isGrouped Whether partition keys are unique (no duplicates). Computed on first
  *                  creation, then preserved through copy operations to avoid recomputation.
@@ -507,7 +506,7 @@ case class KeyedPartitioning(
   }
 
   override def createShuffleSpec(distribution: ClusteredDistribution): ShuffleSpec = {
-    val result = KeyGroupedShuffleSpec(this, distribution)
+    val result = KeyedShuffleSpec(this, distribution)
     if (SQLConf.get.v2BucketingAllowJoinKeysSubsetOfPartitionKeys) {
       // If allowing join keys to be subset of clustering keys, we should create a new
       // `KeyedPartitioning` here that is grouped on the join keys instead, and use that as
@@ -942,7 +941,7 @@ case class CoalescedHashShuffleSpec(
  * @param joinKeyPositions position of join keys among cluster keys.
  *                         This is set if joining on a subset of cluster keys is allowed.
  */
-case class KeyGroupedShuffleSpec(
+case class KeyedShuffleSpec(
     partitioning: KeyedPartitioning,
     distribution: ClusteredDistribution,
     joinKeyPositions: Option[Seq[Int]] = None) extends ShuffleSpec {
@@ -980,7 +979,7 @@ case class KeyGroupedShuffleSpec(
     //    3.3 each pair of partition expressions at the same index must share compatible
     //        transform functions.
     //  4. the partition values from both sides are following the same order.
-    case otherSpec @ KeyGroupedShuffleSpec(otherPartitioning, otherDistribution, _) =>
+    case otherSpec @ KeyedShuffleSpec(otherPartitioning, otherDistribution, _) =>
       distribution.clustering.length == otherDistribution.clustering.length &&
         numPartitions == other.numPartitions && areKeysCompatible(otherSpec) &&
           partitioning.partitionKeys == otherPartitioning.partitionKeys
@@ -991,7 +990,7 @@ case class KeyGroupedShuffleSpec(
 
   // Whether the partition keys (i.e., partition expressions) are compatible between this and the
   // `other` spec.
-  def areKeysCompatible(other: KeyGroupedShuffleSpec): Boolean = {
+  def areKeysCompatible(other: KeyedShuffleSpec): Boolean = {
     val expressions = partitioning.expressions
     val otherExpressions = other.partitioning.expressions
 
@@ -1035,7 +1034,7 @@ case class KeyGroupedShuffleSpec(
    *
    * @param other other key-grouped shuffle spec
    */
-  def reducers(other: KeyGroupedShuffleSpec): Option[Seq[Option[Reducer[_, _]]]] = {
+  def reducers(other: KeyedShuffleSpec): Option[Seq[Option[Reducer[_, _]]]] = {
      val results = partitioning.expressions.zip(other.partitioning.expressions).map {
        case (e1: TransformExpression, e2: TransformExpression) => e1.reducers(e2)
        case (_, _) => None
