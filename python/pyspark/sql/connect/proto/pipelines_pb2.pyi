@@ -1077,7 +1077,7 @@ class PipelineCommand(google.protobuf.message.Message):
         flow_name: builtins.str
         """(Deprecated) The fully qualified name of the flow being updated.
 
-        This field is deprecated since Spark 4.1+. Use flow_identifier field instead.
+        This field is deprecated since Spark 4.2+. Use flow_identifier field instead.
         """
         @property
         def flow_identifier(self) -> pyspark.sql.connect.proto.common_pb2.ResolvedIdentifier:
@@ -1605,7 +1605,7 @@ class PipelineQueryFunctionExecutionSignal(google.protobuf.message.Message):
     ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
         """(Deprecated) The name of flows that are ready to be re-evaluated.
 
-        This field is deprecated since Spark 4.1+. Use flow_identifiers field instead.
+        This field is deprecated since Spark 4.2+. Use flow_identifiers field instead.
         """
     @property
     def flow_identifiers(
@@ -1649,7 +1649,7 @@ class PipelineAnalysisContext(google.protobuf.message.Message):
     flow_name: builtins.str
     """(Deprecated) The name of the Flow involved in this analysis
 
-    This field is deprecated since Spark 4.1+. Use flow_identifier field instead.
+    This field is deprecated since Spark 4.2+. Use flow_identifier field instead.
     """
     @property
     def flow_identifier(self) -> pyspark.sql.connect.proto.common_pb2.ResolvedIdentifier:
