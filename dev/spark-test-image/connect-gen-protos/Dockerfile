@@ -31,6 +31,10 @@ LABEL org.opencontainers.image.version=""
 
 ENV FULL_REFRESH_DATE=20260311
 
+ENV DEBIAN_FRONTEND=noninteractive
+ENV DEBCONF_NONINTERACTIVE_SEEN=true
+ENV OPENSSL_FORCE_FIPS_MODE=0
+
 RUN apt-get update && apt-get install -y \
     ca-certificates \
     curl \
