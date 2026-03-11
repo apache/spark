@@ -35,9 +35,7 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.ArrayImplicits._
 
 
-abstract class QueryTest extends PlanTest {
-
-  protected def spark: SparkSession
+abstract class QueryTest extends PlanTest with SparkSessionProvider {
 
   /**
    * Runs the plan and makes sure the answer contains all of the keywords.
