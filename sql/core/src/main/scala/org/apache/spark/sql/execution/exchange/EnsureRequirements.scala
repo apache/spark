@@ -81,7 +81,7 @@ case class EnsureRequirements(
             distribution match {
               case o: OrderedDistribution =>
                 // OrderedDistribution requires grouped KeyedPartitioning with sorted keys
-                // according to the distributions ordering.
+                // according to the distribution's ordering.
                 // Find any KeyedPartitioning that satisfies via groupedSatisfies.
                 val satisfyingKeyedPartitioning =
                   groupedSatisfies.orElse(nonGroupedSatisfiesWhenGrouped).get
@@ -94,13 +94,13 @@ case class EnsureRequirements(
                 }) {
                   child
                 } else {
-                  // Avoid grouping with `applyPartialClustering` partition alignment
+                  // Use distributePartitions to spread splits across expected partitions
                   val sortedGroupedKeys = satisfyingKeyedPartitioning.partitionKeys
                     .groupBy(identity).view.mapValues(_.size)
                     .toSeq.sortBy(_._1)(keyOrdering)
                   GroupPartitionsExec(child,
                     expectedPartitionKeys = Some(sortedGroupedKeys),
-                    applyPartialClustering = true
+                    distributePartitions = true
                   )
                 }
 
@@ -272,7 +272,7 @@ case class EnsureRequirements(
             child match {
               case ShuffleExchangeExec(_, c, so, ps) =>
                 ShuffleExchangeExec(newPartitioning, c, so, ps)
-              case GroupPartitionsExec(c, _, _, _, _, _) => ShuffleExchangeExec(newPartitioning, c)
+              case GroupPartitionsExec(c, _, _, _, _) => ShuffleExchangeExec(newPartitioning, c)
               case _ => ShuffleExchangeExec(newPartitioning, child)
             }
           }
@@ -630,9 +630,9 @@ case class EnsureRequirements(
 
         // Now we need to push-down the common partition information to the `GroupPartitionsExec`s.
         newLeft = applyGroupPartitions(left, leftSpec.joinKeyPositions, mergedPartitionKeys,
-          leftReducers, applyPartialClustering, replicateLeftSide)
+          leftReducers, distributePartitions = applyPartialClustering && !replicateLeftSide)
         newRight = applyGroupPartitions(right, rightSpec.joinKeyPositions, mergedPartitionKeys,
-          rightReducers, applyPartialClustering, replicateRightSide)
+          rightReducers, distributePartitions = applyPartialClustering && !replicateRightSide)
       }
     }
 
@@ -687,21 +687,19 @@ case class EnsureRequirements(
       joinKeyPositions: Option[Seq[Int]],
       mergedPartitionKeys: Seq[(InternalRowComparableWrapper, Int)],
       reducers: Option[Seq[Option[Reducer[_, _]]]],
-      applyPartialClustering: Boolean,
-      replicatePartitions: Boolean): SparkPlan = {
+      distributePartitions: Boolean): SparkPlan = {
     plan match {
       case g: GroupPartitionsExec =>
         val newGroupPartitions = g.copy(
           joinKeyPositions = joinKeyPositions,
           expectedPartitionKeys = Some(mergedPartitionKeys),
           reducers = reducers,
-          applyPartialClustering = applyPartialClustering,
-          replicatePartitions = replicatePartitions)
+          distributePartitions = distributePartitions)
         newGroupPartitions.copyTagsFrom(g)
         newGroupPartitions
       case _ =>
         GroupPartitionsExec(plan, joinKeyPositions, Some(mergedPartitionKeys), reducers,
-          applyPartialClustering, replicatePartitions)
+          distributePartitions)
     }
   }
 
