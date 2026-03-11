@@ -1151,7 +1151,7 @@ class BasePythonDataSourceTestsMixin:
                             {"class_name": "TestJsonReader", "func_name": "partitions"},
                         ),
                         (
-                            "TestJsonReader.read: None",
+                            "TestJsonReader.read: InputPartition(value=None)",
                             {"class_name": "TestJsonReader", "func_name": "read"},
                         ),
                     ]
