@@ -617,8 +617,6 @@ def _grouped_map_arrow_identity(table):
 
 def _grouped_map_arrow_sort(table):
     """Sort by first column."""
-    import pyarrow.compute as pc
-
     return table.sort_by([(table.column_names[0], "ascending")])
 
 
