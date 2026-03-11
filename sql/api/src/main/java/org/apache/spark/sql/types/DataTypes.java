@@ -50,6 +50,13 @@ public class DataTypes {
   public static final DataType DateType = DateType$.MODULE$;
 
   /**
+   * Gets the TimeType object.
+   *
+   * @since 4.0.0
+   */
+  public static final DataType TimeType = TimeType$.MODULE$;
+
+  /**
    * Gets the TimestampType object.
    */
   public static final DataType TimestampType = TimestampType$.MODULE$;

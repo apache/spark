@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import java.sql.Time
 import java.time.{DateTimeException, LocalTime}
 import java.time.temporal.ChronoField
 
@@ -138,6 +139,24 @@ object TimeUtils {
     require(micros >= 0 && micros < MICROS_PER_DAY,
       s"Time value $micros is out of valid range [0, $MICROS_PER_DAY)")
     LocalTime.ofNanoOfDay(micros * 1000)
+  }
+
+  /**
+   * Converts java.sql.Time to microseconds since midnight.
+   * Note: java.sql.Time stores milliseconds since epoch, but we only care about time-of-day.
+   */
+  def sqlTimeToMicros(time: Time): Long = {
+    // Convert to LocalTime to get time-of-day, then to micros
+    localTimeToMicros(time.toLocalTime)
+  }
+
+  /**
+   * Converts microseconds since midnight to java.sql.Time.
+   */
+  def microsToSqlTime(micros: Long): Time = {
+    require(micros >= 0 && micros < MICROS_PER_DAY,
+      s"Time value $micros is out of valid range [0, $MICROS_PER_DAY)")
+    Time.valueOf(microsToLocalTime(micros))
   }
 
   /**

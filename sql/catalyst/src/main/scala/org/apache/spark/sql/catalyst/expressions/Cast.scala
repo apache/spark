@@ -121,6 +121,9 @@ object Cast extends QueryErrorsBase {
     case (TimestampType, DateType) => true
     case (TimestampNTZType, DateType) => true
 
+    case (StringType, TimeType) => true
+    case (TimestampType, TimeType) => true
+
     case (_: NumericType, _: NumericType) => true
     case (StringType, _: NumericType) => true
     case (BooleanType, _: NumericType) => true
@@ -214,6 +217,9 @@ object Cast extends QueryErrorsBase {
     case (StringType, DateType) => true
     case (TimestampType, DateType) => true
     case (TimestampNTZType, DateType) => true
+
+    case (StringType, TimeType) => true
+    case (TimestampType, TimeType) => true
 
     case (StringType, CalendarIntervalType) => true
     case (StringType, _: DayTimeIntervalType) => true

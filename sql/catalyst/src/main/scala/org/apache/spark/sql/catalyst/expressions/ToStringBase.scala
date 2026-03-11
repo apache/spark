@@ -22,7 +22,7 @@ import java.time.ZoneOffset
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.util.{ArrayData, DateFormatter, IntervalStringStyles, IntervalUtils, MapData, SparkStringUtils, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.{ArrayData, DateFormatter, IntervalStringStyles, IntervalUtils, MapData, SparkStringUtils, TimestampFormatter, TimeUtils}
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.ANSI_STYLE
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.UTF8StringBuilder
@@ -58,6 +58,8 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
       acceptAny[Array[Byte]](UTF8String.fromBytes)
     case DateType =>
       acceptAny[Int](d => UTF8String.fromString(dateFormatter.format(d)))
+    case TimeType =>
+      acceptAny[Long](t => TimeUtils.timeToString(t))
     case TimestampType =>
       acceptAny[Long](t => UTF8String.fromString(timestampFormatter.format(t)))
     case TimestampNTZType =>
@@ -182,6 +184,9 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
           ctx.addReferenceObj("dateFormatter", dateFormatter),
           dateFormatter.getClass)
         (c, evPrim) => code"$evPrim = UTF8String.fromString($df.format($c));"
+      case TimeType =>
+        val tu = TimeUtils.getClass.getName.stripSuffix("$")
+        (c, evPrim) => code"$evPrim = $tu.timeToString($c);"
       case TimestampType =>
         val tf = JavaCode.global(
           ctx.addReferenceObj("timestampFormatter", timestampFormatter),

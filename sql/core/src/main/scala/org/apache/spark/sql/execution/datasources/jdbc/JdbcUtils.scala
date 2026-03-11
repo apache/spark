@@ -157,6 +157,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
       // Note that some dialects override this setting, e.g. as SQL Server.
       case TimestampNTZType => Option(JdbcType("TIMESTAMP", java.sql.Types.TIMESTAMP))
       case DateType => Option(JdbcType("DATE", java.sql.Types.DATE))
+      case TimeType => Option(JdbcType("TIME", java.sql.Types.TIME))
       case t: DecimalType => Option(
         JdbcType(s"DECIMAL(${t.precision},${t.scale})", java.sql.Types.DECIMAL))
       case _ => None
@@ -211,7 +212,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
     case java.sql.Types.SMALLINT => IntegerType
     case java.sql.Types.SQLXML => StringType
     case java.sql.Types.STRUCT => StringType
-    case java.sql.Types.TIME => TimestampType
+    case java.sql.Types.TIME => TimeType
     case java.sql.Types.TIMESTAMP if isTimestampNTZ => TimestampNTZType
     case java.sql.Types.TIMESTAMP => TimestampType
     case java.sql.Types.TINYINT => IntegerType
