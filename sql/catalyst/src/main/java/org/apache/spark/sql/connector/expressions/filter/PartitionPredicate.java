@@ -44,13 +44,8 @@ public abstract class PartitionPredicate extends Predicate {
    */
   public static final String NAME = "PARTITION_PREDICATE";
 
-  /**
-   * @param name predicate name; subclasses should pass {@link #NAME}.
-   * @param children child expressions; use {@link Expression#EMPTY_EXPRESSION} for implementations
-   *                 that store the predicate in a form that does not expose children.
-   */
-  public PartitionPredicate(String name, Expression[] children) {
-    super(name, children);
+  protected PartitionPredicate(Expression[] children) {
+    super(NAME, children);
   }
 
   /**
@@ -59,10 +54,11 @@ public abstract class PartitionPredicate extends Predicate {
    * For PartitionPredicate, returns {@link PartitionColumnReference} instances that identify
    * the partition columns (from {@link Table#partitioning()}) referenced by this predicate.
    * Each reference's {@link PartitionColumnReference#fieldNames()} gives the partition column
-   * name; {@link PartitionColumnReference#ordinal()} gives the 0-based position, paralleling
-   * {@link #referencedPartitionColumnOrdinals()}.
+   * name; {@link PartitionColumnReference#ordinal()} gives the 0-based position. See
+   * {@link #referencedPartitionColumnOrdinals()} for examples and how data sources use these
+   * references (e.g. when to return a predicate for post-scan filtering).
    *
-   * @return array of partition column references (never null)
+   * @return array of partition column references
    */
   @Override
   public abstract NamedReference[] references();

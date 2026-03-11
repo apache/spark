@@ -21,6 +21,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BoundReference, Expression => CatalystExpression, Predicate => CatalystPredicate}
+import org.apache.spark.sql.connector.expressions.Expression
 import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.connector.expressions.filter.PartitionPredicate
 
@@ -29,15 +30,13 @@ import org.apache.spark.sql.connector.expressions.filter.PartitionPredicate
  * partition filter.
  * <p>
  * Supporting data sources receive these via
- * [[org.apache.spark.sql.connector.read.SupportsPushDownV2Filters#pushPredicates pushPredicates]]
+ * [[org.apache.spark.sql.connector.read.SupportsPushDownV2Filters#pushPredicates]]
  * and may use them for additional partition filtering.
  */
 class PartitionPredicateImpl private (
     private val catalystExpr: CatalystExpression,
     private val partitionSchema: Seq[AttributeReference])
-  extends PartitionPredicate(
-    PartitionPredicate.NAME,
-    org.apache.spark.sql.connector.expressions.Expression.EMPTY_EXPRESSION) with Logging {
+  extends PartitionPredicate(Expression.EMPTY_EXPRESSION) with Logging {
 
   /** The wrapped partition filter Catalyst Expression. */
   def expression: CatalystExpression = catalystExpr
