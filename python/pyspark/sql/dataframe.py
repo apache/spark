@@ -3871,11 +3871,13 @@ class DataFrame:
         ...
 
     @overload
-    def groupBy(self, __cols: Union[List[Column], List[str], List[int]]) -> "GroupedData":
+    def groupBy(self, __cols: Sequence["ColumnOrNameOrOrdinal"]) -> "GroupedData":
         ...
 
-    @dispatch_df_method  # type: ignore[misc]
-    def groupBy(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData":
+    @dispatch_df_method
+    def groupBy(
+        self, *cols: Union[Sequence["ColumnOrNameOrOrdinal"], "ColumnOrNameOrOrdinal"]
+    ) -> "GroupedData":
         """
         Groups the :class:`DataFrame` by the specified columns so that aggregation
         can be performed on them.
@@ -6290,11 +6292,13 @@ class DataFrame:
         ...
 
     @overload
-    def groupby(self, __cols: Union[List[Column], List[str], List[int]]) -> "GroupedData":
+    def groupby(self, __cols: Sequence["ColumnOrNameOrOrdinal"]) -> "GroupedData":
         ...
 
-    @dispatch_df_method  # type: ignore[misc]
-    def groupby(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData":
+    @dispatch_df_method
+    def groupby(
+        self, *cols: Union[Sequence["ColumnOrNameOrOrdinal"], "ColumnOrNameOrOrdinal"]
+    ) -> "GroupedData":
         """
         :func:`groupby` is an alias for :func:`groupBy`.
 

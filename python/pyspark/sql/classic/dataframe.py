@@ -953,13 +953,15 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
             cols = cols[0]
         return self._jseq(cols, _to_java_column)
 
-    def _jcols_ordinal(self, *cols: "ColumnOrNameOrOrdinal") -> "JavaObject":
+    def _jcols_ordinal(
+        self, *cols: Union[Sequence["ColumnOrNameOrOrdinal"], "ColumnOrNameOrOrdinal"]
+    ) -> "JavaObject":
         """Return a JVM Seq of Columns from a list of Column or column names or column ordinals.
 
         If `cols` has only one list in it, cols[0] will be used as the list.
         """
         if len(cols) == 1 and isinstance(cols[0], list):
-            cols = cols[0]
+            cols = tuple(cols[0])
 
         _cols = []
         for c in cols:
@@ -1086,10 +1088,12 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         ...
 
     @overload
-    def groupBy(self, __cols: Union[List[Column], List[str], List[int]]) -> "GroupedData":
+    def groupBy(self, __cols: Sequence["ColumnOrNameOrOrdinal"]) -> "GroupedData":
         ...
 
-    def groupBy(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData":  # type: ignore[misc]
+    def groupBy(
+        self, *cols: Union[Sequence["ColumnOrNameOrOrdinal"], "ColumnOrNameOrOrdinal"]
+    ) -> "GroupedData":
         jgd = self._jdf.groupBy(self._jcols_ordinal(*cols))
         from pyspark.sql.group import GroupedData
 
@@ -1801,11 +1805,13 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         ...
 
     @overload
-    def groupby(self, __cols: Union[List[Column], List[str], List[int]]) -> "GroupedData":
+    def groupby(self, __cols: Sequence["ColumnOrNameOrOrdinal"]) -> "GroupedData":
         ...
 
-    def groupby(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData":  # type: ignore[misc]
-        return self.groupBy(*cols)
+    def groupby(
+        self, *cols: Union[Sequence["ColumnOrNameOrOrdinal"], "ColumnOrNameOrOrdinal"]
+    ) -> "GroupedData":
+        return self.groupBy(*cols)  # type: ignore[arg-type]
 
     def drop_duplicates(self, subset: Optional[List[str]] = None) -> ParentDataFrame:
         return self.dropDuplicates(subset)

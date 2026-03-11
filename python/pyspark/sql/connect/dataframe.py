@@ -569,17 +569,19 @@ class DataFrame(ParentDataFrame):
     def first(self) -> Optional[Row]:
         return self.head()
 
-    @overload  # type: ignore[no-overload-impl]
-    def groupby(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData":
+    @overload
+    def groupBy(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData":
         ...
 
     @overload
-    def groupby(self, __cols: Union[List[Column], List[str], List[int]]) -> "GroupedData":
+    def groupBy(self, __cols: Sequence["ColumnOrNameOrOrdinal"]) -> "GroupedData":
         ...
 
-    def groupBy(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData":
+    def groupBy(
+        self, *cols: Union[Sequence["ColumnOrNameOrOrdinal"], "ColumnOrNameOrOrdinal"]
+    ) -> "GroupedData":
         if len(cols) == 1 and isinstance(cols[0], list):
-            cols = cols[0]
+            cols = tuple(cols[0])
 
         _cols: List[Column] = []
         for c in cols:
