@@ -611,6 +611,10 @@ object KeyStateEncoderSpec {
       case "PrefixKeyScanStateEncoderSpec" =>
         val numColsPrefixKey = m("numColsPrefixKey").asInstanceOf[BigInt].toInt
         PrefixKeyScanStateEncoderSpec(keySchema, numColsPrefixKey)
+      case "TimestampAsPrefixKeyStateEncoderSpec" =>
+        TimestampAsPrefixKeyStateEncoderSpec(keySchema)
+      case "TimestampAsPostfixKeyStateEncoderSpec" =>
+        TimestampAsPostfixKeyStateEncoderSpec(keySchema)
     }
   }
 }

@@ -3128,14 +3128,13 @@ object SQLConf {
       .internal()
       .doc("State format version used by streaming join operations in a streaming query. " +
         "State between versions are tend to be incompatible, so state format version shouldn't " +
-        "be modified after running. Version 3 uses a single state store with virtual column " +
-        "families instead of four stores and is only supported with RocksDB. NOTE: version " +
-        "1 is DEPRECATED and should not be explicitly set by users.")
+        "be modified after running. Version 3 and 4 use a single state store with virtual " +
+        "column families instead of four stores and are only supported with RocksDB. Version 4 " +
+        "optimizes eviction by using timestamp-based indexing. NOTE: version 1 is DEPRECATED " +
+        "and should not be explicitly set by users.")
       .version("3.0.0")
       .intConf
-      // TODO: [SPARK-55628] Add version 4 once we integrate the state format version 4 into
-      //  stream-stream join operator.
-      .checkValue(v => Set(1, 2, 3).contains(v), "Valid versions are 1, 2, and 3")
+      .checkValue(v => Set(1, 2, 3, 4).contains(v), "Valid versions are 1, 2, 3, and 4")
       .createWithDefault(2)
 
   val STREAMING_SESSION_WINDOW_MERGE_SESSIONS_IN_LOCAL_PARTITION =

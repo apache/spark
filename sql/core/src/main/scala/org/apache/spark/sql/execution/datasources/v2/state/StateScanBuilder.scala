@@ -48,11 +48,12 @@ class StateScanBuilder(
     stateStoreColFamilySchemaOpt: Option[StateStoreColFamilySchema],
     stateSchemaProviderOpt: Option[StateSchemaProvider],
     joinColFamilyOpt: Option[String],
-    allColumnFamiliesReaderInfo: Option[AllColumnFamiliesReaderInfo]) extends ScanBuilder {
+    allColumnFamiliesReaderInfo: Option[AllColumnFamiliesReaderInfo],
+    joinStateFormatVersion: Option[Int] = None) extends ScanBuilder {
   override def build(): Scan = new StateScan(session, schema, sourceOptions, stateStoreConf,
     batchNumPartitions, keyStateEncoderSpec,
     stateVariableInfoOpt, stateStoreColFamilySchemaOpt, stateSchemaProviderOpt,
-    joinColFamilyOpt, allColumnFamiliesReaderInfo)
+    joinColFamilyOpt, allColumnFamiliesReaderInfo, joinStateFormatVersion)
 }
 
 /** An implementation of [[InputPartition]] for State Store data source. */
@@ -73,7 +74,8 @@ class StateScan(
     stateStoreColFamilySchemaOpt: Option[StateStoreColFamilySchema],
     stateSchemaProviderOpt: Option[StateSchemaProvider],
     joinColFamilyOpt: Option[String],
-    allColumnFamiliesReaderInfo: Option[AllColumnFamiliesReaderInfo])
+    allColumnFamiliesReaderInfo: Option[AllColumnFamiliesReaderInfo],
+    joinStateFormatVersion: Option[Int] = None)
   extends Scan with Batch {
 
   // A Hadoop Configuration can be about 10 KB, which is pretty big, so broadcast it
@@ -138,7 +140,7 @@ class StateScan(
         sourceOptions.stateCheckpointLocation.toString, sourceOptions.operatorId, LeftSide,
         oldSchemaFilePaths, excludeAuxColumns = false)
       new StreamStreamJoinStatePartitionReaderFactory(stateStoreConf,
-        hadoopConfBroadcast.value, userFacingSchema, stateSchema)
+        hadoopConfBroadcast.value, userFacingSchema, stateSchema, joinStateFormatVersion)
 
     case JoinSideValues.right =>
       val userFacingSchema = schema
@@ -148,7 +150,7 @@ class StateScan(
         sourceOptions.stateCheckpointLocation.toString, sourceOptions.operatorId, RightSide,
         oldSchemaFilePaths, excludeAuxColumns = false)
       new StreamStreamJoinStatePartitionReaderFactory(stateStoreConf,
-        hadoopConfBroadcast.value, userFacingSchema, stateSchema)
+        hadoopConfBroadcast.value, userFacingSchema, stateSchema, joinStateFormatVersion)
 
     case JoinSideValues.none =>
       new StatePartitionReaderFactory(stateStoreConf, hadoopConfBroadcast.value, schema,

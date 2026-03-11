@@ -648,13 +648,16 @@ class SymmetricHashJoinStateManagerV4(
     private val attachTimestampProjection: UnsafeProjection =
       TimestampKeyStateEncoder.getAttachTimestampProjection(keySchema)
 
-    // Create the specific column family in the store for this join side's KeyWithIndexToValueStore
+    // Create the specific column family in the store for this join side's TsWithKeyStore.
+    // This is a secondary index for efficient eviction; mark as internal so its keys
+    // are not counted in the reported numKeys metric.
     stateStore.createColFamilyIfAbsent(
       colFamilyName,
       keySchema,
       valueStructType,
       TimestampAsPrefixKeyStateEncoderSpec(keySchemaWithTimestamp),
-      useMultipleValuesPerKey = true
+      useMultipleValuesPerKey = true,
+      isInternal = true
     )
 
     private def createKeyRow(key: UnsafeRow, timestamp: Long): UnsafeRow = {
@@ -1775,33 +1778,52 @@ object SymmetricHashJoinStateManager {
     }
   }
 
+  def allStateStoreNamesV4(joinSides: JoinSide*): Seq[String] = {
+    val allStateStoreTypes: Seq[StateStoreType] = Seq(KeyWithTsToValuesType, TsWithKeyType)
+    for (joinSide <- joinSides; stateStoreType <- allStateStoreTypes) yield {
+      getStateStoreName(joinSide, stateStoreType)
+    }
+  }
+
   def getSchemaForStateStores(
       joinSide: JoinSide,
       inputValueAttributes: Seq[Attribute],
       joinKeys: Seq[Expression],
       stateFormatVersion: Int): Map[String, (StructType, StructType)] = {
-    var result: Map[String, (StructType, StructType)] = Map.empty
-
-    // get the key and value schema for the KeyToNumValues state store
     val keySchema = StructType(
       joinKeys.zipWithIndex.map { case (k, i) => StructField(s"field$i", k.dataType, k.nullable) })
-    val longValueSchema = new StructType().add("value", "long")
-    result += (getStateStoreName(joinSide, KeyToNumValuesType) -> (keySchema, longValueSchema))
 
-    // get the key and value schema for the KeyWithIndexToValue state store
-    val keyWithIndexSchema = keySchema.add("index", LongType)
-    val valueSchema = if (stateFormatVersion == 1) {
-      inputValueAttributes
-    } else if (stateFormatVersion == 2 || stateFormatVersion == 3) {
-      inputValueAttributes :+ AttributeReference("matched", BooleanType)()
+    if (stateFormatVersion == 4) {
+      val valueSchemaWithMatched =
+        (inputValueAttributes :+ AttributeReference("matched", BooleanType)()).toStructType
+      val dummyValueSchema = StructType(Seq(StructField("__dummy__", NullType)))
+
+      Map(
+        getStateStoreName(joinSide, KeyWithTsToValuesType) ->
+          (keySchema, valueSchemaWithMatched),
+        getStateStoreName(joinSide, TsWithKeyType) ->
+          (keySchema, dummyValueSchema)
+      )
     } else {
-      throw new IllegalArgumentException("Incorrect state format version! " +
-        s"version=$stateFormatVersion")
-    }
-    result += (getStateStoreName(joinSide, KeyWithIndexToValueType) ->
-      (keyWithIndexSchema, valueSchema.toStructType))
+      var result: Map[String, (StructType, StructType)] = Map.empty
 
-    result
+      val longValueSchema = new StructType().add("value", "long")
+      result += (getStateStoreName(joinSide, KeyToNumValuesType) -> (keySchema, longValueSchema))
+
+      val keyWithIndexSchema = keySchema.add("index", LongType)
+      val valueSchema = if (stateFormatVersion == 1) {
+        inputValueAttributes
+      } else if (stateFormatVersion == 2 || stateFormatVersion == 3) {
+        inputValueAttributes :+ AttributeReference("matched", BooleanType)()
+      } else {
+        throw new IllegalArgumentException("Incorrect state format version! " +
+          s"version=$stateFormatVersion")
+      }
+      result += (getStateStoreName(joinSide, KeyWithIndexToValueType) ->
+        (keyWithIndexSchema, valueSchema.toStructType))
+
+      result
+    }
   }
 
   /** Retrieves the schemas used for join operator state stores that use column families */
@@ -1810,15 +1832,24 @@ object SymmetricHashJoinStateManager {
       inputValueAttributes: Seq[Attribute],
       joinKeys: Seq[Expression],
       stateFormatVersion: Int): Map[String, StateStoreColFamilySchema] = {
-    // Convert the original schemas for state stores into StateStoreColFamilySchema objects
     val schemas =
       getSchemaForStateStores(joinSide, inputValueAttributes, joinKeys, stateFormatVersion)
 
     schemas.map {
       case (colFamilyName, (keySchema, valueSchema)) =>
+        val encoderSpec = if (stateFormatVersion == 4) {
+          val keySchemaWithTs = TimestampKeyStateEncoder.keySchemaWithTimestamp(keySchema)
+          if (getStoreType(colFamilyName) == KeyWithTsToValuesType) {
+            TimestampAsPostfixKeyStateEncoderSpec(keySchemaWithTs)
+          } else {
+            TimestampAsPrefixKeyStateEncoderSpec(keySchemaWithTs)
+          }
+        } else {
+          NoPrefixKeyStateEncoderSpec(keySchema)
+        }
         colFamilyName -> StateStoreColFamilySchema(
           colFamilyName, 0, keySchema, 0, valueSchema,
-          Some(NoPrefixKeyStateEncoderSpec(keySchema))
+          Some(encoderSpec)
         )
     }
   }
@@ -1978,9 +2009,13 @@ object SymmetricHashJoinStateManager {
     } else if (storeName == getStateStoreName(LeftSide, KeyWithIndexToValueType) ||
       storeName == getStateStoreName(RightSide, KeyWithIndexToValueType)) {
       KeyWithIndexToValueType
+    } else if (storeName == getStateStoreName(LeftSide, KeyWithTsToValuesType) ||
+      storeName == getStateStoreName(RightSide, KeyWithTsToValuesType)) {
+      KeyWithTsToValuesType
+    } else if (storeName == getStateStoreName(LeftSide, TsWithKeyType) ||
+      storeName == getStateStoreName(RightSide, TsWithKeyType)) {
+      TsWithKeyType
     } else {
-      // TODO: [SPARK-55628] Add support of KeyWithTsToValuesType and TsWithKeyType during
-      //  integration.
       throw new IllegalArgumentException(s"Unsupported join store name: $storeName")
     }
   }
@@ -1995,17 +2030,17 @@ object SymmetricHashJoinStateManager {
       stateFormatVersion: Int): StatePartitionKeyExtractor = {
     assert(stateFormatVersion <= 4, "State format version must be less than or equal to 4")
     val name = if (stateFormatVersion >= 3) colFamilyName else storeName
-    if (getStoreType(name) == KeyWithIndexToValueType) {
-      // For KeyWithIndex, the index is added to the join (i.e. partition) key.
-      // Drop the last field (index) to get the partition key
-      new DropLastNFieldsStatePartitionKeyExtractor(stateKeySchema, numLastColsToDrop = 1)
-    } else if (getStoreType(name) == KeyToNumValuesType) {
-      // State key is the partition key
-      new NoopStatePartitionKeyExtractor(stateKeySchema)
-    } else {
-      // TODO: [SPARK-55628] Add support of KeyWithTsToValuesType and TsWithKeyType during
-      //  integration.
-      throw new IllegalArgumentException(s"Unsupported join store name: $storeName")
+    getStoreType(name) match {
+      case KeyWithIndexToValueType =>
+        // For KeyWithIndex, the index is added to the join (i.e. partition) key.
+        // Drop the last field (index) to get the partition key
+        new DropLastNFieldsStatePartitionKeyExtractor(stateKeySchema, numLastColsToDrop = 1)
+      case KeyToNumValuesType =>
+        new NoopStatePartitionKeyExtractor(stateKeySchema)
+      case KeyWithTsToValuesType | TsWithKeyType =>
+        // For v4 stores, the logical key schema in the schema file is just the join key
+        // (timestamp is managed by the encoder), so the state key IS the partition key.
+        new NoopStatePartitionKeyExtractor(stateKeySchema)
     }
   }
 
