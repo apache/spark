@@ -639,6 +639,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val PUSH_DOWN_JOIN_THROUGH_UNION_ENABLED =
+    buildConf("spark.sql.optimizer.pushDownJoinThroughUnion.enabled")
+      .doc("When true, pushes down Join through Union when the join's right side " +
+        "is small enough to broadcast, avoiding shuffling the Union result.")
+      .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(true)
+
   val DYNAMIC_PARTITION_PRUNING_USE_STATS =
     buildConf("spark.sql.optimizer.dynamicPartitionPruning.useStats")
       .internal()
