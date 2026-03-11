@@ -38,6 +38,7 @@ import org.apache.spark.sql.types._
  * }}}
  */
 object MapLookupBenchmark extends SqlBasedBenchmark {
+  private val NUMBER_OF_ITER = 10
 
   override def getSparkSession: SparkSession = {
     SparkSession.builder()
@@ -57,6 +58,7 @@ object MapLookupBenchmark extends SqlBasedBenchmark {
     val benchmark = new Benchmark(
       s"MapLookup (size=$mapSize, hit=$hitRate, type=$keyType)",
       numRows,
+      NUMBER_OF_ITER,
       output = output)
 
     import spark.implicits._
@@ -96,7 +98,7 @@ object MapLookupBenchmark extends SqlBasedBenchmark {
       }
     }
 
-    benchmark.addCase("element_at interpreted") { _ =>
+    benchmark.addCase("ElementAt interpreted") { _ =>
       withSQLConf(
         SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
         SQLConf.CODEGEN_FACTORY_MODE.key -> "NO_CODEGEN",
@@ -105,7 +107,7 @@ object MapLookupBenchmark extends SqlBasedBenchmark {
       }
     }
 
-    benchmark.addCase("element_at codegen") { _ =>
+    benchmark.addCase("ElementAt codegen") { _ =>
       withSQLConf(
         SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
         SQLConf.CODEGEN_FACTORY_MODE.key -> "CODEGEN_ONLY",
@@ -118,7 +120,7 @@ object MapLookupBenchmark extends SqlBasedBenchmark {
   }
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
-    val sizes = Seq(10, 20, 30, 50, 1000, 1000000)
+    val sizes = Seq(10, 20, 30, 50, 100, 1000, 1000000)
     for (size <- sizes) {
       run(size, 1.0, IntegerType)
       run(size, 0.5, IntegerType)
