@@ -445,13 +445,12 @@ trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
   @transient private var lastIndex: java.util.HashMap[Any, Int] = _
 
   /**
-   * Minimum map size to use hash-based lookup.
-   * Below this threshold, the overhead of building a hash index
+   * The threshold is chosen empirically. If the map size is small, the cost of building hash map
    * exceeds the cost of a linear scan.
    * The value 20 is chosen empirically; break-even is around 15-25
    * elements for primitive key types.
    */
-  private val HASH_LOOKUP_THRESHOLD = 20
+  private val hashLookupThreshold = 20
 
   private def getOrBuildIndex(map: MapData, keyType: DataType): java.util.HashMap[Any, Int] = {
     if (lastMap ne map) {
@@ -478,7 +477,7 @@ trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
     val map = value.asInstanceOf[MapData]
     val length = map.numElements()
 
-    if (length < HASH_LOOKUP_THRESHOLD || !TypeUtils.typeWithProperEquals(keyType)) {
+    if (length < hashLookupThreshold || !TypeUtils.typeWithProperEquals(keyType)) {
       getValueEvalLinear(map, ordinal, keyType, ordering)
     } else {
       val idx = getOrBuildIndex(map, keyType).getOrDefault(ordinal, -1)
@@ -674,7 +673,7 @@ trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
         final ArrayData $values = $eval1.valueArray();
         int $index = -1;
 
-        if ($length >= $HASH_LOOKUP_THRESHOLD) {
+        if ($length >= $hashLookupThreshold) {
           if ($keys != $lastKeyArray) {
             $buildIndex
           }
