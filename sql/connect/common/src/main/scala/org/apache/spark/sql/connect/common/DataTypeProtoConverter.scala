@@ -90,7 +90,7 @@ object DataTypeProtoConverter {
 
       case _ =>
         throw InvalidPlanInput(
-          "SPARK_CONNECT_INVALID_PLAN_INPUT.DATA_TYPE_UNSUPPORTED_PROTO_TO_CATALYST",
+          "CONNECT_INVALID_PLAN.DATA_TYPE_UNSUPPORTED_PROTO_TO_CATALYST",
           Map("kindCase" -> t.getKindCase.toString))
     }
   }
@@ -149,7 +149,7 @@ object DataTypeProtoConverter {
   private def toCatalystUDT(t: proto.DataType.UDT): UserDefinedType[_] = {
     if (t.getType != "udt") {
       throw InvalidPlanInput(
-        "SPARK_CONNECT_INVALID_PLAN_INPUT.UDT_TYPE_FIELD_INVALID",
+        "CONNECT_INVALID_PLAN.UDT_TYPE_FIELD_INVALID",
         Map("udtType" -> t.getType))
     }
 
@@ -161,7 +161,7 @@ object DataTypeProtoConverter {
     } else {
       if (!t.hasPythonClass || !t.hasSerializedPythonClass || !t.hasSqlType) {
         throw InvalidPlanInput(
-          "SPARK_CONNECT_INVALID_PLAN_INPUT.PYTHON_UDT_MISSING_FIELDS",
+          "CONNECT_INVALID_PLAN.PYTHON_UDT_MISSING_FIELDS",
           Map.empty)
       }
 
@@ -393,7 +393,7 @@ object DataTypeProtoConverter {
 
       case _ =>
         throw InvalidPlanInput(
-          "SPARK_CONNECT_INVALID_PLAN_INPUT.DATA_TYPE_UNSUPPORTED_CATALYST_TO_PROTO",
+          "CONNECT_INVALID_PLAN.DATA_TYPE_UNSUPPORTED_CATALYST_TO_PROTO",
           Map("typeName" -> t.typeName))
     }
   }

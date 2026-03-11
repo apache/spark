@@ -466,7 +466,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     Option(dataFrameCache.get(dfId))
       .getOrElse {
         throw InvalidPlanInput(
-          "SPARK_CONNECT_INVALID_PLAN_INPUT.DATAFRAME_NOT_FOUND",
+          "CONNECT_INVALID_PLAN.DATAFRAME_NOT_FOUND",
           Map("dfId" -> dfId, "sessionId" -> sessionId))
       }
   }

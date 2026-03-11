@@ -246,7 +246,7 @@ private[connect] class SparkConnectAnalyzeHandler(
       // for unhandled cases, which will fail tests and block CI if you forget to update it.
       case other =>
         throw InvalidPlanInput(
-          "SPARK_CONNECT_INVALID_PLAN_INPUT.UNKNOWN_ANALYZE_METHOD",
+          "CONNECT_INVALID_PLAN.UNKNOWN_ANALYZE_METHOD",
           Map("other" -> other.toString))
     }
 

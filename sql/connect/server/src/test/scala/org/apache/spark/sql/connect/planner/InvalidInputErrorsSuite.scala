@@ -75,7 +75,7 @@ class InvalidInputErrorsSuite extends PlanTest with SparkConnectPlanTest {
       }),
     TestCase(
       name = "Invalid schema string non struct type",
-      expectedErrorCondition = "INVALID_SCHEMA.NON_STRUCT_TYPE",
+      expectedErrorCondition = "CONNECT_INVALID_PLAN.INVALID_SCHEMA_NON_STRUCT_TYPE",
       expectedParameters = Map(
         "inputSchema" -> """"{"type":"array","elementType":"integer","containsNull":false}"""",
         "dataType" -> "\"ARRAY<INT>\""),
@@ -97,7 +97,7 @@ class InvalidInputErrorsSuite extends PlanTest with SparkConnectPlanTest {
       }),
     TestCase(
       name = "Deduplicate needs input",
-      expectedErrorCondition = "SPARK_CONNECT_INVALID_PLAN_INPUT.DEDUPLICATE_NEEDS_INPUT",
+      expectedErrorCondition = "CONNECT_INVALID_PLAN.DEDUPLICATE_NEEDS_INPUT",
       expectedParameters = Map.empty,
       invalidInput = {
         val deduplicate = proto.Deduplicate
@@ -110,7 +110,7 @@ class InvalidInputErrorsSuite extends PlanTest with SparkConnectPlanTest {
     TestCase(
       name = "Catalog not set",
       expectedErrorCondition =
-        "SPARK_CONNECT_INVALID_PLAN_INPUT.INVALID_ONE_OF_FIELD_NOT_SET",
+        "CONNECT_INVALID_PLAN.INVALID_ONE_OF_FIELD_NOT_SET",
       expectedParameters =
         Map("fullName" -> "spark.connect.Catalog", "name" -> "CATTYPE_NOT_SET"),
       invalidInput = {
@@ -134,8 +134,8 @@ class InvalidInputErrorsSuite extends PlanTest with SparkConnectPlanTest {
         exception = exception,
         condition = testCase.expectedErrorCondition,
         parameters = testCase.expectedParameters)
-      if (testCase.expectedErrorCondition.startsWith("SPARK_CONNECT_INVALID_PLAN_INPUT")) {
-        assert(exception.getSqlState == "42000")
+      if (testCase.expectedErrorCondition.startsWith("CONNECT_INVALID_PLAN")) {
+        assert(exception.getSqlState == "56K00")
       }
     }
   }
@@ -144,7 +144,7 @@ class InvalidInputErrorsSuite extends PlanTest with SparkConnectPlanTest {
     val ex = InvalidInputErrors.noHandlerFoundForExtension("foo.bar.Ext")
     assert(ex.getCondition.contains("NO_HANDLER_FOR_EXTENSION"))
     assert(ex.getMessage.contains("foo.bar.Ext"))
-    assert(ex.getSqlState == "42000")
+    assert(ex.getSqlState == "56K00")
   }
 
   test("notFoundCachedLocalRelation") {
@@ -152,7 +152,7 @@ class InvalidInputErrorsSuite extends PlanTest with SparkConnectPlanTest {
     assert(ex.getCondition.contains("NOT_FOUND_CACHED_LOCAL_RELATION"))
     assert(ex.getMessage.contains("abc123"))
     assert(ex.getMessage.contains("sess-uuid"))
-    assert(ex.getSqlState == "42000")
+    assert(ex.getSqlState == "56K00")
   }
 
   test("localRelationSizeLimitExceeded") {
@@ -160,14 +160,14 @@ class InvalidInputErrorsSuite extends PlanTest with SparkConnectPlanTest {
     assert(ex.getCondition.contains("LOCAL_RELATION_SIZE_LIMIT_EXCEEDED"))
     assert(ex.getMessage.contains("1000"))
     assert(ex.getMessage.contains("500"))
-    assert(ex.getSqlState == "42000")
+    assert(ex.getSqlState == "56K00")
   }
 
   test("functionEvalTypeNotSupported") {
     val ex = InvalidInputErrors.functionEvalTypeNotSupported(42)
     assert(ex.getCondition.contains("FUNCTION_EVAL_TYPE_NOT_SUPPORTED"))
     assert(ex.getMessage.contains("42"))
-    assert(ex.getSqlState == "42000")
+    assert(ex.getSqlState == "56K00")
   }
 
   test("streamingQueryRunIdMismatch") {
@@ -176,7 +176,7 @@ class InvalidInputErrorsSuite extends PlanTest with SparkConnectPlanTest {
     assert(ex.getMessage.contains("q1"))
     assert(ex.getMessage.contains("run1"))
     assert(ex.getMessage.contains("run2"))
-    assert(ex.getSqlState == "42000")
+    assert(ex.getSqlState == "56K00")
   }
 
   // Helper case class to define test cases
