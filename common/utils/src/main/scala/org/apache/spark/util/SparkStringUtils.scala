@@ -62,16 +62,19 @@ private[spark] trait SparkStringUtils {
   def abbreviateByBytes(str: String, abbrevMarker: String, maxBytes: Int): String = {
     if (str == null || abbrevMarker == null) {
       null
-    } else if (sizeInBytes(str) <= maxBytes) {
-      str
     } else {
-      val budget = maxBytes - sizeInBytes(abbrevMarker)
       val buf = StandardCharsets.UTF_8.encode(str)
-      buf.limit(math.min(budget, buf.limit()))
-      StandardCharsets.UTF_8.newDecoder()
-        .onMalformedInput(CodingErrorAction.IGNORE)
-        .decode(buf)
-        .toString + abbrevMarker
+      if (buf.limit() <= maxBytes) {
+        str
+      } else {
+        // Truncate at the byte budget, then decode with IGNORE so any incomplete
+        // trailing UTF-8 sequence is silently dropped.
+        buf.limit(math.min(maxBytes - abbrevMarker.length, buf.limit()))
+        val decoder = StandardCharsets.UTF_8.newDecoder()
+          .onMalformedInput(CodingErrorAction.IGNORE)
+          .onUnmappableCharacter(CodingErrorAction.IGNORE)
+        decoder.decode(buf).toString + abbrevMarker
+      }
     }
   }
 

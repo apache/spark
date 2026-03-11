@@ -217,64 +217,96 @@ private[connect] object ErrorUtils extends Logging {
       .newBuilder()
       .setReason(st.getClass.getName)
       .setDomain("org.apache.spark")
-      .putMetadata(
-        "classes",
-        JsonMethods.compact(JsonMethods.render(allClasses(st.getClass).map(_.getName))))
 
     val maxMetadataSize = SparkEnv.get.conf.get(Connect.CONNECT_GRPC_MAX_METADATA_SIZE)
-    // Add the SQL State and Error Class to the response metadata of the ErrorInfoObject.
-    st match {
-      case e: SparkThrowable =>
-        val state = e.getSqlState
-        if (state != null && state.nonEmpty) {
-          errorInfo.putMetadata("sqlState", state)
-        }
-        val errorClass = e.getCondition
-        if (errorClass != null && errorClass.nonEmpty) {
-          val messageParameters = JsonMethods.compact(
-            JsonMethods.render(map2jvalue(e.getMessageParameters.asScala.toMap)))
-          if (Utils.sizeInBytes(messageParameters) <= maxMetadataSize) {
-            errorInfo.putMetadata("errorClass", errorClass)
-            errorInfo.putMetadata("messageParameters", messageParameters)
-          } else {
-            // adds the error class in a separate metadata key, to allow being inspected by
-            // a proxy, without interfering with the FetchErrorDetails client/server flow
-            errorInfo.putMetadata("errorClassFallback", errorClass)
-          }
-        }
-      case _ =>
-    }
 
+    // Tracks the shared metadata budget against the gRPC total-metadata-size limit.
+    // Keys are ASCII so key.length == sizeInBytes(key); values may be multi-byte.
+    class BudgetedMetadata(private var remaining: Long) {
+      // Adds the field if it fits within the remaining budget; returns true if added.
+      def tryPut(key: String, value: String): Boolean = {
+        val cost = key.length + Utils.sizeInBytes(value)
+        if (cost <= remaining) {
+          errorInfo.putMetadata(key, value)
+          remaining -= cost
+          true
+        } else false
+      }
+
+      // Adds both fields atomically if their combined cost fits; returns true if added.
+      // avoiding a single method with varargs to not allocate iterator etc
+      def tryPut(k1: String, v1: String, k2: String, v2: String): Boolean = {
+        val cost = k1.length + Utils.sizeInBytes(v1) + k2.length + Utils.sizeInBytes(v2)
+        if (cost <= remaining) {
+          errorInfo.putMetadata(k1, v1)
+          errorInfo.putMetadata(k2, v2)
+          remaining -= cost
+          true
+        } else false
+      }
+
+      // Always adds the field, truncating the value to fit within the budget
+      // (and optionally a caller-supplied cap on value byte size).
+      def putTruncated(key: String, value: String, maxValueSize: Int = Int.MaxValue): Unit = {
+        val valueBudget = math.min(maxValueSize, (remaining - key.length).toInt)
+        if (valueBudget > 0) {
+          val truncated = Utils.abbreviateByBytes(value, valueBudget)
+          errorInfo.putMetadata(key, truncated)
+          remaining -= key.length + Utils.sizeInBytes(truncated)
+        }
+      }
+    }
+    val metadata = new BudgetedMetadata(maxMetadataSize)
+
+    metadata.putTruncated(
+      "classes",
+      JsonMethods.compact(JsonMethods.render(allClasses(st.getClass).map(_.getName))))
+
+    // moved errorId up to ensure we do not run out of budget, as it is needed for FetchErrorDetails
     val enrichErrorEnabled = sessionHolderOpt.exists(
       _.session.sessionState.conf.getConf(Connect.CONNECT_ENRICH_ERROR_ENABLED))
     if (enrichErrorEnabled) {
       // Generate a new unique key for this exception.
       val errorId = UUID.randomUUID().toString
+      metadata.tryPut("errorId", errorId)
+      sessionHolderOpt.get.errorIdToError.put(errorId, st)
+    }
 
-      errorInfo.putMetadata("errorId", errorId)
-
-      sessionHolderOpt.get.errorIdToError
-        .put(errorId, st)
+    // Add the SQL State and Error Class to the response metadata of the ErrorInfoObject.
+    st match {
+      case e: SparkThrowable =>
+        val state = e.getSqlState
+        if (state != null && state.nonEmpty) {
+          metadata.tryPut("sqlState", state)
+        }
+        val errorClass = e.getCondition
+        if (errorClass != null && errorClass.nonEmpty) {
+          val messageParameters = JsonMethods.compact(
+            JsonMethods.render(map2jvalue(e.getMessageParameters.asScala.toMap)))
+          if (!metadata.tryPut(
+              "errorClass", errorClass, "messageParameters", messageParameters)) {
+            // adds the error class in a separate metadata key, to allow being inspected by
+            // a proxy, without interfering with the FetchErrorDetails client/server flow
+            metadata.tryPut("errorClassFallback", errorClass)
+          }
+        }
+      case _ =>
     }
 
     lazy val stackTrace = Option(Utils.stackTraceToString(st))
     val stackTraceEnabled = sessionHolderOpt.exists(
       _.session.sessionState.conf.getConf(SQLConf.PYSPARK_JVM_STACKTRACE_ENABLED))
-    val withStackTrace =
-      if (stackTraceEnabled && stackTrace.nonEmpty) {
-        val maxSize = Math.min(
-          SparkEnv.get.conf.get(Connect.CONNECT_JVM_STACK_TRACE_MAX_SIZE),
-          maxMetadataSize)
-        errorInfo.putMetadata(
-          "stackTrace", Utils.abbreviateByBytes(stackTrace.get, maxSize.toInt))
-      } else {
-        errorInfo
-      }
+    if (stackTraceEnabled && stackTrace.nonEmpty) {
+      metadata.putTruncated(
+        "stackTrace",
+        stackTrace.get,
+        SparkEnv.get.conf.get(Connect.CONNECT_JVM_STACK_TRACE_MAX_SIZE).toInt)
+    }
 
     RPCStatus
       .newBuilder()
       .setCode(RPCCode.INTERNAL_VALUE)
-      .addDetails(ProtoAny.pack(withStackTrace.build()))
+      .addDetails(ProtoAny.pack(errorInfo.build()))
       .setMessage(SparkConnectService.extractErrorMessage(st))
       .build()
   }
