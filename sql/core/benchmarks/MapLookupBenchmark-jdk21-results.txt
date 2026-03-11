@@ -1,0 +1,189 @@
+OpenJDK 64-Bit Server VM 21.0.10+7-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+MapLookup (size=10, hit=1.0, type=IntegerType):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------
+GetMapValue interpreted                                    23             33           7          0.4        2348.6       1.0X
+GetMapValue codegen                                        19             26           7          0.5        1886.6       1.2X
+ElementAt interpreted                                      16             21           6          0.6        1629.6       1.4X
+ElementAt codegen                                          15             19           5          0.7        1535.8       1.5X
+
+OpenJDK 64-Bit Server VM 21.0.10+7-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+MapLookup (size=10, hit=0.5, type=IntegerType):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------
+GetMapValue interpreted                                    15             20           5          0.7        1470.4       1.0X
+GetMapValue codegen                                        14             18           5          0.7        1415.1       1.0X
+ElementAt interpreted                                      14             16           4          0.7        1365.1       1.1X
+ElementAt codegen                                          14             16           4          0.7        1360.1       1.1X
+
+OpenJDK 64-Bit Server VM 21.0.10+7-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+MapLookup (size=10, hit=0.0, type=IntegerType):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------
+GetMapValue interpreted                                    13             15           3          0.8        1296.3       1.0X
+GetMapValue codegen                                        13             14           2          0.8        1275.5       1.0X
+ElementAt interpreted                                      12             16           4          0.8        1244.6       1.0X
+ElementAt codegen                                          12             14           2          0.8        1210.9       1.1X
+
+OpenJDK 64-Bit Server VM 21.0.10+7-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+MapLookup (size=20, hit=1.0, type=IntegerType):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------
+GetMapValue interpreted                                    12             15           4          0.8        1225.0       1.0X
+GetMapValue codegen                                        12             13           2          0.9        1153.9       1.1X
+ElementAt interpreted                                      12             14           3          0.9        1172.0       1.0X
+ElementAt codegen                                          11             13           3          0.9        1143.0       1.1X
+
+OpenJDK 64-Bit Server VM 21.0.10+7-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+MapLookup (size=20, hit=0.5, type=IntegerType):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------
+GetMapValue interpreted                                    11             14           3          0.9        1126.6       1.0X
+GetMapValue codegen                                        11             13           2          0.9        1113.0       1.0X
+ElementAt interpreted                                      11             13           3          0.9        1132.7       1.0X
+ElementAt codegen                                          11             13           3          0.9        1113.9       1.0X
+
+OpenJDK 64-Bit Server VM 21.0.10+7-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+MapLookup (size=20, hit=0.0, type=IntegerType):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------
+GetMapValue interpreted                                    11             13           3          0.9        1086.0       1.0X
+GetMapValue codegen                                        11             12           2          0.9        1072.5       1.0X
+ElementAt interpreted                                      11             13           3          0.9        1068.9       1.0X
+ElementAt codegen                                          11             12           2          0.9        1056.7       1.0X
+
+OpenJDK 64-Bit Server VM 21.0.10+7-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+MapLookup (size=30, hit=1.0, type=IntegerType):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------
+GetMapValue interpreted                                    11             15           4          0.9        1097.5       1.0X
+GetMapValue codegen                                        11             13           2          0.9        1077.5       1.0X
+ElementAt interpreted                                      11             13           3          0.9        1085.0       1.0X
+ElementAt codegen                                          11             12           2          0.9        1065.7       1.0X
+
+OpenJDK 64-Bit Server VM 21.0.10+7-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+MapLookup (size=30, hit=0.5, type=IntegerType):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------
+GetMapValue interpreted                                    11             12           2          0.9        1057.1       1.0X
+GetMapValue codegen                                        11             12           2          0.9        1059.0       1.0X
+ElementAt interpreted                                      11             12           2          0.9        1058.0       1.0X
+ElementAt codegen                                          10             12           2          1.0        1038.9       1.0X
+
+OpenJDK 64-Bit Server VM 21.0.10+7-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+MapLookup (size=30, hit=0.0, type=IntegerType):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------
+GetMapValue interpreted                                    10             12           2          1.0        1036.2       1.0X
+GetMapValue codegen                                        10             11           2          1.0        1010.6       1.0X
+ElementAt interpreted                                      10             12           2          1.0        1028.0       1.0X
+ElementAt codegen                                          10             12           2          1.0        1040.3       1.0X
+
+OpenJDK 64-Bit Server VM 21.0.10+7-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+MapLookup (size=50, hit=1.0, type=IntegerType):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------
+GetMapValue interpreted                                    11             12           2          0.9        1059.2       1.0X
+GetMapValue codegen                                        10             12           2          1.0        1042.8       1.0X
+ElementAt interpreted                                      10             12           2          1.0        1048.8       1.0X
+ElementAt codegen                                          10             12           2          1.0        1024.4       1.0X
+
+OpenJDK 64-Bit Server VM 21.0.10+7-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+MapLookup (size=50, hit=0.5, type=IntegerType):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------
+GetMapValue interpreted                                    10             11           2          1.0        1031.8       1.0X
+GetMapValue codegen                                        10             11           2          1.0        1013.5       1.0X
+ElementAt interpreted                                      10             12           2          1.0        1034.6       1.0X
+ElementAt codegen                                          10             11           2          1.0        1025.6       1.0X
+
+OpenJDK 64-Bit Server VM 21.0.10+7-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+MapLookup (size=50, hit=0.0, type=IntegerType):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------
+GetMapValue interpreted                                    10             11           2          1.0        1012.2       1.0X
+GetMapValue codegen                                        10             11           2          1.0        1003.7       1.0X
+ElementAt interpreted                                      10             11           2          1.0        1014.9       1.0X
+ElementAt codegen                                          10             11           2          1.0        1001.0       1.0X
+
+OpenJDK 64-Bit Server VM 21.0.10+7-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+MapLookup (size=100, hit=1.0, type=IntegerType):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------
+GetMapValue interpreted                                     10             11           2          1.0        1049.6       1.0X
+GetMapValue codegen                                         10             11           2          1.0        1016.8       1.0X
+ElementAt interpreted                                       11             12           2          0.9        1053.8       1.0X
+ElementAt codegen                                           10             12           2          1.0        1027.8       1.0X
+
+OpenJDK 64-Bit Server VM 21.0.10+7-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+MapLookup (size=100, hit=0.5, type=IntegerType):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------
+GetMapValue interpreted                                     10             11           2          1.0        1026.7       1.0X
+GetMapValue codegen                                         10             11           2          1.0        1007.9       1.0X
+ElementAt interpreted                                       10             11           2          1.0        1026.9       1.0X
+ElementAt codegen                                           10             12           3          1.0        1014.9       1.0X
+
+OpenJDK 64-Bit Server VM 21.0.10+7-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+MapLookup (size=100, hit=0.0, type=IntegerType):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------
+GetMapValue interpreted                                     10             11           2          1.0        1006.2       1.0X
+GetMapValue codegen                                         10             11           2          1.0         996.3       1.0X
+ElementAt interpreted                                       10             11           2          1.0        1010.6       1.0X
+ElementAt codegen                                           10             11           2          1.0        1002.2       1.0X
+
+OpenJDK 64-Bit Server VM 21.0.10+7-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+MapLookup (size=1000, hit=1.0, type=IntegerType):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------
+GetMapValue interpreted                                      11             12           2          0.9        1124.9       1.0X
+GetMapValue codegen                                          11             12           2          0.9        1107.5       1.0X
+ElementAt interpreted                                        11             12           2          0.9        1128.3       1.0X
+ElementAt codegen                                            11             13           2          0.9        1128.3       1.0X
+
+OpenJDK 64-Bit Server VM 21.0.10+7-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+MapLookup (size=1000, hit=0.5, type=IntegerType):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------
+GetMapValue interpreted                                      11             12           2          0.9        1106.7       1.0X
+GetMapValue codegen                                          11             13           2          0.9        1110.0       1.0X
+ElementAt interpreted                                        11             12           2          0.9        1103.1       1.0X
+ElementAt codegen                                            11             13           2          0.9        1112.3       1.0X
+
+OpenJDK 64-Bit Server VM 21.0.10+7-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+MapLookup (size=1000, hit=0.0, type=IntegerType):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------
+GetMapValue interpreted                                      11             12           2          0.9        1084.4       1.0X
+GetMapValue codegen                                          11             12           2          0.9        1085.7       1.0X
+ElementAt interpreted                                        11             12           2          0.9        1085.7       1.0X
+ElementAt codegen                                            11             12           2          0.9        1077.6       1.0X
+
+OpenJDK 64-Bit Server VM 21.0.10+7-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+MapLookup (size=1000000, hit=1.0, type=IntegerType):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-----------------------------------------------------------------------------------------------------------------------------------
+GetMapValue interpreted                                       1140           1391         203          0.0      114048.5       1.0X
+GetMapValue codegen                                           1653           1744          81          0.0      165283.9       0.7X
+ElementAt interpreted                                         1116           1310         137          0.0      111564.9       1.0X
+ElementAt codegen                                             1554           1679         124          0.0      155392.1       0.7X
+
+OpenJDK 64-Bit Server VM 21.0.10+7-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+MapLookup (size=1000000, hit=0.5, type=IntegerType):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-----------------------------------------------------------------------------------------------------------------------------------
+GetMapValue interpreted                                       1224           1314          91          0.0      122399.4       1.0X
+GetMapValue codegen                                           1534           1652         119          0.0      153415.9       0.8X
+ElementAt interpreted                                         1116           1361         196          0.0      111570.5       1.1X
+ElementAt codegen                                             1540           1752         141          0.0      153989.8       0.8X
+
+OpenJDK 64-Bit Server VM 21.0.10+7-LTS on Linux 6.14.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+MapLookup (size=1000000, hit=0.0, type=IntegerType):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-----------------------------------------------------------------------------------------------------------------------------------
+GetMapValue interpreted                                       1108           1344         125          0.0      110803.0       1.0X
+GetMapValue codegen                                           1594           1719         103          0.0      159373.4       0.7X
+ElementAt interpreted                                         1229           1370         106          0.0      122949.0       0.9X
+ElementAt codegen                                             1618           1774          94          0.0      161812.6       0.7X
+
