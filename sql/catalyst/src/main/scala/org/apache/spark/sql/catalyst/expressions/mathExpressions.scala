@@ -423,8 +423,8 @@ case class Acosh(child: Expression)
     // to numeric precision. So log(x + sqrt(x * x - 1)) becomes log(2x) = log(2) + log(x) for
     // positive values.
     case x if x >= Math.sqrt(Double.MaxValue) =>
-      Math.signum(x) * (StrictMath.log(2) + StrictMath.log(x))
-    case x if x <= - Math.sqrt(Double.MaxValue) + 1 =>
+      StrictMath.log(2) + StrictMath.log(x)
+    case x if x < 1 =>
       Double.NaN
     case _ => StrictMath.log(x + math.sqrt(x * x - 1.0)) }, "ACOSH") {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -433,7 +433,7 @@ case class Acosh(child: Expression)
       s"""
          |if ($c >= ${Math.sqrt(Double.MaxValue)}) {
          |  ${ev.value} = $sm.log($c) + $sm.log(2);
-         |} else if ($c <= -${Math.sqrt(Double.MaxValue) - 1}) {
+         |} else if ($c < 1) {
          |  ${ev.value} = java.lang.Double.NaN;
          |} else {
          |  ${ev.value} = $sm.log($c + java.lang.Math.sqrt($c * $c - 1.0));
