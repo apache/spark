@@ -2507,7 +2507,12 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
         put(store, "a", 0, 1)
         put(store, "b", 0, 2)
         store.commit()
-        provider.doMaintenance()
+        // Verify that main file and checksum file were both written to disk.
+        // Both HDFS and RocksDB produce 2 files and 1 checksum file:
+        //   HDFS:    1.delta, 1.delta.checksum
+        //   RocksDB: 1.zip, 1.zip.crc
+        verifyChecksumFiles(storeId.storeCheckpointLocation().toString,
+          expectedNumFiles = 2, expectedNumChecksumFiles = 1)
       }
 
       // Reload and verify state is intact
@@ -2524,9 +2529,14 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     val storeId = StateStoreId(newDir(), 0L, 0)
     withSQLConf(
       SQLConf.STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED.key -> "true",
-      SQLConf.STATE_STORE_FILE_CHECKSUM_THREAD_POOL_SIZE.key -> "0") {
+      SQLConf.STATE_STORE_FILE_CHECKSUM_THREAD_POOL_SIZE.key -> "0",
+      SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1",
+      // So that RocksDB uploads a snapshot during maintenance rather than being a no-op.
+      RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".changelogCheckpointing.enabled" -> "true") {
       tryWithProviderResource(newStoreProviderWithClonedConf(storeId)) { provider =>
-        // Build up a few versions so maintenance has something to work with
+        // Build up a few versions so maintenance has something to work with.
+        // With minDeltasForSnapshot=1 and changelog checkpointing enabled, doMaintenance()
+        // uploads a queued snapshot, exercising the checksum file manager concurrently.
         (0L until 3L).foreach { version =>
           putAndCommitStore(provider, version, doMaintenance = false)
         }
@@ -2562,6 +2572,13 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
           "Maintenance did not complete within 30 seconds")
         assert(errors.isEmpty,
           s"Maintenance failed with: ${Option(errors.peek()).map(_.getMessage).orNull}")
+      }
+
+      // Verify state committed concurrently with maintenance is intact.
+      tryWithProviderResource(newStoreProviderWithClonedConf(storeId)) { provider =>
+        val store = provider.getStore(4)
+        assert(get(store, "3", 3) === Some(300))
+        store.abort()
       }
     }
   }

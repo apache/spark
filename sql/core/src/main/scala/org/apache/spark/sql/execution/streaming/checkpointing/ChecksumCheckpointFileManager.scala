@@ -153,10 +153,6 @@ class ChecksumCheckpointFileManager(
     val skipCreationIfFileMissingChecksum: Boolean)
   extends CheckpointFileManager with Logging {
   assert(numThreads >= 0, "numThreads must be a non-negative integer")
-  if (numThreads < 4) {
-    logWarning(s"numThreads is set to $numThreads, which is below the recommended minimum of 4 " +
-      "(2 threads per caller x 2 callers). This may have performance impact.")
-  }
 
   import ChecksumCheckpointFileManager._
 
