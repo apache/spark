@@ -138,8 +138,8 @@ case class DataSourceV2Relation(
     }
   }
 
-  def autoSchemaEvolution(): Boolean =
-    table.capabilities().contains(TableCapability.AUTOMATIC_SCHEMA_EVOLUTION)
+  def autoSchemaEvolution: Boolean =
+    table.capabilities.contains(TableCapability.AUTOMATIC_SCHEMA_EVOLUTION)
 
   def isVersioned: Boolean = table.version != null
 }

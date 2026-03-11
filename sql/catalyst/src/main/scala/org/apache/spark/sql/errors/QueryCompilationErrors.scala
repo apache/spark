@@ -3514,14 +3514,28 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "change" -> change.toString, "tableName" -> toSQLId(sanitizedTableName)))
   }
 
-  def unsupportedTableChangesInAutoSchemaEvolutionError(
-      changes: Array[TableChange], tableName: Seq[String]): Throwable = {
-    val sanitizedTableName = tableName.map(_.replaceAll("\"", ""))
-    val changesDesc = changes.map(_.toString).mkString("; ")
+  def unsupportedAutoSchemaEvolutionChangesError(
+      catalog: CatalogPlugin,
+      ident: Identifier,
+      remainingChanges: Seq[TableChange]): Throwable = {
     new AnalysisException(
-      errorClass = "UNSUPPORTED_TABLE_CHANGES_IN_AUTO_SCHEMA_EVOLUTION",
+      errorClass = "UNSUPPORTED_AUTO_SCHEMA_EVOLUTION_CHANGES.PARTIAL_EVOLUTION",
       messageParameters = Map(
-        "changes" -> changesDesc, "tableName" -> toSQLId(sanitizedTableName)))
+        "tableName" -> toSQLId(ident.toQualifiedNameParts(catalog)),
+        "changes" -> remainingChanges.mkString("; ")))
+  }
+
+  def failedAutoSchemaEvolutionError(
+      catalog: CatalogPlugin,
+      ident: Identifier,
+      cause: Throwable): Throwable = {
+    val detail = Option(cause.getMessage).getOrElse("Unknown error")
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_AUTO_SCHEMA_EVOLUTION_CHANGES.FAILED_EVOLUTION",
+      messageParameters = Map(
+        "tableName" -> toSQLId(ident.toQualifiedNameParts(catalog)),
+        "detail" -> detail),
+      cause = Some(cause))
   }
 
   def pathOptionNotSetCorrectlyWhenReadingError(): Throwable = {
