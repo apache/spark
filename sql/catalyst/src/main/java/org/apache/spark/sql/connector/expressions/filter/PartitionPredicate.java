@@ -29,7 +29,7 @@ import org.apache.spark.sql.connector.read.SupportsPushDownV2Filters;
  * Represents a partition predicate that can be evaluated using {@link Table#partitioning()}.
  * <p>
  * Connectors are expected to leverage partition predicates for pruning whenever they have
- * partition metadata to evaluate them. Use {@link #accept(InternalRow)} to evaluate this
+ * partition metadata to evaluate them. Use {@link #eval(InternalRow)} to evaluate this
  * predicate against a single partition's keys.
  * </p>
  *
@@ -38,10 +38,6 @@ import org.apache.spark.sql.connector.read.SupportsPushDownV2Filters;
 @Evolving
 public abstract class PartitionPredicate extends Predicate {
 
-  /**
-   * Default predicate name for partition predicates. Consistent with other predicate
-   * expression names (e.g. {@code IS_NULL}, {@code AND}) which use upper case.
-   */
   public static final String NAME = "PARTITION_PREDICATE";
 
   protected PartitionPredicate(Expression[] children) {
@@ -71,7 +67,7 @@ public abstract class PartitionPredicate extends Predicate {
    *                     not just those referenced by this predicate.
    * @return true if the partition represented by these keys satisfies this predicate.
    */
-  public abstract boolean accept(InternalRow partitionKey);
+  public abstract boolean eval(InternalRow partitionKey);
 
   /**
    * Returns the ordinal position(s) of the partition transform(s) in

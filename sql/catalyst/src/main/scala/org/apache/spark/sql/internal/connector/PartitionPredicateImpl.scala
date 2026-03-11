@@ -54,7 +54,7 @@ class PartitionPredicateImpl private (
     predicate.eval
   }
 
-  override def accept(partitionValues: InternalRow): Boolean = {
+  override def eval(partitionValues: InternalRow): Boolean = {
     if (partitionValues.numFields != partitionSchema.length) {
       logWarning(
         log"Cannot evaluate partition predicate " +

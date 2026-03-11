@@ -132,7 +132,7 @@ class InMemoryEnhancedPartitionFilterTable(
         matchingKeys.contains(p.asInstanceOf[BufferedRows].key))
       val filteredBySecondPass = filteredByFirstPass.filter { p =>
         val partRow = p.asInstanceOf[BufferedRows].partitionKey()
-        partitionPredicates.forall(_.accept(partRow))
+        partitionPredicates.forall(_.eval(partRow))
       }
       InMemoryEnhancedPartitionFilterBatchScan(
         filteredBySecondPass, readSchema, tableSchema, partitionPredicates.toSeq)
