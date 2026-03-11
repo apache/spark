@@ -269,9 +269,11 @@ $.extend($.fn.dataTableExt.oSort, {
   }
 });
 
-$(document).ajaxStop($.unblockUI);
+$(document).ajaxStop(function () {
+  $("#loading-overlay").addClass("d-none");
+});
 $(document).ajaxStart(function () {
-  $.blockUI({message: '<h3>Loading Executors Page...</h3>'});
+  $("#loading-overlay").removeClass("d-none");
 });
 
 function logsExist(execs) {
