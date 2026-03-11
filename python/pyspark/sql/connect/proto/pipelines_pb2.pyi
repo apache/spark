@@ -1070,9 +1070,15 @@ class PipelineCommand(google.protobuf.message.Message):
 
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+        FLOW_NAME_FIELD_NUMBER: builtins.int
         FLOW_IDENTIFIER_FIELD_NUMBER: builtins.int
         DATAFLOW_GRAPH_ID_FIELD_NUMBER: builtins.int
         RELATION_FIELD_NUMBER: builtins.int
+        flow_name: builtins.str
+        """(Deprecated) The fully qualified name of the flow being updated.
+
+        This field is deprecated since Spark 4.1+. Use flow_identifier field instead.
+        """
         @property
         def flow_identifier(self) -> pyspark.sql.connect.proto.common_pb2.ResolvedIdentifier:
             """The fully qualified identifier of the flow being updated."""
@@ -1084,6 +1090,7 @@ class PipelineCommand(google.protobuf.message.Message):
         def __init__(
             self,
             *,
+            flow_name: builtins.str | None = ...,
             flow_identifier: pyspark.sql.connect.proto.common_pb2.ResolvedIdentifier | None = ...,
             dataflow_graph_id: builtins.str | None = ...,
             relation: pyspark.sql.connect.proto.relations_pb2.Relation | None = ...,
@@ -1095,12 +1102,16 @@ class PipelineCommand(google.protobuf.message.Message):
                 b"_dataflow_graph_id",
                 "_flow_identifier",
                 b"_flow_identifier",
+                "_flow_name",
+                b"_flow_name",
                 "_relation",
                 b"_relation",
                 "dataflow_graph_id",
                 b"dataflow_graph_id",
                 "flow_identifier",
                 b"flow_identifier",
+                "flow_name",
+                b"flow_name",
                 "relation",
                 b"relation",
             ],
@@ -1112,12 +1123,16 @@ class PipelineCommand(google.protobuf.message.Message):
                 b"_dataflow_graph_id",
                 "_flow_identifier",
                 b"_flow_identifier",
+                "_flow_name",
+                b"_flow_name",
                 "_relation",
                 b"_relation",
                 "dataflow_graph_id",
                 b"dataflow_graph_id",
                 "flow_identifier",
                 b"flow_identifier",
+                "flow_name",
+                b"flow_name",
                 "relation",
                 b"relation",
             ],
@@ -1131,6 +1146,10 @@ class PipelineCommand(google.protobuf.message.Message):
         def WhichOneof(
             self, oneof_group: typing_extensions.Literal["_flow_identifier", b"_flow_identifier"]
         ) -> typing_extensions.Literal["flow_identifier"] | None: ...
+        @typing.overload
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_flow_name", b"_flow_name"]
+        ) -> typing_extensions.Literal["flow_name"] | None: ...
         @typing.overload
         def WhichOneof(
             self, oneof_group: typing_extensions.Literal["_relation", b"_relation"]
@@ -1578,23 +1597,37 @@ class PipelineQueryFunctionExecutionSignal(google.protobuf.message.Message):
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+    FLOW_NAMES_FIELD_NUMBER: builtins.int
     FLOW_IDENTIFIERS_FIELD_NUMBER: builtins.int
+    @property
+    def flow_names(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+        """(Deprecated) The name of flows that are ready to be re-evaluated.
+
+        This field is deprecated since Spark 4.1+. Use flow_identifiers field instead.
+        """
     @property
     def flow_identifiers(
         self,
     ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
         pyspark.sql.connect.proto.common_pb2.ResolvedIdentifier
-    ]: ...
+    ]:
+        """The identifier of flows that are ready to be re-evaluated"""
     def __init__(
         self,
         *,
+        flow_names: collections.abc.Iterable[builtins.str] | None = ...,
         flow_identifiers: collections.abc.Iterable[
             pyspark.sql.connect.proto.common_pb2.ResolvedIdentifier
         ]
         | None = ...,
     ) -> None: ...
     def ClearField(
-        self, field_name: typing_extensions.Literal["flow_identifiers", b"flow_identifiers"]
+        self,
+        field_name: typing_extensions.Literal[
+            "flow_identifiers", b"flow_identifiers", "flow_names", b"flow_names"
+        ],
     ) -> None: ...
 
 global___PipelineQueryFunctionExecutionSignal = PipelineQueryFunctionExecutionSignal
@@ -1614,7 +1647,10 @@ class PipelineAnalysisContext(google.protobuf.message.Message):
     definition_path: builtins.str
     """The path of the top-level pipeline file determined at runtime during pipeline initialization."""
     flow_name: builtins.str
-    """The name of the Flow involved in this analysis"""
+    """(Deprecated) The name of the Flow involved in this analysis
+
+    This field is deprecated since Spark 4.1+. Use flow_identifier field instead.
+    """
     @property
     def flow_identifier(self) -> pyspark.sql.connect.proto.common_pb2.ResolvedIdentifier:
         """The identifier of the Flow involved in this analysis"""
