@@ -122,9 +122,9 @@ case class ResolveExecuteImmediate(sparkSession: SparkSession, catalogManager: C
           throw QueryCompilationErrors.sqlScriptInExecuteImmediate(sqlString)
         }
 
-        // Force analysis to happen within the isolated context to ensure local variables
-        // are not accessible. This is critical because DataFrames are lazy and analysis
-        // would otherwise happen outside the isolation context.
+        // Force analysis to happen while local variables are hidden. This is critical  because
+        // DataFrames are lazy and analysis would otherwise happen after withHiddenLocalVariables
+        // has restored the original context.
         df.queryExecution.analyzed
         df
       }
@@ -205,7 +205,7 @@ case class ResolveExecuteImmediate(sparkSession: SparkSession, catalogManager: C
     val newContextManager = SqlScriptingContextManager.get() match {
       case Some(contextManager) =>
         // SqlScriptingContextManagerTrait is catalog.SqlScriptingContextManager, renamed on import
-        // to distinguish from the companion object.
+        // to distinguish from the object of the same name in org.apache.spark.sql.catalyst.
         new SqlScriptingContextManagerTrait {
           override def getContext = contextManager.getContext
           override def getVariableManager = None
