@@ -54,6 +54,7 @@ private[sql] class SparkArrowFileWriter(schema: Schema, path: Path) extends Auto
       fileWriter.writeBatch()
       batch.close()
     }
+    fileWriter.close()
   }
 }
 
