@@ -46,13 +46,8 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     // aligned is false when schema evolution is pending (see ResolveRowLevelCommandAssignments)
     case m @ MergeIntoTable(aliasedTable, source, cond, matchedActions, notMatchedActions,
-<<<<<<< HEAD
-      notMatchedBySourceActions, _) if m.resolved && m.rewritable && m.aligned &&
-        m.pendingSchemaChanges.isEmpty && matchedActions.isEmpty && notMatchedActions.size == 1 &&
-=======
         notMatchedBySourceActions, _) if m.resolved && m.rewritable && m.aligned &&
         matchedActions.isEmpty && notMatchedActions.size == 1 &&
->>>>>>> spark/master
         notMatchedBySourceActions.isEmpty =>
 
       EliminateSubqueryAliases(aliasedTable) match {
@@ -85,12 +80,7 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
       }
 
     case m @ MergeIntoTable(aliasedTable, source, cond, matchedActions, notMatchedActions,
-<<<<<<< HEAD
-        notMatchedBySourceActions, _)
-      if m.resolved && m.rewritable && m.aligned && m.pendingSchemaChanges.isEmpty &&
-=======
         notMatchedBySourceActions, _) if m.resolved && m.rewritable && m.aligned &&
->>>>>>> spark/master
         matchedActions.isEmpty && notMatchedBySourceActions.isEmpty =>
 
       EliminateSubqueryAliases(aliasedTable) match {
@@ -131,13 +121,7 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
       }
 
     case m @ MergeIntoTable(aliasedTable, source, cond, matchedActions, notMatchedActions,
-<<<<<<< HEAD
-        notMatchedBySourceActions, _)
-      if m.resolved && m.rewritable && m.aligned && m.pendingSchemaChanges.isEmpty =>
-
-=======
         notMatchedBySourceActions, _) if m.resolved && m.rewritable && m.aligned =>
->>>>>>> spark/master
       EliminateSubqueryAliases(aliasedTable) match {
         case r @ ExtractV2Table(tbl: SupportsRowLevelOperations) =>
           validateMergeIntoConditions(m)

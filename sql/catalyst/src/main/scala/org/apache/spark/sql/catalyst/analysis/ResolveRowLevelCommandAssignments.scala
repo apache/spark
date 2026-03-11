@@ -49,12 +49,7 @@ object ResolveRowLevelCommandAssignments extends Rule[LogicalPlan] {
     case u: UpdateTable if !u.skipSchemaResolution && u.resolved && !u.aligned =>
       resolveAssignments(u)
 
-<<<<<<< HEAD
-    case m: MergeIntoTable if !m.skipSchemaResolution && m.resolved && m.rewritable && !m.aligned &&
-      m.pendingSchemaChanges.isEmpty =>
-=======
     case m: MergeIntoTable if m.rewritable && shouldAlignAssignments(m) && containsFinalSchema(m) =>
->>>>>>> spark/master
       validateStoreAssignmentPolicy()
       val coerceNestedTypes = conf.coerceMergeNestedTypes && m.withSchemaEvolution
       m.copy(
@@ -72,12 +67,7 @@ object ResolveRowLevelCommandAssignments extends Rule[LogicalPlan] {
           m.notMatchedBySourceActions,
           coerceNestedTypes))
 
-<<<<<<< HEAD
-    case m: MergeIntoTable if !m.skipSchemaResolution && m.resolved && !m.aligned
-      && m.pendingSchemaChanges.isEmpty =>
-=======
     case m: MergeIntoTable if shouldAlignAssignments(m) && containsFinalSchema(m) =>
->>>>>>> spark/master
       resolveAssignments(m)
   }
 

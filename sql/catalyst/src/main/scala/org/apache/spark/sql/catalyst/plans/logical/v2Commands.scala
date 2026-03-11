@@ -68,19 +68,19 @@ trait V2WriteSchemaEvolution extends LogicalPlan {
    * Whether the plan satisfies requirements to be able to identify schema changes, in particular
    * the table and source are resolved.
    */
-  def canEvaluateSchemaEvolution: Boolean
+  def schemaEvolutionReady: Boolean
 
   /**
    * The set of table changes needed to evolve the target table schema to accommodate the source
    * query schema. Returns an empty array if no changes are needed or if schema evolution is
    * disabled.
    */
-  def pendingSchemaChanges: Array[TableChange]
+  def pendingSchemaChanges: Seq[TableChange]
 
   /** Whether schema evolution is enabled for this command and supported by the table. */
   lazy val schemaEvolutionEnabled: Boolean = withSchemaEvolution && {
     table match {
-      case r: DataSourceV2Relation if r.autoSchemaEvolution() => true
+      case r: DataSourceV2Relation if r.autoSchemaEvolution => true
       case _ => false
     }
   }
@@ -121,13 +121,14 @@ trait V2WriteCommand
     }
   }
 
-  override lazy val canEvaluateSchemaEvolution: Boolean = table.resolved && query.resolved
+  override lazy val schemaEvolutionReady: Boolean = table.resolved && query.resolved
 
-  override lazy val pendingSchemaChanges: Array[TableChange] = {
-    assert(canEvaluateSchemaEvolution,
-      "`pendingSchemaChanges` can only be called when `table` and `query` are both resolved.")
-    if (!schemaEvolutionEnabled) Array.empty
-    else ResolveSchemaEvolution.computeSchemaChanges(table.schema, query.schema, isByName)
+  override lazy val pendingSchemaChanges: Seq[TableChange] = {
+    if (schemaEvolutionEnabled && schemaEvolutionReady) {
+      ResolveSchemaEvolution.computeSchemaChanges(table.schema, query.schema, isByName).toSeq
+    } else {
+      Seq.empty
+    }
   }
 
   def withNewQuery(newQuery: LogicalPlan): V2WriteCommand
@@ -980,78 +981,26 @@ case class MergeIntoTable(
   lazy val duplicateResolved: Boolean =
     targetTable.outputSet.intersect(sourceTable.outputSet).isEmpty
 
-<<<<<<< HEAD
-  lazy val skipSchemaResolution: Boolean =
-    EliminateSubqueryAliases(targetTable) match {
-      case r: NamedRelation => r.skipSchemaResolution
-=======
   lazy val skipSchemaResolution: Boolean = targetTable match {
     case r: NamedRelation => r.skipSchemaResolution
     case SubqueryAlias(_, r: NamedRelation) => r.skipSchemaResolution
     case _ => false
   }
 
-  lazy val pendingSchemaChanges: Seq[TableChange] = {
+  override lazy val pendingSchemaChanges: Seq[TableChange] = {
     if (schemaEvolutionEnabled && schemaEvolutionReady) {
       val referencedSourceSchema = MergeIntoTable.sourceSchemaForSchemaEvolution(this)
-      MergeIntoTable.schemaChanges(targetTable.schema, referencedSourceSchema).toSeq
+      ResolveSchemaEvolution.computeSchemaChanges(
+        targetTable.schema, referencedSourceSchema, isByName = true).toSeq
     } else {
       Seq.empty
     }
   }
 
-  lazy val schemaEvolutionEnabled: Boolean = withSchemaEvolution && {
-    EliminateSubqueryAliases(targetTable) match {
-      case r: DataSourceV2Relation if r.autoSchemaEvolution => true
->>>>>>> spark/master
-      case _ => false
-    }
-
   // Guard that assignments are either resolved or candidates for evolution before
   // evaluating schema evolution. We need to use resolved assignment values to check
-<<<<<<< HEAD
-  // candidates, see MergeIntoTable.sourceSchemaForSchemaEvolution for details.
-  override lazy val canEvaluateSchemaEvolution: Boolean = {
-    if ((!targetTable.resolved) || (!sourceTable.resolved)) {
-      false
-    } else {
-      val actions = matchedActions ++ notMatchedActions
-      val hasStarActions = actions.exists {
-        case _: UpdateStarAction => true
-        case _: InsertStarAction => true
-        case _ => false
-      }
-      if (hasStarActions) {
-        // need to resolve star actions first
-        false
-      } else {
-        val assignments = actions.collect {
-          case a: UpdateAction => a.assignments
-          case a: InsertAction => a.assignments
-        }.flatten
-        val sourcePaths = DataTypeUtils.extractAllFieldPaths(sourceTable.schema)
-        assignments.forall { assignment =>
-          assignment.resolved ||
-            (assignment.value.resolved && sourcePaths.exists {
-              path => MergeIntoTable.isEqual(assignment, path)
-            })
-        }
-      }
-    }
-  }
-
-  override lazy val pendingSchemaChanges: Array[TableChange] = {
-    assert(canEvaluateSchemaEvolution,
-      "`pendingSchemaChanges` can only be called when `targetTable`, `sourceTable` and " +
-      "assignments are resolved.")
-    if (!schemaEvolutionEnabled) Array.empty
-    else ResolveSchemaEvolution.computeSchemaChanges(
-      targetTable.schema, MergeIntoTable.sourceSchemaForSchemaEvolution(this), isByName = true)
-  }
-
-=======
   // candidates, see MergeIntoTable.isSchemaEvolutionCandidate for details.
-  lazy val schemaEvolutionReady: Boolean = {
+  override lazy val schemaEvolutionReady: Boolean = {
     targetTable.resolved && sourceTable.resolved && actionsSchemaEvolutionReady
   }
 
@@ -1064,7 +1013,6 @@ case class MergeIntoTable(
     }
   }
 
->>>>>>> spark/master
   override def left: LogicalPlan = targetTable
   override def right: LogicalPlan = sourceTable
 
@@ -1098,76 +1046,6 @@ object MergeIntoTable {
       .toSeq
   }
 
-<<<<<<< HEAD
-=======
-  def schemaChanges(
-      originalTarget: StructType,
-      originalSource: StructType,
-      fieldPath: Array[String] = Array()): Array[TableChange] = {
-    schemaChanges(originalTarget, originalSource, originalTarget, originalSource, fieldPath)
-  }
-
-  private def schemaChanges(
-      current: DataType,
-      newType: DataType,
-      originalTarget: StructType,
-      originalSource: StructType,
-      fieldPath: Array[String]): Array[TableChange] = {
-    (current, newType) match {
-      case (StructType(currentFields), StructType(newFields)) =>
-        val newFieldMap = toFieldMap(newFields)
-
-        // Update existing field types
-        val updates = {
-          currentFields collect {
-            case currentField: StructField if newFieldMap.contains(currentField.name) =>
-              schemaChanges(currentField.dataType, newFieldMap(currentField.name).dataType,
-                originalTarget, originalSource, fieldPath ++ Seq(currentField.name))
-          }
-        }.flatten
-
-        // Identify the newly added fields and append to the end
-        val currentFieldMap = toFieldMap(currentFields)
-        val adds = newFields.filterNot(f => currentFieldMap.contains(f.name))
-          .map(f => TableChange.addColumn(fieldPath ++ Seq(f.name), f.dataType))
-
-        updates ++ adds
-
-      case (ArrayType(currentElementType, _), ArrayType(newElementType, _)) =>
-        schemaChanges(currentElementType, newElementType,
-          originalTarget, originalSource, fieldPath ++ Seq("element"))
-
-      case (MapType(currentKeyType, currentElementType, _),
-      MapType(updateKeyType, updateElementType, _)) =>
-        schemaChanges(currentKeyType, updateKeyType, originalTarget, originalSource,
-          fieldPath ++ Seq("key")) ++
-          schemaChanges(currentElementType, updateElementType,
-            originalTarget, originalSource, fieldPath ++ Seq("value"))
-
-      case (currentType: AtomicType, newType: AtomicType) if currentType != newType =>
-        Array(TableChange.updateColumnType(fieldPath, newType))
-
-      case (currentType, newType) if currentType == newType =>
-        // No change needed
-        Array.empty[TableChange]
-
-      case _ =>
-        // Do not support change between atomic and complex types for now
-        throw QueryExecutionErrors.failedToMergeIncompatibleSchemasError(
-          originalTarget, originalSource, null)
-    }
-  }
-
-  def toFieldMap(fields: Array[StructField]): Map[String, StructField] = {
-    val fieldMap = fields.map(field => field.name -> field).toMap
-    if (SQLConf.get.caseSensitiveAnalysis) {
-      fieldMap
-    } else {
-      CaseInsensitiveMap(fieldMap)
-    }
-  }
-
->>>>>>> spark/master
   // A pruned version of source schema that only contains columns/nested fields
   // explicitly and directly assigned to a target counterpart in MERGE INTO actions,
   // which are relevant for schema evolution.

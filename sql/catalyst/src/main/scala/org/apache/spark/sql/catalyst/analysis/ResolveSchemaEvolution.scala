@@ -18,17 +18,17 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import scala.jdk.CollectionConverters._
+import scala.util.control.NonFatal
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.expressions.AttributeMap
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.COMMAND
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Table, TableChange, TableWritePrivilege}
-import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+import org.apache.spark.sql.connector.catalog.{Identifier, Table, TableCatalog, TableChange, TableWritePrivilege}
 import org.apache.spark.sql.connector.catalog.TableWritePrivilege.{DELETE, INSERT}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExtractV2CatalogAndIdentifier}
@@ -45,23 +45,41 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] with Logging {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
     _.containsPattern(COMMAND), ruleId) {
-    case write: V2WriteSchemaEvolution
-      if write.canEvaluateSchemaEvolution && write.pendingSchemaChanges.nonEmpty =>
+    // This rule should run only if all assignments are resolved, except those
+    // that will be satisfied by schema evolution
+    case write: V2WriteSchemaEvolution if write.pendingSchemaChanges.nonEmpty =>
       write.table match {
         case relation @ ExtractV2CatalogAndIdentifier(catalog, ident) =>
-          catalog.alterTable(ident, write.pendingSchemaChanges: _*)
+          evolveSchema(catalog, ident, write.pendingSchemaChanges)
           val writePrivileges = getWritePrivileges(write)
           val newTable = catalog.loadTable(ident, writePrivileges.asJava)
-          val writeWithNewTarget = replaceWriteTargetTable(write, relation, newTable)
+          val writeWithNewTarget = replaceWriteTarget(write, relation, newTable)
 
-          // Check if there are any remaining changes not applied.
-          if (writeWithNewTarget.pendingSchemaChanges.nonEmpty) {
-            throw QueryCompilationErrors.unsupportedTableChangesInAutoSchemaEvolutionError(
-              writeWithNewTarget.pendingSchemaChanges, ident.toQualifiedNameParts(catalog))
+          val remainingChanges = writeWithNewTarget.pendingSchemaChanges
+          if (remainingChanges.nonEmpty) {
+            throw QueryCompilationErrors.unsupportedAutoSchemaEvolutionChangesError(
+              catalog, ident, remainingChanges)
           }
+
           writeWithNewTarget
-        case _ => write
+        case _ =>
+          write
       }
+  }
+
+  private def evolveSchema(
+      catalog: TableCatalog,
+      ident: Identifier,
+      changes: Seq[TableChange]): Unit = {
+    try {
+      catalog.alterTable(ident, changes: _*)
+    } catch {
+      case e: IllegalArgumentException if !e.isInstanceOf[SparkThrowable] =>
+        throw QueryExecutionErrors.unsupportedTableChangeError(e)
+      case NonFatal(e) =>
+        throw QueryCompilationErrors.failedAutoSchemaEvolutionError(
+          catalog, ident, e)
+    }
   }
 
   private def getWritePrivileges(write: V2WriteSchemaEvolution): Set[TableWritePrivilege] =
@@ -79,28 +97,32 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] with Logging {
           s"Attempting schema evolution on a command that does not support it: $write")
     }
 
-  private def replaceWriteTargetTable(
+  private def replaceWriteTarget(
       write: V2WriteSchemaEvolution,
       relation: DataSourceV2Relation,
       newTable: Table): V2WriteSchemaEvolution = {
-    val newSchema = CatalogV2Util.v2ColumnsToStructType(newTable.columns())
-    val newRelation =
-      relation.copy(table = newTable, output = DataTypeUtils.toAttributes(newSchema))
-    val attrMapping = relation.output.zip(newRelation.output)
+    val oldOutput = write.table.output
+    val newOutput = DataTypeUtils.toAttributes(newTable.columns)
+    val newRelation = relation.copy(table = newTable, output = newOutput)
 
-    write match {
+    val writeWithNewTargetTable = write match {
       case m: MergeIntoTable =>
         val newTarget = m.targetTable.transform {
           case _: DataSourceV2Relation => newRelation
         }
         m.copy(targetTable = newTarget)
-          .rewriteAttrs(AttributeMap(attrMapping))
-          .asInstanceOf[V2WriteSchemaEvolution]
       case w: V2WriteCommand =>
         w.withNewTable(newRelation)
-          .rewriteAttrs(AttributeMap(attrMapping))
-          .asInstanceOf[V2WriteSchemaEvolution]
     }
+    rewriteAttrs(writeWithNewTargetTable, oldOutput, newOutput)
+  }
+
+  private def rewriteAttrs[T <: LogicalPlan](
+      plan: T,
+      oldOutput: Seq[Attribute],
+      newOutput: Seq[Attribute]): T = {
+    val attrMap = AttributeMap(oldOutput.zip(newOutput))
+    plan.rewriteAttrs(attrMap).asInstanceOf[T]
   }
 
   /**
