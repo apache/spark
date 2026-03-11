@@ -46,7 +46,9 @@ def plot_pandas_on_spark(data: Union["ps.DataFrame", "ps.Series"], kind: str, **
         return plot_kde(data, **kwargs)
 
     # Other plots.
-    return plotly.plot(PandasOnSparkPlotAccessor.pandas_plot_data_map[kind](data), kind, **kwargs)
+    return plotly.plot(
+        PandasOnSparkPlotAccessor.pandas_plot_data_map[kind](data), kind, **kwargs
+    )
 
 
 def plot_pie(data: Union["ps.DataFrame", "ps.Series"], **kwargs):
@@ -136,7 +138,9 @@ def plot_histogram(data: Union["ps.DataFrame", "ps.Series"], **kwargs):
                 name=name_like_string(series.name),
                 text=text_bins,
                 hovertemplate=(
-                    "variable=" + name_like_string(series.name) + "<br>value=%{text}<br>count=%{y}"
+                    "variable="
+                    + name_like_string(series.name)
+                    + "<br>value=%{text}<br>count=%{y}"
                 ),
             )
         )
@@ -277,7 +281,9 @@ def plot_kde(data: Union["ps.DataFrame", "ps.Series"], **kwargs):
                     "index": ind,
                 }
             )
-            for label, kde_result in zip(psdf._internal.column_labels, list(kde_results))
+            for label, kde_result in zip(
+                psdf._internal.column_labels, list(kde_results)
+            )
         ]
     )
 
