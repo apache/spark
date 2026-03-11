@@ -47,7 +47,7 @@ trait DescribeTableSuiteBase extends QueryTest with DDLCommandTestUtils {
       }
       checkErrorTableNotFoundWithSearchPath(e, parsed,
         ExpectedContext(s"${tbl}_non_existence", 15, 14 + s"${tbl}_non_existence".length),
-        "[`system`.`session`, `spark_catalog`.`default`]")
+        defaultSearchPathForTests)
     }
   }
 

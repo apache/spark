@@ -324,10 +324,14 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
         u.tableNotFound(u.multipartIdentifier, searchPath)
 
       case u: UnresolvedTableOrView =>
+        // DESCRIBE TABLE / DESC TABLE: full resolution path (same as DESCRIBE FUNCTION and SELECT).
         // Explicit TEMPORARY VIEW (e.g. DROP TEMPORARY VIEW) -> only SYSTEM.SESSION; else DDL path.
         val catalogPath = (currentCatalog.name +: catalogManager.currentNamespace).toSeq
         val searchPath = if (u.commandName.toUpperCase(Locale.ROOT).contains("TEMPORARY VIEW")) {
           tempViewOnlySearchPathForError()
+        } else if (u.commandName.toUpperCase(Locale.ROOT).contains("DESCRIBE TABLE") ||
+            u.commandName.toUpperCase(Locale.ROOT).contains("DESC TABLE")) {
+          SQLConf.get.resolutionSearchPath(catalogPath).map(toSQLId)
         } else {
           ddlSearchPathForError(catalogPath)
         }

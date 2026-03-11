@@ -101,7 +101,7 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
         condition = "TABLE_OR_VIEW_NOT_FOUND",
         parameters = Map(
           "relationName" -> s"`$tbl`",
-          "searchPath" -> "[`system`.`session`, `spark_catalog`.`default`]"),
+          "searchPath" -> defaultSearchPathForTests),
         context = ExpectedContext(tbl, startPos, startPos + tbl.length - 1)
       )
     }
