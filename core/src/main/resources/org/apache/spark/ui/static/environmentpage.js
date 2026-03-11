@@ -77,6 +77,22 @@ function formatResourceProfile(rp) {
   return lines.join("\n");
 }
 
+function exportSparkProperties(sparkProps, fileName) {
+  var lines = sparkProps.map(function (prop) {
+    return prop[0] + "=" + prop[1];
+  });
+  var content = lines.join("\n") + "\n";
+  var blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement("a");
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(function () { URL.revokeObjectURL(url); }, 100);
+}
+
 function initDataTable(paneId, tableId, data, columns, dtOpts) {
   var pane = document.getElementById(paneId);
   pane.innerHTML = '<table id="' + tableId +
@@ -117,6 +133,15 @@ $(document).ready(function () {
     });
 
   getStandAloneAppId(function (appId) {
+    // Extract attemptId from history server URL if present
+    var words = document.baseURI.split("/");
+    var ind = words.indexOf("history");
+    var attemptId;
+    if (ind > 0 && ind + 2 < words.length && !isNaN(words[ind + 2])) {
+      attemptId = words[ind + 2];
+    }
+    var exportFileName = appId + (attemptId ? "_" + attemptId : "") + "-spark-defaults.conf";
+
     var endPoint = createRESTEndPointForEnvironmentPage(appId);
     $.getJSON(endPoint, function (response) {
       // Runtime Information
@@ -158,6 +183,19 @@ $(document).ready(function () {
       });
 
       updateBadge("spark-props-tab", sparkProps.length);
+
+      if (sparkProps.length > 0) {
+        var exportBtn = document.createElement("button");
+        exportBtn.type = "button";
+        exportBtn.className = "btn btn-sm btn-outline-primary mb-2";
+        exportBtn.id = "export-spark-props-btn";
+        exportBtn.textContent = "Export";
+        exportBtn.addEventListener("click", function () {
+          exportSparkProperties(sparkProps, exportFileName);
+        });
+        var sparkPropsPane = document.getElementById("spark-props");
+        sparkPropsPane.insertBefore(exportBtn, sparkPropsPane.firstChild);
+      }
 
       // Resource Profiles
       var profiles = response.resourceProfiles || [];
