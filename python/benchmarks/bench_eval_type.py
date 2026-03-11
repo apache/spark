@@ -508,103 +508,6 @@ def _make_grouped_batches(
     return groups, return_type
 
 
-# -- SQL_GROUPED_AGG_ARROW_UDF ------------------------------------------------
-# UDF receives pa.Array columns (concatenated across batches for the group),
-# returns a scalar wrapped in pa.array([result]).
-
-
-def _grouped_agg_arrow_identity(col):
-    import pyarrow.compute as pc
-
-    return pc.sum(col).as_py()
-
-
-def _grouped_agg_arrow_sort(col):
-    import pyarrow.compute as pc
-
-    return pc.sum(pc.take(col, pc.sort_indices(col))).as_py()
-
-
-def _grouped_agg_arrow_nullcheck(col):
-    import pyarrow.compute as pc
-
-    return pc.sum(pc.cast(pc.is_valid(col), pa.int64())).as_py()
-
-
-_GROUPED_AGG_ARROW_UDFS = {
-    "identity_udf": (_grouped_agg_arrow_identity, LongType(), [0]),
-    "sort_udf": (_grouped_agg_arrow_sort, LongType(), [0]),
-    "nullcheck_udf": (_grouped_agg_arrow_nullcheck, LongType(), [0]),
-}
-
-
-def _make_agg_grouped_batches(
-    num_groups: int,
-    rows_per_group: int,
-    num_cols: int,
-) -> list[tuple[pa.RecordBatch, ...]]:
-    """Create grouped data for aggregation UDFs.
-
-    Each group is a 1-tuple of a RecordBatch (no struct wrapping needed
-    since ArrowStreamAggArrowUDFSerializer reads columns directly).
-    """
-    groups = []
-    for _ in range(num_groups):
-        arrays = [
-            pa.array(np.random.randint(0, 1000, rows_per_group, dtype=np.int64))
-            for _ in range(num_cols)
-        ]
-        names = [f"col_{i}" for i in range(num_cols)]
-        batch = pa.RecordBatch.from_arrays(arrays, names=names)
-        groups.append((batch,))
-    return groups
-
-
-def _build_grouped_agg_arrow_scenarios():
-    scenarios = {}
-    for name, (num_groups, rows_per_group, num_cols) in {
-        "few_groups_sm": (50, 5_000, 5),
-        "few_groups_lg": (50, 50_000, 5),
-        "many_groups_sm": (2_000, 500, 5),
-        "many_groups_lg": (500, 10_000, 5),
-    }.items():
-        groups = _make_agg_grouped_batches(num_groups, rows_per_group, num_cols)
-        scenarios[name] = (groups, num_cols)
-    return scenarios
-
-
-_GROUPED_AGG_ARROW_SCENARIOS = _build_grouped_agg_arrow_scenarios()
-
-
-class _GroupedAggArrowBenchMixin:
-    """Provides _write_scenario for SQL_GROUPED_AGG_ARROW_UDF."""
-
-    def _write_scenario(self, scenario, udf_name, buf):
-        groups, num_cols = self._scenarios[scenario]
-        udf_func, ret_type, arg_offsets = self._udfs[udf_name]
-
-        _write_worker_input(
-            PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
-            lambda b: _build_udf_payload(udf_func, ret_type, arg_offsets, b),
-            lambda b: _write_grouped_arrow_data(groups, num_dfs=1, buf=b),
-            buf,
-        )
-
-
-class GroupedAggArrowUDFTimeBench(_GroupedAggArrowBenchMixin, _TimeBenchBase):
-    _scenarios = _GROUPED_AGG_ARROW_SCENARIOS
-    _udfs = _GROUPED_AGG_ARROW_UDFS
-    params = [list(_GROUPED_AGG_ARROW_SCENARIOS), list(_GROUPED_AGG_ARROW_UDFS)]
-    param_names = ["scenario", "udf"]
-
-
-class GroupedAggArrowUDFPeakmemBench(_GroupedAggArrowBenchMixin, _PeakmemBenchBase):
-    _scenarios = _GROUPED_AGG_ARROW_SCENARIOS
-    _udfs = _GROUPED_AGG_ARROW_UDFS
-    params = [list(_GROUPED_AGG_ARROW_SCENARIOS), list(_GROUPED_AGG_ARROW_UDFS)]
-    param_names = ["scenario", "udf"]
-
-
 # -- SQL_GROUPED_MAP_ARROW_UDF ------------------------------------------------
 # UDF receives (key: pa.RecordBatch, values: Iterator[pa.RecordBatch]),
 # returns Iterator[pa.RecordBatch].
@@ -700,6 +603,79 @@ class GroupedMapArrowUDFPeakmemBench(_GroupedMapArrowBenchMixin, _PeakmemBenchBa
     _scenarios = _GROUPED_MAP_ARROW_SCENARIOS
     _udfs = _GROUPED_MAP_ARROW_UDFS
     params = [list(_GROUPED_MAP_ARROW_SCENARIOS), list(_GROUPED_MAP_ARROW_UDFS)]
+    param_names = ["scenario", "udf"]
+
+
+# -- SQL_GROUPED_MAP_ARROW_ITER_UDF ------------------------------------------
+# UDF receives Iterator[pa.RecordBatch] per group,
+# returns Iterator[pa.RecordBatch].
+# Uses the same wire format and serializer as SQL_GROUPED_MAP_ARROW_UDF.
+
+
+def _grouped_map_arrow_iter_identity(batches):
+    """Identity grouped map iter UDF: yields each batch as-is."""
+    yield from batches
+
+
+def _grouped_map_arrow_iter_sort(batches):
+    """Sort each batch by first column."""
+    for batch in batches:
+        yield batch.sort_by([(batch.column_names[0], "ascending")])
+
+
+def _grouped_map_arrow_iter_filter(batches):
+    """Filter rows where first column is valid."""
+    import pyarrow.compute as pc
+
+    for batch in batches:
+        yield batch.filter(pc.is_valid(batch.column(0)))
+
+
+_GROUPED_MAP_ARROW_ITER_UDFS = {
+    "identity_udf": _grouped_map_arrow_iter_identity,
+    "sort_udf": _grouped_map_arrow_iter_sort,
+    "filter_udf": _grouped_map_arrow_iter_filter,
+}
+
+
+class _GroupedMapArrowIterBenchMixin:
+    """Provides _write_scenario for SQL_GROUPED_MAP_ARROW_ITER_UDF."""
+
+    def _write_scenario(self, scenario, udf_name, buf):
+        groups, return_type, arg_offsets = self._scenarios[scenario]
+        udf_func = self._udfs[udf_name]
+
+        def write_command(b):
+            write_int(1, b)  # num_udfs
+            write_int(len(arg_offsets), b)  # num_arg
+            for offset in arg_offsets:
+                write_int(offset, b)
+                _write_bool(False, b)  # is_kwarg
+            write_int(1, b)  # num_chained
+            command = cloudpickle_dumps((udf_func, return_type))
+            write_int(len(command), b)
+            b.write(command)
+            write_long(0, b)  # result_id
+
+        _write_worker_input(
+            PythonEvalType.SQL_GROUPED_MAP_ARROW_ITER_UDF,
+            write_command,
+            lambda b: _write_grouped_arrow_data(groups, num_dfs=1, buf=b),
+            buf,
+        )
+
+
+class GroupedMapArrowIterUDFTimeBench(_GroupedMapArrowIterBenchMixin, _TimeBenchBase):
+    _scenarios = _GROUPED_MAP_ARROW_SCENARIOS
+    _udfs = _GROUPED_MAP_ARROW_ITER_UDFS
+    params = [list(_GROUPED_MAP_ARROW_SCENARIOS), list(_GROUPED_MAP_ARROW_ITER_UDFS)]
+    param_names = ["scenario", "udf"]
+
+
+class GroupedMapArrowIterUDFPeakmemBench(_GroupedMapArrowIterBenchMixin, _PeakmemBenchBase):
+    _scenarios = _GROUPED_MAP_ARROW_SCENARIOS
+    _udfs = _GROUPED_MAP_ARROW_ITER_UDFS
+    params = [list(_GROUPED_MAP_ARROW_SCENARIOS), list(_GROUPED_MAP_ARROW_ITER_UDFS)]
     param_names = ["scenario", "udf"]
 
 
