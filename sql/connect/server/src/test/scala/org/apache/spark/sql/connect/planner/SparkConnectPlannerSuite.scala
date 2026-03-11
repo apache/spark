@@ -105,11 +105,12 @@ trait SparkConnectPlanTest extends SharedSparkSession with ArrowAllocatorLeakChe
         timeZoneId,
         true,
         false)
-    val bytes = try {
-      iter.next()
-    } finally {
-      iter.close()
-    }
+    val bytes =
+      try {
+        iter.next()
+      } finally {
+        iter.close()
+      }
 
     localRelationBuilder.setData(ByteString.copyFrom(bytes))
     schema.foreach(s => localRelationBuilder.setSchema(s.json))
