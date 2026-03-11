@@ -15,6 +15,12 @@
 # limitations under the License.
 #
 
+# Usage:
+# 1, Build the image
+# docker build -t connect-cg dev/spark-test-image/connect-gen-protos/
+# 2, Run the image under spark repo
+# docker run -it --rm -v "$(pwd)":/spark connect-cg
+
 # Image for generating Spark Connect protobuf files. Based on Ubuntu 24.04.
 FROM ubuntu:noble
 LABEL org.opencontainers.image.authors="Apache Spark project <dev@spark.apache.org>"
@@ -37,7 +43,7 @@ RUN apt-get update && apt-get install -y \
 # Install buf binary from GitHub releases
 # See https://buf.build/docs/cli/installation/#github
 ARG BUF_VERSION="1.66.1"
-RUN curl -fsSL "https://github.com/bufbuild/buf/releases/download/v$BUF_VERSION/buf-Linux-x86_64" -o /usr/local/bin/buf && \
+RUN curl -fsSL "https://github.com/bufbuild/buf/releases/download/v$BUF_VERSION/buf-Linux-$(uname -m)" -o /usr/local/bin/buf && \
     chmod +x /usr/local/bin/buf
 
 # Setup virtual environment and install Python dependencies
