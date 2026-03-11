@@ -5131,18 +5131,6 @@ class DataFrame:
         """
         ...
 
-    @overload
-    def fillna(
-        self,
-        value: "LiteralType",
-        subset: Optional[Union[str, Tuple[str, ...], List[str]]] = ...,
-    ) -> "DataFrame":
-        ...
-
-    @overload
-    def fillna(self, value: Dict[str, "LiteralType"]) -> "DataFrame":
-        ...
-
     @dispatch_df_method
     def fillna(
         self,
