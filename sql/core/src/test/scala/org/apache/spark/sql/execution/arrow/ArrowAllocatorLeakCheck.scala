@@ -23,8 +23,20 @@ import org.scalatest.Suite
 import org.apache.spark.sql.util.ArrowUtils
 
 /**
- * Mixin that asserts no memory remains allocated in the Arrow rootAllocator after all
- * tests complete. Mix into any suite that uses ArrowUtils.rootAllocator to catch leaks.
+ * Mixin that asserts no memory remains allocated in the Arrow rootAllocator after all tests
+ * complete. Mix into any suite that uses ArrowUtils.rootAllocator to catch leaks.
+ *
+ * '''Mixin order matters:''' this trait must appear to the RIGHT of any trait that allocates
+ * Arrow memory (e.g. `SharedSparkSession`) in the `extends`/`with` clause, so that
+ * `super.afterAll()` (which releases those resources) runs before the leak assertion.
+ *
+ * {{{
+ *   // Correct: SharedSparkSession released before the check
+ *   class MySuite extends QueryTest with SharedSparkSession with ArrowAllocatorLeakCheck
+ *
+ *   // Wrong: check runs before SharedSparkSession teardown
+ *   class MySuite extends QueryTest with ArrowAllocatorLeakCheck with SharedSparkSession
+ * }}}
  */
 trait ArrowAllocatorLeakCheck extends Suite with BeforeAndAfterAll {
   abstract override def afterAll(): Unit = {
