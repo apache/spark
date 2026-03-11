@@ -300,9 +300,21 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case DropTable(ResolvedIdentifier(FakeSystemCatalog, ident), _, _) =>
       DropTempViewCommand(ident)
 
-    // Temp view resolved by name (e.g. session.v or system.session.v) -> drop by table name only
+    // Temp view resolved by name (e.g. session.v or system.session.v) -> drop by table name,
+    // with db = session when session-qualified so SessionCatalog finds the temp view.
     case DropView(ResolvedTempView(ident, _), ifExists) =>
-      val db = if (ident.namespace().nonEmpty) Some(ident.namespace().head) else None
+      val db = if (ident.namespace().nonEmpty) {
+        val ns = ident.namespace().toSeq
+        if (ns.length == 2 &&
+            ns(0).equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
+            ns(1).equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)) {
+          Some(CatalogManager.SESSION_NAMESPACE)
+        } else {
+          Some(ident.namespace().head)
+        }
+      } else {
+        None
+      }
       DropTableCommand(TableIdentifier(ident.name(), db), ifExists, isView = true, purge = false)
 
     case DropView(DropViewInSessionCatalog(ident), ifExists) =>

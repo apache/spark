@@ -538,8 +538,8 @@ class Resolver(
         case e: NoSuchTableException
             if e.getCondition == "TABLE_OR_VIEW_NOT_FOUND" &&
               Option(e.getMessageParameters.get("searchPath")).contains("") =>
-          // Catalog/code paths that throw NoSuchTableException use legacy constructors
-          // with searchPath -> "". Replace with the actual resolution search path.
+          // NoSuchTableException from some code paths does not set searchPath; replace with
+          // the current resolution search path so the user sees the path that was used.
           val catalogPath = (catalogManager.currentCatalog.name() +:
             catalogManager.currentNamespace).toSeq
           val searchPathSeq = SQLConf.get.resolutionSearchPath(catalogPath)

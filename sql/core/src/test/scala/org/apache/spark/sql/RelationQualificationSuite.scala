@@ -22,8 +22,8 @@ import org.apache.spark.sql.test.SharedSparkSession
 /**
  * Test suite for temporary relation (view, and future temp table) qualification and resolution
  * search path. Tests session.v, system.session.v qualification and configurable resolution order
- * (spark.sql.functionResolution.sessionOrder) for shadowing between temp relations and persistent
- * tables/views.
+ * (spark.sql.sessionFunctionResolutionOrder, a.k.a. sessionOrder in the function-resolution API)
+ * for shadowing between temp relations and persistent tables/views.
  */
 class RelationQualificationSuite extends QueryTest with SharedSparkSession {
 
@@ -58,7 +58,7 @@ class RelationQualificationSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SECTION 3: DROP VIEW with qualified names") {
+  test("SECTION 3: DROP VIEW with qualified names (guards against 3-part system.session.v bug)") {
     sql("CREATE TEMPORARY VIEW drop_v AS SELECT 1")
     sql("DROP VIEW session.drop_v")
     intercept[AnalysisException](sql("SELECT * FROM drop_v"))
@@ -192,6 +192,28 @@ class RelationQualificationSuite extends QueryTest with SharedSparkSession {
             "[`system`.`builtin`, `spark_catalog`.`default`, " +
             "`system`.`session`]")),
         context = ExpectedContext(fragment = "no_such_xyz", start = 14, stop = 24))
+    }
+  }
+
+  test("SECTION 12: Persistent view and temp view same name - resolution order and qualification") {
+    withTable("default.backing_t") {
+      sql("CREATE TABLE default.backing_t (id INT) USING parquet")
+      sql("INSERT INTO default.backing_t VALUES (1)")
+      sql("CREATE VIEW default.shadow_persist AS SELECT id FROM default.backing_t")
+      sql("CREATE TEMPORARY VIEW shadow_persist AS SELECT 999 AS id")
+      try {
+        // Default order: temp wins for unqualified name.
+        checkAnswer(sql("SELECT * FROM shadow_persist"), Row(999))
+        // Explicit session qualification always targets temp view.
+        checkAnswer(sql("SELECT * FROM session.shadow_persist"), Row(999))
+        // Unqualified with sessionOrder last: persistent view wins.
+        withSQLConf("spark.sql.functionResolution.sessionOrder" -> "last") {
+          checkAnswer(sql("SELECT * FROM shadow_persist"), Row(1))
+        }
+      } finally {
+        sql("DROP VIEW IF EXISTS shadow_persist")
+        sql("DROP VIEW IF EXISTS default.shadow_persist")
+      }
     }
   }
 }
