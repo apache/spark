@@ -1556,6 +1556,25 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new CannotReplaceMissingTableException(tableIdentifier, cause)
   }
 
+  def cannotReplaceMissingTableError(
+      catalogName: String,
+      tableIdentifier: Identifier): Throwable = {
+    new CannotReplaceMissingTableException(
+      tableIdentifier,
+      None,
+      catalogName +: tableIdentifier.namespace().toSeq)
+  }
+
+  def cannotReplaceMissingTableError(
+      catalogName: String,
+      tableIdentifier: Identifier,
+      cause: Option[Throwable]): Throwable = {
+    new CannotReplaceMissingTableException(
+      tableIdentifier,
+      cause,
+      catalogName +: tableIdentifier.namespace().toSeq)
+  }
+
   def streamingSourcesDoNotSupportCommonExecutionModeError(
       microBatchSources: Seq[String],
       continuousSources: Seq[String]): Throwable = {
@@ -1567,11 +1586,21 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   }
 
   def noSuchTableError(catalogName: String, ident: Identifier): NoSuchTableException = {
-    new NoSuchTableException(catalogName +: ident.asMultipartIdentifier)
+    noSuchTableError(
+      catalogName +: ident.asMultipartIdentifier,
+      catalogName +: ident.namespace().toSeq).asInstanceOf[NoSuchTableException]
   }
 
   def noSuchTableError(nameParts: Seq[String]): Throwable = {
     new NoSuchTableException(nameParts)
+  }
+
+  def noSuchTableError(nameParts: Seq[String], searchPath: Seq[String]): Throwable = {
+    val formattedPath = searchPath.map(toSQLId).mkString("[", ", ", "]")
+    new NoSuchTableException(
+      "TABLE_OR_VIEW_NOT_FOUND",
+      Map("relationName" -> toSQLId(nameParts), "searchPath" -> formattedPath),
+      None)
   }
 
   def noSuchNamespaceError(namespace: Array[String]): Throwable = {

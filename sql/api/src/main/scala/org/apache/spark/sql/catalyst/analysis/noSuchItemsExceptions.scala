@@ -23,6 +23,12 @@ import org.apache.spark.sql.catalyst.util.QuotingUtils.{quoted, quoteIdentifier,
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.util.ArrayImplicits._
 
+private[analysis] object NoSuchItemExceptionHelper {
+  /** Format a search path for TABLE_OR_VIEW_NOT_FOUND (e.g. [`cat`.`ns`]). */
+  def formatSearchPath(searchPath: Seq[String]): String =
+    if (searchPath.isEmpty) "" else searchPath.map(quoteIdentifier).mkString("[", ", ", "]")
+}
+
 /**
  * Thrown by a catalog when an item cannot be found. The analyzer will rethrow the exception as an
  * [[org.apache.spark.sql.AnalysisException]] with the correct position information.
@@ -57,7 +63,8 @@ class NoSuchDatabaseException private[analysis] (
   }
 }
 
-// any changes to this class should be backward compatible as it may be used by external connectors
+// any changes to this class should be backward compatible as it may be used by
+// external connectors
 class NoSuchNamespaceException private (
     message: String,
     cause: Option[Throwable],
@@ -88,7 +95,8 @@ class NoSuchNamespaceException private (
   }
 }
 
-// any changes to this class should be backward compatible as it may be used by external connectors
+// any changes to this class should be backward compatible as it may be used by
+// external connectors
 class NoSuchTableException private (
     message: String,
     cause: Option[Throwable],
@@ -117,7 +125,7 @@ class NoSuchTableException private (
       messageParameters = Map(
         "relationName" ->
           (quoteIdentifier(db) + "." + quoteIdentifier(table)),
-        "searchPath" -> ""),
+        "searchPath" -> NoSuchItemExceptionHelper.formatSearchPath(Seq(db))),
       cause = None)
   }
 
@@ -126,7 +134,8 @@ class NoSuchTableException private (
       errorClass = "TABLE_OR_VIEW_NOT_FOUND",
       messageParameters = Map(
         "relationName" -> quoteNameParts(name),
-        "searchPath" -> ""),
+        "searchPath" -> NoSuchItemExceptionHelper.formatSearchPath(
+          if (name.length > 1) name.dropRight(1).toSeq else Seq.empty)),
       cause = None)
   }
 
@@ -135,12 +144,14 @@ class NoSuchTableException private (
       errorClass = "TABLE_OR_VIEW_NOT_FOUND",
       messageParameters = Map(
         "relationName" -> quoted(tableIdent),
-        "searchPath" -> ""),
+        "searchPath" -> NoSuchItemExceptionHelper.formatSearchPath(
+          tableIdent.namespace.toSeq)),
       cause = None)
   }
 }
 
-// any changes to this class should be backward compatible as it may be used by external connectors
+// any changes to this class should be backward compatible as it may be used by
+// external connectors
 class NoSuchViewException(errorClass: String, messageParameters: Map[String, String])
     extends AnalysisException(errorClass, messageParameters) {
 
@@ -153,7 +164,8 @@ class NoSuchPermanentFunctionException(db: String, func: String)
       errorClass = "ROUTINE_NOT_FOUND",
       Map("routineName" -> (quoteIdentifier(db) + "." + quoteIdentifier(func))))
 
-// any changes to this class should be backward compatible as it may be used by external connectors
+// any changes to this class should be backward compatible as it may be used by
+// external connectors
 class NoSuchFunctionException private (
     message: String,
     cause: Option[Throwable],
@@ -185,9 +197,12 @@ class NoSuchFunctionException private (
 }
 
 class NoSuchTempFunctionException(func: String)
-    extends AnalysisException(errorClass = "ROUTINE_NOT_FOUND", Map("routineName" -> s"`$func`"))
+    extends AnalysisException(
+      errorClass = "ROUTINE_NOT_FOUND",
+      Map("routineName" -> s"`$func`"))
 
-// any changes to this class should be backward compatible as it may be used by external connectors
+// any changes to this class should be backward compatible as it may be used by
+// external connectors
 class NoSuchIndexException private (
     message: String,
     cause: Option[Throwable],
@@ -217,12 +232,18 @@ class NoSuchIndexException private (
 
 class CannotReplaceMissingTableException(
     tableIdentifier: Identifier,
-    cause: Option[Throwable] = None)
+    cause: Option[Throwable] = None,
+    searchPath: Seq[String] = Seq.empty)
     extends AnalysisException(
       errorClass = "TABLE_OR_VIEW_NOT_FOUND",
       messageParameters = Map(
         "relationName"
           -> quoteNameParts(
             (tableIdentifier.namespace :+ tableIdentifier.name).toImmutableArraySeq),
-        "searchPath" -> ""),
-      cause = cause)
+        "searchPath" -> NoSuchItemExceptionHelper.formatSearchPath(searchPath)),
+      cause = cause) {
+
+  def this(tableIdentifier: Identifier, cause: Option[Throwable]) = {
+    this(tableIdentifier, cause, Seq.empty)
+  }
+}

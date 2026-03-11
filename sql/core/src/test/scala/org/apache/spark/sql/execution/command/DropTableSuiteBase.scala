@@ -57,7 +57,8 @@ trait DropTableSuiteBase extends QueryTest with DDLCommandTestUtils {
       val e = intercept[AnalysisException] {
         sql(s"DROP TABLE $catalog.ns.tbl")
       }
-      checkErrorTableNotFound(e, s"`$catalog`.`ns`.`tbl`")
+      checkErrorTableNotFoundWithSearchPath(e, s"`$catalog`.`ns`.`tbl`",
+        s"[`$catalog`.`ns`]")
     }
   }
 
@@ -88,7 +89,7 @@ trait DropTableSuiteBase extends QueryTest with DDLCommandTestUtils {
       condition = "TABLE_OR_VIEW_NOT_FOUND",
       parameters = Map(
         "relationName" -> s"`$catalog`.`non_existent_db`.`tbl`",
-        "searchPath" -> ""))
+        "searchPath" -> s"[`$catalog`.`non_existent_db`]"))
   }
 
   test("SPARK-33174: DROP TABLE should resolve to a temporary view first") {

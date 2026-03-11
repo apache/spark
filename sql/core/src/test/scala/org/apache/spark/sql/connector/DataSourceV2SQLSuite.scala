@@ -752,7 +752,9 @@ class DataSourceV2SQLSuiteV1Filter
             s"AS SELECT id, data FROM source")
         },
         condition = "TABLE_OR_VIEW_NOT_FOUND",
-        parameters = Map("relationName" -> "`replaced`", "searchPath" -> ""))
+        parameters = Map(
+          "relationName" -> "`replaced`",
+          "searchPath" -> s"[`$catalog`]"))
     }
   }
 
@@ -767,7 +769,9 @@ class DataSourceV2SQLSuiteV1Filter
           s" AS SELECT id, data FROM source")
       },
       condition = "TABLE_OR_VIEW_NOT_FOUND",
-      parameters = Map("relationName" -> "`replaced`", "searchPath" -> ""))
+      parameters = Map(
+        "relationName" -> "`replaced`",
+        "searchPath" -> "[`testcat_atomic`]"))
   }
 
   test("CreateTableAsSelect: use v2 plan and session catalog when provider is v2") {

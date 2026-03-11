@@ -2198,7 +2198,7 @@ org.apache.spark.sql.catalyst.analysis.NoSuchTableException
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`spark_catalog`.`identifier_clause_test_schema`.`test_view`",
-    "searchPath" : ""
+    "searchPath" : "[`spark_catalog`, `identifier_clause_test_schema`]"
   }
 }
 
