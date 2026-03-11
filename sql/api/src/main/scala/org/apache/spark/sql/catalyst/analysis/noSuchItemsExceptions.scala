@@ -24,6 +24,7 @@ import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.util.ArrayImplicits._
 
 private[analysis] object NoSuchItemExceptionHelper {
+
   /** Format a search path for TABLE_OR_VIEW_NOT_FOUND (e.g. [`cat`.`ns`]). */
   def formatSearchPath(searchPath: Seq[String]): String =
     if (searchPath.isEmpty) "" else searchPath.map(quoteIdentifier).mkString("[", ", ", "]")
@@ -144,8 +145,7 @@ class NoSuchTableException private (
       errorClass = "TABLE_OR_VIEW_NOT_FOUND",
       messageParameters = Map(
         "relationName" -> quoted(tableIdent),
-        "searchPath" -> NoSuchItemExceptionHelper.formatSearchPath(
-          tableIdent.namespace.toSeq)),
+        "searchPath" -> NoSuchItemExceptionHelper.formatSearchPath(tableIdent.namespace.toSeq)),
       cause = None)
   }
 }
@@ -197,9 +197,7 @@ class NoSuchFunctionException private (
 }
 
 class NoSuchTempFunctionException(func: String)
-    extends AnalysisException(
-      errorClass = "ROUTINE_NOT_FOUND",
-      Map("routineName" -> s"`$func`"))
+    extends AnalysisException(errorClass = "ROUTINE_NOT_FOUND", Map("routineName" -> s"`$func`"))
 
 // any changes to this class should be backward compatible as it may be used by
 // external connectors
