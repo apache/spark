@@ -1127,11 +1127,12 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
         null,
         true,
         false)
-    val buffer = try {
-      iter.next()
-    } finally {
-      iter.close()
-    }
+    val buffer =
+      try {
+        iter.next()
+      } finally {
+        iter.close()
+      }
     proto.Relation
       .newBuilder()
       .setLocalRelation(localRelationBuilder.setData(ByteString.copyFrom(buffer)).build())
