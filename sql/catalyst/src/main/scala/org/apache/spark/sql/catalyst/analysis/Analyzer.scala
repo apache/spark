@@ -1635,8 +1635,7 @@ class Analyzer(
                 UpdateAction(
                   resolvedUpdateCondition,
                   // The update value can access columns from the target table only.
-                  resolveAssignments(assignments, m, MergeResolvePolicy.TARGET,
-                    throws = throws),
+                  resolveAssignments(assignments, m, MergeResolvePolicy.TARGET, throws),
                   fromStar)
               case o => o
             }
