@@ -216,9 +216,17 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
       case LocalTableScanExec(_, rows, _) =>
         executePlan.eventsManager.postFinished(Some(rows.length))
         var offset = 0L
-        converter(rows.iterator).foreach { case (bytes, count) =>
-          sendBatch(bytes, count, offset)
-          offset += count
+        val iter = converter(rows.iterator)
+        try {
+          iter.foreach { case (bytes, count) =>
+            sendBatch(bytes, count, offset)
+            offset += count
+          }
+        } finally {
+          iter match {
+            case c: AutoCloseable => c.close()
+            case _ =>
+          }
         }
       case collectLimit: CollectLimitExec =>
         SQLExecution.withNewExecutionId(dataframe.queryExecution, Some("collectLimitArrow")) {
