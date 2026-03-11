@@ -170,7 +170,7 @@ object SchemaHelper {
       version match {
         case 1 if Utils.isTesting => new SchemaV1Writer
         case 2 => new SchemaV2Writer
-        case 3 => new SchemaV3Writer
+        case v if v >= 3 => new SchemaV3Writer
       }
     }
   }

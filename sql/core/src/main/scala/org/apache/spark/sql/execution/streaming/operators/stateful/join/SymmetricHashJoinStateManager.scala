@@ -1913,6 +1913,13 @@ object SymmetricHashJoinStateManager {
     }
   }
 
+  def allStateStoreNamesV4(joinSides: JoinSide*): Seq[String] = {
+    val allStateStoreTypes: Seq[StateStoreType] = Seq(KeyWithTsToValuesType, TsWithKeyType)
+    for (joinSide <- joinSides; stateStoreType <- allStateStoreTypes) yield {
+      getStateStoreName(joinSide, stateStoreType)
+    }
+  }
+
   def getSchemaForStateStores(
       joinSide: JoinSide,
       inputValueAttributes: Seq[Attribute],
@@ -1964,7 +1971,6 @@ object SymmetricHashJoinStateManager {
       inputValueAttributes: Seq[Attribute],
       joinKeys: Seq[Expression],
       stateFormatVersion: Int): Map[String, StateStoreColFamilySchema] = {
-    // Convert the original schemas for state stores into StateStoreColFamilySchema objects
     val schemas =
       getSchemaForStateStores(joinSide, inputValueAttributes, joinKeys, stateFormatVersion)
 
@@ -2141,9 +2147,13 @@ object SymmetricHashJoinStateManager {
     } else if (storeName == getStateStoreName(LeftSide, KeyWithIndexToValueType) ||
       storeName == getStateStoreName(RightSide, KeyWithIndexToValueType)) {
       KeyWithIndexToValueType
+    } else if (storeName == getStateStoreName(LeftSide, KeyWithTsToValuesType) ||
+      storeName == getStateStoreName(RightSide, KeyWithTsToValuesType)) {
+      KeyWithTsToValuesType
+    } else if (storeName == getStateStoreName(LeftSide, TsWithKeyType) ||
+      storeName == getStateStoreName(RightSide, TsWithKeyType)) {
+      TsWithKeyType
     } else {
-      // TODO: [SPARK-55628] Add support of KeyWithTsToValuesType and TsWithKeyType during
-      //  integration.
       throw new IllegalArgumentException(s"Unsupported join store name: $storeName")
     }
   }
@@ -2158,17 +2168,17 @@ object SymmetricHashJoinStateManager {
       stateFormatVersion: Int): StatePartitionKeyExtractor = {
     assert(stateFormatVersion <= 4, "State format version must be less than or equal to 4")
     val name = if (stateFormatVersion >= 3) colFamilyName else storeName
-    if (getStoreType(name) == KeyWithIndexToValueType) {
-      // For KeyWithIndex, the index is added to the join (i.e. partition) key.
-      // Drop the last field (index) to get the partition key
-      new DropLastNFieldsStatePartitionKeyExtractor(stateKeySchema, numLastColsToDrop = 1)
-    } else if (getStoreType(name) == KeyToNumValuesType) {
-      // State key is the partition key
-      new NoopStatePartitionKeyExtractor(stateKeySchema)
-    } else {
-      // TODO: [SPARK-55628] Add support of KeyWithTsToValuesType and TsWithKeyType during
-      //  integration.
-      throw new IllegalArgumentException(s"Unsupported join store name: $storeName")
+    getStoreType(name) match {
+      case KeyWithIndexToValueType =>
+        // For KeyWithIndex, the index is added to the join (i.e. partition) key.
+        // Drop the last field (index) to get the partition key
+        new DropLastNFieldsStatePartitionKeyExtractor(stateKeySchema, numLastColsToDrop = 1)
+      case KeyToNumValuesType =>
+        new NoopStatePartitionKeyExtractor(stateKeySchema)
+      case KeyWithTsToValuesType | TsWithKeyType =>
+        // For v4 stores, the logical key schema in the schema file is just the join key
+        // (timestamp is managed by the encoder), so the state key IS the partition key.
+        new NoopStatePartitionKeyExtractor(stateKeySchema)
     }
   }
 

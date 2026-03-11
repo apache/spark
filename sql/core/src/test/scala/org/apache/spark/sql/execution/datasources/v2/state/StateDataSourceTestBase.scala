@@ -22,7 +22,7 @@ import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper.{LeftSide, RightSide}
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.SymmetricHashJoinStateManager
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
-import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, RocksDBStateStoreProvider, StateStore}
+import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, RocksDBStateStoreProvider, StateStore, TimestampAsPostfixKeyStateEncoderSpec, TimestampAsPrefixKeyStateEncoderSpec, TimestampKeyStateEncoder}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._
@@ -785,5 +785,56 @@ object StreamStreamJoinTestUtils {
     KEY_WITH_INDEX_ALL.map(name => name -> ColumnFamilyMetadata(
       keyWithIndexKeySchema, keyWithIndexValueSchema, keyWithIndexEncoderSpec)).toMap
 
+  }
+
+  val allStoreNamesV4: Seq[String] =
+    SymmetricHashJoinStateManager.allStateStoreNamesV4(LeftSide, RightSide)
+
+  val KEY_WITH_TS_TO_VALUES_ALL: Seq[String] =
+    allStoreNamesV4.filter(
+      _.endsWith(SymmetricHashJoinStateManager.KeyWithTsToValuesType.toString))
+
+  val TS_WITH_KEY_ALL: Seq[String] =
+    allStoreNamesV4.filter(
+      _.endsWith(SymmetricHashJoinStateManager.TsWithKeyType.toString))
+
+  def getKeyWithTsToValuesSchemasWithMetadata(): ColumnFamilyMetadata = {
+    val keySchema = StructType(Array(
+      StructField("key", IntegerType)
+    ))
+    val valueSchema = StructType(Array(
+      StructField("value", IntegerType, nullable = false),
+      StructField("time", TimestampType, nullable = false),
+      StructField("matched", BooleanType)
+    ))
+    val keySchemaWithTs = TimestampKeyStateEncoder.keySchemaWithTimestamp(keySchema)
+    val encoderSpec = TimestampAsPostfixKeyStateEncoderSpec(keySchemaWithTs)
+    ColumnFamilyMetadata(keySchema, valueSchema, encoderSpec)
+  }
+
+  def getTsWithKeySchemasWithMetadata(): ColumnFamilyMetadata = {
+    val keySchema = StructType(Array(
+      StructField("key", IntegerType)
+    ))
+    val valueSchema = StructType(Array(
+      StructField("__dummy__", NullType)
+    ))
+    val keySchemaWithTs = TimestampKeyStateEncoder.keySchemaWithTimestamp(keySchema)
+    val encoderSpec = TimestampAsPrefixKeyStateEncoderSpec(keySchemaWithTs)
+    ColumnFamilyMetadata(keySchema, valueSchema, encoderSpec)
+  }
+
+  def getJoinV4ColumnSchemaMap(): Map[String, (StructType, StructType)] = {
+    getJoinV4ColumnSchemaMapWithMetadata().view.mapValues { metadata =>
+      (metadata.keySchema, metadata.valueSchema)
+    }.toMap
+  }
+
+  def getJoinV4ColumnSchemaMapWithMetadata(): Map[String, ColumnFamilyMetadata] = {
+    val keyWithTsMeta = getKeyWithTsToValuesSchemasWithMetadata()
+    val tsWithKeyMeta = getTsWithKeySchemasWithMetadata()
+
+    KEY_WITH_TS_TO_VALUES_ALL.map(name => name -> keyWithTsMeta).toMap ++
+    TS_WITH_KEY_ALL.map(name => name -> tsWithKeyMeta).toMap
   }
 }

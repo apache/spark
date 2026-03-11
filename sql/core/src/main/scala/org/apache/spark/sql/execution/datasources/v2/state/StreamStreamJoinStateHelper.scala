@@ -50,13 +50,13 @@ object StreamStreamJoinStateHelper {
       .add("value", valueSchema)
   }
 
-  // Returns whether the checkpoint uses stateFormatVersion 3 which uses VCF for the join.
+  // Returns whether the checkpoint uses VCF for the join (stateFormatVersion >= 3).
   def usesVirtualColumnFamilies(
     hadoopConf: Configuration,
     stateCheckpointLocation: String,
     operatorId: Int): Boolean = {
     // If the schema exists for operatorId/partitionId/left-keyToNumValues, it is not
-    // stateFormatVersion 3.
+    // stateFormatVersion >= 3 (which uses VCF).
     val partitionId = StateStore.PARTITION_ID_TO_CHECK_SCHEMA
     val storeId = new StateStoreId(stateCheckpointLocation, operatorId,
       partitionId, SymmetricHashJoinStateManager.allStateStoreNames(LeftSide).toList.head)
@@ -76,12 +76,12 @@ object StreamStreamJoinStateHelper {
 
     val newHadoopConf = session.sessionState.newHadoopConf()
     val partitionId = StateStore.PARTITION_ID_TO_CHECK_SCHEMA
-    // KeyToNumValuesType, KeyWithIndexToValueType
     val storeNames = SymmetricHashJoinStateManager.allStateStoreNames(side).toList
 
     val (keySchema, valueSchema) =
       if (!usesVirtualColumnFamilies(
         newHadoopConf, stateCheckpointLocation, operatorId)) {
+        // v1/v2: separate state stores per store type
         val storeIdForKeyToNumValues = new StateStoreId(stateCheckpointLocation, operatorId,
           partitionId, storeNames(0))
         val providerIdForKeyToNumValues = new StateStoreProviderId(storeIdForKeyToNumValues,
@@ -105,29 +105,40 @@ object StreamStreamJoinStateHelper {
 
         (kSchema, vSchema)
       } else {
+        // v3/v4: single state store with virtual column families
         val storeId = new StateStoreId(stateCheckpointLocation, operatorId,
           partitionId, StateStoreId.DEFAULT_STORE_NAME)
         val providerId = new StateStoreProviderId(storeId, UUID.randomUUID())
 
         val manager = new StateSchemaCompatibilityChecker(
           providerId, newHadoopConf, oldSchemaFilePaths, createSchemaDir = false)
-        val kSchema = manager.readSchemaFile().find { schema =>
-          schema.colFamilyName == storeNames(0)
-        }.map(_.keySchema).get
+        val schemas = manager.readSchemaFile()
 
-        val vSchema = manager.readSchemaFile().find { schema =>
-          schema.colFamilyName == storeNames(1)
-        }.map(_.valueSchema).get
+        // Try v3 CF names first; if not found, use v4 CF names
+        val v3Names = storeNames
+        val v4Names = SymmetricHashJoinStateManager.allStateStoreNamesV4(side).toList
+
+        val primaryCfName = schemas.find(_.colFamilyName == v3Names(1)) match {
+          case Some(_) => v3Names(1) // v3: keyWithIndexToValue
+          case None => v4Names(0)    // v4: keyWithTsToValues
+        }
+        val keyCfName = schemas.find(_.colFamilyName == v3Names(0)) match {
+          case Some(_) => v3Names(0) // v3: keyToNumValues
+          case None => v4Names(0)    // v4: keyWithTsToValues (key schema is the join key)
+        }
+
+        val kSchema = schemas.find(_.colFamilyName == keyCfName).map(_.keySchema).get
+        val vSchema = schemas.find(_.colFamilyName == primaryCfName).map(_.valueSchema).get
 
         (kSchema, vSchema)
       }
 
     val maybeMatchedColumn = valueSchema.last
 
+    // remove internal column `matched` for format version >= 2
     if (excludeAuxColumns
       && maybeMatchedColumn.name == "matched"
       && maybeMatchedColumn.dataType == BooleanType) {
-      // remove internal column `matched` for format version 2
       (keySchema, StructType(valueSchema.dropRight(1)))
     } else {
       (keySchema, valueSchema)
