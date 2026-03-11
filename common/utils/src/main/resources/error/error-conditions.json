@@ -929,13 +929,6 @@
       "The Spark Connect plan is invalid."
     ],
     "subClass" : {
-      "CANNOT_PARSE" : {
-        "message" : [
-          "Cannot decompress or parse the input plan (<errorMsg>)",
-          "This may be caused by a corrupted compressed plan.",
-          "To disable plan compression, set 'spark.connect.session.planCompression.threshold' to -1."
-        ]
-      },
       "AGGREGATE_NEEDS_PLAN_INPUT" : {
         "message" : [
           "Aggregate needs a plan input"
@@ -969,6 +962,13 @@
       "CANNOT_FIND_CACHED_LOCAL_RELATION" : {
         "message" : [
           "Cannot find a cached local relation for hash: <hash>"
+        ]
+      },
+      "CANNOT_PARSE" : {
+        "message" : [
+          "Cannot decompress or parse the input plan (<errorMsg>)",
+          "This may be caused by a corrupted compressed plan.",
+          "To disable plan compression, set 'spark.connect.session.planCompression.threshold' to -1."
         ]
       },
       "CHUNKED_CACHED_LOCAL_RELATION_WITHOUT_DATA" : {
@@ -1146,6 +1146,13 @@
           "No handler found for extension type: <extensionTypeUrl>"
         ]
       },
+      "PLAN_SIZE_LARGER_THAN_MAX" : {
+        "message" : [
+          "The plan size is larger than max (<planSize> vs. <maxPlanSize>)",
+          "This typically occurs when building very complex queries with many operations, large literals, or deeply nested expressions.",
+          "Consider splitting the query into smaller parts using temporary views for intermediate results or reducing the number of operations."
+        ]
+      },
       "PREDICATES_NOT_SUPPORTED_FOR_DATA_SOURCE" : {
         "message" : [
           "Predicates are not supported for <format> data sources."
@@ -1264,13 +1271,6 @@
       "WITH_COLUMNS_REQUIRE_SINGLE_NAME_PART" : {
         "message" : [
           "WithColumns require column name only contains one name part, but got <got>"
-        ]
-      },
-      "PLAN_SIZE_LARGER_THAN_MAX" : {
-        "message" : [
-          "The plan size is larger than max (<planSize> vs. <maxPlanSize>)",
-          "This typically occurs when building very complex queries with many operations, large literals, or deeply nested expressions.",
-          "Consider splitting the query into smaller parts using temporary views for intermediate results or reducing the number of operations."
         ]
       }
     },

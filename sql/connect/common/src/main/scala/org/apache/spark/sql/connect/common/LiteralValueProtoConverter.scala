@@ -387,9 +387,10 @@ object LiteralValueProtoConverter {
   private def getScalaConverter(dataType: proto.DataType): proto.Expression.Literal => Any = {
     val converter: proto.Expression.Literal => Any = dataType.getKindCase match {
       case proto.DataType.KindCase.NULL =>
-        v => throw InvalidPlanInput(
-          "CONNECT_INVALID_PLAN.EXPECTED_NULL_VALUE",
-          Map("literalTypeCase" -> v.getLiteralTypeCase.toString))
+        v =>
+          throw InvalidPlanInput(
+            "CONNECT_INVALID_PLAN.EXPECTED_NULL_VALUE",
+            Map("literalTypeCase" -> v.getLiteralTypeCase.toString))
       case proto.DataType.KindCase.SHORT => v => v.getShort.toShort
       case proto.DataType.KindCase.INTEGER => v => v.getInteger
       case proto.DataType.KindCase.LONG => v => v.getLong
@@ -613,9 +614,7 @@ object LiteralValueProtoConverter {
       literal: proto.Expression.Literal,
       arrayType: proto.DataType.Array): Array[_] = {
     if (!literal.hasArray) {
-      throw InvalidPlanInput(
-        "CONNECT_INVALID_PLAN.ARRAY_LITERAL_NOT_SET",
-        Map.empty)
+      throw InvalidPlanInput("CONNECT_INVALID_PLAN.ARRAY_LITERAL_NOT_SET", Map.empty)
     }
     val array = literal.getArray
     def makeArrayData[T](converter: proto.Expression.Literal => T)(implicit
@@ -635,9 +634,7 @@ object LiteralValueProtoConverter {
       literal: proto.Expression.Literal,
       mapType: proto.DataType.Map): mutable.Map[_, _] = {
     if (!literal.hasMap) {
-      throw InvalidPlanInput(
-        "CONNECT_INVALID_PLAN.MAP_LITERAL_NOT_SET",
-        Map.empty)
+      throw InvalidPlanInput("CONNECT_INVALID_PLAN.MAP_LITERAL_NOT_SET", Map.empty)
     }
     val map = literal.getMap
     def makeMapData[K, V](
@@ -663,9 +660,7 @@ object LiteralValueProtoConverter {
       literal: proto.Expression.Literal,
       structType: proto.DataType.Struct): Any = {
     if (!literal.hasStruct) {
-      throw InvalidPlanInput(
-        "CONNECT_INVALID_PLAN.STRUCT_LITERAL_NOT_SET",
-        Map.empty)
+      throw InvalidPlanInput("CONNECT_INVALID_PLAN.STRUCT_LITERAL_NOT_SET", Map.empty)
     }
     val struct = literal.getStruct
     val structData = Array.tabulate(struct.getElementsCount) { i =>

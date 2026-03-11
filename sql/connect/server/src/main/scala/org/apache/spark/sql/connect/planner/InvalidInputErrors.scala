@@ -41,29 +41,19 @@ object InvalidInputErrors {
       Map("query" -> query.toString))
 
   def naFillValuesEmpty(): InvalidPlanInput =
-    InvalidPlanInput(
-      "CONNECT_INVALID_PLAN.NA_FILL_VALUES_EMPTY",
-      Map.empty)
+    InvalidPlanInput("CONNECT_INVALID_PLAN.NA_FILL_VALUES_EMPTY", Map.empty)
 
   def naFillValuesLengthMismatch(): InvalidPlanInput =
-    InvalidPlanInput(
-      "CONNECT_INVALID_PLAN.NA_FILL_VALUES_LENGTH_MISMATCH",
-      Map.empty)
+    InvalidPlanInput("CONNECT_INVALID_PLAN.NA_FILL_VALUES_LENGTH_MISMATCH", Map.empty)
 
   def deduplicateNeedsInput(): InvalidPlanInput =
-    InvalidPlanInput(
-      "CONNECT_INVALID_PLAN.DEDUPLICATE_NEEDS_INPUT",
-      Map.empty)
+    InvalidPlanInput("CONNECT_INVALID_PLAN.DEDUPLICATE_NEEDS_INPUT", Map.empty)
 
   def deduplicateAllColumnsAndSubset(): InvalidPlanInput =
-    InvalidPlanInput(
-      "CONNECT_INVALID_PLAN.DEDUPLICATE_ALL_COLUMNS_AND_SUBSET",
-      Map.empty)
+    InvalidPlanInput("CONNECT_INVALID_PLAN.DEDUPLICATE_ALL_COLUMNS_AND_SUBSET", Map.empty)
 
   def deduplicateRequiresColumnsOrAll(): InvalidPlanInput =
-    InvalidPlanInput(
-      "CONNECT_INVALID_PLAN.DEDUPLICATE_REQUIRES_COLUMNS_OR_ALL",
-      Map.empty)
+    InvalidPlanInput("CONNECT_INVALID_PLAN.DEDUPLICATE_REQUIRES_COLUMNS_OR_ALL", Map.empty)
 
   def invalidDeduplicateColumn(colName: String, fieldNames: String): InvalidPlanInput =
     InvalidPlanInput(
@@ -76,9 +66,7 @@ object InvalidInputErrors {
       Map("evalType" -> evalType.toString))
 
   def groupingExpressionAbsentForKeyValueGroupedDataset(): InvalidPlanInput =
-    InvalidPlanInput(
-      "CONNECT_INVALID_PLAN.GROUPING_EXPRESSION_ABSENT",
-      Map.empty)
+    InvalidPlanInput("CONNECT_INVALID_PLAN.GROUPING_EXPRESSION_ABSENT", Map.empty)
 
   def expectingScalaUdfButGot(exprType: proto.Expression.ExprTypeCase): InvalidPlanInput =
     InvalidPlanInput(
@@ -118,19 +106,13 @@ object InvalidInputErrors {
       Map("got" -> got))
 
   def inputDataForLocalRelationNoSchema(): InvalidPlanInput =
-    InvalidPlanInput(
-      "CONNECT_INVALID_PLAN.INPUT_DATA_NO_SCHEMA",
-      Map.empty)
+    InvalidPlanInput("CONNECT_INVALID_PLAN.INPUT_DATA_NO_SCHEMA", Map.empty)
 
   def chunkedCachedLocalRelationWithoutData(): InvalidPlanInput =
-    InvalidPlanInput(
-      "CONNECT_INVALID_PLAN.CHUNKED_CACHED_LOCAL_RELATION_WITHOUT_DATA",
-      Map.empty)
+    InvalidPlanInput("CONNECT_INVALID_PLAN.CHUNKED_CACHED_LOCAL_RELATION_WITHOUT_DATA", Map.empty)
 
   def schemaRequiredForLocalRelation(): InvalidPlanInput =
-    InvalidPlanInput(
-      "CONNECT_INVALID_PLAN.SCHEMA_REQUIRED_FOR_LOCAL_RELATION",
-      Map.empty)
+    InvalidPlanInput("CONNECT_INVALID_PLAN.SCHEMA_REQUIRED_FOR_LOCAL_RELATION", Map.empty)
 
   def invalidSchemaStringNonStructType(schema: String, dataType: DataType): InvalidPlanInput =
     InvalidPlanInput(
@@ -138,9 +120,7 @@ object InvalidInputErrors {
       Map("inputSchema" -> quoteByDefault(schema), "dataType" -> toSQLType(dataType)))
 
   def invalidJdbcParams(): InvalidPlanInput =
-    InvalidPlanInput(
-      "CONNECT_INVALID_PLAN.INVALID_JDBC_PARAMS",
-      Map.empty)
+    InvalidPlanInput("CONNECT_INVALID_PLAN.INVALID_JDBC_PARAMS", Map.empty)
 
   def predicatesNotSupportedForDataSource(format: String): InvalidPlanInput =
     InvalidPlanInput(
@@ -207,54 +187,34 @@ object InvalidInputErrors {
       Map.empty)
 
   def windowFunctionRequired(): InvalidPlanInput =
-    InvalidPlanInput(
-      "CONNECT_INVALID_PLAN.WINDOW_FUNCTION_REQUIRED",
-      Map.empty)
+    InvalidPlanInput("CONNECT_INVALID_PLAN.WINDOW_FUNCTION_REQUIRED", Map.empty)
 
   def lowerBoundRequiredInWindowFrame(): InvalidPlanInput =
-    InvalidPlanInput(
-      "CONNECT_INVALID_PLAN.LOWER_BOUND_REQUIRED_IN_WINDOW_FRAME",
-      Map.empty)
+    InvalidPlanInput("CONNECT_INVALID_PLAN.LOWER_BOUND_REQUIRED_IN_WINDOW_FRAME", Map.empty)
 
   def upperBoundRequiredInWindowFrame(): InvalidPlanInput =
-    InvalidPlanInput(
-      "CONNECT_INVALID_PLAN.UPPER_BOUND_REQUIRED_IN_WINDOW_FRAME",
-      Map.empty)
+    InvalidPlanInput("CONNECT_INVALID_PLAN.UPPER_BOUND_REQUIRED_IN_WINDOW_FRAME", Map.empty)
 
   def setOperationMustHaveTwoInputs(): InvalidPlanInput =
-    InvalidPlanInput(
-      "CONNECT_INVALID_PLAN.SET_OPERATION_MUST_HAVE_TWO_INPUTS",
-      Map.empty)
+    InvalidPlanInput("CONNECT_INVALID_PLAN.SET_OPERATION_MUST_HAVE_TWO_INPUTS", Map.empty)
 
   def exceptDoesNotSupportUnionByName(): InvalidPlanInput =
-    InvalidPlanInput(
-      "CONNECT_INVALID_PLAN.EXCEPT_DOES_NOT_SUPPORT_UNION_BY_NAME",
-      Map.empty)
+    InvalidPlanInput("CONNECT_INVALID_PLAN.EXCEPT_DOES_NOT_SUPPORT_UNION_BY_NAME", Map.empty)
 
   def intersectDoesNotSupportUnionByName(): InvalidPlanInput =
-    InvalidPlanInput(
-      "CONNECT_INVALID_PLAN.INTERSECT_DOES_NOT_SUPPORT_UNION_BY_NAME",
-      Map.empty)
+    InvalidPlanInput("CONNECT_INVALID_PLAN.INTERSECT_DOES_NOT_SUPPORT_UNION_BY_NAME", Map.empty)
 
   def aggregateNeedsPlanInput(): InvalidPlanInput =
-    InvalidPlanInput(
-      "CONNECT_INVALID_PLAN.AGGREGATE_NEEDS_PLAN_INPUT",
-      Map.empty)
+    InvalidPlanInput("CONNECT_INVALID_PLAN.AGGREGATE_NEEDS_PLAN_INPUT", Map.empty)
 
   def aggregateWithPivotRequiresPivot(): InvalidPlanInput =
-    InvalidPlanInput(
-      "CONNECT_INVALID_PLAN.AGGREGATE_WITH_PIVOT_REQUIRES_PIVOT",
-      Map.empty)
+    InvalidPlanInput("CONNECT_INVALID_PLAN.AGGREGATE_WITH_PIVOT_REQUIRES_PIVOT", Map.empty)
 
   def invalidWithRelationReference(): InvalidPlanInput =
-    InvalidPlanInput(
-      "CONNECT_INVALID_PLAN.INVALID_WITH_RELATION_REFERENCE",
-      Map.empty)
+    InvalidPlanInput("CONNECT_INVALID_PLAN.INVALID_WITH_RELATION_REFERENCE", Map.empty)
 
   def assertionFailure(message: String): InvalidPlanInput =
-    InvalidPlanInput(
-      "CONNECT_INVALID_PLAN.ASSERTION_FAILURE",
-      Map("message" -> message))
+    InvalidPlanInput("CONNECT_INVALID_PLAN.ASSERTION_FAILURE", Map("message" -> message))
 
   def unresolvedNamedLambdaVariableRequiresNamePart(): InvalidPlanInput =
     InvalidPlanInput(
@@ -295,9 +255,7 @@ object InvalidInputErrors {
       Map("id" -> id, "runId" -> runId, "serverRunId" -> serverRunId))
 
   def streamingQueryNotFound(id: String): InvalidPlanInput =
-    InvalidPlanInput(
-      "CONNECT_INVALID_PLAN.STREAMING_QUERY_NOT_FOUND",
-      Map("id" -> id))
+    InvalidPlanInput("CONNECT_INVALID_PLAN.STREAMING_QUERY_NOT_FOUND", Map("id" -> id))
 
   def cannotFindCachedLocalRelation(hash: String): InvalidPlanInput =
     InvalidPlanInput(

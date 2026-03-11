@@ -160,9 +160,7 @@ object DataTypeProtoConverter {
         .newInstance()
     } else {
       if (!t.hasPythonClass || !t.hasSerializedPythonClass || !t.hasSqlType) {
-        throw InvalidPlanInput(
-          "CONNECT_INVALID_PLAN.PYTHON_UDT_MISSING_FIELDS",
-          Map.empty)
+        throw InvalidPlanInput("CONNECT_INVALID_PLAN.PYTHON_UDT_MISSING_FIELDS", Map.empty)
       }
 
       new PythonUserDefinedType(

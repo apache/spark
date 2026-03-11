@@ -109,8 +109,7 @@ class InvalidInputErrorsSuite extends PlanTest with SparkConnectPlanTest {
       }),
     TestCase(
       name = "Catalog not set",
-      expectedErrorCondition =
-        "CONNECT_INVALID_PLAN.INVALID_ONE_OF_FIELD_NOT_SET",
+      expectedErrorCondition = "CONNECT_INVALID_PLAN.INVALID_ONE_OF_FIELD_NOT_SET",
       expectedParameters =
         Map("fullName" -> "spark.connect.Catalog", "name" -> "CATTYPE_NOT_SET"),
       invalidInput = {
