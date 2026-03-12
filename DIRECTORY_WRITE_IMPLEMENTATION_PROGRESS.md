@@ -47,7 +47,15 @@
 
 ---
 
-### ⏳ Step 4: Directory Write Execution (TODO)
+### ✅ Step 4: Directory Write Execution (COMPLETED)
+**Changes Made:**
+1. ✅ Added `DirectoryWrite` class extending `FlowExecution`
+2. ✅ Implemented `executeInternal()` method to write DataFrame to directory path
+3. ✅ Updated `FlowPlanner.plan()` to handle Directory destinations
+4. ✅ Supports format, mode, options, and partitioning
+
+**Testing:** Will test with actual INSERT OVERWRITE DIRECTORY statements
+
 **Files to Modify:**
 - `sql/pipelines/src/main/scala/org/apache/spark/sql/pipelines/graph/FlowExecution.scala`
 

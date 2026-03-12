@@ -275,6 +275,42 @@ class BatchTableWrite(
   }
 }
 
+
+/** A `FlowExecution` that writes a batch `DataFrame` to a `Directory`. */
+class DirectoryWrite(
+    val identifier: TableIdentifier,
+    val flow: ResolvedFlow,
+    val graph: DataflowGraph,
+    val destination: Directory,
+    val updateContext: PipelineUpdateContext,
+    val sqlConf: Map[String, String]
+) extends FlowExecution {
+
+  override final def isStreaming: Boolean = false
+  override def getOrigin: QueryOrigin = flow.origin
+
+  def executeInternal(): Future[Unit] = {
+    SparkSessionUtils.withSqlConf(spark, sqlConf.toList: _*) {
+      updateContext.flowProgressEventLogger.recordRunning(flow = flow)
+      val data = graph.reanalyzeFlow(flow).df
+      Future {
+        val dataFrameWriter = data.write
+          .format(destination.format)
+          .mode(destination.mode)
+          .options(destination.options)
+
+        // Handle partitioning if specified in options
+        destination.options.get("partitionBy").foreach { partitionCols =>
+          val cols = partitionCols.split(",").map(_.trim)
+          dataFrameWriter.partitionBy(cols: _*)
+        }
+
+        dataFrameWriter.save(destination.path)
+      }
+    }
+  }
+}
+
 /** A `StreamingFlowExecution` that writes a streaming `DataFrame` to a `Sink`. */
 class SinkWrite(
   val identifier: TableIdentifier,

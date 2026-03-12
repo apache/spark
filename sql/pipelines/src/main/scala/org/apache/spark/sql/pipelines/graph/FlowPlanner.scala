@@ -40,14 +40,31 @@ class FlowPlanner(
     val output = graph.output(flow.destinationIdentifier)
     flow match {
       case cf: CompleteFlow =>
-        new BatchTableWrite(
-          graph = graph,
-          flow = flow,
-          identifier = cf.identifier,
-          sqlConf = cf.sqlConf,
-          destination = output.asInstanceOf[Table],
-          updateContext = updateContext
-        )
+        output match {
+          case t: Table =>
+            new BatchTableWrite(
+              graph = graph,
+              flow = flow,
+              identifier = cf.identifier,
+              sqlConf = cf.sqlConf,
+              destination = t,
+              updateContext = updateContext
+            )
+          case d: Directory =>
+            new DirectoryWrite(
+              graph = graph,
+              flow = flow,
+              identifier = cf.identifier,
+              sqlConf = cf.sqlConf,
+              destination = d,
+              updateContext = updateContext
+            )
+          case _ =>
+            throw new UnsupportedOperationException(
+              s"Unsupported destination type: ${output.getClass.getSimpleName} for " +
+              s"batch flow ${cf.identifier} (${flow.destinationIdentifier})"
+            )
+        }
       case sf: StreamingFlow =>
         val flowMetadata = FlowSystemMetadata(updateContext, sf, graph)
         output match {
