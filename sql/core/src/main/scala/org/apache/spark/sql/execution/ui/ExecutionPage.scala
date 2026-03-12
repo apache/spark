@@ -218,14 +218,14 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
     val rows = jobIds.flatMap { jobId =>
       try {
         val job = store.job(jobId)
+        val submissionTimeMs = job.submissionTime.map(_.getTime).getOrElse(-1L)
         val formattedTime = job.submissionTime.map(UIUtils.formatDate).getOrElse("")
-        val duration = (job.submissionTime, job.completionTime) match {
-          case (Some(start), Some(end)) =>
-            UIUtils.formatDuration(end.getTime - start.getTime)
-          case (Some(start), None) =>
-            UIUtils.formatDuration(System.currentTimeMillis() - start.getTime)
-          case _ => ""
+        val durationMs = (job.submissionTime, job.completionTime) match {
+          case (Some(start), Some(end)) => end.getTime - start.getTime
+          case (Some(start), None) => System.currentTimeMillis() - start.getTime
+          case _ => -1L
         }
+        val duration = if (durationMs >= 0) UIUtils.formatDuration(durationMs) else ""
         val (lastStageName, lastStageDesc) =
           ApiHelper.lastStageNameAndDescription(store, job)
         val jobDesc = UIUtils.makeDescription(
@@ -247,8 +247,8 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
               {jobDesc}
               <a href={detailUrl} class="name-link">{lastStageName}</a>
             </td>
-            <td>{formattedTime}</td>
-            <td>{duration}</td>
+            <td sorttable_customkey={submissionTimeMs.toString}>{formattedTime}</td>
+            <td sorttable_customkey={durationMs.toString}>{duration}</td>
             <td class="stage-progress-cell">{stagesInfo}</td>
             <td class="progress-cell">
               {UIUtils.makeProgressBar(started = job.numActiveTasks,
@@ -275,15 +275,15 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
         </h4>
       </span>
       <div class="collapsible-table collapse show" id="sql-jobs-table">
-        <table class="table table-bordered table-hover table-sm">
+        <table class="table table-bordered table-hover table-sm sortable">
           <thead>
             <tr>
               <th>Job ID</th>
               <th>Description</th>
               <th>Submitted</th>
               <th>Duration</th>
-              <th>Stages: Succeeded/Total</th>
-              <th>Tasks (for all stages): Succeeded/Total</th>
+              <th class="sorttable_nosort">Stages: Succeeded/Total</th>
+              <th class="sorttable_nosort">Tasks (for all stages): Succeeded/Total</th>
             </tr>
           </thead>
           <tbody>{rows}</tbody>
