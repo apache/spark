@@ -123,6 +123,13 @@ object Cast extends QueryErrorsBase {
 
     case (StringType, TimeType) => true
     case (TimestampType, TimeType) => true
+    case (TimestampNTZType, TimeType) => true
+    case (DateType, TimeType) => true
+    case (_: IntegralType, TimeType) => true
+
+    case (TimeType, TimestampType) => true
+    case (TimeType, DateType) => true
+    case (TimeType, _: IntegralType) => true
 
     case (_: NumericType, _: NumericType) => true
     case (StringType, _: NumericType) => true
@@ -220,6 +227,13 @@ object Cast extends QueryErrorsBase {
 
     case (StringType, TimeType) => true
     case (TimestampType, TimeType) => true
+    case (TimestampNTZType, TimeType) => true
+    case (DateType, TimeType) => true
+    case (_: IntegralType, TimeType) => true
+
+    case (TimeType, TimestampType) => true
+    case (TimeType, DateType) => true
+    case (TimeType, _: IntegralType) => true
 
     case (StringType, CalendarIntervalType) => true
     case (StringType, _: DayTimeIntervalType) => true
@@ -639,6 +653,8 @@ case class Cast(
       buildCast[Byte](_, b => longToTimestamp(b.toLong))
     case DateType =>
       buildCast[Int](_, d => daysToMicros(d, zoneId))
+    case TimeType =>
+      buildCast[Long](_, t => TimeCast.castTimeToTimestamp(t, zoneId))
     case TimestampNTZType =>
       buildCast[Long](_, ts => convertTz(ts, zoneId, ZoneOffset.UTC))
     // TimestampWritable.decimalToTimestamp
@@ -675,6 +691,22 @@ case class Cast(
       buildCast[Long](_, ts => convertTz(ts, ZoneOffset.UTC, zoneId))
   }
 
+  // TimeConverter
+  private[this] def castToTime(from: DataType): Any => Any = from match {
+    case StringType =>
+      buildCast[UTF8String](_, s => TimeCast.castStringToTime(s))
+    case LongType =>
+      buildCast[Long](_, l => TimeCast.castLongToTime(l))
+    case IntegerType =>
+      buildCast[Int](_, i => TimeCast.castIntToTime(i))
+    case TimestampType =>
+      buildCast[Long](_, ts => TimeCast.castTimestampToTime(ts, zoneId))
+    case TimestampNTZType =>
+      buildCast[Long](_, ts => TimeCast.castTimestampNTZToTime(ts))
+    case DateType =>
+      buildCast[Int](_, d => TimeCast.castDateToTime(d))
+  }
+
   private[this] def decimalToTimestamp(d: Decimal): Long = {
     (d.toBigDecimal * MICROS_PER_SECOND).longValue
   }
@@ -707,6 +739,8 @@ case class Cast(
       buildCast[Long](_, t => microsToDays(t, zoneId))
     case TimestampNTZType =>
       buildCast[Long](_, t => microsToDays(t, ZoneOffset.UTC))
+    case TimeType =>
+      buildCast[Long](_, t => TimeCast.castTimeToDate(t))
   }
 
   // IntervalConverter
@@ -768,6 +802,8 @@ case class Cast(
       buildCast[Int](_, d => null)
     case TimestampType =>
       buildCast[Long](_, t => timestampToLong(t))
+    case TimeType =>
+      buildCast[Long](_, t => TimeCast.castTimeToLong(t))
     case x: NumericType if ansiEnabled =>
       val exactNumeric = PhysicalNumericType.exactNumeric(x)
       b => exactNumeric.toLong(b)
@@ -802,6 +838,8 @@ case class Cast(
       })
     case TimestampType =>
       buildCast[Long](_, t => timestampToLong(t).toInt)
+    case TimeType =>
+      buildCast[Long](_, t => TimeCast.castTimeToInt(t))
     case x: NumericType if ansiEnabled =>
       val exactNumeric = PhysicalNumericType.exactNumeric(x)
       b => exactNumeric.toInt(b)
@@ -1109,6 +1147,7 @@ case class Cast(
         case StringType => castToString(from)
         case BinaryType => castToBinary(from)
         case DateType => castToDate(from)
+        case TimeType => castToTime(from)
         case decimal: DecimalType => castToDecimal(from, decimal)
         case TimestampType => castToTimestamp(from)
         case TimestampNTZType => castToTimestampNTZ(from)
@@ -1198,6 +1237,7 @@ case class Cast(
     case StringType => (c, evPrim, _) => castToStringCode(from, ctx).apply(c, evPrim)
     case BinaryType => castToBinaryCode(from)
     case DateType => castToDateCode(from, ctx)
+    case TimeType => castToTimeCode(from, ctx)
     case decimal: DecimalType => castToDecimalCode(from, decimal, ctx)
     case TimestampType => castToTimestampCode(from, ctx)
     case TimestampNTZType => castToTimestampNTZCode(from, ctx)
@@ -1289,9 +1329,88 @@ case class Cast(
       case TimestampNTZType =>
         (c, evPrim, evNull) =>
           code"$evPrim = $dateTimeUtilsCls.microsToDays($c, java.time.ZoneOffset.UTC);"
+      case TimeType =>
+        val timeCastClass = TimeCast.getClass.getName.stripSuffix("$")
+        (c, evPrim, evNull) =>
+          code"$evPrim = $timeCastClass.castTimeToDate($c);"
       case _ =>
         (c, evPrim, evNull) => code"$evNull = true;"
     }
+  }
+
+  private[this] def castToTimeCode(
+      from: DataType,
+      ctx: CodegenContext): CastFunction = from match {
+    case StringType =>
+      val timeCastClass = TimeCast.getClass.getCanonicalName.stripSuffix("$")
+      (c, evPrim, evNull) =>
+        if (ansiEnabled) {
+          val errorContext = getContextOrNullCode(ctx)
+          code"""
+            $evPrim = $timeCastClass.castStringToTimeAnsi($c, $errorContext);
+          """
+        } else {
+          code"""
+            Object result = $timeCastClass.castStringToTime($c);
+            if (result != null) {
+              $evPrim = ((Long) result).longValue();
+            } else {
+              $evNull = true;
+            }
+          """
+        }
+    case LongType =>
+      val timeCastClass = TimeCast.getClass.getCanonicalName.stripSuffix("$")
+      (c, evPrim, evNull) =>
+        if (ansiEnabled) {
+          val errorContext = getContextOrNullCode(ctx)
+          code"""
+            $evPrim = $timeCastClass.castLongToTimeAnsi($c, $errorContext);
+          """
+        } else {
+          code"""
+            Object result = $timeCastClass.castLongToTime($c);
+            if (result != null) {
+              $evPrim = ((Long) result).longValue();
+            } else {
+              $evNull = true;
+            }
+          """
+        }
+    case IntegerType =>
+      val timeCastClass = TimeCast.getClass.getCanonicalName.stripSuffix("$")
+      (c, evPrim, evNull) =>
+        if (ansiEnabled) {
+          val errorContext = getContextOrNullCode(ctx)
+          code"""
+            $evPrim = $timeCastClass.castIntToTimeAnsi($c, $errorContext);
+          """
+        } else {
+          code"""
+            Object result = $timeCastClass.castIntToTime($c);
+            if (result != null) {
+              $evPrim = ((Long) result).longValue();
+            } else {
+              $evNull = true;
+            }
+          """
+        }
+    case TimestampType =>
+      val zoneIdClass = classOf[ZoneId]
+      val zid = JavaCode.global(
+        ctx.addReferenceObj("zoneId", zoneId, zoneIdClass.getName),
+        zoneIdClass)
+      val timeCastClass = TimeCast.getClass.getCanonicalName.stripSuffix("$")
+      (c, evPrim, evNull) =>
+        code"$evPrim = $timeCastClass.castTimestampToTime($c, $zid);"
+    case TimestampNTZType =>
+      val timeCastClass = TimeCast.getClass.getCanonicalName.stripSuffix("$")
+      (c, evPrim, evNull) =>
+        code"$evPrim = $timeCastClass.castTimestampNTZToTime($c);"
+    case DateType =>
+      val timeCastClass = TimeCast.getClass.getCanonicalName.stripSuffix("$")
+      (c, evPrim, evNull) =>
+        code"$evPrim = $timeCastClass.castDateToTime($c);"
   }
 
   private[this] def changePrecision(
@@ -1459,6 +1578,14 @@ case class Cast(
       (c, evPrim, evNull) =>
         code"""$evPrim =
           org.apache.spark.sql.catalyst.util.DateTimeUtils.daysToMicros($c, $zid);"""
+    case TimeType =>
+      val zoneIdClass = classOf[ZoneId]
+      val zid = JavaCode.global(
+        ctx.addReferenceObj("zoneId", zoneId, zoneIdClass.getName),
+        zoneIdClass)
+      val timeCastClass = TimeCast.getClass.getCanonicalName.stripSuffix("$")
+      (c, evPrim, evNull) =>
+        code"$evPrim = $timeCastClass.castTimeToTimestamp($c, $zid);"
     case TimestampNTZType =>
       val zoneIdClass = classOf[ZoneId]
       val zid = JavaCode.global(
@@ -1861,6 +1988,9 @@ case class Cast(
     case DateType =>
       (c, evPrim, evNull) => code"$evNull = true;"
     case TimestampType => castTimestampToIntegralTypeCode(ctx, "int", from, IntegerType)
+    case TimeType =>
+      val timeCastClass = TimeCast.getClass.getCanonicalName.stripSuffix("$")
+      (c, evPrim, evNull) => code"$evPrim = $timeCastClass.castTimeToInt($c);"
     case DecimalType() => castDecimalToIntegralTypeCode("int")
     case LongType if ansiEnabled =>
       castIntegralTypeToIntegralTypeExactCode(ctx, "int", from, IntegerType)
@@ -1897,6 +2027,9 @@ case class Cast(
       (c, evPrim, evNull) => code"$evNull = true;"
     case TimestampType =>
       (c, evPrim, evNull) => code"$evPrim = (long) ${timestampToLongCode(c)};"
+    case TimeType =>
+      val timeCastClass = TimeCast.getClass.getCanonicalName.stripSuffix("$")
+      (c, evPrim, evNull) => code"$evPrim = $timeCastClass.castTimeToLong($c);"
     case DecimalType() => castDecimalToIntegralTypeCode("long")
     case FloatType | DoubleType if ansiEnabled =>
       castFractionToIntegralTypeCode(ctx, "long", from, LongType)

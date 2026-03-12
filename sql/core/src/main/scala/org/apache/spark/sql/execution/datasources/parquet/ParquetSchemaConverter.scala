@@ -569,6 +569,7 @@ class SparkToParquetSchemaConverter(
       case TimestampNTZType =>
         Types.primitive(INT64, repetition)
           .as(LogicalTypeAnnotation.timestampType(false, TimeUnit.MICROS)).named(field.name)
+
       case BinaryType =>
         Types.primitive(BINARY, repetition).named(field.name)
 

@@ -182,7 +182,7 @@ case class ApproximatePercentile(
       // Convert the value to a double value
       val doubleValue = child.dataType match {
         case DateType | _: YearMonthIntervalType => value.asInstanceOf[Int].toDouble
-        case TimestampType | TimestampNTZType | _: DayTimeIntervalType =>
+        case TimestampType | TimestampNTZType | TimeType | _: DayTimeIntervalType =>
           value.asInstanceOf[Long].toDouble
         case n: NumericType =>
           PhysicalNumericType.numeric(n)
@@ -204,7 +204,8 @@ case class ApproximatePercentile(
     val doubleResult = buffer.getPercentiles(percentages)
     val result = child.dataType match {
       case DateType | _: YearMonthIntervalType => doubleResult.map(_.toInt)
-      case TimestampType | TimestampNTZType | _: DayTimeIntervalType => doubleResult.map(_.toLong)
+      case TimestampType | TimestampNTZType | TimeType | _: DayTimeIntervalType =>
+        doubleResult.map(_.toLong)
       case ByteType => doubleResult.map(_.toByte)
       case ShortType => doubleResult.map(_.toShort)
       case IntegerType => doubleResult.map(_.toInt)

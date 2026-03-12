@@ -231,6 +231,10 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
         // MICROS time unit.
         (row: SpecializedGetters, ordinal: Int) => recordConsumer.addLong(row.getLong(ordinal))
 
+      case TimeType =>
+        // For TimeType column, Spark outputs as INT64 with TIME annotation in MICROS time unit.
+        (row: SpecializedGetters, ordinal: Int) => recordConsumer.addLong(row.getLong(ordinal))
+
       case BinaryType =>
         (row: SpecializedGetters, ordinal: Int) =>
           recordConsumer.addBinary(Binary.fromReusedByteArray(row.getBinary(ordinal)))

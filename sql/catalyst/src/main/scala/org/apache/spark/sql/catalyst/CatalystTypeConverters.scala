@@ -21,7 +21,7 @@ import java.lang.{Iterable => JavaIterable}
 import java.math.{BigDecimal => JavaBigDecimal}
 import java.math.{BigInteger => JavaBigInteger}
 import java.sql.{Date, Timestamp}
-import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period}
+import java.time.{Duration, Instant, LocalDate, LocalDateTime, LocalTime, Period}
 import java.util.{Map => JavaMap}
 import javax.annotation.Nullable
 
@@ -70,6 +70,7 @@ object CatalystTypeConverters {
       case TimestampType if SQLConf.get.datetimeJava8ApiEnabled => InstantConverter
       case TimestampType => TimestampConverter
       case TimestampNTZType => TimestampNTZConverter
+      case TimeType => LocalTimeConverter
       case dt: DecimalType => new DecimalConverter(dt)
       case BooleanType => BooleanConverter
       case ByteType => ByteConverter
@@ -366,6 +367,24 @@ object CatalystTypeConverters {
 
     override def toScalaImpl(row: InternalRow, column: Int): LocalDateTime =
       DateTimeUtils.microsToLocalDateTime(row.getLong(column))
+  }
+
+  private object LocalTimeConverter extends CatalystTypeConverter[Any, String, Any] {
+    override def toCatalystImpl(scalaValue: Any): Long = scalaValue match {
+      case l: LocalTime => TimeUtils.localTimeToMicros(l)
+      case s: String => TimeUtils.stringToTime(UTF8String.fromString(s)).getOrElse(
+        throw new IllegalArgumentException(s"Cannot parse '$s' as TIME"))
+      case other => throw new IllegalArgumentException(
+        s"The value (${other.toString}) of the type (${other.getClass.getCanonicalName}) "
+          + s"cannot be converted to the ${TimeType.sql} type")
+    }
+
+    override def toScala(catalystValue: Any): String =
+      if (catalystValue == null) null
+      else TimeUtils.timeToString(catalystValue.asInstanceOf[Long]).toString
+
+    override def toScalaImpl(row: InternalRow, column: Int): String =
+      TimeUtils.timeToString(row.getLong(column)).toString
   }
 
   private class DecimalConverter(dataType: DecimalType)

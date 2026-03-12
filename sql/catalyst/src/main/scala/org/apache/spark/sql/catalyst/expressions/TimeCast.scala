@@ -109,6 +109,20 @@ object TimeCast {
   }
 
   /**
+   * Cast from Long to TimeType in ANSI mode.
+   * Throws an exception if the value is out of range.
+   */
+  def castLongToTimeAnsi(micros: Long, errorContext: String): Long = {
+    if (TimeUtils.isValidTime(micros)) {
+      micros
+    } else {
+      val maxValue = TimeUtils.MICROS_PER_DAY - 1
+      throw new IllegalArgumentException(
+        s"Cannot cast $micros to TIME. Valid range is 0 to $maxValue. $errorContext")
+    }
+  }
+
+  /**
    * Cast from Int to TimeType.
    * Interprets the int value as seconds since midnight.
    */
