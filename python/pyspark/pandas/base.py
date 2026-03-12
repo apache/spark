@@ -293,46 +293,38 @@ def _exclude_pd_np_operand(other: Any) -> None:
         )
 
 
-def _isin_compatible_lit(value: Any, spark_type: DataType) -> Optional[Column]:
-    """Return F.lit(value) cast to spark_type if the value is type-compatible, else None.
+def _is_value_type_compatible(value: Any, spark_type: DataType) -> bool:
+    """Check if a Python value's type is compatible with a Spark column type for isin matching.
 
     Pandas isin() uses strict type matching: an integer 1 never matches a string "1".
     However, numeric types (int, float, bool) are cross-compatible, matching Python semantics
     where bool is a subclass of int and int/float compare equal when values match.
-
-    The returned literal is cast to the target Spark type so that Spark's IN expression
-    receives homogeneous types (Spark requires all IN operands to share the same type).
     """
     import datetime
     import decimal
 
     if value is None or isinstance(spark_type, NullType):
-        return F.lit(value).cast(spark_type)
-    compatible: bool
+        return True
     if isinstance(spark_type, NumericType):
-        compatible = isinstance(value, (int, float, bool, decimal.Decimal, np.number))
-    elif isinstance(spark_type, BooleanType):
-        compatible = isinstance(value, (bool, np.bool_, int, float, np.number))
-    elif isinstance(spark_type, (StringType, CharType, VarcharType)):
-        compatible = isinstance(value, str)
-    elif isinstance(spark_type, BinaryType):
-        compatible = isinstance(value, (bytes, bytearray))
-    elif isinstance(spark_type, (TimestampType, TimestampNTZType)):
-        compatible = isinstance(value, (datetime.datetime, pd.Timestamp))
-    elif isinstance(spark_type, DateType):
-        compatible = isinstance(value, (datetime.date, pd.Timestamp))
-    elif isinstance(spark_type, TimeType):
-        compatible = isinstance(value, datetime.time)
-    elif isinstance(spark_type, DayTimeIntervalType):
-        compatible = isinstance(value, datetime.timedelta)
-    else:
-        # For complex types (ArrayType, MapType, StructType) and other exotic types
-        # (VariantType, spatial types, YearMonthIntervalType, CalendarIntervalType),
-        # skip filtering and let Spark handle type resolution.
-        compatible = True
-    if not compatible:
-        return None
-    return F.lit(value).cast(spark_type)
+        return isinstance(value, (int, float, bool, decimal.Decimal, np.number))
+    if isinstance(spark_type, BooleanType):
+        return isinstance(value, (bool, np.bool_, int, float, np.number))
+    if isinstance(spark_type, (StringType, CharType, VarcharType)):
+        return isinstance(value, str)
+    if isinstance(spark_type, BinaryType):
+        return isinstance(value, (bytes, bytearray))
+    if isinstance(spark_type, (TimestampType, TimestampNTZType)):
+        return isinstance(value, (datetime.datetime, pd.Timestamp))
+    if isinstance(spark_type, DateType):
+        return isinstance(value, (datetime.date, pd.Timestamp))
+    if isinstance(spark_type, TimeType):
+        return isinstance(value, datetime.time)
+    if isinstance(spark_type, DayTimeIntervalType):
+        return isinstance(value, datetime.timedelta)
+    # For complex types (ArrayType, MapType, StructType) and other exotic types
+    # (VariantType, spatial types, YearMonthIntervalType, CalendarIntervalType),
+    # skip filtering and let Spark handle type resolution.
+    return True
 
 
 class IndexOpsMixin(object, metaclass=ABCMeta):
@@ -986,7 +978,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
         spark_type = self._internal.data_fields[0].spark_type
         compatible = [
-            lit for v in values if (lit := _isin_compatible_lit(v, spark_type)) is not None
+            F.lit(v).cast(spark_type) for v in values if _is_value_type_compatible(v, spark_type)
         ]
         scol = (
             F.coalesce(self.spark.column.isin(compatible), F.lit(False))
