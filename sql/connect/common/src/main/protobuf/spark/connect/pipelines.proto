@@ -87,6 +87,7 @@ message PipelineCommand {
     oneof details {
       TableDetails table_details = 6;
       SinkDetails sink_details = 7;
+      DirectoryDetails directory_details = 8;
       google.protobuf.Any extension = 999;
     }
 
@@ -118,6 +119,21 @@ message PipelineCommand {
 
       // Streaming write format
       optional string format = 2;
+    }
+
+    // Metadata that's only applicable to directory outputs.
+    message DirectoryDetails {
+      // Output path (s3://bucket/path, file:///local/path, etc.)
+      optional string path = 1;
+
+      // File format (parquet, orc, csv, json, etc.)
+      optional string format = 2;
+
+      // Write mode (overwrite, append, errorifexists, ignore)
+      optional string mode = 3;
+
+      // Additional write options (compression, partitionBy, etc.)
+      map<string, string> options = 4;
     }
   }
 
@@ -278,6 +294,8 @@ enum OutputType {
   TEMPORARY_VIEW = 3;
   // A sink which is not published to the catalog
   SINK = 4;
+  // A directory output (non-catalog managed file path)
+  DIRECTORY = 5;
 }
 
 // A response containing an event emitted during the run of a pipeline.
