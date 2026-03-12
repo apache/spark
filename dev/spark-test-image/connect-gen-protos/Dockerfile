@@ -15,12 +15,6 @@
 # limitations under the License.
 #
 
-# Usage:
-# 1, Build the image
-# docker build -t connect-cg dev/spark-test-image/connect-gen-protos/
-# 2, Run the image under spark repo
-# docker run -it --rm -v "$(pwd)":/spark connect-cg
-
 # Image for generating Spark Connect protobuf files. Based on Ubuntu 24.04.
 FROM ubuntu:noble
 LABEL org.opencontainers.image.authors="Apache Spark project <dev@spark.apache.org>"
@@ -55,6 +49,7 @@ ENV VIRTUAL_ENV=/opt/spark-venv
 RUN python3.12 -m venv $VIRTUAL_ENV
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
+# Keep these versions in sync with the pinned versions in dev/requirements.txt
 RUN python3.12 -m pip install \
     'mypy==1.19.1' \
     'mypy-protobuf==3.3.0' \
