@@ -7,7 +7,32 @@ After modifying any `.proto` file here, regenerate the Python stubs under
 
 ---
 
-## Method 1: Local Python environment
+## Method 1: Docker image (recommended)
+
+This method does not require any local tool installation and produces a
+reproducible environment.
+
+### Build the image
+
+```bash
+docker build -t connect-cg dev/spark-test-image/connect-gen-protos/
+```
+
+### Run the image
+
+From the root of the Spark repository:
+
+```bash
+docker run --cpus 1 -it --rm -v "$(pwd)":/spark connect-cg
+```
+
+The container mounts the repository at `/spark`, runs `dev/connect-gen-protos.sh`
+inside the container, and writes the generated files to
+`python/pyspark/sql/connect/proto/` in your local checkout.
+
+---
+
+## Method 2: Local Python environment
 
 ### Prerequisites
 
@@ -44,27 +69,3 @@ You can also generate to a custom output directory by passing a path:
 ```bash
 ./dev/connect-gen-protos.sh /tmp/my-proto-output
 ```
-
----
-
-## Method 2: Docker image
-
-This method does not require any local tool installation.
-
-### Build the image
-
-```bash
-docker build -t connect-cg dev/spark-test-image/connect-gen-protos/
-```
-
-### Run the image
-
-From the root of the Spark repository:
-
-```bash
-docker run --cpus 1 -it --rm -v "$(pwd)":/spark connect-cg
-```
-
-The container mounts the repository at `/spark`, runs `dev/connect-gen-protos.sh`
-inside the container, and writes the generated files to
-`python/pyspark/sql/connect/proto/` in your local checkout.
