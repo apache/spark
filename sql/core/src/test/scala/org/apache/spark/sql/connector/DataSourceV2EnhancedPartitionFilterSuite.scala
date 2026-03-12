@@ -367,9 +367,8 @@ class DataSourceV2EnhancedPartitionFilterSuite
   }
 
   /**
-   * Asserts that each pushed partition predicate's referencedPartitionColumnOrdinals
-   * and references() (PartitionColumnReference) match the expected ordinals and
-   * partition column names.
+   * Asserts that each pushed partition predicate's references() (PartitionColumnReference,
+   * each with ordinal()) match the expected ordinals and partition column names.
    *
    * @param df the query result
    * @param expectedOrdinals expected 0-based ordinals from Table.partitioning()
@@ -383,21 +382,17 @@ class DataSourceV2EnhancedPartitionFilterSuite
     val predicates = getPushedPartitionPredicates(df)
     val names = expectedPartitionColumnNames
     predicates.foreach { p =>
-      val ordinals = p.referencedPartitionColumnOrdinals()
-      assert(ordinals.sameElements(expectedOrdinals),
-        s"Expected referencedPartitionColumnOrdinals " +
-          s"${expectedOrdinals.mkString("[", ", ", "]")}, " +
+      val refs = p.references()
+      val ordinals = refs.map(_.asInstanceOf[PartitionColumnReference].ordinal()).sorted
+      assert(ordinals.sameElements(expectedOrdinals.sorted),
+        s"Expected references().map(_.ordinal()) " +
+          s"${expectedOrdinals.sorted.mkString("[", ", ", "]")}, " +
           s"got ${ordinals.mkString("[", ", ", "]")}")
 
-      val refs = p.references()
-      assert(refs.length === expectedOrdinals.length,
-        s"Expected references() length ${expectedOrdinals.length}, got ${refs.length}")
       refs.foreach { ref =>
         assert(ref.isInstanceOf[PartitionColumnReference],
           s"Expected PartitionColumnReference, got ${ref.getClass.getName}")
         val partRef = ref.asInstanceOf[PartitionColumnReference]
-        assert(expectedOrdinals.contains(partRef.ordinal()),
-          s"references() ordinal ${partRef.ordinal()} not in expected $expectedOrdinals")
         assert(partRef.fieldNames().nonEmpty,
           s"PartitionColumnReference.ordinal=${partRef.ordinal()} has empty fieldNames")
         assert(partRef.ordinal() < names.length,
@@ -409,10 +404,6 @@ class DataSourceV2EnhancedPartitionFilterSuite
           s"PartitionColumnReference.ordinal=${partRef.ordinal()}: " +
             s"expected fieldNames '${expectedName}', got '${actualName}'")
       }
-      val refOrdinals = refs.map(_.asInstanceOf[PartitionColumnReference].ordinal()).sorted
-      assert(refOrdinals.sameElements(expectedOrdinals.sorted),
-        s"references() ordinals ${refOrdinals.mkString("[", ", ", "]")} " +
-          s"should match expected ${expectedOrdinals.sorted.mkString("[", ", ", "]")}")
     }
   }
 

@@ -20,13 +20,10 @@ package org.apache.spark.sql.internal.connector
 import org.apache.spark.sql.connector.expressions.PartitionColumnReference
 
 /**
- * Implementation of [[PartitionColumnReference]] that carries the ordinal in
+ * Implementation of [[PartitionColumnReference]] that carries the position ordinal in
  * Table.partitioning() and the partition column name(s) for that position.
  */
 private[connector] case class PartitionColumnReferenceImpl(
     ordinal: Int,
-    names: Array[String])
-  extends PartitionColumnReference {
-
-  override def fieldNames(): Array[String] = names
-}
+    fieldNames: Array[String])
+  extends PartitionColumnReference

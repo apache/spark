@@ -19,7 +19,6 @@ package org.apache.spark.sql.connector.expressions;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.catalog.Table;
-import org.apache.spark.sql.connector.expressions.filter.PartitionPredicate;
 
 /**
  * A reference to a partition column in {@link Table#partitioning()}.
@@ -27,8 +26,7 @@ import org.apache.spark.sql.connector.expressions.filter.PartitionPredicate;
  * This extends {@link NamedReference} so that partition predicates can participate in the same
  * reference framework as other expressions. {@link #fieldNames()} returns the partition column
  * name (or names) as reported by the table's partition schema at this ordinal. {@link #ordinal()}
- * returns the 0-based position in {@link Table#partitioning()}, paralleling
- * {@link PartitionPredicate#referencedPartitionColumnOrdinals()}.
+ * returns the 0-based position in {@link Table#partitioning()}.
  *
  * @since 4.2.0
  */

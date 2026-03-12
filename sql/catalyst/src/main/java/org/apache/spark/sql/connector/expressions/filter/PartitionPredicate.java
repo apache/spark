@@ -20,10 +20,10 @@ package org.apache.spark.sql.connector.expressions.filter;
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.connector.catalog.Table;
-import org.apache.spark.sql.connector.expressions.Expression;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 import org.apache.spark.sql.connector.expressions.PartitionColumnReference;
-import org.apache.spark.sql.connector.read.SupportsPushDownV2Filters;
+
+import static org.apache.spark.sql.connector.expressions.Expression.EMPTY_EXPRESSION;
 
 /**
  * Represents a partition predicate that can be evaluated using {@link Table#partitioning()}.
@@ -40,8 +40,8 @@ public abstract class PartitionPredicate extends Predicate {
 
   public static final String NAME = "PARTITION_PREDICATE";
 
-  protected PartitionPredicate(Expression[] children) {
-    super(NAME, children);
+  protected PartitionPredicate() {
+    super(NAME, EMPTY_EXPRESSION);
   }
 
   /**
@@ -50,9 +50,27 @@ public abstract class PartitionPredicate extends Predicate {
    * For PartitionPredicate, returns {@link PartitionColumnReference} instances that identify
    * the partition columns (from {@link Table#partitioning()}) referenced by this predicate.
    * Each reference's {@link PartitionColumnReference#fieldNames()} gives the partition column
-   * name; {@link PartitionColumnReference#ordinal()} gives the 0-based position. See
-   * {@link #referencedPartitionColumnOrdinals()} for examples and how data sources use these
-   * references (e.g. when to return a predicate for post-scan filtering).
+   * name; {@link PartitionColumnReference#ordinal()} gives the 0-based position in
+   * {@link Table#partitioning()}.
+   * <p>
+   * <b>Example:</b> Suppose {@code Table.partitioning()} returns three partition
+   * transforms: {@code [years(ts), months(ts), bucket(32, id)]} with ordinals 0, 1, 2.
+   * Each {@link PartitionColumnReference} has {@link PartitionColumnReference#fieldNames()}
+   * (the transform display name, e.g. {@code years(ts)}) and
+   * {@link PartitionColumnReference#ordinal()}:
+   * <ul>
+   *   <li>{@code years(ts) = 2026} returns one reference: (fieldNames=[years(ts)], ordinal=0).</li>
+   *   <li>{@code years(ts) = 2026 and months(ts) = 01} returns two references:
+   *       (fieldNames=[years(ts)], ordinal=0), (fieldNames=[months(ts)], ordinal=1).</li>
+   *   <li>{@code bucket(32, id) = 1} returns one reference:
+   *       (fieldNames=[bucket(32, id)], ordinal=2).</li>
+   * </ul>
+   * <p>
+   * Data sources can use these references to decide whether to return a predicate for post-scan
+   * filtering. For example, sources supporting partition spec evolution should return
+   * PartitionPredicates that reference later-added partition transforms (incompletely
+   * partitioned data) to Spark for post-scan filter, while predicates that reference only
+   * initially-added partition transforms may be fully pushed.
    *
    * @return array of partition column references
    */
@@ -61,42 +79,14 @@ public abstract class PartitionPredicate extends Predicate {
 
   /**
    * Evaluates this predicate against a single partition's keys.
+   * <p>
+   * The caller must pass the <b>full</b> partition key: one value per partition transform in
+   * {@link Table#partitioning()}, in order. A key for only a subset of referenced columns is not
+   * supported.
    *
    * @param partitionKey the full partition key for one partition, ordered according to
-   *                     {@link Table#partitioning()}. Must include all partition columns,
-   *                     not just those referenced by this predicate.
+   *                     {@link Table#partitioning()}.
    * @return true if the partition represented by these keys satisfies this predicate.
    */
   public abstract boolean eval(InternalRow partitionKey);
-
-  /**
-   * Returns the ordinal position(s) of the partition transform(s) in
-   * {@link Table#partitioning()} that are
-   * referenced by this partition filter expression.
-   *
-   * <p><b>Example:</b> Suppose {@code Table.partitioning()} returns three partition
-   * transforms: {@code [years(ts), months(ts), bucket(32, id)]} with ordinals 0, 1, 2.
-   * <ul>
-   *   <li>A filter expression {@code years(ts) = 2026} returns {@code [0]}.</li>
-   *   <li>A filter expression {@code years(ts) = 2026 and months(ts) = 01}
-   *       returns {@code [0, 1]}.</li>
-   *   <li>A filter expression {@code bucket(32, id) = 1} returns {@code [2]}.</li>
-   * </ul>
-   * <p>
-   * Data sources can use this to evaluate PartitionPredicates pushed down by
-   * {@link SupportsPushDownV2Filters#pushPredicates(Predicate[])}
-   * to determine whether the PartitionPredicate can be satisfied completely,
-   * or whether it must be returned to Spark for post-scan filtering.
-   * <p>
-   * For example, data sources supporting partition spec evolution
-   * should return PartitionPredicates that reference later-added partition
-   * transforms (for which data in the table is incompletely partitioned)
-   * to Spark for post-scan filter, while PartitionPredicates that reference initially-added
-   * partition transforms (for which data in the table is completely partitioned) do not need
-   * to be returned.
-   * @return array of 0-based ordinal position(s) of the transform(s) in
-   * {@link Table#partitioning()} referenced by this
-   * PartitionPredicate's partition filter expression.
-   */
-  public abstract int[] referencedPartitionColumnOrdinals();
 }

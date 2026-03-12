@@ -21,9 +21,10 @@ import org.apache.spark.SparkException
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BoundReference, Expression => CatalystExpression, Predicate => CatalystPredicate}
-import org.apache.spark.sql.connector.expressions.Expression
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.connector.expressions.filter.PartitionPredicate
+import org.apache.spark.sql.types.StructType
 
 /**
  * An implementation for [[PartitionPredicate]] that wraps a Catalyst Expression representing a
@@ -35,20 +36,21 @@ import org.apache.spark.sql.connector.expressions.filter.PartitionPredicate
  */
 class PartitionPredicateImpl private (
     private val catalystExpr: CatalystExpression,
-    private val partitionSchema: Seq[AttributeReference])
-  extends PartitionPredicate(Expression.EMPTY_EXPRESSION) with Logging {
+    private val partitionSchema: StructType)
+  extends PartitionPredicate with Logging {
 
   /** The wrapped partition filter Catalyst Expression. */
   def expression: CatalystExpression = catalystExpr
 
   /** Bound predicate, computed once and reused for all partition rows. */
   private lazy val boundPredicate: InternalRow => Boolean = {
-    // Column name matching is case-sensitive, consistent with DSV1 partition filtering.
+    // Convert to attributes only when binding the expression; use struct everywhere else.
+    val attrs = toAttributes(partitionSchema)
     val boundExpr = catalystExpr.transform {
       case a: AttributeReference =>
-        val index = partitionSchema.indexWhere(_.name == a.name)
+        val index = attrs.indexWhere(_.name == a.name)
         require(index >= 0, s"Column ${a.name} not found in partition schema")
-        BoundReference(index, partitionSchema(index).dataType, nullable = true)
+        BoundReference(index, attrs(index).dataType, nullable = true)
     }
     val predicate = CatalystPredicate.createInterpreted(boundExpr)
     predicate.eval
@@ -78,30 +80,21 @@ class PartitionPredicateImpl private (
     }
   }
 
-  override def referencedPartitionColumnOrdinals(): Array[Int] = {
-    val partitionNames = partitionSchema.map(_.name)
+  override def references(): Array[NamedReference] = {
+    val partitionNames = partitionSchema.fieldNames
     // Case-sensitive column name matching, consistent with DSV1.
     val ordinals = catalystExpr.references.flatMap { ref =>
       val idx = partitionNames.indexWhere(_ == ref.name)
-      if (idx >= 0) {
-        Some(idx)
-      } else {
-        None
-      }
+      if (idx >= 0) Some(idx) else None
     }
-    ordinals.toArray.sorted.distinct
-  }
-
-  override def references(): Array[NamedReference] = {
-    referencedPartitionColumnOrdinals().map { ord =>
-      PartitionColumnReferenceImpl(ord, Array(partitionSchema(ord).name))
+    ordinals.toArray.sorted.distinct.map { ord =>
+      PartitionColumnReferenceImpl(ord, Array(partitionSchema(ord).name)): NamedReference
     }
   }
 
   override def equals(obj: Any): Boolean = obj match {
     case other: PartitionPredicateImpl =>
-      catalystExpr.semanticEquals(other.catalystExpr) &&
-        partitionSchema == other.partitionSchema
+      catalystExpr.semanticEquals(other.catalystExpr) && partitionSchema == other.partitionSchema
     case _ => false
   }
 
@@ -109,21 +102,20 @@ class PartitionPredicateImpl private (
     31 * catalystExpr.semanticHash() + partitionSchema.hashCode()
   }
 
-  override def toString(): String =
-    s"PartitionPredicate(${catalystExpr.sql})"
+  override def toString(): String = s"PartitionPredicate(${catalystExpr.sql})"
 }
 
 object PartitionPredicateImpl {
 
   def apply(
       catalystExpr: CatalystExpression,
-      partitionSchema: Seq[AttributeReference]): PartitionPredicateImpl = {
+      partitionSchema: StructType): PartitionPredicateImpl = {
     if (partitionSchema.isEmpty) {
       throw SparkException.internalError(
         s"Cannot evaluate partition predicate ${catalystExpr.sql}: partition schema is empty")
     }
+    val partitionNames = partitionSchema.fieldNames.toSet
     val refNames = catalystExpr.references.map(_.name).toSet
-    val partitionNames = partitionSchema.map(_.name).toSet
     if (!refNames.subsetOf(partitionNames)) {
       throw SparkException.internalError(
         s"Cannot evaluate partition predicate ${catalystExpr.sql}: expression references " +
