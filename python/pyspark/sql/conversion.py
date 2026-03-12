@@ -1772,14 +1772,7 @@ class ArrowArrayToPandasConversion:
             # This name will be dropped after pa.compute functions.
             ser_name = arr._name
 
-        if isinstance(spark_type, ArrayType):
-            # ArrayType only needs tz localization, not ns coercion.
-            # preprocess_time() coerces to timestamp[ns] which causes PyArrow's
-            # to_pandas() to return raw integers for nested timestamps
-            # instead of datetime objects.
-            arr = ArrowArrayConversion.localize_tz(arr)
-        else:
-            arr = ArrowArrayConversion.preprocess_time(arr)
+        arr = ArrowArrayConversion.preprocess_time(arr)
 
         series: pd.Series
 
@@ -1850,10 +1843,10 @@ class ArrowArrayToPandasConversion:
             )
         elif isinstance(spark_type, ArrayType):
             if ndarray_as_list:
-                series = arr.to_pandas(date_as_object=True, integer_object_nulls=True)
+                series = arr.to_pandas(integer_object_nulls=True)
                 series = series.map(lambda x: cls._ndarray_to_list(x) if x is not None else None)
             else:
-                series = arr.to_pandas(date_as_object=True)
+                series = arr.to_pandas()
         # elif isinstance(spark_type, (MapType, StructType)):
         #     TODO: Support MapType, StructType
         else:  # pragma: no cover
