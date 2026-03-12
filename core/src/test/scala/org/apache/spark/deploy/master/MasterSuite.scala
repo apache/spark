@@ -176,6 +176,42 @@ class MasterSuite extends MasterSuiteBase {
     }
   }
 
+  test("SPARK-55970: executor cores exceeding worker total cores should be capped to worker cores")
+  {
+    val workerCores = 8
+    val requestedCores = 100 // intentionally much larger than worker cores
+    val conf = new SparkConf().set(CAP_EXECUTOR_CORES_ENABLED, true)
+    val master = makeMaster(conf)
+    // maxCores is not set (unlimited), simulating a user who set spark.executor.cores too large
+    // without an explicit spark.cores.max constraint. coresLeft = Int.MaxValue >= requestedCores,
+    // so the scheduler enters the appMayHang path and applies the cap.
+    val appInfo = makeAppInfo(1024, coresPerExecutor = Some(requestedCores))
+    val worker = makeWorkerInfo(2048, workerCores)
+    master.workers += worker
+    master.registerApplication(appInfo)
+    startExecutorsOnWorkers(master)
+    // The executor should be launched with cores capped to the worker's total cores
+    assert(appInfo.executors.size === 1)
+    assert(appInfo.executors.values.head.cores === workerCores)
+  }
+
+  test("SPARK-55970: executor cores within worker total cores should not be capped") {
+    val workerCores = 8
+    val requestedCores = 4 // within worker capacity
+    val conf = new SparkConf().set(CAP_EXECUTOR_CORES_ENABLED, true)
+    val master = makeMaster(conf)
+    val appInfo = makeAppInfo(1024, coresPerExecutor = Some(requestedCores),
+      maxCores = Some(workerCores))
+    val worker = makeWorkerInfo(2048, workerCores)
+    master.workers += worker
+    master.registerApplication(appInfo)
+    startExecutorsOnWorkers(master)
+    // 2 executors should be launched (workerCores / requestedCores = 8 / 4 = 2)
+    // with no capping applied since requestedCores <= workerCores
+    assert(appInfo.executors.size === 2)
+    assert(appInfo.executors.values.forall(_.cores === requestedCores))
+  }
+
   test("SPARK-45753: Support driver id pattern") {
     val master = makeMaster(new SparkConf().set(DRIVER_ID_PATTERN, "my-driver-%2$05d"))
     val submitDate = new Date()

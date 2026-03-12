@@ -825,6 +825,16 @@ private[deploy] class Master(
     assignedCores
   }
 
+  private def sortUsableWorkersByPolicy(workers: Array[WorkerInfo]): Array[WorkerInfo] = {
+    workerSelectionPolicy match {
+      case CORES_FREE_ASC => workers.sortBy(w => (w.coresFree, w.id))
+      case CORES_FREE_DESC => workers.sortBy(w => (w.coresFree, w.id)).reverse
+      case MEMORY_FREE_ASC => workers.sortBy(w => (w.memoryFree, w.id))
+      case MEMORY_FREE_DESC => workers.sortBy(w => (w.memoryFree, w.id)).reverse
+      case WorkerSelectionPolicy.WORKER_ID => workers.sortBy(_.id)
+    }
+  }
+
   /**
    * Schedule and launch executors on workers
    */
@@ -838,36 +848,54 @@ private[deploy] class Master(
         logInfo(log"Start scheduling for app ${MDC(LogKeys.APP_ID, app.id)} with" +
           log" rpId: ${MDC(LogKeys.RESOURCE_PROFILE_ID, rpId)}")
         val resourceDesc = app.getResourceDescriptionForRpId(rpId)
+        val aliveWorkers = workers.toArray.filter(_.state == WorkerState.ALIVE)
         val coresPerExecutor = resourceDesc.coresPerExecutor.getOrElse(1)
 
         // If the cores left is less than the coresPerExecutor,the cores left will not be allocated
         if (app.coresLeft >= coresPerExecutor) {
           // Filter out workers that don't have enough resources to launch an executor
-          val aliveWorkers = workers.toArray.filter(_.state == WorkerState.ALIVE)
-            .filter(canLaunchExecutor(_, resourceDesc))
-          val usableWorkers = workerSelectionPolicy match {
-            case CORES_FREE_ASC => aliveWorkers.sortBy(w => (w.coresFree, w.id))
-            case CORES_FREE_DESC => aliveWorkers.sortBy(w => (w.coresFree, w.id)).reverse
-            case MEMORY_FREE_ASC => aliveWorkers.sortBy(w => (w.memoryFree, w.id))
-            case MEMORY_FREE_DESC => aliveWorkers.sortBy(w => (w.memoryFree, w.id)).reverse
-            case WorkerSelectionPolicy.WORKER_ID => aliveWorkers.sortBy(_.id)
-          }
+          val usableWorkers = aliveWorkers.filter(canLaunchExecutor(_, resourceDesc))
+          val sortedUsableWorkers = sortUsableWorkersByPolicy(usableWorkers)
           val appMayHang = waitingApps.length == 1 &&
-            waitingApps.head.executors.isEmpty && usableWorkers.isEmpty
-          if (appMayHang) {
+            waitingApps.head.executors.isEmpty && sortedUsableWorkers.isEmpty
+          // If the app would hang, log a warning. Also check whether spark.executor.cores
+          // exceeds the total cores of any worker; if so, cap it to the max worker cores and
+          // recompute the usable workers so the executor can be placed.
+          val (effectiveResourceDesc, effectiveUsableWorkers) = if (appMayHang) {
             logWarning(log"App ${MDC(LogKeys.APP_ID, app.id)} requires more resource " +
               log"than any of Workers could have.")
+            resourceDesc.coresPerExecutor match {
+              case Some(requestedCores)
+                if conf.get(CAP_EXECUTOR_CORES_ENABLED) &&
+                  aliveWorkers.nonEmpty && requestedCores > aliveWorkers.map(_.cores).max =>
+                val maxWorkerCores = aliveWorkers.map(_.cores).max
+                logWarning(log"spark.executor.cores is set to " +
+                  log"${MDC(LogKeys.NUM_EXECUTOR_CORES, requestedCores)}, which exceeds the " +
+                  log"maximum available cores on any worker " +
+                  log"(${MDC(LogKeys.NUM_EXECUTOR_CORES_TOTAL, maxWorkerCores)}). " +
+                  log"Resetting spark.executor.cores to " +
+                  log"${MDC(LogKeys.NUM_EXECUTOR_CORES_TOTAL, maxWorkerCores)} " +
+                  log"to allow executor launch.")
+                val cappedDesc = resourceDesc.copy(coresPerExecutor = Some(maxWorkerCores))
+                val cappedWorkers = sortUsableWorkersByPolicy(
+                  aliveWorkers.filter(canLaunchExecutor(_, cappedDesc)))
+                (cappedDesc, cappedWorkers)
+              case _ => (resourceDesc, sortedUsableWorkers)
+            }
+          } else {
+            (resourceDesc, sortedUsableWorkers)
           }
           val assignedCores =
-            scheduleExecutorsOnWorkers(app, rpId, resourceDesc, usableWorkers, spreadOutApps)
+            scheduleExecutorsOnWorkers(
+              app, rpId, effectiveResourceDesc, effectiveUsableWorkers, spreadOutApps)
 
           // Now that we've decided how many cores to allocate on each worker, let's allocate them
-          for (pos <- usableWorkers.indices if assignedCores(pos) > 0) {
+          for (pos <- effectiveUsableWorkers.indices if assignedCores(pos) > 0) {
             allocateWorkerResourceToExecutors(
               app,
               assignedCores(pos),
-              resourceDesc,
-              usableWorkers(pos),
+              effectiveResourceDesc,
+              effectiveUsableWorkers(pos),
               rpId)
           }
         }
