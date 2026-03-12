@@ -83,7 +83,13 @@ trait SparkConnectServerTest extends SharedSparkSession with ArrowAllocatorLeakC
   }
 
   protected def clearAllExecutions(): Unit = {
-    SparkConnectService.executionManager.listExecuteHolders.foreach(_.close())
+    val holders = SparkConnectService.executionManager.listExecuteHolders
+    holders.foreach(_.close())
+    // Wait for execution threads to terminate so that Arrow allocators they hold are released
+    // before the ArrowAllocatorLeakCheck runs in afterAll().
+    holders.foreach { holder =>
+      eventuallyWithTimeout { assert(!holder.isExecuteThreadRunnerAlive()) }
+    }
     SparkConnectService.executionManager.periodicMaintenance(0)
     SparkConnectService.sessionManager.invalidateAllSessions()
     assertNoActiveExecutions()
