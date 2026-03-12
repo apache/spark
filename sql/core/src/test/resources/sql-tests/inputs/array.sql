@@ -189,3 +189,17 @@ select array_prepend(array(CAST(NULL AS String)), CAST(NULL AS String));
 -- SPARK-45599: Confirm 0.0, -0.0, and NaN are handled appropriately.
 select array_union(array(0.0, -0.0, DOUBLE("NaN")), array(0.0, -0.0, DOUBLE("NaN")));
 select array_distinct(array(0.0, -0.0, -0.0, DOUBLE("NaN"), DOUBLE("NaN")));
+
+-- SPARK-54698: Confirm 0.0, -0.0, and NaN are handled appropriately for complex types.
+select array_union(
+  array(named_struct('a', -0.0D), named_struct('a', DOUBLE('NaN'))),
+  array(named_struct('a', 0.0D), named_struct('a', DOUBLE('NaN')), named_struct('a', 1.0D)));
+select array_distinct(
+  array(named_struct('a', -0.0D), named_struct('a', 0.0D),
+    named_struct('a', DOUBLE('NaN')), named_struct('a', DOUBLE('NaN'))));
+select array_except(
+  array(named_struct('a', -0.0D), named_struct('a', DOUBLE('NaN')), named_struct('a', 1.0D)),
+  array(named_struct('a', 0.0D), named_struct('a', DOUBLE('NaN'))));
+select array_intersect(
+  array(named_struct('a', -0.0D), named_struct('a', DOUBLE('NaN')), named_struct('a', 1.0D)),
+  array(named_struct('a', 0.0D), named_struct('a', DOUBLE('NaN')), named_struct('a', 2.0D)));
