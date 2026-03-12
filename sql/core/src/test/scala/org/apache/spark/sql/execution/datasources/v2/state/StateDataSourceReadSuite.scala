@@ -1576,6 +1576,57 @@ class StateDataSourceNoEmptyDirCreationSuite extends StateDataSourceTestBase {
     }
   }
 
+  test("deleted commits directory is not recreated on read (state-metadata source)") {
+    withTempDir { tempDir =>
+      val checkpointPath = tempDir.getAbsolutePath
+      runLargeDataStreamingAggregationQuery(checkpointPath)
+
+      val commitsDir = new File(tempDir, "commits")
+      assert(commitsDir.exists(), "Commits directory should exist after running the query")
+      Utils.deleteRecursively(commitsDir)
+      assert(!commitsDir.exists(), "Commits directory should be deleted")
+
+      spark.read.format("state-metadata").load(checkpointPath).collect()
+
+      assert(!commitsDir.exists(),
+        "State-metadata source reader should not recreate the deleted commits directory")
+    }
+  }
+
+  test("deleted offsets directory is not recreated on read (state-metadata source)") {
+    withTempDir { tempDir =>
+      val checkpointPath = tempDir.getAbsolutePath
+      runLargeDataStreamingAggregationQuery(checkpointPath)
+
+      val offsetsDir = new File(tempDir, "offsets")
+      assert(offsetsDir.exists(), "Offsets directory should exist after running the query")
+      Utils.deleteRecursively(offsetsDir)
+      assert(!offsetsDir.exists(), "Offsets directory should be deleted")
+
+      spark.read.format("state-metadata").load(checkpointPath).collect()
+
+      assert(!offsetsDir.exists(),
+        "State-metadata source reader should not recreate the deleted offsets directory")
+    }
+  }
+
+  test("deleted state directory is not recreated on read (state-metadata source)") {
+    withTempDir { tempDir =>
+      val checkpointPath = tempDir.getAbsolutePath
+      runLargeDataStreamingAggregationQuery(checkpointPath)
+
+      val stateDir = new File(tempDir, "state")
+      assert(stateDir.exists(), "State directory should exist after running the query")
+      Utils.deleteRecursively(stateDir)
+      assert(!stateDir.exists(), "State directory should be deleted")
+
+      spark.read.format("state-metadata").load(checkpointPath).collect()
+
+      assert(!stateDir.exists(),
+        "State-metadata source reader should not recreate the deleted state directory")
+    }
+  }
+
   /**
    * Runs a stateful query to create the checkpoint structure, deletes the state directory,
    * then attempts to read via the state data source and verifies that the state directory
