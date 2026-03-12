@@ -30,14 +30,20 @@ from pandas.api.types import is_list_like, CategoricalDtype
 
 from pyspark.sql import functions as F, Column, Window
 from pyspark.sql.types import (
+    BinaryType,
     BooleanType,
+    CharType,
     DataType,
     DateType,
+    DayTimeIntervalType,
     LongType,
+    NullType,
     NumericType,
     StringType,
     TimestampNTZType,
     TimestampType,
+    TimeType,
+    VarcharType,
 )
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark.pandas._typing import Axis, Dtype, IndexOpsLike, Label, SeriesOrIndex
@@ -297,18 +303,27 @@ def _is_value_type_compatible(value: Any, spark_type: DataType) -> bool:
     import datetime
     import decimal
 
-    if value is None:
+    if value is None or isinstance(spark_type, NullType):
         return True
     if isinstance(spark_type, NumericType):
         return isinstance(value, (int, float, bool, decimal.Decimal, np.number))
     if isinstance(spark_type, BooleanType):
         return isinstance(value, (bool, np.bool_, int, float, np.number))
-    if isinstance(spark_type, StringType):
+    if isinstance(spark_type, (StringType, CharType, VarcharType)):
         return isinstance(value, str)
+    if isinstance(spark_type, BinaryType):
+        return isinstance(value, (bytes, bytearray))
     if isinstance(spark_type, (TimestampType, TimestampNTZType)):
         return isinstance(value, (datetime.datetime, pd.Timestamp))
     if isinstance(spark_type, DateType):
         return isinstance(value, (datetime.date, pd.Timestamp))
+    if isinstance(spark_type, TimeType):
+        return isinstance(value, datetime.time)
+    if isinstance(spark_type, DayTimeIntervalType):
+        return isinstance(value, datetime.timedelta)
+    # For complex types (ArrayType, MapType, StructType) and other exotic types
+    # (VariantType, spatial types, YearMonthIntervalType, CalendarIntervalType),
+    # skip filtering and let Spark handle type resolution.
     return True
 
 
