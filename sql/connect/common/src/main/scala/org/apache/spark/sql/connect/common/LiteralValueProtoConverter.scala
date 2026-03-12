@@ -387,7 +387,10 @@ object LiteralValueProtoConverter {
   private def getScalaConverter(dataType: proto.DataType): proto.Expression.Literal => Any = {
     val converter: proto.Expression.Literal => Any = dataType.getKindCase match {
       case proto.DataType.KindCase.NULL =>
-        v => throw InvalidPlanInput(s"Expected null value, but got ${v.getLiteralTypeCase}")
+        v =>
+          throw InvalidPlanInput(
+            "CONNECT_INVALID_PLAN.EXPECTED_NULL_VALUE",
+            Map("literalTypeCase" -> v.getLiteralTypeCase.toString))
       case proto.DataType.KindCase.SHORT => v => v.getShort.toShort
       case proto.DataType.KindCase.INTEGER => v => v.getInteger
       case proto.DataType.KindCase.LONG => v => v.getLong
@@ -421,7 +424,9 @@ object LiteralValueProtoConverter {
       case proto.DataType.KindCase.STRUCT =>
         v => toScalaStructInternal(v, dataType.getStruct)
       case _ =>
-        throw InvalidPlanInput(s"Unsupported Literal Type: ${dataType.getKindCase}")
+        throw InvalidPlanInput(
+          "CONNECT_INVALID_PLAN.UNSUPPORTED_LITERAL_TYPE",
+          Map("typeInfo" -> dataType.getKindCase.toString))
     }
     v => if (v.hasNull) null else converter(v)
   }
@@ -558,7 +563,9 @@ object LiteralValueProtoConverter {
                   .setContainsNull(true)
                   .build())
             } else {
-              throw InvalidPlanInput("Data type information is missing in the array literal.")
+              throw InvalidPlanInput(
+                "CONNECT_INVALID_PLAN.ARRAY_LITERAL_MISSING_DATA_TYPE",
+                Map.empty)
             }
           case proto.Expression.Literal.LiteralTypeCase.MAP =>
             if (literal.getMap.hasKeyType && literal.getMap.hasValueType) {
@@ -570,18 +577,23 @@ object LiteralValueProtoConverter {
                   .setValueContainsNull(true)
                   .build())
             } else {
-              throw InvalidPlanInput("Data type information is missing in the map literal.")
+              throw InvalidPlanInput(
+                "CONNECT_INVALID_PLAN.MAP_LITERAL_MISSING_DATA_TYPE",
+                Map.empty)
             }
           case proto.Expression.Literal.LiteralTypeCase.STRUCT =>
             if (literal.getStruct.hasStructType) {
               builder.setStruct(literal.getStruct.getStructType.getStruct)
             } else {
-              throw InvalidPlanInput("Data type information is missing in the struct literal.")
+              throw InvalidPlanInput(
+                "CONNECT_INVALID_PLAN.STRUCT_LITERAL_MISSING_DATA_TYPE",
+                Map.empty)
             }
           case _ =>
+            val literalCase = literal.getLiteralTypeCase
             throw InvalidPlanInput(
-              s"Unsupported Literal Type: ${literal.getLiteralTypeCase.name}" +
-                s"(${literal.getLiteralTypeCase.getNumber})")
+              "CONNECT_INVALID_PLAN.UNSUPPORTED_LITERAL_TYPE",
+              Map("typeInfo" -> s"${literalCase.name}(${literalCase.getNumber})"))
         }
         builder.build()
       }
@@ -589,8 +601,10 @@ object LiteralValueProtoConverter {
 
     if (!isCompatible(literal.getLiteralTypeCase, dataType.getKindCase)) {
       throw InvalidPlanInput(
-        s"Incompatible data type ${dataType.getKindCase} " +
-          s"for literal ${literal.getLiteralTypeCase}")
+        "CONNECT_INVALID_PLAN.INCOMPATIBLE_LITERAL_DATA_TYPE",
+        Map(
+          "dataTypeKindCase" -> dataType.getKindCase.toString,
+          "literalTypeCase" -> literal.getLiteralTypeCase.toString))
     }
 
     dataType
@@ -600,7 +614,7 @@ object LiteralValueProtoConverter {
       literal: proto.Expression.Literal,
       arrayType: proto.DataType.Array): Array[_] = {
     if (!literal.hasArray) {
-      throw InvalidPlanInput("Array literal is not set.")
+      throw InvalidPlanInput("CONNECT_INVALID_PLAN.ARRAY_LITERAL_NOT_SET", Map.empty)
     }
     val array = literal.getArray
     def makeArrayData[T](converter: proto.Expression.Literal => T)(implicit
@@ -620,7 +634,7 @@ object LiteralValueProtoConverter {
       literal: proto.Expression.Literal,
       mapType: proto.DataType.Map): mutable.Map[_, _] = {
     if (!literal.hasMap) {
-      throw InvalidPlanInput("Map literal is not set.")
+      throw InvalidPlanInput("CONNECT_INVALID_PLAN.MAP_LITERAL_NOT_SET", Map.empty)
     }
     val map = literal.getMap
     def makeMapData[K, V](
@@ -646,7 +660,7 @@ object LiteralValueProtoConverter {
       literal: proto.Expression.Literal,
       structType: proto.DataType.Struct): Any = {
     if (!literal.hasStruct) {
-      throw InvalidPlanInput("Struct literal is not set.")
+      throw InvalidPlanInput("CONNECT_INVALID_PLAN.STRUCT_LITERAL_NOT_SET", Map.empty)
     }
     val struct = literal.getStruct
     val structData = Array.tabulate(struct.getElementsCount) { i =>
