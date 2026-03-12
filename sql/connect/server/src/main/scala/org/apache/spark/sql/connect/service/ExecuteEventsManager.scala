@@ -188,9 +188,7 @@ case class ExecuteEventsManager(executeHolder: ExecuteHolder, clock: Clock) {
       request.getPlan.getOpTypeCase match {
         case proto.Plan.OpTypeCase.COMMAND => request.getPlan.getCommand
         case proto.Plan.OpTypeCase.ROOT => request.getPlan.getRoot
-        case _ =>
-          throw new UnsupportedOperationException(
-            s"${request.getPlan.getOpTypeCase} not supported.")
+        case _ => request.getPlan
       }
 
     val event = SparkListenerConnectOperationStarted(
