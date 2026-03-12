@@ -364,6 +364,19 @@ class SeriesTestsMixin:
 
         self.assert_eq(psser.isin([1, 5, 0, None]), pser.isin([1, 5, 0, None]))
 
+        # Cross-type matching: string values against int column should not match
+        pser = pd.Series([1, 2, 3], name="a")
+        psser = ps.from_pandas(pser)
+        self.assert_eq(psser.isin(["1", "2"]), pser.isin(["1", "2"]))
+
+        # Numeric cross-type: float values against int column should match
+        self.assert_eq(psser.isin([1.0, 2.0]), pser.isin([1.0, 2.0]))
+
+        # String column with numeric values should not match
+        pser = pd.Series(["1", "2", "3"], name="a")
+        psser = ps.from_pandas(pser)
+        self.assert_eq(psser.isin([1, 2]), pser.isin([1, 2]))
+
     def test_notnull(self):
         pser = pd.Series([1, 2, 3, 4, np.nan, 6], name="x")
         psser = ps.from_pandas(pser)

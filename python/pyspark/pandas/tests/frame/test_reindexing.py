@@ -788,8 +788,7 @@ class FrameReindexingMixin:
         psdf = ps.from_pandas(pdf)
 
         self.assert_eq(psdf.isin([4, "six"]), pdf.isin([4, "six"]))
-        # Seems like pandas has a bug when passing `np.array` as parameter
-        self.assert_eq(psdf.isin(np.array([4, "six"])), pdf.isin([4, "six"]))
+        self.assert_eq(psdf.isin(np.array([4, "six"])), pdf.isin(np.array([4, "six"])))
         self.assert_eq(
             psdf.isin({"a": [2, 8], "c": ["three", "one"]}),
             pdf.isin({"a": [2, 8], "c": ["three", "one"]}),
@@ -823,6 +822,15 @@ class FrameReindexingMixin:
         self.assert_eq(psdf.isin([4, 3, 1, 1, None]), pdf.isin([4, 3, 1, 1, None]))
 
         self.assert_eq(psdf.isin({"b": [4, 3, 1, 1, None]}), pdf.isin({"b": [4, 3, 1, 1, None]}))
+
+        # Cross-type matching: string values against int columns should not match
+        pdf = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]})
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(psdf.isin(["1", "2"]), pdf.isin(["1", "2"]))
+        self.assert_eq(psdf.isin({"a": ["1", "2"]}), pdf.isin({"a": ["1", "2"]}))
+
+        # Numeric cross-type: float values against int columns should match
+        self.assert_eq(psdf.isin([1.0, 2.0]), pdf.isin([1.0, 2.0]))
 
     def test_sample(self):
         psdf = ps.DataFrame({"A": [0, 2, 4]}, index=["x", "y", "z"])
