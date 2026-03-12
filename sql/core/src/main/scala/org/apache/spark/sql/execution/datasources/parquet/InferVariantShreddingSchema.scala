@@ -101,7 +101,8 @@ class InferVariantShreddingSchema(val schema: StructType) {
     var rowCount: Int = 0,           // Count of distinct rows containing this field
     var lastSeenRow: Int = -1,       // Last row index that incremented rowCount
     var arrayElementCount: Long = 0, // Total occurrences across all array elements
-    children: mutable.Map[String, FieldNode] = mutable.Map.empty
+    children: mutable.Map[String, FieldNode] = mutable.Map.empty,
+    var arrayElementNode: Option[FieldNode] = None
   ) {
 
     def getOrCreateChild(fieldName: String): FieldNode = {
@@ -111,6 +112,14 @@ class InferVariantShreddingSchema(val schema: StructType) {
     def hasChildren: Boolean = children.nonEmpty
 
     def getChildren: Seq[(String, FieldNode)] = children.toSeq
+
+    def getOrCreateArrayElement(): FieldNode = {
+      arrayElementNode.getOrElse {
+        val node = FieldNode(NullType)
+        arrayElementNode = Some(node)
+        node
+      }
+    }
   }
 
   private def getFieldCount(field: StructField): Long = {
@@ -313,6 +322,7 @@ class InferVariantShreddingSchema(val schema: StructType) {
         getValueAtPath(schema, row, path).foreach { variantVal =>
           numNonNullVariants += 1
           val v = new Variant(variantVal.getValue, variantVal.getMetadata)
+          rootNode.dataType = mergeSchema(rootNode.dataType, inferPrimitiveType(v, 0))
           // Traverse variant and update field stats tree
           collectFieldStats(v, rootNode, rowIdx, 0, inArrayContext = false)
         }
@@ -320,7 +330,12 @@ class InferVariantShreddingSchema(val schema: StructType) {
 
       // Build final schema from collected statistics
       val minCardinality = (numNonNullVariants + 9) / 10
-      val simpleSchema = buildSchemaFromStats(rootNode, minCardinality, numNonNullVariants)
+      val simpleSchema = buildSchemaFromStats(
+        rootNode,
+        minCardinality,
+        numNonNullVariants,
+        inArrayContext = false,
+        isArray = rootNode.arrayElementNode.isDefined)
       val finalizedSchema = finalizeSimpleSchema(simpleSchema, minCardinality, maxFields)
       val shreddingSchema = SparkShreddingUtils.variantShreddingSchema(finalizedSchema)
       val schemaWithMetadata = SparkShreddingUtils.addWriteShreddingMetadata(shreddingSchema)
@@ -388,8 +403,7 @@ class InferVariantShreddingSchema(val schema: StructType) {
         }
 
       case Type.ARRAY =>
-        // Use "[]" as special child key for array elements
-        val arrayNode = currentNode.getOrCreateChild("[]")
+        val arrayNode = currentNode.getOrCreateArrayElement()
 
         // Track distinct row count for the array field itself
         if (arrayNode.lastSeenRow != rowIdx) {
@@ -467,26 +481,31 @@ class InferVariantShreddingSchema(val schema: StructType) {
       currentNode: FieldNode,
       minCardinality: Int,
       numNonNullVariants: Int,
-      inArrayContext: Boolean = false): DataType = {
+      inArrayContext: Boolean,
+      isArray: Boolean): DataType = {
 
-    // Check if this node represents an array (has "[]" child)
-    val arrayChild = currentNode.children.get("[]")
-    if (arrayChild.isDefined && arrayChild.get.rowCount >= minCardinality) {
-      val arrayNode = arrayChild.get
-      val elementType = buildSchemaFromStats(
-        arrayNode,
-        minCardinality,
-        numNonNullVariants,
-        inArrayContext = true
-      )
-      return ArrayType(if (elementType == VariantType) arrayNode.dataType else elementType)
+    // If this node is an array, use array-element node to build element type.
+    if (isArray) {
+      val arrayElementNodeOpt = currentNode.arrayElementNode
+      if (arrayElementNodeOpt.isDefined && arrayElementNodeOpt.get.rowCount >= minCardinality) {
+        val arrayElementNode = arrayElementNodeOpt.get
+        val elementType = buildSchemaFromStats(
+          arrayElementNode,
+          minCardinality,
+          numNonNullVariants,
+          inArrayContext = true,
+          isArray = arrayElementNode.arrayElementNode.isDefined
+        )
+        return ArrayType(
+          if (elementType == VariantType) arrayElementNode.dataType else elementType)
+      }
+      return currentNode.dataType
     }
 
     // Get all direct children, filter by cardinality, sort by cardinality descending,
     // take top N, then sort alphabetically for determinism.
-    val maxStructSize = 1000
+    val maxStructSize = Math.min(1000, maxShreddedFieldsPerFile)
     val children = currentNode.getChildren
-      .filter { case (fieldName, _) => fieldName != "[]" }  // Exclude array marker
       .filter { case (_, childNode) =>
         val cardinality = if (inArrayContext) {
           childNode.arrayElementCount
@@ -515,23 +534,16 @@ class InferVariantShreddingSchema(val schema: StructType) {
     val fields = children.map { case (fieldName, childNode) =>
       val fieldType = childNode.dataType match {
         case StructType(_) =>
-          // Recurse to build nested struct (pass child node directly)
-          buildSchemaFromStats(childNode, minCardinality, numNonNullVariants, inArrayContext)
+          buildSchemaFromStats(
+            childNode, minCardinality, numNonNullVariants, inArrayContext, isArray = false)
 
         case ArrayType(_, _) =>
-          // Check for array child
-          childNode.children.get("[]") match {
-            case Some(arrayNode) =>
-              val elementType = buildSchemaFromStats(
-                arrayNode,
-                minCardinality,
-                numNonNullVariants,
-                inArrayContext = true
-              )
-              ArrayType(if (elementType == VariantType) arrayNode.dataType else elementType)
-            case None =>
-              childNode.dataType
-          }
+          buildSchemaFromStats(
+            childNode,
+            minCardinality,
+            numNonNullVariants,
+            inArrayContext = true,
+            isArray = childNode.arrayElementNode.isDefined)
 
         case other => other
       }
