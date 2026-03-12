@@ -179,6 +179,50 @@ def _make_typed_batch(rows: int, n_cols: int) -> tuple[pa.RecordBatch, IntegerTy
     )
 
 
+def _make_grouped_batch(rows_per_group, n_cols):
+    """``group_key (int64)`` + ``(n_cols - 1)`` float32 value columns."""
+    arrays = [pa.array(np.zeros(rows_per_group, dtype=np.int64))] + [
+        pa.array(np.random.rand(rows_per_group).astype(np.float32)) for _ in range(n_cols - 1)
+    ]
+    fields = [StructField("group_key", IntegerType())] + [
+        StructField(f"val_{i}", DoubleType()) for i in range(n_cols - 1)
+    ]
+    return (
+        pa.RecordBatch.from_arrays(arrays, names=[f.name for f in fields]),
+        StructType(fields),
+    )
+
+
+def _make_mixed_batch(rows_per_group):
+    """``id``, ``str_col``, ``float_col``, ``double_col``, ``long_col``."""
+    arrays = [
+        pa.array(np.zeros(rows_per_group, dtype=np.int64)),
+        pa.array([f"s{j}" for j in range(rows_per_group)]),
+        pa.array(np.random.rand(rows_per_group).astype(np.float32)),
+        pa.array(np.random.rand(rows_per_group)),
+        pa.array(np.zeros(rows_per_group, dtype=np.int64)),
+    ]
+    fields = [
+        StructField("id", IntegerType()),
+        StructField("str_col", StringType()),
+        StructField("float_col", DoubleType()),
+        StructField("double_col", DoubleType()),
+        StructField("long_col", IntegerType()),
+    ]
+    return (
+        pa.RecordBatch.from_arrays(arrays, names=[f.name for f in fields]),
+        StructType(fields),
+    )
+
+
+def _build_grouped_arg_offsets(n_cols, n_keys=0):
+    """``[len, num_keys, key_col_0, ..., val_col_0, ...]``"""
+    keys = list(range(n_keys))
+    vals = list(range(n_keys, n_cols))
+    offsets = [n_keys] + keys + vals
+    return [len(offsets)] + offsets
+
+
 # ---------------------------------------------------------------------------
 # General benchmark base classes
 # ---------------------------------------------------------------------------
@@ -448,12 +492,20 @@ def _write_grouped_arrow_data(
     groups: list[tuple[pa.RecordBatch, ...]],
     num_dfs: int,
     buf: io.BufferedIOBase,
+    max_records_per_batch: int | None = None,
 ) -> None:
     """Write grouped Arrow data in the wire protocol expected by _load_group_dataframes."""
     for group in groups:
         write_int(num_dfs, buf)
         for df_batch in group:
-            _write_arrow_ipc_batches(iter([df_batch]), buf)
+            if max_records_per_batch and df_batch.num_rows > max_records_per_batch:
+                sub_batches = [
+                    df_batch.slice(offset, max_records_per_batch)
+                    for offset in range(0, df_batch.num_rows, max_records_per_batch)
+                ]
+                _write_arrow_ipc_batches(iter(sub_batches), buf)
+            else:
+                _write_arrow_ipc_batches(iter([df_batch]), buf)
     write_int(0, buf)  # end of groups
 
 
@@ -676,6 +728,88 @@ class GroupedMapArrowIterUDFPeakmemBench(_GroupedMapArrowIterBenchMixin, _Peakme
     _scenarios = _GROUPED_MAP_ARROW_SCENARIOS
     _udfs = _GROUPED_MAP_ARROW_ITER_UDFS
     params = [list(_GROUPED_MAP_ARROW_SCENARIOS), list(_GROUPED_MAP_ARROW_ITER_UDFS)]
+    param_names = ["scenario", "udf"]
+
+
+# -- SQL_GROUPED_MAP_PANDAS_UDF ------------------------------------------------
+# UDF receives a ``pandas.DataFrame`` per group, returns a ``pandas.DataFrame``.
+# Groups are sent as separate Arrow IPC streams with optional sub-batching
+# (``spark.sql.execution.arrow.maxRecordsPerBatch``).
+
+_MAX_RECORDS_PER_BATCH = 10_000
+
+
+def _build_grouped_map_pandas_scenarios():
+    scenarios = {}
+
+    for name, (rows, n_cols, num_groups, max_rpb) in {
+        "sm_grp_few_col": (1_000, 5, 200, None),
+        "sm_grp_many_col": (1_000, 50, 30, None),
+        "lg_grp_few_col": (100_000, 5, 30, _MAX_RECORDS_PER_BATCH),
+        "lg_grp_many_col": (100_000, 50, 5, _MAX_RECORDS_PER_BATCH),
+    }.items():
+        batch, schema = _make_grouped_batch(rows, n_cols)
+        scenarios[name] = (batch, num_groups, schema, max_rpb)
+
+    # mixed column types, small groups
+    batch, schema = _make_mixed_batch(3)
+    scenarios["mixed_types"] = (batch, 200, schema, None)
+
+    return scenarios
+
+
+_GROUPED_MAP_PANDAS_SCENARIOS = _build_grouped_map_pandas_scenarios()
+
+# Each UDF entry: (func, ret_type, n_args).
+# ret_type=None means "use the input schema" (excluding key columns for n_args=2).
+# n_args=1 -> func(pdf), n_args=2 -> func(key, pdf).
+_GROUPED_MAP_PANDAS_UDFS = {
+    "identity_udf": (lambda df: df, None, 1),
+    "sort_udf": (lambda df: df.sort_values(df.columns[0]), None, 1),
+    "key_identity_udf": (lambda key, df: df, None, 2),
+}
+
+
+class _GroupedMapPandasBenchMixin:
+    """Provides ``_write_scenario`` for SQL_GROUPED_MAP_PANDAS_UDF.
+
+    Each scenario stores ``(batch, num_groups, schema, max_rpb)``.
+    Groups are written as separate Arrow IPC streams.
+    """
+
+    def _write_scenario(self, scenario, udf_name, buf):
+        batch, num_groups, schema, max_rpb = self._scenarios[scenario]
+        udf_func, ret_type, n_args = self._udfs[udf_name]
+        if ret_type is None:
+            # 2-arg UDFs receive (key, pdf) where pdf excludes key columns,
+            # so the return schema must also exclude them.
+            ret_type = StructType(schema.fields[n_args - 1 :]) if n_args > 1 else schema
+        n_cols = len(schema.fields)
+        arg_offsets = _build_grouped_arg_offsets(n_cols, n_keys=n_args - 1)
+        _write_worker_input(
+            PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
+            lambda b: _build_udf_payload(udf_func, ret_type, arg_offsets, b),
+            lambda b: _write_grouped_arrow_data(
+                [(batch,)] * num_groups,
+                num_dfs=1,
+                buf=b,
+                max_records_per_batch=max_rpb,
+            ),
+            buf,
+        )
+
+
+class GroupedMapPandasUDFTimeBench(_GroupedMapPandasBenchMixin, _TimeBenchBase):
+    _scenarios = _GROUPED_MAP_PANDAS_SCENARIOS
+    _udfs = _GROUPED_MAP_PANDAS_UDFS
+    params = [list(_GROUPED_MAP_PANDAS_SCENARIOS), list(_GROUPED_MAP_PANDAS_UDFS)]
+    param_names = ["scenario", "udf"]
+
+
+class GroupedMapPandasUDFPeakmemBench(_GroupedMapPandasBenchMixin, _PeakmemBenchBase):
+    _scenarios = _GROUPED_MAP_PANDAS_SCENARIOS
+    _udfs = _GROUPED_MAP_PANDAS_UDFS
+    params = [list(_GROUPED_MAP_PANDAS_SCENARIOS), list(_GROUPED_MAP_PANDAS_UDFS)]
     param_names = ["scenario", "udf"]
 
 
