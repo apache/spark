@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+import datetime
+
 import numpy as np
 import pandas as pd
 from pandas.tseries.offsets import DateOffset
@@ -831,6 +833,35 @@ class FrameReindexingMixin:
 
         # Numeric cross-type: float values against int columns should match
         self.assert_eq(psdf.isin([1.0, 2.0]), pdf.isin([1.0, 2.0]))
+
+        # Bool values are compatible with numeric columns
+        self.assert_eq(psdf.isin([True]), pdf.isin([True]))
+
+        # Bool column: int/float are compatible, string is not
+        pdf = pd.DataFrame({"a": [True, False, True], "b": [1, 2, 3]})
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(psdf.isin([1]), pdf.isin([1]))
+        self.assert_eq(psdf.isin(["True"]), pdf.isin(["True"]))
+
+        # Date column: date is compatible, string/int are not
+        pdf = pd.DataFrame(
+            {
+                "a": [datetime.date(2023, 1, 1), datetime.date(2023, 1, 2)],
+                "b": [1, 2],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(
+            psdf.isin([datetime.date(2023, 1, 1)]),
+            pdf.isin([datetime.date(2023, 1, 1)]),
+        )
+        self.assert_eq(psdf.isin(["2023-01-01"]), pdf.isin(["2023-01-01"]))
+
+        # Binary column: bytes is compatible, string is not
+        pdf = pd.DataFrame({"a": [b"abc", b"def"], "b": [1, 2]})
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(psdf.isin([b"abc"]), pdf.isin([b"abc"]))
+        self.assert_eq(psdf.isin(["abc"]), pdf.isin(["abc"]))
 
     def test_sample(self):
         psdf = ps.DataFrame({"A": [0, 2, 4]}, index=["x", "y", "z"])

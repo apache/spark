@@ -8554,7 +8554,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 % (set(values.keys()).difference(self.columns))
             )
 
-        from pyspark.pandas.base import _is_value_type_compatible
+        from pyspark.pandas.base import _isin_compatible_lit
 
         data_spark_columns = []
         if isinstance(values, dict):
@@ -8565,7 +8565,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
                     label = self._internal.column_labels[i]
                     col_type = self._internal.spark_type_for(label)
-                    compatible = [F.lit(v) for v in item if _is_value_type_compatible(v, col_type)]
+                    compatible = [
+                        lit for v in item if (lit := _isin_compatible_lit(v, col_type)) is not None
+                    ]
                     scol = (
                         F.coalesce(
                             self._internal.spark_column_for(label).isin(compatible), F.lit(False)
@@ -8585,7 +8587,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
             for label in self._internal.column_labels:
                 col_type = self._internal.spark_type_for(label)
-                compatible = [F.lit(v) for v in values if _is_value_type_compatible(v, col_type)]
+                compatible = [
+                    lit for v in values if (lit := _isin_compatible_lit(v, col_type)) is not None
+                ]
                 scol = (
                     F.coalesce(
                         self._internal.spark_column_for(label).isin(compatible), F.lit(False)
