@@ -1887,224 +1887,138 @@ class CollectionExpressionsSuite
     checkEvaluation(ArrayPosition(aa1, aae), 0L)
   }
 
-  test("elementAt") {
-    val a0 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType))
-    val a1 = Literal.create(Seq[String](null, ""), ArrayType(StringType))
-    val a2 = Literal.create(Seq(null), ArrayType(LongType))
-    val a3 = Literal.create(null, ArrayType(StringType))
+  Seq((Int.MaxValue, "Linear"), (0, "Hash Lookup")).foreach { case (threshold, name) =>
+    test(s"elementAt - $name") {
+      withSQLConf(SQLConf.MAP_LOOKUP_HASH_THRESHOLD.key -> threshold.toString) {
+        val a0 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType))
+        val a1 = Literal.create(Seq[String](null, ""), ArrayType(StringType))
+        val a2 = Literal.create(Seq(null), ArrayType(LongType))
+        val a3 = Literal.create(null, ArrayType(StringType))
 
-    intercept[Exception] {
-      checkEvaluation(ElementAt(a0, Literal(0)), null)
-    }.getMessage.contains("SQL array indices start at 1")
-    intercept[Exception] { checkEvaluation(ElementAt(a0, Literal(1.1)), null) }
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> false.toString) {
-      checkEvaluation(ElementAt(a0, Literal(4)), null)
-      checkEvaluation(ElementAt(a0, Literal(-4)), null)
-    }
+        intercept[Exception] {
+          checkEvaluation(ElementAt(a0, Literal(0)), null)
+        }.getMessage.contains("SQL array indices start at 1")
+        intercept[Exception] { checkEvaluation(ElementAt(a0, Literal(1.1)), null) }
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> false.toString) {
+          checkEvaluation(ElementAt(a0, Literal(4)), null)
+          checkEvaluation(ElementAt(a0, Literal(-4)), null)
+        }
 
-    checkEvaluation(ElementAt(a0, Literal(1)), 1)
-    checkEvaluation(ElementAt(a0, Literal(2)), 2)
-    checkEvaluation(ElementAt(a0, Literal(3)), 3)
-    checkEvaluation(ElementAt(a0, Literal(-3)), 1)
-    checkEvaluation(ElementAt(a0, Literal(-2)), 2)
-    checkEvaluation(ElementAt(a0, Literal(-1)), 3)
+        checkEvaluation(ElementAt(a0, Literal(1)), 1)
+        checkEvaluation(ElementAt(a0, Literal(2)), 2)
+        checkEvaluation(ElementAt(a0, Literal(3)), 3)
+        checkEvaluation(ElementAt(a0, Literal(-3)), 1)
+        checkEvaluation(ElementAt(a0, Literal(-2)), 2)
+        checkEvaluation(ElementAt(a0, Literal(-1)), 3)
 
-    checkEvaluation(ElementAt(a1, Literal(1)), null)
-    checkEvaluation(ElementAt(a1, Literal(2)), "")
-    checkEvaluation(ElementAt(a1, Literal(-2)), null)
-    checkEvaluation(ElementAt(a1, Literal(-1)), "")
+        checkEvaluation(ElementAt(a1, Literal(1)), null)
+        checkEvaluation(ElementAt(a1, Literal(2)), "")
+        checkEvaluation(ElementAt(a1, Literal(-2)), null)
+        checkEvaluation(ElementAt(a1, Literal(-1)), "")
 
-    checkEvaluation(ElementAt(a2, Literal(1)), null)
+        checkEvaluation(ElementAt(a2, Literal(1)), null)
 
-    checkEvaluation(ElementAt(a3, Literal(1)), null)
+        checkEvaluation(ElementAt(a3, Literal(1)), null)
 
 
-    val m0 =
-      Literal.create(Map("a" -> "1", "b" -> "2", "c" -> null), MapType(StringType, StringType))
-    val m1 = Literal.create(Map[String, String](), MapType(StringType, StringType))
-    val m2 = Literal.create(null, MapType(StringType, StringType))
+        val m0 =
+          Literal.create(Map("a" -> "1", "b" -> "2", "c" -> null),
+            MapType(StringType, StringType))
+        val m1 = Literal.create(Map[String, String](), MapType(StringType, StringType))
+        val m2 = Literal.create(null, MapType(StringType, StringType))
 
-    assert(ElementAt(m0, Literal(1.0)).checkInputDataTypes() ==
-      DataTypeMismatch(
-        errorSubClass = "MAP_FUNCTION_DIFF_TYPES",
-        messageParameters = Map(
-          "functionName" -> "`element_at`",
-          "dataType" -> "\"MAP\"",
-          "leftType" -> "\"MAP<STRING, STRING>\"",
-          "rightType" -> "\"DOUBLE\""
+        assert(ElementAt(m0, Literal(1.0)).checkInputDataTypes() ==
+          DataTypeMismatch(
+            errorSubClass = "MAP_FUNCTION_DIFF_TYPES",
+            messageParameters = Map(
+              "functionName" -> "`element_at`",
+              "dataType" -> "\"MAP\"",
+              "leftType" -> "\"MAP<STRING, STRING>\"",
+              "rightType" -> "\"DOUBLE\""
+            )
+          )
         )
-      )
-    )
 
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> false.toString) {
-      checkEvaluation(ElementAt(m0, Literal("d")), null)
-      checkEvaluation(ElementAt(m1, Literal("a")), null)
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> false.toString) {
+          checkEvaluation(ElementAt(m0, Literal("d")), null)
+          checkEvaluation(ElementAt(m1, Literal("a")), null)
+        }
+
+        checkEvaluation(ElementAt(m0, Literal("a")), "1")
+        checkEvaluation(ElementAt(m0, Literal("b")), "2")
+        checkEvaluation(ElementAt(m0, Literal("c")), null)
+
+        checkEvaluation(ElementAt(m2, Literal("a")), null)
+
+        // test binary type as keys
+        val mb0 = Literal.create(
+          Map(Array[Byte](1, 2) -> "1", Array[Byte](3, 4) -> null, Array[Byte](2, 1) -> "2"),
+          MapType(BinaryType, StringType))
+        val mb1 = Literal.create(Map[Array[Byte], String](), MapType(BinaryType, StringType))
+
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> false.toString) {
+          checkEvaluation(ElementAt(mb0, Literal(Array[Byte](1, 2, 3))), null)
+          checkEvaluation(ElementAt(mb1, Literal(Array[Byte](1, 2))), null)
+        }
+        checkEvaluation(ElementAt(mb0, Literal(Array[Byte](2, 1), BinaryType)), "2")
+        checkEvaluation(ElementAt(mb0, Literal(Array[Byte](3, 4))), null)
+
+        // Int keys
+        val intMap = Literal.create(Map(1 -> 10, 2 -> 20, 3 -> 30),
+          MapType(IntegerType, IntegerType))
+        checkEvaluation(ElementAt(intMap, Literal(1)), 10)
+        checkEvaluation(ElementAt(intMap, Literal(2)), 20)
+        checkEvaluation(ElementAt(intMap, Literal(4)), null)
+
+        // Duplicate keys
+        val keys = new GenericArrayData(Array(1, 2, 1))
+        val values = new GenericArrayData(Array(10, 20, 30))
+        val dupMapData = new ArrayBasedMapData(keys, values)
+        val dupMap = Literal.create(dupMapData, MapType(IntegerType, IntegerType))
+        checkEvaluation(ElementAt(dupMap, Literal(1)), 10)
+        checkEvaluation(ElementAt(dupMap, Literal(2)), 20)
+
+        // Null values
+        val nullValueMap = Literal.create(Map(1 -> null), MapType(IntegerType, StringType))
+        checkEvaluation(ElementAt(nullValueMap, Literal(1)), null)
+
+        // NaN keys
+        val nan = Double.NaN
+        val doubleMap = Literal.create(Map(1.0 -> 10, nan -> 20),
+          MapType(DoubleType, IntegerType))
+        checkEvaluation(ElementAt(doubleMap, Literal(1.0)), 10)
+        checkEvaluation(ElementAt(doubleMap, Literal(nan)), 20)
+
+        // Nested Map Value
+        val mapNested = Literal.create(
+          Map(1 -> Map(10 -> 100), 2 -> Map(20 -> 200)),
+          MapType(IntegerType, MapType(IntegerType, IntegerType)))
+        checkEvaluation(ElementAt(mapNested, Literal(1)), Map(10 -> 100))
+        checkEvaluation(ElementAt(mapNested, Literal(2)), Map(20 -> 200))
+        checkEvaluation(ElementAt(mapNested, Literal(3)), null)
+
+        // Array Keys
+        val arrayType = ArrayType(IntegerType)
+        val arrayMap = Literal.create(
+          Map(Array(1, 2) -> 10, Array(3, 4) -> 20),
+          MapType(arrayType, IntegerType))
+        checkEvaluation(ElementAt(arrayMap, Literal.create(Array(1, 2), arrayType)), 10)
+        checkEvaluation(ElementAt(arrayMap, Literal.create(Array(3, 4), arrayType)), 20)
+        checkEvaluation(ElementAt(arrayMap, Literal.create(Array(5, 6), arrayType)), null)
+
+        // Struct Keys
+        val structType = new StructType().add("a", "int").add("b", "int")
+        val structMap = Literal.create(
+          Map(create_row(1, 1) -> 10, create_row(2, 2) -> 20),
+          MapType(structType, IntegerType))
+        checkEvaluation(ElementAt(structMap, Literal.create(create_row(1, 1), structType)), 10)
+        checkEvaluation(ElementAt(structMap, Literal.create(create_row(2, 2), structType)), 20)
+        checkEvaluation(ElementAt(structMap, Literal.create(create_row(3, 3), structType)), null)
+      }
     }
-
-    checkEvaluation(ElementAt(m0, Literal("a")), "1")
-    checkEvaluation(ElementAt(m0, Literal("b")), "2")
-    checkEvaluation(ElementAt(m0, Literal("c")), null)
-
-    checkEvaluation(ElementAt(m2, Literal("a")), null)
-
-    // test binary type as keys
-    val mb0 = Literal.create(
-      Map(Array[Byte](1, 2) -> "1", Array[Byte](3, 4) -> null, Array[Byte](2, 1) -> "2"),
-      MapType(BinaryType, StringType))
-    val mb1 = Literal.create(Map[Array[Byte], String](), MapType(BinaryType, StringType))
-
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> false.toString) {
-      checkEvaluation(ElementAt(mb0, Literal(Array[Byte](1, 2, 3))), null)
-      checkEvaluation(ElementAt(mb1, Literal(Array[Byte](1, 2))), null)
-    }
-    checkEvaluation(ElementAt(mb0, Literal(Array[Byte](2, 1), BinaryType)), "2")
-    checkEvaluation(ElementAt(mb0, Literal(Array[Byte](3, 4))), null)
-
-    // Int keys
-    val intMap = Literal.create(Map(1 -> 10, 2 -> 20, 3 -> 30), MapType(IntegerType, IntegerType))
-    checkEvaluation(ElementAt(intMap, Literal(1)), 10)
-    checkEvaluation(ElementAt(intMap, Literal(2)), 20)
-    checkEvaluation(ElementAt(intMap, Literal(4)), null)
-
-    // Duplicate keys
-    val keys = new GenericArrayData(Array(1, 2, 1))
-    val values = new GenericArrayData(Array(10, 20, 30))
-    val dupMapData = new ArrayBasedMapData(keys, values)
-    val dupMap = Literal.create(dupMapData, MapType(IntegerType, IntegerType))
-    checkEvaluation(ElementAt(dupMap, Literal(1)), 10)
-    checkEvaluation(ElementAt(dupMap, Literal(2)), 20)
-
-    // Null values
-    val nullValueMap = Literal.create(Map(1 -> null), MapType(IntegerType, StringType))
-    checkEvaluation(ElementAt(nullValueMap, Literal(1)), null)
-
-    // NaN keys
-    val nan = Double.NaN
-    val doubleMap = Literal.create(Map(1.0 -> 10, nan -> 20), MapType(DoubleType, IntegerType))
-    checkEvaluation(ElementAt(doubleMap, Literal(1.0)), 10)
-    checkEvaluation(ElementAt(doubleMap, Literal(nan)), 20)
   }
 
-  test("SPARK-55959: elementAt - hash lookup") {
-    // 1. Large map (trigger hash lookup)
-    // The size must be larger than or equal to hashLookupThreshold (20) to trigger hash lookup.
-    val size = 30
-    val largeKeys = (0 until size).toArray
-    val largeValues = largeKeys.map(_ * 10)
-    val largeMapData = new ArrayBasedMapData(
-      new GenericArrayData(largeKeys), new GenericArrayData(largeValues))
-    val largeMap = Literal.create(largeMapData, MapType(IntegerType, IntegerType))
 
-    // Test hits
-    checkEvaluation(ElementAt(largeMap, Literal(0)), 0)
-    checkEvaluation(ElementAt(largeMap, Literal(15)), 150)
-    checkEvaluation(ElementAt(largeMap, Literal(29)), 290)
-
-    // Test miss
-    checkEvaluation(ElementAt(largeMap, Literal(30)), null)
-    checkEvaluation(ElementAt(largeMap, Literal(-1)), null)
-
-    // 2. Boundary check (size = 20, trigger hash lookup)
-    val size20 = 20
-    val keys20 = (0 until size20).toArray
-    val values20 = keys20.map(_ * 10)
-    val mapData20 = new ArrayBasedMapData(
-      new GenericArrayData(keys20), new GenericArrayData(values20))
-    val map20 = Literal.create(mapData20, MapType(IntegerType, IntegerType))
-
-    checkEvaluation(ElementAt(map20, Literal(0)), 0)
-    checkEvaluation(ElementAt(map20, Literal(19)), 190)
-    checkEvaluation(ElementAt(map20, Literal(20)), null)
-
-    // 3. Null values
-    val keysWithNull = (0 until size).toArray
-    val valuesWithNull = keysWithNull.map { i =>
-      if (i % 2 == 0) null else i * 10
-    }.asInstanceOf[Array[Any]]
-    val mapDataWithNull = new ArrayBasedMapData(
-      new GenericArrayData(keysWithNull), new GenericArrayData(valuesWithNull))
-    val mapWithNull = Literal.create(mapDataWithNull, MapType(IntegerType, IntegerType))
-
-    checkEvaluation(ElementAt(mapWithNull, Literal(0)), null)
-    checkEvaluation(ElementAt(mapWithNull, Literal(1)), 10)
-
-    // 4. NaN keys
-    val sizeNan = 30
-    val keysNan = (0 until sizeNan).map(i => if (i == 0) Double.NaN else i.toDouble).toArray
-    val valuesNan = keysNan.map(k => if (k.isNaN) 999 else k.toInt * 10)
-    val mapDataNan = new ArrayBasedMapData(
-      new GenericArrayData(keysNan), new GenericArrayData(valuesNan))
-    val mapNan = Literal.create(mapDataNan, MapType(DoubleType, IntegerType))
-
-    checkEvaluation(ElementAt(mapNan, Literal(Double.NaN)), 999)
-    checkEvaluation(ElementAt(mapNan, Literal(1.0)), 10)
-    checkEvaluation(ElementAt(mapNan, Literal(2.0)), 20)
-
-    // 5. Duplicate keys (First win)
-    val keysDup = (0 until size).flatMap(i => Seq(i, i)).toArray
-    val valuesDup = (0 until size).flatMap(i => Seq(i * 10, i * 100)).toArray
-    val mapDataDup = new ArrayBasedMapData(
-      new GenericArrayData(keysDup), new GenericArrayData(valuesDup))
-    val mapDup = Literal.create(mapDataDup, MapType(IntegerType, IntegerType))
-
-    checkEvaluation(ElementAt(mapDup, Literal(0)), 0)
-    checkEvaluation(ElementAt(mapDup, Literal(10)), 100)
-    checkEvaluation(ElementAt(mapDup, Literal(29)), 290)
-
-    // 6. Nested Map Value
-    val valuesNested = keys20.map { i =>
-      val innerKey = i
-      val innerValue = i * 10
-      new ArrayBasedMapData(
-        new GenericArrayData(Array(innerKey)),
-        new GenericArrayData(Array(innerValue)))
-    }.toArray
-    val mapDataNested = new ArrayBasedMapData(
-      new GenericArrayData(keys20), new GenericArrayData(valuesNested))
-    val mapNested = Literal.create(
-      mapDataNested, MapType(IntegerType, MapType(IntegerType, IntegerType)))
-
-    val innerMap0 = new ArrayBasedMapData(
-      new GenericArrayData(Array(0)), new GenericArrayData(Array(0)))
-    val innerMap10 = new ArrayBasedMapData(
-      new GenericArrayData(Array(10)), new GenericArrayData(Array(100)))
-
-    checkEvaluation(ElementAt(mapNested, Literal(0)), innerMap0)
-    checkEvaluation(ElementAt(mapNested, Literal(10)), innerMap10)
-
-    // 7. Binary Keys
-    val keysBinary = (0 until size).map(i => Array(i.toByte)).toArray
-    val valuesBinary = (0 until size).map(_ * 10).toArray
-    val mapDataBinary = new ArrayBasedMapData(
-      new GenericArrayData(keysBinary), new GenericArrayData(valuesBinary))
-    val mapBinary = Literal.create(mapDataBinary, MapType(BinaryType, IntegerType))
-
-    checkEvaluation(ElementAt(mapBinary, Literal(Array(0.toByte))), 0)
-    checkEvaluation(ElementAt(mapBinary, Literal(Array(10.toByte))), 100)
-
-    // 8. Array Keys
-    val keysArray = (0 until size).map(i => new GenericArrayData(Array(i))).toArray
-    val valuesArray = (0 until size).map(_ * 10).toArray
-    val mapDataArray = new ArrayBasedMapData(
-      new GenericArrayData(keysArray), new GenericArrayData(valuesArray))
-    val mapArray = Literal.create(
-      mapDataArray, MapType(ArrayType(IntegerType), IntegerType))
-
-    checkEvaluation(ElementAt(mapArray, Literal(Array(0))), 0)
-    checkEvaluation(ElementAt(mapArray, Literal(Array(10))), 100)
-
-    // 9. Struct Keys
-    val keysStruct = (0 until size).map(i => create_row(i)).toArray
-    val valuesStruct = (0 until size).map(_ * 10).toArray
-    val mapDataStruct = new ArrayBasedMapData(
-      new GenericArrayData(keysStruct), new GenericArrayData(valuesStruct))
-    val structType = new StructType().add("a", "int")
-    val mapStruct = Literal.create(
-      mapDataStruct, MapType(structType, IntegerType))
-
-    checkEvaluation(ElementAt(mapStruct, Literal.create(create_row(0), structType)), 0)
-    checkEvaluation(ElementAt(mapStruct, Literal.create(create_row(10), structType)), 100)
-  }
 
   test("defaultValueOutOfBound") {
     // test defaultValueOutOfBound

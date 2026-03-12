@@ -129,194 +129,102 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(GetArrayItem(stArray4, Literal(1)).nullable)
   }
 
-  test("SPARK-55959: GetMapValue - hash lookup") {
-    def runLookupTests(): Unit = {
-    val typeM = MapType(StringType, StringType)
-    val map = Literal.create(Map("a" -> "b"), typeM)
-    val nullMap = Literal.create(null, typeM)
-    val nullString = Literal.create(null, StringType)
+  Seq((Int.MaxValue, "Linear"), (0, "Hash Lookup")).foreach { case (threshold, name) =>
+    test(s"GetMapValue - $name") {
+      withSQLConf(SQLConf.MAP_LOOKUP_HASH_THRESHOLD.key -> threshold.toString) {
+        val typeM = MapType(StringType, StringType)
+        val map = Literal.create(Map("a" -> "b"), typeM)
+        val nullMap = Literal.create(null, typeM)
+        val nullString = Literal.create(null, StringType)
 
-    // 1. Basic lookup (String keys)
-    checkEvaluation(GetMapValue(map, Literal("a")), "b")
-    checkEvaluation(GetMapValue(map, nullString), null)
-    checkEvaluation(GetMapValue(nullMap, nullString), null)
-    checkEvaluation(GetMapValue(map, nullString), null)
+        // 1. Basic lookup (String keys)
+        checkEvaluation(GetMapValue(map, Literal("a")), "b")
+        checkEvaluation(GetMapValue(map, nullString), null)
+        checkEvaluation(GetMapValue(nullMap, nullString), null)
+        checkEvaluation(GetMapValue(map, nullString), null)
 
-    val nonNullMap = Literal.create(Map("a" -> 1), MapType(StringType, IntegerType, false))
-    checkEvaluation(GetMapValue(nonNullMap, Literal("a")), 1)
+        val nonNullMap = Literal.create(Map("a" -> 1), MapType(StringType, IntegerType, false))
+        checkEvaluation(GetMapValue(nonNullMap, Literal("a")), 1)
 
-    // 2. Nested map
-    val nestedMap = Literal.create(Map("a" -> Map("b" -> "c")), MapType(StringType, typeM))
-    checkEvaluation(GetMapValue(nestedMap, Literal("a")), Map("b" -> "c"))
+        // 2. Nested map
+        val nestedMap = Literal.create(Map("a" -> Map("b" -> "c")), MapType(StringType, typeM))
+        checkEvaluation(GetMapValue(nestedMap, Literal("a")), Map("b" -> "c"))
 
-    // 3. Basic lookup (Int keys)
-    val intMap = Literal.create(Map(1 -> 10, 2 -> 20, 3 -> 30), MapType(IntegerType, IntegerType))
-    checkEvaluation(GetMapValue(intMap, Literal(1)), 10)
-    checkEvaluation(GetMapValue(intMap, Literal(2)), 20)
-    checkEvaluation(GetMapValue(intMap, Literal(3)), 30)
-    checkEvaluation(GetMapValue(intMap, Literal(4)), null)
+        // 3. Basic lookup (Int keys)
+        val intMap = Literal.create(Map(1 -> 10, 2 -> 20, 3 -> 30),
+          MapType(IntegerType, IntegerType))
+        checkEvaluation(GetMapValue(intMap, Literal(1)), 10)
+        checkEvaluation(GetMapValue(intMap, Literal(2)), 20)
+        checkEvaluation(GetMapValue(intMap, Literal(3)), 30)
+        checkEvaluation(GetMapValue(intMap, Literal(4)), null)
 
-    val emptyMap = Literal.create(Map.empty[Int, Int], MapType(IntegerType, IntegerType))
-    checkEvaluation(GetMapValue(emptyMap, Literal(1)), null)
+        val emptyMap = Literal.create(Map.empty[Int, Int], MapType(IntegerType, IntegerType))
+        checkEvaluation(GetMapValue(emptyMap, Literal(1)), null)
 
-    // 4. Special data
-    // Duplicate keys: Spark MapType doesn't enforce uniqueness in the underlying
-    // data structure (ArrayBasedMapData)
-    // We construct it manually to simulate duplicates.
-    val keys = new GenericArrayData(Array(1, 2, 1))
-    val values = new GenericArrayData(Array(10, 20, 30))
-    val dupMapData = new ArrayBasedMapData(keys, values)
-    val dupMap = Literal.create(dupMapData, MapType(IntegerType, IntegerType))
-    // Should return the first match
-    checkEvaluation(GetMapValue(dupMap, Literal(1)), 10)
-    checkEvaluation(GetMapValue(dupMap, Literal(2)), 20)
+        // 4. Special data
+        // Duplicate keys: Spark MapType doesn't enforce uniqueness in the underlying
+        // data structure (ArrayBasedMapData)
+        // We construct it manually to simulate duplicates.
+        val keys = new GenericArrayData(Array(1, 2, 1))
+        val values = new GenericArrayData(Array(10, 20, 30))
+        val dupMapData = new ArrayBasedMapData(keys, values)
+        val dupMap = Literal.create(dupMapData, MapType(IntegerType, IntegerType))
+        // Should return the first match
+        checkEvaluation(GetMapValue(dupMap, Literal(1)), 10)
+        checkEvaluation(GetMapValue(dupMap, Literal(2)), 20)
 
-    // Null values
-    val nullValueMap = Literal.create(Map(1 -> null), MapType(IntegerType, StringType))
-    checkEvaluation(GetMapValue(nullValueMap, Literal(1)), null)
+        // Null values
+        val nullValueMap = Literal.create(Map(1 -> null), MapType(IntegerType, StringType))
+        checkEvaluation(GetMapValue(nullValueMap, Literal(1)), null)
 
-    // NaN keys
-    val nan = Double.NaN
-    val floatNan = Float.NaN
-    val doubleMap = Literal.create(Map(1.0 -> 10, nan -> 20), MapType(DoubleType, IntegerType))
-    checkEvaluation(GetMapValue(doubleMap, Literal(1.0)), 10)
-    checkEvaluation(GetMapValue(doubleMap, Literal(nan)), 20)
+        // NaN keys
+        val nan = Double.NaN
+        val floatNan = Float.NaN
+        val doubleMap = Literal.create(Map(1.0 -> 10, nan -> 20), MapType(DoubleType, IntegerType))
+        checkEvaluation(GetMapValue(doubleMap, Literal(1.0)), 10)
+        checkEvaluation(GetMapValue(doubleMap, Literal(nan)), 20)
 
-    val floatMap = Literal.create(Map(1.0f -> 10, floatNan -> 20), MapType(FloatType, IntegerType))
-    checkEvaluation(GetMapValue(floatMap, Literal(1.0f)), 10)
-    checkEvaluation(GetMapValue(floatMap, Literal(floatNan)), 20)
+        val floatMap = Literal.create(Map(1.0f -> 10, floatNan -> 20),
+          MapType(FloatType, IntegerType))
+        checkEvaluation(GetMapValue(floatMap, Literal(1.0f)), 10)
+        checkEvaluation(GetMapValue(floatMap, Literal(floatNan)), 20)
 
-    // 5. Key types
-    // Long
-    val longMap = Literal.create(Map(1L -> 10, 2L -> 20), MapType(LongType, IntegerType))
-    checkEvaluation(GetMapValue(longMap, Literal(1L)), 10)
-    checkEvaluation(GetMapValue(longMap, Literal(3L)), null)
+        // 5. Key types
+        // Long
+        val longMap = Literal.create(Map(1L -> 10, 2L -> 20), MapType(LongType, IntegerType))
+        checkEvaluation(GetMapValue(longMap, Literal(1L)), 10)
+        checkEvaluation(GetMapValue(longMap, Literal(3L)), null)
 
-    // String
-    val stringMap = Literal.create(Map("a" -> "A", "b" -> "B"), MapType(StringType, StringType))
-    checkEvaluation(GetMapValue(stringMap, Literal("a")), "A")
-    checkEvaluation(GetMapValue(stringMap, Literal("c")), null)
-  }
+        // String
+        val stringMap = Literal.create(Map("a" -> "A", "b" -> "B"), MapType(StringType, StringType))
+        checkEvaluation(GetMapValue(stringMap, Literal("a")), "A")
+        checkEvaluation(GetMapValue(stringMap, Literal("c")), null)
 
-  test("SPARK-55959: GetMapValue - hash lookup") {
-    // 1. Large map (trigger hash lookup)
-    // The size must be larger than or equal to hashLookupThreshold (20) to trigger hash lookup.
-    val size = 30
-    val largeKeys = (0 until size).toArray
-    val largeValues = largeKeys.map(_ * 10)
-    val largeMapData = new ArrayBasedMapData(
-      new GenericArrayData(largeKeys), new GenericArrayData(largeValues))
-    val largeMap = Literal.create(largeMapData, MapType(IntegerType, IntegerType))
+        // 6. Binary Keys
+        val binaryMap = Literal.create(Map(Array(1.toByte) -> 10, Array(2.toByte) -> 20),
+          MapType(BinaryType, IntegerType))
+        checkEvaluation(GetMapValue(binaryMap, Literal(Array(1.toByte))), 10)
+        checkEvaluation(GetMapValue(binaryMap, Literal(Array(3.toByte))), null)
 
-    // Test hits
-    checkEvaluation(GetMapValue(largeMap, Literal(0)), 0)
-    checkEvaluation(GetMapValue(largeMap, Literal(15)), 150)
-    checkEvaluation(GetMapValue(largeMap, Literal(29)), 290)
+        // 7. Array Keys
+        val arrayType = ArrayType(IntegerType)
+        val arrayMap = Literal.create(
+          Map(Array(1, 2) -> 10, Array(3, 4) -> 20),
+          MapType(arrayType, IntegerType))
+        checkEvaluation(GetMapValue(arrayMap, Literal.create(Array(1, 2), arrayType)), 10)
+        checkEvaluation(GetMapValue(arrayMap, Literal.create(Array(3, 4), arrayType)), 20)
+        checkEvaluation(GetMapValue(arrayMap, Literal.create(Array(5, 6), arrayType)), null)
 
-    // Test miss
-    checkEvaluation(GetMapValue(largeMap, Literal(30)), null)
-    checkEvaluation(GetMapValue(largeMap, Literal(-1)), null)
-
-    // 2. Boundary check (size = 20, trigger hash lookup)
-    val size20 = 20
-    val keys20 = (0 until size20).toArray
-    val values20 = keys20.map(_ * 10)
-    val mapData20 = new ArrayBasedMapData(
-      new GenericArrayData(keys20), new GenericArrayData(values20))
-    val map20 = Literal.create(mapData20, MapType(IntegerType, IntegerType))
-
-    checkEvaluation(GetMapValue(map20, Literal(0)), 0)
-    checkEvaluation(GetMapValue(map20, Literal(19)), 190)
-    checkEvaluation(GetMapValue(map20, Literal(20)), null)
-
-    // 3. Null values
-    val keysWithNull = (0 until size).toArray
-    val valuesWithNull = keysWithNull.map { i =>
-      if (i % 2 == 0) null else i * 10
-    }.asInstanceOf[Array[Any]]
-    val mapDataWithNull = new ArrayBasedMapData(
-      new GenericArrayData(keysWithNull), new GenericArrayData(valuesWithNull))
-    val mapWithNull = Literal.create(mapDataWithNull, MapType(IntegerType, IntegerType))
-
-    checkEvaluation(GetMapValue(mapWithNull, Literal(0)), null)
-    checkEvaluation(GetMapValue(mapWithNull, Literal(1)), 10)
-
-    // 4. NaN keys
-    val sizeNan = 30
-    val keysNan = (0 until sizeNan).map(i => if (i == 0) Double.NaN else i.toDouble).toArray
-    val valuesNan = keysNan.map(k => if (k.isNaN) 999 else k.toInt * 10)
-    val mapDataNan = new ArrayBasedMapData(
-      new GenericArrayData(keysNan), new GenericArrayData(valuesNan))
-    val mapNan = Literal.create(mapDataNan, MapType(DoubleType, IntegerType))
-
-    checkEvaluation(GetMapValue(mapNan, Literal(Double.NaN)), 999)
-    checkEvaluation(GetMapValue(mapNan, Literal(1.0)), 10)
-    checkEvaluation(GetMapValue(mapNan, Literal(2.0)), 20)
-
-    // 5. Duplicate keys (First win)
-    val keysDup = (0 until size).flatMap(i => Seq(i, i)).toArray
-    val valuesDup = (0 until size).flatMap(i => Seq(i * 10, i * 100)).toArray
-    val mapDataDup = new ArrayBasedMapData(
-      new GenericArrayData(keysDup), new GenericArrayData(valuesDup))
-    val mapDup = Literal.create(mapDataDup, MapType(IntegerType, IntegerType))
-
-    checkEvaluation(GetMapValue(mapDup, Literal(0)), 0)
-    checkEvaluation(GetMapValue(mapDup, Literal(10)), 100)
-    checkEvaluation(GetMapValue(mapDup, Literal(29)), 290)
-
-    // 6. Nested Map Value
-    val valuesNested = keys20.map { i =>
-      val innerKey = i
-      val innerValue = i * 10
-      new ArrayBasedMapData(
-        new GenericArrayData(Array(innerKey)),
-        new GenericArrayData(Array(innerValue)))
-    }.toArray
-    val mapDataNested = new ArrayBasedMapData(
-      new GenericArrayData(keys20), new GenericArrayData(valuesNested))
-    val mapNested = Literal.create(
-      mapDataNested, MapType(IntegerType, MapType(IntegerType, IntegerType)))
-
-    val innerMap0 = new ArrayBasedMapData(
-      new GenericArrayData(Array(0)), new GenericArrayData(Array(0)))
-    val innerMap10 = new ArrayBasedMapData(
-      new GenericArrayData(Array(10)), new GenericArrayData(Array(100)))
-
-    checkEvaluation(GetMapValue(mapNested, Literal(0)), innerMap0)
-    checkEvaluation(GetMapValue(mapNested, Literal(10)), innerMap10)
-
-    // 7. Binary Keys
-    val keysBinary = (0 until size).map(i => Array(i.toByte)).toArray
-    val valuesBinary = (0 until size).map(_ * 10).toArray
-    val mapDataBinary = new ArrayBasedMapData(
-      new GenericArrayData(keysBinary), new GenericArrayData(valuesBinary))
-    val mapBinary = Literal.create(mapDataBinary, MapType(BinaryType, IntegerType))
-
-    checkEvaluation(GetMapValue(mapBinary, Literal(Array(0.toByte))), 0)
-    checkEvaluation(GetMapValue(mapBinary, Literal(Array(10.toByte))), 100)
-
-    // 8. Array Keys
-    val keysArray = (0 until size).map(i => new GenericArrayData(Array(i))).toArray
-    val valuesArray = (0 until size).map(_ * 10).toArray
-    val mapDataArray = new ArrayBasedMapData(
-      new GenericArrayData(keysArray), new GenericArrayData(valuesArray))
-    val mapArray = Literal.create(
-      mapDataArray, MapType(ArrayType(IntegerType), IntegerType))
-
-    checkEvaluation(GetMapValue(mapArray, Literal(Array(0))), 0)
-    checkEvaluation(GetMapValue(mapArray, Literal(Array(10))), 100)
-
-    // 9. Struct Keys
-    val keysStruct = (0 until size).map(i => create_row(i)).toArray
-    val valuesStruct = (0 until size).map(_ * 10).toArray
-    val mapDataStruct = new ArrayBasedMapData(
-      new GenericArrayData(keysStruct), new GenericArrayData(valuesStruct))
-    val structType = new StructType().add("a", "int")
-    val mapStruct = Literal.create(
-      mapDataStruct, MapType(structType, IntegerType))
-
-    checkEvaluation(GetMapValue(mapStruct, Literal.create(create_row(0), structType)), 0)
-    checkEvaluation(GetMapValue(mapStruct, Literal.create(create_row(10), structType)), 100)
+        // 8. Struct Keys
+        val structType = new StructType().add("a", "int").add("b", "int")
+        val structMap = Literal.create(
+          Map(create_row(1, 1) -> 10, create_row(2, 2) -> 20),
+          MapType(structType, IntegerType))
+        checkEvaluation(GetMapValue(structMap, Literal.create(create_row(1, 1), structType)), 10)
+        checkEvaluation(GetMapValue(structMap, Literal.create(create_row(2, 2), structType)), 20)
+        checkEvaluation(GetMapValue(structMap, Literal.create(create_row(3, 3), structType)), null)
+      }
+    }
   }
 
   test("GetStructField") {

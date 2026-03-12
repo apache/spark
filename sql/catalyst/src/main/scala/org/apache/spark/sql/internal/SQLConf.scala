@@ -2494,21 +2494,16 @@ object SQLConf {
         "otherwise if the size is above the threshold, it'll use broadcast variable. Note that " +
         "maximum string length allowed in Java is Integer.MAX_VALUE, so anything above it would " +
         "be meaningless. The default value is set to -1 (disabled by default).")
-      .version("4.2.0")
+      .version("4.0.0")
       .intConf
       .createWithDefault(-1)
 
   val MAP_LOOKUP_HASH_THRESHOLD = buildConf("spark.sql.mapLookupHashThreshold")
-    .doc("The threshold to use hash lookup for map lookup expressions. When the map size is " +
-      "larger than this threshold, we will build a hash map for lookup. Otherwise, we will use " +
-      "linear scan. This is only effective when the map key type supports hash lookup. " +
-      "To disable hash lookup, set this to a very large number. " +
-      "To always use hash lookup, set this to 0. " +
-      "This configuration affects `map[key]` and `element_at(map, key)`.")
+    .doc("The threshold to determine whether to use hash lookup for map lookup expressions. " +
+      "If the map size is small, the cost of building hash map exceeds the cost of a linear scan.")
     .version("4.2.0")
     .intConf
-    .checkValue(v => v >= 0, "The threshold must be non-negative.")
-    .createWithDefault(20)
+    .createWithDefault(1000)
 
   val FILES_MAX_PARTITION_BYTES = buildConf("spark.sql.files.maxPartitionBytes")
     .doc("The maximum number of bytes to pack into a single partition when reading files. " +
