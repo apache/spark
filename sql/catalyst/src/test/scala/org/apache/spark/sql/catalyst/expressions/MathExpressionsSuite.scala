@@ -280,7 +280,9 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("acosh") {
-    testUnary(Acosh, (x: Double) => StrictMath.log(x + math.sqrt(x * x - 1.0)))
+    def f: (Double) => Double = (x: Double) => StrictMath.log(x + math.sqrt(x * x - 1.0))
+    testUnary(Acosh, f, (10 to 20).map(_ * 0.1))
+    testUnary(Acosh, f, (-20 to 9).map(_ * 0.1), expectNaN = true)
     checkConsistencyBetweenInterpretedAndCodegen(Cosh, DoubleType)
 
     val nullLit = Literal.create(null, NullType)
