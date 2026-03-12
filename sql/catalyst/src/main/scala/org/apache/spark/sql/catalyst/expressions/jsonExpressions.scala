@@ -50,9 +50,9 @@ import org.apache.spark.unsafe.types.UTF8String
   group = "json_funcs",
   since = "1.5.0")
 case class GetJsonObject(json: Expression, path: Expression)
-  extends BinaryExpression
-  with ExpectsInputTypes
-  with DefaultStringProducingExpression {
+    extends BinaryExpression
+    with ExpectsInputTypes
+    with DefaultStringProducingExpression {
 
   override def left: Expression = json
   override def right: Expression = path
@@ -87,8 +87,11 @@ case class GetJsonObject(json: Expression, path: Expression)
         s"new $evaluatorClass($refCachedPath)"
       case _ => s"new $evaluatorClass()"
     }
-    val evaluator = ctx.addMutableState(evaluatorClass, "evaluator",
-      v => s"""$v = $initEvaluator;""", forceInline = true)
+    val evaluator = ctx.addMutableState(
+      evaluatorClass,
+      "evaluator",
+      v => s"""$v = $initEvaluator;""",
+      forceInline = true)
 
     val jsonEval = json.genCode(ctx)
     val pathEval = path.genCode(ctx)
@@ -115,30 +118,31 @@ case class GetJsonObject(json: Expression, path: Expression)
 
     val resultType = CodeGenerator.boxedType(dataType)
     val resultTerm = ctx.freshName("result")
-    ev.copy(code =
-      code"""
+    ev.copy(code = code"""
          |${jsonEval.code}
          |${pathEval.code}
          |$setJson
          |$setPath
          |$resultType $resultTerm = ($resultType) $evaluator.evaluate();
          |boolean ${ev.isNull} = $resultTerm == null;
-         |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+         |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(
+                          dataType)};
          |if (!${ev.isNull}) {
          |  ${ev.value} = $resultTerm;
          |}
-         |""".stripMargin
-    )
+         |""".stripMargin)
   }
 
   override protected def withNewChildrenInternal(
-      newLeft: Expression, newRight: Expression): GetJsonObject =
+      newLeft: Expression,
+      newRight: Expression): GetJsonObject =
     copy(json = newLeft, path = newRight)
 }
 
 // scalastyle:off line.size.limit line.contains.tab
 @ExpressionDescription(
-  usage = "_FUNC_(jsonStr, p1, p2, ..., pn) - Returns a tuple like the function get_json_object, but it takes multiple names. All the input parameters and output column types are string.",
+  usage =
+    "_FUNC_(jsonStr, p1, p2, ..., pn) - Returns a tuple like the function get_json_object, but it takes multiple names. All the input parameters and output column types are string.",
   examples = """
     Examples:
       > SELECT _FUNC_('{"a":1, "b":2}', 'a', 'b');
@@ -147,9 +151,7 @@ case class GetJsonObject(json: Expression, path: Expression)
   group = "json_funcs",
   since = "1.6.0")
 // scalastyle:on line.size.limit line.contains.tab
-case class JsonTuple(children: Seq[Expression])
-  extends Generator
-  with QueryErrorsBase {
+case class JsonTuple(children: Seq[Expression]) extends Generator with QueryErrorsBase {
 
   override def nullable: Boolean = {
     // A row is always returned.
@@ -179,11 +181,11 @@ case class JsonTuple(children: Seq[Expression])
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.length < 2) {
       throw QueryCompilationErrors.wrongNumArgsError(
-        toSQLId(prettyName), Seq("> 1"), children.length
-      )
-    } else if (
-      children.forall(
-        child => StringTypeWithCollation(supportsTrimCollation = true)
+        toSQLId(prettyName),
+        Seq("> 1"),
+        children.length)
+    } else if (children.forall(child =>
+        StringTypeWithCollation(supportsTrimCollation = true)
           .acceptsType(child.dataType))) {
       TypeCheckResult.TypeCheckSuccess
     } else {
@@ -208,9 +210,8 @@ case class JsonTuple(children: Seq[Expression])
     val filedNamesTerm = ctx.freshName("fieldNames")
     val fieldNamesEval = fieldExpressions.map(_.genCode(ctx))
     val wrapperClass = classOf[IterableOnce[_]].getName
-    val setFieldNames = fieldNamesEval.zipWithIndex.map {
-      case (fieldNameEval, idx) =>
-        s"""
+    val setFieldNames = fieldNamesEval.zipWithIndex.map { case (fieldNameEval, idx) =>
+      s"""
            |if (${fieldNameEval.isNull}) {
            |  $filedNamesTerm[$idx] = null;
            |} else {
@@ -218,8 +219,7 @@ case class JsonTuple(children: Seq[Expression])
            |}
            |""".stripMargin
     }
-    ev.copy(code =
-      code"""
+    ev.copy(code = code"""
          |UTF8String[] $filedNamesTerm = new UTF8String[${fieldExpressions.length}];
          |${jsonEval.code}
          |${fieldNamesEval.map(_.code).mkString("\n")}
@@ -235,12 +235,13 @@ case class JsonTuple(children: Seq[Expression])
 }
 
 /**
- * Converts an json input string to a [[StructType]], [[ArrayType]] or [[MapType]]
- * with the specified schema.
+ * Converts an json input string to a [[StructType]], [[ArrayType]] or [[MapType]] with the
+ * specified schema.
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(jsonStr, schema[, options]) - Returns a struct value with the given `jsonStr` and `schema`.",
+  usage =
+    "_FUNC_(jsonStr, schema[, options]) - Returns a struct value with the given `jsonStr` and `schema`.",
   examples = """
     Examples:
       > SELECT _FUNC_('{"a":1, "b":0.8}', 'a INT, b DOUBLE');
@@ -258,12 +259,13 @@ case class JsonToStructs(
     options: Map[String, String],
     child: Expression,
     timeZoneId: Option[String] = None,
-    variantAllowDuplicateKeys: Boolean = SQLConf.get.getConf(SQLConf.VARIANT_ALLOW_DUPLICATE_KEYS))
-  extends UnaryExpression
-  with TimeZoneAwareExpression
-  with CodegenFallback
-  with ExpectsInputTypes
-  with QueryErrorsBase {
+    variantAllowDuplicateKeys: Boolean =
+      SQLConf.get.getConf(SQLConf.VARIANT_ALLOW_DUPLICATE_KEYS))
+    extends UnaryExpression
+    with TimeZoneAwareExpression
+    with CodegenFallback
+    with ExpectsInputTypes
+    with QueryErrorsBase {
 
   // The JSON input data might be missing certain fields. We force the nullability
   // of the user-provided schema to avoid data corruptions. In particular, the parquet-mr encoder
@@ -309,11 +311,16 @@ case class JsonToStructs(
     copy(timeZoneId = Option(timeZoneId))
 
   @transient
-  private lazy val nameOfCorruptRecord = SQLConf.get.getConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD)
+  private lazy val nameOfCorruptRecord =
+    SQLConf.get.getConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD)
 
   @transient
   private lazy val evaluator = new JsonToStructsEvaluator(
-    options, nullableSchema, nameOfCorruptRecord, timeZoneId, variantAllowDuplicateKeys)
+    options,
+    nullableSchema,
+    nameOfCorruptRecord,
+    timeZoneId,
+    variantAllowDuplicateKeys)
 
   override def nullSafeEval(json: Any): Any = evaluator.evaluate(json.asInstanceOf[UTF8String])
 
@@ -367,12 +374,12 @@ case class StructsToJson(
     options: Map[String, String],
     child: Expression,
     timeZoneId: Option[String] = None)
-  extends UnaryExpression
-  with RuntimeReplaceable
-  with ExpectsInputTypes
-  with TimeZoneAwareExpression
-  with DefaultStringProducingExpression
-  with QueryErrorsBase {
+    extends UnaryExpression
+    with RuntimeReplaceable
+    with ExpectsInputTypes
+    with TimeZoneAwareExpression
+    with DefaultStringProducingExpression
+    with QueryErrorsBase {
 
   override def nullable: Boolean = true
 
@@ -383,10 +390,7 @@ case class StructsToJson(
   // Used in `FunctionRegistry`
   def this(child: Expression) = this(Map.empty, child, None)
   def this(child: Expression, options: Expression) =
-    this(
-      options = ExprUtils.convertToMapData(options),
-      child = child,
-      timeZoneId = None)
+    this(options = ExprUtils.convertToMapData(options), child = child, timeZoneId = None)
 
   @transient
   private lazy val inputSchema = child.dataType
@@ -418,8 +422,7 @@ case class StructsToJson(
     "evaluate",
     dataType,
     Seq(child),
-    Seq(child.dataType)
-  )
+    Seq(child.dataType))
 }
 
 /**
@@ -436,19 +439,16 @@ case class StructsToJson(
   """,
   group = "json_funcs",
   since = "2.4.0")
-case class SchemaOfJson(
-    child: Expression,
-    options: Map[String, String])
-  extends UnaryExpression
-  with RuntimeReplaceable
-  with DefaultStringProducingExpression
-  with QueryErrorsBase {
+case class SchemaOfJson(child: Expression, options: Map[String, String])
+    extends UnaryExpression
+    with RuntimeReplaceable
+    with DefaultStringProducingExpression
+    with QueryErrorsBase {
 
   def this(child: Expression) = this(child, Map.empty[String, String])
 
-  def this(child: Expression, options: Expression) = this(
-      child = child,
-      options = ExprUtils.convertToMapData(options))
+  def this(child: Expression, options: Expression) =
+    this(child = child, options = ExprUtils.convertToMapData(options))
 
   override def nullable: Boolean = false
 
@@ -509,12 +509,11 @@ case class SchemaOfJson(
         NULL
   """,
   group = "json_funcs",
-  since = "3.1.0"
-)
+  since = "3.1.0")
 case class LengthOfJsonArray(child: Expression)
-  extends UnaryExpression
-  with ExpectsInputTypes
-  with RuntimeReplaceable {
+    extends UnaryExpression
+    with ExpectsInputTypes
+    with RuntimeReplaceable {
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(StringTypeWithCollation(supportsTrimCollation = true))
@@ -530,8 +529,7 @@ case class LengthOfJsonArray(child: Expression)
     dataType,
     "lengthOfJsonArray",
     Seq(child),
-    inputTypes
-  )
+    inputTypes)
 }
 
 /**
@@ -555,13 +553,12 @@ case class LengthOfJsonArray(child: Expression)
         ["f1","f2"]
   """,
   group = "json_funcs",
-  since = "3.1.0"
-)
+  since = "3.1.0")
 case class JsonObjectKeys(child: Expression)
-  extends UnaryExpression
-  with ExpectsInputTypes
-  with RuntimeReplaceable
-  with DefaultStringProducingExpression {
+    extends UnaryExpression
+    with ExpectsInputTypes
+    with RuntimeReplaceable
+    with DefaultStringProducingExpression {
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(StringTypeWithCollation(supportsTrimCollation = true))
@@ -569,13 +566,8 @@ case class JsonObjectKeys(child: Expression)
   override def nullable: Boolean = true
   override def prettyName: String = "json_object_keys"
 
-  override def replacement: Expression = StaticInvoke(
-    classOf[JsonExpressionUtils],
-    dataType,
-    "jsonObjectKeys",
-    Seq(child),
-    inputTypes
-  )
+  override def replacement: Expression =
+    StaticInvoke(classOf[JsonExpressionUtils], dataType, "jsonObjectKeys", Seq(child), inputTypes)
 
   override protected def withNewChildInternal(newChild: Expression): JsonObjectKeys =
     copy(child = newChild)

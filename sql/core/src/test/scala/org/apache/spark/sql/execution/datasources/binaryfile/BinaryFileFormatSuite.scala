@@ -65,30 +65,30 @@ class BinaryFileFormatSuite extends QueryTest with SharedSparkSession {
     Files.write(
       file1.toPath,
       Seq("2014-test").asJava,
-      StandardOpenOption.CREATE, StandardOpenOption.WRITE
-    )
+      StandardOpenOption.CREATE,
+      StandardOpenOption.WRITE)
     file1Status = fs.getFileStatus(new Path(file1.getPath))
 
     val file2 = new File(year2014Dir, "data2.bin")
     Files.write(
       file2.toPath,
       "2014-test-bin".getBytes,
-      StandardOpenOption.CREATE, StandardOpenOption.WRITE
-    )
+      StandardOpenOption.CREATE,
+      StandardOpenOption.WRITE)
 
     val file3 = new File(year2015Dir, "bool.csv")
     Files.write(
       file3.toPath,
       Seq("bool", "True", "False", "true").asJava,
-      StandardOpenOption.CREATE, StandardOpenOption.WRITE
-    )
+      StandardOpenOption.CREATE,
+      StandardOpenOption.WRITE)
 
     val file4 = new File(year2015Dir, "data.bin")
     Files.write(
       file4.toPath,
       "2015-test".getBytes,
-      StandardOpenOption.CREATE, StandardOpenOption.WRITE
-    )
+      StandardOpenOption.CREATE,
+      StandardOpenOption.WRITE)
   }
 
   test("BinaryFileFormat methods") {
@@ -96,11 +96,12 @@ class BinaryFileFormatSuite extends QueryTest with SharedSparkSession {
     assert(format.shortName() === "binaryFile")
     assert(format.isSplitable(spark, Map.empty, new Path("any")) === false)
     assert(format.inferSchema(spark, Map.empty, Seq.empty) === Some(BinaryFileFormat.schema))
-    assert(BinaryFileFormat.schema === StructType(Seq(
-      StructField("path", StringType, false),
-      StructField("modificationTime", TimestampType, false),
-      StructField("length", LongType, false),
-      StructField("content", BinaryType, true))))
+    assert(
+      BinaryFileFormat.schema === StructType(Seq(
+        StructField("path", StringType, false),
+        StructField("modificationTime", TimestampType, false),
+        StructField("length", LongType, false),
+        StructField("content", BinaryType, true))))
   }
 
   def testBinaryFileDataSource(pathGlobFilter: String): Unit = {
@@ -108,7 +109,9 @@ class BinaryFileFormatSuite extends QueryTest with SharedSparkSession {
     if (pathGlobFilter != null) {
       dfReader.option("pathGlobFilter", pathGlobFilter)
     }
-    val resultDF = dfReader.load(testDir).select(
+    val resultDF = dfReader
+      .load(testDir)
+      .select(
         col(PATH),
         col(MODIFICATION_TIME),
         col(LENGTH),
@@ -133,11 +136,12 @@ class BinaryFileFormatSuite extends QueryTest with SharedSparkSession {
 
           val fcontent = {
             val stream = fs.open(fileStatus.getPath)
-            val content = try {
-              stream.readAllBytes()
-            } finally {
-              Closeables.close(stream, true)
-            }
+            val content =
+              try {
+                stream.readAllBytes()
+              } finally {
+                Closeables.close(stream, true)
+              }
             content
           }
 
@@ -187,7 +191,8 @@ class BinaryFileFormatSuite extends QueryTest with SharedSparkSession {
       testCases: Seq[(FileStatus, Boolean)]): Unit = {
     val funcs = filters.flatMap(BinaryFileFormat.createFilterFunction)
     testCases.foreach { case (status, expected) =>
-      assert(funcs.forall(f => f(status)) === expected,
+      assert(
+        funcs.forall(f => f(status)) === expected,
         s"$filters applied to $status should be $expected.")
     }
   }
@@ -197,9 +202,7 @@ class BinaryFileFormatSuite extends QueryTest with SharedSparkSession {
     val l1 = mockFileStatus(1L, 0L)
     val l2 = mockFileStatus(2L, 0L)
     val l3 = mockFileStatus(3L, 0L)
-    testCreateFilterFunction(
-      Seq(LessThan(LENGTH, 2L)),
-      Seq((l1, true), (l2, false), (l3, false)))
+    testCreateFilterFunction(Seq(LessThan(LENGTH, 2L)), Seq((l1, true), (l2, false), (l3, false)))
     testCreateFilterFunction(
       Seq(LessThanOrEqual(LENGTH, 2L)),
       Seq((l1, true), (l2, true), (l3, false)))
@@ -209,9 +212,7 @@ class BinaryFileFormatSuite extends QueryTest with SharedSparkSession {
     testCreateFilterFunction(
       Seq(GreaterThanOrEqual(LENGTH, 2L)),
       Seq((l1, false), (l2, true), (l3, true)))
-    testCreateFilterFunction(
-      Seq(EqualTo(LENGTH, 2L)),
-      Seq((l1, false), (l2, true), (l3, false)))
+    testCreateFilterFunction(Seq(EqualTo(LENGTH, 2L)), Seq((l1, false), (l2, true), (l3, false)))
     testCreateFilterFunction(
       Seq(Not(EqualTo(LENGTH, 2L))),
       Seq((l1, true), (l2, false), (l3, true)))
@@ -245,16 +246,18 @@ class BinaryFileFormatSuite extends QueryTest with SharedSparkSession {
       Seq(Not(EqualTo(MODIFICATION_TIME, new Timestamp(2L)))),
       Seq((t1, true), (t2, false), (t3, true)))
     testCreateFilterFunction(
-      Seq(And(GreaterThan(MODIFICATION_TIME, new Timestamp(1L)),
-        LessThan(MODIFICATION_TIME, new Timestamp(3L)))),
+      Seq(
+        And(
+          GreaterThan(MODIFICATION_TIME, new Timestamp(1L)),
+          LessThan(MODIFICATION_TIME, new Timestamp(3L)))),
       Seq((t1, false), (t2, true), (t3, false)))
     testCreateFilterFunction(
-      Seq(Or(LessThanOrEqual(MODIFICATION_TIME, new Timestamp(1L)),
-        GreaterThanOrEqual(MODIFICATION_TIME, new Timestamp(3L)))),
+      Seq(
+        Or(
+          LessThanOrEqual(MODIFICATION_TIME, new Timestamp(1L)),
+          GreaterThanOrEqual(MODIFICATION_TIME, new Timestamp(3L)))),
       Seq((t1, true), (t2, false), (t3, true)))
-    testCreateFilterFunction(
-      Seq(Not(IsNull(LENGTH))),
-      Seq((t1, true), (t2, true), (t3, true)))
+    testCreateFilterFunction(Seq(Not(IsNull(LENGTH))), Seq((t1, true), (t2, true), (t3, true)))
 
     // test filters applied on both columns
     testCreateFilterFunction(
@@ -281,18 +284,22 @@ class BinaryFileFormatSuite extends QueryTest with SharedSparkSession {
         hadoopConf = spark.sessionState.newHadoopConf())
       val partitionedFile = mock(classOf[PartitionedFile])
       when(partitionedFile.toPath).thenReturn(fileStatus.getPath)
-      assert(reader(partitionedFile).nonEmpty === expected,
+      assert(
+        reader(partitionedFile).nonEmpty === expected,
         s"Filters $filters applied to $fileStatus should be $expected.")
     }
     testBuildReader(file1Status, Seq.empty, true)
     testBuildReader(file1Status, Seq(LessThan(LENGTH, file1Status.getLen)), false)
-    testBuildReader(file1Status, Seq(
-      LessThan(MODIFICATION_TIME, new Timestamp(file1Status.getModificationTime))
-    ), false)
-    testBuildReader(file1Status, Seq(
-      EqualTo(LENGTH, file1Status.getLen),
-      EqualTo(MODIFICATION_TIME, file1Status.getModificationTime)
-    ), true)
+    testBuildReader(
+      file1Status,
+      Seq(LessThan(MODIFICATION_TIME, new Timestamp(file1Status.getModificationTime))),
+      false)
+    testBuildReader(
+      file1Status,
+      Seq(
+        EqualTo(LENGTH, file1Status.getLen),
+        EqualTo(MODIFICATION_TIME, file1Status.getModificationTime)),
+      true)
   }
 
   private def readBinaryFile(file: File, requiredSchema: StructType): Row = {
@@ -304,8 +311,7 @@ class BinaryFileFormatSuite extends QueryTest with SharedSparkSession {
       requiredSchema = requiredSchema,
       filters = Seq.empty,
       options = Map.empty,
-      hadoopConf = spark.sessionState.newHadoopConf()
-    )
+      hadoopConf = spark.sessionState.newHadoopConf())
     val partitionedFile = mock(classOf[PartitionedFile])
     when(partitionedFile.toPath).thenReturn(new Path(file.toURI))
     val encoder = ExpressionEncoder(requiredSchema).resolveAndBind()
@@ -352,7 +358,8 @@ class BinaryFileFormatSuite extends QueryTest with SharedSparkSession {
       val content = "123".getBytes
       Files.write(file.toPath, content, StandardOpenOption.CREATE, StandardOpenOption.WRITE)
       def readContent(): DataFrame = {
-        spark.read.format(BINARY_FILE)
+        spark.read
+          .format(BINARY_FILE)
           .load(path)
           .select(CONTENT)
       }

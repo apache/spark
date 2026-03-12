@@ -26,11 +26,8 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.types.DataType
 
-case class DummyExpression(
-    k1: Expression,
-    k2: Expression,
-    k3: Expression,
-    k4: Expression) extends Expression {
+case class DummyExpression(k1: Expression, k2: Expression, k3: Expression, k4: Expression)
+    extends Expression {
   override def nullable: Boolean = false
   override def eval(input: InternalRow): Any = None
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = null
@@ -40,13 +37,11 @@ case class DummyExpression(
       newChildren: IndexedSeq[Expression]): Expression = null
 }
 
-object DummyExpressionBuilder extends ExpressionBuilder  {
+object DummyExpressionBuilder extends ExpressionBuilder {
 
   def defaultFunctionSignature: FunctionSignature = {
-    FunctionSignature(Seq(InputParameter("k1"),
-      InputParameter("k2"),
-      InputParameter("k3"),
-      InputParameter("k4")))
+    FunctionSignature(
+      Seq(InputParameter("k1"), InputParameter("k2"), InputParameter("k3"), InputParameter("k4")))
   }
 
   override def functionSignature: Option[FunctionSignature] =
@@ -69,14 +64,17 @@ class NamedParameterFunctionSuite extends AnalysisTest {
 
   final val expectedSeq = Seq(Literal("v1"), Literal("v2"), Literal("v3"), Literal("v4"))
   final val signature = DummyExpressionBuilder.defaultFunctionSignature
-  final val illegalSignature = FunctionSignature(Seq(
-    InputParameter("k1"), InputParameter("k2", Option(Literal("v2"))), InputParameter("k3")))
+  final val illegalSignature = FunctionSignature(
+    Seq(InputParameter("k1"), InputParameter("k2", Option(Literal("v2"))), InputParameter("k3")))
 
   test("Check rearrangement of expressions") {
     Seq("true", "false").foreach { cs =>
       withSQLConf(CASE_SENSITIVE.key -> cs) {
         val rearrangedArgs = NamedParametersSupport.defaultRearrange(
-          signature, args, "function", SQLConf.get.resolver)
+          signature,
+          args,
+          "function",
+          SQLConf.get.resolver)
         for ((returnedArg, expectedArg) <- rearrangedArgs.zip(expectedSeq)) {
           assert(returnedArg == expectedArg)
         }
@@ -94,8 +92,8 @@ class NamedParameterFunctionSuite extends AnalysisTest {
       expressions: Seq[Expression],
       functionName: String = "function"): SparkThrowable = {
     intercept[SparkThrowable](
-      NamedParametersSupport.defaultRearrange(
-        functionSignature, expressions, functionName, SQLConf.get.resolver))
+      NamedParametersSupport
+        .defaultRearrange(functionSignature, expressions, functionName, SQLConf.get.resolver))
   }
 
   test("DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT") {
@@ -103,59 +101,57 @@ class NamedParameterFunctionSuite extends AnalysisTest {
       withSQLConf(CASE_SENSITIVE.key -> cs) {
         checkError(
           exception = parseRearrangeException(
-            signature, Seq(k1Arg, k2Arg, k3Arg, k4Arg, namedK1Arg), "foo"),
+            signature,
+            Seq(k1Arg, k2Arg, k3Arg, k4Arg, namedK1Arg),
+            "foo"),
           condition = "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.BOTH_POSITIONAL_AND_NAMED",
-          parameters = Map(
-            "routineName" -> toSQLId("foo"),
-            "parameterName" -> toSQLId("k1"))
-        )
+          parameters = Map("routineName" -> toSQLId("foo"), "parameterName" -> toSQLId("k1")))
         checkError(
-          exception = parseRearrangeException(
-            signature, Seq(k1Arg, k2Arg, k3Arg, k4Arg, k4Arg), "foo"),
+          exception =
+            parseRearrangeException(signature, Seq(k1Arg, k2Arg, k3Arg, k4Arg, k4Arg), "foo"),
           condition = "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.DOUBLE_NAMED_ARGUMENT_REFERENCE",
-          parameters = Map(
-            "routineName" -> toSQLId("foo"),
-            "parameterName" -> toSQLId("k4"))
-        )
+          parameters = Map("routineName" -> toSQLId("foo"), "parameterName" -> toSQLId("k4")))
       }
     }
 
     withSQLConf(CASE_SENSITIVE.key -> "true") {
       checkError(
         exception = parseRearrangeException(
-          signature, Seq(k1Arg, k2Arg, k3Arg, k4Arg, upperCaseNamedK1Arg), "foo"),
+          signature,
+          Seq(k1Arg, k2Arg, k3Arg, k4Arg, upperCaseNamedK1Arg),
+          "foo"),
         condition = "UNRECOGNIZED_PARAMETER_NAME",
         parameters = Map(
           "routineName" -> toSQLId("foo"),
           "argumentName" -> toSQLId("K1"),
-          "proposal" -> (toSQLId("k1") + " " + toSQLId("k2") + " " + toSQLId("k3")))
-      )
+          "proposal" -> (toSQLId("k1") + " " + toSQLId("k2") + " " + toSQLId("k3"))))
       checkError(
         exception = parseRearrangeException(
-          signature, Seq(k1Arg, k2Arg, k3Arg, k4Arg, upperCaseNamedK4Arg), "foo"),
+          signature,
+          Seq(k1Arg, k2Arg, k3Arg, k4Arg, upperCaseNamedK4Arg),
+          "foo"),
         condition = "UNRECOGNIZED_PARAMETER_NAME",
         parameters = Map(
           "routineName" -> toSQLId("foo"),
           "argumentName" -> toSQLId("K4"),
-          "proposal" -> (toSQLId("k4") + " " + toSQLId("k1") + " " + toSQLId("k2")))
-      )
+          "proposal" -> (toSQLId("k4") + " " + toSQLId("k1") + " " + toSQLId("k2"))))
     }
 
     withSQLConf(CASE_SENSITIVE.key -> "false") {
       checkError(
         exception = parseRearrangeException(
-          signature, Seq(k1Arg, k2Arg, k3Arg, k4Arg, upperCaseNamedK1Arg), "foo"),
+          signature,
+          Seq(k1Arg, k2Arg, k3Arg, k4Arg, upperCaseNamedK1Arg),
+          "foo"),
         condition = "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.BOTH_POSITIONAL_AND_NAMED",
-        parameters = Map("routineName" -> toSQLId("foo"), "parameterName" -> toSQLId("K1"))
-      )
+        parameters = Map("routineName" -> toSQLId("foo"), "parameterName" -> toSQLId("K1")))
       checkError(
         exception = parseRearrangeException(
-          signature, Seq(k1Arg, k2Arg, k3Arg, k4Arg, upperCaseNamedK4Arg), "foo"),
+          signature,
+          Seq(k1Arg, k2Arg, k3Arg, k4Arg, upperCaseNamedK4Arg),
+          "foo"),
         condition = "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.DOUBLE_NAMED_ARGUMENT_REFERENCE",
-        parameters = Map(
-          "routineName" -> toSQLId("foo"),
-          "parameterName" -> toSQLId("K4"))
-      )
+        parameters = Map("routineName" -> toSQLId("foo"), "parameterName" -> toSQLId("K4")))
     }
   }
 
@@ -174,8 +170,8 @@ class NamedParameterFunctionSuite extends AnalysisTest {
 
     withSQLConf(CASE_SENSITIVE.key -> "true") {
       checkError(
-        exception = parseRearrangeException(
-          signature, Seq(upperCaseNamedK1Arg, k2Arg, k3Arg), "foo"),
+        exception =
+          parseRearrangeException(signature, Seq(upperCaseNamedK1Arg, k2Arg, k3Arg), "foo"),
         condition = "UNRECOGNIZED_PARAMETER_NAME",
         parameters = Map(
           "routineName" -> toSQLId("foo"),
@@ -185,13 +181,11 @@ class NamedParameterFunctionSuite extends AnalysisTest {
 
     withSQLConf(CASE_SENSITIVE.key -> "false") {
       checkError(
-        exception = parseRearrangeException(
-          signature, Seq(upperCaseNamedK1Arg, k2Arg, k3Arg), "foo"),
+        exception =
+          parseRearrangeException(signature, Seq(upperCaseNamedK1Arg, k2Arg, k3Arg), "foo"),
         condition = "REQUIRED_PARAMETER_NOT_FOUND",
-        parameters = Map(
-          "routineName" -> toSQLId("foo"),
-          "parameterName" -> toSQLId("k4"),
-          "index" -> "3"))
+        parameters =
+          Map("routineName" -> toSQLId("foo"), "parameterName" -> toSQLId("k4"), "index" -> "3"))
     }
   }
 
@@ -199,21 +193,24 @@ class NamedParameterFunctionSuite extends AnalysisTest {
     Seq("true", "false").foreach { cs =>
       withSQLConf(CASE_SENSITIVE.key -> cs) {
         checkError(
-          exception = parseRearrangeException(signature,
-            Seq(k1Arg, k2Arg, k3Arg, k4Arg, NamedArgumentExpression("k5", Literal("k5"))), "foo"),
+          exception = parseRearrangeException(
+            signature,
+            Seq(k1Arg, k2Arg, k3Arg, k4Arg, NamedArgumentExpression("k5", Literal("k5"))),
+            "foo"),
           condition = "UNRECOGNIZED_PARAMETER_NAME",
           parameters = Map(
             "routineName" -> toSQLId("foo"),
             "argumentName" -> toSQLId("k5"),
-            "proposal" -> (toSQLId("k1") + " " + toSQLId("k2") + " " + toSQLId("k3")))
-        )
+            "proposal" -> (toSQLId("k1") + " " + toSQLId("k2") + " " + toSQLId("k3"))))
       }
     }
 
     withSQLConf(CASE_SENSITIVE.key -> "true") {
       checkError(
         exception = parseRearrangeException(
-          signature, Seq(upperCaseNamedK1Arg, k2Arg, k3Arg, k4Arg), "foo"),
+          signature,
+          Seq(upperCaseNamedK1Arg, k2Arg, k3Arg, k4Arg),
+          "foo"),
         condition = "UNRECOGNIZED_PARAMETER_NAME",
         parameters = Map(
           "routineName" -> toSQLId("foo"),
@@ -223,7 +220,10 @@ class NamedParameterFunctionSuite extends AnalysisTest {
 
     withSQLConf(CASE_SENSITIVE.key -> "false") {
       val rearrangedArgs = NamedParametersSupport.defaultRearrange(
-        signature, Seq(upperCaseNamedK1Arg, k2Arg, k3Arg, k4Arg), "foo", SQLConf.get.resolver)
+        signature,
+        Seq(upperCaseNamedK1Arg, k2Arg, k3Arg, k4Arg),
+        "foo",
+        SQLConf.get.resolver)
       for ((returnedArg, expectedArg) <- rearrangedArgs.zip(expectedSeq)) {
         assert(returnedArg == expectedArg)
       }
@@ -234,26 +234,21 @@ class NamedParameterFunctionSuite extends AnalysisTest {
     Seq("true", "false").foreach { cs =>
       withSQLConf(CASE_SENSITIVE.key -> cs) {
         checkError(
-          exception = parseRearrangeException(signature,
-            Seq(k4Arg, k3Arg, k1Arg, k2Arg), "foo"),
+          exception = parseRearrangeException(signature, Seq(k4Arg, k3Arg, k1Arg, k2Arg), "foo"),
           condition = "UNEXPECTED_POSITIONAL_ARGUMENT",
-          parameters = Map(
-            "routineName" -> toSQLId("foo"),
-            "parameterName" -> toSQLId("k3"))
-        )
+          parameters = Map("routineName" -> toSQLId("foo"), "parameterName" -> toSQLId("k3")))
       }
     }
 
     Seq("true", "false").foreach { cs =>
       withSQLConf(CASE_SENSITIVE.key -> cs) {
         checkError(
-          exception = parseRearrangeException(signature,
-            Seq(upperCaseNamedK4Arg, k3Arg, k1Arg, k2Arg), "foo"),
+          exception = parseRearrangeException(
+            signature,
+            Seq(upperCaseNamedK4Arg, k3Arg, k1Arg, k2Arg),
+            "foo"),
           condition = "UNEXPECTED_POSITIONAL_ARGUMENT",
-          parameters = Map(
-            "routineName" -> toSQLId("foo"),
-            "parameterName" -> toSQLId("k3"))
-        )
+          parameters = Map("routineName" -> toSQLId("foo"), "parameterName" -> toSQLId("k3")))
       }
     }
   }
@@ -267,8 +262,7 @@ class NamedParameterFunctionSuite extends AnalysisTest {
         checkError(
           exception = parseRearrangeException(illegalSignature, args, "foo"),
           condition = "INTERNAL_ERROR",
-          parameters = Map("message" -> errorMessage)
-        )
+          parameters = Map("message" -> errorMessage))
       }
     }
   }

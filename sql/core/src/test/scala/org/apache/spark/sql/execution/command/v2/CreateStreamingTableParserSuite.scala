@@ -33,9 +33,7 @@ class CreateStreamingTableParserSuite extends CommandSuiteBase {
       parser
         .parsePlan("CREATE STREAMING TABLE st COMMENT 'populate with flow later'"),
       CreateStreamingTable(
-        name = UnresolvedIdentifier(
-          nameParts = Seq("st")
-        ),
+        name = UnresolvedIdentifier(nameParts = Seq("st")),
         columns = Seq.empty,
         partitioning = Seq.empty,
         tableSpec = TableSpec(
@@ -47,11 +45,8 @@ class CreateStreamingTableParserSuite extends CommandSuiteBase {
           collation = None,
           serde = None,
           external = false,
-          constraints = Seq.empty
-        ),
-        ifNotExists = false
-      ),
-      checkAnalysis = false
-    )
+          constraints = Seq.empty),
+        ifNotExists = false),
+      checkAnalysis = false)
   }
 }

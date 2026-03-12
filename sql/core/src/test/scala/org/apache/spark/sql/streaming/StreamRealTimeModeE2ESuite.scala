@@ -42,9 +42,7 @@ class StreamRealTimeModeE2ESuite extends StreamRealTimeModeE2ESuiteBase {
       new SparkContext(
         "local[15]",
         "streaming-rtm-e2e-context",
-        sparkConf.set("spark.sql.shuffle.partitions", "5")
-      )
-    )
+        sparkConf.set("spark.sql.shuffle.partitions", "5")))
 
   private def runForeachTest(withUnion: Boolean): Unit = {
     var query: StreamingQuery = null
@@ -69,12 +67,7 @@ class StreamRealTimeModeE2ESuite extends StreamRealTimeModeE2ESuiteBase {
         query = dataframe
           .select(col("_1").as("key"), col("_2").as("value"))
           .select(
-            concat(
-              col("key").cast("STRING"),
-              lit("-"),
-              col("value").cast("STRING")
-            ).as("output")
-          )
+            concat(col("key").cast("STRING"), lit("-"), col("value").cast("STRING")).as("output"))
           .writeStream
           .outputMode(OutputMode.Update())
           .foreach(new ForeachWriter[Row] {
@@ -86,8 +79,7 @@ class StreamRealTimeModeE2ESuite extends StreamRealTimeModeE2ESuiteBase {
               batchPartitionId = s"$uniqueSinkName-$epochId-$partitionId"
               assert(
                 !ResultsCollector.containsKey(batchPartitionId),
-                s"should NOT contain batchPartitionId ${batchPartitionId}"
-              )
+                s"should NOT contain batchPartitionId ${batchPartitionId}")
               ResultsCollector
                 .put(batchPartitionId, new ConcurrentLinkedQueue[String]())
               true
@@ -103,8 +95,7 @@ class StreamRealTimeModeE2ESuite extends StreamRealTimeModeE2ESuiteBase {
 
               assert(
                 ResultsCollector.containsKey(batchPartitionId),
-                s"should contain batchPartitionId ${batchPartitionId}"
-              )
+                s"should contain batchPartitionId ${batchPartitionId}")
               ResultsCollector.get(batchPartitionId).addAll(processedThisBatch)
               processedThisBatch.clear()
             }
@@ -202,12 +193,7 @@ class StreamRealTimeModeE2ESuite extends StreamRealTimeModeE2ESuiteBase {
         val df = dataframe
           .select(col("_1").as("key"), col("_2").as("value"))
           .select(
-            concat(
-              col("key").cast("STRING"),
-              lit("-"),
-              col("value").cast("STRING")
-            ).as("output")
-          )
+            concat(col("key").cast("STRING"), lit("-"), col("value").cast("STRING")).as("output"))
           .as[String]
           .mapPartitions(rows => {
             rows.map(row => {
@@ -332,7 +318,8 @@ class StreamRealTimeModeE2ESuite extends StreamRealTimeModeE2ESuiteBase {
       .toDF()
       .select(col("_1").as("key"), col("_2").as("value"))
       .join(staticDf, col("value") === col("join_key"))
-      .select(concat(col("key"), lit("-"), col("value"), lit("-"), col("join_value")).as("output"))
+      .select(
+        concat(col("key"), lit("-"), col("value"), lit("-"), col("join_value")).as("output"))
 
     var query: StreamingQuery = null
     try {
@@ -384,8 +371,7 @@ class StreamRealTimeModeE2ESuite extends StreamRealTimeModeE2ESuiteBase {
         clock,
         10,
         3,
-        (key, value) => Array(s"$key-$value", s"$key--$value")
-      )
+        (key, value) => Array(s"$key-$value", s"$key--$value"))
     } finally {
       if (query != null) query.stop()
     }

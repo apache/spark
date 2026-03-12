@@ -32,28 +32,39 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{LIMIT, WINDOW}
 object LimitPushDownThroughWindow extends Rule[LogicalPlan] {
   // The window frame of Rank, DenseRank and RowNumber can only be UNBOUNDED PRECEDING to
   // CURRENT ROW.
-  private def supportsPushdownThroughWindow(
-      windowExpressions: Seq[NamedExpression]): Boolean = windowExpressions.forall {
-    case Alias(WindowExpression(_: Rank | _: DenseRank | _: RowNumber, WindowSpecDefinition(Nil, _,
-        SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow))), _) => true
-    case _ => false
-  }
+  private def supportsPushdownThroughWindow(windowExpressions: Seq[NamedExpression]): Boolean =
+    windowExpressions.forall {
+      case Alias(
+            WindowExpression(
+              _: Rank | _: DenseRank | _: RowNumber,
+              WindowSpecDefinition(
+                Nil,
+                _,
+                SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow))),
+            _) =>
+        true
+      case _ => false
+    }
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
-    _.containsAllPatterns(WINDOW, LIMIT), ruleId) {
-    // Adding an extra Limit below WINDOW when the partitionSpec of all window functions is empty.
-    case LocalLimit(limitExpr @ IntegerLiteral(limit),
-        window @ Window(windowExpressions, Nil, orderSpec, child, _))
-      if supportsPushdownThroughWindow(windowExpressions) && child.maxRows.forall(_ > limit) &&
-        limit < conf.topKSortFallbackThreshold =>
-      // Sort is needed here because we need global sort.
-      window.copy(child = Limit(limitExpr, Sort(orderSpec, true, child)))
-    // There is a Project between LocalLimit and Window if they do not have the same output.
-    case LocalLimit(limitExpr @ IntegerLiteral(limit), project @ Project(_,
-        window @ Window(windowExpressions, Nil, orderSpec, child, _)))
-      if supportsPushdownThroughWindow(windowExpressions) && child.maxRows.forall(_ > limit) &&
-        limit < conf.topKSortFallbackThreshold =>
-      // Sort is needed here because we need global sort.
-      project.copy(child = window.copy(child = Limit(limitExpr, Sort(orderSpec, true, child))))
-  }
+  def apply(plan: LogicalPlan): LogicalPlan =
+    plan.transformWithPruning(_.containsAllPatterns(WINDOW, LIMIT), ruleId) {
+      // Adding an extra Limit below WINDOW when the partitionSpec of all window functions is empty.
+      case LocalLimit(
+            limitExpr @ IntegerLiteral(limit),
+            window @ Window(windowExpressions, Nil, orderSpec, child, _))
+          if supportsPushdownThroughWindow(windowExpressions) && child.maxRows.forall(
+            _ > limit) &&
+            limit < conf.topKSortFallbackThreshold =>
+        // Sort is needed here because we need global sort.
+        window.copy(child = Limit(limitExpr, Sort(orderSpec, true, child)))
+      // There is a Project between LocalLimit and Window if they do not have the same output.
+      case LocalLimit(
+            limitExpr @ IntegerLiteral(limit),
+            project @ Project(_, window @ Window(windowExpressions, Nil, orderSpec, child, _)))
+          if supportsPushdownThroughWindow(windowExpressions) && child.maxRows.forall(
+            _ > limit) &&
+            limit < conf.topKSortFallbackThreshold =>
+        // Sort is needed here because we need global sort.
+        project.copy(child = window.copy(child = Limit(limitExpr, Sort(orderSpec, true, child))))
+    }
 }

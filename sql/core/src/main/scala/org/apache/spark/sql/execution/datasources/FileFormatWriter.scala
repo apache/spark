@@ -42,9 +42,9 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 import org.apache.spark.util.ArrayImplicits._
 
-
 /** A helper object for writing FileFormat data out to a location. */
 object FileFormatWriter extends Logging {
+
   /** Describes how output files should be placed in the filesystem. */
   case class OutputSpec(
       outputPath: String,
@@ -70,17 +70,18 @@ object FileFormatWriter extends Logging {
   // scalastyle:off argcount
   /**
    * Basic work flow of this command is:
-   * 1. Driver side setup, including output committer initialization and data source specific
-   *    preparation work for the write job to be issued.
-   * 2. Issues a write job consists of one or more executor side tasks, each of which writes all
-   *    rows within an RDD partition.
-   * 3. If no exception is thrown in a task, commits that task, otherwise aborts that task;  If any
-   *    exception is thrown during task commitment, also aborts that task.
-   * 4. If all tasks are committed, commit the job, otherwise aborts the job;  If any exception is
-   *    thrown during job commitment, also aborts the job.
-   * 5. If the job is successfully committed, perform post-commit operations such as
-   *    processing statistics.
-   * @return The set of all partition paths that were updated during this write job.
+   *   1. Driver side setup, including output committer initialization and data source specific
+   *      preparation work for the write job to be issued.
+   *   2. Issues a write job consists of one or more executor side tasks, each of which writes all
+   *      rows within an RDD partition.
+   *   3. If no exception is thrown in a task, commits that task, otherwise aborts that task; If
+   *      any exception is thrown during task commitment, also aborts that task.
+   *   4. If all tasks are committed, commit the job, otherwise aborts the job; If any exception
+   *      is thrown during job commitment, also aborts the job.
+   *   5. If the job is successfully committed, perform post-commit operations such as processing
+   *      statistics.
+   * @return
+   *   The set of all partition paths that were updated during this write job.
    */
   def write(
       sparkSession: SparkSession,
@@ -93,8 +94,7 @@ object FileFormatWriter extends Logging {
       bucketSpec: Option[BucketSpec],
       statsTrackers: Seq[WriteJobStatsTracker],
       options: Map[String, String],
-      numStaticPartitionCols: Int = 0)
-    : Set[String] = {
+      numStaticPartitionCols: Int = 0): Set[String] = {
     require(partitionColumns.size >= numStaticPartitionCols)
 
     val job = Job.getInstance(hadoopConf)
@@ -131,17 +131,19 @@ object FileFormatWriter extends Logging {
       bucketSpec = writerBucketSpec,
       path = finalOutputSpec.outputPath,
       customPartitionLocations = finalOutputSpec.customPartitionLocations,
-      maxRecordsPerFile = caseInsensitiveOptions.get("maxRecordsPerFile").map(_.toLong)
+      maxRecordsPerFile = caseInsensitiveOptions
+        .get("maxRecordsPerFile")
+        .map(_.toLong)
         .getOrElse(sparkSession.sessionState.conf.maxRecordsPerFile),
-      timeZoneId = caseInsensitiveOptions.get(DateTimeUtils.TIMEZONE_OPTION)
+      timeZoneId = caseInsensitiveOptions
+        .get(DateTimeUtils.TIMEZONE_OPTION)
         .getOrElse(sparkSession.sessionState.conf.sessionLocalTimeZone),
-      statsTrackers = statsTrackers
-    )
+      statsTrackers = statsTrackers)
 
     // We should first sort by dynamic partition columns, then bucket id, and finally sorting
     // columns.
     val requiredOrdering = partitionColumns.drop(numStaticPartitionCols) ++
-        writerBucketSpec.map(_.bucketIdExpression) ++ sortColumns
+      writerBucketSpec.map(_.bucketIdExpression) ++ sortColumns
     val writeFilesOpt = V1WritesUtils.getWriteFilesOpt(plan)
 
     // SPARK-40588: when planned writing is disabled and AQE is enabled,
@@ -154,7 +156,8 @@ object FileFormatWriter extends Logging {
     }
 
     // the sort order doesn't matter
-    val actualOrdering = writeFilesOpt.map(_.child)
+    val actualOrdering = writeFilesOpt
+      .map(_.child)
       .getOrElse(materializeAdaptiveSparkPlan(plan))
       .outputOrdering
     val orderingMatched = V1WritesUtils.isOrderingMatched(requiredOrdering, actualOrdering)
@@ -184,12 +187,20 @@ object FileFormatWriter extends Logging {
       val writeSpec = WriteFilesSpec(
         description = description,
         committer = committer,
-        concurrentOutputWriterSpecFunc = concurrentOutputWriterSpecFunc
-      )
+        concurrentOutputWriterSpecFunc = concurrentOutputWriterSpecFunc)
       executeWrite(sparkSession, plan, writeSpec, job)
     } else {
-      executeWrite(sparkSession, plan, job, description, committer, outputSpec,
-        requiredOrdering, partitionColumns, sortColumns, orderingMatched)
+      executeWrite(
+        sparkSession,
+        plan,
+        job,
+        description,
+        committer,
+        outputSpec,
+        requiredOrdering,
+        partitionColumns,
+        sortColumns,
+        orderingMatched)
     }
   }
   // scalastyle:on argcount
@@ -213,8 +224,8 @@ object FileFormatWriter extends Logging {
         (empty2NullPlan, None)
       } else {
         val sortPlan = createSortPlan(empty2NullPlan, requiredOrdering, outputSpec)
-        val concurrentOutputWriterSpec = createConcurrentOutputWriterSpec(
-          sparkSession, sortPlan, sortColumns)
+        val concurrentOutputWriterSpec =
+          createConcurrentOutputWriterSpec(sparkSession, sortPlan, sortColumns)
         if (concurrentOutputWriterSpec.isDefined) {
           (empty2NullPlan, concurrentOutputWriterSpec)
         } else {
@@ -273,19 +284,24 @@ object FileFormatWriter extends Logging {
       logInfo(log"Start to commit write Job ${MDC(LogKeys.UUID, description.uuid)}.")
       val (_, duration) = Utils
         .timeTakenMs { committer.commitJob(job, commitMsgs.toImmutableArraySeq) }
-      logInfo(log"Write Job ${MDC(LogKeys.UUID, description.uuid)} committed. " +
-        log"Elapsed time: ${MDC(LogKeys.ELAPSED_TIME, duration)} ms.")
+      logInfo(
+        log"Write Job ${MDC(LogKeys.UUID, description.uuid)} committed. " +
+          log"Elapsed time: ${MDC(LogKeys.ELAPSED_TIME, duration)} ms.")
 
       processStats(
-        description.statsTrackers, ret.map(_.summary.stats).toImmutableArraySeq, duration)
-      logInfo(log"Finished processing stats for write job ${MDC(LogKeys.UUID, description.uuid)}.")
+        description.statsTrackers,
+        ret.map(_.summary.stats).toImmutableArraySeq,
+        duration)
+      logInfo(
+        log"Finished processing stats for write job ${MDC(LogKeys.UUID, description.uuid)}.")
 
       // return a set of all the partition paths that were updated during this job
       ret.map(_.summary.updatedPartitions).reduceOption(_ ++ _).getOrElse(Set.empty)
-    } catch { case cause: Throwable =>
-      logError(log"Aborting job ${MDC(WRITE_JOB_UUID, description.uuid)}.", cause)
-      committer.abortJob(job)
-      throw cause
+    } catch {
+      case cause: Throwable =>
+        logError(log"Aborting job ${MDC(WRITE_JOB_UUID, description.uuid)}.", cause)
+        committer.abortJob(job)
+        throw cause
     }
   }
 
@@ -332,12 +348,9 @@ object FileFormatWriter extends Logging {
     // SPARK-21165: the `requiredOrdering` is based on the attributes from analyzed plan, and
     // the physical plan may have different attribute ids due to optimizer removing some
     // aliases. Here we bind the expression ahead to avoid potential attribute ids mismatch.
-    val orderingExpr = bindReferences(
-      requiredOrdering.map(SortOrder(_, Ascending)), outputSpec.outputColumns)
-    SortExec(
-      orderingExpr,
-      global = false,
-      child = plan)
+    val orderingExpr =
+      bindReferences(requiredOrdering.map(SortOrder(_, Ascending)), outputSpec.outputColumns)
+    SortExec(orderingExpr, global = false, child = plan)
   }
 
   private def createConcurrentOutputWriterSpec(
@@ -386,53 +399,58 @@ object FileFormatWriter extends Logging {
     var dataWriter: FileFormatDataWriter = null
 
     Utils.tryWithSafeFinallyAndFailureCallbacks(block = {
-      dataWriter =
-        if (sparkPartitionId != 0 && !iterator.hasNext) {
-          // In case of empty job, leave first partition to save meta for file format like parquet.
-          new EmptyDirectoryDataWriter(description, taskAttemptContext, committer)
-        } else if (description.partitionColumns.isEmpty && description.bucketSpec.isEmpty) {
-          new SingleDirectoryDataWriter(description, taskAttemptContext, committer)
-        } else {
-          concurrentOutputWriterSpec match {
-            case Some(spec) =>
-              new DynamicPartitionDataConcurrentWriter(
-                description, taskAttemptContext, committer, spec)
-            case _ =>
-              new DynamicPartitionDataSingleWriter(description, taskAttemptContext, committer)
-          }
+      dataWriter = if (sparkPartitionId != 0 && !iterator.hasNext) {
+        // In case of empty job, leave first partition to save meta for file format like parquet.
+        new EmptyDirectoryDataWriter(description, taskAttemptContext, committer)
+      } else if (description.partitionColumns.isEmpty && description.bucketSpec.isEmpty) {
+        new SingleDirectoryDataWriter(description, taskAttemptContext, committer)
+      } else {
+        concurrentOutputWriterSpec match {
+          case Some(spec) =>
+            new DynamicPartitionDataConcurrentWriter(
+              description,
+              taskAttemptContext,
+              committer,
+              spec)
+          case _ =>
+            new DynamicPartitionDataSingleWriter(description, taskAttemptContext, committer)
         }
+      }
 
       // Execute the task to write rows out and commit the task.
       dataWriter.writeWithIterator(iterator)
       dataWriter.commit()
-    })(catchBlock = {
-      // If there is an error, abort the task
-      if (dataWriter != null) {
-        dataWriter.abort()
-      } else {
-        committer.abortTask(taskAttemptContext)
-      }
-      logError(log"Job: ${MDC(JOB_ID, jobId)}, Task: ${MDC(TASK_ID, taskId)}, " +
-        log"Task attempt ${MDC(TASK_ATTEMPT_ID, taskAttemptId)} aborted.")
-    }, finallyBlock = {
-      if (dataWriter != null) {
-        dataWriter.close()
-      }
-    })
+    })(
+      catchBlock = {
+        // If there is an error, abort the task
+        if (dataWriter != null) {
+          dataWriter.abort()
+        } else {
+          committer.abortTask(taskAttemptContext)
+        }
+        logError(
+          log"Job: ${MDC(JOB_ID, jobId)}, Task: ${MDC(TASK_ID, taskId)}, " +
+            log"Task attempt ${MDC(TASK_ATTEMPT_ID, taskAttemptId)} aborted.")
+      },
+      finallyBlock = {
+        if (dataWriter != null) {
+          dataWriter.close()
+        }
+      })
   }
 
   /**
-   * For every registered [[WriteJobStatsTracker]], call `processStats()` on it, passing it
-   * the corresponding [[WriteTaskStats]] from all executors.
+   * For every registered [[WriteJobStatsTracker]], call `processStats()` on it, passing it the
+   * corresponding [[WriteTaskStats]] from all executors.
    */
   private[datasources] def processStats(
       statsTrackers: Seq[WriteJobStatsTracker],
       statsPerTask: Seq[Seq[WriteTaskStats]],
-      jobCommitDuration: Long)
-  : Unit = {
+      jobCommitDuration: Long): Unit = {
 
     val numStatsTrackers = statsTrackers.length
-    assert(statsPerTask.forall(_.length == numStatsTrackers),
+    assert(
+      statsPerTask.forall(_.length == numStatsTrackers),
       s"""Every WriteTask should have produced one `WriteTaskStats` object for every tracker.
          |There are $numStatsTrackers statsTrackers, but some task returned
          |${statsPerTask.find(_.length != numStatsTrackers).get.length} results instead.
@@ -444,8 +462,8 @@ object FileFormatWriter extends Logging {
       statsTrackers.map(_ => Seq.empty)
     }
 
-    statsTrackers.zip(statsPerTracker).foreach {
-      case (statsTracker, stats) => statsTracker.processStats(stats, jobCommitDuration)
+    statsTrackers.zip(statsPerTracker).foreach { case (statsTracker, stats) =>
+      statsTracker.processStats(stats, jobCommitDuration)
     }
   }
 }

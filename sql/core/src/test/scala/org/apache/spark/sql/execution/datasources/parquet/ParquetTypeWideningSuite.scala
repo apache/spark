@@ -63,32 +63,31 @@ class ParquetTypeWideningSuite
       dictionaryEnabled <- Seq(true, false)
       timestampRebaseMode <- timestampRebaseModes
     }
-    withClue(
-      s"with dictionary encoding '$dictionaryEnabled' with timestamp rebase mode " +
-        s"'$timestampRebaseMode''") {
-      withAllParquetWriters {
-        withTempDir { dir =>
-          val expected =
-            writeParquetFiles(dir, values, fromType, dictionaryEnabled, timestampRebaseMode)
-          withAllParquetReaders {
-            if (expectError) {
-              val exception = intercept[SparkException] {
-                readParquetFiles(dir, toType).collect()
+      withClue(
+        s"with dictionary encoding '$dictionaryEnabled' with timestamp rebase mode " +
+          s"'$timestampRebaseMode''") {
+        withAllParquetWriters {
+          withTempDir { dir =>
+            val expected =
+              writeParquetFiles(dir, values, fromType, dictionaryEnabled, timestampRebaseMode)
+            withAllParquetReaders {
+              if (expectError) {
+                val exception = intercept[SparkException] {
+                  readParquetFiles(dir, toType).collect()
+                }
+                assert(
+                  exception.getCause
+                    .isInstanceOf[SchemaColumnConvertNotSupportedException] ||
+                    exception.getCause
+                      .isInstanceOf[org.apache.parquet.io.ParquetDecodingException] ||
+                    exception.getCause.getMessage.contains("PARQUET_CONVERSION_FAILURE"))
+              } else {
+                checkAnswer(readParquetFiles(dir, toType), expected.select($"a".cast(toType)))
               }
-              assert(
-                exception.getCause
-                  .isInstanceOf[SchemaColumnConvertNotSupportedException] ||
-                exception.getCause
-                  .isInstanceOf[org.apache.parquet.io.ParquetDecodingException] ||
-                exception.getCause.getMessage.contains(
-                  "PARQUET_CONVERSION_FAILURE"))
-            } else {
-              checkAnswer(readParquetFiles(dir, toType), expected.select($"a".cast(toType)))
             }
           }
         }
       }
-    }
   }
 
   /**
@@ -111,7 +110,7 @@ class ParquetTypeWideningSuite
       dataType: DataType,
       dictionaryEnabled: Boolean,
       timestampRebaseMode: LegacyBehaviorPolicy.Value = LegacyBehaviorPolicy.CORRECTED)
-    : DataFrame = {
+      : DataFrame = {
     val repeatedValues = List.fill(if (dictionaryEnabled) 10 else 1)(values).flatten
     val df = repeatedValues.toDF("a").select(col("a").cast(dataType))
     withSQLConf(
@@ -126,7 +125,8 @@ class ParquetTypeWideningSuite
     }
 
     // Check which encoding was used when writing Parquet V2 files.
-    val isParquetV2 = spark.conf.getOption(ParquetOutputFormat.WRITER_VERSION)
+    val isParquetV2 = spark.conf
+      .getOption(ParquetOutputFormat.WRITER_VERSION)
       .contains(ParquetProperties.WriterVersion.PARQUET_2_0.toString)
     if (isParquetV2) {
       if (dictionaryEnabled) {
@@ -147,7 +147,8 @@ class ParquetTypeWideningSuite
   private def assertAllParquetFilesDictionaryEncoded(dir: File): Unit = {
     dir.listFiles(_.getName.endsWith(".parquet")).foreach { file =>
       val inputFile = HadoopInputFile.fromPath(
-        new Path(dir.toString, file.getName), spark.sessionState.newHadoopConf())
+        new Path(dir.toString, file.getName),
+        spark.sessionState.newHadoopConf())
       val parquetMetadata =
         ParquetFooterReader.readFooter(inputFile, ParquetMetadataConverter.NO_FILTER)
       parquetMetadata.getBlocks.forEach { block =>
@@ -168,7 +169,8 @@ class ParquetTypeWideningSuite
   private def assertParquetV2Encoding(dir: File, expected_encoding: Encoding): Unit = {
     dir.listFiles(_.getName.endsWith(".parquet")).foreach { file =>
       val inputFile = HadoopInputFile.fromPath(
-        new Path(dir.toString, file.getName), spark.sessionState.newHadoopConf())
+        new Path(dir.toString, file.getName),
+        spark.sessionState.newHadoopConf())
       val parquetMetadata =
         ParquetFooterReader.readFooter(inputFile, ParquetMetadataConverter.NO_FILTER)
       parquetMetadata.getBlocks.forEach { block =>
@@ -176,7 +178,7 @@ class ParquetTypeWideningSuite
           assert(
             col.getEncodings.contains(expected_encoding),
             s"Expected column '${col.getPath.toDotString}' to use encoding $expected_encoding " +
-            s"but found ${col.getEncodings}.")
+              s"but found ${col.getEncodings}.")
         }
       }
     }
@@ -191,12 +193,11 @@ class ParquetTypeWideningSuite
       (Seq("1", "2", Short.MinValue.toString), ShortType, DoubleType),
       (Seq("1", "2", Int.MinValue.toString), IntegerType, DoubleType),
       (Seq("1.23", "10.34"), FloatType, DoubleType),
-      (Seq("2020-01-01", "2020-01-02", "1312-02-27"), DateType, TimestampNTZType)
-    )
+      (Seq("2020-01-01", "2020-01-02", "1312-02-27"), DateType, TimestampNTZType))
   }
-  test(s"parquet widening conversion $fromType -> $toType") {
-    checkAllParquetReaders(values, fromType, toType, expectError = false)
-  }
+    test(s"parquet widening conversion $fromType -> $toType") {
+      checkAllParquetReaders(values, fromType, toType, expectError = false)
+    }
 
   for {
     (values: Seq[String], fromType: DataType, toType: DataType) <- Seq(
@@ -213,12 +214,11 @@ class ParquetTypeWideningSuite
       (Seq("1", Byte.MaxValue.toString), ByteType, DecimalType(IntDecimal.precision + 1, 1)),
       (Seq("1", Short.MaxValue.toString), ShortType, DecimalType(IntDecimal.precision + 1, 1)),
       (Seq("1", Int.MaxValue.toString), IntegerType, DecimalType(IntDecimal.precision + 1, 1)),
-      (Seq("1", Long.MaxValue.toString), LongType, DecimalType(LongDecimal.precision + 1, 1))
-    )
+      (Seq("1", Long.MaxValue.toString), LongType, DecimalType(LongDecimal.precision + 1, 1)))
   }
-  test(s"parquet widening conversion $fromType -> $toType") {
-    checkAllParquetReaders(values, fromType, toType, expectError = false)
-  }
+    test(s"parquet widening conversion $fromType -> $toType") {
+      checkAllParquetReaders(values, fromType, toType, expectError = false)
+    }
 
   for {
     (values: Seq[String], fromType: DataType, toType: DataType) <- Seq(
@@ -229,12 +229,11 @@ class ParquetTypeWideningSuite
       (Seq("1", "10"), LongType, DateType),
       (Seq("1", "10"), IntegerType, TimestampType),
       (Seq("1", "10"), IntegerType, TimestampNTZType),
-      (Seq("2020-01-01", "2020-01-02", "1312-02-27"), DateType, TimestampType)
-    )
+      (Seq("2020-01-01", "2020-01-02", "1312-02-27"), DateType, TimestampType))
   }
-  test(s"unsupported parquet conversion $fromType -> $toType") {
-    checkAllParquetReaders(values, fromType, toType, expectError = true)
-  }
+    test(s"unsupported parquet conversion $fromType -> $toType") {
+      checkAllParquetReaders(values, fromType, toType, expectError = true)
+    }
 
   for {
     (values: Seq[String], fromType: DataType, toType: DecimalType) <- Seq(
@@ -255,16 +254,18 @@ class ParquetTypeWideningSuite
       (Seq("1", "2"), ByteType, DecimalType(ByteDecimal.precision, 1)),
       (Seq("1", "2"), ShortType, DecimalType(ShortDecimal.precision, 1)),
       (Seq("1", "2"), IntegerType, DecimalType(IntDecimal.precision, 1)),
-      (Seq("1", "2"), LongType, DecimalType(LongDecimal.precision, 1))
-    )
+      (Seq("1", "2"), LongType, DecimalType(LongDecimal.precision, 1)))
   }
-  test(s"unsupported parquet conversion $fromType -> $toType") {
-    checkAllParquetReaders(values, fromType, toType,
-      expectError =
-      // parquet-mr allows reading decimals into a smaller precision decimal type without
-      // checking for overflows. See test below checking for the overflow case in parquet-mr.
-        spark.conf.get(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key).toBoolean)
-  }
+    test(s"unsupported parquet conversion $fromType -> $toType") {
+      checkAllParquetReaders(
+        values,
+        fromType,
+        toType,
+        expectError =
+          // parquet-mr allows reading decimals into a smaller precision decimal type without
+          // checking for overflows. See test below checking for the overflow case in parquet-mr.
+          spark.conf.get(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key).toBoolean)
+    }
 
   for {
     (values: Seq[String], fromType: DataType, toType: DataType) <- Seq(
@@ -272,14 +273,14 @@ class ParquetTypeWideningSuite
       (Seq("2020-01-01", "2020-01-02", "1312-02-27"), TimestampNTZType, DateType))
     outputTimestampType <- ParquetOutputTimestampType.values
   }
-  test(s"unsupported parquet timestamp conversion $fromType ($outputTimestampType) -> $toType") {
-    withSQLConf(
-      SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> outputTimestampType.toString,
-      SQLConf.PARQUET_INT96_REBASE_MODE_IN_WRITE.key -> LegacyBehaviorPolicy.CORRECTED.toString
-    ) {
-      checkAllParquetReaders(values, fromType, toType, expectError = true)
+    test(
+      s"unsupported parquet timestamp conversion $fromType ($outputTimestampType) -> $toType") {
+      withSQLConf(
+        SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> outputTimestampType.toString,
+        SQLConf.PARQUET_INT96_REBASE_MODE_IN_WRITE.key -> LegacyBehaviorPolicy.CORRECTED.toString) {
+        checkAllParquetReaders(values, fromType, toType, expectError = true)
+      }
     }
-  }
 
   for {
     (fromPrecision, toPrecision) <-
@@ -291,30 +292,40 @@ class ParquetTypeWideningSuite
     Seq(5 -> 7, 5 -> 10, 5 -> 20, 10 -> 12, 10 -> 20, 20 -> 22) ++
       Seq(7 -> 5, 10 -> 5, 20 -> 5, 12 -> 10, 20 -> 10, 22 -> 20)
   }
-  test(
-    s"parquet decimal precision change Decimal($fromPrecision, 2) -> Decimal($toPrecision, 2)") {
-    checkAllParquetReaders(
-      values = Seq("1.23", "10.34"),
-      fromType = DecimalType(fromPrecision, 2),
-      toType = DecimalType(toPrecision, 2),
-      expectError = fromPrecision > toPrecision &&
-        // parquet-mr allows reading decimals into a smaller precision decimal type without
-        // checking for overflows. See test below checking for the overflow case in parquet-mr.
-        spark.conf.get(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key).toBoolean)
-  }
+    test(
+      s"parquet decimal precision change Decimal($fromPrecision, 2) -> Decimal($toPrecision, 2)") {
+      checkAllParquetReaders(
+        values = Seq("1.23", "10.34"),
+        fromType = DecimalType(fromPrecision, 2),
+        toType = DecimalType(toPrecision, 2),
+        expectError = fromPrecision > toPrecision &&
+          // parquet-mr allows reading decimals into a smaller precision decimal type without
+          // checking for overflows. See test below checking for the overflow case in parquet-mr.
+          spark.conf.get(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key).toBoolean)
+    }
 
   for {
     ((fromPrecision, fromScale), (toPrecision, toScale)) <-
-      // Test changing decimal types for decimals backed by different physical parquet types:
-      // - INT32: precisions 5, 7
-      // - INT64: precisions 10, 12
-      // - FIXED_LEN_BYTE_ARRAY: precisions 20, 22
-      // Widening  precision and scale by the same amount.
-      Seq((5, 2) -> (7, 4), (5, 2) -> (10, 7), (5, 2) -> (20, 17), (10, 2) -> (12, 4),
-        (10, 2) -> (20, 12), (20, 2) -> (22, 4)) ++
+    // Test changing decimal types for decimals backed by different physical parquet types:
+    // - INT32: precisions 5, 7
+    // - INT64: precisions 10, 12
+    // - FIXED_LEN_BYTE_ARRAY: precisions 20, 22
+    // Widening  precision and scale by the same amount.
+    Seq(
+      (5, 2) -> (7, 4),
+      (5, 2) -> (10, 7),
+      (5, 2) -> (20, 17),
+      (10, 2) -> (12, 4),
+      (10, 2) -> (20, 12),
+      (20, 2) -> (22, 4)) ++
       // Narrowing precision and scale by the same amount.
-      Seq((7, 4) -> (5, 2), (10, 7) -> (5, 2), (20, 17) -> (5, 2), (12, 4) -> (10, 2),
-        (20, 17) -> (10, 2), (22, 4) -> (20, 2)) ++
+      Seq(
+        (7, 4) -> (5, 2),
+        (10, 7) -> (5, 2),
+        (20, 17) -> (5, 2),
+        (12, 4) -> (10, 2),
+        (20, 17) -> (10, 2),
+        (22, 4) -> (20, 2)) ++
       // Increasing precision and decreasing scale.
       Seq((10, 6) -> (12, 4), (20, 7) -> (22, 5)) ++
       // Decreasing precision and increasing scale.
@@ -322,20 +333,19 @@ class ParquetTypeWideningSuite
       // Increasing precision by a smaller amount than scale.
       Seq((5, 2) -> (6, 4), (10, 4) -> (12, 7), (20, 5) -> (22, 8))
   }
-  test(s"parquet decimal precision and scale change Decimal($fromPrecision, $fromScale) -> " +
-    s"Decimal($toPrecision, $toScale)"
-  ) {
-    checkAllParquetReaders(
-      values = Seq("1.23", "10.34"),
-      fromType = DecimalType(fromPrecision, fromScale),
-      toType = DecimalType(toPrecision, toScale),
-      expectError =
-        (toScale < fromScale || toPrecision - toScale < fromPrecision - fromScale) &&
-          // parquet-mr allows reading decimals into a smaller precision decimal type without
-          // checking for overflows. See test below checking for the overflow case in parquet-mr.
-          spark.conf.get(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key).toBoolean
-    )
-  }
+    test(
+      s"parquet decimal precision and scale change Decimal($fromPrecision, $fromScale) -> " +
+        s"Decimal($toPrecision, $toScale)") {
+      checkAllParquetReaders(
+        values = Seq("1.23", "10.34"),
+        fromType = DecimalType(fromPrecision, fromScale),
+        toType = DecimalType(toPrecision, toScale),
+        expectError =
+          (toScale < fromScale || toPrecision - toScale < fromPrecision - fromScale) &&
+            // parquet-mr allows reading decimals into a smaller precision decimal type without
+            // checking for overflows. See test below checking for the overflow case in parquet-mr.
+            spark.conf.get(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key).toBoolean)
+    }
 
   test("parquet decimal type change Decimal(5, 2) -> Decimal(3, 2) overflows with parquet-mr") {
     withTempDir { dir =>

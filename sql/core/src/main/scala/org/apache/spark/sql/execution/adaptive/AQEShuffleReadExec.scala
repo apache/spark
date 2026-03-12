@@ -33,14 +33,16 @@ import org.apache.spark.sql.vectorized.ColumnarBatch
 /**
  * A wrapper of shuffle query stage, which follows the given partition arrangement.
  *
- * @param child           It is usually `ShuffleQueryStageExec`, but can be the shuffle exchange
- *                        node during canonicalization.
- * @param partitionSpecs  The partition specs that defines the arrangement, requires at least one
- *                        partition.
+ * @param child
+ *   It is usually `ShuffleQueryStageExec`, but can be the shuffle exchange node during
+ *   canonicalization.
+ * @param partitionSpecs
+ *   The partition specs that defines the arrangement, requires at least one partition.
  */
-case class AQEShuffleReadExec private(
+case class AQEShuffleReadExec private (
     child: SparkPlan,
-    partitionSpecs: Seq[ShufflePartitionSpec]) extends UnaryExecNode {
+    partitionSpecs: Seq[ShufflePartitionSpec])
+    extends UnaryExecNode {
   assert(partitionSpecs.nonEmpty, s"${getClass.getSimpleName} requires at least one partition")
 
   // If this is to read shuffle files locally, then all partition specs should be
@@ -58,8 +60,8 @@ case class AQEShuffleReadExec private(
     // the same as the plan before shuffle.
     // TODO this check is based on assumptions of callers' behavior but is sufficient for now.
     if (partitionSpecs.forall(_.isInstanceOf[PartialMapperPartitionSpec]) &&
-        partitionSpecs.map(_.asInstanceOf[PartialMapperPartitionSpec].mapIndex).toSet.size ==
-          partitionSpecs.length) {
+      partitionSpecs.map(_.asInstanceOf[PartialMapperPartitionSpec].mapIndex).toSet.size ==
+        partitionSpecs.length) {
       child match {
         case ShuffleQueryStageExec(_, s: ShuffleExchangeLike, _) =>
           s.child.outputPartitioning
@@ -188,8 +190,8 @@ case class AQEShuffleReadExec private(
     driverAccumUpdates += (numEmptyPartitionsMetric.id -> numEmptyPartitions.toLong)
 
     if (hasSkewedPartition) {
-      val skewedSpecs = partitionSpecs.collect {
-        case p: PartialReducerPartitionSpec => p
+      val skewedSpecs = partitionSpecs.collect { case p: PartialReducerPartitionSpec =>
+        p
       }
 
       val skewedPartitions = metrics("numSkewedPartitions")
@@ -219,12 +221,16 @@ case class AQEShuffleReadExec private(
       partitionDataSizeMetrics.set(dataSizes.sum)
     }
 
-    SQLMetrics.postDriverMetricsUpdatedByValue(sparkContext, executionId, driverAccumUpdates.toSeq)
+    SQLMetrics.postDriverMetricsUpdatedByValue(
+      sparkContext,
+      executionId,
+      driverAccumUpdates.toSeq)
   }
 
   @transient override lazy val metrics: Map[String, SQLMetric] = {
     if (shuffleStage.isDefined) {
-      Map("numPartitions" -> SQLMetrics.createMetric(sparkContext, "number of partitions"),
+      Map(
+        "numPartitions" -> SQLMetrics.createMetric(sparkContext, "number of partitions"),
         "numEmptyPartitions" ->
           SQLMetrics.createMetric(sparkContext, "number of empty partitions")) ++ {
         if (isLocalRead) {
@@ -232,13 +238,15 @@ case class AQEShuffleReadExec private(
           // data size info is available.
           Map.empty
         } else {
-          Map("partitionDataSize" ->
-            SQLMetrics.createSizeMetric(sparkContext, "partition data size"))
+          Map(
+            "partitionDataSize" ->
+              SQLMetrics.createSizeMetric(sparkContext, "partition data size"))
         }
       } ++ {
         if (hasSkewedPartition) {
-          Map("numSkewedPartitions" ->
-            SQLMetrics.createMetric(sparkContext, "number of skewed partitions"),
+          Map(
+            "numSkewedPartitions" ->
+              SQLMetrics.createMetric(sparkContext, "number of skewed partitions"),
             "numSkewedSplits" ->
               SQLMetrics.createMetric(sparkContext, "number of skewed partition splits"))
         } else {
@@ -246,8 +254,9 @@ case class AQEShuffleReadExec private(
         }
       } ++ {
         if (hasCoalescedPartition) {
-          Map("numCoalescedPartitions" ->
-            SQLMetrics.createMetric(sparkContext, "number of coalesced partitions"))
+          Map(
+            "numCoalescedPartitions" ->
+              SQLMetrics.createMetric(sparkContext, "number of coalesced partitions"))
         } else {
           Map.empty
         }

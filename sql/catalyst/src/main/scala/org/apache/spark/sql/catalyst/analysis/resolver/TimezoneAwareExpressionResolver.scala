@@ -17,23 +17,20 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import org.apache.spark.sql.catalyst.expressions.{
-  Cast,
-  DefaultStringProducingExpression,
-  Expression,
-  TimeZoneAwareExpression
-}
+import org.apache.spark.sql.catalyst.expressions.{Cast, DefaultStringProducingExpression, Expression, TimeZoneAwareExpression}
 import org.apache.spark.sql.types.StringType
 
 /**
  * Resolves [[TimeZoneAwareExpressions]] by applying the session's local timezone.
  *
  * This class is responsible for resolving [[TimeZoneAwareExpression]]s by first resolving their
- * children and then applying the session's local timezone. Additionally, ensures that any tags from
- * the original expression are preserved during the resolution process.
+ * children and then applying the session's local timezone. Additionally, ensures that any tags
+ * from the original expression are preserved during the resolution process.
  *
- * @constructor Creates a new TimezoneAwareExpressionResolver with the given expression resolver.
- * @param expressionResolver The [[ExpressionResolver]] used to resolve child expressions.
+ * @constructor
+ *   Creates a new TimezoneAwareExpressionResolver with the given expression resolver.
+ * @param expressionResolver
+ *   The [[ExpressionResolver]] used to resolve child expressions.
  */
 class TimezoneAwareExpressionResolver(expressionResolver: ExpressionResolver)
     extends TreeNodeResolver[TimeZoneAwareExpression, Expression]
@@ -43,25 +40,24 @@ class TimezoneAwareExpressionResolver(expressionResolver: ExpressionResolver)
   private val traversals = expressionResolver.getExpressionTreeTraversals
 
   /**
-   * Resolves a [[TimeZoneAwareExpression]] by resolving its children, applying a timezone
-   * and calling [[coerceExpressionTypes]] on the result. If the expression is a [[Cast]], we apply
+   * Resolves a [[TimeZoneAwareExpression]] by resolving its children, applying a timezone and
+   * calling [[coerceExpressionTypes]] on the result. If the expression is a [[Cast]], we apply
    * [[collapseCast]] to the result.
    *
-   * @param unresolvedTimezoneExpression The [[TimeZoneAwareExpression]] to resolve.
-   * @return A resolved [[Expression]] with the session's local timezone applied, and optionally
-   *   type coerced.
+   * @param unresolvedTimezoneExpression
+   *   The [[TimeZoneAwareExpression]] to resolve.
+   * @return
+   *   A resolved [[Expression]] with the session's local timezone applied, and optionally type
+   *   coerced.
    */
   override def resolve(unresolvedTimezoneExpression: TimeZoneAwareExpression): Expression = {
     val expressionWithResolvedChildren =
       withResolvedChildren(unresolvedTimezoneExpression, expressionResolver.resolve _)
-    val expressionWithResolvedChildrenAndTimeZone = TimezoneAwareExpressionResolver.resolveTimezone(
-      expressionWithResolvedChildren,
-      traversals.current.sessionLocalTimeZone
-    )
+    val expressionWithResolvedChildrenAndTimeZone = TimezoneAwareExpressionResolver
+      .resolveTimezone(expressionWithResolvedChildren, traversals.current.sessionLocalTimeZone)
     coerceExpressionTypes(
       expression = expressionWithResolvedChildrenAndTimeZone,
-      expressionTreeTraversal = traversals.current
-    ) match {
+      expressionTreeTraversal = traversals.current) match {
       case cast: Cast if traversals.current.defaultCollation.isDefined =>
         tryCollapseCast(cast, traversals.current.defaultCollation.get)
       case other =>
@@ -74,15 +70,15 @@ class TimezoneAwareExpressionResolver(expressionResolver: ExpressionResolver)
    * replacing all occurrences of the companion object [[StringType]] with [[StringType]] with the
    * default collation.
    *
-   * Special case:
-   * Before resolution, if the [[Cast]]'s child is a [[DefaultStringProducingExpression]] and the
-   * custom default collation is not `UTF8_BINARY`, then the [[DefaultStringProducingExpression]]
-   * will be wrapped with a [[Cast]] to [[StringType]] with the default collation. Additionally,
-   * if the currently resolving [[Cast]] is also a [[Cast]] to the companion object [[StringType]],
-   * we update it to a [[Cast]] to [[StringType]] with the default collation as well.
+   * Special case: Before resolution, if the [[Cast]]'s child is a
+   * [[DefaultStringProducingExpression]] and the custom default collation is not `UTF8_BINARY`,
+   * then the [[DefaultStringProducingExpression]] will be wrapped with a [[Cast]] to
+   * [[StringType]] with the default collation. Additionally, if the currently resolving [[Cast]]
+   * is also a [[Cast]] to the companion object [[StringType]], we update it to a [[Cast]] to
+   * [[StringType]] with the default collation as well.
    *
-   * This results in two identical [[Cast]]s, which is redundant-so we can remove one of them.
-   * We are doing this to have the same plan as the one from the fixed-point analyzer.
+   * This results in two identical [[Cast]]s, which is redundant-so we can remove one of them. We
+   * are doing this to have the same plan as the one from the fixed-point analyzer.
    *
    * Example query for the special case:
    * {{{
@@ -91,10 +87,8 @@ class TimezoneAwareExpressionResolver(expressionResolver: ExpressionResolver)
    * AS SELECT current_database()::STRING AS c1
    * }}}
    *
-   * Plan for the `AS query` part:
-   * Project [cast(c1#2 as string collate UNICODE) AS c1#3]
-   * +- Project [cast(current_schema() as string collate UNICODE) AS c1#2]
-   *    +- OneRowRelation
+   * Plan for the `AS query` part: Project [cast(c1#2 as string collate UNICODE) AS c1#3] +-
+   * Project [cast(current_schema() as string collate UNICODE) AS c1#2] +- OneRowRelation
    */
   private def tryCollapseCast(cast: Cast, defaultCollation: String): Cast = {
     cast.child match {
@@ -127,7 +121,7 @@ object TimezoneAwareExpressionResolver {
    * timezone until we find one which has it. This is because sometimes type coercion rules (or
    * other code) can produce multiple [[Cast]]s on top of an expression. For example:
    *
-   * {{{ SELECT NANVL(1, null); }}}
+   * {{{SELECT NANVL(1, null);}}}
    *
    * Plan:
    *
@@ -142,9 +136,12 @@ object TimezoneAwareExpressionResolver {
    * This method is particularly useful for cases like resolving [[Cast]] expressions where tags
    * such as [[USER_SPECIFIED_CAST]] need to be preserved.
    *
-   * @param expression The [[TimeZoneAwareExpression]] to apply the timezone to.
-   * @param timeZoneId The timezone ID to apply.
-   * @return A new [[TimeZoneAwareExpression]] with the specified timezone and original tags.
+   * @param expression
+   *   The [[TimeZoneAwareExpression]] to apply the timezone to.
+   * @param timeZoneId
+   *   The timezone ID to apply.
+   * @return
+   *   A new [[TimeZoneAwareExpression]] with the specified timezone and original tags.
    */
   def resolveTimezone(expression: Expression, timeZoneId: String): Expression = {
     expression match {

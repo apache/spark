@@ -25,21 +25,23 @@ import org.apache.spark.sql.types.LongType
 
 /**
  * Extracts [[DistributedSequenceID]] in logical plans, and replace it to
- * [[AttachDistributedSequence]] because this expressions requires a shuffle
- * to generate a sequence that needs the context of the whole data, e.g.,
+ * [[AttachDistributedSequence]] because this expressions requires a shuffle to generate a
+ * sequence that needs the context of the whole data, e.g.,
  * [[org.apache.spark.rdd.RDD.zipWithIndex]].
  */
 object ExtractDistributedSequenceID extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
     plan.resolveOperatorsUpWithPruning(_.containsPattern(DISTRIBUTED_SEQUENCE_ID)) {
-      case plan: LogicalPlan if plan.resolved &&
-          plan.expressions.exists(_.exists(_.isInstanceOf[DistributedSequenceID])) =>
-        val cache = plan.expressions.exists(_.exists(e =>
-          e.isInstanceOf[DistributedSequenceID] &&
-            e.asInstanceOf[DistributedSequenceID].cache.eval().asInstanceOf[Boolean]))
+      case plan: LogicalPlan
+          if plan.resolved &&
+            plan.expressions.exists(_.exists(_.isInstanceOf[DistributedSequenceID])) =>
+        val cache = plan.expressions.exists(
+          _.exists(e =>
+            e.isInstanceOf[DistributedSequenceID] &&
+              e.asInstanceOf[DistributedSequenceID].cache.eval().asInstanceOf[Boolean]))
         val attr = AttributeReference("distributed_sequence_id", LongType, nullable = false)()
-        val newPlan = plan.withNewChildren(
-            plan.children.map(AttachDistributedSequence(attr, _, cache)))
+        val newPlan = plan
+          .withNewChildren(plan.children.map(AttachDistributedSequence(attr, _, cache)))
           .transformExpressions { case _: DistributedSequenceID => attr }
         Project(plan.output, newPlan)
     }

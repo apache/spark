@@ -32,18 +32,24 @@ import org.apache.spark.util.{SerializableConfiguration, Utils}
 /**
  * A factory used to create Text readers.
  *
- * @param sqlConf SQL configuration.
- * @param broadcastedConf Broadcasted serializable Hadoop Configuration.
- * @param readDataSchema Required schema in the batch scan.
- * @param partitionSchema Schema of partitions.
- * @param options Options for reading a text file.
- * */
+ * @param sqlConf
+ *   SQL configuration.
+ * @param broadcastedConf
+ *   Broadcasted serializable Hadoop Configuration.
+ * @param readDataSchema
+ *   Required schema in the batch scan.
+ * @param partitionSchema
+ *   Schema of partitions.
+ * @param options
+ *   Options for reading a text file.
+ */
 case class TextPartitionReaderFactory(
     sqlConf: SQLConf,
     broadcastedConf: Broadcast[SerializableConfiguration],
     readDataSchema: StructType,
     partitionSchema: StructType,
-    options: TextOptions) extends FilePartitionReaderFactory {
+    options: TextOptions)
+    extends FilePartitionReaderFactory {
 
   override def buildReader(file: PartitionedFile): PartitionReader[InternalRow] = {
     val confValue = broadcastedConf.value.value
@@ -69,7 +75,10 @@ case class TextPartitionReaderFactory(
       }
     }
     val fileReader = new PartitionReaderFromIterator[InternalRow](iter)
-    new PartitionReaderWithPartitionValues(fileReader, readDataSchema,
-      partitionSchema, file.partitionValues)
+    new PartitionReaderWithPartitionValues(
+      fileReader,
+      readDataSchema,
+      partitionSchema,
+      file.partitionValues)
   }
 }

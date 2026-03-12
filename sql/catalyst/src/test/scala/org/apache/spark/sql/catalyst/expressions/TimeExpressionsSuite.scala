@@ -35,7 +35,8 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(new ToTime(Literal(null, StringType), Literal("HH:mm:ss")), null)
 
     checkEvaluation(new ToTime(Literal("00:00:00")), localTime())
-    checkEvaluation(new ToTime(Literal("23-59-00.000999"), Literal("HH-mm-ss.SSSSSS")),
+    checkEvaluation(
+      new ToTime(Literal("23-59-00.000999"), Literal("HH-mm-ss.SSSSSS")),
       localTime(23, 59, 0, 999))
     checkEvaluation(
       new ToTime(Literal("12.00.59.90909"), NonFoldableLiteral("HH.mm.ss.SSSSS")),
@@ -70,8 +71,7 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         "functionName" -> "`hour`",
         "expectedNum" -> "> 0",
         "actualNum" -> "0",
-        "docroot" -> SPARK_DOC_ROOT)
-    )
+        "docroot" -> SPARK_DOC_ROOT))
 
     // test TIME-typed child should build HoursOfTime
     val timeExpr = Literal(localTime(12, 58, 59), TimeType())
@@ -108,25 +108,20 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       localTime(14, 30) -> 14,
       localTime(12, 58, 59) -> 12,
       localTime(23, 0, 1) -> 23,
-      localTime(23, 59, 59, 999999) -> 23
-    )
+      localTime(23, 59, 59, 999999) -> 23)
 
     // Create a literal with TimeType() for each test microsecond value
     // evaluate HoursOfTime(...), and check that the result matches the expected hour.
     testTimes.foreach { case (micros, expectedHour) =>
-      checkEvaluation(
-        HoursOfTime(Literal(micros, TimeType())),
-        expectedHour)
+      checkEvaluation(HoursOfTime(Literal(micros, TimeType())), expectedHour)
     }
 
     // Verify NULL handling
-    checkEvaluation(
-      HoursOfTime(Literal.create(null, TimeType(TimeType.MICROS_PRECISION))),
-      null
-    )
+    checkEvaluation(HoursOfTime(Literal.create(null, TimeType(TimeType.MICROS_PRECISION))), null)
 
     checkConsistencyBetweenInterpretedAndCodegen(
-      (child: Expression) => HoursOfTime(child).replacement, TimeType())
+      (child: Expression) => HoursOfTime(child).replacement,
+      TimeType())
   }
 
   test("MinuteExpressionBuilder") {
@@ -140,8 +135,7 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         "functionName" -> "`minute`",
         "expectedNum" -> "> 0",
         "actualNum" -> "0",
-        "docroot" -> SPARK_DOC_ROOT)
-    )
+        "docroot" -> SPARK_DOC_ROOT))
 
     // test TIME-typed child should build MinutesOfTime for default precision value
     val timeExpr = Literal(localTime(12, 58, 59), TimeType())
@@ -177,25 +171,22 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       localTime(14, 30) -> 30,
       localTime(12, 58, 59) -> 58,
       localTime(23, 0, 1) -> 0,
-      localTime(23, 59, 59, 999999) -> 59
-    )
+      localTime(23, 59, 59, 999999) -> 59)
 
     // Create a literal with TimeType() for each test microsecond value
     // evaluate MinutesOfTime(...), and check that the result matches the expected minute.
     testTimes.foreach { case (micros, expectedMinute) =>
-      checkEvaluation(
-        MinutesOfTime(Literal(micros, TimeType())),
-        expectedMinute)
+      checkEvaluation(MinutesOfTime(Literal(micros, TimeType())), expectedMinute)
     }
 
     // Verify NULL handling
     checkEvaluation(
       MinutesOfTime(Literal.create(null, TimeType(TimeType.MICROS_PRECISION))),
-      null
-    )
+      null)
 
     checkConsistencyBetweenInterpretedAndCodegen(
-      (child: Expression) => MinutesOfTime(child).replacement, TimeType())
+      (child: Expression) => MinutesOfTime(child).replacement,
+      TimeType())
   }
 
   test("creating values of TimeType via make_time") {
@@ -211,7 +202,8 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(
       MakeTime(Literal(13), Literal.create(null, IntegerType), Literal(Decimal(23.5, 16, 6))),
       null)
-    checkEvaluation(MakeTime(Literal(13), Literal(18), Literal.create(null, DecimalType(16, 6))),
+    checkEvaluation(
+      MakeTime(Literal(13), Literal(18), Literal.create(null, DecimalType(16, 6))),
       null)
 
     // Invalid cases
@@ -219,18 +211,15 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkErrorInExpression[SparkDateTimeException](
       MakeTime(Literal(25), Literal(2), Literal(Decimal(23.5, 16, 6))),
       errorCode,
-      Map("rangeMessage" -> "Invalid value for HourOfDay (valid values 0 - 23): 25")
-    )
+      Map("rangeMessage" -> "Invalid value for HourOfDay (valid values 0 - 23): 25"))
     checkErrorInExpression[SparkDateTimeException](
       MakeTime(Literal(23), Literal(-1), Literal(Decimal(23.5, 16, 6))),
       errorCode,
-      Map("rangeMessage" -> "Invalid value for MinuteOfHour (valid values 0 - 59): -1")
-    )
+      Map("rangeMessage" -> "Invalid value for MinuteOfHour (valid values 0 - 59): -1"))
     checkErrorInExpression[SparkDateTimeException](
       MakeTime(Literal(23), Literal(12), Literal(Decimal(100.5, 16, 6))),
       errorCode,
-      Map("rangeMessage" -> "Invalid value for SecondOfMinute (valid values 0 - 59): 100")
-    )
+      Map("rangeMessage" -> "Invalid value for SecondOfMinute (valid values 0 - 59): 100"))
   }
 
   test("SecondExpressionBuilder") {
@@ -244,8 +233,7 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         "functionName" -> "`second`",
         "expectedNum" -> "> 0",
         "actualNum" -> "0",
-        "docroot" -> SPARK_DOC_ROOT)
-    )
+        "docroot" -> SPARK_DOC_ROOT))
 
     // test TIME-typed child should build SecondsOfTime
     val timeExpr = Literal(localTime(12, 58, 59), TimeType())
@@ -270,25 +258,22 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       localTime(14, 30) -> 0,
       localTime(12, 58, 59) -> 59,
       localTime(23, 0, 1) -> 1,
-      localTime(23, 59, 59, 999999) -> 59
-    )
+      localTime(23, 59, 59, 999999) -> 59)
 
     // Create a literal with TimeType() for each test microsecond value
     // evaluate SecondsOfTime(...), and check that the result matches the expected second.
     testTimes.foreach { case (micros, expectedSecond) =>
-      checkEvaluation(
-        SecondsOfTime(Literal(micros, TimeType())),
-        expectedSecond)
+      checkEvaluation(SecondsOfTime(Literal(micros, TimeType())), expectedSecond)
     }
 
     // Verify NULL handling
     checkEvaluation(
       SecondsOfTime(Literal.create(null, TimeType(TimeType.MICROS_PRECISION))),
-      null
-    )
+      null)
 
     checkConsistencyBetweenInterpretedAndCodegen(
-      (child: Expression) => SecondsOfTime(child).replacement, TimeType())
+      (child: Expression) => SecondsOfTime(child).replacement,
+      TimeType())
   }
 
   test("CurrentTime") {
@@ -317,16 +302,14 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     // test out of range precision => checkInputDataTypes fails
     expr = CurrentTime(Literal(2 + 8))
-    assert(expr.checkInputDataTypes() ==
-      DataTypeMismatch(
-        errorSubClass = "VALUE_OUT_OF_RANGE",
-        messageParameters = Map(
-          "exprName" -> toSQLId("precision"),
-          "valueRange" -> s"[${TimeType.MIN_PRECISION}, ${TimeType.MICROS_PRECISION}]",
-          "currentValue" -> toSQLValue(10, IntegerType)
-        )
-      )
-    )
+    assert(
+      expr.checkInputDataTypes() ==
+        DataTypeMismatch(
+          errorSubClass = "VALUE_OUT_OF_RANGE",
+          messageParameters = Map(
+            "exprName" -> toSQLId("precision"),
+            "valueRange" -> s"[${TimeType.MIN_PRECISION}, ${TimeType.MICROS_PRECISION}]",
+            "currentValue" -> toSQLValue(10, IntegerType))))
 
     // test non number value should fail since we skip analyzer here
     expr = CurrentTime(Literal("2"))
@@ -378,21 +361,26 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       TimeAddInterval(Literal(LocalTime.of(8, 31)), Literal(Duration.ofMinutes(30))),
       LocalTime.of(8, 31).plusMinutes(30))
     // Maximum precision of TIME and DAY-TIME INTERVAL
-    assert(TimeAddInterval(
-      Literal(0L, TimeType(0)),
-      Literal(0L, DayTimeIntervalType(DAY))).dataType == TimeType(0))
-    assert(TimeAddInterval(
-      Literal(1L, TimeType(TimeType.MAX_PRECISION)),
-      Literal(1L, DayTimeIntervalType(HOUR))).dataType == TimeType(TimeType.MAX_PRECISION))
-    assert(TimeAddInterval(
-      Literal(2L, TimeType(TimeType.MIN_PRECISION)),
-      Literal(2L, DayTimeIntervalType(SECOND))).dataType == TimeType(TimeType.MICROS_PRECISION))
-    assert(TimeAddInterval(
-      Literal(3L, TimeType(TimeType.MAX_PRECISION)),
-      Literal(3L, DayTimeIntervalType(SECOND))).dataType == TimeType(TimeType.MAX_PRECISION))
+    assert(
+      TimeAddInterval(
+        Literal(0L, TimeType(0)),
+        Literal(0L, DayTimeIntervalType(DAY))).dataType == TimeType(0))
+    assert(
+      TimeAddInterval(
+        Literal(1L, TimeType(TimeType.MAX_PRECISION)),
+        Literal(1L, DayTimeIntervalType(HOUR))).dataType == TimeType(TimeType.MAX_PRECISION))
+    assert(
+      TimeAddInterval(
+        Literal(2L, TimeType(TimeType.MIN_PRECISION)),
+        Literal(2L, DayTimeIntervalType(SECOND))).dataType == TimeType(TimeType.MICROS_PRECISION))
+    assert(
+      TimeAddInterval(
+        Literal(3L, TimeType(TimeType.MAX_PRECISION)),
+        Literal(3L, DayTimeIntervalType(SECOND))).dataType == TimeType(TimeType.MAX_PRECISION))
     checkConsistencyBetweenInterpretedAndCodegenAllowingException(
       (time: Expression, interval: Expression) => TimeAddInterval(time, interval).replacement,
-      TimeType(), DayTimeIntervalType())
+      TimeType(),
+      DayTimeIntervalType())
   }
 
   test("SPARK-51555: Time difference") {
@@ -425,9 +413,7 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         parameters = Map(
           "functionName" -> "`time_diff`",
           "parameter" -> "`unit`",
-          "invalidValue" -> s"'$unit'"
-        )
-      )
+          "invalidValue" -> s"'$unit'"))
     }
 
     // Test null inputs.
@@ -443,26 +429,22 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("Subtract times") {
+    checkEvaluation(SubtractTimes(Literal.create(null, TimeType()), Literal(LocalTime.MIN)), null)
+    checkEvaluation(SubtractTimes(Literal(LocalTime.MAX), Literal(null, TimeType())), null)
     checkEvaluation(
-      SubtractTimes(Literal.create(null, TimeType()), Literal(LocalTime.MIN)),
-      null)
-    checkEvaluation(
-      SubtractTimes(Literal(LocalTime.MAX), Literal(null, TimeType())),
-      null)
-    checkEvaluation(
-      SubtractTimes(
-        Literal(LocalTime.of(8, 31).plusMinutes(30)),
-        Literal(LocalTime.of(8, 31))),
+      SubtractTimes(Literal(LocalTime.of(8, 31).plusMinutes(30)), Literal(LocalTime.of(8, 31))),
       Duration.ofMinutes(30))
-    assert(SubtractTimes(
-      Literal(0L, TimeType(0)),
-      Literal(0L, TimeType(0))).dataType == DayTimeIntervalType(HOUR, SECOND))
+    assert(
+      SubtractTimes(
+        Literal(0L, TimeType(0)),
+        Literal(0L, TimeType(0))).dataType == DayTimeIntervalType(HOUR, SECOND))
 
     for (i <- TimeType.MIN_PRECISION to TimeType.MAX_PRECISION) {
       for (j <- TimeType.MIN_PRECISION to TimeType.MAX_PRECISION) {
         checkConsistencyBetweenInterpretedAndCodegenAllowingException(
           (end: Expression, start: Expression) => SubtractTimes(end, start).replacement,
-          TimeType(i), TimeType(j))
+          TimeType(i),
+          TimeType(j))
       }
     }
   }
@@ -474,42 +456,32 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // Test HOUR truncation.
     checkEvaluation(
       TimeTrunc(Literal("HOUR"), Literal(testTime, TimeType())),
-      localTime(9, 0, 0, 0)
-    )
+      localTime(9, 0, 0, 0))
     // Test MINUTE truncation.
     checkEvaluation(
       TimeTrunc(Literal("MINUTE"), Literal(testTime, TimeType())),
-      localTime(9, 32, 0, 0)
-    )
+      localTime(9, 32, 0, 0))
     // Test SECOND truncation.
     checkEvaluation(
       TimeTrunc(Literal("SECOND"), Literal(testTime, TimeType())),
-      localTime(9, 32, 5, 0)
-    )
+      localTime(9, 32, 5, 0))
     // Test MILLISECOND truncation.
     checkEvaluation(
       TimeTrunc(Literal("MILLISECOND"), Literal(testTime, TimeType())),
-      localTime(9, 32, 5, 359000)
-    )
+      localTime(9, 32, 5, 359000))
     // Test MICROSECOND truncation.
-    checkEvaluation(
-      TimeTrunc(Literal("MICROSECOND"), Literal(testTime, TimeType())),
-      testTime
-    )
+    checkEvaluation(TimeTrunc(Literal("MICROSECOND"), Literal(testTime, TimeType())), testTime)
 
     // Test case-insensitive units.
     checkEvaluation(
       TimeTrunc(Literal("hour"), Literal(testTime, TimeType())),
-      localTime(9, 0, 0, 0)
-    )
+      localTime(9, 0, 0, 0))
     checkEvaluation(
       TimeTrunc(Literal("Hour"), Literal(testTime, TimeType())),
-      localTime(9, 0, 0, 0)
-    )
+      localTime(9, 0, 0, 0))
     checkEvaluation(
       TimeTrunc(Literal("hoUR"), Literal(testTime, TimeType())),
-      localTime(9, 0, 0, 0)
-    )
+      localTime(9, 0, 0, 0))
 
     // Test invalid units.
     val invalidUnits: Seq[String] = Seq("MS", "INVALID", "ABC", "XYZ", " ", "")
@@ -522,44 +494,33 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         parameters = Map(
           "functionName" -> "`time_trunc`",
           "parameter" -> "`unit`",
-          "invalidValue" -> s"'$unit'"
-        )
-      )
+          "invalidValue" -> s"'$unit'"))
     }
 
     // Test null inputs.
     checkEvaluation(
       TimeTrunc(Literal.create(null, StringType), Literal(testTime, TimeType())),
-      null
-    )
-    checkEvaluation(
-      TimeTrunc(Literal("HOUR"), Literal.create(null, TimeType())),
-      null
-    )
+      null)
+    checkEvaluation(TimeTrunc(Literal("HOUR"), Literal.create(null, TimeType())), null)
     checkEvaluation(
       TimeTrunc(Literal.create(null, StringType), Literal.create(null, TimeType())),
-      null
-    )
+      null)
 
     // Test edge cases.
     val midnightTime = localTime(0, 0, 0, 0)
-    val supportedUnits: Seq[String] = Seq("HOUR", "MINUTE", "SECOND", "MILLISECOND", "MICROSECOND")
+    val supportedUnits: Seq[String] =
+      Seq("HOUR", "MINUTE", "SECOND", "MILLISECOND", "MICROSECOND")
     supportedUnits.foreach { unit =>
-      checkEvaluation(
-        TimeTrunc(Literal(unit), Literal(midnightTime, TimeType())),
-        midnightTime
-      )
+      checkEvaluation(TimeTrunc(Literal(unit), Literal(midnightTime, TimeType())), midnightTime)
     }
 
     val maxTime = localTimeToNanos(LocalTime.of(23, 59, 59, 999999999))
     checkEvaluation(
       TimeTrunc(Literal("HOUR"), Literal(maxTime, TimeType())),
-      localTime(23, 0, 0, 0)
-    )
+      localTime(23, 0, 0, 0))
     checkEvaluation(
       TimeTrunc(Literal("MICROSECOND"), Literal(maxTime, TimeType())),
-      localTimeToNanos(LocalTime.of(23, 59, 59, 999999000))
-    )
+      localTimeToNanos(LocalTime.of(23, 59, 59, 999999000)))
 
     // Test precision loss.
     val timeWithMicroPrecision = localTime(15, 30, 45, 123456)
@@ -647,9 +608,9 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("TIME to numeric extractions") {
     val midnight = Literal.create(0L, TimeType())
-    val afternoon = Literal.create(52200000000000L, TimeType())  // 14:30:00
+    val afternoon = Literal.create(52200000000000L, TimeType()) // 14:30:00
     val fractional = Literal.create(52200500000000L, TimeType()) // 14:30:00.5
-    val maxTime = Literal.create(86399999999000L, TimeType())    // 23:59:59.999999
+    val maxTime = Literal.create(86399999999000L, TimeType()) // 23:59:59.999999
 
     // time_to_seconds (returns DECIMAL to preserve fractional seconds)
     checkEvaluation(TimeToSeconds(midnight), Decimal(0))

@@ -41,10 +41,11 @@ import org.apache.spark.util.BoundedPriorityQueue
 /**
  * A base class for collect_list and collect_set aggregate functions.
  *
- * We have to store all the collected elements in memory, and so notice that too many elements
- * can cause GC paused and eventually OutOfMemory Errors.
+ * We have to store all the collected elements in memory, and so notice that too many elements can
+ * cause GC paused and eventually OutOfMemory Errors.
  */
-abstract class Collect[T <: Growable[Any] with Iterable[Any]] extends TypedImperativeAggregate[T] {
+abstract class Collect[T <: Growable[Any] with Iterable[Any]]
+    extends TypedImperativeAggregate[T] {
 
   val child: Expression
 
@@ -79,7 +80,8 @@ abstract class Collect[T <: Growable[Any] with Iterable[Any]] extends TypedImper
   protected val bufferElementType: DataType
 
   private lazy val projection = UnsafeProjection.create(
-    Array[DataType](ArrayType(elementType = bufferElementType, containsNull = bufferContainsNull)))
+    Array[DataType](
+      ArrayType(elementType = bufferElementType, containsNull = bufferContainsNull)))
   private lazy val row = new UnsafeRow(1)
 
   override def serialize(obj: T): Array[Byte] = {
@@ -98,8 +100,9 @@ abstract class Collect[T <: Growable[Any] with Iterable[Any]] extends TypedImper
 /**
  * Collect a list of elements.
  *
- * @param ignoreNulls when true (IGNORE NULLS), null values are excluded from the result array.
- *                    When false (RESPECT NULLS), null values are included in the result array.
+ * @param ignoreNulls
+ *   when true (IGNORE NULLS), null values are excluded from the result array. When false (RESPECT
+ *   NULLS), null values are included in the result array.
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Collects and returns a list of non-unique elements.",
@@ -118,8 +121,9 @@ case class CollectList(
     child: Expression,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0,
-    ignoreNulls: Boolean = true) extends Collect[mutable.ArrayBuffer[Any]]
-  with UnaryLike[Expression] {
+    ignoreNulls: Boolean = true)
+    extends Collect[mutable.ArrayBuffer[Any]]
+    with UnaryLike[Expression] {
 
   def this(child: Expression) = this(child, 0, 0, true)
 
@@ -143,7 +147,8 @@ case class CollectList(
     buffer
   }
 
-  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
+  override def withNewMutableAggBufferOffset(
+      newMutableAggBufferOffset: Int): ImperativeAggregate =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
 
   override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
@@ -169,8 +174,9 @@ case class CollectList(
 /**
  * Collect a set of unique elements.
  *
- * @param ignoreNulls when true (IGNORE NULLS), null values are excluded from the result array.
- *                    When false (RESPECT NULLS), null values are included in the result array.
+ * @param ignoreNulls
+ *   when true (IGNORE NULLS), null values are excluded from the result array. When false (RESPECT
+ *   NULLS), null values are included in the result array.
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Collects and returns a set of unique elements.",
@@ -191,7 +197,9 @@ case class CollectSet(
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0,
     ignoreNulls: Boolean = true)
-  extends Collect[mutable.HashSet[Any]] with QueryErrorsBase with UnaryLike[Expression] {
+    extends Collect[mutable.HashSet[Any]]
+    with QueryErrorsBase
+    with UnaryLike[Expression] {
 
   def this(child: Expression) = this(child, 0, 0, true)
 
@@ -203,9 +211,7 @@ case class CollectSet(
     case other => other
   }
 
-  override def update(
-      buffer: mutable.HashSet[Any],
-      input: InternalRow): mutable.HashSet[Any] = {
+  override def update(buffer: mutable.HashSet[Any], input: InternalRow): mutable.HashSet[Any] = {
     val value = child.eval(input)
     if (value != null) {
       buffer += convertToBufferElement(value)
@@ -229,10 +235,12 @@ case class CollectSet(
   override def eval(buffer: mutable.HashSet[Any]): Any = {
     val array = child.dataType match {
       case BinaryType =>
-        buffer.iterator.map {
-          case null => null
-          case v => v.asInstanceOf[ArrayData].toByteArray()
-        }.toArray[Any]
+        buffer.iterator
+          .map {
+            case null => null
+            case v => v.asInstanceOf[ArrayData].toByteArray()
+          }
+          .toArray[Any]
       case _ => buffer.toArray
     }
     new GenericArrayData(array)
@@ -240,20 +248,19 @@ case class CollectSet(
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (!child.dataType.existsRecursively(_.isInstanceOf[MapType]) &&
-        UnsafeRowUtils.isBinaryStable(child.dataType)) {
+      UnsafeRowUtils.isBinaryStable(child.dataType)) {
       TypeCheckResult.TypeCheckSuccess
     } else {
       DataTypeMismatch(
         errorSubClass = "UNSUPPORTED_INPUT_TYPE",
         messageParameters = Map(
           "functionName" -> toSQLId(prettyName),
-          "dataType" -> (s"${toSQLType(MapType)} " + "or \"COLLATED STRING\"")
-        )
-      )
+          "dataType" -> (s"${toSQLType(MapType)} " + "or \"COLLATED STRING\"")))
     }
   }
 
-  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
+  override def withNewMutableAggBufferOffset(
+      newMutableAggBufferOffset: Int): ImperativeAggregate =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
 
   override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
@@ -274,15 +281,17 @@ case class CollectSet(
 
 /**
  * Collect the top-k elements. This expression is dedicated only for Spark-ML.
- * @param reverse when true, returns the smallest k elements.
+ * @param reverse
+ *   when true, returns the smallest k elements.
  */
 case class CollectTopK(
     child: Expression,
     num: Int,
     reverse: Boolean = false,
     mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0) extends Collect[BoundedPriorityQueue[Any]]
-  with UnaryLike[Expression] {
+    inputAggBufferOffset: Int = 0)
+    extends Collect[BoundedPriorityQueue[Any]]
+    with UnaryLike[Expression] {
   assert(num > 0)
 
   def this(child: Expression, num: Int) = this(child, num, false, 0, 0)
@@ -371,8 +380,7 @@ private[aggregate] object CollectTopK {
     * If DISTINCT is specified, then expr and key must be the same expression.
   """,
   group = "agg_funcs",
-  since = "4.0.0"
-)
+  since = "4.0.0")
 // scalastyle:on line.size.limit
 case class ListAgg(
     child: Expression,
@@ -380,9 +388,9 @@ case class ListAgg(
     orderExpressions: Seq[SortOrder] = Nil,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0)
-  extends Collect[mutable.ArrayBuffer[Any]]
-  with SupportsOrderingWithinGroup
-  with ImplicitCastInputTypes {
+    extends Collect[mutable.ArrayBuffer[Any]]
+    with SupportsOrderingWithinGroup
+    with ImplicitCastInputTypes {
 
   override def orderingFilled: Boolean = orderExpressions.nonEmpty
 
@@ -399,11 +407,11 @@ case class ListAgg(
     } else {
       StructType(
         StructField("value", child.dataType)
-        +: orderValuesField
-      )
+          +: orderValuesField)
     }
   }
-  /** Indicates that the result of [[child]] is not enough for evaluation  */
+
+  /** Indicates that the result of [[child]] is not enough for evaluation */
   lazy val needSaveOrderValue: Boolean = !isOrderCompatible(orderExpressions)
 
   def this(child: Expression) =
@@ -416,7 +424,8 @@ case class ListAgg(
 
   override def createAggregationBuffer(): mutable.ArrayBuffer[Any] = mutable.ArrayBuffer.empty
 
-  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
+  override def withNewMutableAggBufferOffset(
+      newMutableAggBufferOffset: Int): ImperativeAggregate =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
 
   override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
@@ -435,16 +444,12 @@ case class ListAgg(
   }
 
   override def inputTypes: Seq[AbstractDataType] =
-    TypeCollection(
-      StringTypeWithCollation(supportsTrimCollation = true),
-      BinaryType
-    ) +:
-    TypeCollection(
-      StringTypeWithCollation(supportsTrimCollation = true),
-      BinaryType,
-      NullType
-    ) +:
-    orderExpressions.map(_ => AnyDataType)
+    TypeCollection(StringTypeWithCollation(supportsTrimCollation = true), BinaryType) +:
+      TypeCollection(
+        StringTypeWithCollation(supportsTrimCollation = true),
+        BinaryType,
+        NullType) +:
+      orderExpressions.map(_ => AnyDataType)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     val matchInputTypes = super.checkInputDataTypes()
@@ -456,9 +461,7 @@ case class ListAgg(
         messageParameters = Map(
           "inputName" -> toSQLId("delimiter"),
           "inputType" -> toSQLType(delimiter.dataType),
-          "inputExpr" -> toSQLExpr(delimiter)
-        )
-      )
+          "inputExpr" -> toSQLExpr(delimiter)))
     } else if (delimiter.dataType == NullType) {
       // Null is the default empty delimiter so type is not important
       TypeCheckSuccess
@@ -477,10 +480,10 @@ case class ListAgg(
   }
 
   /**
-   * Sort buffer according orderExpressions.
-   * If orderExpressions is empty then returns buffer as is.
-   * The format of buffer is determined by [[needSaveOrderValue]]
-   * @return sorted buffer containing only child's values
+   * Sort buffer according orderExpressions. If orderExpressions is empty then returns buffer as
+   * is. The format of buffer is determined by [[needSaveOrderValue]]
+   * @return
+   *   sorted buffer containing only child's values
    */
   private[this] def sortBuffer(buffer: mutable.ArrayBuffer[Any]): mutable.ArrayBuffer[Any] = {
     if (!orderingFilled) {
@@ -511,16 +514,15 @@ case class ListAgg(
   }
 
   /**
-   * @return Ordering by (orderValue0, orderValue1, ...)
-   *         for InternalRow with format [childValue, orderValue0, orderValue1, ...]
+   * @return
+   *   Ordering by (orderValue0, orderValue1, ...) for InternalRow with format [childValue,
+   *   orderValue0, orderValue1, ...]
    */
   private[this] def bufferOrdering: Ordering[InternalRow] = {
-    val bufferSortOrder = orderExpressions.zipWithIndex.map {
-      case (originalOrder, i) =>
-        originalOrder.copy(
-          // first value is the evaluated child so add +1 for order's values
-          child = BoundReference(i + 1, originalOrder.dataType, originalOrder.child.nullable)
-        )
+    val bufferSortOrder = orderExpressions.zipWithIndex.map { case (originalOrder, i) =>
+      originalOrder.copy(
+        // first value is the evaluated child so add +1 for order's values
+        child = BoundReference(i + 1, originalOrder.dataType, originalOrder.child.nullable))
     }
     new InterpretedOrdering(bufferSortOrder)
   }
@@ -537,7 +539,8 @@ case class ListAgg(
   }
 
   /**
-   * @return Delimiter value or default empty value if delimiter is null. Type respects [[dataType]]
+   * @return
+   *   Delimiter value or default empty value if delimiter is null. Type respects [[dataType]]
    */
   private[this] def getDelimiterValue: Either[UTF8String, Array[Byte]] = {
     val delimiterValue = delimiter.eval()
@@ -545,13 +548,11 @@ case class ListAgg(
       case _: StringType =>
         Left(
           if (delimiterValue == null) UTF8String.fromString("")
-          else delimiterValue.asInstanceOf[UTF8String]
-        )
+          else delimiterValue.asInstanceOf[UTF8String])
       case _: BinaryType =>
         Right(
           if (delimiterValue == null) ByteArray.EMPTY_BYTE
-          else delimiterValue.asInstanceOf[Array[Byte]]
-        )
+          else delimiterValue.asInstanceOf[Array[Byte]])
     }
   }
 
@@ -581,8 +582,10 @@ case class ListAgg(
   /**
    * Utility func to check if given order is defined and different from [[child]].
    *
-   * @see [[QueryCompilationErrors.functionAndOrderExpressionMismatchError]]
-   * @see [[needSaveOrderValue]]
+   * @see
+   *   [[QueryCompilationErrors.functionAndOrderExpressionMismatchError]]
+   * @see
+   *   [[needSaveOrderValue]]
    */
   private[this] def isOrderCompatible(someOrder: Seq[SortOrder]): Boolean = {
     if (someOrder.isEmpty) {
@@ -597,33 +600,34 @@ case class ListAgg(
   /**
    * Returns true if the order value may be ambiguous after DISTINCT deduplication.
    *
-   * For LISTAGG(DISTINCT child) WITHIN GROUP (ORDER BY order_expr), correctness requires
-   * a functional dependency (child -> order_expr, where equality is defined by GROUP BY
-   * semantics): each distinct child value must map to exactly one order value. Otherwise,
-   * after deduplication on child, the order value is ambiguous.
+   * For LISTAGG(DISTINCT child) WITHIN GROUP (ORDER BY order_expr), correctness requires a
+   * functional dependency (child -> order_expr, where equality is defined by GROUP BY semantics):
+   * each distinct child value must map to exactly one order value. Otherwise, after deduplication
+   * on child, the order value is ambiguous.
    *
    * When child = Cast(order_expr, T) where T is STRING or BINARY (LISTAGG's accepted input
    * types), the functional dependency (child -> order_expr) is satisfied since casting to
    * string/binary is injective for the types we allow. However, the cast must also be
-   * equality-preserving (order_expr -> child): GROUP BY-equal order values must produce
-   * GROUP BY-equal child values. Otherwise, the DISTINCT rewrite (which groups by child) may
-   * split values that should be in the same group, causing over-counting.
-   * For example, Float/Double violate this because -0.0 and 0.0 are GROUP BY-equal but cast
-   * to different strings. This is checked by [[isCastEqualityPreserving]] and
-   * [[isCastTargetEqualityPreserving]].
+   * equality-preserving (order_expr -> child): GROUP BY-equal order values must produce GROUP
+   * BY-equal child values. Otherwise, the DISTINCT rewrite (which groups by child) may split
+   * values that should be in the same group, causing over-counting. For example, Float/Double
+   * violate this because -0.0 and 0.0 are GROUP BY-equal but cast to different strings. This is
+   * checked by [[isCastEqualityPreserving]] and [[isCastTargetEqualityPreserving]].
    *
-   * Currently only detects these conditions for Cast.
-   * TODO(SPARK-55718): extend to detect other functional dependencies.
+   * Currently only detects these conditions for Cast. TODO(SPARK-55718): extend to detect other
+   * functional dependencies.
    *
-   * Returns false when the order expression matches the child (i.e., [[needSaveOrderValue]]
-   * is false). Otherwise, the behavior depends on the
+   * Returns false when the order expression matches the child (i.e., [[needSaveOrderValue]] is
+   * false). Otherwise, the behavior depends on the
    * [[SQLConf.LISTAGG_ALLOW_DISTINCT_CAST_WITH_ORDER]] config:
-   *  - If enabled, delegates to [[checkOrderValueDeterminism]] to determine whether the
-   *    order value is uniquely determined by the child.
-   *  - If disabled, any mismatch is considered ambiguous.
+   *   - If enabled, delegates to [[checkOrderValueDeterminism]] to determine whether the order
+   *     value is uniquely determined by the child.
+   *   - If disabled, any mismatch is considered ambiguous.
    *
-   * @return true if ambiguity exists, false if the order value is deterministic
-   * @see [[throwDistinctOrderError]] to throw the appropriate error when this returns true
+   * @return
+   *   true if ambiguity exists, false if the order value is deterministic
+   * @see
+   *   [[throwDistinctOrderError]] to throw the appropriate error when this returns true
    */
   def hasDistinctOrderAmbiguity: Boolean = {
     needSaveOrderValue && {
@@ -656,47 +660,53 @@ case class ListAgg(
 
   private def throwFunctionAndOrderExpressionMismatchError() = {
     throw QueryCompilationErrors.functionAndOrderExpressionMismatchError(
-      prettyName, child, orderExpressions)
+      prettyName,
+      child,
+      orderExpressions)
   }
 
   private def throwFunctionAndOrderExpressionUnsafeCastError(
-      inputType: DataType, castType: DataType) = {
+      inputType: DataType,
+      castType: DataType) = {
     throw QueryCompilationErrors.functionAndOrderExpressionUnsafeCastError(
-      prettyName, inputType, castType)
+      prettyName,
+      inputType,
+      castType)
   }
 
   /**
    * Checks whether the order value is uniquely determined by the child value.
    *
    * Currently only handles the case where child = Cast(order_expr, T). If the cast is
-   * equality-preserving, the order value is deterministic (each child string maps back to
-   * exactly one original value). Otherwise, returns
-   * [[OrderDeterminismResult.NonDeterministicMismatch]].
+   * equality-preserving, the order value is deterministic (each child string maps back to exactly
+   * one original value). Otherwise, returns [[OrderDeterminismResult.NonDeterministicMismatch]].
    *
-   * @see [[hasDistinctOrderAmbiguity]]
+   * @see
+   *   [[hasDistinctOrderAmbiguity]]
    */
   private def checkOrderValueDeterminism: OrderDeterminismResult = {
     if (orderExpressions.size != 1) return OrderDeterminismResult.NonDeterministicMismatch
     child match {
       case Cast(castChild, castType, _, _)
-        if orderExpressions.head.child.semanticEquals(castChild) =>
-          if (isCastEqualityPreserving(castChild.dataType) &&
-              isCastTargetEqualityPreserving(castType)) {
-            OrderDeterminismResult.Deterministic
-          } else {
-            OrderDeterminismResult.NonDeterministicCast(castChild.dataType, castType)
-          }
+          if orderExpressions.head.child.semanticEquals(castChild) =>
+        if (isCastEqualityPreserving(castChild.dataType) &&
+          isCastTargetEqualityPreserving(castType)) {
+          OrderDeterminismResult.Deterministic
+        } else {
+          OrderDeterminismResult.NonDeterministicCast(castChild.dataType, castType)
+        }
       case _ => OrderDeterminismResult.NonDeterministicMismatch
     }
   }
 
   /**
-   * Returns true if casting `dt` to string/binary preserves equality semantics: values that
-   * are GROUP BY-equal must cast to equal results, and different results must imply different
-   * original values. Types like Float/Double are unsafe because IEEE 754 negative zero (-0.0)
-   * and positive zero (0.0) are equal but produce different string representations.
+   * Returns true if casting `dt` to string/binary preserves equality semantics: values that are
+   * GROUP BY-equal must cast to equal results, and different results must imply different
+   * original values. Types like Float/Double are unsafe because IEEE 754 negative zero (-0.0) and
+   * positive zero (0.0) are equal but produce different string representations.
    *
-   * @see [[checkOrderValueDeterminism]]
+   * @see
+   *   [[checkOrderValueDeterminism]]
    */
   private def isCastEqualityPreserving(dt: DataType): Boolean = dt match {
     case _: IntegerType | LongType | ShortType | ByteType => true
@@ -717,12 +727,13 @@ case class ListAgg(
   }
 
   /**
-   * Returns true if the cast target type preserves equality semantics for DISTINCT
-   * deduplication. A non-binary-equality collation on the target [[StringType]] can cause
-   * different source values to become equal after casting (e.g., "ABC" and "abc" are different
-   * under UTF8_BINARY but equal under UTF8_LCASE).
+   * Returns true if the cast target type preserves equality semantics for DISTINCT deduplication.
+   * A non-binary-equality collation on the target [[StringType]] can cause different source
+   * values to become equal after casting (e.g., "ABC" and "abc" are different under UTF8_BINARY
+   * but equal under UTF8_LCASE).
    *
-   * @see [[checkOrderValueDeterminism]]
+   * @see
+   *   [[checkOrderValueDeterminism]]
    */
   private def isCastTargetEqualityPreserving(dt: DataType): Boolean = dt match {
     case st: StringType => st.isUTF8BinaryCollation
@@ -731,12 +742,13 @@ case class ListAgg(
   }
 
   /**
-   * Result of checking whether the order value is uniquely determined by the child value
-   * after DISTINCT deduplication. Currently only handles Cast.
+   * Result of checking whether the order value is uniquely determined by the child value after
+   * DISTINCT deduplication. Currently only handles Cast.
    */
   private sealed trait OrderDeterminismResult
 
   private object OrderDeterminismResult {
+
     /** The order value is uniquely determined by the child value. */
     case object Deterministic extends OrderDeterminismResult
 
@@ -744,23 +756,22 @@ case class ListAgg(
     case object NonDeterministicMismatch extends OrderDeterminismResult
 
     /** Non-deterministic: the cast does not preserve equality semantics. */
-    case class NonDeterministicCast(
-        inputType: DataType,
-        castType: DataType) extends OrderDeterminismResult
+    case class NonDeterministicCast(inputType: DataType, castType: DataType)
+        extends OrderDeterminismResult
   }
 
-  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): Expression =
     copy(
       child = newChildren.head,
       delimiter = newChildren(1),
       orderExpressions = newChildren
         .drop(2)
-        .map(_.asInstanceOf[SortOrder])
-    )
+        .map(_.asInstanceOf[SortOrder]))
 
   private[this] def orderValuesField: Seq[StructField] = {
-    orderExpressions.zipWithIndex.map {
-      case (order, i) => StructField(s"sortOrderValue[$i]", order.dataType)
+    orderExpressions.zipWithIndex.map { case (order, i) =>
+      StructField(s"sortOrderValue[$i]", order.dataType)
     }
   }
 }

@@ -28,8 +28,10 @@ class TypeUtilsSuite extends SparkFunSuite {
   }
 
   private def typeCheckFail(types: Seq[DataType]): Unit = {
-    assert(TypeUtils.checkForSameTypeInputExpr(types, "a")
-      .isInstanceOf[DataTypeMismatch])
+    assert(
+      TypeUtils
+        .checkForSameTypeInputExpr(types, "a")
+        .isInstanceOf[DataTypeMismatch])
   }
 
   test("checkForSameTypeInputExpr") {
@@ -41,7 +43,8 @@ class TypeUtilsSuite extends SparkFunSuite {
     typeCheckFail(StringType :: IntegerType :: Nil)
 
     // Should also work on arrays. See SPARK-14990
-    typeCheckPass(ArrayType(StringType, containsNull = true) ::
-      ArrayType(StringType, containsNull = false) :: Nil)
+    typeCheckPass(
+      ArrayType(StringType, containsNull = true) ::
+        ArrayType(StringType, containsNull = false) :: Nil)
   }
 }

@@ -29,7 +29,8 @@ case class V2Aggregator[BUF <: java.io.Serializable, OUT](
     children: Seq[Expression],
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0)
-  extends TypedImperativeAggregate[BUF] with ImplicitCastInputTypes {
+    extends TypedImperativeAggregate[BUF]
+    with ImplicitCastInputTypes {
 
   private[this] lazy val inputProjection = UnsafeProjection.create(children)
 
@@ -62,7 +63,7 @@ case class V2Aggregator[BUF <: java.io.Serializable, OUT](
   def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): V2Aggregator[BUF, OUT] =
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
-  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): Expression =
     copy(children = newChildren)
 }
-

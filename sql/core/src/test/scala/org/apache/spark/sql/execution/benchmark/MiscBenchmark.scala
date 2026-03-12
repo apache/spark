@@ -21,8 +21,7 @@ import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * Benchmark to measure whole stage codegen performance.
- * To run this benchmark:
+ * Benchmark to measure whole stage codegen performance. To run this benchmark:
  * {{{
  *   1. without sbt:
  *      bin/spark-submit --class <this class>
@@ -94,54 +93,68 @@ object MiscBenchmark extends SqlBasedBenchmark {
   def explode(numRows: Int): Unit = {
     runBenchmark("generate explode") {
       codegenBenchmark("generate explode array", numRows) {
-        val df = spark.range(numRows).selectExpr(
-          "id as key",
-          "array(rand(), rand(), rand(), rand(), rand()) as values")
+        val df = spark
+          .range(numRows)
+          .selectExpr("id as key", "array(rand(), rand(), rand(), rand(), rand()) as values")
         df.selectExpr("key", "explode(values) value").noop()
       }
 
       codegenBenchmark("generate explode map", numRows) {
-        val df = spark.range(numRows).selectExpr(
-          "id as key",
-          "map('a', rand(), 'b', rand(), 'c', rand(), 'd', rand(), 'e', rand()) pairs")
+        val df = spark
+          .range(numRows)
+          .selectExpr(
+            "id as key",
+            "map('a', rand(), 'b', rand(), 'c', rand(), 'd', rand(), 'e', rand()) pairs")
         df.selectExpr("key", "explode(pairs) as (k, v)").noop()
       }
 
       codegenBenchmark("generate posexplode array", numRows) {
-        val df = spark.range(numRows).selectExpr(
-          "id as key",
-          "array(rand(), rand(), rand(), rand(), rand()) as values")
+        val df = spark
+          .range(numRows)
+          .selectExpr("id as key", "array(rand(), rand(), rand(), rand(), rand()) as values")
         df.selectExpr("key", "posexplode(values) as (idx, value)").noop()
       }
 
       codegenBenchmark("generate inline array", numRows) {
-        val df = spark.range(numRows).selectExpr(
-          "id as key",
-          "array((rand(), rand()), (rand(), rand()), (rand(), 0.0d)) as values")
+        val df = spark
+          .range(numRows)
+          .selectExpr(
+            "id as key",
+            "array((rand(), rand()), (rand(), rand()), (rand(), 0.0d)) as values")
         df.selectExpr("key", "inline(values) as (r1, r2)").noop()
       }
 
       val M = 60000
       codegenBenchmark("generate big struct array", M) {
         import spark.implicits._
-        val df = spark.sparkContext.parallelize(Seq(("1",
-          Array.fill(M)({
-            val i = math.random()
-            (i.toString, (i + 1).toString, (i + 2).toString, (i + 3).toString)
-          })))).toDF("col", "arr")
+        val df = spark.sparkContext
+          .parallelize(
+            Seq(
+              (
+                "1",
+                Array.fill(M)({
+                  val i = math.random()
+                  (i.toString, (i + 1).toString, (i + 2).toString, (i + 3).toString)
+                }))))
+          .toDF("col", "arr")
 
         df.selectExpr("*", "explode(arr) as arr_col")
-          .select("col", "arr_col.*").noop()
+          .select("col", "arr_col.*")
+          .noop()
       }
 
       withSQLConf(SQLConf.NESTED_PRUNING_ON_EXPRESSIONS.key -> "true") {
         codegenBenchmark("generate big nested struct array", M) {
           import spark.implicits._
-          val df = spark.sparkContext.parallelize(Seq(("1",
-            Array.fill(M)({
-              val i = math.random()
-              (i.toString, (i + 1).toString, (i + 2).toString, (i + 3).toString)
-            })))).toDF("col", "arr")
+          val df = spark.sparkContext
+            .parallelize(
+              Seq((
+                "1",
+                Array.fill(M)({
+                  val i = math.random()
+                  (i.toString, (i + 1).toString, (i + 2).toString, (i + 3).toString)
+                }))))
+            .toDF("col", "arr")
             .selectExpr("col", "struct(col, arr) as st")
             .selectExpr("col", "st.col as col1", "explode(st.arr) as arr_col")
           df.noop()
@@ -153,13 +166,15 @@ object MiscBenchmark extends SqlBasedBenchmark {
   def stack(numRows: Int): Unit = {
     runBenchmark("generate regular generator") {
       codegenBenchmark("generate stack", numRows) {
-        val df = spark.range(numRows).selectExpr(
-          "id as key",
-          "id % 2 as t1",
-          "id % 3 as t2",
-          "id % 5 as t3",
-          "id % 7 as t4",
-          "id % 13 as t5")
+        val df = spark
+          .range(numRows)
+          .selectExpr(
+            "id as key",
+            "id % 2 as t1",
+            "id % 3 as t2",
+            "id % 5 as t3",
+            "id % 7 as t4",
+            "id % 13 as t5")
         df.selectExpr("key", "stack(4, t1, t2, t3, t4, t5)").noop()
       }
     }

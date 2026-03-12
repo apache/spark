@@ -65,17 +65,16 @@ object SQLOpenHashSet {
       dataType: DataType,
       hashSet: SQLOpenHashSet[Any],
       handleNotNull: Any => Unit,
-      handleNull: () => Unit): (ArrayData, Int) => Unit = {
-    (array: ArrayData, index: Int) =>
-      if (array.isNullAt(index)) {
-        if (!hashSet.containsNull()) {
-          hashSet.addNull()
-          handleNull()
-        }
-      } else {
-        val elem = array.get(index, dataType)
-        handleNotNull(elem)
+      handleNull: () => Unit): (ArrayData, Int) => Unit = { (array: ArrayData, index: Int) =>
+    if (array.isNullAt(index)) {
+      if (!hashSet.containsNull()) {
+        hashSet.addNull()
+        handleNull()
       }
+    } else {
+      val elem = array.get(index, dataType)
+      handleNotNull(elem)
+    }
   }
 
   def withNullCheckCode(
@@ -117,10 +116,12 @@ object SQLOpenHashSet {
       handleNaN: Any => Unit): Any => Unit = {
     val (isNaN, valueNaN) = dataType match {
       case DoubleType =>
-        ((value: Any) => java.lang.Double.isNaN(value.asInstanceOf[java.lang.Double]),
+        (
+          (value: Any) => java.lang.Double.isNaN(value.asInstanceOf[java.lang.Double]),
           java.lang.Double.NaN)
       case FloatType =>
-        ((value: Any) => java.lang.Float.isNaN(value.asInstanceOf[java.lang.Float]),
+        (
+          (value: Any) => java.lang.Float.isNaN(value.asInstanceOf[java.lang.Float]),
           java.lang.Float.NaN)
       case _ => ((_: Any) => false, null)
     }
@@ -148,8 +149,9 @@ object SQLOpenHashSet {
         Some((s"java.lang.Float.isNaN((float)$valueName)", "java.lang.Float.NaN"))
       case _ => None
     }
-    ret.map { case (isNaN, valueNaN) =>
-      s"""
+    ret
+      .map { case (isNaN, valueNaN) =>
+        s"""
          |if ($isNaN) {
          |  if (!$hashSet.containsNaN()) {
          |     $hashSet.addNaN();
@@ -159,6 +161,7 @@ object SQLOpenHashSet {
          |  $handleNotNaN
          |}
        """.stripMargin
-    }.getOrElse(handleNotNaN)
+      }
+      .getOrElse(handleNotNaN)
   }
 }

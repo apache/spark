@@ -24,27 +24,28 @@ import org.apache.spark.sql.connector.catalog.CatalogManager
 
 /**
  * The [[BridgedRelationMetadataProvider]] is a [[RelationMetadataProvider]] that just reuses
- * resolved metadata from the [[AnalyzerBridgeState]]. This is used in the single-pass [[Resolver]]
- * to avoid duplicate catalog/table lookups in dual-run mode, so metadata is simply reused from the
- * fixed-point [[Analyzer]] run. We strictly rely on the [[AnalyzerBridgeState]] to avoid any
- * blocking calls here.
+ * resolved metadata from the [[AnalyzerBridgeState]]. This is used in the single-pass
+ * [[Resolver]] to avoid duplicate catalog/table lookups in dual-run mode, so metadata is simply
+ * reused from the fixed-point [[Analyzer]] run. We strictly rely on the [[AnalyzerBridgeState]]
+ * to avoid any blocking calls here.
  */
 class BridgedRelationMetadataProvider(
     override val catalogManager: CatalogManager,
     override val relationResolution: RelationResolution,
     analyzerBridgeState: AnalyzerBridgeState,
-    viewResolver: ViewResolver
-) extends RelationMetadataProvider {
+    viewResolver: ViewResolver)
+    extends RelationMetadataProvider {
   override val relationsWithResolvedMetadata = new RelationsWithResolvedMetadata
 
   /**
-   * We update relations on each [[resolve]] call, because relation IDs might have changed.
-   * This can happen for the nested views, since catalog name may differ, and expanded table name
-   * will differ for the same [[UnresolvedRelation]]. In order to overcome this issue, we use
+   * We update relations on each [[resolve]] call, because relation IDs might have changed. This
+   * can happen for the nested views, since catalog name may differ, and expanded table name will
+   * differ for the same [[UnresolvedRelation]]. In order to overcome this issue, we use
    * [[viewResolver]]'s context to peek into the most recent context and to only resolve the
    * relations which were created under this same context.
    *
-   * See [[ViewResolver.resolve]] for more info on how SQL configs are propagated to nested views).
+   * See [[ViewResolver.resolve]] for more info on how SQL configs are propagated to nested
+   * views).
    */
   override def resolve(unresolvedPlan: LogicalPlan): Unit = {
     updateRelationsWithResolvedMetadata()
@@ -54,16 +55,14 @@ class BridgedRelationMetadataProvider(
     analyzerBridgeState.relationsWithResolvedMetadata.forEach(
       (bridgeRelationId, relationWithResolvedMetadata) => {
         if (viewResolver.getCatalogAndNamespace.getOrElse(Seq.empty)
-          == bridgeRelationId.catalogAndNamespace) {
+            == bridgeRelationId.catalogAndNamespace) {
           relationsWithResolvedMetadata.put(
             relationIdFromUnresolvedRelation(bridgeRelationId.unresolvedRelation),
             visitUnderSubqueryAlias(relationWithResolvedMetadata)({ relation =>
               tryConvertHiveTableRelation(tryConvertUnresolvedCatalogRelation(relation))
-            })
-          )
+            }))
         }
-      }
-    )
+      })
   }
 
   private def tryConvertUnresolvedCatalogRelation(relation: LogicalPlan): LogicalPlan = {

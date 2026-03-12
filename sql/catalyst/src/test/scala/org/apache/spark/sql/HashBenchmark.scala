@@ -25,9 +25,8 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.types._
 
 /**
- * Benchmark for the previous interpreted hash function(InternalRow.hashCode) vs codegened
- * hash expressions (Murmur3Hash/xxHash64).
- * To run this benchmark:
+ * Benchmark for the previous interpreted hash function(InternalRow.hashCode) vs codegened hash
+ * expressions (Murmur3Hash/xxHash64). To run this benchmark:
  * {{{
  *   1. without sbt:
  *      bin/spark-submit --class <this class> --jars <spark core test jar> <spark catalyst test jar>
@@ -46,10 +45,11 @@ object HashBenchmark extends BenchmarkBase {
       val attrs = DataTypeUtils.toAttributes(schema)
       val safeProjection = GenerateSafeProjection.generate(attrs, attrs)
 
-      val rows = (1 to numRows).map(_ =>
-        // The output of encoder is UnsafeRow, use safeProjection to turn in into safe format.
-        safeProjection(toRow(generator().asInstanceOf[Row])).copy()
-      ).toArray
+      val rows = (1 to numRows)
+        .map(_ =>
+          // The output of encoder is UnsafeRow, use safeProjection to turn in into safe format.
+          safeProjection(toRow(generator().asInstanceOf[Row])).copy())
+        .toArray
 
       val benchmark = new Benchmark("Hash For " + name, iters * numRows.toLong, output = output)
       benchmark.addCase("interpreted version") { _: Int =>

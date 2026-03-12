@@ -31,7 +31,6 @@ class OrcV1SchemaPruningSuite extends SchemaPruningSuite {
     SQLConf.ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key
 
   override protected def sparkConf: SparkConf =
-    super
-      .sparkConf
+    super.sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, "orc")
 }

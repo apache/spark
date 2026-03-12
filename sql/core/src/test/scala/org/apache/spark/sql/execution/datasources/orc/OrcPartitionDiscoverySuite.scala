@@ -41,7 +41,8 @@ abstract class OrcPartitionDiscoveryTest extends OrcTest {
   val defaultPartitionName = "__HIVE_DEFAULT_PARTITION__"
 
   protected def withTempTable(tableName: String)(f: => Unit): Unit = {
-    try f finally spark.catalog.dropTempView(tableName)
+    try f
+    finally spark.catalog.dropTempView(tableName)
   }
 
   protected def makePartitionDir(
@@ -111,7 +112,7 @@ abstract class OrcPartitionDiscoveryTest extends OrcTest {
   test("read partitioned table - with nulls") {
     withTempDir { base =>
       for {
-      // Must be `Integer` rather than `Int` here. `null.asInstanceOf[Int]` results in a zero...
+        // Must be `Integer` rather than `Int` here. `null.asInstanceOf[Int]` results in a zero...
         pi <- Seq(1, null.asInstanceOf[Integer])
         ps <- Seq("foo", null.asInstanceOf[String])
       } {
@@ -162,15 +163,15 @@ abstract class OrcPartitionDiscoveryTest extends OrcTest {
 
       val extraOptions = Map(
         "mapred.input.pathFilter.class" -> classOf[TestFileFilter].getName,
-        "mapreduce.input.pathFilter.class" -> classOf[TestFileFilter].getName
-      )
+        "mapreduce.input.pathFilter.class" -> classOf[TestFileFilter].getName)
       assert(spark.read.options(extraOptions).orc(path).count() === 2)
     }
   }
 }
 
 class OrcPartitionDiscoverySuite extends OrcPartitionDiscoveryTest with SharedSparkSession {
-  override protected def sparkConf: SparkConf = super.sparkConf.set(SQLConf.USE_V1_SOURCE_LIST, "")
+  override protected def sparkConf: SparkConf =
+    super.sparkConf.set(SQLConf.USE_V1_SOURCE_LIST, "")
 
   test("read partitioned table - partition key included in orc file") {
     withTempDir { base =>
@@ -257,8 +258,7 @@ class OrcPartitionDiscoverySuite extends OrcPartitionDiscoveryTest with SharedSp
 
 class OrcV1PartitionDiscoverySuite extends OrcPartitionDiscoveryTest with SharedSparkSession {
   override protected def sparkConf: SparkConf =
-    super
-      .sparkConf
+    super.sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, "orc")
 
   test("read partitioned table - partition key included in orc file") {

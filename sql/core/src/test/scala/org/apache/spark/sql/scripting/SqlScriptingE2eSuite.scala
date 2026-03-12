@@ -26,13 +26,12 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
-
 /**
- * End-to-end tests for SQL Scripting.
- * This suite is not intended to heavily test the SQL scripting (parser & interpreter) logic.
- * It is rather focused on testing the sql() API - whether it can handle SQL scripts correctly,
- *  results are returned in expected manner, config flags are applied properly, etc.
- * For full functionality tests, see SqlScriptingParserSuite and SqlScriptingInterpreterSuite.
+ * End-to-end tests for SQL Scripting. This suite is not intended to heavily test the SQL
+ * scripting (parser & interpreter) logic. It is rather focused on testing the sql() API - whether
+ * it can handle SQL scripts correctly, results are returned in expected manner, config flags are
+ * applied properly, etc. For full functionality tests, see SqlScriptingParserSuite and
+ * SqlScriptingInterpreterSuite.
  */
 class SqlScriptingE2eSuite extends QueryTest with SharedSparkSession {
 
@@ -198,8 +197,7 @@ class SqlScriptingE2eSuite extends QueryTest with SharedSparkSession {
       verifySqlScriptResult(
         sqlScript,
         Seq.empty,
-        Some(StructType(Seq(StructField("id", IntegerType)).toArray))
-      )
+        Some(StructType(Seq(StructField("id", IntegerType)).toArray)))
     }
   }
 
@@ -224,11 +222,8 @@ class SqlScriptingE2eSuite extends QueryTest with SharedSparkSession {
         |  END IF;
         |END""".stripMargin
     // Define a map with SQL parameters
-    val args: Map[String, Any] = Map(
-      "param_1" -> 5,
-      "param_2" -> "greater",
-      "param_3" -> "smaller"
-    )
+    val args: Map[String, Any] =
+      Map("param_1" -> 5, "param_2" -> "greater", "param_3" -> "smaller")
     verifySqlScriptResultWithNamedParams(sqlScriptText, Seq(Row("smaller")), args)
   }
 

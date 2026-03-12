@@ -39,11 +39,10 @@ class ResolvedUuidExpressionsSuite extends AnalysisTest {
   private val analyzer = getAnalyzer
 
   private def getUuidExpressions(plan: LogicalPlan): Seq[Uuid] = {
-    plan.flatMap {
-      case p =>
-        p.expressions.flatMap(_.collect {
-          case u: Uuid => u
-        })
+    plan.flatMap { case p =>
+      p.expressions.flatMap(_.collect { case u: Uuid =>
+        u
+      })
     }
   }
 

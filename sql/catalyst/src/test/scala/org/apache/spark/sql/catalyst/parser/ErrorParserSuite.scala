@@ -73,8 +73,7 @@ class ErrorParserSuite extends AnalysisTest {
       condition = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "my-database"))
     checkError(
-      exception = parseException(
-      """
+      exception = parseException("""
         |ALTER DATABASE my-database
         |SET DBPROPERTIES ('p1'='v1')""".stripMargin),
       condition = "INVALID_IDENTIFIER",
@@ -84,8 +83,7 @@ class ErrorParserSuite extends AnalysisTest {
       condition = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "my-database"))
     checkError(
-      exception = parseException(
-        """
+      exception = parseException("""
           |ALTER TABLE t
           |CHANGE COLUMN
           |test-col TYPE BIGINT
@@ -93,8 +91,7 @@ class ErrorParserSuite extends AnalysisTest {
       condition = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "test-col"))
     checkError(
-      exception = parseException(
-        """
+      exception = parseException("""
           |ALTER TABLE t
           |DROP COLUMN
           |test-col, test
@@ -118,8 +115,7 @@ class ErrorParserSuite extends AnalysisTest {
       condition = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "test-func"))
     checkError(
-      exception = parseException(
-        """
+      exception = parseException("""
           |CREATE TABLE IF NOT EXISTS mydb.page-view
           |USING parquet
           |COMMENT 'This is the staging page view table'
@@ -129,8 +125,7 @@ class ErrorParserSuite extends AnalysisTest {
       condition = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "page-view"))
     checkError(
-      exception = parseException(
-        """
+      exception = parseException("""
           |CREATE TABLE IF NOT EXISTS tab
           |USING test-provider
           |AS SELECT * FROM src""".stripMargin),
@@ -190,8 +185,7 @@ class ErrorParserSuite extends AnalysisTest {
       condition = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "a-b"))
     checkError(
-      exception = parseException(
-        """
+      exception = parseException("""
           |SELECT a, b
           |FROM t1 JOIN t2
           |USING (a, b, at-tr)
@@ -199,8 +193,7 @@ class ErrorParserSuite extends AnalysisTest {
       condition = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "at-tr"))
     checkError(
-      exception = parseException(
-        """
+      exception = parseException("""
           |SELECT product, category, dense_rank()
           |OVER (PARTITION BY category ORDER BY revenue DESC) as hyphen-rank
           |FROM productRevenue
@@ -208,8 +201,7 @@ class ErrorParserSuite extends AnalysisTest {
       condition = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "hyphen-rank"))
     checkError(
-      exception = parseException(
-        """
+      exception = parseException("""
           |SELECT a, b
           |FROM grammar-breaker
           |WHERE a-b > 10
@@ -218,21 +210,20 @@ class ErrorParserSuite extends AnalysisTest {
         """.stripMargin),
       condition = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "grammar-breaker"))
-    assert(parsePlan(
-      """
+    assert(
+      parsePlan("""
         |SELECT a, b
         |FROM t
         |WHERE a-b > 10
         |GROUP BY fake-breaker
         |ORDER BY c
       """.stripMargin) ===
-      table("t")
-        .where($"a" - $"b" > 10)
-        .groupBy($"fake" - $"breaker")($"a", $"b")
-        .orderBy($"c".asc))
+        table("t")
+          .where($"a" - $"b" > 10)
+          .groupBy($"fake" - $"breaker")($"a", $"b")
+          .orderBy($"c".asc))
     checkError(
-      exception = parseException(
-        """
+      exception = parseException("""
           |SELECT * FROM tab
           |WINDOW hyphen-window AS
           |  (PARTITION BY a, b ORDER BY c rows BETWEEN 1 PRECEDING AND 1 FOLLOWING)
@@ -240,16 +231,14 @@ class ErrorParserSuite extends AnalysisTest {
       condition = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "hyphen-window"))
     checkError(
-      exception = parseException(
-        """
+      exception = parseException("""
           |SELECT * FROM tab
           |WINDOW window_ref AS window-ref
         """.stripMargin),
       condition = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "window-ref"))
     checkError(
-      exception = parseException(
-        """
+      exception = parseException("""
           |SELECT tb.*
           |FROM t-a INNER JOIN tb
           |ON ta.a = tb.a AND ta.tag = tb.tag
@@ -257,8 +246,7 @@ class ErrorParserSuite extends AnalysisTest {
       condition = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "t-a"))
     checkError(
-      exception = parseException(
-        """
+      exception = parseException("""
           |FROM test-table
           |SELECT a
           |SELECT b
@@ -266,8 +254,7 @@ class ErrorParserSuite extends AnalysisTest {
       condition = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "test-table"))
     checkError(
-      exception = parseException(
-        """
+      exception = parseException("""
           |SELECT * FROM (
           |  SELECT year, course, earnings FROM courseSales
           |)

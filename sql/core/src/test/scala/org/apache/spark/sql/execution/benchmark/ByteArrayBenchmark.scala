@@ -55,8 +55,8 @@ object ByteArrayBenchmark extends BenchmarkBase {
     val dataSmall = Seq.fill(count)(randomBytes(8, 16)).toArray
     val dataMedium = Seq.fill(count)(randomBytes(16, 32)).toArray
     val dataLarge = Seq.fill(count)(randomBytes(512, 1024)).toArray
-    val dataLargeSlow = Seq.fill(count)(
-      Array.tabulate(512) {i => if (i < 511) 0.toByte else 1.toByte}).toArray
+    val dataLargeSlow =
+      Seq.fill(count)(Array.tabulate(512) { i => if (i < 511) 0.toByte else 1.toByte }).toArray
 
     def compareBinary(data: Array[Array[Byte]]) = { _: Int =>
       var sum = 0L
@@ -85,8 +85,10 @@ object ByteArrayBenchmark extends BenchmarkBase {
       for (_ <- 0L until iters) {
         inputs.foreach { input =>
           res = ByteArrayMethods.arrayEquals(
-            input.s1.getBaseObject, input.s1.getBaseOffset,
-            input.s2.getBaseObject, input.s2.getBaseOffset + input.deltaOffset,
+            input.s1.getBaseObject,
+            input.s1.getBaseOffset,
+            input.s2.getBaseObject,
+            input.s2.getBaseOffset + input.deltaOffset,
             input.len)
         }
       }
@@ -106,11 +108,7 @@ object ByteArrayBenchmark extends BenchmarkBase {
     benchmark.run()
   }
 
-  case class BinaryEqualInfo(
-      s1: UTF8String,
-      s2: UTF8String,
-      deltaOffset: Int,
-      len: Int)
+  case class BinaryEqualInfo(s1: UTF8String, s2: UTF8String, deltaOffset: Int, len: Int)
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     runBenchmark("byte array comparisons") {

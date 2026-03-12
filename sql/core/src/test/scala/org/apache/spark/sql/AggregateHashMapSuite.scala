@@ -32,9 +32,11 @@ class SingleLevelAggregateHashMapSuite extends DataFrameAggregateSuite with Befo
   // adding some checking after each test is run, assuring that the configs are not changed
   // in test code
   after {
-    assert(sparkConf.get(SQLConf.CODEGEN_FALLBACK.key) == "false",
+    assert(
+      sparkConf.get(SQLConf.CODEGEN_FALLBACK.key) == "false",
       "configuration parameter changed in test body")
-    assert(sparkConf.get(SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key) == "false",
+    assert(
+      sparkConf.get(SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key) == "false",
       "configuration parameter changed in test body")
   }
 }
@@ -48,17 +50,19 @@ class TwoLevelAggregateHashMapSuite extends DataFrameAggregateSuite with BeforeA
   // adding some checking after each test is run, assuring that the configs are not changed
   // in test code
   after {
-    assert(sparkConf.get(SQLConf.CODEGEN_FALLBACK.key) == "false",
+    assert(
+      sparkConf.get(SQLConf.CODEGEN_FALLBACK.key) == "false",
       "configuration parameter changed in test body")
-    assert(sparkConf.get(SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key) == "true",
+    assert(
+      sparkConf.get(SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key) == "true",
       "configuration parameter changed in test body")
   }
 }
 
 @SlowSQLTest
 class TwoLevelAggregateHashMapWithVectorizedMapSuite
-  extends DataFrameAggregateSuite
-  with BeforeAndAfter {
+    extends DataFrameAggregateSuite
+    with BeforeAndAfter {
 
   override protected def sparkConf: SparkConf = super.sparkConf
     .set(SQLConf.CODEGEN_FALLBACK.key, "false")
@@ -68,12 +72,14 @@ class TwoLevelAggregateHashMapWithVectorizedMapSuite
   // adding some checking after each test is run, assuring that the configs are not changed
   // in test code
   after {
-    assert(sparkConf.get(SQLConf.CODEGEN_FALLBACK.key) == "false",
+    assert(
+      sparkConf.get(SQLConf.CODEGEN_FALLBACK.key) == "false",
       "configuration parameter changed in test body")
-    assert(sparkConf.get(SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key) == "true",
+    assert(
+      sparkConf.get(SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key) == "true",
       "configuration parameter changed in test body")
-    assert(sparkConf.get(SQLConf.ENABLE_VECTORIZED_HASH_MAP.key) == "true",
+    assert(
+      sparkConf.get(SQLConf.ENABLE_VECTORIZED_HASH_MAP.key) == "true",
       "configuration parameter changed in test body")
   }
 }
-

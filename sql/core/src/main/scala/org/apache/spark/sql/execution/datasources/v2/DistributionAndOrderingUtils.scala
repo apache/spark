@@ -44,8 +44,10 @@ object DistributionAndOrderingUtils {
           toCatalystOrdering(d.ordering(), query, funCatalogOpt)
             .map(e => resolveTransformExpression(e).asInstanceOf[SortOrder])
         case d: ClusteredDistribution =>
-          d.clustering.map(e => toCatalyst(e, query, funCatalogOpt))
-            .map(e => resolveTransformExpression(e)).toImmutableArraySeq
+          d.clustering
+            .map(e => toCatalyst(e, query, funCatalogOpt))
+            .map(e => resolveTransformExpression(e))
+            .toImmutableArraySeq
         case _: UnspecifiedDistribution => Seq.empty[Expression]
       }
 
@@ -67,7 +69,8 @@ object DistributionAndOrderingUtils {
           RebalancePartitions(distribution, query, optNumPartitions, optPartitionSize)
         }
       } else if (numPartitions > 0) {
-        throw QueryCompilationErrors.numberOfPartitionsNotAllowedWithUnspecifiedDistributionError()
+        throw QueryCompilationErrors
+          .numberOfPartitionsNotAllowedWithUnspecifiedDistributionError()
       } else if (partitionSize > 0) {
         throw QueryCompilationErrors.partitionSizeNotAllowedWithUnspecifiedDistributionError()
       } else {
@@ -92,7 +95,7 @@ object DistributionAndOrderingUtils {
   private object TypeCoercionExecutor extends RuleExecutor[LogicalPlan] {
     override val batches =
       Batch("Resolve TypeCoercion", FixedPoint(1), typeCoercionRules: _*) ::
-      Batch("Resolve TimeZone", FixedPoint(1), ResolveTimeZone) :: Nil
+        Batch("Resolve TimeZone", FixedPoint(1), ResolveTimeZone) :: Nil
   }
 
   private def resolveTransformExpression(expr: Expression): Expression = expr.transform {

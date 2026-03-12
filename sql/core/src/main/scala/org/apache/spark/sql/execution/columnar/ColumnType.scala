@@ -30,7 +30,6 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String, VariantVal}
 
-
 /**
  * A help class for fast reading Int/Long/Float/Double from ByteBuffer in native order.
  *
@@ -39,7 +38,6 @@ import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String, VariantVal}
  *
  * The unrolling (building columnar cache) is already slow, putLong/putDouble will not help much,
  * so we do not have helper methods for them.
- *
  *
  * WARNING: This only works with HeapByteBuffer
  */
@@ -97,16 +95,21 @@ private[columnar] object ByteBufferHelper {
     val dstPos = dst.position()
     src.position(srcPos + len)
     dst.position(dstPos + len)
-    Platform.copyMemory(src.array(), Platform.BYTE_ARRAY_OFFSET + srcPos,
-      dst.array(), Platform.BYTE_ARRAY_OFFSET + dstPos, len)
+    Platform.copyMemory(
+      src.array(),
+      Platform.BYTE_ARRAY_OFFSET + srcPos,
+      dst.array(),
+      Platform.BYTE_ARRAY_OFFSET + dstPos,
+      len)
   }
 }
 
 /**
- * An abstract class that represents type of a column. Used to append/extract Java objects into/from
- * the underlying [[ByteBuffer]] of a column.
+ * An abstract class that represents type of a column. Used to append/extract Java objects
+ * into/from the underlying [[ByteBuffer]] of a column.
  *
- * @tparam JvmType Underlying Java type to represent the elements.
+ * @tparam JvmType
+ *   Underlying Java type to represent the elements.
  */
 private[columnar] sealed abstract class ColumnType[JvmType] {
 
@@ -123,8 +126,8 @@ private[columnar] sealed abstract class ColumnType[JvmType] {
 
   /**
    * Extracts a value out of the buffer at the buffer's current position and stores in
-   * `row(ordinal)`. Subclasses should override this method to avoid boxing/unboxing costs whenever
-   * possible.
+   * `row(ordinal)`. Subclasses should override this method to avoid boxing/unboxing costs
+   * whenever possible.
    */
   def extract(buffer: ByteBuffer, row: InternalRow, ordinal: Int): Unit = {
     setField(row, ordinal, extract(buffer))
@@ -156,14 +159,14 @@ private[columnar] sealed abstract class ColumnType[JvmType] {
   def getField(row: InternalRow, ordinal: Int): JvmType
 
   /**
-   * Sets `row(ordinal)` to `field`. Subclasses should override this method to avoid boxing/unboxing
-   * costs whenever possible.
+   * Sets `row(ordinal)` to `field`. Subclasses should override this method to avoid
+   * boxing/unboxing costs whenever possible.
    */
   def setField(row: InternalRow, ordinal: Int, value: JvmType): Unit
 
   /**
-   * Copies `from(fromOrdinal)` to `to(toOrdinal)`. Subclasses should override this method to avoid
-   * boxing/unboxing costs whenever possible.
+   * Copies `from(fromOrdinal)` to `to(toOrdinal)`. Subclasses should override this method to
+   * avoid boxing/unboxing costs whenever possible.
    */
   def copyField(from: InternalRow, fromOrdinal: Int, to: InternalRow, toOrdinal: Int): Unit = {
     setField(to, toOrdinal, getField(from, fromOrdinal))
@@ -190,8 +193,7 @@ private[columnar] object NULL extends ColumnType[Any] {
 private[columnar] abstract class NativeColumnType[T <: PhysicalDataType](
     val dataType: T,
     val defaultSize: Int)
-  extends ColumnType[T#InternalType] {
-}
+    extends ColumnType[T#InternalType] {}
 
 private[columnar] object INT extends NativeColumnType(PhysicalIntegerType, 4) {
   override def append(v: Int, buffer: ByteBuffer): Unit = {
@@ -216,9 +218,11 @@ private[columnar] object INT extends NativeColumnType(PhysicalIntegerType, 4) {
 
   override def getField(row: InternalRow, ordinal: Int): Int = row.getInt(ordinal)
 
-
-  override def copyField(from: InternalRow, fromOrdinal: Int,
-      to: InternalRow, toOrdinal: Int): Unit = {
+  override def copyField(
+      from: InternalRow,
+      fromOrdinal: Int,
+      to: InternalRow,
+      toOrdinal: Int): Unit = {
     to.setInt(toOrdinal, from.getInt(fromOrdinal))
   }
 }
@@ -246,8 +250,11 @@ private[columnar] object LONG extends NativeColumnType(PhysicalLongType, 8) {
 
   override def getField(row: InternalRow, ordinal: Int): Long = row.getLong(ordinal)
 
-  override def copyField(from: InternalRow, fromOrdinal: Int,
-      to: InternalRow, toOrdinal: Int): Unit = {
+  override def copyField(
+      from: InternalRow,
+      fromOrdinal: Int,
+      to: InternalRow,
+      toOrdinal: Int): Unit = {
     to.setLong(toOrdinal, from.getLong(fromOrdinal))
   }
 }
@@ -274,7 +281,6 @@ private[columnar] object YEAR_MONTH_INTERVAL extends NativeColumnType(PhysicalIn
   }
 
   override def getField(row: InternalRow, ordinal: Int): Int = row.getInt(ordinal)
-
 
   override def copyField(
       from: InternalRow,
@@ -340,8 +346,11 @@ private[columnar] object FLOAT extends NativeColumnType(PhysicalFloatType, 4) {
 
   override def getField(row: InternalRow, ordinal: Int): Float = row.getFloat(ordinal)
 
-  override def copyField(from: InternalRow, fromOrdinal: Int,
-      to: InternalRow, toOrdinal: Int): Unit = {
+  override def copyField(
+      from: InternalRow,
+      fromOrdinal: Int,
+      to: InternalRow,
+      toOrdinal: Int): Unit = {
     to.setFloat(toOrdinal, from.getFloat(fromOrdinal))
   }
 }
@@ -369,8 +378,11 @@ private[columnar] object DOUBLE extends NativeColumnType(PhysicalDoubleType, 8) 
 
   override def getField(row: InternalRow, ordinal: Int): Double = row.getDouble(ordinal)
 
-  override def copyField(from: InternalRow, fromOrdinal: Int,
-      to: InternalRow, toOrdinal: Int): Unit = {
+  override def copyField(
+      from: InternalRow,
+      fromOrdinal: Int,
+      to: InternalRow,
+      toOrdinal: Int): Unit = {
     to.setDouble(toOrdinal, from.getDouble(fromOrdinal))
   }
 }
@@ -396,8 +408,11 @@ private[columnar] object BOOLEAN extends NativeColumnType(PhysicalBooleanType, 1
 
   override def getField(row: InternalRow, ordinal: Int): Boolean = row.getBoolean(ordinal)
 
-  override def copyField(from: InternalRow, fromOrdinal: Int,
-      to: InternalRow, toOrdinal: Int): Unit = {
+  override def copyField(
+      from: InternalRow,
+      fromOrdinal: Int,
+      to: InternalRow,
+      toOrdinal: Int): Unit = {
     to.setBoolean(toOrdinal, from.getBoolean(fromOrdinal))
   }
 }
@@ -425,8 +440,11 @@ private[columnar] object BYTE extends NativeColumnType(PhysicalByteType, 1) {
 
   override def getField(row: InternalRow, ordinal: Int): Byte = row.getByte(ordinal)
 
-  override def copyField(from: InternalRow, fromOrdinal: Int,
-      to: InternalRow, toOrdinal: Int): Unit = {
+  override def copyField(
+      from: InternalRow,
+      fromOrdinal: Int,
+      to: InternalRow,
+      toOrdinal: Int): Unit = {
     to.setByte(toOrdinal, from.getByte(fromOrdinal))
   }
 }
@@ -454,8 +472,11 @@ private[columnar] object SHORT extends NativeColumnType(PhysicalShortType, 2) {
 
   override def getField(row: InternalRow, ordinal: Int): Short = row.getShort(ordinal)
 
-  override def copyField(from: InternalRow, fromOrdinal: Int,
-      to: InternalRow, toOrdinal: Int): Unit = {
+  override def copyField(
+      from: InternalRow,
+      fromOrdinal: Int,
+      to: InternalRow,
+      toOrdinal: Int): Unit = {
     to.setShort(toOrdinal, from.getShort(fromOrdinal))
   }
 }
@@ -473,8 +494,7 @@ private[columnar] trait DirectCopyColumnType[JvmType] extends ColumnType[JvmType
         val numBytes = buffer.getInt
         val cursor = buffer.position()
         buffer.position(cursor + numBytes)
-        mutable.writer.write(ordinal, buffer.array(),
-          buffer.arrayOffset() + cursor, numBytes)
+        mutable.writer.write(ordinal, buffer.array(), buffer.arrayOffset() + cursor, numBytes)
       case _ =>
         setField(row, ordinal, extract(buffer))
     }
@@ -492,7 +512,7 @@ private[columnar] trait DirectCopyColumnType[JvmType] extends ColumnType[JvmType
 }
 
 private[columnar] case class STRING(collationId: Int)
-  extends NativeColumnType(PhysicalStringType(collationId), 8)
+    extends NativeColumnType(PhysicalStringType(collationId), 8)
     with DirectCopyColumnType[UTF8String] {
 
   override def actualSize(row: InternalRow, ordinal: Int): Int = {
@@ -524,8 +544,11 @@ private[columnar] case class STRING(collationId: Int)
     row.getUTF8String(ordinal)
   }
 
-  override def copyField(from: InternalRow, fromOrdinal: Int,
-      to: InternalRow, toOrdinal: Int): Unit = {
+  override def copyField(
+      from: InternalRow,
+      fromOrdinal: Int,
+      to: InternalRow,
+      toOrdinal: Int): Unit = {
     setField(to, toOrdinal, getField(from, fromOrdinal))
   }
 
@@ -539,7 +562,7 @@ private[columnar] object STRING {
 }
 
 private[columnar] case class COMPACT_DECIMAL(precision: Int, scale: Int)
-  extends NativeColumnType(PhysicalDecimalType(precision, scale), 8) {
+    extends NativeColumnType(PhysicalDecimalType(precision, scale), 8) {
 
   override def extract(buffer: ByteBuffer): Decimal = {
     Decimal(ByteBufferHelper.getLong(buffer), precision, scale)
@@ -575,8 +598,11 @@ private[columnar] case class COMPACT_DECIMAL(precision: Int, scale: Int)
     row.setDecimal(ordinal, value, precision)
   }
 
-  override def copyField(from: InternalRow, fromOrdinal: Int,
-      to: InternalRow, toOrdinal: Int): Unit = {
+  override def copyField(
+      from: InternalRow,
+      fromOrdinal: Int,
+      to: InternalRow,
+      toOrdinal: Int): Unit = {
     setField(to, toOrdinal, getField(from, fromOrdinal))
   }
 }
@@ -588,7 +614,8 @@ private[columnar] object COMPACT_DECIMAL {
 }
 
 private[columnar] sealed abstract class ByteArrayColumnType[JvmType](val defaultSize: Int)
-  extends ColumnType[JvmType] with DirectCopyColumnType[JvmType] {
+    extends ColumnType[JvmType]
+    with DirectCopyColumnType[JvmType] {
 
   def serialize(value: JvmType): Array[Byte]
   def deserialize(bytes: Array[Byte]): JvmType
@@ -627,7 +654,7 @@ private[columnar] object BINARY extends ByteArrayColumnType[Array[Byte]](16) {
 }
 
 private[columnar] case class LARGE_DECIMAL(precision: Int, scale: Int)
-  extends ByteArrayColumnType[Decimal](12) {
+    extends ByteArrayColumnType[Decimal](12) {
 
   override val dataType: PhysicalDataType = PhysicalDecimalType(precision, scale)
 
@@ -660,7 +687,8 @@ private[columnar] object LARGE_DECIMAL {
 }
 
 private[columnar] case class STRUCT(dataType: PhysicalStructType)
-  extends ColumnType[UnsafeRow] with DirectCopyColumnType[UnsafeRow] {
+    extends ColumnType[UnsafeRow]
+    with DirectCopyColumnType[UnsafeRow] {
 
   private val numOfFields: Int = dataType.fields.length
 
@@ -700,7 +728,8 @@ private[columnar] case class STRUCT(dataType: PhysicalStructType)
 }
 
 private[columnar] case class ARRAY(dataType: PhysicalArrayType)
-  extends ColumnType[UnsafeArrayData] with DirectCopyColumnType[UnsafeArrayData] {
+    extends ColumnType[UnsafeArrayData]
+    with DirectCopyColumnType[UnsafeArrayData] {
 
   override def defaultSize: Int = 28
 
@@ -739,7 +768,8 @@ private[columnar] case class ARRAY(dataType: PhysicalArrayType)
 }
 
 private[columnar] case class MAP(dataType: PhysicalMapType)
-  extends ColumnType[UnsafeMapData] with DirectCopyColumnType[UnsafeMapData] {
+    extends ColumnType[UnsafeMapData]
+    with DirectCopyColumnType[UnsafeMapData] {
 
   override def defaultSize: Int = 68
 
@@ -782,7 +812,8 @@ private[columnar] object CALENDAR_INTERVAL extends ColumnType[CalendarInterval] 
 
   override def defaultSize: Int = 16
 
-  override def getField(row: InternalRow, ordinal: Int): CalendarInterval = row.getInterval(ordinal)
+  override def getField(row: InternalRow, ordinal: Int): CalendarInterval =
+    row.getInterval(ordinal)
 
   override def setField(row: InternalRow, ordinal: Int, value: CalendarInterval): Unit = {
     row.setInterval(ordinal, value)
@@ -801,8 +832,7 @@ private[columnar] object CALENDAR_INTERVAL extends ColumnType[CalendarInterval] 
       case mutable: MutableUnsafeRow =>
         val cursor = buffer.position()
         buffer.position(cursor + defaultSize)
-        mutable.writer.write(ordinal, buffer.array(),
-          buffer.arrayOffset() + cursor, defaultSize)
+        mutable.writer.write(ordinal, buffer.array(), buffer.arrayOffset() + cursor, defaultSize)
       case _ =>
         setField(row, ordinal, extract(buffer))
     }
@@ -823,7 +853,8 @@ private[columnar] object CALENDAR_INTERVAL extends ColumnType[CalendarInterval] 
  * and are only expected to be decoded in `extract`.
  */
 private[columnar] object VARIANT
-  extends ColumnType[VariantVal] with DirectCopyColumnType[VariantVal] {
+    extends ColumnType[VariantVal]
+    with DirectCopyColumnType[VariantVal] {
   override def dataType: PhysicalDataType = PhysicalVariantType
 
   /** Chosen to match the default size set in `VariantType`. */

@@ -66,8 +66,10 @@ class FakeDataStream extends MicroBatchStream with ContinuousStream {
 class FakeScanBuilder extends ScanBuilder with Scan {
   override def build(): Scan = this
   override def readSchema(): StructType = StructType(Seq())
-  override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream = new FakeDataStream
-  override def toContinuousStream(checkpointLocation: String): ContinuousStream = new FakeDataStream
+  override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream =
+    new FakeDataStream
+  override def toContinuousStream(checkpointLocation: String): ContinuousStream =
+    new FakeDataStream
 }
 
 class FakeWriteBuilder extends WriteBuilder {
@@ -207,9 +209,7 @@ class FakeNoWrite extends DataSourceRegister with SimpleTableProvider {
   }
 }
 
-class FakeWriteSupportingExternalMetadata
-    extends DataSourceRegister
-    with TableProvider {
+class FakeWriteSupportingExternalMetadata extends DataSourceRegister with TableProvider {
   override def shortName(): String = "fake-write-supporting-external-metadata"
 
   override def supportsExternalMetadata(): Boolean = true
@@ -217,7 +217,7 @@ class FakeWriteSupportingExternalMetadata
   override def inferSchema(options: CaseInsensitiveStringMap): StructType = {
     throw new IllegalArgumentException(
       "Data stream writer should not require inferring table schema the data source supports" +
-      " external Metadata.")
+        " external Metadata.")
   }
 
   override def getTable(
@@ -237,8 +237,10 @@ class FakeSink extends Sink {
   override def addBatch(batchId: Long, data: DataFrame): Unit = {}
 }
 
-class FakeWriteSupportProviderV1Fallback extends DataSourceRegister
-  with SimpleTableProvider with StreamSinkProvider {
+class FakeWriteSupportProviderV1Fallback
+    extends DataSourceRegister
+    with SimpleTableProvider
+    with StreamSinkProvider {
 
   override def createSink(
       sqlContext: SQLContext,
@@ -293,9 +295,7 @@ class StreamingDataSourceV2Suite extends StreamTest {
     "fake-read-continuous-only",
     "fake-read-microbatch-continuous",
     "fake-read-neither-mode")
-  val writeFormats = Seq(
-    "fake-write-microbatch-continuous",
-    "fake-write-neither-mode")
+  val writeFormats = Seq("fake-write-microbatch-continuous", "fake-write-neither-mode")
   val triggers = Seq(
     // NOTE: the test uses the deprecated Trigger.Once() by intention, do not change.
     Trigger.Once(),
@@ -342,15 +342,16 @@ class StreamingDataSourceV2Suite extends StreamTest {
       checkErrorMatchPVals(
         exception = query.exception.get.cause.asInstanceOf[SparkUnsupportedOperationException],
         condition = condition,
-        parameters = parameters
-      )
+        parameters = parameters)
     }
   }
 
-  test("SPARK-33369: Skip schema inference in DataStreamWriter.start() if table provider " +
-    "supports external metadata") {
+  test(
+    "SPARK-33369: Skip schema inference in DataStreamWriter.start() if table provider " +
+      "supports external metadata") {
     testPositiveCaseWithQuery(
-      "fake-read-microbatch-continuous", "fake-write-supporting-external-metadata",
+      "fake-read-microbatch-continuous",
+      "fake-write-supporting-external-metadata",
       Trigger.AvailableNow()) { v2Query =>
       val sink = v2Query.asInstanceOf[StreamingQueryWrapper].streamingQuery.sink
       assert(sink.isInstanceOf[Table])
@@ -361,10 +362,15 @@ class StreamingDataSourceV2Suite extends StreamTest {
   test("disabled v2 write") {
     // Ensure the V2 path works normally and generates a V2 sink..
     testPositiveCaseWithQuery(
-      "fake-read-microbatch-continuous", "fake-write-v1-fallback",
+      "fake-read-microbatch-continuous",
+      "fake-write-v1-fallback",
       Trigger.AvailableNow()) { v2Query =>
-      assert(v2Query.asInstanceOf[StreamingQueryWrapper].streamingQuery.sink
-        .isInstanceOf[Table])
+      assert(
+        v2Query
+          .asInstanceOf[StreamingQueryWrapper]
+          .streamingQuery
+          .sink
+          .isInstanceOf[Table])
     }
 
     // Ensure we create a V1 sink with the config. Note the config is a comma separated
@@ -372,63 +378,79 @@ class StreamingDataSourceV2Suite extends StreamTest {
     val fullSinkName = classOf[FakeWriteSupportProviderV1Fallback].getName
     withSQLConf(SQLConf.DISABLED_V2_STREAMING_WRITERS.key -> s"a,b,c,test,$fullSinkName,d,e") {
       testPositiveCaseWithQuery(
-        "fake-read-microbatch-continuous", "fake-write-v1-fallback",
+        "fake-read-microbatch-continuous",
+        "fake-write-v1-fallback",
         Trigger.AvailableNow()) { v1Query =>
-        assert(v1Query.asInstanceOf[StreamingQueryWrapper].streamingQuery.sink
-          .isInstanceOf[FakeSink])
+        assert(
+          v1Query
+            .asInstanceOf[StreamingQueryWrapper]
+            .streamingQuery
+            .sink
+            .isInstanceOf[FakeSink])
       }
     }
   }
 
   Seq(
     Tuple2(classOf[FakeReadMicroBatchOnly], Trigger.AvailableNow()),
-    Tuple2(classOf[FakeReadContinuousOnly], Trigger.Continuous(1000))
-  ).foreach { case (source, trigger) =>
-    test(s"SPARK-25460: session options are respected in structured streaming sources - $source") {
-      // `keyPrefix` and `shortName` are the same in this test case
-      val readSource = source.getConstructor().newInstance().shortName()
-      val writeSource = "fake-write-microbatch-continuous"
+    Tuple2(classOf[FakeReadContinuousOnly], Trigger.Continuous(1000))).foreach {
+    case (source, trigger) =>
+      test(
+        s"SPARK-25460: session options are respected in structured streaming sources - $source") {
+        // `keyPrefix` and `shortName` are the same in this test case
+        val readSource = source.getConstructor().newInstance().shortName()
+        val writeSource = "fake-write-microbatch-continuous"
 
-      val readOptionName = "optionA"
-      withSQLConf(s"spark.datasource.$readSource.$readOptionName" -> "true") {
-        testPositiveCaseWithQuery(readSource, writeSource, trigger) { _ =>
-          eventually(timeout(streamingTimeout)) {
-            // Write options should not be set.
-            assert(!LastWriteOptions.options.containsKey(readOptionName))
-            assert(LastReadOptions.options.getBoolean(readOptionName, false))
+        val readOptionName = "optionA"
+        withSQLConf(s"spark.datasource.$readSource.$readOptionName" -> "true") {
+          testPositiveCaseWithQuery(readSource, writeSource, trigger) { _ =>
+            eventually(timeout(streamingTimeout)) {
+              // Write options should not be set.
+              assert(!LastWriteOptions.options.containsKey(readOptionName))
+              assert(LastReadOptions.options.getBoolean(readOptionName, false))
+            }
+          }
+        }
+
+        val writeOptionName = "optionB"
+        withSQLConf(s"spark.datasource.$writeSource.$writeOptionName" -> "true") {
+          testPositiveCaseWithQuery(readSource, writeSource, trigger) { _ =>
+            eventually(timeout(streamingTimeout)) {
+              // Read options should not be set.
+              assert(!LastReadOptions.options.containsKey(writeOptionName))
+              assert(LastWriteOptions.options.getBoolean(writeOptionName, false))
+            }
           }
         }
       }
-
-      val writeOptionName = "optionB"
-      withSQLConf(s"spark.datasource.$writeSource.$writeOptionName" -> "true") {
-        testPositiveCaseWithQuery(readSource, writeSource, trigger) { _ =>
-          eventually(timeout(streamingTimeout)) {
-            // Read options should not be set.
-            assert(!LastReadOptions.options.containsKey(writeOptionName))
-            assert(LastWriteOptions.options.getBoolean(writeOptionName, false))
-          }
-        }
-      }
-    }
   }
 
   // Get a list of (read, write, trigger) tuples for test cases.
   val cases = readFormats.flatMap { read =>
-    writeFormats.flatMap { write =>
-      triggers.map(t => (write, t))
-    }.map {
-      case (write, t) => (read, write, t)
-    }
+    writeFormats
+      .flatMap { write =>
+        triggers.map(t => (write, t))
+      }
+      .map { case (write, t) =>
+        (read, write, t)
+      }
   }
 
   for ((read, write, trigger) <- cases) {
     testQuietly(s"stream with read format $read, write format $write, trigger $trigger") {
-      val sourceTable = DataSource.lookupDataSource(read, spark.sessionState.conf).getConstructor()
-        .newInstance().asInstanceOf[SimpleTableProvider].getTable(CaseInsensitiveStringMap.empty())
+      val sourceTable = DataSource
+        .lookupDataSource(read, spark.sessionState.conf)
+        .getConstructor()
+        .newInstance()
+        .asInstanceOf[SimpleTableProvider]
+        .getTable(CaseInsensitiveStringMap.empty())
 
-      val sinkTable = DataSource.lookupDataSource(write, spark.sessionState.conf).getConstructor()
-        .newInstance().asInstanceOf[SimpleTableProvider].getTable(CaseInsensitiveStringMap.empty())
+      val sinkTable = DataSource
+        .lookupDataSource(write, spark.sessionState.conf)
+        .getConstructor()
+        .newInstance()
+        .asInstanceOf[SimpleTableProvider]
+        .getTable(CaseInsensitiveStringMap.empty())
 
       import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
       trigger match {
@@ -439,11 +461,7 @@ class StreamingDataSourceV2Suite extends StreamTest {
               testCase(read, write, trigger)
             },
             condition = "_LEGACY_ERROR_TEMP_2049",
-            parameters = Map(
-              "className" -> "fake-read-neither-mode",
-              "operator" -> "reading"
-            )
-          )
+            parameters = Map("className" -> "fake-read-neither-mode", "operator" -> "reading"))
 
         // Invalid - can't write
         case _ if !sinkTable.supports(STREAMING_WRITE) =>
@@ -452,11 +470,7 @@ class StreamingDataSourceV2Suite extends StreamTest {
               testCase(read, write, trigger)
             },
             condition = "_LEGACY_ERROR_TEMP_2049",
-            parameters = Map(
-              "className" -> "fake-write-neither-mode",
-              "operator" -> "writing"
-            )
-          )
+            parameters = Map("className" -> "fake-write-neither-mode", "operator" -> "writing"))
 
         case _: ContinuousTrigger =>
           if (sourceTable.supports(CONTINUOUS_READ)) {
@@ -469,8 +483,7 @@ class StreamingDataSourceV2Suite extends StreamTest {
                 testCase(read, write, trigger)
               },
               condition = "_LEGACY_ERROR_TEMP_2253",
-              parameters = Map("sourceName" -> "fake-read-microbatch-only")
-            )
+              parameters = Map("sourceName" -> "fake-read-microbatch-only"))
           }
 
         case microBatchTrigger =>
@@ -479,14 +492,12 @@ class StreamingDataSourceV2Suite extends StreamTest {
             testCase(read, write, trigger)
           } else {
             // Invalid - trigger is microbatch but reader is not
-            testPostCreationNegativeCase(read, write, trigger,
+            testPostCreationNegativeCase(
+              read,
+              write,
+              trigger,
               condition = "_LEGACY_ERROR_TEMP_2209",
-              parameters = Map(
-                "srcName" -> read,
-                "disabledSources" -> "",
-                "table" -> ".*"
-              )
-            )
+              parameters = Map("srcName" -> read, "disabledSources" -> "", "table" -> ".*"))
           }
       }
     }

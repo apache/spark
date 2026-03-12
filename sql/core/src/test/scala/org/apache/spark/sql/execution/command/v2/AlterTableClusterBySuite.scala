@@ -26,16 +26,18 @@ import org.apache.spark.sql.execution.command
  * The class contains tests for the `ALTER TABLE ... CLUSTER BY` command to check V2 table
  * catalogs.
  */
-class AlterTableClusterBySuite extends command.AlterTableClusterBySuiteBase
-  with CommandSuiteBase {
+class AlterTableClusterBySuite
+    extends command.AlterTableClusterBySuiteBase
+    with CommandSuiteBase {
   override def validateClusterBy(tableName: String, clusteringColumns: Seq[String]): Unit = {
     val (catalog, namespace, table) = parseTableName(tableName)
     val catalogPlugin = spark.sessionState.catalogManager.catalog(catalog)
     val partTable = catalogPlugin.asTableCatalog
       .loadTable(Identifier.of(Array(namespace), table))
       .asInstanceOf[InMemoryTable]
-    assert(partTable.partitioning ===
-      Array(ClusterByTransform(clusteringColumns.map(FieldReference(_)))))
+    assert(
+      partTable.partitioning ===
+        Array(ClusterByTransform(clusteringColumns.map(FieldReference(_)))))
   }
 
   test("test REPLACE TABLE with clustering columns") {

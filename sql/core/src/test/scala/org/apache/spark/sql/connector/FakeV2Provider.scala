@@ -66,7 +66,8 @@ class FakeV2ProviderWithCustomSchema extends FakeV2Provider {
   class FakeTable(
       schema: StructType,
       partitioning: Array[Transform],
-      options: CaseInsensitiveStringMap) extends SimpleBatchTable {
+      options: CaseInsensitiveStringMap)
+      extends SimpleBatchTable {
     override def schema(): StructType = schema
 
     override def partitioning(): Array[Transform] = partitioning

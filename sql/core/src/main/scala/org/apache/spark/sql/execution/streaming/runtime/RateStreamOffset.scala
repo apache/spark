@@ -23,10 +23,9 @@ import org.json4s.jackson.Serialization
 import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2}
 
 case class RateStreamOffset(partitionToValueAndRunTimeMs: Map[Int, ValueRunTimeMsPair])
-  extends OffsetV2 {
+    extends OffsetV2 {
   implicit val defaultFormats: DefaultFormats = DefaultFormats
   override val json = Serialization.write(partitionToValueAndRunTimeMs)
 }
-
 
 case class ValueRunTimeMsPair(value: Long, runTimeMs: Long)

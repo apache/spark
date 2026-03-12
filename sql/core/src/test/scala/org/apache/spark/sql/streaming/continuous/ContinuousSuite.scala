@@ -78,8 +78,9 @@ class ContinuousSuiteBase extends StreamTest {
       Thread.sleep(100)
     }
     if (System.currentTimeMillis() > maxWait) {
-      logWarning(s"Couldn't reach desired value in $maxWaitTimeMs milliseconds!" +
-        s"Current committed values is ${readCommittedValues(query)}")
+      logWarning(
+        s"Couldn't reach desired value in $maxWaitTimeMs milliseconds!" +
+          s"Current committed values is ${readCommittedValues(query)}")
     }
   }
 
@@ -110,9 +111,7 @@ class ContinuousSuite extends ContinuousSuiteBase {
   test("SPARK-29642: basic with various types") {
     val input = ContinuousMemoryStream[String]
 
-    testStream(input.toDF())(
-      AddData(input, "0", "1", "2"),
-      CheckAnswer("0", "1", "2"))
+    testStream(input.toDF())(AddData(input, "0", "1", "2"), CheckAnswer("0", "1", "2"))
 
     val input2 = ContinuousMemoryStream[(String, Timestamp)]
 
@@ -169,8 +168,8 @@ class ContinuousSuite extends ContinuousSuiteBase {
       testStream(df)(StartStream())
     }
 
-    assert(except.message.contains(
-      "Continuous processing does not support Deduplicate operations."))
+    assert(
+      except.message.contains("Continuous processing does not support Deduplicate operations."))
   }
 
   test("timestamp") {
@@ -181,8 +180,8 @@ class ContinuousSuite extends ContinuousSuiteBase {
       testStream(df)(StartStream())
     }
 
-    assert(except.message.contains(
-      "Continuous processing does not support current time operations."))
+    assert(
+      except.message.contains("Continuous processing does not support current time operations."))
   }
 
   test("subquery alias") {
@@ -274,7 +273,8 @@ class ContinuousSuite extends ContinuousSuiteBase {
     query.stop()
 
     val results = spark.read.table("noharness").collect()
-    assert(expected.map(Row(_)).subsetOf(results.toSet),
+    assert(
+      expected.map(Row(_)).subsetOf(results.toSet),
       s"Result set ${results.toSet} are not a superset of $expected!")
   }
 
@@ -282,8 +282,8 @@ class ContinuousSuite extends ContinuousSuiteBase {
     test(s"continuous mode with various UDFs - ${udf.prettyName}") {
       assume(
         shouldTestPandasUDFs && udf.isInstanceOf[TestScalarPandasUDF] ||
-        shouldTestPythonUDFs && udf.isInstanceOf[TestPythonUDF] ||
-        udf.isInstanceOf[TestScalaUDF])
+          shouldTestPythonUDFs && udf.isInstanceOf[TestPythonUDF] ||
+          udf.isInstanceOf[TestScalaUDF])
 
       val input = ContinuousMemoryStream[Int]
       val df = input.toDF()
@@ -319,8 +319,7 @@ class ContinuousStressSuite extends ContinuousSuiteBase {
       },
       IncrementEpoch(),
       StopStream,
-      CheckAnswerRowsContains(scala.Range(0, 2500).map(Row(_)))
-    )
+      CheckAnswerRowsContains(scala.Range(0, 2500).map(Row(_))))
   }
 
   test("automatic epoch advancement") {
@@ -384,22 +383,26 @@ class ContinuousMetaSuite extends ContinuousSuiteBase {
     new SparkContext(
       "local[10]",
       "continuous-stream-test-sql-context",
-      sparkConf.set("spark.sql.testkey", "true")
+      sparkConf
+        .set("spark.sql.testkey", "true")
         .set(MIN_BATCHES_TO_RETAIN.key, "2")))
 
   test("SPARK-24351: check offsetLog/commitLog retained in the checkpoint directory") {
     withTempDir { checkpointDir =>
       val input = ContinuousMemoryStream[Int]
-      val df = input.toDF().mapPartitions(iter => {
-        // Sleep the task thread for 300 ms to make sure epoch processing time 3 times
-        // longer than epoch creating interval. So the gap between last committed
-        // epoch and currentBatchId grows over time.
-        Thread.sleep(300)
-        iter.map(row => row.getInt(0) * 2)
-      })
+      val df = input
+        .toDF()
+        .mapPartitions(iter => {
+          // Sleep the task thread for 300 ms to make sure epoch processing time 3 times
+          // longer than epoch creating interval. So the gap between last committed
+          // epoch and currentBatchId grows over time.
+          Thread.sleep(300)
+          iter.map(row => row.getInt(0) * 2)
+        })
 
       testStream(df)(
-        StartStream(trigger = Trigger.Continuous(100),
+        StartStream(
+          trigger = Trigger.Continuous(100),
           checkpointLocation = checkpointDir.getAbsolutePath),
         AddData(input, 1),
         CheckAnswer(2),
@@ -416,8 +419,7 @@ class ContinuousMetaSuite extends ContinuousSuiteBase {
               commitLogValidateResult && offsetLogValidateResult
             case None => false
           }
-        })
-      )
+        }))
     }
   }
 }
@@ -446,8 +448,7 @@ class ContinuousEpochBacklogSuite extends ContinuousSuiteBase {
         StartStream(Trigger.Continuous(1)),
         ExpectFailure[IllegalStateException] { e =>
           e.getMessage.contains("queue has exceeded its maximum")
-        }
-      )
+        })
     }
   }
 }

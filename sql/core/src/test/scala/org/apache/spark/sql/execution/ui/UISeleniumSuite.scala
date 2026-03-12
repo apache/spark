@@ -38,7 +38,8 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser {
 
   private var spark: SparkSession = _
 
-  private def creatSparkSessionWithUI: SparkSession = SparkSession.builder()
+  private def creatSparkSessionWithUI: SparkSession = SparkSession
+    .builder()
     .master("local[1,1]")
     .appName("sql ui test")
     .config("spark.ui.enabled", "true")
@@ -54,7 +55,8 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser {
     assert(webUrl.isDefined, "please turn on spark.ui.enabled")
     go to s"${webUrl.get}/SQL"
     findAll(cssSelector("""#failed-table td .stacktrace-details"""))
-      .map(_.underlying.findElement(By.xpath("..")).getText).toList
+      .map(_.underlying.findElement(By.xpath("..")).getText)
+      .toList
   }
 
   private def findErrorSummaryOnSQLUI(): String = {

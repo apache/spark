@@ -28,15 +28,15 @@ import org.apache.spark.sql.types.DataType
  * A logical plan node that contains exactly what was parsed from SQL.
  *
  * This is used to hold information parsed from SQL when there are multiple implementations of a
- * query or command. For example, CREATE TABLE may be implemented by different nodes for v1 and v2.
- * Instead of parsing directly to a v1 CreateTable that keeps metadata in CatalogTable, and then
- * converting that v1 metadata to the v2 equivalent, the sql [[CreateTableStatement]] plan is
+ * query or command. For example, CREATE TABLE may be implemented by different nodes for v1 and
+ * v2. Instead of parsing directly to a v1 CreateTable that keeps metadata in CatalogTable, and
+ * then converting that v1 metadata to the v2 equivalent, the sql [[CreateTableStatement]] plan is
  * produced by the parser and converted once into both implementations.
  *
  * Parsed logical plans are not resolved because they must be converted to concrete logical plans.
  *
- * Parsed logical plans are located in Catalyst so that as much SQL parsing logic as possible is be
- * kept in a [[org.apache.spark.sql.catalyst.parser.AbstractSqlParser]].
+ * Parsed logical plans are located in Catalyst so that as much SQL parsing logic as possible is
+ * be kept in a [[org.apache.spark.sql.catalyst.parser.AbstractSqlParser]].
  */
 abstract class ParsedStatement extends LogicalPlan with CTEInChildren {
   // Redact properties and options when parsed nodes are used by generic methods like toString
@@ -62,7 +62,8 @@ case class SerdeInfo(
     serde: Option[String] = None,
     serdeProperties: Map[String, String] = Map.empty) {
   // this uses assertions because validation is done in validateRowFormatFileFormat etc.
-  assert(storedAs.isEmpty || formatClasses.isEmpty,
+  assert(
+    storedAs.isEmpty || formatClasses.isEmpty,
     "Cannot specify both STORED AS and INPUTFORMAT/OUTPUTFORMAT")
 
   def describe: String = {
@@ -113,11 +114,13 @@ case class FormatClasses(input: String, output: String) {
 object SerdeInfo {
   val empty: SerdeInfo = SerdeInfo(None, None, None, Map.empty)
 
-  def checkSerdePropMerging(
-      props1: Map[String, String], props2: Map[String, String]): Unit = {
+  def checkSerdePropMerging(props1: Map[String, String], props2: Map[String, String]): Unit = {
     val conflictKeys = props1.keySet.intersect(props2.keySet)
     if (conflictKeys.nonEmpty) {
-      throw QueryExecutionErrors.cannotSafelyMergeSerdePropertiesError(props1, props2, conflictKeys)
+      throw QueryExecutionErrors.cannotSafelyMergeSerdePropertiesError(
+        props1,
+        props2,
+        conflictKeys)
     }
   }
 }
@@ -132,7 +135,9 @@ case class QualifiedColType(
     nullable: Boolean,
     comment: Option[String],
     position: Option[FieldPosition],
-    default: Option[DefaultValueExpression]) extends Expression with Unevaluable {
+    default: Option[DefaultValueExpression])
+    extends Expression
+    with Unevaluable {
   override lazy val resolved: Boolean = path.forall(_.resolved) && position.forall(_.resolved) &&
     default.forall(_.resolved)
 
@@ -159,21 +164,26 @@ case class QualifiedColType(
 /**
  * An INSERT INTO statement, as parsed from SQL.
  *
- * @param table                the logical plan representing the table.
- * @param userSpecifiedCols    the user specified list of columns that belong to the table.
- * @param query                the logical plan representing data to write to.
- * @param overwrite            overwrite existing table or partitions.
- * @param partitionSpec        a map from the partition key to the partition value (optional).
- *                             If the value is missing, dynamic partition insert will be performed.
- *                             As an example, `INSERT INTO tbl PARTITION (a=1, b=2) AS` would have
- *                             Map('a' -> Some('1'), 'b' -> Some('2')),
- *                             and `INSERT INTO tbl PARTITION (a=1, b) AS ...`
- *                             would have Map('a' -> Some('1'), 'b' -> None).
- * @param ifPartitionNotExists If true, only write if the partition does not exist.
- *                             Only valid for static partitions.
- * @param byName               If true, reorder the data columns to match the column names of the
- *                             target table.
- * @param withSchemaEvolution  If true, enables automatic schema evolution for the operation.
+ * @param table
+ *   the logical plan representing the table.
+ * @param userSpecifiedCols
+ *   the user specified list of columns that belong to the table.
+ * @param query
+ *   the logical plan representing data to write to.
+ * @param overwrite
+ *   overwrite existing table or partitions.
+ * @param partitionSpec
+ *   a map from the partition key to the partition value (optional). If the value is missing,
+ *   dynamic partition insert will be performed. As an example,
+ *   `INSERT INTO tbl PARTITION (a=1, b=2) AS` would have Map('a' -> Some('1'), 'b' -> Some('2')),
+ *   and `INSERT INTO tbl PARTITION (a=1, b) AS ...` would have Map('a' -> Some('1'), 'b' ->
+ *   None).
+ * @param ifPartitionNotExists
+ *   If true, only write if the partition does not exist. Only valid for static partitions.
+ * @param byName
+ *   If true, reorder the data columns to match the column names of the target table.
+ * @param withSchemaEvolution
+ *   If true, enables automatic schema evolution for the operation.
  */
 case class InsertIntoStatement(
     table: LogicalPlan,
@@ -183,14 +193,14 @@ case class InsertIntoStatement(
     overwrite: Boolean,
     ifPartitionNotExists: Boolean,
     byName: Boolean = false,
-    withSchemaEvolution: Boolean = false) extends UnaryParsedStatement {
+    withSchemaEvolution: Boolean = false)
+    extends UnaryParsedStatement {
 
-  require(overwrite || !ifPartitionNotExists,
-    "IF NOT EXISTS is only valid in INSERT OVERWRITE")
-  require(partitionSpec.values.forall(_.nonEmpty) || !ifPartitionNotExists,
+  require(overwrite || !ifPartitionNotExists, "IF NOT EXISTS is only valid in INSERT OVERWRITE")
+  require(
+    partitionSpec.values.forall(_.nonEmpty) || !ifPartitionNotExists,
     "IF NOT EXISTS is only valid with static partitions")
-  require(userSpecifiedCols.isEmpty || !byName,
-    "BY NAME is only valid without specified cols")
+  require(userSpecifiedCols.isEmpty || !byName, "BY NAME is only valid without specified cols")
 
   override def child: LogicalPlan = query
   override protected def withNewChildInternal(newChild: LogicalPlan): InsertIntoStatement =

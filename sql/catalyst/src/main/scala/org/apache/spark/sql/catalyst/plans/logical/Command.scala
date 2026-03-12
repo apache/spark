@@ -24,8 +24,8 @@ import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMAND, TreePattern}
 
 /**
- * A logical node that represents a non-query command to be executed by the system.  For example,
- * commands can be used by parsers to represent DDL operations.  Commands, unlike queries, are
+ * A logical node that represents a non-query command to be executed by the system. For example,
+ * commands can be used by parsers to represent DDL operations. Commands, unlike queries, are
  * eagerly executed.
  */
 trait Command extends LogicalPlan {
@@ -44,8 +44,8 @@ trait BinaryCommand extends Command with BinaryLike[LogicalPlan]
 
 /**
  * A logical node that can be used for a command that requires its children to be only analyzed,
- * but not optimized. An example would be "create view": we don't need to optimize the view subtree
- * because we will just store the entire view text as is in the catalog.
+ * but not optimized. An example would be "create view": we don't need to optimize the view
+ * subtree because we will just store the entire view text as is in the catalog.
  *
  * The way we do this is by setting the children to empty once the subtree is analyzed. This will
  * prevent the optimizer (or the analyzer from that point on) from traversing into the children.
@@ -65,10 +65,11 @@ trait AnalysisOnlyCommand extends Command {
 }
 
 /**
- * A logical node that does not expose its sub-nodes as children, but rather supervises them
- * in an implementation-defined manner.
+ * A logical node that does not expose its sub-nodes as children, but rather supervises them in an
+ * implementation-defined manner.
  */
 trait SupervisingCommand extends LeafCommand {
+
   /**
    * Transforms its supervised plan using `transformer` and returns a copy of `SupervisingCommand`
    */

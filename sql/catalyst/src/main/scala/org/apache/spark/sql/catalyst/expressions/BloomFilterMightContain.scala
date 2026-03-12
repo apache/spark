@@ -29,19 +29,20 @@ import org.apache.spark.sql.types._
 import org.apache.spark.util.sketch.BloomFilter
 
 /**
- * An internal scalar function that returns the membership check result (either true or false)
- * for values of `valueExpression` in the Bloom filter represented by `bloomFilterExpression`.
- * Not that since the function is "might contain", always returning true regardless is not
- * wrong.
- * Note that this expression requires that `bloomFilterExpression` is either a constant value or
- * an uncorrelated scalar subquery. This is sufficient for the Bloom filter join rewrite.
+ * An internal scalar function that returns the membership check result (either true or false) for
+ * values of `valueExpression` in the Bloom filter represented by `bloomFilterExpression`. Not
+ * that since the function is "might contain", always returning true regardless is not wrong. Note
+ * that this expression requires that `bloomFilterExpression` is either a constant value or an
+ * uncorrelated scalar subquery. This is sufficient for the Bloom filter join rewrite.
  *
- * @param bloomFilterExpression the Binary data of Bloom filter.
- * @param valueExpression the Long value to be tested for the membership of `bloomFilterExpression`.
+ * @param bloomFilterExpression
+ *   the Binary data of Bloom filter.
+ * @param valueExpression
+ *   the Long value to be tested for the membership of `bloomFilterExpression`.
  */
-case class BloomFilterMightContain(
-    bloomFilterExpression: Expression,
-    valueExpression: Expression) extends BinaryExpression with Predicate {
+case class BloomFilterMightContain(bloomFilterExpression: Expression, valueExpression: Expression)
+    extends BinaryExpression
+    with Predicate {
 
   override def nullable: Boolean = true
   override def left: Expression = bloomFilterExpression
@@ -51,13 +52,13 @@ case class BloomFilterMightContain(
   override def checkInputDataTypes(): TypeCheckResult = {
     (left.dataType, right.dataType) match {
       case (BinaryType, NullType) | (NullType, LongType) | (NullType, NullType) |
-           (BinaryType, LongType) =>
+          (BinaryType, LongType) =>
         bloomFilterExpression match {
-          case e : Expression if e.foldable => TypeCheckResult.TypeCheckSuccess
-          case subquery : PlanExpression[_] if !subquery.containsPattern(OUTER_REFERENCE) =>
+          case e: Expression if e.foldable => TypeCheckResult.TypeCheckSuccess
+          case subquery: PlanExpression[_] if !subquery.containsPattern(OUTER_REFERENCE) =>
             TypeCheckResult.TypeCheckSuccess
           case GetStructField(subquery: PlanExpression[_], _, _)
-            if !subquery.containsPattern(OUTER_REFERENCE) =>
+              if !subquery.containsPattern(OUTER_REFERENCE) =>
             TypeCheckResult.TypeCheckSuccess
           case _: ScalarSubqueryReference => TypeCheckResult.TypeCheckSuccess
           case _ =>
@@ -65,9 +66,7 @@ case class BloomFilterMightContain(
               errorSubClass = "BLOOM_FILTER_BINARY_OP_WRONG_TYPE",
               messageParameters = Map(
                 "functionName" -> toSQLId(prettyName),
-                "actual" -> toSQLExpr(bloomFilterExpression)
-              )
-            )
+                "actual" -> toSQLExpr(bloomFilterExpression)))
         }
       case _ =>
         DataTypeMismatch(
@@ -76,17 +75,14 @@ case class BloomFilterMightContain(
             "functionName" -> toSQLId(prettyName),
             "expectedLeft" -> toSQLType(BinaryType),
             "expectedRight" -> toSQLType(LongType),
-            "actual" -> Seq(left.dataType, right.dataType).map(toSQLType).mkString(", ")
-          )
-        )
+            "actual" -> Seq(left.dataType, right.dataType).map(toSQLType).mkString(", ")))
     }
   }
 
   override protected def withNewChildrenInternal(
       newBloomFilterExpression: Expression,
       newValueExpression: Expression): BloomFilterMightContain =
-    copy(bloomFilterExpression = newBloomFilterExpression,
-      valueExpression = newValueExpression)
+    copy(bloomFilterExpression = newBloomFilterExpression, valueExpression = newValueExpression)
 
   // The bloom filter created from `bloomFilterExpression`.
   @transient private lazy val bloomFilter = {

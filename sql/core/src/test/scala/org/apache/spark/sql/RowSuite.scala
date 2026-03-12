@@ -59,7 +59,7 @@ class RowSuite extends SparkFunSuite with SharedSparkSession {
     assert(row.getAs[Int]("a") === 1)
     assert(row.getAs[Seq[Int]]("b") === Seq(1))
 
-    intercept[IllegalArgumentException]{
+    intercept[IllegalArgumentException] {
       row.getAs[Int]("c")
     }
   }
@@ -100,8 +100,9 @@ class RowSuite extends SparkFunSuite with SharedSparkSession {
       java.sql.Date.valueOf(dtString),
       BigDecimal("1234567890.1234567890"),
       (-1).toByte)
-    assert(r3.toString == "[[2147483647,21474.8364,-5,this is a string,true,null],List(1, 2, 3)," +
-      s"Map(1 -> a, 2 -> b),$tsString,$dtString,1234567890.1234567890,-1]")
+    assert(
+      r3.toString == "[[2147483647,21474.8364,-5,this is a string,true,null],List(1, 2, 3)," +
+        s"Map(1 -> a, 2 -> b),$tsString,$dtString,1234567890.1234567890,-1]")
     val empty = Row()
     assert(empty.toString == "[]")
   }
@@ -120,8 +121,8 @@ class RowSuite extends SparkFunSuite with SharedSparkSession {
         rowWithoutSchema.fieldIndex("foo")
       },
       condition = "UNSUPPORTED_CALL.FIELD_INDEX",
-      parameters = Map("methodName" -> "fieldIndex", "className" -> "Row", "fieldName" -> "`foo`")
-    )
+      parameters =
+        Map("methodName" -> "fieldIndex", "className" -> "Row", "fieldName" -> "`foo`"))
   }
 
   test("SPARK-42307: get a value from a null column should result in error") {
@@ -133,14 +134,15 @@ class RowSuite extends SparkFunSuite with SharedSparkSession {
         rowWithNullValue.getLong(position)
       },
       condition = "ROW_VALUE_IS_NULL",
-      parameters = Map("index" -> position.toString)
-    )
+      parameters = Map("index" -> position.toString))
   }
 
   test("Geospatial row API - Geography and Geometry") {
     // A test WKB value corresponding to: POINT (17 7).
     val point = "010100000000000000000031400000000000001C40"
-      .grouped(2).map(Integer.parseInt(_, 16).toByte).toArray
+      .grouped(2)
+      .map(Integer.parseInt(_, 16).toByte)
+      .toArray
 
     val row = Row(Geometry.fromWKB(point), Geography.fromWKB(point))
 

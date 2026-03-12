@@ -41,6 +41,6 @@ class ErrorNotifier extends Logging {
 
   /** Throw errors that have occurred */
   def throwErrorIfExists(): Unit = {
-    getError().foreach({th => throw th})
+    getError().foreach({ th => throw th })
   }
 }

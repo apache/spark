@@ -39,8 +39,7 @@ abstract class ParquetSchemaPruningSuite extends SchemaPruningSuite with Adaptiv
 @ExtendedSQLTest
 class ParquetV1SchemaPruningSuite extends ParquetSchemaPruningSuite {
   override protected def sparkConf: SparkConf =
-    super
-      .sparkConf
+    super.sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, "parquet")
 }
 
@@ -48,16 +47,16 @@ class ParquetV1SchemaPruningSuite extends ParquetSchemaPruningSuite {
 class ParquetV2SchemaPruningSuite extends ParquetSchemaPruningSuite {
   // TODO: enable Parquet V2 write path after file source V2 writers are workable.
   override protected def sparkConf: SparkConf =
-    super
-      .sparkConf
+    super.sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, "")
 
   override def checkScanSchemata(df: DataFrame, expectedSchemaCatalogStrings: String*): Unit = {
     val fileSourceScanSchemata =
-      collect(df.queryExecution.executedPlan) {
-        case scan: BatchScanExec => scan.scan.asInstanceOf[ParquetScan].readDataSchema
+      collect(df.queryExecution.executedPlan) { case scan: BatchScanExec =>
+        scan.scan.asInstanceOf[ParquetScan].readDataSchema
       }
-    assert(fileSourceScanSchemata.size === expectedSchemaCatalogStrings.size,
+    assert(
+      fileSourceScanSchemata.size === expectedSchemaCatalogStrings.size,
       s"Found ${fileSourceScanSchemata.size} file sources in dataframe, " +
         s"but expected $expectedSchemaCatalogStrings")
     fileSourceScanSchemata.zip(expectedSchemaCatalogStrings).foreach {

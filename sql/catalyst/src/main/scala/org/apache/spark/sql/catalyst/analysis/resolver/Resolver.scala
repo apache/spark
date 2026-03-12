@@ -21,26 +21,8 @@ import java.util.HashSet
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{
-  withPosition,
-  AnalysisErrorAt,
-  FunctionResolution,
-  MultiInstanceRelation,
-  RelationCache,
-  RelationResolution,
-  ResolvedInlineTable,
-  UnresolvedHaving,
-  UnresolvedInlineTable,
-  UnresolvedRelation,
-  UnresolvedSubqueryColumnAliases
-}
-import org.apache.spark.sql.catalyst.expressions.{
-  Alias,
-  Attribute,
-  AttributeSet,
-  Expression,
-  ExprId
-}
+import org.apache.spark.sql.catalyst.analysis.{withPosition, AnalysisErrorAt, FunctionResolution, MultiInstanceRelation, RelationCache, RelationResolution, ResolvedInlineTable, UnresolvedHaving, UnresolvedInlineTable, UnresolvedRelation, UnresolvedSubqueryColumnAliases}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeSet, Expression, ExprId}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.util.EvaluateUnresolvedInlineTable
@@ -50,25 +32,27 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 /**
  * The Resolver implements a single-pass bottom-up analysis algorithm in the Catalyst.
  *
- * The functions here generally traverse the [[LogicalPlan]] nodes recursively,
- * constructing and returning the resolved [[LogicalPlan]] nodes bottom-up.
- * This is the primary entry point for implementing SQL and DataFrame plan analysis,
- * wherein the [[resolve]] method accepts a fully unresolved [[LogicalPlan]] and returns
- * a fully resolved [[LogicalPlan]] in response with all data types and attribute
- * reference ID assigned for valid requests. This resolver also takes responsibility
- * to detect any errors in the initial SQL query or DataFrame and return appropriate
- * error messages including precise parse locations wherever possible.
+ * The functions here generally traverse the [[LogicalPlan]] nodes recursively, constructing and
+ * returning the resolved [[LogicalPlan]] nodes bottom-up. This is the primary entry point for
+ * implementing SQL and DataFrame plan analysis, wherein the [[resolve]] method accepts a fully
+ * unresolved [[LogicalPlan]] and returns a fully resolved [[LogicalPlan]] in response with all
+ * data types and attribute reference ID assigned for valid requests. This resolver also takes
+ * responsibility to detect any errors in the initial SQL query or DataFrame and return
+ * appropriate error messages including precise parse locations wherever possible.
  *
  * The Resolver is a one-shot object per each SQL/DataFrame logical plan, the calling code must
  * re-create it for every new analysis run.
  *
- * @param catalogManager [[CatalogManager]] for relation and identifier resolution.
- * @param extensions A list of [[ResolverExtension]]s that will be used to resolve external
- *   operators.
- * @param metadataResolverExtensions A list of [[ResolverExtension]]s that will be used to resolve
- *   relation operators in [[MetadataResolver]].
- * @param externalRelationResolution An optional [[RelationResolution]] with to override the default
- *   one. The default is constructed using [[Resolver.createRelationResolution]].
+ * @param catalogManager
+ *   [[CatalogManager]] for relation and identifier resolution.
+ * @param extensions
+ *   A list of [[ResolverExtension]]s that will be used to resolve external operators.
+ * @param metadataResolverExtensions
+ *   A list of [[ResolverExtension]]s that will be used to resolve relation operators in
+ *   [[MetadataResolver]].
+ * @param externalRelationResolution
+ *   An optional [[RelationResolution]] with to override the default one. The default is
+ *   constructed using [[Resolver.createRelationResolution]].
  */
 class Resolver(
     catalogManager: CatalogManager,
@@ -111,11 +95,8 @@ class Resolver(
    * [[BridgedRelationMetadataProvider]] and later stick to it forever without resorting to the
    * actual blocking metadata resolution.
    */
-  private var relationMetadataProvider: RelationMetadataProvider = new MetadataResolver(
-    catalogManager,
-    relationResolution,
-    metadataResolverExtensions
-  )
+  private var relationMetadataProvider: RelationMetadataProvider =
+    new MetadataResolver(catalogManager, relationResolution, metadataResolverExtensions)
 
   /**
    * Get [[NameScopeStack]] bound to the used [[Resolver]].
@@ -139,13 +120,13 @@ class Resolver(
 
   /**
    * This method is a top-level analysis entry point:
-   * 1. Substitute IDENTIFIERs and CTEs in the `unresolvedPlan` using
-   *    [[IdentifierAndCteSubstitutor]];
-   * 2. Resolve the metadata for the plan using [[MetadataResolver]]. When
-   *    [[ANALYZER_SINGLE_PASS_RESOLVER_RELATION_BRIDGING_ENABLED]] is enabled, we need to
-   *    re-instantiate the [[RelationMetadataProvider]] as [[View]] resolution context might have
-   *    changed in the meantime;
-   * 3. Resolve the plan using [[resolve]].
+   *   1. Substitute IDENTIFIERs and CTEs in the `unresolvedPlan` using
+   *      [[IdentifierAndCteSubstitutor]];
+   *   2. Resolve the metadata for the plan using [[MetadataResolver]]. When
+   *      [[ANALYZER_SINGLE_PASS_RESOLVER_RELATION_BRIDGING_ENABLED]] is enabled, we need to
+   *      re-instantiate the [[RelationMetadataProvider]] as [[View]] resolution context might
+   *      have changed in the meantime;
+   *   3. Resolve the plan using [[resolve]].
    *
    * This method is called for the top-level query and each unresolved [[View]].
    */
@@ -164,8 +145,7 @@ class Resolver(
           catalogManager,
           relationResolution,
           analyzerBridgeState,
-          viewResolver
-        )
+          viewResolver)
       case None =>
         relationMetadataProvider
     }
@@ -184,9 +164,8 @@ class Resolver(
    * pattern matching on the `unresolvedPlan` type. This pattern matching enumerates all the
    * operator node types that are supported by the single-pass analysis.
    *
-   * When developers introduce a new unresolved node type to the Catalyst, they should implement
-   * a corresponding `resolve*` method in the [[Resolver]] and add it to this pattern match
-   * list.
+   * When developers introduce a new unresolved node type to the Catalyst, they should implement a
+   * corresponding `resolve*` method in the [[Resolver]] and add it to this pattern match list.
    *
    * [[resolve]] will be called recursively during the unresolved plan traversal eventually
    * producing a fully resolved plan or a descriptive error message.
@@ -284,11 +263,12 @@ class Resolver(
    * [[UnresolvedWith]] contains a list of unresolved CTE definitions, which are represented by
    * (name, subquery) pairs, and an actual child query. First we resolve the CTE definitions
    * strictly in their declaration order, so they become available for other lower definitions
-   * (lower both in this WITH clause list and in the plan tree) and for the [[UnresolvedWith]] child
-   * query. After that, we resolve the child query. Optionally, if this is a root [[CteScope]],
-   * we return a [[WithCTE]] operator with all the resolved [[CTERelationDef]]s merged together
-   * from this scope and child scopes. Otherwise, we return the resolved child query so that
-   * the resolved [[CTERelationDefs]] propagate up and will be merged together later.
+   * (lower both in this WITH clause list and in the plan tree) and for the [[UnresolvedWith]]
+   * child query. After that, we resolve the child query. Optionally, if this is a root
+   * [[CteScope]], we return a [[WithCTE]] operator with all the resolved [[CTERelationDef]]s
+   * merged together from this scope and child scopes. Otherwise, we return the resolved child
+   * query so that the resolved [[CTERelationDefs]] propagate up and will be merged together
+   * later.
    *
    * See [[CteScope]] scaladoc for all the details on how CTEs are resolved.
    */
@@ -300,35 +280,36 @@ class Resolver(
       scopes.pushScope()
       cteRegistry.pushScope()
 
-      val resolvedCtePlan = try {
-        resolve(ctePlan)
-      } finally {
-        cteRegistry.popScope()
-        scopes.popScope()
-        expressionIdAssigner.popMapping()
-      }
+      val resolvedCtePlan =
+        try {
+          resolve(ctePlan)
+        } finally {
+          cteRegistry.popScope()
+          scopes.popScope()
+          expressionIdAssigner.popMapping()
+        }
 
       cteRegistry.currentScope.registerCte(cteName, CTERelationDef(resolvedCtePlan))
     }
 
     cteRegistry.pushScope()
 
-    val resolvedChild = try {
-      resolve(unresolvedWith.child)
-    } finally {
-      cteRegistry.popScope()
-    }
+    val resolvedChild =
+      try {
+        resolve(unresolvedWith.child)
+      } finally {
+        cteRegistry.popScope()
+      }
 
     cteRegistry.currentScope.tryPutWithCTE(
       unresolvedOperator = unresolvedWith,
-      resolvedOperator = resolvedChild
-    )
+      resolvedOperator = resolvedChild)
   }
 
   /**
    * We may meet resolved [[WithCTE]] while traversing partially resolved trees in DataFrame
-   * programs. In that case we simply recurse into the CTE definitions and the main plan under
-   * new scopes and mappings.
+   * programs. In that case we simply recurse into the CTE definitions and the main plan under new
+   * scopes and mappings.
    */
   private def handleResolvedWithCte(withCte: WithCTE): LogicalPlan = {
     val resolvedCteDefs = withCte.cteDefs.map { cteDef =>
@@ -367,8 +348,7 @@ class Resolver(
       throw QueryCompilationErrors.aliasNumberNotMatchColumnNumberError(
         unresolvedSubqueryColumnAliases.outputColumnNames.size,
         scopes.current.output.size,
-        unresolvedSubqueryColumnAliases
-      )
+        unresolvedSubqueryColumnAliases)
     }
 
     val projectList =
@@ -382,25 +362,23 @@ class Resolver(
   }
 
   /**
-   * [[SubqueryAlias]] has a single child and an identifier. We need to resolve the child and update
-   * the scope with the output, since upper expressions can reference [[SubqueryAlias]]es output by
-   * its identifier.
+   * [[SubqueryAlias]] has a single child and an identifier. We need to resolve the child and
+   * update the scope with the output, since upper expressions can reference [[SubqueryAlias]]es
+   * output by its identifier.
    *
-   * Hidden output is reset when [[SubqueryAlias]] is reached during tree traversal. This has to be
-   * done because upper SQL projection (or DataFrame) cannot look down into the previous
-   * [[SubqueryAlias]]'s hidden output.
-   * Examples (both will throw `UNRESOLVED_COLUMN` exception):
+   * Hidden output is reset when [[SubqueryAlias]] is reached during tree traversal. This has to
+   * be done because upper SQL projection (or DataFrame) cannot look down into the previous
+   * [[SubqueryAlias]]'s hidden output. Examples (both will throw `UNRESOLVED_COLUMN` exception):
    *
-   *  1. SQL
-   *  {{{
+   *   1. SQL
+   *      {{{
    *  -- `hiddenOutput` and `availableAliases` will be reset at [[SubqueryAlias]]. Therefore both
    *  -- `output` and `hiddenOutput` will be [`col2`]. Because of that, `UNRESOLVED_COLUMN` is
    *  -- thrown when resolving `col1`
    *  SELECT col1 FROM (SELECT col2 FROM VALUES (1, 2));
-   *  }}}
-   *
-   *  2. DataFrame
-   *  {{{ spark.sql("SELECT * FROM VALUES (1, 2)").select("col1").as("q1").select("col2"); }}}
+   *      }}}
+   *   2. DataFrame
+   *      {{{spark.sql("SELECT * FROM VALUES (1, 2)").select("col1").as("q1").select("col2");}}}
    */
   private def resolveSubqueryAlias(unresolvedSubqueryAlias: SubqueryAlias): LogicalPlan = {
     val resolvedSubqueryAlias =
@@ -411,8 +389,7 @@ class Resolver(
     scopes.overwriteCurrent(
       output = Some(output),
       hiddenOutput = Some(output),
-      availableAliases = Some(new HashSet[ExprId])
-    )
+      availableAliases = Some(new HashSet[ExprId]))
 
     resolvedSubqueryAlias
   }
@@ -426,8 +403,7 @@ class Resolver(
 
     val resolvedLimitExpr = expressionResolver.resolveLimitLikeExpression(
       unresolvedGlobalLimit.limitExpr,
-      unresolvedGlobalLimit.copy(child = resolvedChild)
-    )
+      unresolvedGlobalLimit.copy(child = resolvedChild))
 
     GlobalLimit(resolvedLimitExpr, resolvedChild)
   }
@@ -441,8 +417,7 @@ class Resolver(
 
     val resolvedLimitExpr = expressionResolver.resolveLimitLikeExpression(
       unresolvedLocalLimit.limitExpr,
-      unresolvedLocalLimit.copy(child = resolvedChild)
-    )
+      unresolvedLocalLimit.copy(child = resolvedChild))
 
     LocalLimit(resolvedLimitExpr, resolvedChild)
   }
@@ -456,32 +431,28 @@ class Resolver(
 
     val resolvedOffsetExpr = expressionResolver.resolveLimitLikeExpression(
       unresolvedOffset.offsetExpr,
-      unresolvedOffset.copy(child = resolvedChild)
-    )
+      unresolvedOffset.copy(child = resolvedChild))
 
     Offset(resolvedOffsetExpr, resolvedChild)
   }
 
   /**
-   * Resolve [[Tail]]. We have to resolve its child and resolve and validate its limit
-   * expression.
+   * Resolve [[Tail]]. We have to resolve its child and resolve and validate its limit expression.
    */
   private def resolveTail(unresolvedTail: Tail): LogicalPlan = {
     val resolvedChild = resolve(unresolvedTail.child)
 
     val resolvedTailExpr = expressionResolver.resolveLimitLikeExpression(
       unresolvedTail.limitExpr,
-      unresolvedTail.copy(child = resolvedChild)
-    )
+      unresolvedTail.copy(child = resolvedChild))
 
     Tail(resolvedTailExpr, resolvedChild)
   }
 
   /**
-   * [[Distinct]] operator doesn't require any special resolution.
-   * We validate results of the resolution using the [[OperatorWithUncomparableTypeValidator]]
-   * ([[MapType]], [[VariantType]], [[GeometryType]] and [[GeographyType]] are not supported
-   * under [[Distinct]] operator).
+   * [[Distinct]] operator doesn't require any special resolution. We validate results of the
+   * resolution using the [[OperatorWithUncomparableTypeValidator]] ([[MapType]], [[VariantType]],
+   * [[GeometryType]] and [[GeographyType]] are not supported under [[Distinct]] operator).
    *
    * `hiddenOutput` and `availableAliases` are reset when [[Distinct]] is reached during tree
    * traversal.
@@ -493,16 +464,16 @@ class Resolver(
 
     scopes.overwriteCurrent(
       hiddenOutput = Some(scopes.current.output),
-      availableAliases = Some(new HashSet[ExprId])
-    )
+      availableAliases = Some(new HashSet[ExprId]))
     resolvedDistinct
   }
 
   /**
-   * [[UnresolvedRelation]] was previously looked up by the [[MetadataResolver]] and now we need to:
-   * - Get the specific relation with metadata from `relationsWithResolvedMetadata`, like
-   *   [[UnresolvedCatalogRelation]], or throw an error if it wasn't found
-   * - Resolve it further, usually using extensions, like [[DataSourceResolver]]
+   * [[UnresolvedRelation]] was previously looked up by the [[MetadataResolver]] and now we need
+   * to:
+   *   - Get the specific relation with metadata from `relationsWithResolvedMetadata`, like
+   *     [[UnresolvedCatalogRelation]], or throw an error if it wasn't found
+   *   - Resolve it further, usually using extensions, like [[DataSourceResolver]]
    */
   private def resolveRelation(unresolvedRelation: UnresolvedRelation): LogicalPlan = {
     viewResolver.withSourceUnresolvedRelation(unresolvedRelation) {
@@ -513,8 +484,7 @@ class Resolver(
         case Some(relationsWithResolvedMetadata) =>
           planLogger.logPlanResolutionEvent(
             relationsWithResolvedMetadata,
-            "Relation metadata retrieved"
-          )
+            "Relation metadata retrieved")
 
           relationsWithResolvedMetadata
         case None =>
@@ -537,8 +507,7 @@ class Resolver(
 
         createCteRelationRef(
           name = unresolvedCteRelationRef.name,
-          cteRelationDef = cteRelationDef
-        )
+          cteRelationDef = cteRelationDef)
       case None =>
         unresolvedCteRelationRef.tableNotFound(Seq(unresolvedCteRelationRef.name))
     }
@@ -547,17 +516,17 @@ class Resolver(
   }
 
   /**
-   * We may meet resolved [[CTERelationRef]] while traversing partially resolved trees in DataFrame
-   * programs. In that case we simply recurse into the child plan.
+   * We may meet resolved [[CTERelationRef]] while traversing partially resolved trees in
+   * DataFrame programs. In that case we simply recurse into the child plan.
    */
   private def handleResolvedCteRelationDef(cteRelationDef: CTERelationDef): LogicalPlan = {
     cteRelationDef.copy(child = resolve(cteRelationDef.child))
   }
 
   /**
-   * [[UnresolvedInlineTable]] resolution requires all the rows to be resolved first. After that we
-   * use [[EvaluateUnresolvedInlineTable]] and try to evaluate the row expressions if possible to
-   * get [[LocalRelation]] right away. Sometimes it's not possible because of expressions like
+   * [[UnresolvedInlineTable]] resolution requires all the rows to be resolved first. After that
+   * we use [[EvaluateUnresolvedInlineTable]] and try to evaluate the row expressions if possible
+   * to get [[LocalRelation]] right away. Sometimes it's not possible because of expressions like
    * `current_date()` which are evaluated in the optimizer (SPARK-46380).
    *
    * Note: By default if all the inline table expressions can be evaluated eagerly, the parser
@@ -572,8 +541,7 @@ class Resolver(
           expressionResolver
             .resolveExpressionTreeInOperator(unresolvedElement, unresolvedInlineTable)
         })
-      })
-    )
+      }))
 
     val resolvedRelation = EvaluateUnresolvedInlineTable
       .evaluateUnresolvedInlineTable(withResolvedExpressions)
@@ -597,16 +565,16 @@ class Resolver(
   }
 
   /**
-   * Leaf operators introduce original attributes to this operator subtree and need to be handled in
-   * a special way:
-   *  - Initialize [[ExpressionIdAssigner]] mapping for this operator branch and reassign
-   *    `leafOperator`'s output attribute IDs. We don't reassign expression IDs in the leftmost
-   *    branch, see [[ExpressionIdAssigner]] class doc for more details.
-   *    [[CTERelationRef]]'s output can always be reassigned.
-   *  - Overwrite the current [[NameScope]] with remapped output attributes (both
-   *    [[NameScope.output]] and [[NameScope.hiddenOutput]] are updated). It's OK to call
-   *    `output` on a [[LeafNode]], because it's not recursive (this call fits the single-pass
-   *    framework).
+   * Leaf operators introduce original attributes to this operator subtree and need to be handled
+   * in a special way:
+   *   - Initialize [[ExpressionIdAssigner]] mapping for this operator branch and reassign
+   *     `leafOperator`'s output attribute IDs. We don't reassign expression IDs in the leftmost
+   *     branch, see [[ExpressionIdAssigner]] class doc for more details. [[CTERelationRef]]'s
+   *     output can always be reassigned.
+   *   - Overwrite the current [[NameScope]] with remapped output attributes (both
+   *     [[NameScope.output]] and [[NameScope.hiddenOutput]] are updated). It's OK to call
+   *     `output` on a [[LeafNode]], because it's not recursive (this call fits the single-pass
+   *     framework).
    */
   private def handleLeafOperator(leafOperator: LeafNode): LogicalPlan = {
     val leafOperatorWithAssignedExpressionIds = leafOperator match {
@@ -632,8 +600,8 @@ class Resolver(
           case _ =>
             AnalysisHelper
               .allowInvokingTransformsInAnalyzer {
-                leafOperator.transformExpressions {
-                  case attribute: Attribute => attribute.newInstance()
+                leafOperator.transformExpressions { case attribute: Attribute =>
+                  attribute.newInstance()
                 }
               }
               .asInstanceOf[LeafNode]
@@ -641,8 +609,7 @@ class Resolver(
 
         expressionIdAssigner.createMappingForLeafOperator(
           newOperator = newLeafOperator,
-          oldOperator = Some(originalLeafOperator)
-        )
+          oldOperator = Some(originalLeafOperator))
 
         newLeafOperator
     }
@@ -670,8 +637,8 @@ class Resolver(
   }
 
   /**
-   * Resolve [[Sample]] operator. Its resolution doesn't require any specific logic (besides
-   * child resolution).
+   * Resolve [[Sample]] operator. Its resolution doesn't require any specific logic (besides child
+   * resolution).
    */
   private def resolveSample(sample: Sample): LogicalPlan = {
     sample.copy(child = resolve(sample.child))
@@ -686,9 +653,7 @@ class Resolver(
         isStreaming = cteRelationDef.isStreaming,
         output = cteRelationDef.output,
         recursive = false,
-        maxRows = cteRelationDef.maxRows
-      )
-    )
+        maxRows = cteRelationDef.maxRows))
   }
 
   /**
@@ -698,16 +663,12 @@ class Resolver(
    */
   private def handleUnmatchedOperator(unresolvedOperator: LogicalPlan): Nothing = {
     if (ExplicitlyUnsupportedResolverFeature.OPERATORS.contains(
-        unresolvedOperator.getClass.getName
-      )) {
+        unresolvedOperator.getClass.getName)) {
       throw new ExplicitlyUnsupportedResolverFeature(
-        s"unsupported operator: ${unresolvedOperator.getClass.getName}"
-      )
+        s"unsupported operator: ${unresolvedOperator.getClass.getName}")
     }
     throw QueryCompilationErrors
-      .unsupportedSinglePassAnalyzerFeature(
-        s"${unresolvedOperator.getClass} operator resolution"
-      )
+      .unsupportedSinglePassAnalyzerFeature(s"${unresolvedOperator.getClass} operator resolution")
       .withPosition(unresolvedOperator.origin)
   }
 
@@ -750,18 +711,14 @@ class Resolver(
           "missingAttributes" -> makeCommaSeparatedExpressionString(missingInput.toSeq),
           "input" -> makeCommaSeparatedExpressionString(inputSet.toSeq),
           "operator" -> operator.simpleString(conf.maxToStringFields),
-          "operation" -> makeCommaSeparatedExpressionString(attributesWithSameName.toSeq)
-        )
-      )
+          "operation" -> makeCommaSeparatedExpressionString(attributesWithSameName.toSeq)))
     } else {
       operator.failAnalysis(
         errorClass = "MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_MISSING_FROM_INPUT",
         messageParameters = Map(
           "missingAttributes" -> makeCommaSeparatedExpressionString(missingInput.toSeq),
           "input" -> makeCommaSeparatedExpressionString(inputSet.toSeq),
-          "operator" -> operator.simpleString(conf.maxToStringFields)
-        )
-      )
+          "operator" -> operator.simpleString(conf.maxToStringFields)))
     }
   }
 
@@ -769,16 +726,13 @@ class Resolver(
     throw SparkException.internalError(
       msg = s"Failed to resolve operator in single-pass: $operator",
       context = operator.origin.getQueryContext,
-      summary = operator.origin.context.summary()
-    )
+      summary = operator.origin.context.summary())
 
   private def throwUnsupportedExprForOperator(invalidExpressions: Seq[Expression]): Nothing = {
     throw new AnalysisException(
       errorClass = "UNSUPPORTED_EXPR_FOR_OPERATOR",
       messageParameters = Map(
-        "invalidExprSqls" -> makeCommaSeparatedExpressionString(invalidExpressions)
-      )
-    )
+        "invalidExprSqls" -> makeCommaSeparatedExpressionString(invalidExpressions)))
   }
 
   private def makeCommaSeparatedExpressionString(expressions: Seq[Expression]): String = {

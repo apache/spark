@@ -28,8 +28,7 @@ class PrimaryKeyConstraintSuite extends QueryTest with CommandSuiteBase with DDL
     ("NOT ENFORCED NORELY", "NOT ENFORCED NORELY"),
     ("NORELY NOT ENFORCED", "NOT ENFORCED NORELY"),
     ("NORELY", "NOT ENFORCED NORELY"),
-    ("RELY", "NOT ENFORCED RELY")
-  )
+    ("RELY", "NOT ENFORCED RELY"))
 
   test("Add primary key constraint") {
     validConstraintCharacteristics.foreach { case (characteristic, expectedDDL) =>
@@ -106,9 +105,9 @@ class PrimaryKeyConstraintSuite extends QueryTest with CommandSuiteBase with DDL
           exception = error,
           condition = "CONSTRAINT_ALREADY_EXISTS",
           sqlState = "42710",
-          parameters = Map("constraintName" -> "pk1",
-            "oldConstraint" -> "CONSTRAINT pk1 PRIMARY KEY (id) NOT ENFORCED NORELY")
-        )
+          parameters = Map(
+            "constraintName" -> "pk1",
+            "oldConstraint" -> "CONSTRAINT pk1 PRIMARY KEY (id) NOT ENFORCED NORELY"))
       }
     }
   }
@@ -123,8 +122,9 @@ class PrimaryKeyConstraintSuite extends QueryTest with CommandSuiteBase with DDL
       assert(table.constraints.length == 1)
       val constraint = table.constraints.head
       assert(constraint.name() == "pk1")
-      assert(constraint.toDDL ==
-        "CONSTRAINT pk1 PRIMARY KEY (id1, id2) NOT ENFORCED NORELY")
+      assert(
+        constraint.toDDL ==
+          "CONSTRAINT pk1 PRIMARY KEY (id1, id2) NOT ENFORCED NORELY")
     }
   }
 }

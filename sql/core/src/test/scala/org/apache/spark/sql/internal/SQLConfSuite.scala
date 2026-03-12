@@ -42,7 +42,8 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
   test("propagate from spark conf") {
     // We create a new context here to avoid order dependence with other tests that might call
     // clear().
-    val newContext = new SQLContext(SparkSession.builder().sparkContext(sparkContext).getOrCreate())
+    val newContext =
+      new SQLContext(SparkSession.builder().sparkContext(sparkContext).getOrCreate())
     assert(newContext.getConf("spark.sql.testkey", "false") === "true")
   }
 
@@ -92,9 +93,7 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
 
   test("set command for display") {
     sqlConf.clear()
-    checkAnswer(
-      sql("SET").where("key = 'spark.sql.groupByOrdinal'").select("key", "value"),
-      Nil)
+    checkAnswer(sql("SET").where("key = 'spark.sql.groupByOrdinal'").select("key", "value"), Nil)
 
     checkAnswer(
       sql("SET -v").where("key = 'spark.sql.groupByOrdinal'").select("key", "value"),
@@ -122,13 +121,16 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test(s"SPARK-35168: ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS} should respect" +
+  test(
+    s"SPARK-35168: ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS} should respect" +
       s" ${SQLConf.SHUFFLE_PARTITIONS.key}") {
-    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true",
       SQLConf.COALESCE_PARTITIONS_INITIAL_PARTITION_NUM.key -> "1",
       SQLConf.SHUFFLE_PARTITIONS.key -> "2") {
-      checkAnswer(sql(s"SET ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS}"),
+      checkAnswer(
+        sql(s"SET ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS}"),
         Row(SQLConf.SHUFFLE_PARTITIONS.key, "2"))
     }
   }
@@ -160,8 +162,9 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
       sql(s"reset")
       assert(sqlConf.getConf(SQLConf.GROUP_BY_ORDINAL))
       assert(sql(s"set").where(s"key = '${SQLConf.GROUP_BY_ORDINAL.key}'").count() == 0)
-      assert(sqlConf.getConf(SQLConf.OPTIMIZER_EXCLUDED_RULES) ===
-        Some("org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation"))
+      assert(
+        sqlConf.getConf(SQLConf.OPTIMIZER_EXCLUDED_RULES) ===
+          Some("org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation"))
     } finally {
       sql(s"set ${SQLConf.GROUP_BY_ORDINAL.key}=$original")
     }
@@ -208,8 +211,7 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     checkError(
       exception = intercept[AnalysisException](sql("RESET spark.executor.cores")),
       condition = "CANNOT_MODIFY_CONFIG",
-      parameters = Map("key" -> "\"spark.executor.cores\"", "docroot" -> SPARK_DOC_ROOT)
-    )
+      parameters = Map("key" -> "\"spark.executor.cores\"", "docroot" -> SPARK_DOC_ROOT))
 
     // user defined settings
     sql("SET spark.abc=xyz")
@@ -227,8 +229,9 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     // runtime sql configs with optional defaults
     assert(sqlConf.getConf(SQLConf.OPTIMIZER_EXCLUDED_RULES).isEmpty)
     sql(s"RESET ${SQLConf.OPTIMIZER_EXCLUDED_RULES.key}")
-    assert(sqlConf.getConf(SQLConf.OPTIMIZER_EXCLUDED_RULES) ===
-      Some("org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation"))
+    assert(
+      sqlConf.getConf(SQLConf.OPTIMIZER_EXCLUDED_RULES) ===
+        Some("org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation"))
     sql(s"SET ${SQLConf.PLAN_CHANGE_LOG_RULES.key}=abc")
     sql(s"RESET ${SQLConf.PLAN_CHANGE_LOG_RULES.key}")
     assert(sqlConf.getConf(SQLConf.PLAN_CHANGE_LOG_RULES).isEmpty)
@@ -252,8 +255,7 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "confName" -> SQLConf.CASE_SENSITIVE.key,
         "confValue" -> "10",
-        "confType" -> "boolean")
-    )
+        "confType" -> "boolean"))
   }
 
   test("Test ADVISORY_PARTITION_SIZE_IN_BYTES's method") {
@@ -280,8 +282,7 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "confName" -> "spark.sql.adaptive.shuffle.targetPostShuffleInputSize",
         "confValue" -> "-1024b",
-        "confRequirement" -> "advisoryPartitionSizeInBytes must be positive")
-    )
+        "confRequirement" -> "advisoryPartitionSizeInBytes must be positive"))
 
     // Test overflow exception
     checkError(
@@ -293,8 +294,7 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "confName" -> "spark.sql.adaptive.shuffle.targetPostShuffleInputSize",
         "confValue" -> "90000000000g",
-        "confType" -> s"bytes in ${ByteUnit.BYTE}")
-    )
+        "confType" -> s"bytes in ${ByteUnit.BYTE}"))
 
     checkError(
       exception = intercept[SparkIllegalArgumentException] {
@@ -305,8 +305,7 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "confName" -> "spark.sql.adaptive.shuffle.targetPostShuffleInputSize",
         "confValue" -> "-90000000000g",
-        "confType" -> s"bytes in ${ByteUnit.BYTE}")
-    )
+        "confType" -> s"bytes in ${ByteUnit.BYTE}"))
 
     sqlConf.clear()
   }
@@ -327,8 +326,9 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
   test("default value of WAREHOUSE_PATH") {
     // JVM adds a trailing slash if the directory exists and leaves it as-is, if it doesn't
     // In our comparison, strip trailing slash off of both sides, to account for such cases
-    assert(new Path(Utils.resolveURI("spark-warehouse")).toString.stripSuffix("/") === spark
-      .sessionState.conf.warehousePath.stripSuffix("/"))
+    assert(
+      new Path(Utils.resolveURI("spark-warehouse")).toString
+        .stripSuffix("/") === spark.sessionState.conf.warehousePath.stripSuffix("/"))
   }
 
   test("static SQL conf comes from SparkConf") {
@@ -349,13 +349,11 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     checkError(
       exception = intercept[AnalysisException](sql(s"SET ${GLOBAL_TEMP_DATABASE.key}=10")),
       condition = "CANNOT_MODIFY_STATIC_CONFIG",
-      parameters = Map("key" -> "\"spark.sql.globalTempDatabase\"")
-    )
+      parameters = Map("key" -> "\"spark.sql.globalTempDatabase\""))
     checkError(
       exception = intercept[AnalysisException](spark.conf.unset(GLOBAL_TEMP_DATABASE.key)),
       condition = "CANNOT_MODIFY_STATIC_CONFIG",
-      parameters = Map("key" -> "\"spark.sql.globalTempDatabase\"")
-    )
+      parameters = Map("key" -> "\"spark.sql.globalTempDatabase\""))
   }
 
   test("SPARK-36643: Show migration guide when attempting SparkConf") {
@@ -378,16 +376,20 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     sqlConf.clear()
 
     // check default value
-    assert(spark.sessionState.conf.parquetOutputTimestampType ==
-      SQLConf.ParquetOutputTimestampType.INT96)
+    assert(
+      spark.sessionState.conf.parquetOutputTimestampType ==
+        SQLConf.ParquetOutputTimestampType.INT96)
 
-    sqlConf.setConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE,
+    sqlConf.setConf(
+      SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE,
       ParquetOutputTimestampType.TIMESTAMP_MICROS)
-    assert(spark.sessionState.conf.parquetOutputTimestampType ==
-      ParquetOutputTimestampType.TIMESTAMP_MICROS)
+    assert(
+      spark.sessionState.conf.parquetOutputTimestampType ==
+        ParquetOutputTimestampType.TIMESTAMP_MICROS)
     sqlConf.setConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE, ParquetOutputTimestampType.INT96)
-    assert(spark.sessionState.conf.parquetOutputTimestampType ==
-      SQLConf.ParquetOutputTimestampType.INT96)
+    assert(
+      spark.sessionState.conf.parquetOutputTimestampType ==
+        SQLConf.ParquetOutputTimestampType.INT96)
 
     // test invalid conf value
     intercept[IllegalArgumentException] {
@@ -398,11 +400,13 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-22779: correctly compute default value for fallback configs") {
-    val fallback = SQLConf.buildConf("spark.sql.__test__.spark_22779")
+    val fallback = SQLConf
+      .buildConf("spark.sql.__test__.spark_22779")
       .fallbackConf(SQLConf.PARQUET_COMPRESSION)
 
-    assert(spark.conf.get(fallback.key) ===
-      SQLConf.PARQUET_COMPRESSION.defaultValue.get)
+    assert(
+      spark.conf.get(fallback.key) ===
+        SQLConf.PARQUET_COMPRESSION.defaultValue.get)
     assert(spark.conf.get(fallback.key, LZO.lowerCaseName()) === LZO.lowerCaseName())
 
     val displayValue = spark.sessionState.conf.getAllDefinedConfs
@@ -452,9 +456,10 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
   test("log deprecation warnings") {
     val logAppender = new LogAppender("deprecated SQL configs")
     def check(config: String): Unit = {
-      assert(logAppender.loggingEvents.exists(
-        e => e.getLevel == Level.WARN &&
-        e.getMessage.getFormattedMessage.contains(config)))
+      assert(
+        logAppender.loggingEvents.exists(e =>
+          e.getLevel == Level.WARN &&
+            e.getMessage.getFormattedMessage.contains(config)))
     }
 
     val config1 = SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key
@@ -474,8 +479,9 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     spark.conf.set(SQLConf.SESSION_LOCAL_TIMEZONE.key, MIT.getId)
     assert(sql(s"set ${SQLConf.SESSION_LOCAL_TIMEZONE.key}").head().getString(1) === MIT.getId)
     spark.conf.set(SQLConf.SESSION_LOCAL_TIMEZONE.key, "America/Chicago")
-    assert(sql(s"set ${SQLConf.SESSION_LOCAL_TIMEZONE.key}").head().getString(1) ===
-      "America/Chicago")
+    assert(
+      sql(s"set ${SQLConf.SESSION_LOCAL_TIMEZONE.key}").head().getString(1) ===
+        "America/Chicago")
     spark.conf.set(SQLConf.SESSION_LOCAL_TIMEZONE.key, "GMT+8:00")
     assert(sql(s"set ${SQLConf.SESSION_LOCAL_TIMEZONE.key}").head().getString(1) === "GMT+8:00")
 
@@ -489,9 +495,8 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
         spark.conf.set(SQLConf.SESSION_LOCAL_TIMEZONE.key, invalidTz)
       },
       condition = "INVALID_CONF_VALUE.TIME_ZONE",
-      parameters = Map(
-        "confValue" -> invalidTz,
-        "confName" -> SQLConf.SESSION_LOCAL_TIMEZONE.key))
+      parameters =
+        Map("confValue" -> invalidTz, "confName" -> SQLConf.SESSION_LOCAL_TIMEZONE.key))
   }
 
   test("set time zone") {
@@ -508,9 +513,7 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
         sql(s"SET TIME ZONE '$tz'").collect()
       },
       condition = "INVALID_CONF_VALUE.TIME_ZONE",
-      parameters = Map(
-        "confValue" -> tz,
-        "confName" -> SQLConf.SESSION_LOCAL_TIMEZONE.key))
+      parameters = Map("confValue" -> tz, "confName" -> SQLConf.SESSION_LOCAL_TIMEZONE.key))
 
     (-18 to 18).map(v => (v, s"interval '$v' hours")).foreach { case (i, interval) =>
       sql(s"set time zone $interval")
@@ -532,7 +535,8 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
   test("SPARK-34454: configs from the legacy namespace should be internal") {
     val nonInternalLegacyConfigs = spark.sessionState.conf.getAllDefinedConfs
       .filter { case (key, _, _, _) => key.contains("spark.sql.legacy.") }
-    assert(nonInternalLegacyConfigs.isEmpty,
+    assert(
+      nonInternalLegacyConfigs.isEmpty,
       s"""
          |Non internal legacy SQL configs:
          |${nonInternalLegacyConfigs.map(_._1).mkString("\n")}
@@ -560,8 +564,9 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
         "confOptions" -> LegacyBehaviorPolicy.values.mkString(", ")))
   }
 
-  test("[SPARK-54063] STATE_STORE_FORCE_SNAPSHOT_UPLOAD_ON_LAG requires " +
-    "STATE_STORE_COORDINATOR_REPORT_SNAPSHOT_UPLOAD_LAG") {
+  test(
+    "[SPARK-54063] STATE_STORE_FORCE_SNAPSHOT_UPLOAD_ON_LAG requires " +
+      "STATE_STORE_COORDINATOR_REPORT_SNAPSHOT_UPLOAD_LAG") {
     // This should work fine - both enabled
     withSQLConf(
       SQLConf.STATE_STORE_COORDINATOR_REPORT_SNAPSHOT_UPLOAD_LAG.key -> "true",

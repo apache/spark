@@ -43,7 +43,10 @@ class InvokeProcedures(session: SparkSession) extends Rule[LogicalPlan] {
       }
   }
 
-  private def invoke(procedure: BoundProcedure, args: Seq[Expression], call: Call): LogicalPlan = {
+  private def invoke(
+      procedure: BoundProcedure,
+      args: Seq[Expression],
+      call: Call): LogicalPlan = {
     val input = toInternalRow(args)
     val scanIterator = procedure.call(input)
     val relations = scanIterator.asScala.map(toRelation).toSeq
@@ -51,11 +54,7 @@ class InvokeProcedures(session: SparkSession) extends Rule[LogicalPlan] {
     // recognizes it as an eagerly executed SQL Command.
     relations match {
       case Nil =>
-        CommandResult(
-          Seq.empty,
-          call,
-          LocalTableScanExec(Seq.empty, Seq.empty, None),
-          Seq.empty)
+        CommandResult(Seq.empty, call, LocalTableScanExec(Seq.empty, Seq.empty, None), Seq.empty)
       case Seq(relation: LocalRelation) =>
         CommandResult(
           relation.output,
@@ -63,7 +62,8 @@ class InvokeProcedures(session: SparkSession) extends Rule[LogicalPlan] {
           LocalTableScanExec(relation.output, relation.data, None),
           relation.data)
       case _ =>
-        throw SparkException.internalError(s"Multi-result procedures are temporarily not supported")
+        throw SparkException.internalError(
+          s"Multi-result procedures are temporarily not supported")
     }
   }
 

@@ -31,7 +31,8 @@ class WindowEvaluatorFactory(
     val orderSpec: Seq[SortOrder],
     val childOutput: Seq[Attribute],
     val spillSize: SQLMetric)
-  extends PartitionEvaluatorFactory[InternalRow, InternalRow] with WindowEvaluatorFactoryBase {
+    extends PartitionEvaluatorFactory[InternalRow, InternalRow]
+    with WindowEvaluatorFactoryBase {
 
   override def createEvaluator(): PartitionEvaluator[InternalRow, InternalRow] = {
     new WindowPartitionEvaluator()
@@ -63,7 +64,7 @@ class WindowEvaluatorFactory(
             val types = partitionSpec.map(_.dataType)
             val ordering = InterpretedOrdering.forSchema(types)
             (key1: UnsafeRow, key2: UnsafeRow) => ordering.compare(key1, key2) == 0
-        }
+          }
 
         // Manage the stream and the grouping.
         var nextRow: UnsafeRow = null

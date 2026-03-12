@@ -27,9 +27,9 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
 /**
- * Unit tests for execution nodes from SqlScriptingExecutionNode.scala.
- * Execution nodes are constructed manually and iterated through.
- * It is then checked if the leaf statements have been iterated in the expected order.
+ * Unit tests for execution nodes from SqlScriptingExecutionNode.scala. Execution nodes are
+ * constructed manually and iterated through. It is then checked if the leaf statements have been
+ * iterated in the expected order.
  */
 class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSession {
   // Helpers
@@ -39,7 +39,12 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       isScope: Boolean = false,
       context: SqlScriptingExecutionContext = null,
       triggerToExceptionHandlerMap: TriggerToExceptionHandlerMap = null)
-    extends CompoundBodyExec(statements, label, isScope, context, triggerToExceptionHandlerMap) {
+      extends CompoundBodyExec(
+        statements,
+        label,
+        isScope,
+        context,
+        triggerToExceptionHandlerMap) {
 
     // No-op to remove unnecessary logic for these tests.
     override def enterScope(): Unit = ()
@@ -55,35 +60,27 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       override val label: Option[String],
       session: SparkSession,
       context: SqlScriptingExecutionContext = MockScriptingContext())
-    extends ForStatementExec(
-      query,
-      variableName,
-      body.statements,
-      label,
-      session,
-      context)
+      extends ForStatementExec(query, variableName, body.statements, label, session, context)
 
   case class TestLeafStatement(testVal: String) extends LeafStatementExec {
     override def reset(): Unit = ()
   }
 
   case class TestIfElseCondition(condVal: Boolean, description: String)
-    extends SingleStatementExec(
-      parsedPlan = Project(Seq(Alias(Literal(condVal), description)()), OneRowRelation()),
-      Origin(startIndex = Some(0), stopIndex = Some(description.length)),
-      Map.empty,
-      isInternal = false,
-      null
-    )
+      extends SingleStatementExec(
+        parsedPlan = Project(Seq(Alias(Literal(condVal), description)()), OneRowRelation()),
+        Origin(startIndex = Some(0), stopIndex = Some(description.length)),
+        Map.empty,
+        isInternal = false,
+        null)
 
   case class TestIntegerProjection(value: Int, description: String)
-    extends SingleStatementExec(
-      parsedPlan = Project(Seq(Alias(Literal(value), description)()), OneRowRelation()),
-      Origin(startIndex = Some(0), stopIndex = Some(description.length)),
-      Map.empty,
-      isInternal = false,
-      null
-  )
+      extends SingleStatementExec(
+        parsedPlan = Project(Seq(Alias(Literal(value), description)()), OneRowRelation()),
+        Origin(startIndex = Some(0), stopIndex = Some(description.length)),
+        Map.empty,
+        isInternal = false,
+        null)
 
   case class DummyLogicalPlan() extends LeafNode {
     override def output: Seq[Attribute] = Seq.empty
@@ -91,22 +88,19 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
 
   case class MockScriptingContext() extends SqlScriptingExecutionContext {
     override def enterScope(
-      label: String,
-      triggerHandlerMap: TriggerToExceptionHandlerMap
-    ): Unit = ()
+        label: String,
+        triggerHandlerMap: TriggerToExceptionHandlerMap): Unit = ()
 
     override def exitScope(label: String): Unit = ()
   }
 
-  case class TestLoopCondition(
-      condVal: Boolean, reps: Int, description: String)
-    extends SingleStatementExec(
-      parsedPlan = DummyLogicalPlan(),
-      Origin(startIndex = Some(0), stopIndex = Some(description.length)),
-      Map.empty,
-      isInternal = false,
-      null
-    )
+  case class TestLoopCondition(condVal: Boolean, reps: Int, description: String)
+      extends SingleStatementExec(
+        parsedPlan = DummyLogicalPlan(),
+        Origin(startIndex = Some(0), stopIndex = Some(description.length)),
+        Map.empty,
+        isInternal = false,
+        null)
 
   class LoopBooleanConditionEvaluator(condition: TestLoopCondition) {
     private var callCount: Int = 0
@@ -126,7 +120,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       condition: TestLoopCondition,
       body: TestCompoundBody,
       label: Option[String] = None)
-    extends WhileStatementExec(condition, body, label, spark) {
+      extends WhileStatementExec(condition, body, label, spark) {
 
     private val evaluator = new LoopBooleanConditionEvaluator(condition)
 
@@ -139,13 +133,13 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       condition: TestLoopCondition,
       body: TestCompoundBody,
       label: Option[String] = None)
-    extends RepeatStatementExec(condition, body, label, spark) {
+      extends RepeatStatementExec(condition, body, label, spark) {
 
     private val evaluator = new LoopBooleanConditionEvaluator(condition)
 
     override def evaluateBooleanCondition(
-      session: SparkSession,
-      statement: LeafStatementExec): Boolean = evaluator.evaluateLoopBooleanCondition()
+        session: SparkSession,
+        statement: LeafStatementExec): Boolean = evaluator.evaluateLoopBooleanCondition()
   }
 
   case class MockQuery(numberOfRows: Int, columnName: String, description: String)
@@ -159,10 +153,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       val data = Seq.range(0, numberOfRows).map(Row(_))
       val schema = List(StructField(columnName, IntegerType))
 
-      spark.createDataFrame(
-        spark.sparkContext.parallelize(data),
-        StructType(schema)
-      )
+      spark.createDataFrame(spark.sparkContext.parallelize(data), StructType(schema))
     }
   }
 
@@ -177,11 +168,11 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       case forStmt: TestForStatement => forStmt.label.get
       case _: NoOpStatementExec => "NOOP"
       case createStmt: SingleStatementExec
-        if createStmt.parsedPlan.isInstanceOf[CreateVariable] => "CreateVariable"
-      case setStmt: SingleStatementExec
-        if setStmt.parsedPlan.isInstanceOf[SetVariable] => "SetVariable"
-      case project: SingleStatementExec if project.parsedPlan.isInstanceOf[Project]
-      => "Project"
+          if createStmt.parsedPlan.isInstanceOf[CreateVariable] =>
+        "CreateVariable"
+      case setStmt: SingleStatementExec if setStmt.parsedPlan.isInstanceOf[SetVariable] =>
+        "SetVariable"
+      case project: SingleStatementExec if project.parsedPlan.isInstanceOf[Project] => "Project"
       case _ => fail("Unexpected statement: " + statement)
     }
 
@@ -197,8 +188,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       Seq(
         TestLeafStatement("one"),
         TestLeafStatement("two"),
-        TestLeafStatement("three")))
-      .getTreeIterator
+        TestLeafStatement("three"))).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq("one", "two", "three"))
   }
@@ -208,884 +198,745 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       Seq(
         TestCompoundBody(Seq(TestLeafStatement("one"), TestLeafStatement("two"))),
         TestLeafStatement("three"),
-        TestCompoundBody(Seq(TestLeafStatement("four"), TestLeafStatement("five")))))
-      .getTreeIterator
+        TestCompoundBody(
+          Seq(TestLeafStatement("four"), TestLeafStatement("five"))))).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq("one", "two", "three", "four", "five"))
   }
 
   test("if else - enter body of the IF clause") {
-    val iter = TestCompoundBody(Seq(
-      new IfElseStatementExec(
-        conditions = Seq(
-          TestIfElseCondition(condVal = true, description = "con1")
-        ),
-        conditionalBodies = Seq(
-          TestCompoundBody(Seq(TestLeafStatement("body1")))
-        ),
+    val iter = TestCompoundBody(
+      Seq(new IfElseStatementExec(
+        conditions = Seq(TestIfElseCondition(condVal = true, description = "con1")),
+        conditionalBodies = Seq(TestCompoundBody(Seq(TestLeafStatement("body1")))),
         elseBody = Some(TestCompoundBody(Seq(TestLeafStatement("body2")))),
-        session = spark
-      )
-    )).getTreeIterator
+        session = spark))).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq("con1", "body1"))
   }
 
   test("if else - enter body of the ELSE clause") {
-    val iter = TestCompoundBody(Seq(
-      new IfElseStatementExec(
-        conditions = Seq(
-          TestIfElseCondition(condVal = false, description = "con1")
-        ),
-        conditionalBodies = Seq(
-          TestCompoundBody(Seq(TestLeafStatement("body1")))
-        ),
+    val iter = TestCompoundBody(
+      Seq(new IfElseStatementExec(
+        conditions = Seq(TestIfElseCondition(condVal = false, description = "con1")),
+        conditionalBodies = Seq(TestCompoundBody(Seq(TestLeafStatement("body1")))),
         elseBody = Some(TestCompoundBody(Seq(TestLeafStatement("body2")))),
-        session = spark
-      )
-    )).getTreeIterator
+        session = spark))).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq("con1", "body2"))
   }
 
   test("if else if - enter body of the IF clause") {
-    val iter = TestCompoundBody(Seq(
-      new IfElseStatementExec(
-        conditions = Seq(
-          TestIfElseCondition(condVal = true, description = "con1"),
-          TestIfElseCondition(condVal = false, description = "con2")
-        ),
-        conditionalBodies = Seq(
-          TestCompoundBody(Seq(TestLeafStatement("body1"))),
-          TestCompoundBody(Seq(TestLeafStatement("body2")))
-        ),
-        elseBody = Some(TestCompoundBody(Seq(TestLeafStatement("body3")))),
-        session = spark
-      )
-    )).getTreeIterator
+    val iter =
+      TestCompoundBody(
+        Seq(
+          new IfElseStatementExec(
+            conditions = Seq(
+              TestIfElseCondition(condVal = true, description = "con1"),
+              TestIfElseCondition(condVal = false, description = "con2")),
+            conditionalBodies = Seq(
+              TestCompoundBody(Seq(TestLeafStatement("body1"))),
+              TestCompoundBody(Seq(TestLeafStatement("body2")))),
+            elseBody = Some(TestCompoundBody(Seq(TestLeafStatement("body3")))),
+            session = spark))).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq("con1", "body1"))
   }
 
   test("if else if - enter body of the ELSE IF clause") {
-    val iter = TestCompoundBody(Seq(
-      new IfElseStatementExec(
-        conditions = Seq(
-          TestIfElseCondition(condVal = false, description = "con1"),
-          TestIfElseCondition(condVal = true, description = "con2")
-        ),
-        conditionalBodies = Seq(
-          TestCompoundBody(Seq(TestLeafStatement("body1"))),
-          TestCompoundBody(Seq(TestLeafStatement("body2")))
-        ),
-        elseBody = Some(TestCompoundBody(Seq(TestLeafStatement("body3")))),
-        session = spark
-      )
-    )).getTreeIterator
+    val iter =
+      TestCompoundBody(
+        Seq(
+          new IfElseStatementExec(
+            conditions = Seq(
+              TestIfElseCondition(condVal = false, description = "con1"),
+              TestIfElseCondition(condVal = true, description = "con2")),
+            conditionalBodies = Seq(
+              TestCompoundBody(Seq(TestLeafStatement("body1"))),
+              TestCompoundBody(Seq(TestLeafStatement("body2")))),
+            elseBody = Some(TestCompoundBody(Seq(TestLeafStatement("body3")))),
+            session = spark))).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq("con1", "con2", "body2"))
   }
 
   test("if else if - enter body of the second ELSE IF clause") {
-    val iter = TestCompoundBody(Seq(
-      new IfElseStatementExec(
-        conditions = Seq(
-          TestIfElseCondition(condVal = false, description = "con1"),
-          TestIfElseCondition(condVal = false, description = "con2"),
-          TestIfElseCondition(condVal = true, description = "con3")
-        ),
-        conditionalBodies = Seq(
-          TestCompoundBody(Seq(TestLeafStatement("body1"))),
-          TestCompoundBody(Seq(TestLeafStatement("body2"))),
-          TestCompoundBody(Seq(TestLeafStatement("body3")))
-        ),
-        elseBody = Some(TestCompoundBody(Seq(TestLeafStatement("body4")))),
-        session = spark
-      )
-    )).getTreeIterator
+    val iter =
+      TestCompoundBody(
+        Seq(
+          new IfElseStatementExec(
+            conditions = Seq(
+              TestIfElseCondition(condVal = false, description = "con1"),
+              TestIfElseCondition(condVal = false, description = "con2"),
+              TestIfElseCondition(condVal = true, description = "con3")),
+            conditionalBodies = Seq(
+              TestCompoundBody(Seq(TestLeafStatement("body1"))),
+              TestCompoundBody(Seq(TestLeafStatement("body2"))),
+              TestCompoundBody(Seq(TestLeafStatement("body3")))),
+            elseBody = Some(TestCompoundBody(Seq(TestLeafStatement("body4")))),
+            session = spark))).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq("con1", "con2", "con3", "body3"))
   }
 
   test("if else if - enter body of the ELSE clause") {
-    val iter = TestCompoundBody(Seq(
-      new IfElseStatementExec(
-        conditions = Seq(
-          TestIfElseCondition(condVal = false, description = "con1"),
-          TestIfElseCondition(condVal = false, description = "con2")
-        ),
-        conditionalBodies = Seq(
-          TestCompoundBody(Seq(TestLeafStatement("body1"))),
-          TestCompoundBody(Seq(TestLeafStatement("body2")))
-        ),
-        elseBody = Some(TestCompoundBody(Seq(TestLeafStatement("body3")))),
-        session = spark
-      )
-    )).getTreeIterator
+    val iter =
+      TestCompoundBody(
+        Seq(
+          new IfElseStatementExec(
+            conditions = Seq(
+              TestIfElseCondition(condVal = false, description = "con1"),
+              TestIfElseCondition(condVal = false, description = "con2")),
+            conditionalBodies = Seq(
+              TestCompoundBody(Seq(TestLeafStatement("body1"))),
+              TestCompoundBody(Seq(TestLeafStatement("body2")))),
+            elseBody = Some(TestCompoundBody(Seq(TestLeafStatement("body3")))),
+            session = spark))).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq("con1", "con2", "body3"))
   }
 
   test("if else if - without else (successful check)") {
-    val iter = TestCompoundBody(Seq(
-      new IfElseStatementExec(
+    val iter = TestCompoundBody(
+      Seq(new IfElseStatementExec(
         conditions = Seq(
           TestIfElseCondition(condVal = false, description = "con1"),
-          TestIfElseCondition(condVal = true, description = "con2")
-        ),
+          TestIfElseCondition(condVal = true, description = "con2")),
         conditionalBodies = Seq(
           TestCompoundBody(Seq(TestLeafStatement("body1"))),
-          TestCompoundBody(Seq(TestLeafStatement("body2")))
-        ),
+          TestCompoundBody(Seq(TestLeafStatement("body2")))),
         elseBody = None,
-        session = spark
-      )
-    )).getTreeIterator
+        session = spark))).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq("con1", "con2", "body2"))
   }
 
   test("if else if - without else (unsuccessful checks)") {
-    val iter = TestCompoundBody(Seq(
-      new IfElseStatementExec(
+    val iter = TestCompoundBody(
+      Seq(new IfElseStatementExec(
         conditions = Seq(
           TestIfElseCondition(condVal = false, description = "con1"),
-          TestIfElseCondition(condVal = false, description = "con2")
-        ),
+          TestIfElseCondition(condVal = false, description = "con2")),
         conditionalBodies = Seq(
           TestCompoundBody(Seq(TestLeafStatement("body1"))),
-          TestCompoundBody(Seq(TestLeafStatement("body2")))
-        ),
+          TestCompoundBody(Seq(TestLeafStatement("body2")))),
         elseBody = None,
-        session = spark
-      )
-    )).getTreeIterator
+        session = spark))).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq("con1", "con2"))
   }
 
   test("while - doesn't enter body") {
-    val iter = TestCompoundBody(Seq(
-      TestWhile(
-        condition = TestLoopCondition(condVal = true, reps = 0, description = "con1"),
-        body = TestCompoundBody(Seq(TestLeafStatement("body1")))
-      )
-    )).getTreeIterator
+    val iter = TestCompoundBody(
+      Seq(
+        TestWhile(
+          condition = TestLoopCondition(condVal = true, reps = 0, description = "con1"),
+          body = TestCompoundBody(Seq(TestLeafStatement("body1")))))).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq("con1"))
   }
 
   test("while - enters body once") {
-    val iter = TestCompoundBody(Seq(
-      TestWhile(
-        condition = TestLoopCondition(condVal = true, reps = 1, description = "con1"),
-        body = TestCompoundBody(Seq(TestLeafStatement("body1")))
-      )
-    )).getTreeIterator
+    val iter = TestCompoundBody(
+      Seq(
+        TestWhile(
+          condition = TestLoopCondition(condVal = true, reps = 1, description = "con1"),
+          body = TestCompoundBody(Seq(TestLeafStatement("body1")))))).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq("con1", "body1", "con1"))
   }
 
   test("while - enters body with multiple statements multiple times") {
-    val iter = TestCompoundBody(Seq(
-      TestWhile(
+    val iter = TestCompoundBody(
+      Seq(TestWhile(
         condition = TestLoopCondition(condVal = true, reps = 2, description = "con1"),
         body = TestCompoundBody(Seq(
           TestLeafStatement("statement1"),
-          TestLeafStatement("statement2")))
-      )
-    )).getTreeIterator
+          TestLeafStatement("statement2")))))).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
-    assert(statements === Seq("con1", "statement1", "statement2",
-                              "con1", "statement1", "statement2", "con1"))
+    assert(
+      statements === Seq(
+        "con1",
+        "statement1",
+        "statement2",
+        "con1",
+        "statement1",
+        "statement2",
+        "con1"))
   }
 
   test("nested while - 2 times outer 2 times inner") {
-    val iter = TestCompoundBody(Seq(
-      TestWhile(
+    val iter = TestCompoundBody(
+      Seq(TestWhile(
         condition = TestLoopCondition(condVal = true, reps = 2, description = "con1"),
-        body = TestCompoundBody(Seq(
-          TestWhile(
-            condition = TestLoopCondition(condVal = true, reps = 2, description = "con2"),
-            body = TestCompoundBody(Seq(TestLeafStatement("body1")))
-          ))
-        )
-      )
-    )).getTreeIterator
+        body = TestCompoundBody(Seq(TestWhile(
+          condition = TestLoopCondition(condVal = true, reps = 2, description = "con2"),
+          body = TestCompoundBody(Seq(TestLeafStatement("body1"))))))))).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
-    assert(statements === Seq("con1", "con2", "body1",
-                                      "con2", "body1", "con2",
-                              "con1", "con2", "body1",
-                                      "con2", "body1", "con2", "con1"))
+    assert(
+      statements === Seq(
+        "con1",
+        "con2",
+        "body1",
+        "con2",
+        "body1",
+        "con2",
+        "con1",
+        "con2",
+        "body1",
+        "con2",
+        "body1",
+        "con2",
+        "con1"))
   }
 
   test("repeat - true condition") {
-    val iter = TestCompoundBody(Seq(
-      TestRepeat(
-        condition = TestLoopCondition(condVal = false, reps = 0, description = "con1"),
-        body = TestCompoundBody(Seq(TestLeafStatement("body1")))
-      )
-    )).getTreeIterator
+    val iter = TestCompoundBody(
+      Seq(
+        TestRepeat(
+          condition = TestLoopCondition(condVal = false, reps = 0, description = "con1"),
+          body = TestCompoundBody(Seq(TestLeafStatement("body1")))))).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq("body1", "con1"))
   }
 
   test("repeat - condition false once") {
-    val iter = TestCompoundBody(Seq(
-      TestRepeat(
-        condition = TestLoopCondition(condVal = false, reps = 1, description = "con1"),
-        body = TestCompoundBody(Seq(TestLeafStatement("body1")))
-      )
-    )).getTreeIterator
+    val iter = TestCompoundBody(
+      Seq(
+        TestRepeat(
+          condition = TestLoopCondition(condVal = false, reps = 1, description = "con1"),
+          body = TestCompoundBody(Seq(TestLeafStatement("body1")))))).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq("body1", "con1", "body1", "con1"))
   }
 
   test("repeat - enters body with multiple statements multiple times") {
-    val iter = TestCompoundBody(Seq(
-      TestRepeat(
+    val iter = TestCompoundBody(
+      Seq(TestRepeat(
         condition = TestLoopCondition(condVal = false, reps = 2, description = "con1"),
         body = TestCompoundBody(Seq(
           TestLeafStatement("statement1"),
-          TestLeafStatement("statement2")))
-      )
-    )).getTreeIterator
+          TestLeafStatement("statement2")))))).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
-    assert(statements === Seq("statement1", "statement2", "con1", "statement1", "statement2",
-      "con1", "statement1", "statement2", "con1"))
+    assert(
+      statements === Seq(
+        "statement1",
+        "statement2",
+        "con1",
+        "statement1",
+        "statement2",
+        "con1",
+        "statement1",
+        "statement2",
+        "con1"))
   }
 
   test("nested repeat") {
-    val iter = TestCompoundBody(Seq(
-      TestRepeat(
+    val iter = TestCompoundBody(
+      Seq(TestRepeat(
         condition = TestLoopCondition(condVal = false, reps = 2, description = "con1"),
-        body = TestCompoundBody(Seq(
-          TestRepeat(
-            condition = TestLoopCondition(condVal = false, reps = 2, description = "con2"),
-            body = TestCompoundBody(Seq(TestLeafStatement("body1")))
-          ))
-        )
-      )
-    )).getTreeIterator
+        body = TestCompoundBody(Seq(TestRepeat(
+          condition = TestLoopCondition(condVal = false, reps = 2, description = "con2"),
+          body = TestCompoundBody(Seq(TestLeafStatement("body1"))))))))).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
-    assert(statements === Seq("body1", "con2", "body1",
-      "con2", "body1", "con2",
-      "con1", "body1", "con2",
-      "body1", "con2", "body1",
-      "con2", "con1", "body1",
-      "con2", "body1", "con2",
-      "body1", "con2", "con1"))
+    assert(
+      statements === Seq(
+        "body1",
+        "con2",
+        "body1",
+        "con2",
+        "body1",
+        "con2",
+        "con1",
+        "body1",
+        "con2",
+        "body1",
+        "con2",
+        "body1",
+        "con2",
+        "con1",
+        "body1",
+        "con2",
+        "body1",
+        "con2",
+        "body1",
+        "con2",
+        "con1"))
   }
 
   test("leave compound block") {
     val iter = TestCompoundBody(
-      statements = Seq(
-        TestLeafStatement("one"),
-        new LeaveStatementExec("lbl")
-      ),
-      label = Some("lbl")
-    ).getTreeIterator
+      statements = Seq(TestLeafStatement("one"), new LeaveStatementExec("lbl")),
+      label = Some("lbl")).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq("one", "lbl"))
   }
 
   test("leave while loop") {
-    val iter = TestCompoundBody(
-      statements = Seq(
-        TestWhile(
-          condition = TestLoopCondition(condVal = true, reps = 2, description = "con1"),
-          body = TestCompoundBody(Seq(
-            TestLeafStatement("body1"),
-            new LeaveStatementExec("lbl"))
-          ),
-          label = Some("lbl")
-        )
-      )
-    ).getTreeIterator
+    val iter = TestCompoundBody(statements = Seq(
+      TestWhile(
+        condition = TestLoopCondition(condVal = true, reps = 2, description = "con1"),
+        body = TestCompoundBody(Seq(TestLeafStatement("body1"), new LeaveStatementExec("lbl"))),
+        label = Some("lbl")))).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq("con1", "body1", "lbl"))
   }
 
   test("leave repeat loop") {
-    val iter = TestCompoundBody(
-      statements = Seq(
-        TestRepeat(
-          condition = TestLoopCondition(condVal = false, reps = 2, description = "con1"),
-          body = TestCompoundBody(Seq(
-            TestLeafStatement("body1"),
-            new LeaveStatementExec("lbl"))
-          ),
-          label = Some("lbl")
-        )
-      )
-    ).getTreeIterator
+    val iter = TestCompoundBody(statements = Seq(
+      TestRepeat(
+        condition = TestLoopCondition(condVal = false, reps = 2, description = "con1"),
+        body = TestCompoundBody(Seq(TestLeafStatement("body1"), new LeaveStatementExec("lbl"))),
+        label = Some("lbl")))).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq("body1", "lbl"))
   }
 
   test("iterate while loop") {
-    val iter = TestCompoundBody(
-      statements = Seq(
-        TestWhile(
-          condition = TestLoopCondition(condVal = true, reps = 2, description = "con1"),
-          body = TestCompoundBody(Seq(
+    val iter = TestCompoundBody(statements = Seq(
+      TestWhile(
+        condition = TestLoopCondition(condVal = true, reps = 2, description = "con1"),
+        body = TestCompoundBody(
+          Seq(
             TestLeafStatement("body1"),
             new IterateStatementExec("lbl"),
-            TestLeafStatement("body2"))
-          ),
-          label = Some("lbl")
-        )
-      )
-    ).getTreeIterator
+            TestLeafStatement("body2"))),
+        label = Some("lbl")))).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq("con1", "body1", "lbl", "con1", "body1", "lbl", "con1"))
   }
 
   test("iterate repeat loop") {
-    val iter = TestCompoundBody(
-      statements = Seq(
-        TestRepeat(
-          condition = TestLoopCondition(condVal = false, reps = 2, description = "con1"),
-          body = TestCompoundBody(Seq(
+    val iter = TestCompoundBody(statements = Seq(
+      TestRepeat(
+        condition = TestLoopCondition(condVal = false, reps = 2, description = "con1"),
+        body = TestCompoundBody(
+          Seq(
             TestLeafStatement("body1"),
             new IterateStatementExec("lbl"),
-            TestLeafStatement("body2"))
-          ),
-          label = Some("lbl")
-        )
-      )
-    ).getTreeIterator
+            TestLeafStatement("body2"))),
+        label = Some("lbl")))).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(
       statements === Seq("body1", "lbl", "con1", "body1", "lbl", "con1", "body1", "lbl", "con1"))
   }
 
   test("leave outer loop from nested while loop") {
-    val iter = TestCompoundBody(
-      statements = Seq(
-        TestWhile(
-          condition = TestLoopCondition(condVal = true, reps = 2, description = "con1"),
-          body = TestCompoundBody(Seq(
-            TestWhile(
-              condition = TestLoopCondition(condVal = true, reps = 2, description = "con2"),
-              body = TestCompoundBody(Seq(
-                TestLeafStatement("body1"),
-                new LeaveStatementExec("lbl"))
-              ),
-              label = Some("lbl2")
-            )
-          )),
-          label = Some("lbl")
-        )
-      )
-    ).getTreeIterator
+    val iter = TestCompoundBody(statements = Seq(
+      TestWhile(
+        condition = TestLoopCondition(condVal = true, reps = 2, description = "con1"),
+        body = TestCompoundBody(Seq(TestWhile(
+          condition = TestLoopCondition(condVal = true, reps = 2, description = "con2"),
+          body = TestCompoundBody(Seq(TestLeafStatement("body1"), new LeaveStatementExec("lbl"))),
+          label = Some("lbl2")))),
+        label = Some("lbl")))).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq("con1", "con2", "body1", "lbl"))
   }
 
   test("leave outer loop from nested repeat loop") {
-    val iter = TestCompoundBody(
-      statements = Seq(
-        TestRepeat(
-          condition = TestLoopCondition(condVal = false, reps = 2, description = "con1"),
-          body = TestCompoundBody(Seq(
-            TestRepeat(
-              condition = TestLoopCondition(condVal = false, reps = 2, description = "con2"),
-              body = TestCompoundBody(Seq(
-                TestLeafStatement("body1"),
-                new LeaveStatementExec("lbl"))
-              ),
-              label = Some("lbl2")
-            )
-          )),
-          label = Some("lbl")
-        )
-      )
-    ).getTreeIterator
+    val iter = TestCompoundBody(statements = Seq(
+      TestRepeat(
+        condition = TestLoopCondition(condVal = false, reps = 2, description = "con1"),
+        body = TestCompoundBody(Seq(TestRepeat(
+          condition = TestLoopCondition(condVal = false, reps = 2, description = "con2"),
+          body = TestCompoundBody(Seq(TestLeafStatement("body1"), new LeaveStatementExec("lbl"))),
+          label = Some("lbl2")))),
+        label = Some("lbl")))).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq("body1", "lbl"))
   }
 
   test("iterate outer loop from nested while loop") {
-    val iter = TestCompoundBody(
-      statements = Seq(
-        TestWhile(
-          condition = TestLoopCondition(condVal = true, reps = 2, description = "con1"),
-          body = TestCompoundBody(Seq(
-            TestWhile(
+    val iter =
+      TestCompoundBody(statements =
+        Seq(
+          TestWhile(
+            condition = TestLoopCondition(condVal = true, reps = 2, description = "con1"),
+            body = TestCompoundBody(Seq(TestWhile(
               condition = TestLoopCondition(condVal = true, reps = 2, description = "con2"),
               body = TestCompoundBody(Seq(
                 TestLeafStatement("body1"),
                 new IterateStatementExec("lbl"),
-                TestLeafStatement("body2"))
-              ),
-              label = Some("lbl2")
-            )
-          )),
-          label = Some("lbl")
-        )
-      )
-    ).getTreeIterator
+                TestLeafStatement("body2"))),
+              label = Some("lbl2")))),
+            label = Some("lbl")))).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
-    assert(statements === Seq(
-      "con1", "con2", "body1", "lbl",
-      "con1", "con2", "body1", "lbl",
-      "con1"))
+    assert(
+      statements === Seq("con1", "con2", "body1", "lbl", "con1", "con2", "body1", "lbl", "con1"))
   }
 
   test("iterate outer loop from nested repeat loop") {
-    val iter = TestCompoundBody(
-      statements = Seq(
-        TestRepeat(
-          condition = TestLoopCondition(condVal = false, reps = 2, description = "con1"),
-          body = TestCompoundBody(Seq(
-            TestRepeat(
+    val iter =
+      TestCompoundBody(statements =
+        Seq(
+          TestRepeat(
+            condition = TestLoopCondition(condVal = false, reps = 2, description = "con1"),
+            body = TestCompoundBody(Seq(TestRepeat(
               condition = TestLoopCondition(condVal = false, reps = 2, description = "con2"),
               body = TestCompoundBody(Seq(
                 TestLeafStatement("body1"),
                 new IterateStatementExec("lbl"),
-                TestLeafStatement("body2"))
-              ),
-              label = Some("lbl2")
-            )
-          )),
-          label = Some("lbl")
-        )
-      )
-    ).getTreeIterator
+                TestLeafStatement("body2"))),
+              label = Some("lbl2")))),
+            label = Some("lbl")))).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
-    assert(statements === Seq(
-      "body1", "lbl", "con1",
-      "body1", "lbl", "con1",
-      "body1", "lbl", "con1"))
+    assert(
+      statements === Seq("body1", "lbl", "con1", "body1", "lbl", "con1", "body1", "lbl", "con1"))
   }
 
   test("searched case - enter first WHEN clause") {
-    val iter = TestCompoundBody(Seq(
-      new SearchedCaseStatementExec(
-        conditions = Seq(
-          TestIfElseCondition(condVal = true, description = "con1"),
-          TestIfElseCondition(condVal = false, description = "con2")
-        ),
-        conditionalBodies = Seq(
-          TestCompoundBody(Seq(TestLeafStatement("body1"))),
-          TestCompoundBody(Seq(TestLeafStatement("body2")))
-        ),
-        elseBody = Some(TestCompoundBody(Seq(TestLeafStatement("body3")))),
-        session = spark
-      )
-    )).getTreeIterator
+    val iter =
+      TestCompoundBody(
+        Seq(
+          new SearchedCaseStatementExec(
+            conditions = Seq(
+              TestIfElseCondition(condVal = true, description = "con1"),
+              TestIfElseCondition(condVal = false, description = "con2")),
+            conditionalBodies = Seq(
+              TestCompoundBody(Seq(TestLeafStatement("body1"))),
+              TestCompoundBody(Seq(TestLeafStatement("body2")))),
+            elseBody = Some(TestCompoundBody(Seq(TestLeafStatement("body3")))),
+            session = spark))).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq("con1", "body1"))
   }
 
   test("searched case - enter body of the ELSE clause") {
-    val iter = TestCompoundBody(Seq(
-      new SearchedCaseStatementExec(
-        conditions = Seq(
-          TestIfElseCondition(condVal = false, description = "con1")
-        ),
-        conditionalBodies = Seq(
-          TestCompoundBody(Seq(TestLeafStatement("body1")))
-        ),
+    val iter = TestCompoundBody(
+      Seq(new SearchedCaseStatementExec(
+        conditions = Seq(TestIfElseCondition(condVal = false, description = "con1")),
+        conditionalBodies = Seq(TestCompoundBody(Seq(TestLeafStatement("body1")))),
         elseBody = Some(TestCompoundBody(Seq(TestLeafStatement("body2")))),
-        session = spark
-      )
-    )).getTreeIterator
+        session = spark))).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq("con1", "body2"))
   }
 
   test("searched case - enter second WHEN clause") {
-    val iter = TestCompoundBody(Seq(
-      new SearchedCaseStatementExec(
-        conditions = Seq(
-          TestIfElseCondition(condVal = false, description = "con1"),
-          TestIfElseCondition(condVal = true, description = "con2")
-        ),
-        conditionalBodies = Seq(
-          TestCompoundBody(Seq(TestLeafStatement("body1"))),
-          TestCompoundBody(Seq(TestLeafStatement("body2")))
-        ),
-        elseBody = Some(TestCompoundBody(Seq(TestLeafStatement("body3")))),
-        session = spark
-      )
-    )).getTreeIterator
+    val iter =
+      TestCompoundBody(
+        Seq(
+          new SearchedCaseStatementExec(
+            conditions = Seq(
+              TestIfElseCondition(condVal = false, description = "con1"),
+              TestIfElseCondition(condVal = true, description = "con2")),
+            conditionalBodies = Seq(
+              TestCompoundBody(Seq(TestLeafStatement("body1"))),
+              TestCompoundBody(Seq(TestLeafStatement("body2")))),
+            elseBody = Some(TestCompoundBody(Seq(TestLeafStatement("body3")))),
+            session = spark))).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq("con1", "con2", "body2"))
   }
 
   test("searched case - without else (successful check)") {
-    val iter = TestCompoundBody(Seq(
-      new SearchedCaseStatementExec(
+    val iter = TestCompoundBody(
+      Seq(new SearchedCaseStatementExec(
         conditions = Seq(
           TestIfElseCondition(condVal = false, description = "con1"),
-          TestIfElseCondition(condVal = true, description = "con2")
-        ),
+          TestIfElseCondition(condVal = true, description = "con2")),
         conditionalBodies = Seq(
           TestCompoundBody(Seq(TestLeafStatement("body1"))),
-          TestCompoundBody(Seq(TestLeafStatement("body2")))
-        ),
+          TestCompoundBody(Seq(TestLeafStatement("body2")))),
         elseBody = None,
-        session = spark
-      )
-    )).getTreeIterator
+        session = spark))).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq("con1", "con2", "body2"))
   }
 
   test("searched case - without else (unsuccessful checks)") {
-    val iter = TestCompoundBody(Seq(
-      new SearchedCaseStatementExec(
+    val iter = TestCompoundBody(
+      Seq(new SearchedCaseStatementExec(
         conditions = Seq(
           TestIfElseCondition(condVal = false, description = "con1"),
-          TestIfElseCondition(condVal = false, description = "con2")
-        ),
+          TestIfElseCondition(condVal = false, description = "con2")),
         conditionalBodies = Seq(
           TestCompoundBody(Seq(TestLeafStatement("body1"))),
-          TestCompoundBody(Seq(TestLeafStatement("body2")))
-        ),
+          TestCompoundBody(Seq(TestLeafStatement("body2")))),
         elseBody = None,
-        session = spark
-      )
-    )).getTreeIterator
+        session = spark))).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq("con1", "con2"))
   }
 
   test("simple case - enter first WHEN clause") {
-    val iter = TestCompoundBody(Seq(
-      new SimpleCaseStatementExec(
-        caseVariableExec = TestIntegerProjection(1, "1"),
-        conditionExpressions = Seq(
-          Literal(1),
-          Literal(2)
-        ),
-        conditionalBodies = Seq(
-          TestCompoundBody(Seq(TestLeafStatement("body1"))),
-          TestCompoundBody(Seq(TestLeafStatement("body2")))
-        ),
-        elseBody = Some(TestCompoundBody(Seq(TestLeafStatement("body3")))),
-        session = spark,
-        context = MockScriptingContext()
-      )
-    )).getTreeIterator
+    val iter =
+      TestCompoundBody(
+        Seq(
+          new SimpleCaseStatementExec(
+            caseVariableExec = TestIntegerProjection(1, "1"),
+            conditionExpressions = Seq(Literal(1), Literal(2)),
+            conditionalBodies = Seq(
+              TestCompoundBody(Seq(TestLeafStatement("body1"))),
+              TestCompoundBody(Seq(TestLeafStatement("body2")))),
+            elseBody = Some(TestCompoundBody(Seq(TestLeafStatement("body3")))),
+            session = spark,
+            context = MockScriptingContext()))).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq("Project", "body1"))
   }
 
   test("simple case - enter body of the ELSE clause") {
-    val iter = TestCompoundBody(Seq(
-      new SimpleCaseStatementExec(
+    val iter = TestCompoundBody(
+      Seq(new SimpleCaseStatementExec(
         caseVariableExec = TestIntegerProjection(2, "2"),
-        conditionExpressions = Seq(
-          Literal(1)
-        ),
-        conditionalBodies = Seq(
-          TestCompoundBody(Seq(TestLeafStatement("body1")))
-        ),
+        conditionExpressions = Seq(Literal(1)),
+        conditionalBodies = Seq(TestCompoundBody(Seq(TestLeafStatement("body1")))),
         elseBody = Some(TestCompoundBody(Seq(TestLeafStatement("body2")))),
         session = spark,
-        context = MockScriptingContext()
-      )
-    )).getTreeIterator
+        context = MockScriptingContext()))).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq("Project", "body2"))
   }
 
   test("simple case - enter second WHEN clause") {
-    val iter = TestCompoundBody(Seq(
-      new SimpleCaseStatementExec(
-        caseVariableExec = TestIntegerProjection(2, "2"),
-        conditionExpressions = Seq(
-          Literal(1),
-          Literal(2)
-        ),
-        conditionalBodies = Seq(
-          TestCompoundBody(Seq(TestLeafStatement("body1"))),
-          TestCompoundBody(Seq(TestLeafStatement("body2")))
-        ),
-        elseBody = Some(TestCompoundBody(Seq(TestLeafStatement("body3")))),
-        session = spark,
-        context = MockScriptingContext()
-      )
-    )).getTreeIterator
+    val iter =
+      TestCompoundBody(
+        Seq(
+          new SimpleCaseStatementExec(
+            caseVariableExec = TestIntegerProjection(2, "2"),
+            conditionExpressions = Seq(Literal(1), Literal(2)),
+            conditionalBodies = Seq(
+              TestCompoundBody(Seq(TestLeafStatement("body1"))),
+              TestCompoundBody(Seq(TestLeafStatement("body2")))),
+            elseBody = Some(TestCompoundBody(Seq(TestLeafStatement("body3")))),
+            session = spark,
+            context = MockScriptingContext()))).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq("Project", "Project", "body2"))
   }
 
   test("simple case - without else (successful check)") {
-    val iter = TestCompoundBody(Seq(
-      new SimpleCaseStatementExec(
+    val iter = TestCompoundBody(
+      Seq(new SimpleCaseStatementExec(
         caseVariableExec = TestIntegerProjection(2, "2"),
-        conditionExpressions = Seq(
-          Literal(1),
-          Literal(2)
-        ),
+        conditionExpressions = Seq(Literal(1), Literal(2)),
         conditionalBodies = Seq(
           TestCompoundBody(Seq(TestLeafStatement("body1"))),
-          TestCompoundBody(Seq(TestLeafStatement("body2")))
-        ),
+          TestCompoundBody(Seq(TestLeafStatement("body2")))),
         elseBody = None,
         session = spark,
-        context = MockScriptingContext()
-      )
-    )).getTreeIterator
+        context = MockScriptingContext()))).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq("Project", "Project", "body2"))
   }
 
   test("simple case - without else (unsuccessful checks)") {
-    val iter = TestCompoundBody(Seq(
-      new SimpleCaseStatementExec(
+    val iter = TestCompoundBody(
+      Seq(new SimpleCaseStatementExec(
         caseVariableExec = TestIntegerProjection(3, "3"),
-        conditionExpressions = Seq(
-          Literal(1),
-          Literal(2)
-        ),
+        conditionExpressions = Seq(Literal(1), Literal(2)),
         conditionalBodies = Seq(
           TestCompoundBody(Seq(TestLeafStatement("body1"))),
-          TestCompoundBody(Seq(TestLeafStatement("body2")))
-        ),
+          TestCompoundBody(Seq(TestLeafStatement("body2")))),
         elseBody = None,
         session = spark,
-        context = MockScriptingContext()
-      )
-    )).getTreeIterator
+        context = MockScriptingContext()))).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq("Project", "Project"))
   }
 
   test("loop statement with leave") {
-    val iter = TestCompoundBody(
-      statements = Seq(
-        new LoopStatementExec(
-          body = TestCompoundBody(Seq(
-            TestLeafStatement("body1"),
-            new LeaveStatementExec("lbl"))
-          ),
-          label = Some("lbl")
-        )
-      )
-    ).getTreeIterator
+    val iter = TestCompoundBody(statements = Seq(
+      new LoopStatementExec(
+        body = TestCompoundBody(Seq(TestLeafStatement("body1"), new LeaveStatementExec("lbl"))),
+        label = Some("lbl")))).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq("body1", "lbl"))
   }
 
   test("for statement - enters body once") {
-    val iter = TestCompoundBody(Seq(
-      TestForStatement(
-        query = MockQuery(1, "intCol", "query1"),
-        variableName = Some("x"),
-        label = Some("for1"),
-        session = spark,
-        body = TestCompoundBody(Seq(TestLeafStatement("body")))
-      )
-    )).getTreeIterator
+    val iter = TestCompoundBody(
+      Seq(
+        TestForStatement(
+          query = MockQuery(1, "intCol", "query1"),
+          variableName = Some("x"),
+          label = Some("for1"),
+          session = spark,
+          body = TestCompoundBody(Seq(TestLeafStatement("body")))))).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
-    assert(statements === Seq(
-      "CreateVariable",
-      "SetVariable",
-      "body",
-      "NOOP"
-    ))
+    assert(statements === Seq("CreateVariable", "SetVariable", "body", "NOOP"))
   }
 
   test("for statement - enters body with multiple statements multiple times") {
-    val iter = TestCompoundBody(Seq(
-      TestForStatement(
+    val iter = TestCompoundBody(
+      Seq(TestForStatement(
         query = MockQuery(2, "intCol", "query1"),
         variableName = Some("x"),
         label = Some("for1"),
         session = spark,
-        body = TestCompoundBody(
-          Seq(TestLeafStatement("statement1"), TestLeafStatement("statement2"))
-        )
-      )
-    )).getTreeIterator
+        body = TestCompoundBody(Seq(
+          TestLeafStatement("statement1"),
+          TestLeafStatement("statement2")))))).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
-    assert(statements === Seq(
-      "CreateVariable",
-      "SetVariable",
-      "statement1",
-      "statement2",
-      "NOOP",
-      "CreateVariable",
-      "SetVariable",
-      "statement1",
-      "statement2",
-      "NOOP"
-    ))
+    assert(
+      statements === Seq(
+        "CreateVariable",
+        "SetVariable",
+        "statement1",
+        "statement2",
+        "NOOP",
+        "CreateVariable",
+        "SetVariable",
+        "statement1",
+        "statement2",
+        "NOOP"))
   }
 
   test("for statement - empty result") {
-    val iter = TestCompoundBody(Seq(
-      TestForStatement(
-        query = MockQuery(0, "intCol", "query1"),
-        variableName = Some("x"),
-        label = Some("for1"),
-        session = spark,
-        body = TestCompoundBody(Seq(TestLeafStatement("body1")))
-      )
-    )).getTreeIterator
+    val iter = TestCompoundBody(
+      Seq(
+        TestForStatement(
+          query = MockQuery(0, "intCol", "query1"),
+          variableName = Some("x"),
+          label = Some("for1"),
+          session = spark,
+          body = TestCompoundBody(Seq(TestLeafStatement("body1")))))).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === List("NOOP"))
   }
 
   test("for statement - nested") {
-    val iter = TestCompoundBody(Seq(
-      TestForStatement(
-        query = MockQuery(2, "intCol", "query1"),
-        variableName = Some("x"),
-        label = Some("for1"),
-        session = spark,
-        body = TestCompoundBody(Seq(
-          TestForStatement(
-            query = MockQuery(2, "intCol1", "query2"),
-            variableName = Some("y"),
-            label = Some("for2"),
-            session = spark,
-            body = TestCompoundBody(Seq(TestLeafStatement("body")))
-          )
-        ))
-      )),
-      label = Some("lbl")
-    ).getTreeIterator
+    val iter = TestCompoundBody(
+      Seq(
+        TestForStatement(
+          query = MockQuery(2, "intCol", "query1"),
+          variableName = Some("x"),
+          label = Some("for1"),
+          session = spark,
+          body = TestCompoundBody(
+            Seq(
+              TestForStatement(
+                query = MockQuery(2, "intCol1", "query2"),
+                variableName = Some("y"),
+                label = Some("for2"),
+                session = spark,
+                body = TestCompoundBody(Seq(TestLeafStatement("body")))))))),
+      label = Some("lbl")).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
-    assert(statements === Seq(
-      "CreateVariable",
-      "SetVariable",
-      "CreateVariable",
-      "SetVariable",
-      "body",
-      "NOOP",
-      "CreateVariable",
-      "SetVariable",
-      "body",
-      "NOOP",
-      "NOOP",
-      "CreateVariable",
-      "SetVariable",
-      "CreateVariable",
-      "SetVariable",
-      "body",
-      "NOOP",
-      "CreateVariable",
-      "SetVariable",
-      "body",
-      "NOOP",
-      "NOOP"
-    ))
+    assert(
+      statements === Seq(
+        "CreateVariable",
+        "SetVariable",
+        "CreateVariable",
+        "SetVariable",
+        "body",
+        "NOOP",
+        "CreateVariable",
+        "SetVariable",
+        "body",
+        "NOOP",
+        "NOOP",
+        "CreateVariable",
+        "SetVariable",
+        "CreateVariable",
+        "SetVariable",
+        "body",
+        "NOOP",
+        "CreateVariable",
+        "SetVariable",
+        "body",
+        "NOOP",
+        "NOOP"))
   }
 
   test("for statement no variable - enters body once") {
-    val iter = TestCompoundBody(Seq(
-      TestForStatement(
-        query = MockQuery(1, "intCol", "query1"),
-        variableName = None,
-        label = Some("for1"),
-        session = spark,
-        body = TestCompoundBody(Seq(TestLeafStatement("body")))
-      )
-    )).getTreeIterator
+    val iter = TestCompoundBody(
+      Seq(
+        TestForStatement(
+          query = MockQuery(1, "intCol", "query1"),
+          variableName = None,
+          label = Some("for1"),
+          session = spark,
+          body = TestCompoundBody(Seq(TestLeafStatement("body")))))).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
-    assert(statements === Seq(
-      "CreateVariable",
-      "SetVariable",
-      "body",
-      "NOOP"
-    ))
+    assert(statements === Seq("CreateVariable", "SetVariable", "body", "NOOP"))
   }
 
   test("for statement no variable - enters body with multiple statements multiple times") {
-    val iter = TestCompoundBody(Seq(
-      TestForStatement(
+    val iter = TestCompoundBody(
+      Seq(TestForStatement(
         query = MockQuery(2, "intCol", "query1"),
         variableName = None,
         label = Some("for1"),
         session = spark,
         body = TestCompoundBody(Seq(
           TestLeafStatement("statement1"),
-          TestLeafStatement("statement2")))
-      )
-    )).getTreeIterator
+          TestLeafStatement("statement2")))))).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
-    assert(statements === Seq(
-      "CreateVariable",
-      "SetVariable",
-      "statement1",
-      "statement2",
-      "NOOP",
-      "CreateVariable",
-      "SetVariable",
-      "statement1",
-      "statement2",
-      "NOOP"
-    ))
+    assert(
+      statements === Seq(
+        "CreateVariable",
+        "SetVariable",
+        "statement1",
+        "statement2",
+        "NOOP",
+        "CreateVariable",
+        "SetVariable",
+        "statement1",
+        "statement2",
+        "NOOP"))
   }
 
   test("for statement no variable - empty result") {
-    val iter = TestCompoundBody(Seq(
-      TestForStatement(
-        query = MockQuery(0, "intCol", "query1"),
-        variableName = None,
-        label = Some("for1"),
-        session = spark,
-        body = TestCompoundBody(Seq(TestLeafStatement("body1")))
-      )
-    )).getTreeIterator
+    val iter = TestCompoundBody(
+      Seq(
+        TestForStatement(
+          query = MockQuery(0, "intCol", "query1"),
+          variableName = None,
+          label = Some("for1"),
+          session = spark,
+          body = TestCompoundBody(Seq(TestLeafStatement("body1")))))).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === List("NOOP"))
   }
 
   test("for statement no variable - nested") {
-    val iter = TestCompoundBody(Seq(
-      TestForStatement(
+    val iter = TestCompoundBody(
+      Seq(TestForStatement(
         query = MockQuery(2, "intCol", "query1"),
         variableName = None,
         label = Some("for1"),
         session = spark,
-        body = TestCompoundBody(Seq(
-          TestForStatement(
-            query = MockQuery(2, "intCol1", "query2"),
-            variableName = None,
-            label = Some("for2"),
-            session = spark,
-            body = TestCompoundBody(Seq(TestLeafStatement("body")))
-          )
-        ))
-      )
-    )).getTreeIterator
+        body = TestCompoundBody(
+          Seq(
+            TestForStatement(
+              query = MockQuery(2, "intCol1", "query2"),
+              variableName = None,
+              label = Some("for2"),
+              session = spark,
+              body = TestCompoundBody(Seq(TestLeafStatement("body"))))))))).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
-    assert(statements === Seq(
-      "CreateVariable",
-      "SetVariable",
-      "CreateVariable",
-      "SetVariable",
-      "body",
-      "NOOP",
-      "CreateVariable",
-      "SetVariable",
-      "body",
-      "NOOP",
-      "NOOP",
-      "CreateVariable",
-      "SetVariable",
-      "CreateVariable",
-      "SetVariable",
-      "body",
-      "NOOP",
-      "CreateVariable",
-      "SetVariable",
-      "body",
-      "NOOP",
-      "NOOP"
-    ))
+    assert(
+      statements === Seq(
+        "CreateVariable",
+        "SetVariable",
+        "CreateVariable",
+        "SetVariable",
+        "body",
+        "NOOP",
+        "CreateVariable",
+        "SetVariable",
+        "body",
+        "NOOP",
+        "NOOP",
+        "CreateVariable",
+        "SetVariable",
+        "CreateVariable",
+        "SetVariable",
+        "body",
+        "NOOP",
+        "CreateVariable",
+        "SetVariable",
+        "body",
+        "NOOP",
+        "NOOP"))
   }
 
   test("for statement - iterate") {
-    val iter = TestCompoundBody(Seq(
-      TestForStatement(
+    val iter = TestCompoundBody(
+      Seq(TestForStatement(
         query = MockQuery(2, "intCol", "query1"),
         variableName = Some("x"),
         label = Some("lbl1"),
@@ -1093,25 +944,23 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
         body = TestCompoundBody(Seq(
           TestLeafStatement("statement1"),
           new IterateStatementExec("lbl1"),
-          TestLeafStatement("statement2")))
-      )
-    )).getTreeIterator
+          TestLeafStatement("statement2")))))).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
-    assert(statements === Seq(
-      "CreateVariable",
-      "SetVariable",
-      "statement1",
-      "lbl1",
-      "CreateVariable",
-      "SetVariable",
-      "statement1",
-      "lbl1"
-    ))
+    assert(
+      statements === Seq(
+        "CreateVariable",
+        "SetVariable",
+        "statement1",
+        "lbl1",
+        "CreateVariable",
+        "SetVariable",
+        "statement1",
+        "lbl1"))
   }
 
   test("for statement - leave") {
-    val iter = TestCompoundBody(Seq(
-      TestForStatement(
+    val iter = TestCompoundBody(
+      Seq(TestForStatement(
         query = MockQuery(2, "intCol", "query1"),
         variableName = Some("x"),
         label = Some("lbl1"),
@@ -1119,92 +968,82 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
         body = TestCompoundBody(Seq(
           TestLeafStatement("statement1"),
           new LeaveStatementExec("lbl1"),
-          TestLeafStatement("statement2")))
-      )
-    )).getTreeIterator
+          TestLeafStatement("statement2")))))).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
-    assert(statements === Seq(
-      "CreateVariable",
-      "SetVariable",
-      "statement1",
-      "lbl1"))
+    assert(statements === Seq("CreateVariable", "SetVariable", "statement1", "lbl1"))
   }
 
   test("for statement - nested - iterate outer loop") {
-    val iter = TestCompoundBody(Seq(
-      TestForStatement(
-        query = MockQuery(2, "intCol", "query1"),
-        variableName = Some("x"),
-        label = Some("lbl1"),
-        session = spark,
-        body = TestCompoundBody(Seq(
-          TestLeafStatement("outer_body"),
+    val iter =
+      TestCompoundBody(
+        Seq(
           TestForStatement(
-            query = MockQuery(2, "intCol1", "query2"),
-            variableName = Some("y"),
-            label = Some("lbl2"),
+            query = MockQuery(2, "intCol", "query1"),
+            variableName = Some("x"),
+            label = Some("lbl1"),
             session = spark,
             body = TestCompoundBody(Seq(
-              TestLeafStatement("body1"),
-              new IterateStatementExec("lbl1"),
-              TestLeafStatement("body2")))
-          )
-        ))
-      )
-    )).getTreeIterator
+              TestLeafStatement("outer_body"),
+              TestForStatement(
+                query = MockQuery(2, "intCol1", "query2"),
+                variableName = Some("y"),
+                label = Some("lbl2"),
+                session = spark,
+                body = TestCompoundBody(Seq(
+                  TestLeafStatement("body1"),
+                  new IterateStatementExec("lbl1"),
+                  TestLeafStatement("body2"))))))))).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
-    assert(statements === Seq(
-      "CreateVariable",
-      "SetVariable",
-      "outer_body",
-      "CreateVariable",
-      "SetVariable",
-      "body1",
-      "lbl1",
-      "CreateVariable",
-      "SetVariable",
-      "outer_body",
-      "CreateVariable",
-      "SetVariable",
-      "body1",
-      "lbl1"
-    ))
+    assert(
+      statements === Seq(
+        "CreateVariable",
+        "SetVariable",
+        "outer_body",
+        "CreateVariable",
+        "SetVariable",
+        "body1",
+        "lbl1",
+        "CreateVariable",
+        "SetVariable",
+        "outer_body",
+        "CreateVariable",
+        "SetVariable",
+        "body1",
+        "lbl1"))
   }
 
   test("for statement - nested - leave outer loop") {
-    val iter = TestCompoundBody(Seq(
-      TestForStatement(
-        query = MockQuery(2, "intCol", "query1"),
-        variableName = Some("x"),
-        label = Some("lbl1"),
-        session = spark,
-        body = TestCompoundBody(Seq(
+    val iter =
+      TestCompoundBody(
+        Seq(
           TestForStatement(
-            query = MockQuery(2, "intCol", "query2"),
-            variableName = Some("y"),
-            label = Some("lbl2"),
+            query = MockQuery(2, "intCol", "query1"),
+            variableName = Some("x"),
+            label = Some("lbl1"),
             session = spark,
-            body = TestCompoundBody(Seq(
-              TestLeafStatement("body1"),
-              new LeaveStatementExec("lbl1"),
-              TestLeafStatement("body2")))
-          )
-        ))
-      )
-    )).getTreeIterator
+            body = TestCompoundBody(Seq(TestForStatement(
+              query = MockQuery(2, "intCol", "query2"),
+              variableName = Some("y"),
+              label = Some("lbl2"),
+              session = spark,
+              body = TestCompoundBody(Seq(
+                TestLeafStatement("body1"),
+                new LeaveStatementExec("lbl1"),
+                TestLeafStatement("body2"))))))))).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
-    assert(statements === Seq(
-      "CreateVariable",
-      "SetVariable",
-      "CreateVariable",
-      "SetVariable",
-      "body1",
-      "lbl1"))
+    assert(
+      statements === Seq(
+        "CreateVariable",
+        "SetVariable",
+        "CreateVariable",
+        "SetVariable",
+        "body1",
+        "lbl1"))
   }
 
   test("for statement no variable - iterate") {
-    val iter = TestCompoundBody(Seq(
-      TestForStatement(
+    val iter = TestCompoundBody(
+      Seq(TestForStatement(
         query = MockQuery(2, "intCol", "query1"),
         variableName = None,
         label = Some("lbl1"),
@@ -1212,25 +1051,23 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
         body = TestCompoundBody(Seq(
           TestLeafStatement("statement1"),
           new IterateStatementExec("lbl1"),
-          TestLeafStatement("statement2")))
-      )
-    )).getTreeIterator
+          TestLeafStatement("statement2")))))).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
-    assert(statements === Seq(
-      "CreateVariable",
-      "SetVariable",
-      "statement1",
-      "lbl1",
-      "CreateVariable",
-      "SetVariable",
-      "statement1",
-      "lbl1"
-    ))
+    assert(
+      statements === Seq(
+        "CreateVariable",
+        "SetVariable",
+        "statement1",
+        "lbl1",
+        "CreateVariable",
+        "SetVariable",
+        "statement1",
+        "lbl1"))
   }
 
   test("for statement no variable - leave") {
-    val iter = TestCompoundBody(Seq(
-      TestForStatement(
+    val iter = TestCompoundBody(
+      Seq(TestForStatement(
         query = MockQuery(2, "intCol", "query1"),
         variableName = None,
         label = Some("lbl1"),
@@ -1238,85 +1075,76 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
         body = TestCompoundBody(Seq(
           TestLeafStatement("statement1"),
           new LeaveStatementExec("lbl1"),
-          TestLeafStatement("statement2")))
-      )
-    )).getTreeIterator
+          TestLeafStatement("statement2")))))).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
-    assert(statements === Seq(
-      "CreateVariable",
-      "SetVariable",
-      "statement1",
-      "lbl1"))
+    assert(statements === Seq("CreateVariable", "SetVariable", "statement1", "lbl1"))
   }
 
   test("for statement no variable - nested - iterate outer loop") {
-    val iter = TestCompoundBody(Seq(
-      TestForStatement(
-        query = MockQuery(2, "intCol", "query1"),
-        variableName = None,
-        label = Some("lbl1"),
-        session = spark,
-        body = TestCompoundBody(Seq(
-          TestLeafStatement("outer_body"),
+    val iter =
+      TestCompoundBody(
+        Seq(
           TestForStatement(
-            query = MockQuery(2, "intCol1", "query2"),
+            query = MockQuery(2, "intCol", "query1"),
             variableName = None,
-            label = Some("lbl2"),
+            label = Some("lbl1"),
             session = spark,
             body = TestCompoundBody(Seq(
-              TestLeafStatement("body1"),
-              new IterateStatementExec("lbl1"),
-              TestLeafStatement("body2")))
-          )
-        ))
-      )
-    )).getTreeIterator
+              TestLeafStatement("outer_body"),
+              TestForStatement(
+                query = MockQuery(2, "intCol1", "query2"),
+                variableName = None,
+                label = Some("lbl2"),
+                session = spark,
+                body = TestCompoundBody(Seq(
+                  TestLeafStatement("body1"),
+                  new IterateStatementExec("lbl1"),
+                  TestLeafStatement("body2"))))))))).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
-    assert(statements === Seq(
-      "CreateVariable",
-      "SetVariable",
-      "outer_body",
-      "CreateVariable",
-      "SetVariable",
-      "body1", "lbl1",
-      "CreateVariable",
-      "SetVariable",
-      "outer_body",
-      "CreateVariable",
-      "SetVariable",
-      "body1",
-      "lbl1"
-    ))
+    assert(
+      statements === Seq(
+        "CreateVariable",
+        "SetVariable",
+        "outer_body",
+        "CreateVariable",
+        "SetVariable",
+        "body1",
+        "lbl1",
+        "CreateVariable",
+        "SetVariable",
+        "outer_body",
+        "CreateVariable",
+        "SetVariable",
+        "body1",
+        "lbl1"))
   }
 
   test("for statement no variable - nested - leave outer loop") {
-    val iter = TestCompoundBody(Seq(
-      TestForStatement(
-        query = MockQuery(2, "intCol", "query1"),
-        variableName = None,
-        label = Some("lbl1"),
-        session = spark,
-        body = TestCompoundBody(Seq(
+    val iter =
+      TestCompoundBody(
+        Seq(
           TestForStatement(
-            query = MockQuery(2, "intCol1", "query2"),
+            query = MockQuery(2, "intCol", "query1"),
             variableName = None,
-            label = Some("lbl2"),
+            label = Some("lbl1"),
             session = spark,
-            body = TestCompoundBody(Seq(
-              TestLeafStatement("body1"),
-              new LeaveStatementExec("lbl1"),
-              TestLeafStatement("body2")))
-          )
-        ))
-      )
-    )).getTreeIterator
+            body = TestCompoundBody(Seq(TestForStatement(
+              query = MockQuery(2, "intCol1", "query2"),
+              variableName = None,
+              label = Some("lbl2"),
+              session = spark,
+              body = TestCompoundBody(Seq(
+                TestLeafStatement("body1"),
+                new LeaveStatementExec("lbl1"),
+                TestLeafStatement("body2"))))))))).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
-    assert(statements === Seq(
-      "CreateVariable",
-      "SetVariable",
-      "CreateVariable",
-      "SetVariable",
-      "body1",
-      "lbl1"))
+    assert(
+      statements === Seq(
+        "CreateVariable",
+        "SetVariable",
+        "CreateVariable",
+        "SetVariable",
+        "body1",
+        "lbl1"))
   }
 }

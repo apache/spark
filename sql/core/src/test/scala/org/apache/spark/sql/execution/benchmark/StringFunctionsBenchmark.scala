@@ -21,8 +21,7 @@ import org.apache.spark.sql.functions.{col, concat, lit}
 import org.apache.spark.sql.types.StructType
 
 /**
- * Synthetic benchmark for the string functions.
- * To run this benchmark:
+ * Synthetic benchmark for the string functions. To run this benchmark:
  * {{{
  *   1. without sbt:
  *      bin/spark-submit --class <this class>
@@ -37,10 +36,12 @@ object StringFunctionsBenchmark extends SqlBasedBenchmark {
   private val N = 10_000_00
   private val M = 100
 
-  private val df = spark.range(N).to(new StructType().add("id", "int")).
-    withColumn("subject", concat(col("id"), lit("-"), col("id") * 2)).
-    withColumn("regexp", lit("(\\d+)")).
-    withColumn("rep", lit("num"))
+  private val df = spark
+    .range(N)
+    .to(new StructType().add("id", "int"))
+    .withColumn("subject", concat(col("id"), lit("-"), col("id") * 2))
+    .withColumn("regexp", lit("(\\d+)"))
+    .withColumn("rep", lit("num"))
 
   private def doRegexpReplaceBenchmark(): Unit = {
     df.selectExpr("regexp_replace(subject, regexp, rep)").noop()

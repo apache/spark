@@ -32,7 +32,8 @@ class DeltaBasedUpdateTableSuite extends DeltaBasedUpdateTableSuiteBase {
   }
 
   test("update handles metadata columns correctly") {
-    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+    createAndInitTable(
+      "pk INT NOT NULL, id INT, dep STRING",
       """{ "pk": 1, "id": 1, "dep": "hr" }
         |{ "pk": 2, "id": 2, "dep": "software" }
         |{ "pk": 3, "id": 3, "dep": "hr" }
@@ -58,7 +59,8 @@ class DeltaBasedUpdateTableSuite extends DeltaBasedUpdateTableSuiteBase {
 
   test("update with subquery handles metadata columns correctly") {
     withTempView("updated_dep") {
-      createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+      createAndInitTable(
+        "pk INT NOT NULL, id INT, dep STRING",
         """{ "pk": 1, "id": 1, "dep": "hr" }
           |{ "pk": 2, "id": 2, "dep": "software" }
           |{ "pk": 3, "id": 3, "dep": "hr" }
@@ -67,8 +69,7 @@ class DeltaBasedUpdateTableSuite extends DeltaBasedUpdateTableSuiteBase {
       val updatedIdDF = Seq(Some("hr"), Some("it")).toDF()
       updatedIdDF.createOrReplaceTempView("updated_dep")
 
-      sql(
-        s"""UPDATE $tableNameAsString
+      sql(s"""UPDATE $tableNameAsString
            |SET id = -1
            |WHERE
            | id IN (1, 20)
@@ -94,15 +95,15 @@ class DeltaBasedUpdateTableSuite extends DeltaBasedUpdateTableSuiteBase {
   }
 
   test("update does not double plan table") {
-    createAndInitTable("pk INT NOT NULL, id INT, salary INT, dep STRING",
+    createAndInitTable(
+      "pk INT NOT NULL, id INT, salary INT, dep STRING",
       """{ "pk": 1, "id": 1, "salary": 300, "dep": 'hr' }
         |{ "pk": 2, "id": 2, "salary": 150, "dep": 'software' }
         |{ "pk": 3, "id": 3, "salary": 120, "dep": 'hr' }
         |""".stripMargin)
 
     val (cond, groupFilterCond) = executeAndKeepConditions {
-      sql(
-        s"""UPDATE $tableNameAsString SET salary = -1
+      sql(s"""UPDATE $tableNameAsString SET salary = -1
            |WHERE id IN (SELECT id FROM $tableNameAsString WHERE salary > 200)
            |""".stripMargin)
     }

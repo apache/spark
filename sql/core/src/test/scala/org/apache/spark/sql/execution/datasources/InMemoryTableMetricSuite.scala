@@ -27,8 +27,7 @@ import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.IntegerType
 
-class InMemoryTableMetricSuite
-  extends QueryTest with SharedSparkSession with BeforeAndAfter {
+class InMemoryTableMetricSuite extends QueryTest with SharedSparkSession with BeforeAndAfter {
   import testImplicits._
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
@@ -41,7 +40,9 @@ class InMemoryTableMetricSuite
     spark.sessionState.conf.clear()
   }
 
-  private def testMetricOnDSv2(func: String => Unit, checker: Map[String, String] => Unit): Unit = {
+  private def testMetricOnDSv2(
+      func: String => Unit,
+      checker: Map[String, String] => Unit): Unit = {
     withTable("testcat.table_name") {
       val statusStore = spark.sharedState.statusStore
       val oldCount = statusStore.executionsList().size
@@ -51,7 +52,8 @@ class InMemoryTableMetricSuite
       testCatalog.createTable(
         Identifier.of(Array(), "table_name"),
         Array(Column.create("i", IntegerType)),
-        Array.empty[Transform], Collections.emptyMap[String, String])
+        Array.empty[Transform],
+        Collections.emptyMap[String, String])
 
       val metrics = runAndFetchMetrics(func("testcat.table_name"))
 
@@ -60,39 +62,46 @@ class InMemoryTableMetricSuite
   }
 
   test("Report metrics from Datasource v2 write: append") {
-    testMetricOnDSv2(table => {
-      val df = sql("select 1 as i")
-      val v2Writer = df.writeTo(table)
-      v2Writer.append()
-    }, metrics => {
-      assert(metrics.get("number of rows in buffer").contains("in-memory rows: 1"))
-      assert(metrics.get("number of rows from driver").contains("1"))
-    })
+    testMetricOnDSv2(
+      table => {
+        val df = sql("select 1 as i")
+        val v2Writer = df.writeTo(table)
+        v2Writer.append()
+      },
+      metrics => {
+        assert(metrics.get("number of rows in buffer").contains("in-memory rows: 1"))
+        assert(metrics.get("number of rows from driver").contains("1"))
+      })
   }
 
   test("Report metrics from Datasource v2 write: overwrite") {
-    testMetricOnDSv2(table => {
-      val df = Seq(1, 2, 3).toDF("i")
-      val v2Writer = df.writeTo(table)
-      v2Writer.overwrite(lit(true))
-    }, metrics => {
-      assert(metrics.get("number of rows in buffer").contains("in-memory rows: 3"))
-      assert(metrics.get("number of rows from driver").contains("3"))
-    })
+    testMetricOnDSv2(
+      table => {
+        val df = Seq(1, 2, 3).toDF("i")
+        val v2Writer = df.writeTo(table)
+        v2Writer.overwrite(lit(true))
+      },
+      metrics => {
+        assert(metrics.get("number of rows in buffer").contains("in-memory rows: 3"))
+        assert(metrics.get("number of rows from driver").contains("3"))
+      })
   }
 
   test("Report metrics for aborted command") {
-    testMetricOnDSv2(table => {
-      assertThrows[IllegalArgumentException] {
-        val df = spark
-          .range(start = InMemoryTable.uncommittableValue(),
-            end = InMemoryTable.uncommittableValue() + 1)
-          .toDF("i")
-        val v2Writer = df.writeTo(table)
-        v2Writer.overwrite(lit(true))
-      }
-    }, metrics => {
-      assert(metrics.get("number of rows from driver").contains("1"))
-    })
+    testMetricOnDSv2(
+      table => {
+        assertThrows[IllegalArgumentException] {
+          val df = spark
+            .range(
+              start = InMemoryTable.uncommittableValue(),
+              end = InMemoryTable.uncommittableValue() + 1)
+            .toDF("i")
+          val v2Writer = df.writeTo(table)
+          v2Writer.overwrite(lit(true))
+        }
+      },
+      metrics => {
+        assert(metrics.get("number of rows from driver").contains("1"))
+      })
   }
 }

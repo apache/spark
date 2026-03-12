@@ -47,7 +47,8 @@ class RandomSuite extends SparkFunSuite with ExpressionEvalHelper {
     // Note that we use a seed of zero in these tests to keep the results deterministic.
     def testRandStr(first: Any, result: Any): Unit = {
       checkEvaluationWithoutCodegen(
-        RandStr(Literal(first), Literal(0)), CatalystTypeConverters.convertToCatalyst(result))
+        RandStr(Literal(first), Literal(0)),
+        CatalystTypeConverters.convertToCatalyst(result))
     }
     testRandStr(1, "c")
     testRandStr(5, "ceV0P")
@@ -61,7 +62,7 @@ class RandomSuite extends SparkFunSuite with ExpressionEvalHelper {
     testUniform(0, 1, 0)
     testUniform(0, 10, 7)
     testUniform(0L, 10L, 7L)
-    testUniform(10.0F, 20.0F, 17.604954F)
-    testUniform(10L, 20.0F, 17.604954F)
+    testUniform(10.0f, 20.0f, 17.604954f)
+    testUniform(10L, 20.0f, 17.604954f)
   }
 }

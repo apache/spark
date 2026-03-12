@@ -31,17 +31,24 @@ import org.apache.spark.sql.streaming.OutputMode.Update
 import org.apache.spark.sql.streaming.util.StatefulOpClusteredDistributionTestHelper
 import org.apache.spark.util.Utils
 
-class StreamingAggregationDistributionSuite extends StreamTest
-  with StatefulOpClusteredDistributionTestHelper with Assertions {
+class StreamingAggregationDistributionSuite
+    extends StreamTest
+    with StatefulOpClusteredDistributionTestHelper
+    with Assertions {
 
   import testImplicits._
 
-  test("SPARK-38204: streaming aggregation should require StatefulOpClusteredDistribution " +
-    "from children") {
+  test(
+    "SPARK-38204: streaming aggregation should require StatefulOpClusteredDistribution " +
+      "from children") {
 
     val input = MemoryStream[Int]
-    val df1 = input.toDF().select($"value" as Symbol("key1"), $"value" * 2 as Symbol("key2"),
-      $"value" * 3 as Symbol("value"))
+    val df1 = input
+      .toDF()
+      .select(
+        $"value" as Symbol("key1"),
+        $"value" * 2 as Symbol("key2"),
+        $"value" * 3 as Symbol("value"))
     val agg = df1.repartition($"key1").groupBy($"key1", $"key2").agg(count($"*"))
 
     testStream(agg, OutputMode.Update())(
@@ -58,10 +65,16 @@ class StreamingAggregationDistributionSuite extends StreamTest
 
         assert(stateStoreOps.nonEmpty)
         stateStoreOps.foreach { stateOp =>
-          assert(requireStatefulOpClusteredDistribution(stateOp, Seq(Seq("key1", "key2")),
-            numPartitions))
-          assert(hasDesiredHashPartitioningInChildren(stateOp, Seq(Seq("key1", "key2")),
-            numPartitions))
+          assert(
+            requireStatefulOpClusteredDistribution(
+              stateOp,
+              Seq(Seq("key1", "key2")),
+              numPartitions))
+          assert(
+            hasDesiredHashPartitioningInChildren(
+              stateOp,
+              Seq(Seq("key1", "key2")),
+              numPartitions))
         }
 
         // verify aggregations in between, except partial aggregation
@@ -80,23 +93,29 @@ class StreamingAggregationDistributionSuite extends StreamTest
         // For aggregate execs, we make sure output partitioning of the children is same as
         // we expect, HashPartitioning with clustering keys & number of partitions.
         aggregateExecsWithoutPartialAgg.foreach { aggr =>
-          assert(hasDesiredHashPartitioningInChildren(aggr, Seq(Seq("key1", "key2")),
-            numPartitions))
+          assert(
+            hasDesiredHashPartitioningInChildren(aggr, Seq(Seq("key1", "key2")), numPartitions))
         }
-      }
-    )
+      })
   }
 
-  test("SPARK-38204: streaming aggregation should require ClusteredDistribution " +
-    "from children if the query starts from checkpoint in prior to 3.3") {
+  test(
+    "SPARK-38204: streaming aggregation should require ClusteredDistribution " +
+      "from children if the query starts from checkpoint in prior to 3.3") {
 
     val inputData = MemoryStream[Int]
-    val df1 = inputData.toDF().select($"value" as Symbol("key1"), $"value" * 2 as Symbol("key2"),
-      $"value" * 3 as Symbol("value"))
+    val df1 = inputData
+      .toDF()
+      .select(
+        $"value" as Symbol("key1"),
+        $"value" * 2 as Symbol("key2"),
+        $"value" * 3 as Symbol("value"))
     val agg = df1.repartition($"key1").groupBy($"key1", $"key2").agg(count($"*"))
 
-    val resourceUri = this.getClass.getResource(
-      "/structured-streaming/checkpoint-version-3.2.0-streaming-aggregate-with-repartition/").toURI
+    val resourceUri = this.getClass
+      .getResource(
+        "/structured-streaming/checkpoint-version-3.2.0-streaming-aggregate-with-repartition/")
+      .toURI
 
     val checkpointDir = Utils.createTempDir().getCanonicalFile
     // Copy the checkpoint to a temp dir to prevent changes to the original.
@@ -107,7 +126,8 @@ class StreamingAggregationDistributionSuite extends StreamTest
     inputData.addData(3, 2)
 
     testStream(agg, Update)(
-      StartStream(checkpointLocation = checkpointDir.getAbsolutePath,
+      StartStream(
+        checkpointLocation = checkpointDir.getAbsolutePath,
         additionalConfs = Map(SQLConf.STATEFUL_OPERATOR_USE_STRICT_DISTRIBUTION.key -> "true")),
 
       // scalastyle:off line.size.limit
@@ -162,7 +182,7 @@ class StreamingAggregationDistributionSuite extends StreamTest
                                    +- MicroBatchScan[value#1] MemoryStreamDataSource
 
         D. Spark 2.4.0
-        *(4) HashAggregate(keys=[key1#3, key2#4], functions=[count(1)], output=[key1#3, key2#4, count(1)#13L])
+       *(4) HashAggregate(keys=[key1#3, key2#4], functions=[count(1)], output=[key1#3, key2#4, count(1)#13L])
         +- StateStoreSave [key1#3, key2#4], state info [ checkpoint = file:/tmp/spark-c4fd5b1f-18e0-4433-ac7a-00df93464b49/state, runId = 89bfe27b-da33-4a75-9f36-97717c137b2a, opId = 0, ver = 1, numPartitions = 5], Update, 0, 2
            +- *(3) HashAggregate(keys=[key1#3, key2#4], functions=[merge_count(1)], output=[key1#3, key2#4, count#42L])
               +- StateStoreRestore [key1#3, key2#4], state info [ checkpoint = file:/tmp/spark-c4fd5b1f-18e0-4433-ac7a-00df93464b49/state, runId = 89bfe27b-da33-4a75-9f36-97717c137b2a, opId = 0, ver = 1, numPartitions = 5], 2
@@ -177,7 +197,6 @@ class StreamingAggregationDistributionSuite extends StreamTest
 
       AddData(inputData, 3, 2, 1),
       CheckLastBatch((3, 6, 3), (2, 4, 2), (1, 2, 1)),
-
       Execute { query =>
         val executedPlan = query.lastExecution.executedPlan
         assert(!executedPlan.conf.getConf(SQLConf.STATEFUL_OPERATOR_USE_STRICT_DISTRIBUTION))
@@ -192,15 +211,14 @@ class StreamingAggregationDistributionSuite extends StreamTest
 
         assert(stateStoreOps.nonEmpty)
         stateStoreOps.foreach { stateOp =>
-          assert(requireClusteredDistribution(stateOp, Seq(Seq("key1", "key2")),
-            Some(numPartitions)))
-          assert(hasDesiredHashPartitioningInChildren(stateOp, Seq(Seq("key1")),
-            numPartitions))
+          assert(
+            requireClusteredDistribution(stateOp, Seq(Seq("key1", "key2")), Some(numPartitions)))
+          assert(hasDesiredHashPartitioningInChildren(stateOp, Seq(Seq("key1")), numPartitions))
         }
 
         // verify aggregations in between, except partial aggregation
-        val allAggregateExecs = executedPlan.collect {
-          case a: BaseAggregateExec => a
+        val allAggregateExecs = executedPlan.collect { case a: BaseAggregateExec =>
+          a
         }
 
         val aggregateExecsWithoutPartialAgg = allAggregateExecs.filter {
@@ -214,12 +232,10 @@ class StreamingAggregationDistributionSuite extends StreamTest
         // For aggregate execs, we make sure output partitioning of the children is same as
         // we expect, HashPartitioning with sub-clustering keys & number of partitions.
         aggregateExecsWithoutPartialAgg.foreach { aggr =>
-          assert(requireClusteredDistribution(aggr, Seq(Seq("key1", "key2")),
-            Some(numPartitions)))
-          assert(hasDesiredHashPartitioningInChildren(aggr, Seq(Seq("key1")),
-            numPartitions))
+          assert(
+            requireClusteredDistribution(aggr, Seq(Seq("key1", "key2")), Some(numPartitions)))
+          assert(hasDesiredHashPartitioningInChildren(aggr, Seq(Seq("key1")), numPartitions))
         }
-      }
-    )
+      })
   }
 }

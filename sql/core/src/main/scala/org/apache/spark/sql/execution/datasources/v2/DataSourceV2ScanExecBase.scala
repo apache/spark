@@ -33,9 +33,12 @@ import org.apache.spark.util.Utils
 
 trait DataSourceV2ScanExecBase extends LeafExecNode {
 
-  lazy val customMetrics = scan.supportedCustomMetrics().map { customMetric =>
-    customMetric.name() -> SQLMetrics.createV2CustomMetric(sparkContext, customMetric)
-  }.toMap
+  lazy val customMetrics = scan
+    .supportedCustomMetrics()
+    .map { customMetric =>
+      customMetric.name() -> SQLMetrics.createV2CustomMetric(sparkContext, customMetric)
+    }
+    .toMap
 
   override lazy val metrics = {
     Map("numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows")) ++
@@ -46,12 +49,16 @@ trait DataSourceV2ScanExecBase extends LeafExecNode {
 
   def readerFactory: PartitionReaderFactory
 
-  /** Optional partitioning expressions provided by the V2 data sources, through
-   * `SupportsReportPartitioning` */
+  /**
+   * Optional partitioning expressions provided by the V2 data sources, through
+   * `SupportsReportPartitioning`
+   */
   def keyGroupedPartitioning: Option[Seq[Expression]]
 
-  /** Optional ordering expressions provided by the V2 data sources, through
-   * `SupportsReportOrdering` */
+  /**
+   * Optional ordering expressions provided by the V2 data sources, through
+   * `SupportsReportOrdering`
+   */
   def ordering: Option[Seq[SortOrder]]
 
   protected def inputPartitions: Seq[InputPartition]
@@ -91,8 +98,9 @@ trait DataSourceV2ScanExecBase extends LeafExecNode {
 
   override def outputPartitioning: physical.Partitioning = {
     keyGroupedPartitioning match {
-      case Some(exprs) if conf.v2BucketingEnabled && KeyedPartitioning.supportsExpressions(exprs) &&
-          inputPartitions.nonEmpty && inputPartitions.forall(_.isInstanceOf[HasPartitionKey]) =>
+      case Some(exprs)
+          if conf.v2BucketingEnabled && KeyedPartitioning.supportsExpressions(exprs) &&
+            inputPartitions.nonEmpty && inputPartitions.forall(_.isInstanceOf[HasPartitionKey]) =>
         val dataTypes = exprs.map(_.dataType)
         val rowOrdering = RowOrdering.createNaturalAscendingOrdering(dataTypes)
         val partitionKeys =
@@ -104,9 +112,9 @@ trait DataSourceV2ScanExecBase extends LeafExecNode {
   }
 
   /**
-   * Returns the output ordering from the data source if available, otherwise falls back
-   * to the default (no ordering). This allows data sources to report their natural ordering
-   * through `SupportsReportOrdering`.
+   * Returns the output ordering from the data source if available, otherwise falls back to the
+   * default (no ordering). This allows data sources to report their natural ordering through
+   * `SupportsReportOrdering`.
    */
   override def outputOrdering: Seq[SortOrder] = ordering.getOrElse(super.outputOrdering)
 
@@ -136,14 +144,18 @@ trait DataSourceV2ScanExecBase extends LeafExecNode {
   }
 
   protected def postDriverMetrics(): Unit = {
-    val driveSQLMetrics = scan.reportDriverMetrics().map(customTaskMetric => {
-      val metric = metrics(customTaskMetric.name())
-      metric.set(customTaskMetric.value())
-      metric
-    })
+    val driveSQLMetrics = scan
+      .reportDriverMetrics()
+      .map(customTaskMetric => {
+        val metric = metrics(customTaskMetric.name())
+        metric.set(customTaskMetric.value())
+        metric
+      })
 
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
-    SQLMetrics.postDriverMetricUpdates(sparkContext, executionId,
+    SQLMetrics.postDriverMetricUpdates(
+      sparkContext,
+      executionId,
       driveSQLMetrics.toImmutableArraySeq)
   }
 

@@ -22,9 +22,9 @@ import java.time.{Duration, Period}
 import org.apache.spark.sql.{QueryTest, Row}
 
 /**
- * This base suite contains unified tests for the `ALTER TABLE .. ADD COLUMNS` command that
- * check V1 and V2 table catalogs. The tests that cannot run for all supported catalogs are
- * located in more specific test suites:
+ * This base suite contains unified tests for the `ALTER TABLE .. ADD COLUMNS` command that check
+ * V1 and V2 table catalogs. The tests that cannot run for all supported catalogs are located in
+ * more specific test suites:
  *
  *   - V2 table catalog tests:
  *     `org.apache.spark.sql.execution.command.v2.AlterTableAddColumnsSuite`

@@ -17,27 +17,12 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import org.apache.spark.sql.catalyst.expressions.{
-  Alias,
-  ArraysZip,
-  AttributeReference,
-  BinaryExpression,
-  Exists,
-  Expression,
-  InSubquery,
-  ListQuery,
-  Literal,
-  NamedExpression,
-  OuterReference,
-  Predicate,
-  ScalarSubquery,
-  TimeZoneAwareExpression
-}
+import org.apache.spark.sql.catalyst.expressions.{Alias, ArraysZip, AttributeReference, BinaryExpression, Exists, Expression, InSubquery, ListQuery, Literal, NamedExpression, OuterReference, Predicate, ScalarSubquery, TimeZoneAwareExpression}
 import org.apache.spark.sql.types.BooleanType
 
 /**
- * The [[ExpressionResolutionValidator]] performs the validation work on the expression tree for the
- * [[ResolutionValidator]]. These two components work together recursively validating the
+ * The [[ExpressionResolutionValidator]] performs the validation work on the expression tree for
+ * the [[ResolutionValidator]]. These two components work together recursively validating the
  * logical plan. You can find more info in the [[ResolutionValidator]] scaladoc.
  */
 class ExpressionResolutionValidator(resolutionValidator: ResolutionValidator) {
@@ -96,16 +81,16 @@ class ExpressionResolutionValidator(resolutionValidator: ResolutionValidator) {
     predicate.children.foreach(validate)
     assert(
       predicate.dataType == BooleanType,
-      s"Output type of a predicate must be a boolean, but got: ${predicate.dataType.typeName}"
-    )
+      s"Output type of a predicate must be a boolean, but got: ${predicate.dataType.typeName}")
     validateInputDataTypes(predicate)
   }
 
   private def validateAttributeReference(attributeReference: AttributeReference): Unit = {
     assert(
-      attributeScopeStack.contains(attributeReference, isOuterReference = inOuterReferenceSubtree),
-      s"Attribute $attributeReference is missing from attribute scope stack: $attributeScopeStack"
-    )
+      attributeScopeStack.contains(
+        attributeReference,
+        isOuterReference = inOuterReferenceSubtree),
+      s"Attribute $attributeReference is missing from attribute scope stack: $attributeScopeStack")
   }
 
   private def validateAlias(alias: Alias): Unit = {
@@ -149,8 +134,7 @@ class ExpressionResolutionValidator(resolutionValidator: ResolutionValidator) {
 
     assert(
       scalarSubquery.plan.output.size == 1,
-      s"Scalar subquery returns more than one column: ${scalarSubquery.plan.output}"
-    )
+      s"Scalar subquery returns more than one column: ${scalarSubquery.plan.output}")
   }
 
   private def validateInSubquery(inSubquery: InSubquery): Unit = {
@@ -207,7 +191,6 @@ class ExpressionResolutionValidator(resolutionValidator: ResolutionValidator) {
     assert(
       expression.checkInputDataTypes().isSuccess,
       s"Input types of ${expression.getClass.getName} must be valid, but got: " +
-      expression.children.map(_.dataType.typeName).mkString(", ")
-    )
+        expression.children.map(_.dataType.typeName).mkString(", "))
   }
 }

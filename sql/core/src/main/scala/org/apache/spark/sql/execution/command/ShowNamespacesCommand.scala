@@ -33,7 +33,7 @@ case class ShowNamespacesCommand(
     child: LogicalPlan,
     pattern: Option[String],
     override val output: Seq[Attribute] = ShowNamespacesCommand.output)
-  extends UnaryRunnableCommand {
+    extends UnaryRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val ResolvedNamespace(cat, ns, _) = child
@@ -46,15 +46,16 @@ case class ShowNamespacesCommand(
 
     // The legacy SHOW DATABASES command does not quote the database names.
     assert(output.length == 1)
-    val namespaceNames = if (output.head.name == "databaseName"
-      && namespaces.forall(_.length == 1)) {
-      namespaces.map(_.head)
-    } else {
-      namespaces.map(_.quoted)
-    }
+    val namespaceNames =
+      if (output.head.name == "databaseName"
+        && namespaces.forall(_.length == 1)) {
+        namespaces.map(_.head)
+      } else {
+        namespaces.map(_.quoted)
+      }
 
     namespaceNames
-      .filter{ns => pattern.forall(StringUtils.filterPattern(Seq(ns), _).nonEmpty)}
+      .filter { ns => pattern.forall(StringUtils.filterPattern(Seq(ns), _).nonEmpty) }
       .map(Row(_))
       .toSeq
   }
@@ -66,12 +67,10 @@ case class ShowNamespacesCommand(
 
 object ShowNamespacesCommand {
   def output: Seq[AttributeReference] = {
-    Seq(
-      if (SQLConf.get.legacyOutputSchema) {
-        AttributeReference("databaseName", StringType, nullable = false)()
-      } else {
-        AttributeReference("namespace", StringType, nullable = false)()
-      }
-    )
+    Seq(if (SQLConf.get.legacyOutputSchema) {
+      AttributeReference("databaseName", StringType, nullable = false)()
+    } else {
+      AttributeReference("namespace", StringType, nullable = false)()
+    })
   }
 }

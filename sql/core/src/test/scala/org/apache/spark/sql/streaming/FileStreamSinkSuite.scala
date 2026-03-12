@@ -77,11 +77,10 @@ abstract class FileStreamSinkSuite extends StreamTest {
     var query: StreamingQuery = null
 
     try {
-      query =
-        df.writeStream
-          .option("checkpointLocation", checkpointDir)
-          .format("parquet")
-          .start(outputDir)
+      query = df.writeStream
+        .option("checkpointLocation", checkpointDir)
+        .format("parquet")
+        .start(outputDir)
 
       inputData.addData(1, 2, 3)
 
@@ -106,7 +105,8 @@ abstract class FileStreamSinkSuite extends StreamTest {
     val outputDir = Utils.createTempDir(namePrefix = "stream.output").getCanonicalPath
     val checkpointDir = Utils.createTempDir(namePrefix = "stream.checkpoint").getCanonicalPath
 
-    val query = ds.map(s => (s, s.length))
+    val query = ds
+      .map(s => (s, s.length))
       .toDF("value", "len")
       .writeStream
       .partitionBy("value")
@@ -138,14 +138,14 @@ abstract class FileStreamSinkSuite extends StreamTest {
     var query: StreamingQuery = null
 
     try {
-      query =
-        ds.map(i => (i, i * 1000))
-          .toDF("id", "value")
-          .writeStream
-          .partitionBy("id")
-          .option("checkpointLocation", checkpointDir)
-          .format("parquet")
-          .start(outputDir)
+      query = ds
+        .map(i => (i, i * 1000))
+        .toDF("id", "value")
+        .writeStream
+        .partitionBy("id")
+        .option("checkpointLocation", checkpointDir)
+        .format("parquet")
+        .start(outputDir)
 
       inputData.addData(1, 2, 3)
       failAfter(streamingTimeout) {
@@ -159,9 +159,7 @@ abstract class FileStreamSinkSuite extends StreamTest {
       assert(outputDf.schema === expectedSchema)
 
       // Verify the data is correctly read
-      checkDatasetUnorderly(
-        outputDf.as[(Int, Int)],
-        (1000, 1), (2000, 2), (3000, 3))
+      checkDatasetUnorderly(outputDf.as[(Int, Int)], (1000, 1), (2000, 2), (3000, 3))
 
       checkQueryExecution(outputDf)
     } finally {
@@ -181,14 +179,14 @@ abstract class FileStreamSinkSuite extends StreamTest {
         var query: StreamingQuery = null
 
         try {
-          query =
-            ds.map(i => (i, -i, i * 1000))
-              .toDF("id1", "id2", "value")
-              .writeStream
-              .partitionBy("id1", "id2")
-              .option("checkpointLocation", checkpointDir.getAbsolutePath)
-              .format("parquet")
-              .start(outputPath)
+          query = ds
+            .map(i => (i, -i, i * 1000))
+            .toDF("id1", "id2", "value")
+            .writeStream
+            .partitionBy("id1", "id2")
+            .option("checkpointLocation", checkpointDir.getAbsolutePath)
+            .format("parquet")
+            .start(outputPath)
 
           inputData.addData(1, 2, 3)
           failAfter(streamingTimeout) {
@@ -198,7 +196,9 @@ abstract class FileStreamSinkSuite extends StreamTest {
           val readIn = spark.read.option("basePath", outputPath).parquet(s"$outputDir/*/*")
           checkDatasetUnorderly(
             readIn.as[(Int, Int, Int)],
-            (1000, 1, -1), (2000, 2, -2), (3000, 3, -3))
+            (1000, 1, -1),
+            (2000, 2, -2),
+            (3000, 3, -3))
         } finally {
           if (query != null) {
             query.stop()
@@ -231,12 +231,10 @@ abstract class FileStreamSinkSuite extends StreamTest {
     var query: StreamingQuery = null
 
     try {
-      query =
-        outputDf.writeStream
-          .option("checkpointLocation", checkpointDir)
-          .format("parquet")
-          .start(outputDir)
-
+      query = outputDf.writeStream
+        .option("checkpointLocation", checkpointDir)
+        .format("parquet")
+        .start(outputDir)
 
       def addTimestamp(timestampInSecs: Int*): Unit = {
         inputData.addData(timestampInSecs.map(_ * 1L): _*)
@@ -246,11 +244,9 @@ abstract class FileStreamSinkSuite extends StreamTest {
       }
 
       def check(expectedResult: ((Long, Long), Long)*): Unit = {
-        val outputDf = spark.read.parquet(outputDir)
-          .selectExpr(
-            "CAST(start as BIGINT) AS start",
-            "CAST(end as BIGINT) AS end",
-            "count")
+        val outputDf = spark.read
+          .parquet(outputDir)
+          .selectExpr("CAST(start as BIGINT) AS start", "CAST(end as BIGINT) AS end", "count")
           .orderBy("start") // sort the DataFrame in order to compare with the expected one.
         checkDataset(
           outputDf.as[(Long, Long, Long)],
@@ -261,10 +257,10 @@ abstract class FileStreamSinkSuite extends StreamTest {
       check() // nothing emitted yet
 
       addTimestamp(104, 123) // watermark = 90 before this, watermark = 123 - 10 = 113 after this
-      check((100L, 105L) -> 2L)  // no-data-batch emits results on 100-105,
+      check((100L, 105L) -> 2L) // no-data-batch emits results on 100-105,
 
       addTimestamp(140) // wm = 113 before this, emit results on 100-105, wm = 130 after this
-      check((100L, 105L) -> 2L, (120L, 125L) -> 1L)  // no-data-batch emits results on 120-125
+      check((100L, 105L) -> 2L, (120L, 125L) -> 1L) // no-data-batch emits results on 120-125
 
     } finally {
       if (query != null) {
@@ -278,7 +274,6 @@ abstract class FileStreamSinkSuite extends StreamTest {
     val outputDir = Utils.createTempDir(namePrefix = "stream.output").getCanonicalPath
 
     withTempDir { dir =>
-
       def testOutputMode(mode: String): Unit = {
         checkError(
           exception = intercept[AnalysisException] {
@@ -327,7 +322,9 @@ abstract class FileStreamSinkSuite extends StreamTest {
     }
     val checkpointDir = Utils.createTempDir(namePrefix = "stream.checkpoint").getCanonicalPath
 
-    val writer = ds.toDF("value").writeStream
+    val writer = ds
+      .toDF("value")
+      .writeStream
       .option("checkpointLocation", checkpointDir)
     if (format.nonEmpty) {
       writer.format(format.get)
@@ -374,11 +371,10 @@ abstract class FileStreamSinkSuite extends StreamTest {
 
         var query: StreamingQuery = null
         try {
-          query =
-            df.writeStream
-              .option("checkpointLocation", checkpointDir)
-              .format("json")
-              .start(outputDir)
+          query = df.writeStream
+            .option("checkpointLocation", checkpointDir)
+            .format("json")
+            .start(outputDir)
 
           inputData.addData((1, 1))
 
@@ -408,7 +404,6 @@ abstract class FileStreamSinkSuite extends StreamTest {
 
       withTempDir { outputDir =>
         withTempDir { checkpointDir =>
-
           var query: StreamingQuery = null
 
           var numTasks = 0
@@ -424,11 +419,10 @@ abstract class FileStreamSinkSuite extends StreamTest {
               }
             })
 
-            query =
-              df.writeStream
-                .option("checkpointLocation", checkpointDir.getCanonicalPath)
-                .format(format)
-                .start(outputDir.getCanonicalPath)
+            query = df.writeStream
+              .option("checkpointLocation", checkpointDir.getCanonicalPath)
+              .format(format)
+              .start(outputDir.getCanonicalPath)
 
             inputData.addData("1", "2", "3")
             inputData.addData("4", "5")
@@ -458,7 +452,8 @@ abstract class FileStreamSinkSuite extends StreamTest {
       val outputDir = new File(tempDir, "output @#output")
       val inputData = MemoryStream[Int]
       inputData.addData(1, 2, 3)
-      val q = inputData.toDF()
+      val q = inputData
+        .toDF()
         .writeStream
         .option("checkpointLocation", checkpointDir.getCanonicalPath)
         .format("parquet")
@@ -481,7 +476,9 @@ abstract class FileStreamSinkSuite extends StreamTest {
       val outputDir = new File(tempDir, "output")
       val inputData = MemoryStream[Int]
       inputData.addData(1, 2, 3)
-      val q = inputData.toDS().map(_ / 0)
+      val q = inputData
+        .toDS()
+        .map(_ / 0)
         .writeStream
         .option("checkpointLocation", checkpointDir.getCanonicalPath)
         .format("parquet")
@@ -495,21 +492,27 @@ abstract class FileStreamSinkSuite extends StreamTest {
         }
       }
 
-      val outputFiles = Files.walk(outputDir.toPath).iterator().asScala
+      val outputFiles = Files
+        .walk(outputDir.toPath)
+        .iterator()
+        .asScala
         .filter(_.toString.endsWith(".parquet"))
       assert(outputFiles.toList.isEmpty, "Incomplete files should be cleaned up.")
     }
   }
 
   testQuietly("cleanup complete but invalid output for aborted job") {
-    withSQLConf(("spark.sql.streaming.commitProtocolClass",
-      classOf[PendingCommitFilesTrackingManifestFileCommitProtocol].getCanonicalName)) {
+    withSQLConf(
+      (
+        "spark.sql.streaming.commitProtocolClass",
+        classOf[PendingCommitFilesTrackingManifestFileCommitProtocol].getCanonicalName)) {
       withTempDir { tempDir =>
         val checkpointDir = new File(tempDir, "chk")
         val outputDir = new File(tempDir, "output @#output")
         val inputData = MemoryStream[Int]
         inputData.addData(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
-        val q = inputData.toDS()
+        val q = inputData
+          .toDS()
           .repartition(10)
           .map { value =>
             // we intend task failure after some tasks succeeds
@@ -559,7 +562,8 @@ abstract class FileStreamSinkSuite extends StreamTest {
         // there would be possible to have race condition:
         // - some tasks complete while abortJob is being called
         // we can't delete complete files for these tasks (it's OK since this is a best effort)
-        assert(outputFileNames.intersect(trackingFileNames).isEmpty,
+        assert(
+          outputFileNames.intersect(trackingFileNames).isEmpty,
           "abortJob should clean up files reported as successful.")
       }
     }
@@ -575,12 +579,12 @@ abstract class FileStreamSinkSuite extends StreamTest {
           var query: StreamingQuery = null
           try {
             // repartition to more than the input to leave empty partitions
-            query =
-              df.repartition(10)
-                .writeStream
-                .option("checkpointLocation", checkpointDir.getCanonicalPath)
-                .format(format)
-                .start(outputDir.getCanonicalPath)
+            query = df
+              .repartition(10)
+              .writeStream
+              .option("checkpointLocation", checkpointDir.getCanonicalPath)
+              .format(format)
+              .start(outputDir.getCanonicalPath)
 
             inputData.addData("1", "2", "3")
             inputData.addData("4", "5")
@@ -607,8 +611,11 @@ abstract class FileStreamSinkSuite extends StreamTest {
           assert(allFiles.forall(file => fs.exists(file.sparkPath.toPath)))
 
           // the query should be able to read all rows correctly with metadata log
-          val outputDf = spark.read.format(format).load(outputDir.getCanonicalPath)
-            .selectExpr("CAST(value AS INT)").as[Int]
+          val outputDf = spark.read
+            .format(format)
+            .load(outputDir.getCanonicalPath)
+            .selectExpr("CAST(value AS INT)")
+            .as[Int]
           checkDatasetUnorderly(outputDf, 1, 2, 3, 4, 5)
         }
       }
@@ -649,11 +656,10 @@ abstract class FileStreamSinkSuite extends StreamTest {
           withTempDir { checkpointDir =>
             var query: StreamingQuery = null
             try {
-              query =
-                df.writeStream
-                  .option("checkpointLocation", checkpointDir.getCanonicalPath)
-                  .format("text")
-                  .start(outputDir.getCanonicalPath)
+              query = df.writeStream
+                .option("checkpointLocation", checkpointDir.getCanonicalPath)
+                .format("text")
+                .start(outputDir.getCanonicalPath)
 
               inputData.addData("1", "2", "3")
               inputData.addData("4", "5")
@@ -671,8 +677,11 @@ abstract class FileStreamSinkSuite extends StreamTest {
             stringToFile(additionalFile, "6")
             additionalFile.exists()
 
-            val outputDf = spark.read.format("text").load(outputDir.getCanonicalPath)
-              .selectExpr("CAST(value AS INT)").as[Int]
+            val outputDf = spark.read
+              .format("text")
+              .load(outputDir.getCanonicalPath)
+              .selectExpr("CAST(value AS INT)")
+              .as[Int]
             if (ignoreMetadata) {
               checkDatasetUnorderly(outputDf, 1, 2, 3, 4, 5, 6)
             } else {
@@ -691,9 +700,11 @@ abstract class FileStreamSinkSuite extends StreamTest {
         assert(!FileStreamSink.hasMetadata(Seq(path), spark.sessionState.newHadoopConf(), conf))
       }
 
-      assert(logAppender.loggingEvents.map(_.getMessage.getFormattedMessage).contains(
-        "Assume no metadata directory. Error while looking for metadata directory in the path:" +
-        s" $path."))
+      assert(logAppender.loggingEvents
+        .map(_.getMessage.getFormattedMessage)
+        .contains(
+          "Assume no metadata directory. Error while looking for metadata directory in the path:" +
+            s" $path."))
     }
   }
 
@@ -716,7 +727,7 @@ object PendingCommitFilesTrackingManifestFileCommitProtocol {
 }
 
 class PendingCommitFilesTrackingManifestFileCommitProtocol(jobId: String, path: String)
-  extends ManifestFileCommitProtocol(jobId, path) {
+    extends ManifestFileCommitProtocol(jobId, path) {
   import PendingCommitFilesTrackingManifestFileCommitProtocol._
 
   override def setupJob(jobContext: JobContext): Unit = {
@@ -733,8 +744,7 @@ class PendingCommitFilesTrackingManifestFileCommitProtocol(jobId: String, path: 
 @SlowSQLTest
 class FileStreamSinkV1Suite extends FileStreamSinkSuite {
   override protected def sparkConf: SparkConf =
-    super
-      .sparkConf
+    super.sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, "csv,json,orc,text,parquet")
 
   override def checkQueryExecution(df: DataFrame): Unit = {
@@ -750,12 +760,15 @@ class FileStreamSinkV1Suite extends FileStreamSinkSuite {
 
     /** Check some condition on the partitions of the FileScanRDD generated by a DF */
     def checkFileScanPartitions(df: DataFrame)(func: Seq[FilePartition] => Unit): Unit = {
-      val getFileScanRDD = df.queryExecution.executedPlan.collect {
-        case scan: DataSourceScanExec if scan.inputRDDs().head.isInstanceOf[FileScanRDD] =>
-          scan.inputRDDs().head.asInstanceOf[FileScanRDD]
-      }.headOption.getOrElse {
-        fail(s"No FileScan in query\n${df.queryExecution}")
-      }
+      val getFileScanRDD = df.queryExecution.executedPlan
+        .collect {
+          case scan: DataSourceScanExec if scan.inputRDDs().head.isInstanceOf[FileScanRDD] =>
+            scan.inputRDDs().head.asInstanceOf[FileScanRDD]
+        }
+        .headOption
+        .getOrElse {
+          fail(s"No FileScan in query\n${df.queryExecution}")
+        }
       func(getFileScanRDD.filePartitions)
     }
 
@@ -784,15 +797,14 @@ class FileStreamSinkV1Suite extends FileStreamSinkSuite {
 @SlowSQLTest
 class FileStreamSinkV2Suite extends FileStreamSinkSuite {
   override protected def sparkConf: SparkConf =
-    super
-      .sparkConf
+    super.sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, "")
 
   override def checkQueryExecution(df: DataFrame): Unit = {
     // Verify that MetadataLogFileIndex is being used and the correct partitioning schema has
     // been inferred
-    val table = df.queryExecution.analyzed.collect {
-      case ExtractV2Table(table: FileTable) => table
+    val table = df.queryExecution.analyzed.collect { case ExtractV2Table(table: FileTable) =>
+      table
     }
     assert(table.size === 1)
     assert(table.head.fileIndex.isInstanceOf[MetadataLogFileIndex])
@@ -801,12 +813,15 @@ class FileStreamSinkV2Suite extends FileStreamSinkSuite {
 
     /** Check some condition on the partitions of the FileScanRDD generated by a DF */
     def checkFileScanPartitions(df: DataFrame)(func: Seq[FilePartition] => Unit): Unit = {
-      val fileScan = df.queryExecution.executedPlan.collect {
-        case batch: BatchScanExec if batch.scan.isInstanceOf[FileScan] =>
-          batch.scan.asInstanceOf[FileScan]
-      }.headOption.getOrElse {
-        fail(s"No FileScan in query\n${df.queryExecution}")
-      }
+      val fileScan = df.queryExecution.executedPlan
+        .collect {
+          case batch: BatchScanExec if batch.scan.isInstanceOf[FileScan] =>
+            batch.scan.asInstanceOf[FileScan]
+        }
+        .headOption
+        .getOrElse {
+          fail(s"No FileScan in query\n${df.queryExecution}")
+        }
       func(fileScan.planInputPartitions().map(_.asInstanceOf[FilePartition]).toImmutableArraySeq)
     }
 

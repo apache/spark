@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-
 package org.apache.spark.sql.execution.datasources.v2.python
 
 import org.apache.spark.SparkEnv
@@ -27,11 +26,11 @@ import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.storage.PythonStreamBlockId
 
-
 case class PythonStreamingInputPartition(
     index: Int,
     pickedPartition: Array[Byte],
-    blockId: Option[PythonStreamBlockId]) extends InputPartition {
+    blockId: Option[PythonStreamBlockId])
+    extends InputPartition {
   def dropCache(): Unit = {
     blockId.foreach(SparkEnv.get.blockManager.master.removeBlock(_))
   }
@@ -43,18 +42,21 @@ class PythonStreamingPartitionReaderFactory(
     outputSchema: StructType,
     jobArtifactUUID: Option[String],
     sessionUUID: Option[String])
-  extends PartitionReaderFactory with Logging {
+    extends PartitionReaderFactory
+    with Logging {
 
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
     val part = partition.asInstanceOf[PythonStreamingInputPartition]
 
     // Maybe read from cached block prefetched by SimpleStreamReader
     lazy val cachedBlock = if (part.blockId.isDefined) {
-      val block = SparkEnv.get.blockManager.get[InternalRow](part.blockId.get)
+      val block = SparkEnv.get.blockManager
+        .get[InternalRow](part.blockId.get)
         .map(_.data.asInstanceOf[Iterator[InternalRow]])
       if (block.isEmpty) {
-        logWarning(log"Prefetched block ${MDC(LogKeys.BLOCK_ID, part.blockId)} " +
-          log"for Python data source not found.")
+        logWarning(
+          log"Prefetched block ${MDC(LogKeys.BLOCK_ID, part.blockId)} " +
+            log"for Python data source not found.")
       }
       block
     } else None
@@ -74,8 +76,9 @@ class PythonStreamingPartitionReaderFactory(
           jobArtifactUUID,
           sessionUUID)
 
-        evaluatorFactory.createEvaluator().eval(
-          part.index, Iterator.single(InternalRow(part.pickedPartition)))
+        evaluatorFactory
+          .createEvaluator()
+          .eval(part.index, Iterator.single(InternalRow(part.pickedPartition)))
       } else cachedBlock.get
 
       override def next(): Boolean = outputIter.hasNext

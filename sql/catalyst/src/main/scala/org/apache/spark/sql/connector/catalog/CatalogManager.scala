@@ -37,10 +37,11 @@ import org.apache.spark.sql.internal.SQLConf
  */
 // TODO: all commands should look up table from the current catalog. The `SessionCatalog` doesn't
 //       need to track current database at all.
-private[sql]
-class CatalogManager(
+private[sql] class CatalogManager(
     defaultSessionCatalog: CatalogPlugin,
-    val v1SessionCatalog: SessionCatalog) extends SQLConfHelper with Logging {
+    val v1SessionCatalog: SessionCatalog)
+    extends SQLConfHelper
+    with Logging {
   import CatalogManager.SESSION_CATALOG_NAME
   import CatalogV2Util._
 
@@ -81,8 +82,8 @@ class CatalogManager(
    *
    * This catalog is a v2 catalog that delegates to the v1 session catalog. it is used when the
    * session catalog is responsible for an identifier, but the source requires the v2 catalog API.
-   * This happens when the source implementation extends the v2 TableProvider API and is not listed
-   * in the fallback configuration, spark.sql.sources.useV1SourceList
+   * This happens when the source implementation extends the v2 TableProvider API and is not
+   * listed in the fallback configuration, spark.sql.sources.useV1SourceList
    */
   private[sql] def v2SessionCatalog: CatalogPlugin = {
     conf.getConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION) match {

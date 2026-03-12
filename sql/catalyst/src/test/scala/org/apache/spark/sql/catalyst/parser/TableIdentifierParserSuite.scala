@@ -283,7 +283,6 @@ class TableIdentifierParserSuite extends SQLKeywordUtils {
     "where",
     "with")
 
-
   test("table identifier") {
     // Regular names.
     assert(TableIdentifier("q") === parseTableIdentifier("q"))
@@ -295,12 +294,12 @@ class TableIdentifierParserSuite extends SQLKeywordUtils {
       "d.q.g" -> ("PARSE_SYNTAX_ERROR", Map("error" -> "'.'", "hint" -> "")),
       "t:" -> ("PARSE_SYNTAX_ERROR", Map("error" -> "':'", "hint" -> ": extra input ':'")),
       "${some.var.x}" -> ("PARSE_SYNTAX_ERROR", Map("error" -> "'$'", "hint" -> "")),
-      "tab:1" -> ("PARSE_SYNTAX_ERROR", Map("error" -> "':'", "hint" -> ""))
-    ).foreach { case (identifier, (condition, parameters)) =>
-      checkError(
-        exception = intercept[ParseException](parseTableIdentifier(identifier)),
-        condition = condition,
-        parameters = parameters)
+      "tab:1" -> ("PARSE_SYNTAX_ERROR", Map("error" -> "':'", "hint" -> ""))).foreach {
+      case (identifier, (condition, parameters)) =>
+        checkError(
+          exception = intercept[ParseException](parseTableIdentifier(identifier)),
+          condition = condition,
+          parameters = parameters)
     }
   }
 
@@ -313,7 +312,8 @@ class TableIdentifierParserSuite extends SQLKeywordUtils {
   }
 
   test("table identifier - reserved/non-reserved keywords if ANSI mode enabled") {
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true",
+    withSQLConf(
+      SQLConf.ANSI_ENABLED.key -> "true",
       SQLConf.ENFORCE_RESERVED_KEYWORDS.key -> "true") {
       reservedKeywordsInAnsiMode.foreach { keyword =>
         checkError(

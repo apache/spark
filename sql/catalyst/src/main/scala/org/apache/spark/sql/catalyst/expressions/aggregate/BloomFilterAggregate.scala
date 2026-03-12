@@ -34,9 +34,12 @@ import org.apache.spark.util.sketch.BloomFilter
 /**
  * An internal aggregate function that creates a Bloom filter from input values.
  *
- * @param child                     Child expression of Long values for creating a Bloom filter.
- * @param estimatedNumItemsExpression The number of estimated distinct items (optional).
- * @param numBitsExpression         The number of bits to use (optional).
+ * @param child
+ *   Child expression of Long values for creating a Bloom filter.
+ * @param estimatedNumItemsExpression
+ *   The number of estimated distinct items (optional).
+ * @param numBitsExpression
+ *   The number of bits to use (optional).
  */
 case class BloomFilterAggregate(
     child: Expression,
@@ -44,28 +47,39 @@ case class BloomFilterAggregate(
     numBitsExpression: Expression,
     override val mutableAggBufferOffset: Int,
     override val inputAggBufferOffset: Int)
-  extends TypedImperativeAggregate[BloomFilter] with TernaryLike[Expression] {
+    extends TypedImperativeAggregate[BloomFilter]
+    with TernaryLike[Expression] {
 
-  def this(child: Expression, estimatedNumItemsExpression: Expression,
+  def this(
+      child: Expression,
+      estimatedNumItemsExpression: Expression,
       numBitsExpression: Expression) = {
     this(child, estimatedNumItemsExpression, numBitsExpression, 0, 0)
   }
 
   def this(child: Expression, estimatedNumItemsExpression: Expression) = {
-    this(child, estimatedNumItemsExpression,
+    this(
+      child,
+      estimatedNumItemsExpression,
       // 1 byte per item.
       Multiply(estimatedNumItemsExpression, Literal(8L)))
   }
 
   def this(child: Expression, estimatedNumItems: Long) = {
-    this(child, Literal(estimatedNumItems),
-      Literal(BloomFilter.optimalNumOfBits(estimatedNumItems,
-        SQLConf.get.getConf(RUNTIME_BLOOM_FILTER_MAX_NUM_ITEMS),
-        SQLConf.get.getConf(RUNTIME_BLOOM_FILTER_MAX_NUM_BITS))))
+    this(
+      child,
+      Literal(estimatedNumItems),
+      Literal(
+        BloomFilter.optimalNumOfBits(
+          estimatedNumItems,
+          SQLConf.get.getConf(RUNTIME_BLOOM_FILTER_MAX_NUM_ITEMS),
+          SQLConf.get.getConf(RUNTIME_BLOOM_FILTER_MAX_NUM_BITS))))
   }
 
   def this(child: Expression) = {
-    this(child, Literal(SQLConf.get.getConf(SQLConf.RUNTIME_BLOOM_FILTER_EXPECTED_NUM_ITEMS)),
+    this(
+      child,
+      Literal(SQLConf.get.getConf(SQLConf.RUNTIME_BLOOM_FILTER_EXPECTED_NUM_ITEMS)),
       Literal(SQLConf.get.getConf(SQLConf.RUNTIME_BLOOM_FILTER_NUM_BITS)))
   }
 
@@ -74,10 +88,7 @@ case class BloomFilterAggregate(
       case (_, NullType, _) | (_, _, NullType) =>
         DataTypeMismatch(
           errorSubClass = "UNEXPECTED_NULL",
-          messageParameters = Map(
-            "exprName" -> "estimatedNumItems or numBits"
-          )
-        )
+          messageParameters = Map("exprName" -> "estimatedNumItems or numBits"))
       case (LongType | IntegerType | ShortType | ByteType | _: StringType, LongType, LongType) =>
         if (!estimatedNumItemsExpression.foldable) {
           DataTypeMismatch(
@@ -85,39 +96,32 @@ case class BloomFilterAggregate(
             messageParameters = Map(
               "inputName" -> toSQLId("estimatedNumItems"),
               "inputType" -> toSQLType(estimatedNumItemsExpression.dataType),
-              "inputExpr" -> toSQLExpr(estimatedNumItemsExpression)
-            )
-          )
+              "inputExpr" -> toSQLExpr(estimatedNumItemsExpression)))
         } else if (estimatedNumItems <= 0L) {
           DataTypeMismatch(
             errorSubClass = "VALUE_OUT_OF_RANGE",
             messageParameters = Map(
               "exprName" -> "estimatedNumItems",
               "valueRange" -> s"[0, positive]",
-              "currentValue" -> toSQLValue(estimatedNumItems, LongType)
-            )
-          )
+              "currentValue" -> toSQLValue(estimatedNumItems, LongType)))
         } else if (!numBitsExpression.foldable) {
           DataTypeMismatch(
             errorSubClass = "NON_FOLDABLE_INPUT",
             messageParameters = Map(
               "inputName" -> toSQLId("numBitsExpression"),
               "inputType" -> toSQLType(numBitsExpression.dataType),
-              "inputExpr" -> toSQLExpr(numBitsExpression)
-            )
-          )
+              "inputExpr" -> toSQLExpr(numBitsExpression)))
         } else if (numBits <= 0L) {
           DataTypeMismatch(
             errorSubClass = "VALUE_OUT_OF_RANGE",
             messageParameters = Map(
               "exprName" -> "numBits",
               "valueRange" -> s"[0, positive]",
-              "currentValue" -> toSQLValue(numBits, LongType)
-            )
-          )
+              "currentValue" -> toSQLValue(numBits, LongType)))
         } else {
-          require(estimatedNumItems <=
-            SQLConf.get.getConf(RUNTIME_BLOOM_FILTER_MAX_NUM_ITEMS))
+          require(
+            estimatedNumItems <=
+              SQLConf.get.getConf(RUNTIME_BLOOM_FILTER_MAX_NUM_ITEMS))
           require(numBits <= SQLConf.get.getConf(RUNTIME_BLOOM_FILTER_MAX_NUM_BITS))
           TypeCheckSuccess
         }
@@ -129,9 +133,8 @@ case class BloomFilterAggregate(
             "expectedLeft" -> toSQLType(BinaryType),
             "expectedRight" -> toSQLType(LongType),
             "actual" -> Seq(first.dataType, second.dataType, third.dataType)
-              .map(toSQLType).mkString(", ")
-          )
-        )
+              .map(toSQLType)
+              .mkString(", ")))
     }
   }
   override def nullable: Boolean = true
@@ -142,12 +145,14 @@ case class BloomFilterAggregate(
 
   // Mark as lazy so that `estimatedNumItems` is not evaluated during tree transformation.
   private lazy val estimatedNumItems: Long =
-    Math.min(estimatedNumItemsExpression.eval().asInstanceOf[Number].longValue,
+    Math.min(
+      estimatedNumItemsExpression.eval().asInstanceOf[Number].longValue,
       SQLConf.get.getConf(RUNTIME_BLOOM_FILTER_MAX_NUM_ITEMS))
 
   // Mark as lazy so that `numBits` is not evaluated during tree transformation.
   private lazy val numBits: Long =
-    Math.min(numBitsExpression.eval().asInstanceOf[Number].longValue,
+    Math.min(
+      numBitsExpression.eval().asInstanceOf[Number].longValue,
       SQLConf.get.getConf(RUNTIME_BLOOM_FILTER_MAX_NUM_BITS))
 
   // Mark as lazy so that `updater` is not evaluated during tree transformation.
@@ -169,7 +174,9 @@ case class BloomFilterAggregate(
       newChild: Expression,
       newEstimatedNumItemsExpression: Expression,
       newNumBitsExpression: Expression): BloomFilterAggregate = {
-    copy(child = newChild, estimatedNumItemsExpression = newEstimatedNumItemsExpression,
+    copy(
+      child = newChild,
+      estimatedNumItemsExpression = newEstimatedNumItemsExpression,
       numBitsExpression = newNumBitsExpression)
   }
 

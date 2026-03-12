@@ -27,12 +27,15 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.types.{BooleanType, IntegerType}
 
-
 class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
-    val batches = Batch("SimplifyConditionals", FixedPoint(50),
-      BooleanSimplification, ConstantFolding, SimplifyConditionals) :: Nil
+    val batches = Batch(
+      "SimplifyConditionals",
+      FixedPoint(50),
+      BooleanSimplification,
+      ConstantFolding,
+      SimplifyConditionals) :: Nil
   }
 
   private val relation = LocalRelation($"a".int, $"b".int, $"c".boolean)
@@ -49,34 +52,28 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper {
   private val nullBranch = (Literal.create(null, BooleanType), Literal(30))
 
   test("simplify if") {
-    assertEquivalent(
-      If(TrueLiteral, Literal(10), Literal(20)),
-      Literal(10))
+    assertEquivalent(If(TrueLiteral, Literal(10), Literal(20)), Literal(10))
 
-    assertEquivalent(
-      If(FalseLiteral, Literal(10), Literal(20)),
-      Literal(20))
+    assertEquivalent(If(FalseLiteral, Literal(10), Literal(20)), Literal(20))
 
-    assertEquivalent(
-      If(Literal.create(null, BooleanType), Literal(10), Literal(20)),
-      Literal(20))
+    assertEquivalent(If(Literal.create(null, BooleanType), Literal(10), Literal(20)), Literal(20))
   }
 
   test("remove unnecessary if when the outputs are semantic equivalence") {
     assertEquivalent(
-      If(IsNotNull(UnresolvedAttribute("a")),
+      If(
+        IsNotNull(UnresolvedAttribute("a")),
         Subtract(Literal(10), Literal(1)),
         Add(Literal(6), Literal(3))),
       Literal(9))
 
     // For non-deterministic condition, we don't remove the `If` statement.
     assertEquivalent(
-      If(GreaterThan(Rand(0), Literal(0.5)),
+      If(
+        GreaterThan(Rand(0), Literal(0.5)),
         Subtract(Literal(10), Literal(1)),
         Add(Literal(6), Literal(3))),
-      If(GreaterThan(Rand(0), Literal(0.5)),
-        Literal(9),
-        Literal(9)))
+      If(GreaterThan(Rand(0), Literal(0.5)), Literal(9), Literal(9)))
   }
 
   test("remove unreachable branches") {
@@ -97,14 +94,14 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper {
   }
 
   test("remove entire CaseWhen if the first branch is always true") {
-    assertEquivalent(
-      CaseWhen(trueBranch :: normalBranch :: nullBranch :: Nil, None),
-      Literal(5))
+    assertEquivalent(CaseWhen(trueBranch :: normalBranch :: nullBranch :: Nil, None), Literal(5))
 
     // Test branch elimination and simplification in combination
     assertEquivalent(
-      CaseWhen(unreachableBranch :: unreachableBranch :: nullBranch :: trueBranch :: normalBranch
-        :: Nil, None),
+      CaseWhen(
+        unreachableBranch :: unreachableBranch :: nullBranch :: trueBranch :: normalBranch
+          :: Nil,
+        None),
       Literal(5))
 
     // Make sure this doesn't trigger if there is a non-foldable branch before the true branch
@@ -115,10 +112,11 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper {
 
   test("simplify CaseWhen, prune branches following a definite true") {
     assertEquivalent(
-      CaseWhen(normalBranch :: unreachableBranch ::
-        unreachableBranch :: nullBranch ::
-        trueBranch :: normalBranch ::
-        Nil,
+      CaseWhen(
+        normalBranch :: unreachableBranch ::
+          unreachableBranch :: nullBranch ::
+          trueBranch :: normalBranch ::
+          Nil,
         None),
       CaseWhen(normalBranch :: trueBranch :: Nil, None))
   }
@@ -126,44 +124,46 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper {
   test("simplify CaseWhen if all the outputs are semantic equivalence") {
     // When the conditions in `CaseWhen` are all deterministic, `CaseWhen` can be removed.
     assertEquivalent(
-      CaseWhen(($"a".isNotNull, Subtract(Literal(3), Literal(2))) ::
-        ($"b".isNull, Literal(1)) ::
-        (!$"c", Add(Literal(6), Literal(-5))) ::
-        Nil,
+      CaseWhen(
+        ($"a".isNotNull, Subtract(Literal(3), Literal(2))) ::
+          ($"b".isNull, Literal(1)) ::
+          (!$"c", Add(Literal(6), Literal(-5))) ::
+          Nil,
         Add(Literal(2), Literal(-1))),
-      Literal(1)
-    )
+      Literal(1))
 
     // For non-deterministic conditions, we don't remove the `CaseWhen` statement.
     assertEquivalent(
-      CaseWhen((GreaterThan(Rand(0), Literal(0.5)), Subtract(Literal(3), Literal(2))) ::
-        (LessThan(Rand(1), Literal(0.5)), Literal(1)) ::
-        (EqualTo(Rand(2), Literal(0.5)), Add(Literal(6), Literal(-5))) ::
-        Nil,
+      CaseWhen(
+        (GreaterThan(Rand(0), Literal(0.5)), Subtract(Literal(3), Literal(2))) ::
+          (LessThan(Rand(1), Literal(0.5)), Literal(1)) ::
+          (EqualTo(Rand(2), Literal(0.5)), Add(Literal(6), Literal(-5))) ::
+          Nil,
         Add(Literal(2), Literal(-1))),
-      CaseWhen((GreaterThan(Rand(0), Literal(0.5)), Literal(1)) ::
-        (LessThan(Rand(1), Literal(0.5)), Literal(1)) ::
-        (EqualTo(Rand(2), Literal(0.5)), Literal(1)) ::
-        Nil,
-        Literal(1))
-    )
+      CaseWhen(
+        (GreaterThan(Rand(0), Literal(0.5)), Literal(1)) ::
+          (LessThan(Rand(1), Literal(0.5)), Literal(1)) ::
+          (EqualTo(Rand(2), Literal(0.5)), Literal(1)) ::
+          Nil,
+        Literal(1)))
 
     // When we have mixture of deterministic and non-deterministic conditions, we remove
     // the deterministic conditions from the tail until a non-deterministic one is seen.
     assertEquivalent(
-      CaseWhen((GreaterThan(Rand(0), Literal(0.5)), Subtract(Literal(3), Literal(2))) ::
-        (NonFoldableLiteral(true), Add(Literal(2), Literal(-1))) ::
-        (LessThan(Rand(1), Literal(0.5)), Literal(1)) ::
-        (NonFoldableLiteral(true), Add(Literal(6), Literal(-5))) ::
-        (NonFoldableLiteral(false), Literal(1)) ::
-        Nil,
+      CaseWhen(
+        (GreaterThan(Rand(0), Literal(0.5)), Subtract(Literal(3), Literal(2))) ::
+          (NonFoldableLiteral(true), Add(Literal(2), Literal(-1))) ::
+          (LessThan(Rand(1), Literal(0.5)), Literal(1)) ::
+          (NonFoldableLiteral(true), Add(Literal(6), Literal(-5))) ::
+          (NonFoldableLiteral(false), Literal(1)) ::
+          Nil,
         Add(Literal(2), Literal(-1))),
-      CaseWhen((GreaterThan(Rand(0), Literal(0.5)), Literal(1)) ::
-        (NonFoldableLiteral(true), Literal(1)) ::
-        (LessThan(Rand(1), Literal(0.5)), Literal(1)) ::
-        Nil,
-        Literal(1))
-    )
+      CaseWhen(
+        (GreaterThan(Rand(0), Literal(0.5)), Literal(1)) ::
+          (NonFoldableLiteral(true), Literal(1)) ::
+          (LessThan(Rand(1), Literal(0.5)), Literal(1)) ::
+          Nil,
+        Literal(1)))
   }
 
   test("simplify if when one clause is null and another is boolean") {
@@ -176,9 +176,11 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper {
 
     // the rule should not apply to nullable predicate
     Seq(TrueLiteral, FalseLiteral).foreach { b =>
-      assertEquivalent(If(GreaterThan($"a", 42), nullLiteral, b),
+      assertEquivalent(
+        If(GreaterThan($"a", 42), nullLiteral, b),
         If(GreaterThan($"a", 42), nullLiteral, b))
-      assertEquivalent(If(GreaterThan($"a", 42), b, nullLiteral),
+      assertEquivalent(
+        If(GreaterThan($"a", 42), b, nullLiteral),
         If(GreaterThan($"a", 42), b, nullLiteral))
     }
 
@@ -193,21 +195,19 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper {
     // should have no effect on expressions with nullable if condition
     assert((Factorial(5) > 100L).nullable)
     Seq(TrueLiteral, FalseLiteral).foreach { b =>
-      checkEvaluation(If(Factorial(5) > 100L, nullLiteral, b),
+      checkEvaluation(
+        If(Factorial(5) > 100L, nullLiteral, b),
         If(Factorial(5) > 100L, nullLiteral, b).eval(EmptyRow))
-      checkEvaluation(If(Factorial(5) > 100L, b, nullLiteral),
+      checkEvaluation(
+        If(Factorial(5) > 100L, b, nullLiteral),
         If(Factorial(5) > 100L, b, nullLiteral).eval(EmptyRow))
     }
   }
 
   test("SPARK-33845: remove unnecessary if when the outputs are boolean type") {
     // verify the boolean equivalence of all transformations involved
-    val fields = Seq(
-      $"cond".boolean.notNull,
-      $"cond_nullable".boolean,
-      $"a".boolean,
-      $"b".boolean
-    )
+    val fields =
+      Seq($"cond".boolean.notNull, $"cond_nullable".boolean, $"a".boolean, $"b".boolean)
     val Seq(cond, cond_nullable, a, b) = fields.zipWithIndex.map { case (f, i) => f.at(i) }
 
     val exprs = Seq(
@@ -226,10 +226,10 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper {
     val binaryBooleanValues = Seq(true, false)
     val ternaryBooleanValues = Seq(true, false, null)
     for (condVal <- binaryBooleanValues;
-         condNullableVal <- ternaryBooleanValues;
-         aVal <- ternaryBooleanValues;
-         bVal <- ternaryBooleanValues;
-         (originalExpr, expectedExpr) <- exprs) {
+      condNullableVal <- ternaryBooleanValues;
+      aVal <- ternaryBooleanValues;
+      bVal <- ternaryBooleanValues;
+      (originalExpr, expectedExpr) <- exprs) {
       val inputRow = create_row(condVal, condNullableVal, aVal, bVal)
       val optimizedVal = evaluateWithoutCodegen(expectedExpr, inputRow)
       checkEvaluation(originalExpr, optimizedVal, inputRow)
@@ -248,12 +248,8 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper {
 
   test("SPARK-33884: simplify CaseWhen clauses with (true and false) and (false and true)") {
     // verify the boolean equivalence of all transformations involved
-    val fields = Seq(
-      $"cond".boolean.notNull,
-      $"cond_nullable".boolean,
-      $"a".boolean,
-      $"b".boolean
-    )
+    val fields =
+      Seq($"cond".boolean.notNull, $"cond_nullable".boolean, $"a".boolean, $"b".boolean)
     val Seq(cond, cond_nullable, a, b) = fields.zipWithIndex.map { case (f, i) => f.at(i) }
 
     val exprs = Seq(
@@ -272,10 +268,10 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper {
     val binaryBooleanValues = Seq(true, false)
     val ternaryBooleanValues = Seq(true, false, null)
     for (condVal <- binaryBooleanValues;
-         condNullableVal <- ternaryBooleanValues;
-         aVal <- ternaryBooleanValues;
-         bVal <- ternaryBooleanValues;
-         (originalExpr, expectedExpr) <- exprs) {
+      condNullableVal <- ternaryBooleanValues;
+      aVal <- ternaryBooleanValues;
+      bVal <- ternaryBooleanValues;
+      (originalExpr, expectedExpr) <- exprs) {
       val inputRow = create_row(condVal, condNullableVal, aVal, bVal)
       val optimizedVal = evaluateWithoutCodegen(expectedExpr, inputRow)
       checkEvaluation(originalExpr, optimizedVal, inputRow)
@@ -284,12 +280,14 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper {
 
   test("SPARK-37270: Remove elseValue if it is null Literal") {
     assertEquivalent(
-      CaseWhen((GreaterThan($"a", Rand(1)), Literal.create(null, BooleanType)) :: Nil,
+      CaseWhen(
+        (GreaterThan($"a", Rand(1)), Literal.create(null, BooleanType)) :: Nil,
         Some(Literal.create(null, BooleanType))),
       CaseWhen((GreaterThan($"a", Rand(1)), Literal.create(null, BooleanType)) :: Nil))
 
     assertEquivalent(
-      CaseWhen((GreaterThan($"a", 1), Literal.create(1, IntegerType)) :: Nil,
+      CaseWhen(
+        (GreaterThan($"a", 1), Literal.create(1, IntegerType)) :: Nil,
         Some(Literal.create(null, IntegerType))),
       CaseWhen((GreaterThan($"a", 1), Literal.create(1, IntegerType)) :: Nil))
   }

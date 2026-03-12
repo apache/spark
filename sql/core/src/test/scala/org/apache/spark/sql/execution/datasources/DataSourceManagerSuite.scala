@@ -25,8 +25,10 @@ class DataSourceManagerSuite extends SparkFunSuite {
     withLogAppender(testAppender) {
       new DataSourceManager().clone()
     }
-    assert(!testAppender.loggingEvents
-      .exists(msg =>
-        msg.getMessage.getFormattedMessage.contains("Skipping the lookup of Python Data Sources")))
+    assert(
+      !testAppender.loggingEvents
+        .exists(msg =>
+          msg.getMessage.getFormattedMessage.contains(
+            "Skipping the lookup of Python Data Sources")))
   }
 }

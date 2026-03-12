@@ -36,12 +36,13 @@ class DataFrameTungstenSuite extends QueryTest with SharedSparkSession {
   }
 
   test("test struct type") {
-    val struct = Row(1, 2L, 3.0F, 3.0)
+    val struct = Row(1, 2L, 3.0f, 3.0)
     val data = sparkContext.parallelize(Seq(Row(1, struct)))
 
     val schema = new StructType()
       .add("a", IntegerType)
-      .add("b",
+      .add(
+        "b",
         new StructType()
           .add("b1", IntegerType)
           .add("b2", LongType)
@@ -54,20 +55,23 @@ class DataFrameTungstenSuite extends QueryTest with SharedSparkSession {
 
   test("test nested struct type") {
     val innerStruct = Row(1, "abcd")
-    val outerStruct = Row(1, 2L, 3.0F, 3.0, innerStruct, "efg")
+    val outerStruct = Row(1, 2L, 3.0f, 3.0, innerStruct, "efg")
     val data = sparkContext.parallelize(Seq(Row(1, outerStruct)))
 
     val schema = new StructType()
       .add("a", IntegerType)
-      .add("b",
+      .add(
+        "b",
         new StructType()
           .add("b1", IntegerType)
           .add("b2", LongType)
           .add("b3", FloatType)
           .add("b4", DoubleType)
-          .add("b5", new StructType()
-          .add("b5a", IntegerType)
-          .add("b5b", StringType))
+          .add(
+            "b5",
+            new StructType()
+              .add("b5a", IntegerType)
+              .add("b5b", StringType))
           .add("b6", StringType))
 
     val df = spark.createDataFrame(data, schema)
@@ -75,10 +79,16 @@ class DataFrameTungstenSuite extends QueryTest with SharedSparkSession {
   }
 
   test("primitive data type accesses in persist data") {
-    val data = Seq(true, 1.toByte, 3.toShort, 7, 15.toLong,
-      31.25.toFloat, 63.75, null)
-    val dataTypes = Seq(BooleanType, ByteType, ShortType, IntegerType, LongType,
-      FloatType, DoubleType, IntegerType)
+    val data = Seq(true, 1.toByte, 3.toShort, 7, 15.toLong, 31.25.toFloat, 63.75, null)
+    val dataTypes = Seq(
+      BooleanType,
+      ByteType,
+      ShortType,
+      IntegerType,
+      LongType,
+      FloatType,
+      DoubleType,
+      IntegerType)
     val schemas = dataTypes.zipWithIndex.map { case (dataType, index) =>
       StructField(s"col$index", dataType, true)
     }

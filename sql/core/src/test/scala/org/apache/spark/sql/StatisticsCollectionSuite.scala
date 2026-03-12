@@ -40,7 +40,6 @@ import org.apache.spark.sql.test.SQLTestData.ArrayData
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-
 /**
  * End-to-end suite testing statistics collection and use on both entire table and columns.
  */
@@ -49,7 +48,8 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
 
   test("estimates the size of a limit 0 on outer join") {
     withTempView("test") {
-      Seq(("one", 1), ("two", 2), ("three", 3), ("four", 4)).toDF("k", "v")
+      Seq(("one", 1), ("two", 2), ("three", 3), ("four", 4))
+        .toDF("k", "v")
         .createOrReplaceTempView("test")
       val df1 = spark.table("test")
       val df2 = spark.table("test").limit(0)
@@ -60,7 +60,8 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       }
 
       assert(sizes.size === 1, s"number of Join nodes is wrong:\n ${df.queryExecution}")
-      assert(sizes.head === BigInt(128),
+      assert(
+        sizes.head === BigInt(128),
         s"expected exact size 96 for table 'test', got: ${sizes.head}")
     }
   }
@@ -77,15 +78,13 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
             sql(s"ANALYZE TABLE $viewName COMPUTE STATISTICS")
           },
           condition = "UNSUPPORTED_FEATURE.ANALYZE_VIEW",
-          parameters = Map.empty
-        )
+          parameters = Map.empty)
         checkError(
           exception = intercept[AnalysisException] {
             sql(s"ANALYZE TABLE $viewName COMPUTE STATISTICS FOR COLUMNS id")
           },
           condition = "UNSUPPORTED_FEATURE.ANALYZE_VIEW",
-          parameters = Map.empty
-        )
+          parameters = Map.empty)
       }
     }
   }
@@ -110,12 +109,18 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       val fetchedStats1 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = None)
       assert(fetchedStats1.get.sizeInBytes == 0)
       sql(s"ANALYZE TABLE $table COMPUTE STATISTICS")
-      val fetchedStats2 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = Some(0))
+      val fetchedStats2 =
+        checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = Some(0))
       assert(fetchedStats2.get.sizeInBytes == 0)
 
       val expectedColStat =
-        "key" -> CatalogColumnStat(Some(0), None, None, Some(0),
-          Some(IntegerType.defaultSize), Some(IntegerType.defaultSize))
+        "key" -> CatalogColumnStat(
+          Some(0),
+          None,
+          None,
+          Some(0),
+          Some(IntegerType.defaultSize),
+          Some(IntegerType.defaultSize))
 
       // There won't be histogram for empty column.
       Seq("true", "false").foreach { histogramEnabled =>
@@ -140,9 +145,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
         parameters = Map(
           "columnType" -> "\"ARRAY<INT>\"",
           "columnName" -> "`data`",
-          "tableName" -> "`spark_catalog`.`default`.`column_stats_test1`"
-        )
-      )
+          "tableName" -> "`spark_catalog`.`default`.`column_stats_test1`"))
 
       // Test invalid columns
       checkError(
@@ -152,9 +155,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
         condition = "COLUMN_NOT_FOUND",
         parameters = Map(
           "colName" -> "`some_random_column`",
-          "caseSensitiveConfig" -> "\"spark.sql.caseSensitive\""
-        )
-      )
+          "caseSensitiveConfig" -> "\"spark.sql.caseSensitive\""))
     }
   }
 
@@ -177,15 +178,17 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
   test("SPARK-15392: DataFrame created from RDD should not be broadcasted") {
     val rdd = sparkContext.range(1, 100).map(i => Row(i, i))
     val df = spark.createDataFrame(rdd, new StructType().add("a", LongType).add("b", LongType))
-    assert(df.queryExecution.analyzed.stats.sizeInBytes >
-      spark.sessionState.conf.autoBroadcastJoinThreshold)
-    assert(df.selectExpr("a").queryExecution.analyzed.stats.sizeInBytes >
-      spark.sessionState.conf.autoBroadcastJoinThreshold)
+    assert(
+      df.queryExecution.analyzed.stats.sizeInBytes >
+        spark.sessionState.conf.autoBroadcastJoinThreshold)
+    assert(
+      df.selectExpr("a").queryExecution.analyzed.stats.sizeInBytes >
+        spark.sessionState.conf.autoBroadcastJoinThreshold)
   }
 
   test("column stats round trip serialization") {
     // Make sure we serialize and then deserialize and we will get the result data
-    val df = data.toDF(stats.keys.toSeq :+ "carray" : _*)
+    val df = data.toDF(stats.keys.toSeq :+ "carray": _*)
     Seq(stats, statsWithHgms).foreach { s =>
       s.zip(df.schema).foreach { case ((k, v), field) =>
         withClue(s"column $k with type ${field.dataType}") {
@@ -208,7 +211,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
   test("analyze column command - result verification") {
     // (data.head.productArity - 1) because the last column does not support stats collection.
     assert(stats.size == data.head.productArity - 1)
-    val df = data.toDF(stats.keys.toSeq :+ "carray" : _*)
+    val df = data.toDF(stats.keys.toSeq :+ "carray": _*)
     checkColStats(df, stats)
 
     // test column stats with histograms
@@ -219,18 +222,36 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
 
   test("column stats collection for null columns") {
     val dataTypes: Seq[(DataType, Int)] = Seq(
-      BooleanType, ByteType, ShortType, IntegerType, LongType,
-      DoubleType, FloatType, DecimalType.SYSTEM_DEFAULT,
-      StringType, BinaryType, DateType, TimestampType
-    ).zipWithIndex
+      BooleanType,
+      ByteType,
+      ShortType,
+      IntegerType,
+      LongType,
+      DoubleType,
+      FloatType,
+      DecimalType.SYSTEM_DEFAULT,
+      StringType,
+      BinaryType,
+      DateType,
+      TimestampType).zipWithIndex
 
-    val df = sql("select " + dataTypes.map { case (tpe, idx) =>
-      s"cast(null as ${tpe.sql}) as col$idx"
-    }.mkString(", "))
+    val df = sql(
+      "select " + dataTypes
+        .map { case (tpe, idx) =>
+          s"cast(null as ${tpe.sql}) as col$idx"
+        }
+        .mkString(", "))
 
     val expectedColStats = dataTypes.map { case (tpe, idx) =>
-      (s"col$idx", CatalogColumnStat(Some(0), None, None, Some(1),
-        Some(tpe.defaultSize.toLong), Some(tpe.defaultSize.toLong)))
+      (
+        s"col$idx",
+        CatalogColumnStat(
+          Some(0),
+          None,
+          None,
+          Some(1),
+          Some(tpe.defaultSize.toLong),
+          Some(tpe.defaultSize.toLong)))
     }
 
     // There won't be histograms for null columns.
@@ -269,9 +290,8 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       BigInt(4444444444L) -> (("4.1 GiB", "4.44E+9")),
       BigInt(5555555555555L) -> (("5.1 TiB", "5.56E+12")),
       BigInt(6666666666666666L) -> (("5.9 PiB", "6.67E+15")),
-      BigInt(1L << 10 ) * (1L << 60) -> (("1024.0 EiB", "1.18E+21")),
-      BigInt(1L << 11) * (1L << 60) -> (("2.36E+21 B", "2.36E+21"))
-    )
+      BigInt(1L << 10) * (1L << 60) -> (("1024.0 EiB", "1.18E+21")),
+      BigInt(1L << 11) * (1L << 60) -> (("2.36E+21 B", "2.36E+21")))
     numbers.foreach { case (input, (expectedSize, expectedRows)) =>
       val stats = Statistics(sizeInBytes = input, rowCount = Some(input))
       val expectedString = s"sizeInBytes=$expectedSize, rowCount=$expectedRows"
@@ -288,24 +308,30 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
           spark.range(100).select($"id", $"id" % 5 as "value").write.saveAsTable(table)
           // analyze to get initial stats
           sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS id, value")
-          val fetched1 = checkTableStats(
-            table, hasSizeInBytes = true, expectedRowCounts = Some(100))
+          val fetched1 =
+            checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = Some(100))
           assert(fetched1.get.sizeInBytes > 0)
           assert(fetched1.get.colStats.size == 2)
 
           // set location command
-          val initLocation = spark.sessionState.catalog.getTableMetadata(TableIdentifier(table))
-            .storage.locationUri.get.toString
+          val initLocation = spark.sessionState.catalog
+            .getTableMetadata(TableIdentifier(table))
+            .storage
+            .locationUri
+            .get
+            .toString
           withTempDir { newLocation =>
             sql(s"ALTER TABLE $table SET LOCATION '${newLocation.toURI.toString}'")
             if (autoUpdate) {
-              val fetched2 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = None)
+              val fetched2 =
+                checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = None)
               assert(fetched2.get.sizeInBytes == 0)
               assert(fetched2.get.colStats.isEmpty)
 
               // set back to the initial location
               sql(s"ALTER TABLE $table SET LOCATION '$initLocation'")
-              val fetched3 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = None)
+              val fetched3 =
+                checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = None)
               assert(fetched3.get.sizeInBytes == fetched1.get.sizeInBytes)
             } else {
               checkTableStats(table, hasSizeInBytes = false, expectedRowCounts = None)
@@ -327,7 +353,8 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
           sql(s"CREATE TABLE $table (i int, j string) USING PARQUET")
           // analyze to get initial stats
           sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS i, j")
-          val fetched1 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = Some(0))
+          val fetched1 =
+            checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = Some(0))
           assert(fetched1.get.sizeInBytes == 0)
           assert(fetched1.get.colStats.size == 2)
 
@@ -427,10 +454,13 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
       withTable("TBL1", "TBL") {
         import org.apache.spark.sql.functions._
-        val df = spark.range(1000L).select($"id",
-          $"id" * 2 as "FLD1",
-          $"id" * 12 as "FLD2",
-          lit(null).cast(DoubleType) + $"id" as "fld3")
+        val df = spark
+          .range(1000L)
+          .select(
+            $"id",
+            $"id" * 2 as "FLD1",
+            $"id" * 12 as "FLD2",
+            lit(null).cast(DoubleType) + $"id" as "fld3")
         df.write
           .mode(SaveMode.Overwrite)
           .bucketBy(10, "id", "FLD1", "FLD2")
@@ -438,8 +468,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
           .saveAsTable("TBL")
         sql("ANALYZE TABLE TBL COMPUTE STATISTICS ")
         sql("ANALYZE TABLE TBL COMPUTE STATISTICS FOR COLUMNS ID, FLD1, FLD2, FLD3")
-        val df2 = spark.sql(
-          """
+        val df2 = spark.sql("""
              |SELECT t1.id, t1.fld1, t1.fld2, t1.fld3
              |FROM tbl t1
              |JOIN tbl t2 on t1.id=t2.id
@@ -454,24 +483,23 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
   test("store and retrieve column stats in different time zones") {
     val (start, end) = (0, TimeUnit.DAYS.toSeconds(2))
 
-    def checkTimestampStats(
-        t: DataType,
-        srcTimeZone: TimeZone,
-        dstTimeZone: TimeZone)(checker: ColumnStat => Unit): Unit = {
+    def checkTimestampStats(t: DataType, srcTimeZone: TimeZone, dstTimeZone: TimeZone)(
+        checker: ColumnStat => Unit): Unit = {
       val table = "time_table"
       val column = "T"
       val original = TimeZone.getDefault
       try {
         withTable(table) {
           TimeZone.setDefault(srcTimeZone)
-          spark.range(start, end)
+          spark
+            .range(start, end)
             .select(timestamp_seconds($"id").cast(t).as(column))
-            .write.saveAsTable(table)
+            .write
+            .saveAsTable(table)
           sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS $column")
 
           TimeZone.setDefault(dstTimeZone)
-          val stats = getCatalogTable(table)
-            .stats.get.colStats(column).toPlanStat(column, t)
+          val stats = getCatalogTable(table).stats.get.colStats(column).toPlanStat(column, t)
           checker(stats)
         }
       } finally {
@@ -510,8 +538,9 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     assert(extractColumnStatsFromDesc("max", descTsCol) == expectedMaxTimestamp)
   }
 
-  test("SPARK-38140: describe column stats (min, max) for timestamp column: desc results should " +
-    "be consistent with the written value if writing and desc happen in the same time zone") {
+  test(
+    "SPARK-38140: describe column stats (min, max) for timestamp column: desc results should " +
+      "be consistent with the written value if writing and desc happen in the same time zone") {
 
     val zoneIdAndOffsets =
       Seq((UTC, "+0000"), (PST, "-0800"), (getZoneId("Asia/Hong_Kong"), "+0800"))
@@ -537,8 +566,9 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     }
   }
 
-  test("SPARK-38140: describe column stats (min, max) for timestamp column: desc should show " +
-    "different results if writing in UTC and desc in other time zones") {
+  test(
+    "SPARK-38140: describe column stats (min, max) for timestamp column: desc should show " +
+      "different results if writing in UTC and desc in other time zones") {
 
     val table = "insert_desc_diff_time_zones"
     val tsCol = "timestamp_typed_col"
@@ -591,8 +621,8 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
         expectedMaxTimestamp = "2022-01-03 00:00:02.987654")
 
       // Converting TimestampNTZ catalog stats to plan stats
-      val columnStat = getCatalogTable(table)
-        .stats.get.colStats(tsCol).toPlanStat(tsCol, TimestampNTZType)
+      val columnStat =
+        getCatalogTable(table).stats.get.colStats(tsCol).toPlanStat(tsCol, TimestampNTZType)
       assert(columnStat.min.contains(1640995201123456L))
       assert(columnStat.max.contains(1641168002987654L))
     }
@@ -605,8 +635,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
 
   test("analyzes column statistics in cached query") {
     withTempView("cachedQuery") {
-      sql(
-        """CACHE TABLE cachedQuery AS
+      sql("""CACHE TABLE cachedQuery AS
           |  SELECT c0, avg(c1) AS v1, avg(c2) AS v2
           |  FROM (SELECT id % 3 AS c0, id % 5 AS c1, 2 AS c2 FROM range(1, 30))
           |  GROUP BY c0
@@ -618,7 +647,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
 
       // Analyzes two more columns
       sql("ANALYZE TABLE cachedQuery COMPUTE STATISTICS FOR COLUMNS c0, v2")
-      assert(getStatAttrNames("cachedQuery")  === Set("c0", "v1", "v2"))
+      assert(getStatAttrNames("cachedQuery") === Set("c0", "v1", "v2"))
     }
   }
 
@@ -631,8 +660,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
           sql("ANALYZE TABLE tempView COMPUTE STATISTICS FOR COLUMNS id")
         },
         condition = "UNSUPPORTED_FEATURE.ANALYZE_UNCACHED_TEMP_VIEW",
-        parameters = Map("viewName" -> "`tempView`")
-      )
+        parameters = Map("viewName" -> "`tempView`"))
 
       // Cache the view then analyze it
       sql("CACHE TABLE tempView")
@@ -648,7 +676,9 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       val e1 = intercept[AnalysisException] {
         sql(s"ANALYZE TABLE $globalTempDB.gTempView COMPUTE STATISTICS FOR COLUMNS id")
       }
-      checkErrorTableNotFound(e1, s"`$globalTempDB`.`gTempView`",
+      checkErrorTableNotFound(
+        e1,
+        s"`$globalTempDB`.`gTempView`",
         ExpectedContext(s"$globalTempDB.gTempView", 14, 13 + s"$globalTempDB.gTempView".length))
       // Analyzes in a global temporary view
       sql("CREATE GLOBAL TEMP VIEW gTempView AS SELECT 1 id")
@@ -657,8 +687,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
           sql(s"ANALYZE TABLE $globalTempDB.gTempView COMPUTE STATISTICS FOR COLUMNS id")
         },
         condition = "UNSUPPORTED_FEATURE.ANALYZE_UNCACHED_TEMP_VIEW",
-        parameters = Map("viewName" -> "`global_temp`.`gTempView`")
-      )
+        parameters = Map("viewName" -> "`global_temp`.`gTempView`"))
 
       // Cache the view then analyze it
       sql(s"CACHE TABLE $globalTempDB.gTempView")
@@ -687,8 +716,9 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
         sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS c")
 
         val table = getCatalogTable(tableName)
-        assert(table.stats.get.colStats("c") ==
-          CatalogColumnStat(Some(1), None, None, Some(0), Some(1), Some(1)))
+        assert(
+          table.stats.get.colStats("c") ==
+            CatalogColumnStat(Some(1), None, None, Some(0), Some(1), Some(1)))
       }
     }
   }
@@ -779,8 +809,9 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
   }
 
   Seq(true, false).foreach { caseSensitive =>
-    test(s"SPARK-30903: Fail fast on duplicate columns when analyze columns " +
-      s"- caseSensitive=$caseSensitive") {
+    test(
+      s"SPARK-30903: Fail fast on duplicate columns when analyze columns " +
+        s"- caseSensitive=$caseSensitive") {
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         val table = "test_table"
         withTable(table) {
@@ -800,31 +831,36 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
   test("SPARK-34119: Keep necessary stats after PruneFileSourcePartitions") {
     withTable("SPARK_34119") {
       withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
-        sql(s"CREATE TABLE SPARK_34119 using parquet PARTITIONED BY (p) AS " +
-          "(SELECT id, CAST(id % 5 AS STRING) AS p FROM range(10))")
+        sql(
+          s"CREATE TABLE SPARK_34119 using parquet PARTITIONED BY (p) AS " +
+            "(SELECT id, CAST(id % 5 AS STRING) AS p FROM range(10))")
         sql(s"ANALYZE TABLE SPARK_34119 COMPUTE STATISTICS FOR ALL COLUMNS")
 
-        checkOptimizedPlanStats(sql(s"SELECT id FROM SPARK_34119"),
+        checkOptimizedPlanStats(
+          sql(s"SELECT id FROM SPARK_34119"),
           160L,
           Some(10),
-          Seq(ColumnStat(
-            distinctCount = Some(10),
-            min = Some(0),
-            max = Some(9),
-            nullCount = Some(0),
-            avgLen = Some(LongType.defaultSize),
-            maxLen = Some(LongType.defaultSize))))
+          Seq(
+            ColumnStat(
+              distinctCount = Some(10),
+              min = Some(0),
+              max = Some(9),
+              nullCount = Some(0),
+              avgLen = Some(LongType.defaultSize),
+              maxLen = Some(LongType.defaultSize))))
 
-        checkOptimizedPlanStats(sql("SELECT id FROM SPARK_34119 WHERE p = '2'"),
+        checkOptimizedPlanStats(
+          sql("SELECT id FROM SPARK_34119 WHERE p = '2'"),
           32L,
           Some(2),
-          Seq(ColumnStat(
-            distinctCount = Some(2),
-            min = Some(0),
-            max = Some(9),
-            nullCount = Some(0),
-            avgLen = Some(LongType.defaultSize),
-            maxLen = Some(LongType.defaultSize))))
+          Seq(
+            ColumnStat(
+              distinctCount = Some(2),
+              min = Some(0),
+              max = Some(9),
+              nullCount = Some(0),
+              avgLen = Some(LongType.defaultSize),
+              maxLen = Some(LongType.defaultSize))))
       }
     }
   }
@@ -835,8 +871,9 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       withTempDir { dir =>
         withTable("t1", "t2") {
           spark.range(10).write.saveAsTable("t1")
-          sql(s"CREATE EXTERNAL TABLE t2 USING parquet LOCATION '${dir.toURI}' " +
-            "AS SELECT * FROM range(20)")
+          sql(
+            s"CREATE EXTERNAL TABLE t2 USING parquet LOCATION '${dir.toURI}' " +
+              "AS SELECT * FROM range(20)")
           withView("v1", "v2") {
             sql("CREATE VIEW v1 AS SELECT 1 c1")
             sql("CREATE VIEW v2 AS SELECT 2 c2")
@@ -863,15 +900,16 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     val e = intercept[AnalysisException] {
       sql(s"ANALYZE TABLES IN db_not_exists COMPUTE STATISTICS")
     }
-    checkError(e,
+    checkError(
+      e,
       condition = "SCHEMA_NOT_FOUND",
       parameters = Map("schemaName" -> "`spark_catalog`.`db_not_exists`"))
   }
 
   test("SPARK-43383: Add rowCount statistics to LocalRelation") {
     withSQLConf("spark.sql.test.localRelationRowCount" -> "true") {
-      val optimizedPlan = spark.sql("select * from values(1),(2),(3),(4),(5),(6)")
-        .queryExecution.optimizedPlan
+      val optimizedPlan =
+        spark.sql("select * from values(1),(2),(3),(4),(5),(6)").queryExecution.optimizedPlan
       assert(optimizedPlan.isInstanceOf[LocalRelation])
 
       val stats = optimizedPlan.stats
@@ -881,36 +919,33 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
 
   test("SPARK-39834: build the stats for LogicalRDD based on origin stats") {
     def buildExpectedColumnStats(attrs: Seq[Attribute]): AttributeMap[ColumnStat] = {
-      AttributeMap(
-        attrs.map {
-          case attr if attr.dataType == BooleanType =>
-            attr -> ColumnStat(
-              distinctCount = Some(2),
-              min = Some(false),
-              max = Some(true),
-              nullCount = Some(0),
-              avgLen = Some(1),
-              maxLen = Some(1))
+      AttributeMap(attrs.map {
+        case attr if attr.dataType == BooleanType =>
+          attr -> ColumnStat(
+            distinctCount = Some(2),
+            min = Some(false),
+            max = Some(true),
+            nullCount = Some(0),
+            avgLen = Some(1),
+            maxLen = Some(1))
 
-          case attr if attr.dataType == ByteType =>
-            attr -> ColumnStat(
-              distinctCount = Some(2),
-              min = Some(1),
-              max = Some(2),
-              nullCount = Some(0),
-              avgLen = Some(1),
-              maxLen = Some(1))
+        case attr if attr.dataType == ByteType =>
+          attr -> ColumnStat(
+            distinctCount = Some(2),
+            min = Some(1),
+            max = Some(2),
+            nullCount = Some(0),
+            avgLen = Some(1),
+            maxLen = Some(1))
 
-          case attr => attr -> ColumnStat()
-        }
-      )
+        case attr => attr -> ColumnStat()
+      })
     }
 
     val outputList = Seq(
       AttributeReference("cbool", BooleanType)(),
       AttributeReference("cbyte", ByteType)(),
-      AttributeReference("cint", IntegerType)()
-    )
+      AttributeReference("cint", IntegerType)())
 
     val expectedSize = 16
     val statsPlan = OutputListAwareStatsTestPlan(
@@ -919,7 +954,8 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       size = Some(expectedSize))
 
     withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
-      val df = classic.Dataset.ofRows(spark, statsPlan)
+      val df = classic.Dataset
+        .ofRows(spark, statsPlan)
         // add some map-like operations which optimizer will optimize away, and make a divergence
         // for output between logical plan and optimized plan
         // logical plan
@@ -934,14 +970,20 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       // We can't leverage LogicalRDD.fromDataset here, since it triggers physical planning and
       // there is no matching physical node for OutputListAwareStatsTestPlan.
       val optimizedPlan = df.queryExecution.optimizedPlan
-      val rewrite = LogicalRDD.buildOutputAssocForRewrite(optimizedPlan.output,
-        df.logicalPlan.output)
+      val rewrite =
+        LogicalRDD.buildOutputAssocForRewrite(optimizedPlan.output, df.logicalPlan.output)
       val logicalRDD = LogicalRDD(
-        df.logicalPlan.output, spark.sparkContext.emptyRDD[InternalRow], isStreaming = true)(
-        spark, Some(LogicalRDD.rewriteStatistics(optimizedPlan.stats, rewrite.get)), None)
+        df.logicalPlan.output,
+        spark.sparkContext.emptyRDD[InternalRow],
+        isStreaming = true)(
+        spark,
+        Some(LogicalRDD.rewriteStatistics(optimizedPlan.stats, rewrite.get)),
+        None)
 
       val stats = logicalRDD.computeStats()
-      val expectedStats = Statistics(sizeInBytes = expectedSize, rowCount = Some(2),
+      val expectedStats = Statistics(
+        sizeInBytes = expectedSize,
+        rowCount = Some(2),
         attributeStats = buildExpectedColumnStats(logicalRDD.output))
       assert(stats === expectedStats)
 
@@ -949,7 +991,9 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       // reflected as well.
       val newLogicalRDD = logicalRDD.newInstance()
       val newStats = newLogicalRDD.computeStats()
-      val newExpectedStats = Statistics(sizeInBytes = expectedSize, rowCount = Some(2),
+      val newExpectedStats = Statistics(
+        sizeInBytes = expectedSize,
+        rowCount = Some(2),
         attributeStats = buildExpectedColumnStats(newLogicalRDD.output))
       assert(newStats === newExpectedStats)
     }
@@ -962,7 +1006,9 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
 case class OutputListAwareStatsTestPlan(
     outputList: Seq[Attribute],
     rowCount: BigInt,
-    size: Option[BigInt] = None) extends LeafNode with MultiInstanceRelation {
+    size: Option[BigInt] = None)
+    extends LeafNode
+    with MultiInstanceRelation {
   override def output: Seq[Attribute] = outputList
   override def computeStats(): Statistics = {
     val columnInfo = outputList.map { attr =>

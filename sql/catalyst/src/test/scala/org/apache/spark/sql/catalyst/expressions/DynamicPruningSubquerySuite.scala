@@ -26,12 +26,12 @@ class DynamicPruningSubquerySuite extends SparkFunSuite {
 
   private val validDynamicPruningSubquery = DynamicPruningSubquery(
     pruningKey = pruningKeyExpression,
-    buildQuery = Project(Seq(AttributeReference("id", IntegerType)()),
+    buildQuery = Project(
+      Seq(AttributeReference("id", IntegerType)()),
       LocalRelation(AttributeReference("id", IntegerType)())),
     buildKeys = Seq(pruningKeyExpression),
     broadcastKeyIndices = Seq(0),
-    onlyInBroadcast = false
-  )
+    onlyInBroadcast = false)
 
   test("pruningKey data type matches single buildKey") {
     val dynamicPruningSubquery = validDynamicPruningSubquery
@@ -41,14 +41,16 @@ class DynamicPruningSubquerySuite extends SparkFunSuite {
 
   test("pruningKey data type is a Struct and matches with Struct buildKey") {
     val dynamicPruningSubquery = validDynamicPruningSubquery
-      .copy(pruningKey = CreateStruct(Seq(Literal(1), Literal.FalseLiteral)),
+      .copy(
+        pruningKey = CreateStruct(Seq(Literal(1), Literal.FalseLiteral)),
         buildKeys = Seq(CreateStruct(Seq(Literal(2), Literal.TrueLiteral))))
     assert(dynamicPruningSubquery.resolved == true)
   }
 
   test("multiple buildKeys but only one broadcastKeyIndex") {
     val dynamicPruningSubquery = validDynamicPruningSubquery
-      .copy(buildKeys = Seq(Literal(0), Literal(2), Literal(0), Literal(9)),
+      .copy(
+        buildKeys = Seq(Literal(0), Literal(2), Literal(0), Literal(9)),
         broadcastKeyIndices = Seq(1))
     assert(dynamicPruningSubquery.resolved == true)
   }
@@ -62,22 +64,23 @@ class DynamicPruningSubquerySuite extends SparkFunSuite {
 
   test("pruningKey data type is a Struct but mismatch with Struct buildKey") {
     val dynamicPruningSubquery = validDynamicPruningSubquery
-      .copy(pruningKey = CreateStruct(Seq(Literal(1), Literal.FalseLiteral)),
+      .copy(
+        pruningKey = CreateStruct(Seq(Literal(1), Literal.FalseLiteral)),
         buildKeys = Seq(CreateStruct(Seq(Literal.TrueLiteral, Literal(2)))))
     assert(dynamicPruningSubquery.resolved == false)
   }
 
   test("DynamicPruningSubquery should only have a single broadcasting key") {
     val dynamicPruningSubquery = validDynamicPruningSubquery
-      .copy(buildKeys = Seq(Literal(2025), Literal(2), Literal(1809)),
+      .copy(
+        buildKeys = Seq(Literal(2025), Literal(2), Literal(1809)),
         broadcastKeyIndices = Seq(0, 2))
     assert(dynamicPruningSubquery.resolved == false)
   }
 
   test("duplicates in broadcastKeyIndices, and also should not be allowed") {
     val dynamicPruningSubquery = validDynamicPruningSubquery
-      .copy(buildKeys = Seq(Literal(2)),
-        broadcastKeyIndices = Seq(0, 0))
+      .copy(buildKeys = Seq(Literal(2)), broadcastKeyIndices = Seq(0, 0))
     assert(dynamicPruningSubquery.resolved == false)
   }
 

@@ -31,10 +31,8 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
 
-case class DescribeTableExec(
-    output: Seq[Attribute],
-    table: Table,
-    isExtended: Boolean) extends LeafV2CommandExec {
+case class DescribeTableExec(output: Seq[Attribute], table: Table, isExtended: Boolean)
+    extends LeafV2CommandExec {
   override protected def run(): Seq[InternalRow] = {
     val rows = new ArrayBuffer[InternalRow]()
     addSchema(rows)
@@ -69,11 +67,15 @@ case class DescribeTableExec(
         }
       })
     val properties =
-      conf.redactOptions(table.properties.asScala.toMap).toList
+      conf
+        .redactOptions(table.properties.asScala.toMap)
+        .toList
         .filter(kv => !CatalogV2Util.TABLE_RESERVED_PROPERTIES.contains(kv._1))
-        .sortBy(_._1).map {
-        case (key, value) => key + "=" + value
-      }.mkString("[", ",", "]")
+        .sortBy(_._1)
+        .map { case (key, value) =>
+          key + "=" + value
+        }
+        .mkString("[", ",", "]")
     rows += toCatalystRow("Table Properties", properties, "")
 
     // If any columns have default values, append them to the result.
@@ -83,9 +85,8 @@ case class DescribeTableExec(
   }
 
   private def addSchema(rows: ArrayBuffer[InternalRow]): Unit = {
-    rows ++= table.columns().map{ column =>
-      toCatalystRow(
-        column.name, column.dataType.simpleString, column.comment)
+    rows ++= table.columns().map { column =>
+      toCatalystRow(column.name, column.dataType.simpleString, column.comment)
     }
   }
 
@@ -93,7 +94,7 @@ case class DescribeTableExec(
     if (table.constraints.nonEmpty) {
       rows += emptyRow()
       rows += toCatalystRow("# Constraints", "", "")
-      rows ++= table.constraints().map{ constraint =>
+      rows ++= table.constraints().map { constraint =>
         toCatalystRow(constraint.name(), constraint.toDescription, "")
       }
     }
@@ -117,20 +118,23 @@ case class DescribeTableExec(
       rows: ArrayBuffer[InternalRow]): Unit = {
     rows += toCatalystRow("# Clustering Information", "", "")
     rows += toCatalystRow(s"# ${output.head.name}", output(1).name, output(2).name)
-    rows ++= clusterBySpec.columnNames.map { fieldNames =>
-      val schema = CatalogV2Util.v2ColumnsToStructType(table.columns())
-      val nestedField = schema.findNestedField(fieldNames.fieldNames.toIndexedSeq)
-      assert(nestedField.isDefined,
-        "The clustering column " +
-          s"${fieldNames.fieldNames.map(quoteIfNeeded).mkString(".")} " +
-          s"was not found in the table schema ${schema.catalogString}.")
-      nestedField.get
-    }.map { case (path, field) =>
-      toCatalystRow(
-        (path :+ field.name).map(quoteIfNeeded).mkString("."),
-        field.dataType.simpleString,
-        field.getComment().orNull)
-    }
+    rows ++= clusterBySpec.columnNames
+      .map { fieldNames =>
+        val schema = CatalogV2Util.v2ColumnsToStructType(table.columns())
+        val nestedField = schema.findNestedField(fieldNames.fieldNames.toIndexedSeq)
+        assert(
+          nestedField.isDefined,
+          "The clustering column " +
+            s"${fieldNames.fieldNames.map(quoteIfNeeded).mkString(".")} " +
+            s"was not found in the table schema ${schema.catalogString}.")
+        nestedField.get
+      }
+      .map { case (path, field) =>
+        toCatalystRow(
+          (path :+ field.name).map(quoteIfNeeded).mkString("."),
+          field.dataType.simpleString,
+          field.getComment().orNull)
+      }
   }
 
   private def addClustering(rows: ArrayBuffer[InternalRow]): Unit = {
@@ -146,8 +150,7 @@ case class DescribeTableExec(
           val stats = s.estimateStatistics()
           val statsComponents = Seq(
             Option.when(stats.sizeInBytes().isPresent)(s"${stats.sizeInBytes().getAsLong} bytes"),
-            Option.when(stats.numRows().isPresent)(s"${stats.numRows().getAsLong} rows")
-          ).flatten
+            Option.when(stats.numRows().isPresent)(s"${stats.numRows().getAsLong} rows")).flatten
           if (statsComponents.nonEmpty) {
             rows += toCatalystRow("Statistics", statsComponents.mkString(", "), null)
           }
@@ -176,7 +179,8 @@ case class DescribeTableExec(
                 schema)
             }
             nestedField.get
-          }.map { case (path, field) =>
+          }
+          .map { case (path, field) =>
             toCatalystRow(
               (path :+ field.name).map(quoteIfNeeded(_)).mkString("."),
               field.dataType.simpleString,
@@ -185,8 +189,8 @@ case class DescribeTableExec(
       } else {
         rows += emptyRow()
         rows += toCatalystRow("# Partitioning", "", "")
-        rows ++= table.partitioning.zipWithIndex.map {
-          case (transform, index) => toCatalystRow(s"Part $index", transform.describe(), "")
+        rows ++= table.partitioning.zipWithIndex.map { case (transform, index) =>
+          toCatalystRow(s"Part $index", transform.describe(), "")
         }
       }
     }

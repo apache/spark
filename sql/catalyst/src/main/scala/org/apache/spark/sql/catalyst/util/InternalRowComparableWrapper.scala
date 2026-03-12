@@ -24,12 +24,12 @@ import org.apache.spark.sql.types.{DataType, StructField, StructType}
 import org.apache.spark.util.NonFateSharingCache
 
 /**
- * Wraps the [[InternalRow]] with the corresponding [[DataType]] to make it comparable with
- * the values in [[InternalRow]].
- * It uses Spark's internal murmur hash to compute hash code from an row, and uses [[RowOrdering]]
- * to perform equality checks.
+ * Wraps the [[InternalRow]] with the corresponding [[DataType]] to make it comparable with the
+ * values in [[InternalRow]]. It uses Spark's internal murmur hash to compute hash code from an
+ * row, and uses [[RowOrdering]] to perform equality checks.
  *
- * @param dataTypes the data types for the row
+ * @param dataTypes
+ *   the data types for the row
  */
 class InternalRowComparableWrapper private (
     val row: InternalRow,
@@ -39,8 +39,8 @@ class InternalRowComparableWrapper private (
 
   /**
    * Previous constructor for binary compatibility. Prefer using
-   * `getInternalRowComparableWrapperFactory` for the creation of InternalRowComparableWrapper's in
-   * hot paths to avoid excessive cache lookups.
+   * `getInternalRowComparableWrapperFactory` for the creation of InternalRowComparableWrapper's
+   * in hot paths to avoid excessive cache lookups.
    */
   @deprecated
   def this(row: InternalRow, dataTypes: Seq[DataType]) = this(
@@ -49,13 +49,15 @@ class InternalRowComparableWrapper private (
     InternalRowComparableWrapper.structTypeCache.get(dataTypes),
     InternalRowComparableWrapper.orderingCache.get(dataTypes))
 
-  override def hashCode(): Int = Murmur3HashFunction.hash(
-    row,
-    structType,
-    42L,
-    isCollationAware = true,
-    // legacyCollationAwareHashing only matters when isCollationAware is false.
-    legacyCollationAwareHashing = false).toInt
+  override def hashCode(): Int = Murmur3HashFunction
+    .hash(
+      row,
+      structType,
+      42L,
+      isCollationAware = true,
+      // legacyCollationAwareHashing only matters when isCollationAware is false.
+      legacyCollationAwareHashing = false)
+    .toInt
 
   override def equals(other: Any): Boolean = {
     if (!other.isInstanceOf[InternalRowComparableWrapper]) {
@@ -90,7 +92,8 @@ object InternalRowComparableWrapper {
       partition: InputPartition with HasPartitionKey,
       partitionExpression: Seq[Expression]): InternalRowComparableWrapper = {
     new InternalRowComparableWrapper(
-      partition.asInstanceOf[HasPartitionKey].partitionKey(), partitionExpression.map(_.dataType))
+      partition.asInstanceOf[HasPartitionKey].partitionKey(),
+      partitionExpression.map(_.dataType))
   }
 
   def apply(

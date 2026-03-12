@@ -28,18 +28,16 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.storage.{StorageLevel, StorageLevelMapper}
 
 /**
- * A physical plan that adds a new long column with `sequenceAttr` that
- * increases one by one.
- * This is for 'distributed-sequence' default index in pandas API on Spark,
- * and 'DataFrame.zipWithIndex'
- * When cache is true, the underlying RDD will be cached according to
- * PS config "pandas_on_Spark.compute.default_index_cache".
+ * A physical plan that adds a new long column with `sequenceAttr` that increases one by one. This
+ * is for 'distributed-sequence' default index in pandas API on Spark, and
+ * 'DataFrame.zipWithIndex' When cache is true, the underlying RDD will be cached according to PS
+ * config "pandas_on_Spark.compute.default_index_cache".
  */
 case class AttachDistributedSequenceExec(
     sequenceAttr: Attribute,
     child: SparkPlan,
     cache: Boolean)
-  extends UnaryExecNode {
+    extends UnaryExecNode {
 
   override def producedAttributes: AttributeSet = AttributeSet(sequenceAttr)
 
@@ -74,10 +72,12 @@ case class AttachDistributedSequenceExec(
     //    Out[7]: '"DISK_ONLY"'
 
     // The string is double quoted because of JSON ser/deser for pandas API on Spark
-    val storageLevel = SQLConf.get.getConfString(
-      "pandas_on_Spark.compute.default_index_cache",
-      StorageLevelMapper.MEMORY_AND_DISK_SER.name()
-    ).stripPrefix("\"").stripSuffix("\"")
+    val storageLevel = SQLConf.get
+      .getConfString(
+        "pandas_on_Spark.compute.default_index_cache",
+        StorageLevelMapper.MEMORY_AND_DISK_SER.name())
+      .stripPrefix("\"")
+      .stripSuffix("\"")
 
     storageLevel match {
       // zipWithIndex launches a Spark job only if #partition > 1
@@ -87,11 +87,15 @@ case class AttachDistributedSequenceExec(
 
       case "LOCAL_CHECKPOINT" =>
         // localcheckpointing is unreliable so should not eagerly release it in 'cleanupResources'
-        rdd.map(_.copy()).localCheckpoint()
+        rdd
+          .map(_.copy())
+          .localCheckpoint()
           .setName(s"Temporary RDD locally checkpointed in AttachDistributedSequenceExec($id)")
 
       case _ =>
-        cached = rdd.map(_.copy()).persist(StorageLevel.fromString(storageLevel))
+        cached = rdd
+          .map(_.copy())
+          .persist(StorageLevel.fromString(storageLevel))
           .setName(s"Temporary RDD cached in AttachDistributedSequenceExec($id)")
         cached
     }
@@ -110,20 +114,23 @@ case class AttachDistributedSequenceExec(
       val unsafeRowWriter =
         new org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter(1)
 
-      iter.map { case (row, id) =>
-        // Writes to an UnsafeRow directly
-        unsafeRowWriter.reset()
-        unsafeRowWriter.write(0, id)
-        joinedRow(unsafeRowWriter.getRow, row)
-      }.map(unsafeProj)
+      iter
+        .map { case (row, id) =>
+          // Writes to an UnsafeRow directly
+          unsafeRowWriter.reset()
+          unsafeRowWriter.write(0, id)
+          joinedRow(unsafeRowWriter.getRow, row)
+        }
+        .map(unsafeProj)
     }
   }
 
   override protected[sql] def cleanupResources(): Unit = {
     try {
       if (cached != null && cached.getStorageLevel != StorageLevel.NONE) {
-        logWarning(log"clean up cached RDD(${MDC(RDD_ID, cached.id)}) in " +
-          log"AttachDistributedSequenceExec(${MDC(SPARK_PLAN_ID, id)})")
+        logWarning(
+          log"clean up cached RDD(${MDC(RDD_ID, cached.id)}) in " +
+            log"AttachDistributedSequenceExec(${MDC(SPARK_PLAN_ID, id)})")
         cached.unpersist(blocking = false)
       }
     } finally {
@@ -131,7 +138,8 @@ case class AttachDistributedSequenceExec(
     }
   }
 
-  override protected def withNewChildInternal(newChild: SparkPlan): AttachDistributedSequenceExec =
+  override protected def withNewChildInternal(
+      newChild: SparkPlan): AttachDistributedSequenceExec =
     copy(child = newChild)
 
   override def simpleString(maxFields: Int): String = {

@@ -23,9 +23,9 @@ import org.apache.spark.sql.execution.streaming.runtime.StreamingRelation
 import org.apache.spark.sql.test.SharedSparkSession
 
 /**
- * Tests for streaming source identifying name propagation through the resolution pipeline.
- * These tests verify that sourceIdentifyingName is correctly propagated from CatalogTable
- * through DataSource to StreamingRelation during streaming table resolution.
+ * Tests for streaming source identifying name propagation through the resolution pipeline. These
+ * tests verify that sourceIdentifyingName is correctly propagated from CatalogTable through
+ * DataSource to StreamingRelation during streaming table resolution.
  */
 class StreamingSourceIdentifyingNameSuite extends SharedSparkSession {
 
@@ -35,18 +35,18 @@ class StreamingSourceIdentifyingNameSuite extends SharedSparkSession {
 
       val analyzedPlan = sql("SELECT * FROM STREAM stream_name_test").queryExecution.analyzed
 
-      val streamingRelation = analyzedPlan.collectFirst {
-        case sr: StreamingRelation => sr
+      val streamingRelation = analyzedPlan.collectFirst { case sr: StreamingRelation =>
+        sr
       }
 
       assert(streamingRelation.isDefined, "Expected StreamingRelation in analyzed plan")
-      assert(streamingRelation.get.sourceIdentifyingName == Unassigned,
+      assert(
+        streamingRelation.get.sourceIdentifyingName == Unassigned,
         s"Expected Unassigned but got ${streamingRelation.get.sourceIdentifyingName}")
 
       // Verify the DataSource has no user-specified source name (None means no user-provided name)
       val dsSourceName = streamingRelation.get.dataSource.userSpecifiedStreamingSourceName
-      assert(dsSourceName.isEmpty,
-        s"Expected None but got $dsSourceName")
+      assert(dsSourceName.isEmpty, s"Expected None but got $dsSourceName")
     }
   }
 
@@ -58,20 +58,20 @@ class StreamingSourceIdentifyingNameSuite extends SharedSparkSession {
 
       // Query using fully qualified name to ensure SubqueryAlias is created
       val analyzedPlan = sql(
-        "SELECT * FROM STREAM spark_catalog.default.stream_alias_test"
-      ).queryExecution.analyzed
+        "SELECT * FROM STREAM spark_catalog.default.stream_alias_test").queryExecution.analyzed
 
-      val streamingRelation = analyzedPlan.collectFirst {
-        case sr: StreamingRelation => sr
+      val streamingRelation = analyzedPlan.collectFirst { case sr: StreamingRelation =>
+        sr
       }
 
       assert(streamingRelation.isDefined, "Expected StreamingRelation in analyzed plan")
-      assert(streamingRelation.get.sourceIdentifyingName == Unassigned,
+      assert(
+        streamingRelation.get.sourceIdentifyingName == Unassigned,
         s"Expected Unassigned but got ${streamingRelation.get.sourceIdentifyingName}")
 
       // Verify the plan has SubqueryAlias wrapping StreamingRelation
-      val hasSubqueryAlias = analyzedPlan.collect {
-        case SubqueryAlias(_, _: StreamingRelation) => true
+      val hasSubqueryAlias = analyzedPlan.collect { case SubqueryAlias(_, _: StreamingRelation) =>
+        true
       }.nonEmpty
       assert(hasSubqueryAlias, "Expected SubqueryAlias wrapping StreamingRelation")
     }
@@ -86,12 +86,13 @@ class StreamingSourceIdentifyingNameSuite extends SharedSparkSession {
       val df = spark.readStream.table("api_stream_test")
       val analyzedPlan = df.queryExecution.analyzed
 
-      val streamingRelation = analyzedPlan.collectFirst {
-        case sr: StreamingRelation => sr
+      val streamingRelation = analyzedPlan.collectFirst { case sr: StreamingRelation =>
+        sr
       }
 
       assert(streamingRelation.isDefined, "Expected StreamingRelation in analyzed plan")
-      assert(streamingRelation.get.sourceIdentifyingName == Unassigned,
+      assert(
+        streamingRelation.get.sourceIdentifyingName == Unassigned,
         s"Expected Unassigned but got ${streamingRelation.get.sourceIdentifyingName}")
     }
   }
@@ -107,8 +108,8 @@ class StreamingSourceIdentifyingNameSuite extends SharedSparkSession {
       assert(result.length == 2, s"Expected 2 rows but got ${result.length}")
 
       val analyzedPlan = sql("SELECT * FROM batch_test").queryExecution.analyzed
-      val hasStreamingRelation = analyzedPlan.collect {
-        case _: StreamingRelation => true
+      val hasStreamingRelation = analyzedPlan.collect { case _: StreamingRelation =>
+        true
       }.nonEmpty
       assert(!hasStreamingRelation, "Batch query should not contain StreamingRelation")
     }

@@ -72,19 +72,55 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
   private val double2 = 6.987654321
 
   /**
-   * Define a very simple 3 row table used for testing column serialization.
-   * Note: last column is seq[int] which doesn't support stats collection.
+   * Define a very simple 3 row table used for testing column serialization. Note: last column is
+   * seq[int] which doesn't support stats collection.
    */
-  protected val data = Seq[
-    (jl.Boolean, jl.Byte, jl.Short, jl.Integer, jl.Long,
-      jl.Double, jl.Float, java.math.BigDecimal,
-      String, Array[Byte], Date, Timestamp, LocalDateTime,
+  protected val data = Seq[(
+      jl.Boolean,
+      jl.Byte,
+      jl.Short,
+      jl.Integer,
+      jl.Long,
+      jl.Double,
+      jl.Float,
+      java.math.BigDecimal,
+      String,
+      Array[Byte],
+      Date,
+      Timestamp,
+      LocalDateTime,
       Seq[Int])](
     // scalastyle:off nonascii
-    (false, 1.toByte, 1.toShort, 1, 1L, double1, 1.12345f,
-      dec1, "string escrito en español", "b1".getBytes, d1, t1, tsNTZ1, null),
-    (true, 2.toByte, 30000.toShort, 40000000, 5536453629L, double2, 7.54321f,
-      dec2, "日本語で書かれたstring", "a string full of bytes".getBytes, d2, t2, tsNTZ2, null),
+    (
+      false,
+      1.toByte,
+      1.toShort,
+      1,
+      1L,
+      double1,
+      1.12345f,
+      dec1,
+      "string escrito en español",
+      "b1".getBytes,
+      d1,
+      t1,
+      tsNTZ1,
+      null),
+    (
+      true,
+      2.toByte,
+      30000.toShort,
+      40000000,
+      5536453629L,
+      double2,
+      7.54321f,
+      dec2,
+      "日本語で書かれたstring",
+      "a string full of bytes".getBytes,
+      d2,
+      t2,
+      tsNTZ2,
+      null),
     (null, null, null, null, null, null, null, null, null, null, null, null, null, null)
     // scalastyle:on nonascii
   )
@@ -95,56 +131,118 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
     "cbyte" -> CatalogColumnStat(Some(2), Some("1"), Some("2"), Some(1), Some(1), Some(1)),
     "cshort" -> CatalogColumnStat(Some(2), Some("1"), Some("30000"), Some(1), Some(2), Some(2)),
     "cint" -> CatalogColumnStat(Some(2), Some("1"), Some("40000000"), Some(1), Some(4), Some(4)),
-    "clong" -> CatalogColumnStat(Some(2), Some("1"), Some("5536453629"), Some(1), Some(8), Some(8)),
+    "clong" -> CatalogColumnStat(
+      Some(2),
+      Some("1"),
+      Some("5536453629"),
+      Some(1),
+      Some(8),
+      Some(8)),
     "cdouble" -> CatalogColumnStat(
-      Some(2), Some(double1.toString), Some(double2.toString), Some(1), Some(8), Some(8)),
+      Some(2),
+      Some(double1.toString),
+      Some(double2.toString),
+      Some(1),
+      Some(8),
+      Some(8)),
     "cfloat" -> CatalogColumnStat(
-      Some(2), Some("1.12345"), Some("7.54321"), Some(1), Some(4), Some(4)),
+      Some(2),
+      Some("1.12345"),
+      Some("7.54321"),
+      Some(1),
+      Some(4),
+      Some(4)),
     "cdecimal" -> CatalogColumnStat(
-      Some(2), Some(dec1.toString), Some(dec2.toString), Some(1), Some(16), Some(16)),
+      Some(2),
+      Some(dec1.toString),
+      Some(dec2.toString),
+      Some(1),
+      Some(16),
+      Some(16)),
     "cstring" -> CatalogColumnStat(Some(2), None, None, Some(1), Some(20), Some(25)),
     "cbinary" -> CatalogColumnStat(Some(2), None, None, Some(1), Some(12), Some(22)),
-    "cdate" -> CatalogColumnStat(Some(2), Some(d1Str), Some(d2Str),
-      Some(1), Some(4), Some(4)),
-    "ctimestamp" -> CatalogColumnStat(Some(2), Some(t1Str),
-      Some(t2Str), Some(1), Some(8), Some(8)),
-    "ctimestamp_ntz" -> CatalogColumnStat(Some(2), Some(t1Str),
-      Some(t2Str), Some(1), Some(8), Some(8))
-  )
+    "cdate" -> CatalogColumnStat(Some(2), Some(d1Str), Some(d2Str), Some(1), Some(4), Some(4)),
+    "ctimestamp" -> CatalogColumnStat(
+      Some(2),
+      Some(t1Str),
+      Some(t2Str),
+      Some(1),
+      Some(8),
+      Some(8)),
+    "ctimestamp_ntz" -> CatalogColumnStat(
+      Some(2),
+      Some(t1Str),
+      Some(t2Str),
+      Some(1),
+      Some(8),
+      Some(8)))
 
   /**
-   * A mapping from column to the stats collected including histograms.
-   * The number of bins in the histograms is 2.
+   * A mapping from column to the stats collected including histograms. The number of bins in the
+   * histograms is 2.
    */
   protected val statsWithHgms = {
     val colStats = mutable.LinkedHashMap(stats.toSeq: _*)
-    colStats.update("cbyte", stats("cbyte").copy(histogram =
-      Some(Histogram(1, Array(HistogramBin(1, 1, 1), HistogramBin(1, 2, 1))))))
-    colStats.update("cshort", stats("cshort").copy(histogram =
-      Some(Histogram(1, Array(HistogramBin(1, 1, 1), HistogramBin(1, 30000, 1))))))
-    colStats.update("cint", stats("cint").copy(histogram =
-      Some(Histogram(1, Array(HistogramBin(1, 1, 1), HistogramBin(1, 40000000, 1))))))
-    colStats.update("clong", stats("clong").copy(histogram =
-      Some(Histogram(1, Array(HistogramBin(1, 1, 1), HistogramBin(1, 5536453629L, 1))))))
-    colStats.update("cdouble", stats("cdouble").copy(histogram =
-      Some(Histogram(1, Array(
-        HistogramBin(double1, double1, 1), HistogramBin(double1, double2, 1))))))
-    colStats.update("cfloat", stats("cfloat").copy(histogram =
-      Some(Histogram(1, Array(
-        HistogramBin(1.12345, 1.12345, 1), HistogramBin(1.12345, 7.54321, 1))))))
-    colStats.update("cdecimal", stats("cdecimal").copy(histogram =
-      Some(Histogram(1, Array(
-        HistogramBin(dec1.doubleValue(), dec1.doubleValue(), 1),
-        HistogramBin(dec1.doubleValue(), dec2.doubleValue(), 1))))))
-    colStats.update("cdate", stats("cdate").copy(histogram =
-      Some(Histogram(1, Array(HistogramBin(d1Internal, d1Internal, 1),
-        HistogramBin(d1Internal, d2Internal, 1))))))
-    colStats.update("ctimestamp", stats("ctimestamp").copy(histogram =
-      Some(Histogram(1, Array(HistogramBin(t1Internal.toDouble, t1Internal.toDouble, 1),
-        HistogramBin(t1Internal.toDouble, t2Internal.toDouble, 1))))))
-    colStats.update("ctimestamp_ntz", stats("ctimestamp_ntz").copy(histogram =
-      Some(Histogram(1, Array(HistogramBin(t1Internal.toDouble, t1Internal.toDouble, 1),
-        HistogramBin(t1Internal.toDouble, t2Internal.toDouble, 1))))))
+    colStats.update(
+      "cbyte",
+      stats("cbyte").copy(histogram =
+        Some(Histogram(1, Array(HistogramBin(1, 1, 1), HistogramBin(1, 2, 1))))))
+    colStats.update(
+      "cshort",
+      stats("cshort").copy(histogram =
+        Some(Histogram(1, Array(HistogramBin(1, 1, 1), HistogramBin(1, 30000, 1))))))
+    colStats.update(
+      "cint",
+      stats("cint").copy(histogram =
+        Some(Histogram(1, Array(HistogramBin(1, 1, 1), HistogramBin(1, 40000000, 1))))))
+    colStats.update(
+      "clong",
+      stats("clong").copy(histogram =
+        Some(Histogram(1, Array(HistogramBin(1, 1, 1), HistogramBin(1, 5536453629L, 1))))))
+    colStats.update(
+      "cdouble",
+      stats("cdouble").copy(histogram = Some(
+        Histogram(
+          1,
+          Array(HistogramBin(double1, double1, 1), HistogramBin(double1, double2, 1))))))
+    colStats.update(
+      "cfloat",
+      stats("cfloat").copy(histogram = Some(
+        Histogram(
+          1,
+          Array(HistogramBin(1.12345, 1.12345, 1), HistogramBin(1.12345, 7.54321, 1))))))
+    colStats.update(
+      "cdecimal",
+      stats("cdecimal").copy(histogram = Some(
+        Histogram(
+          1,
+          Array(
+            HistogramBin(dec1.doubleValue(), dec1.doubleValue(), 1),
+            HistogramBin(dec1.doubleValue(), dec2.doubleValue(), 1))))))
+    colStats.update(
+      "cdate",
+      stats("cdate").copy(histogram = Some(
+        Histogram(
+          1,
+          Array(
+            HistogramBin(d1Internal, d1Internal, 1),
+            HistogramBin(d1Internal, d2Internal, 1))))))
+    colStats.update(
+      "ctimestamp",
+      stats("ctimestamp").copy(histogram = Some(
+        Histogram(
+          1,
+          Array(
+            HistogramBin(t1Internal.toDouble, t1Internal.toDouble, 1),
+            HistogramBin(t1Internal.toDouble, t2Internal.toDouble, 1))))))
+    colStats.update(
+      "ctimestamp_ntz",
+      stats("ctimestamp_ntz").copy(histogram = Some(
+        Histogram(
+          1,
+          Array(
+            HistogramBin(t1Internal.toDouble, t1Internal.toDouble, 1),
+            HistogramBin(t1Internal.toDouble, t2Internal.toDouble, 1))))))
     colStats
   }
 
@@ -236,8 +334,7 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
     "spark.sql.statistics.colStats.ctimestamp_ntz.maxLen" -> "8",
     "spark.sql.statistics.colStats.ctimestamp_ntz.min" -> "2016-05-08 00:00:01.123456",
     "spark.sql.statistics.colStats.ctimestamp_ntz.nullCount" -> "1",
-    "spark.sql.statistics.colStats.ctimestamp_ntz.version" -> strVersion
-  )
+    "spark.sql.statistics.colStats.ctimestamp_ntz.version" -> strVersion)
 
   val expectedSerializedHistograms = Map(
     "spark.sql.statistics.colStats.cbyte.histogram" ->
@@ -259,8 +356,7 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
     "spark.sql.statistics.colStats.ctimestamp.histogram" ->
       HistogramSerializer.serialize(statsWithHgms("ctimestamp").histogram.get),
     "spark.sql.statistics.colStats.ctimestamp_ntz.histogram" ->
-      HistogramSerializer.serialize(statsWithHgms("ctimestamp_ntz").histogram.get)
-  )
+      HistogramSerializer.serialize(statsWithHgms("ctimestamp_ntz").histogram.get))
 
   private val randomName = new Random(31)
 
@@ -271,7 +367,9 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
   def getTableFromCatalogCache(tableName: String): LogicalPlan = {
     val catalog = spark.sessionState.catalog
     val qualifiedTableName = QualifiedTableName(
-      CatalogManager.SESSION_CATALOG_NAME, catalog.getCurrentDatabase, tableName)
+      CatalogManager.SESSION_CATALOG_NAME,
+      catalog.getCurrentDatabase,
+      tableName)
     catalog.getCachedTable(qualifiedTableName)
   }
 
@@ -314,8 +412,9 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
       df.write.saveAsTable(tableName)
 
       // Collect statistics
-      sql(s"analyze table $tableName compute STATISTICS FOR COLUMNS " +
-        colStats.keys.mkString(", "))
+      sql(
+        s"analyze table $tableName compute STATISTICS FOR COLUMNS " +
+          colStats.keys.mkString(", "))
 
       // Validate statistics
       validateColStats(tableName, colStats)
@@ -347,22 +446,31 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
       colStat: Seq[ColumnStat]): Unit = {
     val optimizedPlan = df.queryExecution.optimizedPlan
     val attributeStats = optimizedPlan.references.zip(colStat)
-    assert(optimizedPlan.stats ===
-      Statistics(sizeInBytes, rowCount, AttributeMap(attributeStats.toSeq)))
+    assert(
+      optimizedPlan.stats ===
+        Statistics(sizeInBytes, rowCount, AttributeMap(attributeStats.toSeq)))
   }
 
   // Filter out the checksum file refer to ChecksumFileSystem#isChecksumFile.
   def getDataSize(file: File): Long = {
-    file.listFiles.filter { f =>
-      val name = f.getName
-      !(name.startsWith(".") && name.endsWith(".crc"))
-    }.map(_.length).sum
+    file.listFiles
+      .filter { f =>
+        val name = f.getName
+        !(name.startsWith(".") && name.endsWith(".crc"))
+      }
+      .map(_.length)
+      .sum
   }
 
   // This test will be run twice: with and without Hive support
   test("SPARK-18856: non-empty partitioned table should not report zero size") {
     withTable("ds_tbl", "hive_tbl") {
-      spark.range(100).select($"id", $"id" % 5 as "p").write.partitionBy("p").saveAsTable("ds_tbl")
+      spark
+        .range(100)
+        .select($"id", $"id" % 5 as "p")
+        .write
+        .partitionBy("p")
+        .saveAsTable("ds_tbl")
       val stats = spark.table("ds_tbl").queryExecution.optimizedPlan.stats
       assert(stats.sizeInBytes > 0, "non-empty partitioned table should not report zero size.")
 
@@ -397,10 +505,15 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
     sql(createTableSql)
     // Analyze only one column.
     sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS c1")
-    val (relation, catalogTable) = spark.table(tableName).queryExecution.analyzed.collect {
-      case catalogRel: HiveTableRelation => (catalogRel, catalogRel.tableMeta)
-      case logicalRel: LogicalRelation => (logicalRel, logicalRel.catalogTable.get)
-    }.head
+    val (relation, catalogTable) = spark
+      .table(tableName)
+      .queryExecution
+      .analyzed
+      .collect {
+        case catalogRel: HiveTableRelation => (catalogRel, catalogRel.tableMeta)
+        case logicalRel: LogicalRelation => (logicalRel, logicalRel.catalogTable.get)
+      }
+      .head
     val emptyColStat = ColumnStat(Some(0), None, None, Some(0), Some(4), Some(4))
     val emptyCatalogColStat = CatalogColumnStat(Some(0), None, None, Some(0), Some(4), Some(4))
     // Check catalog statistics

@@ -20,8 +20,7 @@ package org.apache.spark.sql.execution.benchmark
 import org.apache.spark.benchmark.Benchmark
 
 /**
- * Benchmark for measuring perf of different Base64 implementations
- * To run this benchmark:
+ * Benchmark for measuring perf of different Base64 implementations To run this benchmark:
  * {{{
  *   1. without sbt:
  *      bin/spark-submit --class <this class> --jars <spark core test jar> <sql core test jar>
@@ -43,38 +42,46 @@ object Base64Benchmark extends SqlBasedBenchmark {
   }
 
   private def doDecode(len: Int, f: Array[Byte] => Array[Byte]): Unit = {
-    spark.range(N).map(_ => "Spark".repeat(len)).map { s =>
-      // using the same encode func
-      java.util.Base64.getMimeEncoder.encode(s.getBytes)
-    }.foreach { s =>
-      f(s)
-      ()
-    }
+    spark
+      .range(N)
+      .map(_ => "Spark".repeat(len))
+      .map { s =>
+        // using the same encode func
+        java.util.Base64.getMimeEncoder.encode(s.getBytes)
+      }
+      .foreach { s =>
+        f(s)
+        ()
+      }
   }
 
   // scalastyle:off commonscodecbase64
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
-    Seq(1, 3, 5, 7).map { len =>
-      val benchmark = new Benchmark(s"encode for $len", N, output = output)
-      benchmark.addCase("java", 3) { _ =>
-        doEncode(len, x => java.util.Base64.getMimeEncoder().encode(x))
+    Seq(1, 3, 5, 7)
+      .map { len =>
+        val benchmark = new Benchmark(s"encode for $len", N, output = output)
+        benchmark.addCase("java", 3) { _ =>
+          doEncode(len, x => java.util.Base64.getMimeEncoder().encode(x))
+        }
+        benchmark.addCase(s"apache", 3) { _ =>
+          doEncode(len, org.apache.commons.codec.binary.Base64.encodeBase64)
+        }
+        benchmark
       }
-      benchmark.addCase(s"apache", 3) { _ =>
-        doEncode(len, org.apache.commons.codec.binary.Base64.encodeBase64)
-      }
-      benchmark
-    }.foreach(_.run())
+      .foreach(_.run())
 
-    Seq(1, 3, 5, 7).map { len =>
-      val benchmark = new Benchmark(s"decode for $len", N, output = output)
-      benchmark.addCase("java", 3) { _ =>
-        doDecode(len, x => java.util.Base64.getMimeDecoder.decode(x))
+    Seq(1, 3, 5, 7)
+      .map { len =>
+        val benchmark = new Benchmark(s"decode for $len", N, output = output)
+        benchmark.addCase("java", 3) { _ =>
+          doDecode(len, x => java.util.Base64.getMimeDecoder.decode(x))
+        }
+        benchmark.addCase(s"apache", 3) { _ =>
+          doDecode(len, org.apache.commons.codec.binary.Base64.decodeBase64)
+        }
+        benchmark
       }
-      benchmark.addCase(s"apache", 3) { _ =>
-        doDecode(len, org.apache.commons.codec.binary.Base64.decodeBase64)
-      }
-      benchmark
-    }.foreach(_.run())
+      .foreach(_.run())
   }
   // scalastyle:on commonscodecbase64
 }

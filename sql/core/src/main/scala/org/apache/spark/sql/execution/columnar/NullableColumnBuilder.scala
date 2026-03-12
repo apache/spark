@@ -22,7 +22,7 @@ import java.nio.{ByteBuffer, ByteOrder}
 import org.apache.spark.sql.catalyst.InternalRow
 
 /**
- * A stackable trait used for building byte buffer for a column containing null values.  Memory
+ * A stackable trait used for building byte buffer for a column containing null values. Memory
  * layout of the final byte buffer is:
  * {{{
  *    .------------------- Null count N (4 bytes)

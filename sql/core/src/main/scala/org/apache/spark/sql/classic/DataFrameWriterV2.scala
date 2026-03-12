@@ -43,7 +43,7 @@ import org.apache.spark.sql.types.IntegerType
  * @since 3.0.0
  */
 @Experimental
-final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
+final class DataFrameWriterV2[T] private[sql] (table: String, ds: Dataset[T])
     extends sql.DataFrameWriterV2[T] {
 
   private val df: DataFrame = ds.toDF()
@@ -79,9 +79,8 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
 
   /** @inheritdoc */
   override def options(options: scala.collection.Map[String, String]): this.type = {
-    options.foreach {
-      case (key, value) =>
-        this.options.put(key, value)
+    options.foreach { case (key, value) =>
+      this.options.put(key, value)
     }
     this
   }
@@ -98,7 +97,6 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
     this
   }
 
-
   /** @inheritdoc */
   @scala.annotation.varargs
   override def partitionedBy(column: Column, columns: Column*): this.type = {
@@ -113,7 +111,8 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
         LogicalExpressions.days(ref(attr.name))
       case PartitionTransform.HOURS(Seq(attr: Attribute)) =>
         LogicalExpressions.hours(ref(attr.name))
-      case PartitionTransform.BUCKET(Seq(Literal(numBuckets: Int, IntegerType), attr: Attribute)) =>
+      case PartitionTransform.BUCKET(
+            Seq(Literal(numBuckets: Int, IntegerType), attr: Attribute)) =>
         LogicalExpressions.bucket(numBuckets, Array(ref(attr.name)))
       case PartitionTransform.BUCKET(Seq(numBuckets, e)) =>
         throw QueryCompilationErrors.invalidBucketsNumberError(numBuckets.toString, e.toString)
@@ -131,8 +130,8 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
   /** @inheritdoc */
   @scala.annotation.varargs
   override def clusterBy(colName: String, colNames: String*): this.type = {
-    this.clustering =
-      Some(ClusterByTransform((colName +: colNames).map(col => FieldReference(col))))
+    this.clustering = Some(
+      ClusterByTransform((colName +: colNames).map(col => FieldReference(col))))
     validatePartitioning()
     this
   }
@@ -162,8 +161,8 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
   }
 
   private def buildTableSpec(): UnresolvedTableSpec = {
-    val ignorePathOption = sparkSession.sessionState.conf.getConf(
-      SQLConf.LEGACY_DF_WRITER_V2_IGNORE_PATH_OPTION)
+    val ignorePathOption =
+      sparkSession.sessionState.conf.getConf(SQLConf.LEGACY_DF_WRITER_V2_IGNORE_PATH_OPTION)
     UnresolvedTableSpec(
       properties = properties.toMap,
       provider = provider,
@@ -195,7 +194,8 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
   private[sql] def appendCommand(): LogicalPlan = {
     AppendData.byName(
       UnresolvedRelation(tableName).requireWritePrivileges(Seq(INSERT)),
-      logicalPlan, options.toMap)
+      logicalPlan,
+      options.toMap)
   }
 
   /** @inheritdoc */
@@ -207,7 +207,9 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
   private[sql] def overwriteCommand(condition: Column): LogicalPlan = {
     OverwriteByExpression.byName(
       UnresolvedRelation(tableName).requireWritePrivileges(Seq(INSERT, DELETE)),
-      logicalPlan, expression(condition), options.toMap)
+      logicalPlan,
+      expression(condition),
+      options.toMap)
   }
 
   /** @inheritdoc */
@@ -219,7 +221,8 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
   private[sql] def overwritePartitionsCommand(): LogicalPlan = {
     OverwritePartitionsDynamic.byName(
       UnresolvedRelation(tableName).requireWritePrivileges(Seq(INSERT, DELETE)),
-      logicalPlan, options.toMap)
+      logicalPlan,
+      options.toMap)
   }
 
   /**
@@ -227,9 +230,12 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
    * callback functions.
    */
   private def runCommand(command: LogicalPlan): Unit = {
-    val qe = new QueryExecution(sparkSession, command, df.queryExecution.tracker,
-      shuffleCleanupModeOpt =
-        Some(QueryExecution.determineShuffleCleanupMode(sparkSession.sessionState.conf)))
+    val qe = new QueryExecution(
+      sparkSession,
+      command,
+      df.queryExecution.tracker,
+      shuffleCleanupModeOpt = Some(
+        QueryExecution.determineShuffleCleanupMode(sparkSession.sessionState.conf)))
     qe.assertCommandExecuted()
   }
 

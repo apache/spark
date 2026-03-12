@@ -22,16 +22,7 @@ import scala.reflect.runtime.universe.typeOf
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.catalyst.expressions.{
-  Add,
-  Alias,
-  AttributeReference,
-  Cast,
-  GreaterThan,
-  Literal,
-  NamedExpression,
-  TimestampAddInterval
-}
+import org.apache.spark.sql.catalyst.expressions.{Add, Alias, AttributeReference, Cast, GreaterThan, Literal, NamedExpression, TimestampAddInterval}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.types._
 
@@ -43,8 +34,7 @@ class ResolutionValidatorSuite extends SparkFunSuite with SQLConfHelper {
     // See [[Resolver.resolveInlineTable]] scaladoc for more info.
     "resolveResolvedInlineTable",
     // [[UnresolvedSubqueryColumnAliases]] turns into a [[Project]]
-    "resolveSubqueryColumnAliases"
-  )
+    "resolveSubqueryColumnAliases")
 
   private val colInteger = AttributeReference(name = "colInteger", dataType = IntegerType)()
   private val colBoolean = AttributeReference(name = "colBoolean", dataType = BooleanType)()
@@ -81,48 +71,29 @@ class ResolutionValidatorSuite extends SparkFunSuite with SQLConfHelper {
     validate(
       Project(
         projectList = Seq(colInteger, colBoolean, colInteger),
-        child = LocalRelation(output = Seq(colInteger, colBoolean))
-      )
-    )
+        child = LocalRelation(output = Seq(colInteger, colBoolean))))
     validate(
-      Project(
-        projectList = Seq(colInteger),
-        child = LocalRelation(output = colBoolean)
-      ),
-      error = Some("Project list contains nonexisting attribute")
-    )
+      Project(projectList = Seq(colInteger), child = LocalRelation(output = colBoolean)),
+      error = Some("Project list contains nonexisting attribute"))
   }
 
   test("Filter") {
     validate(
       Project(
         projectList = Seq(colBoolean),
-        child = Filter(
-          condition = colBoolean,
-          child = LocalRelation(output = colBoolean)
-        )
-      )
-    )
+        child = Filter(condition = colBoolean, child = LocalRelation(output = colBoolean))))
     validate(
       Project(
         projectList = Seq(colInteger),
-        child = Filter(
-          condition = colInteger,
-          child = LocalRelation(output = colInteger)
-        )
-      ),
-      error = Some("Non-boolean condition")
-    )
+        child = Filter(condition = colInteger, child = LocalRelation(output = colInteger))),
+      error = Some("Non-boolean condition"))
     validate(
       Project(
         projectList = Seq(colBoolean),
         child = Filter(
           condition = AttributeReference(name = "colBooleanOther", dataType = BooleanType)(),
-          child = LocalRelation(output = colBoolean)
-        )
-      ),
-      error = Some("Condition references nonexisting attribute")
-    )
+          child = LocalRelation(output = colBoolean))),
+      error = Some("Condition references nonexisting attribute"))
   }
 
   test("Predicate") {
@@ -131,52 +102,29 @@ class ResolutionValidatorSuite extends SparkFunSuite with SQLConfHelper {
         projectList = Seq(colInteger),
         child = Filter(
           condition = GreaterThan(colInteger, colInteger),
-          child = LocalRelation(output = colInteger)
-        )
-      )
-    )
+          child = LocalRelation(output = colInteger))))
     validate(
       Project(
         projectList = Seq(colInteger),
         child = Filter(
           condition = GreaterThan(colInteger, colBoolean),
-          child = LocalRelation(output = Seq(colInteger, colBoolean))
-        )
-      ),
-      error = Some("Input data types mismatch")
-    )
+          child = LocalRelation(output = Seq(colInteger, colBoolean)))),
+      error = Some("Input data types mismatch"))
   }
 
   test("BinaryExpression") {
     validate(
       Project(
-        projectList = Seq(
-          Alias(
-            child = Add(
-              left = Literal(5),
-              right = Literal(1)
-            ),
-            "Add"
-          )(NamedExpression.newExprId)
-        ),
-        child = LocalRelation(output = colInteger)
-      )
-    )
+        projectList = Seq(Alias(child = Add(left = Literal(5), right = Literal(1)), "Add")(
+          NamedExpression.newExprId)),
+        child = LocalRelation(output = colInteger)))
     validate(
       Project(
         projectList = Seq(
-          Alias(
-            child = Add(
-              left = Literal(5),
-              right = Literal("1")
-            ),
-            "AddWrongInputTypes"
-          )(NamedExpression.newExprId)
-        ),
-        child = LocalRelation(output = colInteger)
-      ),
-      error = Some("checkInputDataTypes mismatch")
-    )
+          Alias(child = Add(left = Literal(5), right = Literal("1")), "AddWrongInputTypes")(
+            NamedExpression.newExprId)),
+        child = LocalRelation(output = colInteger)),
+      error = Some("checkInputDataTypes mismatch"))
     validate(
       Project(
         projectList = Seq(
@@ -185,21 +133,14 @@ class ResolutionValidatorSuite extends SparkFunSuite with SQLConfHelper {
               start = Cast(
                 child = Literal("2024-10-01"),
                 dataType = TimestampType,
-                timeZoneId = Option(conf.sessionLocalTimeZone)
-              ),
+                timeZoneId = Option(conf.sessionLocalTimeZone)),
               interval = Cast(
                 child = Literal(1),
                 dataType = DayTimeIntervalType(DayTimeIntervalType.DAY, DayTimeIntervalType.DAY),
-                timeZoneId = Option(conf.sessionLocalTimeZone)
-              )
-            ),
-            "AddNoTimezone"
-          )(NamedExpression.newExprId)
-        ),
-        child = LocalRelation(output = colInteger)
-      ),
-      error = Some("TimezoneId is not set for TimestampAddInterval")
-    )
+                timeZoneId = Option(conf.sessionLocalTimeZone))),
+            "AddNoTimezone")(NamedExpression.newExprId)),
+        child = LocalRelation(output = colInteger)),
+      error = Some("TimezoneId is not set for TimestampAddInterval"))
   }
 
   test("TimeZoneAwareExpression") {
@@ -210,29 +151,16 @@ class ResolutionValidatorSuite extends SparkFunSuite with SQLConfHelper {
             Cast(
               child = colInteger,
               dataType = DecimalType.USER_DEFAULT,
-              timeZoneId = Option(conf.sessionLocalTimeZone)
-            ),
-            "withTimezone"
-          )(NamedExpression.newExprId)
-        ),
-        child = LocalRelation(output = colInteger)
-      )
-    )
+              timeZoneId = Option(conf.sessionLocalTimeZone)),
+            "withTimezone")(NamedExpression.newExprId)),
+        child = LocalRelation(output = colInteger)))
     validate(
       Project(
         projectList = Seq(
-          Alias(
-            Cast(
-              child = colTimestamp,
-              dataType = StringType
-            ),
-            "withoutTimezone"
-          )(NamedExpression.newExprId)
-        ),
-        child = LocalRelation(output = colTimestamp)
-      ),
-      error = Some("TimezoneId is not set")
-    )
+          Alias(Cast(child = colTimestamp, dataType = StringType), "withoutTimezone")(
+            NamedExpression.newExprId)),
+        child = LocalRelation(output = colTimestamp)),
+      error = Some("TimezoneId is not set"))
   }
 
   def validate(plan: LogicalPlan, error: Option[String] = None): Unit = {

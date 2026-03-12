@@ -35,20 +35,21 @@ import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructType, Use
 
 /**
  * Removes cases where we are unnecessarily going between the object and serialized (InternalRow)
- * representation of data item.  For example back to back map operations.
+ * representation of data item. For example back to back map operations.
  */
 object EliminateSerialization extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
-    _.containsAnyPattern(DESERIALIZE_TO_OBJECT, APPEND_COLUMNS, TYPED_FILTER), ruleId) {
+    _.containsAnyPattern(DESERIALIZE_TO_OBJECT, APPEND_COLUMNS, TYPED_FILTER),
+    ruleId) {
     case d @ DeserializeToObject(_, _, s: SerializeFromObject)
-      if d.outputObjAttr.dataType == s.inputObjAttr.dataType =>
+        if d.outputObjAttr.dataType == s.inputObjAttr.dataType =>
       // Adds an extra Project here, to preserve the output expr id of `DeserializeToObject`.
       // We will remove it later in RemoveAliasOnlyProject rule.
       val objAttr = Alias(s.inputObjAttr, s.inputObjAttr.name)(exprId = d.outputObjAttr.exprId)
       Project(objAttr :: Nil, s.child)
 
     case a @ AppendColumns(_, _, _, _, _, s: SerializeFromObject)
-      if a.deserializer.dataType == s.inputObjAttr.dataType =>
+        if a.deserializer.dataType == s.inputObjAttr.dataType =>
       AppendColumnsWithObject(a.func, s.serializer, a.serializer, s.child)
 
     // If there is a `SerializeFromObject` under typed filter and its input object type is same with
@@ -57,7 +58,7 @@ object EliminateSerialization extends Rule[LogicalPlan] {
     // e.g. `ds.map(...).filter(...)` can be optimized by this rule to save extra deserialization,
     // but `ds.map(...).as[AnotherType].filter(...)` can not be optimized.
     case f @ TypedFilter(_, _, _, _, s: SerializeFromObject)
-      if f.deserializer.dataType == s.inputObjAttr.dataType =>
+        if f.deserializer.dataType == s.inputObjAttr.dataType =>
       s.copy(child = f.withObjectProducerChild(s.child))
 
     // If there is a `DeserializeToObject` upon typed filter and its output object type is same with
@@ -66,56 +67,61 @@ object EliminateSerialization extends Rule[LogicalPlan] {
     // e.g. `ds.filter(...).map(...)` can be optimized by this rule to save extra deserialization,
     // but `ds.filter(...).as[AnotherType].map(...)` can not be optimized.
     case d @ DeserializeToObject(_, _, f: TypedFilter)
-      if d.outputObjAttr.dataType == f.deserializer.dataType =>
+        if d.outputObjAttr.dataType == f.deserializer.dataType =>
       f.withObjectProducerChild(d.copy(child = f.child))
   }
 }
 
 /**
- * Combines two adjacent [[TypedFilter]]s, which operate on same type object in condition, into one,
- * merging the filter functions into one conjunctive function.
+ * Combines two adjacent [[TypedFilter]]s, which operate on same type object in condition, into
+ * one, merging the filter functions into one conjunctive function.
  */
 object CombineTypedFilters extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
-    _.containsPattern(TYPED_FILTER), ruleId) {
-    case t1 @ TypedFilter(_, _, _, _, t2 @ TypedFilter(_, _, _, _, child))
-        if t1.deserializer.dataType == t2.deserializer.dataType =>
-      TypedFilter(
-        combineFilterFunction(t2.func, t1.func),
-        t1.argumentClass,
-        t1.argumentSchema,
-        t1.deserializer,
-        child)
-  }
+  def apply(plan: LogicalPlan): LogicalPlan =
+    plan.transformWithPruning(_.containsPattern(TYPED_FILTER), ruleId) {
+      case t1 @ TypedFilter(_, _, _, _, t2 @ TypedFilter(_, _, _, _, child))
+          if t1.deserializer.dataType == t2.deserializer.dataType =>
+        TypedFilter(
+          combineFilterFunction(t2.func, t1.func),
+          t1.argumentClass,
+          t1.argumentSchema,
+          t1.deserializer,
+          child)
+    }
 
   private def combineFilterFunction(func1: AnyRef, func2: AnyRef): Any => Boolean = {
     (func1, func2) match {
       case (f1: FilterFunction[_], f2: FilterFunction[_]) =>
-        input => f1.asInstanceOf[FilterFunction[Any]].call(input) &&
-          f2.asInstanceOf[FilterFunction[Any]].call(input)
+        input =>
+          f1.asInstanceOf[FilterFunction[Any]].call(input) &&
+            f2.asInstanceOf[FilterFunction[Any]].call(input)
       case (f1: FilterFunction[_], f2) =>
-        input => f1.asInstanceOf[FilterFunction[Any]].call(input) &&
-          f2.asInstanceOf[Any => Boolean](input)
+        input =>
+          f1.asInstanceOf[FilterFunction[Any]].call(input) &&
+            f2.asInstanceOf[Any => Boolean](input)
       case (f1, f2: FilterFunction[_]) =>
-        input => f1.asInstanceOf[Any => Boolean].apply(input) &&
-          f2.asInstanceOf[FilterFunction[Any]].call(input)
+        input =>
+          f1.asInstanceOf[Any => Boolean].apply(input) &&
+            f2.asInstanceOf[FilterFunction[Any]].call(input)
       case (f1, f2) =>
-        input => f1.asInstanceOf[Any => Boolean].apply(input) &&
-          f2.asInstanceOf[Any => Boolean].apply(input)
+        input =>
+          f1.asInstanceOf[Any => Boolean].apply(input) &&
+            f2.asInstanceOf[Any => Boolean].apply(input)
     }
   }
 }
 
 /**
  * Removes MapObjects when the following conditions are satisfied
- *   1. Mapobject(... lambdavariable(..., false) ...), which means types for input and output
- *      are primitive types with non-nullable
+ *   1. Mapobject(... lambdavariable(..., false) ...), which means types for input and output are
+ *      primitive types with non-nullable
  *   2. no custom collection class specified representation of data item.
  */
 object EliminateMapObjects extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressionsWithPruning(
-    _.containsAllPatterns(MAP_OBJECTS, LAMBDA_VARIABLE), ruleId) {
-     case MapObjects(_, LambdaVariable(_, _, false, _), inputData, None) => inputData
+    _.containsAllPatterns(MAP_OBJECTS, LAMBDA_VARIABLE),
+    ruleId) { case MapObjects(_, LambdaVariable(_, _, false, _), inputData, None) =>
+    inputData
   }
 }
 
@@ -126,10 +132,11 @@ object EliminateMapObjects extends Rule[LogicalPlan] {
 object ObjectSerializerPruning extends Rule[LogicalPlan] {
 
   /**
-   * Visible for testing.
-   * Collects all struct types from given data type object, recursively.
+   * Visible for testing. Collects all struct types from given data type object, recursively.
    */
-  def collectStructType(dt: DataType, structs: ArrayBuffer[StructType]): ArrayBuffer[StructType] = {
+  def collectStructType(
+      dt: DataType,
+      structs: ArrayBuffer[StructType]): ArrayBuffer[StructType] = {
     dt match {
       case s @ StructType(fields) =>
         structs += s
@@ -147,28 +154,31 @@ object ObjectSerializerPruning extends Rule[LogicalPlan] {
   }
 
   /**
-   * This method returns pruned `CreateNamedStruct` expression given an original `CreateNamedStruct`
-   * and a pruned `StructType`.
+   * This method returns pruned `CreateNamedStruct` expression given an original
+   * `CreateNamedStruct` and a pruned `StructType`.
    */
   private def pruneNamedStruct(struct: CreateNamedStruct, prunedType: StructType) = {
     // Filters out the pruned fields.
     val resolver = conf.resolver
-    val prunedFields = struct.nameExprs.zip(struct.valExprs).filter { case (nameExpr, _) =>
-      val name = nameExpr.eval(EmptyRow).toString
-      prunedType.fieldNames.exists(resolver(_, name))
-    }.flatMap(pair => Seq(pair._1, pair._2))
+    val prunedFields = struct.nameExprs
+      .zip(struct.valExprs)
+      .filter { case (nameExpr, _) =>
+        val name = nameExpr.eval(EmptyRow).toString
+        prunedType.fieldNames.exists(resolver(_, name))
+      }
+      .flatMap(pair => Seq(pair._1, pair._2))
 
     CreateNamedStruct(prunedFields)
   }
 
   /**
    * When we change nested serializer data type, `If` expression will be unresolved because
-   * literal null's data type doesn't match now. We need to align it with new data type.
-   * Note: we should do `transformUp` explicitly to change data types.
+   * literal null's data type doesn't match now. We need to align it with new data type. Note: we
+   * should do `transformUp` explicitly to change data types.
    */
   private def alignNullTypeInIf(expr: Expression) = expr.transformUp {
     case i @ If(IsNullCondition(), Literal(null, dt), ser)
-      if !DataTypeUtils.sameType(dt, ser.dataType) =>
+        if !DataTypeUtils.sameType(dt, ser.dataType) =>
       i.copy(trueValue = Literal(null, ser.dataType))
   }
 
@@ -181,22 +191,21 @@ object ObjectSerializerPruning extends Rule[LogicalPlan] {
   }
 
   /**
-   * This method prunes given serializer expression by given pruned data type. For example,
-   * given a serializer creating struct(a int, b int) and pruned data type struct(a int),
-   * this method returns pruned serializer creating struct(a int).
+   * This method prunes given serializer expression by given pruned data type. For example, given
+   * a serializer creating struct(a int, b int) and pruned data type struct(a int), this method
+   * returns pruned serializer creating struct(a int).
    */
-  def pruneSerializer(
-      serializer: NamedExpression,
-      prunedDataType: DataType): NamedExpression = {
-    val prunedStructTypes = collectStructType(prunedDataType, ArrayBuffer.empty[StructType])
-      .iterator
+  def pruneSerializer(serializer: NamedExpression, prunedDataType: DataType): NamedExpression = {
+    val prunedStructTypes =
+      collectStructType(prunedDataType, ArrayBuffer.empty[StructType]).iterator
 
     def transformer: PartialFunction[Expression, Expression] = {
       case m: ExternalMapToCatalyst =>
         val prunedKeyConverter = m.keyConverter.transformDown(transformer)
         val prunedValueConverter = m.valueConverter.transformDown(transformer)
 
-        m.copy(keyConverter = alignNullTypeInIf(prunedKeyConverter),
+        m.copy(
+          keyConverter = alignNullTypeInIf(prunedKeyConverter),
           valueConverter = alignNullTypeInIf(prunedValueConverter))
 
       case s: CreateNamedStruct if prunedStructTypes.hasNext =>
@@ -214,39 +223,44 @@ object ObjectSerializerPruning extends Rule[LogicalPlan] {
     }
   }
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
-    _.containsAllPatterns(SERIALIZE_FROM_OBJECT, PROJECT), ruleId) {
-    case p @ Project(_, s: SerializeFromObject) =>
-      // Prunes individual serializer if it is not used at all by above projection.
-      val usedRefs = p.references
-      val prunedSerializer = s.serializer.filter(usedRefs.contains)
+  def apply(plan: LogicalPlan): LogicalPlan =
+    plan.transformWithPruning(_.containsAllPatterns(SERIALIZE_FROM_OBJECT, PROJECT), ruleId) {
+      case p @ Project(_, s: SerializeFromObject) =>
+        // Prunes individual serializer if it is not used at all by above projection.
+        val usedRefs = p.references
+        val prunedSerializer = s.serializer.filter(usedRefs.contains)
 
-      val rootFields = SchemaPruning.identifyRootFields(p.projectList, Seq.empty)
+        val rootFields = SchemaPruning.identifyRootFields(p.projectList, Seq.empty)
 
-      if (conf.serializerNestedSchemaPruningEnabled && rootFields.nonEmpty) {
-        // Prunes nested fields in serializers.
-        val prunedSchema = SchemaPruning.pruneSchema(
-          DataTypeUtils.fromAttributes(prunedSerializer.map(_.toAttribute)), rootFields)
-        val nestedPrunedSerializer = prunedSerializer.zipWithIndex.map { case (serializer, idx) =>
-          pruneSerializer(serializer, prunedSchema(idx).dataType)
+        if (conf.serializerNestedSchemaPruningEnabled && rootFields.nonEmpty) {
+          // Prunes nested fields in serializers.
+          val prunedSchema = SchemaPruning.pruneSchema(
+            DataTypeUtils.fromAttributes(prunedSerializer.map(_.toAttribute)),
+            rootFields)
+          val nestedPrunedSerializer = prunedSerializer.zipWithIndex.map {
+            case (serializer, idx) =>
+              pruneSerializer(serializer, prunedSchema(idx).dataType)
+          }
+
+          // Builds new projection.
+          val projectionOverSchema = ProjectionOverSchema(prunedSchema, AttributeSet(s.output))
+          val newProjects = p.projectList
+            .map(_.transformDown { case projectionOverSchema(expr) =>
+              expr
+            })
+            .map { case expr: NamedExpression => expr }
+          p.copy(
+            projectList = newProjects,
+            child = SerializeFromObject(nestedPrunedSerializer, s.child))
+        } else {
+          p.copy(child = SerializeFromObject(prunedSerializer, s.child))
         }
-
-        // Builds new projection.
-        val projectionOverSchema = ProjectionOverSchema(prunedSchema, AttributeSet(s.output))
-        val newProjects = p.projectList.map(_.transformDown {
-          case projectionOverSchema(expr) => expr
-        }).map { case expr: NamedExpression => expr }
-        p.copy(projectList = newProjects,
-          child = SerializeFromObject(nestedPrunedSerializer, s.child))
-      } else {
-        p.copy(child = SerializeFromObject(prunedSerializer, s.child))
-      }
-  }
+    }
 }
 
 /**
- * Reassigns per-query unique IDs to `LambdaVariable`s, whose original IDs are globally unique. This
- * can help Spark to hit codegen cache more often and improve performance.
+ * Reassigns per-query unique IDs to `LambdaVariable`s, whose original IDs are globally unique.
+ * This can help Spark to hit codegen cache more often and improve performance.
  */
 object ReassignLambdaVariableID extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {

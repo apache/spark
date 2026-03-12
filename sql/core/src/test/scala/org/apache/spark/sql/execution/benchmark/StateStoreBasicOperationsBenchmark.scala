@@ -32,8 +32,7 @@ import org.apache.spark.sql.types.{IntegerType, StructField, StructType, Timesta
 import org.apache.spark.util.Utils
 
 /**
- * Synthetic benchmark for State Store basic operations.
- * To run this benchmark:
+ * Synthetic benchmark for State Store basic operations. To run this benchmark:
  * {{{
  *   1. without sbt:
  *      bin/spark-submit --class <this class>
@@ -88,8 +87,8 @@ object StateStoreBasicOperationsBenchmark extends SqlBasedBenchmark {
       val overwriteRates = Seq(100, 50, 10, 0)
 
       numOfRows.foreach { numOfRow =>
-        val testData = constructRandomizedTestData(numOfRow,
-          (1 to numOfRow).map(_ * 1000L).toList, 0)
+        val testData =
+          constructRandomizedTestData(numOfRow, (1 to numOfRow).map(_ * 1000L).toList, 0)
 
         val inMemoryProvider = newHDFSBackedStateStoreProvider()
         val rocksDBProvider = newRocksDBStateProvider()
@@ -97,16 +96,18 @@ object StateStoreBasicOperationsBenchmark extends SqlBasedBenchmark {
 
         val committedInMemoryVersion = loadInitialData(inMemoryProvider, testData)
         val committedRocksDBVersion = loadInitialData(rocksDBProvider, testData)
-        val committedRocksDBWithNoTrackVersion = loadInitialData(
-          rocksDBWithNoTrackProvider, testData)
+        val committedRocksDBWithNoTrackVersion =
+          loadInitialData(rocksDBWithNoTrackProvider, testData)
 
         overwriteRates.foreach { overwriteRate =>
           val numOfRowsToOverwrite = numOfRow * overwriteRate / 100
 
           val numOfNewRows = numOfRow - numOfRowsToOverwrite
           val newRows = if (numOfNewRows > 0) {
-            constructRandomizedTestData(numOfNewRows,
-              (1 to numOfNewRows).map(_ * 1000L).toList, 0)
+            constructRandomizedTestData(
+              numOfNewRows,
+              (1 to numOfNewRows).map(_ * 1000L).toList,
+              0)
           } else {
             Seq.empty[(UnsafeRow, UnsafeRow)]
           }
@@ -117,16 +118,31 @@ object StateStoreBasicOperationsBenchmark extends SqlBasedBenchmark {
           }
           val rowsToPut = Random.shuffle(newRows ++ existingRows)
 
-          val benchmark = new Benchmark(s"putting $numOfRow rows " +
-            s"($numOfRowsToOverwrite rows to overwrite - rate $overwriteRate)",
-            numOfRow, minNumIters = 1000, output = output)
+          val benchmark = new Benchmark(
+            s"putting $numOfRow rows " +
+              s"($numOfRowsToOverwrite rows to overwrite - rate $overwriteRate)",
+            numOfRow,
+            minNumIters = 1000,
+            output = output)
 
-          registerPutBenchmarkCase(benchmark, "In-memory", inMemoryProvider,
-            committedInMemoryVersion, rowsToPut)
-          registerPutBenchmarkCase(benchmark, "RocksDB (trackTotalNumberOfRows: true)",
-            rocksDBProvider, committedRocksDBVersion, rowsToPut)
-          registerPutBenchmarkCase(benchmark, "RocksDB (trackTotalNumberOfRows: false)",
-            rocksDBWithNoTrackProvider, committedRocksDBWithNoTrackVersion, rowsToPut)
+          registerPutBenchmarkCase(
+            benchmark,
+            "In-memory",
+            inMemoryProvider,
+            committedInMemoryVersion,
+            rowsToPut)
+          registerPutBenchmarkCase(
+            benchmark,
+            "RocksDB (trackTotalNumberOfRows: true)",
+            rocksDBProvider,
+            committedRocksDBVersion,
+            rowsToPut)
+          registerPutBenchmarkCase(
+            benchmark,
+            "RocksDB (trackTotalNumberOfRows: false)",
+            rocksDBWithNoTrackProvider,
+            committedRocksDBWithNoTrackVersion,
+            rowsToPut)
 
           benchmark.run()
         }
@@ -162,28 +178,36 @@ object StateStoreBasicOperationsBenchmark extends SqlBasedBenchmark {
       val overwriteRates = Seq(100, 50, 10, 0)
 
       numOfRows.foreach { numOfRow =>
-        val testData = constructRandomizedTestDataWithMultipleValues(numOfRow,
-          (1 to numOfRow).map(_ * 1000L).toList, numValuesPerKey, 0)
+        val testData = constructRandomizedTestDataWithMultipleValues(
+          numOfRow,
+          (1 to numOfRow).map(_ * 1000L).toList,
+          numValuesPerKey,
+          0)
 
         // note that merge is only supported for RocksDB state store provider
-        val rocksDBProvider = newRocksDBStateProvider(trackTotalNumberOfRows = true,
+        val rocksDBProvider = newRocksDBStateProvider(
+          trackTotalNumberOfRows = true,
           useColumnFamilies = true,
           useMultipleValuesPerKey = true)
-        val rocksDBWithNoTrackProvider = newRocksDBStateProvider(trackTotalNumberOfRows = false,
+        val rocksDBWithNoTrackProvider = newRocksDBStateProvider(
+          trackTotalNumberOfRows = false,
           useColumnFamilies = true,
           useMultipleValuesPerKey = true)
 
         val committedRocksDBVersion = loadInitialDataWithMultipleValues(rocksDBProvider, testData)
-        val committedRocksDBWithNoTrackVersion = loadInitialDataWithMultipleValues(
-          rocksDBWithNoTrackProvider, testData)
+        val committedRocksDBWithNoTrackVersion =
+          loadInitialDataWithMultipleValues(rocksDBWithNoTrackProvider, testData)
 
         overwriteRates.foreach { overwriteRate =>
           val numOfRowsToOverwrite = numOfRow * overwriteRate / 100
 
           val numOfNewRows = numOfRow - numOfRowsToOverwrite
           val newRows = if (numOfNewRows > 0) {
-            constructRandomizedTestDataWithMultipleValues(numOfNewRows,
-              (1 to numOfNewRows).map(_ * 1000L).toList, numValuesPerKey, 0)
+            constructRandomizedTestDataWithMultipleValues(
+              numOfNewRows,
+              (1 to numOfNewRows).map(_ * 1000L).toList,
+              numValuesPerKey,
+              0)
           } else {
             Seq.empty[(UnsafeRow, Seq[UnsafeRow])]
           }
@@ -194,15 +218,26 @@ object StateStoreBasicOperationsBenchmark extends SqlBasedBenchmark {
           }
           val rowsToPut = Random.shuffle(newRows ++ existingRows)
 
-          val benchmark = new Benchmark(s"merging $numOfRow rows " +
-            s"with $numValuesPerKey values per key " +
-            s"($numOfRowsToOverwrite rows to overwrite - rate $overwriteRate)",
-            numOfRow, minNumIters = 1000, output = output)
+          val benchmark = new Benchmark(
+            s"merging $numOfRow rows " +
+              s"with $numValuesPerKey values per key " +
+              s"($numOfRowsToOverwrite rows to overwrite - rate $overwriteRate)",
+            numOfRow,
+            minNumIters = 1000,
+            output = output)
 
-          registerMergeBenchmarkCase(benchmark, "RocksDB (trackTotalNumberOfRows: true)",
-            rocksDBProvider, committedRocksDBVersion, rowsToPut)
-          registerMergeBenchmarkCase(benchmark, "RocksDB (trackTotalNumberOfRows: false)",
-            rocksDBWithNoTrackProvider, committedRocksDBWithNoTrackVersion, rowsToPut)
+          registerMergeBenchmarkCase(
+            benchmark,
+            "RocksDB (trackTotalNumberOfRows: true)",
+            rocksDBProvider,
+            committedRocksDBVersion,
+            rowsToPut)
+          registerMergeBenchmarkCase(
+            benchmark,
+            "RocksDB (trackTotalNumberOfRows: false)",
+            rocksDBWithNoTrackProvider,
+            committedRocksDBWithNoTrackVersion,
+            rowsToPut)
 
           benchmark.run()
         }
@@ -235,8 +270,8 @@ object StateStoreBasicOperationsBenchmark extends SqlBasedBenchmark {
       val numOfRows = Seq(10000)
       val nonExistRates = Seq(100, 50, 10, 0)
       numOfRows.foreach { numOfRow =>
-        val testData = constructRandomizedTestData(numOfRow,
-          (1 to numOfRow).map(_ * 1000L).toList, 0)
+        val testData =
+          constructRandomizedTestData(numOfRow, (1 to numOfRow).map(_ * 1000L).toList, 0)
 
         val inMemoryProvider = newHDFSBackedStateStoreProvider()
         val rocksDBProvider = newRocksDBStateProvider()
@@ -244,16 +279,18 @@ object StateStoreBasicOperationsBenchmark extends SqlBasedBenchmark {
 
         val committedInMemoryVersion = loadInitialData(inMemoryProvider, testData)
         val committedRocksDBVersion = loadInitialData(rocksDBProvider, testData)
-        val committedRocksDBWithNoTrackVersion = loadInitialData(
-          rocksDBWithNoTrackProvider, testData)
+        val committedRocksDBWithNoTrackVersion =
+          loadInitialData(rocksDBWithNoTrackProvider, testData)
 
         nonExistRates.foreach { nonExistRate =>
           val numOfRowsNonExist = numOfRow * nonExistRate / 100
 
           val numOfExistingRows = numOfRow - numOfRowsNonExist
           val nonExistingRows = if (numOfRowsNonExist > 0) {
-            constructRandomizedTestData(numOfRowsNonExist,
-              (numOfRow + 1 to numOfRow + numOfRowsNonExist).map(_ * 1000L).toList, 0)
+            constructRandomizedTestData(
+              numOfRowsNonExist,
+              (numOfRow + 1 to numOfRow + numOfRowsNonExist).map(_ * 1000L).toList,
+              0)
           } else {
             Seq.empty[(UnsafeRow, UnsafeRow)]
           }
@@ -264,17 +301,32 @@ object StateStoreBasicOperationsBenchmark extends SqlBasedBenchmark {
           }
           val keysToDelete = Random.shuffle(nonExistingRows ++ existingRows).map(_._1)
 
-          val benchmark = new Benchmark(s"trying to delete $numOfRow rows " +
-            s"from $numOfRow rows" +
-            s"($numOfRowsNonExist rows are non-existing - rate $nonExistRate)",
-            numOfRow, minNumIters = 1000, output = output)
+          val benchmark = new Benchmark(
+            s"trying to delete $numOfRow rows " +
+              s"from $numOfRow rows" +
+              s"($numOfRowsNonExist rows are non-existing - rate $nonExistRate)",
+            numOfRow,
+            minNumIters = 1000,
+            output = output)
 
-          registerDeleteBenchmarkCase(benchmark, "In-memory", inMemoryProvider,
-            committedInMemoryVersion, keysToDelete)
-          registerDeleteBenchmarkCase(benchmark, "RocksDB (trackTotalNumberOfRows: true)",
-            rocksDBProvider, committedRocksDBVersion, keysToDelete)
-          registerDeleteBenchmarkCase(benchmark, "RocksDB (trackTotalNumberOfRows: false)",
-            rocksDBWithNoTrackProvider, committedRocksDBWithNoTrackVersion, keysToDelete)
+          registerDeleteBenchmarkCase(
+            benchmark,
+            "In-memory",
+            inMemoryProvider,
+            committedInMemoryVersion,
+            keysToDelete)
+          registerDeleteBenchmarkCase(
+            benchmark,
+            "RocksDB (trackTotalNumberOfRows: true)",
+            rocksDBProvider,
+            committedRocksDBVersion,
+            keysToDelete)
+          registerDeleteBenchmarkCase(
+            benchmark,
+            "RocksDB (trackTotalNumberOfRows: false)",
+            rocksDBWithNoTrackProvider,
+            committedRocksDBWithNoTrackVersion,
+            keysToDelete)
 
           benchmark.run()
         }
@@ -298,8 +350,7 @@ object StateStoreBasicOperationsBenchmark extends SqlBasedBenchmark {
         val store = provider.getStore(version)
 
         timer.startTiming()
-        evictAsFullScanAndRemove(store, maxTimestampToEvictInMillis,
-          expectedNumOfRows)
+        evictAsFullScanAndRemove(store, maxTimestampToEvictInMillis, expectedNumOfRows)
         timer.stopTiming()
 
         store.abort()
@@ -321,30 +372,48 @@ object StateStoreBasicOperationsBenchmark extends SqlBasedBenchmark {
 
         val committedInMemoryVersion = loadInitialData(inMemoryProvider, testData)
         val committedRocksDBVersion = loadInitialData(rocksDBProvider, testData)
-        val committedRocksDBWithNoTrackVersion = loadInitialData(
-          rocksDBWithNoTrackProvider, testData)
+        val committedRocksDBWithNoTrackVersion =
+          loadInitialData(rocksDBWithNoTrackProvider, testData)
 
         numOfEvictionRates.foreach { numOfEvictionRate =>
           val numOfRowsToEvict = numOfRow * numOfEvictionRate / 100
           val maxTimestampToEvictInMillis = timestampsInMicros
             .take(numOfRow * numOfEvictionRate / 100)
-            .lastOption.map(_ / 1000).getOrElse(-1L)
+            .lastOption
+            .map(_ / 1000)
+            .getOrElse(-1L)
 
-          val benchmark = new Benchmark(s"evicting $numOfRowsToEvict rows " +
-            s"(maxTimestampToEvictInMillis: $maxTimestampToEvictInMillis) " +
-            s"from $numOfRow rows",
-            numOfRow, minNumIters = 1000, output = output)
+          val benchmark = new Benchmark(
+            s"evicting $numOfRowsToEvict rows " +
+              s"(maxTimestampToEvictInMillis: $maxTimestampToEvictInMillis) " +
+              s"from $numOfRow rows",
+            numOfRow,
+            minNumIters = 1000,
+            output = output)
 
-          registerEvictBenchmarkCase(benchmark, "In-memory", inMemoryProvider,
-            committedInMemoryVersion, maxTimestampToEvictInMillis, numOfRowsToEvict)
-
-          registerEvictBenchmarkCase(benchmark, "RocksDB (trackTotalNumberOfRows: true)",
-            rocksDBProvider, committedRocksDBVersion, maxTimestampToEvictInMillis,
+          registerEvictBenchmarkCase(
+            benchmark,
+            "In-memory",
+            inMemoryProvider,
+            committedInMemoryVersion,
+            maxTimestampToEvictInMillis,
             numOfRowsToEvict)
 
-          registerEvictBenchmarkCase(benchmark, "RocksDB (trackTotalNumberOfRows: false)",
-            rocksDBWithNoTrackProvider, committedRocksDBWithNoTrackVersion,
-            maxTimestampToEvictInMillis, numOfRowsToEvict)
+          registerEvictBenchmarkCase(
+            benchmark,
+            "RocksDB (trackTotalNumberOfRows: true)",
+            rocksDBProvider,
+            committedRocksDBVersion,
+            maxTimestampToEvictInMillis,
+            numOfRowsToEvict)
+
+          registerEvictBenchmarkCase(
+            benchmark,
+            "RocksDB (trackTotalNumberOfRows: false)",
+            rocksDBWithNoTrackProvider,
+            committedRocksDBWithNoTrackVersion,
+            maxTimestampToEvictInMillis,
+            numOfRowsToEvict)
 
           benchmark.run()
         }
@@ -372,17 +441,13 @@ object StateStoreBasicOperationsBenchmark extends SqlBasedBenchmark {
     store.commit()
   }
 
-  private def updateRows(
-      store: StateStore,
-      rows: Seq[(UnsafeRow, UnsafeRow)]): Unit = {
+  private def updateRows(store: StateStore, rows: Seq[(UnsafeRow, UnsafeRow)]): Unit = {
     rows.foreach { case (key, value) =>
       store.put(key, value)
     }
   }
 
-  private def mergeRows(
-      store: StateStore,
-      rows: Seq[(UnsafeRow, Seq[UnsafeRow])]): Unit = {
+  private def mergeRows(store: StateStore, rows: Seq[(UnsafeRow, Seq[UnsafeRow])]): Unit = {
     rows.foreach { case (key, values) =>
       values.foreach { value =>
         store.merge(key, value)
@@ -390,9 +455,7 @@ object StateStoreBasicOperationsBenchmark extends SqlBasedBenchmark {
     }
   }
 
-  private def deleteRows(
-      store: StateStore,
-      rows: Seq[UnsafeRow]): Unit = {
+  private def deleteRows(store: StateStore, rows: Seq[UnsafeRow]): Unit = {
     rows.foreach { key =>
       store.remove(key)
     }
@@ -409,8 +472,7 @@ object StateStoreBasicOperationsBenchmark extends SqlBasedBenchmark {
         removedRows += 1
       }
     }
-    assert(removedRows == expectedNumOfRows,
-      s"expected: $expectedNumOfRows actual: $removedRows")
+    assert(removedRows == expectedNumOfRows, s"expected: $expectedNumOfRows actual: $removedRows")
   }
 
   // This prevents created keys to be in order, which may affect the performance on RocksDB.
@@ -468,8 +530,13 @@ object StateStoreBasicOperationsBenchmark extends SqlBasedBenchmark {
     val configuration = new Configuration
     configuration.set(StreamExecution.RUN_ID_KEY, UUID.randomUUID().toString)
     provider.init(
-      storeId, keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
-      useColumnFamilies = false, storeConf, configuration)
+      storeId,
+      keySchema,
+      valueSchema,
+      NoPrefixKeyStateEncoderSpec(keySchema),
+      useColumnFamilies = false,
+      storeConf,
+      configuration)
     provider
   }
 
@@ -480,9 +547,11 @@ object StateStoreBasicOperationsBenchmark extends SqlBasedBenchmark {
     val storeId = StateStoreId(newDir(), Random.nextInt(), 0)
     val provider = new RocksDBStateStoreProvider()
     val sqlConf = new SQLConf()
-    sqlConf.setConfString("spark.sql.streaming.stateStore.rocksdb.trackTotalNumberOfRows",
+    sqlConf.setConfString(
+      "spark.sql.streaming.stateStore.rocksdb.trackTotalNumberOfRows",
       trackTotalNumberOfRows.toString)
-    sqlConf.setConfString("spark.sql.streaming.stateStore.coordinatorReportSnapshotUploadLag",
+    sqlConf.setConfString(
+      "spark.sql.streaming.stateStore.coordinatorReportSnapshotUploadLag",
       false.toString)
     val storeConf = new StateStoreConf(sqlConf)
 
@@ -490,8 +559,13 @@ object StateStoreBasicOperationsBenchmark extends SqlBasedBenchmark {
     configuration.set(StreamExecution.RUN_ID_KEY, UUID.randomUUID().toString)
 
     provider.init(
-      storeId, keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
-      useColumnFamilies = useColumnFamilies, storeConf, configuration,
+      storeId,
+      keySchema,
+      valueSchema,
+      NoPrefixKeyStateEncoderSpec(keySchema),
+      useColumnFamilies = useColumnFamilies,
+      storeConf,
+      configuration,
       useMultipleValuesPerKey = useMultipleValuesPerKey)
     provider
   }

@@ -72,18 +72,16 @@ class MapperRowCounter extends AccumulatorV2[jl.Long, java.util.List[(jl.Integer
     }
   }
 
-  override def merge(
-      other: AccumulatorV2[jl.Long, java.util.List[(jl.Integer, jl.Long)]]): Unit
-  = other match {
-    case o: MapperRowCounter =>
-      this.synchronized(getOrCreate.addAll(o.value))
-    case _ =>
-      throw new SparkUnsupportedOperationException(
-        errorClass = "_LEGACY_ERROR_TEMP_3165",
-        messageParameters = Map(
-          "classA" -> this.getClass.getName,
-          "classB" -> other.getClass.getName))
-  }
+  override def merge(other: AccumulatorV2[jl.Long, java.util.List[(jl.Integer, jl.Long)]]): Unit =
+    other match {
+      case o: MapperRowCounter =>
+        this.synchronized(getOrCreate.addAll(o.value))
+      case _ =>
+        throw new SparkUnsupportedOperationException(
+          errorClass = "_LEGACY_ERROR_TEMP_3165",
+          messageParameters =
+            Map("classA" -> this.getClass.getName, "classB" -> other.getClass.getName))
+    }
 
   override def value: java.util.List[(jl.Integer, jl.Long)] = this.synchronized(getOrCreate)
 }

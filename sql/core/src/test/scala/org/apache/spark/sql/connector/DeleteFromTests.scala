@@ -44,8 +44,7 @@ trait DeleteFromTests extends DatasourceV2SQLBase {
       sql(s"CREATE TABLE $t (id bigint, data string, p int) USING foo PARTITIONED BY (id, p)")
       sql(s"INSERT INTO $t VALUES (2L, 'a', 2), (2L, 'b', 3), (3L, 'c', 3)")
       sql(s"DELETE FROM $t WHERE id = 2")
-      checkAnswer(spark.table(t), Seq(
-        Row(3, "c", 3)))
+      checkAnswer(spark.table(t), Seq(Row(3, "c", 3)))
     }
   }
 
@@ -55,8 +54,7 @@ trait DeleteFromTests extends DatasourceV2SQLBase {
       sql(s"CREATE TABLE $t (id bigint, data string, p int) USING foo PARTITIONED BY (id, p)")
       sql(s"INSERT INTO $t VALUES (2L, 'a', 2), (2L, 'b', 3), (3L, 'c', 3)")
       sql(s"DELETE FROM $t AS tbl WHERE tbl.id = 2")
-      checkAnswer(spark.table(t), Seq(
-        Row(3, "c", 3)))
+      checkAnswer(spark.table(t), Seq(Row(3, "c", 3)))
     }
   }
 
@@ -66,8 +64,7 @@ trait DeleteFromTests extends DatasourceV2SQLBase {
       sql(s"CREATE TABLE $t (id bigint, data string, p int) USING foo PARTITIONED BY (id, p)")
       sql(s"INSERT INTO $t VALUES (2L, 'a', 2), (2L, 'b', 3), (3L, 'c', 3)")
       sql(s"DELETE FROM $t AS tbl WHERE tbl.ID = 2")
-      checkAnswer(spark.table(t), Seq(
-        Row(3, "c", 3)))
+      checkAnswer(spark.table(t), Seq(Row(3, "c", 3)))
     }
   }
 
@@ -104,8 +101,9 @@ trait DeleteFromTests extends DatasourceV2SQLBase {
     spark.conf.set(V2_SESSION_CATALOG_IMPLEMENTATION, "builtin")
     val v1Table = "tbl"
     withTable(v1Table) {
-      sql(s"CREATE TABLE $v1Table" +
-        s" USING ${classOf[SimpleScanSource].getName} OPTIONS (from=0,to=1)")
+      sql(
+        s"CREATE TABLE $v1Table" +
+          s" USING ${classOf[SimpleScanSource].getName} OPTIONS (from=0,to=1)")
       val exc = intercept[AnalysisException] {
         sql(s"DELETE FROM $v1Table WHERE i = 2")
       }
@@ -114,8 +112,8 @@ trait DeleteFromTests extends DatasourceV2SQLBase {
         exception = exc,
         condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
         sqlState = "0A000",
-        parameters = Map("tableName" -> "`spark_catalog`.`default`.`tbl`",
-          "operation" -> "DELETE"))
+        parameters =
+          Map("tableName" -> "`spark_catalog`.`default`.`tbl`", "operation" -> "DELETE"))
     }
   }
 

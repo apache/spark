@@ -52,7 +52,8 @@ class SQLExecutionSuite extends SparkFunSuite with SQLConfHelper {
   }
 
   test("concurrent query execution with fork-join pool (SPARK-13747)") {
-    val spark = SparkSession.builder()
+    val spark = SparkSession
+      .builder()
       .master("local[*]")
       .appName("test")
       .getOrCreate()
@@ -104,7 +105,6 @@ class SQLExecutionSuite extends SparkFunSuite with SQLConfHelper {
     }
   }
 
-
   test("Finding QueryExecution for given executionId") {
     val spark = SparkSession.builder().master("local[*]").appName("test").getOrCreate()
     import spark.implicits._
@@ -143,21 +143,31 @@ class SQLExecutionSuite extends SparkFunSuite with SQLConfHelper {
     withTempDir { tempDir =>
       try {
         val tablePath = tempDir.toString + "/table"
-        val df = ThreadUtils.awaitResult(Future {
-          session = SparkSession.builder().appName("test").master("local[*]").getOrCreate()
+        val df = ThreadUtils.awaitResult(
+          Future {
+            session = SparkSession.builder().appName("test").master("local[*]").getOrCreate()
 
-          session.createDataFrame(
-            session.sparkContext.parallelize(Row(Array(1, 2, 3)) :: Nil),
-            StructType(Seq(
-              StructField("a", ArrayType(IntegerType, containsNull = false), nullable = false))))
-            .write.parquet(tablePath)
+            session
+              .createDataFrame(
+                session.sparkContext.parallelize(Row(Array(1, 2, 3)) :: Nil),
+                StructType(
+                  Seq(
+                    StructField(
+                      "a",
+                      ArrayType(IntegerType, containsNull = false),
+                      nullable = false))))
+              .write
+              .parquet(tablePath)
 
-          session.read.parquet(tablePath)
-        }(ExecutionContext.fromExecutorService(executor1)), 1.minute)
+            session.read.parquet(tablePath)
+          }(ExecutionContext.fromExecutorService(executor1)),
+          1.minute)
 
-        ThreadUtils.awaitResult(Future {
-          assert(df.rdd.collect()(0) === Row(Seq(1, 2, 3)))
-        }(ExecutionContext.fromExecutorService(executor2)), 1.minute)
+        ThreadUtils.awaitResult(
+          Future {
+            assert(df.rdd.collect()(0) === Row(Seq(1, 2, 3)))
+          }(ExecutionContext.fromExecutorService(executor2)),
+          1.minute)
       } finally {
         executor1.shutdown()
         executor2.shutdown()
@@ -172,7 +182,8 @@ class SQLExecutionSuite extends SparkFunSuite with SQLConfHelper {
 
     try {
       val originalQueryId = spark.sparkContext.getLocalProperty(SQLExecution.QUERY_ID_KEY)
-      val parentQE = new QueryExecution(spark.asInstanceOf[classic.SparkSession], OneRowRelation())
+      val parentQE =
+        new QueryExecution(spark.asInstanceOf[classic.SparkSession], OneRowRelation())
       val parentQueryId = parentQE.queryId.toString
 
       var childQueryId: String = null
@@ -294,7 +305,8 @@ class SQLExecutionSuite extends SparkFunSuite with SQLConfHelper {
   }
 
   test("SPARK-34735: Add modified configs for SQL execution in UI") {
-    val spark = SparkSession.builder()
+    val spark = SparkSession
+      .builder()
       .master("local[*]")
       .appName("test")
       .config("k1", "v1")

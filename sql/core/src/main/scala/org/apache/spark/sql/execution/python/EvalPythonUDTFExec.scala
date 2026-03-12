@@ -31,8 +31,8 @@ import org.apache.spark.sql.types.{DataType, StructField, StructType}
 import org.apache.spark.util.Utils
 
 /**
- * A physical plan that evaluates a [[PythonUDTF]], one partition of tuples at a time.
- * This is similar to [[EvalPythonExec]].
+ * A physical plan that evaluates a [[PythonUDTF]], one partition of tuples at a time. This is
+ * similar to [[EvalPythonExec]].
  */
 trait EvalPythonUDTFExec extends UnaryExecNode {
   def udtf: PythonUDTF
@@ -59,8 +59,10 @@ trait EvalPythonUDTFExec extends UnaryExecNode {
 
       // The queue used to buffer input rows so we can drain it to
       // combine input with output from Python.
-      val queue = HybridRowQueue(context.taskMemoryManager(),
-        new File(Utils.getLocalDir(SparkEnv.get.conf)), child.output.length)
+      val queue = HybridRowQueue(
+        context.taskMemoryManager(),
+        new File(Utils.getLocalDir(SparkEnv.get.conf)),
+        child.output.length)
       context.addTaskCompletionListener[Unit] { ctx =>
         queue.close()
       }
@@ -68,23 +70,24 @@ trait EvalPythonUDTFExec extends UnaryExecNode {
       // flatten all the arguments
       val allInputs = new ArrayBuffer[Expression]
       val dataTypes = new ArrayBuffer[DataType]
-      val argMetas = udtf.children.zip(
-        udtf.tableArguments.getOrElse(Seq.fill(udtf.children.length)(false))
-      ).map { case (e: Expression, isTableArg: Boolean) =>
-        val (key, value) = e match {
-          case NamedArgumentExpression(key, value) =>
-            (Some(key), value)
-          case _ =>
-            (None, e)
+      val argMetas = udtf.children
+        .zip(udtf.tableArguments.getOrElse(Seq.fill(udtf.children.length)(false)))
+        .map { case (e: Expression, isTableArg: Boolean) =>
+          val (key, value) = e match {
+            case NamedArgumentExpression(key, value) =>
+              (Some(key), value)
+            case _ =>
+              (None, e)
+          }
+          if (allInputs.exists(_.semanticEquals(value))) {
+            ArgumentMetadata(allInputs.indexWhere(_.semanticEquals(value)), key, isTableArg)
+          } else {
+            allInputs += value
+            dataTypes += value.dataType
+            ArgumentMetadata(allInputs.length - 1, key, isTableArg)
+          }
         }
-        if (allInputs.exists(_.semanticEquals(value))) {
-          ArgumentMetadata(allInputs.indexWhere(_.semanticEquals(value)), key, isTableArg)
-        } else {
-          allInputs += value
-          dataTypes += value.dataType
-          ArgumentMetadata(allInputs.length - 1, key, isTableArg)
-        }
-      }.toArray
+        .toArray
       val projection = MutableProjection.create(allInputs.toSeq, child.output)
       projection.initialize(context.partitionId())
       val schema = StructType(dataTypes.zipWithIndex.map { case (dt, i) =>

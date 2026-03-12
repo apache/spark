@@ -35,12 +35,16 @@ private[sql] abstract class SparkPlanTest extends SparkFunSuite with SparkSessio
 
   /**
    * Runs the plan and makes sure the answer matches the expected result.
-   * @param input the input data to be used.
-   * @param planFunction a function which accepts the input SparkPlan and uses it to instantiate
-   *                     the physical operator that's being tested.
-   * @param expectedAnswer the expected result in a [[Seq]] of [[Row]]s.
-   * @param sortAnswers if true, the answers will be sorted by their toString representations prior
-   *                    to being compared.
+   * @param input
+   *   the input data to be used.
+   * @param planFunction
+   *   a function which accepts the input SparkPlan and uses it to instantiate the physical
+   *   operator that's being tested.
+   * @param expectedAnswer
+   *   the expected result in a [[Seq]] of [[Row]]s.
+   * @param sortAnswers
+   *   if true, the answers will be sorted by their toString representations prior to being
+   *   compared.
    */
   protected def checkAnswer(
       input: DataFrame,
@@ -56,13 +60,18 @@ private[sql] abstract class SparkPlanTest extends SparkFunSuite with SparkSessio
 
   /**
    * Runs the plan and makes sure the answer matches the expected result.
-   * @param left the left input data to be used.
-   * @param right the right input data to be used.
-   * @param planFunction a function which accepts the input SparkPlan and uses it to instantiate
-   *                     the physical operator that's being tested.
-   * @param expectedAnswer the expected result in a [[Seq]] of [[Row]]s.
-   * @param sortAnswers if true, the answers will be sorted by their toString representations prior
-   *                    to being compared.
+   * @param left
+   *   the left input data to be used.
+   * @param right
+   *   the right input data to be used.
+   * @param planFunction
+   *   a function which accepts the input SparkPlan and uses it to instantiate the physical
+   *   operator that's being tested.
+   * @param expectedAnswer
+   *   the expected result in a [[Seq]] of [[Row]]s.
+   * @param sortAnswers
+   *   if true, the answers will be sorted by their toString representations prior to being
+   *   compared.
    */
   protected def checkAnswer2(
       left: DataFrame,
@@ -79,12 +88,16 @@ private[sql] abstract class SparkPlanTest extends SparkFunSuite with SparkSessio
 
   /**
    * Runs the plan and makes sure the answer matches the expected result.
-   * @param input the input data to be used.
-   * @param planFunction a function which accepts a sequence of input SparkPlans and uses them to
-   *                     instantiate the physical operator that's being tested.
-   * @param expectedAnswer the expected result in a [[Seq]] of [[Row]]s.
-   * @param sortAnswers if true, the answers will be sorted by their toString representations prior
-   *                    to being compared.
+   * @param input
+   *   the input data to be used.
+   * @param planFunction
+   *   a function which accepts a sequence of input SparkPlans and uses them to instantiate the
+   *   physical operator that's being tested.
+   * @param expectedAnswer
+   *   the expected result in a [[Seq]] of [[Row]]s.
+   * @param sortAnswers
+   *   if true, the answers will be sorted by their toString representations prior to being
+   *   compared.
    */
   protected def doCheckAnswer(
       input: Seq[DataFrame],
@@ -93,22 +106,25 @@ private[sql] abstract class SparkPlanTest extends SparkFunSuite with SparkSessio
       sortAnswers: Boolean = true): Unit = {
     SparkPlanTest
       .checkAnswer(input, planFunction, expectedAnswer, sortAnswers, spark.sqlContext) match {
-        case Some(errorMessage) => fail(errorMessage)
-        case None =>
+      case Some(errorMessage) => fail(errorMessage)
+      case None =>
     }
   }
 
   /**
    * Runs the plan and makes sure the answer matches the result produced by a reference plan.
-   * @param input the input data to be used.
-   * @param planFunction a function which accepts the input SparkPlan and uses it to instantiate
-   *                     the physical operator that's being tested.
-   * @param expectedPlanFunction a function which accepts the input SparkPlan and uses it to
-   *                             instantiate a reference implementation of the physical operator
-   *                             that's being tested. The result of executing this plan will be
-   *                             treated as the source-of-truth for the test.
-   * @param sortAnswers if true, the answers will be sorted by their toString representations prior
-   *                    to being compared.
+   * @param input
+   *   the input data to be used.
+   * @param planFunction
+   *   a function which accepts the input SparkPlan and uses it to instantiate the physical
+   *   operator that's being tested.
+   * @param expectedPlanFunction
+   *   a function which accepts the input SparkPlan and uses it to instantiate a reference
+   *   implementation of the physical operator that's being tested. The result of executing this
+   *   plan will be treated as the source-of-truth for the test.
+   * @param sortAnswers
+   *   if true, the answers will be sorted by their toString representations prior to being
+   *   compared.
    */
   protected def checkThatPlansAgree(
       input: DataFrame,
@@ -116,7 +132,11 @@ private[sql] abstract class SparkPlanTest extends SparkFunSuite with SparkSessio
       expectedPlanFunction: SparkPlan => SparkPlan,
       sortAnswers: Boolean = true): Unit = {
     SparkPlanTest.checkAnswer(
-        input, planFunction, expectedPlanFunction, sortAnswers, spark.sqlContext) match {
+      input,
+      planFunction,
+      expectedPlanFunction,
+      sortAnswers,
+      spark.sqlContext) match {
       case Some(errorMessage) => fail(errorMessage)
       case None =>
     }
@@ -130,13 +150,15 @@ object SparkPlanTest {
 
   /**
    * Runs the plan and makes sure the answer matches the result produced by a reference plan.
-   * @param input the input data to be used.
-   * @param planFunction a function which accepts the input SparkPlan and uses it to instantiate
-   *                     the physical operator that's being tested.
-   * @param expectedPlanFunction a function which accepts the input SparkPlan and uses it to
-   *                             instantiate a reference implementation of the physical operator
-   *                             that's being tested. The result of executing this plan will be
-   *                             treated as the source-of-truth for the test.
+   * @param input
+   *   the input data to be used.
+   * @param planFunction
+   *   a function which accepts the input SparkPlan and uses it to instantiate the physical
+   *   operator that's being tested.
+   * @param expectedPlanFunction
+   *   a function which accepts the input SparkPlan and uses it to instantiate a reference
+   *   implementation of the physical operator that's being tested. The result of executing this
+   *   plan will be treated as the source-of-truth for the test.
    */
   def checkAnswer(
       input: DataFrame,
@@ -148,35 +170,37 @@ object SparkPlanTest {
     val outputPlan = planFunction(input.queryExecution.sparkPlan)
     val expectedOutputPlan = expectedPlanFunction(input.queryExecution.sparkPlan)
 
-    val expectedAnswer: Seq[Row] = try {
-      executePlan(expectedOutputPlan, spark)
-    } catch {
-      case NonFatal(e) =>
-        val errorMessage =
-          s"""
+    val expectedAnswer: Seq[Row] =
+      try {
+        executePlan(expectedOutputPlan, spark)
+      } catch {
+        case NonFatal(e) =>
+          val errorMessage =
+            s"""
              | Exception thrown while executing Spark plan to calculate expected answer:
              | $expectedOutputPlan
              | == Exception ==
              | $e
              | ${org.apache.spark.sql.catalyst.util.stackTraceToString(e)}
           """.stripMargin
-        return Some(errorMessage)
-    }
+          return Some(errorMessage)
+      }
 
-    val actualAnswer: Seq[Row] = try {
-      executePlan(outputPlan, spark)
-    } catch {
-      case NonFatal(e) =>
-        val errorMessage =
-          s"""
+    val actualAnswer: Seq[Row] =
+      try {
+        executePlan(outputPlan, spark)
+      } catch {
+        case NonFatal(e) =>
+          val errorMessage =
+            s"""
              | Exception thrown while executing Spark plan:
              | $outputPlan
              | == Exception ==
              | $e
              | ${org.apache.spark.sql.catalyst.util.stackTraceToString(e)}
           """.stripMargin
-        return Some(errorMessage)
-    }
+          return Some(errorMessage)
+      }
 
     SQLTestUtils.compareAnswers(actualAnswer, expectedAnswer, sortAnswers).map { errorMessage =>
       s"""
@@ -192,12 +216,16 @@ object SparkPlanTest {
 
   /**
    * Runs the plan and makes sure the answer matches the expected result.
-   * @param input the input data to be used.
-   * @param planFunction a function which accepts the input SparkPlan and uses it to instantiate
-   *                     the physical operator that's being tested.
-   * @param expectedAnswer the expected result in a [[Seq]] of [[Row]]s.
-   * @param sortAnswers if true, the answers will be sorted by their toString representations prior
-   *                    to being compared.
+   * @param input
+   *   the input data to be used.
+   * @param planFunction
+   *   a function which accepts the input SparkPlan and uses it to instantiate the physical
+   *   operator that's being tested.
+   * @param expectedAnswer
+   *   the expected result in a [[Seq]] of [[Row]]s.
+   * @param sortAnswers
+   *   if true, the answers will be sorted by their toString representations prior to being
+   *   compared.
    */
   def checkAnswer(
       input: Seq[DataFrame],
@@ -208,20 +236,21 @@ object SparkPlanTest {
 
     val outputPlan = planFunction(input.map(_.queryExecution.sparkPlan))
 
-    val sparkAnswer: Seq[Row] = try {
-      executePlan(outputPlan, spark)
-    } catch {
-      case NonFatal(e) =>
-        val errorMessage =
-          s"""
+    val sparkAnswer: Seq[Row] =
+      try {
+        executePlan(outputPlan, spark)
+      } catch {
+        case NonFatal(e) =>
+          val errorMessage =
+            s"""
              | Exception thrown while executing Spark plan:
              | $outputPlan
              | == Exception ==
              | $e
              | ${org.apache.spark.sql.catalyst.util.stackTraceToString(e)}
           """.stripMargin
-        return Some(errorMessage)
-    }
+          return Some(errorMessage)
+      }
 
     SQLTestUtils.compareAnswers(sparkAnswer, expectedAnswer, sortAnswers).map { errorMessage =>
       s"""
@@ -234,22 +263,22 @@ object SparkPlanTest {
 
   /**
    * Runs the plan
-   * @param outputPlan SparkPlan to be executed
-   * @param spark SqlContext used for execution of the plan
+   * @param outputPlan
+   *   SparkPlan to be executed
+   * @param spark
+   *   SqlContext used for execution of the plan
    */
   def executePlan(outputPlan: SparkPlan, spark: SQLContext): Seq[Row] = {
     val execution = new QueryExecution(spark.sparkSession, LocalRelation(Nil)) {
-      override lazy val sparkPlan: SparkPlan = outputPlan transform {
-        case plan: SparkPlan =>
-          val inputMap = plan.children.flatMap(_.output).map(a => (a.name, a)).toMap
-          plan transformExpressions {
-            case UnresolvedAttribute(Seq(u)) =>
-              inputMap.getOrElse(u,
-                sys.error(s"Invalid Test: Cannot resolve $u given input $inputMap"))
-          }
+      override lazy val sparkPlan: SparkPlan = outputPlan transform { case plan: SparkPlan =>
+        val inputMap = plan.children.flatMap(_.output).map(a => (a.name, a)).toMap
+        plan transformExpressions { case UnresolvedAttribute(Seq(u)) =>
+          inputMap.getOrElse(
+            u,
+            sys.error(s"Invalid Test: Cannot resolve $u given input $inputMap"))
+        }
       }
     }
     execution.executedPlan.executeCollectPublic().toSeq
   }
 }
-

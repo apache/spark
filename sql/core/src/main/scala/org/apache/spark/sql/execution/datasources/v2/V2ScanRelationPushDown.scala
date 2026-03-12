@@ -45,7 +45,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   import DataSourceV2Implicits._
 
   def apply(plan: LogicalPlan): LogicalPlan = {
-    val pushdownRules = Seq[LogicalPlan => LogicalPlan] (
+    val pushdownRules = Seq[LogicalPlan => LogicalPlan](
       createScanBuilder,
       pushDownSample,
       pushDownFilters,
@@ -80,22 +80,22 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       // `pushedFilters` will be pushed down and evaluated in the underlying data sources.
       // `postScanFilters` need to be evaluated after the scan.
       // `postScanFilters` and `pushedFilters` can overlap, e.g. the parquet row group filter.
-      val (pushedFilters, postScanFiltersWithoutSubquery) = PushDownUtils.pushFilters(
-        sHolder.builder, normalizedFiltersWithoutSubquery)
+      val (pushedFilters, postScanFiltersWithoutSubquery) =
+        PushDownUtils.pushFilters(sHolder.builder, normalizedFiltersWithoutSubquery)
       val pushedFiltersStr = if (pushedFilters.isLeft) {
         pushedFilters.swap
           .getOrElse(throw new NoSuchElementException("The left node doesn't have pushedFilters"))
           .mkString(", ")
       } else {
         sHolder.pushedPredicates = pushedFilters
-          .getOrElse(throw new NoSuchElementException("The right node doesn't have pushedFilters"))
+          .getOrElse(
+            throw new NoSuchElementException("The right node doesn't have pushedFilters"))
         sHolder.pushedPredicates.mkString(", ")
       }
 
       val postScanFilters = postScanFiltersWithoutSubquery ++ normalizedFiltersWithSubquery
 
-      logInfo(
-        log"""
+      logInfo(log"""
             |Pushing operators to ${MDC(RELATION_NAME, sHolder.relation.name)}
             |Pushed Filters: ${MDC(PUSHED_FILTERS, pushedFiltersStr)}
             |Post-Scan Filters: ${MDC(POST_SCAN_FILTERS, postScanFilters.mkString(","))}
@@ -123,25 +123,24 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
     // projection with aliases between top level join and scanBuilderHolder (that has pushed
     // child joins).
     case node @ Join(
-      PhysicalOperation(
-        leftProjections,
-        Nil,
-        leftHolder @ ScanBuilderHolder(_, _, lBuilder: SupportsPushDownJoin)
-      ),
-      PhysicalOperation(
-        rightProjections,
-        Nil,
-        rightHolder @ ScanBuilderHolder(_, _, rBuilder: SupportsPushDownJoin)
-      ),
-      joinType,
-      condition,
-    _) if conf.dataSourceV2JoinPushdown &&
-        // We do not support pushing down anything besides AttributeReference.
-        leftProjections.forall(_.isInstanceOf[AttributeReference]) &&
-        rightProjections.forall(_.isInstanceOf[AttributeReference]) &&
-        // Cross joins are not supported because they increase the amount of data.
-        condition.isDefined &&
-        lBuilder.isOtherSideCompatibleForJoin(rBuilder) =>
+          PhysicalOperation(
+            leftProjections,
+            Nil,
+            leftHolder @ ScanBuilderHolder(_, _, lBuilder: SupportsPushDownJoin)),
+          PhysicalOperation(
+            rightProjections,
+            Nil,
+            rightHolder @ ScanBuilderHolder(_, _, rBuilder: SupportsPushDownJoin)),
+          joinType,
+          condition,
+          _)
+        if conf.dataSourceV2JoinPushdown &&
+          // We do not support pushing down anything besides AttributeReference.
+          leftProjections.forall(_.isInstanceOf[AttributeReference]) &&
+          rightProjections.forall(_.isInstanceOf[AttributeReference]) &&
+          // Cross joins are not supported because they increase the amount of data.
+          condition.isDefined &&
+          lBuilder.isOtherSideCompatibleForJoin(rBuilder) =>
       // Process left and right columns in original order
       val (leftSideRequiredColumnsWithAliases, rightSideRequiredColumnsWithAliases) =
         generateColumnAliasesForDuplicatedName(
@@ -152,47 +151,48 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       val pushedJoinOutputMap = AttributeMap[Expression](
         node.output
           .zip(leftSideRequiredColumnsWithAliases ++ rightSideRequiredColumnsWithAliases)
-          .collect {
-            case (attr, columnWithAlias) =>
-              if (columnWithAlias.alias() != null) {
-                (attr, attr.withName(columnWithAlias.alias()))
-              } else {
-                (attr, attr.withName(columnWithAlias.colName()))
-              }
+          .collect { case (attr, columnWithAlias) =>
+            if (columnWithAlias.alias() != null) {
+              (attr, attr.withName(columnWithAlias.alias()))
+            } else {
+              (attr, attr.withName(columnWithAlias.colName()))
+            }
           }
-          .toMap
-      )
+          .toMap)
 
       // Reuse the previously calculated map to update the condition with attributes
       // with up-to-date names
       val normalizedCondition = condition.map { e =>
-        DataSourceStrategy.normalizeExprs(
-          Seq(e),
-          (leftHolder.output ++ rightHolder.output).map { a =>
-            pushedJoinOutputMap.getOrElse(a, a).asInstanceOf[AttributeReference]
-          }
-        ).head
+        DataSourceStrategy
+          .normalizeExprs(
+            Seq(e),
+            (leftHolder.output ++ rightHolder.output).map { a =>
+              pushedJoinOutputMap.getOrElse(a, a).asInstanceOf[AttributeReference]
+            })
+          .head
       }
 
       val translatedCondition =
         normalizedCondition.flatMap(DataSourceV2Strategy.translateFilterV2(_))
       val translatedJoinType = DataSourceStrategy.translateJoinType(joinType)
 
-      logInfo(log"DSv2 Join pushdown - translated join condition " +
-        log"${MDC(JOIN_CONDITION, translatedCondition)}")
-      logInfo(log"DSv2 Join pushdown - translated join type " +
-        log"${MDC(JOIN_TYPE, translatedJoinType)}")
+      logInfo(
+        log"DSv2 Join pushdown - translated join condition " +
+          log"${MDC(JOIN_CONDITION, translatedCondition)}")
+      logInfo(
+        log"DSv2 Join pushdown - translated join type " +
+          log"${MDC(JOIN_TYPE, translatedJoinType)}")
 
-      logInfo(log"DSv2 Join pushdown - left side required columns with aliases: " +
-        log"${MDC(
-          COLUMN_NAMES,
-          leftSideRequiredColumnsWithAliases.map(_.prettyString()).mkString(", ")
-        )}")
-      logInfo(log"DSv2 Join pushdown - right side required columns with aliases: " +
-        log"${MDC(
-          COLUMN_NAMES,
-          rightSideRequiredColumnsWithAliases.map(_.prettyString()).mkString(", ")
-        )}")
+      logInfo(
+        log"DSv2 Join pushdown - left side required columns with aliases: " +
+          log"${MDC(
+              COLUMN_NAMES,
+              leftSideRequiredColumnsWithAliases.map(_.prettyString()).mkString(", "))}")
+      logInfo(
+        log"DSv2 Join pushdown - right side required columns with aliases: " +
+          log"${MDC(
+              COLUMN_NAMES,
+              rightSideRequiredColumnsWithAliases.map(_.prettyString()).mkString(", "))}")
 
       if (translatedJoinType.isDefined &&
         translatedCondition.isDefined &&
@@ -201,8 +201,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
           translatedJoinType.get,
           leftSideRequiredColumnsWithAliases,
           rightSideRequiredColumnsWithAliases,
-          translatedCondition.get)
-      ) {
+          translatedCondition.get)) {
         val leftSidePushedDownOperators = getPushedDownOperators(leftHolder)
         val rightSidePushedDownOperators = getPushedDownOperators(rightHolder)
 
@@ -219,9 +218,10 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         // TODO: for cascade joins, already joined relations will still have the name of the
         // original(leaf) relation. It should be thought of if we want to change the name of the
         // relation when join is pushed down.
-        logInfo(log"DSv2 Join pushdown - successfully pushed down join between relations " +
-          log"${MDC(RELATION_NAME, leftHolder.relation.name)} and " +
-          log"${MDC(RELATION_NAME, rightHolder.relation.name)}.")
+        logInfo(
+          log"DSv2 Join pushdown - successfully pushed down join between relations " +
+            log"${MDC(RELATION_NAME, leftHolder.relation.name)} and " +
+            log"${MDC(RELATION_NAME, rightHolder.relation.name)}.")
 
         leftHolder
       } else {
@@ -229,26 +229,31 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         node
       }
   }
+
   /**
-   * Generates unique column aliases for join operations to avoid naming conflicts.
-   * Handles case sensitivity issues across different databases (SQL Server, MySQL, etc.).
+   * Generates unique column aliases for join operations to avoid naming conflicts. Handles case
+   * sensitivity issues across different databases (SQL Server, MySQL, etc.).
    *
-   * @param leftSideRequiredColumnNames  Columns from the left side of the join
-   * @param rightSideRequiredColumnNames Columns from the right side of the join
-   * @return Tuple of (leftColumnsWithAliases, rightColumnsWithAliases)
+   * @param leftSideRequiredColumnNames
+   *   Columns from the left side of the join
+   * @param rightSideRequiredColumnNames
+   *   Columns from the right side of the join
+   * @return
+   *   Tuple of (leftColumnsWithAliases, rightColumnsWithAliases)
    */
   private[v2] def generateColumnAliasesForDuplicatedName(
-    leftSideRequiredColumnNames: Array[String],
-    rightSideRequiredColumnNames: Array[String]
-  ): (Array[SupportsPushDownJoin.ColumnWithAlias],
-    Array[SupportsPushDownJoin.ColumnWithAlias]) = {
+      leftSideRequiredColumnNames: Array[String],
+      rightSideRequiredColumnNames: Array[String]): (
+      Array[SupportsPushDownJoin.ColumnWithAlias],
+      Array[SupportsPushDownJoin.ColumnWithAlias]) = {
     // Normalize all column names to lowercase for case-insensitive comparison
     val normalizeCase: String => String = _.toLowerCase(Locale.ROOT)
 
     // Count occurrences of each column name (case-insensitive)
     val allRequiredColumnNames = leftSideRequiredColumnNames ++ rightSideRequiredColumnNames
     val allNameCounts: Map[String, Int] =
-      allRequiredColumnNames.map(normalizeCase)
+      allRequiredColumnNames
+        .map(normalizeCase)
         .groupBy(identity)
         .view
         .mapValues(_.length)
@@ -257,9 +262,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
     // Track claimed aliases using normalized names.
     // Use Set for O(1) lookups when checking existing column names, claim all names
     // that appears only once to ensure they have highest priority.
-    val allClaimedAliases = mutable.Set.from(
-      allNameCounts.filter(_._2 == 1).keys
-    )
+    val allClaimedAliases = mutable.Set.from(allNameCounts.filter(_._2 == 1).keys)
 
     // Track suffix index for each base column name (starts at 0) to avoid extreme worst
     // case of O(n^2) alias generation.
@@ -298,8 +301,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
 
     (
       leftSideRequiredColumnNames.map(processColumn),
-      rightSideRequiredColumnNames.map(processColumn)
-    )
+      rightSideRequiredColumnNames.map(processColumn))
   }
 
   // Projections' names are maybe not up to date if the joins have been previously pushed down.
@@ -307,12 +309,13 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   def getRequiredColumnNames(
       projections: Seq[NamedExpression],
       sHolder: ScanBuilderHolder): Array[String] = {
-    val normalizedProjections = DataSourceStrategy.normalizeExprs(
-      projections,
-      sHolder.output.map { a =>
-        sHolder.pushedJoinOutputMap.getOrElse(a, a).asInstanceOf[AttributeReference]
-      }
-    ).asInstanceOf[Seq[AttributeReference]]
+    val normalizedProjections = DataSourceStrategy
+      .normalizeExprs(
+        projections,
+        sHolder.output.map { a =>
+          sHolder.pushedJoinOutputMap.getOrElse(a, a).asInstanceOf[AttributeReference]
+        })
+      .asInstanceOf[Seq[AttributeReference]]
 
     normalizedProjections.map(_.name).toArray
   }
@@ -323,8 +326,10 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   def pushDownVariants(plan: LogicalPlan): LogicalPlan = plan.transformDown {
-    case p@PhysicalOperation(projectList, filters, sHolder @ ScanBuilderHolder(_, _,
-        builder: SupportsPushDownVariantExtractions))
+    case p @ PhysicalOperation(
+          projectList,
+          filters,
+          sHolder @ ScanBuilderHolder(_, _, builder: SupportsPushDownVariantExtractions))
         if conf.getConf(org.apache.spark.sql.internal.SQLConf.PUSH_VARIANT_INTO_SCAN) =>
       pushVariantExtractions(p, projectList, filters, sHolder, builder)
   }
@@ -332,9 +337,12 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   /**
    * Converts an ordinal path to a field name path.
    *
-   * @param structType The top-level struct type
-   * @param ordinals The ordinal path (e.g., [1, 1] for nested.field)
-   * @return The field name path (e.g., ["nested", "field"])
+   * @param structType
+   *   The top-level struct type
+   * @param ordinals
+   *   The ordinal path (e.g., [1, 1] for nested.field)
+   * @return
+   *   The field name path (e.g., ["nested", "field"])
    */
   private def getColumnName(structType: StructType, ordinals: Seq[Int]): Seq[String] = {
     ordinals match {
@@ -372,11 +380,11 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
     val schemaAttributes = sHolder.output
 
     // Construct schema for default value resolution
-    val structSchema = StructType(schemaAttributes.map(a =>
-      StructField(a.name, a.dataType, a.nullable, a.metadata)))
+    val structSchema = StructType(
+      schemaAttributes.map(a => StructField(a.name, a.dataType, a.nullable, a.metadata)))
 
-    val defaultValues = org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.
-      existenceDefaultValues(structSchema)
+    val defaultValues = org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
+      .existenceDefaultValues(structSchema)
 
     // Add variant fields from the V2 scan schema
     for ((a, defaultValue) <- schemaAttributes.zip(defaultValues)) {
@@ -410,8 +418,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
             val extraction = new VariantExtractionImpl(
               columnName.toArray,
               field.path.toMetadata,
-              field.targetType
-            )
+              field.targetType)
             (extraction, topAttr, field, ordinal)
           }
         }
@@ -434,10 +441,11 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
 
     // Build new attribute mapping based on pushed variant extractions
     val attributeMap = schemaAttributes.map { a =>
-      if (pushedColumnNames.contains(a.name) && variants.mapping.get(a.exprId).exists(_.nonEmpty)) {
+      if (pushedColumnNames
+          .contains(a.name) && variants.mapping.get(a.exprId).exists(_.nonEmpty)) {
         val newType = variants.rewriteType(a.exprId, a.dataType, Nil)
-        val newAttr = AttributeReference(a.name, newType, a.nullable, a.metadata)(
-          qualifier = a.qualifier)
+        val newAttr =
+          AttributeReference(a.name, newType, a.nullable, a.metadata)(qualifier = a.qualifier)
         (a.exprId, newAttr)
       } else {
         (a.exprId, a.asInstanceOf[AttributeReference])
@@ -456,9 +464,14 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   private def rewriteAggregate(agg: Aggregate): LogicalPlan = agg.child match {
-    case PhysicalOperation(project, Nil, holder @ ScanBuilderHolder(_, _,
-        r: SupportsPushDownAggregates)) if CollapseProject.canCollapseExpressions(
-        agg.aggregateExpressions, project, alwaysInline = true) =>
+    case PhysicalOperation(
+          project,
+          Nil,
+          holder @ ScanBuilderHolder(_, _, r: SupportsPushDownAggregates))
+        if CollapseProject.canCollapseExpressions(
+          agg.aggregateExpressions,
+          project,
+          alwaysInline = true) =>
       val aliasMap = getAliasMap(project)
       val actualResultExprs = agg.aggregateExpressions.map(replaceAliasButKeepName(_, aliasMap))
       val actualGroupExprs = agg.groupingExpressions.map(replaceAlias(_, aliasMap))
@@ -468,8 +481,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       val normalizedAggExprs =
         normalizeExpressions(aggregates, holder).asInstanceOf[Seq[AggregateExpression]]
       val normalizedGroupingExpr = normalizeExpressions(actualGroupExprs, holder)
-      val translatedAggOpt = DataSourceStrategy.translateAggregation(
-        normalizedAggExprs, normalizedGroupingExpr)
+      val translatedAggOpt =
+        DataSourceStrategy.translateAggregation(normalizedAggExprs, normalizedGroupingExpr)
       if (translatedAggOpt.isEmpty) {
         // Cannot translate the catalyst aggregate, return the query plan unchanged.
         return agg
@@ -496,33 +509,39 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
           // Aggregate [c2#10],[sum(c1#9)/count(c1#9) AS avg(c1)#19]
           // +- ScanOperation[...]
           // scalastyle:on
-          val newResultExpressions = actualResultExprs.map { expr =>
-            expr.transform {
-              case AggregateExpression(avg: aggregate.Average, _, isDistinct, _, _) =>
-                val sum = aggregate.Sum(avg.child).toAggregateExpression(isDistinct)
-                val count = aggregate.Count(avg.child).toAggregateExpression(isDistinct)
-                avg.evaluateExpression transform {
-                  case a: Attribute if a.semanticEquals(avg.sum) =>
-                    addCastIfNeeded(sum, avg.sum.dataType)
-                  case a: Attribute if a.semanticEquals(avg.count) =>
-                    addCastIfNeeded(count, avg.count.dataType)
-                }
+          val newResultExpressions = actualResultExprs
+            .map { expr =>
+              expr.transform {
+                case AggregateExpression(avg: aggregate.Average, _, isDistinct, _, _) =>
+                  val sum = aggregate.Sum(avg.child).toAggregateExpression(isDistinct)
+                  val count = aggregate.Count(avg.child).toAggregateExpression(isDistinct)
+                  avg.evaluateExpression transform {
+                    case a: Attribute if a.semanticEquals(avg.sum) =>
+                      addCastIfNeeded(sum, avg.sum.dataType)
+                    case a: Attribute if a.semanticEquals(avg.count) =>
+                      addCastIfNeeded(count, avg.count.dataType)
+                  }
+              }
             }
-          }.asInstanceOf[Seq[NamedExpression]]
+            .asInstanceOf[Seq[NamedExpression]]
           // Because aggregate expressions changed, translate them again.
           aggExprToOutputOrdinal.clear()
           val newAggregates =
             collectAggregates(newResultExpressions, aggExprToOutputOrdinal)
-          val newNormalizedAggExprs = DataSourceStrategy.normalizeExprs(
-            newAggregates, holder.relation.output).asInstanceOf[Seq[AggregateExpression]]
-          val newTranslatedAggOpt = DataSourceStrategy.translateAggregation(
-            newNormalizedAggExprs, normalizedGroupingExpr)
+          val newNormalizedAggExprs = DataSourceStrategy
+            .normalizeExprs(newAggregates, holder.relation.output)
+            .asInstanceOf[Seq[AggregateExpression]]
+          val newTranslatedAggOpt =
+            DataSourceStrategy.translateAggregation(newNormalizedAggExprs, normalizedGroupingExpr)
           if (newTranslatedAggOpt.isEmpty) {
             // Ideally we should never reach here. But if we end up with not able to translate
             // new aggregate with AVG replaced by SUM/COUNT, revert to the original one.
             (actualResultExprs, normalizedAggExprs, translatedAggOpt.get, false)
           } else {
-            (newResultExpressions, newNormalizedAggExprs, newTranslatedAggOpt.get,
+            (
+              newResultExpressions,
+              newNormalizedAggExprs,
+              newTranslatedAggOpt.get,
               r.supportCompletePushDown(newTranslatedAggOpt.get))
           }
         }
@@ -566,8 +585,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       holder.pushedAggregate = Some(translatedAgg)
       holder.pushedAggOutputMap = AttributeMap(groupOutputMap ++ aggOutputMap)
       holder.output = newOutput
-      logInfo(
-        log"""
+      logInfo(log"""
             |Pushing operators to ${MDC(RELATION_NAME, holder.relation.name)}
             |Pushed Aggregate Functions:
             | ${MDC(AGGREGATE_FUNCTIONS, translatedAgg.aggregateExpressions().mkString(", "))}
@@ -576,19 +594,21 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
            """.stripMargin)
 
       if (canCompletePushDown) {
-        val projectExpressions = finalResultExprs.map { expr =>
-          expr.transformDown {
-            case agg: AggregateExpression =>
-              val ordinal = aggExprToOutputOrdinal(agg.canonicalized)
-              Alias(aggOutput(ordinal), agg.resultAttribute.name)(agg.resultAttribute.exprId)
-            case expr if groupByExprToOutputOrdinal.contains(expr.canonicalized) =>
-              val ordinal = groupByExprToOutputOrdinal(expr.canonicalized)
-              expr match {
-                case ne: NamedExpression => Alias(groupOutput(ordinal), ne.name)(ne.exprId)
-                case _ => groupOutput(ordinal)
-              }
+        val projectExpressions = finalResultExprs
+          .map { expr =>
+            expr.transformDown {
+              case agg: AggregateExpression =>
+                val ordinal = aggExprToOutputOrdinal(agg.canonicalized)
+                Alias(aggOutput(ordinal), agg.resultAttribute.name)(agg.resultAttribute.exprId)
+              case expr if groupByExprToOutputOrdinal.contains(expr.canonicalized) =>
+                val ordinal = groupByExprToOutputOrdinal(expr.canonicalized)
+                expr match {
+                  case ne: NamedExpression => Alias(groupOutput(ordinal), ne.name)(ne.exprId)
+                  case _ => groupOutput(ordinal)
+                }
+            }
           }
-        }.asInstanceOf[Seq[NamedExpression]]
+          .asInstanceOf[Seq[NamedExpression]]
         Project(projectExpressions, holder)
       } else {
         // scalastyle:off
@@ -609,38 +629,40 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         // Aggregate [c2#10], [min(min(c1)#21) AS min(c1)#17, max(max(c1)#22) AS max(c1)#18]
         // +- RelationV2[c2#10, min(c1)#21, max(c1)#22] ...
         // scalastyle:on
-        val aggExprs = finalResultExprs.map(_.transform {
-          case agg: AggregateExpression =>
-            val ordinal = aggExprToOutputOrdinal(agg.canonicalized)
-            val aggAttribute = aggOutput(ordinal)
-            val aggFunction: aggregate.AggregateFunction =
-              agg.aggregateFunction match {
-                case max: aggregate.Max =>
-                  max.copy(child = aggAttribute)
-                case min: aggregate.Min =>
-                  min.copy(child = aggAttribute)
-                case sum: aggregate.Sum =>
-                  // To keep the dataType of `Sum` unchanged, we need to cast the
-                  // data-source-aggregated result to `Sum.child.dataType` if it's decimal.
-                  // See `SumBase.resultType`
-                  val newChild = if (sum.dataType.isInstanceOf[DecimalType]) {
-                    addCastIfNeeded(aggAttribute, sum.child.dataType)
-                  } else {
-                    aggAttribute
-                  }
-                  sum.copy(child = newChild)
-                case _: aggregate.Count =>
-                  aggregate.Sum(aggAttribute)
-                case other => other
+        val aggExprs = finalResultExprs
+          .map(_.transform {
+            case agg: AggregateExpression =>
+              val ordinal = aggExprToOutputOrdinal(agg.canonicalized)
+              val aggAttribute = aggOutput(ordinal)
+              val aggFunction: aggregate.AggregateFunction =
+                agg.aggregateFunction match {
+                  case max: aggregate.Max =>
+                    max.copy(child = aggAttribute)
+                  case min: aggregate.Min =>
+                    min.copy(child = aggAttribute)
+                  case sum: aggregate.Sum =>
+                    // To keep the dataType of `Sum` unchanged, we need to cast the
+                    // data-source-aggregated result to `Sum.child.dataType` if it's decimal.
+                    // See `SumBase.resultType`
+                    val newChild = if (sum.dataType.isInstanceOf[DecimalType]) {
+                      addCastIfNeeded(aggAttribute, sum.child.dataType)
+                    } else {
+                      aggAttribute
+                    }
+                    sum.copy(child = newChild)
+                  case _: aggregate.Count =>
+                    aggregate.Sum(aggAttribute)
+                  case other => other
+                }
+              agg.copy(aggregateFunction = aggFunction)
+            case expr if groupByExprToOutputOrdinal.contains(expr.canonicalized) =>
+              val ordinal = groupByExprToOutputOrdinal(expr.canonicalized)
+              expr match {
+                case ne: NamedExpression => Alias(groupOutput(ordinal), ne.name)(ne.exprId)
+                case _ => groupOutput(ordinal)
               }
-            agg.copy(aggregateFunction = aggFunction)
-          case expr if groupByExprToOutputOrdinal.contains(expr.canonicalized) =>
-            val ordinal = groupByExprToOutputOrdinal(expr.canonicalized)
-            expr match {
-              case ne: NamedExpression => Alias(groupOutput(ordinal), ne.name)(ne.exprId)
-              case _ => groupOutput(ordinal)
-            }
-        }).asInstanceOf[Seq[NamedExpression]]
+          })
+          .asInstanceOf[Seq[NamedExpression]]
         Aggregate(groupOutput, aggExprs, holder)
       }
 
@@ -656,8 +678,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         // Do not push down duplicated aggregate expressions. For example,
         // `SELECT max(a) + 1, max(a) + 2 FROM ...`, we should only push down one
         // `max(a)` to the data source.
-        case agg: AggregateExpression
-          if !aggExprToOutputOrdinal.contains(agg.canonicalized) =>
+        case agg: AggregateExpression if !aggExprToOutputOrdinal.contains(agg.canonicalized) =>
           aggExprToOutputOrdinal(agg.canonicalized) = ordinal
           ordinal += 1
           agg
@@ -694,7 +715,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       // included in the output.
       val scan = holder.builder.build()
       val realOutput = toAttributes(scan.readSchema())
-      assert(realOutput.length == holder.output.length,
+      assert(
+        realOutput.length == holder.output.length,
         "The data source returns unexpected number of columns")
       val wrappedScan = getWrappedScan(scan, holder)
       val scanRelation = DataSourceV2ScanRelation(holder.relation, wrappedScan, realOutput)
@@ -711,7 +733,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
     case holder: ScanBuilderHolder if holder.joinedRelations.length > 1 =>
       val scan = holder.builder.build()
       val realOutput = toAttributes(scan.readSchema())
-      assert(realOutput.length == holder.output.length,
+      assert(
+        realOutput.length == holder.output.length,
         "The data source returns unexpected number of columns")
       val wrappedScan = getWrappedScan(scan, holder)
       val scanRelation = DataSourceV2ScanRelation(holder.relation, wrappedScan, realOutput)
@@ -727,7 +750,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   def buildScanWithPushedVariants(plan: LogicalPlan): LogicalPlan = plan.transform {
-    case p@PhysicalOperation(projectList, filters, holder: ScanBuilderHolder)
+    case p @ PhysicalOperation(projectList, filters, holder: ScanBuilderHolder)
         if holder.pushedVariants.isDefined =>
       val variants = holder.pushedVariants.get
       val attributeMap = holder.pushedVariantAttributeMap
@@ -777,10 +800,12 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       val allFilters = filtersPushDown.reduceOption(And).toSeq ++ filtersStayUp
       val normalizedFilters = DataSourceStrategy.normalizeExprs(allFilters, sHolder.output)
       val (scan, output) = PushDownUtils.pruneColumns(
-        sHolder.builder, sHolder.relation, normalizedProjects, normalizedFilters)
+        sHolder.builder,
+        sHolder.relation,
+        normalizedProjects,
+        normalizedFilters)
 
-      logInfo(
-        log"""
+      logInfo(log"""
             |Output: ${MDC(RELATION_OUTPUT, output.mkString(", "))}
            """.stripMargin)
 
@@ -790,9 +815,10 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
 
       val projectionOverSchema =
         ProjectionOverSchema(output.toStructType, AttributeSet(output))
-      val projectionFunc = (expr: Expression) => expr transformDown {
-        case projectionOverSchema(newExpr) => newExpr
-      }
+      val projectionFunc = (expr: Expression) =>
+        expr transformDown { case projectionOverSchema(newExpr) =>
+          newExpr
+        }
 
       val finalFilters = normalizedFilters.map(projectionFunc)
       // bottom-most filters are put in the left of the list.
@@ -810,8 +836,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       }
   }
 
-  def pushDownSample(plan: LogicalPlan): LogicalPlan = plan.transform {
-    case sample: Sample => sample.child match {
+  def pushDownSample(plan: LogicalPlan): LogicalPlan = plan.transform { case sample: Sample =>
+    sample.child match {
       case PhysicalOperation(_, Nil, sHolder: ScanBuilderHolder) =>
         val tableSample = TableSampleInfo(
           sample.lowerBound,
@@ -837,17 +863,19 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         sHolder.pushedLimit = Some(limit)
       }
       (operation, isPushed && !isPartiallyPushed)
-    case s @ Sort(order, _,
-    operation @ PhysicalOperation(project, Nil, sHolder: ScanBuilderHolder), _)
-      if CollapseProject.canCollapseExpressions(order, project, alwaysInline = true) =>
+    case s @ Sort(
+          order,
+          _,
+          operation @ PhysicalOperation(project, Nil, sHolder: ScanBuilderHolder),
+          _) if CollapseProject.canCollapseExpressions(order, project, alwaysInline = true) =>
       val aliasMap = getAliasMap(project)
       val aliasReplacedOrder = order.map(replaceAlias(_, aliasMap))
       val newOrder = if (sHolder.pushedAggregate.isDefined) {
         // `ScanBuilderHolder` has different output columns after aggregate push-down. Here we
         // replace the attributes in ordering expressions with the original table output columns.
         aliasReplacedOrder.map {
-          _.transform {
-            case a: Attribute => sHolder.pushedAggOutputMap.getOrElse(a, a)
+          _.transform { case a: Attribute =>
+            sHolder.pushedAggOutputMap.getOrElse(a, a)
           }.asInstanceOf[SortOrder]
         }
       } else {
@@ -879,9 +907,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   @scala.annotation.tailrec
-  private def pushDownOffset(
-      plan: LogicalPlan,
-      offset: Int): Boolean = plan match {
+  private def pushDownOffset(plan: LogicalPlan, offset: Int): Boolean = plan match {
     case sHolder: ScanBuilderHolder =>
       val isPushed = PushDownUtils.pushOffset(sHolder.builder, offset)
       if (isPushed) {
@@ -984,16 +1010,23 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
 
   private def getPushedDownOperators(sHolder: ScanBuilderHolder): PushedDownOperators = {
     val optRelationName = Option.when(sHolder.joinedRelations.length <= 1)(sHolder.relation.name)
-    PushedDownOperators(sHolder.pushedAggregate, sHolder.pushedSample,
-      sHolder.pushedLimit, sHolder.pushedOffset, sHolder.sortOrders, sHolder.pushedPredicates,
-      sHolder.joinedRelationsPushedDownOperators, optRelationName)
+    PushedDownOperators(
+      sHolder.pushedAggregate,
+      sHolder.pushedSample,
+      sHolder.pushedLimit,
+      sHolder.pushedOffset,
+      sHolder.sortOrders,
+      sHolder.pushedPredicates,
+      sHolder.joinedRelationsPushedDownOperators,
+      optRelationName)
   }
 }
 
 case class ScanBuilderHolder(
     var output: Seq[AttributeReference],
     relation: DataSourceV2Relation,
-    builder: ScanBuilder) extends LeafNode {
+    builder: ScanBuilder)
+    extends LeafNode {
   var pushedLimit: Option[Int] = None
 
   var pushedOffset: Option[Int] = None
@@ -1010,7 +1043,8 @@ case class ScanBuilderHolder(
 
   var joinedRelations: Seq[DataSourceV2RelationBase] = Seq(relation)
 
-  var joinedRelationsPushedDownOperators: Seq[PushedDownOperators] = Seq.empty[PushedDownOperators]
+  var joinedRelationsPushedDownOperators: Seq[PushedDownOperators] =
+    Seq.empty[PushedDownOperators]
 
   var pushedJoinOutputMap: AttributeMap[Expression] = AttributeMap.empty[Expression]
 
@@ -1024,6 +1058,7 @@ case class ScanBuilderHolder(
 case class V1ScanWrapper(
     v1Scan: V1Scan,
     handledFilters: Seq[sources.Filter],
-    pushedDownOperators: PushedDownOperators) extends Scan {
+    pushedDownOperators: PushedDownOperators)
+    extends Scan {
   override def readSchema(): StructType = v1Scan.readSchema()
 }

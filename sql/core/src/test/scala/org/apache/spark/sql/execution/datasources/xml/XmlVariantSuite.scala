@@ -36,7 +36,8 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
   override protected def sparkConf: SparkConf = super.sparkConf
     .set(SQLConf.LEGACY_XML_PARSER_ENABLED, legacyParserEnabled)
 
-  private val baseOptions = Map("rowTag" -> "ROW", "valueTag" -> "_VALUE", "attributePrefix" -> "_")
+  private val baseOptions =
+    Map("rowTag" -> "ROW", "valueTag" -> "_VALUE", "attributePrefix" -> "_")
 
   private val resDir = "test-data/xml-resources/"
 
@@ -65,40 +66,31 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
     // Decimal -> Decimal
     testParser(
       xml = "<ROW><price>158,058,049.001</price></ROW>",
-      expectedJsonStr = """{"price":158058049.001}"""
-    )
+      expectedJsonStr = """{"price":158058049.001}""")
     testParser(
       xml = "<ROW><decimal>10.05</decimal></ROW>",
-      expectedJsonStr = """{"decimal":10.05}"""
-    )
-    testParser(
-      xml = "<ROW><amount>5.0</amount></ROW>",
-      expectedJsonStr = """{"amount":5}"""
-    )
+      expectedJsonStr = """{"decimal":10.05}""")
+    testParser(xml = "<ROW><amount>5.0</amount></ROW>", expectedJsonStr = """{"amount":5}""")
     // This is parsed as String, because it is too large for Decimal
     testParser(
       xml = "<ROW><amount>1e40</amount></ROW>",
-      expectedJsonStr = """{"amount":"1e40"}"""
-    )
+      expectedJsonStr = """{"amount":"1e40"}""")
     // Extreme negative scale: parsed as String to avoid hanging on setScale(0).
     // "1e-99999" parses to a BigDecimal with scale=99999, which is fine (positive scale).
     // "1e99999" parses to a BigDecimal with scale=-99999, triggering the guard.
     testParser(
       xml = "<ROW><amount>1e99999</amount></ROW>",
-      expectedJsonStr = """{"amount":"1e99999"}"""
-    )
+      expectedJsonStr = """{"amount":"1e99999"}""")
 
     // Date -> String
     testParser(
       xml = "<ROW><createdAt>2023-10-01</createdAt></ROW>",
-      expectedJsonStr = """{"createdAt":"2023-10-01"}"""
-    )
+      expectedJsonStr = """{"createdAt":"2023-10-01"}""")
 
     // Timestamp -> String
     testParser(
       xml = "<ROW><createdAt>2023-10-01T12:00:00Z</createdAt></ROW>",
-      expectedJsonStr = """{"createdAt":"2023-10-01T12:00:00Z"}"""
-    )
+      expectedJsonStr = """{"createdAt":"2023-10-01T12:00:00Z"}""")
 
     // String -> String
     testParser("<ROW><name>Sam</name></ROW>", """{"name":"Sam"}""")
@@ -106,74 +98,60 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
     testParser(
       "<ROW><note>  hello world  </note></ROW>",
       expectedJsonStr = """{"note":"  hello world  "}""",
-      extraOptions = Map("ignoreSurroundingSpaces" -> "false")
-    )
+      extraOptions = Map("ignoreSurroundingSpaces" -> "false"))
     testParser(
       xml = "<ROW><note>  hello world  </note></ROW>",
-      expectedJsonStr = """{"note":"hello world"}"""
-    )
+      expectedJsonStr = """{"note":"hello world"}""")
   }
 
   test("Parser: parse XML attributes as variants") {
     // XML elements with only attributes
-    testParser(
-      xml = "<ROW id=\"2\"></ROW>",
-      expectedJsonStr = """{"_id":2}"""
-    )
+    testParser(xml = "<ROW id=\"2\"></ROW>", expectedJsonStr = """{"_id":2}""")
     testParser(
       xml = "<ROW><a><b attr=\"1\"></b></a></ROW>",
-      expectedJsonStr = """{"a":{"b":{"_attr":1}}}"""
-    )
+      expectedJsonStr = """{"a":{"b":{"_attr":1}}}""")
     testParser(
       xml = "<ROW id=\"2\" name=\"Sam\" amount=\"93\"></ROW>",
-      expectedJsonStr = """{"_amount":93,"_id":2,"_name":"Sam"}"""
-    )
+      expectedJsonStr = """{"_amount":93,"_id":2,"_name":"Sam"}""")
 
     // XML elements with attributes and elements
     testParser(
       xml = "<ROW id=\"2\" name=\"Sam\"><amount>93</amount></ROW>",
-      expectedJsonStr = """{"_id":2,"_name":"Sam","amount":93}"""
-    )
+      expectedJsonStr = """{"_id":2,"_name":"Sam","amount":93}""")
 
     // XML elements with attributes and nested elements
     testParser(
       xml = "<ROW id=\"2\" name=\"Sam\"><info><amount>93</amount></info></ROW>",
-      expectedJsonStr = """{"_id":2,"_name":"Sam","info":{"amount":93}}"""
-    )
+      expectedJsonStr = """{"_id":2,"_name":"Sam","info":{"amount":93}}""")
 
     // XML elements with attributes and value tag
     testParser(
       xml = "<ROW id=\"2\" name=\"Sam\">93</ROW>",
-      expectedJsonStr = """{"_VALUE":93,"_id":2,"_name":"Sam"}"""
-    )
+      expectedJsonStr = """{"_VALUE":93,"_id":2,"_name":"Sam"}""")
   }
 
   test("Parser: parse XML value tags as variants") {
     // XML elements with value tags and attributes
     testParser(
       xml = "<ROW id=\"2\" name=\"Sam\">93</ROW>",
-      expectedJsonStr = """{"_VALUE":93,"_id":2,"_name":"Sam"}"""
-    )
+      expectedJsonStr = """{"_VALUE":93,"_id":2,"_name":"Sam"}""")
 
     // XML elements with value tags and nested elements
     testParser(
       xml = "<ROW><info>Sam<amount>93</amount></info></ROW>",
-      expectedJsonStr = """{"info":{"_VALUE":"Sam","amount":93}}"""
-    )
+      expectedJsonStr = """{"info":{"_VALUE":"Sam","amount":93}}""")
   }
 
   test("Parser: parse XML elements as variant object") {
     testParser(
       xml = "<ROW><info><name>Sam</name><amount>93</amount></info></ROW>",
-      expectedJsonStr = """{"info":{"amount":93,"name":"Sam"}}"""
-    )
+      expectedJsonStr = """{"info":{"amount":93,"name":"Sam"}}""")
   }
 
   test("Parser: parse XML elements as variant array") {
     testParser(
       xml = "<ROW><array>1</array><array>2</array></ROW>",
-      expectedJsonStr = """{"array":[1,2]}"""
-    )
+      expectedJsonStr = """{"array":[1,2]}""")
   }
 
   test("Parser: null and empty XML elements are parsed as variant null") {
@@ -181,13 +159,11 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
     testParser(
       xml = """<ROW><name></name><amount>93</amount><space> </space><newline>
                       </newline></ROW>""",
-      expectedJsonStr = """{"amount":93,"name":null,"newline":null,"space":null}"""
-    )
+      expectedJsonStr = """{"amount":93,"name":null,"newline":null,"space":null}""")
     testParser(
       xml = "<ROW><name>Sam</name><amount>n/a</amount></ROW>",
       expectedJsonStr = """{"amount":null,"name":"Sam"}""",
-      extraOptions = Map("nullValue" -> "n/a")
-    )
+      extraOptions = Map("nullValue" -> "n/a"))
   }
 
   test("Parser: Parse whitespaces with quotes") {
@@ -201,8 +177,7 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
                |</ROW>
                |""".stripMargin,
       expectedJsonStr = """{"a":"\" \"","b":{"_VALUE":"\" \"","c":1},"d":{"e":{"_attr":" "}}}""",
-      extraOptions = Map("ignoreSurroundingSpaces" -> "false")
-    )
+      extraOptions = Map("ignoreSurroundingSpaces" -> "false"))
   }
 
   test("Parser: Comments are ignored") {
@@ -216,8 +191,7 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
               |   <!-- <a>1</a> -->
               |</ROW>
               |""".stripMargin,
-      expectedJsonStr = """{"amount":93,"name":"Sam"}"""
-    )
+      expectedJsonStr = """{"amount":93,"name":"Sam"}""")
   }
 
   test("Parser: CDATA should be handled properly") {
@@ -229,8 +203,7 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
               |   <amount>93</amount>
               |</ROW>
               |""".stripMargin,
-      expectedJsonStr = """{"amount":93,"name":"Sam"}"""
-    )
+      expectedJsonStr = """{"amount":93,"name":"Sam"}""")
   }
 
   test("Parser: parse mixed types as variants") {
@@ -267,10 +240,7 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
         |   }
         |}
         |""".stripMargin.replaceAll("\\s+", "")
-    testParser(
-      xml = complexFieldAndType1.head,
-      expectedJsonStr = expectedJsonStr
-    )
+    testParser(xml = complexFieldAndType1.head, expectedJsonStr = expectedJsonStr)
 
     val expectedJsonStr2 =
       """
@@ -310,10 +280,7 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
         |   ]
         |}
         """.stripMargin.replaceAll("\\s+", "")
-    testParser(
-      xml = complexFieldAndType2.head,
-      expectedJsonStr = expectedJsonStr2
-    )
+    testParser(xml = complexFieldAndType2.head, expectedJsonStr = expectedJsonStr2)
   }
 
   test("Parser: Case sensitivity test") {
@@ -327,14 +294,12 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
       testParser(
         xml = xmlString,
-        expectedJsonStr = """{"a":[{"_VALUE":1,"b":2},{"_VALUE":3,"b":4}]}"""
-      )
+        expectedJsonStr = """{"a":[{"_VALUE":1,"b":2},{"_VALUE":3,"b":4}]}""")
     }
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
       testParser(
         xml = xmlString,
-        expectedJsonStr = """{"A":{"_VALUE":3,"b":4},"a":{"_VALUE":1,"b":2}}"""
-      )
+        expectedJsonStr = """{"A":{"_VALUE":3,"b":4},"a":{"_VALUE":1,"b":2}}""")
     }
   }
 
@@ -347,8 +312,7 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
               |   <a>3</a>
               |</ROW>
               |""".stripMargin,
-      expectedJsonStr = """{"a":[1,3],"b":2}"""
-    )
+      expectedJsonStr = """{"a":[1,3],"b":2}""")
 
     testParser(
       xml = """
@@ -360,8 +324,7 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
               |   value3
               |</ROW>
               |""".stripMargin,
-      expectedJsonStr = """{"_VALUE":["value1","value2","value3"],"a":[1,2]}"""
-    )
+      expectedJsonStr = """{"_VALUE":["value1","value2","value3"],"a":[1,2]}""")
 
     // long and double
     testParser(
@@ -376,8 +339,7 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
               |  </a>
               |</ROW>
               |""".stripMargin,
-      expectedJsonStr = """{"a":{"_VALUE":[1,3,5],"b":[2,4]}}"""
-    )
+      expectedJsonStr = """{"a":{"_VALUE":[1,3,5],"b":[2,4]}}""")
 
     // Comments
     testParser(
@@ -391,8 +353,7 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
               |   <a>3</a>
               |</ROW>
               |""".stripMargin,
-      expectedJsonStr = """{"a":[1,3],"b":2}"""
-    )
+      expectedJsonStr = """{"a":[1,3],"b":2}""")
   }
 
   // ==============================
@@ -406,13 +367,10 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
       extraOptions: Map[String, String] = Map.empty): DataFrame = {
     assert(
       singleVariantColumn.isDefined || schemaDDL.isDefined,
-      "Either singleVariantColumn or schema must be defined to ingest XML files as variants via DSL"
-    )
+      "Either singleVariantColumn or schema must be defined to ingest XML files as variants via DSL")
     var reader = spark.read.format("xml").options(baseOptions ++ extraOptions)
-    singleVariantColumn.foreach(
-      singleVariantColumnName =>
-        reader = reader.option("singleVariantColumn", singleVariantColumnName)
-    )
+    singleVariantColumn.foreach(singleVariantColumnName =>
+      reader = reader.option("singleVariantColumn", singleVariantColumnName))
     schemaDDL.foreach(s => reader = reader.schema(s))
 
     reader.load(getTestResourcePath(resDir + fileName))
@@ -422,8 +380,7 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
     val df = createDSLDataFrame(fileName = "cars.xml", singleVariantColumn = Some("var"))
     checkAnswer(
       df.select(variant_get(col("var"), "$.year", "int")),
-      Seq(Row(2012), Row(1997), Row(2015))
-    )
+      Seq(Row(2012), Row(1997), Row(2015)))
   }
 
   test("DSL: read XML files with defined schema") {
@@ -431,27 +388,23 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
       fileName = "books-complicated.xml",
       schemaDDL = Some(
         "_id variant, " + // Attribute as variant
-        "author string, " +
-        "title string, " +
-        "genre struct<genreid int, name variant>, " + // Struct with variant
-        "price variant, " + // Scalar as variant
-        "publish_dates struct<publish_date array<variant>>" // Array with variant
+          "author string, " +
+          "title string, " +
+          "genre struct<genreid int, name variant>, " + // Struct with variant
+          "price variant, " + // Scalar as variant
+          "publish_dates struct<publish_date array<variant>>" // Array with variant
       ),
-      extraOptions = Map("rowTag" -> "book")
-    )
+      extraOptions = Map("rowTag" -> "book"))
     checkAnswer(
       df.select(
         variant_get(col("_id"), "$", "string"),
         variant_get(col("genre.name"), "$", "string"),
         variant_get(col("price"), "$", "double"),
-        variant_get(col("publish_dates.publish_date").getItem(0), "$.month", "int")
-      ),
+        variant_get(col("publish_dates.publish_date").getItem(0), "$.month", "int")),
       Seq(
         Row("bk101", "Computer", 44.95, 10),
         Row("bk102", "Fantasy", 5.95, 12),
-        Row("bk103", "Fantasy", null, 11)
-      )
-    )
+        Row("bk103", "Fantasy", null, 11)))
   }
 
   test("DSL: provided schema in singleVariantColumn mode") {
@@ -462,39 +415,30 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
         createDSLDataFrame(
           fileName = "cars.xml",
           singleVariantColumn = Some("var"),
-          schemaDDL = Some("year variant, make string, model string, comment string")
-        )
+          schemaDDL = Some("year variant, make string, model string, comment string"))
       },
       condition = "INVALID_SINGLE_VARIANT_COLUMN",
       parameters = Map(
-        "schema" -> """"STRUCT<year: VARIANT, make: STRING, model: STRING, comment: STRING>""""
-      )
-    )
+        "schema" -> """"STRUCT<year: VARIANT, make: STRING, model: STRING, comment: STRING>""""))
     checkError(
       exception = intercept[AnalysisException] {
         createDSLDataFrame(
           fileName = "cars.xml",
           singleVariantColumn = Some("var"),
-          schemaDDL = Some("_corrupt_record string")
-        )
+          schemaDDL = Some("_corrupt_record string"))
       },
       condition = "INVALID_SINGLE_VARIANT_COLUMN",
-      parameters = Map(
-        "schema" -> """"STRUCT<_corrupt_record: STRING>""""
-      )
-    )
+      parameters = Map("schema" -> """"STRUCT<_corrupt_record: STRING>""""))
 
     // Valid schema in singleVariantColumn mode
     createDSLDataFrame(
       fileName = "cars.xml",
       singleVariantColumn = Some("var"),
-      schemaDDL = Some("var variant")
-    )
+      schemaDDL = Some("var variant"))
     createDSLDataFrame(
       fileName = "cars.xml",
       singleVariantColumn = Some("var"),
-      schemaDDL = Some("var variant, _corrupt_record string")
-    )
+      schemaDDL = Some("var variant, _corrupt_record string"))
   }
 
   test("DSL: handle malformed record in singleVariantColumn mode") {
@@ -504,19 +448,16 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
         createDSLDataFrame(
           fileName = "cars-malformed.xml",
           singleVariantColumn = Some("var"),
-          extraOptions = Map("mode" -> "FAILFAST")
-        ).collect()
+          extraOptions = Map("mode" -> "FAILFAST")).collect()
       }.getCause.asInstanceOf[SparkException],
       condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
-      parameters = Map("badRecord" -> "[null]", "failFastMode" -> "FAILFAST")
-    )
+      parameters = Map("badRecord" -> "[null]", "failFastMode" -> "FAILFAST"))
 
     // PERMISSIVE mode
     val df = createDSLDataFrame(
       fileName = "cars-malformed.xml",
       singleVariantColumn = Some("var"),
-      extraOptions = Map("mode" -> "PERMISSIVE")
-    )
+      extraOptions = Map("mode" -> "PERMISSIVE"))
     val expectedResult = if (legacyParserEnabled) {
       Seq(Row(2015), Row(null), Row(null))
     } else {
@@ -530,12 +471,8 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
     val df2 = createDSLDataFrame(
       fileName = "cars-malformed.xml",
       singleVariantColumn = Some("var"),
-      extraOptions = Map("mode" -> "DROPMALFORMED")
-    )
-    checkAnswer(
-      df2.select(variant_get(col("var"), "$.year", "int")),
-      Seq(Row(2015))
-    )
+      extraOptions = Map("mode" -> "DROPMALFORMED"))
+    checkAnswer(df2.select(variant_get(col("var"), "$.year", "int")), Seq(Row(2015)))
   }
 
   test("DSL: test XSD validation") {
@@ -544,18 +481,15 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
       singleVariantColumn = Some("var"),
       extraOptions = Map(
         "rowTag" -> "basket",
-        "rowValidationXSDPath" -> getTestResourcePath(resDir + "basket.xsd").replace("file:/", "/")
-      )
-    )
+        "rowValidationXSDPath" -> getTestResourcePath(resDir + "basket.xsd")
+          .replace("file:/", "/")))
     checkAnswer(
       df.select(variant_get(col("var"), "$", "string")),
       Seq(
         // The first row matches the XSD and thus is parsed as Variant successfully
         Row("""{"entry":[{"key":1,"value":"fork"},{"key":2,"value":"cup"}]}"""),
         // The second row fails the XSD validation and is not parsed
-        Row(null)
-      )
-    )
+        Row(null)))
   }
 
   // ============================
@@ -579,8 +513,7 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
       spark
         .sql(s"""SELECT from_xml('$xmlStr', 'variant') as var""")
         .select(variant_get(col("var"), "$.year", "int")),
-      Seq(Row(2012))
-    )
+      Seq(Row(2012)))
   }
 
   test("SQL: read partial XML record as variant using from_xml with a defined schema") {
@@ -609,10 +542,10 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
     // Read specific elements in the XML record as variant
     val schemaDDL =
       "scalar variant, " +
-      "arrayField array<variant>, " + // Array with variants
-      "structField struct<a variant, c struct<d variant>>, " + // Struct with variants
-      "nestedVariantField variant, " +
-      "mapField map<string, variant>"
+        "arrayField array<variant>, " + // Array with variants
+        "structField struct<a variant, c struct<d variant>>, " + // Struct with variants
+        "nestedVariantField variant, " +
+        "mapField map<string, variant>"
     // Verify we can extract fields from the variant type
     checkAnswer(
       spark
@@ -626,10 +559,8 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
           variant_get(col("row.nestedVariantField"), "$.a", "int"),
           variant_get(col("row.nestedVariantField"), "$.b.c", "int"),
           variant_get(col("row.mapField.a"), "$.b", "int"),
-          variant_get(col("row.mapField.c"), "$", "int")
-        ),
-      Seq(Row("Hello", 1, 2, 3, 4, 5, 6, 7, 8))
-    )
+          variant_get(col("row.mapField.c"), "$", "int")),
+      Seq(Row("Hello", 1, 2, 3, 4, 5, 6, 7, 8)))
   }
 
   // =============================
@@ -653,8 +584,7 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
       schema = VariantType,
       writer = writer,
       options = new XmlOptions(baseOptions ++ extraOptions),
-      validateStructure = false
-    )
+      validateStructure = false)
     gen.write(v)
     gen.flush()
     val xmlString = writer.toString
@@ -707,7 +637,9 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
     // Decimal
     testPrimitive(new java.math.BigDecimal("1.0"), "<ROW>1</ROW>")
     testPrimitive(new java.math.BigDecimal("1E-10"), "<ROW>1E-10</ROW>")
-    testPrimitive(new java.math.BigDecimal("123456789.987654321"), "<ROW>123456789.987654321</ROW>")
+    testPrimitive(
+      new java.math.BigDecimal("123456789.987654321"),
+      "<ROW>123456789.987654321</ROW>")
 
     // Float
     testPrimitive(1.0f, "<ROW>1.0</ROW>")
@@ -715,32 +647,25 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
     testPrimitive(Float.MinValue, "<ROW>-3.4028235E38</ROW>")
 
     // Date
-    testPrimitive(
-      java.sql.Date.valueOf("2023-10-01"),
-      "<ROW>2023-10-01</ROW>"
-    )
+    testPrimitive(java.sql.Date.valueOf("2023-10-01"), "<ROW>2023-10-01</ROW>")
     testPrimitive(
       java.sql.Date.valueOf("2023-10-01"),
       "<ROW>10/01/2023</ROW>",
-      extraOptions = Map("dateFormat" -> "MM/dd/yyyy")
-    )
+      extraOptions = Map("dateFormat" -> "MM/dd/yyyy"))
 
     // Timestamp
     testPrimitive(
       java.sql.Timestamp.valueOf("2023-10-01 12:00:00"),
       "<ROW>2023-10-01T12:00:00-07</ROW>",
-      extraOptions = Map("timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ssX")
-    )
+      extraOptions = Map("timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ssX"))
     testPrimitive(
       java.sql.Timestamp.valueOf("1970-01-01 00:00:00"),
       "<ROW>1970-01-01T00:00:00Z</ROW>",
-      extraOptions = Map("timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss'Z'")
-    )
+      extraOptions = Map("timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss'Z'"))
     testPrimitive(
       java.sql.Timestamp.valueOf("1970-01-01 12:30:45"),
       "<ROW>01/01/1970 12:30:45 PM</ROW>",
-      extraOptions = Map("timestampFormat" -> "MM/dd/yyyy hh:mm:ss a")
-    )
+      extraOptions = Map("timestampFormat" -> "MM/dd/yyyy hh:mm:ss a"))
 
     // UUID
     val uuid = java.util.UUID.randomUUID()
@@ -766,13 +691,11 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
         |    <array>3</array>
         |    <array>2</array>
         |    <array>1</array>
-        |</ROW>""".stripMargin
-    ).foreach { xmlString =>
+        |</ROW>""".stripMargin).foreach { xmlString =>
       testGenerator(
         StaxXmlParser.parseVariant(xmlString, XmlOptions(baseOptions)),
         expectedXml = xmlString,
-        extraOptions = Map.empty
-      )
+        extraOptions = Map.empty)
     }
   }
 
@@ -787,8 +710,7 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
     testGenerator(
       StaxXmlParser.parseVariant(xmlString, XmlOptions(baseOptions)),
       expectedXml = xmlString,
-      extraOptions = Map.empty
-    )
+      extraOptions = Map.empty)
   }
 
   test("Generator: serialize Variant object with attribute fields to XML") {
@@ -802,8 +724,7 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
     testGenerator(
       StaxXmlParser.parseVariant(xmlString, XmlOptions(baseOptions)),
       expectedXml = xmlString,
-      extraOptions = Map.empty
-    )
+      extraOptions = Map.empty)
   }
 
   test("Generator: serialize Variant object with value tag to XML") {
@@ -817,8 +738,7 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
     testGenerator(
       StaxXmlParser.parseVariant(xmlString, XmlOptions(baseOptions)),
       expectedXml = xmlString,
-      extraOptions = Map.empty
-    )
+      extraOptions = Map.empty)
   }
 
   // =============================
@@ -861,10 +781,8 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
     val df = spark.read
       .format("xml")
       .option("rowTag", "book")
-      .schema(
-        "_id string, author string, title string, genre variant, price double, " +
-        "publish_dates variant"
-      )
+      .schema("_id string, author string, title string, genre variant, price double, " +
+        "publish_dates variant")
       .load(getTestResourcePath(resDir + "books-complicated.xml"))
 
     withTempDir { dir =>
@@ -952,21 +870,19 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
 
   test(
     "[SPARK-54099] XML variant parser should fall back to string " +
-    "when failing to parse decimal values"
-  ) {
+      "when failing to parse decimal values") {
     // Decimals with extreme exponents. The variant parser should throw ArithmeticException when
     // parsing these values as Decimal:
     val decimalString = Seq(
-      "1E+2147483647",    // Maximum int exponent - scale would be -2147483647
-      "5E+1000000000",    // 1 billion exponent
-      "1.23E+999999999",  // Very large exponent
+      "1E+2147483647", // Maximum int exponent - scale would be -2147483647
+      "5E+1000000000", // 1 billion exponent
+      "1.23E+999999999", // Very large exponent
       "0.001E+2147483640" // Still results in huge effective exponent
     )
     decimalString.foreach { str =>
       testParser(
         xml = s"<ROW><decimal>$str</decimal></ROW>",
-        expectedJsonStr = s"""{"decimal":"$str"}"""
-      )
+        expectedJsonStr = s"""{"decimal":"$str"}""")
     }
   }
 }

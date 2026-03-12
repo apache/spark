@@ -143,117 +143,125 @@ class JavaTypeInferenceSuite extends SparkFunSuite {
 
   test("resolve type parameters for map, list and set") {
     val encoder = JavaTypeInference.encoderFor(classOf[GenericCollectionBean])
-    val expected = JavaBeanEncoder(ClassTag(classOf[GenericCollectionBean]), Seq(
-      encoderField(
-        "hashSetOfString",
-        IterableEncoder(
-          ClassTag(classOf[HashSet[_]]),
-          StringEncoder,
-          containsNull = true,
-          lenientSerialization = false)),
-      encoderField(
-        "linkedListOfStrings",
-        IterableEncoder(
-          ClassTag(classOf[LinkedList[_]]),
-          StringEncoder,
-          containsNull = true,
-          lenientSerialization = false)),
-      encoderField(
-        "listOfListOfStrings",
-        IterableEncoder(
-          ClassTag(classOf[JList[_]]),
+    val expected = JavaBeanEncoder(
+      ClassTag(classOf[GenericCollectionBean]),
+      Seq(
+        encoderField(
+          "hashSetOfString",
+          IterableEncoder(
+            ClassTag(classOf[HashSet[_]]),
+            StringEncoder,
+            containsNull = true,
+            lenientSerialization = false)),
+        encoderField(
+          "linkedListOfStrings",
+          IterableEncoder(
+            ClassTag(classOf[LinkedList[_]]),
+            StringEncoder,
+            containsNull = true,
+            lenientSerialization = false)),
+        encoderField(
+          "listOfListOfStrings",
           IterableEncoder(
             ClassTag(classOf[JList[_]]),
-            StringEncoder,
+            IterableEncoder(
+              ClassTag(classOf[JList[_]]),
+              StringEncoder,
+              containsNull = true,
+              lenientSerialization = false),
             containsNull = true,
-            lenientSerialization = false),
-          containsNull = true,
-          lenientSerialization = false)),
-      encoderField(
-        "mapOfDummyBeans",
-        MapEncoder(
-          ClassTag(classOf[JMap[_, _]]),
-          StringEncoder,
-          expectedDummyBeanEncoder,
-          valueContainsNull = true)),
-      encoderField(
-        "setOfSetOfStrings",
-        IterableEncoder(
-          ClassTag(classOf[JSet[_]]),
+            lenientSerialization = false)),
+        encoderField(
+          "mapOfDummyBeans",
+          MapEncoder(
+            ClassTag(classOf[JMap[_, _]]),
+            StringEncoder,
+            expectedDummyBeanEncoder,
+            valueContainsNull = true)),
+        encoderField(
+          "setOfSetOfStrings",
           IterableEncoder(
             ClassTag(classOf[JSet[_]]),
-            StringEncoder,
+            IterableEncoder(
+              ClassTag(classOf[JSet[_]]),
+              StringEncoder,
+              containsNull = true,
+              lenientSerialization = false),
             containsNull = true,
-            lenientSerialization = false),
-          containsNull = true,
-          lenientSerialization = false))))
+            lenientSerialization = false))))
     assert(encoder === expected)
   }
 
   test("resolve leaf encoders") {
     val encoder = JavaTypeInference.encoderFor(classOf[LeafBean])
-    val expected = JavaBeanEncoder(ClassTag(classOf[LeafBean]), Seq(
-      // The order is different from the definition because fields are ordered by name.
-      encoderField("bigDecimal", DEFAULT_JAVA_DECIMAL_ENCODER),
-      encoderField("bigInteger", JavaBigIntEncoder),
-      encoderField("binary", BinaryEncoder),
-      encoderField("boxedBoolean", BoxedBooleanEncoder),
-      encoderField("boxedByte", BoxedByteEncoder),
-      encoderField("boxedDouble", BoxedDoubleEncoder),
-      encoderField("boxedFloat", BoxedFloatEncoder),
-      encoderField("boxedInt", BoxedIntEncoder),
-      encoderField("boxedLong", BoxedLongEncoder),
-      encoderField("boxedShort", BoxedShortEncoder),
-      encoderField("date", STRICT_DATE_ENCODER),
-      encoderField("duration", DayTimeIntervalEncoder),
-      encoderField("genericNestedBean", JavaBeanEncoder(
-        ClassTag(classOf[JavaBeanWithGenericBase]),
-        Seq(
-          encoderField("attribute", StringEncoder),
-          encoderField("value", StringEncoder)
-        ))),
-      encoderField("genericNestedBean2", JavaBeanEncoder(
-        ClassTag(classOf[JavaBeanWithGenericsABC[Integer]]),
-        Seq(
-          encoderField("propertyA", StringEncoder),
-          encoderField("propertyB", BoxedLongEncoder),
-          encoderField("propertyC", BoxedIntEncoder)
-        ))),
-      encoderField("instant", STRICT_INSTANT_ENCODER),
-      encoderField("localDate", STRICT_LOCAL_DATE_ENCODER),
-      encoderField("localDateTime", LocalDateTimeEncoder),
-      encoderField("monthEnum", JavaEnumEncoder(classTag[java.time.Month])),
-      encoderField("nonNullString", StringEncoder, overrideNullable = Option(false)),
-      encoderField("period", YearMonthIntervalEncoder),
-      encoderField("primitiveBoolean", PrimitiveBooleanEncoder),
-      encoderField("primitiveByte", PrimitiveByteEncoder),
-      encoderField("primitiveDouble", PrimitiveDoubleEncoder),
-      encoderField("primitiveFloat", PrimitiveFloatEncoder),
-      encoderField("primitiveInt", PrimitiveIntEncoder),
-      encoderField("primitiveLong", PrimitiveLongEncoder),
-      encoderField("primitiveShort", PrimitiveShortEncoder),
-      encoderField("readOnlyString", StringEncoder, readOnly = true),
-      encoderField("string", StringEncoder),
-      encoderField("timestamp", STRICT_TIMESTAMP_ENCODER)
-    ))
+    val expected = JavaBeanEncoder(
+      ClassTag(classOf[LeafBean]),
+      Seq(
+        // The order is different from the definition because fields are ordered by name.
+        encoderField("bigDecimal", DEFAULT_JAVA_DECIMAL_ENCODER),
+        encoderField("bigInteger", JavaBigIntEncoder),
+        encoderField("binary", BinaryEncoder),
+        encoderField("boxedBoolean", BoxedBooleanEncoder),
+        encoderField("boxedByte", BoxedByteEncoder),
+        encoderField("boxedDouble", BoxedDoubleEncoder),
+        encoderField("boxedFloat", BoxedFloatEncoder),
+        encoderField("boxedInt", BoxedIntEncoder),
+        encoderField("boxedLong", BoxedLongEncoder),
+        encoderField("boxedShort", BoxedShortEncoder),
+        encoderField("date", STRICT_DATE_ENCODER),
+        encoderField("duration", DayTimeIntervalEncoder),
+        encoderField(
+          "genericNestedBean",
+          JavaBeanEncoder(
+            ClassTag(classOf[JavaBeanWithGenericBase]),
+            Seq(encoderField("attribute", StringEncoder), encoderField("value", StringEncoder)))),
+        encoderField(
+          "genericNestedBean2",
+          JavaBeanEncoder(
+            ClassTag(classOf[JavaBeanWithGenericsABC[Integer]]),
+            Seq(
+              encoderField("propertyA", StringEncoder),
+              encoderField("propertyB", BoxedLongEncoder),
+              encoderField("propertyC", BoxedIntEncoder)))),
+        encoderField("instant", STRICT_INSTANT_ENCODER),
+        encoderField("localDate", STRICT_LOCAL_DATE_ENCODER),
+        encoderField("localDateTime", LocalDateTimeEncoder),
+        encoderField("monthEnum", JavaEnumEncoder(classTag[java.time.Month])),
+        encoderField("nonNullString", StringEncoder, overrideNullable = Option(false)),
+        encoderField("period", YearMonthIntervalEncoder),
+        encoderField("primitiveBoolean", PrimitiveBooleanEncoder),
+        encoderField("primitiveByte", PrimitiveByteEncoder),
+        encoderField("primitiveDouble", PrimitiveDoubleEncoder),
+        encoderField("primitiveFloat", PrimitiveFloatEncoder),
+        encoderField("primitiveInt", PrimitiveIntEncoder),
+        encoderField("primitiveLong", PrimitiveLongEncoder),
+        encoderField("primitiveShort", PrimitiveShortEncoder),
+        encoderField("readOnlyString", StringEncoder, readOnly = true),
+        encoderField("string", StringEncoder),
+        encoderField("timestamp", STRICT_TIMESTAMP_ENCODER)))
     assert(encoder === expected)
   }
 
   test("resolve array encoders") {
     val encoder = JavaTypeInference.encoderFor(classOf[ArrayBean])
-    val expected = JavaBeanEncoder(ClassTag(classOf[ArrayBean]), Seq(
-      encoderField("dummyBeanArray", ArrayEncoder(expectedDummyBeanEncoder, containsNull = true)),
-      encoderField("primitiveIntArray", ArrayEncoder(PrimitiveIntEncoder, containsNull = false)),
-      encoderField("stringArray", ArrayEncoder(StringEncoder, containsNull = true))
-    ))
+    val expected = JavaBeanEncoder(
+      ClassTag(classOf[ArrayBean]),
+      Seq(
+        encoderField(
+          "dummyBeanArray",
+          ArrayEncoder(expectedDummyBeanEncoder, containsNull = true)),
+        encoderField(
+          "primitiveIntArray",
+          ArrayEncoder(PrimitiveIntEncoder, containsNull = false)),
+        encoderField("stringArray", ArrayEncoder(StringEncoder, containsNull = true))))
     assert(encoder === expected)
   }
 
   test("resolve UDT encoders") {
     val encoder = JavaTypeInference.encoderFor(classOf[UDTBean])
-    val expected = JavaBeanEncoder(ClassTag(classOf[UDTBean]), Seq(
-      encoderField("udt", UDTEncoder(new UDTForCaseClass, classOf[UDTForCaseClass]))
-    ))
+    val expected = JavaBeanEncoder(
+      ClassTag(classOf[UDTBean]),
+      Seq(encoderField("udt", UDTEncoder(new UDTForCaseClass, classOf[UDTForCaseClass]))))
     assert(encoder === expected)
   }
 
@@ -261,10 +269,9 @@ class JavaTypeInferenceSuite extends SparkFunSuite {
     val encoder =
       JavaTypeInference.encoderFor(classOf[JavaBeanWithGenericBase])
     val expected =
-      JavaBeanEncoder(ClassTag(classOf[JavaBeanWithGenericBase]), Seq(
-        encoderField("attribute", StringEncoder),
-        encoderField("value", StringEncoder)
-      ))
+      JavaBeanEncoder(
+        ClassTag(classOf[JavaBeanWithGenericBase]),
+        Seq(encoderField("attribute", StringEncoder), encoderField("value", StringEncoder)))
     assert(encoder === expected)
   }
 
@@ -272,33 +279,32 @@ class JavaTypeInferenceSuite extends SparkFunSuite {
     val encoder =
       JavaTypeInference.encoderFor(classOf[JavaBeanWithGenericHierarchy])
     val expected =
-      JavaBeanEncoder(ClassTag(classOf[JavaBeanWithGenericHierarchy]), Seq(
-        encoderField("propertyA", StringEncoder),
-        encoderField("propertyB", BoxedLongEncoder),
-        encoderField("propertyC", BoxedIntEncoder)
-      ))
+      JavaBeanEncoder(
+        ClassTag(classOf[JavaBeanWithGenericHierarchy]),
+        Seq(
+          encoderField("propertyA", StringEncoder),
+          encoderField("propertyB", BoxedLongEncoder),
+          encoderField("propertyC", BoxedIntEncoder)))
     assert(encoder === expected)
   }
 
   test("SPARK-46679: resolve generics with multi-level inheritance") {
     val encoder = JavaTypeInference.encoderFor(classOf[StringFooWrapper])
-    val expected = JavaBeanEncoder(ClassTag(classOf[StringFooWrapper]), Seq(
-      encoderField("foo", JavaBeanEncoder(
-        ClassTag(classOf[Foo[String]]),
-        Seq(encoderField("t", StringEncoder))
-      ))
-    ))
+    val expected = JavaBeanEncoder(
+      ClassTag(classOf[StringFooWrapper]),
+      Seq(encoderField(
+        "foo",
+        JavaBeanEncoder(ClassTag(classOf[Foo[String]]), Seq(encoderField("t", StringEncoder))))))
     assert(encoder === expected)
   }
 
   test("SPARK-46679: resolve generics with multi-level inheritance same type names") {
     val encoder = JavaTypeInference.encoderFor(classOf[StringBarWrapper])
-    val expected = JavaBeanEncoder(ClassTag(classOf[StringBarWrapper]), Seq(
-      encoderField("bar", JavaBeanEncoder(
-        ClassTag(classOf[Bar[String]]),
-        Seq(encoderField("t", StringEncoder))
-      ))
-    ))
+    val expected = JavaBeanEncoder(
+      ClassTag(classOf[StringBarWrapper]),
+      Seq(encoderField(
+        "bar",
+        JavaBeanEncoder(ClassTag(classOf[Bar[String]]), Seq(encoderField("t", StringEncoder))))))
     assert(encoder === expected)
   }
 }

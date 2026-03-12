@@ -20,16 +20,16 @@ package org.apache.spark.sql.execution.streaming.state
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 
 /**
- * [[UnsafeRow]] is immutable and this allows wrapping it with additional info
- * without having to copy/modify it.
- * */
+ * [[UnsafeRow]] is immutable and this allows wrapping it with additional info without having to
+ * copy/modify it.
+ */
 trait UnsafeRowWrapper {
   def unsafeRow(): UnsafeRow
 }
 
 /**
  * A simple wrapper over the state store [[UnsafeRow]]
- * */
+ */
 class StateStoreRow(row: UnsafeRow) extends UnsafeRowWrapper {
   override def unsafeRow(): UnsafeRow = row
 }
@@ -42,13 +42,17 @@ object StateStoreRow {
  * This is used to represent a range of indices in an array. Useful when we want to operate on a
  * subset of an array without copying it.
  *
- * @param array The underlying array.
- * @param fromIndex The starting index.
- * @param untilIndex The end index (exclusive).
- * */
+ * @param array
+ *   The underlying array.
+ * @param fromIndex
+ *   The starting index.
+ * @param untilIndex
+ *   The end index (exclusive).
+ */
 case class ArrayIndexRange[T](array: Array[T], fromIndex: Int, untilIndex: Int) {
   // When fromIndex == untilIndex, it is an empty array
-  assert(fromIndex >= 0 && fromIndex <= untilIndex,
+  assert(
+    fromIndex >= 0 && fromIndex <= untilIndex,
     s"Invalid range: fromIndex ($fromIndex) should be >= 0 and <= untilIndex ($untilIndex)")
 
   /** The number of elements in the range. */

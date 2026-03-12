@@ -30,17 +30,21 @@ import org.apache.spark.util.CircularBuffer
 /**
  * Transforms the input by forking and running the specified script.
  *
- * @param script the command that should be executed.
- * @param output the attributes that are produced by the script.
- * @param child logical plan whose output is transformed.
- * @param ioschema the class set that defines how to handle input/output data.
+ * @param script
+ *   the command that should be executed.
+ * @param output
+ *   the attributes that are produced by the script.
+ * @param child
+ *   logical plan whose output is transformed.
+ * @param ioschema
+ *   the class set that defines how to handle input/output data.
  */
 case class SparkScriptTransformationExec(
     script: String,
     output: Seq[Attribute],
     child: SparkPlan,
     ioschema: ScriptTransformationIOSchema)
-  extends BaseScriptTransformationExec {
+    extends BaseScriptTransformationExec {
 
   override def processIterator(
       inputIterator: Iterator[InternalRow],
@@ -60,8 +64,7 @@ case class SparkScriptTransformationExec(
       proc,
       stderrBuffer,
       TaskContext.get(),
-      hadoopConf
-    )
+      hadoopConf)
 
     val outputIterator =
       createOutputIteratorWithoutSerde(writerThread, inputStream, proc, stderrBuffer)
@@ -71,7 +74,8 @@ case class SparkScriptTransformationExec(
     outputIterator
   }
 
-  override protected def withNewChildInternal(newChild: SparkPlan): SparkScriptTransformationExec =
+  override protected def withNewChildInternal(
+      newChild: SparkPlan): SparkScriptTransformationExec =
     copy(child = newChild)
 }
 
@@ -84,7 +88,7 @@ case class SparkScriptTransformationWriterThread(
     stderrBuffer: CircularBuffer,
     taskContext: TaskContext,
     conf: Configuration)
-  extends BaseScriptTransformationWriterThread {
+    extends BaseScriptTransformationWriterThread {
 
   override def processRows(): Unit = {
     processRowsWithoutSerde()

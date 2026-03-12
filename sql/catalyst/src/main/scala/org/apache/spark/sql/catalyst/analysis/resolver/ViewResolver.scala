@@ -59,13 +59,10 @@ class ViewResolver(resolver: Resolver, catalogManager: CatalogManager)
    *
    * [[sourceUnresolvedRelationStack]] is used to save the [[UnresolvedRelation]] after its
    * resolution by [[Resolver.resolveRelation]], since [[View]] that was produced from this
-   * [[UnresolvedRelation]] needs [[UnresolvedRelation.options]] for its resolution.
-   * We pop from the [[sourceUnresolvedRelationStack]] after the `body` is executed. The stack is
-   * necessary, since [[withSourceUnresolvedRelation]] calls might be nested:
-   * [[UnresolvedRelation]] -> [[View]]
-   *   ...
-   *     [[UnresolvedRelation]] -> [[View]]
-   *       ...
+   * [[UnresolvedRelation]] needs [[UnresolvedRelation.options]] for its resolution. We pop from
+   * the [[sourceUnresolvedRelationStack]] after the `body` is executed. The stack is necessary,
+   * since [[withSourceUnresolvedRelation]] calls might be nested: [[UnresolvedRelation]] ->
+   * [[View]] ... [[UnresolvedRelation]] -> [[View]] ...
    */
   def withSourceUnresolvedRelation(unresolvedRelation: UnresolvedRelation)(
       body: => LogicalPlan): LogicalPlan = {
@@ -80,8 +77,9 @@ class ViewResolver(resolver: Resolver, catalogManager: CatalogManager)
   /**
    * Resolve the `unresolvedView` and its underlying plan. This method uses parent [[Resolver]] to
    * resolve the view child. [[View]] resolution consists of the following steps:
-   *   - Check if the single-pass resolver fully supports the view plan using the [[ResolverGuard]].
-   *     Throw [[ExplicitlyUnsupportedResolverFeature]] if the view plan is not supported.
+   *   - Check if the single-pass resolver fully supports the view plan using the
+   *     [[ResolverGuard]]. Throw [[ExplicitlyUnsupportedResolverFeature]] if the view plan is not
+   *     supported.
    *   - Set the [[ViewResolutionContext]] for the view plan resolution.
    *   - Replace the necessary configurations in [[SQLConf]] with those that were stored with the
    *     view.
@@ -97,8 +95,7 @@ class ViewResolver(resolver: Resolver, catalogManager: CatalogManager)
 
     val (resolvedChild, usedViewResolutionContext) = withViewResolutionContext(unresolvedView) {
       SQLConf.withExistingConf(
-        View.effectiveSQLConf(unresolvedView.desc.viewSQLConfigs, unresolvedView.isTempView)
-      ) {
+        View.effectiveSQLConf(unresolvedView.desc.viewSQLConfigs, unresolvedView.isTempView)) {
         cteRegistry.pushScope(isRoot = true, isOpaque = true)
 
         try {
@@ -119,8 +116,8 @@ class ViewResolver(resolver: Resolver, catalogManager: CatalogManager)
 
   /**
    * Execute `body` with a fresh [[ViewResolutionContext]] specifically constructed for
-   * `unresolvedView` resolution. The context is popped back to the previous one after the
-   * `body` is executed, because views may be nested.
+   * `unresolvedView` resolution. The context is popped back to the previous one after the `body`
+   * is executed, because views may be nested.
    */
   private def withViewResolutionContext(unresolvedView: View)(
       body: => LogicalPlan): (LogicalPlan, ViewResolutionContext) = {
@@ -128,18 +125,14 @@ class ViewResolver(resolver: Resolver, catalogManager: CatalogManager)
       val currentAnalysisContext = AnalysisContext.get
 
       val prevContext = if (viewResolutionContextStack.isEmpty()) {
-        ViewResolutionContext(
-          nestedViewDepth = 0,
-          maxNestedViewDepth = conf.maxNestedViewDepth
-        )
+        ViewResolutionContext(nestedViewDepth = 0, maxNestedViewDepth = conf.maxNestedViewDepth)
       } else {
         viewResolutionContextStack.peek()
       }
 
       val viewResolutionContext = prevContext.copy(
         nestedViewDepth = prevContext.nestedViewDepth + 1,
-        catalogAndNamespace = Some(unresolvedView.desc.viewCatalogAndNamespace)
-      )
+        catalogAndNamespace = Some(unresolvedView.desc.viewCatalogAndNamespace))
       viewResolutionContext.validate(unresolvedView)
 
       viewResolutionContextStack.push(viewResolutionContext)
@@ -163,11 +156,15 @@ class ViewResolver(resolver: Resolver, catalogManager: CatalogManager)
  * The [[ViewResolutionContext]] consists of data, which is specific to the specific view plan
  * resolution. This data is also propagated to the subviews.
  *
- * @param nestedViewDepth Current nested view depth. Cannot exceed the `maxNestedViewDepth`.
- * @param maxNestedViewDepth Maximum allowed nested view depth. Configured in the upper context
- *   based on [[SQLConf.MAX_NESTED_VIEW_DEPTH]].
- * @param collation View's default collation if explicitly set.
- * @param catalogAndNamespace Catalog and camespace under which the [[View]] was created.
+ * @param nestedViewDepth
+ *   Current nested view depth. Cannot exceed the `maxNestedViewDepth`.
+ * @param maxNestedViewDepth
+ *   Maximum allowed nested view depth. Configured in the upper context based on
+ *   [[SQLConf.MAX_NESTED_VIEW_DEPTH]].
+ * @param collation
+ *   View's default collation if explicitly set.
+ * @param catalogAndNamespace
+ *   Catalog and camespace under which the [[View]] was created.
  */
 case class ViewResolutionContext(
     nestedViewDepth: Int,
@@ -179,8 +176,7 @@ case class ViewResolutionContext(
       throw QueryCompilationErrors.viewDepthExceedsMaxResolutionDepthError(
         unresolvedView.desc.identifier,
         maxNestedViewDepth,
-        unresolvedView
-      )
+        unresolvedView)
     }
   }
 }

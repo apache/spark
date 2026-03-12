@@ -30,7 +30,6 @@ import org.apache.spark.sql.execution.ui.{SparkPlanGraph, SQLAppStatusStore}
 import org.apache.spark.sql.internal.SQLConf.WHOLESTAGE_CODEGEN_ENABLED
 import org.apache.spark.sql.test.SQLTestUtils
 
-
 trait SQLMetricsTestUtils extends SQLTestUtils {
   import testImplicits._
 
@@ -68,8 +67,10 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
   /**
    * Get execution metrics for the SQL execution and verify metrics values.
    *
-   * @param metricsValues the expected metric values (numFiles, numPartitions, numOutputRows).
-   * @param func the function can produce execution id after running.
+   * @param metricsValues
+   *   the expected metric values (numFiles, numPartitions, numOutputRows).
+   * @param func
+   *   the function can produce execution id after running.
    */
   private def verifyWriteDataMetrics(metricsValues: Seq[Int])(func: => Unit): Unit = {
     val previousExecutionIds = currentExecutionIds()
@@ -82,10 +83,8 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
 
     val executedNode = statusStore.planGraph(executionId).nodes.head
 
-    val metricsNames = Seq(
-      "number of written files",
-      "number of dynamic part",
-      "number of output rows")
+    val metricsNames =
+      Seq("number of written files", "number of dynamic part", "number of output rows")
 
     val metrics = statusStore.executionMetrics(executionId)
 
@@ -97,27 +96,33 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
       assert(metricValue == expected)
     }
 
-    val totalNumBytesMetric = executedNode.metrics.find(
-      _.name == "written output").get
-    val totalNumBytes = metrics(totalNumBytesMetric.accumulatorId).replaceAll(",", "")
-      .split(" ").head.trim.toDouble
+    val totalNumBytesMetric = executedNode.metrics.find(_.name == "written output").get
+    val totalNumBytes = metrics(totalNumBytesMetric.accumulatorId)
+      .replaceAll(",", "")
+      .split(" ")
+      .head
+      .trim
+      .toDouble
     assert(totalNumBytes > 0)
   }
 
-  protected def testMetricsNonDynamicPartition(
-      dataFormat: String,
-      tableName: String): Unit = {
+  protected def testMetricsNonDynamicPartition(dataFormat: String, tableName: String): Unit = {
     withTable(tableName) {
-      Seq((1, 2)).toDF("i", "j")
-        .write.format(dataFormat).mode("overwrite").saveAsTable(tableName)
+      Seq((1, 2)).toDF("i", "j").write.format(dataFormat).mode("overwrite").saveAsTable(tableName)
 
       val tableLocation =
         new File(spark.sessionState.catalog.getTableMetadata(TableIdentifier(tableName)).location)
 
       // 2 files, 100 rows, 0 dynamic partition.
       verifyWriteDataMetrics(Seq(2, 0, 100)) {
-        (0 until 100).map(i => (i, i + 1)).toDF("i", "j").repartition(2)
-          .write.format(dataFormat).mode("overwrite").insertInto(tableName)
+        (0 until 100)
+          .map(i => (i, i + 1))
+          .toDF("i", "j")
+          .repartition(2)
+          .write
+          .format(dataFormat)
+          .mode("overwrite")
+          .insertInto(tableName)
       }
       assert(TestUtils.recursiveList(tableLocation).count(_.getName.startsWith("part-")) == 2)
     }
@@ -129,8 +134,7 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
       tableName: String): Unit = {
     withTable(tableName) {
       withTempPath { dir =>
-        spark.sql(
-          s"""
+        spark.sql(s"""
              |CREATE TABLE $tableName(a int, b int)
              |USING $provider
              |PARTITIONED BY(a)
@@ -139,12 +143,14 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier(tableName))
         assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
 
-        val df = spark.range(start = 0, end = 40, step = 1, numPartitions = 1)
+        val df = spark
+          .range(start = 0, end = 40, step = 1, numPartitions = 1)
           .selectExpr("id a", "id b")
 
         // 40 files, 80 rows, 40 dynamic partitions.
         verifyWriteDataMetrics(Seq(40, 40, 80)) {
-          df.union(df).repartition(2, $"a")
+          df.union(df)
+            .repartition(2, $"a")
             .write
             .format(dataFormat)
             .mode("overwrite")
@@ -158,16 +164,20 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
   /**
    * Call `df.collect()` and collect necessary metrics from execution data.
    *
-   * @param df `DataFrame` to run
-   * @param expectedNumOfJobs number of jobs that will run
-   * @param expectedNodeIds the node ids of the metrics to collect from execution data.
-   * @param enableWholeStage enable whole-stage code generation or not.
+   * @param df
+   *   `DataFrame` to run
+   * @param expectedNumOfJobs
+   *   number of jobs that will run
+   * @param expectedNodeIds
+   *   the node ids of the metrics to collect from execution data.
+   * @param enableWholeStage
+   *   enable whole-stage code generation or not.
    */
   protected def getSparkPlanMetrics(
-       df: DataFrame,
-       expectedNumOfJobs: Int,
-       expectedNodeIds: Set[Long],
-       enableWholeStage: Boolean = false): Option[Map[Long, (String, Map[String, Any])]] = {
+      df: DataFrame,
+      expectedNumOfJobs: Int,
+      expectedNodeIds: Set[Long],
+      enableWholeStage: Boolean = false): Option[Map[Long, (String, Map[String, Any])]] = {
     val previousExecutionIds = currentExecutionIds()
     withSQLConf(WHOLESTAGE_CODEGEN_ENABLED.key -> enableWholeStage.toString) {
       df.collect()
@@ -183,16 +193,19 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
     if (jobs.size == expectedNumOfJobs) {
       // If we can track all jobs, check the metric values
       val metricValues = statusStore.executionMetrics(executionId)
-      val metrics = SparkPlanGraph(SparkPlanInfo.fromSparkPlan(
-        df.queryExecution.executedPlan)).allNodes.filter { node =>
-        expectedNodeIds.contains(node.id)
-      }.map { node =>
-        val nodeMetrics = node.metrics.map { metric =>
-          val metricValue = metricValues(metric.accumulatorId)
-          (metric.name, metricValue)
-        }.toMap
-        (node.id, node.name -> nodeMetrics)
-      }.toMap
+      val metrics =
+        SparkPlanGraph(SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan)).allNodes
+          .filter { node =>
+            expectedNodeIds.contains(node.id)
+          }
+          .map { node =>
+            val nodeMetrics = node.metrics.map { metric =>
+              val metricValue = metricValues(metric.accumulatorId)
+              (metric.name, metricValue)
+            }.toMap
+            (node.id, node.name -> nodeMetrics)
+          }
+          .toMap
       Some(metrics)
     } else {
       // TODO Remove this "else" once we fix the race condition that missing the JobStarted event.
@@ -206,33 +219,46 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
   /**
    * Call `df.collect()` and verify if the collected metrics are same as "expectedMetrics".
    *
-   * @param df `DataFrame` to run
-   * @param expectedNumOfJobs number of jobs that will run
-   * @param expectedMetrics the expected metrics. The format is
-   *                        `nodeId -> (operatorName, metric name -> metric value)`.
+   * @param df
+   *   `DataFrame` to run
+   * @param expectedNumOfJobs
+   *   number of jobs that will run
+   * @param expectedMetrics
+   *   the expected metrics. The format is
+   *   `nodeId -> (operatorName, metric name -> metric value)`.
    */
   protected def testSparkPlanMetrics(
       df: DataFrame,
       expectedNumOfJobs: Int,
       expectedMetrics: Map[Long, (String, Map[String, Any])],
       enableWholeStage: Boolean = false): Unit = {
-    val expectedMetricsPredicates = expectedMetrics.transform { case (_, (nodeName, nodeMetrics)) =>
-      (nodeName, nodeMetrics.transform((_, expectedMetricValue) =>
-        (actualMetricValue: Any) => {
-          actualMetricValue.toString.matches(expectedMetricValue.toString)
-        }))
+    val expectedMetricsPredicates = expectedMetrics.transform {
+      case (_, (nodeName, nodeMetrics)) =>
+        (
+          nodeName,
+          nodeMetrics.transform((_, expectedMetricValue) =>
+            (actualMetricValue: Any) => {
+              actualMetricValue.toString.matches(expectedMetricValue.toString)
+            }))
     }
-    testSparkPlanMetricsWithPredicates(df, expectedNumOfJobs, expectedMetricsPredicates,
+    testSparkPlanMetricsWithPredicates(
+      df,
+      expectedNumOfJobs,
+      expectedMetricsPredicates,
       enableWholeStage)
   }
 
   /**
    * Call `df.collect()` and verify if the collected metrics satisfy the specified predicates.
-   * @param df `DataFrame` to run
-   * @param expectedNumOfJobs number of jobs that will run
-   * @param expectedMetricsPredicates the expected metrics predicates. The format is
-   *                                  `nodeId -> (operatorName, metric name -> metric predicate)`.
-   * @param enableWholeStage enable whole-stage code generation or not.
+   * @param df
+   *   `DataFrame` to run
+   * @param expectedNumOfJobs
+   *   number of jobs that will run
+   * @param expectedMetricsPredicates
+   *   the expected metrics predicates. The format is
+   *   `nodeId -> (operatorName, metric name -> metric predicate)`.
+   * @param enableWholeStage
+   *   enable whole-stage code generation or not.
    */
   protected def testSparkPlanMetricsWithPredicates(
       df: DataFrame,
@@ -240,15 +266,20 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
       expectedMetricsPredicates: Map[Long, (String, Map[String, Any => Boolean])],
       enableWholeStage: Boolean = false): Unit = {
     val optActualMetrics =
-      getSparkPlanMetrics(df, expectedNumOfJobs, expectedMetricsPredicates.keySet, enableWholeStage)
+      getSparkPlanMetrics(
+        df,
+        expectedNumOfJobs,
+        expectedMetricsPredicates.keySet,
+        enableWholeStage)
     optActualMetrics.foreach { actualMetrics =>
       assert(expectedMetricsPredicates.keySet === actualMetrics.keySet)
-      for ((nodeId, (expectedNodeName, expectedMetricsPredicatesMap))
-          <- expectedMetricsPredicates) {
+      for ((nodeId, (expectedNodeName, expectedMetricsPredicatesMap)) <-
+          expectedMetricsPredicates) {
         val (actualNodeName, actualMetricsMap) = actualMetrics(nodeId)
         assert(expectedNodeName === actualNodeName)
         for ((metricName, metricPredicate) <- expectedMetricsPredicatesMap) {
-          assert(metricPredicate(actualMetricsMap(metricName)),
+          assert(
+            metricPredicate(actualMetricsMap(metricName)),
             s"$nodeId / '$metricName' (= ${actualMetricsMap(metricName)}) did not match predicate.")
         }
       }
@@ -258,8 +289,10 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
   /**
    * Verify if the metrics in `SparkPlan` operator are same as expected metrics.
    *
-   * @param plan `SparkPlan` operator to check metrics
-   * @param expectedMetrics the expected metrics. The format is `metric name -> metric value`.
+   * @param plan
+   *   `SparkPlan` operator to check metrics
+   * @param expectedMetrics
+   *   the expected metrics. The format is `metric name -> metric value`.
    */
   protected def testMetricsInSparkPlanOperator(
       plan: SparkPlan,
@@ -267,20 +300,20 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
     expectedMetrics.foreach { case (metricName: String, metricValue: Long) =>
       assert(plan.metrics.contains(metricName), s"The query plan should have metric $metricName")
       val actualMetric = plan.metrics(metricName)
-      assert(actualMetric.value == metricValue,
+      assert(
+        actualMetric.value == metricValue,
         s"The query plan metric $metricName did not match, " +
           s"expected:$metricValue, actual:${actualMetric.value}")
     }
   }
 }
 
-
 object InputOutputMetricsHelper {
   private class InputOutputMetricsListener extends SparkListener {
     private case class MetricsResult(
-      var recordsRead: Long = 0L,
-      var shuffleRecordsRead: Long = 0L,
-      var sumMaxOutputRows: Long = 0L)
+        var recordsRead: Long = 0L,
+        var shuffleRecordsRead: Long = 0L,
+        var sumMaxOutputRows: Long = 0L)
 
     private[this] val stageIdToMetricsResult = HashMap.empty[Int, MetricsResult]
 
@@ -291,11 +324,12 @@ object InputOutputMetricsHelper {
     /**
      * Return a list of recorded metrics aggregated per stage.
      *
-     * The list is sorted in the ascending order on the stageId.
-     * For each recorded stage, the following tuple is returned:
-     *  - sum of inputMetrics.recordsRead for all the tasks in the stage
-     *  - sum of shuffleReadMetrics.recordsRead for all the tasks in the stage
-     *  - sum of the highest values of "number of output rows" metric for all the tasks in the stage
+     * The list is sorted in the ascending order on the stageId. For each recorded stage, the
+     * following tuple is returned:
+     *   - sum of inputMetrics.recordsRead for all the tasks in the stage
+     *   - sum of shuffleReadMetrics.recordsRead for all the tasks in the stage
+     *   - sum of the highest values of "number of output rows" metric for all the tasks in the
+     *     stage
      */
     def getResults(): List[(Long, Long, Long)] = {
       stageIdToMetricsResult.keySet.toList.sorted.map { stageId =>

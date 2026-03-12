@@ -65,8 +65,8 @@ import org.apache.spark.sql.util.{CaseInsensitiveStringMap, SchemaUtils}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
- * Replaces generic operations with specific variants that are designed to work with Spark
- * SQL Data Sources.
+ * Replaces generic operations with specific variants that are designed to work with Spark SQL
+ * Data Sources.
  *
  * Note that, this rule must be run after `PreprocessTableCreation` and
  * `PreprocessTableInsertion`.
@@ -93,43 +93,47 @@ object DataSourceAnalysis extends Rule[LogicalPlan] {
     // clause needs to match the number of columns of the target table.
     if (staticPartitions.size + sourceAttributes.size != targetAttributes.size) {
       throw QueryCompilationErrors.insertMismatchedColumnNumberError(
-        targetAttributes, sourceAttributes, staticPartitions.size)
+        targetAttributes,
+        sourceAttributes,
+        staticPartitions.size)
     }
 
     if (providedPartitions.size != targetPartitionSchema.fields.length) {
       throw QueryCompilationErrors.insertMismatchedPartitionNumberError(
-        targetPartitionSchema, providedPartitions.size)
+        targetPartitionSchema,
+        providedPartitions.size)
     }
 
-    staticPartitions.foreach {
-      case (partKey, _) =>
-        if (!targetPartitionSchema.fields.exists(field => resolver(field.name, partKey))) {
-          throw QueryCompilationErrors.invalidPartitionColumnError(partKey, targetPartitionSchema)
-        }
+    staticPartitions.foreach { case (partKey, _) =>
+      if (!targetPartitionSchema.fields.exists(field => resolver(field.name, partKey))) {
+        throw QueryCompilationErrors.invalidPartitionColumnError(partKey, targetPartitionSchema)
+      }
     }
 
     val partitionList = targetPartitionSchema.fields.map { field =>
-      val potentialSpecs = staticPartitions.filter {
-        case (partKey, partValue) => resolver(field.name, partKey)
+      val potentialSpecs = staticPartitions.filter { case (partKey, partValue) =>
+        resolver(field.name, partKey)
       }
       if (potentialSpecs.isEmpty) {
         None
       } else if (potentialSpecs.size == 1) {
         val partValue = potentialSpecs.head._2
-        Some(Alias(CatalystPartitioningUtils.castPartitionSpec(
-          partValue, field.dataType, conf), field.name)())
+        Some(
+          Alias(
+            CatalystPartitioningUtils.castPartitionSpec(partValue, field.dataType, conf),
+            field.name)())
       } else {
         throw QueryCompilationErrors.multiplePartitionColumnValuesSpecifiedError(
-          field, potentialSpecs)
+          field,
+          potentialSpecs)
       }
     }
 
     // We first drop all leading static partitions using dropWhile and check if there is
     // any static partition appear after dynamic partitions.
-    partitionList.dropWhile(_.isDefined).collectFirst {
-      case Some(_) =>
-        throw QueryCompilationErrors.invalidOrderingForConstantValuePartitionColumnError(
-          targetPartitionSchema)
+    partitionList.dropWhile(_.isDefined).collectFirst { case Some(_) =>
+      throw QueryCompilationErrors.invalidOrderingForConstantValuePartitionColumnError(
+        targetPartitionSchema)
     }
 
     assert(partitionList.take(staticPartitions.size).forall(_.isDefined))
@@ -144,16 +148,21 @@ object DataSourceAnalysis extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case CreateTable(tableDesc, mode, None) if DDLUtils.isDatasourceTable(tableDesc) =>
       ResolveDefaultColumns.validateTableProviderForDefaultValue(
-        tableDesc.schema, tableDesc.provider, "CREATE TABLE", false)
+        tableDesc.schema,
+        tableDesc.provider,
+        "CREATE TABLE",
+        false)
 
       if (GeneratedColumn.hasGeneratedColumns(tableDesc.schema)) {
         throw QueryCompilationErrors.unsupportedTableOperationError(
-          tableDesc.identifier, "generated columns")
+          tableDesc.identifier,
+          "generated columns")
       }
 
       if (IdentityColumn.hasIdentityColumns(tableDesc.schema)) {
         throw QueryCompilationErrors.unsupportedTableOperationError(
-          tableDesc.identifier, "identity columns")
+          tableDesc.identifier,
+          "identity columns")
       }
 
       CreateDataSourceTableCommand(tableDesc, ignoreIfExists = mode == SaveMode.Ignore)
@@ -162,22 +171,34 @@ object DataSourceAnalysis extends Rule[LogicalPlan] {
         if query.resolved && DDLUtils.isDatasourceTable(tableDesc) =>
       CreateDataSourceTableAsSelectCommand(tableDesc, mode, query, query.output.map(_.name))
 
-    case InsertIntoStatement(l @ LogicalRelationWithTable(_: InsertableRelation, _),
-        parts, _, query, overwrite, false, _, _)
-        if parts.isEmpty =>
+    case InsertIntoStatement(
+          l @ LogicalRelationWithTable(_: InsertableRelation, _),
+          parts,
+          _,
+          query,
+          overwrite,
+          false,
+          _,
+          _) if parts.isEmpty =>
       InsertIntoDataSourceCommand(l, query, overwrite)
 
     case InsertIntoDir(_, storage, provider, query, overwrite)
-      if query.resolved && provider.isDefined &&
-        provider.get.toLowerCase(Locale.ROOT) != DDLUtils.HIVE_PROVIDER =>
+        if query.resolved && provider.isDefined &&
+          provider.get.toLowerCase(Locale.ROOT) != DDLUtils.HIVE_PROVIDER =>
       val outputPath = new Path(storage.locationUri.get)
       if (overwrite) DDLUtils.verifyNotReadPath(query, outputPath)
 
       InsertIntoDataSourceDirCommand(storage, provider.get, query, overwrite)
 
-    case i @ InsertIntoStatement(l @ LogicalRelationWithTable(t: HadoopFsRelation, table),
-        parts, _, query, overwrite, _, _, _)
-        if query.resolved =>
+    case i @ InsertIntoStatement(
+          l @ LogicalRelationWithTable(t: HadoopFsRelation, table),
+          parts,
+          _,
+          query,
+          overwrite,
+          _,
+          _,
+          _) if query.resolved =>
       // If the InsertIntoTable command is for a partitioned HadoopFsRelation and
       // the user has specified static partitions, we add a Project operator on top of the query
       // to include those constant column values in the query result.
@@ -215,8 +236,8 @@ object DataSourceAnalysis extends Rule[LogicalPlan] {
       val outputPath = t.location.rootPaths.head
       val mode = if (overwrite) SaveMode.Overwrite else SaveMode.Append
 
-      val partitionSchema = actualQuery.resolve(
-        t.partitionSchema, t.sparkSession.sessionState.analyzer.resolver)
+      val partitionSchema =
+        actualQuery.resolve(t.partitionSchema, t.sparkSession.sessionState.analyzer.resolver)
       val staticPartitions = parts.filter(_._2.nonEmpty).map { case (k, v) => k -> v.get }
 
       val insertCommand = InsertIntoHadoopFsRelationCommand(
@@ -243,7 +264,6 @@ object DataSourceAnalysis extends Rule[LogicalPlan] {
   }
 }
 
-
 /**
  * Replaces [[UnresolvedCatalogRelation]] with concrete relation logical plans.
  *
@@ -252,7 +272,8 @@ object DataSourceAnalysis extends Rule[LogicalPlan] {
  */
 class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] {
   private def readDataSourceTable(
-      table: CatalogTable, extraOptions: CaseInsensitiveStringMap): LogicalPlan = {
+      table: CatalogTable,
+      extraOptions: CaseInsensitiveStringMap): LogicalPlan = {
     val qualifiedTableName =
       QualifiedTableName(table.identifier.catalog.get, table.database, table.identifier.table)
     val catalog = sparkSession.sessionState.catalog
@@ -283,9 +304,9 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
       // This ensures the relation reflects any changes in data source options.
       // Otherwise, leave the cached table relation as is
       case r @ LogicalRelation(fsRelation: HadoopFsRelation, _, _, _, _)
-        if !readFileSourceTableCacheIgnoreOptions &&
-          (new CaseInsensitiveStringMap(fsRelation.options.asJava) !=
-          new CaseInsensitiveStringMap(dsOptions.asJava)) =>
+          if !readFileSourceTableCacheIgnoreOptions &&
+            (new CaseInsensitiveStringMap(fsRelation.options.asJava) !=
+              new CaseInsensitiveStringMap(dsOptions.asJava)) =>
         val newFsRelation = fsRelation.copy(options = dsOptions)(sparkSession)
         r.copy(relation = newFsRelation)
 
@@ -294,10 +315,9 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
   }
 
   private def getStreamingRelation(
-    table: CatalogTable,
-    extraOptions: CaseInsensitiveStringMap,
-    sourceIdentifyingName: StreamingSourceIdentifyingName
-  ): StreamingRelation = {
+      table: CatalogTable,
+      extraOptions: CaseInsensitiveStringMap,
+      sourceIdentifyingName: StreamingSourceIdentifyingName): StreamingRelation = {
     val dsOptions = DataSourceUtils.generateDatasourceOptions(extraOptions, table)
     val dataSource = DataSource(
       SparkSession.active,
@@ -309,21 +329,38 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
     StreamingRelation(dataSource)
   }
 
-
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case i @ InsertIntoStatement(UnresolvedCatalogRelation(tableMeta, options, false),
-        _, _, _, _, _, _, _) if DDLUtils.isDatasourceTable(tableMeta) =>
+    case i @ InsertIntoStatement(
+          UnresolvedCatalogRelation(tableMeta, options, false),
+          _,
+          _,
+          _,
+          _,
+          _,
+          _,
+          _) if DDLUtils.isDatasourceTable(tableMeta) =>
       i.copy(table = readDataSourceTable(tableMeta, options))
 
-    case i @ InsertIntoStatement(UnresolvedCatalogRelation(tableMeta, _, false),
-        _, _, _, _, _, _, _) =>
+    case i @ InsertIntoStatement(
+          UnresolvedCatalogRelation(tableMeta, _, false),
+          _,
+          _,
+          _,
+          _,
+          _,
+          _,
+          _) =>
       i.copy(table = DDLUtils.readHiveTable(tableMeta))
 
-    case append @ AppendData(
-        ExtractV2Table(V1Table(table: CatalogTable)), _, _, _, _, _) if !append.isByName =>
-      InsertIntoStatement(UnresolvedCatalogRelation(table),
+    case append @ AppendData(ExtractV2Table(V1Table(table: CatalogTable)), _, _, _, _, _)
+        if !append.isByName =>
+      InsertIntoStatement(
+        UnresolvedCatalogRelation(table),
         table.partitionColumnNames.map(name => name -> None).toMap,
-        Seq.empty, append.query, false, append.isByName)
+        Seq.empty,
+        append.query,
+        false,
+        append.isByName)
 
     // Skip streaming UnresolvedCatalogRelation here - they're handled by the
     // NamedStreamingRelation case below to preserve the source identifying name.
@@ -350,7 +387,8 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
     // - this happens when resolving streaming tables from catalogs where the table lookup
     // creates a SubqueryAlias wrapper around the UnresolvedCatalogRelation.
     case NamedStreamingRelation(
-        SubqueryAlias(alias, u: UnresolvedCatalogRelation), sourceIdentifyingName) =>
+          SubqueryAlias(alias, u: UnresolvedCatalogRelation),
+          sourceIdentifyingName) =>
       val resolved = getStreamingRelation(u.tableMeta, u.options, sourceIdentifyingName)
       SubqueryAlias(alias, resolved)
 
@@ -361,12 +399,19 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
       getStreamingRelation(u.tableMeta, u.options, Unassigned)
 
     case s @ StreamingRelationV2(
-        _, _, table, extraOptions, _, _, _,
-        Some(UnresolvedCatalogRelation(tableMeta, _, true)), name) =>
+          _,
+          _,
+          table,
+          extraOptions,
+          _,
+          _,
+          _,
+          Some(UnresolvedCatalogRelation(tableMeta, _, true)),
+          name) =>
       import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
       val v1Relation = getStreamingRelation(tableMeta, extraOptions, name)
       if (table.isInstanceOf[SupportsRead]
-          && table.supportsAny(MICRO_BATCH_READ, CONTINUOUS_READ)) {
+        && table.supportsAny(MICRO_BATCH_READ, CONTINUOUS_READ)) {
         s.copy(v1Relation = Some(v1Relation))
       } else {
         // Fallback to V1 relation
@@ -393,12 +438,15 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
   }
 }
 
-
 /**
  * A Strategy for planning scans over data sources defined using the sources API.
  */
 object DataSourceStrategy
-  extends Strategy with Logging with CastSupport with PredicateHelper with SQLConfHelper {
+    extends Strategy
+    with Logging
+    with CastSupport
+    with PredicateHelper
+    with SQLConfHelper {
 
   def apply(plan: LogicalPlan): Seq[execution.SparkPlan] = plan match {
     case PhysicalOperation(projects, filters, l @ LogicalRelationWithTable(t: CatalystScan, _)) =>
@@ -409,8 +457,10 @@ object DataSourceStrategy
         (requestedColumns, allPredicates, _) =>
           toCatalystRDD(l, requestedColumns, t.buildScan(requestedColumns, allPredicates))) :: Nil
 
-    case PhysicalOperation(projects, filters,
-                           l @ LogicalRelationWithTable(t: PrunedFilteredScan, _)) =>
+    case PhysicalOperation(
+          projects,
+          filters,
+          l @ LogicalRelationWithTable(t: PrunedFilteredScan, _)) =>
       pruneFilterProject(
         l,
         projects,
@@ -469,17 +519,20 @@ object DataSourceStrategy
   //
   // Note that 2 and 3 shouldn't be used together.
   private def pruneFilterProjectRaw(
-    relation: LogicalRelation,
-    projects: Seq[NamedExpression],
-    filterPredicates: Seq[Expression],
-    scanBuilder: (Seq[Attribute], Seq[Expression], Seq[Filter]) => RDD[InternalRow]): SparkPlan = {
+      relation: LogicalRelation,
+      projects: Seq[NamedExpression],
+      filterPredicates: Seq[Expression],
+      scanBuilder: (Seq[Attribute], Seq[Expression], Seq[Filter]) => RDD[InternalRow])
+      : SparkPlan = {
 
     val projectSet = AttributeSet(projects.flatMap(_.references))
     val filterSet = AttributeSet(filterPredicates.flatMap(_.references))
 
-    val candidatePredicates = filterPredicates.map { _ transform {
-      case a: AttributeReference => relation.attributeMap(a) // Match original case of attributes.
-    }}
+    val candidatePredicates = filterPredicates.map {
+      _ transform { case a: AttributeReference =>
+        relation.attributeMap(a) // Match original case of attributes.
+      }
+    }
 
     val (unhandledPredicates, pushedFilters, handledFilters) =
       selectFilters(relation.relation, candidatePredicates)
@@ -489,8 +542,8 @@ object DataSourceStrategy
     val filterCondition = unhandledPredicates.reduceLeftOption(expressions.And)
 
     if (projects.map(_.toAttribute) == projects &&
-        projectSet.size == projects.size &&
-        filterSet.subsetOf(projectSet)) {
+      projectSet.size == projects.size &&
+      filterSet.subsetOf(projectSet)) {
       // When it is possible to just use column pruning to get the right projection and
       // when the columns of this projection are enough to evaluate all filter conditions,
       // just do a scan followed by a filter, with no extra project.
@@ -535,7 +588,8 @@ object DataSourceStrategy
         relation.stream,
         relation.catalogTable.map(_.identifier))
       execution.ProjectExec(
-        projects, filterCondition.map(execution.FilterExec(_, scan)).getOrElse(scan))
+        projects,
+        filterCondition.map(execution.FilterExec(_, scan)).getOrElse(scan))
     }
   }
 
@@ -566,17 +620,16 @@ object DataSourceStrategy
   }
 
   /**
-   * The attribute name may differ from the one in the schema if the query analyzer
-   * is case insensitive. We should change attribute names to match the ones in the schema,
-   * so we do not need to worry about case sensitivity anymore.
+   * The attribute name may differ from the one in the schema if the query analyzer is case
+   * insensitive. We should change attribute names to match the ones in the schema, so we do not
+   * need to worry about case sensitivity anymore.
    */
   protected[sql] def normalizeExprs(
       exprs: Seq[Expression],
       attributes: Seq[Attribute]): Seq[Expression] = {
     exprs.map { e =>
-      e transform {
-        case a: AttributeReference =>
-          a.withName(attributes.find(_.semanticEquals(a)).getOrElse(a).name)
+      e transform { case a: AttributeReference =>
+        a.withName(attributes.find(_.semanticEquals(a)).getOrElse(a).name)
       }
     }
   }
@@ -589,10 +642,11 @@ object DataSourceStrategy
     } else {
       val partitionSet = AttributeSet(partitionColumns)
       val maxToStringFields = SQLConf.get.getConf(SQLConf.MAX_TO_STRING_FIELDS)
-      val predicates = ExpressionSet(normalizedFilters
-        .flatMap(extractPredicatesWithinOutputSet(_, partitionSet)))
-      logInfo(log"Pruning directories with: ${MDC(PREDICATES,
-        predicates.simpleString(maxToStringFields))}")
+      val predicates = ExpressionSet(
+        normalizedFilters
+          .flatMap(extractPredicatesWithinOutputSet(_, partitionSet)))
+      logInfo(
+        log"Pruning directories with: ${MDC(PREDICATES, predicates.simpleString(maxToStringFields))}")
       predicates
     }
   }
@@ -655,14 +709,16 @@ object DataSourceStrategy
       Some(collationAwareFilter(sources.GreaterThan(name, convertToScala(v, t)), e.dataType))
 
     case expressions.GreaterThanOrEqual(e @ pushableColumn(name), Literal(v, t)) =>
-      Some(collationAwareFilter(sources.GreaterThanOrEqual(name, convertToScala(v, t)), e.dataType))
+      Some(
+        collationAwareFilter(sources.GreaterThanOrEqual(name, convertToScala(v, t)), e.dataType))
     case expressions.GreaterThanOrEqual(Literal(v, t), e @ pushableColumn(name)) =>
       Some(collationAwareFilter(sources.LessThanOrEqual(name, convertToScala(v, t)), e.dataType))
 
     case expressions.LessThanOrEqual(e @ pushableColumn(name), Literal(v, t)) =>
       Some(collationAwareFilter(sources.LessThanOrEqual(name, convertToScala(v, t)), e.dataType))
     case expressions.LessThanOrEqual(Literal(v, t), e @ pushableColumn(name)) =>
-      Some(collationAwareFilter(sources.GreaterThanOrEqual(name, convertToScala(v, t)), e.dataType))
+      Some(
+        collationAwareFilter(sources.GreaterThanOrEqual(name, convertToScala(v, t)), e.dataType))
 
     case expressions.InSet(e @ pushableColumn(name), set) =>
       val toScala = CatalystTypeConverters.createToScalaConverter(e.dataType)
@@ -704,28 +760,32 @@ object DataSourceStrategy
   /**
    * Tries to translate a Catalyst [[Expression]] into data source [[Filter]].
    *
-   * @return a `Some[Filter]` if the input [[Expression]] is convertible, otherwise a `None`.
+   * @return
+   *   a `Some[Filter]` if the input [[Expression]] is convertible, otherwise a `None`.
    */
   protected[sql] def translateFilter(
-      predicate: Expression, supportNestedPredicatePushdown: Boolean): Option[Filter] = {
+      predicate: Expression,
+      supportNestedPredicatePushdown: Boolean): Option[Filter] = {
     translateFilterWithMapping(predicate, None, supportNestedPredicatePushdown)
   }
 
   /**
    * Tries to translate a Catalyst [[Expression]] into data source [[Filter]].
    *
-   * @param predicate The input [[Expression]] to be translated as [[Filter]]
-   * @param translatedFilterToExpr An optional map from leaf node filter expressions to its
-   *                               translated [[Filter]]. The map is used for rebuilding
-   *                               [[Expression]] from [[Filter]].
-   * @param nestedPredicatePushdownEnabled Whether nested predicate pushdown is enabled.
-   * @return a `Some[Filter]` if the input [[Expression]] is convertible, otherwise a `None`.
+   * @param predicate
+   *   The input [[Expression]] to be translated as [[Filter]]
+   * @param translatedFilterToExpr
+   *   An optional map from leaf node filter expressions to its translated [[Filter]]. The map is
+   *   used for rebuilding [[Expression]] from [[Filter]].
+   * @param nestedPredicatePushdownEnabled
+   *   Whether nested predicate pushdown is enabled.
+   * @return
+   *   a `Some[Filter]` if the input [[Expression]] is convertible, otherwise a `None`.
    */
   protected[sql] def translateFilterWithMapping(
       predicate: Expression,
       translatedFilterToExpr: Option[mutable.HashMap[sources.Filter, Expression]],
-      nestedPredicatePushdownEnabled: Boolean)
-    : Option[Filter] = {
+      nestedPredicatePushdownEnabled: Boolean): Option[Filter] = {
     predicate match {
       case expressions.And(left, right) =>
         // See SPARK-12218 for detailed discussion
@@ -739,17 +799,25 @@ object DataSourceStrategy
         // You can see ParquetFilters' createFilter for more details.
         for {
           leftFilter <- translateFilterWithMapping(
-            left, translatedFilterToExpr, nestedPredicatePushdownEnabled)
+            left,
+            translatedFilterToExpr,
+            nestedPredicatePushdownEnabled)
           rightFilter <- translateFilterWithMapping(
-            right, translatedFilterToExpr, nestedPredicatePushdownEnabled)
+            right,
+            translatedFilterToExpr,
+            nestedPredicatePushdownEnabled)
         } yield sources.And(leftFilter, rightFilter)
 
       case expressions.Or(left, right) =>
         for {
           leftFilter <- translateFilterWithMapping(
-            left, translatedFilterToExpr, nestedPredicatePushdownEnabled)
+            left,
+            translatedFilterToExpr,
+            nestedPredicatePushdownEnabled)
           rightFilter <- translateFilterWithMapping(
-            right, translatedFilterToExpr, nestedPredicatePushdownEnabled)
+            right,
+            translatedFilterToExpr,
+            nestedPredicatePushdownEnabled)
         } yield sources.Or(leftFilter, rightFilter)
 
       case expressions.Not(child) =>
@@ -757,7 +825,8 @@ object DataSourceStrategy
           .map(sources.Not)
 
       case other =>
-        val filter = translateLeafNodeFilter(other, PushableColumn(nestedPredicatePushdownEnabled))
+        val filter =
+          translateLeafNodeFilter(other, PushableColumn(nestedPredicatePushdownEnabled))
         if (filter.isDefined && translatedFilterToExpr.isDefined) {
           translatedFilterToExpr.get(filter.get) = predicate
         }
@@ -770,15 +839,18 @@ object DataSourceStrategy
       translatedFilterToExpr: mutable.HashMap[sources.Filter, Expression]): Expression = {
     filter match {
       case sources.And(left, right) =>
-        expressions.And(rebuildExpressionFromFilter(left, translatedFilterToExpr),
+        expressions.And(
+          rebuildExpressionFromFilter(left, translatedFilterToExpr),
           rebuildExpressionFromFilter(right, translatedFilterToExpr))
       case sources.Or(left, right) =>
-        expressions.Or(rebuildExpressionFromFilter(left, translatedFilterToExpr),
+        expressions.Or(
+          rebuildExpressionFromFilter(left, translatedFilterToExpr),
           rebuildExpressionFromFilter(right, translatedFilterToExpr))
       case sources.Not(pred) =>
         expressions.Not(rebuildExpressionFromFilter(pred, translatedFilterToExpr))
       case other =>
-        translatedFilterToExpr.getOrElse(other,
+        translatedFilterToExpr.getOrElse(
+          other,
           throw QueryCompilationErrors.failedToRebuildExpressionError(filter))
     }
   }
@@ -787,11 +859,12 @@ object DataSourceStrategy
    * Selects Catalyst predicate [[Expression]]s which are convertible into data source [[Filter]]s
    * and can be handled by `relation`.
    *
-   * @return A triplet of `Seq[Expression]`, `Seq[Filter]`, and `Seq[Filter]` . The first element
-   *         contains all Catalyst predicate [[Expression]]s that are either not convertible or
-   *         cannot be handled by `relation`. The second element contains all converted data source
-   *         [[Filter]]s that will be pushed down to the data source. The third element contains
-   *         all [[Filter]]s that are completely filtered at the DataSource.
+   * @return
+   *   A triplet of `Seq[Expression]`, `Seq[Filter]`, and `Seq[Filter]` . The first element
+   *   contains all Catalyst predicate [[Expression]]s that are either not convertible or cannot
+   *   be handled by `relation`. The second element contains all converted data source [[Filter]]s
+   *   that will be pushed down to the data source. The third element contains all [[Filter]]s
+   *   that are completely filtered at the DataSource.
    */
   protected[sql] def selectFilters(
       relation: BaseRelation,
@@ -829,10 +902,12 @@ object DataSourceStrategy
   /**
    * Translate aggregate expressions and group by expressions.
    *
-   * @return translated aggregation.
+   * @return
+   *   translated aggregation.
    */
   protected[sql] def translateAggregation(
-      aggregates: Seq[AggregateExpression], groupBy: Seq[Expression]): Option[Aggregation] = {
+      aggregates: Seq[AggregateExpression],
+      groupBy: Seq[Expression]): Option[Aggregation] = {
 
     def translate(e: Expression): Option[V2Expression] = e match {
       case PushableExpression(expr) => Some(expr)

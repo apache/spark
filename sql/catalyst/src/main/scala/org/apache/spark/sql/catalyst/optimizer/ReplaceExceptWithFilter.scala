@@ -25,7 +25,6 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.EXCEPT
 
-
 /**
  * If one or both of the datasets in the logical [[Except]] operator are purely transformed using
  * [[Filter]], this rule will replace logical [[Except]] operator with a [[Filter]] operator by
@@ -35,11 +34,10 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.EXCEPT
  *   ==>  SELECT DISTINCT a1, a2 FROM Tab1 WHERE a2 = 12 AND (a1 is null OR a1 <> 5)
  * }}}
  *
- * Note:
- * Before flipping the filter condition of the right node, we should:
- * 1. Combine all it's [[Filter]].
- * 2. Update the attribute references to the left node;
- * 3. Add a Coalesce(condition, False) (to take into account of NULL values in the condition).
+ * Note: Before flipping the filter condition of the right node, we should:
+ *   1. Combine all it's [[Filter]].
+ *   2. Update the attribute references to the left node;
+ *   3. Add a Coalesce(condition, False) (to take into account of NULL values in the condition).
  */
 object ReplaceExceptWithFilter extends Rule[LogicalPlan] {
 
@@ -52,11 +50,13 @@ object ReplaceExceptWithFilter extends Rule[LogicalPlan] {
       case e @ Except(left, right, false) if isEligible(left, right) =>
         val filterCondition = combineFilters(skipProject(right)).asInstanceOf[Filter].condition
         if (filterCondition.deterministic) {
-          transformCondition(left, filterCondition).map { c =>
-            Distinct(Filter(Not(c), left))
-          }.getOrElse {
-            e
-          }
+          transformCondition(left, filterCondition)
+            .map { c =>
+              Distinct(Filter(Not(c), left))
+            }
+            .getOrElse {
+              e
+            }
         } else {
           e
         }
@@ -66,8 +66,8 @@ object ReplaceExceptWithFilter extends Rule[LogicalPlan] {
   private def transformCondition(plan: LogicalPlan, condition: Expression): Option[Expression] = {
     val attributeNameMap: Map[String, Attribute] = plan.output.map(x => (x.name, x)).toMap
     if (condition.references.forall(r => attributeNameMap.contains(r.name))) {
-      val rewrittenCondition = condition.transform {
-        case a: AttributeReference => attributeNameMap(a.name)
+      val rewrittenCondition = condition.transform { case a: AttributeReference =>
+        attributeNameMap(a.name)
       }
       // We need to consider as False when the condition is NULL, otherwise we do not return those
       // rows containing NULL which are instead filtered in the Except right plan
@@ -88,10 +88,10 @@ object ReplaceExceptWithFilter extends Rule[LogicalPlan] {
     val rightProjectList = projectList(right)
 
     left.output.size == left.output.map(_.name).distinct.size &&
-      !left.exists(_.expressions.exists(SubqueryExpression.hasSubquery)) &&
-        !right.exists(_.expressions.exists(SubqueryExpression.hasSubquery)) &&
-          Project(leftProjectList, nonFilterChild(skipProject(left))).sameResult(
-            Project(rightProjectList, nonFilterChild(skipProject(right))))
+    !left.exists(_.expressions.exists(SubqueryExpression.hasSubquery)) &&
+    !right.exists(_.expressions.exists(SubqueryExpression.hasSubquery)) &&
+    Project(leftProjectList, nonFilterChild(skipProject(left)))
+      .sameResult(Project(rightProjectList, nonFilterChild(skipProject(right))))
   }
 
   private def projectList(node: LogicalPlan): Seq[NamedExpression] = node match {

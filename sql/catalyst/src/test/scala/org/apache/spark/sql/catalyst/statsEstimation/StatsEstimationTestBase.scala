@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LeafNode, Logica
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, StringType}
 
-
 trait StatsEstimationTestBase extends SparkFunSuite {
 
   var originalCBOValue: Boolean = false
@@ -53,17 +52,22 @@ trait StatsEstimationTestBase extends SparkFunSuite {
   def attr(colName: String): AttributeReference = AttributeReference(colName, IntegerType)()
 
   /** Convert (column name, column stat) pairs to an AttributeMap based on plan output. */
-  def toAttributeMap(colStats: Seq[(String, ColumnStat)], plan: LogicalPlan)
-    : AttributeMap[ColumnStat] = {
+  def toAttributeMap(
+      colStats: Seq[(String, ColumnStat)],
+      plan: LogicalPlan): AttributeMap[ColumnStat] = {
     val nameToAttr: Map[String, Attribute] = plan.output.map(a => (a.name, a)).toMap
     AttributeMap(colStats.map(kv => nameToAttr(kv._1) -> kv._2))
   }
 
   /** Get a test ColumnStat with given distinctCount and nullCount */
   def rangeColumnStat(distinctCount: Int, nullCount: Int): ColumnStat =
-    ColumnStat(distinctCount = Some(distinctCount),
-      min = Some(1), max = Some(distinctCount),
-      nullCount = Some(0), avgLen = Some(4), maxLen = Some(4))
+    ColumnStat(
+      distinctCount = Some(distinctCount),
+      min = Some(1),
+      max = Some(distinctCount),
+      nullCount = Some(0),
+      avgLen = Some(4),
+      maxLen = Some(4))
 }
 
 /**
@@ -73,7 +77,9 @@ case class StatsTestPlan(
     outputList: Seq[Attribute],
     rowCount: BigInt,
     attributeStats: AttributeMap[ColumnStat],
-    size: Option[BigInt] = None) extends LeafNode with MultiInstanceRelation {
+    size: Option[BigInt] = None)
+    extends LeafNode
+    with MultiInstanceRelation {
   override def output: Seq[Attribute] = outputList
   override def computeStats(): Statistics = Statistics(
     // If sizeInBytes is useless in testing, we just use a fake value

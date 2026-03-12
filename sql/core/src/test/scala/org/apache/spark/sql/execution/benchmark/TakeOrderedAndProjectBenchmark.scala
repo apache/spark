@@ -22,8 +22,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * TakeOrderedAndProject benchmark.
- * To run this benchmark:
+ * TakeOrderedAndProject benchmark. To run this benchmark:
  * {{{
  *   1. without sbt:
  *      bin/spark-submit --class <this class>
@@ -45,10 +44,12 @@ object TakeOrderedAndProjectBenchmark extends SqlBasedBenchmark {
     val benchmark = new Benchmark("TakeOrderedAndProject with SMJ", row, output = output)
 
     benchmark.addCase("TakeOrderedAndProject with SMJ for doExecute", 3) { _ =>
-      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
-          SQLConf.SHUFFLE_PARTITIONS.key -> "5",
-          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
-        df1.join(df2, col("c1") === col("c2"))
+      withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "5",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+        df1
+          .join(df2, col("c1") === col("c2"))
           .orderBy(col("c1"))
           .limit(100)
           .noop()
@@ -56,10 +57,12 @@ object TakeOrderedAndProjectBenchmark extends SqlBasedBenchmark {
     }
 
     benchmark.addCase("TakeOrderedAndProject with SMJ for executeCollect", 3) { _ =>
-      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
-          SQLConf.SHUFFLE_PARTITIONS.key -> "5",
-          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
-        df1.join(df2, col("c1") === col("c2"))
+      withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "5",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+        df1
+          .join(df2, col("c1") === col("c2"))
           .orderBy(col("c1"))
           .limit(100)
           .collect()

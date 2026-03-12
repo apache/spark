@@ -58,8 +58,8 @@ object ReplaceCharWithVarchar extends Rule[LogicalPlan] {
           col.copy(dataType = CharVarcharUtils.replaceCharWithVarchar(col.dataType))
         })
       case cmd: AlterTableChangeColumnCommand =>
-        cmd.copy(newColumn = cmd.newColumn.copy(
-          dataType = CharVarcharUtils.replaceCharWithVarchar(cmd.newColumn.dataType)))
+        cmd.copy(newColumn = cmd.newColumn.copy(dataType =
+          CharVarcharUtils.replaceCharWithVarchar(cmd.newColumn.dataType)))
     }
   }
 
@@ -68,6 +68,7 @@ object ReplaceCharWithVarchar extends Rule[LogicalPlan] {
   }
 
   private def replaceCharWithVarcharInTableMeta(tbl: CatalogTable): CatalogTable = {
-    tbl.copy(schema = CharVarcharUtils.replaceCharWithVarchar(tbl.schema).asInstanceOf[StructType])
+    tbl.copy(schema =
+      CharVarcharUtils.replaceCharWithVarchar(tbl.schema).asInstanceOf[StructType])
   }
 }

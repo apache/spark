@@ -32,7 +32,8 @@ case class DescribeNamespaceExec(
     output: Seq[Attribute],
     catalog: SupportsNamespaces,
     namespace: Seq[String],
-    isExtended: Boolean) extends LeafV2CommandExec {
+    isExtended: Boolean)
+    extends LeafV2CommandExec {
   override protected def run(): Seq[InternalRow] = {
     val rows = new ArrayBuffer[InternalRow]()
     val ns = namespace.toArray

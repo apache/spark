@@ -31,13 +31,16 @@ import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.Utils
 
 @SlowSQLTest
-class StreamingSessionWindowDistributionSuite extends StreamTest
-  with StatefulOpClusteredDistributionTestHelper with Logging {
+class StreamingSessionWindowDistributionSuite
+    extends StreamTest
+    with StatefulOpClusteredDistributionTestHelper
+    with Logging {
 
   import testImplicits._
 
-  test("SPARK-38204: session window aggregation should require StatefulOpClusteredDistribution " +
-    "from children") {
+  test(
+    "SPARK-38204: session window aggregation should require StatefulOpClusteredDistribution " +
+      "from children") {
 
     withSQLConf(
       // exclude partial merging session to simplify test
@@ -46,7 +49,8 @@ class StreamingSessionWindowDistributionSuite extends StreamTest
       val inputData = MemoryStream[(String, String, Long)]
 
       // Split the lines into words, treat words as sessionId of events
-      val events = inputData.toDF()
+      val events = inputData
+        .toDF()
         .select($"_1".as("value"), $"_2".as("userId"), $"_3".as("timestamp"))
         .withColumn("eventTime", $"timestamp".cast("timestamp"))
         .withWatermark("eventTime", "30 seconds")
@@ -54,19 +58,24 @@ class StreamingSessionWindowDistributionSuite extends StreamTest
 
       val sessionUpdates = events
         .repartition($"userId")
-        .groupBy(session_window($"eventTime", "10 seconds") as Symbol("session"),
-          $"sessionId", $"userId")
+        .groupBy(
+          session_window($"eventTime", "10 seconds") as Symbol("session"),
+          $"sessionId",
+          $"userId")
         .agg(count("*").as("numEvents"))
-        .selectExpr("sessionId", "userId", "CAST(session.start AS LONG)",
+        .selectExpr(
+          "sessionId",
+          "userId",
+          "CAST(session.start AS LONG)",
           "CAST(session.end AS LONG)",
           "CAST(session.end AS LONG) - CAST(session.start AS LONG) AS durationMs",
           "numEvents")
 
       testStream(sessionUpdates, OutputMode.Append())(
-        AddData(inputData,
+        AddData(
+          inputData,
           ("hello world spark streaming", "key1", 40L),
-          ("world hello structured streaming", "key2", 41L)
-        ),
+          ("world hello structured streaming", "key2", 41L)),
 
         // skip checking the result, since we focus to verify the physical plan
         ProcessAllAvailable(),
@@ -80,10 +89,16 @@ class StreamingSessionWindowDistributionSuite extends StreamTest
 
           assert(operators.nonEmpty)
           operators.foreach { stateOp =>
-            assert(requireStatefulOpClusteredDistribution(stateOp, Seq(Seq("sessionId", "userId")),
-              numPartitions))
-            assert(hasDesiredHashPartitioningInChildren(stateOp, Seq(Seq("sessionId", "userId")),
-              numPartitions))
+            assert(
+              requireStatefulOpClusteredDistribution(
+                stateOp,
+                Seq(Seq("sessionId", "userId")),
+                numPartitions))
+            assert(
+              hasDesiredHashPartitioningInChildren(
+                stateOp,
+                Seq(Seq("sessionId", "userId")),
+                numPartitions))
           }
 
           // Verify aggregations in between, except partial aggregation.
@@ -103,16 +118,19 @@ class StreamingSessionWindowDistributionSuite extends StreamTest
           // For aggregate execs, we make sure output partitioning of the children is same as
           // we expect, HashPartitioning with clustering keys & number of partitions.
           aggregateExecsWithoutPartialAgg.foreach { aggr =>
-            assert(hasDesiredHashPartitioningInChildren(aggr, Seq(Seq("sessionId", "userId")),
-              numPartitions))
+            assert(
+              hasDesiredHashPartitioningInChildren(
+                aggr,
+                Seq(Seq("sessionId", "userId")),
+                numPartitions))
           }
-        }
-      )
+        })
     }
   }
 
-  test("SPARK-38204: session window aggregation should require ClusteredDistribution " +
-    "from children if the query starts from checkpoint in 3.2") {
+  test(
+    "SPARK-38204: session window aggregation should require ClusteredDistribution " +
+      "from children if the query starts from checkpoint in 3.2") {
 
     withSQLConf(
       // exclude partial merging session to simplify test
@@ -121,7 +139,8 @@ class StreamingSessionWindowDistributionSuite extends StreamTest
       val inputData = MemoryStream[(String, String, Long)]
 
       // Split the lines into words, treat words as sessionId of events
-      val events = inputData.toDF()
+      val events = inputData
+        .toDF()
         .select($"_1".as("value"), $"_2".as("userId"), $"_3".as("timestamp"))
         .withColumn("eventTime", $"timestamp".cast("timestamp"))
         .withWatermark("eventTime", "30 seconds")
@@ -129,16 +148,23 @@ class StreamingSessionWindowDistributionSuite extends StreamTest
 
       val sessionUpdates = events
         .repartition($"userId")
-        .groupBy(session_window($"eventTime", "10 seconds") as Symbol("session"),
-          $"sessionId", $"userId")
+        .groupBy(
+          session_window($"eventTime", "10 seconds") as Symbol("session"),
+          $"sessionId",
+          $"userId")
         .agg(count("*").as("numEvents"))
-        .selectExpr("sessionId", "userId", "CAST(session.start AS LONG)",
+        .selectExpr(
+          "sessionId",
+          "userId",
+          "CAST(session.start AS LONG)",
           "CAST(session.end AS LONG)",
           "CAST(session.end AS LONG) - CAST(session.start AS LONG) AS durationMs",
           "numEvents")
 
-      val resourceUri = this.getClass.getResource(
-        "/structured-streaming/checkpoint-version-3.2.0-session-window-with-repartition/").toURI
+      val resourceUri = this.getClass
+        .getResource(
+          "/structured-streaming/checkpoint-version-3.2.0-session-window-with-repartition/")
+        .toURI
 
       val checkpointDir = Utils.createTempDir().getCanonicalFile
       // Copy the checkpoint to a temp dir to prevent changes to the original.
@@ -150,7 +176,8 @@ class StreamingSessionWindowDistributionSuite extends StreamTest
         ("world hello structured streaming", "key2", 41L))
 
       testStream(sessionUpdates, OutputMode.Append())(
-        StartStream(checkpointLocation = checkpointDir.getAbsolutePath,
+        StartStream(
+          checkpointLocation = checkpointDir.getAbsolutePath,
           additionalConfs = Map(SQLConf.STATEFUL_OPERATOR_USE_STRICT_DISTRIBUTION.key -> "true")),
 
         // scalastyle:off line.size.limit
@@ -178,13 +205,12 @@ class StreamingSessionWindowDistributionSuite extends StreamTest
                                       +- *(1) Filter (precisetimestampconversion(precisetimestampconversion(eventTime#15-T30000ms + 10 seconds, TimestampType, LongType), LongType, TimestampType) > precisetimestampconversion(precisetimestampconversion(eventTime#15-T30000ms, TimestampType, LongType), LongType, TimestampType))
                                          +- EventTimeWatermark eventTime#15: timestamp, 30 seconds
                                             +- LocalTableScan <empty>, [value#9, userId#10, eventTime#15]
-        */
+         */
         // scalastyle:on line.size.limit
 
         AddData(inputData, ("spark streaming", "key1", 25L)),
         // skip checking the result, since we focus to verify the physical plan
         ProcessAllAvailable(),
-
         Execute { query =>
           val numPartitions = query.lastExecution.numStateStores
 
@@ -195,10 +221,13 @@ class StreamingSessionWindowDistributionSuite extends StreamTest
 
           assert(operators.nonEmpty)
           operators.foreach { stateOp =>
-            assert(requireClusteredDistribution(stateOp, Seq(Seq("sessionId", "userId")),
-              Some(numPartitions)))
-            assert(hasDesiredHashPartitioningInChildren(stateOp, Seq(Seq("userId")),
-              numPartitions))
+            assert(
+              requireClusteredDistribution(
+                stateOp,
+                Seq(Seq("sessionId", "userId")),
+                Some(numPartitions)))
+            assert(
+              hasDesiredHashPartitioningInChildren(stateOp, Seq(Seq("userId")), numPartitions))
           }
 
           // Verify aggregations in between, except partial aggregation.
@@ -218,11 +247,9 @@ class StreamingSessionWindowDistributionSuite extends StreamTest
           // For aggregate execs, we make sure output partitioning of the children is same as
           // we expect, HashPartitioning with sub-clustering keys & number of partitions.
           aggregateExecsWithoutPartialAgg.foreach { aggr =>
-            assert(hasDesiredHashPartitioningInChildren(aggr, Seq(Seq("userId")),
-              numPartitions))
+            assert(hasDesiredHashPartitioningInChildren(aggr, Seq(Seq("userId")), numPartitions))
           }
-        }
-      )
+        })
     }
   }
 }

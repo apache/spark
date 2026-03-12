@@ -63,8 +63,7 @@ class ToPrettyStringSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(ToPrettyString(Literal.create((1, "a", 0.1))), "{1, a, 0.1}")
     checkEvaluation(
       ToPrettyString(Literal.create(Tuple2[String, String](null, null))),
-      "{NULL, NULL}"
-    )
+      "{NULL, NULL}")
   }
 
   test("YearMonthInterval as pretty strings") {
@@ -80,8 +79,7 @@ class ToPrettyStringSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("Decimal as pretty strings") {
-    checkEvaluation(
-      ToPrettyString(Cast(Literal(1234.65), DecimalType(6, 2))), "1234.65")
+    checkEvaluation(ToPrettyString(Cast(Literal(1234.65), DecimalType(6, 2))), "1234.65")
   }
 
   test("String as pretty strings") {
@@ -138,7 +136,8 @@ class ToPrettyStringSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("Time as pretty strings") {
     checkEvaluation(ToPrettyString(Literal(1000 * 1000L, TimeType())), "00:00:00.001")
     checkEvaluation(ToPrettyString(Literal(1000L, TimeType())), "00:00:00.000001")
-    checkEvaluation(ToPrettyString(Literal(
-      (23 * 3600 + 59 * 60 + 59) * 1000000000L, TimeType())), "23:59:59")
+    checkEvaluation(
+      ToPrettyString(Literal((23 * 3600 + 59 * 60 + 59) * 1000000000L, TimeType())),
+      "23:59:59")
   }
 }

@@ -47,7 +47,8 @@ class AlterTableDropColumnParserSuite extends AnalysisTest with SharedSparkSessi
         parsePlan(drop),
         DropColumns(
           UnresolvedTable(Seq("table_name"), "ALTER TABLE ... DROP COLUMNS"),
-          Seq(UnresolvedFieldName(Seq("x")),
+          Seq(
+            UnresolvedFieldName(Seq("x")),
             UnresolvedFieldName(Seq("y")),
             UnresolvedFieldName(Seq("a", "b", "c"))),
           ifExists = false))
@@ -59,7 +60,8 @@ class AlterTableDropColumnParserSuite extends AnalysisTest with SharedSparkSessi
         parsePlan(drop),
         DropColumns(
           UnresolvedTable(Seq("table_name"), "ALTER TABLE ... DROP COLUMNS"),
-          Seq(UnresolvedFieldName(Seq("x")),
+          Seq(
+            UnresolvedFieldName(Seq("x")),
             UnresolvedFieldName(Seq("y")),
             UnresolvedFieldName(Seq("a", "b", "c"))),
           ifExists = true))

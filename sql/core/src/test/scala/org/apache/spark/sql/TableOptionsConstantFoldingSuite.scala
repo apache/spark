@@ -31,8 +31,13 @@ class TableOptionsConstantFoldingSuite extends QueryTest with SharedSparkSession
       sql(s"$prefix ('k' = $createOption)")
       sql("insert into t values (42)")
       checkAnswer(spark.table("t"), Seq(Row(42)))
-      val actual = spark.table("t")
-        .queryExecution.sparkPlan.asInstanceOf[FileSourceScanExec].relation.options
+      val actual = spark
+        .table("t")
+        .queryExecution
+        .sparkPlan
+        .asInstanceOf[FileSourceScanExec]
+        .relation
+        .options
       assert(actual.get("k").get == expectedValue)
     }
   }
@@ -42,13 +47,15 @@ class TableOptionsConstantFoldingSuite extends QueryTest with SharedSparkSession
     checkOption("'a' || 'b'", "ab")
     checkOption("true or false", "true")
     checkOption("null", null)
-    checkOption("cast('11 23:4:0' as interval day to second)",
+    checkOption(
+      "cast('11 23:4:0' as interval day to second)",
       "INTERVAL '11 23:04:00' DAY TO SECOND")
     withSQLConf(SQLConf.LEGACY_EVAL_CURRENT_TIME.key -> "true") {
       checkOption("date_diff(current_date(), current_date())", "0")
     }
     checkOption("date_sub(date'2022-02-02', 1)", "2022-02-01")
-    checkOption("timestampadd(microsecond, 5, timestamp'2022-02-28 00:00:00')",
+    checkOption(
+      "timestampadd(microsecond, 5, timestamp'2022-02-28 00:00:00')",
       "2022-02-28 00:00:00.000005")
     checkOption("round(cast(2.25 as decimal(5, 3)), 1)", "2.3")
     // The result of invoking this "ROUND" function call is NULL, since the target decimal type is
@@ -57,9 +64,11 @@ class TableOptionsConstantFoldingSuite extends QueryTest with SharedSparkSession
     Seq(true, false).foreach { ansiEnabled =>
       withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
         if (ansiEnabled) {
-          val exception = intercept[AnalysisException](sql(s"$prefix ('k' = $cannotBeRepresented)"))
-          assert(exception.cause.exists(_.getMessage.contains(
-            "2.25 cannot be represented as Decimal(3, 3)")))
+          val exception =
+            intercept[AnalysisException](sql(s"$prefix ('k' = $cannotBeRepresented)"))
+          assert(
+            exception.cause.exists(
+              _.getMessage.contains("2.25 cannot be represented as Decimal(3, 3)")))
         } else {
           checkOption(cannotBeRepresented, "null")
         }
@@ -68,48 +77,34 @@ class TableOptionsConstantFoldingSuite extends QueryTest with SharedSparkSession
 
     // Test some cases where the provided option value is a non-constant or invalid expression.
     checkError(
-      exception = intercept[AnalysisException](
-        sql(s"$prefix ('k' = 1 + 2 + unresolvedAttribute)")),
+      exception =
+        intercept[AnalysisException](sql(s"$prefix ('k' = 1 + 2 + unresolvedAttribute)")),
       condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-      parameters = Map(
-        "objectName" -> "`unresolvedAttribute`",
-        "proposal" -> "`col`"),
+      parameters = Map("objectName" -> "`unresolvedAttribute`", "proposal" -> "`col`"),
       queryContext = Array(ExpectedContext("", "", 60, 78, "unresolvedAttribute")))
     checkError(
       exception = intercept[AnalysisException](
         sql(s"$prefix ('k' = true or false or unresolvedAttribute)")),
       condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-      parameters = Map(
-        "objectName" -> "`unresolvedAttribute`",
-        "proposal" -> "`col`"),
+      parameters = Map("objectName" -> "`unresolvedAttribute`", "proposal" -> "`col`"),
       queryContext = Array(ExpectedContext("", "", 69, 87, "unresolvedAttribute")))
     checkError(
       exception = intercept[AnalysisException](
         sql(s"$prefix ('k' = cast(array('9', '9') as array<byte>))")),
       condition = "INVALID_SQL_SYNTAX.OPTION_IS_INVALID",
-      parameters = Map(
-        "key" -> "k",
-        "supported" -> "constant expressions"))
+      parameters = Map("key" -> "k", "supported" -> "constant expressions"))
     checkError(
       exception = intercept[AnalysisException](
         sql(s"$prefix ('k' = cast(map('9', '9') as map<string, string>))")),
       condition = "INVALID_SQL_SYNTAX.OPTION_IS_INVALID",
-      parameters = Map(
-        "key" -> "k",
-        "supported" -> "constant expressions"))
+      parameters = Map("key" -> "k", "supported" -> "constant expressions"))
     checkError(
-      exception = intercept[AnalysisException](
-        sql(s"$prefix ('k' = raise_error('failure'))")),
+      exception = intercept[AnalysisException](sql(s"$prefix ('k' = raise_error('failure'))")),
       condition = "INVALID_SQL_SYNTAX.OPTION_IS_INVALID",
-      parameters = Map(
-        "key" -> "k",
-        "supported" -> "constant expressions"))
+      parameters = Map("key" -> "k", "supported" -> "constant expressions"))
     checkError(
-      exception = intercept[AnalysisException](
-        sql(s"$prefix ('k' = raise_error('failure'))")),
+      exception = intercept[AnalysisException](sql(s"$prefix ('k' = raise_error('failure'))")),
       condition = "INVALID_SQL_SYNTAX.OPTION_IS_INVALID",
-      parameters = Map(
-        "key" -> "k",
-        "supported" -> "constant expressions"))
+      parameters = Map("key" -> "k", "supported" -> "constant expressions"))
   }
 }

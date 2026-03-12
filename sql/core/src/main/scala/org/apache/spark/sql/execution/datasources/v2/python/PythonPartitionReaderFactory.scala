@@ -23,7 +23,6 @@ import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.types.StructType
 
-
 case class PythonInputPartition(index: Int, pickedPartition: Array[Byte]) extends InputPartition
 
 class PythonPartitionReaderFactory(
@@ -32,7 +31,7 @@ class PythonPartitionReaderFactory(
     outputSchema: StructType,
     jobArtifactUUID: Option[String],
     sessionUUID: Option[String])
-  extends PartitionReaderFactory {
+    extends PartitionReaderFactory {
 
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
     new PartitionReader[InternalRow] {
@@ -50,8 +49,9 @@ class PythonPartitionReaderFactory(
           sessionUUID)
 
         val part = partition.asInstanceOf[PythonInputPartition]
-        evaluatorFactory.createEvaluator().eval(
-          part.index, Iterator.single(InternalRow(part.pickedPartition)))
+        evaluatorFactory
+          .createEvaluator()
+          .eval(part.index, Iterator.single(InternalRow(part.pickedPartition)))
       }
 
       override def next(): Boolean = outputIter.hasNext
@@ -61,7 +61,7 @@ class PythonPartitionReaderFactory(
       override def close(): Unit = {}
 
       override def currentMetricsValues(): Array[CustomTaskMetric] = {
-        source.createPythonTaskMetrics(metrics.map { case (k, v) => k -> v.value})
+        source.createPythonTaskMetrics(metrics.map { case (k, v) => k -> v.value })
       }
     }
   }

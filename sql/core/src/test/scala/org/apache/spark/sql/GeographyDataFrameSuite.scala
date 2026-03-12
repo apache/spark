@@ -27,9 +27,13 @@ import org.apache.spark.sql.types._
 class GeographyDataFrameSuite extends QueryTest with SharedSparkSession {
 
   val point1 = "010100000000000000000031400000000000001C40"
-    .grouped(2).map(Integer.parseInt(_, 16).toByte).toArray
+    .grouped(2)
+    .map(Integer.parseInt(_, 16).toByte)
+    .toArray
   val point2 = "010100000000000000000035400000000000001E40"
-    .grouped(2).map(Integer.parseInt(_, 16).toByte).toArray
+    .grouped(2)
+    .map(Integer.parseInt(_, 16).toByte)
+    .toArray
 
   test("decode geography value: SRID schema does not match input SRID data schema") {
     val rdd = sparkContext.parallelize(Seq(Row(Geography.fromWKB(point1, 0))))
@@ -41,8 +45,7 @@ class GeographyDataFrameSuite extends QueryTest with SharedSparkSession {
         spark.createDataFrame(rdd, schema).collect()
       }.getCause.asInstanceOf[SparkRuntimeException],
       condition = "GEO_ENCODER_SRID_MISMATCH_ERROR",
-      parameters = Map("type" -> "GEOGRAPHY", "valueSrid" -> "0", "typeSrid" -> "4326")
-    )
+      parameters = Map("type" -> "GEOGRAPHY", "valueSrid" -> "0", "typeSrid" -> "4326"))
 
     val javaRDD = sparkContext.parallelize(Seq(Row(Geography.fromWKB(point1, 0)))).toJavaRDD()
     checkError(
@@ -52,8 +55,7 @@ class GeographyDataFrameSuite extends QueryTest with SharedSparkSession {
         spark.createDataFrame(javaRDD, schema).collect()
       }.getCause.asInstanceOf[SparkRuntimeException],
       condition = "GEO_ENCODER_SRID_MISMATCH_ERROR",
-      parameters = Map("type" -> "GEOGRAPHY", "valueSrid" -> "0", "typeSrid" -> "4326")
-    )
+      parameters = Map("type" -> "GEOGRAPHY", "valueSrid" -> "0", "typeSrid" -> "4326"))
 
     // For some reason this API does not use expression encoders,
     // but CatalystTypeConverter, so we are not looking at cause.
@@ -63,8 +65,7 @@ class GeographyDataFrameSuite extends QueryTest with SharedSparkSession {
         spark.createDataFrame(javaList, schema).collect()
       },
       condition = "GEO_ENCODER_SRID_MISMATCH_ERROR",
-      parameters = Map("type" -> "GEOGRAPHY", "valueSrid" -> "0", "typeSrid" -> "4326")
-    )
+      parameters = Map("type" -> "GEOGRAPHY", "valueSrid" -> "0", "typeSrid" -> "4326"))
 
     val geography1 = Geography.fromWKB(point1, 0)
     val rdd2 = sparkContext.parallelize(Seq((geography1, 1)))
@@ -73,8 +74,7 @@ class GeographyDataFrameSuite extends QueryTest with SharedSparkSession {
         spark.createDataFrame(rdd2).collect()
       },
       condition = "GEO_ENCODER_SRID_MISMATCH_ERROR",
-      parameters = Map("type" -> "GEOGRAPHY", "valueSrid" -> "0", "typeSrid" -> "4326")
-    )
+      parameters = Map("type" -> "GEOGRAPHY", "valueSrid" -> "0", "typeSrid" -> "4326"))
 
     // For some reason this API does not use expression encoders,
     // but CatalystTypeConverter, so we are not looking at cause.
@@ -84,8 +84,7 @@ class GeographyDataFrameSuite extends QueryTest with SharedSparkSession {
         spark.createDataFrame(seq).collect()
       },
       condition = "GEO_ENCODER_SRID_MISMATCH_ERROR",
-      parameters = Map("type" -> "GEOGRAPHY", "valueSrid" -> "0", "typeSrid" -> "4326")
-    )
+      parameters = Map("type" -> "GEOGRAPHY", "valueSrid" -> "0", "typeSrid" -> "4326"))
 
     import testImplicits._
     checkError(
@@ -93,27 +92,28 @@ class GeographyDataFrameSuite extends QueryTest with SharedSparkSession {
         Seq(geography1).toDF().collect()
       }.getCause.asInstanceOf[SparkRuntimeException],
       condition = "GEO_ENCODER_SRID_MISMATCH_ERROR",
-      parameters = Map("type" -> "GEOGRAPHY", "valueSrid" -> "0", "typeSrid" -> "4326")
-    )
+      parameters = Map("type" -> "GEOGRAPHY", "valueSrid" -> "0", "typeSrid" -> "4326"))
   }
 
   test("decode geography value: mixed SRID schema is provided") {
     val rdd = sparkContext.parallelize(
       Seq(Row(Geography.fromWKB(point1, 4326)), Row(Geography.fromWKB(point2, 4326))))
     val schema = StructType(Seq(StructField("col1", GeographyType("ANY"), nullable = false)))
-    val expectedResult = Seq(
-      Row(Geography.fromWKB(point1, 4326)), Row(Geography.fromWKB(point2, 4326)))
+    val expectedResult =
+      Seq(Row(Geography.fromWKB(point1, 4326)), Row(Geography.fromWKB(point2, 4326)))
 
     val resultDF = spark.createDataFrame(rdd, schema)
     checkAnswer(resultDF, expectedResult)
 
-    val javaRDD = sparkContext.parallelize(
-      Seq(Row(Geography.fromWKB(point1, 4326)), Row(Geography.fromWKB(point2, 4326)))).toJavaRDD()
+    val javaRDD = sparkContext
+      .parallelize(
+        Seq(Row(Geography.fromWKB(point1, 4326)), Row(Geography.fromWKB(point2, 4326))))
+      .toJavaRDD()
     val resultJavaDF = spark.createDataFrame(javaRDD, schema)
     checkAnswer(resultJavaDF, expectedResult)
 
-    val javaList = java.util.Arrays.asList(
-      Row(Geography.fromWKB(point1, 4326)), Row(Geography.fromWKB(point2, 4326)))
+    val javaList = java.util.Arrays
+      .asList(Row(Geography.fromWKB(point1, 4326)), Row(Geography.fromWKB(point2, 4326)))
     val resultJavaListDF = spark.createDataFrame(javaList, schema)
     checkAnswer(resultJavaListDF, expectedResult)
 
@@ -125,8 +125,7 @@ class GeographyDataFrameSuite extends QueryTest with SharedSparkSession {
         spark.createDataFrame(rdd2, schema).collect()
       }.getCause.asInstanceOf[SparkIllegalArgumentException],
       condition = "ST_INVALID_SRID_VALUE",
-      parameters = Map("srid" -> "0")
-    )
+      parameters = Map("srid" -> "0"))
   }
 
   test("createDataFrame APIs with Geography.fromWKB") {
@@ -146,14 +145,13 @@ class GeographyDataFrameSuite extends QueryTest with SharedSparkSession {
     val geography3 = Geography.fromWKB(point1, 4326)
     val geography4 = Geography.fromWKB(point2, 4326)
     val rowRDD = sparkContext.parallelize(Seq(Row(geography3), Row(geography4), Row(null)))
-    val schema = StructType(Seq(
-      StructField("geography", GeographyType(4326), nullable = true)
-    ))
+    val schema = StructType(Seq(StructField("geography", GeographyType(4326), nullable = true)))
     val dfFromRowRDD = spark.createDataFrame(rowRDD, schema)
     checkAnswer(dfFromRowRDD, Seq(Row(geography3), Row(geography4), Row(null)))
 
     // 4. Test createDataFrame with JavaRDD of Rows and StructType schema
-    val javaRDD = sparkContext.parallelize(Seq(Row(geography3), Row(geography4), Row(null)))
+    val javaRDD = sparkContext
+      .parallelize(Seq(Row(geography3), Row(geography4), Row(null)))
       .toJavaRDD()
     val dfFromJavaRDD = spark.createDataFrame(javaRDD, schema)
     checkAnswer(dfFromJavaRDD, Seq(Row(geography3), Row(geography4), Row(null)))
@@ -173,7 +171,9 @@ class GeographyDataFrameSuite extends QueryTest with SharedSparkSession {
     // A test WKB value corresponding to: POINT (17 7).
     val pointString: String = "010100000000000000000031400000000000001C40"
     val pointBytes: Array[Byte] = pointString
-      .grouped(2).map(Integer.parseInt(_, 16).toByte).toArray
+      .grouped(2)
+      .map(Integer.parseInt(_, 16).toByte)
+      .toArray
     val df = spark.sql(s"SELECT ST_GeogFromWKB(X'$pointString')")
     val expectedGeog = Geography.fromWKB(pointBytes, 4326)
     checkAnswer(df, Seq(Row(expectedGeog)))
@@ -189,24 +189,21 @@ class GeographyDataFrameSuite extends QueryTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           spark.createDataFrame(rdd, schema).collect()
         },
-        condition = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED"
-      )
+        condition = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED")
       // Java List[Row] + schema.
       val javaList = java.util.Arrays.asList(Row(geography))
       checkError(
         exception = intercept[AnalysisException] {
           spark.createDataFrame(javaList, schema).collect()
         },
-        condition = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED"
-      )
+        condition = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED")
       // Implicit encoder path.
       import testImplicits._
       checkError(
         exception = intercept[AnalysisException] {
           Seq(geography).toDF("g").collect()
         },
-        condition = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED"
-      )
+        condition = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED")
     }
   }
 }

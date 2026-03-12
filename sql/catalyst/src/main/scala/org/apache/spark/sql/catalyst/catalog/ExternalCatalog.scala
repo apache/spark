@@ -25,9 +25,9 @@ import org.apache.spark.sql.types.StructType
 /**
  * Interface for the system catalog (of functions, partitions, tables, and databases).
  *
- * This is only used for non-temporary items, and implementations must be thread-safe as they
- * can be accessed in multiple threads. This is an external catalog because it is expected to
- * interact with external systems.
+ * This is only used for non-temporary items, and implementations must be thread-safe as they can
+ * be accessed in multiple threads. This is an external catalog because it is expected to interact
+ * with external systems.
  *
  * Implementations should throw [[NoSuchDatabaseException]] when databases don't exist.
  */
@@ -71,11 +71,11 @@ trait ExternalCatalog {
   def dropDatabase(db: String, ignoreIfNotExists: Boolean, cascade: Boolean): Unit
 
   /**
-   * Alter a database whose name matches the one specified in `dbDefinition`,
-   * assuming the database exists.
+   * Alter a database whose name matches the one specified in `dbDefinition`, assuming the
+   * database exists.
    *
-   * Note: If the underlying implementation does not support altering a certain field,
-   * this becomes a no-op.
+   * Note: If the underlying implementation does not support altering a certain field, this
+   * becomes a no-op.
    */
   def alterDatabase(dbDefinition: CatalogDatabase): Unit
 
@@ -98,19 +98,18 @@ trait ExternalCatalog {
   /**
    * Drop a table from the specified database.
    *
-   * @param db database name
-   * @param table table name
-   * @param ignoreIfNotExists if true, do not throw an error if the table or database
-   *                          does not exist
-   * @param purge if true, completely remove the table data (skip trash)
-   * @throws NoSuchTableException if the table or database does not exist and
-   *                              ignoreIfNotExists is false
+   * @param db
+   *   database name
+   * @param table
+   *   table name
+   * @param ignoreIfNotExists
+   *   if true, do not throw an error if the table or database does not exist
+   * @param purge
+   *   if true, completely remove the table data (skip trash)
+   * @throws NoSuchTableException
+   *   if the table or database does not exist and ignoreIfNotExists is false
    */
-  def dropTable(
-      db: String,
-      table: String,
-      ignoreIfNotExists: Boolean,
-      purge: Boolean): Unit
+  def dropTable(db: String, table: String, ignoreIfNotExists: Boolean, purge: Boolean): Unit
 
   def renameTable(db: String, oldName: String, newName: String): Unit
 
@@ -119,8 +118,8 @@ trait ExternalCatalog {
    * the table exists. Note that, even though we can specify database in `tableDefinition`, it's
    * used to identify the table, not to alter the table's database, which is not allowed.
    *
-   * Note: If the underlying implementation does not support altering a certain field,
-   * this becomes a no-op.
+   * Note: If the underlying implementation does not support altering a certain field, this
+   * becomes a no-op.
    */
   def alterTable(tableDefinition: CatalogTable): Unit
 
@@ -129,10 +128,14 @@ trait ExternalCatalog {
    * data schema should not have conflict column names with the existing partition columns, and
    * should still contain all the existing data columns.
    *
-   * @param db Database that table to alter schema for exists in
-   * @param table Name of table to alter schema for
-   * @param newDataSchema Updated data schema to be used for the table.
-   * @deprecated since 4.1.0 use `alterTableSchema` instead.
+   * @param db
+   *   Database that table to alter schema for exists in
+   * @param table
+   *   Name of table to alter schema for
+   * @param newDataSchema
+   *   Updated data schema to be used for the table.
+   * @deprecated
+   *   since 4.1.0 use `alterTableSchema` instead.
    */
   def alterTableDataSchema(db: String, table: String, newDataSchema: StructType): Unit
 
@@ -141,9 +144,12 @@ trait ExternalCatalog {
    *
    * All partition columns must be preserved.
    *
-   * @param db Database that table to alter schema for exists in
-   * @param table Name of table to alter schema for
-   * @param newSchema Updated data schema to be used for the table.
+   * @param db
+   *   Database that table to alter schema for exists in
+   * @param table
+   *   Name of table to alter schema for
+   * @param newSchema
+   *   Updated data schema to be used for the table.
    */
   def alterTableSchema(db: String, table: String, newSchema: StructType): Unit
 
@@ -165,8 +171,8 @@ trait ExternalCatalog {
   /**
    * Loads data into a table.
    *
-   * @param isSrcLocal Whether the source data is local, as defined by the "LOAD DATA LOCAL"
-   *                   HiveQL command.
+   * @param isSrcLocal
+   *   Whether the source data is local, as defined by the "LOAD DATA LOCAL" HiveQL command.
    */
   def loadTable(
       db: String,
@@ -178,8 +184,8 @@ trait ExternalCatalog {
   /**
    * Loads data into a partition.
    *
-   * @param isSrcLocal Whether the source data is local, as defined by the "LOAD DATA LOCAL"
-   *                   HiveQL command.
+   * @param isSrcLocal
+   *   Whether the source data is local, as defined by the "LOAD DATA LOCAL" HiveQL command.
    */
   def loadPartition(
       db: String,
@@ -217,8 +223,8 @@ trait ExternalCatalog {
       retainData: Boolean): Unit
 
   /**
-   * Override the specs of one or many existing table partitions, assuming they exist.
-   * This assumes index i of `specs` corresponds to index i of `newSpecs`.
+   * Override the specs of one or many existing table partitions, assuming they exist. This
+   * assumes index i of `specs` corresponds to index i of `newSpecs`.
    */
   def renamePartitions(
       db: String,
@@ -230,13 +236,10 @@ trait ExternalCatalog {
    * Alter one or many table partitions whose specs that match those specified in `parts`,
    * assuming the partitions exist.
    *
-   * Note: If the underlying implementation does not support altering a certain field,
-   * this becomes a no-op.
+   * Note: If the underlying implementation does not support altering a certain field, this
+   * becomes a no-op.
    */
-  def alterPartitions(
-      db: String,
-      table: String,
-      parts: Seq[CatalogTablePartition]): Unit
+  def alterPartitions(db: String, table: String, parts: Seq[CatalogTablePartition]): Unit
 
   def getPartition(db: String, table: String, spec: TablePartitionSpec): CatalogTablePartition
 
@@ -260,9 +263,12 @@ trait ExternalCatalog {
    * A partial partition spec may optionally be provided to filter the partitions returned, as
    * described in the `listPartitions` method.
    *
-   * @param db database name
-   * @param table table name
-   * @param partialSpec partition spec
+   * @param db
+   *   database name
+   * @param table
+   *   table name
+   * @param partialSpec
+   *   partition spec
    */
   def listPartitionNames(
       db: String,
@@ -272,13 +278,16 @@ trait ExternalCatalog {
   /**
    * List the metadata of all partitions that belong to the specified table, assuming it exists.
    *
-   * A partial partition spec may optionally be provided to filter the partitions returned.
-   * For instance, if there exist partitions (a='1', b='2'), (a='1', b='3') and (a='2', b='4'),
-   * then a partial spec of (a='1') will return the first two only.
+   * A partial partition spec may optionally be provided to filter the partitions returned. For
+   * instance, if there exist partitions (a='1', b='2'), (a='1', b='3') and (a='2', b='4'), then a
+   * partial spec of (a='1') will return the first two only.
    *
-   * @param db database name
-   * @param table table name
-   * @param partialSpec partition spec
+   * @param db
+   *   database name
+   * @param table
+   *   table name
+   * @param partialSpec
+   *   partition spec
    */
   def listPartitions(
       db: String,
@@ -289,10 +298,14 @@ trait ExternalCatalog {
    * List the metadata of partitions that belong to the specified table, assuming it exists, that
    * satisfy the given partition-pruning predicate expressions.
    *
-   * @param db database name
-   * @param table table name
-   * @param predicates partition-pruning predicates
-   * @param defaultTimeZoneId default timezone id to parse partition values of TimestampType
+   * @param db
+   *   database name
+   * @param table
+   *   table name
+   * @param predicates
+   *   partition-pruning predicates
+   * @param defaultTimeZoneId
+   *   default timezone id to parse partition values of TimestampType
    */
   def listPartitionsByFilter(
       db: String,

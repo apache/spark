@@ -55,9 +55,11 @@ class CastingSyntaxSuite extends AnalysisTest {
     assertEqual("123 :: double v", Alias(Cast(Literal(123), DoubleType), "v")())
     assertEqual("abc::double v", Alias(Cast(UnresolvedAttribute("abc"), DoubleType), "v")())
     assertEqual("`abc`::double v", Alias(Cast(UnresolvedAttribute("abc"), DoubleType), "v")())
-    assertEqual("abc.def::double v",
+    assertEqual(
+      "abc.def::double v",
       Alias(Cast(UnresolvedAttribute(Seq("abc", "def")), DoubleType), "v")())
-    assertEqual("`abc.def`::double v",
+    assertEqual(
+      "`abc.def`::double v",
       Alias(Cast(UnresolvedAttribute(Seq("abc.def")), DoubleType), "v")())
   }
 
@@ -82,13 +84,17 @@ class CastingSyntaxSuite extends AnalysisTest {
   test("functions") {
     assertEqual(
       "get_json_object(blob, '$.field')::int",
-      Cast(UnresolvedFunction("get_json_object",
-        Seq(UnresolvedAttribute("blob"), Literal("$.field")),
-        isDistinct = false), IntegerType))
+      Cast(
+        UnresolvedFunction(
+          "get_json_object",
+          Seq(UnresolvedAttribute("blob"), Literal("$.field")),
+          isDistinct = false),
+        IntegerType))
 
     assertEqual(
       "max(value::double)",
-      UnresolvedFunction("max",
+      UnresolvedFunction(
+        "max",
         Seq(Cast(UnresolvedAttribute("value"), DoubleType)),
         isDistinct = false))
 

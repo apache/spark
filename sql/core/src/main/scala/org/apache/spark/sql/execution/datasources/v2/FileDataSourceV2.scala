@@ -42,25 +42,29 @@ import org.apache.spark.util.Utils
  * A base interface for data source v2 implementations of the built-in file-based data sources.
  */
 trait FileDataSourceV2 extends TableProvider with DataSourceRegister {
+
   /**
-   * Returns a V1 [[FileFormat]] class of the same file data source.
-   * This is a solution for the following cases:
-   * 1. File datasource V2 implementations cause regression. Users can disable the problematic data
-   *    source via SQL configuration and fall back to FileFormat.
-   * 2. Catalog support is required, which is still under development for data source V2.
+   * Returns a V1 [[FileFormat]] class of the same file data source. This is a solution for the
+   * following cases:
+   *   1. File datasource V2 implementations cause regression. Users can disable the problematic
+   *      data source via SQL configuration and fall back to FileFormat.
+   *   2. Catalog support is required, which is still under development for data source V2.
    */
   def fallbackFileFormat: Class[_ <: FileFormat]
 
   lazy val sparkSession = SparkSession.active
 
   protected def getPaths(map: CaseInsensitiveStringMap): Seq[String] = {
-    val paths = Option(map.get("paths")).map { pathStr =>
-      FileDataSourceV2.readPathsToSeq(pathStr)
-    }.getOrElse(Seq.empty)
+    val paths = Option(map.get("paths"))
+      .map { pathStr =>
+        FileDataSourceV2.readPathsToSeq(pathStr)
+      }
+      .getOrElse(Seq.empty)
     paths ++ Option(map.get("path")).toSeq
   }
 
-  protected def getOptionsWithoutPaths(map: CaseInsensitiveStringMap): CaseInsensitiveStringMap = {
+  protected def getOptionsWithoutPaths(
+      map: CaseInsensitiveStringMap): CaseInsensitiveStringMap = {
     val withoutPath = map.asCaseSensitiveMap().asScala.filter { case (k, _) =>
       !k.equalsIgnoreCase("path") && !k.equalsIgnoreCase("paths")
     }
@@ -68,8 +72,8 @@ trait FileDataSourceV2 extends TableProvider with DataSourceRegister {
   }
 
   protected def getTableName(map: CaseInsensitiveStringMap, paths: Seq[String]): String = {
-    val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(
-      map.asCaseSensitiveMap().asScala.toMap)
+    val hadoopConf =
+      sparkSession.sessionState.newHadoopConfWithOptions(map.asCaseSensitiveMap().asScala.toMap)
     val name = shortName() + " " + paths.map(qualifiedPathName(_, hadoopConf)).mkString(",")
     Utils.redact(sparkSession.sessionState.conf.stringRedactionPattern, name)
   }
@@ -135,7 +139,11 @@ object FileDataSourceV2 {
         throw e
       case e: SchemaColumnConvertNotSupportedException =>
         throw QueryExecutionErrors.parquetColumnDataTypeMismatchError(
-          filePath, e.getColumn, e.getLogicalType, e.getPhysicalType, e)
+          filePath,
+          e.getColumn,
+          e.getLogicalType,
+          e.getPhysicalType,
+          e)
       case e: FileNotFoundException =>
         throw QueryExecutionErrors.fileNotExistError(filePath, e)
       case NonFatal(e) =>

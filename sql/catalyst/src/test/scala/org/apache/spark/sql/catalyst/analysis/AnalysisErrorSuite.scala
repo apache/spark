@@ -56,20 +56,22 @@ private[sql] case class UngroupableData(data: Map[Int, Int]) {
   def getData: Map[Int, Int] = data
 }
 
-case class TestFunction(
-    children: Seq[Expression],
-    inputTypes: Seq[AbstractDataType])
-  extends Expression with ImplicitCastInputTypes with Unevaluable {
+case class TestFunction(children: Seq[Expression], inputTypes: Seq[AbstractDataType])
+    extends Expression
+    with ImplicitCastInputTypes
+    with Unevaluable {
   override def nullable: Boolean = true
   override def dataType: DataType = StringType
-  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): Expression =
     copy(children = newChildren)
 }
 
 case class TestFunctionWithTypeCheckFailure(
     children: Seq[Expression],
     inputTypes: Seq[AbstractDataType])
-  extends Expression with Unevaluable {
+    extends Expression
+    with Unevaluable {
 
   override def checkInputDataTypes(): TypeCheckResult = {
     for ((child, idx) <- children.zipWithIndex) {
@@ -84,7 +86,8 @@ case class TestFunctionWithTypeCheckFailure(
 
   override def nullable: Boolean = true
   override def dataType: DataType = StringType
-  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): Expression =
     copy(children = newChildren)
 }
 
@@ -93,7 +96,8 @@ case class UnresolvedTestPlan() extends UnresolvedLeafNode
 case class SupportsNonDeterministicExpressionTestOperator(
     actions: Seq[Expression],
     allowNonDeterministicExpression: Boolean)
-  extends LeafNode with SupportsNonDeterministicExpression {
+    extends LeafNode
+    with SupportsNonDeterministicExpression {
   override def output: Seq[Attribute] = Seq()
 }
 
@@ -118,7 +122,10 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
       caseSensitive: Boolean = true): Unit = {
     test(name) {
       assertAnalysisErrorCondition(
-        plan, condition, messageParameters, caseSensitive = caseSensitive)
+        plan,
+        condition,
+        messageParameters,
+        caseSensitive = caseSensitive)
     }
   }
 
@@ -126,9 +133,9 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
 
   errorTest(
     "scalar subquery with 2 columns",
-     testRelation.select(
-       (ScalarSubquery(testRelation.select($"a", dateLit.as("b"))) + Literal(1)).as("a")),
-       "Scalar subquery must return only one column, but got 2" :: Nil)
+    testRelation.select(
+      (ScalarSubquery(testRelation.select($"a", dateLit.as("b"))) + Literal(1)).as("a")),
+    "Scalar subquery must return only one column, but got 2" :: Nil)
 
   errorTest(
     "scalar subquery with no column",
@@ -202,8 +209,9 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
           SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
           UnspecifiedFrame)).as("window")),
     condition = "DISTINCT_WINDOW_FUNCTION_UNSUPPORTED",
-    messageParameters = Map("windowExpr" ->
-      s"""
+    messageParameters = Map(
+      "windowExpr" ->
+        s"""
          |"count(DISTINCT b) OVER (PARTITION BY a ORDER BY b ASC NULLS FIRST
          | RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)"
          |""".stripMargin.replaceAll("\n", "")))
@@ -212,9 +220,8 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
     assertAnalysisErrorCondition(
       CatalystSqlParser.parsePlan("SELECT hex(DISTINCT a) FROM TaBlE"),
       expectedErrorCondition = "INVALID_SQL_SYNTAX.FUNCTION_WITH_UNSUPPORTED_SYNTAX",
-      expectedMessageParameters = Map(
-        "prettyName" -> toSQLId("hex"),
-        "syntax" -> toSQLStmt("DISTINCT")),
+      expectedMessageParameters =
+        Map("prettyName" -> toSQLId("hex"), "syntax" -> toSQLStmt("DISTINCT")),
       Array(ExpectedContext("hex(DISTINCT a)", 7, 21)))
   }
 
@@ -222,9 +229,8 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
     assertAnalysisErrorCondition(
       CatalystSqlParser.parsePlan("SELECT hex(a) FILTER (WHERE c = 1) FROM TaBlE2"),
       expectedErrorCondition = "INVALID_SQL_SYNTAX.FUNCTION_WITH_UNSUPPORTED_SYNTAX",
-      expectedMessageParameters = Map(
-        "prettyName" -> toSQLId("hex"),
-        "syntax" -> toSQLStmt("FILTER CLAUSE")),
+      expectedMessageParameters =
+        Map("prettyName" -> toSQLId("hex"), "syntax" -> toSQLStmt("FILTER CLAUSE")),
       Array(ExpectedContext("hex(a) FILTER (WHERE c = 1)", 7, 33)))
   }
 
@@ -232,9 +238,8 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
     assertAnalysisErrorCondition(
       CatalystSqlParser.parsePlan("SELECT percent_rank(DISTINCT a) OVER () FROM TaBlE"),
       expectedErrorCondition = "INVALID_SQL_SYNTAX.FUNCTION_WITH_UNSUPPORTED_SYNTAX",
-      expectedMessageParameters = Map(
-        "prettyName" -> toSQLId("percent_rank"),
-        "syntax" -> toSQLStmt("DISTINCT")),
+      expectedMessageParameters =
+        Map("prettyName" -> toSQLId("percent_rank"), "syntax" -> toSQLStmt("DISTINCT")),
       Array(ExpectedContext("percent_rank(DISTINCT a) OVER ()", 7, 38)))
   }
 
@@ -243,16 +248,14 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
       CatalystSqlParser.parsePlan(
         "SELECT percent_rank(a) FILTER (WHERE c > 1) OVER () FROM TaBlE2"),
       expectedErrorCondition = "INVALID_SQL_SYNTAX.FUNCTION_WITH_UNSUPPORTED_SYNTAX",
-      expectedMessageParameters = Map(
-        "prettyName" -> toSQLId("percent_rank"),
-        "syntax" -> toSQLStmt("FILTER CLAUSE")),
+      expectedMessageParameters =
+        Map("prettyName" -> toSQLId("percent_rank"), "syntax" -> toSQLStmt("FILTER CLAUSE")),
       Array(ExpectedContext("percent_rank(a) FILTER (WHERE c > 1) OVER ()", 7, 50)))
   }
 
   test("window specification error") {
     assertAnalysisErrorCondition(
-      inputPlan = CatalystSqlParser.parsePlan(
-        """
+      inputPlan = CatalystSqlParser.parsePlan("""
           |WITH sample_data AS (
           |    SELECT 1 AS a, 10 AS b UNION ALL
           |    SELECT 2 AS a, 20 AS b
@@ -263,30 +266,30 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
           |GROUP BY a, b;
           |""".stripMargin),
       expectedErrorCondition = "MISSING_WINDOW_SPECIFICATION",
-      expectedMessageParameters = Map(
-        "windowName" -> "b",
-        "docroot" -> SPARK_DOC_ROOT))
+      expectedMessageParameters = Map("windowName" -> "b", "docroot" -> SPARK_DOC_ROOT))
   }
 
   test("higher order function with filter predicate") {
     assertAnalysisErrorCondition(
-      CatalystSqlParser.parsePlan("SELECT aggregate(array(1, 2, 3), 0, (acc, x) -> acc + x) " +
-        "FILTER (WHERE c > 1)"),
+      CatalystSqlParser.parsePlan(
+        "SELECT aggregate(array(1, 2, 3), 0, (acc, x) -> acc + x) " +
+          "FILTER (WHERE c > 1)"),
       expectedErrorCondition = "INVALID_SQL_SYNTAX.FUNCTION_WITH_UNSUPPORTED_SYNTAX",
-      expectedMessageParameters = Map(
-        "prettyName" -> toSQLId("aggregate"),
-        "syntax" -> toSQLStmt("FILTER CLAUSE")),
-      Array(ExpectedContext(
-        "aggregate(array(1, 2, 3), 0, (acc, x) -> acc + x) FILTER (WHERE c > 1)", 7, 76)))
+      expectedMessageParameters =
+        Map("prettyName" -> toSQLId("aggregate"), "syntax" -> toSQLStmt("FILTER CLAUSE")),
+      Array(
+        ExpectedContext(
+          "aggregate(array(1, 2, 3), 0, (acc, x) -> acc + x) FILTER (WHERE c > 1)",
+          7,
+          76)))
   }
 
   test("function don't support ignore nulls") {
     assertAnalysisErrorCondition(
       CatalystSqlParser.parsePlan("SELECT hex(a) IGNORE NULLS FROM TaBlE2"),
       expectedErrorCondition = "INVALID_SQL_SYNTAX.FUNCTION_WITH_UNSUPPORTED_SYNTAX",
-      expectedMessageParameters = Map(
-        "prettyName" -> toSQLId("hex"),
-        "syntax" -> toSQLStmt("IGNORE NULLS")),
+      expectedMessageParameters =
+        Map("prettyName" -> toSQLId("hex"), "syntax" -> toSQLStmt("IGNORE NULLS")),
       Array(ExpectedContext("hex(a) IGNORE NULLS", 7, 25)))
   }
 
@@ -294,9 +297,8 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
     assertAnalysisErrorCondition(
       CatalystSqlParser.parsePlan("SELECT percent_rank(a) IGNORE NULLS FROM TaBlE2"),
       expectedErrorCondition = "INVALID_SQL_SYNTAX.FUNCTION_WITH_UNSUPPORTED_SYNTAX",
-      expectedMessageParameters = Map(
-        "prettyName" -> toSQLId("percent_rank"),
-        "syntax" -> toSQLStmt("IGNORE NULLS")),
+      expectedMessageParameters =
+        Map("prettyName" -> toSQLId("percent_rank"), "syntax" -> toSQLStmt("IGNORE NULLS")),
       Array(ExpectedContext("percent_rank(a) IGNORE NULLS", 7, 34)))
   }
 
@@ -304,9 +306,8 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
     assertAnalysisErrorCondition(
       CatalystSqlParser.parsePlan("SELECT count(a) IGNORE NULLS FROM TaBlE2"),
       expectedErrorCondition = "INVALID_SQL_SYNTAX.FUNCTION_WITH_UNSUPPORTED_SYNTAX",
-      expectedMessageParameters = Map(
-        "prettyName" -> toSQLId("count"),
-        "syntax" -> toSQLStmt("IGNORE NULLS")),
+      expectedMessageParameters =
+        Map("prettyName" -> toSQLId("count"), "syntax" -> toSQLStmt("IGNORE NULLS")),
       Array(ExpectedContext("count(a) IGNORE NULLS", 7, 27)))
   }
 
@@ -315,11 +316,10 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
       CatalystSqlParser.parsePlan(
         "SELECT aggregate(array(1, 2, 3), 0, (acc, x) -> acc + x) IGNORE NULLS"),
       expectedErrorCondition = "INVALID_SQL_SYNTAX.FUNCTION_WITH_UNSUPPORTED_SYNTAX",
-      expectedMessageParameters = Map(
-        "prettyName" -> toSQLId("aggregate"),
-        "syntax" -> toSQLStmt("IGNORE NULLS")),
-      Array(ExpectedContext(
-        "aggregate(array(1, 2, 3), 0, (acc, x) -> acc + x) IGNORE NULLS", 7, 68)))
+      expectedMessageParameters =
+        Map("prettyName" -> toSQLId("aggregate"), "syntax" -> toSQLStmt("IGNORE NULLS")),
+      Array(
+        ExpectedContext("aggregate(array(1, 2, 3), 0, (acc, x) -> acc + x) IGNORE NULLS", 7, 68)))
   }
 
   errorConditionTest(
@@ -327,8 +327,7 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
     testRelation.groupBy($"a")(
       Max(Count(Literal(1)).toAggregateExpression()).toAggregateExpression()),
     condition = "NESTED_AGGREGATE_FUNCTION",
-    messageParameters = Map.empty
-  )
+    messageParameters = Map.empty)
 
   errorTest(
     "offset window function",
@@ -391,7 +390,6 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
       "inputType" -> "\"FLOAT\"",
       "requiredType" -> "\"INT\""))
 
-
   errorConditionTest(
     "the buckets of ntile window function is not int literal",
     testRelation2.select(
@@ -416,7 +414,8 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
 
   errorConditionTest(
     "unresolved attributes with a generated name",
-    testRelation2.groupBy($"a")(max($"b"))
+    testRelation2
+      .groupBy($"a")(max($"b"))
       .where(sum($"b") > 0)
       .orderBy($"havingCondition".asc),
     "UNRESOLVED_COLUMN.WITH_SUGGESTION",
@@ -426,8 +425,7 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
     "unresolved star expansion in max",
     testRelation2.groupBy($"a")(sum(UnresolvedStar(None))),
     condition = "INVALID_USAGE_OF_STAR_OR_REGEX",
-    messageParameters = Map("elem" -> "'*'", "prettyName" -> "expression `sum`")
-  )
+    messageParameters = Map("elem" -> "'*'", "prettyName" -> "expression `sum`"))
 
   errorConditionTest(
     "sorting by unsupported column types",
@@ -460,30 +458,21 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
     "missing group by",
     testRelation2.groupBy($"a")($"b"),
     "MISSING_AGGREGATION",
-    messageParameters = Map(
-      "expression" -> "\"b\"",
-      "expressionAnyValue" -> "\"any_value(b)\"")
-  )
+    messageParameters = Map("expression" -> "\"b\"", "expressionAnyValue" -> "\"any_value(b)\""))
 
   errorConditionTest(
     "ambiguous field",
     nestedRelation.select($"top.duplicateField"),
     condition = "AMBIGUOUS_REFERENCE_TO_FIELDS",
-    messageParameters = Map(
-      "field" -> "`duplicateField`",
-      "count" -> "2"),
-    caseSensitive = false
-  )
+    messageParameters = Map("field" -> "`duplicateField`", "count" -> "2"),
+    caseSensitive = false)
 
   errorConditionTest(
     "ambiguous field due to case insensitivity",
     nestedRelation.select($"top.differentCase"),
     condition = "AMBIGUOUS_REFERENCE_TO_FIELDS",
-    messageParameters = Map(
-      "field" -> "`differentCase`",
-      "count" -> "2"),
-    caseSensitive = false
-  )
+    messageParameters = Map("field" -> "`differentCase`", "count" -> "2"),
+    caseSensitive = false)
 
   errorConditionTest(
     "missing field",
@@ -526,7 +515,7 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
   errorTest(
     "union with a incompatible column type and compatible column types",
     testRelation3.union(testRelation4),
-    "union"  :: "compatible column types" :: "map" :: "decimal" :: Nil)
+    "union" :: "compatible column types" :: "map" :: "decimal" :: Nil)
 
   errorTest(
     "intersect with incompatible column types",
@@ -558,7 +547,8 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
   errorConditionTest(
     "slide duration greater than window in time window",
     testRelation2.select(
-      TimeWindow(Literal("2016-01-01 01:01:01"), "1 second", "2 second", "0 second").as("window")),
+      TimeWindow(Literal("2016-01-01 01:01:01"), "1 second", "2 second", "0 second").as(
+        "window")),
     "DATATYPE_MISMATCH.PARAMETER_CONSTRAINT_VIOLATION",
     Map(
       "sqlExpr" -> "\"window(2016-01-01 01:01:01, 1000000, 2000000, 0)\"",
@@ -566,14 +556,13 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
       "leftExprValue" -> "2000000L",
       "constraint" -> "<=",
       "rightExprName" -> "`window_duration`",
-      "rightExprValue" -> "1000000L"
-    )
-  )
+      "rightExprValue" -> "1000000L"))
 
   errorConditionTest(
     "start time greater than slide duration in time window",
     testRelation.select(
-      TimeWindow(Literal("2016-01-01 01:01:01"), "1 second", "1 second", "1 minute").as("window")),
+      TimeWindow(Literal("2016-01-01 01:01:01"), "1 second", "1 second", "1 minute").as(
+        "window")),
     "DATATYPE_MISMATCH.PARAMETER_CONSTRAINT_VIOLATION",
     Map(
       "sqlExpr" -> "\"window(2016-01-01 01:01:01, 1000000, 1000000, 60000000)\"",
@@ -581,14 +570,13 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
       "leftExprValue" -> "60000000L",
       "constraint" -> "<",
       "rightExprName" -> "`slide_duration`",
-      "rightExprValue" -> "1000000L"
-    )
-  )
+      "rightExprValue" -> "1000000L"))
 
   errorConditionTest(
     "start time equal to slide duration in time window",
     testRelation.select(
-      TimeWindow(Literal("2016-01-01 01:01:01"), "1 second", "1 second", "1 second").as("window")),
+      TimeWindow(Literal("2016-01-01 01:01:01"), "1 second", "1 second", "1 second").as(
+        "window")),
     "DATATYPE_MISMATCH.PARAMETER_CONSTRAINT_VIOLATION",
     Map(
       "sqlExpr" -> "\"window(2016-01-01 01:01:01, 1000000, 1000000, 1000000)\"",
@@ -596,14 +584,13 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
       "leftExprValue" -> "1000000L",
       "constraint" -> "<",
       "rightExprName" -> "`slide_duration`",
-      "rightExprValue" -> "1000000L"
-    )
-  )
+      "rightExprValue" -> "1000000L"))
 
   errorConditionTest(
     "SPARK-21590: absolute value of start time greater than slide duration in time window",
     testRelation.select(
-      TimeWindow(Literal("2016-01-01 01:01:01"), "1 second", "1 second", "-1 minute").as("window")),
+      TimeWindow(Literal("2016-01-01 01:01:01"), "1 second", "1 second", "-1 minute").as(
+        "window")),
     "DATATYPE_MISMATCH.PARAMETER_CONSTRAINT_VIOLATION",
     Map(
       "sqlExpr" -> "\"window(2016-01-01 01:01:01, 1000000, 1000000, -60000000)\"",
@@ -611,14 +598,13 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
       "leftExprValue" -> "60000000L",
       "constraint" -> "<",
       "rightExprName" -> "`slide_duration`",
-      "rightExprValue" -> "1000000L"
-    )
-  )
+      "rightExprValue" -> "1000000L"))
 
   errorConditionTest(
     "SPARK-21590: absolute value of start time equal to slide duration in time window",
     testRelation.select(
-      TimeWindow(Literal("2016-01-01 01:01:01"), "1 second", "1 second", "-1 second").as("window")),
+      TimeWindow(Literal("2016-01-01 01:01:01"), "1 second", "1 second", "-1 second").as(
+        "window")),
     "DATATYPE_MISMATCH.PARAMETER_CONSTRAINT_VIOLATION",
     Map(
       "sqlExpr" -> "\"window(2016-01-01 01:01:01, 1000000, 1000000, -1000000)\"",
@@ -626,186 +612,136 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
       "leftExprValue" -> "1000000L",
       "constraint" -> "<",
       "rightExprName" -> "`slide_duration`",
-      "rightExprValue" -> "1000000L"
-    )
-  )
+      "rightExprValue" -> "1000000L"))
 
   errorConditionTest(
     "negative window duration in time window",
     testRelation.select(
-      TimeWindow(Literal("2016-01-01 01:01:01"), "-1 second", "1 second", "0 second").as("window")),
-      "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+      TimeWindow(Literal("2016-01-01 01:01:01"), "-1 second", "1 second", "0 second").as(
+        "window")),
+    "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
     Map(
       "sqlExpr" -> "\"window(2016-01-01 01:01:01, -1000000, 1000000, 0)\"",
       "exprName" -> "`window_duration`",
       "valueRange" -> s"(0, 9223372036854775807]",
-      "currentValue" -> "-1000000L"
-    )
-  )
+      "currentValue" -> "-1000000L"))
 
   errorConditionTest(
     "zero window duration in time window",
     testRelation.select(
-      TimeWindow(Literal("2016-01-01 01:01:01"), "0 second", "1 second", "0 second").as("window")),
+      TimeWindow(Literal("2016-01-01 01:01:01"), "0 second", "1 second", "0 second").as(
+        "window")),
     "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
     Map(
       "sqlExpr" -> "\"window(2016-01-01 01:01:01, 0, 1000000, 0)\"",
       "exprName" -> "`window_duration`",
       "valueRange" -> "(0, 9223372036854775807]",
-      "currentValue" -> "0L"
-    )
-  )
+      "currentValue" -> "0L"))
 
   errorConditionTest(
     "negative slide duration in time window",
     testRelation.select(
-      TimeWindow(Literal("2016-01-01 01:01:01"), "1 second", "-1 second", "0 second").as("window")),
+      TimeWindow(Literal("2016-01-01 01:01:01"), "1 second", "-1 second", "0 second").as(
+        "window")),
     "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
     Map(
       "sqlExpr" -> "\"window(2016-01-01 01:01:01, 1000000, -1000000, 0)\"",
       "exprName" -> "`slide_duration`",
       "valueRange" -> "(0, 9223372036854775807]",
-      "currentValue" -> "-1000000L"
-    )
-  )
+      "currentValue" -> "-1000000L"))
 
   errorConditionTest(
     "zero slide duration in time window",
     testRelation.select(
-      TimeWindow(Literal("2016-01-01 01:01:01"), "1 second", "0 second", "0 second").as("window")),
+      TimeWindow(Literal("2016-01-01 01:01:01"), "1 second", "0 second", "0 second").as(
+        "window")),
     "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
     Map(
       "sqlExpr" -> "\"window(2016-01-01 01:01:01, 1000000, 0, 0)\"",
       "exprName" -> "`slide_duration`",
       "valueRange" -> "(0, 9223372036854775807]",
-      "currentValue" -> "0L"
-    )
-  )
+      "currentValue" -> "0L"))
 
   errorTest(
     "generator nested in expressions",
     listRelation.select(Explode($"list") + 1),
     """The generator is not supported: nested in expressions "(explode(list) + 1)""""
-      :: Nil
-  )
+      :: Nil)
 
   errorTest(
-    "SPARK-30998: unsupported nested inner generators",
-    {
-      val nestedListRelation = LocalRelation(
-        AttributeReference("nestedList", ArrayType(ArrayType(IntegerType)))())
+    "SPARK-30998: unsupported nested inner generators", {
+      val nestedListRelation =
+        LocalRelation(AttributeReference("nestedList", ArrayType(ArrayType(IntegerType)))())
       nestedListRelation.select(Explode(Explode($"nestedList")))
     },
     "The generator is not supported: nested in expressions " +
-      """"explode(explode(nestedList))"""" :: Nil
-  )
+      """"explode(explode(nestedList))"""" :: Nil)
 
   errorTest(
     "SPARK-30998: unsupported nested inner generators for aggregates",
-    testRelation.select(Explode(Explode(
-      CreateArray(CreateArray(min($"a") :: max($"a") :: Nil) :: Nil)))),
+    testRelation.select(
+      Explode(Explode(CreateArray(CreateArray(min($"a") :: max($"a") :: Nil) :: Nil)))),
     "The generator is not supported: nested in expressions " +
-      """"explode(explode(array(array(min(a), max(a)))))"""" :: Nil
-  )
+      """"explode(explode(array(array(min(a), max(a)))))"""" :: Nil)
 
   errorTest(
     "generator nested in expressions for aggregates",
     testRelation.select(Explode(CreateArray(min($"a") :: max($"a") :: Nil)) + 1),
     "The generator is not supported: nested in expressions " +
-      """"(explode(array(min(a), max(a))) + 1)"""" :: Nil
-  )
+      """"(explode(array(min(a), max(a))) + 1)"""" :: Nil)
 
   errorTest(
     "generator appears in operator which is not Project",
     listRelation.sortBy(Explode($"list").asc),
-    "The generator is not supported: outside the SELECT clause, found: Sort" :: Nil
-  )
+    "The generator is not supported: outside the SELECT clause, found: Sort" :: Nil)
 
   errorConditionTest(
     "an evaluated limit class must not be string",
     testRelation.limit(Literal(UTF8String.fromString("abc"), StringType)),
     "INVALID_LIMIT_LIKE_EXPRESSION.DATA_TYPE",
-    Map(
-      "name" -> "limit",
-      "expr" -> "\"abc\"",
-      "dataType" -> "\"STRING\""
-    )
-  )
+    Map("name" -> "limit", "expr" -> "\"abc\"", "dataType" -> "\"STRING\""))
 
   errorConditionTest(
     "an evaluated limit class must not be long",
     testRelation.limit(Literal(10L, LongType)),
     "INVALID_LIMIT_LIKE_EXPRESSION.DATA_TYPE",
-    Map(
-      "name" -> "limit",
-      "expr" -> "\"10\"",
-      "dataType" -> "\"BIGINT\""
-    )
-  )
+    Map("name" -> "limit", "expr" -> "\"10\"", "dataType" -> "\"BIGINT\""))
 
   errorConditionTest(
     "an evaluated limit class must not be null",
     testRelation.limit(Literal(null, IntegerType)),
     "INVALID_LIMIT_LIKE_EXPRESSION.IS_NULL",
-    Map(
-      "name" -> "limit",
-      "expr" -> "\"NULL\""
-    )
-  )
+    Map("name" -> "limit", "expr" -> "\"NULL\""))
 
   errorConditionTest(
     "num_rows in limit clause must be equal to or greater than 0",
     listRelation.limit(-1),
     "INVALID_LIMIT_LIKE_EXPRESSION.IS_NEGATIVE",
-    Map(
-      "name" -> "limit",
-      "expr" -> "\"-1\"",
-      "v" -> "-1"
-    )
-  )
+    Map("name" -> "limit", "expr" -> "\"-1\"", "v" -> "-1"))
 
   errorConditionTest(
     "an evaluated offset class must not be string",
     testRelation.offset(Literal(UTF8String.fromString("abc"), StringType)),
     "INVALID_LIMIT_LIKE_EXPRESSION.DATA_TYPE",
-    Map(
-      "name" -> "offset",
-      "expr" -> "\"abc\"",
-      "dataType" -> "\"STRING\""
-    )
-  )
+    Map("name" -> "offset", "expr" -> "\"abc\"", "dataType" -> "\"STRING\""))
 
   errorConditionTest(
     "an evaluated offset class must not be long",
     testRelation.offset(Literal(10L, LongType)),
     "INVALID_LIMIT_LIKE_EXPRESSION.DATA_TYPE",
-    Map(
-      "name" -> "offset",
-      "expr" -> "\"10\"",
-      "dataType" -> "\"BIGINT\""
-    )
-  )
+    Map("name" -> "offset", "expr" -> "\"10\"", "dataType" -> "\"BIGINT\""))
 
   errorConditionTest(
     "an evaluated offset class must not be null",
     testRelation.offset(Literal(null, IntegerType)),
     "INVALID_LIMIT_LIKE_EXPRESSION.IS_NULL",
-    Map(
-      "name" -> "offset",
-      "expr" -> "\"NULL\""
-    )
-  )
+    Map("name" -> "offset", "expr" -> "\"NULL\""))
 
   errorConditionTest(
     "num_rows in offset clause must be equal to or greater than 0",
     testRelation.offset(-1),
     "INVALID_LIMIT_LIKE_EXPRESSION.IS_NEGATIVE",
-    Map(
-      "name" -> "offset",
-      "expr" -> "\"-1\"",
-      "v" -> "-1"
-    )
-  )
+    Map("name" -> "offset", "expr" -> "\"-1\"", "v" -> "-1"))
 
   errorConditionTest(
     "the sum of num_rows in limit clause and num_rows in offset clause less than Int.MaxValue",
@@ -815,16 +751,11 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
 
   errorTest(
     "more than one generators for aggregates in SELECT",
-    testRelation.select(Explode(CreateArray(min($"a") :: Nil)),
+    testRelation.select(
+      Explode(CreateArray(min($"a") :: Nil)),
       Explode(CreateArray(max($"a") :: Nil))),
     "The generator is not supported: only one generator allowed per SELECT clause but found 2: " +
-      """"explode(array(min(a)))", "explode(array(max(a)))"""" :: Nil
-  )
-
-
-
-
-
+      """"explode(array(min(a)))", "explode(array(max(a)))"""" :: Nil)
 
   test("SPARK-6452 regression test") {
     // CheckAnalysis should throw AnalysisException when Aggregate contains missing attribute(s)
@@ -834,10 +765,7 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
     val otherA = AttributeReference("a", LongType)(exprId = ExprId(2))
     val attrC = AttributeReference("c", LongType)(exprId = ExprId(3))
     val aliases = Alias(sum(attrA), "b")() :: Alias(sum(attrC), "d")() :: Nil
-    val plan = Aggregate(
-      Nil,
-      aliases,
-      LocalRelation(otherA))
+    val plan = Aggregate(Nil, aliases, LocalRelation(otherA))
 
     assert(plan.resolved)
 
@@ -848,9 +776,7 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
         "missingAttributes" -> "\"a\", \"c\"",
         "input" -> "\"a\"",
         "operator" -> s"!Aggregate [${aliases.mkString(", ")}]",
-        "operation" -> "\"a\""
-      )
-    )
+        "operation" -> "\"a\""))
   }
 
   test("error test for self-join") {
@@ -860,8 +786,9 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
         SimpleAnalyzer.checkAnalysis(join)
       },
       condition = "INTERNAL_ERROR",
-      parameters = Map("message" ->
-        """
+      parameters = Map(
+        "message" ->
+          """
           |Failure when resolving conflicting references in Join:
           |'Join Cross
           |:- LocalRelation <empty>, [a#x]
@@ -877,8 +804,9 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
         SimpleAnalyzer.checkAnalysis(intersect)
       },
       condition = "INTERNAL_ERROR",
-      parameters = Map("message" ->
-        """
+      parameters = Map(
+        "message" ->
+          """
           |Failure when resolving conflicting references in Intersect All:
           |'Intersect All true
           |:- LocalRelation <empty>, [a#x]
@@ -894,8 +822,9 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
         SimpleAnalyzer.checkAnalysis(except)
       },
       condition = "INTERNAL_ERROR",
-      parameters = Map("message" ->
-        """
+      parameters = Map(
+        "message" ->
+          """
           |Failure when resolving conflicting references in Except All:
           |'Except All true
           |:- LocalRelation <empty>, [a#x]
@@ -906,16 +835,24 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
 
   test("error test for self-asOfJoin") {
     val asOfJoin =
-      AsOfJoin(testRelation, testRelation, testRelation.output(0), testRelation.output(0),
-      None, Inner, tolerance = None, allowExactMatches = true,
-      direction = AsOfJoinDirection("backward"))
+      AsOfJoin(
+        testRelation,
+        testRelation,
+        testRelation.output(0),
+        testRelation.output(0),
+        None,
+        Inner,
+        tolerance = None,
+        allowExactMatches = true,
+        direction = AsOfJoinDirection("backward"))
     checkError(
       exception = intercept[SparkException] {
         SimpleAnalyzer.checkAnalysis(asOfJoin)
       },
       condition = "INTERNAL_ERROR",
-      parameters = Map("message" ->
-        """
+      parameters = Map(
+        "message" ->
+          """
           |Failure when resolving conflicting references in AsOfJoin:
           |'AsOfJoin (a#x >= a#x), Inner
           |:- LocalRelation <empty>, [a#x]
@@ -938,11 +875,20 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
     }
 
     val supportedDataTypes = Seq(
-      StringType, BinaryType,
-      NullType, BooleanType,
-      ByteType, ShortType, IntegerType, LongType,
-      FloatType, DoubleType, DecimalType(25, 5), DecimalType(6, 5),
-      DateType, TimestampType,
+      StringType,
+      BinaryType,
+      NullType,
+      BooleanType,
+      ByteType,
+      ShortType,
+      IntegerType,
+      LongType,
+      FloatType,
+      DoubleType,
+      DecimalType(25, 5),
+      DecimalType(6, 5),
+      DateType,
+      TimestampType,
       ArrayType(IntegerType),
       MapType(StringType, LongType),
       new StructType()
@@ -972,25 +918,18 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
     assertAnalysisErrorCondition(
       inputPlan = plan,
       expectedErrorCondition = "NESTED_AGGREGATE_FUNCTION",
-      expectedMessageParameters = Map.empty
-    )
+      expectedMessageParameters = Map.empty)
   }
 
   test("Join can work on binary types but can't work on map types") {
     val left = LocalRelation($"a".binary, Symbol("b").map(StringType, StringType))
     val right = LocalRelation($"c".binary, Symbol("d").map(StringType, StringType))
 
-    val plan1 = left.join(
-      right,
-      joinType = Cross,
-      condition = Some($"a" === $"c"))
+    val plan1 = left.join(right, joinType = Cross, condition = Some($"a" === $"c"))
 
     assertAnalysisSuccess(plan1)
 
-    val plan2 = left.join(
-      right,
-      joinType = Cross,
-      condition = Some($"b" === $"d"))
+    val plan2 = left.join(right, joinType = Cross, condition = Some($"b" === $"d"))
 
     assertAnalysisErrorCondition(
       inputPlan = plan2,
@@ -998,10 +937,8 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
       expectedMessageParameters = Map(
         "functionName" -> "`=`",
         "dataType" -> "\"MAP<STRING, STRING>\"",
-        "sqlExpr" -> "\"(b = d)\""
-      ),
-      caseSensitive = true
-    )
+        "sqlExpr" -> "\"(b = d)\""),
+      caseSensitive = true)
   }
 
   test("PredicateSubQuery is used outside of a allowed nodes") {
@@ -1043,67 +980,73 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
 
     val plan3 = Filter(
       Exists(
-        Sample(0.0, 0.5, false, 1L,
-          Filter(EqualTo(UnresolvedAttribute("a"), b), LocalRelation(b))).select("b")
-      ),
+        Sample(
+          0.0,
+          0.5,
+          false,
+          1L,
+          Filter(EqualTo(UnresolvedAttribute("a"), b), LocalRelation(b))).select("b")),
       LocalRelation(a))
-    assertAnalysisError(plan3,
-                        "Accessing outer query column is not allowed in" :: Nil)
+    assertAnalysisError(plan3, "Accessing outer query column is not allowed in" :: Nil)
   }
 
   test("Error on filter condition containing aggregate expressions") {
     val a = AttributeReference("a", IntegerType)()
     val b = AttributeReference("b", IntegerType)()
     val plan = Filter($"a" === UnresolvedFunction("max", Seq(b), true), LocalRelation(a, b))
-    assertAnalysisErrorCondition(plan,
+    assertAnalysisErrorCondition(
+      plan,
       expectedErrorCondition = "INVALID_WHERE_CONDITION",
-      expectedMessageParameters = Map(
-        "condition" -> "\"(a = max(DISTINCT b))\"",
-        "expressionList" -> "max(DISTINCT b)"))
+      expectedMessageParameters =
+        Map("condition" -> "\"(a = max(DISTINCT b))\"", "expressionList" -> "max(DISTINCT b)"))
   }
 
-  test("SPARK-30811: CTE should not cause stack overflow when " +
-    "it refers to non-existent table with same name") {
+  test(
+    "SPARK-30811: CTE should not cause stack overflow when " +
+      "it refers to non-existent table with same name") {
     val plan = UnresolvedWith(
       UnresolvedRelation(TableIdentifier("t")),
-      Seq(("t", SubqueryAlias("t",
-        Project(
-          Alias(Literal(1), "x")() :: Nil,
-          UnresolvedRelation(TableIdentifier("t", Option("nonexist"))))), None)))
-    assertAnalysisErrorCondition(plan,
+      Seq(
+        (
+          "t",
+          SubqueryAlias(
+            "t",
+            Project(
+              Alias(Literal(1), "x")() :: Nil,
+              UnresolvedRelation(TableIdentifier("t", Option("nonexist"))))),
+          None)))
+    assertAnalysisErrorCondition(
+      plan,
       expectedErrorCondition = "TABLE_OR_VIEW_NOT_FOUND",
       Map("relationName" -> "`nonexist`.`t`"))
   }
 
   test("SPARK-33909: Check rand functions seed is legal at analyzer side") {
-    Seq((Rand("a".attr), "\"rand(a)\""),
-      (Randn("a".attr), "\"randn(a)\"")).foreach {
+    Seq((Rand("a".attr), "\"rand(a)\""), (Randn("a".attr), "\"randn(a)\"")).foreach {
       case (r, expectedArg) =>
         val plan = Project(Seq(r.as("r")), testRelation)
-        assertAnalysisErrorCondition(plan,
+        assertAnalysisErrorCondition(
+          plan,
           expectedErrorCondition = "SEED_EXPRESSION_IS_UNFOLDABLE",
-          expectedMessageParameters = Map(
-            "seedExpr" -> "\"a\"",
-            "exprWithSeed" -> expectedArg),
-          caseSensitive = false
-        )
+          expectedMessageParameters = Map("seedExpr" -> "\"a\"", "exprWithSeed" -> expectedArg),
+          caseSensitive = false)
     }
     Seq(
       Rand(1.0) -> ("\"rand(1.0)\"", "\"1.0\"", "\"DOUBLE\""),
       Rand("1") -> ("\"rand(1)\"", "\"1\"", "\"STRING\""),
-      Randn("a") -> ("\"randn(a)\"", "\"a\"", "\"STRING\"")
-    ).foreach { case (r, (sqlExpr, inputSql, inputType)) =>
-      val plan = Project(Seq(r.as("r")), testRelation)
-      assertAnalysisErrorCondition(plan,
-        expectedErrorCondition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-        expectedMessageParameters = Map(
-          "sqlExpr" -> sqlExpr,
-          "paramIndex" -> "first",
-          "inputSql" -> inputSql,
-          "inputType" -> inputType,
-          "requiredType" -> "(\"INT\" or \"BIGINT\")"),
-        caseSensitive = false
-      )
+      Randn("a") -> ("\"randn(a)\"", "\"a\"", "\"STRING\"")).foreach {
+      case (r, (sqlExpr, inputSql, inputType)) =>
+        val plan = Project(Seq(r.as("r")), testRelation)
+        assertAnalysisErrorCondition(
+          plan,
+          expectedErrorCondition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+          expectedMessageParameters = Map(
+            "sqlExpr" -> sqlExpr,
+            "paramIndex" -> "first",
+            "inputSql" -> inputSql,
+            "inputType" -> inputType,
+            "requiredType" -> "(\"INT\" or \"BIGINT\")"),
+          caseSensitive = false)
     }
   }
 
@@ -1113,11 +1056,12 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
     val t = LocalRelation(c1, c2)
     val plan = Aggregate(
       ScalarSubquery(
-        Aggregate(Nil, sum($"c2").as("sum") :: Nil,
-          Filter($"t1.c1" === $"t2.c1",
-            t.as("t2")))
-      ) :: Nil,
-      sum($"c2").as("sum") :: Nil, t.as("t1"))
+        Aggregate(
+          Nil,
+          sum($"c2").as("sum") :: Nil,
+          Filter($"t1.c1" === $"t2.c1", t.as("t2")))) :: Nil,
+      sum($"c2").as("sum") :: Nil,
+      t.as("t1"))
     assertAnalysisErrorCondition(
       plan,
       expectedErrorCondition =
@@ -1132,14 +1076,12 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
     val plan = Aggregate(
       $"c1" :: Nil,
       ScalarSubquery(
-        Aggregate(Nil, sum($"c2").as("sum") :: Nil,
-          Filter($"t1.c1" === $"t2.c1",
-            t.as("t2")))
-      ).as("sub") :: Nil, t.as("t1"))
+        Aggregate(Nil, sum($"c2").as("sum") :: Nil, Filter($"t1.c1" === $"t2.c1", t.as("t2"))))
+        .as("sub") :: Nil,
+      t.as("t1"))
     assertAnalysisErrorCondition(
       plan,
-      expectedErrorCondition =
-        "SCALAR_SUBQUERY_IS_IN_GROUP_BY_OR_AGGREGATE_FUNCTION",
+      expectedErrorCondition = "SCALAR_SUBQUERY_IS_IN_GROUP_BY_OR_AGGREGATE_FUNCTION",
       expectedMessageParameters = Map("sqlExpr" -> "\"scalarsubquery(c1)\""))
   }
 
@@ -1147,9 +1089,8 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
     "SPARK-34920: error code to error message",
     testRelation2.where($"bad_column" > 1).groupBy($"a")(UnresolvedAlias(max($"b"))),
     condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-    messageParameters = Map(
-      "objectName" -> "`bad_column`",
-      "proposal" -> "`a`, `c`, `d`, `b`, `e`"))
+    messageParameters =
+      Map("objectName" -> "`bad_column`", "proposal" -> "`a`, `c`, `d`, `b`, `e`"))
 
   errorConditionTest(
     "SPARK-39783: backticks in error message for candidate column with dots",
@@ -1157,9 +1098,7 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
     // the error message suggest the existing column with correct backticks
     testRelation6.select($"`the`.`id`"),
     condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-    messageParameters = Map(
-      "objectName" -> "`the`.`id`",
-      "proposal" -> "`the.id`"))
+    messageParameters = Map("objectName" -> "`the`.`id`", "proposal" -> "`the.id`"))
 
   errorConditionTest(
     "SPARK-39783: backticks in error message for candidate struct column",
@@ -1167,15 +1106,14 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
     // the error message suggest the existing column with correct backticks
     nestedRelation2.select($"`top.aField`"),
     condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-    messageParameters = Map(
-      "objectName" -> "`top.aField`",
-      "proposal" -> "`top`"))
+    messageParameters = Map("objectName" -> "`top.aField`", "proposal" -> "`top`"))
 
   test("SPARK-35673: fail if the plan still contains UnresolvedHint after analysis") {
     val hintName = "some_random_hint_that_does_not_exist"
-    val plan = UnresolvedHint(hintName, Seq.empty,
-      Project(Alias(Literal(1), "x")() :: Nil, OneRowRelation())
-    )
+    val plan = UnresolvedHint(
+      hintName,
+      Seq.empty,
+      Project(Alias(Literal(1), "x")() :: Nil, OneRowRelation()))
     assert(plan.resolved)
 
     checkError(
@@ -1204,8 +1142,7 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
     assertAnalysisErrorCondition(
       Project(ScalarSubquery(t0.select(star("t2"))).as("sub") :: Nil, t1),
       expectedErrorCondition = "CANNOT_RESOLVE_STAR_EXPAND",
-      expectedMessageParameters = Map("targetString" -> "`t2`", "columns" -> "")
-    )
+      expectedMessageParameters = Map("targetString" -> "`t2`", "columns" -> ""))
   }
 
   test("SPARK-35618: Invalid star usage in subqueries") {
@@ -1219,15 +1156,13 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
     assertAnalysisErrorCondition(
       Filter(EqualTo(a, ScalarSubquery(t2.select(sum(c)).where(star("t1") === b))), t1),
       expectedErrorCondition = "INVALID_USAGE_OF_STAR_OR_REGEX",
-      expectedMessageParameters = Map("elem" -> "'*'", "prettyName" -> "expression `equalto`")
-    )
+      expectedMessageParameters = Map("elem" -> "'*'", "prettyName" -> "expression `equalto`"))
 
     // SELECT * FROM t1 JOIN t2 ON (EXISTS (SELECT 1 FROM t2 WHERE t1.* = b))
     assertAnalysisErrorCondition(
       t1.join(t2, condition = Some(Exists(t2.select(1).where(star("t1") === b)))),
       expectedErrorCondition = "INVALID_USAGE_OF_STAR_OR_REGEX",
-      expectedMessageParameters = Map("elem" -> "'*'", "prettyName" -> "expression `equalto`")
-    )
+      expectedMessageParameters = Map("elem" -> "'*'", "prettyName" -> "expression `equalto`"))
   }
 
   test("SPARK-36488: Regular expression expansion should fail with a meaningful message") {
@@ -1235,55 +1170,44 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
       assertAnalysisErrorCondition(
         testRelation.select(Divide(UnresolvedRegex(".?", None, false), "a")),
         expectedErrorCondition = "INVALID_USAGE_OF_STAR_OR_REGEX",
-        expectedMessageParameters = Map(
-          "elem" -> "regular expression '.?'",
-          "prettyName" -> "expression `divide`")
-      )
+        expectedMessageParameters =
+          Map("elem" -> "regular expression '.?'", "prettyName" -> "expression `divide`"))
       assertAnalysisErrorCondition(
         testRelation.select(
           Divide(UnresolvedRegex(".?", None, false), UnresolvedRegex(".*", None, false))),
         expectedErrorCondition = "INVALID_USAGE_OF_STAR_OR_REGEX",
-        expectedMessageParameters = Map(
-          "elem" -> "regular expressions '.?', '.*'",
-          "prettyName" -> "expression `divide`")
-      )
+        expectedMessageParameters =
+          Map("elem" -> "regular expressions '.?', '.*'", "prettyName" -> "expression `divide`"))
       assertAnalysisErrorCondition(
         testRelation.select(
           Divide(UnresolvedRegex(".?", None, false), UnresolvedRegex(".?", None, false))),
         expectedErrorCondition = "INVALID_USAGE_OF_STAR_OR_REGEX",
-        expectedMessageParameters = Map(
-          "elem" -> "regular expression '.?'",
-          "prettyName" -> "expression `divide`")
-      )
+        expectedMessageParameters =
+          Map("elem" -> "regular expression '.?'", "prettyName" -> "expression `divide`"))
       assertAnalysisErrorCondition(
         testRelation.select(Divide(UnresolvedStar(None), "a")),
         expectedErrorCondition = "INVALID_USAGE_OF_STAR_OR_REGEX",
-        expectedMessageParameters = Map(
-          "elem" -> "'*'",
-          "prettyName" -> "expression `divide`")
-      )
+        expectedMessageParameters = Map("elem" -> "'*'", "prettyName" -> "expression `divide`"))
       assertAnalysisErrorCondition(
         testRelation.select(Divide(UnresolvedStar(None), UnresolvedStar(None))),
         expectedErrorCondition = "INVALID_USAGE_OF_STAR_OR_REGEX",
-        expectedMessageParameters = Map(
-          "elem" -> "'*'",
-          "prettyName" -> "expression `divide`")
-      )
+        expectedMessageParameters = Map("elem" -> "'*'", "prettyName" -> "expression `divide`"))
       assertAnalysisErrorCondition(
         testRelation.select(Divide(UnresolvedStar(None), UnresolvedRegex(".?", None, false))),
         expectedErrorCondition = "INVALID_USAGE_OF_STAR_OR_REGEX",
-        expectedMessageParameters = Map(
-          "elem" -> "'*' and regular expression '.?'",
-          "prettyName" -> "expression `divide`")
-      )
+        expectedMessageParameters =
+          Map("elem" -> "'*' and regular expression '.?'", "prettyName" -> "expression `divide`"))
       assertAnalysisErrorCondition(
-        testRelation.select(Least(Seq(UnresolvedStar(None),
-          UnresolvedRegex(".*", None, false), UnresolvedRegex(".?", None, false)))),
+        testRelation.select(
+          Least(
+            Seq(
+              UnresolvedStar(None),
+              UnresolvedRegex(".*", None, false),
+              UnresolvedRegex(".?", None, false)))),
         expectedErrorCondition = "INVALID_USAGE_OF_STAR_OR_REGEX",
         expectedMessageParameters = Map(
           "elem" -> "'*' and regular expressions '.*', '.?'",
-          "prettyName" -> "expression `least`")
-      )
+          "prettyName" -> "expression `least`"))
     }
   }
 
@@ -1297,23 +1221,20 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
           SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
           UnspecifiedFrame)).as("window")),
     condition = "EXPRESSION_TYPE_IS_NOT_ORDERABLE",
-    messageParameters = Map(
-      "expr" -> "\"_w0\"",
-      "exprType" -> "\"MAP<STRING, STRING>\""))
+    messageParameters = Map("expr" -> "\"_w0\"", "exprType" -> "\"MAP<STRING, STRING>\""))
 
   test("SPARK-48871: SupportsNonDeterministicExpression allows non-deterministic expressions") {
     val nonDeterministicExpressions = Seq(new Rand())
     val tolerantPlan =
       SupportsNonDeterministicExpressionTestOperator(
-        nonDeterministicExpressions, allowNonDeterministicExpression = true)
+        nonDeterministicExpressions,
+        allowNonDeterministicExpression = true)
     assertAnalysisSuccess(tolerantPlan)
 
     val intolerantPlan =
       SupportsNonDeterministicExpressionTestOperator(
-        nonDeterministicExpressions, allowNonDeterministicExpression = false)
-    assertAnalysisError(
-      intolerantPlan,
-      "INVALID_NON_DETERMINISTIC_EXPRESSIONS" :: Nil
-    )
+        nonDeterministicExpressions,
+        allowNonDeterministicExpression = false)
+    assertAnalysisError(intolerantPlan, "INVALID_NON_DETERMINISTIC_EXPRESSIONS" :: Nil)
   }
 }

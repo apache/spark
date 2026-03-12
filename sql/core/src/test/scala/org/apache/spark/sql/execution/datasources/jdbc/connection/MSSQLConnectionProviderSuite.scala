@@ -26,7 +26,10 @@ class MSSQLConnectionProviderSuite extends ConnectionProviderSuiteBase {
     val provider = new MSSQLConnectionProvider()
     val driver = registerDriver(provider.driverClass)
 
-    testProviders(driver, provider, options("jdbc:sqlserver://localhost/mssql"),
+    testProviders(
+      driver,
+      provider,
+      options("jdbc:sqlserver://localhost/mssql"),
       options("jdbc:sqlserver://localhost/mssql;jaasConfigurationName=custommssql"))
   }
 
@@ -36,7 +39,10 @@ class MSSQLConnectionProviderSuite extends ConnectionProviderSuiteBase {
     }
     val driver = registerDriver(provider.driverClass)
 
-    testProviders(driver, provider, options("jdbc:sqlserver://localhost/mssql"),
+    testProviders(
+      driver,
+      provider,
+      options("jdbc:sqlserver://localhost/mssql"),
       options("jdbc:sqlserver://localhost/mssql;jaasConfigurationName=custommssql"))
   }
 

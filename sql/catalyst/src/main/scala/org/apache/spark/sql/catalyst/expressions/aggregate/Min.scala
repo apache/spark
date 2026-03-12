@@ -48,17 +48,12 @@ case class Min(child: Expression) extends DeclarativeAggregate with UnaryLike[Ex
   override lazy val aggBufferAttributes: Seq[AttributeReference] = min :: Nil
 
   override lazy val initialValues: Seq[Expression] = Seq(
-    /* min = */ Literal.create(null, child.dataType)
-  )
+    /* min = */ Literal.create(null, child.dataType))
 
-  override lazy val updateExpressions: Seq[Expression] = Seq(
-    /* min = */ least(min, child)
-  )
+  override lazy val updateExpressions: Seq[Expression] = Seq( /* min = */ least(min, child))
 
   override lazy val mergeExpressions: Seq[Expression] = {
-    Seq(
-      /* min = */ least(min.left, min.right)
-    )
+    Seq( /* min = */ least(min.left, min.right))
   }
 
   override lazy val evaluateExpression: AttributeReference = min

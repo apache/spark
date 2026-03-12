@@ -44,18 +44,26 @@ class SelectedFieldSuite extends AnalysisTest {
   //  |    |-- field9: map (nullable = true)
   //  |    |    |-- key: string
   //  |    |    |-- value: integer (valueContainsNull = false)
-  private val nestedComplex = StructType(ignoredField ::
-      StructField("col2", StructType(
-        StructField("field1", IntegerType) ::
-        StructField("field6", StructType(
-          StructField("subfield1", StringType, nullable = false) ::
-          StructField("subfield2", StringType) :: Nil)) ::
-        StructField("field7", StructType(
-          StructField("subfield1", StructType(
-            StructField("subsubfield1", IntegerType) ::
-            StructField("subsubfield2", IntegerType) :: Nil)) :: Nil)) ::
-        StructField("field9",
-          MapType(StringType, IntegerType, valueContainsNull = false)) :: Nil)) :: Nil)
+  private val nestedComplex = StructType(
+    ignoredField ::
+      StructField(
+        "col2",
+        StructType(
+          StructField("field1", IntegerType) ::
+            StructField(
+              "field6",
+              StructType(StructField("subfield1", StringType, nullable = false) ::
+                StructField("subfield2", StringType) :: Nil)) ::
+            StructField(
+              "field7",
+              StructType(
+                StructField(
+                  "subfield1",
+                  StructType(StructField("subsubfield1", IntegerType) ::
+                    StructField("subsubfield2", IntegerType) :: Nil)) :: Nil)) ::
+            StructField(
+              "field9",
+              MapType(StringType, IntegerType, valueContainsNull = false)) :: Nil)) :: Nil)
 
   test("SelectedField should not match an attribute reference") {
     val testRelation = LocalRelation(nestedComplex)
@@ -74,45 +82,73 @@ class SelectedFieldSuite extends AnalysisTest {
   //  |    |    |    |-- subfield2: integer (nullable = true)
   //  |    |    |    |-- subfield3: array (nullable = true)
   //  |    |    |    |    |-- element: integer (containsNull = true)
-  private val structOfArray = StructType(ignoredField ::
-    StructField("col2", StructType(
-      StructField("field2", ArrayType(IntegerType, containsNull = false)) ::
-      StructField("field3", ArrayType(StructType(
-        StructField("subfield1", IntegerType) ::
-          StructField("subfield2", IntegerType) ::
-          StructField("subfield3", ArrayType(IntegerType)) :: Nil)), nullable = false)
-      :: Nil))
-    :: Nil)
+  private val structOfArray = StructType(
+    ignoredField ::
+      StructField(
+        "col2",
+        StructType(
+          StructField("field2", ArrayType(IntegerType, containsNull = false)) ::
+            StructField(
+              "field3",
+              ArrayType(StructType(StructField("subfield1", IntegerType) ::
+                StructField("subfield2", IntegerType) ::
+                StructField("subfield3", ArrayType(IntegerType)) :: Nil)),
+              nullable = false)
+            :: Nil))
+      :: Nil)
 
   testSelect(structOfArray, "col2.field2", "col2.field2[0] as foo") {
-    StructField("col2", StructType(
-      StructField("field2", ArrayType(IntegerType, containsNull = false)) :: Nil))
+    StructField(
+      "col2",
+      StructType(StructField("field2", ArrayType(IntegerType, containsNull = false)) :: Nil))
   }
 
   testSelect(nestedComplex, "col2.field9", "col2.field9['foo'] as foo") {
-    StructField("col2", StructType(
-      StructField("field9", MapType(StringType, IntegerType, valueContainsNull = false)) :: Nil))
+    StructField(
+      "col2",
+      StructType(
+        StructField(
+          "field9",
+          MapType(StringType, IntegerType, valueContainsNull = false)) :: Nil))
   }
 
-  testSelect(structOfArray, "col2.field3.subfield3", "col2.field3[0].subfield3 as foo",
-      "col2.field3.subfield3[0] as foo", "col2.field3[0].subfield3[0] as foo") {
-    StructField("col2", StructType(
-      StructField("field3", ArrayType(StructType(
-        StructField("subfield3", ArrayType(IntegerType)) :: Nil)), nullable = false) :: Nil))
+  testSelect(
+    structOfArray,
+    "col2.field3.subfield3",
+    "col2.field3[0].subfield3 as foo",
+    "col2.field3.subfield3[0] as foo",
+    "col2.field3[0].subfield3[0] as foo") {
+    StructField(
+      "col2",
+      StructType(
+        StructField(
+          "field3",
+          ArrayType(StructType(StructField("subfield3", ArrayType(IntegerType)) :: Nil)),
+          nullable = false) :: Nil))
   }
 
-  testSelect(structOfArray, "element_at(col2.field3, 1).subfield3 as foo",
+  testSelect(
+    structOfArray,
+    "element_at(col2.field3, 1).subfield3 as foo",
     "element_at(col2.field3.subfield3, 0) as foo",
     "element_at(element_at(col2.field3, 1).subfield3, 0) as foo") {
-    StructField("col2", StructType(
-      StructField("field3", ArrayType(StructType(
-        StructField("subfield3", ArrayType(IntegerType)) :: Nil)), nullable = false) :: Nil))
+    StructField(
+      "col2",
+      StructType(
+        StructField(
+          "field3",
+          ArrayType(StructType(StructField("subfield3", ArrayType(IntegerType)) :: Nil)),
+          nullable = false) :: Nil))
   }
 
   testSelect(structOfArray, "col2.field3.subfield1") {
-    StructField("col2", StructType(
-      StructField("field3", ArrayType(StructType(
-        StructField("subfield1", IntegerType) :: Nil)), nullable = false) :: Nil))
+    StructField(
+      "col2",
+      StructType(
+        StructField(
+          "field3",
+          ArrayType(StructType(StructField("subfield1", IntegerType) :: Nil)),
+          nullable = false) :: Nil))
   }
 
   //  |-- col1: string (nullable = false)
@@ -132,38 +168,65 @@ class SelectedFieldSuite extends AnalysisTest {
   //  |    |    |    |    |    |-- element: integer (containsNull = false)
   private val structWithMap = StructType(
     ignoredField ::
-    StructField("col2", StructType(
-      StructField("field4", MapType(StringType, StructType(
-        StructField("subfield1", IntegerType) ::
-          StructField("subfield2", ArrayType(IntegerType, containsNull = false)) :: Nil
-      ), valueContainsNull = false)) ::
-      StructField("field8", MapType(StringType, ArrayType(StructType(
-        StructField("subfield1", IntegerType) ::
-          StructField("subfield2", ArrayType(IntegerType, containsNull = false)) :: Nil)
-      ), valueContainsNull = false)) :: Nil
-    )) :: Nil
-  )
+      StructField(
+        "col2",
+        StructType(StructField(
+          "field4",
+          MapType(
+            StringType,
+            StructType(StructField("subfield1", IntegerType) ::
+              StructField("subfield2", ArrayType(IntegerType, containsNull = false)) :: Nil),
+            valueContainsNull = false)) ::
+          StructField(
+            "field8",
+            MapType(
+              StringType,
+              ArrayType(StructType(StructField("subfield1", IntegerType) ::
+                StructField("subfield2", ArrayType(IntegerType, containsNull = false)) :: Nil)),
+              valueContainsNull = false)) :: Nil)) :: Nil)
 
   testSelect(structWithMap, "col2.field4['foo'].subfield1 as foo") {
-    StructField("col2", StructType(
-      StructField("field4", MapType(StringType, StructType(
-        StructField("subfield1", IntegerType) :: Nil), valueContainsNull = false)) :: Nil))
+    StructField(
+      "col2",
+      StructType(
+        StructField(
+          "field4",
+          MapType(
+            StringType,
+            StructType(StructField("subfield1", IntegerType) :: Nil),
+            valueContainsNull = false)) :: Nil))
   }
 
-  testSelect(structWithMap,
-    "col2.field4['foo'].subfield2 as foo", "col2.field4['foo'].subfield2[0] as foo") {
-    StructField("col2", StructType(
-      StructField("field4", MapType(StringType, StructType(
-        StructField("subfield2", ArrayType(IntegerType, containsNull = false))
-          :: Nil), valueContainsNull = false)) :: Nil))
+  testSelect(
+    structWithMap,
+    "col2.field4['foo'].subfield2 as foo",
+    "col2.field4['foo'].subfield2[0] as foo") {
+    StructField(
+      "col2",
+      StructType(
+        StructField(
+          "field4",
+          MapType(
+            StringType,
+            StructType(StructField("subfield2", ArrayType(IntegerType, containsNull = false))
+              :: Nil),
+            valueContainsNull = false)) :: Nil))
   }
 
-  testSelect(structWithMap, "element_at(col2.field4, 'foo').subfield2 as foo",
+  testSelect(
+    structWithMap,
+    "element_at(col2.field4, 'foo').subfield2 as foo",
     "element_at(element_at(col2.field4, 'foo').subfield2, 1) as foo") {
-    StructField("col2", StructType(
-      StructField("field4", MapType(StringType, StructType(
-        StructField("subfield2", ArrayType(IntegerType, containsNull = false))
-          :: Nil), valueContainsNull = false)) :: Nil))
+    StructField(
+      "col2",
+      StructType(
+        StructField(
+          "field4",
+          MapType(
+            StringType,
+            StructType(StructField("subfield2", ArrayType(IntegerType, containsNull = false))
+              :: Nil),
+            valueContainsNull = false)) :: Nil))
   }
 
   //  |-- col1: string (nullable = false)
@@ -179,74 +242,122 @@ class SelectedFieldSuite extends AnalysisTest {
   //  |    |    |    |    |-- subsubfield2: integer (nullable = true)
   private val structWithArray = StructType(
     ignoredField ::
-    StructField("col2", StructType(
-      StructField("field5", ArrayType(StructType(
-        StructField("subfield1", StructType(
-          StructField("subsubfield1", IntegerType) ::
-          StructField("subsubfield2", IntegerType) :: Nil), nullable = false) ::
-        StructField("subfield2", StructType(
-          StructField("subsubfield1", StructType(
-            StructField("subsubsubfield1", StringType) :: Nil)) ::
-          StructField("subsubfield2", IntegerType) :: Nil)) :: Nil)), nullable = false) :: Nil)
-    ) :: Nil
-  )
+      StructField(
+        "col2",
+        StructType(
+          StructField(
+            "field5",
+            ArrayType(
+              StructType(
+                StructField(
+                  "subfield1",
+                  StructType(StructField("subsubfield1", IntegerType) ::
+                    StructField("subsubfield2", IntegerType) :: Nil),
+                  nullable = false) ::
+                  StructField(
+                    "subfield2",
+                    StructType(StructField(
+                      "subsubfield1",
+                      StructType(StructField("subsubsubfield1", StringType) :: Nil)) ::
+                      StructField("subsubfield2", IntegerType) :: Nil)) :: Nil)),
+            nullable = false) :: Nil)) :: Nil)
 
   testSelect(structWithArray, "col2.field5.subfield1") {
-    StructField("col2", StructType(
-      StructField("field5", ArrayType(StructType(
-        StructField("subfield1", StructType(
-          StructField("subsubfield1", IntegerType) ::
-          StructField("subsubfield2", IntegerType) :: Nil), nullable = false)
-          :: Nil)), nullable = false) :: Nil))
+    StructField(
+      "col2",
+      StructType(
+        StructField(
+          "field5",
+          ArrayType(
+            StructType(
+              StructField(
+                "subfield1",
+                StructType(StructField("subsubfield1", IntegerType) ::
+                  StructField("subsubfield2", IntegerType) :: Nil),
+                nullable = false)
+                :: Nil)),
+          nullable = false) :: Nil))
   }
 
   testSelect(structWithArray, "col2.field5.subfield1.subsubfield1") {
-    StructField("col2", StructType(
-      StructField("field5", ArrayType(StructType(
-        StructField("subfield1", StructType(
-          StructField("subsubfield1", IntegerType) :: Nil), nullable = false)
-          :: Nil)), nullable = false) :: Nil))
+    StructField(
+      "col2",
+      StructType(
+        StructField(
+          "field5",
+          ArrayType(
+            StructType(
+              StructField(
+                "subfield1",
+                StructType(StructField("subsubfield1", IntegerType) :: Nil),
+                nullable = false)
+                :: Nil)),
+          nullable = false) :: Nil))
   }
 
   testSelect(structWithArray, "col2.field5.subfield2.subsubfield1.subsubsubfield1") {
-    StructField("col2", StructType(
-      StructField("field5", ArrayType(StructType(
-        StructField("subfield2", StructType(
-          StructField("subsubfield1", StructType(
-            StructField("subsubsubfield1", StringType) :: Nil)) :: Nil))
-          :: Nil)), nullable = false) :: Nil))
+    StructField(
+      "col2",
+      StructType(
+        StructField(
+          "field5",
+          ArrayType(
+            StructType(
+              StructField(
+                "subfield2",
+                StructType(StructField(
+                  "subsubfield1",
+                  StructType(StructField("subsubsubfield1", StringType) :: Nil)) :: Nil))
+                :: Nil)),
+          nullable = false) :: Nil))
   }
 
   testSelect(structWithMap, "col2.field8['foo'][0].subfield1 as foo") {
-    StructField("col2", StructType(
-      StructField("field8", MapType(StringType, ArrayType(StructType(
-        StructField("subfield1", IntegerType) :: Nil)), valueContainsNull = false)) :: Nil))
+    StructField(
+      "col2",
+      StructType(
+        StructField(
+          "field8",
+          MapType(
+            StringType,
+            ArrayType(StructType(StructField("subfield1", IntegerType) :: Nil)),
+            valueContainsNull = false)) :: Nil))
   }
 
   testSelect(nestedComplex, "col2.field1") {
-    StructField("col2", StructType(
-      StructField("field1", IntegerType) :: Nil))
+    StructField("col2", StructType(StructField("field1", IntegerType) :: Nil))
   }
 
   testSelect(nestedComplex, "col2.field6") {
-    StructField("col2", StructType(
-      StructField("field6", StructType(
-        StructField("subfield1", StringType, nullable = false) ::
-        StructField("subfield2", StringType) :: Nil)) :: Nil))
+    StructField(
+      "col2",
+      StructType(
+        StructField(
+          "field6",
+          StructType(StructField("subfield1", StringType, nullable = false) ::
+            StructField("subfield2", StringType) :: Nil)) :: Nil))
   }
 
   testSelect(nestedComplex, "col2.field6.subfield1") {
-    StructField("col2", StructType(
-      StructField("field6", StructType(
-        StructField("subfield1", StringType, nullable = false) :: Nil)) :: Nil))
+    StructField(
+      "col2",
+      StructType(
+        StructField(
+          "field6",
+          StructType(StructField("subfield1", StringType, nullable = false) :: Nil)) :: Nil))
   }
 
   testSelect(nestedComplex, "col2.field7.subfield1") {
-    StructField("col2", StructType(
-      StructField("field7", StructType(
-        StructField("subfield1", StructType(
-          StructField("subsubfield1", IntegerType) ::
-          StructField("subsubfield2", IntegerType) :: Nil)) :: Nil)) :: Nil))
+    StructField(
+      "col2",
+      StructType(
+        StructField(
+          "field7",
+          StructType(
+            StructField(
+              "subfield1",
+              StructType(StructField("subsubfield1", IntegerType) ::
+                StructField("subsubfield2", IntegerType) :: Nil)) :: Nil)) :: Nil))
   }
 
   //  |-- col1: string (nullable = false)
@@ -258,32 +369,54 @@ class SelectedFieldSuite extends AnalysisTest {
   //  |    |    |-- field2: map (nullable = true)
   //  |    |    |    |-- key: string
   //  |    |    |    |-- value: integer (valueContainsNull = false)
-  private val arrayWithStructAndMap = StructType(Array(
-    StructField("col3", ArrayType(StructType(
-      StructField("field1", StructType(
-        StructField("subfield1", IntegerType, nullable = false) ::
-        StructField("subfield2", IntegerType) :: Nil)) ::
-      StructField("field2", MapType(StringType, IntegerType, valueContainsNull = false))
-      :: Nil), containsNull = false), nullable = false)
-  ))
+  private val arrayWithStructAndMap = StructType(
+    Array(
+      StructField(
+        "col3",
+        ArrayType(
+          StructType(
+            StructField(
+              "field1",
+              StructType(StructField("subfield1", IntegerType, nullable = false) ::
+                StructField("subfield2", IntegerType) :: Nil)) ::
+              StructField("field2", MapType(StringType, IntegerType, valueContainsNull = false))
+              :: Nil),
+          containsNull = false),
+        nullable = false)))
 
   testSelect(arrayWithStructAndMap, "col3.field1.subfield1") {
-    StructField("col3", ArrayType(StructType(
-      StructField("field1", StructType(
-        StructField("subfield1", IntegerType, nullable = false) :: Nil))
-        :: Nil), containsNull = true), nullable = false)
+    StructField(
+      "col3",
+      ArrayType(
+        StructType(
+          StructField(
+            "field1",
+            StructType(StructField("subfield1", IntegerType, nullable = false) :: Nil))
+            :: Nil),
+        containsNull = true),
+      nullable = false)
   }
 
   testSelect(arrayWithStructAndMap, "col3.field2['foo'] as foo") {
-    StructField("col3", ArrayType(StructType(
-      StructField("field2", MapType(StringType, IntegerType, valueContainsNull = false))
-        :: Nil), containsNull = true), nullable = false)
+    StructField(
+      "col3",
+      ArrayType(
+        StructType(
+          StructField("field2", MapType(StringType, IntegerType, valueContainsNull = false))
+            :: Nil),
+        containsNull = true),
+      nullable = false)
   }
 
   testSelect(arrayWithStructAndMap, "element_at(col3.field2, 'foo') as foo") {
-    StructField("col3", ArrayType(StructType(
-      StructField("field2", MapType(StringType, IntegerType, valueContainsNull = false))
-        :: Nil), containsNull = true), nullable = false)
+    StructField(
+      "col3",
+      ArrayType(
+        StructType(
+          StructField("field2", MapType(StringType, IntegerType, valueContainsNull = false))
+            :: Nil),
+        containsNull = true),
+      nullable = false)
   }
 
   //  |-- col1: string (nullable = false)
@@ -296,26 +429,47 @@ class SelectedFieldSuite extends AnalysisTest {
   //  |    |    |-- field2: map (nullable = true)
   //  |    |    |    |-- key: string
   //  |    |    |    |-- value: integer (valueContainsNull = false)
-  private val col4 = StructType(Array(ignoredField,
-    StructField("col4", MapType(StringType, StructType(
-      StructField("field1", StructType(
-        StructField("subfield1", IntegerType, nullable = false) ::
-        StructField("subfield2", IntegerType) :: Nil)) ::
-        StructField("field2", MapType(StringType, IntegerType, valueContainsNull = false))
-        :: Nil), valueContainsNull = false), nullable = false)
-  ))
+  private val col4 = StructType(
+    Array(
+      ignoredField,
+      StructField(
+        "col4",
+        MapType(
+          StringType,
+          StructType(
+            StructField(
+              "field1",
+              StructType(StructField("subfield1", IntegerType, nullable = false) ::
+                StructField("subfield2", IntegerType) :: Nil)) ::
+              StructField("field2", MapType(StringType, IntegerType, valueContainsNull = false))
+              :: Nil),
+          valueContainsNull = false),
+        nullable = false)))
 
   testSelect(col4, "col4['foo'].field1.subfield1 as foo") {
-    StructField("col4", MapType(StringType, StructType(
-      StructField("field1", StructType(
-        StructField("subfield1", IntegerType, nullable = false) :: Nil))
-        :: Nil), valueContainsNull = false), nullable = false)
+    StructField(
+      "col4",
+      MapType(
+        StringType,
+        StructType(
+          StructField(
+            "field1",
+            StructType(StructField("subfield1", IntegerType, nullable = false) :: Nil))
+            :: Nil),
+        valueContainsNull = false),
+      nullable = false)
   }
 
   testSelect(col4, "col4['foo'].field2['bar'] as foo") {
-    StructField("col4", MapType(StringType, StructType(
-      StructField("field2", MapType(StringType, IntegerType, valueContainsNull = false))
-        :: Nil), valueContainsNull = false), nullable = false)
+    StructField(
+      "col4",
+      MapType(
+        StringType,
+        StructType(
+          StructField("field2", MapType(StringType, IntegerType, valueContainsNull = false))
+            :: Nil),
+        valueContainsNull = false),
+      nullable = false)
   }
 
   //  |-- col1: string (nullable = false)
@@ -326,29 +480,47 @@ class SelectedFieldSuite extends AnalysisTest {
   //  |    |    |    |-- field1: struct (nullable = true)
   //  |    |    |    |    |-- subfield1: integer (nullable = true)
   //  |    |    |    |    |-- subfield2: integer (nullable = true)
-  private val arrayOfStruct = StructType(Array(ignoredField,
-    StructField("col5", ArrayType(MapType(StringType, StructType(
-      StructField("field1", StructType(
-        StructField("subfield1", IntegerType) ::
-        StructField("subfield2", IntegerType) :: Nil)) :: Nil), valueContainsNull = false)))
-  ))
+  private val arrayOfStruct = StructType(
+    Array(
+      ignoredField,
+      StructField(
+        "col5",
+        ArrayType(MapType(
+          StringType,
+          StructType(StructField(
+            "field1",
+            StructType(StructField("subfield1", IntegerType) ::
+              StructField("subfield2", IntegerType) :: Nil)) :: Nil),
+          valueContainsNull = false)))))
 
   testSelect(arrayOfStruct, "col5[0]['foo'].field1.subfield1 as foo") {
-    StructField("col5", ArrayType(MapType(StringType, StructType(
-      StructField("field1", StructType(
-        StructField("subfield1", IntegerType) :: Nil)) :: Nil), valueContainsNull = false)))
+    StructField(
+      "col5",
+      ArrayType(MapType(
+        StringType,
+        StructType(
+          StructField("field1", StructType(StructField("subfield1", IntegerType) :: Nil)) :: Nil),
+        valueContainsNull = false)))
   }
 
   testSelect(arrayOfStruct, "map_values(col5[0]).field1.subfield1 as foo") {
-    StructField("col5", ArrayType(MapType(StringType, StructType(
-      StructField("field1", StructType(
-        StructField("subfield1", IntegerType) :: Nil)) :: Nil), valueContainsNull = false)))
+    StructField(
+      "col5",
+      ArrayType(MapType(
+        StringType,
+        StructType(
+          StructField("field1", StructType(StructField("subfield1", IntegerType) :: Nil)) :: Nil),
+        valueContainsNull = false)))
   }
 
   testSelect(arrayOfStruct, "map_values(col5[0]).field1.subfield2 as foo") {
-    StructField("col5", ArrayType(MapType(StringType, StructType(
-      StructField("field1", StructType(
-        StructField("subfield2", IntegerType) :: Nil)) :: Nil), valueContainsNull = false)))
+    StructField(
+      "col5",
+      ArrayType(MapType(
+        StringType,
+        StructType(
+          StructField("field1", StructType(StructField("subfield2", IntegerType) :: Nil)) :: Nil),
+        valueContainsNull = false)))
   }
 
   //  |-- col1: string (nullable = false)
@@ -359,22 +531,45 @@ class SelectedFieldSuite extends AnalysisTest {
   //  |    |    |    |-- field1: struct (nullable = true)
   //  |    |    |    |    |-- subfield1: integer (nullable = true)
   //  |    |    |    |    |-- subfield2: integer (nullable = true)
-  private val mapOfArray = StructType(Array(ignoredField,
-    StructField("col6", MapType(StringType, ArrayType(StructType(
-      StructField("field1", StructType(
-        StructField("subfield1", IntegerType) ::
-        StructField("subfield2", IntegerType) :: Nil)) :: Nil), containsNull = false)))))
+  private val mapOfArray = StructType(
+    Array(
+      ignoredField,
+      StructField(
+        "col6",
+        MapType(
+          StringType,
+          ArrayType(
+            StructType(
+              StructField(
+                "field1",
+                StructType(StructField("subfield1", IntegerType) ::
+                  StructField("subfield2", IntegerType) :: Nil)) :: Nil),
+            containsNull = false)))))
 
   testSelect(mapOfArray, "col6['foo'][0].field1.subfield1 as foo") {
-    StructField("col6", MapType(StringType, ArrayType(StructType(
-      StructField("field1", StructType(
-        StructField("subfield1", IntegerType) :: Nil)) :: Nil), containsNull = false)))
+    StructField(
+      "col6",
+      MapType(
+        StringType,
+        ArrayType(
+          StructType(
+            StructField(
+              "field1",
+              StructType(StructField("subfield1", IntegerType) :: Nil)) :: Nil),
+          containsNull = false)))
   }
 
   testSelect(mapOfArray, "element_at(element_at(col6, 'foo'), 0).field1.subfield1 as foo") {
-    StructField("col6", MapType(StringType, ArrayType(StructType(
-      StructField("field1", StructType(
-        StructField("subfield1", IntegerType) :: Nil)) :: Nil), containsNull = false)))
+    StructField(
+      "col6",
+      MapType(
+        StringType,
+        ArrayType(
+          StructType(
+            StructField(
+              "field1",
+              StructType(StructField("subfield1", IntegerType) :: Nil)) :: Nil),
+          containsNull = false)))
   }
 
   // An array with a struct with a different fields
@@ -387,36 +582,60 @@ class SelectedFieldSuite extends AnalysisTest {
   //  |    |    |-- field3: array (nullable = true)
   //  |    |    |    |-- element: struct (containsNull = true)
   //  |    |    |    |    |-- subfield1: integer (nullable = false)
-  private val arrayWithMultipleFields = StructType(Array(ignoredField,
-    StructField("col7", ArrayType(StructType(
-    StructField("field1", IntegerType, nullable = false) ::
-      StructField("field2", StructType(
-        StructField("subfield1", IntegerType, nullable = false) :: Nil)) ::
-      StructField("field3", ArrayType(StructType(
-        StructField("subfield1", IntegerType, nullable = false) :: Nil))) :: Nil)))))
+  private val arrayWithMultipleFields = StructType(
+    Array(
+      ignoredField,
+      StructField(
+        "col7",
+        ArrayType(
+          StructType(
+            StructField("field1", IntegerType, nullable = false) ::
+              StructField(
+                "field2",
+                StructType(StructField("subfield1", IntegerType, nullable = false) :: Nil)) ::
+              StructField(
+                "field3",
+                ArrayType(StructType(
+                  StructField("subfield1", IntegerType, nullable = false) :: Nil))) :: Nil)))))
 
-  testSelect(arrayWithMultipleFields,
-    "col7.field1", "col7[0].field1 as foo", "col7.field1[0] as foo") {
-    StructField("col7", ArrayType(StructType(
-      StructField("field1", IntegerType, nullable = false) :: Nil)))
+  testSelect(
+    arrayWithMultipleFields,
+    "col7.field1",
+    "col7[0].field1 as foo",
+    "col7.field1[0] as foo") {
+    StructField(
+      "col7",
+      ArrayType(StructType(StructField("field1", IntegerType, nullable = false) :: Nil)))
   }
 
-  testSelect(arrayWithMultipleFields,
-    "col7.field1", "element_at(col7, 0).field1 as foo", "element_at(col7.field1, 0) as foo") {
-    StructField("col7", ArrayType(StructType(
-      StructField("field1", IntegerType, nullable = false) :: Nil)))
+  testSelect(
+    arrayWithMultipleFields,
+    "col7.field1",
+    "element_at(col7, 0).field1 as foo",
+    "element_at(col7.field1, 0) as foo") {
+    StructField(
+      "col7",
+      ArrayType(StructType(StructField("field1", IntegerType, nullable = false) :: Nil)))
   }
 
   testSelect(arrayWithMultipleFields, "col7.field2.subfield1") {
-    StructField("col7", ArrayType(StructType(
-      StructField("field2", StructType(
-        StructField("subfield1", IntegerType, nullable = false) :: Nil)) :: Nil)))
+    StructField(
+      "col7",
+      ArrayType(
+        StructType(
+          StructField(
+            "field2",
+            StructType(StructField("subfield1", IntegerType, nullable = false) :: Nil)) :: Nil)))
   }
 
   testSelect(arrayWithMultipleFields, "col7.field3.subfield1") {
-    StructField("col7", ArrayType(StructType(
-      StructField("field3", ArrayType(StructType(
-        StructField("subfield1", IntegerType, nullable = false) :: Nil))) :: Nil)))
+    StructField(
+      "col7",
+      ArrayType(
+        StructType(StructField(
+          "field3",
+          ArrayType(
+            StructType(StructField("subfield1", IntegerType, nullable = false) :: Nil))) :: Nil)))
   }
 
   // Array with a nested int array
@@ -425,19 +644,31 @@ class SelectedFieldSuite extends AnalysisTest {
   //  |    |-- element: struct (containsNull = true)
   //  |    |    |-- field1: array (nullable = false)
   //  |    |    |    |-- element: integer (containsNull = false)
-  private val arrayOfArray = StructType(Array(ignoredField,
-    StructField("col8",
-      ArrayType(StructType(Array(StructField("field1",
-        ArrayType(IntegerType, containsNull = false), nullable = false))))
-    )))
+  private val arrayOfArray = StructType(
+    Array(
+      ignoredField,
+      StructField(
+        "col8",
+        ArrayType(
+          StructType(
+            Array(
+              StructField(
+                "field1",
+                ArrayType(IntegerType, containsNull = false),
+                nullable = false)))))))
 
-  testSelect(arrayOfArray, "col8.field1",
+  testSelect(
+    arrayOfArray,
+    "col8.field1",
     "col8[0].field1 as foo",
     "col8.field1[0] as foo",
     "col8[0].field1[0] as foo") {
-    StructField("col8", ArrayType(StructType(
-      StructField("field1", ArrayType(IntegerType, containsNull = false), nullable = false)
-        :: Nil)))
+    StructField(
+      "col8",
+      ArrayType(
+        StructType(
+          StructField("field1", ArrayType(IntegerType, containsNull = false), nullable = false)
+            :: Nil)))
   }
 
   //  |-- col1: string (nullable = false)
@@ -450,32 +681,48 @@ class SelectedFieldSuite extends AnalysisTest {
   //  |    |    |    |-- field3: struct (nullable = true)
   //  |    |    |    |    |-- subfield1: integer (nullable = true)
   //  |    |    |    |    |-- subfield2: integer (nullable = true)
-  private val mapWithStructKey = StructType(Array(ignoredField,
-    StructField("col2", MapType(
-      StructType(
-        StructField("field1", StringType) ::
-        StructField("field2", IntegerType) :: Nil),
-      ArrayType(StructType(
-        StructField("field3", StructType(
-          StructField("subfield1", IntegerType) ::
-          StructField("subfield2", IntegerType) :: Nil)) :: Nil), containsNull = false)))))
+  private val mapWithStructKey = StructType(
+    Array(
+      ignoredField,
+      StructField(
+        "col2",
+        MapType(
+          StructType(StructField("field1", StringType) ::
+            StructField("field2", IntegerType) :: Nil),
+          ArrayType(
+            StructType(
+              StructField(
+                "field3",
+                StructType(StructField("subfield1", IntegerType) ::
+                  StructField("subfield2", IntegerType) :: Nil)) :: Nil),
+            containsNull = false)))))
 
   testSelect(mapWithStructKey, "map_keys(col2).field1 as foo") {
-    StructField("col2", MapType(
-      StructType(StructField("field1", StringType) :: Nil),
-      ArrayType(StructType(
-        StructField("field3", StructType(
-          StructField("subfield1", IntegerType) ::
-          StructField("subfield2", IntegerType) :: Nil)) :: Nil), containsNull = false)))
+    StructField(
+      "col2",
+      MapType(
+        StructType(StructField("field1", StringType) :: Nil),
+        ArrayType(
+          StructType(
+            StructField(
+              "field3",
+              StructType(StructField("subfield1", IntegerType) ::
+                StructField("subfield2", IntegerType) :: Nil)) :: Nil),
+          containsNull = false)))
   }
 
   testSelect(mapWithStructKey, "map_keys(col2).field2 as foo") {
-    StructField("col2", MapType(
-      StructType(StructField("field2", IntegerType) :: Nil),
-      ArrayType(StructType(
-        StructField("field3", StructType(
-          StructField("subfield1", IntegerType) ::
-          StructField("subfield2", IntegerType) :: Nil)) :: Nil), containsNull = false)))
+    StructField(
+      "col2",
+      MapType(
+        StructType(StructField("field2", IntegerType) :: Nil),
+        ArrayType(
+          StructType(
+            StructField(
+              "field3",
+              StructType(StructField("subfield1", IntegerType) ::
+                StructField("subfield2", IntegerType) :: Nil)) :: Nil),
+          containsNull = false)))
   }
 
   //  |-- col1: string (nullable = false)
@@ -491,37 +738,59 @@ class SelectedFieldSuite extends AnalysisTest {
   //  |    |    |    |-- field3: struct (nullable = true)
   //  |    |    |    |    |-- subfield3: integer (nullable = true)
   //  |    |    |    |    |-- subfield4: integer (nullable = true)
-  private val mapWithArrayOfStructKey = StructType(Array(ignoredField,
-    StructField("col2", MapType(
-      ArrayType(StructType(
-        StructField("field1", StringType) ::
-        StructField("field2", StructType(
-          StructField("subfield1", IntegerType) ::
-          StructField("subfield2", LongType) :: Nil)) :: Nil), containsNull = false),
-      ArrayType(StructType(
-        StructField("field3", StructType(
-          StructField("subfield3", IntegerType) ::
-          StructField("subfield4", IntegerType) :: Nil)) :: Nil), containsNull = false)))))
+  private val mapWithArrayOfStructKey = StructType(
+    Array(
+      ignoredField,
+      StructField(
+        "col2",
+        MapType(
+          ArrayType(
+            StructType(
+              StructField("field1", StringType) ::
+                StructField(
+                  "field2",
+                  StructType(StructField("subfield1", IntegerType) ::
+                    StructField("subfield2", LongType) :: Nil)) :: Nil),
+            containsNull = false),
+          ArrayType(
+            StructType(
+              StructField(
+                "field3",
+                StructType(StructField("subfield3", IntegerType) ::
+                  StructField("subfield4", IntegerType) :: Nil)) :: Nil),
+            containsNull = false)))))
 
   testSelect(mapWithArrayOfStructKey, "map_keys(col2)[0].field1 as foo") {
-    StructField("col2", MapType(
-      ArrayType(StructType(
-        StructField("field1", StringType) :: Nil), containsNull = true),
-      ArrayType(StructType(
-        StructField("field3", StructType(
-          StructField("subfield3", IntegerType) ::
-          StructField("subfield4", IntegerType) :: Nil)) :: Nil), containsNull = false)))
+    StructField(
+      "col2",
+      MapType(
+        ArrayType(StructType(StructField("field1", StringType) :: Nil), containsNull = true),
+        ArrayType(
+          StructType(
+            StructField(
+              "field3",
+              StructType(StructField("subfield3", IntegerType) ::
+                StructField("subfield4", IntegerType) :: Nil)) :: Nil),
+          containsNull = false)))
   }
 
   testSelect(mapWithArrayOfStructKey, "map_keys(col2)[0].field2.subfield1 as foo") {
-    StructField("col2", MapType(
-      ArrayType(StructType(
-        StructField("field2", StructType(
-          StructField("subfield1", IntegerType) :: Nil)) :: Nil), containsNull = true),
-      ArrayType(StructType(
-        StructField("field3", StructType(
-          StructField("subfield3", IntegerType) ::
-          StructField("subfield4", IntegerType) :: Nil)) :: Nil), containsNull = false)))
+    StructField(
+      "col2",
+      MapType(
+        ArrayType(
+          StructType(
+            StructField(
+              "field2",
+              StructType(StructField("subfield1", IntegerType) :: Nil)) :: Nil),
+          containsNull = true),
+        ArrayType(
+          StructType(
+            StructField(
+              "field3",
+              StructType(StructField("subfield3", IntegerType) ::
+                StructField("subfield4", IntegerType) :: Nil)) :: Nil),
+          containsNull = false)))
   }
 
   def assertResult(expected: StructField)(actual: StructField)(selectExpr: String): Unit = {
@@ -530,22 +799,24 @@ class SelectedFieldSuite extends AnalysisTest {
     } catch {
       case ex: TestFailedException =>
         // Print some helpful diagnostics in the case of failure
-        alert("Expected SELECT \"" + selectExpr + "\" to select the schema\n" +
-          indent(StructType(expected :: Nil).treeString) +
-          indent("but it actually selected\n") +
-          indent(StructType(actual :: Nil).treeString) +
-          indent("Note that expected.dataType.sameType(actual.dataType) = " +
-          DataTypeUtils.sameType(expected.dataType, actual.dataType)))
+        alert(
+          "Expected SELECT \"" + selectExpr + "\" to select the schema\n" +
+            indent(StructType(expected :: Nil).treeString) +
+            indent("but it actually selected\n") +
+            indent(StructType(actual :: Nil).treeString) +
+            indent("Note that expected.dataType.sameType(actual.dataType) = " +
+              DataTypeUtils.sameType(expected.dataType, actual.dataType)))
         throw ex
     }
   }
 
   // Test that the given SELECT expressions prune the test schema to the single-column schema
   // defined by the given field
-  private def testSelect(inputSchema: StructType, selectExprs: String*)
-                        (expected: StructField): Unit = {
-    test(s"SELECT ${selectExprs.map(s => s""""$s"""").mkString(", ")} should select the schema\n" +
-      indent(StructType(expected :: Nil).treeString)) {
+  private def testSelect(inputSchema: StructType, selectExprs: String*)(
+      expected: StructField): Unit = {
+    test(
+      s"SELECT ${selectExprs.map(s => s""""$s"""").mkString(", ")} should select the schema\n" +
+        indent(StructType(expected :: Nil).treeString)) {
       for (selectExpr <- selectExprs) {
         assertSelect(selectExpr, expected, inputSchema)
       }
@@ -560,8 +831,8 @@ class SelectedFieldSuite extends AnalysisTest {
       case None =>
         val failureMessage =
           "Failed to select a field from " + expr + ". " +
-          "Expected:\n" +
-          StructType(expected :: Nil).treeString
+            "Expected:\n" +
+            StructType(expected :: Nil).treeString
         fail(failureMessage)
     }
   }

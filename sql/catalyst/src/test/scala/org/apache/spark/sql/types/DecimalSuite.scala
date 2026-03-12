@@ -107,10 +107,8 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
     checkError(
       exception = intercept[AnalysisException](Decimal(BigDecimal("10"), 2, -5)),
       condition = "NEGATIVE_SCALE_DISALLOWED",
-      parameters = Map(
-        "scale" -> "-5",
-        "sqlConf" -> "\"spark.sql.legacy.allowNegativeScaleOfDecimal\""
-      ))
+      parameters =
+        Map("scale" -> "-5", "sqlConf" -> "\"spark.sql.legacy.allowNegativeScaleOfDecimal\""))
   }
 
   test("creating decimals with negative scale under legacy mode") {
@@ -129,10 +127,8 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
       checkError(
         exception = intercept[AnalysisException](d),
         condition = "NEGATIVE_SCALE_DISALLOWED",
-        parameters = Map(
-          "scale" -> "-3",
-          "sqlConf" -> "\"spark.sql.legacy.allowNegativeScaleOfDecimal\""
-        ))
+        parameters =
+          Map("scale" -> "-3", "sqlConf" -> "\"spark.sql.legacy.allowNegativeScaleOfDecimal\""))
     }
     checkNegativeScaleDecimal(Decimal(BigDecimal("98765"), 5, -3))
     checkNegativeScaleDecimal(Decimal(BigDecimal("98765").underlying(), 5, -3))
@@ -141,6 +137,7 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
   }
 
   test("double and long values") {
+
     /** Check that a Decimal converts to the given double and long values */
     def checkValues(d: Decimal, doubleValue: Double, longValue: Long): Unit = {
       assert(d.toDouble === doubleValue)
@@ -187,9 +184,9 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
     checkCompact(Decimal(1e16.toLong), true)
     checkCompact(Decimal(1e17.toLong), true)
     checkCompact(Decimal(1e18.toLong - 1), true)
-    checkCompact(Decimal(- 1e18.toLong + 1), true)
+    checkCompact(Decimal(-1e18.toLong + 1), true)
     checkCompact(Decimal(1e18.toLong - 1, 30, 10), true)
-    checkCompact(Decimal(- 1e18.toLong + 1, 30, 10), true)
+    checkCompact(Decimal(-1e18.toLong + 1, 30, 10), true)
     checkCompact(Decimal(1e18.toLong), false)
     checkCompact(Decimal(-1e18.toLong), false)
     checkCompact(Decimal(1e18.toLong, 30, 10), false)
@@ -326,8 +323,7 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
         d.toPrecision(5, 50, BigDecimal.RoundingMode.HALF_DOWN)
       },
       condition = "INTERNAL_ERROR",
-      parameters = Map("message" -> "Not supported rounding mode: HALF_DOWN.")
-    )
+      parameters = Map("message" -> "Not supported rounding mode: HALF_DOWN."))
   }
 
   test("SPARK-20341: support BigInt's value does not fit in long value range") {
@@ -386,13 +382,13 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
         "ansiConfig" -> "\"spark.sql.ansi.enabled\""))
   }
 
-  test("SPARK-35841: Casting string to decimal type doesn't work " +
-    "if the sum of the digits is greater than 38") {
+  test(
+    "SPARK-35841: Casting string to decimal type doesn't work " +
+      "if the sum of the digits is greater than 38") {
     val values = Array(
       "28.9259999999999983799625624669715762138",
       "28.925999999999998379962562466971576213",
-      "2.9259999999999983799625624669715762138"
-    )
+      "2.9259999999999983799625624669715762138")
     for (string <- values) {
       assert(Decimal.fromString(UTF8String.fromString(string)) === Decimal(string))
       assert(Decimal.fromStringANSI(UTF8String.fromString(string)) === Decimal(string))
@@ -420,13 +416,9 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
 
   // 18 is a max number of digits in Decimal's compact long
   test("SPARK-41554: decrease/increase scale by 18 and more on compact decimal") {
-    val unscaledNums = Seq(
-      0L, 1L, 10L, 51L, 123L, 523L,
+    val unscaledNums = Seq(0L, 1L, 10L, 51L, 123L, 523L,
       // 18 digits
-      912345678901234567L,
-      112345678901234567L,
-      512345678901234567L
-    )
+      912345678901234567L, 112345678901234567L, 512345678901234567L)
     val precision = 38
     // generate some (from, to) scale pairs, e.g. (38, 18), (-20, -2), etc
     val scalePairs = for {
@@ -454,13 +446,17 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
       }
     }
 
-    def checkScaleChange(unscaled: Long, scaleFrom: Int, scaleTo: Int,
-                         roundMode: BigDecimal.RoundingMode.Value): Unit = {
+    def checkScaleChange(
+        unscaled: Long,
+        scaleFrom: Int,
+        scaleTo: Int,
+        roundMode: BigDecimal.RoundingMode.Value): Unit = {
       val decimal = Decimal(unscaled, precision, scaleFrom)
       checkCompact(decimal, true)
       decimal.changePrecision(precision, scaleTo, roundMode)
       val bd = BigDecimal(unscaled, scaleFrom).setScale(scaleTo, roundMode)
-      assert(decimal.toBigDecimal === bd,
+      assert(
+        decimal.toBigDecimal === bd,
         s"unscaled: $unscaled, scaleFrom: $scaleFrom, scaleTo: $scaleTo, mode: $roundMode")
     }
   }

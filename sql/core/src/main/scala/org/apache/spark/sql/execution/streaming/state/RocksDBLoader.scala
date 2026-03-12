@@ -27,6 +27,7 @@ import org.apache.spark.util.UninterruptibleThread
  * code will throw an error when interrupted.
  */
 object RocksDBLoader extends Logging {
+
   /**
    * Keep tracks of the exception thrown from the loading thread, if any.
    */

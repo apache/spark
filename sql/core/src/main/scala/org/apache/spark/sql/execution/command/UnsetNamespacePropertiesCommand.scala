@@ -32,9 +32,8 @@ import org.apache.spark.sql.connector.catalog.NamespaceChange
  *      UNSET (DBPROPERTIES|PROPERTIES) ('key1', 'key2', ...);
  * }}}
  */
-case class UnsetNamespacePropertiesCommand(
-    ident: LogicalPlan,
-    propKeys: Seq[String]) extends UnaryRunnableCommand {
+case class UnsetNamespacePropertiesCommand(ident: LogicalPlan, propKeys: Seq[String])
+    extends UnaryRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val ResolvedNamespace(catalog, ns, _) = child

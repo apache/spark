@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-
 package org.apache.spark.sql.catalyst.plans
 
 import org.apache.spark.SparkFunSuite
@@ -65,15 +64,10 @@ class JoinTypesTest extends SparkFunSuite {
   test("unsupported join type") {
     val joinType = "unknown"
     checkError(
-      exception = intercept[AnalysisException](
-        JoinType(joinType)
-      ),
+      exception = intercept[AnalysisException](JoinType(joinType)),
       condition = "UNSUPPORTED_JOIN_TYPE",
       sqlState = "0A000",
-      parameters = Map(
-        "typ" -> joinType,
-        "supported" -> JoinType.supported.mkString("'", "', '", "'")
-      )
-    )
+      parameters =
+        Map("typ" -> joinType, "supported" -> JoinType.supported.mkString("'", "', '", "'")))
   }
 }

@@ -24,8 +24,8 @@ import org.apache.spark.unsafe.types._
 import org.apache.spark.util.ArrayImplicits._
 
 /**
- * An extended version of [[InternalRow]] that implements all special getters, toString
- * and equals/hashCode by `genericGet`.
+ * An extended version of [[InternalRow]] that implements all special getters, toString and
+ * equals/hashCode by `genericGet`.
  */
 trait BaseGenericInternalRow extends InternalRow {
 
@@ -113,16 +113,17 @@ trait BaseGenericInternalRow extends InternalRow {
               return false
             }
           case f1: Float if java.lang.Float.isNaN(f1) =>
-            if (!o2.isInstanceOf[Float] || ! java.lang.Float.isNaN(o2.asInstanceOf[Float])) {
+            if (!o2.isInstanceOf[Float] || !java.lang.Float.isNaN(o2.asInstanceOf[Float])) {
               return false
             }
           case d1: Double if java.lang.Double.isNaN(d1) =>
-            if (!o2.isInstanceOf[Double] || ! java.lang.Double.isNaN(o2.asInstanceOf[Double])) {
+            if (!o2.isInstanceOf[Double] || !java.lang.Double.isNaN(o2.asInstanceOf[Double])) {
               return false
             }
-          case _ => if (o1 != o2) {
-            return false
-          }
+          case _ =>
+            if (o1 != o2) {
+              return false
+            }
         }
       }
       i += 1
@@ -162,11 +163,12 @@ trait BaseGenericInternalRow extends InternalRow {
 }
 
 /**
- * An internal row implementation that uses an array of objects as the underlying storage.
- * Note that, while the array is not copied, and thus could technically be mutated after creation,
- * this is not allowed.
+ * An internal row implementation that uses an array of objects as the underlying storage. Note
+ * that, while the array is not copied, and thus could technically be mutated after creation, this
+ * is not allowed.
  */
 class GenericInternalRow(val values: Array[Any]) extends BaseGenericInternalRow {
+
   /** No-arg constructor for serialization. */
   protected def this() = this(null)
 
@@ -178,7 +180,7 @@ class GenericInternalRow(val values: Array[Any]) extends BaseGenericInternalRow 
 
   override def numFields: Int = values.length
 
-  override def setNullAt(i: Int): Unit = { values(i) = null}
+  override def setNullAt(i: Int): Unit = { values(i) = null }
 
   override def update(i: Int, value: Any): Unit = { values(i) = value }
 }

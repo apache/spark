@@ -38,30 +38,32 @@ import org.apache.spark.sql.types.{DataType, IntegerType}
  *   df.writeTo("catalog.db.table").partitionedBy($"category", days($"timestamp")).create()
  * }}}
  */
-abstract class PartitionTransformExpression extends Expression with Unevaluable
-  with UnaryLike[Expression] {
+abstract class PartitionTransformExpression
+    extends Expression
+    with Unevaluable
+    with UnaryLike[Expression] {
   override def nullable: Boolean = true
 
   override def eval(input: InternalRow): Any =
     throw new SparkException(
       errorClass = "PARTITION_TRANSFORM_EXPRESSION_NOT_IN_PARTITIONED_BY",
       messageParameters = Map("expression" -> toSQLExpr(this)),
-      cause = null
-    )
+      cause = null)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
     throw new SparkException(
       errorClass = "PARTITION_TRANSFORM_EXPRESSION_NOT_IN_PARTITIONED_BY",
       messageParameters = Map("expression" -> toSQLExpr(this)),
-      cause = null
-    )
+      cause = null)
 }
+
 /**
  * Expression for the v2 partition transform years.
  */
 case class Years(child: Expression) extends PartitionTransformExpression {
   override def dataType: DataType = IntegerType
-  override protected def withNewChildInternal(newChild: Expression): Years = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): Years =
+    copy(child = newChild)
 }
 
 /**
@@ -69,7 +71,8 @@ case class Years(child: Expression) extends PartitionTransformExpression {
  */
 case class Months(child: Expression) extends PartitionTransformExpression {
   override def dataType: DataType = IntegerType
-  override protected def withNewChildInternal(newChild: Expression): Months = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): Months =
+    copy(child = newChild)
 }
 
 /**
@@ -85,7 +88,8 @@ case class Days(child: Expression) extends PartitionTransformExpression {
  */
 case class Hours(child: Expression) extends PartitionTransformExpression {
   override def dataType: DataType = IntegerType
-  override protected def withNewChildInternal(newChild: Expression): Hours = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): Hours =
+    copy(child = newChild)
 }
 
 /**
@@ -96,7 +100,8 @@ case class Bucket(numBuckets: Literal, child: Expression) extends PartitionTrans
     this(Bucket.expressionToNumBuckets(numBuckets, child), child)
 
   override def dataType: DataType = IntegerType
-  override protected def withNewChildInternal(newChild: Expression): Bucket = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): Bucket =
+    copy(child = newChild)
 }
 
 private[sql] object Bucket {

@@ -34,17 +34,19 @@ import org.apache.spark.sql.scripting.{CursorFetching, CursorOpened}
 /**
  * Physical plan node for fetching from cursors.
  *
- * Fetches the next row from the result iterator that was created at OPEN time.
- * On first fetch, transitions from Opened to Fetching state.
+ * Fetches the next row from the result iterator that was created at OPEN time. On first fetch,
+ * transitions from Opened to Fetching state.
  *
  * Assigns fetched values to target variables with ANSI store assignment rules.
  *
- * @param cursor CursorReference resolved during analysis phase
- * @param targetVariables Variables to fetch into
+ * @param cursor
+ *   CursorReference resolved during analysis phase
+ * @param targetVariables
+ *   Variables to fetch into
  */
-case class FetchCursorExec(
-    cursor: Expression,
-    targetVariables: Seq[VariableReference]) extends LeafV2CommandExec with DataTypeErrorsBase {
+case class FetchCursorExec(cursor: Expression, targetVariables: Seq[VariableReference])
+    extends LeafV2CommandExec
+    with DataTypeErrorsBase {
 
   override protected def run(): Seq[InternalRow] = {
     // Extract CursorReference from the resolved cursor expression
@@ -53,10 +55,12 @@ case class FetchCursorExec(
     val scriptingContext = CursorCommandUtils.getScriptingContext(cursorRef.definition.name)
 
     // Get current cursor state
-    val currentState = scriptingContext.getCursorState(cursorRef).getOrElse(
-      throw new AnalysisException(
-        errorClass = "CURSOR_NOT_FOUND",
-        messageParameters = Map("cursorName" -> toSQLId(cursorRef.definition.name))))
+    val currentState = scriptingContext
+      .getCursorState(cursorRef)
+      .getOrElse(
+        throw new AnalysisException(
+          errorClass = "CURSOR_NOT_FOUND",
+          messageParameters = Map("cursorName" -> toSQLId(cursorRef.definition.name))))
 
     // Get iterator based on current state
     val (iterator, outputSchema) = currentState match {
@@ -105,21 +109,20 @@ case class FetchCursorExec(
   }
 
   /**
-   * Determines if the fetch should use the struct special case.
-   * Returns true if there's exactly one target variable, it's a struct type,
-   * and there are multiple cursor columns.
+   * Determines if the fetch should use the struct special case. Returns true if there's exactly
+   * one target variable, it's a struct type, and there are multiple cursor columns.
    */
   private def shouldFetchIntoStruct(
       targetVariables: Seq[VariableReference],
       currentRow: InternalRow): Boolean = {
     targetVariables.length == 1 &&
-      currentRow.numFields > 1 &&
-      targetVariables.head.dataType.isInstanceOf[org.apache.spark.sql.types.StructType]
+    currentRow.numFields > 1 &&
+    targetVariables.head.dataType.isInstanceOf[org.apache.spark.sql.types.StructType]
   }
 
   /**
-   * Performs regular one-to-one assignment of cursor columns to variables.
-   * Applies ANSI store assignment rules with type casting.
+   * Performs regular one-to-one assignment of cursor columns to variables. Applies ANSI store
+   * assignment rules with type casting.
    */
   private def fetchIntoVariables(
       targetVariables: Seq[VariableReference],
@@ -137,10 +140,8 @@ case class FetchCursorExec(
     // Assign each column to its corresponding variable
     targetVariables.zipWithIndex.foreach { case (varRef, idx) =>
       val sourceValue = currentRow.get(idx, outputSchema(idx).dataType)
-      val castedValue = applyCastIfNeeded(
-        sourceValue,
-        outputSchema(idx).dataType,
-        varRef.dataType)
+      val castedValue =
+        applyCastIfNeeded(sourceValue, outputSchema(idx).dataType, varRef.dataType)
 
       assignToVariable(varRef, castedValue)
     }
@@ -168,9 +169,7 @@ case class FetchCursorExec(
   /**
    * Assigns a value to a variable, handling case sensitivity properly.
    */
-  private def assignToVariable(
-      varRef: VariableReference,
-      value: Any): Unit = {
+  private def assignToVariable(varRef: VariableReference, value: Any): Unit = {
     val namePartsCaseAdjusted = if (session.sessionState.conf.caseSensitiveAnalysis) {
       varRef.originalNameParts
     } else {
@@ -184,12 +183,14 @@ case class FetchCursorExec(
 
     val variableManager = varRef.catalog match {
       case FakeLocalCatalog if scriptingVariableManager.isEmpty =>
-        throw SparkException.internalError("FetchCursorExec: Variable has FakeLocalCatalog, " +
-          "but ScriptingVariableManager is None.")
+        throw SparkException.internalError(
+          "FetchCursorExec: Variable has FakeLocalCatalog, " +
+            "but ScriptingVariableManager is None.")
 
       case FakeLocalCatalog if scriptingVariableManager.get.get(namePartsCaseAdjusted).isEmpty =>
-        throw SparkException.internalError("Local variable should be present in FetchCursorExec " +
-          "because ResolveFetchCursor has already determined it exists.")
+        throw SparkException.internalError(
+          "Local variable should be present in FetchCursorExec " +
+            "because ResolveFetchCursor has already determined it exists.")
 
       case FakeLocalCatalog => scriptingVariableManager.get
 
@@ -204,19 +205,17 @@ case class FetchCursorExec(
     val varDef = VariableDefinition(
       varRef.identifier,
       varRef.varDef.defaultValueSQL,
-      Literal(value, varRef.dataType)
-    )
+      Literal(value, varRef.dataType))
 
     variableManager.set(namePartsCaseAdjusted, varDef)
   }
 
   /**
-   * Fetches multiple cursor columns into a single STRUCT variable.
-   * This is a SQL Standard special case that allows:
-   *   FETCH cursor_with_multiple_columns INTO single_struct_variable
+   * Fetches multiple cursor columns into a single STRUCT variable. This is a SQL Standard special
+   * case that allows: FETCH cursor_with_multiple_columns INTO single_struct_variable
    *
-   * Each cursor column is cast to the corresponding struct field type using
-   * ANSI store assignment rules.
+   * Each cursor column is cast to the corresponding struct field type using ANSI store assignment
+   * rules.
    */
   private def fetchIntoStruct(
       targetVar: VariableReference,

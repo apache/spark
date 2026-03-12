@@ -36,21 +36,19 @@ import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLExpr
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.types._
 
-
 /**
- * Finds all the [[RuntimeReplaceable]] expressions that are unevaluable and replace them
- * with semantically equivalent expressions that can be evaluated.
+ * Finds all the [[RuntimeReplaceable]] expressions that are unevaluable and replace them with
+ * semantically equivalent expressions that can be evaluated.
  *
- * This is mainly used to provide compatibility with other databases.
- * Few examples are:
- *   we use this to support "left" by replacing it with "substring".
- *   we use this to replace Every and Any with Min and Max respectively.
+ * This is mainly used to provide compatibility with other databases. Few examples are: we use
+ * this to support "left" by replacing it with "substring". we use this to replace Every and Any
+ * with Min and Max respectively.
  */
 object ReplaceExpressions extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
-    _.containsAnyPattern(RUNTIME_REPLACEABLE)) {
-    case p => p.mapExpressions(replace)
-  }
+  def apply(plan: LogicalPlan): LogicalPlan =
+    plan.transformWithPruning(_.containsAnyPattern(RUNTIME_REPLACEABLE)) { case p =>
+      p.mapExpressions(replace)
+    }
 
   private def replace(e: Expression): Expression = e match {
     case r: RuntimeReplaceable => replace(r.replacement)
@@ -59,27 +57,26 @@ object ReplaceExpressions extends Rule[LogicalPlan] {
 }
 
 /**
- * Rewrite non correlated exists subquery to use ScalarSubquery
- *   WHERE EXISTS (SELECT A FROM TABLE B WHERE COL1 > 10)
- * will be rewritten to
- *   WHERE (SELECT 1 FROM (SELECT A FROM TABLE B WHERE COL1 > 10) LIMIT 1) IS NOT NULL
+ * Rewrite non correlated exists subquery to use ScalarSubquery WHERE EXISTS (SELECT A FROM TABLE
+ * B WHERE COL1 > 10) will be rewritten to WHERE (SELECT 1 FROM (SELECT A FROM TABLE B WHERE COL1
+ * > 10) LIMIT 1) IS NOT NULL
  */
 object RewriteNonCorrelatedExists extends Rule[LogicalPlan] {
-  override def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressionsWithPruning(
-    _.containsPattern(EXISTS_SUBQUERY)) {
-    case exists: Exists if exists.children.isEmpty =>
-      IsNotNull(
-        ScalarSubquery(
-          plan = Limit(Literal(1), Project(Seq(Alias(Literal(1), "col")()), exists.plan)),
-          exprId = exists.exprId,
-          hint = exists.hint))
-  }
+  override def apply(plan: LogicalPlan): LogicalPlan =
+    plan.transformAllExpressionsWithPruning(_.containsPattern(EXISTS_SUBQUERY)) {
+      case exists: Exists if exists.children.isEmpty =>
+        IsNotNull(
+          ScalarSubquery(
+            plan = Limit(Literal(1), Project(Seq(Alias(Literal(1), "col")()), exists.plan)),
+            exprId = exists.exprId,
+            hint = exists.hint))
+    }
 }
 
 /**
- * Computes expressions in inline tables. This rule is supposed to be called at the very end
- * of the analysis phase, given that all the expressions need to be fully resolved/replaced
- * at this point.
+ * Computes expressions in inline tables. This rule is supposed to be called at the very end of
+ * the analysis phase, given that all the expressions need to be fully resolved/replaced at this
+ * point.
  */
 object EvalInlineTables extends Rule[LogicalPlan] with CastSupport {
   override def apply(plan: LogicalPlan): LogicalPlan = {
@@ -88,9 +85,10 @@ object EvalInlineTables extends Rule[LogicalPlan] with CastSupport {
     }
   }
 
-    def eval(table: ResolvedInlineTable): LocalRelation = {
-      val newRows: Seq[InternalRow] =
-        table.rows.map { row => InternalRow.fromSeq(row.map { e =>
+  def eval(table: ResolvedInlineTable): LocalRelation = {
+    val newRows: Seq[InternalRow] =
+      table.rows.map { row =>
+        InternalRow.fromSeq(row.map { e =>
           try {
             prepareForEval(e).eval()
           } catch {
@@ -99,11 +97,12 @@ object EvalInlineTables extends Rule[LogicalPlan] with CastSupport {
                 errorClass = "INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION",
                 messageParameters = Map("sqlExpr" -> toSQLExpr(e)),
                 cause = ex)
-          }})
-        }
+          }
+        })
+      }
 
-      LocalRelation(table.output, newRows)
-    }
+    LocalRelation(table.output, newRows)
+  }
 }
 
 /**
@@ -123,33 +122,35 @@ object ComputeCurrentTime extends Rule[LogicalPlan] {
       treePatternbits.containsPattern(CURRENT_LIKE)
     }
 
-    plan.transformDownWithSubqueriesAndPruning(transformCondition) {
-      case subQuery =>
-        subQuery.transformAllExpressionsWithPruning(transformCondition) {
-          case cd: CurrentDate =>
-            currentDates.getOrElseUpdate(cd.zoneId, {
+    plan.transformDownWithSubqueriesAndPruning(transformCondition) { case subQuery =>
+      subQuery.transformAllExpressionsWithPruning(transformCondition) {
+        case cd: CurrentDate =>
+          currentDates.getOrElseUpdate(
+            cd.zoneId, {
               Literal.create(
-                DateTimeUtils.microsToDays(currentTimestampMicros, cd.zoneId), DateType)
+                DateTimeUtils.microsToDays(currentTimestampMicros, cd.zoneId),
+                DateType)
             })
-          case currentTimeType : CurrentTime =>
-            val truncatedTime = truncateTimeToPrecision(currentTimeOfDayNanos,
-              currentTimeType.precision)
-            Literal.create(truncatedTime, TimeType(currentTimeType.precision))
-          case CurrentTimestamp() | Now() => currentTime
-          case CurrentTimeZone() => timezone
-          case localTimestamp: LocalTimestamp =>
-            localTimestamps.getOrElseUpdate(localTimestamp.zoneId, {
+        case currentTimeType: CurrentTime =>
+          val truncatedTime =
+            truncateTimeToPrecision(currentTimeOfDayNanos, currentTimeType.precision)
+          Literal.create(truncatedTime, TimeType(currentTimeType.precision))
+        case CurrentTimestamp() | Now() => currentTime
+        case CurrentTimeZone() => timezone
+        case localTimestamp: LocalTimestamp =>
+          localTimestamps.getOrElseUpdate(
+            localTimestamp.zoneId, {
               val asDateTime = LocalDateTime.ofInstant(instant, localTimestamp.zoneId)
               Literal.create(localDateTimeToMicros(asDateTime), TimestampNTZType)
             })
-        }
+      }
     }
   }
 }
 
 /**
- * Replaces the expression of CurrentDatabase, CurrentCatalog, and CurrentUser
- * with the current values.
+ * Replaces the expression of CurrentDatabase, CurrentCatalog, and CurrentUser with the current
+ * values.
  */
 case class ReplaceCurrentLike(catalogManager: CatalogManager) extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
@@ -170,8 +171,8 @@ case class ReplaceCurrentLike(catalogManager: CatalogManager) extends Rule[Logic
 }
 
 /**
- * Replaces casts of special datetime strings by its date/timestamp values
- * if the input strings are foldable.
+ * Replaces casts of special datetime strings by its date/timestamp values if the input strings
+ * are foldable.
  */
 object SpecialDatetimeValues extends Rule[LogicalPlan] {
   private val conv = Map[DataType, (String, java.time.ZoneId) => Option[Any]](
@@ -181,7 +182,7 @@ object SpecialDatetimeValues extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
     plan.transformAllExpressionsWithPruning(_.containsPattern(CAST)) {
       case cast @ Cast(e, dt @ (DateType | TimestampType | TimestampNTZType), _, _)
-        if e.foldable && e.dataType == StringType =>
+          if e.foldable && e.dataType == StringType =>
         Option(e.eval())
           .flatMap(s => conv(dt)(s.toString, cast.zoneId))
           .map(Literal(_, dt))
@@ -191,8 +192,7 @@ object SpecialDatetimeValues extends Rule[LogicalPlan] {
 }
 
 object ReplaceTranspose extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan.transform {
-    case t @ Transpose(output, data) =>
-      LocalRelation(output, data)
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transform { case t @ Transpose(output, data) =>
+    LocalRelation(output, data)
   }
 }

@@ -30,37 +30,35 @@ class DeprecatedDatasetAggregatorSuite extends QueryTest with SharedSparkSession
 
     checkDatasetUnorderly(
       ds.groupByKey(_._1).agg(typed.sum(_._2)),
-      ("a", 30.0), ("b", 3.0), ("c", 1.0))
+      ("a", 30.0),
+      ("b", 3.0),
+      ("c", 1.0))
   }
 
   test("typed aggregation: TypedAggregator, expr, expr") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
 
     checkDatasetUnorderly(
-      ds.groupByKey(_._1).agg(
-        typed.sum(_._2),
-        expr("sum(_2)").as[Long],
-        count("*")),
-      ("a", 30.0, 30L, 2L), ("b", 3.0, 3L, 2L), ("c", 1.0, 1L, 1L))
+      ds.groupByKey(_._1).agg(typed.sum(_._2), expr("sum(_2)").as[Long], count("*")),
+      ("a", 30.0, 30L, 2L),
+      ("b", 3.0, 3L, 2L),
+      ("c", 1.0, 1L, 1L))
   }
 
   test("typed aggregation: in project list") {
     val ds = Seq(1, 3, 2, 5).toDS()
 
-    checkDataset(
-      ds.select(typed.sum((i: Int) => i)),
-      11.0)
-    checkDataset(
-      ds.select(typed.sum((i: Int) => i), typed.sum((i: Int) => i * 2)),
-      11.0 -> 22.0)
+    checkDataset(ds.select(typed.sum((i: Int) => i)), 11.0)
+    checkDataset(ds.select(typed.sum((i: Int) => i), typed.sum((i: Int) => i * 2)), 11.0 -> 22.0)
   }
 
   test("typed aggregate: avg, count, sum") {
     val ds = Seq("a" -> 1, "a" -> 3, "b" -> 3).toDS()
     checkDatasetUnorderly(
-      ds.groupByKey(_._1).agg(
-        typed.avg(_._2), typed.count(_._2), typed.sum(_._2), typed.sumLong(_._2)),
-      ("a", 2.0, 2L, 4.0, 4L), ("b", 3.0, 1L, 3.0, 3L))
+      ds.groupByKey(_._1)
+        .agg(typed.avg(_._2), typed.count(_._2), typed.sum(_._2), typed.sumLong(_._2)),
+      ("a", 2.0, 2L, 4.0, 4L),
+      ("b", 3.0, 1L, 3.0, 3L))
   }
 
   test("spark-15114 shorter system generated alias names") {
@@ -70,8 +68,9 @@ class DeprecatedDatasetAggregatorSuite extends QueryTest with SharedSparkSession
     assert(ds2.columns.head === "TypedSumDouble(int)")
     assert(ds2.columns.last === "TypedAverage(int)")
     val df = Seq(1 -> "a", 2 -> "b", 3 -> "b").toDF("i", "j")
-    assert(df.groupBy($"j").agg(RowAgg.toColumn).columns.last ==
-      "RowAgg(org.apache.spark.sql.Row)")
+    assert(
+      df.groupBy($"j").agg(RowAgg.toColumn).columns.last ==
+        "RowAgg(org.apache.spark.sql.Row)")
     assert(df.groupBy($"j").agg(RowAgg.toColumn as "agg1").columns.last == "agg1")
   }
 }

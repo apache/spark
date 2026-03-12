@@ -29,9 +29,9 @@ import org.apache.spark.sql.execution.streaming.checkpointing._
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * This inherits tests for the [[CheckpointFileManager]] from [[CheckpointFileManagerTests]].
- * It also adds specific test cases for the [[ChecksumCheckpointFileManager]] e.g. test cases
- * to detect corrupt files, non-sequential reads, backward-compatibility etc.
+ * This inherits tests for the [[CheckpointFileManager]] from [[CheckpointFileManagerTests]]. It
+ * also adds specific test cases for the [[ChecksumCheckpointFileManager]] e.g. test cases to
+ * detect corrupt files, non-sequential reads, backward-compatibility etc.
  */
 abstract class ChecksumCheckpointFileManagerSuite extends CheckpointFileManagerTestsOnLocalFs {
   import ChecksumCheckpointFileManager._
@@ -43,8 +43,11 @@ abstract class ChecksumCheckpointFileManagerSuite extends CheckpointFileManagerT
     super.checkLeakingCrcFiles(path)
 
     // Now let's validate our own crc files to make sure no orphan.
-    val files = new File(path.toString).listFiles().toSeq
-      .filter(f => f.isFile).map(f => new Path(f.toPath.toUri))
+    val files = new File(path.toString)
+      .listFiles()
+      .toSeq
+      .filter(f => f.isFile)
+      .map(f => new Path(f.toPath.toUri))
     val checksumFiles = files
       // filter out hadoop crc files if present (e.g .foo.crc)
       .filterNot(p => p.getName.startsWith(".") && p.getName.endsWith(".crc"))
@@ -53,7 +56,8 @@ abstract class ChecksumCheckpointFileManagerSuite extends CheckpointFileManagerT
     val mainFilesForExistingChecksumFiles = checksumFiles.map(_.mainFilePath)
 
     // Check all main files exist for all checksum files.
-    assert(mainFilesForExistingChecksumFiles.toSet.subsetOf(files.toSet),
+    assert(
+      mainFilesForExistingChecksumFiles.toSet.subsetOf(files.toSet),
       s"Some checksum files don't have main files - checksum files: $checksumFiles / " +
         s"expected main files: $mainFilesForExistingChecksumFiles / actual files: $files")
   }
@@ -62,16 +66,15 @@ abstract class ChecksumCheckpointFileManagerSuite extends CheckpointFileManagerT
     createChecksumManager(
       path,
       skipCreationIfFileMissingChecksum =
-        SQLConf.STREAMING_CHECKPOINT_FILE_CHECKSUM_SKIP_CREATION_IF_FILE_MISSING_CHECKSUM
-        .defaultValue.get)
+        SQLConf.STREAMING_CHECKPOINT_FILE_CHECKSUM_SKIP_CREATION_IF_FILE_MISSING_CHECKSUM.defaultValue.get)
   }
 
   /** Create a normal CheckpointFileManager (not the checksum checkpoint manager) */
   protected def createNoChecksumManager(path: Path): CheckpointFileManager
 
   protected def createChecksumManager(
-    path: Path,
-    skipCreationIfFileMissingChecksum: Boolean): CheckpointFileManager = {
+      path: Path,
+      skipCreationIfFileMissingChecksum: Boolean): CheckpointFileManager = {
     new ChecksumCheckpointFileManager(
       createNoChecksumManager(path),
       allowConcurrentDelete = true,
@@ -125,7 +128,8 @@ abstract class ChecksumCheckpointFileManagerSuite extends CheckpointFileManagerT
           "expectedSize" -> fileSize.toString,
           "expectedChecksum" -> "^-?\\d+$", // integer
           "computedSize" -> fileSize.toString,
-          "computedChecksum" -> "^-?\\d+$"), // integer
+          "computedChecksum" -> "^-?\\d+$"
+        ), // integer
         matchPVals = true)
 
       checksumFm.close()
@@ -153,8 +157,7 @@ abstract class ChecksumCheckpointFileManagerSuite extends CheckpointFileManagerT
         _.seekToNewSource(1),
         _.read(1, new Array[Byte](1), 0, 1),
         _.readFully(1, new Array[Byte](1), 0, 1),
-        _.readFully(1, new Array[Byte](1))
-      )
+        _.readFully(1, new Array[Byte](1)))
 
       unsupported.foreach(op => {
         intercept[UnsupportedOperationException] {
@@ -220,8 +223,10 @@ abstract class ChecksumCheckpointFileManagerSuite extends CheckpointFileManagerT
       val checksumFmWithFallback =
         createChecksumManager(basePath, skipCreationIfFileMissingChecksum = true)
       // Overwrite the file with a different content.
-      checksumFmWithFallback.createAtomic(
-        path, overwriteIfPossible = true).writeContent(content + 1).close()
+      checksumFmWithFallback
+        .createAtomic(path, overwriteIfPossible = true)
+        .writeContent(content + 1)
+        .close()
       assert(checksumFmWithFallback.open(path).readContent() == content + 1)
       // Checksum should not be created since we fallback to the underlying file manager.
       assert(!checksumFmWithFallback.exists(getChecksumPath(path)))
@@ -230,16 +235,20 @@ abstract class ChecksumCheckpointFileManagerSuite extends CheckpointFileManagerT
       val checksumFmWithoutFallback =
         createChecksumManager(basePath, skipCreationIfFileMissingChecksum = false)
       // Overwrite the file with a different content.
-      checksumFmWithoutFallback.createAtomic(
-        path, overwriteIfPossible = true).writeContent(content + 2).close()
+      checksumFmWithoutFallback
+        .createAtomic(path, overwriteIfPossible = true)
+        .writeContent(content + 2)
+        .close()
       assert(checksumFmWithoutFallback.open(path).readContent() == content + 2)
       // Checksum should be created since we don't fallback to the underlying file manager.
       assert(checksumFmWithoutFallback.exists(getChecksumPath(path)))
 
       // Try to write and read the file with the checksum manager with fallback when the checksum
       // file already exists.
-      checksumFmWithFallback.createAtomic(
-        path, overwriteIfPossible = true).writeContent(content + 3).close()
+      checksumFmWithFallback
+        .createAtomic(path, overwriteIfPossible = true)
+        .writeContent(content + 3)
+        .close()
       // This read should succeed since we do not fallback to the underlying file manager, since
       // the checksum file already exists.
       assert(checksumFmWithFallback.open(path).readContent() == content + 3)

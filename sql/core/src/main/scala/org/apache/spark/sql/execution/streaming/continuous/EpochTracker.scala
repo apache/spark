@@ -20,8 +20,8 @@ package org.apache.spark.sql.execution.streaming.continuous
 import java.util.concurrent.atomic.AtomicLong
 
 /**
- * Tracks the current continuous processing epoch within a task. Call
- * EpochTracker.getCurrentEpoch to get the current epoch.
+ * Tracks the current continuous processing epoch within a task. Call EpochTracker.getCurrentEpoch
+ * to get the current epoch.
  */
 object EpochTracker {
   // The current epoch. Note that this is a shared reference; ContinuousWriteRDD.compute() will

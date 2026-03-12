@@ -25,7 +25,8 @@ trait TaggingExpression extends UnaryExpression {
   override def nullable: Boolean = child.nullable
   override def dataType: DataType = child.dataType
 
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = child.genCode(ctx)
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
+    child.genCode(ctx)
 
   override def eval(input: InternalRow): Any = child.eval(input)
 }
@@ -64,6 +65,7 @@ case class KnownNotContainsNull(child: Expression) extends TaggingExpression {
 }
 
 case class KnownFloatingPointNormalized(child: Expression) extends TaggingExpression {
-  override protected def withNewChildInternal(newChild: Expression): KnownFloatingPointNormalized =
+  override protected def withNewChildInternal(
+      newChild: Expression): KnownFloatingPointNormalized =
     copy(child = newChild)
 }

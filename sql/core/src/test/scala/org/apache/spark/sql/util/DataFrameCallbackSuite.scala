@@ -41,9 +41,10 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StringType
 
-class DataFrameCallbackSuite extends QueryTest
-  with SharedSparkSession
-  with AdaptiveSparkPlanHelper {
+class DataFrameCallbackSuite
+    extends QueryTest
+    with SharedSparkSession
+    with AdaptiveSparkPlanHelper {
   import testImplicits._
   import functions._
 
@@ -57,7 +58,10 @@ class DataFrameCallbackSuite extends QueryTest
     val metrics = ArrayBuffer.empty[(String, QueryExecution, Long)]
     val listener = new QueryExecutionListener {
       // Only test successful case here, so no need to implement `onFailure`
-      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
+      override def onFailure(
+          funcName: String,
+          qe: QueryExecution,
+          exception: Exception): Unit = {}
 
       override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {
         metrics += ((funcName, qe, duration))
@@ -113,7 +117,10 @@ class DataFrameCallbackSuite extends QueryTest
     val metrics = ArrayBuffer.empty[(String, QueryExecution, Long)]
     val listener = new QueryExecutionListener {
       // Only test successful case here, so no need to implement `onFailure`
-      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
+      override def onFailure(
+          funcName: String,
+          qe: QueryExecution,
+          exception: Exception): Unit = {}
 
       override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {
         metrics += ((funcName, qe, duration))
@@ -141,7 +148,10 @@ class DataFrameCallbackSuite extends QueryTest
     val metrics = ArrayBuffer.empty[Long]
     val listener = new QueryExecutionListener {
       // Only test successful case here, so no need to implement `onFailure`
-      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
+      override def onFailure(
+          funcName: String,
+          qe: QueryExecution,
+          exception: Exception): Unit = {}
 
       override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {
         val metric = stripAQEPlan(qe.executedPlan) match {
@@ -181,7 +191,10 @@ class DataFrameCallbackSuite extends QueryTest
     val metrics = ArrayBuffer.empty[Long]
     val listener = new QueryExecutionListener {
       // Only test successful case here, so no need to implement `onFailure`
-      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
+      override def onFailure(
+          funcName: String,
+          qe: QueryExecution,
+          exception: Exception): Unit = {}
 
       override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {
         metrics += qe.executedPlan.longMetric("dataSize").value
@@ -198,7 +211,9 @@ class DataFrameCallbackSuite extends QueryTest
     df.groupBy("i").count().collect()
 
     def getPeakExecutionMemory(stageId: Int): Long = {
-      val peakMemoryAccumulator = sparkListener.getCompletedStageInfos(stageId).accumulables
+      val peakMemoryAccumulator = sparkListener
+        .getCompletedStageInfos(stageId)
+        .accumulables
         .filter(_._2.name == Some(InternalAccumulator.PEAK_EXECUTION_MEMORY))
 
       assert(peakMemoryAccumulator.size == 1)
@@ -239,8 +254,11 @@ class DataFrameCallbackSuite extends QueryTest
       assert(commands.length == 1)
       assert(commands.head._1 == "command")
       assert(commands.head._2.isInstanceOf[InsertIntoHadoopFsRelationCommand])
-      assert(commands.head._2.asInstanceOf[InsertIntoHadoopFsRelationCommand]
-        .fileFormat.isInstanceOf[JsonFileFormat])
+      assert(
+        commands.head._2
+          .asInstanceOf[InsertIntoHadoopFsRelationCommand]
+          .fileFormat
+          .isInstanceOf[JsonFileFormat])
     }
 
     withTable("tab") {
@@ -250,8 +268,13 @@ class DataFrameCallbackSuite extends QueryTest
       assert(commands.length == 3)
       assert(commands(2)._1 == "command")
       assert(commands(2)._2.isInstanceOf[InsertIntoHadoopFsRelationCommand])
-      assert(commands(2)._2.asInstanceOf[InsertIntoHadoopFsRelationCommand]
-        .catalogTable.get.identifier.identifier == "tab")
+      assert(
+        commands(2)._2
+          .asInstanceOf[InsertIntoHadoopFsRelationCommand]
+          .catalogTable
+          .get
+          .identifier
+          .identifier == "tab")
     }
     // exiting withTable adds commands(3) via onSuccess (drops tab)
 
@@ -266,8 +289,11 @@ class DataFrameCallbackSuite extends QueryTest
       assert(commands.length == 7)
       assert(commands(5)._1 == "command")
       assert(commands(5)._2.isInstanceOf[CreateDataSourceTableAsSelectCommand])
-      assert(commands(5)._2.asInstanceOf[CreateDataSourceTableAsSelectCommand]
-        .table.partitionColumnNames == Seq("p"))
+      assert(
+        commands(5)._2
+          .asInstanceOf[CreateDataSourceTableAsSelectCommand]
+          .table
+          .partitionColumnNames == Seq("p"))
     }
 
     withTable("tab") {
@@ -284,7 +310,8 @@ class DataFrameCallbackSuite extends QueryTest
   }
 
   test("get observable metrics by callback") {
-    val df = spark.range(100)
+    val df = spark
+      .range(100)
       .observe(
         name = "my_event",
         min($"id").as("min_val"),
@@ -292,15 +319,14 @@ class DataFrameCallbackSuite extends QueryTest
         // Test unresolved alias
         sum($"id"),
         count(when($"id" % 2 === 0, 1)).as("num_even"))
-      .observe(
-        name = "other_event",
-        avg($"id").cast("int").as("avg_val"))
+      .observe(name = "other_event", avg($"id").cast("int").as("avg_val"))
 
     validateObservedMetrics(df)
   }
 
   test("SPARK-35296: observe should work even if a task contains multiple partitions") {
-    val df = spark.range(0, 100, 1, 3)
+    val df = spark
+      .range(0, 100, 1, 3)
       .observe(
         name = "my_event",
         min($"id").as("min_val"),
@@ -308,16 +334,15 @@ class DataFrameCallbackSuite extends QueryTest
         // Test unresolved alias
         sum($"id"),
         count(when($"id" % 2 === 0, 1)).as("num_even"))
-      .observe(
-        name = "other_event",
-        avg($"id").cast("int").as("avg_val"))
+      .observe(name = "other_event", avg($"id").cast("int").as("avg_val"))
       .coalesce(2)
 
     validateObservedMetrics(df)
   }
 
   test("SPARK-35695: get observable metrics with persist by callback") {
-    val df = spark.range(100)
+    val df = spark
+      .range(100)
       .observe(
         name = "my_event",
         min($"id").as("min_val"),
@@ -326,9 +351,7 @@ class DataFrameCallbackSuite extends QueryTest
         sum($"id"),
         count(when($"id" % 2 === 0, 1)).as("num_even"))
       .persist()
-      .observe(
-        name = "other_event",
-        avg($"id").cast("int").as("avg_val"))
+      .observe(name = "other_event", avg($"id").cast("int").as("avg_val"))
       .persist()
 
     validateObservedMetrics(df)
@@ -336,7 +359,8 @@ class DataFrameCallbackSuite extends QueryTest
 
   test("SPARK-35695: get observable metrics with adaptive execution by callback") {
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
-      val df = spark.range(100)
+      val df = spark
+        .range(100)
         .observe(
           name = "my_event",
           min($"id").as("min_val"),
@@ -345,9 +369,7 @@ class DataFrameCallbackSuite extends QueryTest
           sum($"id"),
           count(when($"id" % 2 === 0, 1)).as("num_even"))
         .repartition($"id")
-        .observe(
-          name = "other_event",
-          avg($"id").cast("int").as("avg_val"))
+        .observe(name = "other_event", avg($"id").cast("int").as("avg_val"))
 
       validateObservedMetrics(df)
     }
@@ -376,14 +398,16 @@ class DataFrameCallbackSuite extends QueryTest
 
     try {
       val heartbeatInterval = sparkContext.getConf.get(EXECUTOR_HEARTBEAT_INTERVAL)
-      val df = spark.range(0, 100, 1, 1)
+      val df = spark
+        .range(0, 100, 1, 1)
         .mapPartitions { iter =>
           TaskContext.get().addTaskCompletionListener[Unit] { _ =>
             // Wait for heartbeat sent, 30s timeout by default
             assert(HeartbeatMonitor.await(heartbeatInterval * 3, TimeUnit.MILLISECONDS))
           }
           iter
-        }.toDF("id")
+        }
+        .toDF("id")
         .observe(
           name = "my_event",
           max($"id").as("max_val"),
@@ -404,14 +428,16 @@ class DataFrameCallbackSuite extends QueryTest
 
   test("SPARK-50581: support observe with udaf") {
     withUserDefinedFunction(("someUdaf", true)) {
-      spark.udf.register("someUdaf", functions.udaf(new Aggregator[JLong, JLong, JLong] {
-        def zero: JLong = 0L
-        def reduce(b: JLong, a: JLong): JLong = a + b
-        def merge(b1: JLong, b2: JLong): JLong = b1 + b2
-        def finish(r: JLong): JLong = r
-        def bufferEncoder: Encoder[JLong] = Encoders.LONG
-        def outputEncoder: Encoder[JLong] = Encoders.LONG
-      }))
+      spark.udf.register(
+        "someUdaf",
+        functions.udaf(new Aggregator[JLong, JLong, JLong] {
+          def zero: JLong = 0L
+          def reduce(b: JLong, a: JLong): JLong = a + b
+          def merge(b1: JLong, b2: JLong): JLong = b1 + b2
+          def finish(r: JLong): JLong = r
+          def bufferEncoder: Encoder[JLong] = Encoders.LONG
+          def outputEncoder: Encoder[JLong] = Encoders.LONG
+        }))
 
       val df = spark.range(100)
 
@@ -423,7 +449,10 @@ class DataFrameCallbackSuite extends QueryTest
           }
         }
 
-        override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {
+        override def onFailure(
+            funcName: String,
+            qe: QueryExecution,
+            exception: Exception): Unit = {
           // No-op
         }
       }
@@ -431,10 +460,7 @@ class DataFrameCallbackSuite extends QueryTest
         spark.listenerManager.register(listener)
 
         // udaf usage in observe is not working (serialization exception)
-        df.observe(
-            name = "my_metrics",
-            expr("someUdaf(id)").as("agg")
-          )
+        df.observe(name = "my_metrics", expr("someUdaf(id)").as("agg"))
           .collect()
 
         sparkContext.listenerBus.waitUntilEmpty()
@@ -484,7 +510,6 @@ class DataFrameCallbackSuite extends QueryTest
     }
   }
 
-
   testQuietly("SPARK-31144: QueryExecutionListener should receive `java.lang.Error`") {
     var e: Exception = null
     val listener = new QueryExecutionListener {
@@ -499,8 +524,9 @@ class DataFrameCallbackSuite extends QueryTest
       Dataset.ofRows(spark, ErrorTestCommand("foo")).collect()
     }
     sparkContext.listenerBus.waitUntilEmpty()
-    assert(e != null && e.isInstanceOf[SparkException]
-      && e.getCause.isInstanceOf[Error] && e.getCause.getMessage == "foo")
+    assert(
+      e != null && e.isInstanceOf[SparkException]
+        && e.getCause.isInstanceOf[Error] && e.getCause.getMessage == "foo")
     spark.listenerManager.unregister(listener)
   }
 }

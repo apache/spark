@@ -34,19 +34,16 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
  * Similar to [[HashAggregateExec]], this operator also falls back to sort-based aggregation when
  * the size of the internal hash map exceeds the threshold. The differences are:
  *
- *  - It uses safe rows as aggregation buffer since it must support JVM objects as aggregation
- *    states.
- *
- *  - It tracks entry count of the hash map instead of byte size to decide when we should fall back.
- *    This is because it's hard to estimate the accurate size of arbitrary JVM objects in a
- *    lightweight way.
- *
- *  - Whenever fallen back to sort-based aggregation, this operator feeds all of the rest input rows
- *    into external sorters instead of building more hash map(s) as what [[HashAggregateExec]] does.
- *    This is because having too many JVM object aggregation states floating there can be dangerous
- *    for GC.
- *
- *  - CodeGen is not supported yet.
+ *   - It uses safe rows as aggregation buffer since it must support JVM objects as aggregation
+ *     states.
+ *   - It tracks entry count of the hash map instead of byte size to decide when we should fall
+ *     back. This is because it's hard to estimate the accurate size of arbitrary JVM objects in a
+ *     lightweight way.
+ *   - Whenever fallen back to sort-based aggregation, this operator feeds all of the rest input
+ *     rows into external sorters instead of building more hash map(s) as what
+ *     [[HashAggregateExec]] does. This is because having too many JVM object aggregation states
+ *     floating there can be dangerous for GC.
+ *   - CodeGen is not supported yet.
  *
  * This operator may be turned off by setting the following SQL configuration to `false`:
  * {{{
@@ -67,7 +64,7 @@ case class ObjectHashAggregateExec(
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
     child: SparkPlan)
-  extends BaseAggregateExec {
+    extends BaseAggregateExec {
 
   override def allAttributes: AttributeSeq =
     child.output ++ aggregateBufferAttributes ++ aggregateAttributes ++
@@ -77,8 +74,9 @@ case class ObjectHashAggregateExec(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
     "aggTime" -> SQLMetrics.createTimingMetric(sparkContext, "time in aggregation build"),
     "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"),
-    "numTasksFallBacked" -> SQLMetrics.createMetric(sparkContext, "number of sort fallback tasks")
-  )
+    "numTasksFallBacked" -> SQLMetrics.createMetric(
+      sparkContext,
+      "number of sort fallback tasks"))
 
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
@@ -104,8 +102,7 @@ case class ObjectHashAggregateExec(
             aggregateAttributes,
             initialInputBufferOffset,
             resultExpressions,
-            (expressions, inputSchema) =>
-              MutableProjection.create(expressions, inputSchema),
+            (expressions, inputSchema) => MutableProjection.create(expressions, inputSchema),
             inputAttributes,
             iter,
             fallbackCountThreshold,

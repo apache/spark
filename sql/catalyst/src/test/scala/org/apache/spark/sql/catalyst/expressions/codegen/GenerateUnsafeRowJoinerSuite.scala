@@ -50,28 +50,28 @@ class GenerateUnsafeRowJoinerSuite extends SparkFunSuite {
   }
 
   test("rows with all empty strings") {
-    val schema = StructType(Seq(
-      StructField("f1", StringType), StructField("f2", StringType)))
-    val row: UnsafeRow = UnsafeProjection.create(schema).apply(
-      InternalRow(UTF8String.EMPTY_UTF8, UTF8String.EMPTY_UTF8))
-     testConcat(schema, row, schema, row)
+    val schema = StructType(Seq(StructField("f1", StringType), StructField("f2", StringType)))
+    val row: UnsafeRow = UnsafeProjection
+      .create(schema)
+      .apply(InternalRow(UTF8String.EMPTY_UTF8, UTF8String.EMPTY_UTF8))
+    testConcat(schema, row, schema, row)
   }
 
   test("rows with all empty int arrays") {
-    val schema = StructType(Seq(
-      StructField("f1", ArrayType(IntegerType)), StructField("f2", ArrayType(IntegerType))))
+    val schema = StructType(
+      Seq(StructField("f1", ArrayType(IntegerType)), StructField("f2", ArrayType(IntegerType))))
     val toRow = ExpressionEncoder[Array[Int]]().resolveAndBind().createSerializer()
     val emptyIntArray = toRow(Array.emptyIntArray).getArray(0)
-    val row: UnsafeRow = UnsafeProjection.create(schema).apply(
-      InternalRow(emptyIntArray, emptyIntArray))
+    val row: UnsafeRow =
+      UnsafeProjection.create(schema).apply(InternalRow(emptyIntArray, emptyIntArray))
     testConcat(schema, row, schema, row)
   }
 
   test("alternating empty and non-empty strings") {
-    val schema = StructType(Seq(
-      StructField("f1", StringType), StructField("f2", StringType)))
-    val row: UnsafeRow = UnsafeProjection.create(schema).apply(
-      InternalRow(UTF8String.EMPTY_UTF8, UTF8String.fromString("foo")))
+    val schema = StructType(Seq(StructField("f1", StringType), StructField("f2", StringType)))
+    val row: UnsafeRow = UnsafeProjection
+      .create(schema)
+      .apply(InternalRow(UTF8String.EMPTY_UTF8, UTF8String.fromString("foo")))
     testConcat(schema, row, schema, row)
   }
 
@@ -102,14 +102,17 @@ class GenerateUnsafeRowJoinerSuite extends SparkFunSuite {
   }
 
   test("SPARK-30993: UserDefinedType matched to fixed length SQL type shouldn't be corrupted") {
-    val schema1 = new StructType(Array(
-      StructField("date", new WrappedDateTimeUDT),
-      StructField("s", StringType),
-      StructField("i", IntegerType)))
+    val schema1 = new StructType(
+      Array(
+        StructField("date", new WrappedDateTimeUDT),
+        StructField("s", StringType),
+        StructField("i", IntegerType)))
     val proj1 = UnsafeProjection.create(schema1.fields.map(_.dataType))
-    val intRow1 = new GenericInternalRow(Array[Any](
-      LocalDateTime.now().toEpochSecond(ZoneOffset.UTC),
-      UTF8String.fromString("hello"), 1))
+    val intRow1 = new GenericInternalRow(
+      Array[Any](
+        LocalDateTime.now().toEpochSecond(ZoneOffset.UTC),
+        UTF8String.fromString("hello"),
+        1))
 
     val schema2 = new StructType(Array(StructField("i", IntegerType)))
     val proj2 = UnsafeProjection.create(schema2.fields.map(_.dataType))
@@ -118,13 +121,18 @@ class GenerateUnsafeRowJoinerSuite extends SparkFunSuite {
     testConcat(schema1, proj1.apply(intRow1), schema2, proj2.apply(intRow2))
   }
 
-  private def testConcat(numFields1: Int, numFields2: Int, candidateTypes: Seq[DataType]): Unit = {
+  private def testConcat(
+      numFields1: Int,
+      numFields2: Int,
+      candidateTypes: Seq[DataType]): Unit = {
     for (i <- 0 until 10) {
       testConcatOnce(numFields1, numFields2, candidateTypes)
     }
   }
 
-  private def testConcatOnce(numFields1: Int, numFields2: Int,
+  private def testConcatOnce(
+      numFields1: Int,
+      numFields2: Int,
       candidateTypes: Seq[DataType]): Unit = {
     info(s"schema size $numFields1, $numFields2")
     val random = new Random()
@@ -183,16 +191,17 @@ class GenerateUnsafeRowJoinerSuite extends SparkFunSuite {
       }
     }
 
-
     assert(
       expectedOutput.getSizeInBytes == output.getSizeInBytes,
       "output isn't same size in bytes as slow path")
 
     // Compare the UnsafeRows byte-by-byte so that we can print more useful debug information in
     // case this assertion fails:
-    val actualBytes = output.getBaseObject.asInstanceOf[Array[Byte]]
+    val actualBytes = output.getBaseObject
+      .asInstanceOf[Array[Byte]]
       .take(output.getSizeInBytes)
-    val expectedBytes = expectedOutput.getBaseObject.asInstanceOf[Array[Byte]]
+    val expectedBytes = expectedOutput.getBaseObject
+      .asInstanceOf[Array[Byte]]
       .take(expectedOutput.getSizeInBytes)
 
     val bitsetWidth = UnsafeRow.calculateBitSetWidthInBytes(expectedOutput.numFields())
@@ -204,20 +213,22 @@ class GenerateUnsafeRowJoinerSuite extends SparkFunSuite {
     val actualFixedLength = actualBytes.slice(bitsetWidth, bitsetWidth + fixedLengthSize)
     val expectedFixedLength = expectedBytes.slice(bitsetWidth, bitsetWidth + fixedLengthSize)
     if (actualFixedLength !== expectedFixedLength) {
-      actualFixedLength.grouped(8)
+      actualFixedLength
+        .grouped(8)
         .zip(expectedFixedLength.grouped(8))
         .zip(mergedSchema.fields.iterator)
-        .foreach {
-          case ((actual, expected), field) =>
-            assert(actual === expected, s"Fixed length sections are not equal for field $field")
-      }
+        .foreach { case ((actual, expected), field) =>
+          assert(actual === expected, s"Fixed length sections are not equal for field $field")
+        }
       fail("Fixed length sections were not equal")
     }
 
     val variableLengthStart = bitsetWidth + fixedLengthSize
     val actualVariableLength = actualBytes.drop(variableLengthStart)
     val expectedVariableLength = expectedBytes.drop(variableLengthStart)
-    assert(actualVariableLength === expectedVariableLength, "fixed length sections were not equal")
+    assert(
+      actualVariableLength === expectedVariableLength,
+      "fixed length sections were not equal")
 
     assert(output.hashCode() == expectedOutput.hashCode(), "hash codes were not equal")
   }

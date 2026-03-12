@@ -43,10 +43,7 @@ class TruncateTableSuite extends command.TruncateTableSuiteBase with CommandSuit
         },
         condition = "INVALID_PARTITION_OPERATION.PARTITION_MANAGEMENT_IS_UNSUPPORTED",
         parameters = Map("name" -> tableName),
-        context = ExpectedContext(
-          fragment = t,
-          start = 15,
-          stop = 42))
+        context = ExpectedContext(fragment = t, start = 15, stop = 42))
     }
   }
 }

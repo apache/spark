@@ -29,7 +29,9 @@ import org.apache.spark.sql.types.{StringType, StructType}
 class GenerateOptimizationSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
-    val batches = Batch("GenerateOptimization", FixedPoint(100),
+    val batches = Batch(
+      "GenerateOptimization",
+      FixedPoint(100),
       ColumnPruning,
       CollapseProject,
       GenerateOptimization) :: Nil
@@ -50,9 +52,9 @@ class GenerateOptimizationSuite extends PlanTest {
     val aliases = collectGeneratedAliases(optimized)
 
     val expected = relation
-      .select(
-        $"items".getField("item_id").as(aliases(0)))
-      .generate(Explode($"${aliases(0)}"),
+      .select($"items".getField("item_id").as(aliases(0)))
+      .generate(
+        Explode($"${aliases(0)}"),
         unrequiredChildIndex = Seq(0),
         outputNames = Seq("explode"))
       .select()

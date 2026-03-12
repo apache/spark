@@ -50,12 +50,10 @@ class GroupingAndAggregateExpressionsExtractor(
       case other =>
         aliasChildToAliasInAggregateExpressions.put(other, None)
         other
-    }
-  )
+    })
 
   private val groupingExpressionsSemanticComparator = new SemanticComparator(
-    aggregate.groupingExpressions
-  )
+    aggregate.groupingExpressions)
 
   /**
    * Extracts grouping and aggregate expressions based on the provided expression. Instead of
@@ -94,8 +92,7 @@ class GroupingAndAggregateExpressionsExtractor(
         case (Some(expression), None) =>
           throw SparkException.internalError(
             s"No parent alias for expression $expression while extracting aggregate" +
-            s"expressions in an operator."
-          )
+              s"expressions in an operator.")
         case _ =>
           expression match {
             case aggregateExpression: AggregateExpression =>

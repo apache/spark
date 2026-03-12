@@ -23,7 +23,6 @@ import java.util.concurrent.TimeUnit
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.util.Utils
 
-
 /**
  * Static SQL configuration is a cross-session, immutable Spark configuration. External users can
  * see the static sql configs via `SparkSession.conf`, but can NOT set/unset them.
@@ -40,10 +39,10 @@ object StaticSQLConf {
 
   val CATALOG_DEFAULT_DATABASE =
     buildStaticConf(s"spark.sql.catalog.$SESSION_CATALOG_NAME.defaultDatabase")
-    .doc("The default database for session catalog.")
-    .version("3.4.0")
-    .stringConf
-    .createWithDefault("default")
+      .doc("The default database for session catalog.")
+      .version("3.4.0")
+      .stringConf
+      .createWithDefault("default")
 
   val CATALOG_IMPLEMENTATION = buildStaticConf("spark.sql.catalogImplementation")
     .internal()
@@ -80,26 +79,30 @@ object StaticSQLConf {
   val FILESOURCE_TABLE_RELATION_CACHE_SIZE =
     buildStaticConf("spark.sql.filesourceTableRelationCacheSize")
       .internal()
-      .doc("The maximum size of the cache that maps qualified table names to table relation plans.")
+      .doc(
+        "The maximum size of the cache that maps qualified table names to table relation plans.")
       .version("2.2.0")
       .intConf
-      .checkValue(cacheSize => cacheSize >= 0, "The maximum size of the cache must not be negative")
+      .checkValue(
+        cacheSize => cacheSize >= 0,
+        "The maximum size of the cache must not be negative")
       .createWithDefault(1000)
 
   val CODEGEN_CACHE_MAX_ENTRIES = buildStaticConf("spark.sql.codegen.cache.maxEntries")
-      .internal()
-      .doc("When nonzero, enable caching of generated classes for operators and expressions. " +
-        "All jobs share the cache that can use up to the specified number for generated classes.")
-      .version("2.4.0")
-      .intConf
-      .checkValue(maxEntries => maxEntries >= 0, "The maximum must not be negative")
-      .createWithDefault(100)
+    .internal()
+    .doc("When nonzero, enable caching of generated classes for operators and expressions. " +
+      "All jobs share the cache that can use up to the specified number for generated classes.")
+    .version("2.4.0")
+    .intConf
+    .checkValue(maxEntries => maxEntries >= 0, "The maximum must not be negative")
+    .createWithDefault(100)
 
   val CODEGEN_COMMENTS = buildStaticConf("spark.sql.codegen.comments")
     .internal()
-    .doc("When true, put comment in the generated code. Since computing huge comments " +
-      "can be extremely expensive in certain cases, such as deeply-nested expressions which " +
-      "operate over inputs with wide schemas, default is false.")
+    .doc(
+      "When true, put comment in the generated code. Since computing huge comments " +
+        "can be extremely expensive in certain cases, such as deeply-nested expressions which " +
+        "operate over inputs with wide schemas, default is false.")
     .version("2.0.0")
     .booleanConf
     .createWithDefault(false)
@@ -115,9 +118,10 @@ object StaticSQLConf {
 
   val HIVE_THRIFT_SERVER_SINGLESESSION =
     buildStaticConf("spark.sql.hive.thriftServer.singleSession")
-      .doc("When set to true, Hive Thrift server is running in a single session mode. " +
-        "All the JDBC/ODBC connections share the temporary views, function registries, " +
-        "SQL configuration and the current database.")
+      .doc(
+        "When set to true, Hive Thrift server is running in a single session mode. " +
+          "All the JDBC/ODBC connections share the temporary views, function registries, " +
+          "SQL configuration and the current database.")
       .version("1.6.0")
       .booleanConf
       .createWithDefault(false)
@@ -137,34 +141,38 @@ object StaticSQLConf {
 
   val LOAD_SESSION_EXTENSIONS_FROM_CLASSPATH =
     buildStaticConf("spark.sql.extensions.test.loadFromCp")
-      .doc("Flag that determines if we should load extensions from the classpath using the " +
-        "SparkSessionExtensionsProvider mechanism. This is a test only flag.")
+      .doc(
+        "Flag that determines if we should load extensions from the classpath using the " +
+          "SparkSessionExtensionsProvider mechanism. This is a test only flag.")
       .booleanConf
       .createWithDefault(true)
 
   val SPARK_CACHE_SERIALIZER = buildStaticConf("spark.sql.cache.serializer")
-    .doc("The name of a class that implements " +
-      "org.apache.spark.sql.columnar.CachedBatchSerializer. It will be used to " +
-      "translate SQL data into a format that can more efficiently be cached. The underlying " +
-      "API is subject to change so use with caution. Multiple classes cannot be specified. " +
-      "The class must have a no-arg constructor.")
+    .doc(
+      "The name of a class that implements " +
+        "org.apache.spark.sql.columnar.CachedBatchSerializer. It will be used to " +
+        "translate SQL data into a format that can more efficiently be cached. The underlying " +
+        "API is subject to change so use with caution. Multiple classes cannot be specified. " +
+        "The class must have a no-arg constructor.")
     .version("3.1.0")
     .stringConf
     .createWithDefault("org.apache.spark.sql.execution.columnar.DefaultCachedBatchSerializer")
 
   val QUERY_EXECUTION_LISTENERS = buildStaticConf("spark.sql.queryExecutionListeners")
-    .doc("List of class names implementing QueryExecutionListener that will be automatically " +
-      "added to newly created sessions. The classes should have either a no-arg constructor, " +
-      "or a constructor that expects a SparkConf argument.")
+    .doc(
+      "List of class names implementing QueryExecutionListener that will be automatically " +
+        "added to newly created sessions. The classes should have either a no-arg constructor, " +
+        "or a constructor that expects a SparkConf argument.")
     .version("2.3.0")
     .stringConf
     .toSequence
     .createOptional
 
   val STREAMING_QUERY_LISTENERS = buildStaticConf("spark.sql.streaming.streamingQueryListeners")
-    .doc("List of class names implementing StreamingQueryListener that will be automatically " +
-      "added to newly created sessions. The classes should have either a no-arg constructor, " +
-      "or a constructor that expects a SparkConf argument.")
+    .doc(
+      "List of class names implementing StreamingQueryListener that will be automatically " +
+        "added to newly created sessions. The classes should have either a no-arg constructor, " +
+        "or a constructor that expects a SparkConf argument.")
     .version("2.4.0")
     .stringConf
     .toSequence
@@ -190,12 +198,13 @@ object StaticSQLConf {
   val BROADCAST_EXCHANGE_MAX_THREAD_THRESHOLD =
     buildStaticConf("spark.sql.broadcastExchange.maxThreadThreshold")
       .internal()
-      .doc("The maximum degree of parallelism to fetch and broadcast the table. " +
-        "If we encounter memory issue like frequently full GC or OOM when broadcast table " +
-        "we can decrease this number in order to reduce memory usage. " +
-        "Notice the number should be carefully chosen since decreasing parallelism might " +
-        "cause longer waiting for other broadcasting. Also, increasing parallelism may " +
-        "cause memory problem.")
+      .doc(
+        "The maximum degree of parallelism to fetch and broadcast the table. " +
+          "If we encounter memory issue like frequently full GC or OOM when broadcast table " +
+          "we can decrease this number in order to reduce memory usage. " +
+          "Notice the number should be carefully chosen since decreasing parallelism might " +
+          "cause longer waiting for other broadcasting. Also, increasing parallelism may " +
+          "cause memory problem.")
       .version("3.0.0")
       .intConf
       .checkValue(thres => thres > 0 && thres <= 128, "The threshold must be in (0,128].")
@@ -241,11 +250,11 @@ object StaticSQLConf {
       .internal()
       .doc(
         "When true, register Hadoop's FsUrlStreamHandlerFactory to support " +
-        "ADD JAR against HDFS locations. " +
-        "It should be disabled when a different stream protocol handler should be registered " +
-        "to support a particular protocol type, or if Hadoop's FsUrlStreamHandlerFactory " +
-        "conflicts with other protocol types such as `http` or `https`. See also SPARK-25694 " +
-        "and HADOOP-14598.")
+          "ADD JAR against HDFS locations. " +
+          "It should be disabled when a different stream protocol handler should be registered " +
+          "to support a particular protocol type, or if Hadoop's FsUrlStreamHandlerFactory " +
+          "conflicts with other protocol types such as `http` or `https`. See also SPARK-25694 " +
+          "and HADOOP-14598.")
       .version("3.0.0")
       .booleanConf
       .createWithDefault(true)
@@ -274,13 +283,14 @@ object StaticSQLConf {
       .createWithDefault(100)
 
   val METADATA_CACHE_TTL_SECONDS = buildStaticConf("spark.sql.metadataCacheTTLSeconds")
-    .doc("Time-to-live (TTL) value for the metadata caches: partition file metadata cache and " +
-      "session catalog cache. This configuration only has an effect when this value having " +
-      "a positive value (> 0). It also requires setting " +
-      s"'${StaticSQLConf.CATALOG_IMPLEMENTATION.key}' to `hive`, setting " +
-      s"'${SQLConf.HIVE_FILESOURCE_PARTITION_FILE_CACHE_SIZE.key}' > 0 and setting " +
-      s"'${SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key}' to `true` " +
-      "to be applied to the partition file metadata cache.")
+    .doc(
+      "Time-to-live (TTL) value for the metadata caches: partition file metadata cache and " +
+        "session catalog cache. This configuration only has an effect when this value having " +
+        "a positive value (> 0). It also requires setting " +
+        s"'${StaticSQLConf.CATALOG_IMPLEMENTATION.key}' to `hive`, setting " +
+        s"'${SQLConf.HIVE_FILESOURCE_PARTITION_FILE_CACHE_SIZE.key}' > 0 and setting " +
+        s"'${SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key}' to `true` " +
+        "to be applied to the partition file metadata cache.")
     .version("3.1.0")
     .timeConf(TimeUnit.SECONDS)
     .createWithDefault(-1)
@@ -307,11 +317,10 @@ object StaticSQLConf {
 
   val DATA_FRAME_DEBUGGING_ENABLED =
     buildStaticConf("spark.python.sql.dataFrameDebugging.enabled")
-    .internal()
-    .doc(
-      "Enable the DataFrame debugging. This feature is enabled by default, but has a " +
+      .internal()
+      .doc("Enable the DataFrame debugging. This feature is enabled by default, but has a " +
         "non-trivial performance overhead because of the stack trace collection.")
-    .version("4.0.0")
-    .booleanConf
-    .createWithDefault(true)
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(true)
 }

@@ -22,8 +22,8 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.benchmark.SqlBasedBenchmark
 
 /**
- * Benchmark to low level memory access using different ways to manage buffers.
- * To run this benchmark:
+ * Benchmark to low level memory access using different ways to manage buffers. To run this
+ * benchmark:
  * {{{
  *   1. without sbt:
  *      bin/spark-submit --class <this class>

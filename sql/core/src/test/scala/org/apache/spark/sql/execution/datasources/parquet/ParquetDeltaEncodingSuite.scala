@@ -30,13 +30,13 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, IntegralType, LongType}
 
 /**
- * Read tests for vectorized Delta binary packed reader.
- * Translated from
- *  org.apache.parquet.column.values.delta.DeltaBinaryPackingValuesWriterForIntegerTest
- *  org.apache.parquet.column.values.delta.DeltaBinaryPackingValuesWriterForLongTest
+ * Read tests for vectorized Delta binary packed reader. Translated from
+ * org.apache.parquet.column.values.delta.DeltaBinaryPackingValuesWriterForIntegerTest
+ * org.apache.parquet.column.values.delta.DeltaBinaryPackingValuesWriterForLongTest
  */
-abstract class ParquetDeltaEncodingSuite[T] extends ParquetCompatibilityTest
-  with SharedSparkSession {
+abstract class ParquetDeltaEncodingSuite[T]
+    extends ParquetCompatibilityTest
+    with SharedSparkSession {
   protected var blockSize = 128
   protected var miniBlockNum = 4
   protected var reader: VectorizedDeltaBinaryPackedReader = _
@@ -50,7 +50,7 @@ abstract class ParquetDeltaEncodingSuite[T] extends ParquetCompatibilityTest
 
   protected def writeData(data: Array[T], length: Int): Unit
 
-  protected def initValuesWriter (): Unit
+  protected def initValuesWriter(): Unit
 
   protected def allocDataArray(size: Int): Array[T]
 
@@ -60,17 +60,16 @@ abstract class ParquetDeltaEncodingSuite[T] extends ParquetCompatibilityTest
 
   protected def getTypeMaxValue: T
 
-  protected def readData(total: Int, columnVector : WritableColumnVector, rowId: Int): Unit
+  protected def readData(total: Int, columnVector: WritableColumnVector, rowId: Int): Unit
 
   protected def skip(total: Int): Unit
 
-  protected def readDataFromVector(columnVector : WritableColumnVector, rowId: Int): T
+  protected def readDataFromVector(columnVector: WritableColumnVector, rowId: Int): T
 
-  protected def estimatedSize(length: Int) : Double
+  protected def estimatedSize(length: Int): Double
 
   protected def setValue(arr: Array[T], index: Int, value: Int): Unit
-  protected def compareValues(expected: Int, actual: T) : Boolean
-
+  protected def compareValues(expected: Int, actual: T): Boolean
 
   protected override def beforeEach(): Unit = {
     random = new Random(0)
@@ -270,7 +269,7 @@ class ParquetDeltaEncodingInteger extends ParquetDeltaEncodingSuite[Int] {
     }
   }
 
-  override protected def initValuesWriter (): Unit = {
+  override protected def initValuesWriter(): Unit = {
     writer = new DeltaBinaryPackingValuesWriterForInteger(
       blockSize,
       miniBlockNum,
@@ -285,15 +284,17 @@ class ParquetDeltaEncodingInteger extends ParquetDeltaEncodingSuite[Int] {
   override protected def getTypeMinValue: Int = Int.MinValue
   override protected def getTypeMaxValue: Int = Int.MaxValue
 
-  override protected def readData(total: Int, columnVector : WritableColumnVector, rowId: Int): Unit
-  = reader.readIntegers(total, columnVector, rowId)
+  override protected def readData(
+      total: Int,
+      columnVector: WritableColumnVector,
+      rowId: Int): Unit = reader.readIntegers(total, columnVector, rowId)
 
   override protected def skip(total: Int): Unit = reader.skipIntegers(total)
 
   override protected def readDataFromVector(columnVector: WritableColumnVector, rowId: Int): Int =
     columnVector.getInt(rowId)
 
-  override protected def estimatedSize(length: Int) : Double = {
+  override protected def estimatedSize(length: Int): Double = {
     val miniBlockSize = blockSize / miniBlockNum
     val miniBlockFlushed = Math.ceil((length.toDouble - 1) / miniBlockSize)
     val blockFlushed = Math.ceil((length.toDouble - 1) / blockSize)
@@ -306,7 +307,7 @@ class ParquetDeltaEncodingInteger extends ParquetDeltaEncodingSuite[Int] {
   override protected def setValue(arr: Array[Int], index: Int, value: Int): Unit =
     arr(index) = value
 
-  override protected def compareValues(expected: Int, actual: Int) : Boolean =
+  override protected def compareValues(expected: Int, actual: Int): Boolean =
     expected == actual
 
 }
@@ -322,7 +323,7 @@ class ParquetDeltaEncodingLong extends ParquetDeltaEncodingSuite[Long] {
     }
   }
 
-  override protected def initValuesWriter (): Unit = {
+  override protected def initValuesWriter(): Unit = {
     writer = new DeltaBinaryPackingValuesWriterForLong(
       blockSize,
       miniBlockNum,
@@ -337,15 +338,19 @@ class ParquetDeltaEncodingLong extends ParquetDeltaEncodingSuite[Long] {
   override protected def getTypeMinValue: Long = Long.MinValue
   override protected def getTypeMaxValue: Long = Long.MaxValue
 
-  override protected def readData(total: Int, columnVector: WritableColumnVector, rowId: Int): Unit
-    = reader.readLongs(total, columnVector, rowId)
+  override protected def readData(
+      total: Int,
+      columnVector: WritableColumnVector,
+      rowId: Int): Unit = reader.readLongs(total, columnVector, rowId)
 
   override protected def skip(total: Int): Unit = reader.skipLongs(total)
 
-  override protected def readDataFromVector(columnVector: WritableColumnVector, rowId: Int): Long =
+  override protected def readDataFromVector(
+      columnVector: WritableColumnVector,
+      rowId: Int): Long =
     columnVector.getLong(rowId)
 
-  override protected def estimatedSize(length: Int) : Double = {
+  override protected def estimatedSize(length: Int): Double = {
     val miniBlockSize = blockSize / miniBlockNum
     val miniBlockFlushed = Math.ceil((length.toDouble - 1) / miniBlockSize)
     val blockFlushed = Math.ceil((length.toDouble - 1) / blockSize)
@@ -359,7 +364,7 @@ class ParquetDeltaEncodingLong extends ParquetDeltaEncodingSuite[Long] {
     arr(index) = value.toLong
   }
 
-  override protected def compareValues(expected: Int, actual: Long) : Boolean = {
+  override protected def compareValues(expected: Int, actual: Long): Boolean = {
     expected.toLong == actual
   }
 

@@ -27,18 +27,18 @@ import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.errors.SqlScriptingErrors
 
 /**
- * Trait for all SQL Scripting logical operators that are product of parsing phase.
- * These operators will be used by the SQL Scripting interpreter to generate execution nodes.
+ * Trait for all SQL Scripting logical operators that are product of parsing phase. These
+ * operators will be used by the SQL Scripting interpreter to generate execution nodes.
  */
 sealed trait CompoundPlanStatement extends LogicalPlan
 
 /**
- * Logical operator representing result of parsing a single SQL statement
- *   that is supposed to be executed against Spark.
- * @param parsedPlan Result of SQL statement parsing.
+ * Logical operator representing result of parsing a single SQL statement that is supposed to be
+ * executed against Spark.
+ * @param parsedPlan
+ *   Result of SQL statement parsing.
  */
-case class SingleStatement(parsedPlan: LogicalPlan)
-  extends CompoundPlanStatement {
+case class SingleStatement(parsedPlan: LogicalPlan) extends CompoundPlanStatement {
 
   override val origin: Origin = CurrentOrigin.get
 
@@ -63,14 +63,19 @@ case class SingleStatement(parsedPlan: LogicalPlan)
 
 /**
  * Logical operator for a compound body. Contains all statements within the compound body.
- * @param collection Collection of statements within the compound body.
- * @param label Label set to CompoundBody by user or UUID otherwise.
- *              It can be None in case when CompoundBody is not part of BeginEndCompoundBlock
- *              for example when CompoundBody is inside loop or conditional block.
- * @param isScope Flag indicating if the CompoundBody is a labeled scope.
- *                Scopes are used for grouping local variables and exception handlers.
- * @param handlers Collection of error handlers that are defined within the compound body.
- * @param conditions Collection of error conditions that are defined within the compound body.
+ * @param collection
+ *   Collection of statements within the compound body.
+ * @param label
+ *   Label set to CompoundBody by user or UUID otherwise. It can be None in case when CompoundBody
+ *   is not part of BeginEndCompoundBlock for example when CompoundBody is inside loop or
+ *   conditional block.
+ * @param isScope
+ *   Flag indicating if the CompoundBody is a labeled scope. Scopes are used for grouping local
+ *   variables and exception handlers.
+ * @param handlers
+ *   Collection of error handlers that are defined within the compound body.
+ * @param conditions
+ *   Collection of error conditions that are defined within the compound body.
  */
 case class CompoundBody(
     collection: Seq[CompoundPlanStatement],
@@ -78,7 +83,8 @@ case class CompoundBody(
     isScope: Boolean,
     handlers: Seq[ExceptionHandler] = Seq.empty,
     conditions: mutable.Map[String, String] = mutable.HashMap())
-  extends Command with CompoundPlanStatement {
+    extends Command
+    with CompoundPlanStatement {
 
   override def children: Seq[LogicalPlan] = collection
 
@@ -90,17 +96,19 @@ case class CompoundBody(
 
 /**
  * Logical operator for IF ELSE statement.
- * @param conditions Collection of conditions. First condition corresponds to IF clause,
- *                   while others (if any) correspond to following ELSEIF clauses.
- * @param conditionalBodies Collection of bodies that have a corresponding condition,
- *                          in IF or ELSEIF branches.
- * @param elseBody Body that is executed if none of the conditions are met,
- *                          i.e. ELSE branch.
+ * @param conditions
+ *   Collection of conditions. First condition corresponds to IF clause, while others (if any)
+ *   correspond to following ELSEIF clauses.
+ * @param conditionalBodies
+ *   Collection of bodies that have a corresponding condition, in IF or ELSEIF branches.
+ * @param elseBody
+ *   Body that is executed if none of the conditions are met, i.e. ELSE branch.
  */
 case class IfElseStatement(
     conditions: Seq[SingleStatement],
     conditionalBodies: Seq[CompoundBody],
-    elseBody: Option[CompoundBody]) extends CompoundPlanStatement {
+    elseBody: Option[CompoundBody])
+    extends CompoundPlanStatement {
   assert(conditions.length == conditionalBodies.length)
 
   override def output: Seq[Attribute] = Seq.empty
@@ -117,8 +125,9 @@ case class IfElseStatement(
       .map(_.asInstanceOf[CompoundBody])
     var elseBody: Option[CompoundBody] = None
 
-    assert(conditions.length == conditionalBodies.length ||
-      conditions.length + 1 == conditionalBodies.length)
+    assert(
+      conditions.length == conditionalBodies.length ||
+        conditions.length + 1 == conditionalBodies.length)
 
     if (conditions.length < conditionalBodies.length) {
       conditionalBodies = conditionalBodies.dropRight(1)
@@ -130,18 +139,18 @@ case class IfElseStatement(
 
 /**
  * Logical operator for while statement.
- * @param condition Any expression evaluating to a Boolean.
- *                 Body is executed as long as the condition evaluates to true
- * @param body Compound body is a collection of statements that are executed if condition is true.
- * @param label An optional label for the loop which is unique amongst all labels for statements
- *              within which the WHILE statement is contained.
- *              If an end label is specified it must match the beginning label.
- *              The label can be used to LEAVE or ITERATE the loop.
+ * @param condition
+ *   Any expression evaluating to a Boolean. Body is executed as long as the condition evaluates
+ *   to true
+ * @param body
+ *   Compound body is a collection of statements that are executed if condition is true.
+ * @param label
+ *   An optional label for the loop which is unique amongst all labels for statements within which
+ *   the WHILE statement is contained. If an end label is specified it must match the beginning
+ *   label. The label can be used to LEAVE or ITERATE the loop.
  */
-case class WhileStatement(
-    condition: SingleStatement,
-    body: CompoundBody,
-    label: Option[String]) extends CompoundPlanStatement {
+case class WhileStatement(condition: SingleStatement, body: CompoundBody, label: Option[String])
+    extends CompoundPlanStatement {
 
   override def output: Seq[Attribute] = Seq.empty
 
@@ -159,19 +168,19 @@ case class WhileStatement(
 
 /**
  * Logical operator for REPEAT statement.
- * @param condition Any expression evaluating to a Boolean.
- *                 Body is executed as long as the condition evaluates to false
- * @param body Compound body is a collection of statements that are executed once no matter what,
- *             and then as long as condition is false.
- * @param label An optional label for the loop which is unique amongst all labels for statements
- *              within which the REPEAT statement is contained.
- *              If an end label is specified it must match the beginning label.
- *              The label can be used to LEAVE or ITERATE the loop.
+ * @param condition
+ *   Any expression evaluating to a Boolean. Body is executed as long as the condition evaluates
+ *   to false
+ * @param body
+ *   Compound body is a collection of statements that are executed once no matter what, and then
+ *   as long as condition is false.
+ * @param label
+ *   An optional label for the loop which is unique amongst all labels for statements within which
+ *   the REPEAT statement is contained. If an end label is specified it must match the beginning
+ *   label. The label can be used to LEAVE or ITERATE the loop.
  */
-case class RepeatStatement(
-    condition: SingleStatement,
-    body: CompoundBody,
-    label: Option[String]) extends CompoundPlanStatement {
+case class RepeatStatement(condition: SingleStatement, body: CompoundBody, label: Option[String])
+    extends CompoundPlanStatement {
 
   override def output: Seq[Attribute] = Seq.empty
 
@@ -188,11 +197,11 @@ case class RepeatStatement(
 }
 
 /**
- * Logical operator for LEAVE statement.
- * The statement can be used both for compounds or any kind of loops.
- * When used, the corresponding body/loop execution is skipped and the execution continues
- *   with the next statement after the body/loop.
- * @param label Label of the compound or loop to leave.
+ * Logical operator for LEAVE statement. The statement can be used both for compounds or any kind
+ * of loops. When used, the corresponding body/loop execution is skipped and the execution
+ * continues with the next statement after the body/loop.
+ * @param label
+ *   Label of the compound or loop to leave.
  */
 case class LeaveStatement(label: String) extends CompoundPlanStatement {
   override def output: Seq[Attribute] = Seq.empty
@@ -204,11 +213,10 @@ case class LeaveStatement(label: String) extends CompoundPlanStatement {
 }
 
 /**
- * Logical operator for ITERATE statement.
- * The statement can be used only for loops.
- * When used, the rest of the loop is skipped and the loop execution continues
- *   with the next iteration.
- * @param label Label of the loop to iterate.
+ * Logical operator for ITERATE statement. The statement can be used only for loops. When used,
+ * the rest of the loop is skipped and the loop execution continues with the next iteration.
+ * @param label
+ *   Label of the loop to iterate.
  */
 case class IterateStatement(label: String) extends CompoundPlanStatement {
   override def output: Seq[Attribute] = Seq.empty
@@ -220,8 +228,7 @@ case class IterateStatement(label: String) extends CompoundPlanStatement {
 }
 
 /**
- * Logical operator for CASE statement, SEARCHED variant.<br>
- * Example:
+ * Logical operator for CASE statement, SEARCHED variant.<br> Example:
  * {{{
  *   CASE
  *     WHEN x = 1 THEN
@@ -232,15 +239,18 @@ case class IterateStatement(label: String) extends CompoundPlanStatement {
  *       SELECT 3;
  *   END CASE;
  * }}}
- * @param conditions Collection of conditions which correspond to WHEN clauses.
- * @param conditionalBodies Collection of bodies that have a corresponding condition,
- *                          in WHEN branches.
- * @param elseBody Body that is executed if none of the conditions are met, i.e. ELSE branch.
+ * @param conditions
+ *   Collection of conditions which correspond to WHEN clauses.
+ * @param conditionalBodies
+ *   Collection of bodies that have a corresponding condition, in WHEN branches.
+ * @param elseBody
+ *   Body that is executed if none of the conditions are met, i.e. ELSE branch.
  */
 case class SearchedCaseStatement(
     conditions: Seq[SingleStatement],
     conditionalBodies: Seq[CompoundBody],
-    elseBody: Option[CompoundBody]) extends CompoundPlanStatement {
+    elseBody: Option[CompoundBody])
+    extends CompoundPlanStatement {
   assert(conditions.length == conditionalBodies.length)
 
   override def output: Seq[Attribute] = Seq.empty
@@ -257,8 +267,9 @@ case class SearchedCaseStatement(
       .map(_.asInstanceOf[CompoundBody])
     var elseBody: Option[CompoundBody] = None
 
-    assert(conditions.length == conditionalBodies.length ||
-      conditions.length + 1 == conditionalBodies.length)
+    assert(
+      conditions.length == conditionalBodies.length ||
+        conditions.length + 1 == conditionalBodies.length)
 
     if (conditions.length < conditionalBodies.length) {
       conditionalBodies = conditionalBodies.dropRight(1)
@@ -269,8 +280,7 @@ case class SearchedCaseStatement(
 }
 
 /**
- * Logical operator for CASE statement, SIMPLE variant.<br>
- * Example:
+ * Logical operator for CASE statement, SIMPLE variant.<br> Example:
  * {{{
  *   CASE x
  *     WHEN 1 THEN
@@ -281,17 +291,21 @@ case class SearchedCaseStatement(
  *       SELECT 3;
  *   END CASE;
  * }}}
- * @param caseVariableExpression Expression with which all conditionExpressions will be compared to.
- * @param conditionExpressions Collection of expressions which correspond to WHEN clauses.
- * @param conditionalBodies Collection of bodies that have a corresponding condition,
- *                          in WHEN branches.
- * @param elseBody Body that is executed if none of the conditions are met, i.e. ELSE branch.
+ * @param caseVariableExpression
+ *   Expression with which all conditionExpressions will be compared to.
+ * @param conditionExpressions
+ *   Collection of expressions which correspond to WHEN clauses.
+ * @param conditionalBodies
+ *   Collection of bodies that have a corresponding condition, in WHEN branches.
+ * @param elseBody
+ *   Body that is executed if none of the conditions are met, i.e. ELSE branch.
  */
 case class SimpleCaseStatement(
     caseVariableExpression: Expression,
     conditionExpressions: Seq[Expression],
     conditionalBodies: Seq[CompoundBody],
-    elseBody: Option[CompoundBody]) extends CompoundPlanStatement {
+    elseBody: Option[CompoundBody])
+    extends CompoundPlanStatement {
   assert(conditionExpressions.nonEmpty)
   assert(conditionExpressions.length == conditionalBodies.length)
 
@@ -300,7 +314,7 @@ case class SimpleCaseStatement(
   override def children: Seq[LogicalPlan] = conditionalBodies
 
   override protected def withNewChildrenInternal(
-    newChildren: IndexedSeq[LogicalPlan]): LogicalPlan = {
+      newChildren: IndexedSeq[LogicalPlan]): LogicalPlan = {
     val conditionalBodies = newChildren.map(_.asInstanceOf[CompoundBody])
     SimpleCaseStatement(caseVariableExpression, conditionExpressions, conditionalBodies, elseBody)
   }
@@ -308,16 +322,16 @@ case class SimpleCaseStatement(
 
 /**
  * Logical operator for LOOP statement.
- * @param body Compound body is a collection of statements that are executed until the
- *             LOOP statement is terminated by using the LEAVE statement.
- * @param label An optional label for the loop which is unique amongst all labels for statements
- *              within which the LOOP statement is contained.
- *              If an end label is specified it must match the beginning label.
- *              The label can be used to LEAVE or ITERATE the loop.
+ * @param body
+ *   Compound body is a collection of statements that are executed until the LOOP statement is
+ *   terminated by using the LEAVE statement.
+ * @param label
+ *   An optional label for the loop which is unique amongst all labels for statements within which
+ *   the LOOP statement is contained. If an end label is specified it must match the beginning
+ *   label. The label can be used to LEAVE or ITERATE the loop.
  */
-case class LoopStatement(
-    body: CompoundBody,
-    label: Option[String]) extends CompoundPlanStatement {
+case class LoopStatement(body: CompoundBody, label: Option[String])
+    extends CompoundPlanStatement {
 
   override def output: Seq[Attribute] = Seq.empty
 
@@ -332,20 +346,24 @@ case class LoopStatement(
 
 /**
  * Logical operator for FOR statement.
- * @param query Query which is executed once, then it's result set is iterated on, row by row.
- * @param variableName Name of variable which is used to access the current row during iteration.
- * @param body Compound body is a collection of statements that are executed for each row in
- *             the result set of the query.
- * @param label An optional label for the loop which is unique amongst all labels for statements
- *              within which the FOR statement is contained.
- *              If an end label is specified it must match the beginning label.
- *              The label can be used to LEAVE or ITERATE the loop.
+ * @param query
+ *   Query which is executed once, then it's result set is iterated on, row by row.
+ * @param variableName
+ *   Name of variable which is used to access the current row during iteration.
+ * @param body
+ *   Compound body is a collection of statements that are executed for each row in the result set
+ *   of the query.
+ * @param label
+ *   An optional label for the loop which is unique amongst all labels for statements within which
+ *   the FOR statement is contained. If an end label is specified it must match the beginning
+ *   label. The label can be used to LEAVE or ITERATE the loop.
  */
 case class ForStatement(
     query: SingleStatement,
     variableName: Option[String],
     body: CompoundBody,
-    label: Option[String]) extends CompoundPlanStatement {
+    label: Option[String])
+    extends CompoundPlanStatement {
 
   override def output: Seq[Attribute] = Seq.empty
 
@@ -360,12 +378,12 @@ case class ForStatement(
 
 /**
  * Logical operator for an error condition.
- * @param conditionName Name of the error condition.
- * @param sqlState SQLSTATE or Error Code.
+ * @param conditionName
+ *   Name of the error condition.
+ * @param sqlState
+ *   SQLSTATE or Error Code.
  */
-case class ErrorCondition(
-    conditionName: String,
-    sqlState: String) extends CompoundPlanStatement {
+case class ErrorCondition(conditionName: String, sqlState: String) extends CompoundPlanStatement {
   override def output: Seq[Attribute] = Seq.empty
 
   override def children: Seq[LogicalPlan] = Seq.empty
@@ -381,10 +399,14 @@ object ExceptionHandlerType extends Enumeration {
 
 /**
  * Class holding information about what triggers the handler.
- * @param sqlStates Set of sqlStates that will trigger handler.
- * @param conditions  Set of error condition names that will trigger handler.
- * @param sqlException Flag indicating if the handler is triggered by SQLEXCEPTION.
- * @param notFound Flag indicating if the handler is triggered by NOT FOUND.
+ * @param sqlStates
+ *   Set of sqlStates that will trigger handler.
+ * @param conditions
+ *   Set of error condition names that will trigger handler.
+ * @param sqlException
+ *   Flag indicating if the handler is triggered by SQLEXCEPTION.
+ * @param notFound
+ *   Flag indicating if the handler is triggered by NOT FOUND.
  */
 class ExceptionHandlerTriggers(
     val sqlStates: mutable.Set[String] = mutable.Set.empty,
@@ -429,18 +451,20 @@ class ExceptionHandlerTriggers(
 
 /**
  * Logical operator for an error handler.
- * @param exceptionHandlerTriggers Collection of different handler triggers:
- *        sqlStates -> set of sqlStates that will trigger handler
- *        conditions -> set of conditions that will trigger handler
- *        sqlException -> if handler is triggered by SQLEXCEPTION
- *        notFound -> if handler is triggered by NotFound
- * @param body CompoundBody of the handler.
- * @param handlerType Type of the handler (CONTINUE or EXIT).
+ * @param exceptionHandlerTriggers
+ *   Collection of different handler triggers: sqlStates -> set of sqlStates that will trigger
+ *   handler conditions -> set of conditions that will trigger handler sqlException -> if handler
+ *   is triggered by SQLEXCEPTION notFound -> if handler is triggered by NotFound
+ * @param body
+ *   CompoundBody of the handler.
+ * @param handlerType
+ *   Type of the handler (CONTINUE or EXIT).
  */
 case class ExceptionHandler(
     exceptionHandlerTriggers: ExceptionHandlerTriggers,
     body: CompoundBody,
-    handlerType: ExceptionHandlerType) extends CompoundPlanStatement {
+    handlerType: ExceptionHandlerType)
+    extends CompoundPlanStatement {
   override def output: Seq[Attribute] = Seq.empty
 
   override def children: Seq[LogicalPlan] = Seq(body)

@@ -33,20 +33,25 @@ import org.apache.spark.util.{ListenerBus, Utils}
 /**
  * The interface of query execution listener that can be used to analyze execution metrics.
  *
- * @note Implementations should guarantee thread-safety as they can be invoked by
- * multiple different threads.
+ * @note
+ *   Implementations should guarantee thread-safety as they can be invoked by multiple different
+ *   threads.
  */
 trait QueryExecutionListener {
 
   /**
    * A callback function that will be called when a query executed successfully.
    *
-   * @param funcName name of the action that triggered this query.
-   * @param qe the QueryExecution object that carries detail information like logical plan,
-   *           physical plan, etc.
-   * @param durationNs the execution time for this query in nanoseconds.
+   * @param funcName
+   *   name of the action that triggered this query.
+   * @param qe
+   *   the QueryExecution object that carries detail information like logical plan, physical plan,
+   *   etc.
+   * @param durationNs
+   *   the execution time for this query in nanoseconds.
    *
-   * @note This can be invoked by multiple different threads.
+   * @note
+   *   This can be invoked by multiple different threads.
    */
   @DeveloperApi
   def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit
@@ -54,18 +59,20 @@ trait QueryExecutionListener {
   /**
    * A callback function that will be called when a query execution failed.
    *
-   * @param funcName the name of the action that triggered this query.
-   * @param qe the QueryExecution object that carries detail information like logical plan,
-   *           physical plan, etc.
-   * @param exception the exception that failed this query. If `java.lang.Error` is thrown during
-   *                  execution, it will be wrapped with an `Exception` and it can be accessed by
-   *                  `exception.getCause`.
-   * @note This can be invoked by multiple different threads.
+   * @param funcName
+   *   the name of the action that triggered this query.
+   * @param qe
+   *   the QueryExecution object that carries detail information like logical plan, physical plan,
+   *   etc.
+   * @param exception
+   *   the exception that failed this query. If `java.lang.Error` is thrown during execution, it
+   *   will be wrapped with an `Exception` and it can be accessed by `exception.getCause`.
+   * @note
+   *   This can be invoked by multiple different threads.
    */
   @DeveloperApi
   def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit
 }
-
 
 /**
  * Manager for [[QueryExecutionListener]]. See `org.apache.spark.sql.SQLContext.listenerManager`.
@@ -75,11 +82,11 @@ trait QueryExecutionListener {
 // The `loadExtensions` flag is used to indicate whether we should load the pre-defined,
 // user-specified listeners during construction. We should not do it when cloning this listener
 // manager, as we will copy all listeners to the cloned listener manager.
-class ExecutionListenerManager private[sql](
+class ExecutionListenerManager private[sql] (
     session: SparkSession,
     sqlConf: SQLConf,
     loadExtensions: Boolean)
-  extends Logging {
+    extends Logging {
 
   // SPARK-39864: lazily create the listener bus on the first register() call in order to
   // avoid listener overheads when QueryExecutionListeners aren't used:
@@ -140,8 +147,9 @@ class ExecutionListenerManager private[sql](
   }
 }
 
-private[sql] class ExecutionListenerBus private(sessionUUID: String)
-  extends SparkListener with ListenerBus[QueryExecutionListener, SparkListenerSQLExecutionEnd] {
+private[sql] class ExecutionListenerBus private (sessionUUID: String)
+    extends SparkListener
+    with ListenerBus[QueryExecutionListener, SparkListenerSQLExecutionEnd] {
 
   def this(manager: ExecutionListenerManager, session: SparkSession) = {
     this(session.sessionUUID)

@@ -26,7 +26,7 @@ import org.apache.spark.sql.execution.columnar.{ColumnBuilder, NativeColumnBuild
 import org.apache.spark.unsafe.Platform
 
 /**
- * A stackable trait that builds optionally compressed byte buffer for a column.  Memory layout of
+ * A stackable trait that builds optionally compressed byte buffer for a column. Memory layout of
  * the final byte buffer is:
  * {{{
  *    .----------------------- Null count N (4 bytes)
@@ -42,7 +42,8 @@ import org.apache.spark.unsafe.Platform
  * }}}
  */
 private[columnar] trait CompressibleColumnBuilder[T <: PhysicalDataType]
-  extends ColumnBuilder with Logging {
+    extends ColumnBuilder
+    with Logging {
 
   this: NativeColumnBuilder[T] with WithCompressionSchemes =>
 
@@ -53,12 +54,11 @@ private[columnar] trait CompressibleColumnBuilder[T <: PhysicalDataType]
       columnName: String,
       useCompression: Boolean): Unit = {
 
-    compressionEncoders =
-      if (useCompression) {
-        schemes.filter(_.supports(columnType)).map(_.encoder[T](columnType))
-      } else {
-        Seq(PassThrough.encoder(columnType))
-      }
+    compressionEncoders = if (useCompression) {
+      schemes.filter(_.supports(columnType)).map(_.encoder[T](columnType))
+    } else {
+      Seq(PassThrough.encoder(columnType))
+    }
     super.initialize(initialSize, columnName, useCompression)
   }
 

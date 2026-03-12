@@ -34,10 +34,10 @@ import org.apache.spark.tags.SlowSQLTest
  * A test suite that tests aggregate push down for Parquet and ORC.
  */
 trait FileSourceAggregatePushDownSuite
-  extends QueryTest
-  with FileBasedDataSourceTest
-  with SharedSparkSession
-  with ExplainSuiteHelper {
+    extends QueryTest
+    with FileBasedDataSourceTest
+    with SharedSparkSession
+    with ExplainSuiteHelper {
 
   import testImplicits._
 
@@ -68,7 +68,7 @@ trait FileSourceAggregatePushDownSuite
 
   test("nested column: Max(nested sub-field) not push down") {
     val data = (1 to 10).map(i => Tuple1((i, Seq(s"val_$i"))))
-    withSQLConf(aggPushDownEnabledKey-> "true") {
+    withSQLConf(aggPushDownEnabledKey -> "true") {
       withDataSourceTable(data, "t") {
         val max = sql("SELECT Max(_1._2[0]) FROM t")
         checkPushedInfo(max, "PushedAggregation: []")
@@ -89,8 +89,13 @@ trait FileSourceAggregatePushDownSuite
 
   test("Max(partition column): not push down") {
     withTempPath { dir =>
-      spark.range(10).selectExpr("id", "id % 3 as p")
-        .write.partitionBy("p").format(format).save(dir.getCanonicalPath)
+      spark
+        .range(10)
+        .selectExpr("id", "id % 3 as p")
+        .write
+        .partitionBy("p")
+        .format(format)
+        .save(dir.getCanonicalPath)
       withTempView("tmp") {
         spark.read.format(format).load(dir.getCanonicalPath).createOrReplaceTempView("tmp")
         withSQLConf(aggPushDownEnabledKey -> "true") {
@@ -104,13 +109,19 @@ trait FileSourceAggregatePushDownSuite
 
   test("Count(partition column): push down") {
     withTempPath { dir =>
-      spark.range(10).selectExpr("if(id % 2 = 0, null, id) AS n", "id % 3 as p")
-        .write.partitionBy("p").format(format).save(dir.getCanonicalPath)
+      spark
+        .range(10)
+        .selectExpr("if(id % 2 = 0, null, id) AS n", "id % 3 as p")
+        .write
+        .partitionBy("p")
+        .format(format)
+        .save(dir.getCanonicalPath)
       withTempView("tmp") {
         spark.read.format(format).load(dir.getCanonicalPath).createOrReplaceTempView("tmp")
         val enableVectorizedReader = Seq("false", "true")
         for (testVectorizedReader <- enableVectorizedReader) {
-          withSQLConf(aggPushDownEnabledKey -> "true",
+          withSQLConf(
+            aggPushDownEnabledKey -> "true",
             vectorizedReaderEnabledKey -> testVectorizedReader) {
             val count = sql("SELECT COUNT(p) FROM tmp")
             checkPushedInfo(count, "PushedAggregation: [COUNT(p)]")
@@ -122,8 +133,13 @@ trait FileSourceAggregatePushDownSuite
   }
 
   test("filter alias over aggregate") {
-    val data = Seq((-2, "abc", 2), (3, "def", 4), (6, "ghi", 2), (0, null, 19),
-      (9, "mno", 7), (2, null, 6))
+    val data = Seq(
+      (-2, "abc", 2),
+      (3, "def", 4),
+      (6, "ghi", 2),
+      (0, null, 19),
+      (9, "mno", 7),
+      (2, null, 6))
     withDataSourceTable(data, "t") {
       withSQLConf(aggPushDownEnabledKey -> "true") {
         val selectAgg = sql("SELECT min(_1) + max(_1) as res FROM t having res > 1")
@@ -134,8 +150,13 @@ trait FileSourceAggregatePushDownSuite
   }
 
   test("alias over aggregate") {
-    val data = Seq((-2, "abc", 2), (3, "def", 4), (6, "ghi", 2), (0, null, 19),
-      (9, "mno", 7), (2, null, 6))
+    val data = Seq(
+      (-2, "abc", 2),
+      (3, "def", 4),
+      (6, "ghi", 2),
+      (0, null, 19),
+      (9, "mno", 7),
+      (2, null, 6))
     withDataSourceTable(data, "t") {
       withSQLConf(aggPushDownEnabledKey -> "true") {
         val selectAgg = sql("SELECT min(_1) + 1 as minPlus1, min(_1) + 2 as minPlus2 FROM t")
@@ -146,8 +167,13 @@ trait FileSourceAggregatePushDownSuite
   }
 
   test("aggregate over alias push down") {
-    val data = Seq((-2, "abc", 2), (3, "def", 4), (6, "ghi", 2), (0, null, 19),
-      (9, "mno", 7), (2, null, 6))
+    val data = Seq(
+      (-2, "abc", 2),
+      (3, "def", 4),
+      (6, "ghi", 2),
+      (0, null, 19),
+      (9, "mno", 7),
+      (2, null, 6))
     withDataSourceTable(data, "t") {
       withSQLConf(aggPushDownEnabledKey -> "true") {
         val df = spark.table("t")
@@ -159,8 +185,13 @@ trait FileSourceAggregatePushDownSuite
   }
 
   test("query with group by not push down") {
-    val data = Seq((-2, "abc", 2), (3, "def", 4), (6, "ghi", 2), (0, null, 19),
-      (9, "mno", 7), (2, null, 7))
+    val data = Seq(
+      (-2, "abc", 2),
+      (3, "def", 4),
+      (6, "ghi", 2),
+      (0, null, 19),
+      (9, "mno", 7),
+      (2, null, 7))
     withDataSourceTable(data, "t") {
       withSQLConf(aggPushDownEnabledKey -> "true") {
         // aggregate not pushed down if there is group by
@@ -172,8 +203,13 @@ trait FileSourceAggregatePushDownSuite
   }
 
   test("aggregate with data filter cannot be pushed down") {
-    val data = Seq((-2, "abc", 2), (3, "def", 4), (6, "ghi", 2), (0, null, 19),
-      (9, "mno", 7), (2, null, 7))
+    val data = Seq(
+      (-2, "abc", 2),
+      (3, "def", 4),
+      (6, "ghi", 2),
+      (0, null, 19),
+      (9, "mno", 7),
+      (2, null, 7))
     withDataSourceTable(data, "t") {
       withSQLConf(aggPushDownEnabledKey -> "true") {
         // aggregate not pushed down if there is filter
@@ -186,12 +222,18 @@ trait FileSourceAggregatePushDownSuite
 
   test("aggregate with partition filter can be pushed down") {
     withTempPath { dir =>
-      spark.range(10).selectExpr("id", "id % 3 as p")
-        .write.partitionBy("p").format(format).save(dir.getCanonicalPath)
+      spark
+        .range(10)
+        .selectExpr("id", "id % 3 as p")
+        .write
+        .partitionBy("p")
+        .format(format)
+        .save(dir.getCanonicalPath)
       withTempView("tmp") {
         spark.read.format(format).load(dir.getCanonicalPath).createOrReplaceTempView("tmp")
         Seq("false", "true").foreach { enableVectorizedReader =>
-          withSQLConf(aggPushDownEnabledKey -> "true",
+          withSQLConf(
+            aggPushDownEnabledKey -> "true",
             vectorizedReaderEnabledKey -> enableVectorizedReader) {
             val max = sql("SELECT max(id), min(id), count(id) FROM tmp WHERE p = 0")
             checkPushedInfo(max, "PushedAggregation: [MAX(id), MIN(id), COUNT(id)]")
@@ -204,18 +246,24 @@ trait FileSourceAggregatePushDownSuite
 
   test("aggregate with partition group by can be pushed down") {
     withTempPath { dir =>
-      spark.range(10).selectExpr("id", "id % 3 as P")
-        .write.partitionBy("p").format(format).save(dir.getCanonicalPath)
+      spark
+        .range(10)
+        .selectExpr("id", "id % 3 as P")
+        .write
+        .partitionBy("p")
+        .format(format)
+        .save(dir.getCanonicalPath)
       withTempView("tmp") {
         spark.read.format(format).load(dir.getCanonicalPath).createOrReplaceTempView("tmp");
         val query = "SELECT count(*), count(id), p, max(id), p, count(p), max(id)," +
           "  min(id), p FROM tmp group by p"
         var expected = Array.empty[Row]
         withSQLConf(aggPushDownEnabledKey -> "false") {
-            expected = sql(query).collect()
+          expected = sql(query).collect()
         }
         Seq("false", "true").foreach { enableVectorizedReader =>
-          withSQLConf(aggPushDownEnabledKey -> "true",
+          withSQLConf(
+            aggPushDownEnabledKey -> "true",
             vectorizedReaderEnabledKey -> enableVectorizedReader) {
             val df = sql(query)
             val expected_plan_fragment =
@@ -231,9 +279,18 @@ trait FileSourceAggregatePushDownSuite
 
   test("aggregate with multi partition group by columns can be pushed down") {
     withTempPath { dir =>
-      Seq((10, 1, 2, 5, 6), (2, 1, 2, 5, 6), (3, 2, 1, 4, 8), (4, 2, 1, 4, 9),
-        (5, 2, 1, 5, 8), (6, 2, 1, 4, 8), (1, 1, 2, 5, 6), (4, 1, 2, 5, 6),
-        (3, 2, 2, 9, 10), (-4, 2, 2, 9, 10), (6, 2, 2, 9, 10))
+      Seq(
+        (10, 1, 2, 5, 6),
+        (2, 1, 2, 5, 6),
+        (3, 2, 1, 4, 8),
+        (4, 2, 1, 4, 9),
+        (5, 2, 1, 5, 8),
+        (6, 2, 1, 4, 8),
+        (1, 1, 2, 5, 6),
+        (4, 1, 2, 5, 6),
+        (3, 2, 2, 9, 10),
+        (-4, 2, 2, 9, 10),
+        (6, 2, 2, 9, 10))
         .toDF("value", "p1", "p2", "p3", "p4")
         .write
         .partitionBy("p2", "p1", "p4", "p3")
@@ -249,7 +306,8 @@ trait FileSourceAggregatePushDownSuite
           expected = sql(query).collect()
         }
         Seq("false", "true").foreach { enableVectorizedReader =>
-          withSQLConf(aggPushDownEnabledKey -> "true",
+          withSQLConf(
+            aggPushDownEnabledKey -> "true",
             vectorizedReaderEnabledKey -> enableVectorizedReader) {
             val df = sql(query)
             val expected_plan_fragment =
@@ -264,8 +322,13 @@ trait FileSourceAggregatePushDownSuite
   }
 
   test("push down only if all the aggregates can be pushed down") {
-    val data = Seq((-2, "abc", 2), (3, "def", 4), (6, "ghi", 2), (0, null, 19),
-      (9, "mno", 7), (2, null, 7))
+    val data = Seq(
+      (-2, "abc", 2),
+      (3, "def", 4),
+      (6, "ghi", 2),
+      (0, null, 19),
+      (9, "mno", 7),
+      (2, null, 7))
     withDataSourceTable(data, "t") {
       withSQLConf(aggPushDownEnabledKey -> "true") {
         // not push down since sum can't be pushed down
@@ -277,12 +340,18 @@ trait FileSourceAggregatePushDownSuite
   }
 
   test("aggregate push down - MIN/MAX/COUNT") {
-    val data = Seq((-2, "abc", 2), (3, "def", 4), (6, "ghi", 2), (0, null, 19),
-      (9, "mno", 7), (2, null, 6))
+    val data = Seq(
+      (-2, "abc", 2),
+      (3, "def", 4),
+      (6, "ghi", 2),
+      (0, null, 19),
+      (9, "mno", 7),
+      (2, null, 6))
     withDataSourceTable(data, "t") {
       withSQLConf(aggPushDownEnabledKey -> "true") {
-        val selectAgg = sql("SELECT min(_3), min(_3), max(_3), min(_1), max(_1), max(_1)," +
-          " count(*), count(_1), count(_2), count(_3) FROM t")
+        val selectAgg = sql(
+          "SELECT min(_3), min(_3), max(_3), min(_1), max(_1), max(_1)," +
+            " count(*), count(_1), count(_2), count(_3) FROM t")
         val expected_plan_fragment =
           "PushedAggregation: [MIN(_3), " +
             "MAX(_3), " +
@@ -299,12 +368,16 @@ trait FileSourceAggregatePushDownSuite
   }
 
   test("aggregate not push down - MIN/MAX/COUNT with CASE WHEN") {
-    val data = Seq((-2, "abc", 2), (3, "def", 4), (6, "ghi", 2), (0, null, 19),
-      (9, "mno", 7), (2, null, 6))
+    val data = Seq(
+      (-2, "abc", 2),
+      (3, "def", 4),
+      (6, "ghi", 2),
+      (0, null, 19),
+      (9, "mno", 7),
+      (2, null, 6))
     withDataSourceTable(data, "t") {
       withSQLConf(aggPushDownEnabledKey -> "true") {
-        val selectAgg = sql(
-          """
+        val selectAgg = sql("""
             |SELECT
             |  min(CASE WHEN _1 < 0 THEN 0 ELSE _1 END),
             |  min(CASE WHEN _3 > 5 THEN 1 ELSE 0 END),
@@ -328,18 +401,20 @@ trait FileSourceAggregatePushDownSuite
       expectedMaxWithOutTSAndBinary: Seq[Row],
       expectedCount: Seq[Row]): Unit = {
 
-    val schema = StructType(List(StructField("StringCol", StringType, true),
-      StructField("BooleanCol", BooleanType, false),
-      StructField("ByteCol", ByteType, false),
-      StructField("BinaryCol", BinaryType, false),
-      StructField("ShortCol", ShortType, false),
-      StructField("IntegerCol", IntegerType, true),
-      StructField("LongCol", LongType, false),
-      StructField("FloatCol", FloatType, false),
-      StructField("DoubleCol", DoubleType, false),
-      StructField("DecimalCol", DecimalType(25, 5), true),
-      StructField("DateCol", DateType, false),
-      StructField("TimestampCol", TimestampType, false)).toArray)
+    val schema = StructType(
+      List(
+        StructField("StringCol", StringType, true),
+        StructField("BooleanCol", BooleanType, false),
+        StructField("ByteCol", ByteType, false),
+        StructField("BinaryCol", BinaryType, false),
+        StructField("ShortCol", ShortType, false),
+        StructField("IntegerCol", IntegerType, true),
+        StructField("LongCol", LongType, false),
+        StructField("FloatCol", FloatType, false),
+        StructField("DoubleCol", DoubleType, false),
+        StructField("DecimalCol", DecimalType(25, 5), true),
+        StructField("DateCol", DateType, false),
+        StructField("TimestampCol", TimestampType, false)).toArray)
 
     val rdd = sparkContext.parallelize(inputRows)
     withTempPath { file =>
@@ -347,13 +422,15 @@ trait FileSourceAggregatePushDownSuite
       withTempView("test") {
         spark.read.format(format).load(file.getCanonicalPath).createOrReplaceTempView("test")
         Seq("false", "true").foreach { enableVectorizedReader =>
-          withSQLConf(aggPushDownEnabledKey -> "true",
+          withSQLConf(
+            aggPushDownEnabledKey -> "true",
             vectorizedReaderEnabledKey -> enableVectorizedReader,
             SQLConf.MAX_METADATA_STRING_LENGTH.key -> "1000") {
 
-            val testMinWithAllTypes = sql("SELECT min(StringCol), min(BooleanCol), min(ByteCol), " +
-              "min(BinaryCol), min(ShortCol), min(IntegerCol), min(LongCol), min(FloatCol), " +
-              "min(DoubleCol), min(DecimalCol), min(DateCol), min(TimestampCol) FROM test")
+            val testMinWithAllTypes = sql(
+              "SELECT min(StringCol), min(BooleanCol), min(ByteCol), " +
+                "min(BinaryCol), min(ShortCol), min(IntegerCol), min(LongCol), min(FloatCol), " +
+                "min(DoubleCol), min(DecimalCol), min(DateCol), min(TimestampCol) FROM test")
 
             // INT96 (Timestamp) sort order is undefined, parquet doesn't return stats for this type
             // so aggregates are not pushed down
@@ -363,9 +440,10 @@ trait FileSourceAggregatePushDownSuite
             checkPushedInfo(testMinWithAllTypes, "PushedAggregation: []")
             checkAnswer(testMinWithAllTypes, expectedMinWithAllTypes)
 
-            val testMinWithOutTSAndBinary = sql("SELECT min(BooleanCol), min(ByteCol), " +
-              "min(ShortCol), min(IntegerCol), min(LongCol), min(FloatCol), " +
-              "min(DoubleCol), min(DateCol) FROM test")
+            val testMinWithOutTSAndBinary = sql(
+              "SELECT min(BooleanCol), min(ByteCol), " +
+                "min(ShortCol), min(IntegerCol), min(LongCol), min(FloatCol), " +
+                "min(DoubleCol), min(DateCol) FROM test")
 
             var expected_plan_fragment =
               "PushedAggregation: [MIN(BooleanCol), " +
@@ -392,40 +470,40 @@ trait FileSourceAggregatePushDownSuite
             checkPushedInfo(testMaxWithAllTypes, "PushedAggregation: []")
             checkAnswer(testMaxWithAllTypes, expectedMaxWithAllTypes)
 
-            val testMaxWithoutTSAndBinary = sql("SELECT max(BooleanCol), max(ByteCol), " +
-              "max(ShortCol), max(IntegerCol), max(LongCol), max(FloatCol), " +
-              "max(DoubleCol), max(DateCol) FROM test")
+            val testMaxWithoutTSAndBinary = sql(
+              "SELECT max(BooleanCol), max(ByteCol), " +
+                "max(ShortCol), max(IntegerCol), max(LongCol), max(FloatCol), " +
+                "max(DoubleCol), max(DateCol) FROM test")
 
-            expected_plan_fragment =
-              "PushedAggregation: [MAX(BooleanCol), " +
-                "MAX(ByteCol), " +
-                "MAX(ShortCol), " +
-                "MAX(IntegerCol), " +
-                "MAX(LongCol), " +
-                "MAX(FloatCol), " +
-                "MAX(DoubleCol), " +
-                "MAX(DateCol)]"
+            expected_plan_fragment = "PushedAggregation: [MAX(BooleanCol), " +
+              "MAX(ByteCol), " +
+              "MAX(ShortCol), " +
+              "MAX(IntegerCol), " +
+              "MAX(LongCol), " +
+              "MAX(FloatCol), " +
+              "MAX(DoubleCol), " +
+              "MAX(DateCol)]"
             checkPushedInfo(testMaxWithoutTSAndBinary, expected_plan_fragment)
             checkAnswer(testMaxWithoutTSAndBinary, expectedMaxWithOutTSAndBinary)
 
-            val testCount = sql("SELECT count(StringCol), count(BooleanCol)," +
-              " count(ByteCol), count(BinaryCol), count(ShortCol), count(IntegerCol)," +
-              " count(LongCol), count(FloatCol), count(DoubleCol)," +
-              " count(DecimalCol), count(DateCol), count(TimestampCol) FROM test")
-            expected_plan_fragment =
-              "PushedAggregation: [" +
-                "COUNT(StringCol), " +
-                "COUNT(BooleanCol), " +
-                "COUNT(ByteCol), " +
-                "COUNT(BinaryCol), " +
-                "COUNT(ShortCol), " +
-                "COUNT(IntegerCol), " +
-                "COUNT(LongCol), " +
-                "COUNT(FloatCol), " +
-                "COUNT(DoubleCol), " +
-                "COUNT(DecimalCol), " +
-                "COUNT(DateCol), " +
-                "COUNT(TimestampCol)]"
+            val testCount = sql(
+              "SELECT count(StringCol), count(BooleanCol)," +
+                " count(ByteCol), count(BinaryCol), count(ShortCol), count(IntegerCol)," +
+                " count(LongCol), count(FloatCol), count(DoubleCol)," +
+                " count(DecimalCol), count(DateCol), count(TimestampCol) FROM test")
+            expected_plan_fragment = "PushedAggregation: [" +
+              "COUNT(StringCol), " +
+              "COUNT(BooleanCol), " +
+              "COUNT(ByteCol), " +
+              "COUNT(BinaryCol), " +
+              "COUNT(ShortCol), " +
+              "COUNT(IntegerCol), " +
+              "COUNT(LongCol), " +
+              "COUNT(FloatCol), " +
+              "COUNT(DoubleCol), " +
+              "COUNT(DecimalCol), " +
+              "COUNT(DateCol), " +
+              "COUNT(TimestampCol)]"
             checkPushedInfo(testCount, expected_plan_fragment)
             checkAnswer(testCount, expectedCount)
           }
@@ -454,7 +532,7 @@ trait FileSourceAggregatePushDownSuite
           3,
           Long.MaxValue,
           0.15.toFloat,
-          0.75D,
+          0.75d,
           Decimal("12.345678"),
           ("2021-01-01").date,
           ("2015-01-01 23:50:59.123").ts),
@@ -467,7 +545,7 @@ trait FileSourceAggregatePushDownSuite
           null,
           Long.MinValue,
           0.25.toFloat,
-          0.85D,
+          0.85d,
           Decimal("1.2345678"),
           ("2015-01-01").date,
           ("2021-01-01 23:50:59.123").ts),
@@ -480,47 +558,93 @@ trait FileSourceAggregatePushDownSuite
           113,
           11111111L,
           0.25.toFloat,
-          0.75D,
+          0.75d,
           Decimal("12345.678"),
           ("2004-06-19").date,
-          ("1999-08-26 10:43:59.123").ts)
-      )
+          ("1999-08-26 10:43:59.123").ts))
 
     testPushDownForAllDataTypes(
       rows,
-      Seq(Row("a string", false, 1.toByte,
-        "Parquet".getBytes, 2.toShort, 3, -9223372036854775808L, 0.15.toFloat, 0.75D,
-        1.23457, ("2004-06-19").date, ("1999-08-26 10:43:59.123").ts)),
-      Seq(Row(false, 1.toByte,
-        2.toShort, 3, -9223372036854775808L, 0.15.toFloat, 0.75D, ("2004-06-19").date)),
-      Seq(Row("test string", true, 16.toByte,
-        "Spark SQL".getBytes, 222.toShort, 113, 9223372036854775807L, 0.25.toFloat, 0.85D,
-        12345.678, ("2021-01-01").date, ("2021-01-01 23:50:59.123").ts)),
-      Seq(Row(true, 16.toByte,
-        222.toShort, 113, 9223372036854775807L, 0.25.toFloat, 0.85D, ("2021-01-01").date)),
-      Seq(Row(2, 3, 3, 3, 3, 2, 3, 3, 3, 3, 3, 3))
-    )
+      Seq(
+        Row(
+          "a string",
+          false,
+          1.toByte,
+          "Parquet".getBytes,
+          2.toShort,
+          3,
+          -9223372036854775808L,
+          0.15.toFloat,
+          0.75d,
+          1.23457,
+          ("2004-06-19").date,
+          ("1999-08-26 10:43:59.123").ts)),
+      Seq(
+        Row(
+          false,
+          1.toByte,
+          2.toShort,
+          3,
+          -9223372036854775808L,
+          0.15.toFloat,
+          0.75d,
+          ("2004-06-19").date)),
+      Seq(
+        Row(
+          "test string",
+          true,
+          16.toByte,
+          "Spark SQL".getBytes,
+          222.toShort,
+          113,
+          9223372036854775807L,
+          0.25.toFloat,
+          0.85d,
+          12345.678,
+          ("2021-01-01").date,
+          ("2021-01-01 23:50:59.123").ts)),
+      Seq(
+        Row(
+          true,
+          16.toByte,
+          222.toShort,
+          113,
+          9223372036854775807L,
+          0.25.toFloat,
+          0.85d,
+          ("2021-01-01").date)),
+      Seq(Row(2, 3, 3, 3, 3, 2, 3, 3, 3, 3, 3, 3)))
 
     // Test for 0 row (empty file)
     val nullRow = Row.fromSeq((1 to 12).map(_ => null))
     val nullRowWithOutTSAndBinary = Row.fromSeq((1 to 8).map(_ => null))
     val zeroCount = Row.fromSeq((1 to 12).map(_ => 0))
-    testPushDownForAllDataTypes(Seq.empty, Seq(nullRow), Seq(nullRowWithOutTSAndBinary),
-      Seq(nullRow), Seq(nullRowWithOutTSAndBinary), Seq(zeroCount))
+    testPushDownForAllDataTypes(
+      Seq.empty,
+      Seq(nullRow),
+      Seq(nullRowWithOutTSAndBinary),
+      Seq(nullRow),
+      Seq(nullRowWithOutTSAndBinary),
+      Seq(zeroCount))
   }
 
   test("column name case sensitivity") {
     Seq("false", "true").foreach { enableVectorizedReader =>
-      withSQLConf(aggPushDownEnabledKey -> "true",
+      withSQLConf(
+        aggPushDownEnabledKey -> "true",
         vectorizedReaderEnabledKey -> enableVectorizedReader) {
         withTempPath { dir =>
-          spark.range(10).selectExpr("id", "id % 3 as p")
-            .write.partitionBy("p").format(format).save(dir.getCanonicalPath)
+          spark
+            .range(10)
+            .selectExpr("id", "id % 3 as p")
+            .write
+            .partitionBy("p")
+            .format(format)
+            .save(dir.getCanonicalPath)
           withTempView("tmp") {
             spark.read.format(format).load(dir.getCanonicalPath).createOrReplaceTempView("tmp")
             val selectAgg = sql("SELECT max(iD), min(Id) FROM tmp")
-            checkPushedInfo(selectAgg,
-              "PushedAggregation: [MAX(id), MIN(id)]")
+            checkPushedInfo(selectAgg, "PushedAggregation: [MAX(id), MIN(id)]")
             checkAnswer(selectAgg, Seq(Row(9, 0)))
           }
         }
@@ -529,15 +653,15 @@ trait FileSourceAggregatePushDownSuite
   }
 
   private def checkPushedInfo(df: DataFrame, expectedPlanFragment: String): Unit = {
-    df.queryExecution.optimizedPlan.collect {
-      case _: DataSourceV2ScanRelation =>
-        checkKeywordsExistsInExplain(df, expectedPlanFragment)
+    df.queryExecution.optimizedPlan.collect { case _: DataSourceV2ScanRelation =>
+      checkKeywordsExistsInExplain(df, expectedPlanFragment)
     }
   }
 }
 
 abstract class ParquetAggregatePushDownSuite
-  extends FileSourceAggregatePushDownSuite with ParquetTest {
+    extends FileSourceAggregatePushDownSuite
+    with ParquetTest {
 
   override def format: String = "parquet"
   override protected val aggPushDownEnabledKey: String =

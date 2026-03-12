@@ -32,7 +32,8 @@ case class AddPartitionExec(
     table: SupportsPartitionManagement,
     partSpecs: Seq[ResolvedPartitionSpec],
     ignoreIfExists: Boolean,
-    refreshCache: () => Unit) extends LeafV2CommandExec {
+    refreshCache: () => Unit)
+    extends LeafV2CommandExec {
   import DataSourceV2Implicits._
 
   override def output: Seq[Attribute] = Seq.empty
@@ -43,7 +44,9 @@ case class AddPartitionExec(
 
     if (existsParts.nonEmpty && !ignoreIfExists) {
       throw new PartitionsAlreadyExistException(
-        table.name(), existsParts.map(_.ident), table.partitionSchema())
+        table.name(),
+        existsParts.map(_.ident),
+        table.partitionSchema())
     }
 
     val isTableAltered = notExistsParts match {
@@ -56,9 +59,7 @@ case class AddPartitionExec(
         val partIdents = notExistsParts.map(_.ident)
         val partProps = notExistsParts.map(_.location.map(loc => "location" -> loc).toMap)
         table.asAtomicPartitionable
-          .createPartitions(
-            partIdents.toArray,
-            partProps.map(_.asJava).toArray)
+          .createPartitions(partIdents.toArray, partProps.map(_.asJava).toArray)
         true
       case _ =>
         throw QueryExecutionErrors.cannotAddMultiPartitionsOnNonatomicPartitionTableError(

@@ -43,8 +43,9 @@ class ConsoleWriteSupportSuite extends StreamTest {
       }
     }
 
-    assert(captured.toString() ==
-      """-------------------------------------------
+    assert(
+      captured.toString() ==
+        """-------------------------------------------
         |Batch: 0
         |-------------------------------------------
         |+-----+
@@ -91,8 +92,9 @@ class ConsoleWriteSupportSuite extends StreamTest {
       }
     }
 
-    assert(captured.toString() ==
-      """-------------------------------------------
+    assert(
+      captured.toString() ==
+        """-------------------------------------------
         |Batch: 0
         |-------------------------------------------
         |+-----+
@@ -119,8 +121,9 @@ class ConsoleWriteSupportSuite extends StreamTest {
       }
     }
 
-    assert(captured.toString() ==
-      """-------------------------------------------
+    assert(
+      captured.toString() ==
+        """-------------------------------------------
         |Batch: 0
         |-------------------------------------------
         |+--------------------+

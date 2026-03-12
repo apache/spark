@@ -26,10 +26,12 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DataType, GeographyType, GeometryType, IntegerType, StringType}
 
 /**
- * Read tests for vectorized Delta byte array  reader.
- * Translated from * org.apache.parquet.column.values.delta.TestDeltaByteArray
+ * Read tests for vectorized Delta byte array reader. Translated from *
+ * org.apache.parquet.column.values.delta.TestDeltaByteArray
  */
-class ParquetDeltaByteArrayEncodingSuite extends ParquetCompatibilityTest with SharedSparkSession {
+class ParquetDeltaByteArrayEncodingSuite
+    extends ParquetCompatibilityTest
+    with SharedSparkSession {
   val values: Array[String] = Array("parquet-mr", "parquet", "parquet-format");
   val randvalues: Array[String] = Utils.getRandomStringSamples(10000, 32)
 
@@ -87,16 +89,22 @@ class ParquetDeltaByteArrayEncodingSuite extends ParquetCompatibilityTest with S
   }
 
   testGeo("geo types multiple identical points") { geoType =>
-    assertGeoReadWrite(writer, reader,
-      Array(makePointWkb(1, 1), makePointWkb(1, 1), makePointWkb(1, 1)), geoType)
+    assertGeoReadWrite(
+      writer,
+      reader,
+      Array(makePointWkb(1, 1), makePointWkb(1, 1), makePointWkb(1, 1)),
+      geoType)
   }
 
   testGeo("geo types polygons with shared prefix") { geoType =>
     // These polygons share a WKB prefix, exercising delta encoding.
-    assertGeoReadWrite(writer, reader, Array(
-      makePolygonWkb((3, 3), (4, 4), (5, 5.1), (3, 3)),
-      makePolygonWkb((3, 3), (4, 4), (5, 5.2), (3, 3)),
-      makePolygonWkb((3, 3), (4, 4), (5, 5.3), (3, 3))),
+    assertGeoReadWrite(
+      writer,
+      reader,
+      Array(
+        makePolygonWkb((3, 3), (4, 4), (5, 5.1), (3, 3)),
+        makePolygonWkb((3, 3), (4, 4), (5, 5.2), (3, 3)),
+        makePolygonWkb((3, 3), (4, 4), (5, 5.3), (3, 3))),
       geoType)
   }
 
@@ -165,7 +173,7 @@ class ParquetDeltaByteArrayEncodingSuite extends ParquetCompatibilityTest with S
     writableColumnVector = new OnHeapColumnVector(length, StringType)
     reader.initFromPage(length, is)
     var i = 0
-    while ( {
+    while ({
       i < vals.length
     }) {
       reader.readBinary(1, writableColumnVector, i)
@@ -186,7 +194,7 @@ class ParquetDeltaByteArrayEncodingSuite extends ParquetCompatibilityTest with S
     reader.initFromPage(length, is)
     var skipCount = 0
     var i = 0
-    while ( {
+    while ({
       i < vals.length
     }) {
       skipCount = (vals.length - i) / 2

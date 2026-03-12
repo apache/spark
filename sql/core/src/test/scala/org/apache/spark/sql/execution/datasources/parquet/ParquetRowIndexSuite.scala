@@ -46,15 +46,21 @@ class ParquetRowIndexSuite extends QueryTest with SharedSparkSession {
 
   private def readRowGroupRowCounts(path: String): Seq[Long] = {
     val inputFile = HadoopInputFile.fromPath(new Path(path), spark.sessionState.newHadoopConf())
-    ParquetFooterReader.readFooter(inputFile, ParquetMetadataConverter.NO_FILTER)
-      .getBlocks.asScala.toSeq.map(_.getRowCount)
+    ParquetFooterReader
+      .readFooter(inputFile, ParquetMetadataConverter.NO_FILTER)
+      .getBlocks
+      .asScala
+      .toSeq
+      .map(_.getRowCount)
   }
 
   private def readRowGroupRowCounts(dir: File): Seq[Seq[Long]] = {
     assert(dir.isDirectory)
-    dir.listFiles()
+    dir
+      .listFiles()
       .filter { f => f.isFile && f.getName.endsWith("parquet") }
-      .map { f => readRowGroupRowCounts(f.getAbsolutePath) }.toImmutableArraySeq
+      .map { f => readRowGroupRowCounts(f.getAbsolutePath) }
+      .toImmutableArraySeq
   }
 
   /**
@@ -74,19 +80,22 @@ class ParquetRowIndexSuite extends QueryTest with SharedSparkSession {
     readRowGroupRowCounts(dir).foreach { rcs =>
       assert(rcs.length > 1, "expected multiple row groups per file")
       assert(rcs.last <= DEFAULT_MINIMUM_RECORD_COUNT_FOR_CHECK)
-      assert(rcs.reverse.tail.distinct == Seq(DEFAULT_MINIMUM_RECORD_COUNT_FOR_CHECK),
+      assert(
+        rcs.reverse.tail.distinct == Seq(DEFAULT_MINIMUM_RECORD_COUNT_FOR_CHECK),
         "expected row groups with minimal row count")
     }
   }
 
   /**
-   * Do the files have a good layout to test a combination of page skipping and row group skipping?
+   * Do the files have a good layout to test a combination of page skipping and row group
+   * skipping?
    */
   private def assertIntermediateRowGroups(dir: File): Unit = {
     readRowGroupRowCounts(dir).foreach { rcs =>
       assert(rcs.length >= 3, "expected at least 3 row groups per file")
       rcs.reverse.tail.foreach { rc =>
-        assert(rc > DEFAULT_MINIMUM_RECORD_COUNT_FOR_CHECK,
+        assert(
+          rc > DEFAULT_MINIMUM_RECORD_COUNT_FOR_CHECK,
           "expected row groups larger than minimal row count")
       }
     }
@@ -106,7 +115,8 @@ class ParquetRowIndexSuite extends QueryTest with SharedSparkSession {
     // The test doesn't work correctly if the number of records per file is uneven.
     assert(!useMultipleFiles || (numRows % NUM_MULTIPLE_FILES == 0))
 
-    def numFiles: Int = if (useMultipleFiles) { NUM_MULTIPLE_FILES } else { 1 }
+    def numFiles: Int = if (useMultipleFiles) { NUM_MULTIPLE_FILES }
+    else { 1 }
 
     def rowGroupSize: Long = if (useSmallRowGroups) {
       if (useSmallPages) {
@@ -147,36 +157,40 @@ class ParquetRowIndexSuite extends QueryTest with SharedSparkSession {
     }
 
     def desc: String = {
-      { if (useVectorizedReader) Seq("vectorized reader") else Seq("parquet-mr reader") } ++
-      { if (useMultipleFiles) Seq("many files") else Seq.empty[String] } ++
-      { if (useFilter) Seq("filtered") else Seq.empty[String] } ++
-      { if (useSmallPages) Seq("small pages") else Seq.empty[String] } ++
-      { if (useSmallRowGroups) Seq("small row groups") else Seq.empty[String] } ++
-      { if (useSmallSplits) Seq("small splits") else Seq.empty[String] } ++
-      { if (useDataSourceV2) Seq("datasource v2") else Seq.empty[String] }
+      { if (useVectorizedReader) Seq("vectorized reader") else Seq("parquet-mr reader") } ++ {
+        if (useMultipleFiles) Seq("many files") else Seq.empty[String]
+      } ++ { if (useFilter) Seq("filtered") else Seq.empty[String] } ++ {
+        if (useSmallPages) Seq("small pages") else Seq.empty[String]
+      } ++ { if (useSmallRowGroups) Seq("small row groups") else Seq.empty[String] } ++ {
+        if (useSmallSplits) Seq("small splits") else Seq.empty[String]
+      } ++ { if (useDataSourceV2) Seq("datasource v2") else Seq.empty[String] }
     }.mkString(", ")
 
     def sqlConfs: Seq[(String, String)] = Seq(
       SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> useVectorizedReader.toString,
-      SQLConf.FILES_MAX_PARTITION_BYTES.key -> filesMaxPartitionBytes.toString
-    ) ++ { if (useDataSourceV2) Seq(SQLConf.USE_V1_SOURCE_LIST.key -> "") else Seq.empty }
+      SQLConf.FILES_MAX_PARTITION_BYTES.key -> filesMaxPartitionBytes.toString) ++ {
+      if (useDataSourceV2) Seq(SQLConf.USE_V1_SOURCE_LIST.key -> "") else Seq.empty
+    }
   }
 
   for (useVectorizedReader <- Seq(true, false))
-  for (useDataSourceV2 <- Seq(true, false))
-  for (useSmallRowGroups <- Seq(true, false))
-  for (useSmallPages <- Seq(true, false))
-  for (useFilter <- Seq(true, false))
-  for (useSmallSplits <- Seq(useSmallRowGroups, false).distinct) {
-    val conf = RowIndexTestConf(useVectorizedReader = useVectorizedReader,
-      useDataSourceV2 = useDataSourceV2, useSmallRowGroups = useSmallRowGroups,
-      useSmallPages = useSmallPages, useFilter = useFilter,
-      useSmallSplits = useSmallSplits)
-    testRowIndexGeneration("row index generation", conf)
-  }
+    for (useDataSourceV2 <- Seq(true, false))
+      for (useSmallRowGroups <- Seq(true, false))
+        for (useSmallPages <- Seq(true, false))
+          for (useFilter <- Seq(true, false))
+            for (useSmallSplits <- Seq(useSmallRowGroups, false).distinct) {
+              val conf = RowIndexTestConf(
+                useVectorizedReader = useVectorizedReader,
+                useDataSourceV2 = useDataSourceV2,
+                useSmallRowGroups = useSmallRowGroups,
+                useSmallPages = useSmallPages,
+                useFilter = useFilter,
+                useSmallSplits = useSmallSplits)
+              testRowIndexGeneration("row index generation", conf)
+            }
 
   private def testRowIndexGeneration(label: String, conf: RowIndexTestConf): Unit = {
-    test (s"$label - ${conf.desc}") {
+    test(s"$label - ${conf.desc}") {
       withSQLConf(conf.sqlConfs: _*) {
         withTempPath { path =>
           // Read row index using _metadata.row_index if that is supported by the file format.
@@ -193,7 +207,9 @@ class ParquetRowIndexSuite extends QueryTest with SharedSparkSession {
           val (skipCentileFirst, skipCentileMidLeft, skipCentileMidRight, skipCentileLast) =
             (0.2, 0.4, 0.6, 0.8)
           val expectedRowIdxCol = "expected_rowIdx_col"
-          val df = spark.range(0, conf.numRows, 1, conf.numFiles).toDF("id")
+          val df = spark
+            .range(0, conf.numRows, 1, conf.numFiles)
+            .toDF("id")
             .withColumn("dummy_col", ($"id" / 55).cast("int"))
             .withColumn(expectedRowIdxCol, ($"id" % numRecordsPerFile).cast("int"))
 
@@ -229,11 +245,9 @@ class ParquetRowIndexSuite extends QueryTest with SharedSparkSession {
           val dfToAssert = if (conf.useFilter) {
             // Add a filter such that we skip 60% of the records:
             // [0%, 20%], [40%, 60%], [80%, 100%]
-            dfRead.filter((
-              $"id" >= (skipCentileFirst * conf.numRows).toInt &&
-                $"id" < (skipCentileMidLeft * conf.numRows).toInt) || (
-              $"id" >= (skipCentileMidRight * conf.numRows).toInt &&
-                $"id" < (skipCentileLast * conf.numRows).toInt))
+            dfRead.filter(($"id" >= (skipCentileFirst * conf.numRows).toInt &&
+              $"id" < (skipCentileMidLeft * conf.numRows).toInt) || ($"id" >= (skipCentileMidRight * conf.numRows).toInt &&
+              $"id" < (skipCentileLast * conf.numRows).toInt))
           } else {
             dfRead
           }
@@ -258,17 +272,18 @@ class ParquetRowIndexSuite extends QueryTest with SharedSparkSession {
           }
 
           // Assert that every rowIdx value matches the value in `expectedRowIdx`.
-          assert(dfToAssert.filter(s"$rowIndexColName != $expectedRowIdxCol")
-            .count() == 0)
+          assert(
+            dfToAssert
+              .filter(s"$rowIndexColName != $expectedRowIdxCol")
+              .count() == 0)
 
           if (conf.useFilter) {
             if (conf.useSmallRowGroups) {
               assert(numOutputRows < conf.numRows)
             }
 
-            val minMaxRowIndexes = dfToAssert.select(
-              max(col(rowIndexColName)),
-              min(col(rowIndexColName))).collect()
+            val minMaxRowIndexes =
+              dfToAssert.select(max(col(rowIndexColName)), min(col(rowIndexColName))).collect()
             val (expectedMaxRowIdx, expectedMinRowIdx) = if (conf.numFiles == 1) {
               // When there is a single file, we still have row group skipping,
               // but that should not affect the produced rowIdx.
@@ -282,20 +297,25 @@ class ParquetRowIndexSuite extends QueryTest with SharedSparkSession {
             assert(minMaxRowIndexes(0).get(1) == expectedMinRowIdx)
             if (!conf.useMultipleFiles) {
               val skippedValues = List.range(0, (skipCentileFirst * conf.numRows).toInt) ++
-                List.range((skipCentileMidLeft * conf.numRows).toInt,
+                List.range(
+                  (skipCentileMidLeft * conf.numRows).toInt,
                   (skipCentileMidRight * conf.numRows).toInt) ++
                 List.range((skipCentileLast * conf.numRows).toInt, conf.numRows)
               // rowIdx column should not have any of the `skippedValues`.
-              assert(dfToAssert
-                .filter(col(rowIndexColName).isin(skippedValues: _*)).count() == 0)
+              assert(
+                dfToAssert
+                  .filter(col(rowIndexColName).isin(skippedValues: _*))
+                  .count() == 0)
             }
           } else {
             assert(numOutputRows == conf.numRows)
             // When there is no filter, the rowIdx values should be in range
             // [0-`numRecordsPerFile`].
             val expectedRowIdxValues = List.range(0, numRecordsPerFile)
-            assert(dfToAssert.filter(col(rowIndexColName).isin(expectedRowIdxValues: _*))
-              .count() == conf.numRows)
+            assert(
+              dfToAssert
+                .filter(col(rowIndexColName).isin(expectedRowIdxValues: _*))
+                .count() == conf.numRows)
           }
         }
       }
@@ -307,7 +327,7 @@ class ParquetRowIndexSuite extends QueryTest with SharedSparkSession {
 
     test(s"invalid row index column type - ${conf.desc}") {
       withSQLConf(conf.sqlConfs: _*) {
-        withTempPath{ path =>
+        withTempPath { path =>
           val df = spark.range(0, 10, 1, 1).toDF("id")
           val schemaWithRowIdx = df.schema
             .add(ParquetFileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME, StringType)
@@ -323,8 +343,9 @@ class ParquetRowIndexSuite extends QueryTest with SharedSparkSession {
 
           val exception = intercept[SparkException](dfRead.collect())
           assert(exception.getCondition.startsWith("FAILED_READ_FILE"))
-          assert(exception.getCause.getMessage.contains(
-            ParquetFileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME))
+          assert(
+            exception.getCause.getMessage.contains(
+              ParquetFileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME))
         }
       }
     }

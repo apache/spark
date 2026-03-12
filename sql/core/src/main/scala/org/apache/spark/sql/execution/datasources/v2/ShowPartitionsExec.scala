@@ -34,7 +34,9 @@ case class ShowPartitionsExec(
     output: Seq[Attribute],
     catalog: TableCatalog,
     table: SupportsPartitionManagement,
-    partitionSpec: Option[ResolvedPartitionSpec]) extends V2CommandExec with LeafExecNode {
+    partitionSpec: Option[ResolvedPartitionSpec])
+    extends V2CommandExec
+    with LeafExecNode {
   override protected def run(): Seq[InternalRow] = {
     val (names, ident) = partitionSpec
       .map(spec => (spec.names, spec.ident))
@@ -55,7 +57,8 @@ case class ShowPartitionsExec(
         val dataType = schema(i).dataType
         val partValueUTF8String =
           Cast(Literal(row.get(i, dataType), dataType), StringType, Some(timeZoneId)).eval()
-        val partValueStr = if (partValueUTF8String == null) "null" else partValueUTF8String.toString
+        val partValueStr =
+          if (partValueUTF8String == null) "null" else partValueUTF8String.toString
         partitions(i) = escapePathName(schema(i).name) + "=" + escapePathName(partValueStr)
         i += 1
       }

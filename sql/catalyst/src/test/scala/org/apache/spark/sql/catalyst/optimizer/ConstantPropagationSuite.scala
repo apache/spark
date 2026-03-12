@@ -32,9 +32,10 @@ class ConstantPropagationSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
-      Batch("AnalysisNodes", Once,
-        EliminateSubqueryAliases) ::
-        Batch("ConstantPropagation", FixedPoint(10),
+      Batch("AnalysisNodes", Once, EliminateSubqueryAliases) ::
+        Batch(
+          "ConstantPropagation",
+          FixedPoint(10),
           ConstantPropagation,
           ConstantFolding,
           BooleanSimplification) :: Nil
@@ -55,7 +56,8 @@ class ConstantPropagationSuite extends PlanTest {
     val correctAnswer =
       testRelation
         .select(columnA)
-        .where(columnA === Literal(11) && columnB === Literal(10)).analyze
+        .where(columnA === Literal(11) && columnB === Literal(10))
+        .analyze
 
     comparePlans(Optimize.execute(query.analyze), correctAnswer)
   }
@@ -108,16 +110,14 @@ class ConstantPropagationSuite extends PlanTest {
   test("equality predicates outside a `OR` can be propagated within a `OR`") {
     val query = testRelation
       .select(columnA)
-      .where(
-        columnA === Literal(2) &&
-          (columnA === Add(columnB, Literal(3)) || columnB === Literal(9)))
+      .where(columnA === Literal(2) &&
+        (columnA === Add(columnB, Literal(3)) || columnB === Literal(9)))
       .analyze
 
     val correctAnswer = testRelation
       .select(columnA)
-      .where(
-        columnA === Literal(2) &&
-          (Literal(2) === Add(columnB, Literal(3)) || columnB === Literal(9)))
+      .where(columnA === Literal(2) &&
+        (Literal(2) === Add(columnB, Literal(3)) || columnB === Literal(9)))
       .analyze
 
     comparePlans(Optimize.execute(query), correctAnswer)
@@ -126,9 +126,8 @@ class ConstantPropagationSuite extends PlanTest {
   test("equality predicates inside a `OR` should not be picked for propagation") {
     val query = testRelation
       .select(columnA)
-      .where(
-        columnA === Add(columnB, Literal(2)) &&
-          (columnA === Add(columnB, Literal(3)) || columnB === Literal(9)))
+      .where(columnA === Add(columnB, Literal(2)) &&
+        (columnA === Add(columnB, Literal(3)) || columnB === Literal(9)))
       .analyze
 
     comparePlans(Optimize.execute(query), query)
@@ -137,16 +136,14 @@ class ConstantPropagationSuite extends PlanTest {
   test("equality operator not immediate child of root `AND` should not be used for propagation") {
     val query = testRelation
       .select(columnA)
-      .where(
-        columnA === Literal(0) &&
-          ((columnB === columnA) === (columnB === Literal(0))))
+      .where(columnA === Literal(0) &&
+        ((columnB === columnA) === (columnB === Literal(0))))
       .analyze
 
     val correctAnswer = testRelation
       .select(columnA)
-      .where(
-        columnA === Literal(0) &&
-          ((columnB === Literal(0)) === (columnB === Literal(0))))
+      .where(columnA === Literal(0) &&
+        ((columnB === Literal(0)) === (columnB === Literal(0))))
       .analyze
 
     comparePlans(Optimize.execute(query), correctAnswer)
@@ -161,7 +158,8 @@ class ConstantPropagationSuite extends PlanTest {
     val correctAnswer = testRelation
       .select(columnA, columnB)
       .where(Literal.FalseLiteral)
-      .select(columnA).analyze
+      .select(columnA)
+      .analyze
 
     comparePlans(Optimize.execute(query.analyze), correctAnswer)
   }

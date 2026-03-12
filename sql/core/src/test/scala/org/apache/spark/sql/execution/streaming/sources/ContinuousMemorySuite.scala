@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-
 package org.apache.spark.sql.execution.streaming.sources
 
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream

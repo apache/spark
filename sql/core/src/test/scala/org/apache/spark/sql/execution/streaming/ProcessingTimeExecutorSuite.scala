@@ -82,7 +82,7 @@ class ProcessingTimeExecutorSuite extends SparkFunSuite with TimeLimits {
     // If next trigger takes less than the trigger interval, executor should immediately execute
     // another one
     clockIncrementInTrigger = 1500
-    clock.setTime(2000)   // allow another trigger by setting clock to 2000
+    clock.setTime(2000) // allow another trigger by setting clock to 2000
     eventually {
       // Since the next trigger will take 1500 (which is more than trigger interval of 1000)
       // executor will immediately execute another trigger
@@ -95,7 +95,8 @@ class ProcessingTimeExecutorSuite extends SparkFunSuite with TimeLimits {
     waitForThreadJoin(executorThread)
   }
 
-  test("calling nextBatchTime with the result of a previous call should return the next interval") {
+  test(
+    "calling nextBatchTime with the result of a previous call should return the next interval") {
     val intervalMS = 100
     val processingTimeExecutor = ProcessingTimeExecutor(ProcessingTimeTrigger(intervalMS))
 
@@ -130,11 +131,12 @@ class ProcessingTimeExecutorSuite extends SparkFunSuite with TimeLimits {
     @volatile var batchFallingBehindCalled = false
     val t = new Thread() {
       override def run(): Unit = {
-        val processingTimeExecutor = new ProcessingTimeExecutor(ProcessingTimeTrigger(100), clock) {
-          override def notifyBatchFallingBehind(realElapsedTimeMs: Long): Unit = {
-            batchFallingBehindCalled = true
+        val processingTimeExecutor =
+          new ProcessingTimeExecutor(ProcessingTimeTrigger(100), clock) {
+            override def notifyBatchFallingBehind(realElapsedTimeMs: Long): Unit = {
+              batchFallingBehindCalled = true
+            }
           }
-        }
         processingTimeExecutor.execute((_) => {
           clock.waitTillTime(200)
           false

@@ -42,8 +42,7 @@ class CreateNamespaceParserSuite extends AnalysisTest with SharedSparkSession {
         "location" -> "/home/user/db"))
 
     comparePlans(
-      parsePlan(
-        """
+      parsePlan("""
           |CREATE NAMESPACE IF NOT EXISTS a.b.c
           |WITH PROPERTIES ('a'='a', 'b'='b', 'c'='c')
           |COMMENT 'namespace_comment' LOCATION '/home/user/db'
@@ -51,8 +50,7 @@ class CreateNamespaceParserSuite extends AnalysisTest with SharedSparkSession {
       expected)
 
     comparePlans(
-      parsePlan(
-        """
+      parsePlan("""
           |CREATE DATABASE IF NOT EXISTS a.b.c
           |WITH DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')
           |COMMENT 'namespace_comment' LOCATION '/home/user/db'
@@ -72,40 +70,28 @@ class CreateNamespaceParserSuite extends AnalysisTest with SharedSparkSession {
       exception = parseException(sql1),
       condition = "DUPLICATE_CLAUSES",
       parameters = Map("clauseName" -> "COMMENT"),
-      context = ExpectedContext(
-        fragment = sql1,
-        start = 0,
-        stop = 91))
+      context = ExpectedContext(fragment = sql1, start = 0, stop = 91))
 
     val sql2 = createNamespace("LOCATION '/home/user/db'")
     checkError(
       exception = parseException(sql2),
       condition = "DUPLICATE_CLAUSES",
       parameters = Map("clauseName" -> "LOCATION"),
-      context = ExpectedContext(
-        fragment = sql2,
-        start = 0,
-        stop = 85))
+      context = ExpectedContext(fragment = sql2, start = 0, stop = 85))
 
     val sql3 = createNamespace("WITH PROPERTIES ('a'='a', 'b'='b', 'c'='c')")
     checkError(
       exception = parseException(sql3),
       condition = "DUPLICATE_CLAUSES",
       parameters = Map("clauseName" -> "WITH PROPERTIES"),
-      context = ExpectedContext(
-        fragment = sql3,
-        start = 0,
-        stop = 123))
+      context = ExpectedContext(fragment = sql3, start = 0, stop = 123))
 
     val sql4 = createNamespace("WITH DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')")
     checkError(
       exception = parseException(sql4),
       condition = "DUPLICATE_CLAUSES",
       parameters = Map("clauseName" -> "WITH DBPROPERTIES"),
-      context = ExpectedContext(
-        fragment = sql4,
-        start = 0,
-        stop = 127))
+      context = ExpectedContext(fragment = sql4, start = 0, stop = 127))
   }
 
   test("create namespace - property values must be set") {
@@ -114,10 +100,7 @@ class CreateNamespaceParserSuite extends AnalysisTest with SharedSparkSession {
       exception = parseException(sql),
       condition = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map("message" -> "Values must be specified for key(s): [key_without_value]"),
-      context = ExpectedContext(
-        fragment = sql,
-        start = 0,
-        stop = 80))
+      context = ExpectedContext(fragment = sql, start = 0, stop = 80))
   }
 
   test("create namespace - either PROPERTIES or DBPROPERTIES is allowed") {
@@ -129,10 +112,7 @@ class CreateNamespaceParserSuite extends AnalysisTest with SharedSparkSession {
       exception = parseException(sql),
       condition = "UNSUPPORTED_FEATURE.SET_PROPERTIES_AND_DBPROPERTIES",
       parameters = Map.empty,
-      context = ExpectedContext(
-        fragment = sql,
-        start = 0,
-        stop = 125))
+      context = ExpectedContext(fragment = sql, start = 0, stop = 125))
   }
 
   test("create namespace - support for other types in PROPERTIES") {
@@ -147,10 +127,6 @@ class CreateNamespaceParserSuite extends AnalysisTest with SharedSparkSession {
       CreateNamespace(
         UnresolvedNamespace(Seq("a", "b", "c")),
         ifNotExists = false,
-        Map(
-          "a" -> "1",
-          "b" -> "0.1",
-          "c" -> "true",
-          "location" -> "/home/user/db")))
+        Map("a" -> "1", "b" -> "0.1", "c" -> "true", "location" -> "/home/user/db")))
   }
 }

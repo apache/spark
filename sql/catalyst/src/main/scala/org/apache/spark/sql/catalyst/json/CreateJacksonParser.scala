@@ -37,8 +37,8 @@ object CreateJacksonParser extends Serializable {
     val bb = record.getByteBuffer
     assert(bb.hasArray)
 
-    val bain = new ByteArrayInputStream(
-      bb.array(), bb.arrayOffset() + bb.position(), bb.remaining())
+    val bain =
+      new ByteArrayInputStream(bb.array(), bb.arrayOffset() + bb.position(), bb.remaining())
 
     jsonFactory.createParser(new InputStreamReader(bain, StandardCharsets.UTF_8))
   }

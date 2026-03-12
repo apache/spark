@@ -42,7 +42,8 @@ abstract class PlanExpression[T <: QueryPlan[_]] extends Expression {
     bits
   }
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(PLAN_EXPRESSION) ++ nodePatternsInternal()
+  final override val nodePatterns: Seq[TreePattern] =
+    Seq(PLAN_EXPRESSION) ++ nodePatternsInternal()
 
   override lazy val deterministic: Boolean = children.forall(_.deterministic) &&
     plan.deterministic
@@ -50,7 +51,7 @@ abstract class PlanExpression[T <: QueryPlan[_]] extends Expression {
   // Subclasses can override this function to provide more TreePatterns.
   def nodePatternsInternal(): Seq[TreePattern] = Seq()
 
-  /**  The id of the subquery expression. */
+  /** The id of the subquery expression. */
   def exprId: ExprId
 
   /** The plan being wrapped in the query. */
@@ -65,20 +66,24 @@ abstract class PlanExpression[T <: QueryPlan[_]] extends Expression {
 /**
  * A base interface for expressions that contain a [[LogicalPlan]].
  *
- * @param plan: the subquery plan
- * @param outerAttrs: the outer references in the subquery plan
- * @param exprId: ID of the expression
- * @param joinCond: the join conditions with the outer query. It contains both inner and outer
- *                  query references.
- * @param hint: An optional hint for this subquery that will be passed to the join formed from
- *              this subquery.
+ * @param plan:
+ *   the subquery plan
+ * @param outerAttrs:
+ *   the outer references in the subquery plan
+ * @param exprId:
+ *   ID of the expression
+ * @param joinCond:
+ *   the join conditions with the outer query. It contains both inner and outer query references.
+ * @param hint:
+ *   An optional hint for this subquery that will be passed to the join formed from this subquery.
  */
 abstract class SubqueryExpression(
     plan: LogicalPlan,
     outerAttrs: Seq[Expression],
     exprId: ExprId,
     joinCond: Seq[Expression],
-    hint: Option[HintInfo]) extends PlanExpression[LogicalPlan] {
+    hint: Option[HintInfo])
+    extends PlanExpression[LogicalPlan] {
 
   override lazy val resolved: Boolean = childrenResolved && plan.resolved
 
@@ -106,9 +111,10 @@ abstract class SubqueryExpression(
 }
 
 object SubqueryExpression {
+
   /**
-   * Returns true when an expression contains an IN or correlated EXISTS subquery
-   * and false otherwise.
+   * Returns true when an expression contains an IN or correlated EXISTS subquery and false
+   * otherwise.
    */
   def hasInOrCorrelatedExistsSubquery(e: Expression): Boolean = {
     e.exists {
@@ -142,6 +148,7 @@ object SubqueryExpression {
 }
 
 object SubExprUtils extends PredicateHelper {
+
   /**
    * Returns true when an expression contains correlated predicates i.e outer references and
    * returns false otherwise.
@@ -158,14 +165,14 @@ object SubExprUtils extends PredicateHelper {
   }
 
   /**
-   * Returns the list of expressions after removing the OuterReference shell from each of
-   * the expression.
+   * Returns the list of expressions after removing the OuterReference shell from each of the
+   * expression.
    */
   def stripOuterReferences[E <: Expression](e: Seq[E]): Seq[E] = e.map(stripOuterReference)
 
   /**
-   * Returns the logical plan after removing the OuterReference shell from all the expressions
-   * of the input logical plan.
+   * Returns the logical plan after removing the OuterReference shell from all the expressions of
+   * the input logical plan.
    */
   def stripOuterReferences(p: LogicalPlan): LogicalPlan = {
     p.transformAllExpressionsWithPruning(_.containsPattern(OUTER_REFERENCE)) {
@@ -196,10 +203,9 @@ object SubExprUtils extends PredicateHelper {
    *   SELECT a FROM l GROUP by 1 HAVING EXISTS (SELECT 1 FROM r WHERE d < min(b))
    * }}}
    * In the above case, we want to mark the entire min(b) as an outer reference
-   * OuterReference(min(b)) instead of min(OuterReference(b)).
-   * TODO: Currently we don't allow deep correlation. Also, we don't allow mixing of
-   * outer references and local references under an aggregate expression.
-   * For example (SQL):
+   * OuterReference(min(b)) instead of min(OuterReference(b)). TODO: Currently we don't allow deep
+   * correlation. Also, we don't allow mixing of outer references and local references under an
+   * aggregate expression. For example (SQL):
    * {{{
    *   SELECT .. FROM p1
    *   WHERE EXISTS (SELECT ...
@@ -252,8 +258,8 @@ object SubExprUtils extends PredicateHelper {
   }
 
   /**
-   * Returns the correlated predicates from a logical plan. The OuterReference wrapper
-   * is removed before returning the predicate to the caller.
+   * Returns the correlated predicates from a logical plan. The OuterReference wrapper is removed
+   * before returning the predicate to the caller.
    */
   def getCorrelatedPredicates(plan: LogicalPlan): Seq[Expression] = {
     val conditions = plan.collect { case Filter(cond, _) => cond }
@@ -267,11 +273,9 @@ object SubExprUtils extends PredicateHelper {
   }
 
   /**
-   * Matches an equality 'expr = func(outer)', where 'func(outer)' depends on outer rows or
-   * is a constant.
-   * A scalar subquery is allowed to group-by on 'expr', as they are guaranteed to have exactly
-   * one value for every outer row.
-   * Positive examples:
+   * Matches an equality 'expr = func(outer)', where 'func(outer)' depends on outer rows or is a
+   * constant. A scalar subquery is allowed to group-by on 'expr', as they are guaranteed to have
+   * exactly one value for every outer row. Positive examples:
    *   - x + 1 = outer(a)
    *   - cast(x as date) = outer(b)
    *   - y + z = 100
@@ -279,8 +283,8 @@ object SubExprUtils extends PredicateHelper {
    * In all of these examples, the left side of the equality will be returned.
    *
    * Negative examples:
-   *    - x < outer(b)
-   *    - x = y
+   *   - x < outer(b)
+   *   - x = y
    * In all of these examples, None will be returned.
    * @param expr
    * @return
@@ -291,54 +295,55 @@ object SubExprUtils extends PredicateHelper {
 
     expr match {
       case EqualTo(left, x)
-        if ((allowConstants || containsOuter(x)) &&
-          !x.exists(_.isInstanceOf[Attribute])) => Some(left)
+          if ((allowConstants || containsOuter(x)) &&
+            !x.exists(_.isInstanceOf[Attribute])) =>
+        Some(left)
       case EqualTo(x, right)
-        if ((allowConstants || containsOuter(x)) &&
-          !x.exists(_.isInstanceOf[Attribute])) => Some(right)
+          if ((allowConstants || containsOuter(x)) &&
+            !x.exists(_.isInstanceOf[Attribute])) =>
+        Some(right)
       case _ => None
     }
   }
 
   /**
-   * Returns the inner query expressions that are guaranteed to have a single value for each
-   * outer row. Therefore, a scalar subquery is allowed to group-by on these expressions.
-   * We can derive these from correlated equality predicates, though we need to take care about
-   * propagating this through operators like OUTER JOIN or UNION.
+   * Returns the inner query expressions that are guaranteed to have a single value for each outer
+   * row. Therefore, a scalar subquery is allowed to group-by on these expressions. We can derive
+   * these from correlated equality predicates, though we need to take care about propagating this
+   * through operators like OUTER JOIN or UNION.
    *
    * Positive examples:
-   * - x = outer(a) AND y = outer(b)
-   * - x = 1
-   * - x = outer(a) + 1
-   * - cast(x as date) = current_date() + outer(b)
+   *   - x = outer(a) AND y = outer(b)
+   *   - x = 1
+   *   - x = outer(a) + 1
+   *   - cast(x as date) = current_date() + outer(b)
    *
    * Negative examples:
-   * - x <= outer(a)
-   * - x + y = outer(a)
-   * - x = outer(a) OR y = outer(b)
-   * - y + outer(b) = 1 (this and similar expressions could be supported, but very carefully)
-   * - An equality under the right side of a LEFT OUTER JOIN, e.g.
-   *   select *, (select count(*) from y left join
-   *     (select * from z where z1 = x1) sub on y2 = z2 group by z1) from x;
-   * - An equality under UNION e.g.
-   *   select *, (select count(*) from
-   *     (select * from y where y1 = x1 union all select * from y) group by y1) from x;
+   *   - x <= outer(a)
+   *   - x + y = outer(a)
+   *   - x = outer(a) OR y = outer(b)
+   *   - y + outer(b) = 1 (this and similar expressions could be supported, but very carefully)
+   *   - An equality under the right side of a LEFT OUTER JOIN, e.g. select *, (select count(*)
+   *     from y left join (select * from z where z1 = x1) sub on y2 = z2 group by z1) from x;
+   *   - An equality under UNION e.g. select *, (select count(*) from (select * from y where y1 =
+   *     x1 union all select * from y) group by y1) from x;
    */
   def getCorrelatedEquivalentInnerExpressions(plan: LogicalPlan): ExpressionSet = {
     plan match {
       case Filter(cond, child) =>
-        val equivalentExprs = ExpressionSet(splitConjunctivePredicates(cond)
-          .filter(
-            SQLConf.get.getConf(SQLConf.SCALAR_SUBQUERY_ALLOW_GROUP_BY_COLUMN_EQUAL_TO_CONSTANT)
-            || containsOuter(_))
-          .flatMap(getEquivalentToOuter))
+        val equivalentExprs = ExpressionSet(
+          splitConjunctivePredicates(cond)
+            .filter(
+              SQLConf.get.getConf(SQLConf.SCALAR_SUBQUERY_ALLOW_GROUP_BY_COLUMN_EQUAL_TO_CONSTANT)
+                || containsOuter(_))
+            .flatMap(getEquivalentToOuter))
         equivalentExprs ++ getCorrelatedEquivalentInnerExpressions(child)
 
       case Join(left, right, joinType, _, _) =>
-         joinType match {
+        joinType match {
           case _: InnerLike =>
-            ExpressionSet(plan.children.flatMap(
-              child => getCorrelatedEquivalentInnerExpressions(child)))
+            ExpressionSet(
+              plan.children.flatMap(child => getCorrelatedEquivalentInnerExpressions(child)))
           case LeftOuter => getCorrelatedEquivalentInnerExpressions(left)
           case RightOuter => getCorrelatedEquivalentInnerExpressions(right)
           case FullOuter => ExpressionSet().empty
@@ -350,26 +355,12 @@ object SubExprUtils extends PredicateHelper {
       case _: Union => ExpressionSet().empty
       case Except(left, _, _) => getCorrelatedEquivalentInnerExpressions(left)
 
-      case
-        _: Aggregate |
-        _: Distinct |
-        _: Intersect |
-        _: GlobalLimit |
-        _: LocalLimit |
-        _: Offset |
-        _: Project |
-        _: Repartition |
-        _: RepartitionByExpression |
-        _: RebalancePartitions |
-        _: Sample |
-        _: Sort |
-        _: Window |
-        _: Tail |
-        _: WithCTE |
-        _: Range |
-        _: SubqueryAlias =>
-        ExpressionSet(plan.children.flatMap(child =>
-          getCorrelatedEquivalentInnerExpressions(child)))
+      case _: Aggregate | _: Distinct | _: Intersect | _: GlobalLimit | _: LocalLimit |
+          _: Offset | _: Project | _: Repartition | _: RepartitionByExpression |
+          _: RebalancePartitions | _: Sample | _: Sort | _: Window | _: Tail | _: WithCTE |
+          _: Range | _: SubqueryAlias =>
+        ExpressionSet(
+          plan.children.flatMap(child => getCorrelatedEquivalentInnerExpressions(child)))
 
       case _ => ExpressionSet().empty
     }
@@ -383,8 +374,10 @@ object SubExprUtils extends PredicateHelper {
     // Grouping expressions, except outer refs and constant expressions - grouping by an
     // outer ref or a constant is always ok
     val groupByExprs =
-    ExpressionSet(aggNode.groupingExpressions.filter(x => !x.isInstanceOf[OuterReference] &&
-      x.references.nonEmpty))
+      ExpressionSet(
+        aggNode.groupingExpressions.filter(x =>
+          !x.isInstanceOf[OuterReference] &&
+            x.references.nonEmpty))
     val nonEquivalentGroupByExprs = groupByExprs -- correlatedEquivalentExprs
     nonEquivalentGroupByExprs
   }
@@ -396,11 +389,11 @@ object SubExprUtils extends PredicateHelper {
  *
  * Note: `exprId` is used to have a unique name in explain string output.
  *
- * `mayHaveCountBug` is whether it's possible for the subquery to evaluate to non-null on
- * empty input (zero tuples). It is false if the subquery has a GROUP BY clause, because in that
- * case the subquery yields no row at all on empty input to the GROUP BY, which evaluates to NULL.
- * It is set in PullupCorrelatedPredicates to true/false, before it is set its value is None.
- * See constructLeftJoins in RewriteCorrelatedScalarSubquery for more details.
+ * `mayHaveCountBug` is whether it's possible for the subquery to evaluate to non-null on empty
+ * input (zero tuples). It is false if the subquery has a GROUP BY clause, because in that case
+ * the subquery yields no row at all on empty input to the GROUP BY, which evaluates to NULL. It
+ * is set in PullupCorrelatedPredicates to true/false, before it is set its value is None. See
+ * constructLeftJoins in RewriteCorrelatedScalarSubquery for more details.
  *
  * 'needSingleJoin' is set to true if we can't guarantee that the correlated scalar subquery
  * returns at most 1 row. For such subqueries we use a modification of an outer join called
@@ -415,18 +408,20 @@ case class ScalarSubquery(
     hint: Option[HintInfo] = None,
     mayHaveCountBug: Option[Boolean] = None,
     needSingleJoin: Option[Boolean] = None)
-  extends SubqueryExpression(plan, outerAttrs, exprId, joinCond, hint) with Unevaluable {
+    extends SubqueryExpression(plan, outerAttrs, exprId, joinCond, hint)
+    with Unevaluable {
   override def dataType: DataType = {
     if (!plan.schema.fields.nonEmpty) {
-      throw QueryCompilationErrors.subqueryReturnMoreThanOneColumn(plan.schema.fields.length,
+      throw QueryCompilationErrors.subqueryReturnMoreThanOneColumn(
+        plan.schema.fields.length,
         origin)
     }
     plan.schema.fields.head.dataType
   }
   override def nullable: Boolean = true
   override def withNewPlan(plan: LogicalPlan): ScalarSubquery = copy(plan = plan)
-  override def withNewOuterAttrs(outerAttrs: Seq[Expression]): ScalarSubquery = copy(
-    outerAttrs = outerAttrs)
+  override def withNewOuterAttrs(outerAttrs: Seq[Expression]): ScalarSubquery =
+    copy(outerAttrs = outerAttrs)
   override def withNewHint(hint: Option[HintInfo]): ScalarSubquery = copy(hint = hint)
   override def toString: String = s"scalar-subquery#${exprId.id} $conditionString"
   override lazy val canonicalized: Expression = {
@@ -455,8 +450,7 @@ object ScalarSubquery {
   }
 }
 
-case class UnresolvedScalarSubqueryPlanId(planId: Long)
-  extends UnresolvedPlanId {
+case class UnresolvedScalarSubqueryPlanId(planId: Long) extends UnresolvedPlanId {
 
   override def withPlan(plan: LogicalPlan): Expression = {
     ScalarSubquery(plan)
@@ -467,22 +461,21 @@ case class UnresolvedTableArgPlanId(
     planId: Long,
     partitionSpec: Seq[Expression] = Seq.empty,
     orderSpec: Seq[SortOrder] = Seq.empty,
-    withSinglePartition: Boolean = false
-) extends UnresolvedPlanId {
+    withSinglePartition: Boolean = false)
+    extends UnresolvedPlanId {
 
   override def withPlan(plan: LogicalPlan): Expression = {
     FunctionTableSubqueryArgumentExpression(
       plan,
       partitionByExpressions = partitionSpec,
       orderByExpressions = orderSpec,
-      withSinglePartition = withSinglePartition
-    )
+      withSinglePartition = withSinglePartition)
   }
 }
 
 /**
- * A subquery that can return multiple rows and columns. This should be rewritten as a join
- * with the outer query during the optimization phase.
+ * A subquery that can return multiple rows and columns. This should be rewritten as a join with
+ * the outer query during the optimization phase.
  *
  * Note: `exprId` is used to have a unique name in explain string output.
  */
@@ -492,12 +485,13 @@ case class LateralSubquery(
     exprId: ExprId = NamedExpression.newExprId,
     joinCond: Seq[Expression] = Seq.empty,
     hint: Option[HintInfo] = None)
-  extends SubqueryExpression(plan, outerAttrs, exprId, joinCond, hint) with Unevaluable {
+    extends SubqueryExpression(plan, outerAttrs, exprId, joinCond, hint)
+    with Unevaluable {
   override def dataType: DataType = plan.output.toStructType
   override def nullable: Boolean = true
   override def withNewPlan(plan: LogicalPlan): LateralSubquery = copy(plan = plan)
-  override def withNewOuterAttrs(outerAttrs: Seq[Expression]): LateralSubquery = copy(
-    outerAttrs = outerAttrs)
+  override def withNewOuterAttrs(outerAttrs: Seq[Expression]): LateralSubquery =
+    copy(outerAttrs = outerAttrs)
   override def withNewHint(hint: Option[HintInfo]): LateralSubquery = copy(hint = hint)
   override def toString: String = s"lateral-subquery#${exprId.id} $conditionString"
   override lazy val canonicalized: Expression = {
@@ -509,7 +503,7 @@ case class LateralSubquery(
   }
 
   override protected def withNewChildrenInternal(
-    newChildren: IndexedSeq[Expression]): LateralSubquery =
+      newChildren: IndexedSeq[Expression]): LateralSubquery =
     copy(
       outerAttrs = newChildren.take(outerAttrs.size),
       joinCond = newChildren.drop(outerAttrs.size))
@@ -538,7 +532,8 @@ case class ListQuery(
     numCols: Int = -1,
     joinCond: Seq[Expression] = Seq.empty,
     hint: Option[HintInfo] = None)
-  extends SubqueryExpression(plan, outerAttrs, exprId, joinCond, hint) with Unevaluable {
+    extends SubqueryExpression(plan, outerAttrs, exprId, joinCond, hint)
+    with Unevaluable {
   def childOutputs: Seq[Attribute] = plan.output.take(numCols)
   override def dataType: DataType = if (numCols > 1) {
     childOutputs.toStructType
@@ -550,14 +545,16 @@ case class ListQuery(
     // ListQuery can't be executed alone so its nullability is not defined.
     // Consider using ListQuery.childOutputs.exists(_.nullable)
     if (!SQLConf.get.getConf(SQLConf.LEGACY_IN_SUBQUERY_NULLABILITY)) {
-      assert(false, "ListQuery nullability is not defined. To restore the legacy behavior before " +
-        s"Spark 3.5.0, set ${SQLConf.LEGACY_IN_SUBQUERY_NULLABILITY.key}=true")
+      assert(
+        false,
+        "ListQuery nullability is not defined. To restore the legacy behavior before " +
+          s"Spark 3.5.0, set ${SQLConf.LEGACY_IN_SUBQUERY_NULLABILITY.key}=true")
     }
     false
   }
   override def withNewPlan(plan: LogicalPlan): ListQuery = copy(plan = plan)
-  override def withNewOuterAttrs(outerAttrs: Seq[Expression]): ListQuery = copy(
-    outerAttrs = outerAttrs)
+  override def withNewOuterAttrs(outerAttrs: Seq[Expression]): ListQuery =
+    copy(outerAttrs = outerAttrs)
   override def withNewHint(hint: Option[HintInfo]): ListQuery = copy(hint = hint)
   override def toString: String = s"list#${exprId.id} $conditionString"
   override lazy val canonicalized: Expression = {
@@ -581,7 +578,7 @@ case class ListQuery(
  * The [[Exists]] expression checks if a row exists in a subquery given some correlated condition
  * or some uncorrelated condition.
  *
- * 1. correlated condition:
+ *   1. correlated condition:
  *
  * For example (SQL):
  * {{{
@@ -592,7 +589,7 @@ case class ListQuery(
  *                   WHERE   b.id = a.id)
  * }}}
  *
- * 2. uncorrelated condition example:
+ *   2. uncorrelated condition example:
  *
  * For example (SQL):
  * {{{
@@ -609,13 +606,13 @@ case class Exists(
     exprId: ExprId = NamedExpression.newExprId,
     joinCond: Seq[Expression] = Seq.empty,
     hint: Option[HintInfo] = None)
-  extends SubqueryExpression(plan, outerAttrs, exprId, joinCond, hint)
-  with Predicate
-  with Unevaluable {
+    extends SubqueryExpression(plan, outerAttrs, exprId, joinCond, hint)
+    with Predicate
+    with Unevaluable {
   override def nullable: Boolean = false
   override def withNewPlan(plan: LogicalPlan): Exists = copy(plan = plan)
-  override def withNewOuterAttrs(outerAttrs: Seq[Expression]): Exists = copy(
-    outerAttrs = outerAttrs)
+  override def withNewOuterAttrs(outerAttrs: Seq[Expression]): Exists =
+    copy(outerAttrs = outerAttrs)
   override def withNewHint(hint: Option[HintInfo]): Exists = copy(hint = hint)
   override def toString: String = s"exists#${exprId.id} $conditionString"
   override lazy val canonicalized: Expression = {
@@ -634,8 +631,7 @@ case class Exists(
   final override def nodePatternsInternal(): Seq[TreePattern] = Seq(EXISTS_SUBQUERY)
 }
 
-case class UnresolvedExistsPlanId(planId: Long)
-  extends UnresolvedPlanId {
+case class UnresolvedExistsPlanId(planId: Long) extends UnresolvedPlanId {
 
   override def withPlan(plan: LogicalPlan): Expression = {
     Exists(plan)

@@ -23,13 +23,16 @@ import org.apache.spark.shuffle.ShuffleWriteMetricsReporter
 
 /**
  * A shuffle metrics reporter for SQL exchange operators.
- * @param tempMetrics [[TempShuffleReadMetrics]] created in TaskContext.
- * @param metrics All metrics in current SparkPlan. This param should not empty and
- *   contains all shuffle metrics defined in createShuffleReadMetrics.
+ * @param tempMetrics
+ *   [[TempShuffleReadMetrics]] created in TaskContext.
+ * @param metrics
+ *   All metrics in current SparkPlan. This param should not empty and contains all shuffle
+ *   metrics defined in createShuffleReadMetrics.
  */
 class SQLShuffleReadMetricsReporter(
     tempMetrics: TempShuffleReadMetrics,
-    metrics: Map[String, SQLMetric]) extends TempShuffleReadMetrics {
+    metrics: Map[String, SQLMetric])
+    extends TempShuffleReadMetrics {
   private[this] val _remoteBlocksFetched =
     metrics(SQLShuffleReadMetricsReporter.REMOTE_BLOCKS_FETCHED)
   private[this] val _localBlocksFetched =
@@ -171,22 +174,25 @@ object SQLShuffleReadMetricsReporter {
     LOCAL_MERGED_BLOCKS_FETCHED -> SQLMetrics.createMetric(sc, "local merged blocks fetched"),
     REMOTE_MERGED_CHUNKS_FETCHED -> SQLMetrics.createMetric(sc, "remote merged chunks fetched"),
     LOCAL_MERGED_CHUNKS_FETCHED -> SQLMetrics.createMetric(sc, "local merged chunks fetched"),
-    REMOTE_MERGED_BYTES_READ -> SQLMetrics.createSizeMetric(sc,
-      "remote merged bytes read"),
-    LOCAL_MERGED_BYTES_READ -> SQLMetrics.createSizeMetric(sc,
-      "local merged bytes read"),
+    REMOTE_MERGED_BYTES_READ -> SQLMetrics.createSizeMetric(sc, "remote merged bytes read"),
+    LOCAL_MERGED_BYTES_READ -> SQLMetrics.createSizeMetric(sc, "local merged bytes read"),
     REMOTE_REQS_DURATION -> SQLMetrics.createTimingMetric(sc, "remote reqs duration"),
-    REMOTE_MERGED_REQS_DURATION -> SQLMetrics.createTimingMetric(sc, "remote merged reqs duration"))
+    REMOTE_MERGED_REQS_DURATION -> SQLMetrics.createTimingMetric(
+      sc,
+      "remote merged reqs duration"))
 }
 
 /**
  * A shuffle write metrics reporter for SQL exchange operators.
- * @param metricsReporter Other reporter need to be updated in this SQLShuffleWriteMetricsReporter.
- * @param metrics Shuffle write metrics in current SparkPlan.
+ * @param metricsReporter
+ *   Other reporter need to be updated in this SQLShuffleWriteMetricsReporter.
+ * @param metrics
+ *   Shuffle write metrics in current SparkPlan.
  */
 class SQLShuffleWriteMetricsReporter(
     metricsReporter: ShuffleWriteMetricsReporter,
-    metrics: Map[String, SQLMetric]) extends ShuffleWriteMetricsReporter {
+    metrics: Map[String, SQLMetric])
+    extends ShuffleWriteMetricsReporter {
   private[this] val _bytesWritten =
     metrics(SQLShuffleWriteMetricsReporter.SHUFFLE_BYTES_WRITTEN)
   private[this] val _recordsWritten =

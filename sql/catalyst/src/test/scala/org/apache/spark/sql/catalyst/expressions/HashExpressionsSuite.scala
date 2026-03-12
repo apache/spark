@@ -42,50 +42,62 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   implicit def stringToUTF8Str(str: String): UTF8String = UTF8String.fromString(str)
 
   test("md5") {
-    checkEvaluation(Md5(Literal("ABC".getBytes(StandardCharsets.UTF_8))),
+    checkEvaluation(
+      Md5(Literal("ABC".getBytes(StandardCharsets.UTF_8))),
       "902fbdd2b1df0c4f70b4a5d23525e932")
-    checkEvaluation(Md5(Literal.create(Array[Byte](1, 2, 3, 4, 5, 6), BinaryType)),
+    checkEvaluation(
+      Md5(Literal.create(Array[Byte](1, 2, 3, 4, 5, 6), BinaryType)),
       "6ac1e56bc78f031059be7be854522c4c")
     checkEvaluation(Md5(Literal.create(null, BinaryType)), null)
     checkConsistencyBetweenInterpretedAndCodegen(Md5, BinaryType)
   }
 
   test("sha1") {
-    checkEvaluation(Sha1(Literal("ABC".getBytes(StandardCharsets.UTF_8))),
+    checkEvaluation(
+      Sha1(Literal("ABC".getBytes(StandardCharsets.UTF_8))),
       "3c01bdbb26f358bab27f267924aa2c9a03fcfdb8")
-    checkEvaluation(Sha1(Literal.create(Array[Byte](1, 2, 3, 4, 5, 6), BinaryType)),
+    checkEvaluation(
+      Sha1(Literal.create(Array[Byte](1, 2, 3, 4, 5, 6), BinaryType)),
       "5d211bad8f4ee70e16c7d343a838fc344a1ed961")
     checkEvaluation(Sha1(Literal.create(null, BinaryType)), null)
-    checkEvaluation(Sha1(Literal("".getBytes(StandardCharsets.UTF_8))),
+    checkEvaluation(
+      Sha1(Literal("".getBytes(StandardCharsets.UTF_8))),
       "da39a3ee5e6b4b0d3255bfef95601890afd80709")
     checkConsistencyBetweenInterpretedAndCodegen(Sha1, BinaryType)
   }
 
   test("sha2") {
-    checkEvaluation(Sha2(Literal("ABC".getBytes(StandardCharsets.UTF_8)), Literal(224)),
+    checkEvaluation(
+      Sha2(Literal("ABC".getBytes(StandardCharsets.UTF_8)), Literal(224)),
       "107c5072b799c4771f328304cfe1ebb375eb6ea7f35a3aa753836fad")
-    checkEvaluation(Sha2(Literal("ABC".getBytes(StandardCharsets.UTF_8)), Literal(0)),
+    checkEvaluation(
+      Sha2(Literal("ABC".getBytes(StandardCharsets.UTF_8)), Literal(0)),
       DigestUtils.sha256Hex("ABC"))
-    checkEvaluation(Sha2(Literal("ABC".getBytes(StandardCharsets.UTF_8)), Literal(256)),
+    checkEvaluation(
+      Sha2(Literal("ABC".getBytes(StandardCharsets.UTF_8)), Literal(256)),
       DigestUtils.sha256Hex("ABC"))
-    checkEvaluation(Sha2(Literal.create(Array[Byte](1, 2, 3, 4, 5, 6), BinaryType), Literal(384)),
+    checkEvaluation(
+      Sha2(Literal.create(Array[Byte](1, 2, 3, 4, 5, 6), BinaryType), Literal(384)),
       DigestUtils.sha384Hex(Array[Byte](1, 2, 3, 4, 5, 6)))
-    checkEvaluation(Sha2(Literal("ABC".getBytes(StandardCharsets.UTF_8)), Literal(512)),
+    checkEvaluation(
+      Sha2(Literal("ABC".getBytes(StandardCharsets.UTF_8)), Literal(512)),
       DigestUtils.sha512Hex("ABC"))
     // unsupported bit length
     checkEvaluation(Sha2(Literal.create(null, BinaryType), Literal(1024)), null)
     // null input and valid bit length
     checkEvaluation(Sha2(Literal.create(null, BinaryType), Literal(512)), null)
     // valid input and null bit length
-    checkEvaluation(Sha2(Literal("ABC".getBytes(StandardCharsets.UTF_8)),
-      Literal.create(null, IntegerType)), null)
-    checkEvaluation(Sha2(Literal.create(null, BinaryType), Literal.create(null, IntegerType)), null)
+    checkEvaluation(
+      Sha2(Literal("ABC".getBytes(StandardCharsets.UTF_8)), Literal.create(null, IntegerType)),
+      null)
+    checkEvaluation(
+      Sha2(Literal.create(null, BinaryType), Literal.create(null, IntegerType)),
+      null)
   }
 
   test("crc32") {
     checkEvaluation(Crc32(Literal("ABC".getBytes(StandardCharsets.UTF_8))), 2743272264L)
-    checkEvaluation(Crc32(Literal.create(Array[Byte](1, 2, 3, 4, 5, 6), BinaryType)),
-      2180413220L)
+    checkEvaluation(Crc32(Literal.create(Array[Byte](1, 2, 3, 4, 5, 6), BinaryType)), 2180413220L)
     checkEvaluation(Crc32(Literal.create(null, BinaryType)), null)
     checkConsistencyBetweenInterpretedAndCodegen(Crc32, BinaryType)
   }
@@ -98,8 +110,7 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       seed = 0,
       isCollationAware = true,
       // legacyCollationAwareHashing only matters when isCollationAware is false.
-      legacyCollationAwareHashing = false
-    )
+      legacyCollationAwareHashing = false)
 
     withClue(s"hash mismatch for input = `$input` of type `$dataType`.") {
       assert(actual == expected)
@@ -158,11 +169,11 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("hive-hash for float") {
-    checkHiveHash(0F, FloatType, 0)
-    checkHiveHash(0.0F, FloatType, 0)
-    checkHiveHash(1.1F, FloatType, 1066192077L)
-    checkHiveHash(-1.1F, FloatType, -1081291571)
-    checkHiveHash(99999999.99999999999F, FloatType, 1287568416L)
+    checkHiveHash(0f, FloatType, 0)
+    checkHiveHash(0.0f, FloatType, 0)
+    checkHiveHash(1.1f, FloatType, 1066192077L)
+    checkHiveHash(-1.1f, FloatType, -1081291571)
+    checkHiveHash(99999999.99999999999f, FloatType, 1287568416L)
     checkHiveHash(Float.MaxValue, FloatType, 2139095039)
     checkHiveHash(Float.MinValue, FloatType, -8388609)
   }
@@ -243,7 +254,9 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkHiveHashForTimestampType("2017-02-24 10:56:29.111111", 1353936655)
 
     // with different timezone
-    checkHiveHashForTimestampType("2017-02-24 10:56:29", 1445732471,
+    checkHiveHashForTimestampType(
+      "2017-02-24 10:56:29",
+      1445732471,
       DateTimeUtils.getZoneId("US/Pacific"))
 
     // boundary cases
@@ -268,13 +281,16 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     intercept[NoSuchElementException](checkHiveHashForTimestampType("2016-02-30 00:00:00", 0))
 
     // Invalid input: Hive accepts upto 9 decimal place precision but Spark uses upto 6
-    intercept[TestFailedException](checkHiveHashForTimestampType("2017-02-24 10:56:29.11111111", 0))
+    intercept[TestFailedException](
+      checkHiveHashForTimestampType("2017-02-24 10:56:29.11111111", 0))
   }
 
   test("hive-hash for CalendarInterval type") {
     def checkHiveHashForIntervalType(interval: String, expected: Long): Unit = {
-      checkHiveHash(IntervalUtils.stringToInterval(UTF8String.fromString(interval)),
-        CalendarIntervalType, expected)
+      checkHiveHash(
+        IntervalUtils.stringToInterval(UTF8String.fromString(interval)),
+        CalendarIntervalType,
+        expected)
     }
 
     // ----- MICROSEC -----
@@ -383,16 +399,20 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkHiveHashForIntervalType("interval 0 day 0 hour 0 minute 0 second", 23273)
     checkHiveHashForIntervalType("interval 0 day 0 hour 0 minute 0 second 0 millisecond", 23273)
     checkHiveHashForIntervalType(
-      "interval 0 day 0 hour 0 minute 0 second 0 millisecond 0 microsecond", 23273)
+      "interval 0 day 0 hour 0 minute 0 second 0 millisecond 0 microsecond",
+      23273)
 
     checkHiveHashForIntervalType("interval 6 day 15 hour", 21202073)
     checkHiveHashForIntervalType("interval 5 day 4 hour 8 minute", 16557833)
-    checkHiveHashForIntervalType("interval -23 day 56 hour -1111113 minute 9898989 second",
+    checkHiveHashForIntervalType(
+      "interval -23 day 56 hour -1111113 minute 9898989 second",
       -2128468593)
-    checkHiveHashForIntervalType("interval 66 day 12 hour 39 minute 23 second 987 millisecond",
+    checkHiveHashForIntervalType(
+      "interval 66 day 12 hour 39 minute 23 second 987 millisecond",
       1199697904)
     checkHiveHashForIntervalType(
-      "interval 66 day 12 hour 39 minute 23 second 987 millisecond 123 microsecond", 1199820904)
+      "interval 66 day 12 hour 39 minute 23 second 987 millisecond 123 microsecond",
+      1199820904)
   }
 
   test("hive-hash for array") {
@@ -433,8 +453,7 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         Array(
           new GenericArrayData(Array(1234L, -9L, 67L)),
           new GenericArrayData(Array(null, null)),
-          new GenericArrayData(Array(55L, -100L, -2147452680L))
-        )),
+          new GenericArrayData(Array(55L, -100L, -2147452680L)))),
       dataType = ArrayType(ArrayType(LongType)),
       expected = -1007531064)
 
@@ -447,8 +466,7 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
             new GenericArrayData(Array(UTF8String.fromString("sql"), null))),
           new ArrayBasedMapData(
             new GenericArrayData(Array(67)),
-            new GenericArrayData(Array(UTF8String.fromString("apache spark"))))
-        )),
+            new GenericArrayData(Array(UTF8String.fromString("apache spark")))))),
       dataType = ArrayType(MapType(IntegerType, StringType)),
       expected = 1139205955)
   }
@@ -490,8 +508,7 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
               new GenericArrayData(Array(UTF8String.fromString("sql"), null))),
             new ArrayBasedMapData(
               new GenericArrayData(Array(67)),
-              new GenericArrayData(Array(UTF8String.fromString("apache spark"))))
-          ))),
+              new GenericArrayData(Array(UTF8String.fromString("apache spark"))))))),
       dataType = nestedMapType,
       expected = -1142817416)
   }
@@ -501,11 +518,10 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val row = new GenericInternalRow(Array[Any](1, 2, 3))
     checkHiveHash(
       input = row,
-      dataType =
-        new StructType()
-          .add("col1", IntegerType)
-          .add("col2", IntegerType)
-          .add("col3", IntegerType),
+      dataType = new StructType()
+        .add("col1", IntegerType)
+        .add("col2", IntegerType)
+        .add("col3", IntegerType),
       expected = 1026)
 
     // mix of several datatypes
@@ -526,20 +542,15 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     rowValues += 2
     rowValues += Int.MaxValue
     rowValues += Long.MinValue
-    rowValues += new GenericArrayData(Array(
-      UTF8String.fromString("apache spark"),
-      UTF8String.fromString("hello world")
-    ))
+    rowValues += new GenericArrayData(
+      Array(UTF8String.fromString("apache spark"), UTF8String.fromString("hello world")))
     rowValues += new ArrayBasedMapData(
-      new GenericArrayData(Array(UTF8String.fromString("project"), UTF8String.fromString("meta"))),
-      new GenericArrayData(Array(UTF8String.fromString("apache spark"), null))
-    )
+      new GenericArrayData(
+        Array(UTF8String.fromString("project"), UTF8String.fromString("meta"))),
+      new GenericArrayData(Array(UTF8String.fromString("apache spark"), null)))
 
     val row2 = new GenericInternalRow(rowValues.toArray)
-    checkHiveHash(
-      input = row2,
-      dataType = structType,
-      expected = -2119012447)
+    checkHiveHash(input = row2, dataType = structType, expected = -2119012447)
   }
 
   private val structOfString = new StructType().add("str", StringType)
@@ -633,14 +644,10 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       val s1 = "aaa"
       val s2 = "AAA"
 
-      val murmur3Hash1 = CollationAwareMurmur3Hash(
-        Seq(Collate(Literal(s1), ResolvedCollation(collation))),
-        42
-      )
-      val murmur3Hash2 = CollationAwareMurmur3Hash(
-        Seq(Collate(Literal(s2), ResolvedCollation(collation))),
-        42
-      )
+      val murmur3Hash1 =
+        CollationAwareMurmur3Hash(Seq(Collate(Literal(s1), ResolvedCollation(collation))), 42)
+      val murmur3Hash2 =
+        CollationAwareMurmur3Hash(Seq(Collate(Literal(s2), ResolvedCollation(collation))), 42)
 
       // Interpreted hash values for s1 and s2
       val interpretedHash1 = murmur3Hash1.eval()
@@ -682,7 +689,8 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           val utf8BinaryStringExpr = Collate(Literal(s), ResolvedCollation("UTF8_BINARY"))
           val murmur3HashBinary = Murmur3Hash(Seq(utf8BinaryStringExpr), 42)
           val hashBinary = murmur3HashBinary.eval()
-          val murmur3Hash = Murmur3Hash(Seq(Collate(Literal(s), ResolvedCollation(collation))), 42)
+          val murmur3Hash =
+            Murmur3Hash(Seq(Collate(Literal(s), ResolvedCollation(collation))), 42)
           val interpretedHash = murmur3Hash.eval()
           assert(interpretedHash == hashBinary)
         }
@@ -734,8 +742,7 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         ("AAA", "UNICODE_CI_RTRIM", -443043098, -6629915645815515868L),
         ("AAA  ", "UNICODE_CI_RTRIM", -443043098, -6629915645815515868L),
         ("aaa", "UNICODE_CI_RTRIM", -443043098, -6629915645815515868L),
-        ("aaa   ", "UNICODE_CI_RTRIM", -443043098, -6629915645815515868L)
-      )
+        ("aaa   ", "UNICODE_CI_RTRIM", -443043098, -6629915645815515868L))
       testCases.foreach { case (str, collationName, expectedMurmur3, expectedXxHash64) =>
         val stringExpr = Collate(Literal(str), ResolvedCollation(collationName))
         val murmur3Expr = Murmur3Hash(Seq(stringExpr), 42)
@@ -789,8 +796,8 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     val N = 1000
-    val wideRow = new GenericInternalRow(
-      Seq.tabulate(N)(i => UTF8String.fromString(i.toString)).toArray[Any])
+    val wideRow =
+      new GenericInternalRow(Seq.tabulate(N)(i => UTF8String.fromString(i.toString)).toArray[Any])
     val schema = StructType((1 to N).map(i => StructField(i.toString, StringType)))
     checkResult(schema, wideRow)
 
@@ -806,16 +813,24 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val O = 50
     val seed = 42
 
-    val wideRow = new GenericInternalRow(Seq.tabulate(O)(k =>
-      new GenericInternalRow(Seq.tabulate(M)(j =>
-        new GenericInternalRow(Seq.tabulate(N)(i =>
-          new GenericInternalRow(Array[Any](
-            UTF8String.fromString((k * L + j * N + i).toString))))
-          .toArray[Any])).toArray[Any])).toArray[Any])
-    val inner = new StructType(
-      (0 until N).map(_ => StructField("structOfString", structOfString)).toArray)
-    val outer = new StructType(
-      (0 until M).map(_ => StructField("structOfStructOfString", inner)).toArray)
+    val wideRow = new GenericInternalRow(
+      Seq
+        .tabulate(O)(k =>
+          new GenericInternalRow(
+            Seq
+              .tabulate(M)(j =>
+                new GenericInternalRow(
+                  Seq
+                    .tabulate(N)(i =>
+                      new GenericInternalRow(
+                        Array[Any](UTF8String.fromString((k * L + j * N + i).toString))))
+                    .toArray[Any]))
+              .toArray[Any]))
+        .toArray[Any])
+    val inner =
+      new StructType((0 until N).map(_ => StructField("structOfString", structOfString)).toArray)
+    val outer =
+      new StructType((0 until M).map(_ => StructField("structOfStructOfString", inner)).toArray)
     val schema = new StructType(
       (0 until O).map(_ => StructField("structOfStructOfStructOfString", outer)).toArray)
     val exprs = schema.fields.zipWithIndex.map { case (f, i) =>
@@ -836,17 +851,12 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       Integer.MIN_VALUE.toLong - 1L,
       0L,
       Integer.MAX_VALUE.toLong + 1L,
-      Long.MaxValue
-    )
+      Long.MaxValue)
     for (seed <- longSeeds) {
       checkEvaluation(XxHash64(Seq(literal), seed), XxHash64(Seq(literal), seed).eval())
     }
 
-    val intSeeds = Seq(
-      Integer.MIN_VALUE,
-      0,
-      Integer.MAX_VALUE
-    )
+    val intSeeds = Seq(Integer.MIN_VALUE, 0, Integer.MAX_VALUE)
     for (seed <- intSeeds) {
       checkEvaluation(XxHash64(Seq(literal), seed), XxHash64(Seq(literal), seed).eval())
     }
@@ -873,8 +883,8 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(HiveHash(Seq(exprs1)), HiveHash(Seq(exprs2)).eval())
     }
 
-    checkResult(Literal.create(-0D, DoubleType), Literal.create(0D, DoubleType))
-    checkResult(Literal.create(-0F, FloatType), Literal.create(0F, FloatType))
+    checkResult(Literal.create(-0d, DoubleType), Literal.create(0d, DoubleType))
+    checkResult(Literal.create(-0f, FloatType), Literal.create(0f, FloatType))
   }
 
   test("Support TimeType") {

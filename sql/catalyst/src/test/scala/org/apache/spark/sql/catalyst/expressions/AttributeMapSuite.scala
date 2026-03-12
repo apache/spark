@@ -78,15 +78,17 @@ class AttributeMapSuite extends SparkFunSuite {
     val metadata2 = new MetadataBuilder().putString("key", "value2").build()
 
     // Two attributes with same exprId but different metadata
-    val attrWithMetadata1 = AttributeReference("col", IntegerType, metadata = metadata1)(
-      exprId = ExprId(100))
-    val attrWithMetadata2 = AttributeReference("col", IntegerType, metadata = metadata2)(
-      exprId = ExprId(100))
+    val attrWithMetadata1 =
+      AttributeReference("col", IntegerType, metadata = metadata1)(exprId = ExprId(100))
+    val attrWithMetadata2 =
+      AttributeReference("col", IntegerType, metadata = metadata2)(exprId = ExprId(100))
 
     // These should have different hashCodes but same exprId
-    assert(attrWithMetadata1.hashCode() != attrWithMetadata2.hashCode(),
+    assert(
+      attrWithMetadata1.hashCode() != attrWithMetadata2.hashCode(),
       "Attributes with different metadata should have different hashCodes")
-    assert(attrWithMetadata1.exprId == attrWithMetadata2.exprId,
+    assert(
+      attrWithMetadata1.exprId == attrWithMetadata2.exprId,
       "Attributes should have the same exprId")
 
     // Create a map with the first attribute
@@ -97,7 +99,8 @@ class AttributeMapSuite extends SparkFunSuite {
 
     // CRITICAL: The map should still find the original entry using an attribute
     // with the same exprId but different metadata
-    assert(map2.get(attrWithMetadata2) === Some("original"),
+    assert(
+      map2.get(attrWithMetadata2) === Some("original"),
       "AttributeMap should look up by exprId, not by attribute hashCode")
 
     // And the new entry should also be present
@@ -211,18 +214,14 @@ class AttributeMapSuite extends SparkFunSuite {
         AttributeReference("b", IntegerType)(exprId = ExprId(2)) -> 2,
         AttributeReference("c", IntegerType)(exprId = ExprId(3)) -> 3,
         AttributeReference("d", IntegerType)(exprId = ExprId(4)) -> 4,
-        AttributeReference("e", IntegerType)(exprId = ExprId(5)) -> 5
-      )
-    )
+        AttributeReference("e", IntegerType)(exprId = ExprId(5)) -> 5))
     var map2 = AttributeMap(
       Seq(
         AttributeReference("a", IntegerType)(exprId = ExprId(1)) -> 1,
         AttributeReference("b", IntegerType)(exprId = ExprId(2)) -> 2,
         AttributeReference("c", IntegerType)(exprId = ExprId(3)) -> 3,
         AttributeReference("d", IntegerType)(exprId = ExprId(4)) -> 4,
-        AttributeReference("e", IntegerType)(exprId = ExprId(5)) -> 5
-      )
-    )
+        AttributeReference("e", IntegerType)(exprId = ExprId(5)) -> 5))
     val qualifier1 = Seq("d")
     val qualifier2 = Seq()
     val exprId = ExprId(42)
@@ -248,18 +247,14 @@ class AttributeMapSuite extends SparkFunSuite {
         AttributeReference("b", IntegerType)(exprId = ExprId(2)) -> 2,
         AttributeReference("c", IntegerType)(exprId = ExprId(3)) -> 3,
         AttributeReference("d", IntegerType)(exprId = ExprId(4)) -> 4,
-        AttributeReference("e", IntegerType)(exprId = ExprId(5)) -> 5
-      )
-    )
+        AttributeReference("e", IntegerType)(exprId = ExprId(5)) -> 5))
     var map2: Map[Attribute, Int] = AttributeMap(
       Seq(
         AttributeReference("a", IntegerType)(exprId = ExprId(1)) -> 1,
         AttributeReference("b", IntegerType)(exprId = ExprId(2)) -> 2,
         AttributeReference("c", IntegerType)(exprId = ExprId(3)) -> 3,
         AttributeReference("d", IntegerType)(exprId = ExprId(4)) -> 4,
-        AttributeReference("e", IntegerType)(exprId = ExprId(5)) -> 5
-      )
-    )
+        AttributeReference("e", IntegerType)(exprId = ExprId(5)) -> 5))
     val qualifier1 = Seq("d")
     val qualifier2 = Seq()
     val exprId = ExprId(42)

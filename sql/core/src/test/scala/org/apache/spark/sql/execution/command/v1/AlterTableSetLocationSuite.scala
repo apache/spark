@@ -29,11 +29,12 @@ import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * This base suite contains unified tests for the `ALTER TABLE .. SET LOCATION`
- * command that check V1 table catalogs. The tests that cannot run for all V1 catalogs
- * are located in more specific test suites:
+ * This base suite contains unified tests for the `ALTER TABLE .. SET LOCATION` command that check
+ * V1 table catalogs. The tests that cannot run for all V1 catalogs are located in more specific
+ * test suites:
  *
- *   - V1 In-Memory catalog: `org.apache.spark.sql.execution.command.v1.AlterTableSetLocationSuite`
+ *   - V1 In-Memory catalog:
+ *     `org.apache.spark.sql.execution.command.v1.AlterTableSetLocationSuite`
  *   - V1 Hive External catalog:
  *     `org.apache.spark.sql.hive.execution.command.AlterTableSetLocationSuite`
  */
@@ -55,8 +56,9 @@ trait AlterTableSetLocationSuiteBase extends command.AlterTableSetLocationSuiteB
     val storageFormat = spec
       .map { s => sessionCatalog.getPartition(tableIdent, s).storage }
       .getOrElse { sessionCatalog.getTableMetadata(tableIdent).storage }
-    assert(storageFormat.locationUri ===
-      Some(makeQualifiedPath(CatalogUtils.URIToString(expected))))
+    assert(
+      storageFormat.locationUri ===
+        Some(makeQualifiedPath(CatalogUtils.URIToString(expected))))
   }
 
   test("alter table set location") {
@@ -94,8 +96,7 @@ trait AlterTableSetLocationSuiteBase extends command.AlterTableSetLocationSuiteB
             sql(s"ALTER TABLE $t PARTITION (A='1', B='2') SET LOCATION '/path/to/part/ways3'")
           },
           condition = "PARTITIONS_NOT_FOUND",
-          parameters = Map("partitionList" -> "`A`", "tableName" -> "`spark_catalog`.`ns`.`tbl`")
-        )
+          parameters = Map("partitionList" -> "`A`", "tableName" -> "`spark_catalog`.`ns`.`tbl`"))
       }
 
       sessionCatalog.setCurrentDatabase("ns")
@@ -114,7 +115,9 @@ trait AlterTableSetLocationSuiteBase extends command.AlterTableSetLocationSuiteB
     val e = intercept[AnalysisException] {
       sql("ALTER TABLE ns.does_not_exist SET LOCATION '/mister/spark'")
     }
-    checkErrorTableNotFound(e, "`ns`.`does_not_exist`",
+    checkErrorTableNotFound(
+      e,
+      "`ns`.`does_not_exist`",
       ExpectedContext("ns.does_not_exist", 12, 11 + "ns.does_not_exist".length))
   }
 

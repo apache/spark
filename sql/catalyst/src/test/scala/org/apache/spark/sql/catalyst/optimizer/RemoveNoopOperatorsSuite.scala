@@ -27,8 +27,7 @@ class RemoveNoopOperatorsSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
-      Batch("RemoveNoopOperators", Once,
-        RemoveNoopOperators) :: Nil
+      Batch("RemoveNoopOperators", Once, RemoveNoopOperators) :: Nil
   }
 
   val testRelation = LocalRelation($"a".int, $"b".int, $"c".int)

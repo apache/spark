@@ -23,11 +23,11 @@ import org.apache.spark.sql.types.{DataType, Decimal, StructType}
 import org.apache.spark.unsafe.types._
 
 /**
- * An [[InternalRow]] that projects particular columns from another [[InternalRow]] without copying
- * the underlying data.
+ * An [[InternalRow]] that projects particular columns from another [[InternalRow]] without
+ * copying the underlying data.
  */
-case class ProjectingInternalRow(schema: StructType,
-    colOrdinals: IndexedSeq[Int]) extends InternalRow {
+case class ProjectingInternalRow(schema: StructType, colOrdinals: IndexedSeq[Int])
+    extends InternalRow {
   assert(schema.size == colOrdinals.size)
 
   private var row: InternalRow = _

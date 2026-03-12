@@ -26,8 +26,7 @@ import org.apache.spark.sql.internal.SQLConf
 trait SQLConfHelper {
 
   /**
-   * The active config object within the current scope.
-   * See [[SQLConf.get]] for more information.
+   * The active config object within the current scope. See [[SQLConf.get]] for more information.
    */
   def conf: SQLConf = SQLConf.get
 
@@ -51,7 +50,8 @@ trait SQLConfHelper {
       }
       conf.setConfString(k, v)
     }
-    try f finally {
+    try f
+    finally {
       keys.zip(currentValues).foreach {
         case (key, Some(value)) => conf.setConfString(key, value)
         case (key, None) => conf.unsetConf(key)

@@ -54,8 +54,8 @@ class IndeterminateCollationTestSuite extends QueryTest with SharedSparkSession 
     assert(exception.getCondition === "INDETERMINATE_COLLATION")
   }
 
-  def assertIndeterminateCollationInSchemaError(columnPaths: String*)(
-      query: => DataFrame): Unit = {
+  def assertIndeterminateCollationInSchemaError(
+      columnPaths: String*)(query: => DataFrame): Unit = {
     checkError(
       exception = intercept[AnalysisException] {
         query.collect()
@@ -165,18 +165,13 @@ class IndeterminateCollationTestSuite extends QueryTest with SharedSparkSession 
     withTestTable {
       sql(s"INSERT INTO $testTableName VALUES ('a', 'b')")
 
-      val schema = StructType(Seq(
-        StructField("c1", StringType),
-        StructField("c2", StringType("UNICODE"))
-      ))
-      val dataframe = spark.createDataFrame(
-        spark.sparkContext.parallelize(Seq(Row("a", "b"))), schema
-      )
+      val schema =
+        StructType(Seq(StructField("c1", StringType), StructField("c2", StringType("UNICODE"))))
+      val dataframe =
+        spark.createDataFrame(spark.sparkContext.parallelize(Seq(Row("a", "b"))), schema)
 
-      val indeterminateDf = dataframe.select(
-        expr("concat(c1, c2)").alias("c1"),
-        expr("concat(c2, c1)").alias("c2")
-      )
+      val indeterminateDf =
+        dataframe.select(expr("concat(c1, c2)").alias("c1"), expr("concat(c2, c1)").alias("c2"))
 
       indeterminateDf.write.mode("overwrite").insertInto(testTableName)
 

@@ -37,16 +37,18 @@ object StreamingRelation {
   def apply(dataSource: DataSource): StreamingRelation = {
     // Extract source identifying name from DataSource for stable checkpoints
     StreamingRelation(
-      dataSource, dataSource.sourceInfo.name, toAttributes(dataSource.sourceInfo.schema),
+      dataSource,
+      dataSource.sourceInfo.name,
+      toAttributes(dataSource.sourceInfo.schema),
       dataSource.streamingSourceIdentifyingName)
   }
 }
 
 /**
  * Used to link a streaming [[DataSource]] into a
- * [[org.apache.spark.sql.catalyst.plans.logical.LogicalPlan]]. This is only used for creating
- * a streaming [[org.apache.spark.sql.DataFrame]] from [[org.apache.spark.sql.DataFrameReader]].
- * It should be used to create [[Source]] and converted to [[StreamingExecutionRelation]] when
+ * [[org.apache.spark.sql.catalyst.plans.logical.LogicalPlan]]. This is only used for creating a
+ * streaming [[org.apache.spark.sql.DataFrame]] from [[org.apache.spark.sql.DataFrameReader]]. It
+ * should be used to create [[Source]] and converted to [[StreamingExecutionRelation]] when
  * passing to [[StreamExecution]] to run a query.
  */
 case class StreamingRelation(
@@ -54,7 +56,9 @@ case class StreamingRelation(
     sourceName: String,
     output: Seq[Attribute],
     sourceIdentifyingName: StreamingSourceIdentifyingName = Unassigned)
-  extends LeafNode with MultiInstanceRelation with ExposesMetadataColumns
+    extends LeafNode
+    with MultiInstanceRelation
+    with ExposesMetadataColumns
     with HasStreamingSourceIdentifyingName {
   override def isStreaming: Boolean = true
   override def toString: String = sourceName
@@ -71,9 +75,8 @@ case class StreamingRelation(
   // swapped out with microbatches. But some dataframe operations (in particular explain) do lead
   // to this node surviving analysis. So we satisfy the LeafNode contract with the session default
   // value.
-  override def computeStats(): Statistics = Statistics(
-    sizeInBytes = BigInt(dataSource.sparkSession.sessionState.conf.defaultSizeInBytes)
-  )
+  override def computeStats(): Statistics =
+    Statistics(sizeInBytes = BigInt(dataSource.sparkSession.sessionState.conf.defaultSizeInBytes))
 
   override def newInstance(): LogicalPlan = this.copy(output = output.map(_.newInstance()))
 
@@ -81,8 +84,11 @@ case class StreamingRelation(
     dataSource.providingInstance() match {
       case f: FileFormat => metadataOutputWithOutConflicts(Seq(f.createFileMetadataCol()))
       case s: SupportsStreamSourceMetadataColumns =>
-        metadataOutputWithOutConflicts(s.getMetadataOutput(
-          dataSource.sparkSession, dataSource.options, dataSource.userSpecifiedSchema))
+        metadataOutputWithOutConflicts(
+          s.getMetadataOutput(
+            dataSource.sparkSession,
+            dataSource.options,
+            dataSource.userSpecifiedSchema))
       case _ => Nil
     }
   }
@@ -105,9 +111,9 @@ case class StreamingExecutionRelation(
     source: SparkDataStream,
     output: Seq[Attribute],
     catalogTable: Option[CatalogTable],
-    sourceIdentifyingName: StreamingSourceIdentifyingName = Unassigned)
-    (session: SparkSession)
-  extends LeafNode with MultiInstanceRelation {
+    sourceIdentifyingName: StreamingSourceIdentifyingName = Unassigned)(session: SparkSession)
+    extends LeafNode
+    with MultiInstanceRelation {
 
   override def otherCopyArgs: Seq[AnyRef] = session :: Nil
   override def isStreaming: Boolean = true
@@ -117,11 +123,11 @@ case class StreamingExecutionRelation(
   // swapped out with microbatches. But some dataframe operations (in particular explain) do lead
   // to this node surviving analysis. So we satisfy the LeafNode contract with the session default
   // value.
-  override def computeStats(): Statistics = Statistics(
-    sizeInBytes = BigInt(session.sessionState.conf.defaultSizeInBytes)
-  )
+  override def computeStats(): Statistics =
+    Statistics(sizeInBytes = BigInt(session.sessionState.conf.defaultSizeInBytes))
 
-  override def newInstance(): LogicalPlan = this.copy(output = output.map(_.newInstance()))(session)
+  override def newInstance(): LogicalPlan =
+    this.copy(output = output.map(_.newInstance()))(session)
 }
 
 /**
@@ -131,7 +137,8 @@ case class StreamingExecutionRelation(
 case class StreamingRelationExec(
     sourceName: String,
     output: Seq[Attribute],
-    tableIdentifier: Option[String]) extends LeafExecNode {
+    tableIdentifier: Option[String])
+    extends LeafExecNode {
   override def toString: String = sourceName
   override protected def doExecute(): RDD[InternalRow] = {
     throw QueryExecutionErrors.cannotExecuteStreamingRelationExecError()

@@ -27,47 +27,47 @@ import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors.unresolvedVariableError
 
 /**
- * Resolves the target SQL variables in FetchCursor command.
- * Variables can be either scripting local variables or session variables.
+ * Resolves the target SQL variables in FetchCursor command. Variables can be either scripting
+ * local variables or session variables.
  */
-class ResolveFetchCursor(val catalogManager: CatalogManager) extends Rule[LogicalPlan]
-  with ColumnResolutionHelper {
+class ResolveFetchCursor(val catalogManager: CatalogManager)
+    extends Rule[LogicalPlan]
+    with ColumnResolutionHelper {
   // VariableResolution looks up both scripting local variables (via SqlScriptingContextManager)
   // and session variables (via tempVariableManager), checking local variables first.
   private val variableResolution = new VariableResolution(catalogManager.tempVariableManager)
 
   /**
-   * Checks for duplicate variable names and throws an exception if found.
-   * Names are normalized when the variables are created.
-   * No need for case insensitive comparison here.
+   * Checks for duplicate variable names and throws an exception if found. Names are normalized
+   * when the variables are created. No need for case insensitive comparison here.
    */
   private def checkForDuplicateVariables(variables: Seq[VariableReference]): Unit = {
     val dups = variables.groupBy(_.identifier).filter(kv => kv._2.length > 1)
     if (dups.nonEmpty) {
       throw new AnalysisException(
         errorClass = "DUPLICATE_ASSIGNMENTS",
-        messageParameters = Map("nameList" ->
-          dups.keys.map(key => toSQLId(key.name())).mkString(", ")))
+        messageParameters = Map(
+          "nameList" ->
+            dups.keys.map(key => toSQLId(key.name())).mkString(", ")))
     }
   }
 
   /**
-   * Resolves and validates the target variables for a FetchCursor command.
-   * Returns a sequence of resolved VariableReference expressions.
+   * Resolves and validates the target variables for a FetchCursor command. Returns a sequence of
+   * resolved VariableReference expressions.
    */
   private def resolveAndValidateTargetVariables(
       targetVariables: Seq[Expression]): Seq[VariableReference] = {
     val resolvedVars = targetVariables.map {
       case u: UnresolvedAttribute =>
-        variableResolution.lookupVariable(
-          nameParts = u.nameParts
-        ) match {
+        variableResolution.lookupVariable(nameParts = u.nameParts) match {
           case Some(variable) => variable.copy(canFold = false)
           case _ => throw unresolvedVariableError(u.nameParts, Seq("SYSTEM", "SESSION"))
         }
 
-      case other => throw SparkException.internalError(
-        "Unexpected target variable expression in FetchCursor: " + other)
+      case other =>
+        throw SparkException.internalError(
+          "Unexpected target variable expression in FetchCursor: " + other)
     }
 
     // Check for duplicates immediately after resolution
@@ -75,17 +75,17 @@ class ResolveFetchCursor(val catalogManager: CatalogManager) extends Rule[Logica
     resolvedVars
   }
 
-  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
-    _.containsPattern(COMMAND), ruleId) {
-    // Resolve FetchCursor wrapped in SingleStatement
-    case s @ SingleStatement(fetchCursor: FetchCursor)
-        if !fetchCursor.targetVariables.forall(_.resolved) =>
-      val resolvedVars = resolveAndValidateTargetVariables(fetchCursor.targetVariables)
-      s.copy(parsedPlan = fetchCursor.copy(targetVariables = resolvedVars))
+  override def apply(plan: LogicalPlan): LogicalPlan =
+    plan.resolveOperatorsWithPruning(_.containsPattern(COMMAND), ruleId) {
+      // Resolve FetchCursor wrapped in SingleStatement
+      case s @ SingleStatement(fetchCursor: FetchCursor)
+          if !fetchCursor.targetVariables.forall(_.resolved) =>
+        val resolvedVars = resolveAndValidateTargetVariables(fetchCursor.targetVariables)
+        s.copy(parsedPlan = fetchCursor.copy(targetVariables = resolvedVars))
 
-    // Also resolve unwrapped FetchCursor (when extracted from SingleStatement for execution)
-    case fetchCursor: FetchCursor if !fetchCursor.targetVariables.forall(_.resolved) =>
-      val resolvedVars = resolveAndValidateTargetVariables(fetchCursor.targetVariables)
-      fetchCursor.copy(targetVariables = resolvedVars)
-  }
+      // Also resolve unwrapped FetchCursor (when extracted from SingleStatement for execution)
+      case fetchCursor: FetchCursor if !fetchCursor.targetVariables.forall(_.resolved) =>
+        val resolvedVars = resolveAndValidateTargetVariables(fetchCursor.targetVariables)
+        fetchCursor.copy(targetVariables = resolvedVars)
+    }
 }

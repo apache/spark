@@ -35,8 +35,8 @@ import org.apache.spark.sql.util.NumericHistogram
 /**
  * Computes an approximate histogram of a numerical column using a user-specified number of bins.
  *
- * The output is an array of (x,y) pairs as struct objects that represents the histogram's
- * bin centers and heights.
+ * The output is an array of (x,y) pairs as struct objects that represents the histogram's bin
+ * centers and heights.
  */
 @ExpressionDescription(
   usage = """
@@ -63,8 +63,10 @@ case class HistogramNumeric(
     nBins: Expression,
     override val mutableAggBufferOffset: Int,
     override val inputAggBufferOffset: Int)
-  extends TypedImperativeAggregate[NumericHistogram] with ImplicitCastInputTypes
-  with BinaryLike[Expression] with QueryErrorsBase {
+    extends TypedImperativeAggregate[NumericHistogram]
+    with ImplicitCastInputTypes
+    with BinaryLike[Expression]
+    with QueryErrorsBase {
 
   def this(child: Expression, nBins: Expression) = {
     this(child, nBins, 0, 0)
@@ -81,8 +83,15 @@ case class HistogramNumeric(
     // Support NumericType, DateType, TimestampType and TimestampNTZType, YearMonthIntervalType,
     // DayTimeIntervalType since their internal types are all numeric,
     // and can be easily cast to double for processing.
-    Seq(TypeCollection(NumericType, DateType, TimestampType, TimestampNTZType,
-      YearMonthIntervalType, DayTimeIntervalType), IntegerType)
+    Seq(
+      TypeCollection(
+        NumericType,
+        DateType,
+        TimestampType,
+        TimestampNTZType,
+        YearMonthIntervalType,
+        DayTimeIntervalType),
+      IntegerType)
   }
 
   override def checkInputDataTypes(): TypeCheckResult = {
@@ -95,8 +104,7 @@ case class HistogramNumeric(
         messageParameters = Map(
           "inputName" -> toSQLId("nb"),
           "inputType" -> toSQLType(nBins.dataType),
-          "inputExpr" -> toSQLExpr(nBins))
-      )
+          "inputExpr" -> toSQLExpr(nBins)))
     } else if (nb == null) {
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_NULL",
@@ -107,9 +115,7 @@ case class HistogramNumeric(
         messageParameters = Map(
           "exprName" -> "nb",
           "valueRange" -> s"[2, ${Int.MaxValue}]",
-          "currentValue" -> toSQLValue(nb, IntegerType)
-        )
-      )
+          "currentValue" -> toSQLValue(nb, IntegerType)))
     } else {
       TypeCheckSuccess
     }
@@ -135,9 +141,7 @@ case class HistogramNumeric(
     buffer
   }
 
-  override def merge(
-      buffer: NumericHistogram,
-      other: NumericHistogram): NumericHistogram = {
+  override def merge(buffer: NumericHistogram, other: NumericHistogram): NumericHistogram = {
     buffer.merge(other)
     buffer
   }
@@ -216,53 +220,57 @@ case class HistogramNumeric(
     // the output data type of this aggregate function is an array of structs, where each struct
     // has two fields (x, y): one of the same data type as the left child and another of double
     // type. Otherwise, the 'x' field always has double type.
-    ArrayType(new StructType(Array(
-      StructField(name = "x",
-        dataType = if (propagateInputType) left.dataType else DoubleType,
-        nullable = true),
-      StructField("y", DoubleType, true))), true)
+    ArrayType(
+      new StructType(
+        Array(
+          StructField(
+            name = "x",
+            dataType = if (propagateInputType) left.dataType else DoubleType,
+            nullable = true),
+          StructField("y", DoubleType, true))),
+      true)
   }
 
   override def prettyName: String = "histogram_numeric"
 }
 
 object NumericHistogramSerializer {
-    private final def length(histogram: NumericHistogram): Int = {
-      // histogram.nBins, histogram.nUsedBins
-      Ints.BYTES + Ints.BYTES +
-        //  histogram.bins, Array[Coord(x: Double, y: Double)]
-        histogram.getUsedBins * (Doubles.BYTES + Doubles.BYTES)
-    }
+  private final def length(histogram: NumericHistogram): Int = {
+    // histogram.nBins, histogram.nUsedBins
+    Ints.BYTES + Ints.BYTES +
+      //  histogram.bins, Array[Coord(x: Double, y: Double)]
+      histogram.getUsedBins * (Doubles.BYTES + Doubles.BYTES)
+  }
 
-    def serialize(histogram: NumericHistogram): Array[Byte] = {
-      val buffer = ByteBuffer.wrap(new Array(length(histogram)))
-      buffer.putInt(histogram.getNumBins)
-      buffer.putInt(histogram.getUsedBins)
+  def serialize(histogram: NumericHistogram): Array[Byte] = {
+    val buffer = ByteBuffer.wrap(new Array(length(histogram)))
+    buffer.putInt(histogram.getNumBins)
+    buffer.putInt(histogram.getUsedBins)
 
-      var i = 0
-      while (i < histogram.getUsedBins) {
-        val coord = histogram.getBin(i)
-        buffer.putDouble(coord.x)
-        buffer.putDouble(coord.y)
-        i += 1
-      }
-      buffer.array()
+    var i = 0
+    while (i < histogram.getUsedBins) {
+      val coord = histogram.getBin(i)
+      buffer.putDouble(coord.x)
+      buffer.putDouble(coord.y)
+      i += 1
     }
+    buffer.array()
+  }
 
-    def deserialize(bytes: Array[Byte]): NumericHistogram = {
-      val buffer = ByteBuffer.wrap(bytes)
-      val nBins = buffer.getInt()
-      val nUsedBins = buffer.getInt()
-      val histogram = new NumericHistogram()
-      histogram.allocate(nBins)
-      histogram.setUsedBins(nUsedBins)
-      var i: Int = 0
-      while (i < nUsedBins) {
-        val x = buffer.getDouble()
-        val y = buffer.getDouble()
-        histogram.addBin(x, y, i)
-        i += 1
-      }
-      histogram
+  def deserialize(bytes: Array[Byte]): NumericHistogram = {
+    val buffer = ByteBuffer.wrap(bytes)
+    val nBins = buffer.getInt()
+    val nUsedBins = buffer.getInt()
+    val histogram = new NumericHistogram()
+    histogram.allocate(nBins)
+    histogram.setUsedBins(nUsedBins)
+    var i: Int = 0
+    while (i < nUsedBins) {
+      val x = buffer.getDouble()
+      val y = buffer.getDouble()
+      histogram.addBin(x, y, i)
+      i += 1
     }
+    histogram
+  }
 }

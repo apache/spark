@@ -19,8 +19,12 @@ package org.apache.spark.sql.catalyst
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
 package object parser {
-  /** Some syntactic sugar which makes it easier to work with optional clauses for LogicalPlans. */
+
+  /**
+   * Some syntactic sugar which makes it easier to work with optional clauses for LogicalPlans.
+   */
   implicit class EnhancedLogicalPlan(val plan: LogicalPlan) extends AnyVal {
+
     /**
      * Create a plan using the block of code when the given context exists. Otherwise return the
      * original plan.

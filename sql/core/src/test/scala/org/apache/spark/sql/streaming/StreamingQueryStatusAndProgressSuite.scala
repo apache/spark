@@ -285,7 +285,8 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually wi
     assert(compact(parse(testProgress1.json)) === testProgress1.json)
     assert(compact(parse(testProgress2.json)) === testProgress2.json)
     assert(compact(parse(testProgress3.json)) === testProgress3.json)
-    assert(compact(parse(testProgress4.json, useBigDecimalForDouble = true)) === testProgress4.json)
+    assert(
+      compact(parse(testProgress4.json, useBigDecimalForDouble = true)) === testProgress4.json)
     assert(compact(parse(testProgress5.json)) === testProgress5.json)
     assert(compact(parse(testProgress6.json)) === testProgress6.json)
     assert(compact(parse(testProgress7.json)) === testProgress7.json)
@@ -309,8 +310,7 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually wi
       testProgress4,
       testProgress5,
       testProgress6,
-      testProgress7
-    ).foreach { input =>
+      testProgress7).foreach { input =>
       val jsonString = StreamingQueryProgress.jsonString(input)
       val result = StreamingQueryProgress.fromJson(jsonString)
       assert(input.id == result.id)
@@ -401,7 +401,8 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually wi
 
     val inputData = MemoryStream[Int]
 
-    val query = inputData.toDS()
+    val query = inputData
+      .toDS()
       .groupBy($"value")
       .agg(count("*"))
       .writeStream
@@ -438,7 +439,9 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually wi
     withSQLConf(SQLConf.STREAMING_NO_DATA_PROGRESS_EVENT_INTERVAL.key -> "10") {
       val inputData = MemoryStream[Int]
 
-      val query = inputData.toDS().toDF("value")
+      val query = inputData
+        .toDS()
+        .toDF("value")
         .select($"value")
         .groupBy($"value")
         .agg(count("*"))
@@ -492,8 +495,7 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually wi
         assert(query.lastProgress.processedRowsPerSecond == 2000d)
         true
       }),
-      StopStream
-    )
+      StopStream)
   }
 
   test("SPARK-45655: Use current batch timestamp in observe API") {
@@ -502,7 +504,8 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually wi
     val inputData = MemoryStream[Timestamp]
 
     // current_date() internally uses current batch timestamp on streaming query
-    val query = inputData.toDF()
+    val query = inputData
+      .toDF()
       .filter("value < current_date()")
       .observe("metrics", count(expr("value >= current_date()")).alias("dropped"))
       .writeStream
@@ -537,26 +540,28 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually wi
     assert(data(0).getAs[Timestamp](0).equals(validValue))
   }
 
-  test("SPARK-53491: inputRowsPerSecond and processedRowsPerSecond " +
-    "should never be with scientific notation") {
+  test(
+    "SPARK-53491: inputRowsPerSecond and processedRowsPerSecond " +
+      "should never be with scientific notation") {
     val progress = testProgress4.jsonValue
 
     // Actual values
-    val inputRowsPerSecond: Double = 6.923076923076923E8
-    val processedRowsPerSecond: Double = 2.923076923076923E8
+    val inputRowsPerSecond: Double = 6.923076923076923e8
+    val processedRowsPerSecond: Double = 2.923076923076923e8
 
     // Get values from progress metrics JSON and cast back to Double
     // for numeric comparison
-    val inputRowsPerSecondJSON = (progress \ "inputRowsPerSecond").values.toString
-      .toDouble
-    val processedRowsPerSecondJSON = (progress \ "processedRowsPerSecond").values.toString
-      .toDouble
+    val inputRowsPerSecondJSON = (progress \ "inputRowsPerSecond").values.toString.toDouble
+    val processedRowsPerSecondJSON =
+      (progress \ "processedRowsPerSecond").values.toString.toDouble
 
     // Get expected values after type casting
     val inputRowsPerSecondExpected = BigDecimal(inputRowsPerSecond)
-      .setScale(1, RoundingMode.HALF_UP).toDouble
+      .setScale(1, RoundingMode.HALF_UP)
+      .toDouble
     val processedRowsPerSecondExpected = BigDecimal(processedRowsPerSecond)
-      .setScale(1, RoundingMode.HALF_UP).toDouble
+      .setScale(1, RoundingMode.HALF_UP)
+      .toDouble
 
     // This should fail if inputRowsPerSecond contains E notation
     (progress \ "inputRowsPerSecond").values.toString should not include "E"
@@ -576,13 +581,12 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually wi
     val progressPretty = testProgress7.prettyJson
 
     // Actual values
-    val avgOffsetsBehindLatest: Double = 2.70941269E8
+    val avgOffsetsBehindLatest: Double = 2.70941269e8
 
     // Get values from progress metrics JSON and cast back to Double
     // for numeric comparison
     val metricsJSON = (progress \ "sources")(0) \ "metrics"
-    val avgOffsetsBehindLatestJSON = (metricsJSON \ "avgOffsetsBehindLatest")
-      .values.toString
+    val avgOffsetsBehindLatestJSON = (metricsJSON \ "avgOffsetsBehindLatest").values.toString
 
     // Get expected values after type casting
     val avgOffsetsBehindLatestExpected = BigDecimal(avgOffsetsBehindLatest)
@@ -691,20 +695,34 @@ object StreamingQueryStatusAndProgressSuite {
     timestamp = "2016-12-05T20:54:20.827Z",
     batchId = 2L,
     batchDuration = 0L,
-    durationMs = new java.util.HashMap(Map("total" -> 0L).transform((_, v) => long2Long(v)).asJava),
-    eventTime = new java.util.HashMap(Map(
-      "max" -> "2016-12-05T20:54:20.827Z",
-      "min" -> "2016-12-05T20:54:20.827Z",
-      "avg" -> "2016-12-05T20:54:20.827Z",
-      "watermark" -> "2016-12-05T20:54:20.827Z").asJava),
-    stateOperators = Array(new StateOperatorProgress(operatorName = "op1",
-      numRowsTotal = 0, numRowsUpdated = 1, allUpdatesTimeMs = 1, numRowsRemoved = 2,
-      allRemovalsTimeMs = 34, commitTimeMs = 23, memoryUsedBytes = 3, numRowsDroppedByWatermark = 0,
-      numShufflePartitions = 2, numStateStoreInstances = 2,
-      customMetrics = new java.util.HashMap(Map("stateOnCurrentVersionSizeBytes" -> 2L,
-        "loadedMapCacheHitCount" -> 1L, "loadedMapCacheMissCount" -> 0L)
-        .transform((_, v) => long2Long(v)).asJava)
-    )),
+    durationMs =
+      new java.util.HashMap(Map("total" -> 0L).transform((_, v) => long2Long(v)).asJava),
+    eventTime = new java.util.HashMap(
+      Map(
+        "max" -> "2016-12-05T20:54:20.827Z",
+        "min" -> "2016-12-05T20:54:20.827Z",
+        "avg" -> "2016-12-05T20:54:20.827Z",
+        "watermark" -> "2016-12-05T20:54:20.827Z").asJava),
+    stateOperators = Array(
+      new StateOperatorProgress(
+        operatorName = "op1",
+        numRowsTotal = 0,
+        numRowsUpdated = 1,
+        allUpdatesTimeMs = 1,
+        numRowsRemoved = 2,
+        allRemovalsTimeMs = 34,
+        commitTimeMs = 23,
+        memoryUsedBytes = 3,
+        numRowsDroppedByWatermark = 0,
+        numShufflePartitions = 2,
+        numStateStoreInstances = 2,
+        customMetrics = new java.util.HashMap(
+          Map(
+            "stateOnCurrentVersionSizeBytes" -> 2L,
+            "loadedMapCacheHitCount" -> 1L,
+            "loadedMapCacheMissCount" -> 0L)
+            .transform((_, v) => long2Long(v))
+            .asJava))),
     sources = Array(
       new SourceProgress(
         description = "source",
@@ -713,14 +731,13 @@ object StreamingQueryStatusAndProgressSuite {
         latestOffset = "789",
         numInputRows = 678,
         inputRowsPerSecond = 10.0,
-        processedRowsPerSecond = Double.PositiveInfinity  // should not be present in the json
-      )
-    ),
+        processedRowsPerSecond = Double.PositiveInfinity // should not be present in the json
+      )),
     sink = SinkProgress("sink", None),
-    observedMetrics = new java.util.HashMap(Map(
-      "event1" -> row(schema1, 1L, 3.0d),
-      "event2" -> row(schema2, 1L, "hello", "world")).asJava)
-  )
+    observedMetrics = new java.util.HashMap(
+      Map(
+        "event1" -> row(schema1, 1L, 3.0d),
+        "event2" -> row(schema2, 1L, "hello", "world")).asJava))
 
   val testProgress2 = new StreamingQueryProgress(
     id = UUID.randomUUID,
@@ -729,13 +746,23 @@ object StreamingQueryStatusAndProgressSuite {
     timestamp = "2016-12-05T20:54:20.827Z",
     batchId = 2L,
     batchDuration = 0L,
-    durationMs = new java.util.HashMap(Map("total" -> 0L).transform((_, v) => long2Long(v)).asJava),
+    durationMs =
+      new java.util.HashMap(Map("total" -> 0L).transform((_, v) => long2Long(v)).asJava),
     // empty maps should be handled correctly
     eventTime = new java.util.HashMap(Map.empty[String, String].asJava),
-    stateOperators = Array(new StateOperatorProgress(operatorName = "op2",
-      numRowsTotal = 0, numRowsUpdated = 1, allUpdatesTimeMs = 1, numRowsRemoved = 2,
-      allRemovalsTimeMs = 34, commitTimeMs = 23, memoryUsedBytes = 2, numRowsDroppedByWatermark = 0,
-      numShufflePartitions = 2, numStateStoreInstances = 2)),
+    stateOperators = Array(
+      new StateOperatorProgress(
+        operatorName = "op2",
+        numRowsTotal = 0,
+        numRowsUpdated = 1,
+        allUpdatesTimeMs = 1,
+        numRowsRemoved = 2,
+        allRemovalsTimeMs = 34,
+        commitTimeMs = 23,
+        memoryUsedBytes = 2,
+        numRowsDroppedByWatermark = 0,
+        numShufflePartitions = 2,
+        numStateStoreInstances = 2)),
     sources = Array(
       new SourceProgress(
         description = "source",
@@ -745,14 +772,13 @@ object StreamingQueryStatusAndProgressSuite {
         numInputRows = 678,
         inputRowsPerSecond = Double.NaN, // should not be present in the json
         processedRowsPerSecond = Double.NegativeInfinity // should not be present in the json
-      )
-    ),
+      )),
     sink = SinkProgress("sink", None),
-    observedMetrics = new java.util.HashMap(Map(
-      "event_a" -> row(schema1, null, -20.7d),
-      "event_b1" -> row(schema2, 33L, "foo", "bar"),
-      "event_b2" -> row(schema2, 200L, "fzo", "baz")).asJava)
-  )
+    observedMetrics = new java.util.HashMap(
+      Map(
+        "event_a" -> row(schema1, null, -20.7d),
+        "event_b1" -> row(schema2, 33L, "foo", "bar"),
+        "event_b2" -> row(schema2, 200L, "fzo", "baz")).asJava))
 
   val testProgress3 = new StreamingQueryProgress(
     id = UUID.randomUUID,
@@ -763,18 +789,29 @@ object StreamingQueryStatusAndProgressSuite {
     batchDuration = 0L,
     durationMs = null,
     eventTime = null,
-    stateOperators = Array(new StateOperatorProgress(operatorName = "op1",
-      numRowsTotal = 0, numRowsUpdated = 1, allUpdatesTimeMs = 1, numRowsRemoved = 2,
-      allRemovalsTimeMs = 34, commitTimeMs = 23, memoryUsedBytes = 3, numRowsDroppedByWatermark = 0,
-      numShufflePartitions = 2, numStateStoreInstances = 2,
-      customMetrics = new java.util.HashMap(Map("stateOnCurrentVersionSizeBytes" -> 2L,
-        "loadedMapCacheHitCount" -> 1L, "loadedMapCacheMissCount" -> 0L)
-        .transform((_, v) => long2Long(v)).asJava)
-    )),
+    stateOperators = Array(
+      new StateOperatorProgress(
+        operatorName = "op1",
+        numRowsTotal = 0,
+        numRowsUpdated = 1,
+        allUpdatesTimeMs = 1,
+        numRowsRemoved = 2,
+        allRemovalsTimeMs = 34,
+        commitTimeMs = 23,
+        memoryUsedBytes = 3,
+        numRowsDroppedByWatermark = 0,
+        numShufflePartitions = 2,
+        numStateStoreInstances = 2,
+        customMetrics = new java.util.HashMap(
+          Map(
+            "stateOnCurrentVersionSizeBytes" -> 2L,
+            "loadedMapCacheHitCount" -> 1L,
+            "loadedMapCacheMissCount" -> 0L)
+            .transform((_, v) => long2Long(v))
+            .asJava))),
     sources = Array(),
     sink = SinkProgress("sink", None),
-    observedMetrics = null
-  )
+    observedMetrics = null)
 
   val testProgress4 = new StreamingQueryProgress(
     id = UUID.randomUUID,
@@ -783,20 +820,34 @@ object StreamingQueryStatusAndProgressSuite {
     timestamp = "2025-09-05T20:54:20.827Z",
     batchId = 2L,
     batchDuration = 0L,
-    durationMs = new java.util.HashMap(Map("total" -> 0L).transform((_, v) => long2Long(v)).asJava),
-    eventTime = new java.util.HashMap(Map(
-      "max" -> "2025-09-05T20:54:20.827Z",
-      "min" -> "2025-09-05T20:54:20.827Z",
-      "avg" -> "2025-09-05T20:54:20.827Z",
-      "watermark" -> "2025-09-05T20:54:20.827Z").asJava),
-    stateOperators = Array(new StateOperatorProgress(operatorName = "op1",
-      numRowsTotal = 0, numRowsUpdated = 1, allUpdatesTimeMs = 1, numRowsRemoved = 2,
-      allRemovalsTimeMs = 34, commitTimeMs = 23, memoryUsedBytes = 3, numRowsDroppedByWatermark = 0,
-      numShufflePartitions = 2, numStateStoreInstances = 2,
-      customMetrics = new java.util.HashMap(Map("stateOnCurrentVersionSizeBytes" -> 2L,
-        "loadedMapCacheHitCount" -> 1L, "loadedMapCacheMissCount" -> 0L)
-        .transform((_, v) => long2Long(v)).asJava)
-    )),
+    durationMs =
+      new java.util.HashMap(Map("total" -> 0L).transform((_, v) => long2Long(v)).asJava),
+    eventTime = new java.util.HashMap(
+      Map(
+        "max" -> "2025-09-05T20:54:20.827Z",
+        "min" -> "2025-09-05T20:54:20.827Z",
+        "avg" -> "2025-09-05T20:54:20.827Z",
+        "watermark" -> "2025-09-05T20:54:20.827Z").asJava),
+    stateOperators = Array(
+      new StateOperatorProgress(
+        operatorName = "op1",
+        numRowsTotal = 0,
+        numRowsUpdated = 1,
+        allUpdatesTimeMs = 1,
+        numRowsRemoved = 2,
+        allRemovalsTimeMs = 34,
+        commitTimeMs = 23,
+        memoryUsedBytes = 3,
+        numRowsDroppedByWatermark = 0,
+        numShufflePartitions = 2,
+        numStateStoreInstances = 2,
+        customMetrics = new java.util.HashMap(
+          Map(
+            "stateOnCurrentVersionSizeBytes" -> 2L,
+            "loadedMapCacheHitCount" -> 1L,
+            "loadedMapCacheMissCount" -> 0L)
+            .transform((_, v) => long2Long(v))
+            .asJava))),
     sources = Array(
       new SourceProgress(
         description = "source",
@@ -804,15 +855,13 @@ object StreamingQueryStatusAndProgressSuite {
         endOffset = "456",
         latestOffset = "789",
         numInputRows = 678,
-        inputRowsPerSecond = 6.923076923076923E8, // Large double value having exponentials
-        processedRowsPerSecond = 2.923076923076923E8
-      )
-    ),
+        inputRowsPerSecond = 6.923076923076923e8, // Large double value having exponentials
+        processedRowsPerSecond = 2.923076923076923e8)),
     sink = SinkProgress("sink", None),
-    observedMetrics = new java.util.HashMap(Map(
-      "event1" -> row(schema1, 1L, 3.0d),
-      "event2" -> row(schema2, 1L, "hello", "world")).asJava)
-  )
+    observedMetrics = new java.util.HashMap(
+      Map(
+        "event1" -> row(schema1, 1L, 3.0d),
+        "event2" -> row(schema2, 1L, "hello", "world")).asJava))
 
   val testProgress5 = new StreamingQueryProgress(
     id = UUID.randomUUID,
@@ -833,12 +882,10 @@ object StreamingQueryStatusAndProgressSuite {
         latestOffset = """{"topic":{"0":789}}""",
         numInputRows = 100,
         inputRowsPerSecond = 10.0,
-        processedRowsPerSecond = 10.0
-      ),
+        processedRowsPerSecond = 10.0),
       new SourceProgress(
         description = "kinesis",
-        startOffset =
-          """
+        startOffset = """
             |[{
             |  "shard": {
             |    "stream": "stream1",
@@ -851,8 +898,7 @@ object StreamingQueryStatusAndProgressSuite {
             |  "lastRecordSeqNum": null
             |}]
           """.stripMargin,
-        endOffset =
-          """
+        endOffset = """
             |[{
             |  "shard": {
             |    "stream": "stream1",
@@ -865,8 +911,7 @@ object StreamingQueryStatusAndProgressSuite {
             |  "lastRecordSeqNum": null
             |}]
           """.stripMargin,
-        latestOffset =
-          """
+        latestOffset = """
             |[{
             |  "shard": {
             |    "stream": "stream1",
@@ -881,12 +926,9 @@ object StreamingQueryStatusAndProgressSuite {
           """.stripMargin,
         numInputRows = 101,
         inputRowsPerSecond = 10.1,
-        processedRowsPerSecond = 10.1
-      )
-    ),
+        processedRowsPerSecond = 10.1)),
     sink = SinkProgress("sink", None),
-    observedMetrics = new java.util.HashMap(Map().asJava)
-  )
+    observedMetrics = new java.util.HashMap(Map().asJava))
 
   val testProgress6 = new StreamingQueryProgress(
     id = UUID.randomUUID,
@@ -898,7 +940,8 @@ object StreamingQueryStatusAndProgressSuite {
     durationMs = null,
     eventTime = null,
     stateOperators = Array(),
-    sources = Array(new SourceProgress(
+    sources = Array(
+      new SourceProgress(
         description = "kafka",
         startOffset = "1000",
         endOffset = "2000",
@@ -906,11 +949,9 @@ object StreamingQueryStatusAndProgressSuite {
         numInputRows = 1001
         // inputRowsPerSecond and processedRowsPerSecond should be Double.NaN
         // and not present in the json
-      )
-    ),
+      )),
     sink = SinkProgress("sink", None),
-    observedMetrics = new java.util.HashMap(Map().asJava)
-  )
+    observedMetrics = new java.util.HashMap(Map().asJava))
 
   val testProgress7 = new StreamingQueryProgress(
     id = UUID.randomUUID,
@@ -928,30 +969,27 @@ object StreamingQueryStatusAndProgressSuite {
         "latestOffset" -> 2,
         "queryPlanning" -> 179,
         "triggerExecution" -> 111255,
-        "walCommit" -> 74
-      ).transform((_, v) => long2Long(v)).asJava
-    ),
+        "walCommit" -> 74).transform((_, v) => long2Long(v)).asJava),
     eventTime = new java.util.HashMap(),
     stateOperators = Array.empty,
     sources = Array(
       new SourceProgress(
         description = "KafkaV2[Subscribe[bigdata_omsTrade_cdc]]",
-        startOffset = "{\n    \"bigdata_omsTrade_cdc\" : {\n        \"0\" : 18424809459\n    }\n}",
+        startOffset =
+          "{\n    \"bigdata_omsTrade_cdc\" : {\n        \"0\" : 18424809459\n    }\n}",
         endOffset = "{\n    \"bigdata_omsTrade_cdc\" : {\n        \"0\" : 18432809459\n    }\n}",
-        latestOffset = "{\n    \"bigdata_omsTrade_cdc\" : {\n        \"0\" : 18703750728\n    }\n}",
+        latestOffset =
+          "{\n    \"bigdata_omsTrade_cdc\" : {\n        \"0\" : 18703750728\n    }\n}",
         numInputRows = 800000L,
         inputRowsPerSecond = 75291.2831516931,
         processedRowsPerSecond = 71906.88058963642,
-        metrics = new java.util.HashMap(Map(
-          "avgOffsetsBehindLatest" -> "2.70941269E8",
-          "minOffsetsBehindLatest" -> "270941269",
-          "maxOffsetsBehindLatest" -> "270941269").asJava))),
-    sink = SinkProgress(
-      "DeltaSink[s3://<masked-storage>/delta-source]"
-      , None
-    ),
+        metrics = new java.util.HashMap(
+          Map(
+            "avgOffsetsBehindLatest" -> "2.70941269E8",
+            "minOffsetsBehindLatest" -> "270941269",
+            "maxOffsetsBehindLatest" -> "270941269").asJava))),
+    sink = SinkProgress("DeltaSink[s3://<masked-storage>/delta-source]", None),
     observedMetrics = new java.util.HashMap())
 
   val testStatus = new StreamingQueryStatus("active", true, false)
 }
-

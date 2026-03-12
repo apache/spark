@@ -55,19 +55,17 @@ trait AliasHelper {
   /**
    * Replace all attributes, that reference an alias, with the aliased expression
    */
-  protected def replaceAlias(
-      expr: Expression,
-      aliasMap: AttributeMap[Alias]): Expression = {
+  protected def replaceAlias(expr: Expression, aliasMap: AttributeMap[Alias]): Expression = {
     // Use transformUp to prevent infinite recursion when the replacement expression
     // redefines the same ExprId,
-    trimAliases(expr.transformUp {
-      case a: Attribute => aliasMap.getOrElse(a, a)
+    trimAliases(expr.transformUp { case a: Attribute =>
+      aliasMap.getOrElse(a, a)
     })
   }
 
   /**
-   * Replace all attributes, that reference an alias, with the aliased expression.
-   * Tracks which aliases were replaced and returns them.
+   * Replace all attributes, that reference an alias, with the aliased expression. Tracks which
+   * aliases were replaced and returns them.
    */
   protected def replaceAliasWhileTracking(
       expr: Expression,
@@ -75,25 +73,24 @@ trait AliasHelper {
     // Use transformUp to prevent infinite recursion when the replacement expression
     // redefines the same ExprId,
     var replaced = AttributeMap.empty[Alias]
-    val newExpr = trimAliases(expr.transformUp {
-      case a: Attribute =>
-        // If we replace an alias add it to replaced
-        val newElem = aliasMap.get(a)
-        newElem match {
-          case None => a
-          case Some(b) =>
-            if (!replaced.contains(a)) {
-              replaced += (a, b)
-            }
-            b
-        }
+    val newExpr = trimAliases(expr.transformUp { case a: Attribute =>
+      // If we replace an alias add it to replaced
+      val newElem = aliasMap.get(a)
+      newElem match {
+        case None => a
+        case Some(b) =>
+          if (!replaced.contains(a)) {
+            replaced += (a, b)
+          }
+          b
+      }
     })
     (newExpr, replaced)
   }
 
   /**
-   * Replace all attributes, that reference an alias, with the aliased expression,
-   * but keep the name of the outermost attribute.
+   * Replace all attributes, that reference an alias, with the aliased expression, but keep the
+   * name of the outermost attribute.
    */
   protected def replaceAliasButKeepName(
       expr: NamedExpression,
@@ -105,8 +102,8 @@ trait AliasHelper {
       case o =>
         // Use transformUp to prevent infinite recursion when the replacement expression
         // redefines the same ExprId.
-        o.mapChildren(_.transformUp {
-          case a: Attribute => aliasMap.get(a).map(_.child).getOrElse(a)
+        o.mapChildren(_.transformUp { case a: Attribute =>
+          aliasMap.get(a).map(_.child).getOrElse(a)
         }).asInstanceOf[NamedExpression]
     }
   }
@@ -114,10 +111,11 @@ trait AliasHelper {
   protected def trimAliases(e: Expression): Expression = e match {
     // The children of `CreateNamedStruct` may use `Alias` to carry metadata and we should not
     // trim them.
-    case c: CreateNamedStruct => c.mapChildren {
-      case a: Alias if a.metadata != Metadata.empty => a
-      case other => trimAliases(other)
-    }
+    case c: CreateNamedStruct =>
+      c.mapChildren {
+        case a: Alias if a.metadata != Metadata.empty => a
+        case other => trimAliases(other)
+      }
     case Alias(child, _) => trimAliases(child)
     case MultiAlias(child, _) => trimAliases(child)
     case other => other.mapChildren(trimAliases)
@@ -136,13 +134,10 @@ trait AliasHelper {
   }
 
   /**
-   * Merge any stack of aliases under the top-level alias, and then
-   * drops any aliases deeper in the expression tree.
-   * So Alias1(Alias2(Alias3(Foo(Alias4(x))))) becomes
-   *    Alias5(Foo(x))
-   * where Alias5 preserves the metadata of Alias{1,2,3}
-   * and the name and exprId of Alias1.
-   * Alias4 is simply removed.
+   * Merge any stack of aliases under the top-level alias, and then drops any aliases deeper in
+   * the expression tree. So Alias1(Alias2(Alias3(Foo(Alias4(x))))) becomes Alias5(Foo(x)) where
+   * Alias5 preserves the metadata of Alias{1,2,3} and the name and exprId of Alias1. Alias4 is
+   * simply removed.
    */
   @tailrec
   protected final def mergeAndTrimAliases(alias: Alias): Alias = {
@@ -155,16 +150,14 @@ trait AliasHelper {
   /**
    * Merge an Alias(Alias(x)) into Alias(x) preserving metadata.
    *
-   * If the outer alias has explicit metadata,
-   *    it is preserved.
-   * Else if the inner alias has explicit metadata,
-   *    the result has explicit outer.metadata.
-   * Else both are deriving the metadata.
-   *    the result is deriving metadata,
-   *    with the union of noninheritable keys.
+   * If the outer alias has explicit metadata, it is preserved. Else if the inner alias has
+   * explicit metadata, the result has explicit outer.metadata. Else both are deriving the
+   * metadata. the result is deriving metadata, with the union of noninheritable keys.
    *
-   * @param alias An Alias with a child Alias, Alias(Alias(x))
-   * @return The merged alias, Alias(x)
+   * @param alias
+   *   An Alias with a child Alias, Alias(Alias(x))
+   * @return
+   *   The merged alias, Alias(x)
    */
   protected final def mergeAliases(alias: Alias): Alias = {
     val child = alias.child.asInstanceOf[Alias]
@@ -184,7 +177,7 @@ trait AliasHelper {
       // Both are deriving. Union the nonInheritableMetadataKeys
       val nonInheritSet = nonInheritableMetadataKeys.toSet
       nonInheritableMetadataKeys = nonInheritableMetadataKeys ++
-          child.nonInheritableMetadataKeys.filterNot(nonInheritSet)
+        child.nonInheritableMetadataKeys.filterNot(nonInheritSet)
     }
     val res = CurrentOrigin.withOrigin(alias.origin) {
       alias.copy(child = child.child)(

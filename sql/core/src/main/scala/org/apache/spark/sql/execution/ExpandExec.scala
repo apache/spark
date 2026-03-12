@@ -26,18 +26,19 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * Apply all of the GroupExpressions to every input row, hence we will get
- * multiple output rows for an input row.
- * @param projections The group of expressions, all of the group expressions should
- *                    output the same schema specified bye the parameter `output`
- * @param output      The output Schema
- * @param child       Child operator
+ * Apply all of the GroupExpressions to every input row, hence we will get multiple output rows
+ * for an input row.
+ * @param projections
+ *   The group of expressions, all of the group expressions should output the same schema
+ *   specified bye the parameter `output`
+ * @param output
+ *   The output Schema
+ * @param child
+ *   Child operator
  */
-case class ExpandExec(
-    projections: Seq[Seq[Expression]],
-    output: Seq[Attribute],
-    child: SparkPlan)
-  extends UnaryExecNode with CodegenSupport {
+case class ExpandExec(projections: Seq[Seq[Expression]], output: Seq[Attribute], child: SparkPlan)
+    extends UnaryExecNode
+    with CodegenSupport {
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
@@ -134,18 +135,14 @@ case class ExpandExec(
         // This column is the same across all output rows. Just generate code for it here.
         BindReferences.bindReference(firstExpr, attributeSeq).genCode(ctx)
       } else {
-        val isNull = ctx.addMutableState(
-          CodeGenerator.JAVA_BOOLEAN,
-          "resultIsNull",
-          v => s"$v = true;")
+        val isNull =
+          ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "resultIsNull", v => s"$v = true;")
         val value = ctx.addMutableState(
           CodeGenerator.javaType(firstExpr.dataType),
           "resultValue",
           v => s"$v = ${CodeGenerator.defaultValue(firstExpr.dataType)};")
 
-        ExprCode(
-          JavaCode.isNullVariable(isNull),
-          JavaCode.variable(value, firstExpr.dataType))
+        ExprCode(JavaCode.isNullVariable(isNull), JavaCode.variable(value, firstExpr.dataType))
       }
     }
 
@@ -167,13 +164,15 @@ case class ExpandExec(
     }
 
     val updateCodes = switchCaseExprs.map { case (_, exprCodes, _) =>
-      exprCodes.map { case (col, ev) =>
-        s"""
+      exprCodes
+        .map { case (col, ev) =>
+          s"""
            |${ev.code}
            |${outputColumns(col).isNull} = ${ev.isNull};
            |${outputColumns(col).value} = ${ev.value};
          """.stripMargin
-      }.mkString("\n")
+        }
+        .mkString("\n")
     }
 
     val splitThreshold = SQLConf.get.methodSplitThreshold
@@ -185,7 +184,8 @@ case class ExpandExec(
           val argList = inputVars.map { v =>
             s"${CodeGenerator.typeName(v.javaType)} ${v.variableName}"
           }
-          ctx.addNewFunction(switchCaseFunc,
+          ctx.addNewFunction(
+            switchCaseFunc,
             s"""
                |private void $switchCaseFunc(${argList.mkString(", ")}) {
                |  $updateCode

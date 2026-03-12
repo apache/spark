@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.expressions
 
 import scala.collection.mutable
 
-
 protected class AttributeEquals(val a: Attribute) {
   override def hashCode(): Int = a match {
     case ar: AttributeReference => ar.exprId.hashCode()
@@ -33,6 +32,7 @@ protected class AttributeEquals(val a: Attribute) {
 }
 
 object AttributeSet {
+
   /** Returns an empty [[AttributeSet]]. */
   val empty = apply(Iterable.empty)
 
@@ -50,24 +50,25 @@ object AttributeSet {
 
   /** Constructs a new [[AttributeSet]] given a sequence of [[AttributeSet]]s. */
   def fromAttributeSets(sets: Iterable[AttributeSet]): AttributeSet = {
-    val baseSet = sets.foldLeft(new mutable.LinkedHashSet[AttributeEquals]())( _ ++= _.baseSet)
+    val baseSet = sets.foldLeft(new mutable.LinkedHashSet[AttributeEquals]())(_ ++= _.baseSet)
     new AttributeSet(baseSet)
   }
 }
 
 /**
  * A Set designed to hold [[AttributeReference]] objects, that performs equality checking using
- * expression id instead of standard java equality.  Using expression id means that these
- * sets will correctly test for membership, even when the AttributeReferences in question differ
+ * expression id instead of standard java equality. Using expression id means that these sets will
+ * correctly test for membership, even when the AttributeReferences in question differ
  * cosmetically (e.g., the names have different capitalizations).
  *
  * Note that we do not override equality for Attribute references as it is really weird when
- * `AttributeReference("a"...) == AttributeReference("b", ...)`. This tactic leads to broken tests,
- * and also makes doing transformations hard (we always try keep older trees instead of new ones
- * when the transformation was a no-op).
+ * `AttributeReference("a"...) == AttributeReference("b", ...)`. This tactic leads to broken
+ * tests, and also makes doing transformations hard (we always try keep older trees instead of new
+ * ones when the transformation was a no-op).
  */
 class AttributeSet private (private val baseSet: mutable.LinkedHashSet[AttributeEquals])
-  extends Iterable[Attribute] with Serializable {
+    extends Iterable[Attribute]
+    with Serializable {
 
   override def hashCode: Int = baseSet.hashCode()
 
@@ -83,7 +84,7 @@ class AttributeSet private (private val baseSet: mutable.LinkedHashSet[Attribute
     baseSet.contains(new AttributeEquals(elem.toAttribute))
 
   /** Returns a new [[AttributeSet]] that contains `elem` in addition to the current elements. */
-  def +(elem: Attribute): AttributeSet =  // scalastyle:ignore
+  def +(elem: Attribute): AttributeSet = // scalastyle:ignore
     new AttributeSet(baseSet.union(Set(new AttributeEquals(elem))))
 
   /** Returns a new [[AttributeSet]] that does not contain `elem`. */
@@ -100,8 +101,8 @@ class AttributeSet private (private val baseSet: mutable.LinkedHashSet[Attribute
   def subsetOf(other: AttributeSet): Boolean = baseSet.subsetOf(other.baseSet)
 
   /**
-   * Returns a new [[AttributeSet]] that does not contain any of the [[Attribute Attributes]] found
-   * in `other`.
+   * Returns a new [[AttributeSet]] that does not contain any of the [[Attribute Attributes]]
+   * found in `other`.
    */
   def --(other: Iterable[NamedExpression]): AttributeSet = {
     if (isEmpty) {
@@ -121,14 +122,14 @@ class AttributeSet private (private val baseSet: mutable.LinkedHashSet[Attribute
   }
 
   /**
-   * Returns a new [[AttributeSet]] that contains all of the [[Attribute Attributes]] found
-   * in `other`.
+   * Returns a new [[AttributeSet]] that contains all of the [[Attribute Attributes]] found in
+   * `other`.
    */
   def ++(other: AttributeSet): AttributeSet = new AttributeSet(baseSet ++ other.baseSet)
 
   /**
-   * Returns a new [[AttributeSet]] contain only the [[Attribute Attributes]] where `f` evaluates to
-   * true.
+   * Returns a new [[AttributeSet]] contain only the [[Attribute Attributes]] where `f` evaluates
+   * to true.
    */
   override def filter(f: Attribute => Boolean): AttributeSet =
     new AttributeSet(baseSet.filter(ae => f(ae.a)))

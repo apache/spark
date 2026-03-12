@@ -31,16 +31,16 @@ import org.apache.spark.sql.types._
 import org.apache.spark.util.random.XORShiftRandom
 
 /**
- * A Random distribution generating expression.
- * TODO: This can be made generic to generate any type of random distribution, or any type of
- * StructType.
+ * A Random distribution generating expression. TODO: This can be made generic to generate any
+ * type of random distribution, or any type of StructType.
  *
  * Since this expression is stateful, it cannot be a case object.
  */
 trait RDG extends Expression with ExpressionWithRandomSeed {
+
   /**
-   * Record ID within each partition. By being transient, the Random Number Generator is
-   * reset every time we serialize and deserialize and initialize it.
+   * Record ID within each partition. By being transient, the Random Number Generator is reset
+   * every time we serialize and deserialize and initialize it.
    */
   @transient protected var rng: XORShiftRandom = _
 
@@ -57,7 +57,10 @@ trait RDG extends Expression with ExpressionWithRandomSeed {
 }
 
 abstract class NondeterministicUnaryRDG
-  extends RDG with UnaryLike[Expression] with Nondeterministic with ExpectsInputTypes {
+    extends RDG
+    with UnaryLike[Expression]
+    with Nondeterministic
+    with ExpectsInputTypes {
   override def seedExpression: Expression = child
 
   override protected def initializeInternal(partitionIndex: Int): Unit = {
@@ -68,8 +71,8 @@ abstract class NondeterministicUnaryRDG
 }
 
 /**
- * Represents the behavior of expressions which have a random seed and can renew the seed.
- * Usually the random seed needs to be renewed at each execution under streaming queries.
+ * Represents the behavior of expressions which have a random seed and can renew the seed. Usually
+ * the random seed needs to be renewed at each execution under streaming queries.
  */
 trait ExpressionWithRandomSeed extends Expression {
   override val nodePatterns: Seq[TreePattern] = Seq(EXPRESSION_WITH_RANDOM_SEED)
@@ -91,7 +94,8 @@ private[catalyst] object ExpressionWithRandomSeed {
 /** Generate a random column with i.i.d. uniformly distributed values in [0, 1). */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_([seed]) - Returns a random value with independent and identically distributed (i.i.d.) uniformly distributed values in [0, 1).",
+  usage =
+    "_FUNC_([seed]) - Returns a random value with independent and identically distributed (i.i.d.) uniformly distributed values in [0, 1).",
   examples = """
     Examples:
       > SELECT _FUNC_();
@@ -125,7 +129,8 @@ case class Rand(child: Expression, hideSeed: Boolean = false) extends Nondetermi
     val rngTerm = ctx.addMutableState(className, "rng")
     ctx.addPartitionInitializationStatement(
       s"$rngTerm = new $className(${seed}L + partitionIndex);")
-    ev.copy(code = code"""
+    ev.copy(
+      code = code"""
       final ${CodeGenerator.javaType(dataType)} ${ev.value} = $rngTerm.nextDouble();""",
       isNull = FalseLiteral)
   }
@@ -145,7 +150,8 @@ object Rand {
 /** Generate a random column with i.i.d. values drawn from the standard normal distribution. */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = """_FUNC_([seed]) - Returns a random value with independent and identically distributed (i.i.d.) values drawn from the standard normal distribution.""",
+  usage =
+    """_FUNC_([seed]) - Returns a random value with independent and identically distributed (i.i.d.) values drawn from the standard normal distribution.""",
   examples = """
     Examples:
       > SELECT _FUNC_();
@@ -179,7 +185,8 @@ case class Randn(child: Expression, hideSeed: Boolean = false) extends Nondeterm
     val rngTerm = ctx.addMutableState(className, "rng")
     ctx.addPartitionInitializationStatement(
       s"$rngTerm = new $className(${seed}L + partitionIndex);")
-    ev.copy(code = code"""
+    ev.copy(
+      code = code"""
       final ${CodeGenerator.javaType(dataType)} ${ev.value} = $rngTerm.nextGaussian();""",
       isNull = FalseLiteral)
   }
@@ -189,7 +196,8 @@ case class Randn(child: Expression, hideSeed: Boolean = false) extends Nondeterm
     s"randn(${if (hideSeed) "" else child.sql})"
   }
 
-  override protected def withNewChildInternal(newChild: Expression): Randn = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): Randn =
+    copy(child = newChild)
 }
 
 object Randn {
@@ -218,7 +226,7 @@ case class Uniform(
     seedExpression: Expression,
     hideSeed: Boolean,
     timeZoneId: Option[String] = None)
-  extends RuntimeReplaceable
+    extends RuntimeReplaceable
     with TernaryLike[Expression]
     with RDG
     with ExpectsInputTypes
@@ -261,9 +269,7 @@ case class Uniform(
   override def checkInputDataTypes(): TypeCheckResult = {
     var result: TypeCheckResult = super.checkInputDataTypes()
     def requiredType = "integer or floating-point"
-    Seq((min, "min"),
-      (max, "max"),
-      (seedExpression, "seed")).foreach {
+    Seq((min, "min"), (max, "max"), (seedExpression, "seed")).foreach {
       case (expr: Expression, name: String) =>
         if (result == TypeCheckResult.TypeCheckSuccess && !expr.foldable) {
           result = DataTypeMismatch(
@@ -288,7 +294,9 @@ case class Uniform(
     Uniform(min, max, Literal(seed + shift, LongType), hideSeed)
 
   override def withNewChildrenInternal(
-      newFirst: Expression, newSecond: Expression, newThird: Expression): Expression =
+      newFirst: Expression,
+      newSecond: Expression,
+      newThird: Expression): Expression =
     Uniform(newFirst, newSecond, newThird, hideSeed)
 
   override def replacement: Expression = {
@@ -298,13 +306,10 @@ case class Uniform(
       def cast(e: Expression, to: DataType): Expression = {
         if (e.dataType == to) e else Cast(e, to, timeZoneId)
       }
-      cast(Add(
-        cast(min, DoubleType),
-        Multiply(
-          Subtract(
-            cast(max, DoubleType),
-            cast(min, DoubleType)),
-          Rand(seed))),
+      cast(
+        Add(
+          cast(min, DoubleType),
+          Multiply(Subtract(cast(max, DoubleType), cast(min, DoubleType)), Rand(seed))),
         dataType)
     }
   }
@@ -329,21 +334,19 @@ object Uniform {
       optional. The string length must be a constant two-byte or four-byte integer (SMALLINT or INT,
       respectively).
   """,
-  examples =
-    """
+  examples = """
     Examples:
       > SELECT _FUNC_(3, 0) AS result;
        ceV
   """,
   since = "4.0.0",
   group = "string_funcs")
-case class RandStr(
-    length: Expression, override val seedExpression: Expression, hideSeed: Boolean)
-  extends ExpressionWithRandomSeed
-  with BinaryLike[Expression]
-  with DefaultStringProducingExpression
-  with Nondeterministic
-  with ExpectsInputTypes {
+case class RandStr(length: Expression, override val seedExpression: Expression, hideSeed: Boolean)
+    extends ExpressionWithRandomSeed
+    with BinaryLike[Expression]
+    with DefaultStringProducingExpression
+    with Nondeterministic
+    with ExpectsInputTypes {
   def this(length: Expression) =
     this(length, UnresolvedSeed, hideSeed = true)
   def this(length: Expression, seedExpression: Expression) =
@@ -354,13 +357,12 @@ case class RandStr(
   override def left: Expression = length
   override def right: Expression = seedExpression
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(
-    IntegerType,
-    TypeCollection(IntegerType, LongType))
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(IntegerType, TypeCollection(IntegerType, LongType))
 
   /**
-   * Record ID within each partition. By being transient, the Random Number Generator is
-   * reset every time we serialize and deserialize and initialize it.
+   * Record ID within each partition. By being transient, the Random Number Generator is reset
+   * every time we serialize and deserialize and initialize it.
    */
   @transient protected var rng: XORShiftRandom = _
 
@@ -387,8 +389,7 @@ case class RandStr(
 
   override def checkInputDataTypes(): TypeCheckResult = {
     var result: TypeCheckResult = super.checkInputDataTypes()
-    Seq((length, "length"),
-      (seedExpression, "seed")).foreach {
+    Seq((length, "length"), (seedExpression, "seed")).foreach {
       case (expr: Expression, name: String) =>
         if (result == TypeCheckResult.TypeCheckSuccess && !expr.foldable) {
           result = DataTypeMismatch(
@@ -424,8 +425,8 @@ case class RandStr(
     ctx.addPartitionInitializationStatement(
       s"$rngTerm = new $className(${seed}L + partitionIndex);")
     val numChars = lengthInteger()
-    ev.copy(code =
-      code"""
+    ev.copy(
+      code = code"""
         |UTF8String ${ev.value} =
         |  ${classOf[ExpressionImplUtils].getName}.randStr($rngTerm, $numChars);
         |boolean ${ev.isNull} = false;

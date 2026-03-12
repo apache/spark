@@ -25,9 +25,9 @@ class TestCompressibleColumnBuilder[T <: PhysicalDataType](
     override val columnStats: ColumnStats,
     override val columnType: NativeColumnType[T],
     override val schemes: Seq[CompressionScheme])
-  extends NativeColumnBuilder(columnStats, columnType)
-  with NullableColumnBuilder
-  with CompressibleColumnBuilder[T] {
+    extends NativeColumnBuilder(columnStats, columnType)
+    with NullableColumnBuilder
+    with CompressibleColumnBuilder[T] {
 
   override protected def isWorthCompressing(encoder: Encoder[T]) = true
 }
@@ -46,7 +46,10 @@ object TestCompressibleColumnBuilder {
 
 object ColumnBuilderHelper {
   def apply(
-      dataType: DataType, batchSize: Int, name: String, useCompression: Boolean): ColumnBuilder = {
+      dataType: DataType,
+      batchSize: Int,
+      name: String,
+      useCompression: Boolean): ColumnBuilder = {
     ColumnBuilder(dataType, batchSize, name, useCompression)
   }
 }

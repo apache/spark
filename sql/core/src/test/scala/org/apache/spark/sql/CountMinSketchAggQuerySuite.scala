@@ -34,9 +34,13 @@ class CountMinSketchAggQuerySuite extends QueryTest with SharedSparkSession {
     val seed = 11
 
     val items = Seq(1, 1, 2, 2, 2, 2, 3, 4, 5)
-    val sketch = CountMinSketch.readFrom(items.toDF("id")
-      .selectExpr(s"count_min_sketch(id, ${eps}d, ${confidence}d, $seed)")
-      .head().get(0).asInstanceOf[Array[Byte]])
+    val sketch = CountMinSketch.readFrom(
+      items
+        .toDF("id")
+        .selectExpr(s"count_min_sketch(id, ${eps}d, ${confidence}d, $seed)")
+        .head()
+        .get(0)
+        .asInstanceOf[Array[Byte]])
 
     val reference = CountMinSketch.create(eps, confidence, seed)
     items.foreach(reference.add)
@@ -52,9 +56,13 @@ class CountMinSketchAggQuerySuite extends QueryTest with SharedSparkSession {
     val seed = 11
 
     val items = Seq(1, 1, 2, 2, 2, 2, 3, 4, 5)
-    val sketch = CountMinSketch.readFrom(items.toDF("id")
-      .select(count_min_sketch($"id", lit(eps), lit(confidence), lit(seed)))
-      .head().get(0).asInstanceOf[Array[Byte]])
+    val sketch = CountMinSketch.readFrom(
+      items
+        .toDF("id")
+        .select(count_min_sketch($"id", lit(eps), lit(confidence), lit(seed)))
+        .head()
+        .get(0)
+        .asInstanceOf[Array[Byte]])
 
     val reference = CountMinSketch.create(eps, confidence, seed)
     items.foreach(reference.add)

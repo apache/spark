@@ -27,10 +27,11 @@ import org.apache.spark.sql.scripting.{CursorClosed, CursorDeclared}
 /**
  * Physical plan node for closing cursors.
  *
- * Transitions cursor from Opened or Fetching state to Closed state, releasing resources.
- * Closing an already closed cursor or a declared-but-not-opened cursor raises an error.
+ * Transitions cursor from Opened or Fetching state to Closed state, releasing resources. Closing
+ * an already closed cursor or a declared-but-not-opened cursor raises an error.
  *
- * @param cursor CursorReference resolved during analysis phase
+ * @param cursor
+ *   CursorReference resolved during analysis phase
  */
 case class CloseCursorExec(cursor: Expression) extends LeafV2CommandExec with DataTypeErrorsBase {
 
@@ -41,10 +42,12 @@ case class CloseCursorExec(cursor: Expression) extends LeafV2CommandExec with Da
     val scriptingContext = CursorCommandUtils.getScriptingContext(cursorRef.definition.name)
 
     // Get current cursor state and validate it exists
-    val currentState = scriptingContext.getCursorState(cursorRef).getOrElse(
-      throw new AnalysisException(
-        errorClass = "CURSOR_NOT_FOUND",
-        messageParameters = Map("cursorName" -> toSQLId(cursorRef.definition.name))))
+    val currentState = scriptingContext
+      .getCursorState(cursorRef)
+      .getOrElse(
+        throw new AnalysisException(
+          errorClass = "CURSOR_NOT_FOUND",
+          messageParameters = Map("cursorName" -> toSQLId(cursorRef.definition.name))))
 
     // Validate cursor is in an open state (Opened or Fetching)
     currentState match {

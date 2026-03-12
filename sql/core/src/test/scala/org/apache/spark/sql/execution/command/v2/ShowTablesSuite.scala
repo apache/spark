@@ -32,7 +32,8 @@ class ShowTablesSuite extends command.ShowTablesSuiteBase with CommandSuiteBase 
   //   The namespace in session catalog must have exactly one name part: spark_catalog.n1.n2.db
   test("show tables in nested namespaces") {
     withTable(s"$catalog.n1.n2.db") {
-      spark.sql(s"CREATE TABLE $catalog.n1.n2.db.table_name (id bigint, data string) $defaultUsing")
+      spark.sql(
+        s"CREATE TABLE $catalog.n1.n2.db.table_name (id bigint, data string) $defaultUsing")
       runShowTablesSql(
         s"SHOW TABLES FROM $catalog.n1.n2.db",
         Seq(Row("n1.n2.db", "table_name", false)))
@@ -53,7 +54,8 @@ class ShowTablesSuite extends command.ShowTablesSuiteBase with CommandSuiteBase 
       catalog: String,
       namespace: String,
       table: String): (String, Map[String, String]) = {
-    ("PARTITIONS_NOT_FOUND",
+    (
+      "PARTITIONS_NOT_FOUND",
       Map("partitionList" -> "`id`", "tableName" -> s"`$catalog`.`$namespace`.`$table`"))
   }
 

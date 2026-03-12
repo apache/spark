@@ -28,13 +28,12 @@ import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Remove redundant ProjectExec node from the spark plan. A ProjectExec node is redundant when
- * - It has the same output attributes and orders as its child's output and the ordering of
- *   the attributes is required.
- * - It has the same output attributes as its child's output when attribute output ordering
- *   is not required.
- * This rule needs to be a physical rule because project nodes are useful during logical
- * optimization to prune data. During physical planning, redundant project nodes can be removed
- * to simplify the query plan.
+ *   - It has the same output attributes and orders as its child's output and the ordering of the
+ *     attributes is required.
+ *   - It has the same output attributes as its child's output when attribute output ordering is
+ *     not required. This rule needs to be a physical rule because project nodes are useful during
+ *     logical optimization to prune data. During physical planning, redundant project nodes can
+ *     be removed to simplify the query plan.
  */
 object RemoveRedundantProjects extends Rule[SparkPlan] {
   def apply(plan: SparkPlan): SparkPlan = {
@@ -63,7 +62,8 @@ object RemoveRedundantProjects extends Rule[SparkPlan] {
         // to optimize out other Projects, otherwise when AQE turns physical plan back to
         // logical plan, we lose the Project and may mess up the output column order. So column
         // ordering is required if AQE is enabled and projectList is the same as child output.
-        val requireColOrdering = conf.adaptiveExecutionEnabled && op.projectList == op.child.output
+        val requireColOrdering =
+          conf.adaptiveExecutionEnabled && op.projectList == op.child.output
         op.mapChildren(removeProject(_, requireColOrdering))
       case a: BaseAggregateExec =>
         // BaseAggregateExec require specific column ordering when mode is Final or PartialMerge.
@@ -109,12 +109,12 @@ object RemoveRedundantProjects extends Rule[SparkPlan] {
       case _ =>
         if (requireOrdering) {
           project.output.map(_.exprId.id) == child.output.map(_.exprId.id) &&
-            checkNullability(project.output, child.output)
+          checkNullability(project.output, child.output)
         } else {
           val orderedProjectOutput = project.output.sortBy(_.exprId.id)
           val orderedChildOutput = child.output.sortBy(_.exprId.id)
           orderedProjectOutput.map(_.exprId.id) == orderedChildOutput.map(_.exprId.id) &&
-            checkNullability(orderedProjectOutput, orderedChildOutput)
+          checkNullability(orderedProjectOutput, orderedChildOutput)
         }
     }
   }

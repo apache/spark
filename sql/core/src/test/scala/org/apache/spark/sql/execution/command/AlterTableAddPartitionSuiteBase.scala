@@ -85,8 +85,10 @@ trait AlterTableAddPartitionSuiteBase extends QueryTest with DDLCommandTestUtils
 
   test("table to alter does not exist") {
     withNamespaceAndTable("ns", "does_not_exist") { t =>
-      val parsed = CatalystSqlParser.parseMultipartIdentifier(t)
-        .map(part => quoteIdentifier(part)).mkString(".")
+      val parsed = CatalystSqlParser
+        .parseMultipartIdentifier(t)
+        .map(part => quoteIdentifier(part))
+        .mkString(".")
       val e = intercept[AnalysisException] {
         sql(s"ALTER TABLE $t ADD IF NOT EXISTS PARTITION (a='4', b='9')")
       }
@@ -108,10 +110,7 @@ trait AlterTableAddPartitionSuiteBase extends QueryTest with DDLCommandTestUtils
             spark.sql(s"ALTER TABLE $t ADD PARTITION (ID=1) LOCATION 'loc1'")
           },
           condition = "PARTITIONS_NOT_FOUND",
-          parameters = Map(
-            "partitionList" -> "`ID`",
-            "tableName" -> expectedTableName)
-        )
+          parameters = Map("partitionList" -> "`ID`", "tableName" -> expectedTableName))
       }
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
         spark.sql(s"ALTER TABLE $t ADD PARTITION (ID=1) LOCATION 'loc1'")
@@ -178,8 +177,9 @@ trait AlterTableAddPartitionSuiteBase extends QueryTest with DDLCommandTestUtils
       val errMsg = intercept[AnalysisException] {
         sql(s"ALTER TABLE $t ADD PARTITION (part0 = 1)")
       }.getMessage
-      assert(errMsg.contains("Partition spec is invalid. " +
-        "The spec (part0) must match the partition spec (part0, part1)"))
+      assert(
+        errMsg.contains("Partition spec is invalid. " +
+          "The spec (part0) must match the partition spec (part0, part1)"))
     }
   }
 
@@ -187,7 +187,7 @@ trait AlterTableAddPartitionSuiteBase extends QueryTest with DDLCommandTestUtils
     withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t(name STRING, part DATE) USING PARQUET PARTITIONED BY (part)")
       sql(s"ALTER TABLE $t ADD PARTITION(part = date'2020-01-01')")
-      checkPartitions(t, Map("part" ->"2020-01-01"))
+      checkPartitions(t, Map("part" -> "2020-01-01"))
     }
   }
 
@@ -195,14 +195,12 @@ trait AlterTableAddPartitionSuiteBase extends QueryTest with DDLCommandTestUtils
     assume(!catalogVersion.contains("Hive")) // Hive catalog doesn't support the interval types
 
     withNamespaceAndTable("ns", "tbl") { t =>
-      sql(
-        s"""CREATE TABLE $t (
+      sql(s"""CREATE TABLE $t (
            | ym INTERVAL YEAR,
            | dt INTERVAL DAY,
            | data STRING) $defaultUsing
            |PARTITIONED BY (ym, dt)""".stripMargin)
-      sql(
-        s"""ALTER TABLE $t ADD PARTITION (
+      sql(s"""ALTER TABLE $t ADD PARTITION (
            | ym = INTERVAL '100' YEAR,
            | dt = INTERVAL '10' DAY
            |) LOCATION 'loc'""".stripMargin)
@@ -210,12 +208,10 @@ trait AlterTableAddPartitionSuiteBase extends QueryTest with DDLCommandTestUtils
       checkPartitions(t, Map("ym" -> "INTERVAL '100' YEAR", "dt" -> "INTERVAL '10' DAY"))
       checkLocation(t, Map("ym" -> "INTERVAL '100' YEAR", "dt" -> "INTERVAL '10' DAY"), "loc")
 
-      sql(
-        s"""INSERT INTO $t PARTITION (
+      sql(s"""INSERT INTO $t PARTITION (
            | ym = INTERVAL '100' YEAR,
            | dt = INTERVAL '10' DAY) SELECT 'aaa'""".stripMargin)
-      sql(
-        s"""INSERT INTO $t PARTITION (
+      sql(s"""INSERT INTO $t PARTITION (
            | ym = INTERVAL '1' YEAR,
            | dt = INTERVAL '-1' DAY) SELECT 'bbb'""".stripMargin)
 
@@ -228,12 +224,13 @@ trait AlterTableAddPartitionSuiteBase extends QueryTest with DDLCommandTestUtils
   }
 
   test("SPARK-40798: Alter partition should verify partition value") {
-    def shouldThrowException(policy: SQLConf.StoreAssignmentPolicy.Value): Boolean = policy match {
-      case SQLConf.StoreAssignmentPolicy.ANSI | SQLConf.StoreAssignmentPolicy.STRICT =>
-        true
-      case SQLConf.StoreAssignmentPolicy.LEGACY =>
-        false
-    }
+    def shouldThrowException(policy: SQLConf.StoreAssignmentPolicy.Value): Boolean =
+      policy match {
+        case SQLConf.StoreAssignmentPolicy.ANSI | SQLConf.StoreAssignmentPolicy.STRICT =>
+          true
+        case SQLConf.StoreAssignmentPolicy.LEGACY =>
+          false
+      }
 
     SQLConf.StoreAssignmentPolicy.values.foreach { policy =>
       withNamespaceAndTable("ns", "tbl") { t =>

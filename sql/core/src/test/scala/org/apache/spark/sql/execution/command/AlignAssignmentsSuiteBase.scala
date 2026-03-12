@@ -102,22 +102,10 @@ abstract class AlignAssignmentsSuiteBase extends AnalysisTest {
     val t = mock(classOf[SupportsRowLevelOperations])
     val schema = new StructType()
       .add("c", "CHAR(5)")
-      .add(
-        "s",
-        "STRUCT<n_i: INT, n_vc: VARCHAR(5)>",
-        nullable = false)
-      .add(
-        "a",
-        "ARRAY<STRUCT<n_i: INT, n_vc: VARCHAR(5)>>",
-        nullable = false)
-      .add(
-        "mk",
-        "MAP<STRUCT<n_i: INT, n_vc: VARCHAR(5)>, STRING>",
-        nullable = false)
-      .add(
-        "mv",
-        "MAP<STRING, STRUCT<n_i: INT, n_vc: VARCHAR(5)>>",
-        nullable = false)
+      .add("s", "STRUCT<n_i: INT, n_vc: VARCHAR(5)>", nullable = false)
+      .add("a", "ARRAY<STRUCT<n_i: INT, n_vc: VARCHAR(5)>>", nullable = false)
+      .add("mk", "MAP<STRUCT<n_i: INT, n_vc: VARCHAR(5)>, STRING>", nullable = false)
+      .add("mv", "MAP<STRING, STRUCT<n_i: INT, n_vc: VARCHAR(5)>>", nullable = false)
     when(t.columns()).thenReturn(CatalogV2Util.structTypeToV2Columns(schema))
     when(t.partitioning()).thenReturn(Array.empty[Transform])
     t
@@ -138,9 +126,10 @@ abstract class AlignAssignmentsSuiteBase extends AnalysisTest {
   private val defaultValuesTable = {
     val t = mock(classOf[SupportsRowLevelOperations])
     val iDefault = new ColumnDefaultValue("42", LiteralValue(42, IntegerType))
-    when(t.columns()).thenReturn(Array(
-      Column.create("b", BooleanType, true, null, null),
-      Column.create("i", IntegerType, true, null, iDefault, null)))
+    when(t.columns()).thenReturn(
+      Array(
+        Column.create("b", BooleanType, true, null, null),
+        Column.create("i", IntegerType, true, null, iDefault, null)))
     when(t.partitioning()).thenReturn(Array.empty[Transform])
     t
   }
@@ -219,16 +208,18 @@ abstract class AlignAssignmentsSuiteBase extends AnalysisTest {
   }
 
   protected def assertNoNullCheckExists(plan: LogicalPlan): Unit = {
-    val asserts = plan.expressions.flatMap(e => e.collect {
-      case assert: AssertNotNull => assert
-    })
+    val asserts = plan.expressions.flatMap(e =>
+      e.collect { case assert: AssertNotNull =>
+        assert
+      })
     assert(asserts.isEmpty, s"Must not have NOT NULL checks")
   }
 
   protected def assertNullCheckExists(plan: LogicalPlan, colPath: Seq[String]): Unit = {
-    val asserts = plan.expressions.flatMap(e => e.collect {
-      case assert: AssertNotNull if assert.walkedTypePath == colPath => assert
-    })
+    val asserts = plan.expressions.flatMap(e =>
+      e.collect {
+        case assert: AssertNotNull if assert.walkedTypePath == colPath => assert
+      })
     assert(asserts.nonEmpty, s"Must have NOT NULL checks for col $colPath")
   }
 

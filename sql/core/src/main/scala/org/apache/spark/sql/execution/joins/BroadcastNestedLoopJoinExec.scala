@@ -36,7 +36,8 @@ case class BroadcastNestedLoopJoinExec(
     right: SparkPlan,
     buildSide: BuildSide,
     joinType: JoinType,
-    condition: Option[Expression]) extends JoinCodegenSupport {
+    condition: Option[Expression])
+    extends JoinCodegenSupport {
 
   override def leftKeys: Seq[Expression] = Nil
   override def rightKeys: Seq[Expression] = Nil
@@ -64,14 +65,14 @@ case class BroadcastNestedLoopJoinExec(
 
   override def outputPartitioning: Partitioning = (joinType, buildSide) match {
     case (_: InnerLike, _) | (LeftOuter, BuildRight) | (RightOuter, BuildLeft) |
-         (LeftSingle, BuildRight) | (LeftSemi, BuildRight) | (LeftAnti, BuildRight) =>
+        (LeftSingle, BuildRight) | (LeftSemi, BuildRight) | (LeftAnti, BuildRight) =>
       streamed.outputPartitioning
     case _ => super.outputPartitioning
   }
 
   override def outputOrdering: Seq[SortOrder] = (joinType, buildSide) match {
     case (_: InnerLike, _) | (LeftOuter, BuildRight) | (RightOuter, BuildLeft) |
-         (LeftSingle, BuildRight) | (LeftSemi, BuildRight) | (LeftAnti, BuildRight) =>
+        (LeftSingle, BuildRight) | (LeftSemi, BuildRight) | (LeftAnti, BuildRight) =>
       streamed.outputOrdering
     case _ => Nil
   }
@@ -83,7 +84,8 @@ case class BroadcastNestedLoopJoinExec(
       // Always put the stream side on left to simplify implementation
       // both of left and right side could be null
       UnsafeProjection.create(
-        output, (streamed.output ++ broadcast.output).map(_.withNullability(true)))
+        output,
+        (streamed.output ++ broadcast.output).map(_.withNullability(true)))
   }
 
   override def output: Seq[Attribute] = {
@@ -109,8 +111,8 @@ case class BroadcastNestedLoopJoinExec(
   @transient private lazy val boundCondition = {
     if (condition.isDefined) {
       Predicate.create(condition.get, streamed.output ++ broadcast.output).eval _
-    } else {
-      (r: InternalRow) => true
+    } else { (r: InternalRow) =>
+      true
     }
   }
 
@@ -136,12 +138,10 @@ case class BroadcastNestedLoopJoinExec(
   /**
    * The implementation for these joins:
    *
-   *   LeftOuter with BuildRight
-   *   RightOuter with BuildLeft
-   *   LeftSingle with BuildRight
+   * LeftOuter with BuildRight RightOuter with BuildLeft LeftSingle with BuildRight
    *
-   * For the (LeftSingle, BuildRight) case we pass 'singleJoin' flag that
-   * makes sure there is at most 1 matching build row per every probe tuple.
+   * For the (LeftSingle, BuildRight) case we pass 'singleJoin' flag that makes sure there is at
+   * most 1 matching build row per every probe tuple.
    */
   private def outerJoin(
       relation: Broadcast[Array[InternalRow]],
@@ -220,8 +220,7 @@ case class BroadcastNestedLoopJoinExec(
 
           if (condition.isDefined) {
             streamedIter.filter(l =>
-              buildRows.exists(r => boundCondition(joinedRow(l, r))) == exists
-            )
+              buildRows.exists(r => boundCondition(joinedRow(l, r))) == exists)
           } else if (buildRows.nonEmpty == exists) {
             streamedIter
           } else {
@@ -293,9 +292,7 @@ case class BroadcastNestedLoopJoinExec(
   /**
    * The implementation for these joins:
    *
-   *   LeftOuter with BuildLeft
-   *   RightOuter with BuildRight
-   *   FullOuter
+   * LeftOuter with BuildLeft RightOuter with BuildRight FullOuter
    */
   private def defaultJoin(relation: Broadcast[Array[InternalRow]]): RDD[InternalRow] = {
     val streamRdd = streamed.execute()
@@ -345,16 +342,12 @@ case class BroadcastNestedLoopJoinExec(
       }
     }
 
-    sparkContext.union(
-      matchedStreamRows,
-      notMatchedBroadcastRows
-    )
+    sparkContext.union(matchedStreamRows, notMatchedBroadcastRows)
   }
 
   /**
-   * Get matched rows from broadcast side as a [[BitSet]].
-   * Create a local [[BitSet]] for broadcast side on each RDD partition,
-   * and merge all [[BitSet]]s together.
+   * Get matched rows from broadcast side as a [[BitSet]]. Create a local [[BitSet]] for broadcast
+   * side on each RDD partition, and merge all [[BitSet]]s together.
    */
   private def getMatchedBroadcastRowsBitSet(
       streamRdd: RDD[InternalRow],
@@ -408,9 +401,7 @@ case class BroadcastNestedLoopJoinExec(
             s"executing a LeftSingle join")
       case _ =>
         /**
-         * LeftOuter with BuildLeft
-         * RightOuter with BuildRight
-         * FullOuter
+         * LeftOuter with BuildLeft RightOuter with BuildRight FullOuter
          */
         defaultJoin(broadcastedRelation)
     }
@@ -428,7 +419,8 @@ case class BroadcastNestedLoopJoinExec(
 
   override def supportCodegen: Boolean = (joinType, buildSide) match {
     case (_: InnerLike, _) | (LeftOuter, BuildRight) | (RightOuter, BuildLeft) |
-         (LeftSemi | LeftAnti, BuildRight) | (LeftSingle, BuildRight) => true
+        (LeftSemi | LeftAnti, BuildRight) | (LeftSingle, BuildRight) =>
+      true
     case _ => false
   }
 
@@ -452,7 +444,7 @@ case class BroadcastNestedLoopJoinExec(
       case _ =>
         throw new IllegalArgumentException(
           s"BroadcastNestedLoopJoin code-gen should not take neither $joinType as the JoinType " +
-          s"nor $buildSide as the BuildSide")
+            s"nor $buildSide as the BuildSide")
     }
   }
 
@@ -465,8 +457,11 @@ case class BroadcastNestedLoopJoinExec(
     val broadcastTerm = ctx.addReferenceObj("broadcastTerm", broadcastArray)
 
     // Inline mutable state since not many join operations in a task
-    val arrayTerm = ctx.addMutableState("InternalRow[]", "buildRowArray",
-      v => s"$v = (InternalRow[]) $broadcastTerm.value();", forceInline = true)
+    val arrayTerm = ctx.addMutableState(
+      "InternalRow[]",
+      "buildRowArray",
+      v => s"$v = (InternalRow[]) $broadcastTerm.value();",
+      forceInline = true)
     (broadcastArray.value, arrayTerm)
   }
 
@@ -492,9 +487,7 @@ case class BroadcastNestedLoopJoinExec(
      """.stripMargin
   }
 
-  private def codegenOuter(
-      ctx: CodegenContext,
-      input: Seq[ExprCode]): String = {
+  private def codegenOuter(ctx: CodegenContext, input: Seq[ExprCode]): String = {
     val (buildRowArray, buildRowArrayTerm) = prepareBroadcast(ctx)
     val (buildRow, checkCondition, _) = getJoinCondition(ctx, input, streamed, broadcast)
     val buildVars = genOneSideJoinVars(ctx, buildRow, broadcast, setDefaultValue = true)
@@ -595,6 +588,7 @@ case class BroadcastNestedLoopJoinExec(
   }
 
   override protected def withNewChildrenInternal(
-      newLeft: SparkPlan, newRight: SparkPlan): BroadcastNestedLoopJoinExec =
+      newLeft: SparkPlan,
+      newRight: SparkPlan): BroadcastNestedLoopJoinExec =
     copy(left = newLeft, right = newRight)
 }

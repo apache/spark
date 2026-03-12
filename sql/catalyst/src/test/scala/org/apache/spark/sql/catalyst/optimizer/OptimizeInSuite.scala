@@ -31,13 +31,14 @@ class OptimizeInSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
-      Batch("AnalysisNodes", Once,
-        EliminateSubqueryAliases) ::
-      Batch("ConstantFolding", FixedPoint(10),
-        NullPropagation,
-        ConstantFolding,
-        BooleanSimplification,
-        OptimizeIn) :: Nil
+      Batch("AnalysisNodes", Once, EliminateSubqueryAliases) ::
+        Batch(
+          "ConstantFolding",
+          FixedPoint(10),
+          NullPropagation,
+          ConstantFolding,
+          BooleanSimplification,
+          OptimizeIn) :: Nil
   }
 
   val testRelation = LocalRelation($"a".int, $"b".int, $"c".int)
@@ -45,22 +46,34 @@ class OptimizeInSuite extends PlanTest {
   test("OptimizedIn test: Remove deterministic repetitions") {
     val originalQuery =
       testRelation
-        .where(In(UnresolvedAttribute("a"),
-          Seq(Literal(1), Literal(1), Literal(2), Literal(2), Literal(1), Literal(2))))
-        .where(In(UnresolvedAttribute("b"),
-          Seq(UnresolvedAttribute("a"), UnresolvedAttribute("a"),
-            Round(UnresolvedAttribute("a"), 0), Round(UnresolvedAttribute("a"), 0),
-            Rand(0), Rand(0))))
+        .where(
+          In(
+            UnresolvedAttribute("a"),
+            Seq(Literal(1), Literal(1), Literal(2), Literal(2), Literal(1), Literal(2))))
+        .where(In(
+          UnresolvedAttribute("b"),
+          Seq(
+            UnresolvedAttribute("a"),
+            UnresolvedAttribute("a"),
+            Round(UnresolvedAttribute("a"), 0),
+            Round(UnresolvedAttribute("a"), 0),
+            Rand(0),
+            Rand(0))))
         .analyze
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer =
       testRelation
         .where(In(UnresolvedAttribute("a"), Seq(Literal(1), Literal(2))))
-        .where(In(UnresolvedAttribute("b"),
-          Seq(UnresolvedAttribute("a"), UnresolvedAttribute("a"),
-            Round(UnresolvedAttribute("a"), 0), Round(UnresolvedAttribute("a"), 0),
-            Rand(0), Rand(0))))
+        .where(In(
+          UnresolvedAttribute("b"),
+          Seq(
+            UnresolvedAttribute("a"),
+            UnresolvedAttribute("a"),
+            Round(UnresolvedAttribute("a"), 0),
+            Round(UnresolvedAttribute("a"), 0),
+            Rand(0),
+            Rand(0))))
         .analyze
 
     comparePlans(optimized, correctAnswer)
@@ -94,13 +107,15 @@ class OptimizeInSuite extends PlanTest {
   test("OptimizedIn test: In clause not optimized in case filter has attributes") {
     val originalQuery =
       testRelation
-        .where(In(UnresolvedAttribute("a"), Seq(Literal(1), Literal(2), UnresolvedAttribute("b"))))
+        .where(
+          In(UnresolvedAttribute("a"), Seq(Literal(1), Literal(2), UnresolvedAttribute("b"))))
         .analyze
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer =
       testRelation
-        .where(In(UnresolvedAttribute("a"), Seq(Literal(1), Literal(2), UnresolvedAttribute("b"))))
+        .where(
+          In(UnresolvedAttribute("a"), Seq(Literal(1), Literal(2), UnresolvedAttribute("b"))))
         .analyze
 
     comparePlans(optimized, correctAnswer)
@@ -121,8 +136,9 @@ class OptimizeInSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("OptimizedIn test: Legacy behavior: " +
-    "NULL IN (subquery) gets transformed to Filter(null)") {
+  test(
+    "OptimizedIn test: Legacy behavior: " +
+      "NULL IN (subquery) gets transformed to Filter(null)") {
     withSQLConf(LEGACY_NULL_IN_EMPTY_LIST_BEHAVIOR.key -> "true") {
       val subquery = ListQuery(testRelation.select(UnresolvedAttribute("a")))
       val originalQuery =
@@ -139,8 +155,9 @@ class OptimizeInSuite extends PlanTest {
     }
   }
 
-  test("OptimizedIn test: NULL IN (subquery) gets transformed to " +
-    "If(Exists(subquery), null, false)") {
+  test(
+    "OptimizedIn test: NULL IN (subquery) gets transformed to " +
+      "If(Exists(subquery), null, false)") {
     withSQLConf(LEGACY_NULL_IN_EMPTY_LIST_BEHAVIOR.key -> "false") {
       val subquery = testRelation.select(UnresolvedAttribute("a"))
       val originalQuery =
@@ -153,15 +170,19 @@ class OptimizeInSuite extends PlanTest {
       // the full optimizer.
       val correctAnswer =
         testRelation
-          .where(If(Exists(Project(Seq(UnresolvedAttribute("a")), subquery)),
-            Literal.create(null, BooleanType), Literal(false)))
+          .where(
+            If(
+              Exists(Project(Seq(UnresolvedAttribute("a")), subquery)),
+              Literal.create(null, BooleanType),
+              Literal(false)))
           .analyze
       comparePlans(optimized, correctAnswer)
     }
   }
 
-  test("OptimizedIn test: Inset optimization disabled as " +
-    "list expression contains attribute)") {
+  test(
+    "OptimizedIn test: Inset optimization disabled as " +
+      "list expression contains attribute)") {
     val originalQuery =
       testRelation
         .where(In(Literal.create(null, StringType), Seq(Literal(1), UnresolvedAttribute("b"))))
@@ -176,12 +197,14 @@ class OptimizeInSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("OptimizedIn test: Inset optimization disabled as " +
-    "list expression contains attribute - select)") {
+  test(
+    "OptimizedIn test: Inset optimization disabled as " +
+      "list expression contains attribute - select)") {
     val originalQuery =
       testRelation
-        .select(In(Literal.create(null, StringType),
-        Seq(Literal(1), UnresolvedAttribute("b"))).as("a")).analyze
+        .select(
+          In(Literal.create(null, StringType), Seq(Literal(1), UnresolvedAttribute("b"))).as("a"))
+        .analyze
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer =
@@ -220,7 +243,7 @@ class OptimizeInSuite extends PlanTest {
         val optimizedPlan = OptimizeIn(plan)
         optimizedPlan match {
           case Filter(cond, _)
-            if cond.isInstanceOf[InSet] && cond.asInstanceOf[InSet].set.size == 3 =>
+              if cond.isInstanceOf[InSet] && cond.asInstanceOf[InSet].set.size == 3 =>
           // pass
           case _ => fail("Unexpected result for OptimizedIn")
         }
@@ -311,8 +334,9 @@ class OptimizeInSuite extends PlanTest {
     }
   }
 
-  test("OptimizedIn test: Legacy behavior: " +
-    "In empty list gets transformed to FalseLiteral when value is not nullable") {
+  test(
+    "OptimizedIn test: Legacy behavior: " +
+      "In empty list gets transformed to FalseLiteral when value is not nullable") {
     withSQLConf(LEGACY_NULL_IN_EMPTY_LIST_BEHAVIOR.key -> "true") {
       val originalQuery =
         testRelation
@@ -329,8 +353,9 @@ class OptimizeInSuite extends PlanTest {
     }
   }
 
-  test("OptimizedIn test: Legacy behavior:  " +
-    "In empty list gets transformed to `If` expression when value is nullable") {
+  test(
+    "OptimizedIn test: Legacy behavior:  " +
+      "In empty list gets transformed to `If` expression when value is nullable") {
     withSQLConf(LEGACY_NULL_IN_EMPTY_LIST_BEHAVIOR.key -> "true") {
       val originalQuery =
         testRelation
@@ -340,8 +365,11 @@ class OptimizeInSuite extends PlanTest {
       val optimized = Optimize.execute(originalQuery)
       val correctAnswer =
         testRelation
-          .where(If(IsNotNull(UnresolvedAttribute("a")),
-            Literal(false), Literal.create(null, BooleanType)))
+          .where(
+            If(
+              IsNotNull(UnresolvedAttribute("a")),
+              Literal(false),
+              Literal.create(null, BooleanType)))
           .analyze
 
       comparePlans(optimized, correctAnswer)

@@ -28,13 +28,13 @@ import org.apache.spark.util.ArrayImplicits._
 /**
  * This class is used to test SupportsAtomicPartitionManagement API.
  */
-class InMemoryAtomicPartitionTable (
+class InMemoryAtomicPartitionTable(
     name: String,
     columns: Array[Column],
     partitioning: Array[Transform],
     properties: util.Map[String, String])
-  extends InMemoryPartitionTable(name, columns, partitioning, properties)
-  with SupportsAtomicPartitionManagement {
+    extends InMemoryPartitionTable(name, columns, partitioning, properties)
+    with SupportsAtomicPartitionManagement {
 
   def this(
       name: String,
@@ -43,9 +43,7 @@ class InMemoryAtomicPartitionTable (
       properties: util.Map[String, String]) =
     this(name, CatalogV2Util.structTypeToV2Columns(schema), partitioning, properties)
 
-  override def createPartition(
-      ident: InternalRow,
-      properties: util.Map[String, String]): Unit = {
+  override def createPartition(ident: InternalRow, properties: util.Map[String, String]): Unit = {
     if (memoryTablePartitions.containsKey(ident)) {
       throw new PartitionsAlreadyExistException(name, ident, partitionSchema)
     } else {
@@ -69,7 +67,9 @@ class InMemoryAtomicPartitionTable (
       properties: Array[util.Map[String, String]]): Unit = {
     if (idents.exists(partitionExists)) {
       throw new PartitionsAlreadyExistException(
-        name, idents.filter(partitionExists).toImmutableArraySeq, partitionSchema)
+        name,
+        idents.filter(partitionExists).toImmutableArraySeq,
+        partitionSchema)
     }
     idents.zip(properties).foreach { case (ident, property) =>
       createPartition(ident, property)

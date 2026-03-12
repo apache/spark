@@ -39,8 +39,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UPPER_OR_LO
 import org.apache.spark.sql.catalyst.util.{ArrayData, CharsetProvider, CollationFactory, CollationSupport, GenericArrayData, TypeUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.types.{AbstractArrayType,
-  StringTypeNonCSAICollation, StringTypeWithCollation}
+import org.apache.spark.sql.internal.types.{AbstractArrayType, StringTypeNonCSAICollation, StringTypeWithCollation}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.UTF8StringBuilder
 import org.apache.spark.unsafe.array.ByteArrayMethods
@@ -51,16 +50,16 @@ import org.apache.spark.util.ArrayImplicits._
 // This file defines expressions for string operations.
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-
 /**
- * An expression that concatenates multiple input strings or array of strings into a single string,
- * using a given separator (the first child).
+ * An expression that concatenates multiple input strings or array of strings into a single
+ * string, using a given separator (the first child).
  *
  * Returns null if the separator is null. Otherwise, concat_ws skips all null values.
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(sep[, str | array(str)]+) - Returns the concatenation of the strings separated by `sep`, skipping null values.",
+  usage =
+    "_FUNC_(sep[, str | array(str)]+) - Returns the concatenation of the strings separated by `sep`, skipping null values.",
   examples = """
     Examples:
       > SELECT _FUNC_(' ', 'Spark', 'SQL');
@@ -75,18 +74,16 @@ import org.apache.spark.util.ArrayImplicits._
   since = "1.5.0",
   group = "string_funcs")
 // scalastyle:on line.size.limit
-case class ConcatWs(children: Seq[Expression])
-  extends Expression with ImplicitCastInputTypes {
+case class ConcatWs(children: Seq[Expression]) extends Expression with ImplicitCastInputTypes {
 
   override def prettyName: String = "concat_ws"
 
   /** The 1st child (separator) is str, and rest are either str or array of str. */
   override def inputTypes: Seq[AbstractDataType] = {
     val arrayOrStr =
-      TypeCollection(AbstractArrayType(
-        StringTypeWithCollation(supportsTrimCollation = true)),
-        StringTypeWithCollation(supportsTrimCollation = true)
-      )
+      TypeCollection(
+        AbstractArrayType(StringTypeWithCollation(supportsTrimCollation = true)),
+        StringTypeWithCollation(supportsTrimCollation = true))
     StringTypeWithCollation(supportsTrimCollation = true) +:
       Seq.fill(children.size - 1)(arrayOrStr)
   }
@@ -100,8 +97,9 @@ case class ConcatWs(children: Seq[Expression])
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.isEmpty) {
       throw QueryCompilationErrors.wrongNumArgsError(
-        toSQLId(prettyName), Seq("> 0"), children.length
-      )
+        toSQLId(prettyName),
+        Seq("> 0"),
+        children.length)
     } else {
       super.checkInputDataTypes()
     }
@@ -116,7 +114,7 @@ case class ConcatWs(children: Seq[Expression])
         case null => Iterator(null.asInstanceOf[UTF8String])
       }
     }
-    UTF8String.concatWs(flatInputs.head, flatInputs.tail : _*)
+    UTF8String.concatWs(flatInputs.head, flatInputs.tail: _*)
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -141,9 +139,9 @@ case class ConcatWs(children: Seq[Expression])
         }
       }
       val codes = ctx.splitExpressionsWithCurrentInputs(
-          expressions = inputs,
-          funcName = "valueConcatWs",
-          extraArguments = ("UTF8String[]", args) :: Nil)
+        expressions = inputs,
+        funcName = "valueConcatWs",
+        extraArguments = ("UTF8String[]", args) :: Nil)
       ev.copy(code"""
         UTF8String[] $args = new UTF8String[$numArgs];
         ${separator.code}
@@ -160,67 +158,73 @@ case class ConcatWs(children: Seq[Expression])
       val idxVararg = ctx.freshName("idxInVararg")
 
       val evals = children.map(_.genCode(ctx))
-      val (argBuild, varargCount, varargBuild) = children.tail.zip(evals.tail)
-        .zipWithIndex.map { case ((child, eval), idx) =>
-        val reprForIsNull = s"$isNullArgs[$idx]"
-        val reprForValue = s"$valueArgs[$idx]"
+      val (argBuild, varargCount, varargBuild) = children.tail
+        .zip(evals.tail)
+        .zipWithIndex
+        .map { case ((child, eval), idx) =>
+          val reprForIsNull = s"$isNullArgs[$idx]"
+          val reprForValue = s"$valueArgs[$idx]"
 
-        val arg =
-          s"""
+          val arg =
+            s"""
            ${eval.code}
            $reprForIsNull = ${eval.isNull};
            $reprForValue = ${eval.value};
            """
 
-        val (varCount, varBuild) = child.dataType match {
-          case _: StringType =>
-            val reprForValueCast = s"((UTF8String) $reprForValue)"
-            ("", // we count all the StringType arguments num at once below.
+          val (varCount, varBuild) = child.dataType match {
+            case _: StringType =>
+              val reprForValueCast = s"((UTF8String) $reprForValue)"
+              (
+                "", // we count all the StringType arguments num at once below.
+                if (eval.isNull == TrueLiteral) {
+                  ""
+                } else {
+                  s"$array[$idxVararg ++] = $reprForIsNull ? (UTF8String) null : $reprForValueCast;"
+                })
+            case arr: ArrayType =>
+              val reprForValueCast = s"((ArrayData) $reprForValue)"
+              val size = ctx.freshName("n")
               if (eval.isNull == TrueLiteral) {
-                ""
+                ("", "")
               } else {
-                s"$array[$idxVararg ++] = $reprForIsNull ? (UTF8String) null : $reprForValueCast;"
-              })
-          case arr: ArrayType =>
-            val reprForValueCast = s"((ArrayData) $reprForValue)"
-            val size = ctx.freshName("n")
-            if (eval.isNull == TrueLiteral) {
-              ("", "")
-            } else {
-              // scalastyle:off line.size.limit
-              (s"""
+                // scalastyle:off line.size.limit
+                (
+                  s"""
                 if (!$reprForIsNull) {
                   $varargNum += $reprForValueCast.numElements();
                 }
                 """,
-                s"""
+                  s"""
                 if (!$reprForIsNull) {
                   final int $size = $reprForValueCast.numElements();
                   for (int j = 0; j < $size; j ++) {
-                    $array[$idxVararg ++] = ${CodeGenerator.getValue(reprForValueCast, arr.elementType, "j")};
+                    $array[$idxVararg ++] = ${CodeGenerator.getValue(
+                      reprForValueCast,
+                      arr.elementType,
+                      "j")};
                   }
                 }
                 """)
-              // scalastyle:on line.size.limit
-            }
-        }
+                // scalastyle:on line.size.limit
+              }
+          }
 
-        (arg, varCount, varBuild)
-      }.unzip3
+          (arg, varCount, varBuild)
+        }
+        .unzip3
 
       val argBuilds = ctx.splitExpressionsWithCurrentInputs(
         expressions = argBuild,
         funcName = "initializeArgsArrays",
-        extraArguments = ("boolean []", isNullArgs) :: ("Object []", valueArgs) :: Nil
-      )
+        extraArguments = ("boolean []", isNullArgs) :: ("Object []", valueArgs) :: Nil)
 
       val varargCounts = ctx.splitExpressionsWithCurrentInputs(
         expressions = varargCount,
         funcName = "varargCountsConcatWs",
         extraArguments = ("boolean []", isNullArgs) :: ("Object []", valueArgs) :: Nil,
         returnType = "int",
-        makeSplitFunction = body =>
-          s"""
+        makeSplitFunction = body => s"""
              |int $varargNum = 0;
              |$body
              |return $varargNum;
@@ -233,15 +237,13 @@ case class ConcatWs(children: Seq[Expression])
         extraArguments = ("UTF8String []", array) :: ("int", idxVararg) ::
           ("boolean []", isNullArgs) :: ("Object []", valueArgs) :: Nil,
         returnType = "int",
-        makeSplitFunction = body =>
-          s"""
+        makeSplitFunction = body => s"""
              |$body
              |return $idxVararg;
            """.stripMargin,
         foldFunctions = _.map(funcCall => s"$idxVararg = $funcCall;").mkString("\n"))
 
-      ev.copy(
-        code"""
+      ev.copy(code"""
         boolean[] $isNullArgs = new boolean[${children.length - 1}];
         Object[] $valueArgs = new Object[${children.length - 1}];
         $argBuilds
@@ -262,9 +264,9 @@ case class ConcatWs(children: Seq[Expression])
 }
 
 /**
- * An expression that returns the `n`-th input in given inputs.
- * If all inputs are binary, `elt` returns an output as binary. Otherwise, it returns as string.
- * If any input is null, `elt` returns null.
+ * An expression that returns the `n`-th input in given inputs. If all inputs are binary, `elt`
+ * returns an output as binary. Otherwise, it returns as string. If any input is null, `elt`
+ * returns null.
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
@@ -284,10 +286,9 @@ case class ConcatWs(children: Seq[Expression])
   since = "2.0.0",
   group = "string_funcs")
 // scalastyle:on line.size.limit
-case class Elt(
-    children: Seq[Expression],
-    failOnError: Boolean = SQLConf.get.ansiEnabled) extends Expression
-  with SupportQueryContext {
+case class Elt(children: Seq[Expression], failOnError: Boolean = SQLConf.get.ansiEnabled)
+    extends Expression
+    with SupportQueryContext {
 
   def this(children: Seq[Expression]) = this(children, SQLConf.get.ansiEnabled)
 
@@ -303,8 +304,9 @@ case class Elt(
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.size < 2) {
       throw QueryCompilationErrors.wrongNumArgsError(
-        toSQLId(prettyName), Seq("> 1"), children.length
-      )
+        toSQLId(prettyName),
+        Seq("> 1"),
+        children.length)
     } else {
       val (indexType, inputTypes) = (indexExpr.dataType, inputExprs.map(_.dataType))
       if (indexType != IntegerType) {
@@ -323,9 +325,7 @@ case class Elt(
             "paramIndex" -> (ordinalNumber(1) + "..."),
             "requiredType" -> (toSQLType(StringType) + " or " + toSQLType(BinaryType)),
             "inputSql" -> inputExprs.map(toSQLExpr).mkString(","),
-            "inputType" -> inputTypes.map(toSQLType).mkString(",")
-          )
-        )
+            "inputType" -> inputTypes.map(toSQLType).mkString(",")))
       }
       TypeUtils.checkForSameTypeInputExpr(inputTypes.toImmutableArraySeq, prettyName)
     }
@@ -340,7 +340,9 @@ case class Elt(
       if (index <= 0 || index > inputExprs.length) {
         if (failOnError) {
           throw QueryExecutionErrors.invalidArrayIndexError(
-            index, inputExprs.length, getContextOrNull())
+            index,
+            inputExprs.length,
+            getContextOrNull())
         } else {
           null
         }
@@ -374,8 +376,7 @@ case class Elt(
       funcName = "eltFunc",
       extraArguments = ("int", indexVal) :: Nil,
       returnType = CodeGenerator.JAVA_BOOLEAN,
-      makeSplitFunction = body =>
-        s"""
+      makeSplitFunction = body => s"""
            |${CodeGenerator.JAVA_BOOLEAN} $indexMatched = false;
            |do {
            |  $body
@@ -404,8 +405,7 @@ case class Elt(
       ""
     }
 
-    ev.copy(
-      code"""
+    ev.copy(code"""
          |${index.code}
          |boolean ${ev.isNull} = ${index.isNull};
          |${CodeGenerator.javaType(dataType)} ${ev.value} = null;
@@ -433,7 +433,6 @@ case class Elt(
   }
 }
 
-
 trait String2StringExpression extends ImplicitCastInputTypes {
   self: UnaryExpression =>
 
@@ -460,8 +459,7 @@ trait String2StringExpression extends ImplicitCastInputTypes {
   """,
   since = "1.0.1",
   group = "string_funcs")
-case class Upper(child: Expression)
-  extends UnaryExpression with String2StringExpression {
+case class Upper(child: Expression) extends UnaryExpression with String2StringExpression {
   override def nullIntolerant: Boolean = true
 
   final lazy val collationId: Int = child.dataType.asInstanceOf[StringType].collationId
@@ -478,7 +476,8 @@ case class Upper(child: Expression)
     defineCodeGen(ctx, ev, c => CollationSupport.Upper.genCode(c, collationId, useICU))
   }
 
-  override protected def withNewChildInternal(newChild: Expression): Upper = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): Upper =
+    copy(child = newChild)
 }
 
 /**
@@ -493,8 +492,7 @@ case class Upper(child: Expression)
   """,
   since = "1.0.1",
   group = "string_funcs")
-case class Lower(child: Expression)
-  extends UnaryExpression with String2StringExpression {
+case class Lower(child: Expression) extends UnaryExpression with String2StringExpression {
   override def nullIntolerant: Boolean = true
 
   final lazy val collationId: Int = child.dataType.asInstanceOf[StringType].collationId
@@ -514,12 +512,15 @@ case class Lower(child: Expression)
   override def prettyName: String =
     getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("lower")
 
-  override protected def withNewChildInternal(newChild: Expression): Lower = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): Lower =
+    copy(child = newChild)
 }
 
 /** A base trait for functions that compare two strings, returning a boolean. */
-abstract class StringPredicate extends BinaryExpression
-  with Predicate with ImplicitCastInputTypes {
+abstract class StringPredicate
+    extends BinaryExpression
+    with Predicate
+    with ImplicitCastInputTypes {
   override def nullIntolerant: Boolean = true
 
   final lazy val collationId: Int = left.dataType.asInstanceOf[StringType].collationId
@@ -527,7 +528,8 @@ abstract class StringPredicate extends BinaryExpression
   def compare(l: UTF8String, r: UTF8String): Boolean
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeWithCollation(supportsTrimCollation = true),
+    Seq(
+      StringTypeWithCollation(supportsTrimCollation = true),
       StringTypeWithCollation(supportsTrimCollation = true))
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any =
@@ -556,14 +558,24 @@ trait StringBinaryPredicateExpressionBuilderBase extends ExpressionBuilder {
 object BinaryPredicate {
   def unapply(expr: Expression): Option[StaticInvoke] = expr match {
     case s @ StaticInvoke(
-        clz, _, "contains" | "startsWith" | "endsWith", Seq(_, _), _, _, _, _, _)
-      if clz == classOf[ByteArrayMethods] => Some(s)
+          clz,
+          _,
+          "contains" | "startsWith" | "endsWith",
+          Seq(_, _),
+          _,
+          _,
+          _,
+          _,
+          _) if clz == classOf[ByteArrayMethods] =>
+      Some(s)
     case _ => None
   }
 }
 
 case class BinaryPredicate(override val prettyName: String, left: Expression, right: Expression)
-  extends RuntimeReplaceable with ImplicitCastInputTypes with BinaryLike[Expression] {
+    extends RuntimeReplaceable
+    with ImplicitCastInputTypes
+    with BinaryLike[Expression] {
 
   private lazy val realFuncName = prettyName match {
     case "startswith" => "startsWith"
@@ -606,10 +618,11 @@ case class BinaryPredicate(override val prettyName: String, left: Expression, ri
        true
   """,
   since = "3.3.0",
-  group = "string_funcs"
-)
+  group = "string_funcs")
 object ContainsExpressionBuilder extends StringBinaryPredicateExpressionBuilderBase {
-  override protected def createStringPredicate(left: Expression, right: Expression): Expression = {
+  override protected def createStringPredicate(
+      left: Expression,
+      right: Expression): Expression = {
     Contains(left, right)
   }
 }
@@ -619,15 +632,15 @@ case class Contains(left: Expression, right: Expression) extends StringPredicate
     CollationSupport.Contains.exec(l, r, collationId)
   }
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (c1, c2) =>
-      CollationSupport.Contains.genCode(c1, c2, collationId))
+    defineCodeGen(ctx, ev, (c1, c2) => CollationSupport.Contains.genCode(c1, c2, collationId))
   }
-  override def inputTypes : Seq[AbstractDataType] =
-    Seq(StringTypeNonCSAICollation(supportsTrimCollation = true),
-      StringTypeNonCSAICollation(supportsTrimCollation = true)
-    )
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(
+      StringTypeNonCSAICollation(supportsTrimCollation = true),
+      StringTypeNonCSAICollation(supportsTrimCollation = true))
   override protected def withNewChildrenInternal(
-    newLeft: Expression, newRight: Expression): Contains = copy(left = newLeft, right = newRight)
+      newLeft: Expression,
+      newRight: Expression): Contains = copy(left = newLeft, right = newRight)
 }
 
 @ExpressionDescription(
@@ -650,10 +663,11 @@ case class Contains(left: Expression, right: Expression) extends StringPredicate
        false
   """,
   since = "3.3.0",
-  group = "string_funcs"
-)
+  group = "string_funcs")
 object StartsWithExpressionBuilder extends StringBinaryPredicateExpressionBuilderBase {
-  override protected def createStringPredicate(left: Expression, right: Expression): Expression = {
+  override protected def createStringPredicate(
+      left: Expression,
+      right: Expression): Expression = {
     StartsWith(left, right)
   }
 }
@@ -664,19 +678,18 @@ case class StartsWith(left: Expression, right: Expression) extends StringPredica
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (c1, c2) =>
-      CollationSupport.StartsWith.genCode(c1, c2, collationId))
+    defineCodeGen(ctx, ev, (c1, c2) => CollationSupport.StartsWith.genCode(c1, c2, collationId))
   }
 
-  override def inputTypes : Seq[AbstractDataType] =
+  override def inputTypes: Seq[AbstractDataType] =
     Seq(
       StringTypeNonCSAICollation(supportsTrimCollation = true),
       StringTypeNonCSAICollation(supportsTrimCollation = true),
-      StringTypeNonCSAICollation(supportsTrimCollation = true)
-    )
+      StringTypeNonCSAICollation(supportsTrimCollation = true))
 
   override protected def withNewChildrenInternal(
-    newLeft: Expression, newRight: Expression): StartsWith = copy(left = newLeft, right = newRight)
+      newLeft: Expression,
+      newRight: Expression): StartsWith = copy(left = newLeft, right = newRight)
 }
 
 @ExpressionDescription(
@@ -699,10 +712,11 @@ case class StartsWith(left: Expression, right: Expression) extends StringPredica
        true
   """,
   since = "3.3.0",
-  group = "string_funcs"
-)
+  group = "string_funcs")
 object EndsWithExpressionBuilder extends StringBinaryPredicateExpressionBuilderBase {
-  override protected def createStringPredicate(left: Expression, right: Expression): Expression = {
+  override protected def createStringPredicate(
+      left: Expression,
+      right: Expression): Expression = {
     EndsWith(left, right)
   }
 }
@@ -713,19 +727,18 @@ case class EndsWith(left: Expression, right: Expression) extends StringPredicate
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (c1, c2) =>
-      CollationSupport.EndsWith.genCode(c1, c2, collationId))
+    defineCodeGen(ctx, ev, (c1, c2) => CollationSupport.EndsWith.genCode(c1, c2, collationId))
   }
 
-  override def inputTypes : Seq[AbstractDataType] =
+  override def inputTypes: Seq[AbstractDataType] =
     Seq(
       StringTypeNonCSAICollation(supportsTrimCollation = true),
       StringTypeNonCSAICollation(supportsTrimCollation = true),
-      StringTypeNonCSAICollation(supportsTrimCollation = true)
-    )
+      StringTypeNonCSAICollation(supportsTrimCollation = true))
 
   override protected def withNewChildrenInternal(
-    newLeft: Expression, newRight: Expression): EndsWith = copy(left = newLeft, right = newRight)
+      newLeft: Expression,
+      newRight: Expression): EndsWith = copy(left = newLeft, right = newRight)
 }
 
 /**
@@ -750,8 +763,10 @@ case class EndsWith(left: Expression, right: Expression) extends StringPredicate
   """,
   since = "4.0.0",
   group = "string_funcs")
-case class IsValidUTF8(input: Expression) extends RuntimeReplaceable with ImplicitCastInputTypes
-  with UnaryLike[Expression] {
+case class IsValidUTF8(input: Expression)
+    extends RuntimeReplaceable
+    with ImplicitCastInputTypes
+    with UnaryLike[Expression] {
   override def nullIntolerant: Boolean = true
 
   override lazy val replacement: Expression = Invoke(input, "isValid", BooleanType)
@@ -799,8 +814,10 @@ case class IsValidUTF8(input: Expression) extends RuntimeReplaceable with Implic
   since = "4.0.0",
   group = "string_funcs")
 // scalastyle:on
-case class MakeValidUTF8(input: Expression) extends RuntimeReplaceable with ImplicitCastInputTypes
-  with UnaryLike[Expression] {
+case class MakeValidUTF8(input: Expression)
+    extends RuntimeReplaceable
+    with ImplicitCastInputTypes
+    with UnaryLike[Expression] {
   override def nullIntolerant: Boolean = true
 
   override lazy val replacement: Expression = Invoke(input, "makeValid", input.dataType)
@@ -841,8 +858,10 @@ case class MakeValidUTF8(input: Expression) extends RuntimeReplaceable with Impl
   since = "4.0.0",
   group = "string_funcs")
 // scalastyle:on
-case class ValidateUTF8(input: Expression) extends RuntimeReplaceable with ImplicitCastInputTypes
-  with UnaryLike[Expression] {
+case class ValidateUTF8(input: Expression)
+    extends RuntimeReplaceable
+    with ImplicitCastInputTypes
+    with UnaryLike[Expression] {
   override def nullIntolerant: Boolean = true
 
   override lazy val replacement: Expression =
@@ -893,8 +912,10 @@ case class ValidateUTF8(input: Expression) extends RuntimeReplaceable with Impli
   since = "4.0.0",
   group = "string_funcs")
 // scalastyle:on
-case class TryValidateUTF8(input: Expression) extends RuntimeReplaceable with ImplicitCastInputTypes
-  with UnaryLike[Expression] {
+case class TryValidateUTF8(input: Expression)
+    extends RuntimeReplaceable
+    with ImplicitCastInputTypes
+    with UnaryLike[Expression] {
   override def nullIntolerant: Boolean = true
 
   override lazy val replacement: Expression =
@@ -942,7 +963,8 @@ case class TryValidateUTF8(input: Expression) extends RuntimeReplaceable with Im
   group = "string_funcs")
 // scalastyle:on line.size.limit
 case class StringReplace(srcExpr: Expression, searchExpr: Expression, replaceExpr: Expression)
-  extends TernaryExpression with ImplicitCastInputTypes {
+    extends TernaryExpression
+    with ImplicitCastInputTypes {
   override def nullIntolerant: Boolean = true
 
   final lazy val collationId: Int = first.dataType.asInstanceOf[StringType].collationId
@@ -952,13 +974,19 @@ case class StringReplace(srcExpr: Expression, searchExpr: Expression, replaceExp
   }
 
   override def nullSafeEval(srcEval: Any, searchEval: Any, replaceEval: Any): Any = {
-    CollationSupport.StringReplace.exec(srcEval.asInstanceOf[UTF8String],
-      searchEval.asInstanceOf[UTF8String], replaceEval.asInstanceOf[UTF8String], collationId);
+    CollationSupport.StringReplace.exec(
+      srcEval.asInstanceOf[UTF8String],
+      searchEval.asInstanceOf[UTF8String],
+      replaceEval.asInstanceOf[UTF8String],
+      collationId);
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (src, search, replace) =>
-      CollationSupport.StringReplace.genCode(src, search, replace, collationId))
+    defineCodeGen(
+      ctx,
+      ev,
+      (src, search, replace) =>
+        CollationSupport.StringReplace.genCode(src, search, replace, collationId))
   }
 
   override def dataType: DataType = srcExpr.dataType
@@ -966,8 +994,7 @@ case class StringReplace(srcExpr: Expression, searchExpr: Expression, replaceExp
     Seq(
       StringTypeNonCSAICollation(supportsTrimCollation = true),
       StringTypeNonCSAICollation(supportsTrimCollation = true),
-      StringTypeNonCSAICollation(supportsTrimCollation = true)
-    )
+      StringTypeNonCSAICollation(supportsTrimCollation = true))
   override def first: Expression = srcExpr
   override def second: Expression = searchExpr
   override def third: Expression = replaceExpr
@@ -975,7 +1002,9 @@ case class StringReplace(srcExpr: Expression, searchExpr: Expression, replaceExp
   override def prettyName: String = "replace"
 
   override protected def withNewChildrenInternal(
-      newFirst: Expression, newSecond: Expression, newThird: Expression): StringReplace =
+      newFirst: Expression,
+      newSecond: Expression,
+      newThird: Expression): StringReplace =
     copy(srcExpr = newFirst, searchExpr = newSecond, replaceExpr = newThird)
 }
 
@@ -1006,14 +1035,17 @@ object Overlay {
     } else {
       replace.length
     }
-    ByteArray.concat(ByteArray.subStringSQL(input, 1, pos - 1),
-      replace, ByteArray.subStringSQL(input, pos + length, Int.MaxValue))
+    ByteArray.concat(
+      ByteArray.subStringSQL(input, 1, pos - 1),
+      replace,
+      ByteArray.subStringSQL(input, pos + length, Int.MaxValue))
   }
 }
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(input, replace, pos[, len]) - Replace `input` with `replace` that starts at `pos` and is of length `len`.",
+  usage =
+    "_FUNC_(input, replace, pos[, len]) - Replace `input` with `replace` that starts at `pos` and is of length `len`.",
   examples = """
     Examples:
       > SELECT _FUNC_('Spark SQL' PLACING '_' FROM 6);
@@ -1037,7 +1069,8 @@ object Overlay {
   group = "string_funcs")
 // scalastyle:on line.size.limit
 case class Overlay(input: Expression, replace: Expression, pos: Expression, len: Expression)
-  extends QuaternaryExpression with ImplicitCastInputTypes {
+    extends QuaternaryExpression
+    with ImplicitCastInputTypes {
   override def nullIntolerant: Boolean = true
 
   def this(str: Expression, replace: Expression, pos: Expression) = {
@@ -1047,20 +1080,15 @@ case class Overlay(input: Expression, replace: Expression, pos: Expression, len:
   override def dataType: DataType = input.dataType
 
   override def inputTypes: Seq[AbstractDataType] = Seq(
-    TypeCollection(
-      StringTypeWithCollation(supportsTrimCollation = true), BinaryType
-    ),
-    TypeCollection(
-      StringTypeWithCollation(supportsTrimCollation = true), BinaryType
-    ),
+    TypeCollection(StringTypeWithCollation(supportsTrimCollation = true), BinaryType),
+    TypeCollection(StringTypeWithCollation(supportsTrimCollation = true), BinaryType),
     IntegerType,
     IntegerType)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     val inputTypeCheck = super.checkInputDataTypes()
     if (inputTypeCheck.isSuccess) {
-      TypeUtils.checkForSameTypeInputExpr(
-        input.dataType :: replace.dataType :: Nil, prettyName)
+      TypeUtils.checkForSameTypeInputExpr(input.dataType :: replace.dataType :: Nil, prettyName)
     } else {
       inputTypeCheck
     }
@@ -1072,14 +1100,16 @@ case class Overlay(input: Expression, replace: Expression, pos: Expression, len:
         Overlay.calculate(
           inputEval.asInstanceOf[UTF8String],
           replaceEval.asInstanceOf[UTF8String],
-          posEval, lenEval)
+          posEval,
+          lenEval)
       }
     case BinaryType =>
       (inputEval: Any, replaceEval: Any, posEval: Int, lenEval: Int) => {
         Overlay.calculate(
           inputEval.asInstanceOf[Array[Byte]],
           replaceEval.asInstanceOf[Array[Byte]],
-          posEval, lenEval)
+          posEval,
+          lenEval)
       }
   }
 
@@ -1088,9 +1118,12 @@ case class Overlay(input: Expression, replace: Expression, pos: Expression, len:
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (input, replace, pos, len) =>
-      "org.apache.spark.sql.catalyst.expressions.Overlay" +
-        s".calculate($input, $replace, $pos, $len);")
+    defineCodeGen(
+      ctx,
+      ev,
+      (input, replace, pos, len) =>
+        "org.apache.spark.sql.catalyst.expressions.Overlay" +
+          s".calculate($input, $replace, $pos, $len);")
   }
 
   override def first: Expression = input
@@ -1099,19 +1132,25 @@ case class Overlay(input: Expression, replace: Expression, pos: Expression, len:
   override def fourth: Expression = len
 
   override protected def withNewChildrenInternal(
-      first: Expression, second: Expression, third: Expression, fourth: Expression): Overlay =
+      first: Expression,
+      second: Expression,
+      third: Expression,
+      fourth: Expression): Overlay =
     copy(input = first, replace = second, pos = third, len = fourth)
 }
 
 object StringTranslate {
 
   /**
-   * Build a translation dictionary from UTF8Strings. First, this method converts the input strings
-   * to valid Java Strings. However, we avoid any behavior changes for the UTF8_BINARY collation,
-   * but ensure that all other collations use `UTF8String.toValidString` to achieve this step.
+   * Build a translation dictionary from UTF8Strings. First, this method converts the input
+   * strings to valid Java Strings. However, we avoid any behavior changes for the UTF8_BINARY
+   * collation, but ensure that all other collations use `UTF8String.toValidString` to achieve
+   * this step.
    */
-  def buildDict(matchingString: UTF8String, replaceString: UTF8String, collationId: Integer)
-    : JMap[String, String] = {
+  def buildDict(
+      matchingString: UTF8String,
+      replaceString: UTF8String,
+      collationId: Integer): JMap[String, String] = {
     val isCollationAware = collationId == CollationFactory.UTF8_BINARY_COLLATION_ID
     val matching: String = if (isCollationAware) {
       matchingString.toString
@@ -1160,14 +1199,14 @@ object StringTranslate {
 }
 
 /**
- * A function translate any character in the `srcExpr` by a character in `replaceExpr`.
- * The characters in `replaceExpr` is corresponding to the characters in `matchingExpr`.
- * The translate will happen when any character in the string matching with the character
- * in the `matchingExpr`.
+ * A function translate any character in the `srcExpr` by a character in `replaceExpr`. The
+ * characters in `replaceExpr` is corresponding to the characters in `matchingExpr`. The translate
+ * will happen when any character in the string matching with the character in the `matchingExpr`.
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(input, from, to) - Translates the `input` string by replacing the characters present in the `from` string with the corresponding characters in the `to` string.",
+  usage =
+    "_FUNC_(input, from, to) - Translates the `input` string by replacing the characters present in the `from` string with the corresponding characters in the `to` string.",
   examples = """
     Examples:
       > SELECT _FUNC_('AaBbCc', 'abc', '123');
@@ -1177,7 +1216,8 @@ object StringTranslate {
   group = "string_funcs")
 // scalastyle:on line.size.limit
 case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replaceExpr: Expression)
-  extends TernaryExpression with ImplicitCastInputTypes {
+    extends TernaryExpression
+    with ImplicitCastInputTypes {
   override def nullIntolerant: Boolean = true
 
   @transient private var lastMatching: UTF8String = _
@@ -1203,13 +1243,16 @@ case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replac
     val termLastReplace = ctx.addMutableState("UTF8String", "lastReplace")
     val termDict = ctx.addMutableState(classNameDict, "dict")
 
-    nullSafeCodeGen(ctx, ev, (src, matching, replace) => {
-      val check = if (matchingExpr.foldable && replaceExpr.foldable) {
-        s"$termDict == null"
-      } else {
-        s"!$matching.equals($termLastMatching) || !$replace.equals($termLastReplace)"
-      }
-      s"""if ($check) {
+    nullSafeCodeGen(
+      ctx,
+      ev,
+      (src, matching, replace) => {
+        val check = if (matchingExpr.foldable && replaceExpr.foldable) {
+          s"$termDict == null"
+        } else {
+          s"!$matching.equals($termLastMatching) || !$replace.equals($termLastReplace)"
+        }
+        s"""if ($check) {
         // Not all of them is literal or matching or replace value changed
         $termLastMatching = $matching.clone();
         $termLastReplace = $replace.clone();
@@ -1218,7 +1261,7 @@ case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replac
       }
       ${ev.value} = CollationSupport.StringTranslate.exec($src, $termDict, $collationId);
       """
-    })
+      })
   }
 
   override def dataType: DataType = srcExpr.dataType
@@ -1233,14 +1276,16 @@ case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replac
   override def prettyName: String = "translate"
 
   override protected def withNewChildrenInternal(
-      newFirst: Expression, newSecond: Expression, newThird: Expression): StringTranslate =
+      newFirst: Expression,
+      newSecond: Expression,
+      newThird: Expression): StringTranslate =
     copy(srcExpr = newFirst, matchingExpr = newSecond, replaceExpr = newThird)
 }
 
 /**
- * A function that returns the index (1-based) of the given string (left) in the comma-
- * delimited list (right). Returns 0, if the string wasn't found or if the given
- * string (left) contains a comma.
+ * A function that returns the index (1-based) of the given string (left) in the comma- delimited
+ * list (right). Returns 0, if the string wasn't found or if the given string (left) contains a
+ * comma.
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
@@ -1256,7 +1301,8 @@ case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replac
   since = "1.5.0",
   group = "string_funcs")
 // scalastyle:on line.size.limit
-case class FindInSet(left: Expression, right: Expression) extends BinaryExpression
+case class FindInSet(left: Expression, right: Expression)
+    extends BinaryExpression
     with ImplicitCastInputTypes {
   override def nullIntolerant: Boolean = true
   final lazy val collationId: Int = left.dataType.asInstanceOf[StringType].collationId
@@ -1264,19 +1310,22 @@ case class FindInSet(left: Expression, right: Expression) extends BinaryExpressi
   override def inputTypes: Seq[AbstractDataType] =
     Seq(
       StringTypeWithCollation(supportsTrimCollation = true),
-      StringTypeWithCollation(supportsTrimCollation = true)
-    )
+      StringTypeWithCollation(supportsTrimCollation = true))
 
   override def contextIndependentFoldable: Boolean = super.contextIndependentFoldable
 
   override protected def nullSafeEval(word: Any, set: Any): Any = {
-    CollationSupport.FindInSet.
-      exec(word.asInstanceOf[UTF8String], set.asInstanceOf[UTF8String], collationId)
+    CollationSupport.FindInSet.exec(
+      word.asInstanceOf[UTF8String],
+      set.asInstanceOf[UTF8String],
+      collationId)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (word, set) => CollationSupport.FindInSet.
-      genCode(word, set, collationId))
+    defineCodeGen(
+      ctx,
+      ev,
+      (word, set) => CollationSupport.FindInSet.genCode(word, set, collationId))
   }
 
   override def dataType: DataType = IntegerType
@@ -1284,7 +1333,8 @@ case class FindInSet(left: Expression, right: Expression) extends BinaryExpressi
   override def prettyName: String = "find_in_set"
 
   override protected def withNewChildrenInternal(
-    newLeft: Expression, newRight: Expression): FindInSet = copy(left = newLeft, right = newRight)
+      newLeft: Expression,
+      newRight: Expression): FindInSet = copy(left = newLeft, right = newRight)
 }
 
 trait String2TrimExpression extends Expression with ImplicitCastInputTypes {
@@ -1375,23 +1425,22 @@ trait String2TrimExpression extends Expression with ImplicitCastInputTypes {
 }
 
 object StringTrim {
-  def apply(str: Expression, trimStr: Expression) : StringTrim = StringTrim(str, Some(trimStr))
-  def apply(str: Expression) : StringTrim = StringTrim(str, None)
+  def apply(str: Expression, trimStr: Expression): StringTrim = StringTrim(str, Some(trimStr))
+  def apply(str: Expression): StringTrim = StringTrim(str, None)
 }
 
 /**
  * A function that takes a character string, removes the leading and trailing characters matching
- * with any character in the trim string, returns the new string.
- * If BOTH and trimStr keywords are not specified, it defaults to remove space character from both
- * ends. The trim function will have one argument, which contains the source string.
- * If BOTH and trimStr keywords are specified, it trims the characters from both ends, and the trim
- * function will have two arguments, the first argument contains trimStr, the second argument
- * contains the source string.
- * trimStr: A character string to be trimmed from the source string, if it has multiple characters,
- * the function searches for each character in the source string, removes the characters from the
- * source string until it encounters the first non-match character.
- * BOTH: removes any character from both ends of the source string that matches characters in the
- * trim string.
+ * with any character in the trim string, returns the new string. If BOTH and trimStr keywords are
+ * not specified, it defaults to remove space character from both ends. The trim function will
+ * have one argument, which contains the source string. If BOTH and trimStr keywords are
+ * specified, it trims the characters from both ends, and the trim function will have two
+ * arguments, the first argument contains trimStr, the second argument contains the source string.
+ * trimStr: A character string to be trimmed from the source string, if it has multiple
+ * characters, the function searches for each character in the source string, removes the
+ * characters from the source string until it encounters the first non-match character. BOTH:
+ * removes any character from both ends of the source string that matches characters in the trim
+ * string.
  */
 @ExpressionDescription(
   usage = """
@@ -1444,7 +1493,7 @@ object StringTrim {
   since = "1.5.0",
   group = "string_funcs")
 case class StringTrim(srcStr: Expression, trimStr: Option[Expression] = None)
-  extends String2TrimExpression {
+    extends String2TrimExpression {
 
   def this(trimStr: Expression, srcStr: Expression) = this(srcStr, Option(trimStr))
 
@@ -1463,10 +1512,10 @@ case class StringTrim(srcStr: Expression, trimStr: Option[Expression] = None)
   override def inputTypes: Seq[AbstractDataType] =
     Seq(
       StringTypeNonCSAICollation(supportsTrimCollation = true),
-      StringTypeNonCSAICollation(supportsTrimCollation = true)
-    )
+      StringTypeNonCSAICollation(supportsTrimCollation = true))
 
-  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): Expression =
     copy(
       srcStr = newChildren.head,
       trimStr = if (trimStr.isDefined) Some(newChildren.last) else None)
@@ -1474,10 +1523,10 @@ case class StringTrim(srcStr: Expression, trimStr: Option[Expression] = None)
 
 /**
  * A function that takes a character string, removes the leading and trailing characters matching
- * with any character in the trim string, returns the new string.
- * trimStr: A character string to be trimmed from the source string, if it has multiple characters,
- * the function searches for each character in the source string, removes the characters from the
- * source string until it encounters the first non-match character.
+ * with any character in the trim string, returns the new string. trimStr: A character string to
+ * be trimmed from the source string, if it has multiple characters, the function searches for
+ * each character in the source string, removes the characters from the source string until it
+ * encounters the first non-match character.
  */
 @ExpressionDescription(
   usage = """
@@ -1503,8 +1552,12 @@ case class StringTrim(srcStr: Expression, trimStr: Option[Expression] = None)
   """,
   since = "3.2.0",
   group = "string_funcs")
-case class StringTrimBoth(srcStr: Expression, trimStr: Option[Expression], replacement: Expression)
-  extends RuntimeReplaceable with InheritAnalysisRules {
+case class StringTrimBoth(
+    srcStr: Expression,
+    trimStr: Option[Expression],
+    replacement: Expression)
+    extends RuntimeReplaceable
+    with InheritAnalysisRules {
 
   def this(srcStr: Expression, trimStr: Expression) = {
     this(srcStr, Option(trimStr), StringTrim(srcStr, trimStr))
@@ -1529,16 +1582,15 @@ object StringTrimLeft {
 }
 
 /**
- * A function that trims the characters from left end for a given string.
- * If LEADING and trimStr keywords are not specified, it defaults to remove space character from
- * the left end. The ltrim function will have one argument, which contains the source string.
- * If LEADING and trimStr keywords are not specified, it trims the characters from left end. The
- * ltrim function will have two arguments, the first argument contains trimStr, the second argument
- * contains the source string.
- * trimStr: the function removes any character from the left end of the source string which matches
- * with the characters from trimStr, it stops at the first non-match character.
- * LEADING: removes any character from the left end of the source string that matches characters in
- * the trim string.
+ * A function that trims the characters from left end for a given string. If LEADING and trimStr
+ * keywords are not specified, it defaults to remove space character from the left end. The ltrim
+ * function will have one argument, which contains the source string. If LEADING and trimStr
+ * keywords are not specified, it trims the characters from left end. The ltrim function will have
+ * two arguments, the first argument contains trimStr, the second argument contains the source
+ * string. trimStr: the function removes any character from the left end of the source string
+ * which matches with the characters from trimStr, it stops at the first non-match character.
+ * LEADING: removes any character from the left end of the source string that matches characters
+ * in the trim string.
  */
 @ExpressionDescription(
   usage = """
@@ -1557,7 +1609,7 @@ object StringTrimLeft {
   since = "1.5.0",
   group = "string_funcs")
 case class StringTrimLeft(srcStr: Expression, trimStr: Option[Expression] = None)
-  extends String2TrimExpression {
+    extends String2TrimExpression {
 
   def this(trimStr: Expression, srcStr: Expression) = this(srcStr, Option(trimStr))
 
@@ -1576,8 +1628,7 @@ case class StringTrimLeft(srcStr: Expression, trimStr: Option[Expression] = None
   override def inputTypes: Seq[AbstractDataType] =
     Seq(
       StringTypeNonCSAICollation(supportsTrimCollation = true),
-      StringTypeNonCSAICollation(supportsTrimCollation = true)
-    )
+      StringTypeNonCSAICollation(supportsTrimCollation = true))
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): StringTrimLeft =
@@ -1589,20 +1640,19 @@ case class StringTrimLeft(srcStr: Expression, trimStr: Option[Expression] = None
 object StringTrimRight {
   def apply(str: Expression, trimStr: Expression): StringTrimRight =
     StringTrimRight(str, Some(trimStr))
-  def apply(str: Expression) : StringTrimRight = StringTrimRight(str, None)
+  def apply(str: Expression): StringTrimRight = StringTrimRight(str, None)
 }
 
 /**
- * A function that trims the characters from right end for a given string.
- * If TRAILING and trimStr keywords are not specified, it defaults to remove space character
- * from the right end. The rtrim function will have one argument, which contains the source string.
- * If TRAILING and trimStr keywords are specified, it trims the characters from right end. The
- * rtrim function will have two arguments, the first argument contains trimStr, the second argument
- * contains the source string.
- * trimStr: the function removes any character from the right end of source string which matches
- * with the characters from trimStr, it stops at the first non-match character.
- * TRAILING: removes any character from the right end of the source string that matches characters
- * in the trim string.
+ * A function that trims the characters from right end for a given string. If TRAILING and trimStr
+ * keywords are not specified, it defaults to remove space character from the right end. The rtrim
+ * function will have one argument, which contains the source string. If TRAILING and trimStr
+ * keywords are specified, it trims the characters from right end. The rtrim function will have
+ * two arguments, the first argument contains trimStr, the second argument contains the source
+ * string. trimStr: the function removes any character from the right end of source string which
+ * matches with the characters from trimStr, it stops at the first non-match character. TRAILING:
+ * removes any character from the right end of the source string that matches characters in the
+ * trim string.
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
@@ -1623,7 +1673,7 @@ object StringTrimRight {
   group = "string_funcs")
 // scalastyle:on line.size.limit
 case class StringTrimRight(srcStr: Expression, trimStr: Option[Expression] = None)
-  extends String2TrimExpression {
+    extends String2TrimExpression {
 
   def this(trimStr: Expression, srcStr: Expression) = this(srcStr, Option(trimStr))
 
@@ -1642,8 +1692,7 @@ case class StringTrimRight(srcStr: Expression, trimStr: Option[Expression] = Non
   override def inputTypes: Seq[AbstractDataType] =
     Seq(
       StringTypeNonCSAICollation(supportsTrimCollation = true),
-      StringTypeNonCSAICollation(supportsTrimCollation = true)
-    )
+      StringTypeNonCSAICollation(supportsTrimCollation = true))
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): StringTrimRight =
@@ -1654,14 +1703,15 @@ case class StringTrimRight(srcStr: Expression, trimStr: Option[Expression] = Non
 
 /**
  * A function that returns the position of the first occurrence of substr in the given string.
- * Returns null if either of the arguments are null and
- * returns 0 if substr could not be found in str.
+ * Returns null if either of the arguments are null and returns 0 if substr could not be found in
+ * str.
  *
  * NOTE: that this is not zero based, but 1-based index. The first character in str has index 1.
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(str, substr) - Returns the (1-based) index of the first occurrence of `substr` in `str`.",
+  usage =
+    "_FUNC_(str, substr) - Returns the (1-based) index of the first occurrence of `substr` in `str`.",
   examples = """
     Examples:
       > SELECT _FUNC_('SparkSQL', 'SQL');
@@ -1671,7 +1721,8 @@ case class StringTrimRight(srcStr: Expression, trimStr: Option[Expression] = Non
   group = "string_funcs")
 // scalastyle:on line.size.limit
 case class StringInstr(str: Expression, substr: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes {
+    extends BinaryExpression
+    with ImplicitCastInputTypes {
   override def nullIntolerant: Boolean = true
   final lazy val collationId: Int = left.dataType.asInstanceOf[StringType].collationId
 
@@ -1681,32 +1732,37 @@ case class StringInstr(str: Expression, substr: Expression)
   override def inputTypes: Seq[AbstractDataType] =
     Seq(
       StringTypeNonCSAICollation(supportsTrimCollation = true),
-      StringTypeNonCSAICollation(supportsTrimCollation = true)
-    )
+      StringTypeNonCSAICollation(supportsTrimCollation = true))
 
   override def contextIndependentFoldable: Boolean = super.contextIndependentFoldable
 
   override def nullSafeEval(string: Any, sub: Any): Any = {
-    CollationSupport.StringInstr.
-      exec(string.asInstanceOf[UTF8String], sub.asInstanceOf[UTF8String], collationId) + 1
+    CollationSupport.StringInstr.exec(
+      string.asInstanceOf[UTF8String],
+      sub.asInstanceOf[UTF8String],
+      collationId) + 1
   }
 
   override def prettyName: String = "instr"
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-      defineCodeGen(ctx, ev, (string, substring) =>
+    defineCodeGen(
+      ctx,
+      ev,
+      (string, substring) =>
         CollationSupport.StringInstr.genCode(string, substring, collationId) + " + 1")
   }
 
   override protected def withNewChildrenInternal(
-    newLeft: Expression, newRight: Expression): StringInstr = copy(str = newLeft, substr = newRight)
+      newLeft: Expression,
+      newRight: Expression): StringInstr = copy(str = newLeft, substr = newRight)
 }
 
 /**
- * Returns the substring from string str before count occurrences of the delimiter delim.
- * If count is positive, everything the left of the final delimiter (counting from left) is
- * returned. If count is negative, every to the right of the final delimiter (counting from the
- * right) is returned. substring_index performs a case-sensitive match when searching for delim.
+ * Returns the substring from string str before count occurrences of the delimiter delim. If count
+ * is positive, everything the left of the final delimiter (counting from left) is returned. If
+ * count is negative, every to the right of the final delimiter (counting from the right) is
+ * returned. substring_index performs a case-sensitive match when searching for delim.
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
@@ -1726,7 +1782,8 @@ case class StringInstr(str: Expression, substr: Expression)
   group = "string_funcs")
 // scalastyle:on line.size.limit
 case class SubstringIndex(strExpr: Expression, delimExpr: Expression, countExpr: Expression)
- extends TernaryExpression with ImplicitCastInputTypes {
+    extends TernaryExpression
+    with ImplicitCastInputTypes {
   override def nullIntolerant: Boolean = true
   final lazy val collationId: Int = first.dataType.asInstanceOf[StringType].collationId
 
@@ -1735,8 +1792,7 @@ case class SubstringIndex(strExpr: Expression, delimExpr: Expression, countExpr:
     Seq(
       StringTypeNonCSAICollation(supportsTrimCollation = true),
       StringTypeNonCSAICollation(supportsTrimCollation = true),
-      IntegerType
-    )
+      IntegerType)
   override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
   override def first: Expression = strExpr
   override def second: Expression = delimExpr
@@ -1744,23 +1800,31 @@ case class SubstringIndex(strExpr: Expression, delimExpr: Expression, countExpr:
   override def prettyName: String = "substring_index"
 
   override def nullSafeEval(str: Any, delim: Any, count: Any): Any = {
-    CollationSupport.SubstringIndex.exec(str.asInstanceOf[UTF8String],
-      delim.asInstanceOf[UTF8String], count.asInstanceOf[Int], collationId);
+    CollationSupport.SubstringIndex.exec(
+      str.asInstanceOf[UTF8String],
+      delim.asInstanceOf[UTF8String],
+      count.asInstanceOf[Int],
+      collationId);
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (str, delim, count) =>
-      CollationSupport.SubstringIndex.genCode(str, delim, count, collationId))
+    defineCodeGen(
+      ctx,
+      ev,
+      (str, delim, count) =>
+        CollationSupport.SubstringIndex.genCode(str, delim, count, collationId))
   }
 
   override protected def withNewChildrenInternal(
-      newFirst: Expression, newSecond: Expression, newThird: Expression): SubstringIndex =
+      newFirst: Expression,
+      newSecond: Expression,
+      newThird: Expression): SubstringIndex =
     copy(strExpr = newFirst, delimExpr = newSecond, countExpr = newThird)
 }
 
 /**
- * A function that returns the position of the first occurrence of substr
- * in given string after position pos.
+ * A function that returns the position of the first occurrence of substr in given string after
+ * position pos.
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
@@ -1781,7 +1845,8 @@ case class SubstringIndex(strExpr: Expression, delimExpr: Expression, countExpr:
   group = "string_funcs")
 // scalastyle:on line.size.limit
 case class StringLocate(substr: Expression, str: Expression, start: Expression)
-  extends TernaryExpression with ImplicitCastInputTypes {
+    extends TernaryExpression
+    with ImplicitCastInputTypes {
 
   def this(substr: Expression, str: Expression) = {
     this(substr, str, Literal(1))
@@ -1798,8 +1863,7 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
     Seq(
       StringTypeNonCSAICollation(supportsTrimCollation = true),
       StringTypeNonCSAICollation(supportsTrimCollation = true),
-      IntegerType
-    )
+      IntegerType)
 
   override def eval(input: InternalRow): Any = {
     val s = start.eval(input)
@@ -1819,8 +1883,11 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
           if (sVal < 1) {
             0
           } else {
-            CollationSupport.StringLocate.exec(l.asInstanceOf[UTF8String],
-              r.asInstanceOf[UTF8String], s.asInstanceOf[Int] - 1, collationId) + 1;
+            CollationSupport.StringLocate.exec(
+              l.asInstanceOf[UTF8String],
+              r.asInstanceOf[UTF8String],
+              s.asInstanceOf[Int] - 1,
+              collationId) + 1;
           }
         }
       }
@@ -1858,21 +1925,23 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
     getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("locate")
 
   override protected def withNewChildrenInternal(
-      newFirst: Expression, newSecond: Expression, newThird: Expression): StringLocate =
+      newFirst: Expression,
+      newSecond: Expression,
+      newThird: Expression): StringLocate =
     copy(substr = newFirst, str = newSecond, start = newThird)
 
 }
 
 trait PadExpressionBuilderBase extends ExpressionBuilder {
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
-    val behaviorChangeEnabled = !SQLConf.get.getConf(SQLConf.LEGACY_LPAD_RPAD_BINARY_TYPE_AS_STRING)
+    val behaviorChangeEnabled =
+      !SQLConf.get.getConf(SQLConf.LEGACY_LPAD_RPAD_BINARY_TYPE_AS_STRING)
     val numArgs = expressions.length
     if (numArgs == 2) {
       if (expressions(0).dataType == BinaryType && behaviorChangeEnabled) {
         BinaryPad(funcName, expressions(0), expressions(1), Literal(Array[Byte](0)))
       } else {
-        createStringPad(expressions(0),
-          expressions(1), Literal(" "))
+        createStringPad(expressions(0), expressions(1), Literal(" "))
       }
     } else if (numArgs == 3) {
       if (expressions(0).dataType == BinaryType && expressions(2).dataType == BinaryType
@@ -1918,7 +1987,8 @@ object LPadExpressionBuilder extends PadExpressionBuilderBase {
 }
 
 case class StringLPad(str: Expression, len: Expression, pad: Expression)
-  extends TernaryExpression with ImplicitCastInputTypes {
+    extends TernaryExpression
+    with ImplicitCastInputTypes {
   override def nullIntolerant: Boolean = true
 
   override def first: Expression = str
@@ -1930,28 +2000,33 @@ case class StringLPad(str: Expression, len: Expression, pad: Expression)
     Seq(
       StringTypeWithCollation(supportsTrimCollation = true),
       IntegerType,
-      StringTypeWithCollation(supportsTrimCollation = true)
-    )
+      StringTypeWithCollation(supportsTrimCollation = true))
 
   override def nullSafeEval(string: Any, len: Any, pad: Any): Any = {
     string.asInstanceOf[UTF8String].lpad(len.asInstanceOf[Int], pad.asInstanceOf[UTF8String])
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (string, len, pad) => {
-      s"$string.lpad($len, $pad)"
-    })
+    defineCodeGen(
+      ctx,
+      ev,
+      (string, len, pad) => {
+        s"$string.lpad($len, $pad)"
+      })
   }
 
   override def prettyName: String = "lpad"
 
   override protected def withNewChildrenInternal(
-      newFirst: Expression, newSecond: Expression, newThird: Expression): StringLPad =
+      newFirst: Expression,
+      newSecond: Expression,
+      newThird: Expression): StringLPad =
     copy(str = newFirst, len = newSecond, pad = newThird)
 }
 
 case class BinaryPad(funcName: String, str: Expression, len: Expression, pad: Expression)
-  extends RuntimeReplaceable with ImplicitCastInputTypes {
+    extends RuntimeReplaceable
+    with ImplicitCastInputTypes {
   assert(funcName == "lpad" || funcName == "rpad")
 
   override lazy val replacement: Expression = StaticInvoke(
@@ -2006,7 +2081,8 @@ case class StringRPad(
     str: Expression,
     len: Expression,
     pad: Expression = Literal.create(" ", StringType))
-  extends TernaryExpression with ImplicitCastInputTypes {
+    extends TernaryExpression
+    with ImplicitCastInputTypes {
   override def nullIntolerant: Boolean = true
   override def first: Expression = str
   override def second: Expression = len
@@ -2017,23 +2093,27 @@ case class StringRPad(
     Seq(
       StringTypeWithCollation(supportsTrimCollation = true),
       IntegerType,
-      StringTypeWithCollation(supportsTrimCollation = true)
-    )
+      StringTypeWithCollation(supportsTrimCollation = true))
 
   override def nullSafeEval(string: Any, len: Any, pad: Any): Any = {
     string.asInstanceOf[UTF8String].rpad(len.asInstanceOf[Int], pad.asInstanceOf[UTF8String])
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (string, len, pad) => {
-      s"$string.rpad($len, $pad)"
-    })
+    defineCodeGen(
+      ctx,
+      ev,
+      (string, len, pad) => {
+        s"$string.rpad($len, $pad)"
+      })
   }
 
   override def prettyName: String = "rpad"
 
   override protected def withNewChildrenInternal(
-      newFirst: Expression, newSecond: Expression, newThird: Expression): StringRPad =
+      newFirst: Expression,
+      newSecond: Expression,
+      newThird: Expression): StringRPad =
     copy(str = newFirst, len = newSecond, pad = newThird)
 }
 
@@ -2042,7 +2122,8 @@ case class StringRPad(
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(strfmt, obj, ...) - Returns a formatted string from printf-style format strings.",
+  usage =
+    "_FUNC_(strfmt, obj, ...) - Returns a formatted string from printf-style format strings.",
   examples = """
     Examples:
       > SELECT _FUNC_("Hello World %d %s", 100, "days");
@@ -2057,7 +2138,6 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
     checkArgumentIndexNotZero(children(0))
   }
 
-
   override def foldable: Boolean = children.forall(_.foldable)
   override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
   override def nullable: Boolean = children(0).nullable
@@ -2070,8 +2150,9 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.isEmpty) {
       throw QueryCompilationErrors.wrongNumArgsError(
-          toSQLId(prettyName), Seq("> 0"), children.length
-      )
+        toSQLId(prettyName),
+        Seq("> 0"),
+        children.length)
     } else {
       super.checkInputDataTypes()
     }
@@ -2095,7 +2176,7 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
     val argListGen = children.tail.map(x => (x.dataType, x.genCode(ctx)))
     val argList = ctx.freshName("argLists")
     val numArgLists = argListGen.length
-    val argListCode = argListGen.zipWithIndex.map { case(v, index) =>
+    val argListCode = argListGen.zipWithIndex.map { case (v, index) =>
       val value =
         if (CodeGenerator.boxedType(v._1) != CodeGenerator.javaType(v._1)) {
           // Java primitives get boxed in order to allow null values.
@@ -2129,21 +2210,21 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
       }""")
   }
 
-  override def prettyName: String = getTagValue(
-    FunctionRegistry.FUNC_ALIAS).getOrElse("format_string")
+  override def prettyName: String =
+    getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("format_string")
 
   override protected def withNewChildrenInternal(
-    newChildren: IndexedSeq[Expression]): FormatString = FormatString(newChildren: _*)
+      newChildren: IndexedSeq[Expression]): FormatString = FormatString(newChildren: _*)
 
   /**
    * SPARK-37013: The `formatSpecifier` defined in `j.u.Formatter` as follows:
-   *  "%[argument_index$][flags][width][.precision][t]conversion"
-   * The optional `argument_index` is a decimal integer indicating the position of the argument
-   * in the argument list. The first argument is referenced by "1$", the second by "2$", etc.
-   * However, for the illegal definition of "%0$", Java 8 and Java 11 uses it as "%1$",
-   * and Java 17 throws IllegalFormatArgumentIndexException(Illegal format argument index = 0).
-   * Therefore, manually check that the pattern string not contains "%0$" to ensure consistent
-   * behavior of Java 8, Java 11 and Java 17.
+   * "%[argument_index$][flags][width][.precision][t]conversion" The optional `argument_index` is
+   * a decimal integer indicating the position of the argument in the argument list. The first
+   * argument is referenced by "1$", the second by "2$", etc. However, for the illegal definition
+   * of "%0$", Java 8 and Java 11 uses it as "%1$", and Java 17 throws
+   * IllegalFormatArgumentIndexException(Illegal format argument index = 0). Therefore, manually
+   * check that the pattern string not contains "%0$" to ensure consistent behavior of Java 8,
+   * Java 11 and Java 17.
    */
   private def checkArgumentIndexNotZero(expression: Expression): Unit = expression match {
     case StringLiteral(pattern) if pattern.contains("%0$") =>
@@ -2153,8 +2234,8 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
 }
 
 /**
- * Returns string, with the first letter of each word in uppercase, all other letters in lowercase.
- * Words are delimited by whitespace.
+ * Returns string, with the first letter of each word in uppercase, all other letters in
+ * lowercase. Words are delimited by whitespace.
  */
 @ExpressionDescription(
   usage = """
@@ -2168,8 +2249,7 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
   """,
   since = "1.5.0",
   group = "string_funcs")
-case class InitCap(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes {
+case class InitCap(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
   override def nullIntolerant: Boolean = true
   final lazy val collationId: Int = child.dataType.asInstanceOf[StringType].collationId
 
@@ -2204,16 +2284,14 @@ case class InitCap(child: Expression)
   since = "1.5.0",
   group = "string_funcs")
 case class StringRepeat(str: Expression, times: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes {
+    extends BinaryExpression
+    with ImplicitCastInputTypes {
   override def nullIntolerant: Boolean = true
   override def left: Expression = str
   override def right: Expression = times
   override def dataType: DataType = str.dataType
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(
-      StringTypeWithCollation(supportsTrimCollation = true),
-      IntegerType
-    )
+    Seq(StringTypeWithCollation(supportsTrimCollation = true), IntegerType)
 
   override def contextIndependentFoldable: Boolean = super.contextIndependentFoldable
 
@@ -2228,7 +2306,8 @@ case class StringRepeat(str: Expression, times: Expression)
   }
 
   override protected def withNewChildrenInternal(
-    newLeft: Expression, newRight: Expression): StringRepeat = copy(str = newLeft, times = newRight)
+      newLeft: Expression,
+      newRight: Expression): StringRepeat = copy(str = newLeft, times = newRight)
 }
 
 /**
@@ -2244,7 +2323,9 @@ case class StringRepeat(str: Expression, times: Expression)
   since = "1.5.0",
   group = "string_funcs")
 case class StringSpace(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes with DefaultStringProducingExpression {
+    extends UnaryExpression
+    with ImplicitCastInputTypes
+    with DefaultStringProducingExpression {
   override def nullIntolerant: Boolean = true
   override def inputTypes: Seq[DataType] = Seq(IntegerType)
   override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
@@ -2255,8 +2336,10 @@ case class StringSpace(child: Expression)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, (length) =>
-      s"""${ev.value} = UTF8String.blankString(($length < 0) ? 0 : $length);""")
+    nullSafeCodeGen(
+      ctx,
+      ev,
+      (length) => s"""${ev.value} = UTF8String.blankString(($length < 0) ? 0 : $length);""")
   }
 
   override def prettyName: String = "space"
@@ -2266,8 +2349,8 @@ case class StringSpace(child: Expression)
 }
 
 /**
- * A function that takes a substring of its first argument starting at a given position.
- * Defined for String and Binary types.
+ * A function that takes a substring of its first argument starting at a given position. Defined
+ * for String and Binary types.
  *
  * NOTE: that this is not zero based, but 1-based index. The first character in str has index 1.
  */
@@ -2299,7 +2382,8 @@ case class StringSpace(child: Expression)
   group = "string_funcs")
 // scalastyle:on line.size.limit
 case class Substring(str: Expression, pos: Expression, len: Expression)
-  extends TernaryExpression with ImplicitCastInputTypes {
+    extends TernaryExpression
+    with ImplicitCastInputTypes {
   override def nullIntolerant: Boolean = true
 
   def this(str: Expression, pos: Expression) = {
@@ -2312,8 +2396,7 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
     Seq(
       TypeCollection(StringTypeWithCollation(supportsTrimCollation = true), BinaryType),
       IntegerType,
-      IntegerType
-    )
+      IntegerType)
 
   override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
 
@@ -2323,25 +2406,35 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
 
   override def nullSafeEval(string: Any, pos: Any, len: Any): Any = {
     str.dataType match {
-      case _: StringType => string.asInstanceOf[UTF8String]
-        .substringSQL(pos.asInstanceOf[Int], len.asInstanceOf[Int])
-      case BinaryType => ByteArray.subStringSQL(string.asInstanceOf[Array[Byte]],
-        pos.asInstanceOf[Int], len.asInstanceOf[Int])
+      case _: StringType =>
+        string
+          .asInstanceOf[UTF8String]
+          .substringSQL(pos.asInstanceOf[Int], len.asInstanceOf[Int])
+      case BinaryType =>
+        ByteArray.subStringSQL(
+          string.asInstanceOf[Array[Byte]],
+          pos.asInstanceOf[Int],
+          len.asInstanceOf[Int])
     }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
 
-    defineCodeGen(ctx, ev, (string, pos, len) => {
-      str.dataType match {
-        case _: StringType => s"$string.substringSQL($pos, $len)"
-        case BinaryType => s"${classOf[ByteArray].getName}.subStringSQL($string, $pos, $len)"
-      }
-    })
+    defineCodeGen(
+      ctx,
+      ev,
+      (string, pos, len) => {
+        str.dataType match {
+          case _: StringType => s"$string.substringSQL($pos, $len)"
+          case BinaryType => s"${classOf[ByteArray].getName}.subStringSQL($string, $pos, $len)"
+        }
+      })
   }
 
   override protected def withNewChildrenInternal(
-      newFirst: Expression, newSecond: Expression, newThird: Expression): Substring =
+      newFirst: Expression,
+      newSecond: Expression,
+      newThird: Expression): Substring =
     copy(str = newFirst, pos = newSecond, len = newThird)
 
 }
@@ -2351,7 +2444,8 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(str, len) - Returns the rightmost `len`(`len` can be string type) characters from the string `str`,if `len` is less or equal than 0 the result is an empty string.",
+  usage =
+    "_FUNC_(str, len) - Returns the rightmost `len`(`len` can be string type) characters from the string `str`,if `len` is less or equal than 0 the result is an empty string.",
   examples = """
     Examples:
       > SELECT _FUNC_('Spark SQL', 3);
@@ -2360,8 +2454,10 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
   since = "2.3.0",
   group = "string_funcs")
 // scalastyle:on line.size.limit
-case class Right(str: Expression, len: Expression) extends RuntimeReplaceable
-  with ImplicitCastInputTypes with BinaryLike[Expression] {
+case class Right(str: Expression, len: Expression)
+    extends RuntimeReplaceable
+    with ImplicitCastInputTypes
+    with BinaryLike[Expression] {
 
   override lazy val replacement: Expression = If(
     IsNull(str),
@@ -2369,19 +2465,15 @@ case class Right(str: Expression, len: Expression) extends RuntimeReplaceable
     If(
       LessThanOrEqual(len, Literal(0)),
       Literal(UTF8String.EMPTY_UTF8, str.dataType),
-      new Substring(str, UnaryMinus(len, failOnError = false))
-    )
-  )
+      new Substring(str, UnaryMinus(len, failOnError = false))))
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(
-      StringTypeWithCollation(supportsTrimCollation = true),
-      IntegerType
-    )
+    Seq(StringTypeWithCollation(supportsTrimCollation = true), IntegerType)
   override def left: Expression = str
   override def right: Expression = len
   override protected def withNewChildrenInternal(
-      newLeft: Expression, newRight: Expression): Expression = {
+      newLeft: Expression,
+      newRight: Expression): Expression = {
     copy(str = newLeft, len = newRight)
   }
 }
@@ -2391,7 +2483,8 @@ case class Right(str: Expression, len: Expression) extends RuntimeReplaceable
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(str, len) - Returns the leftmost `len`(`len` can be string type) characters from the string `str`,if `len` is less or equal than 0 the result is an empty string.",
+  usage =
+    "_FUNC_(str, len) - Returns the leftmost `len`(`len` can be string type) characters from the string `str`,if `len` is less or equal than 0 the result is an empty string.",
   examples = """
     Examples:
       > SELECT _FUNC_('Spark SQL', 3);
@@ -2402,35 +2495,36 @@ case class Right(str: Expression, len: Expression) extends RuntimeReplaceable
   since = "2.3.0",
   group = "string_funcs")
 // scalastyle:on line.size.limit
-case class Left(str: Expression, len: Expression) extends RuntimeReplaceable
-  with ImplicitCastInputTypes with BinaryLike[Expression] {
+case class Left(str: Expression, len: Expression)
+    extends RuntimeReplaceable
+    with ImplicitCastInputTypes
+    with BinaryLike[Expression] {
 
   override lazy val replacement: Expression = Substring(str, Literal(1), len)
 
   override def inputTypes: Seq[AbstractDataType] = {
     Seq(
-      TypeCollection(
-        StringTypeWithCollation(supportsTrimCollation = true),
-        BinaryType)
-      , IntegerType
-    )
+      TypeCollection(StringTypeWithCollation(supportsTrimCollation = true), BinaryType),
+      IntegerType)
   }
 
   override def left: Expression = str
   override def right: Expression = len
   override protected def withNewChildrenInternal(
-      newLeft: Expression, newRight: Expression): Expression = {
+      newLeft: Expression,
+      newRight: Expression): Expression = {
     copy(str = newLeft, len = newRight)
   }
 }
 
 /**
- * A function that returns the char length of the given string expression or
- * number of bytes of the given binary expression.
+ * A function that returns the char length of the given string expression or number of bytes of
+ * the given binary expression.
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the character length of string data or number of bytes of binary data. The length of string data includes the trailing spaces. The length of binary data includes binary zeros.",
+  usage =
+    "_FUNC_(expr) - Returns the character length of string data or number of bytes of binary data. The length of string data includes the trailing spaces. The length of binary data includes binary zeros.",
   examples = """
     Examples:
       > SELECT _FUNC_('Spark SQL ');
@@ -2445,17 +2539,11 @@ case class Left(str: Expression, len: Expression) extends RuntimeReplaceable
   since = "1.5.0",
   group = "string_funcs")
 // scalastyle:on line.size.limit
-case class Length(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes {
+case class Length(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
   override def nullIntolerant: Boolean = true
   override def dataType: DataType = IntegerType
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(
-      TypeCollection(
-        StringTypeWithCollation(supportsTrimCollation = true),
-        BinaryType
-      )
-    )
+    Seq(TypeCollection(StringTypeWithCollation(supportsTrimCollation = true), BinaryType))
   override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
 
   protected override def nullSafeEval(value: Any): Any = child.dataType match {
@@ -2470,14 +2558,16 @@ case class Length(child: Expression)
     }
   }
 
-  override protected def withNewChildInternal(newChild: Expression): Length = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): Length =
+    copy(child = newChild)
 }
 
 /**
  * A function that returns the bit length of the given string or binary expression.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the bit length of string data or number of bits of binary data.",
+  usage =
+    "_FUNC_(expr) - Returns the bit length of string data or number of bits of binary data.",
   examples = """
     Examples:
       > SELECT _FUNC_('Spark SQL');
@@ -2487,17 +2577,11 @@ case class Length(child: Expression)
   """,
   since = "2.3.0",
   group = "string_funcs")
-case class BitLength(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes {
+case class BitLength(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
   override def nullIntolerant: Boolean = true
   override def dataType: DataType = IntegerType
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(
-      TypeCollection(
-        StringTypeWithCollation(supportsTrimCollation = true),
-        BinaryType
-      )
-    )
+    Seq(TypeCollection(StringTypeWithCollation(supportsTrimCollation = true), BinaryType))
   override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
   protected override def nullSafeEval(value: Any): Any = child.dataType match {
     case _: StringType => value.asInstanceOf[UTF8String].numBytes * 8
@@ -2532,17 +2616,11 @@ case class BitLength(child: Expression)
   """,
   since = "2.3.0",
   group = "string_funcs")
-case class OctetLength(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes {
+case class OctetLength(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
   override def nullIntolerant: Boolean = true
   override def dataType: DataType = IntegerType
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(
-      TypeCollection(
-        StringTypeWithCollation(supportsTrimCollation = true),
-        BinaryType
-      )
-    )
+    Seq(TypeCollection(StringTypeWithCollation(supportsTrimCollation = true), BinaryType))
   override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
 
   protected override def nullSafeEval(value: Any): Any = child.dataType match {
@@ -2580,12 +2658,9 @@ case class OctetLength(child: Expression)
   since = "1.5.0",
   group = "string_funcs")
 // scalastyle:on line.size.limit
-case class Levenshtein(
-    left: Expression,
-    right: Expression,
-    threshold: Option[Expression] = None)
-  extends Expression
-  with ImplicitCastInputTypes {
+case class Levenshtein(left: Expression, right: Expression, threshold: Option[Expression] = None)
+    extends Expression
+    with ImplicitCastInputTypes {
 
   def this(left: Expression, right: Expression, threshold: Expression) =
     this(left, right, Option(threshold))
@@ -2595,24 +2670,24 @@ case class Levenshtein(
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.length > 3 || children.length < 2) {
       throw QueryCompilationErrors.wrongNumArgsError(
-        toSQLId(prettyName), Seq(2, 3), children.length)
+        toSQLId(prettyName),
+        Seq(2, 3),
+        children.length)
     } else {
       super.checkInputDataTypes()
     }
   }
 
   override def inputTypes: Seq[AbstractDataType] = threshold match {
-      case Some(_) =>
-        Seq(
-          StringTypeWithCollation(supportsTrimCollation = true),
-          StringTypeWithCollation(supportsTrimCollation = true),
-          IntegerType
-        )
-      case _ =>
-        Seq(
-          StringTypeWithCollation(supportsTrimCollation = true),
-          StringTypeWithCollation(supportsTrimCollation = true)
-        )
+    case Some(_) =>
+      Seq(
+        StringTypeWithCollation(supportsTrimCollation = true),
+        StringTypeWithCollation(supportsTrimCollation = true),
+        IntegerType)
+    case _ =>
+      Seq(
+        StringTypeWithCollation(supportsTrimCollation = true),
+        StringTypeWithCollation(supportsTrimCollation = true))
   }
 
   override def children: Seq[Expression] = threshold match {
@@ -2625,8 +2700,8 @@ case class Levenshtein(
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): Expression = {
     threshold match {
-      case Some(_) => copy(left = newChildren(0), right = newChildren(1),
-        threshold = Some(newChildren(2)))
+      case Some(_) =>
+        copy(left = newChildren(0), right = newChildren(1), threshold = Some(newChildren(2)))
       case _ => copy(left = newChildren(0), right = newChildren(1))
     }
   }
@@ -2645,8 +2720,9 @@ case class Levenshtein(
     val thresholdEval = threshold.map(_.eval(input))
     thresholdEval match {
       case Some(v) =>
-        leftEval.asInstanceOf[UTF8String].levenshteinDistance(rightEval.asInstanceOf[UTF8String],
-          v.asInstanceOf[Int])
+        leftEval
+          .asInstanceOf[UTF8String]
+          .levenshteinDistance(rightEval.asInstanceOf[UTF8String], v.asInstanceOf[Int])
       case _ =>
         leftEval.asInstanceOf[UTF8String].levenshteinDistance(rightEval.asInstanceOf[UTF8String])
     }
@@ -2687,10 +2763,12 @@ case class Levenshtein(
         $nullSafeEval""")
     } else {
       val eval = leftGen.code + rightGen.code + thresholdGen.code
-      ev.copy(code = code"""
+      ev.copy(
+        code = code"""
         $eval
         ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-        $resultCode""", isNull = FalseLiteral)
+        $resultCode""",
+        isNull = FalseLiteral)
     }
   }
 
@@ -2714,10 +2792,12 @@ case class Levenshtein(
         $nullSafeEval""")
     } else {
       val eval = leftGen.code + rightGen.code
-      ev.copy(code = code"""
+      ev.copy(
+        code = code"""
         $eval
         ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-        $resultCode""", isNull = FalseLiteral)
+        $resultCode""",
+        isNull = FalseLiteral)
     }
   }
 }
@@ -2735,7 +2815,9 @@ case class Levenshtein(
   since = "1.5.0",
   group = "string_funcs")
 case class SoundEx(child: Expression)
-  extends UnaryExpression with ExpectsInputTypes with DefaultStringProducingExpression {
+    extends UnaryExpression
+    with ExpectsInputTypes
+    with DefaultStringProducingExpression {
   override def nullIntolerant: Boolean = true
 
   override def inputTypes: Seq[AbstractDataType] =
@@ -2767,8 +2849,7 @@ case class SoundEx(child: Expression)
   """,
   since = "1.5.0",
   group = "string_funcs")
-case class Ascii(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes {
+case class Ascii(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
   override def nullIntolerant: Boolean = true
   override def dataType: DataType = IntegerType
   override def inputTypes: Seq[AbstractDataType] =
@@ -2785,28 +2866,34 @@ case class Ascii(child: Expression)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, (child) => {
-      val firstCharStr = ctx.freshName("firstCharStr")
-      s"""
+    nullSafeCodeGen(
+      ctx,
+      ev,
+      (child) => {
+        val firstCharStr = ctx.freshName("firstCharStr")
+        s"""
         UTF8String $firstCharStr = $child.substring(0, 1);
         if ($firstCharStr.numChars() > 0) {
           ${ev.value} = $firstCharStr.toString().codePointAt(0);
         } else {
           ${ev.value} = 0;
         }
-       """})
+       """
+      })
   }
 
-  override protected def withNewChildInternal(newChild: Expression): Ascii = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): Ascii =
+    copy(child = newChild)
 }
 
 /**
- * Returns the ASCII character having the binary equivalent to n.
- * If n is larger than 256 the result is equivalent to chr(n % 256)
+ * Returns the ASCII character having the binary equivalent to n. If n is larger than 256 the
+ * result is equivalent to chr(n % 256)
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the ASCII character having the binary equivalent to `expr`. If n is larger than 256 the result is equivalent to chr(n % 256)",
+  usage =
+    "_FUNC_(expr) - Returns the ASCII character having the binary equivalent to `expr`. If n is larger than 256 the result is equivalent to chr(n % 256)",
   examples = """
     Examples:
       > SELECT _FUNC_(65);
@@ -2816,7 +2903,9 @@ case class Ascii(child: Expression)
   group = "string_funcs")
 // scalastyle:on line.size.limit
 case class Chr(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes with DefaultStringProducingExpression {
+    extends UnaryExpression
+    with ImplicitCastInputTypes
+    with DefaultStringProducingExpression {
   override def nullIntolerant: Boolean = true
 
   override def inputTypes: Seq[DataType] = Seq(LongType)
@@ -2825,18 +2914,21 @@ case class Chr(child: Expression)
     val longVal = lon.asInstanceOf[Long]
     if (longVal < 0) {
       UTF8String.EMPTY_UTF8
-    } else if ((longVal & 0xFF) == 0) {
+    } else if ((longVal & 0xff) == 0) {
       UTF8String.fromString(Character.MIN_VALUE.toString)
     } else {
-      UTF8String.fromString((longVal & 0xFF).toChar.toString)
+      UTF8String.fromString((longVal & 0xff).toChar.toString)
     }
   }
 
   override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, lon => {
-      s"""
+    nullSafeCodeGen(
+      ctx,
+      ev,
+      lon => {
+        s"""
         if ($lon < 0) {
           ${ev.value} = UTF8String.EMPTY_UTF8;
         } else if (($lon & 0xFF) == 0) {
@@ -2846,7 +2938,7 @@ case class Chr(child: Expression)
           ${ev.value} = UTF8String.fromString(String.valueOf(c));
         }
       """
-    })
+      })
   }
 
   override protected def withNewChildInternal(newChild: Expression): Chr = copy(child = newChild)
@@ -2867,10 +2959,10 @@ case class Chr(child: Expression)
   since = "1.5.0",
   group = "string_funcs")
 case class Base64(child: Expression, chunkBase64: Boolean)
-  extends UnaryExpression
-  with RuntimeReplaceable
-  with ImplicitCastInputTypes
-  with DefaultStringProducingExpression {
+    extends UnaryExpression
+    with RuntimeReplaceable
+    with ImplicitCastInputTypes
+    with DefaultStringProducingExpression {
 
   def this(expr: Expression) = this(expr, SQLConf.get.chunkBase64StringEnabled)
 
@@ -2920,7 +3012,8 @@ object Base64 {
   since = "1.5.0",
   group = "string_funcs")
 case class UnBase64(child: Expression, failOnError: Boolean = false)
-  extends UnaryExpression with ImplicitCastInputTypes {
+    extends UnaryExpression
+    with ImplicitCastInputTypes {
   override def nullIntolerant: Boolean = true
 
   override def dataType: DataType = BinaryType
@@ -2944,11 +3037,14 @@ case class UnBase64(child: Expression, failOnError: Boolean = false)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, child => {
-      val maybeValidateInputCode = if (failOnError) {
-        val unbase64 = UnBase64.getClass.getName.stripSuffix("$")
-        val binaryType = ctx.addReferenceObj("to", BinaryType, BinaryType.getClass.getName)
-        s"""
+    nullSafeCodeGen(
+      ctx,
+      ev,
+      child => {
+        val maybeValidateInputCode = if (failOnError) {
+          val unbase64 = UnBase64.getClass.getName.stripSuffix("$")
+          val binaryType = ctx.addReferenceObj("to", BinaryType, BinaryType.getClass.getName)
+          s"""
            |if (!$unbase64.isValidBase64($child)) {
            |  throw QueryExecutionErrors.invalidInputInConversionError(
            |    $binaryType,
@@ -2957,13 +3053,14 @@ case class UnBase64(child: Expression, failOnError: Boolean = false)
            |    "try_to_binary");
            |}
        """.stripMargin
-      } else {
-        ""
-      }
-      s"""
+        } else {
+          ""
+        }
+        s"""
          $maybeValidateInputCode
          ${ev.value} = ${classOf[JBase64].getName}.getMimeDecoder().decode($child.toString());
-       """})
+       """
+      })
   }
 
   override protected def withNewChildInternal(newChild: Expression): UnBase64 =
@@ -2971,7 +3068,7 @@ case class UnBase64(child: Expression, failOnError: Boolean = false)
 }
 
 object UnBase64 {
-  def isValidBase64(srcString: UTF8String) : Boolean = {
+  def isValidBase64(srcString: UTF8String): Boolean = {
     // We use RFC4648. The valid base64 string should contain zero or more groups of 4 symbols plus
     // last group consisting of 2-4 valid symbols and optional padding.
     // Last group should contain at least 2 valid symbols and up to 2 padding characters `=`.
@@ -2994,10 +3091,10 @@ object UnBase64 {
     for (c: Char <- srcString.toString) {
       c match {
         case a
-          if (a >= '0' && a <= '9')
-            || (a >= 'A' && a <= 'Z')
-            || (a >= 'a' && a <= 'z')
-            || a == '/' || a == '+' =>
+            if (a >= '0' && a <= '9')
+              || (a >= 'A' && a <= 'Z')
+              || (a >= 'a' && a <= 'z')
+              || a == '/' || a == '+' =>
           if (padSize != 0) return false // Padding symbols should conclude the string.
           position += 1
         case '=' =>
@@ -3083,7 +3180,8 @@ object Decode {
   group = "string_funcs")
 // scalastyle:on line.size.limit
 case class Decode(params: Seq[Expression], replacement: Expression)
-  extends RuntimeReplaceable with InheritAnalysisRules {
+    extends RuntimeReplaceable
+    with InheritAnalysisRules {
 
   def this(params: Seq[Expression]) = this(params, Decode.createExpr(params))
 
@@ -3099,15 +3197,15 @@ case class StringDecode(
     charset: Expression,
     legacyCharsets: Boolean,
     legacyErrorAction: Boolean)
-  extends RuntimeReplaceable with ImplicitCastInputTypes with DefaultStringProducingExpression {
+    extends RuntimeReplaceable
+    with ImplicitCastInputTypes
+    with DefaultStringProducingExpression {
 
   def this(bin: Expression, charset: Expression) =
     this(bin, charset, SQLConf.get.legacyJavaCharsets, SQLConf.get.legacyCodingErrorAction)
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(
-      BinaryType,
-      StringTypeWithCollation(supportsTrimCollation = true)
-    )
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(BinaryType, StringTypeWithCollation(supportsTrimCollation = true))
   override def prettyName: String = "decode"
   override def toString: String = s"$prettyName($bin, $charset)"
 
@@ -3120,12 +3218,11 @@ case class StringDecode(
       BinaryType,
       StringTypeWithCollation(supportsTrimCollation = true),
       BooleanType,
-      BooleanType
-    )
-  )
+      BooleanType))
 
   override def children: Seq[Expression] = Seq(bin, charset)
-  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): Expression =
     copy(bin = newChildren(0), charset = newChildren(1))
 }
 
@@ -3153,7 +3250,8 @@ object StringDecode {
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(str, charset) - Encodes the first argument using the second argument character set. If either argument is null, the result will also be null.",
+  usage =
+    "_FUNC_(str, charset) - Encodes the first argument using the second argument character set. If either argument is null, the result will also be null.",
   arguments = """
     Arguments:
       * str - a string expression
@@ -3172,7 +3270,8 @@ case class Encode(
     charset: Expression,
     legacyCharsets: Boolean,
     legacyErrorAction: Boolean)
-  extends RuntimeReplaceable with ImplicitCastInputTypes {
+    extends RuntimeReplaceable
+    with ImplicitCastInputTypes {
 
   def this(value: Expression, charset: Expression) =
     this(value, charset, SQLConf.get.legacyJavaCharsets, SQLConf.get.legacyCodingErrorAction)
@@ -3181,16 +3280,17 @@ case class Encode(
   override def inputTypes: Seq[AbstractDataType] =
     Seq(
       StringTypeWithCollation(supportsTrimCollation = true),
-      StringTypeWithCollation(supportsTrimCollation = true)
-    )
+      StringTypeWithCollation(supportsTrimCollation = true))
 
   override lazy val replacement: Expression = StaticInvoke(
     classOf[Encode],
     BinaryType,
     "encode",
     Seq(
-      str, charset, Literal(legacyCharsets, BooleanType), Literal(legacyErrorAction, BooleanType)
-    ),
+      str,
+      charset,
+      Literal(legacyCharsets, BooleanType),
+      Literal(legacyErrorAction, BooleanType)),
     Seq(
       StringTypeWithCollation(supportsTrimCollation = true),
       StringTypeWithCollation(supportsTrimCollation = true),
@@ -3201,7 +3301,8 @@ case class Encode(
 
   override def children: Seq[Expression] = Seq(str, charset)
 
-  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): Expression =
     copy(str = newChildren.head, charset = newChildren(1))
 }
 
@@ -3247,17 +3348,20 @@ object Encode {
 case class ToBinary(
     expr: Expression,
     format: Option[Expression],
-    nullOnInvalidFormat: Boolean = false) extends RuntimeReplaceable
+    nullOnInvalidFormat: Boolean = false)
+    extends RuntimeReplaceable
     with ImplicitCastInputTypes {
 
-  @transient lazy val fmt: String = format.map { f =>
-    val value = f.eval()
-    if (value == null) {
-      null
-    } else {
-      value.asInstanceOf[UTF8String].toString.toLowerCase(Locale.ROOT)
+  @transient lazy val fmt: String = format
+    .map { f =>
+      val value = f.eval()
+      if (value == null) {
+        null
+      } else {
+        value.asInstanceOf[UTF8String].toString.toLowerCase(Locale.ROOT)
+      }
     }
-  }.getOrElse("hex")
+    .getOrElse("hex")
 
   override lazy val replacement: Expression = if (fmt == null) {
     Literal(null, BinaryType)
@@ -3299,9 +3403,7 @@ case class ToBinary(
                 "requireType" ->
                   s"case-insensitive ${toSQLType(StringTypeWithCollation)}",
                 "validValues" -> "'hex', 'utf-8', 'utf8', or 'base64'",
-                "inputValue" -> toSQLValue(fmt, f.dataType)
-              )
-            )
+                "inputValue" -> toSQLValue(fmt, f.dataType)))
           }
         } else if (!f.foldable) {
           DataTypeMismatch(
@@ -3309,9 +3411,7 @@ case class ToBinary(
             messageParameters = Map(
               "inputName" -> toSQLId("fmt"),
               "inputType" -> toSQLType(StringTypeWithCollation),
-              "inputExpr" -> toSQLExpr(f)
-            )
-          )
+              "inputExpr" -> toSQLExpr(f)))
         } else {
           DataTypeMismatch(
             errorSubClass = "INVALID_ARG_VALUE",
@@ -3320,9 +3420,7 @@ case class ToBinary(
               "requireType" ->
                 s"case-insensitive ${toSQLType(StringTypeWithCollation)}",
               "validValues" -> "'hex', 'utf-8', 'utf8', or 'base64'",
-              "inputValue" -> toSQLValue(f.eval(), f.dataType)
-            )
-          )
+              "inputValue" -> toSQLValue(f.eval(), f.dataType)))
         }
       case _ => super.checkInputDataTypes()
     }
@@ -3330,18 +3428,17 @@ case class ToBinary(
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): Expression = {
-      if (format.isDefined) {
-        copy(expr = newChildren.head, format = Some(newChildren.last))
-      } else {
-        copy(expr = newChildren.head)
-      }
+    if (format.isDefined) {
+      copy(expr = newChildren.head, format = Some(newChildren.last))
+    } else {
+      copy(expr = newChildren.head)
+    }
   }
 }
 
 /**
- * Formats the number X to a format like '#,###,###.##', rounded to D decimal places,
- * and returns the result as a string. If D is 0, the result has no decimal point or
- * fractional part.
+ * Formats the number X to a format like '#,###,###.##', rounded to D decimal places, and returns
+ * the result as a string. If D is 0, the result has no decimal point or fractional part.
  */
 @ExpressionDescription(
   usage = """
@@ -3360,7 +3457,9 @@ case class ToBinary(
   since = "1.5.0",
   group = "string_funcs")
 case class FormatNumber(x: Expression, d: Expression)
-  extends BinaryExpression with ExpectsInputTypes with DefaultStringProducingExpression {
+    extends BinaryExpression
+    with ExpectsInputTypes
+    with DefaultStringProducingExpression {
 
   override def left: Expression = x
   override def right: Expression = d
@@ -3371,10 +3470,7 @@ case class FormatNumber(x: Expression, d: Expression)
   override def inputTypes: Seq[AbstractDataType] =
     Seq(
       NumericType,
-      TypeCollection(IntegerType,
-        StringTypeWithCollation(supportsTrimCollation = true)
-      )
-    )
+      TypeCollection(IntegerType, StringTypeWithCollation(supportsTrimCollation = true)))
 
   private val defaultFormat = "#,###,###,###,###,###,##0"
 
@@ -3457,32 +3553,37 @@ case class FormatNumber(x: Expression, d: Expression)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, (num, d) => {
+    nullSafeCodeGen(
+      ctx,
+      ev,
+      (num, d) => {
 
-      def typeHelper(p: String): String = {
-        x.dataType match {
-          case _ : DecimalType => s"""$p.toJavaBigDecimal()"""
-          case _ => s"$p"
+        def typeHelper(p: String): String = {
+          x.dataType match {
+            case _: DecimalType => s"""$p.toJavaBigDecimal()"""
+            case _ => s"$p"
+          }
         }
-      }
 
-      val sb = classOf[JStringBuilder].getName
-      val df = classOf[DecimalFormat].getName
-      val dfs = classOf[DecimalFormatSymbols].getName
-      val l = classOf[Locale].getName
-      // SPARK-13515: US Locale configures the DecimalFormat object to use a dot ('.')
-      // as a decimal separator.
-      val usLocale = "US"
-      val numberFormat = ctx.addMutableState(df, "numberFormat",
-        v => s"""$v = new $df("", new $dfs($l.$usLocale));""")
+        val sb = classOf[JStringBuilder].getName
+        val df = classOf[DecimalFormat].getName
+        val dfs = classOf[DecimalFormatSymbols].getName
+        val l = classOf[Locale].getName
+        // SPARK-13515: US Locale configures the DecimalFormat object to use a dot ('.')
+        // as a decimal separator.
+        val usLocale = "US"
+        val numberFormat = ctx.addMutableState(
+          df,
+          "numberFormat",
+          v => s"""$v = new $df("", new $dfs($l.$usLocale));""")
 
-      right.dataType match {
-        case IntegerType =>
-          val pattern = ctx.addMutableState(sb, "pattern", v => s"$v = new $sb();")
-          val i = ctx.freshName("i")
-          val lastDValue =
-            ctx.addMutableState(CodeGenerator.JAVA_INT, "lastDValue", v => s"$v = -100;")
-          s"""
+        right.dataType match {
+          case IntegerType =>
+            val pattern = ctx.addMutableState(sb, "pattern", v => s"$v = new $sb();")
+            val i = ctx.freshName("i")
+            val lastDValue =
+              ctx.addMutableState(CodeGenerator.JAVA_INT, "lastDValue", v => s"$v = -100;")
+            s"""
             if ($d >= 0) {
               $pattern.delete(0, $pattern.length());
               if ($d != $lastDValue) {
@@ -3503,10 +3604,10 @@ case class FormatNumber(x: Expression, d: Expression)
               ${ev.isNull} = true;
             }
            """
-        case _: StringType =>
-          val lastDValue = ctx.addMutableState("String", "lastDValue", v => s"""$v = null;""")
-          val dValue = ctx.freshName("dValue")
-          s"""
+          case _: StringType =>
+            val lastDValue = ctx.addMutableState("String", "lastDValue", v => s"""$v = null;""")
+            val dValue = ctx.freshName("dValue")
+            s"""
             String $dValue = $d.toString();
             if (!$dValue.equals($lastDValue)) {
               $lastDValue = $dValue;
@@ -3518,30 +3619,31 @@ case class FormatNumber(x: Expression, d: Expression)
             }
             ${ev.value} = UTF8String.fromString($numberFormat.format(${typeHelper(num)}));
            """
-      }
-    })
+        }
+      })
   }
 
   override def prettyName: String = "format_number"
 
   override protected def withNewChildrenInternal(
-    newLeft: Expression, newRight: Expression): FormatNumber = copy(x = newLeft, d = newRight)
+      newLeft: Expression,
+      newRight: Expression): FormatNumber = copy(x = newLeft, d = newRight)
 }
 
 /**
- * Splits a string into arrays of sentences, where each sentence is an array of words.
- * The `lang` and `country` arguments are optional, their default values are all '',
- *  - When they are omitted:
- *    1. If they are both omitted, the `Locale.ROOT - locale(language='', country='')` is used.
- *       The `Locale.ROOT` is regarded as the base locale of all locales, and is used as the
- *       language/country neutral locale for the locale sensitive operations.
- *    2. If the `country` is omitted, the `locale(language, country='')` is used.
- *  - When they are null:
- *    1. If they are both `null`, the `Locale.US - locale(language='en', country='US')` is used.
- *    2. If the `language` is null and the `country` is not null,
- *       the `Locale.US - locale(language='en', country='US')` is used.
- *    3. If the `language` is not null and the `country` is null, the `locale(language)` is used.
- *    4. If neither is `null`, the `locale(language, country)` is used.
+ * Splits a string into arrays of sentences, where each sentence is an array of words. The `lang`
+ * and `country` arguments are optional, their default values are all '',
+ *   - When they are omitted:
+ *     1. If they are both omitted, the `Locale.ROOT - locale(language='', country='')` is used.
+ *        The `Locale.ROOT` is regarded as the base locale of all locales, and is used as the
+ *        language/country neutral locale for the locale sensitive operations.
+ *     2. If the `country` is omitted, the `locale(language, country='')` is used.
+ *   - When they are null:
+ *     1. If they are both `null`, the `Locale.US - locale(language='en', country='US')` is used.
+ *     2. If the `language` is null and the `country` is not null, the
+ *        `Locale.US - locale(language='en', country='US')` is used.
+ *     3. If the `language` is not null and the `country` is null, the `locale(language)` is used.
+ *     4. If neither is `null`, the `locale(language, country)` is used.
  */
 @ExpressionDescription(
   usage = "_FUNC_(str[, lang[, country]]) - Splits `str` into an array of array of words.",
@@ -3568,9 +3670,9 @@ case class Sentences(
     str: Expression,
     language: Expression = Literal(""),
     country: Expression = Literal(""))
-  extends TernaryExpression
-  with ImplicitCastInputTypes
-  with RuntimeReplaceable {
+    extends TernaryExpression
+    with ImplicitCastInputTypes
+    with RuntimeReplaceable {
 
   def this(str: Expression) = this(str, Literal(""), Literal(""))
   def this(str: Expression, language: Expression) = this(str, language, Literal(""))
@@ -3582,8 +3684,7 @@ case class Sentences(
     Seq(
       StringTypeWithCollation(supportsTrimCollation = true),
       StringTypeWithCollation(supportsTrimCollation = true),
-      StringTypeWithCollation(supportsTrimCollation = true)
-    )
+      StringTypeWithCollation(supportsTrimCollation = true))
   override def first: Expression = str
   override def second: Expression = language
   override def third: Expression = country
@@ -3598,20 +3699,19 @@ case class Sentences(
       propagateNull = false)
 
   override protected def withNewChildrenInternal(
-      newFirst: Expression, newSecond: Expression, newThird: Expression): Sentences =
+      newFirst: Expression,
+      newSecond: Expression,
+      newThird: Expression): Sentences =
     copy(str = newFirst, language = newSecond, country = newThird)
 }
 
 /**
- * Splits a given string by a specified delimiter and return splits into a
- * GenericArrayData. This expression is different from `split` function as
- * `split` takes regex expression as the pattern to split strings while this
- * expression take delimiter (a string without carrying special meaning on its
- * characters, thus is not treated as regex) to split strings.
+ * Splits a given string by a specified delimiter and return splits into a GenericArrayData. This
+ * expression is different from `split` function as `split` takes regex expression as the pattern
+ * to split strings while this expression take delimiter (a string without carrying special
+ * meaning on its characters, thus is not treated as regex) to split strings.
  */
-case class StringSplitSQL(
-    str: Expression,
-    delimiter: Expression) extends BinaryExpression {
+case class StringSplitSQL(str: Expression, delimiter: Expression) extends BinaryExpression {
   override def dataType: DataType = ArrayType(str.dataType, containsNull = false)
   final lazy val collationId: Int = left.dataType.asInstanceOf[StringType].collationId
   override def left: Expression = str
@@ -3620,73 +3720,78 @@ case class StringSplitSQL(
   override def contextIndependentFoldable: Boolean = super.contextIndependentFoldable
 
   override def nullSafeEval(string: Any, delimiter: Any): Any = {
-    val strings = CollationSupport.StringSplitSQL.exec(string.asInstanceOf[UTF8String],
-      delimiter.asInstanceOf[UTF8String], collationId)
+    val strings = CollationSupport.StringSplitSQL.exec(
+      string.asInstanceOf[UTF8String],
+      delimiter.asInstanceOf[UTF8String],
+      collationId)
     new GenericArrayData(strings.asInstanceOf[Array[Any]])
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val arrayClass = classOf[GenericArrayData].getName
-    nullSafeCodeGen(ctx, ev, (str, delimiter) => {
-      // Array in java is covariant, so we don't need to cast UTF8String[] to Object[].
-      s"${ev.value} = new $arrayClass(" +
-        s"${CollationSupport.StringSplitSQL.genCode(str, delimiter, collationId)});"
-    })
+    nullSafeCodeGen(
+      ctx,
+      ev,
+      (str, delimiter) => {
+        // Array in java is covariant, so we don't need to cast UTF8String[] to Object[].
+        s"${ev.value} = new $arrayClass(" +
+          s"${CollationSupport.StringSplitSQL.genCode(str, delimiter, collationId)});"
+      })
   }
 
   override def withNewChildrenInternal(
-      newFirst: Expression, newSecond: Expression): StringSplitSQL =
+      newFirst: Expression,
+      newSecond: Expression): StringSplitSQL =
     copy(str = newFirst, delimiter = newSecond)
 }
 
 /**
- * Splits a given string by a specified delimiter and returns the requested part.
- * If any input is null, returns null.
- * If index is out of range of split parts, return empty string.
- * If index is 0, throws an ArrayIndexOutOfBoundsException.
+ * Splits a given string by a specified delimiter and returns the requested part. If any input is
+ * null, returns null. If index is out of range of split parts, return empty string. If index is
+ * 0, throws an ArrayIndexOutOfBoundsException.
  */
 @ExpressionDescription(
-  usage =
-    """
+  usage = """
     _FUNC_(str, delimiter, partNum) - Splits `str` by delimiter and return
       requested part of the split (1-based). If any input is null, returns null.
       if `partNum` is out of range of split parts, returns empty string. If `partNum` is 0,
       throws an error. If `partNum` is negative, the parts are counted backward from the
       end of the string. If the `delimiter` is an empty string, the `str` is not split.
   """,
-  examples =
-    """
+  examples = """
     Examples:
       > SELECT _FUNC_('11.12.13', '.', 3);
        13
   """,
   since = "3.3.0",
   group = "string_funcs")
-case class SplitPart (
-    str: Expression,
-    delimiter: Expression,
-    partNum: Expression)
-  extends RuntimeReplaceable with ImplicitCastInputTypes {
+case class SplitPart(str: Expression, delimiter: Expression, partNum: Expression)
+    extends RuntimeReplaceable
+    with ImplicitCastInputTypes {
   override lazy val replacement: Expression =
-    ElementAt(StringSplitSQL(str, delimiter), partNum, Some(Literal.create("", str.dataType)),
+    ElementAt(
+      StringSplitSQL(str, delimiter),
+      partNum,
+      Some(Literal.create("", str.dataType)),
       false)
   override def nodeName: String = "split_part"
   override def inputTypes: Seq[AbstractDataType] =
     Seq(
       StringTypeNonCSAICollation(supportsTrimCollation = true),
       StringTypeNonCSAICollation(supportsTrimCollation = true),
-      IntegerType
-    )
+      IntegerType)
   def children: Seq[Expression] = Seq(str, delimiter, partNum)
   protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression = {
-    copy(str = newChildren.apply(0), delimiter = newChildren.apply(1),
+    copy(
+      str = newChildren.apply(0),
+      delimiter = newChildren.apply(1),
       partNum = newChildren.apply(2))
   }
 }
 
 /**
- * A internal function that converts the empty string to null for partition values.
- * This function should be only used in V1Writes.
+ * A internal function that converts the empty string to null for partition values. This function
+ * should be only used in V1Writes.
  */
 case class Empty2Null(child: Expression) extends UnaryExpression with String2StringExpression {
   override def convert(v: UTF8String): UTF8String = if (v.numBytes() == 0) null else v
@@ -3694,14 +3799,17 @@ case class Empty2Null(child: Expression) extends UnaryExpression with String2Str
   override def nullable: Boolean = true
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, c => {
-      s"""if ($c.numBytes() == 0) {
+    nullSafeCodeGen(
+      ctx,
+      ev,
+      c => {
+        s"""if ($c.numBytes() == 0) {
          |  ${ev.isNull} = true;
          |  ${ev.value} = null;
          |} else {
          |  ${ev.value} = $c;
          |}""".stripMargin
-    })
+      })
   }
 
   override protected def withNewChildInternal(newChild: Expression): Empty2Null =
@@ -3735,7 +3843,8 @@ case class Luhncheck(input: Expression) extends RuntimeReplaceable with Implicit
     classOf[ExpressionImplUtils],
     BooleanType,
     "isLuhnNumber",
-    Seq(input), inputTypes)
+    Seq(input),
+    inputTypes)
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(StringTypeWithCollation(supportsTrimCollation = true))
@@ -3749,12 +3858,13 @@ case class Luhncheck(input: Expression) extends RuntimeReplaceable with Implicit
 }
 
 /**
- * A function that prepends a backslash to each instance of single quote
- * in the given string and encloses the result by single quotes.
+ * A function that prepends a backslash to each instance of single quote in the given string and
+ * encloses the result by single quotes.
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(str) - Returns `str` enclosed by single quotes and each instance of single quote in it is preceded by a backslash.",
+  usage =
+    "_FUNC_(str) - Returns `str` enclosed by single quotes and each instance of single quote in it is preceded by a backslash.",
   examples = """
     Examples:
       > SELECT _FUNC_('Don\'t');
@@ -3764,17 +3874,13 @@ case class Luhncheck(input: Expression) extends RuntimeReplaceable with Implicit
   group = "string_funcs")
 // scalastyle:on line.size.limit
 case class Quote(input: Expression)
-  extends UnaryExpression
-  with RuntimeReplaceable
-  with ImplicitCastInputTypes
-  with DefaultStringProducingExpression {
+    extends UnaryExpression
+    with RuntimeReplaceable
+    with ImplicitCastInputTypes
+    with DefaultStringProducingExpression {
 
-  override lazy val replacement: Expression = StaticInvoke(
-    classOf[ExpressionImplUtils],
-    dataType,
-    "quote",
-    Seq(input),
-    inputTypes)
+  override lazy val replacement: Expression =
+    StaticInvoke(classOf[ExpressionImplUtils], dataType, "quote", Seq(input), inputTypes)
 
   override def inputTypes: Seq[AbstractDataType] = {
     Seq(StringTypeWithCollation(supportsTrimCollation = true))

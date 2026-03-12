@@ -18,8 +18,8 @@
 package org.apache.spark.sql.execution.datasources
 
 /**
- * Represents a trait that should be implemented by relations which
- * access external database engines
+ * Represents a trait that should be implemented by relations which access external database
+ * engines
  */
 trait ExternalEngineDatasourceRDD {
   def getExternalEngineQuery: String

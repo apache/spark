@@ -33,39 +33,39 @@ import org.apache.spark.util.collection.OpenHashMap
 sealed trait AggregateMode
 
 /**
- * An [[AggregateFunction]] with [[Partial]] mode is used for partial aggregation.
- * This function updates the given aggregation buffer with the original input of this
- * function. When it has processed all input rows, the aggregation buffer is returned.
+ * An [[AggregateFunction]] with [[Partial]] mode is used for partial aggregation. This function
+ * updates the given aggregation buffer with the original input of this function. When it has
+ * processed all input rows, the aggregation buffer is returned.
  */
 case object Partial extends AggregateMode
 
 /**
  * An [[AggregateFunction]] with [[PartialMerge]] mode is used to merge aggregation buffers
- * containing intermediate results for this function.
- * This function updates the given aggregation buffer by merging multiple aggregation buffers.
- * When it has processed all input rows, the aggregation buffer is returned.
+ * containing intermediate results for this function. This function updates the given aggregation
+ * buffer by merging multiple aggregation buffers. When it has processed all input rows, the
+ * aggregation buffer is returned.
  */
 case object PartialMerge extends AggregateMode
 
 /**
- * An [[AggregateFunction]] with [[Final]] mode is used to merge aggregation buffers
- * containing intermediate results for this function and then generate final result.
- * This function updates the given aggregation buffer by merging multiple aggregation buffers.
- * When it has processed all input rows, the final result of this function is returned.
+ * An [[AggregateFunction]] with [[Final]] mode is used to merge aggregation buffers containing
+ * intermediate results for this function and then generate final result. This function updates
+ * the given aggregation buffer by merging multiple aggregation buffers. When it has processed all
+ * input rows, the final result of this function is returned.
  */
 case object Final extends AggregateMode
 
 /**
- * An [[AggregateFunction]] with [[Complete]] mode is used to evaluate this function directly
- * from original input rows without any partial aggregation.
- * This function updates the given aggregation buffer with the original input of this
- * function. When it has processed all input rows, the final result of this function is returned.
+ * An [[AggregateFunction]] with [[Complete]] mode is used to evaluate this function directly from
+ * original input rows without any partial aggregation. This function updates the given
+ * aggregation buffer with the original input of this function. When it has processed all input
+ * rows, the final result of this function is returned.
  */
 case object Complete extends AggregateMode
 
 /**
- * A place holder expressions used in code-gen, it does not change the corresponding value
- * in the row.
+ * A place holder expressions used in code-gen, it does not change the corresponding value in the
+ * row.
  */
 case object NoOp extends LeafExpression with Unevaluable {
   override def nullable: Boolean = true
@@ -78,12 +78,7 @@ object AggregateExpression {
       mode: AggregateMode,
       isDistinct: Boolean,
       filter: Option[Expression] = None): AggregateExpression = {
-    AggregateExpression(
-      aggregateFunction,
-      mode,
-      isDistinct,
-      filter,
-      NamedExpression.newExprId)
+    AggregateExpression(aggregateFunction, mode, isDistinct, filter, NamedExpression.newExprId)
   }
 
   def containsAggregate(expr: Expression): Boolean = {
@@ -92,9 +87,9 @@ object AggregateExpression {
 }
 
 /**
- * A container for an [[AggregateFunction]] with its [[AggregateMode]] and a field
- * (`isDistinct`) indicating if DISTINCT keyword is specified for this function and
- * a field (`filter`) indicating if filter clause is specified for this function.
+ * A container for an [[AggregateFunction]] with its [[AggregateMode]] and a field (`isDistinct`)
+ * indicating if DISTINCT keyword is specified for this function and a field (`filter`) indicating
+ * if filter clause is specified for this function.
  */
 case class AggregateExpression(
     aggregateFunction: AggregateFunction,
@@ -102,8 +97,8 @@ case class AggregateExpression(
     isDistinct: Boolean,
     filter: Option[Expression],
     resultId: ExprId)
-  extends Expression
-  with Unevaluable {
+    extends Expression
+    with Unevaluable {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(AGGREGATE_EXPRESSION)
 
@@ -127,9 +122,10 @@ case class AggregateExpression(
     val normalizedAggFunc = mode match {
       // For PartialMerge or Final mode, the input to the `aggregateFunction` is aggregate buffers,
       // and the actual children of `aggregateFunction` is not used, here we normalize the expr id.
-      case PartialMerge | Final => aggregateFunction.transform {
-        case a: AttributeReference => a.withExprId(ExprId(0))
-      }
+      case PartialMerge | Final =>
+        aggregateFunction.transform { case a: AttributeReference =>
+          a.withExprId(ExprId(0))
+        }
       case Partial | Complete => aggregateFunction
     }
 
@@ -190,10 +186,11 @@ case class AggregateExpression(
 /**
  * AggregateFunction is the superclass of two aggregation function interfaces:
  *
- *  - [[ImperativeAggregate]] is for aggregation functions that are specified in terms of
- *    initialize(), update(), and merge() functions that operate on Row-based aggregation buffers.
- *  - [[DeclarativeAggregate]] is for aggregation functions that are specified using
- *    Catalyst expressions.
+ *   - [[ImperativeAggregate]] is for aggregation functions that are specified in terms of
+ *     initialize(), update(), and merge() functions that operate on Row-based aggregation
+ *     buffers.
+ *   - [[DeclarativeAggregate]] is for aggregation functions that are specified using Catalyst
+ *     expressions.
  *
  * In both interfaces, aggregates must define the schema ([[aggBufferSchema]]) and attributes
  * ([[aggBufferAttributes]]) of an aggregation buffer which is used to hold partial aggregate
@@ -217,8 +214,8 @@ abstract class AggregateFunction extends Expression {
 
   /**
    * Attributes of fields in input aggregation buffers (immutable aggregation buffers that are
-   * merged with mutable aggregation buffers in the merge() function or merge expressions).
-   * These attributes are created automatically by cloning the [[aggBufferAttributes]].
+   * merged with mutable aggregation buffers in the merge() function or merge expressions). These
+   * attributes are created automatically by cloning the [[aggBufferAttributes]].
    */
   def inputAggBufferAttributes: Seq[AttributeReference]
 
@@ -230,17 +227,17 @@ abstract class AggregateFunction extends Expression {
   /**
    * Creates [[AggregateExpression]] with `isDistinct` flag disabled.
    *
-   * @see `toAggregateExpression(isDistinct: Boolean)` for detailed description
+   * @see
+   *   `toAggregateExpression(isDistinct: Boolean)` for detailed description
    */
   def toAggregateExpression(): AggregateExpression = toAggregateExpression(isDistinct = false)
 
   /**
-   * Wraps this [[AggregateFunction]] in an [[AggregateExpression]] and sets `isDistinct`
-   * flag of the [[AggregateExpression]] to the given value because
-   * [[AggregateExpression]] is the container of an [[AggregateFunction]], aggregation mode,
-   * and the flag indicating if this aggregation is distinct aggregation or not.
-   * An [[AggregateFunction]] should not be used without being wrapped in
-   * an [[AggregateExpression]].
+   * Wraps this [[AggregateFunction]] in an [[AggregateExpression]] and sets `isDistinct` flag of
+   * the [[AggregateExpression]] to the given value because [[AggregateExpression]] is the
+   * container of an [[AggregateFunction]], aggregation mode, and the flag indicating if this
+   * aggregation is distinct aggregation or not. An [[AggregateFunction]] should not be used
+   * without being wrapped in an [[AggregateExpression]].
    */
   def toAggregateExpression(
       isDistinct: Boolean,
@@ -268,19 +265,19 @@ abstract class AggregateFunction extends Expression {
  * API for aggregation functions that are expressed in terms of imperative initialize(), update(),
  * and merge() functions which operate on Row-based aggregation buffers.
  *
- * Within these functions, code should access fields of the mutable aggregation buffer by adding the
- * bufferSchema-relative field number to `mutableAggBufferOffset` then using this new field number
- * to access the buffer Row. This is necessary because this aggregation function's buffer is
- * embedded inside of a larger shared aggregation buffer when an aggregation operator evaluates
+ * Within these functions, code should access fields of the mutable aggregation buffer by adding
+ * the bufferSchema-relative field number to `mutableAggBufferOffset` then using this new field
+ * number to access the buffer Row. This is necessary because this aggregation function's buffer
+ * is embedded inside of a larger shared aggregation buffer when an aggregation operator evaluates
  * multiple aggregate functions at the same time.
  *
- * We need to perform similar field number arithmetic when merging multiple intermediate
- * aggregate buffers together in `merge()` (in this case, use `inputAggBufferOffset` when accessing
- * the input buffer).
+ * We need to perform similar field number arithmetic when merging multiple intermediate aggregate
+ * buffers together in `merge()` (in this case, use `inputAggBufferOffset` when accessing the
+ * input buffer).
  *
- * Correct ImperativeAggregate evaluation depends on the correctness of `mutableAggBufferOffset` and
- * `inputAggBufferOffset`, but not on the correctness of the attribute ids in `aggBufferAttributes`
- * and `inputAggBufferAttributes`.
+ * Correct ImperativeAggregate evaluation depends on the correctness of `mutableAggBufferOffset`
+ * and `inputAggBufferOffset`, but not on the correctness of the attribute ids in
+ * `aggBufferAttributes` and `inputAggBufferAttributes`.
  */
 abstract class ImperativeAggregate extends AggregateFunction with CodegenFallback {
 
@@ -306,8 +303,8 @@ abstract class ImperativeAggregate extends AggregateFunction with CodegenFallbac
   protected val mutableAggBufferOffset: Int
 
   /**
-   * Returns a copy of this ImperativeAggregate with an updated mutableAggBufferOffset.
-   * This new copy's attributes may have different ids than the original.
+   * Returns a copy of this ImperativeAggregate with an updated mutableAggBufferOffset. This new
+   * copy's attributes may have different ids than the original.
    */
   def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate
 
@@ -320,10 +317,10 @@ abstract class ImperativeAggregate extends AggregateFunction with CodegenFallbac
    * An input aggregation buffer may contain extra fields, such as grouping keys, at its start, so
    * mutableAggBufferOffset and inputAggBufferOffset are often different.
    *
-   * For example, say we have a grouping expression, `key`, and two aggregate functions,
-   * `avg(x)` and `avg(y)`. In the shared input aggregation buffer, the position of the first
-   * buffer value of `avg(x)` will be 1 and the position of the first buffer value of `avg(y)`
-   * will be 3 (position 0 is used for the value of `key`):
+   * For example, say we have a grouping expression, `key`, and two aggregate functions, `avg(x)`
+   * and `avg(y)`. In the shared input aggregation buffer, the position of the first buffer value
+   * of `avg(x)` will be 1 and the position of the first buffer value of `avg(y)` will be 3
+   * (position 0 is used for the value of `key`):
    * {{{
    *          avg(x) inputAggBufferOffset = 1
    *                   |
@@ -339,8 +336,8 @@ abstract class ImperativeAggregate extends AggregateFunction with CodegenFallbac
   protected val inputAggBufferOffset: Int
 
   /**
-   * Returns a copy of this ImperativeAggregate with an updated mutableAggBufferOffset.
-   * This new copy's attributes may have different ids than the original.
+   * Returns a copy of this ImperativeAggregate with an updated mutableAggBufferOffset. This new
+   * copy's attributes may have different ids than the original.
    */
   def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate
 
@@ -369,8 +366,8 @@ abstract class ImperativeAggregate extends AggregateFunction with CodegenFallbac
    * Combines new intermediate results from the `inputAggBuffer` with the existing intermediate
    * results in the `mutableAggBuffer.`
    *
-   * Use `fieldNumber + mutableAggBufferOffset` to access fields of `mutableAggBuffer`.
-   * Use `fieldNumber + inputAggBufferOffset` to access fields of `inputAggBuffer`.
+   * Use `fieldNumber + mutableAggBufferOffset` to access fields of `mutableAggBuffer`. Use
+   * `fieldNumber + inputAggBufferOffset` to access fields of `inputAggBuffer`.
    *
    * Note that, the input row may be produced by unsafe projection and it may not be safe to cache
    * some fields of the input row, as the values can be changed unexpectedly.
@@ -386,14 +383,11 @@ abstract class ImperativeAggregate extends AggregateFunction with CodegenFallbac
  * can then use these attributes when defining `updateExpressions`, `mergeExpressions`, and
  * `evaluateExpressions`.
  *
- * Please note that children of an aggregate function can be unresolved (it will happen when
- * we create this function in DataFrame API). So, if there is any fields in
- * the implemented class that need to access fields of its children, please make
- * those fields `lazy val`s.
+ * Please note that children of an aggregate function can be unresolved (it will happen when we
+ * create this function in DataFrame API). So, if there is any fields in the implemented class
+ * that need to access fields of its children, please make those fields `lazy val`s.
  */
-abstract class DeclarativeAggregate
-  extends AggregateFunction
-  with Serializable {
+abstract class DeclarativeAggregate extends AggregateFunction with Serializable {
 
   /**
    * Expressions for initializing empty aggregation buffers.
@@ -408,8 +402,8 @@ abstract class DeclarativeAggregate
   /**
    * A sequence of expressions for merging two aggregation buffers together. When defining these
    * expressions, you can use the syntax `attributeName.left` and `attributeName.right` to refer
-   * to the attributes corresponding to each of the buffers being merged (this magic is enabled
-   * by the [[RichAttribute]] implicit class).
+   * to the attributes corresponding to each of the buffers being merged (this magic is enabled by
+   * the [[RichAttribute]] implicit class).
    */
   val mergeExpressions: Seq[Expression]
 
@@ -420,19 +414,20 @@ abstract class DeclarativeAggregate
   val evaluateExpression: Expression
 
   /** An expression-based aggregate's bufferSchema is derived from bufferAttributes. */
-  final override def aggBufferSchema: StructType = DataTypeUtils.fromAttributes(aggBufferAttributes)
+  final override def aggBufferSchema: StructType =
+    DataTypeUtils.fromAttributes(aggBufferAttributes)
 
   lazy val inputAggBufferAttributes: Seq[AttributeReference] =
     aggBufferAttributes.map(_.newInstance())
 
   /**
-   * A helper class for representing an attribute used in merging two
-   * aggregation buffers. When merging two buffers, `bufferLeft` and `bufferRight`,
-   * we merge buffer values and then update bufferLeft. A [[RichAttribute]]
-   * of an [[AttributeReference]] `a` has two functions `left` and `right`,
-   * which represent `a` in `bufferLeft` and `bufferRight`, respectively.
+   * A helper class for representing an attribute used in merging two aggregation buffers. When
+   * merging two buffers, `bufferLeft` and `bufferRight`, we merge buffer values and then update
+   * bufferLeft. A [[RichAttribute]] of an [[AttributeReference]] `a` has two functions `left` and
+   * `right`, which represent `a` in `bufferLeft` and `bufferRight`, respectively.
    */
   implicit class RichAttribute(a: AttributeReference) {
+
     /** Represents this attribute at the mutable buffer side. */
     def left: AttributeReference = a
 
@@ -446,7 +441,6 @@ abstract class DeclarativeAggregate
   final override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
     throw QueryExecutionErrors.cannotGenerateCodeForExpressionError(this)
 }
-
 
 /**
  * Aggregation function which allows **arbitrary** user-defined java object to be used as internal
@@ -472,52 +466,46 @@ abstract class DeclarativeAggregate
  *   2. In `initialize`, we call `createAggregationBuffer(): T` to get the initial buffer object,
  *      and set it to the global buffer row.
  *
- *
  * Stage 2: process input rows.
  *
- *   If the aggregate mode is `Partial` or `Complete`:
- *     1. The framework calls `update(buffer: MutableRow, input: InternalRow)` to process the input
- *        row.
- *     2. In `update`, we get the buffer object from the global buffer row and call
- *        `update(buffer: T, input: InternalRow): Unit`.
+ * If the aggregate mode is `Partial` or `Complete`:
+ *   1. The framework calls `update(buffer: MutableRow, input: InternalRow)` to process the input
+ *      row.
+ *   2. In `update`, we get the buffer object from the global buffer row and call
+ *      `update(buffer: T, input: InternalRow): Unit`.
  *
- *   If the aggregate mode is `PartialMerge` or `Final`:
- *     1. The framework call `merge(buffer: MutableRow, inputBuffer: InternalRow)` to process the
- *        input row, which are serialized buffer objects shuffled from other nodes.
- *     2. In `merge`, we get the buffer object from the global buffer row, and get the binary data
- *        from input row and deserialize it to buffer object, then we call
- *        `merge(buffer: T, input: T): Unit` to merge these 2 buffer objects.
- *
+ * If the aggregate mode is `PartialMerge` or `Final`:
+ *   1. The framework call `merge(buffer: MutableRow, inputBuffer: InternalRow)` to process the
+ *      input row, which are serialized buffer objects shuffled from other nodes.
+ *   2. In `merge`, we get the buffer object from the global buffer row, and get the binary data
+ *      from input row and deserialize it to buffer object, then we call
+ *      `merge(buffer: T, input: T): Unit` to merge these 2 buffer objects.
  *
  * Stage 3: output results.
  *
- *   If the aggregate mode is `Partial` or `PartialMerge`:
- *     1. The framework calls `serializeAggregateBufferInPlace` to replace the buffer object in the
- *        global buffer row with binary data.
- *     2. In `serializeAggregateBufferInPlace`, we get the buffer object from the global buffer row
- *        and call `serialize(buffer: T): Array[Byte]` to serialize the buffer object to binary.
- *     3. The framework outputs buffer attributes and shuffle them to other nodes.
+ * If the aggregate mode is `Partial` or `PartialMerge`:
+ *   1. The framework calls `serializeAggregateBufferInPlace` to replace the buffer object in the
+ *      global buffer row with binary data.
+ *   2. In `serializeAggregateBufferInPlace`, we get the buffer object from the global buffer row
+ *      and call `serialize(buffer: T): Array[Byte]` to serialize the buffer object to binary.
+ *   3. The framework outputs buffer attributes and shuffle them to other nodes.
  *
- *   If the aggregate mode is `Final` or `Complete`:
- *     1. The framework calls `eval(buffer: InternalRow)` to calculate the final result.
- *     2. In `eval`, we get the buffer object from the global buffer row and call
- *        `eval(buffer: T): Any` to get the final result.
- *     3. The framework outputs these final results.
+ * If the aggregate mode is `Final` or `Complete`:
+ *   1. The framework calls `eval(buffer: InternalRow)` to calculate the final result.
+ *   2. In `eval`, we get the buffer object from the global buffer row and call
+ *      `eval(buffer: T): Any` to get the final result.
+ *   3. The framework outputs these final results.
  *
+ * Window function work flow: The framework calls `update(buffer: MutableRow, input: InternalRow)`
+ * several times and then call `eval(buffer: InternalRow)`, so there is no need for window
+ * operator to call `serializeAggregateBufferInPlace`.
  *
- * Window function work flow:
- *   The framework calls `update(buffer: MutableRow, input: InternalRow)` several times and then
- *   call `eval(buffer: InternalRow)`, so there is no need for window operator to call
- *   `serializeAggregateBufferInPlace`.
- *
- *
- * NOTE: SQL with TypedImperativeAggregate functions is planned in sort based aggregation,
- * instead of hash based aggregation, as TypedImperativeAggregate use BinaryType as aggregation
- * buffer's storage format, which is not supported by hash based aggregation. Hash based
- * aggregation only support aggregation buffer of mutable types (like LongType, IntType that have
- * fixed length and can be mutated in place in UnsafeRow).
- * NOTE: The newly added ObjectHashAggregateExec supports TypedImperativeAggregate functions in
- * hash based aggregation under some constraints.
+ * NOTE: SQL with TypedImperativeAggregate functions is planned in sort based aggregation, instead
+ * of hash based aggregation, as TypedImperativeAggregate use BinaryType as aggregation buffer's
+ * storage format, which is not supported by hash based aggregation. Hash based aggregation only
+ * support aggregation buffer of mutable types (like LongType, IntType that have fixed length and
+ * can be mutated in place in UnsafeRow). NOTE: The newly added ObjectHashAggregateExec supports
+ * TypedImperativeAggregate functions in hash based aggregation under some constraints.
  */
 abstract class TypedImperativeAggregate[T] extends ImperativeAggregate {
 
@@ -525,7 +513,8 @@ abstract class TypedImperativeAggregate[T] extends ImperativeAggregate {
    * Creates an empty aggregation buffer object. This is called before processing each key group
    * (group by key).
    *
-   * @return an aggregation buffer object
+   * @return
+   *   an aggregation buffer object
    */
   def createAggregationBuffer(): T
 
@@ -536,8 +525,10 @@ abstract class TypedImperativeAggregate[T] extends ImperativeAggregate {
    *
    * This is typically called when doing Partial or Complete mode aggregation.
    *
-   * @param buffer The aggregation buffer object.
-   * @param input an input row
+   * @param buffer
+   *   The aggregation buffer object.
+   * @param input
+   *   an input row
    */
   def update(buffer: T, input: InternalRow): T
 
@@ -548,15 +539,17 @@ abstract class TypedImperativeAggregate[T] extends ImperativeAggregate {
    *
    * This is typically called when doing PartialMerge or Final mode aggregation.
    *
-   * @param buffer the aggregation buffer object used to store the aggregation result.
-   * @param input an input aggregation object. Input aggregation object can be produced by
-   *              de-serializing the partial aggregate's output from Mapper side.
+   * @param buffer
+   *   the aggregation buffer object used to store the aggregation result.
+   * @param input
+   *   an input aggregation object. Input aggregation object can be produced by de-serializing the
+   *   partial aggregate's output from Mapper side.
    */
   def merge(buffer: T, input: T): T
 
   /**
-   * Generates the final aggregation result value for current key group with the aggregation buffer
-   * object.
+   * Generates the final aggregation result value for current key group with the aggregation
+   * buffer object.
    *
    * Developer note: the only return types accepted by Spark are:
    *   - primitive types
@@ -564,8 +557,10 @@ abstract class TypedImperativeAggregate[T] extends ImperativeAggregate {
    *   - ArrayData
    *   - MapData
    *
-   * @param buffer aggregation buffer object.
-   * @return The aggregation result of current key group
+   * @param buffer
+   *   aggregation buffer object.
+   * @return
+   *   The aggregation result of current key group
    */
   def eval(buffer: T): Any
 
@@ -607,7 +602,8 @@ abstract class TypedImperativeAggregate[T] extends ImperativeAggregate {
   final override lazy val inputAggBufferAttributes: Seq[AttributeReference] =
     aggBufferAttributes.map(_.newInstance())
 
-  final override def aggBufferSchema: StructType = DataTypeUtils.fromAttributes(aggBufferAttributes)
+  final override def aggBufferSchema: StructType =
+    DataTypeUtils.fromAttributes(aggBufferAttributes)
 
   /**
    * In-place replaces the aggregation buffer object stored at buffer's index
@@ -622,11 +618,13 @@ abstract class TypedImperativeAggregate[T] extends ImperativeAggregate {
   }
 
   /**
-   * Merge an input buffer into the aggregation buffer, where both buffers contain the deserialized
-   * java object. This function is used by aggregating accumulators.
+   * Merge an input buffer into the aggregation buffer, where both buffers contain the
+   * deserialized java object. This function is used by aggregating accumulators.
    *
-   * @param buffer the aggregation buffer that is updated.
-   * @param inputBuffer the buffer that is merged into the aggregation buffer.
+   * @param buffer
+   *   the aggregation buffer that is updated.
+   * @param inputBuffer
+   *   the buffer that is merged into the aggregation buffer.
    */
   final def mergeBuffersObjects(buffer: InternalRow, inputBuffer: InternalRow): Unit = {
     val bufferObject = getBufferObject(buffer)
@@ -644,7 +642,7 @@ abstract class TypedImperativeAggregate[T] extends ImperativeAggregate {
  * aggregation buffer.
  */
 abstract class TypedAggregateWithHashMapAsBuffer
-  extends TypedImperativeAggregate[OpenHashMap[AnyRef, Long]] {
+    extends TypedImperativeAggregate[OpenHashMap[AnyRef, Long]] {
   override def createAggregationBuffer(): OpenHashMap[AnyRef, Long] = {
     // Initialize new counts map instance here.
     new OpenHashMap[AnyRef, Long]()
@@ -655,7 +653,7 @@ abstract class TypedAggregateWithHashMapAsBuffer
   private lazy val projection = UnsafeProjection.create(Array[DataType](child.dataType, LongType))
 
   override def serialize(obj: OpenHashMap[AnyRef, Long]): Array[Byte] = {
-    val buffer = new Array[Byte](4 << 10)  // 4K
+    val buffer = new Array[Byte](4 << 10) // 4K
     val bos = new ByteArrayOutputStream()
     val out = new DataOutputStream(bos)
     try {

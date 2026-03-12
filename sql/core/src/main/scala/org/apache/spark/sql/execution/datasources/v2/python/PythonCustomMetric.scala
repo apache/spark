@@ -21,10 +21,8 @@ import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.PythonSQLMetrics
 import org.apache.spark.util.MetricUtils
 
-
-class PythonCustomMetric(
-    override val name: String,
-    override val description: String) extends CustomMetric {
+class PythonCustomMetric(override val name: String, override val description: String)
+    extends CustomMetric {
   // To allow the aggregation can be called. See `SQLAppStatusListener.aggregateMetrics`
   def this() = this(null, null)
 
@@ -33,10 +31,8 @@ class PythonCustomMetric(
   }
 }
 
-class PythonCustomTaskMetric(
-    override val name: String,
-    override val value: Long) extends CustomTaskMetric
-
+class PythonCustomTaskMetric(override val name: String, override val value: Long)
+    extends CustomTaskMetric
 
 object PythonCustomMetric {
   val pythonMetrics: Map[String, SQLMetric] = {
@@ -45,10 +41,13 @@ object PythonCustomMetric {
     // is not used when it is reported. It is to reuse existing Python runner.
     // See also `UserDefinedPythonDataSource.createPythonMetrics`.
     PythonSQLMetrics.pythonSizeMetricsDesc.keys
-      .map(_ -> new SQLMetric("size", -1)).toMap ++
+      .map(_ -> new SQLMetric("size", -1))
+      .toMap ++
       PythonSQLMetrics.pythonTimingMetricsDesc.keys
-        .map(_ -> new SQLMetric("timing", -1)).toMap ++
+        .map(_ -> new SQLMetric("timing", -1))
+        .toMap ++
       PythonSQLMetrics.pythonOtherMetricsDesc.keys
-        .map(_ -> new SQLMetric("sum", -1)).toMap
+        .map(_ -> new SQLMetric("sum", -1))
+        .toMap
   }
 }

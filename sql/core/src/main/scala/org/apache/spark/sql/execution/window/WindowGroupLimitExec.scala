@@ -32,14 +32,20 @@ case object Partial extends WindowGroupLimitMode
 case object Final extends WindowGroupLimitMode
 
 /**
- * This operator is designed to filter out unnecessary rows before WindowExec
- * for top-k computation.
- * @param partitionSpec Should be the same as [[WindowExec#partitionSpec]].
- * @param orderSpec Should be the same as [[WindowExec#orderSpec]].
- * @param rankLikeFunction The function to compute row rank, should be RowNumber/Rank/DenseRank.
- * @param limit The limit for rank value.
- * @param mode The mode describes [[WindowGroupLimitExec]] before or after shuffle.
- * @param child The child spark plan.
+ * This operator is designed to filter out unnecessary rows before WindowExec for top-k
+ * computation.
+ * @param partitionSpec
+ *   Should be the same as [[WindowExec#partitionSpec]].
+ * @param orderSpec
+ *   Should be the same as [[WindowExec#orderSpec]].
+ * @param rankLikeFunction
+ *   The function to compute row rank, should be RowNumber/Rank/DenseRank.
+ * @param limit
+ *   The limit for rank value.
+ * @param mode
+ *   The mode describes [[WindowGroupLimitExec]] before or after shuffle.
+ * @param child
+ *   The child spark plan.
  */
 case class WindowGroupLimitExec(
     partitionSpec: Seq[Expression],
@@ -47,7 +53,8 @@ case class WindowGroupLimitExec(
     rankLikeFunction: Expression,
     limit: Int,
     mode: WindowGroupLimitMode,
-    child: SparkPlan) extends UnaryExecNode {
+    child: SparkPlan)
+    extends UnaryExecNode {
 
   override def output: Seq[Attribute] = child.output
 
@@ -122,10 +129,8 @@ abstract class BaseLimitIterator extends Iterator[InternalRow] {
   def reset(): Unit
 }
 
-case class SimpleLimitIterator(
-    input: Iterator[InternalRow],
-    limit: Int,
-    numOutputRows: SQLMetric) extends BaseLimitIterator {
+case class SimpleLimitIterator(input: Iterator[InternalRow], limit: Int, numOutputRows: SQLMetric)
+    extends BaseLimitIterator {
 
   override def increaseRank(): Unit = {
     rank += 1
@@ -149,7 +154,9 @@ case class RankLimitIterator(
     input: Iterator[InternalRow],
     orderSpec: Seq[SortOrder],
     limit: Int,
-    numOutputRows: SQLMetric) extends BaseLimitIterator with OrderSpecProvider {
+    numOutputRows: SQLMetric)
+    extends BaseLimitIterator
+    with OrderSpecProvider {
 
   var count = 0
 
@@ -177,7 +184,9 @@ case class DenseRankLimitIterator(
     input: Iterator[InternalRow],
     orderSpec: Seq[SortOrder],
     limit: Int,
-    numOutputRows: SQLMetric) extends BaseLimitIterator with OrderSpecProvider {
+    numOutputRows: SQLMetric)
+    extends BaseLimitIterator
+    with OrderSpecProvider {
 
   override def increaseRank(): Unit = {
     if (currentRankRow == null) {
@@ -201,7 +210,7 @@ class GroupedLimitIterator(
     output: Seq[Attribute],
     partitionSpec: Seq[Expression],
     createLimitIterator: Iterator[InternalRow] => BaseLimitIterator)
-  extends Iterator[InternalRow] {
+    extends Iterator[InternalRow] {
 
   val grouping = UnsafeProjection.create(partitionSpec, output)
 

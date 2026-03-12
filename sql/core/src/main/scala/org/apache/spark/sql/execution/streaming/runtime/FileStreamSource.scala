@@ -53,10 +53,10 @@ class FileStreamSource(
     partitionColumns: Seq[String],
     metadataPath: String,
     options: Map[String, String])
-  extends SupportsAdmissionControl
-  with SupportsTriggerAvailableNow
-  with Source
-  with Logging {
+    extends SupportsAdmissionControl
+    with SupportsTriggerAvailableNow
+    with Source
+    with Logging {
 
   import FileStreamSource._
 
@@ -67,11 +67,11 @@ class FileStreamSource(
   @transient private val fs = new Path(path).getFileSystem(hadoopConf)
 
   private val qualifiedBasePath: Path = {
-    fs.makeQualified(new Path(path))  // can contain glob patterns
+    fs.makeQualified(new Path(path)) // can contain glob patterns
   }
 
-  private val sourceCleaner: Option[FileStreamSourceCleaner] = FileStreamSourceCleaner(
-    fs, qualifiedBasePath, sourceOptions, hadoopConf)
+  private val sourceCleaner: Option[FileStreamSourceCleaner] =
+    FileStreamSourceCleaner(fs, qualifiedBasePath, sourceOptions, hadoopConf)
 
   private val optionsForInnerDataSource = sourceOptions.optionMapWithoutPath ++ {
     val pathOption =
@@ -94,20 +94,21 @@ class FileStreamSource(
   private val maxBytesPerBatch = sourceOptions.maxBytesPerTrigger
 
   private val fileSortOrder = if (sourceOptions.latestFirst) {
-      logWarning(
-        """'latestFirst' is true. New files will be processed first, which may affect the watermark
+    logWarning(
+      """'latestFirst' is true. New files will be processed first, which may affect the watermark
           |value. In addition, 'maxFileAge' will be ignored.""".stripMargin)
-      implicitly[Ordering[Long]].reverse
-    } else {
-      implicitly[Ordering[Long]]
-    }
-
-  private val maxFileAgeMs: Long = if (sourceOptions.latestFirst &&
-      (maxFilesPerBatch.isDefined || maxBytesPerBatch.isDefined)) {
-    Long.MaxValue
+    implicitly[Ordering[Long]].reverse
   } else {
-    sourceOptions.maxFileAgeMs
+    implicitly[Ordering[Long]]
   }
+
+  private val maxFileAgeMs: Long =
+    if (sourceOptions.latestFirst &&
+      (maxFilesPerBatch.isDefined || maxBytesPerBatch.isDefined)) {
+      Long.MaxValue
+    } else {
+      sourceOptions.maxFileAgeMs
+    }
 
   private val fileNameOnly = sourceOptions.fileNameOnly
   if (fileNameOnly) {
@@ -115,7 +116,6 @@ class FileStreamSource(
       "UUID), otherwise, files with the same name but under different paths will be considered " +
       "the same and causes data lost.")
   }
-
 
   private val maxCachedFiles = sourceOptions.maxCachedFiles
 
@@ -132,19 +132,21 @@ class FileStreamSource(
   }
   seenFiles.purge()
 
-  logInfo(log"maxFilesPerBatch = ${MDC(LogKeys.NUM_FILES, maxFilesPerBatch)}, " +
-    log"maxBytesPerBatch = ${MDC(LogKeys.NUM_BYTES, maxBytesPerBatch)}, " +
-    log"maxFileAgeMs = ${MDC(LogKeys.TIME_UNITS, maxFileAgeMs)}")
+  logInfo(
+    log"maxFilesPerBatch = ${MDC(LogKeys.NUM_FILES, maxFilesPerBatch)}, " +
+      log"maxBytesPerBatch = ${MDC(LogKeys.NUM_BYTES, maxBytesPerBatch)}, " +
+      log"maxFileAgeMs = ${MDC(LogKeys.TIME_UNITS, maxFileAgeMs)}")
 
   private var unreadFiles: Seq[NewFileEntry] = _
 
   /**
-   * Split files into a selected/unselected pair according to a total size threshold.
-   * Always puts the 1st element in a left split and keep adding it to a left split
-   * until reaches a specified threshold or [[Long.MaxValue]].
+   * Split files into a selected/unselected pair according to a total size threshold. Always puts
+   * the 1st element in a left split and keep adding it to a left split until reaches a specified
+   * threshold or [[Long.MaxValue]].
    */
-  private def takeFilesUntilMax(files: Seq[NewFileEntry], maxSize: Long)
-    : (FilesSplit, FilesSplit) = {
+  private def takeFilesUntilMax(
+      files: Seq[NewFileEntry],
+      maxSize: Long): (FilesSplit, FilesSplit) = {
     var lSize = BigInt(0)
     var rSize = BigInt(0)
     val lFiles = ArrayBuffer[NewFileEntry]()
@@ -180,8 +182,8 @@ class FileStreamSource(
       } else {
         fetchAllFiles()
       }
-      allFiles.filter {
-        case NewFileEntry(path, _, timestamp) => seenFiles.isNewFile(path, timestamp)
+      allFiles.filter { case NewFileEntry(path, _, timestamp) =>
+        seenFiles.isNewFile(path, timestamp)
       }
     }
 
@@ -236,8 +238,9 @@ class FileStreamSource(
       logTrace(s"${unreadFiles.size} unread files are available for further batches.")
     } else {
       unreadFiles = null
-      logTrace(s"No unread file is available for further batches or maxCachedFiles has been set " +
-        s" to 0 to disable caching.")
+      logTrace(
+        s"No unread file is available for further batches or maxCachedFiles has been set " +
+          s" to 0 to disable caching.")
     }
 
     batchFiles.foreach { case NewFileEntry(p, _, timestamp) =>
@@ -246,8 +249,7 @@ class FileStreamSource(
     }
     val numPurged = seenFiles.purge()
 
-    logTrace(
-      s"""
+    logTrace(s"""
          |Number of new files = ${newFiles.size}
          |Number of files selected for batch = ${batchFiles.size}
          |Number of unread files = ${Option(unreadFiles).map(_.size).getOrElse(0)}
@@ -262,11 +264,13 @@ class FileStreamSource(
         FileEntry(path = p.urlEncoded, timestamp = timestamp, batchId = metadataLogCurrentOffset)
       }.toArray
       if (metadataLog.add(metadataLogCurrentOffset, fileEntries)) {
-        logInfo(log"Log offset set to ${MDC(LogKeys.LOG_OFFSET, metadataLogCurrentOffset)} " +
-          log"with ${MDC(LogKeys.NUM_FILES, batchFiles.size)} new files")
+        logInfo(
+          log"Log offset set to ${MDC(LogKeys.LOG_OFFSET, metadataLogCurrentOffset)} " +
+            log"with ${MDC(LogKeys.NUM_FILES, batchFiles.size)} new files")
       } else {
-        throw new IllegalStateException("Concurrent update to the log. Multiple streaming jobs " +
-          s"detected for $metadataLogCurrentOffset")
+        throw new IllegalStateException(
+          "Concurrent update to the log. Multiple streaming jobs " +
+            s"detected for $metadataLogCurrentOffset")
       }
     }
 
@@ -278,14 +282,14 @@ class FileStreamSource(
   }
 
   override def getDefaultReadLimit: ReadLimit = {
-    maxFilesPerBatch.map(ReadLimit.maxFiles).getOrElse(
-      maxBytesPerBatch.map(ReadLimit.maxBytes).getOrElse(super.getDefaultReadLimit)
-    )
+    maxFilesPerBatch
+      .map(ReadLimit.maxFiles)
+      .getOrElse(maxBytesPerBatch.map(ReadLimit.maxBytes).getOrElse(super.getDefaultReadLimit))
   }
 
   /**
-   * For test only. Run `func` with the internal lock to make sure when `func` is running,
-   * the current offset won't be changed and no new batch will be emitted.
+   * For test only. Run `func` with the internal lock to make sure when `func` is running, the
+   * current offset won't be changed and no new batch will be emitted.
    */
   def withBatchingLocked[T](func: => T): T = synchronized {
     func
@@ -303,9 +307,10 @@ class FileStreamSource(
 
     assert(startOffset <= endOffset)
     val files = metadataLog.get(Some(startOffset + 1), Some(endOffset)).flatMap(_._2)
-    logInfo(log"Processing ${MDC(LogKeys.NUM_FILES, files.length)} files from " +
-      log"${MDC(LogKeys.FILE_START_OFFSET, startOffset + 1)}:" +
-      log"${MDC(LogKeys.FILE_END_OFFSET, endOffset)}")
+    logInfo(
+      log"Processing ${MDC(LogKeys.NUM_FILES, files.length)} files from " +
+        log"${MDC(LogKeys.FILE_START_OFFSET, startOffset + 1)}:" +
+        log"${MDC(LogKeys.FILE_END_OFFSET, endOffset)}")
     logTrace(s"Files are:\n\t" + files.mkString("\n\t"))
     val newDataSource =
       DataSource(
@@ -315,33 +320,36 @@ class FileStreamSource(
         partitionColumns = partitionColumns,
         className = fileFormatClassName,
         options = optionsForInnerDataSource)
-    Dataset.ofRows(sparkSession, LogicalRelation(newDataSource.resolveRelation(
-      checkFilesExist = false, readOnly = true), isStreaming = true))
+    Dataset.ofRows(
+      sparkSession,
+      LogicalRelation(
+        newDataSource.resolveRelation(checkFilesExist = false, readOnly = true),
+        isStreaming = true))
   }
 
   /**
-   * If the source has a metadata log indicating which files should be read, then we should use it.
-   * Only when user gives a non-glob path that will we figure out whether the source has some
+   * If the source has a metadata log indicating which files should be read, then we should use
+   * it. Only when user gives a non-glob path that will we figure out whether the source has some
    * metadata log
    *
-   * None        means we don't know at the moment
-   * Some(true)  means we know for sure the source DOES have metadata
-   * Some(false) means we know for sure the source DOSE NOT have metadata
+   * None means we don't know at the moment Some(true) means we know for sure the source DOES have
+   * metadata Some(false) means we know for sure the source DOSE NOT have metadata
    */
   @volatile private[sql] var sourceHasMetadata: Option[Boolean] =
     if (SparkHadoopUtil.get.isGlobPath(new Path(path))) Some(false) else None
 
   private def allFilesUsingInMemoryFileIndex() = {
     val globbedPaths = SparkHadoopUtil.get.globPathIfNecessary(fs, qualifiedBasePath)
-    val fileIndex = new InMemoryFileIndex(sparkSession, globbedPaths, options, Some(new StructType))
+    val fileIndex =
+      new InMemoryFileIndex(sparkSession, globbedPaths, options, Some(new StructType))
     fileIndex.allFiles()
   }
 
   private def allFilesUsingMetadataLogFileIndex() = {
     // Note if `sourceHasMetadata` holds, then `qualifiedBasePath` is guaranteed to be a
     // non-glob path
-    new MetadataLogFileIndex(sparkSession, qualifiedBasePath,
-      CaseInsensitiveMap(options), None).allFiles()
+    new MetadataLogFileIndex(sparkSession, qualifiedBasePath, CaseInsensitiveMap(options), None)
+      .allFiles()
   }
 
   private def setSourceHasMetadata(newValue: Option[Boolean]): Unit = newValue match {
@@ -375,7 +383,10 @@ class FileStreamSource(
             // double check whether source has metadata, preventing the extreme corner case that
             // metadata log and data files are only generated after the previous
             // `FileStreamSink.hasMetadata` check
-            if (FileStreamSink.hasMetadata(Seq(path), hadoopConf, sparkSession.sessionState.conf)) {
+            if (FileStreamSink.hasMetadata(
+                Seq(path),
+                hadoopConf,
+                sparkSession.sessionState.conf)) {
               setSourceHasMetadata(Some(true))
               allFiles = allFilesUsingMetadataLogFileIndex()
             } else {
@@ -395,8 +406,9 @@ class FileStreamSource(
     val listingTimeMs = NANOSECONDS.toMillis(endTime - startTime)
     if (listingTimeMs > 2000) {
       // Output a warning when listing files uses more than 2 seconds.
-      logWarning(log"Listed ${MDC(LogKeys.NUM_FILES, files.size)} file(s) in " +
-        log"${MDC(LogKeys.ELAPSED_TIME, listingTimeMs)} ms")
+      logWarning(
+        log"Listed ${MDC(LogKeys.NUM_FILES, files.size)} file(s) in " +
+          log"${MDC(LogKeys.ELAPSED_TIME, listingTimeMs)} ms")
     } else {
       logTrace(s"Listed ${files.size} file(s) in $listingTimeMs ms")
     }
@@ -432,15 +444,16 @@ class FileStreamSource(
   override def stop(): Unit = sourceCleaner.foreach(_.stop())
 }
 
-
 object FileStreamSource {
+
   /** Timestamp for file modification time, in ms since January 1, 1970 UTC. */
   type Timestamp = Long
 
   case class FileEntry(
       path: String, // uri-encoded path string
       timestamp: Timestamp,
-      batchId: Long) extends Serializable {
+      batchId: Long)
+      extends Serializable {
     def sparkPath: SparkPath = SparkPath.fromUrlString(path)
   }
 
@@ -452,8 +465,8 @@ object FileStreamSource {
   /**
    * A custom hash map used to track the list of files seen. This map is not thread-safe.
    *
-   * To prevent the hash map from growing indefinitely, a purge function is available to
-   * remove files "maxAgeMs" older than the latest file.
+   * To prevent the hash map from growing indefinitely, a purge function is available to remove
+   * files "maxAgeMs" older than the latest file.
    */
   class SeenFilesMap(maxAgeMs: Long, fileNameOnly: Boolean) {
     require(maxAgeMs >= 0)
@@ -562,18 +575,24 @@ object FileStreamSource {
       fileSystem: FileSystem,
       sourcePath: Path,
       baseArchiveFileSystem: FileSystem,
-      baseArchivePath: Path) extends FileStreamSourceCleaner with Logging {
+      baseArchivePath: Path)
+      extends FileStreamSourceCleaner
+      with Logging {
     assertParameters()
 
     private def assertParameters(): Unit = {
-      require(fileSystem.getUri == baseArchiveFileSystem.getUri, "Base archive path is located " +
-        s"on a different file system than the source files. source path: $sourcePath" +
-        s" / base archive path: $baseArchivePath")
+      require(
+        fileSystem.getUri == baseArchiveFileSystem.getUri,
+        "Base archive path is located " +
+          s"on a different file system than the source files. source path: $sourcePath" +
+          s" / base archive path: $baseArchivePath")
 
-      require(!isBaseArchivePathMatchedAgainstSourcePattern, "Base archive path cannot be set to" +
-        " the path where archived path can possibly match with source pattern. Ensure the base " +
-        "archive path doesn't match with source pattern in depth, where the depth is minimum of" +
-        " depth on both paths.")
+      require(
+        !isBaseArchivePathMatchedAgainstSourcePattern,
+        "Base archive path cannot be set to" +
+          " the path where archived path can possibly match with source pattern. Ensure the base " +
+          "archive path doesn't match with source pattern in depth, where the depth is minimum of" +
+          " depth on both paths.")
     }
 
     private def getAncestorEnsuringDepth(path: Path, depth: Int): Path = {
@@ -641,19 +660,23 @@ object FileStreamSource {
 
         logDebug(s"Archiving completed file $curPath to $newPath")
         if (!fileSystem.rename(curPath, newPath)) {
-          logWarning(log"Fail to move ${MDC(LogKeys.CURRENT_PATH, curPath)} to " +
-            log"${MDC(LogKeys.NEW_PATH, newPath)} / skip moving file.")
+          logWarning(
+            log"Fail to move ${MDC(LogKeys.CURRENT_PATH, curPath)} to " +
+              log"${MDC(LogKeys.NEW_PATH, newPath)} / skip moving file.")
         }
       } catch {
         case NonFatal(e) =>
-          logWarning(log"Fail to move ${MDC(LogKeys.CURRENT_PATH, curPath)} to " +
-            log"${MDC(LogKeys.NEW_PATH, newPath)} / skip moving file.", e)
+          logWarning(
+            log"Fail to move ${MDC(LogKeys.CURRENT_PATH, curPath)} to " +
+              log"${MDC(LogKeys.NEW_PATH, newPath)} / skip moving file.",
+            e)
       }
     }
   }
 
   private[sql] class SourceFileRemover(fileSystem: FileSystem)
-    extends FileStreamSourceCleaner with Logging {
+      extends FileStreamSourceCleaner
+      with Logging {
 
     override protected def cleanTask(entry: FileEntry): Unit = {
       val curPath = entry.sparkPath.toPath
@@ -668,7 +691,8 @@ object FileStreamSource {
         case NonFatal(e) =>
           // Log to error but swallow exception to avoid process being stopped
           logWarning(
-            log"Fail to remove ${MDC(LogKeys.CURRENT_PATH, curPath)} / skip removing file.", e)
+            log"Fail to remove ${MDC(LogKeys.CURRENT_PATH, curPath)} / skip removing file.",
+            e)
       }
     }
   }

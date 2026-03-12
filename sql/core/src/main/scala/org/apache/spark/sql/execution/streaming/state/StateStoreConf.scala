@@ -26,7 +26,7 @@ class StateStoreConf(
     // the transient annotation)
     @transient private val sqlConf: SQLConf,
     val extraOptions: Map[String, String] = Map.empty)
-  extends Serializable {
+    extends Serializable {
 
   def this() = this(new SQLConf)
 
@@ -46,11 +46,12 @@ class StateStoreConf(
   val stateStoreMaintenanceForceShutdownTimeout: Long =
     sqlConf.stateStoreMaintenanceForceShutdownTimeout
 
-  val stateStoreMaintenanceProcessingTimeout: Long = sqlConf.stateStoreMaintenanceProcessingTimeout
+  val stateStoreMaintenanceProcessingTimeout: Long =
+    sqlConf.stateStoreMaintenanceProcessingTimeout
 
   /**
-   * Minimum number of delta files in a chain after which HDFSBackedStateStore will
-   * consider generating a snapshot.
+   * Minimum number of delta files in a chain after which HDFSBackedStateStore will consider
+   * generating a snapshot.
    */
   val minDeltasForSnapshot: Int = sqlConf.stateStoreMinDeltasForSnapshot
 
@@ -61,7 +62,9 @@ class StateStoreConf(
   val autoSnapshotRepairNumFailuresBeforeActivating: Int =
     sqlConf.stateStoreAutoSnapshotRepairNumFailuresBeforeActivating
 
-  /** Maximum number of change files allowed to be replayed when auto snapshot repair is enabled */
+  /**
+   * Maximum number of change files allowed to be replayed when auto snapshot repair is enabled
+   */
   val autoSnapshotRepairMaxChangeFileReplay: Int =
     sqlConf.stateStoreAutoSnapshotRepairMaxChangeFileReplay
 
@@ -69,9 +72,9 @@ class StateStoreConf(
   val minVersionsToRetain: Int = sqlConf.minBatchesToRetain
 
   /**
-   * Minimum number of stale checkpoint versions that need to be present in the DFS
-   * checkpoint directory for old state checkpoint version deletion to be invoked.
-   * This is to amortize the cost of discovering and deleting old checkpoint versions.
+   * Minimum number of stale checkpoint versions that need to be present in the DFS checkpoint
+   * directory for old state checkpoint version deletion to be invoked. This is to amortize the
+   * cost of discovering and deleting old checkpoint versions.
    */
   val minVersionsToDelete: Long =
     Math.round(sqlConf.ratioExtraSpaceAllowedInCheckpoint * sqlConf.minBatchesToRetain)
@@ -83,8 +86,8 @@ class StateStoreConf(
   val maxVersionsToDeletePerMaintenance: Int = sqlConf.maxVersionsToDeletePerMaintenance
 
   /**
-   * Optional fully qualified name of the subclass of [[StateStoreProvider]]
-   * managing state data. That is, the implementation of the State Store to use.
+   * Optional fully qualified name of the subclass of [[StateStoreProvider]] managing state data.
+   * That is, the implementation of the State Store to use.
    */
   val providerClass: String = sqlConf.stateStoreProviderClass
 
@@ -92,17 +95,16 @@ class StateStoreConf(
   val formatValidationEnabled: Boolean = sqlConf.stateStoreFormatValidationEnabled
 
   /**
-   * Whether to validate StateStore commits for ForeachBatch sinks to ensure all partitions
-   * are processed. This helps detect incomplete processing due to operations like show()
-   * or limit().
+   * Whether to validate StateStore commits for ForeachBatch sinks to ensure all partitions are
+   * processed. This helps detect incomplete processing due to operations like show() or limit().
    */
   val commitValidationEnabled = sqlConf.stateStoreCommitValidationEnabled
 
   /**
    * Whether to validate the value side. This config is applied to both validators as below:
    *
-   * - whether to validate the value format when the format validation is enabled.
-   * - whether to validate the value schema when the state schema check is enabled.
+   *   - whether to validate the value format when the format validation is enabled.
+   *   - whether to validate the value schema when the state schema check is enabled.
    */
   val formatValidationCheckValue: Boolean =
     extraOptions.getOrElse(StateStoreConf.FORMAT_VALIDATION_CHECK_VALUE_CONFIG, "true") == "true"
@@ -134,16 +136,17 @@ class StateStoreConf(
   /**
    * Whether to skip checksum creation if file missing checksum.
    *
-   * Consider the case using STATE_STORE_CHECKPOINT_FORMAT_VERSION = 1 when a batch fails but state
-   * files are written. If on the next run, we try to upload both a new state file and a file
-   * checksum, the file could fail to be uploaded but the file checksum is uploaded successfully.
-   * This would lead to a situation where the old file could be loaded and compared with the new
-   * file checksum, which would fail the checksum verification. This issue does not happen when
-   * STATE_STORE_CHECKPOINT_FORMAT_VERSION = 2 since each batch run unique ids will be created.
+   * Consider the case using STATE_STORE_CHECKPOINT_FORMAT_VERSION = 1 when a batch fails but
+   * state files are written. If on the next run, we try to upload both a new state file and a
+   * file checksum, the file could fail to be uploaded but the file checksum is uploaded
+   * successfully. This would lead to a situation where the old file could be loaded and compared
+   * with the new file checksum, which would fail the checksum verification. This issue does not
+   * happen when STATE_STORE_CHECKPOINT_FORMAT_VERSION = 2 since each batch run unique ids will be
+   * created.
    */
   val checkpointFileChecksumSkipCreationIfFileMissingChecksum: Boolean =
     sqlConf.checkpointFileChecksumSkipCreationIfFileMissingChecksum &&
-    !enableStateStoreCheckpointIds
+      !enableStateStoreCheckpointIds
 
   /**
    * Whether the coordinator is reporting state stores trailing behind in snapshot uploads.
@@ -164,8 +167,8 @@ class StateStoreConf(
   val stateStoreCheckpointFormatVersion: Int = sqlConf.stateStoreCheckpointFormatVersion
 
   /**
-   * Additional configurations related to state store. This will capture all configs in
-   * SQLConf that start with `spark.sql.streaming.stateStore.`
+   * Additional configurations related to state store. This will capture all configs in SQLConf
+   * that start with `spark.sql.streaming.stateStore.`
    */
   val sqlConfs: Map[String, String] =
     sqlConf.getAllConfs.filter(_._1.startsWith("spark.sql.streaming.stateStore."))

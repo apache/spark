@@ -30,11 +30,11 @@ import org.apache.spark.memory.{MemoryMode, UnifiedMemoryManager, UnmanagedMemor
 
 /**
  * Singleton responsible for managing cache and write buffer manager associated with all RocksDB
- * state store instances running on a single executor if boundedMemoryUsage is enabled for RocksDB.
- * If boundedMemoryUsage is disabled, a new cache object is returned.
- * This also implements UnmanagedMemoryConsumer to report RocksDB memory usage to Spark's
- * UnifiedMemoryManager, allowing Spark to account for RocksDB memory when making
- * memory allocation decisions.
+ * state store instances running on a single executor if boundedMemoryUsage is enabled for
+ * RocksDB. If boundedMemoryUsage is disabled, a new cache object is returned. This also
+ * implements UnmanagedMemoryConsumer to report RocksDB memory usage to Spark's
+ * UnifiedMemoryManager, allowing Spark to account for RocksDB memory when making memory
+ * allocation decisions.
  */
 object RocksDBMemoryManager extends Logging with UnmanagedMemoryConsumer {
   private var writeBufferManager: WriteBufferManager = null
@@ -75,22 +75,24 @@ object RocksDBMemoryManager extends Logging with UnmanagedMemoryConsumer {
 
   /**
    * Register/update a RocksDB instance with its memory usage.
-   * @param uniqueId The instance's unique identifier
-   * @param memoryUsage The current memory usage in bytes
-   * @param isBoundedMemory Whether this instance uses bounded memory mode
+   * @param uniqueId
+   *   The instance's unique identifier
+   * @param memoryUsage
+   *   The current memory usage in bytes
+   * @param isBoundedMemory
+   *   Whether this instance uses bounded memory mode
    */
-  def updateMemoryUsage(
-      uniqueId: String,
-      memoryUsage: Long,
-      isBoundedMemory: Boolean): Unit = {
+  def updateMemoryUsage(uniqueId: String, memoryUsage: Long, isBoundedMemory: Boolean): Unit = {
     instanceMemoryMap.put(uniqueId, InstanceMemoryInfo(memoryUsage, isBoundedMemory))
-    logDebug(s"Updated memory usage for $uniqueId: $memoryUsage bytes " +
-      s"(bounded=$isBoundedMemory)")
+    logDebug(
+      s"Updated memory usage for $uniqueId: $memoryUsage bytes " +
+        s"(bounded=$isBoundedMemory)")
   }
 
   /**
    * Unregister a RocksDB instance.
-   * @param uniqueId The instance's unique identifier
+   * @param uniqueId
+   *   The instance's unique identifier
    */
   def unregisterInstance(uniqueId: String): Unit = {
     instanceMemoryMap.remove(uniqueId)
@@ -103,13 +105,16 @@ object RocksDBMemoryManager extends Logging with UnmanagedMemoryConsumer {
 
   /**
    * Get the memory usage for a specific instance, accounting for bounded memory sharing.
-   * @param uniqueId The instance's unique identifier
-   * @param totalMemoryUsage The total memory usage of this instance
-   * @return The adjusted memory usage accounting for sharing in bounded memory mode
+   * @param uniqueId
+   *   The instance's unique identifier
+   * @param totalMemoryUsage
+   *   The total memory usage of this instance
+   * @return
+   *   The adjusted memory usage accounting for sharing in bounded memory mode
    */
   def getInstanceMemoryUsage(uniqueId: String, totalMemoryUsage: Long): Long = {
-    val instanceInfo = instanceMemoryMap.
-      getOrDefault(uniqueId, InstanceMemoryInfo(0L, isBoundedMemory = false))
+    val instanceInfo =
+      instanceMemoryMap.getOrDefault(uniqueId, InstanceMemoryInfo(0L, isBoundedMemory = false))
     if (instanceInfo.isBoundedMemory) {
       // In bounded memory mode, divide by the number of bounded instances
       // since they share the same memory pool
@@ -124,19 +129,20 @@ object RocksDBMemoryManager extends Logging with UnmanagedMemoryConsumer {
   /**
    * Get the pinned blocks memory usage for a specific instance, accounting for bounded memory
    * sharing.
-   * @param uniqueId The instance's unique identifier
-   * @param totalPinnedUsage The total pinned usage from the cache
-   * @return The adjusted pinned blocks memory usage accounting for sharing in bounded memory mode
+   * @param uniqueId
+   *   The instance's unique identifier
+   * @param totalPinnedUsage
+   *   The total pinned usage from the cache
+   * @return
+   *   The adjusted pinned blocks memory usage accounting for sharing in bounded memory mode
    */
-  def getInstancePinnedBlocksMemUsage(
-      uniqueId: String,
-      totalPinnedUsage: Long): Long = {
-    val instanceInfo = instanceMemoryMap.
-      getOrDefault(uniqueId, InstanceMemoryInfo(0L, isBoundedMemory = false))
+  def getInstancePinnedBlocksMemUsage(uniqueId: String, totalPinnedUsage: Long): Long = {
+    val instanceInfo =
+      instanceMemoryMap.getOrDefault(uniqueId, InstanceMemoryInfo(0L, isBoundedMemory = false))
     if (instanceInfo.isBoundedMemory) {
       // In bounded memory mode, divide by the number of bounded instances
       // since they share the same cache
-      val numBoundedInstances = getNumRocksDBInstances(true /* boundedMemory */)
+      val numBoundedInstances = getNumRocksDBInstances(true /* boundedMemory */ )
       totalPinnedUsage / numBoundedInstances
     } else {
       // In unbounded memory mode, each instance has its own cache
@@ -144,47 +150,50 @@ object RocksDBMemoryManager extends Logging with UnmanagedMemoryConsumer {
     }
   }
 
-  def getOrCreateRocksDBMemoryManagerAndCache(conf: RocksDBConf): (WriteBufferManager, Cache)
-    = synchronized {
-    // Register with UnifiedMemoryManager (idempotent operation)
-    if (SparkEnv.get != null) {
-      UnifiedMemoryManager.registerUnmanagedMemoryConsumer(this)
-    }
-
-    if (conf.boundedMemoryUsage) {
-      if (writeBufferManager == null) {
-        assert(cache == null)
-
-        // Check that the provided ratios don't exceed the limit
-        if (conf.writeBufferCacheRatio + conf.highPriorityPoolRatio >= 1.0) {
-          throw new IllegalArgumentException("Sum of writeBufferCacheRatio and " +
-            "highPriorityPoolRatio should be less than 1.0")
-        }
-
-        if (conf.totalMemoryUsageMB <= 0) {
-          throw new IllegalArgumentException("Total memory usage must be a positive integer")
-        }
-
-        val totalMemoryUsageInBytes: Long = conf.totalMemoryUsageMB * 1024 * 1024
-        logInfo(log"Creating RocksDB state store LRU cache with " +
-          log"total_size=${MDC(NUM_BYTES, totalMemoryUsageInBytes)}")
-
-        // SPARK-44878 - avoid using strict limit to prevent insertion exception on cache full.
-        // Please refer to RocksDB issue here - https://github.com/facebook/rocksdb/issues/8670
-        cache = new LRUCache(totalMemoryUsageInBytes,
-          -1,
-          /* strictCapacityLimit = */false,
-          conf.highPriorityPoolRatio)
-
-        writeBufferManager = new WriteBufferManager(
-          (totalMemoryUsageInBytes * conf.writeBufferCacheRatio).toLong,
-          cache)
+  def getOrCreateRocksDBMemoryManagerAndCache(conf: RocksDBConf): (WriteBufferManager, Cache) =
+    synchronized {
+      // Register with UnifiedMemoryManager (idempotent operation)
+      if (SparkEnv.get != null) {
+        UnifiedMemoryManager.registerUnmanagedMemoryConsumer(this)
       }
-      (writeBufferManager, cache)
-    } else {
-      (null, new LRUCache(conf.blockCacheSizeMB * 1024 * 1024))
+
+      if (conf.boundedMemoryUsage) {
+        if (writeBufferManager == null) {
+          assert(cache == null)
+
+          // Check that the provided ratios don't exceed the limit
+          if (conf.writeBufferCacheRatio + conf.highPriorityPoolRatio >= 1.0) {
+            throw new IllegalArgumentException(
+              "Sum of writeBufferCacheRatio and " +
+                "highPriorityPoolRatio should be less than 1.0")
+          }
+
+          if (conf.totalMemoryUsageMB <= 0) {
+            throw new IllegalArgumentException("Total memory usage must be a positive integer")
+          }
+
+          val totalMemoryUsageInBytes: Long = conf.totalMemoryUsageMB * 1024 * 1024
+          logInfo(
+            log"Creating RocksDB state store LRU cache with " +
+              log"total_size=${MDC(NUM_BYTES, totalMemoryUsageInBytes)}")
+
+          // SPARK-44878 - avoid using strict limit to prevent insertion exception on cache full.
+          // Please refer to RocksDB issue here - https://github.com/facebook/rocksdb/issues/8670
+          cache = new LRUCache(
+            totalMemoryUsageInBytes,
+            -1,
+            /* strictCapacityLimit = */ false,
+            conf.highPriorityPoolRatio)
+
+          writeBufferManager = new WriteBufferManager(
+            (totalMemoryUsageInBytes * conf.writeBufferCacheRatio).toLong,
+            cache)
+        }
+        (writeBufferManager, cache)
+      } else {
+        (null, new LRUCache(conf.blockCacheSizeMB * 1024 * 1024))
+      }
     }
-  }
 
   /** Used only for unit testing */
   def resetWriteBufferManagerAndCache: Unit = synchronized {

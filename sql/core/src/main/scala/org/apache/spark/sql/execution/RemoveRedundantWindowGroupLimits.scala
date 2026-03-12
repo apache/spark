@@ -22,14 +22,20 @@ import org.apache.spark.sql.execution.window.{Final, Partial, WindowGroupLimitEx
 
 /**
  * Remove redundant partial WindowGroupLimitExec node from the spark plan. A partial
- * WindowGroupLimitExec node is redundant when its child satisfies its required child distribution.
+ * WindowGroupLimitExec node is redundant when its child satisfies its required child
+ * distribution.
  */
 object RemoveRedundantWindowGroupLimits extends Rule[SparkPlan] {
 
   def apply(plan: SparkPlan): SparkPlan = plan transform {
     case outer @ WindowGroupLimitExec(
-    _, _, _, _, Final, WindowGroupLimitExec(_, _, _, _, Partial, child))
-      if child.outputPartitioning.satisfies(outer.requiredChildDistribution.head) =>
+          _,
+          _,
+          _,
+          _,
+          Final,
+          WindowGroupLimitExec(_, _, _, _, Partial, child))
+        if child.outputPartitioning.satisfies(outer.requiredChildDistribution.head) =>
       val newOuter = outer.withNewChildren(Seq(child))
       newOuter
   }

@@ -26,19 +26,16 @@ import org.apache.hadoop.io.WritableUtils
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.{rebaseGregorianToJulianDays, rebaseJulianToGregorianDays}
 
 /**
- * The class accepts/returns days in Gregorian calendar and rebase them
- * via conversion to local date in Julian calendar for dates before 1582-10-15
- * in read/write for backward compatibility with Spark 2.4 and earlier versions.
+ * The class accepts/returns days in Gregorian calendar and rebase them via conversion to local
+ * date in Julian calendar for dates before 1582-10-15 in read/write for backward compatibility
+ * with Spark 2.4 and earlier versions.
  *
- * @param gregorianDays The number of days since the epoch 1970-01-01 in
- *                      Gregorian calendar.
- * @param julianDays The number of days since the epoch 1970-01-01 in
- *                   Julian calendar.
+ * @param gregorianDays
+ *   The number of days since the epoch 1970-01-01 in Gregorian calendar.
+ * @param julianDays
+ *   The number of days since the epoch 1970-01-01 in Julian calendar.
  */
-class DaysWritable(
-    var gregorianDays: Int,
-    var julianDays: Int)
-  extends DateWritable {
+class DaysWritable(var gregorianDays: Int, var julianDays: Int) extends DateWritable {
 
   def this() = this(0, 0)
   def this(gregorianDays: Int) =
@@ -48,7 +45,7 @@ class DaysWritable(
       gregorianDays = dateWritable match {
         case daysWritable: DaysWritable => daysWritable.gregorianDays
         case dateWritable: DateWritable =>
-        rebaseJulianToGregorianDays(dateWritable.getDays)
+          rebaseJulianToGregorianDays(dateWritable.getDays)
       },
       julianDays = dateWritable.getDays)
   }

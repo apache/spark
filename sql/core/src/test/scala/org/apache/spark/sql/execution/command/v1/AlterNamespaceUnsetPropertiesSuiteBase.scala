@@ -21,25 +21,27 @@ import org.apache.spark.sql.execution.command
 
 /**
  * This base suite contains unified tests for the `ALTER NAMESPACE ... UNSET PROPERTIES` command
- * that checks V1 table catalogs. The tests that cannot run for all V1 catalogs are located in more
- * specific test suites:
+ * that checks V1 table catalogs. The tests that cannot run for all V1 catalogs are located in
+ * more specific test suites:
  *
  *   - V1 In-Memory catalog:
  *     `org.apache.spark.sql.execution.command.v1.AlterNamespaceUnsetPropertiesSuite`
  *   - V1 Hive External catalog:
  *     `org.apache.spark.sql.hive.execution.command.AlterNamespaceUnsetPropertiesSuite`
  */
-trait AlterNamespaceUnsetPropertiesSuiteBase extends command.AlterNamespaceUnsetPropertiesSuiteBase
+trait AlterNamespaceUnsetPropertiesSuiteBase
+    extends command.AlterNamespaceUnsetPropertiesSuiteBase
     with command.TestsV1AndV2Commands {
   override def namespace: String = "db"
 }
 
 /**
- * The class contains tests for the `ALTER NAMESPACE ... UNSET PROPERTIES` command to
- * check V1 In-Memory table catalog.
+ * The class contains tests for the `ALTER NAMESPACE ... UNSET PROPERTIES` command to check V1
+ * In-Memory table catalog.
  */
-class AlterNamespaceUnsetPropertiesSuite extends AlterNamespaceUnsetPropertiesSuiteBase
-  with CommandSuiteBase {
+class AlterNamespaceUnsetPropertiesSuite
+    extends AlterNamespaceUnsetPropertiesSuiteBase
+    with CommandSuiteBase {
   override def commandVersion: String =
     super[AlterNamespaceUnsetPropertiesSuiteBase].commandVersion
 }

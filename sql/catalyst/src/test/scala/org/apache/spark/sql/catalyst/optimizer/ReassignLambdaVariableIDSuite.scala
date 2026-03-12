@@ -59,7 +59,7 @@ class ReassignLambdaVariableIDSuite extends PlanTest {
     checkError(
       exception = intercept[SparkException](Optimize.execute(query)),
       condition = "INTERNAL_ERROR",
-      parameters = Map(
-        "message" -> "LambdaVariable IDs in a query should be all positive or negative."))
+      parameters =
+        Map("message" -> "LambdaVariable IDs in a query should be all positive or negative."))
   }
 }

@@ -372,8 +372,7 @@ class BloomFilterAggregateQuerySuite extends QueryTest with SharedSparkSession {
     val table = "bloom_filter_test"
     withTempView(table) {
       Seq(0).toDF("col").createOrReplaceTempView(table)
-      val df = sql(
-        s"""
+      val df = sql(s"""
           |SELECT
           |  (SELECT
           |    first(might_contain(

@@ -115,8 +115,8 @@ case class KllSketchToStringDouble(child: Expression) extends KllSketchToStringB
 /** This is a base class for the above expressions to reduce boilerplate. */
 abstract class KllSketchToStringBase
     extends UnaryExpression
-        with CodegenFallback
-        with ImplicitCastInputTypes {
+    with CodegenFallback
+    with ImplicitCastInputTypes {
   override def dataType: DataType = StringType
   override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType)
   override def nullIntolerant: Boolean = true
@@ -209,8 +209,8 @@ case class KllSketchGetNDouble(child: Expression) extends KllSketchGetNBase {
 /** This is a base class for the above expressions to reduce boilerplate. */
 abstract class KllSketchGetNBase
     extends UnaryExpression
-        with CodegenFallback
-        with ImplicitCastInputTypes {
+    with CodegenFallback
+    with ImplicitCastInputTypes {
   override def dataType: DataType = LongType
   override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType)
   override def nullIntolerant: Boolean = true
@@ -312,8 +312,8 @@ case class KllSketchMergeDouble(left: Expression, right: Expression) extends Kll
 /** This is a base class for the above expressions to reduce boilerplate. */
 abstract class KllSketchMergeBase
     extends BinaryExpression
-        with CodegenFallback
-        with ImplicitCastInputTypes {
+    with CodegenFallback
+    with ImplicitCastInputTypes {
   override def dataType: DataType = BinaryType
   override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType, BinaryType)
   override def nullIntolerant: Boolean = true
@@ -417,38 +417,48 @@ case class KllSketchGetQuantileDouble(left: Expression, right: Expression)
 }
 
 /**
- * This is a base class for the above expressions to reduce boilerplate.
- * Each implementor is expected to define three methods: one to specify the output data type,
- * one to compute the quantile of an input sketch buffer given a single input rank,
- * and one to compute multiple quantiles given an array of ranks (batch API for performance).
+ * This is a base class for the above expressions to reduce boilerplate. Each implementor is
+ * expected to define three methods: one to specify the output data type, one to compute the
+ * quantile of an input sketch buffer given a single input rank, and one to compute multiple
+ * quantiles given an array of ranks (batch API for performance).
  */
 abstract class KllSketchGetQuantileBase
     extends BinaryExpression
-        with CodegenFallback
-        with ImplicitCastInputTypes {
+    with CodegenFallback
+    with ImplicitCastInputTypes {
+
   /**
    * This method accepts a KLL quantiles Memory segment, wraps it with the corresponding
    * Kll*Sketch.wrap method, and then calls getQuantile on the result.
-   * @param memory The input KLL quantiles sketch buffer to extract the quantile from
-   * @param rank The input rank to use to compute the quantile
-   * @return The result quantile
+   * @param memory
+   *   The input KLL quantiles sketch buffer to extract the quantile from
+   * @param rank
+   *   The input rank to use to compute the quantile
+   * @return
+   *   The result quantile
    */
   protected def kllSketchGetQuantile(memory: Memory, rank: Double): Any
 
   /**
    * This method accepts a KLL quantiles Memory segment, wraps it with the corresponding
    * Kll*Sketch.wrap method, and then calls getQuantiles on the result (batch API).
-   * @param memory The input KLL quantiles sketch buffer to extract the quantiles from
-   * @param ranks The input ranks array to use to compute the quantiles
-   * @return The result quantiles as an array
+   * @param memory
+   *   The input KLL quantiles sketch buffer to extract the quantiles from
+   * @param ranks
+   *   The input ranks array to use to compute the quantiles
+   * @return
+   *   The result quantiles as an array
    */
   protected def kllSketchGetQuantiles(memory: Memory, ranks: Array[Double]): Array[Any]
 
   /**
    * Helper method to wrap quantile operations with consistent error handling.
-   * @param rankForError The rank value to include in error messages
-   * @param operation The operation to execute
-   * @return The result of the operation
+   * @param rankForError
+   *   The rank value to include in error messages
+   * @param operation
+   *   The operation to execute
+   * @return
+   *   The result of the operation
    */
   protected def withQuantileErrorHandling[T](rankForError: Double)(operation: => T): T = {
     try {
@@ -484,11 +494,7 @@ abstract class KllSketchGetQuantileBase
 
   override def nullIntolerant: Boolean = true
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(
-      BinaryType,
-      TypeCollection(
-        DoubleType,
-        ArrayType(DoubleType, containsNull = false)))
+    Seq(BinaryType, TypeCollection(DoubleType, ArrayType(DoubleType, containsNull = false)))
 
   override def dataType: DataType = {
     right.dataType match {
@@ -600,18 +606,21 @@ case class KllSketchGetRankDouble(left: Expression, right: Expression)
 }
 
 /**
- * This is a base class for the above expressions to reduce boilerplate.
- * Each implementor is expected to define two methods, one to specify the input argument data type,
- * and another to compute the rank of an input sketch buffer given the input quantile.
+ * This is a base class for the above expressions to reduce boilerplate. Each implementor is
+ * expected to define two methods, one to specify the input argument data type, and another to
+ * compute the rank of an input sketch buffer given the input quantile.
  */
 abstract class KllSketchGetRankBase
     extends BinaryExpression
-        with CodegenFallback
-        with ImplicitCastInputTypes {
+    with CodegenFallback
+    with ImplicitCastInputTypes {
+
   /**
    * Helper method to wrap rank operations with consistent error handling.
-   * @param operation The operation to execute
-   * @return The result of the operation
+   * @param operation
+   *   The operation to execute
+   * @return
+   *   The result of the operation
    */
   protected def withRankErrorHandling[T](operation: => T): T = {
     try {
@@ -627,9 +636,12 @@ abstract class KllSketchGetRankBase
   /**
    * This method accepts a KLL quantiles Memory segment, wraps it with the corresponding
    * Kll*Sketch.wrap method, and then calls getRank on the result.
-   * @param memory The input KLL quantiles sketch buffer to extract the rank from
-   * @param quantile The input quantile to use to compute the rank
-   * @return The result rank
+   * @param memory
+   *   The input KLL quantiles sketch buffer to extract the rank from
+   * @param quantile
+   *   The input quantile to use to compute the rank
+   * @return
+   *   The result rank
    */
   protected def kllSketchGetRank(memory: Memory, quantile: Any): Double
 
@@ -649,11 +661,7 @@ abstract class KllSketchGetRankBase
 
   override def nullIntolerant: Boolean = true
   override def inputTypes: Seq[AbstractDataType] = {
-    Seq(
-      BinaryType,
-      TypeCollection(
-        inputDataType,
-        ArrayType(inputDataType, containsNull = false)))
+    Seq(BinaryType, TypeCollection(inputDataType, ArrayType(inputDataType, containsNull = false)))
   }
   override def dataType: DataType = {
     right.dataType match {
@@ -697,5 +705,3 @@ abstract class KllSketchGetRankBase
     }
   }
 }
-
-

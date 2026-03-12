@@ -33,21 +33,24 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.tags.SlowSQLTest
 
 @SlowSQLTest
-class DatasetCacheSuite extends QueryTest
-  with SharedSparkSession
-  with TimeLimits
-  with AdaptiveSparkPlanHelper {
+class DatasetCacheSuite
+    extends QueryTest
+    with SharedSparkSession
+    with TimeLimits
+    with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   /**
-   * Asserts that a cached [[Dataset]] will be built using the given number of other cached results.
+   * Asserts that a cached [[Dataset]] will be built using the given number of other cached
+   * results.
    */
   private def assertCacheDependency(df: DataFrame, numOfCachesDependedUpon: Int = 1): Unit = {
     val plan = df.queryExecution.withCachedData
     assert(plan.isInstanceOf[InMemoryRelation])
     val internalPlan = plan.asInstanceOf[InMemoryRelation].cacheBuilder.cachedPlan
-    assert(find(internalPlan)(_.isInstanceOf[InMemoryTableScanExec]).size
-      == numOfCachesDependedUpon)
+    assert(
+      find(internalPlan)(_.isInstanceOf[InMemoryTableScanExec]).size
+        == numOfCachesDependedUpon)
   }
 
   test("get storage level") {
@@ -78,9 +81,7 @@ class DatasetCacheSuite extends QueryTest
     // Make sure, the Dataset is indeed cached.
     assertCached(cached)
     // Check result.
-    checkDataset(
-      cached,
-      2, 3, 4)
+    checkDataset(cached, 2, 3, 4)
     // Drop the cache.
     cached.unpersist(blocking = true)
     assert(cached.storageLevel == StorageLevel.NONE, "The Dataset should not be cached.")
@@ -111,16 +112,15 @@ class DatasetCacheSuite extends QueryTest
     val aggregated = grouped.mapGroups { (g, iter) => (g, iter.map(_._2).sum) }
     aggregated.persist()
 
-    checkDataset(
-      aggregated.filter(_._1 == "b"),
-      ("b", 3))
+    checkDataset(aggregated.filter(_._1 == "b"), ("b", 3))
     assertCached(aggregated.filter(_._1 == "b"))
 
     ds.unpersist(blocking = true)
     assert(ds.storageLevel == StorageLevel.NONE, "The Dataset ds should not be cached.")
     aggregated.unpersist(blocking = true)
-    assert(aggregated.storageLevel == StorageLevel.NONE,
-           "The Dataset aggregated should not be cached.")
+    assert(
+      aggregated.storageLevel == StorageLevel.NONE,
+      "The Dataset aggregated should not be cached.")
   }
 
   test("persist and then withColumn") {
@@ -139,7 +139,7 @@ class DatasetCacheSuite extends QueryTest
   }
 
   test("cache UDF result correctly") {
-    val expensiveUDF = udf({x: Int => Thread.sleep(2000); x})
+    val expensiveUDF = udf({ x: Int => Thread.sleep(2000); x })
     val df = spark.range(0, 2).toDF("a").repartition(1).withColumn("b", expensiveUDF($"a"))
     val df2 = df.agg(sum(df("b")))
 
@@ -157,7 +157,7 @@ class DatasetCacheSuite extends QueryTest
   }
 
   test("SPARK-24613 Cache with UDF could not be matched with subsequent dependent caches") {
-    val udf1 = udf({x: Int => x + 1})
+    val udf1 = udf({ x: Int => x + 1 })
     val df = spark.range(0, 10).toDF("a").withColumn("b", udf1($"a"))
     val df2 = df.agg(sum(df("b")))
 
@@ -235,7 +235,9 @@ class DatasetCacheSuite extends QueryTest
     // Verify that df1 is a InMemoryRelation plan with dependency on another cached plan.
     assertCacheDependency(df1)
     val df1InnerPlan = df1.queryExecution.withCachedData
-      .asInstanceOf[InMemoryRelation].cacheBuilder.cachedPlan
+      .asInstanceOf[InMemoryRelation]
+      .cacheBuilder
+      .cachedPlan
     // Verify that df2 is a InMemoryRelation plan with dependency on another cached plan.
     assertCacheDependency(df2)
 
@@ -255,13 +257,15 @@ class DatasetCacheSuite extends QueryTest
     val df2LimitInnerPlan = df2Limit.queryExecution.withCachedData.collectFirst {
       case i: InMemoryRelation => i.cacheBuilder.cachedPlan
     }
-    assert(df2LimitInnerPlan.isDefined &&
-      !df2LimitInnerPlan.get.exists(_.isInstanceOf[InMemoryTableScanExec]))
+    assert(
+      df2LimitInnerPlan.isDefined &&
+        !df2LimitInnerPlan.get.exists(_.isInstanceOf[InMemoryTableScanExec]))
   }
 
   test("SPARK-27739 Save stats from optimized plan") {
     withTable("a") {
-      spark.range(4)
+      spark
+        .range(4)
         .selectExpr("id", "id % 2 AS p")
         .write
         .partitionBy("p")
@@ -273,8 +277,9 @@ class DatasetCacheSuite extends QueryTest
       df.queryExecution.withCachedData match {
         case i: InMemoryRelation =>
           // Optimized plan has non-default size in bytes
-          assert(i.statsOfPlanToCache.sizeInBytes !==
-            df.sparkSession.sessionState.conf.defaultSizeInBytes)
+          assert(
+            i.statsOfPlanToCache.sizeInBytes !==
+              df.sparkSession.sessionState.conf.defaultSizeInBytes)
       }
     }
   }

@@ -26,33 +26,38 @@ import org.apache.spark.sql.types.{BooleanType, StructType}
 import org.apache.spark.util.ArrayImplicits._
 
 /**
- * The class provides API for applying pushed down filters to partially or
- * fully set internal rows that have the struct schema.
+ * The class provides API for applying pushed down filters to partially or fully set internal rows
+ * that have the struct schema.
  *
  * `StructFilters` assumes that:
  *   - `reset()` is called before any `skipRow()` calls for new row.
  *
- * @param pushedFilters The pushed down source filters. The filters should refer to
- *                      the fields of the provided schema.
- * @param schema The required schema of records from datasource files.
+ * @param pushedFilters
+ *   The pushed down source filters. The filters should refer to the fields of the provided
+ *   schema.
+ * @param schema
+ *   The required schema of records from datasource files.
  */
 abstract class StructFilters(pushedFilters: Seq[sources.Filter], schema: StructType) {
 
   protected val filters = StructFilters.pushedFilters(pushedFilters.toArray, schema)
 
   /**
-   * Applies pushed down source filters to the given row assuming that
-   * value at `index` has been already set.
+   * Applies pushed down source filters to the given row assuming that value at `index` has been
+   * already set.
    *
-   * @param row The row with fully or partially set values.
-   * @param index The index of already set value.
-   * @return `true` if currently processed row can be skipped otherwise false.
+   * @param row
+   *   The row with fully or partially set values.
+   * @param index
+   *   The index of already set value.
+   * @return
+   *   `true` if currently processed row can be skipped otherwise false.
    */
   def skipRow(row: InternalRow, index: Int): Boolean
 
   /**
-   * Resets states of pushed down filters. The method must be called before
-   * processing any new row otherwise `skipRow()` may return wrong result.
+   * Resets states of pushed down filters. The method must be called before processing any new row
+   * otherwise `skipRow()` may return wrong result.
    */
   def reset(): Unit
 
@@ -85,9 +90,12 @@ object StructFilters {
 
   /**
    * Returns the filters currently supported by the datasource.
-   * @param filters The filters pushed down to the datasource.
-   * @param schema data schema of datasource files.
-   * @return a sub-set of `filters` that can be handled by the datasource.
+   * @param filters
+   *   The filters pushed down to the datasource.
+   * @param schema
+   *   data schema of datasource files.
+   * @return
+   *   a sub-set of `filters` that can be handled by the datasource.
    */
   def pushedFilters(filters: Array[sources.Filter], schema: StructType): Array[sources.Filter] = {
     val fieldNames = schema.fieldNames.toSet
@@ -105,10 +113,13 @@ object StructFilters {
   /**
    * Converts a filter to an expression and binds it to row positions.
    *
-   * @param filter The filter to convert.
-   * @param toRef The function converts a filter attribute to a bound reference.
-   * @return some expression with resolved attributes or `None` if the conversion
-   *         of the given filter to an expression is impossible.
+   * @param filter
+   *   The filter to convert.
+   * @param toRef
+   *   The function converts a filter attribute to a bound reference.
+   * @return
+   *   some expression with resolved attributes or `None` if the conversion of the given filter to
+   *   an expression is impossible.
    */
   def filterToExpression(
       filter: sources.Filter,

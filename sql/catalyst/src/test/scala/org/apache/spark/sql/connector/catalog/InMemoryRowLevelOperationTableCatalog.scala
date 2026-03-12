@@ -32,7 +32,11 @@ class InMemoryRowLevelOperationTableCatalog extends InMemoryTableCatalog {
     val tableName = s"$name.${ident.quoted}"
     val schema = CatalogV2Util.v2ColumnsToStructType(tableInfo.columns)
     val table = new InMemoryRowLevelOperationTable(
-      tableName, schema, tableInfo.partitions, tableInfo.properties, tableInfo.constraints())
+      tableName,
+      schema,
+      tableInfo.partitions,
+      tableInfo.properties,
+      tableInfo.constraints())
     tables.put(ident, table)
     namespaces.putIfAbsent(ident.namespace.toList, Map())
     table

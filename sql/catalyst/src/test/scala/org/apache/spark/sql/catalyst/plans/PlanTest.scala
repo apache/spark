@@ -36,9 +36,8 @@ trait PlanTest extends SparkFunSuite with PlanTestBase
 
 trait CodegenInterpretedPlanTest extends PlanTest {
 
-  override protected def test(
-      testName: String,
-      testTags: Tag*)(testFun: => Any)(implicit pos: source.Position): Unit = {
+  override protected def test(testName: String, testTags: Tag*)(testFun: => Any)(implicit
+      pos: source.Position): Unit = {
     val codegenMode = CodegenObjectFactoryMode.CODEGEN_ONLY.toString
     val interpretedMode = CodegenObjectFactoryMode.NO_CODEGEN.toString
 
@@ -48,9 +47,8 @@ trait CodegenInterpretedPlanTest extends PlanTest {
       withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> interpretedMode) { testFun })(pos)
   }
 
-  protected def testFallback(
-      testName: String,
-      testTags: Tag*)(testFun: => Any)(implicit pos: source.Position): Unit = {
+  protected def testFallback(testName: String, testTags: Tag*)(testFun: => Any)(implicit
+      pos: source.Position): Unit = {
     val codegenMode = CodegenObjectFactoryMode.FALLBACK.toString
     super.test(testName + " (codegen fallback mode)", testTags: _*)(
       withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode) { testFun })(pos)
@@ -58,8 +56,7 @@ trait CodegenInterpretedPlanTest extends PlanTest {
 }
 
 /**
- * Provides helper methods for comparing plans, but without the overhead of
- * mandating a FunSuite.
+ * Provides helper methods for comparing plans, but without the overhead of mandating a FunSuite.
  */
 trait PlanTestBase extends PredicateHelper with SQLHelper { self: Suite =>
 
@@ -67,9 +64,8 @@ trait PlanTestBase extends PredicateHelper with SQLHelper { self: Suite =>
     NormalizePlan.normalizeExprIds(plan)
 
   protected def rewriteNameFromAttrNullability(plan: LogicalPlan): LogicalPlan = {
-    plan.transformAllExpressions {
-      case a @ AttributeReference(name, _, false, _) =>
-        a.copy(name = s"*$name")(exprId = a.exprId, qualifier = a.qualifier)
+    plan.transformAllExpressions { case a @ AttributeReference(name, _, false, _) =>
+      a.copy(name = s"*$name")(exprId = a.exprId, qualifier = a.qualifier)
     }
   }
 
@@ -90,18 +86,20 @@ trait PlanTestBase extends PredicateHelper with SQLHelper { self: Suite =>
     val normalized1 = normalizePlan(normalizeExprIds(plan1))
     val normalized2 = normalizePlan(normalizeExprIds(plan2))
     if (normalized1 != normalized2) {
-      fail(
-        s"""
+      fail(s"""
           |== FAIL: Plans do not match ===
           |${sideBySide(
-            rewriteNameFromAttrNullability(normalized1).treeString,
-            rewriteNameFromAttrNullability(normalized2).treeString).mkString("\n")}
+               rewriteNameFromAttrNullability(normalized1).treeString,
+               rewriteNameFromAttrNullability(normalized2).treeString).mkString("\n")}
          """.stripMargin)
     }
   }
 
   /** Fails the test if the two expressions do not match */
   protected def compareExpressions(e1: Expression, e2: Expression): Unit = {
-    comparePlans(Filter(e1, OneRowRelation()), Filter(e2, OneRowRelation()), checkAnalysis = false)
+    comparePlans(
+      Filter(e1, OneRowRelation()),
+      Filter(e2, OneRowRelation()),
+      checkAnalysis = false)
   }
 }

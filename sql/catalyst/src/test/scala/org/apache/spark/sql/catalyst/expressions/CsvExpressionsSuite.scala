@@ -36,10 +36,7 @@ class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("from_csv") {
     val csvData = "1"
     val schema = StructType(StructField("a", IntegerType) :: Nil)
-    checkEvaluation(
-      CsvToStructs(schema, Map.empty, Literal(csvData), UTC_OPT),
-      InternalRow(1)
-    )
+    checkEvaluation(CsvToStructs(schema, Map.empty, Literal(csvData), UTC_OPT), InternalRow(1))
   }
 
   test("from_csv - invalid data") {
@@ -57,15 +54,12 @@ class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val schema = StructType(StructField("a", IntegerType) :: Nil)
     checkEvaluation(
       CsvToStructs(schema, Map.empty, Literal.create(null, StringType), UTC_OPT),
-      null
-    )
+      null)
   }
 
   test("from_csv bad UTF-8") {
     val schema = StructType(StructField("a", IntegerType) :: Nil)
-    checkEvaluation(
-      CsvToStructs(schema, Map.empty, Literal(badCsv), UTC_OPT),
-      InternalRow(null))
+    checkEvaluation(CsvToStructs(schema, Map.empty, Literal(badCsv), UTC_OPT), InternalRow(null))
   }
 
   test("from_csv with timestamp") {
@@ -77,15 +71,13 @@ class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     c.set(Calendar.MILLISECOND, 123)
     checkEvaluation(
       CsvToStructs(schema, Map.empty, Literal(csvData1), UTC_OPT),
-      InternalRow(c.getTimeInMillis * 1000L)
-    )
+      InternalRow(c.getTimeInMillis * 1000L))
     // The result doesn't change because the CSV string includes timezone string ("Z" here),
     // which means the string represents the timestamp string in the timezone regardless of
     // the timeZoneId parameter.
     checkEvaluation(
       CsvToStructs(schema, Map.empty, Literal(csvData1), Option(PST.getId)),
-      InternalRow(c.getTimeInMillis * 1000L)
-    )
+      InternalRow(c.getTimeInMillis * 1000L))
 
     val csvData2 = "2016-01-01T00:00:00"
     for (zid <- DateTimeTestUtils.outstandingZoneIds) {
@@ -98,17 +90,16 @@ class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           Map("timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss"),
           Literal(csvData2),
           Option(zid.getId)),
-        InternalRow(c.getTimeInMillis * 1000L)
-      )
+        InternalRow(c.getTimeInMillis * 1000L))
       checkEvaluation(
         CsvToStructs(
           schema,
-          Map("timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss",
+          Map(
+            "timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss",
             DateTimeUtils.TIMEZONE_OPTION -> zid.getId),
           Literal(csvData2),
           UTC_OPT),
-        InternalRow(c.getTimeInMillis * 1000L)
-      )
+        InternalRow(c.getTimeInMillis * 1000L))
     }
   }
 
@@ -116,8 +107,7 @@ class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val schema = StructType(StructField("a", IntegerType) :: Nil)
     checkEvaluation(
       CsvToStructs(schema, Map.empty, Literal.create(" ", StringType), UTC_OPT),
-      InternalRow(null)
-    )
+      InternalRow(null))
   }
 
   test("forcing schema nullability") {
@@ -134,15 +124,13 @@ class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(schemaToCompare == schema)
   }
 
-
   test("from_csv missing columns") {
     val schema = new StructType()
       .add("a", IntegerType)
       .add("b", IntegerType)
     checkEvaluation(
       CsvToStructs(schema, Map.empty, Literal.create("1"), UTC_OPT),
-      InternalRow(1, null)
-    )
+      InternalRow(1, null))
   }
 
   test("unsupported mode") {
@@ -156,9 +144,7 @@ class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           InternalRow(null))
       }.getCause.asInstanceOf[AnalysisException],
       condition = "PARSE_MODE_UNSUPPORTED",
-      parameters = Map(
-        "funcName" -> "`from_csv`",
-        "mode" -> "DROPMALFORMED"))
+      parameters = Map("funcName" -> "`from_csv`", "mode" -> "DROPMALFORMED"))
   }
 
   test("infer schema of CSV strings") {
@@ -180,10 +166,7 @@ class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("to_csv null input column") {
     val schema = StructType(StructField("a", IntegerType) :: Nil)
     val struct = Literal.create(null, schema)
-    checkEvaluation(
-      StructsToCsv(Map.empty, struct, UTC_OPT),
-      null
-    )
+    checkEvaluation(StructsToCsv(Map.empty, struct, UTC_OPT), null)
   }
 
   test("to_csv with timestamp") {
@@ -195,24 +178,25 @@ class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     checkEvaluation(StructsToCsv(Map.empty, struct, UTC_OPT), "2016-01-01T00:00:00.000Z")
     checkEvaluation(
-      StructsToCsv(Map.empty, struct, Option(PST.getId)), "2015-12-31T16:00:00.000-08:00")
+      StructsToCsv(Map.empty, struct, Option(PST.getId)),
+      "2015-12-31T16:00:00.000-08:00")
 
     checkEvaluation(
       StructsToCsv(
-        Map("timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss",
+        Map(
+          "timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss",
           DateTimeUtils.TIMEZONE_OPTION -> UTC_OPT.get),
         struct,
         UTC_OPT),
-      "2016-01-01T00:00:00"
-    )
+      "2016-01-01T00:00:00")
     checkEvaluation(
       StructsToCsv(
-        Map("timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss",
+        Map(
+          "timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss",
           DateTimeUtils.TIMEZONE_OPTION -> PST.getId),
         struct,
         UTC_OPT),
-      "2015-12-31T16:00:00"
-    )
+      "2015-12-31T16:00:00")
   }
 
   test("parse date with locale") {
@@ -227,7 +211,8 @@ class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
       checkEvaluation(
         CsvToStructs(schema, options, Literal.create(dateStr), UTC_OPT),
-        InternalRow(17836)) // number of days from 1970-01-01
+        InternalRow(17836)
+      ) // number of days from 1970-01-01
     }
   }
 
@@ -237,7 +222,9 @@ class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         schema = StructType.fromDDL("i int, _unparsed boolean"),
         options = Map("columnNameOfCorruptRecord" -> "_unparsed"),
         child = Literal.create("a"),
-        timeZoneId = UTC_OPT), null, "INVALID_CORRUPT_RECORD_TYPE",
+        timeZoneId = UTC_OPT),
+      null,
+      "INVALID_CORRUPT_RECORD_TYPE",
       Map("columnName" -> "`_unparsed`", "actualType" -> "\"BOOLEAN\""))
   }
 
@@ -245,7 +232,7 @@ class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val schema = new StructType().add("a", "interval")
     checkEvaluation(
       StructsToCsv(Map.empty, Literal.create(create_row(new CalendarInterval(1, 2, 3)), schema)),
-       "1 months 2 days 0.000003 seconds")
+      "1 months 2 days 0.000003 seconds")
     checkEvaluation(
       CsvToStructs(schema, Map.empty, Literal.create("1 day")),
       InternalRow(new CalendarInterval(0, 1, 0)))
@@ -268,8 +255,7 @@ class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       (3, LocalTime.of(14, 30, 45, 123000000), "14:30:45.123"),
       (4, LocalTime.of(14, 30, 45, 123400000), "14:30:45.1234"),
       (5, LocalTime.of(14, 30, 45, 123450000), "14:30:45.12345"),
-      (6, LocalTime.of(14, 30, 45, 123456000), "14:30:45.123456")
-    )
+      (6, LocalTime.of(14, 30, 45, 123456000), "14:30:45.123456"))
 
     testData.foreach { case (precision, timeValue, timeStr) =>
       val schema = StructType(StructField("time", TimeType(precision)) :: Nil)
@@ -283,9 +269,7 @@ class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(StructsToCsv(Map.empty, struct, UTC_OPT), timeStr)
 
       val csvResult = StructsToCsv(Map.empty, struct, UTC_OPT)
-      checkEvaluation(
-        CsvToStructs(schema, Map.empty, csvResult, UTC_OPT),
-        InternalRow(timeNanos))
+      checkEvaluation(CsvToStructs(schema, Map.empty, csvResult, UTC_OPT), InternalRow(timeNanos))
     }
 
     val customFormat = "HH-mm-ss.SSSSSS"
@@ -294,8 +278,11 @@ class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val customTimeNanos = SparkDateTimeUtils.localTimeToNanos(customTime)
 
     checkEvaluation(
-      CsvToStructs(customSchema, Map("timeFormat" -> customFormat),
-        Literal("14-30-45.123456"), UTC_OPT),
+      CsvToStructs(
+        customSchema,
+        Map("timeFormat" -> customFormat),
+        Literal("14-30-45.123456"),
+        UTC_OPT),
       InternalRow(customTimeNanos))
 
     val customStruct = Literal.create(create_row(customTimeNanos), customSchema)

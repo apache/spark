@@ -34,16 +34,16 @@ import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, StatefulPr
 import org.apache.spark.sql.types._
 
 object CatalystSerde {
-  def deserialize[T : Encoder](child: LogicalPlan): DeserializeToObject = {
+  def deserialize[T: Encoder](child: LogicalPlan): DeserializeToObject = {
     val deserializer = UnresolvedDeserializer(encoderFor[T].deserializer)
     DeserializeToObject(deserializer, generateObjAttr[T], child)
   }
 
-  def serialize[T : Encoder](child: LogicalPlan): SerializeFromObject = {
+  def serialize[T: Encoder](child: LogicalPlan): SerializeFromObject = {
     SerializeFromObject(encoderFor[T].namedExpressions, child)
   }
 
-  def generateObjAttr[T : Encoder]: Attribute = {
+  def generateObjAttr[T: Encoder]: Attribute = {
     val enc = encoderFor[T]
     val dataType = enc.deserializer.dataType
     val nullable = !enc.clsTag.runtimeClass.isPrimitive
@@ -52,8 +52,8 @@ object CatalystSerde {
 }
 
 /**
- * A trait for logical operators that produces domain objects as output.
- * The output of this operator is a single-field safe row containing the produced object.
+ * A trait for logical operators that produces domain objects as output. The output of this
+ * operator is a single-field safe row containing the produced object.
  */
 trait ObjectProducer extends LogicalPlan {
   // The attribute that reference to the single object field this operator outputs.
@@ -65,8 +65,8 @@ trait ObjectProducer extends LogicalPlan {
 }
 
 /**
- * A trait for logical operators that consumes domain objects as input.
- * The output of its child must be a single-field row containing the input object.
+ * A trait for logical operators that consumes domain objects as input. The output of its child
+ * must be a single-field row containing the input object.
  */
 trait ObjectConsumer extends UnaryNode with ReferenceAllColumns[LogicalPlan] {
   assert(child.output.length == 1)
@@ -74,12 +74,15 @@ trait ObjectConsumer extends UnaryNode with ReferenceAllColumns[LogicalPlan] {
 }
 
 /**
- * Takes the input row from child and turns it into object using the given deserializer expression.
+ * Takes the input row from child and turns it into object using the given deserializer
+ * expression.
  */
 case class DeserializeToObject(
     deserializer: Expression,
     outputObjAttr: Attribute,
-    child: LogicalPlan) extends UnaryNode with ObjectProducer {
+    child: LogicalPlan)
+    extends UnaryNode
+    with ObjectProducer {
   final override val nodePatterns: Seq[TreePattern] = Seq(DESERIALIZE_TO_OBJECT)
   override protected def withNewChildInternal(newChild: LogicalPlan): DeserializeToObject =
     copy(child = newChild)
@@ -89,9 +92,8 @@ case class DeserializeToObject(
  * Takes the input object from child and turns it into unsafe row using the given serializer
  * expression.
  */
-case class SerializeFromObject(
-    serializer: Seq[NamedExpression],
-    child: LogicalPlan) extends ObjectConsumer {
+case class SerializeFromObject(serializer: Seq[NamedExpression], child: LogicalPlan)
+    extends ObjectConsumer {
 
   override def output: Seq[Attribute] = serializer.map(_.toAttribute)
 
@@ -102,7 +104,7 @@ case class SerializeFromObject(
 }
 
 object MapPartitions {
-  def apply[T : Encoder, U : Encoder](
+  def apply[T: Encoder, U: Encoder](
       func: Iterator[T] => Iterator[U],
       child: LogicalPlan): LogicalPlan = {
     val deserialized = CatalystSerde.deserialize[T](child)
@@ -120,7 +122,9 @@ object MapPartitions {
 case class MapPartitions(
     func: Iterator[Any] => Iterator[Any],
     outputObjAttr: Attribute,
-    child: LogicalPlan) extends ObjectConsumer with ObjectProducer {
+    child: LogicalPlan)
+    extends ObjectConsumer
+    with ObjectProducer {
   override protected def withNewChildInternal(newChild: LogicalPlan): MapPartitions =
     copy(child = newChild)
 }
@@ -143,21 +147,22 @@ object MapPartitionsInR {
         child)
     } else {
       val deserialized = CatalystSerde.deserialize(child)(encoder)
-      CatalystSerde.serialize(MapPartitionsInR(
-        func,
-        packageNames,
-        broadcastVars,
-        encoder.schema,
-        schema,
-        CatalystSerde.generateObjAttr(ExpressionEncoder(schema)),
-        deserialized))(ExpressionEncoder(schema))
+      CatalystSerde.serialize(
+        MapPartitionsInR(
+          func,
+          packageNames,
+          broadcastVars,
+          encoder.schema,
+          schema,
+          CatalystSerde.generateObjAttr(ExpressionEncoder(schema)),
+          deserialized))(ExpressionEncoder(schema))
     }
   }
 }
 
 /**
- * A relation produced by applying a serialized R function `func` to each partition of the `child`.
- *
+ * A relation produced by applying a serialized R function `func` to each partition of the
+ * `child`.
  */
 case class MapPartitionsInR(
     func: Array[Byte],
@@ -166,19 +171,20 @@ case class MapPartitionsInR(
     inputSchema: StructType,
     outputSchema: StructType,
     outputObjAttr: Attribute,
-    child: LogicalPlan) extends ObjectConsumer with ObjectProducer {
+    child: LogicalPlan)
+    extends ObjectConsumer
+    with ObjectProducer {
   override lazy val schema = outputSchema
 
-  override protected def stringArgs: Iterator[Any] = Iterator(inputSchema, outputSchema,
-    outputObjAttr, child)
+  override protected def stringArgs: Iterator[Any] =
+    Iterator(inputSchema, outputSchema, outputObjAttr, child)
 
   override protected def withNewChildInternal(newChild: LogicalPlan): MapPartitionsInR =
     copy(child = newChild)
 }
 
 /**
- * Similar with `MapPartitionsInR` but serializes and deserializes input/output in
- * Arrow format.
+ * Similar with `MapPartitionsInR` but serializes and deserializes input/output in Arrow format.
  *
  * This is somewhat similar with `org.apache.spark.sql.execution.python.ArrowEvalPython`
  */
@@ -188,13 +194,14 @@ case class MapPartitionsInRWithArrow(
     broadcastVars: Array[Broadcast[Object]],
     inputSchema: StructType,
     output: Seq[Attribute],
-    child: LogicalPlan) extends UnaryNode {
+    child: LogicalPlan)
+    extends UnaryNode {
   // This operator always need all columns of its child, even it doesn't reference to.
   @transient
   override lazy val references: AttributeSet = child.outputSet
 
-  override protected def stringArgs: Iterator[Any] = Iterator(
-    inputSchema, DataTypeUtils.fromAttributes(output), child)
+  override protected def stringArgs: Iterator[Any] =
+    Iterator(inputSchema, DataTypeUtils.fromAttributes(output), child)
 
   override val producedAttributes = AttributeSet(output)
 
@@ -203,9 +210,7 @@ case class MapPartitionsInRWithArrow(
 }
 
 object MapElements {
-  def apply[T : Encoder, U : Encoder](
-      func: AnyRef,
-      child: LogicalPlan): LogicalPlan = {
+  def apply[T: Encoder, U: Encoder](func: AnyRef, child: LogicalPlan): LogicalPlan = {
     val deserialized = CatalystSerde.deserialize[T](child)
     val mapped = MapElements(
       func,
@@ -225,13 +230,15 @@ case class MapElements(
     argumentClass: Class[_],
     argumentSchema: StructType,
     outputObjAttr: Attribute,
-    child: LogicalPlan) extends ObjectConsumer with ObjectProducer {
+    child: LogicalPlan)
+    extends ObjectConsumer
+    with ObjectProducer {
   override protected def withNewChildInternal(newChild: LogicalPlan): MapElements =
     copy(child = newChild)
 }
 
 object TypedFilter {
-  def apply[T : Encoder](func: AnyRef, child: LogicalPlan): TypedFilter = {
+  def apply[T: Encoder](func: AnyRef, child: LogicalPlan): TypedFilter = {
     TypedFilter(
       func,
       implicitly[Encoder[T]].clsTag.runtimeClass,
@@ -255,7 +262,8 @@ case class TypedFilter(
     argumentClass: Class[_],
     argumentSchema: StructType,
     deserializer: Expression,
-    child: LogicalPlan) extends UnaryNode {
+    child: LogicalPlan)
+    extends UnaryNode {
 
   override def output: Seq[Attribute] = child.output
 
@@ -291,8 +299,9 @@ object FunctionUtils {
     }
   }
 
-  def getFunctionOneName(outputDT: DataType, inputDT: DataType):
-      (Class[scala.Function1[_, _]], String) = {
+  def getFunctionOneName(
+      outputDT: DataType,
+      inputDT: DataType): (Class[scala.Function1[_, _]], String) = {
     classOf[scala.Function1[_, _]] -> {
       // if a pair of an argument and return types is one of specific types
       // whose specialized method (apply$mc..$sp) is generated by scalac,
@@ -316,9 +325,7 @@ object FunctionUtils {
 
 /** Factory for constructing new `AppendColumn` nodes. */
 object AppendColumns {
-  def apply[T : Encoder, U : Encoder](
-      func: T => U,
-      child: LogicalPlan): AppendColumns = {
+  def apply[T: Encoder, U: Encoder](func: T => U, child: LogicalPlan): AppendColumns = {
     new AppendColumns(
       func.asInstanceOf[Any => Any],
       implicitly[Encoder[T]].clsTag.runtimeClass,
@@ -328,7 +335,7 @@ object AppendColumns {
       child)
   }
 
-  def apply[T : Encoder, U : Encoder](
+  def apply[T: Encoder, U: Encoder](
       func: T => U,
       inputAttributes: Seq[Attribute],
       child: LogicalPlan): AppendColumns = {
@@ -353,8 +360,7 @@ object AppendColumns {
       inEncoder.schema,
       UnresolvedDeserializer(inEncoder.deserializer, inputAttributes),
       outEncoder.namedExpressions,
-      child
-    )
+      child)
   }
 }
 
@@ -362,8 +368,10 @@ object AppendColumns {
  * A relation produced by applying `func` to each element of the `child`, concatenating the
  * resulting columns at the end of the input row.
  *
- * @param deserializer used to extract the input to `func` from an input row.
- * @param serializer use to serialize the output of `func`.
+ * @param deserializer
+ *   used to extract the input to `func` from an input row.
+ * @param serializer
+ *   use to serialize the output of `func`.
  */
 case class AppendColumns(
     func: Any => Any,
@@ -371,7 +379,8 @@ case class AppendColumns(
     argumentSchema: StructType,
     deserializer: Expression,
     serializer: Seq[NamedExpression],
-    child: LogicalPlan) extends UnaryNode {
+    child: LogicalPlan)
+    extends UnaryNode {
 
   override def output: Seq[Attribute] = child.output ++ newColumns
 
@@ -384,15 +393,18 @@ case class AppendColumns(
 }
 
 /**
- * An optimized version of [[AppendColumns]], that can be executed on deserialized object directly.
+ * An optimized version of [[AppendColumns]], that can be executed on deserialized object
+ * directly.
  */
 case class AppendColumnsWithObject(
     func: Any => Any,
     childSerializer: Seq[NamedExpression],
     newColumnsSerializer: Seq[NamedExpression],
-    child: LogicalPlan) extends ObjectConsumer {
+    child: LogicalPlan)
+    extends ObjectConsumer {
 
-  override def output: Seq[Attribute] = (childSerializer ++ newColumnsSerializer).map(_.toAttribute)
+  override def output: Seq[Attribute] =
+    (childSerializer ++ newColumnsSerializer).map(_.toAttribute)
 
   override protected def withNewChildInternal(newChild: LogicalPlan): AppendColumnsWithObject =
     copy(child = newChild)
@@ -400,7 +412,7 @@ case class AppendColumnsWithObject(
 
 /** Factory for constructing new `MapGroups` nodes. */
 object MapGroups {
-  def apply[K : Encoder, T : Encoder, U : Encoder](
+  def apply[K: Encoder, T: Encoder, U: Encoder](
       func: (K, Iterator[T]) => IterableOnce[U],
       groupingAttributes: Seq[Attribute],
       dataAttributes: Seq[Attribute],
@@ -432,8 +444,10 @@ object MapGroups {
  * object representation of all the rows with that key. Given an additional `dataOrder`, data in
  * the iterator will be sorted accordingly. That sorting does not add computational complexity.
  *
- * @param keyDeserializer used to extract the key object for each group.
- * @param valueDeserializer used to extract the items in the iterator from an input row.
+ * @param keyDeserializer
+ *   used to extract the key object for each group.
+ * @param valueDeserializer
+ *   used to extract the items in the iterator from an input row.
  */
 case class MapGroups(
     func: (Any, Iterator[Any]) => IterableOnce[Any],
@@ -443,7 +457,9 @@ case class MapGroups(
     dataAttributes: Seq[Attribute],
     dataOrder: Seq[SortOrder],
     outputObjAttr: Attribute,
-    child: LogicalPlan) extends UnaryNode with ObjectProducer {
+    child: LogicalPlan)
+    extends UnaryNode
+    with ObjectProducer {
   override protected def withNewChildInternal(newChild: LogicalPlan): MapGroups =
     copy(child = newChild)
 }
@@ -476,8 +492,7 @@ object FlatMapGroupsWithState {
       dataAttributes,
       UnresolvedDeserializer(encoderFor[K].deserializer, groupingAttributes),
       LocalRelation(stateEncoder.schema), // empty data set
-      child
-    )
+      child)
     CatalystSerde.serialize[U](mapped)
   }
 
@@ -517,26 +532,41 @@ object FlatMapGroupsWithState {
 
 /**
  * Applies func to each unique group in `child`, based on the evaluation of `groupingAttributes`,
- * while using state data.
- * Func is invoked with an object representation of the grouping key an iterator containing the
- * object representation of all the rows with that key.
+ * while using state data. Func is invoked with an object representation of the grouping key an
+ * iterator containing the object representation of all the rows with that key.
  *
- * @param func function called on each group
- * @param keyDeserializer used to extract the key object for each group.
- * @param valueDeserializer used to extract the items in the iterator from an input row.
- * @param groupingAttributes used to group the data
- * @param dataAttributes used to read the data
- * @param outputObjAttr used to define the output object
- * @param stateEncoder used to serialize/deserialize state before calling `func`
- * @param outputMode the output mode of `func`
- * @param isMapGroupsWithState whether it is created by the `mapGroupsWithState` method
- * @param timeout used to timeout groups that have not received data in a while
- * @param hasInitialState Indicates whether initial state needs to be applied or not.
- * @param initialStateGroupAttrs grouping attributes for the initial state
- * @param initialStateDataAttrs used to read the initial state
- * @param initialStateDeserializer used to extract the initial state objects.
- * @param initialState user defined initial state that is applied in the first batch.
- * @param child logical plan of the underlying data
+ * @param func
+ *   function called on each group
+ * @param keyDeserializer
+ *   used to extract the key object for each group.
+ * @param valueDeserializer
+ *   used to extract the items in the iterator from an input row.
+ * @param groupingAttributes
+ *   used to group the data
+ * @param dataAttributes
+ *   used to read the data
+ * @param outputObjAttr
+ *   used to define the output object
+ * @param stateEncoder
+ *   used to serialize/deserialize state before calling `func`
+ * @param outputMode
+ *   the output mode of `func`
+ * @param isMapGroupsWithState
+ *   whether it is created by the `mapGroupsWithState` method
+ * @param timeout
+ *   used to timeout groups that have not received data in a while
+ * @param hasInitialState
+ *   Indicates whether initial state needs to be applied or not.
+ * @param initialStateGroupAttrs
+ *   grouping attributes for the initial state
+ * @param initialStateDataAttrs
+ *   used to read the initial state
+ * @param initialStateDeserializer
+ *   used to extract the initial state objects.
+ * @param initialState
+ *   user defined initial state that is applied in the first batch.
+ * @param child
+ *   logical plan of the underlying data
  */
 case class FlatMapGroupsWithState(
     func: (Any, Iterator[Any], LogicalGroupState[Any]) => Iterator[Any],
@@ -554,7 +584,9 @@ case class FlatMapGroupsWithState(
     initialStateDataAttrs: Seq[Attribute],
     initialStateDeserializer: Expression,
     initialState: LogicalPlan,
-    child: LogicalPlan) extends BinaryNode with ObjectProducer {
+    child: LogicalPlan)
+    extends BinaryNode
+    with ObjectProducer {
 
   if (isMapGroupsWithState) {
     assert(outputMode == OutputMode.Update)
@@ -565,7 +597,8 @@ case class FlatMapGroupsWithState(
   override def right: LogicalPlan = initialState
 
   override protected def withNewChildrenInternal(
-      newLeft: LogicalPlan, newRight: LogicalPlan): FlatMapGroupsWithState =
+      newLeft: LogicalPlan,
+      newRight: LogicalPlan): FlatMapGroupsWithState =
     copy(child = newLeft, initialState = newRight)
 }
 
@@ -627,8 +660,7 @@ object TransformWithState {
       initialStateGroupingAttrs,
       initialStateDataAttrs,
       UnresolvedDeserializer(encoderFor[S].deserializer, initialStateDataAttrs),
-      initialState
-    )
+      initialState)
     CatalystSerde.serialize[U](mapped)
   }
 }
@@ -648,12 +680,15 @@ case class TransformWithState(
     initialStateGroupingAttrs: Seq[Attribute],
     initialStateDataAttrs: Seq[Attribute],
     initialStateDeserializer: Expression,
-    initialState: LogicalPlan) extends BinaryNode with ObjectProducer {
+    initialState: LogicalPlan)
+    extends BinaryNode
+    with ObjectProducer {
 
   override def left: LogicalPlan = child
   override def right: LogicalPlan = initialState
   override protected def withNewChildrenInternal(
-      newLeft: LogicalPlan, newRight: LogicalPlan): TransformWithState =
+      newLeft: LogicalPlan,
+      newRight: LogicalPlan): TransformWithState =
     copy(child = newLeft, initialState = newRight)
 }
 
@@ -681,18 +716,19 @@ object FlatMapGroupsInR {
         groupingAttributes,
         child)
     } else {
-      CatalystSerde.serialize(FlatMapGroupsInR(
-        func,
-        packageNames,
-        broadcastVars,
-        inputSchema,
-        schema,
-        UnresolvedDeserializer(keyDeserializer, groupingAttributes),
-        UnresolvedDeserializer(valueDeserializer, dataAttributes),
-        groupingAttributes,
-        dataAttributes,
-        CatalystSerde.generateObjAttr(ExpressionEncoder(schema)),
-        child))(ExpressionEncoder(schema))
+      CatalystSerde.serialize(
+        FlatMapGroupsInR(
+          func,
+          packageNames,
+          broadcastVars,
+          inputSchema,
+          schema,
+          UnresolvedDeserializer(keyDeserializer, groupingAttributes),
+          UnresolvedDeserializer(valueDeserializer, dataAttributes),
+          groupingAttributes,
+          dataAttributes,
+          CatalystSerde.generateObjAttr(ExpressionEncoder(schema)),
+          child))(ExpressionEncoder(schema))
     }
   }
 }
@@ -708,12 +744,20 @@ case class FlatMapGroupsInR(
     groupingAttributes: Seq[Attribute],
     dataAttributes: Seq[Attribute],
     outputObjAttr: Attribute,
-    child: LogicalPlan) extends UnaryNode with ObjectProducer {
+    child: LogicalPlan)
+    extends UnaryNode
+    with ObjectProducer {
 
   override lazy val schema = outputSchema
 
-  override protected def stringArgs: Iterator[Any] = Iterator(inputSchema, outputSchema,
-    keyDeserializer, valueDeserializer, groupingAttributes, dataAttributes, outputObjAttr,
+  override protected def stringArgs: Iterator[Any] = Iterator(
+    inputSchema,
+    outputSchema,
+    keyDeserializer,
+    valueDeserializer,
+    groupingAttributes,
+    dataAttributes,
+    outputObjAttr,
     child)
 
   override protected def withNewChildInternal(newChild: LogicalPlan): FlatMapGroupsInR =
@@ -721,8 +765,7 @@ case class FlatMapGroupsInR(
 }
 
 /**
- * Similar with `FlatMapGroupsInR` but serializes and deserializes input/output in
- * Arrow format.
+ * Similar with `FlatMapGroupsInR` but serializes and deserializes input/output in Arrow format.
  * This is also somewhat similar with [[FlatMapGroupsInPandas]].
  */
 case class FlatMapGroupsInRWithArrow(
@@ -733,13 +776,18 @@ case class FlatMapGroupsInRWithArrow(
     output: Seq[Attribute],
     keyDeserializer: Expression,
     groupingAttributes: Seq[Attribute],
-    child: LogicalPlan) extends UnaryNode {
+    child: LogicalPlan)
+    extends UnaryNode {
   // This operator always need all columns of its child, even it doesn't reference to.
   @transient
   override lazy val references: AttributeSet = child.outputSet
 
   override protected def stringArgs: Iterator[Any] = Iterator(
-    inputSchema, DataTypeUtils.fromAttributes(output), keyDeserializer, groupingAttributes, child)
+    inputSchema,
+    DataTypeUtils.fromAttributes(output),
+    keyDeserializer,
+    groupingAttributes,
+    child)
 
   override val producedAttributes = AttributeSet(output)
 
@@ -749,7 +797,7 @@ case class FlatMapGroupsInRWithArrow(
 
 /** Factory for constructing new `CoGroup` nodes. */
 object CoGroup {
-  def apply[K : Encoder, L : Encoder, R : Encoder, OUT : Encoder](
+  def apply[K: Encoder, L: Encoder, R: Encoder, OUT: Encoder](
       func: (K, Iterator[L], Iterator[R]) => IterableOnce[OUT],
       leftGroup: Seq[Attribute],
       rightGroup: Seq[Attribute],
@@ -798,13 +846,17 @@ case class CoGroup(
     rightOrder: Seq[SortOrder],
     outputObjAttr: Attribute,
     left: LogicalPlan,
-    right: LogicalPlan) extends BinaryNode with ObjectProducer {
+    right: LogicalPlan)
+    extends BinaryNode
+    with ObjectProducer {
   override protected def withNewChildrenInternal(
-      newLeft: LogicalPlan, newRight: LogicalPlan): CoGroup = copy(left = newLeft, right = newRight)
+      newLeft: LogicalPlan,
+      newRight: LogicalPlan): CoGroup = copy(left = newLeft, right = newRight)
 }
 
 // TODO (SPARK-44225): Move this into analyzer
 object JoinWith {
+
   /**
    * find the trivially true predicates and automatically resolves them to both sides.
    */
@@ -812,23 +864,27 @@ object JoinWith {
     val cond = plan.condition.map {
       _.transform {
         case catalyst.expressions.EqualTo(a: AttributeReference, b: AttributeReference)
-          if a.sameRef(b) =>
+            if a.sameRef(b) =>
           catalyst.expressions.EqualTo(
-            plan.left.resolveQuoted(a.name, resolver).getOrElse(
-              throw QueryCompilationErrors.unresolvedColumnError(
-                a.name, plan.left.schema.fieldNames)),
-            plan.right.resolveQuoted(b.name, resolver).getOrElse(
-              throw QueryCompilationErrors.unresolvedColumnError(
-                b.name, plan.right.schema.fieldNames)))
+            plan.left
+              .resolveQuoted(a.name, resolver)
+              .getOrElse(throw QueryCompilationErrors
+                .unresolvedColumnError(a.name, plan.left.schema.fieldNames)),
+            plan.right
+              .resolveQuoted(b.name, resolver)
+              .getOrElse(throw QueryCompilationErrors
+                .unresolvedColumnError(b.name, plan.right.schema.fieldNames)))
         case catalyst.expressions.EqualNullSafe(a: AttributeReference, b: AttributeReference)
-          if a.sameRef(b) =>
+            if a.sameRef(b) =>
           catalyst.expressions.EqualNullSafe(
-            plan.left.resolveQuoted(a.name, resolver).getOrElse(
-              throw QueryCompilationErrors.unresolvedColumnError(
-                a.name, plan.left.schema.fieldNames)),
-            plan.right.resolveQuoted(b.name, resolver).getOrElse(
-              throw QueryCompilationErrors.unresolvedColumnError(
-                b.name, plan.right.schema.fieldNames)))
+            plan.left
+              .resolveQuoted(a.name, resolver)
+              .getOrElse(throw QueryCompilationErrors
+                .unresolvedColumnError(a.name, plan.left.schema.fieldNames)),
+            plan.right
+              .resolveQuoted(b.name, resolver)
+              .getOrElse(throw QueryCompilationErrors
+                .unresolvedColumnError(b.name, plan.right.schema.fieldNames)))
       }
     }
     plan.copy(condition = cond)

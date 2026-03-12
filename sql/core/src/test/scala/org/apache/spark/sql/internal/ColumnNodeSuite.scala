@@ -71,7 +71,8 @@ class ColumnNodeSuite extends SparkFunSuite {
     val lambdaVariableY = new UnresolvedNamedLambdaVariable("y")
     testSql(
       UnresolvedFunction(
-        "transform", Seq(
+        "transform",
+        Seq(
           UnresolvedAttribute("input"),
           LambdaFunction(
             UnresolvedFunction("adjust", Seq(lambdaVariableX, UnresolvedAttribute("b"))),
@@ -79,7 +80,8 @@ class ColumnNodeSuite extends SparkFunSuite {
       "transform(input, x -> adjust(x, b))")
     testSql(
       UnresolvedFunction(
-        "transform", Seq(
+        "transform",
+        Seq(
           UnresolvedAttribute("input"),
           LambdaFunction(
             UnresolvedFunction(
@@ -92,14 +94,15 @@ class ColumnNodeSuite extends SparkFunSuite {
     testSql(
       UpdateFields(UnresolvedAttribute("struct"), "b", Option(Literal(10.toLong))),
       "update_field(struct, b, 10L)")
-    testSql(CaseWhenOtherwise(
-      Seq(UnresolvedAttribute("c1") -> UnresolvedAttribute("v1"))),
+    testSql(
+      CaseWhenOtherwise(Seq(UnresolvedAttribute("c1") -> UnresolvedAttribute("v1"))),
       "CASE WHEN c1 THEN v1 END")
-    testSql(CaseWhenOtherwise(
-      Seq(
-        UnresolvedAttribute("c1") -> UnresolvedAttribute("v1"),
-        UnresolvedAttribute("c2") -> UnresolvedAttribute("v2")),
-      Option(Literal(25))),
+    testSql(
+      CaseWhenOtherwise(
+        Seq(
+          UnresolvedAttribute("c1") -> UnresolvedAttribute("v1"),
+          UnresolvedAttribute("c2") -> UnresolvedAttribute("v2")),
+        Option(Literal(25))),
       "CASE WHEN c1 THEN v1 WHEN c2 THEN v2 ELSE 25 END")
     val windowSpec = WindowSpec(
       Seq(UnresolvedAttribute("a"), UnresolvedAttribute("b")),
@@ -109,9 +112,8 @@ class ColumnNodeSuite extends SparkFunSuite {
     val reducedWindowSpec = windowSpec.copy(
       partitionColumns = windowSpec.partitionColumns.take(1),
       sortColumns = windowSpec.sortColumns.take(1))
-    val window = Window(
-      UnresolvedFunction("sum", Seq(UnresolvedAttribute("i"))),
-      WindowSpec(Nil, Nil))
+    val window =
+      Window(UnresolvedFunction("sum", Seq(UnresolvedAttribute("i"))), WindowSpec(Nil, Nil))
     testSql(window, "sum(i) OVER ()")
     testSql(
       window.copy(windowSpec = windowSpec.copy(sortColumns = Nil)),
@@ -126,17 +128,16 @@ class ColumnNodeSuite extends SparkFunSuite {
       window.copy(windowSpec = reducedWindowSpec),
       "sum(i) OVER (PARTITION BY a ORDER BY x DESC NULLS FIRST)")
     testSql(
-      window.copy(windowSpec = reducedWindowSpec.copy(frame = Option(WindowFrame(
-        WindowFrame.Row,
-        WindowFrame.UnboundedPreceding,
-        WindowFrame.CurrentRow)))),
+      window.copy(windowSpec = reducedWindowSpec.copy(frame = Option(
+        WindowFrame(WindowFrame.Row, WindowFrame.UnboundedPreceding, WindowFrame.CurrentRow)))),
       "sum(i) OVER (PARTITION BY a ORDER BY x DESC NULLS FIRST " +
         "ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)")
     testSql(
-      window.copy(windowSpec = reducedWindowSpec.copy(frame = Option(WindowFrame(
-        WindowFrame.Range,
-        WindowFrame.Value(Literal(-10)),
-        WindowFrame.UnboundedFollowing)))),
+      window.copy(windowSpec = reducedWindowSpec.copy(frame = Option(
+        WindowFrame(
+          WindowFrame.Range,
+          WindowFrame.Value(Literal(-10)),
+          WindowFrame.UnboundedFollowing)))),
       "sum(i) OVER (PARTITION BY a ORDER BY x DESC NULLS FIRST " +
         "RANGE BETWEEN -10 AND UNBOUNDED FOLLOWING)")
     testSql(InvokeInlineUserDefinedFunction(simpleUdf, Seq(UnresolvedAttribute("x"))), "UDF(x)")
@@ -162,42 +163,43 @@ class ColumnNodeSuite extends SparkFunSuite {
     val lambdaVariable = UnresolvedNamedLambdaVariable("x")
     testNormalization(
       UnresolvedFunction(
-        "transform", Seq(
+        "transform",
+        Seq(
           attribute("input", 331),
           LambdaFunction(
             UnresolvedFunction("adjust", Seq(lambdaVariable, attribute("b", 2))),
             Seq(lambdaVariable)))))
     testNormalization(UnresolvedExtractValue(attribute("b", 2), attribute("a", 8)))
     testNormalization(UpdateFields(attribute("struct", 4), "a", Option(attribute("a", 11))))
-    testNormalization(CaseWhenOtherwise(
-      Seq(
-        attribute("c1", 5) -> attribute("v1", 2),
-        attribute("c2", 3) -> attribute("v2", 4)),
-      Option(attribute("v2", 5))))
-    testNormalization(Window(
-      UnresolvedFunction("sum", Seq(attribute("a")), isInternal = true, isDistinct = true),
-      WindowSpec(
-        Seq(attribute("b", 2)),
-        Seq(SortOrder(attribute("c", 3), SortOrder.Descending, SortOrder.NullsFirst)),
-        // Not a supported frame, just here for testing.
-        Option(WindowFrame(
-          WindowFrame.Range,
-          WindowFrame.Value(attribute("d", 3)),
-          WindowFrame.Value(attribute("e", 4)))))))
-    testNormalization(InvokeInlineUserDefinedFunction(
-      simpleUdf,
-      Seq(attribute("a", 2))))
+    testNormalization(
+      CaseWhenOtherwise(
+        Seq(attribute("c1", 5) -> attribute("v1", 2), attribute("c2", 3) -> attribute("v2", 4)),
+        Option(attribute("v2", 5))))
+    testNormalization(
+      Window(
+        UnresolvedFunction("sum", Seq(attribute("a")), isInternal = true, isDistinct = true),
+        WindowSpec(
+          Seq(attribute("b", 2)),
+          Seq(SortOrder(attribute("c", 3), SortOrder.Descending, SortOrder.NullsFirst)),
+          // Not a supported frame, just here for testing.
+          Option(
+            WindowFrame(
+              WindowFrame.Range,
+              WindowFrame.Value(attribute("d", 3)),
+              WindowFrame.Value(attribute("e", 4)))))))
+    testNormalization(InvokeInlineUserDefinedFunction(simpleUdf, Seq(attribute("a", 2))))
   }
 
   private def testNormalization(generate: => ColumnNode): Unit = {
     val a = CurrentOrigin.withOrigin(origin())(generate)
     val b = CurrentOrigin.withOrigin(origin())(generate)
-    val c = try {
-      createNormalized.set(true)
-      CurrentOrigin.withOrigin(ColumnNode.NO_ORIGIN)(generate)
-    } finally {
-      createNormalized.set(false)
-    }
+    val c =
+      try {
+        createNormalized.set(true)
+        CurrentOrigin.withOrigin(ColumnNode.NO_ORIGIN)(generate)
+      } finally {
+        createNormalized.set(false)
+      }
     assert(a != a.normalized)
     assert(a.normalized eq a.normalized.normalized)
     assert(a != b)
@@ -230,10 +232,7 @@ class ColumnNodeSuite extends SparkFunSuite {
     } else {
       Metadata.empty
     }
-    ExpressionColumnNode(AttributeReference(
-      name,
-      LongType,
-      metadata = metadata)(
-      exprId = ExprId(id)))
+    ExpressionColumnNode(
+      AttributeReference(name, LongType, metadata = metadata)(exprId = ExprId(id)))
   }
 }

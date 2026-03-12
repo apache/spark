@@ -30,24 +30,24 @@ import org.apache.spark.sql.types.{LongType, StructField, StructType, TimestampT
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
- *  A source that generates increment long values with timestamps. Each generated row has two
- *  columns: a timestamp column for the generated time and an auto increment long column starting
- *  with 0L.
+ * A source that generates increment long values with timestamps. Each generated row has two
+ * columns: a timestamp column for the generated time and an auto increment long column starting
+ * with 0L.
  *
- *  This source supports the following options:
- *  - `rowsPerBatch` (e.g. 100): How many rows should be generated per micro-batch.
- *  - `numPartitions` (e.g. 10, default: Spark's default parallelism): The partition number for the
- *    generated rows.
- *  - `startTimestamp` (e.g. 1000, default: 0): starting value of generated time
- *  - `advanceMillisPerBatch` (e.g. 1000, default: 1000): the amount of time being advanced in
- *    generated time on each micro-batch.
+ * This source supports the following options:
+ *   - `rowsPerBatch` (e.g. 100): How many rows should be generated per micro-batch.
+ *   - `numPartitions` (e.g. 10, default: Spark's default parallelism): The partition number for
+ *     the generated rows.
+ *   - `startTimestamp` (e.g. 1000, default: 0): starting value of generated time
+ *   - `advanceMillisPerBatch` (e.g. 1000, default: 1000): the amount of time being advanced in
+ *     generated time on each micro-batch.
  *
- *  Unlike `rate` data source, this data source provides a consistent set of input rows per
- *  micro-batch regardless of query execution (configuration of trigger, query being lagging, etc.),
- *  say, batch 0 will produce 0~999 and batch 1 will produce 1000~1999, and so on. Same applies to
- *  the generated time.
+ * Unlike `rate` data source, this data source provides a consistent set of input rows per
+ * micro-batch regardless of query execution (configuration of trigger, query being lagging,
+ * etc.), say, batch 0 will produce 0~999 and batch 1 will produce 1000~1999, and so on. Same
+ * applies to the generated time.
  *
- *  As the name represents, this data source only supports micro-batch read.
+ * As the name represents, this data source only supports micro-batch read.
  */
 class RatePerMicroBatchProvider extends SimpleTableProvider with DataSourceRegister {
   import RatePerMicroBatchProvider._
@@ -59,8 +59,8 @@ class RatePerMicroBatchProvider extends SimpleTableProvider with DataSourceRegis
         s"Invalid value '$rowsPerBatch'. The option 'rowsPerBatch' must be positive")
     }
 
-    val numPartitions = options.getInt(
-      NUM_PARTITIONS, SparkSession.active.sparkContext.defaultParallelism)
+    val numPartitions =
+      options.getInt(NUM_PARTITIONS, SparkSession.active.sparkContext.defaultParallelism)
     if (numPartitions <= 0) {
       throw new IllegalArgumentException(
         s"Invalid value '$numPartitions'. The option 'numPartitions' must be positive")
@@ -79,8 +79,7 @@ class RatePerMicroBatchProvider extends SimpleTableProvider with DataSourceRegis
           "must be non-negative")
     }
 
-    new RatePerMicroBatchTable(rowsPerBatch, numPartitions, startTimestamp,
-      advanceMillisPerBatch)
+    new RatePerMicroBatchTable(rowsPerBatch, numPartitions, startTimestamp, advanceMillisPerBatch)
   }
 
   override def shortName(): String = "rate-micro-batch"
@@ -90,7 +89,9 @@ class RatePerMicroBatchTable(
     rowsPerBatch: Long,
     numPartitions: Int,
     startTimestamp: Long,
-    advanceMillisPerBatch: Int) extends Table with SupportsRead {
+    advanceMillisPerBatch: Int)
+    extends Table
+    with SupportsRead {
   override def name(): String = {
     s"RatePerMicroBatch(rowsPerBatch=$rowsPerBatch, numPartitions=$numPartitions," +
       s"startTimestamp=$startTimestamp, advanceMillisPerBatch=$advanceMillisPerBatch)"
@@ -102,20 +103,25 @@ class RatePerMicroBatchTable(
     util.EnumSet.of(TableCapability.MICRO_BATCH_READ)
   }
 
-  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = () => new Scan {
-    override def readSchema(): StructType = RatePerMicroBatchProvider.SCHEMA
+  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = () =>
+    new Scan {
+      override def readSchema(): StructType = RatePerMicroBatchProvider.SCHEMA
 
-    override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream =
-      new RatePerMicroBatchStream(rowsPerBatch, numPartitions, startTimestamp,
-        advanceMillisPerBatch, options)
+      override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream =
+        new RatePerMicroBatchStream(
+          rowsPerBatch,
+          numPartitions,
+          startTimestamp,
+          advanceMillisPerBatch,
+          options)
 
-    override def toContinuousStream(checkpointLocation: String): ContinuousStream = {
-      throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3167")
+      override def toContinuousStream(checkpointLocation: String): ContinuousStream = {
+        throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3167")
+      }
+
+      override def columnarSupportMode(): Scan.ColumnarSupportMode =
+        Scan.ColumnarSupportMode.UNSUPPORTED
     }
-
-    override def columnarSupportMode(): Scan.ColumnarSupportMode =
-      Scan.ColumnarSupportMode.UNSUPPORTED
-  }
 }
 
 object RatePerMicroBatchProvider {

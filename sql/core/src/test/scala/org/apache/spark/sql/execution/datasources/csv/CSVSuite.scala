@@ -50,10 +50,10 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
 abstract class CSVSuite
-  extends QueryTest
-  with SharedSparkSession
-  with TestCsvData
-  with CommonFileDataSourceSuite {
+    extends QueryTest
+    with SharedSparkSession
+    with TestCsvData
+    with CommonFileDataSourceSuite {
 
   import testImplicits._
 
@@ -133,8 +133,7 @@ abstract class CSVSuite
   }
 
   test("simple csv test") {
-    val cars = spark
-      .read
+    val cars = spark.read
       .format("csv")
       .option("header", "false")
       .load(testFile(carsFile))
@@ -143,8 +142,7 @@ abstract class CSVSuite
   }
 
   test("simple csv test with calling another function to load") {
-    val cars = spark
-      .read
+    val cars = spark.read
       .option("header", "false")
       .csv(testFile(carsFile))
 
@@ -152,8 +150,7 @@ abstract class CSVSuite
   }
 
   test("simple csv test with type inference") {
-    val cars = spark
-      .read
+    val cars = spark.read
       .format("csv")
       .option("header", "true")
       .option("inferSchema", "true")
@@ -185,8 +182,7 @@ abstract class CSVSuite
       .option("inferSchema", "true")
       .load(testFile(boolFile))
 
-    val expectedSchema = StructType(List(
-      StructField("bool", BooleanType, nullable = true)))
+    val expectedSchema = StructType(List(StructField("bool", BooleanType, nullable = true)))
     assert(result.schema === expectedSchema)
   }
 
@@ -197,10 +193,11 @@ abstract class CSVSuite
       .option("header", "true")
       .option("inferSchema", "true")
       .load(testFile(decimalFile))
-    val expectedSchema = StructType(List(
-      StructField("decimal", DecimalType(20, 0), nullable = true),
-      StructField("long", LongType, nullable = true),
-      StructField("double", DoubleType, nullable = true)))
+    val expectedSchema = StructType(
+      List(
+        StructField("decimal", DecimalType(20, 0), nullable = true),
+        StructField("long", LongType, nullable = true),
+        StructField("double", DoubleType, nullable = true)))
     assert(result.schema === expectedSchema)
   }
 
@@ -215,24 +212,24 @@ abstract class CSVSuite
 
   test("test with tab delimiter and double quote") {
     val cars = spark.read
-        .options(Map("quote" -> "\"", "delimiter" -> """\t""", "header" -> "true"))
-        .csv(testFile(carsTsvFile))
+      .options(Map("quote" -> "\"", "delimiter" -> """\t""", "header" -> "true"))
+      .csv(testFile(carsTsvFile))
 
     verifyCars(cars, numFields = 6, withHeader = true, checkHeader = false)
   }
 
   test("SPARK-24540: test with multiple character delimiter (comma space)") {
     val cars = spark.read
-        .options(Map("quote" -> "\'", "delimiter" -> ", ", "header" -> "true"))
-        .csv(testFile(carsMultiCharDelimitedFile))
+      .options(Map("quote" -> "\'", "delimiter" -> ", ", "header" -> "true"))
+      .csv(testFile(carsMultiCharDelimitedFile))
 
     verifyCars(cars, withHeader = true)
   }
 
   test("SPARK-24540: test with multiple (crazy) character delimiter") {
     val cars = spark.read
-        .options(Map("quote" -> "\'", "delimiter" -> """_/-\\_""", "header" -> "true"))
-        .csv(testFile(carsMultiCharCrazyDelimitedFile))
+      .options(Map("quote" -> "\'", "delimiter" -> """_/-\\_""", "header" -> "true"))
+      .csv(testFile(carsMultiCharCrazyDelimitedFile))
 
     verifyCars(cars, withHeader = true)
 
@@ -241,8 +238,7 @@ abstract class CSVSuite
     val expectedOtherColVals = Seq(
       ("Tesla", "S", "No comment", null),
       ("Ford", "E350", "Go get one now they are going fast", null),
-      ("Chevy", "Volt", null, null)
-    )
+      ("Chevy", "Volt", null, null))
 
     expectedOtherColVals.zipWithIndex.foreach { case (values, index) =>
       val actualRow = otherCols(index)
@@ -270,7 +266,9 @@ abstract class CSVSuite
   test("bad encoding name") {
     checkError(
       exception = intercept[SparkIllegalArgumentException] {
-        spark.read.format("csv").option("charset", "1-9588-osi")
+        spark.read
+          .format("csv")
+          .option("charset", "1-9588-osi")
           .load(testFile(carsFile8859))
       },
       condition = "INVALID_PARAMETER_VALUE.CHARSET",
@@ -278,15 +276,13 @@ abstract class CSVSuite
         "charset" -> "1-9588-osi",
         "functionName" -> toSQLId("CSVOptions"),
         "parameter" -> toSQLId("charset"),
-        "charsets" -> CharsetProvider.VALID_CHARSETS.mkString(", "))
-    )
+        "charsets" -> CharsetProvider.VALID_CHARSETS.mkString(", ")))
   }
 
   test("test different encoding") {
     withView("carsTable") {
       // scalastyle:off
-      spark.sql(
-        s"""
+      spark.sql(s"""
           |CREATE TEMPORARY VIEW carsTable USING csv
           |OPTIONS (path "${testFile(carsFile8859)}", header "true",
           |charset "iso-8859-1", delimiter "þ")
@@ -297,8 +293,7 @@ abstract class CSVSuite
   }
 
   test("crlf line separators in multiline mode") {
-    val cars = spark
-      .read
+    val cars = spark.read
       .format("csv")
       .option("multiLine", "true")
       .option("header", "true")
@@ -309,8 +304,7 @@ abstract class CSVSuite
 
   test("test aliases sep and encoding for delimiter and charset") {
     // scalastyle:off
-    val cars = spark
-      .read
+    val cars = spark.read
       .format("csv")
       .option("header", "true")
       .option("encoding", "iso-8859-1")
@@ -323,8 +317,7 @@ abstract class CSVSuite
 
   test("DDL test with tab separated file") {
     withView("carsTable") {
-      spark.sql(
-        s"""
+      spark.sql(s"""
           |CREATE TEMPORARY VIEW carsTable USING csv
           |OPTIONS (path "${testFile(carsTsvFile)}", header "true", delimiter "\t")
          """.stripMargin.replaceAll("\n", " "))
@@ -335,8 +328,7 @@ abstract class CSVSuite
 
   test("DDL test parsing decimal type") {
     withView("carsTable") {
-      spark.sql(
-        s"""
+      spark.sql(s"""
           |CREATE TEMPORARY VIEW carsTable
           |(yearMade double, makeName string, modelName string, priceTag decimal,
           | comments string, grp string)
@@ -369,8 +361,9 @@ abstract class CSVSuite
       .options(Map("header" -> "true", "mode" -> null))
       .load(testFile(carsFile))
     assert(cars.collect().length == 3)
-    assert(cars.select("make").collect() sameElements
-      Array(Row("Tesla"), Row("Ford"), Row("Chevy")))
+    assert(
+      cars.select("make").collect() sameElements
+        Array(Row("Tesla"), Row("Ford"), Row("Chevy")))
   }
 
   test("test for blank column names on read and select columns") {
@@ -391,7 +384,8 @@ abstract class CSVSuite
           .format("csv")
           .option("multiLine", multiLine)
           .options(Map("header" -> "true", "mode" -> "failfast"))
-          .load(testFile(carsFile)).collect()
+          .load(testFile(carsFile))
+          .collect()
       }
       checkErrorMatchPVals(
         exception = e1,
@@ -402,14 +396,12 @@ abstract class CSVSuite
       checkError(
         exception = e2.getCause.asInstanceOf[SparkRuntimeException],
         condition = "MALFORMED_CSV_RECORD",
-        parameters = Map("badRecord" -> "2015,Chevy,Volt")
-      )
+        parameters = Map("badRecord" -> "2015,Chevy,Volt"))
     }
   }
 
   test("test for tokens more than the fields in the schema") {
-    val cars = spark
-      .read
+    val cars = spark.read
       .format("csv")
       .option("header", "false")
       .option("comment", "~")
@@ -441,8 +433,7 @@ abstract class CSVSuite
 
   test("DDL test with empty file") {
     withView("carsTable") {
-      spark.sql(
-        s"""
+      spark.sql(s"""
           |CREATE TEMPORARY VIEW carsTable
           |(yearMade double, makeName string, modelName string, comments string, grp string)
           |USING csv
@@ -455,8 +446,7 @@ abstract class CSVSuite
 
   test("DDL test with schema") {
     withView("carsTable") {
-      spark.sql(
-        s"""
+      spark.sql(s"""
           |CREATE TEMPORARY VIEW carsTable
           |(yearMade double, makeName string, modelName string, comments string, blank string)
           |USING csv
@@ -466,7 +456,12 @@ abstract class CSVSuite
       val cars = spark.table("carsTable")
       verifyCars(cars, withHeader = true, checkHeader = false, checkValues = false)
       assert(
-        cars.schema.fieldNames === Array("yearMade", "makeName", "modelName", "comments", "blank"))
+        cars.schema.fieldNames === Array(
+          "yearMade",
+          "makeName",
+          "modelName",
+          "comments",
+          "blank"))
     }
   }
 
@@ -478,7 +473,9 @@ abstract class CSVSuite
         .option("header", "true")
         .load(testFile(carsFile))
 
-      cars.coalesce(1).write
+      cars
+        .coalesce(1)
+        .write
         .option("header", "true")
         .csv(csvDir)
 
@@ -499,7 +496,9 @@ abstract class CSVSuite
         .option("header", "true")
         .load(testFile(carsFile))
 
-      cars.coalesce(1).write
+      cars
+        .coalesce(1)
+        .write
         .format("csv")
         .option("header", "true")
         .option("quote", "\"")
@@ -523,7 +522,8 @@ abstract class CSVSuite
       val df = spark.createDataFrame(data)
 
       // escapeQuotes should be true by default
-      df.coalesce(1).write
+      df.coalesce(1)
+        .write
         .format("csv")
         .option("quote", "\"")
         .option("escape", "\"")
@@ -549,7 +549,8 @@ abstract class CSVSuite
       val df = spark.createDataFrame(data)
 
       // escapeQuotes should be true by default
-      df.coalesce(1).write
+      df.coalesce(1)
+        .write
         .format("csv")
         .option("quote", "\"")
         .option("escape", "\"")
@@ -574,7 +575,8 @@ abstract class CSVSuite
       val df = spark.createDataFrame(data)
 
       // escapeQuotes should be true by default
-      df.coalesce(1).write
+      df.coalesce(1)
+        .write
         .format("csv")
         .option("quote", "\"")
         .option("escapeQuotes", "false")
@@ -594,21 +596,14 @@ abstract class CSVSuite
 
   test("save csv with quote escaping, using charToEscapeQuoteEscaping option") {
     withTempPath { path =>
-
       // original text
-      val df1 = Seq(
-        """You are "beautiful"""",
-        """Yes, \"in the inside"\"""
-      ).toDF()
+      val df1 = Seq("""You are "beautiful"""", """Yes, \"in the inside"\""").toDF()
 
       // text written in CSV with following options:
       // quote character: "
       // escape character: \
       // character to escape quote escaping: #
-      val df2 = Seq(
-        """"You are \"beautiful\""""",
-        """"Yes, #\\"in the inside\"#\""""
-      ).toDF()
+      val df2 = Seq(""""You are \"beautiful\""""", """"Yes, #\\"in the inside\"#\"""").toDF()
 
       df2.coalesce(1).write.text(path.getAbsolutePath)
 
@@ -633,15 +628,21 @@ abstract class CSVSuite
       withTempPath { path =>
         withSQLConf(SQLConf.LEGACY_JAVA_CHARSETS.key -> "true") {
           val csvDir = new File(path, "csv")
-          Seq(content).toDF().write
+          Seq(content)
+            .toDF()
+            .write
             .option("encoding", encoding)
             .csv(csvDir.getCanonicalPath)
 
-          csvDir.listFiles().filter(_.getName.endsWith("csv")).foreach({ csvFile =>
-            val readback = Files.readAllBytes(csvFile.toPath)
-            val expected = (content + Properties.lineSeparator).getBytes(Charset.forName(encoding))
-            assert(readback === expected)
-          })
+          csvDir
+            .listFiles()
+            .filter(_.getName.endsWith("csv"))
+            .foreach({ csvFile =>
+              val readback = Files.readAllBytes(csvFile.toPath)
+              val expected =
+                (content + Properties.lineSeparator).getBytes(Charset.forName(encoding))
+              assert(readback === expected)
+            })
         }
       }
     }
@@ -652,7 +653,9 @@ abstract class CSVSuite
       exception = intercept[SparkIllegalArgumentException] {
         withTempPath { path =>
           val csvDir = new File(path, "csv").getCanonicalPath
-          Seq("a,A,c,A,b,B").toDF().write
+          Seq("a,A,c,A,b,B")
+            .toDF()
+            .write
             .option("encoding", "1-9588-osi")
             .csv(csvDir)
         }
@@ -662,13 +665,11 @@ abstract class CSVSuite
         "charset" -> "1-9588-osi",
         "functionName" -> toSQLId("CSVOptions"),
         "parameter" -> toSQLId("charset"),
-        "charsets" -> CharsetProvider.VALID_CHARSETS.mkString(", "))
-    )
+        "charsets" -> CharsetProvider.VALID_CHARSETS.mkString(", ")))
   }
 
   test("commented lines in CSV data") {
     Seq("false", "true").foreach { multiLine =>
-
       val results = spark.read
         .format("csv")
         .options(Map("comment" -> "~", "header" -> "false", "multiLine" -> multiLine))
@@ -676,7 +677,8 @@ abstract class CSVSuite
         .collect()
 
       val expected =
-        Seq(Seq("1", "2", "3", "4", "5.01", "2015-08-20 15:57:00"),
+        Seq(
+          Seq("1", "2", "3", "4", "5.01", "2015-08-20 15:57:00"),
           Seq("6", "7", "8", "9", "0", "2015-08-21 16:58:01"),
           Seq("1", "2", "3", "4", "5", "2015-08-23 18:00:42"))
 
@@ -693,18 +695,17 @@ abstract class CSVSuite
       .collect()
 
     val expected =
-      Seq(Seq(1, 2, 3, 4, 5.01D, Timestamp.valueOf("2015-08-20 15:57:00")),
-          Seq(6, 7, 8, 9, 0, Timestamp.valueOf("2015-08-21 16:58:01")),
-          Seq(1, 2, 3, 4, 5, Timestamp.valueOf("2015-08-23 18:00:42")))
+      Seq(
+        Seq(1, 2, 3, 4, 5.01d, Timestamp.valueOf("2015-08-20 15:57:00")),
+        Seq(6, 7, 8, 9, 0, Timestamp.valueOf("2015-08-21 16:58:01")),
+        Seq(1, 2, 3, 4, 5, Timestamp.valueOf("2015-08-23 18:00:42")))
 
     assert(results.toSeq.map(_.toSeq) === expected)
   }
 
   test("inferring timestamp types via custom date format") {
-    val options = Map(
-      "header" -> "true",
-      "inferSchema" -> "true",
-      "timestampFormat" -> "dd/MM/yyyy HH:mm")
+    val options =
+      Map("header" -> "true", "inferSchema" -> "true", "timestampFormat" -> "dd/MM/yyyy HH:mm")
     val results = spark.read
       .format("csv")
       .options(options)
@@ -714,7 +715,8 @@ abstract class CSVSuite
 
     val dateFormat = new SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.US)
     val expected =
-      Seq(Seq(new Timestamp(dateFormat.parse("26/08/2015 18:00").getTime)),
+      Seq(
+        Seq(new Timestamp(dateFormat.parse("26/08/2015 18:00").getTime)),
         Seq(new Timestamp(dateFormat.parse("27/10/2014 18:30").getTime)),
         Seq(new Timestamp(dateFormat.parse("28/01/2016 20:00").getTime)))
     assert(results.toSeq.map(_.toSeq) === expected)
@@ -722,10 +724,8 @@ abstract class CSVSuite
 
   test("load date types via custom date format") {
     val customSchema = new StructType(Array(StructField("date", DateType, true)))
-    val options = Map(
-      "header" -> "true",
-      "inferSchema" -> "false",
-      "dateFormat" -> "dd/MM/yyyy HH:mm")
+    val options =
+      Map("header" -> "true", "inferSchema" -> "false", "dateFormat" -> "dd/MM/yyyy HH:mm")
     val results = spark.read
       .format("csv")
       .options(options)
@@ -741,11 +741,10 @@ abstract class CSVSuite
       new Date(dateFormat.parse("27/10/2014 18:30").getTime),
       new Date(dateFormat.parse("28/01/2016 20:00").getTime))
     val dates = results.toSeq.map(_.toSeq.head)
-    expected.zip(dates).foreach {
-      case (expectedDate, date) =>
-        // As it truncates the hours, minutes and etc., we only check
-        // if the dates (days, months and years) are the same via `toString()`.
-        assert(expectedDate.toString === date.toString)
+    expected.zip(dates).foreach { case (expectedDate, date) =>
+      // As it truncates the hours, minutes and etc., we only check
+      // if the dates (days, months and years) are the same via `toString()`.
+      assert(expectedDate.toString === date.toString)
     }
   }
 
@@ -757,9 +756,7 @@ abstract class CSVSuite
       .collect()
 
     val expected =
-      Seq(
-        Seq("#1", "2", "3"),
-        Seq("4", "5", "6"))
+      Seq(Seq("#1", "2", "3"), Seq("4", "5", "6"))
 
     assert(results.toSeq.map(_.toSeq) === expected)
   }
@@ -767,12 +764,13 @@ abstract class CSVSuite
   test("nullable fields with user defined null value of \"null\"") {
 
     // year,make,model,comment,blank
-    val dataSchema = StructType(List(
-      StructField("year", IntegerType, nullable = true),
-      StructField("make", StringType, nullable = false),
-      StructField("model", StringType, nullable = false),
-      StructField("comment", StringType, nullable = true),
-      StructField("blank", StringType, nullable = true)))
+    val dataSchema = StructType(
+      List(
+        StructField("year", IntegerType, nullable = true),
+        StructField("make", StringType, nullable = false),
+        StructField("model", StringType, nullable = false),
+        StructField("comment", StringType, nullable = true),
+        StructField("blank", StringType, nullable = true)))
     val cars = spark.read
       .format("csv")
       .schema(dataSchema)
@@ -788,12 +786,13 @@ abstract class CSVSuite
   test("empty fields with user defined empty values") {
 
     // year,make,model,comment,blank
-    val dataSchema = StructType(List(
-      StructField("year", IntegerType, nullable = true),
-      StructField("make", StringType, nullable = false),
-      StructField("model", StringType, nullable = false),
-      StructField("comment", StringType, nullable = true),
-      StructField("blank", StringType, nullable = true)))
+    val dataSchema = StructType(
+      List(
+        StructField("year", IntegerType, nullable = true),
+        StructField("make", StringType, nullable = false),
+        StructField("model", StringType, nullable = false),
+        StructField("comment", StringType, nullable = true),
+        StructField("blank", StringType, nullable = true)))
     val cars = spark.read
       .format("csv")
       .schema(dataSchema)
@@ -804,8 +803,9 @@ abstract class CSVSuite
     verifyCars(cars, withHeader = true, checkValues = false)
     val results = cars.collect()
     assert(results(0).toSeq === Array(2012, "Tesla", "S", "empty", "empty"))
-    assert(results(1).toSeq ===
-      Array(1997, "Ford", "E350", "Go get one now they are going fast", null))
+    assert(
+      results(1).toSeq ===
+        Array(1997, "Ford", "E350", "Go get one now they are going fast", null))
     assert(results(2).toSeq === Array(2015, "Chevy", "Volt", null, "empty"))
   }
 
@@ -814,12 +814,13 @@ abstract class CSVSuite
       val csvDir = new File(dir, "csv").getCanonicalPath
 
       // year,make,model,comment,blank
-      val dataSchema = StructType(List(
-        StructField("year", IntegerType, nullable = true),
-        StructField("make", StringType, nullable = false),
-        StructField("model", StringType, nullable = false),
-        StructField("comment", StringType, nullable = true),
-        StructField("blank", StringType, nullable = true)))
+      val dataSchema = StructType(
+        List(
+          StructField("year", IntegerType, nullable = true),
+          StructField("make", StringType, nullable = false),
+          StructField("model", StringType, nullable = false),
+          StructField("comment", StringType, nullable = true),
+          StructField("blank", StringType, nullable = true)))
       val cars = spark.read
         .format("csv")
         .schema(dataSchema)
@@ -827,7 +828,9 @@ abstract class CSVSuite
         .option("nullValue", "NULL")
         .load(testFile(carsEmptyValueFile))
 
-      cars.coalesce(1).write
+      cars
+        .coalesce(1)
+        .write
         .format("csv")
         .option("header", "true")
         .option("emptyValue", "empty")
@@ -843,14 +846,16 @@ abstract class CSVSuite
       verifyCars(carsCopy, withHeader = true, checkValues = false)
       val results = carsCopy.collect()
       assert(results(0).toSeq === Array(2012, "Tesla", "S", "empty", "empty"))
-      assert(results(1).toSeq ===
-        Array(1997, "Ford", "E350", "Go get one now they are going fast", null))
+      assert(
+        results(1).toSeq ===
+          Array(1997, "Ford", "E350", "Go get one now they are going fast", null))
       assert(results(2).toSeq === Array(2015, "Chevy", "Volt", null, "empty"))
     }
   }
 
-  test("SPARK-37575: null values should be saved as nothing rather than " +
-    "quoted empty Strings \"\" with default settings") {
+  test(
+    "SPARK-37575: null values should be saved as nothing rather than " +
+      "quoted empty Strings \"\" with default settings") {
     Seq("true", "false").foreach { confVal =>
       withSQLConf(SQLConf.LEGACY_NULL_VALUE_WRITTEN_AS_QUOTED_EMPTY_STRING_CSV.key -> confVal) {
         withTempPath { path =>
@@ -876,7 +881,9 @@ abstract class CSVSuite
         .option("header", "true")
         .load(testFile(carsFile))
 
-      cars.coalesce(1).write
+      cars
+        .coalesce(1)
+        .write
         .format("csv")
         .option("header", "true")
         .option("compression", "gZiP")
@@ -899,8 +906,7 @@ abstract class CSVSuite
       "mapreduce.output.fileoutputformat.compress" -> "true",
       "mapreduce.output.fileoutputformat.compress.type" -> CompressionType.BLOCK.toString,
       "mapreduce.map.output.compress" -> "true",
-      "mapreduce.map.output.compress.codec" -> classOf[GzipCodec].getName
-    )
+      "mapreduce.map.output.compress.codec" -> classOf[GzipCodec].getName)
     withTempDir { dir =>
       val csvDir = new File(dir, "csv").getCanonicalPath
       val cars = spark.read
@@ -909,7 +915,9 @@ abstract class CSVSuite
         .options(extraOptions)
         .load(testFile(carsFile))
 
-      cars.coalesce(1).write
+      cars
+        .coalesce(1)
+        .write
         .format("csv")
         .option("header", "true")
         .option("compression", HadoopCompressionCodec.NONE.lowerCaseName())
@@ -937,13 +945,13 @@ abstract class CSVSuite
       .load(testFile(simpleSparseFile))
 
     assert(
-      df.schema.fields.map(field => field.dataType).sameElements(
-        Array(IntegerType, IntegerType, IntegerType, IntegerType)))
+      df.schema.fields
+        .map(field => field.dataType)
+        .sameElements(Array(IntegerType, IntegerType, IntegerType, IntegerType)))
   }
 
   test("old csv data source name works") {
-    val cars = spark
-      .read
+    val cars = spark.read
       .format("com.databricks.spark.csv")
       .option("header", "false")
       .load(testFile(carsFile))
@@ -952,22 +960,23 @@ abstract class CSVSuite
   }
 
   test("nulls, NaNs and Infinity values can be parsed") {
-    val numbers = spark
-      .read
+    val numbers = spark.read
       .format("csv")
-      .schema(StructType(List(
-        StructField("int", IntegerType, true),
-        StructField("long", LongType, true),
-        StructField("float", FloatType, true),
-        StructField("double", DoubleType, true)
-      )))
-      .options(Map(
-        "header" -> "true",
-        "mode" -> "DROPMALFORMED",
-        "nullValue" -> "--",
-        "nanValue" -> "NAN",
-        "negativeInf" -> "-INF",
-        "positiveInf" -> "INF"))
+      .schema(
+        StructType(
+          List(
+            StructField("int", IntegerType, true),
+            StructField("long", LongType, true),
+            StructField("float", FloatType, true),
+            StructField("double", DoubleType, true))))
+      .options(
+        Map(
+          "header" -> "true",
+          "mode" -> "DROPMALFORMED",
+          "nullValue" -> "--",
+          "nanValue" -> "NAN",
+          "negativeInf" -> "-INF",
+          "positiveInf" -> "INF"))
       .load(testFile(numbersFile))
 
     assert(numbers.count() == 8)
@@ -1010,8 +1019,7 @@ abstract class CSVSuite
         Row("1885-01-01T10:30:00.000-08:00"),
         Row("2014-10-27T18:30:00.000-07:00"),
         Row("2015-08-26T18:00:00.000-07:00"),
-        Row("2016-01-28T20:00:00.000-08:00")
-      )
+        Row("2016-01-28T20:00:00.000-08:00"))
 
       checkAnswer(iso8601Timestamps, expectedTimestamps)
     }
@@ -1145,8 +1153,7 @@ abstract class CSVSuite
 
   test("SPARK-37326: Timestamp type inference for a column with TIMESTAMP_NTZ values") {
     withTempPath { path =>
-      val exp = spark.sql(
-        """
+      val exp = spark.sql("""
           |select *
           |from values (timestamp_ntz'2020-12-12 12:12:12'), (timestamp_ntz'2020-12-12 12:12:12')
           |as t(col0)
@@ -1183,8 +1190,7 @@ abstract class CSVSuite
               spark.sql("""
                 select timestamp_ltz'2020-12-12 12:12:12' as col0 union all
                 select timestamp_ltz'2020-12-12 12:12:12' as col0
-                """)
-            )
+                """))
           }
         }
       }
@@ -1198,14 +1204,16 @@ abstract class CSVSuite
         "2020-12-12T12:12:12.000",
         "2020-12-12T17:12:12.000Z",
         "2020-12-12T17:12:12.000+05:00",
-        "2020-12-12T12:12:12.000"
-      ).toDF("data")
+        "2020-12-12T12:12:12.000")
+        .toDF("data")
         .coalesce(1)
-        .write.text(path.getAbsolutePath)
+        .write
+        .text(path.getAbsolutePath)
 
       for (policy <- Seq("exception", "corrected", "legacy")) {
         withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> policy) {
-          val res = spark.read.format("csv")
+          val res = spark.read
+            .format("csv")
             .option("inferSchema", "true")
             .option("header", "true")
             .load(path.getAbsolutePath)
@@ -1235,10 +1243,11 @@ abstract class CSVSuite
         "2020-12-12T12:12:12.000",
         "2020-12-12T17:12:12.000Z",
         "2020-12-12T17:12:12.000+05:00",
-        "2020-12-12T12:12:12.000"
-      ).toDF("data")
+        "2020-12-12T12:12:12.000")
+        .toDF("data")
         .coalesce(1)
-        .write.text(path.getAbsolutePath)
+        .write
+        .text(path.getAbsolutePath)
 
       for (timestampNTZFormat <- Seq(None, Some("yyyy-MM-dd'T'HH:mm:ss[.SSS]"))) {
         val reader = spark.read.format("csv").schema("col0 TIMESTAMP_NTZ")
@@ -1255,18 +1264,14 @@ abstract class CSVSuite
             Row(LocalDateTime.of(2020, 12, 12, 12, 12, 12)),
             Row(null),
             Row(null),
-            Row(LocalDateTime.of(2020, 12, 12, 12, 12, 12))
-          )
-        )
+            Row(LocalDateTime.of(2020, 12, 12, 12, 12, 12))))
       }
     }
   }
 
   test("SPARK-37326: Fail to write TIMESTAMP_NTZ if timestampNTZFormat contains zone offset") {
-    val patterns = Seq(
-      "yyyy-MM-dd HH:mm:ss XXX",
-      "yyyy-MM-dd HH:mm:ss Z",
-      "yyyy-MM-dd HH:mm:ss z")
+    val patterns =
+      Seq("yyyy-MM-dd HH:mm:ss XXX", "yyyy-MM-dd HH:mm:ss Z", "yyyy-MM-dd HH:mm:ss z")
 
     val exp = spark.sql("select timestamp_ntz'2020-12-12 12:12:12' as col0")
     for (pattern <- patterns) {
@@ -1281,8 +1286,8 @@ abstract class CSVSuite
         val msg = ex.getCause.getMessage
         assert(
           msg.contains("Unsupported field: OffsetSeconds") ||
-          msg.contains("Unable to extract value") ||
-          msg.contains("Unable to extract ZoneId"))
+            msg.contains("Unable to extract value") ||
+            msg.contains("Unable to extract ZoneId"))
       }
     }
   }
@@ -1311,10 +1316,8 @@ abstract class CSVSuite
         .schema(stringSchema)
         .option("header", "true")
         .load(datesWithFormatPath)
-      val expectedStringDatesWithFormat = Seq(
-        Row("2015/08/26"),
-        Row("2014/10/27"),
-        Row("2016/01/28"))
+      val expectedStringDatesWithFormat =
+        Seq(Row("2015/08/26"), Row("2014/10/27"), Row("2016/01/28"))
 
       checkAnswer(stringDatesWithFormat, expectedStringDatesWithFormat)
     }
@@ -1343,10 +1346,8 @@ abstract class CSVSuite
         .schema(stringSchema)
         .option("header", "true")
         .load(timestampsWithFormatPath)
-      val expectedStringTimestampsWithFormat = Seq(
-        Row("2015/08/26 18:00"),
-        Row("2014/10/27 18:30"),
-        Row("2016/01/28 20:00"))
+      val expectedStringTimestampsWithFormat =
+        Seq(Row("2015/08/26 18:00"), Row("2014/10/27 18:30"), Row("2016/01/28 20:00"))
 
       checkAnswer(stringTimestampsWithFormat, expectedStringTimestampsWithFormat)
     }
@@ -1376,10 +1377,8 @@ abstract class CSVSuite
         .schema(stringSchema)
         .option("header", "true")
         .load(timestampsWithFormatPath)
-      val expectedStringTimestampsWithFormat = Seq(
-        Row("2015/08/27 01:00"),
-        Row("2014/10/28 01:30"),
-        Row("2016/01/29 04:00"))
+      val expectedStringTimestampsWithFormat =
+        Seq(Row("2015/08/27 01:00"), Row("2014/10/28 01:30"), Row("2016/01/29 04:00"))
 
       checkAnswer(stringTimestampsWithFormat, expectedStringTimestampsWithFormat)
 
@@ -1436,7 +1435,8 @@ abstract class CSVSuite
     }
 
     withTempPath { path =>
-      sql(s"INSERT OVERWRITE DIRECTORY '${path.getCanonicalPath}' USING csv SELECT 's1' a, 's2' a")
+      sql(
+        s"INSERT OVERWRITE DIRECTORY '${path.getCanonicalPath}' USING csv SELECT 's1' a, 's2' a")
       val df = spark.read.csv(path.getCanonicalPath)
       assert(df.columns === Array("_c0", "_c1"))
       checkAnswer(df, Row("s1", "s2"))
@@ -1448,7 +1448,7 @@ abstract class CSVSuite
       Seq("1").toDF().write.text(path.getAbsolutePath)
       val schema = StructType(
         StructField("a", IntegerType, true) ::
-        StructField("b", IntegerType, true) :: Nil)
+          StructField("b", IntegerType, true) :: Nil)
       val df = spark.read
         .schema(schema)
         .option("header", "false")
@@ -1462,53 +1462,52 @@ abstract class CSVSuite
     Seq(false, true).foreach { multiLine =>
       val schema = new StructType().add("a", IntegerType).add("b", DateType)
       // We use `PERMISSIVE` mode by default if invalid string is given.
-      val df1 = spark
-        .read
+      val df1 = spark.read
         .option("mode", "abcd")
         .option("multiLine", multiLine)
         .schema(schema)
         .csv(testFile(valueMalformedFile))
-      checkAnswer(df1,
+      checkAnswer(
+        df1,
         Row(0, null) ::
-        Row(1, java.sql.Date.valueOf("1983-08-04")) ::
-        Nil)
+          Row(1, java.sql.Date.valueOf("1983-08-04")) ::
+          Nil)
 
       // If `schema` has `columnNameOfCorruptRecord`, it should handle corrupt records
       val columnNameOfCorruptRecord = "_unparsed"
       val schemaWithCorrField1 = schema.add(columnNameOfCorruptRecord, StringType)
-      val df2 = spark
-        .read
+      val df2 = spark.read
         .option("mode", "Permissive")
         .option("columnNameOfCorruptRecord", columnNameOfCorruptRecord)
         .option("multiLine", multiLine)
         .schema(schemaWithCorrField1)
         .csv(testFile(valueMalformedFile))
-      checkAnswer(df2,
+      checkAnswer(
+        df2,
         Row(0, null, "0,2013-111_11 12:13:14") ::
-        Row(1, java.sql.Date.valueOf("1983-08-04"), null) ::
-        Nil)
+          Row(1, java.sql.Date.valueOf("1983-08-04"), null) ::
+          Nil)
 
       // We put a `columnNameOfCorruptRecord` field in the middle of a schema
       val schemaWithCorrField2 = new StructType()
         .add("a", IntegerType)
         .add(columnNameOfCorruptRecord, StringType)
         .add("b", DateType)
-      val df3 = spark
-        .read
+      val df3 = spark.read
         .option("mode", "permissive")
         .option("columnNameOfCorruptRecord", columnNameOfCorruptRecord)
         .option("multiLine", multiLine)
         .schema(schemaWithCorrField2)
         .csv(testFile(valueMalformedFile))
-      checkAnswer(df3,
+      checkAnswer(
+        df3,
         Row(0, "0,2013-111_11 12:13:14", null) ::
-        Row(1, null, java.sql.Date.valueOf("1983-08-04")) ::
-        Nil)
+          Row(1, null, java.sql.Date.valueOf("1983-08-04")) ::
+          Nil)
 
       checkError(
         exception = intercept[AnalysisException] {
-          spark
-            .read
+          spark.read
             .option("mode", "PERMISSIVE")
             .option("columnNameOfCorruptRecord", columnNameOfCorruptRecord)
             .option("multiLine", multiLine)
@@ -1517,9 +1516,8 @@ abstract class CSVSuite
             .collect()
         },
         condition = "INVALID_CORRUPT_RECORD_TYPE",
-        parameters = Map(
-          "columnName" -> toSQLId(columnNameOfCorruptRecord), "actualType" -> "\"INT\"")
-      )
+        parameters =
+          Map("columnName" -> toSQLId(columnNameOfCorruptRecord), "actualType" -> "\"INT\""))
     }
   }
 
@@ -1532,8 +1530,7 @@ abstract class CSVSuite
         checkErrorMatchPVals(
           exception = e,
           condition = "FAILED_READ_FILE.NO_HINT",
-          parameters = Map("path" -> s".*${inputFile.getName}.*")
-        )
+          parameters = Map("path" -> s".*${inputFile.getName}.*"))
         assert(e.getCause.isInstanceOf[EOFException])
         assert(e.getCause.getMessage === "Unexpected end of input stream")
         val e2 = intercept[SparkException] {
@@ -1542,15 +1539,14 @@ abstract class CSVSuite
         checkErrorMatchPVals(
           exception = e2,
           condition = "FAILED_READ_FILE.NO_HINT",
-          parameters = Map("path" -> s".*${inputFile.getName}.*")
-        )
+          parameters = Map("path" -> s".*${inputFile.getName}.*"))
         assert(e2.getCause.getCause.getCause.isInstanceOf[EOFException])
         assert(e2.getCause.getCause.getCause.getMessage === "Unexpected end of input stream")
       }
       withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
         assert(spark.read.csv(inputFile.toURI.toString).collect().isEmpty)
-        assert(spark.read.option("multiLine", true).csv(inputFile.toURI.toString).collect()
-          .isEmpty)
+        assert(
+          spark.read.option("multiLine", true).csv(inputFile.toURI.toString).collect().isEmpty)
       }
     })
     withTempPath { dir =>
@@ -1566,8 +1562,7 @@ abstract class CSVSuite
             df.collect()
           },
           condition = "FAILED_READ_FILE.FILE_NOT_EXIST",
-          parameters = Map("path" -> s".*$dir.*")
-        )
+          parameters = Map("path" -> s".*$dir.*"))
       }
 
       sampledTestData.write.csv(csvPath.toString)
@@ -1619,14 +1614,15 @@ abstract class CSVSuite
         "92233720368547758070",
         "\n\n1.7976931348623157E308",
         "true",
-         null)
+        null)
       checkAnswer(df, expected)
     }
   }
 
   test("Empty file produces empty dataframe with empty schema") {
     Seq(false, true).foreach { multiLine =>
-      val df = spark.read.format("csv")
+      val df = spark.read
+        .format("csv")
         .option("header", true)
         .option("multiLine", multiLine)
         .load(testFile(emptyFile))
@@ -1651,18 +1647,13 @@ abstract class CSVSuite
 
     // For reading, default of both `ignoreLeadingWhiteSpace` and`ignoreTrailingWhiteSpace`
     // are `false`. So, these are excluded.
-    val combinations = Seq(
-      (true, true),
-      (false, true),
-      (true, false))
+    val combinations = Seq((true, true), (false, true), (true, false))
 
     // Check if read rows ignore whitespaces as configured.
-    val expectedRows = Seq(
-      Row("a", "b", "c"),
-      Row(" a", "b", " c"),
-      Row("a", "b  ", "c "))
+    val expectedRows = Seq(Row("a", "b", "c"), Row(" a", "b", " c"), Row("a", "b  ", "c "))
 
-    combinations.zip(expectedRows)
+    combinations
+      .zip(expectedRows)
       .foreach { case ((ignoreLeadingWhiteSpace, ignoreTrailingWhiteSpace), expected) =>
         val df = spark.read
           .option("ignoreLeadingWhiteSpace", ignoreLeadingWhiteSpace)
@@ -1678,18 +1669,13 @@ abstract class CSVSuite
 
     // For writing, default of both `ignoreLeadingWhiteSpace` and `ignoreTrailingWhiteSpace`
     // are `true`. So, these are excluded.
-    val combinations = Seq(
-      (false, false),
-      (false, true),
-      (true, false))
+    val combinations = Seq((false, false), (false, true), (true, false))
 
     // Check if written lines ignore each whitespaces as configured.
-    val expectedLines = Seq(
-      " a,b  , c ",
-      " a,b, c",
-      "a,b  ,c ")
+    val expectedLines = Seq(" a,b  , c ", " a,b, c", "a,b  ,c ")
 
-    combinations.zip(expectedLines)
+    combinations
+      .zip(expectedLines)
       .foreach { case ((ignoreLeadingWhiteSpace, ignoreTrailingWhiteSpace), expected) =>
         withTempPath { path =>
           df.write
@@ -1706,7 +1692,8 @@ abstract class CSVSuite
 
   test("SPARK-21263: Invalid float and double are handled correctly in different modes") {
     val exception = intercept[SparkException] {
-      spark.read.schema("a DOUBLE")
+      spark.read
+        .schema("a DOUBLE")
         .option("mode", "FAILFAST")
         .csv(Seq("10u12").toDS())
         .collect()
@@ -1717,13 +1704,15 @@ abstract class CSVSuite
       parameters = Map("badRecord" -> "[null]", "failFastMode" -> "FAILFAST"))
     assert(exception.getCause.getMessage.contains("""input string: "10u12""""))
 
-    val count = spark.read.schema("a FLOAT")
+    val count = spark.read
+      .schema("a FLOAT")
       .option("mode", "DROPMALFORMED")
       .csv(Seq("10u12").toDS())
       .count()
     assert(count == 0)
 
-    val results = spark.read.schema("a FLOAT")
+    val results = spark.read
+      .schema("a FLOAT")
       .option("mode", "PERMISSIVE")
       .csv(Seq("10u12").toDS())
     checkAnswer(results, Row(null))
@@ -1742,22 +1731,19 @@ abstract class CSVSuite
       .add("a", IntegerType)
       .add("b", DateType)
       .add("corrRec", StringType)
-    val readback = spark
-      .read
+    val readback = spark.read
       .option("columnNameOfCorruptRecord", "corrRec")
       .schema(schema)
       .csv(testFile(valueMalformedFile))
     checkAnswer(
       readback,
       Row(0, null, "0,2013-111_11 12:13:14") ::
-      Row(1, Date.valueOf("1983-08-04"), null) :: Nil)
-    checkAnswer(
-      readback.filter($"corrRec".isNotNull),
-      Row(0, null, "0,2013-111_11 12:13:14"))
+        Row(1, Date.valueOf("1983-08-04"), null) :: Nil)
+    checkAnswer(readback.filter($"corrRec".isNotNull), Row(0, null, "0,2013-111_11 12:13:14"))
     checkAnswer(
       readback.select($"corrRec", $"b"),
       Row("0,2013-111_11 12:13:14", null) ::
-      Row(null, Date.valueOf("1983-08-04")) :: Nil)
+        Row(null, Date.valueOf("1983-08-04")) :: Nil)
     checkAnswer(
       readback.filter($"corrRec".isNull && $"a" === 1),
       Row(1, Date.valueOf("1983-08-04"), null) :: Nil)
@@ -1765,9 +1751,11 @@ abstract class CSVSuite
 
   test("SPARK-40468: column pruning with the corrupt record column") {
     withTempPath { path =>
-      Seq("1,a").toDF()
+      Seq("1,a")
+        .toDF()
         .repartition(1)
-        .write.text(path.getAbsolutePath)
+        .write
+        .text(path.getAbsolutePath)
 
       // Corrupt record column with the default name should return null instead of "1,a"
       val corruptRecordCol = spark.sessionState.conf.columnNameOfCorruptRecord
@@ -1789,8 +1777,9 @@ abstract class CSVSuite
     }
   }
 
-  test("SPARK-49016: Queries from raw CSV files are disallowed when the referenced columns only" +
-    " include the internal corrupt record column") {
+  test(
+    "SPARK-49016: Queries from raw CSV files are disallowed when the referenced columns only" +
+      " include the internal corrupt record column") {
     val schema = new StructType()
       .add("a", IntegerType)
       .add("b", DateType)
@@ -1799,20 +1788,19 @@ abstract class CSVSuite
     // negative cases
     checkError(
       exception = intercept[AnalysisException] {
-        spark.read.schema(schema).csv(testFile(valueMalformedFile))
-          .select("_corrupt_record").collect()
+        spark.read
+          .schema(schema)
+          .csv(testFile(valueMalformedFile))
+          .select("_corrupt_record")
+          .collect()
       },
       condition = "UNSUPPORTED_FEATURE.QUERY_ONLY_CORRUPT_RECORD_COLUMN",
-      parameters = Map.empty
-    )
+      parameters = Map.empty)
     // workaround
     val df2 = spark.read.schema(schema).csv(testFile(valueMalformedFile)).cache()
     assert(df2.filter($"_corrupt_record".isNotNull).count() == 1)
     assert(df2.filter($"_corrupt_record".isNull).count() == 1)
-    checkAnswer(
-      df2.select("_corrupt_record"),
-      Row("0,2013-111_11 12:13:14") :: Row(null) :: Nil
-    )
+    checkAnswer(df2.select("_corrupt_record"), Row("0,2013-111_11 12:13:14") :: Row(null) :: Nil)
   }
 
   test("SPARK-23846: schema inferring touches less data if samplingRatio < 1.0") {
@@ -1821,13 +1809,13 @@ abstract class CSVSuite
     // reliable sampling of the input file.
     withSQLConf(
       SQLConf.FILES_MAX_PARTITION_BYTES.key -> (128 * 1024 * 1024).toString,
-      SQLConf.FILES_OPEN_COST_IN_BYTES.key -> (4 * 1024 * 1024).toString
-    )(withTempPath { path =>
+      SQLConf.FILES_OPEN_COST_IN_BYTES.key -> (4 * 1024 * 1024).toString)(withTempPath { path =>
       val ds = sampledTestData.coalesce(1)
       ds.write.text(path.getAbsolutePath)
 
       val readback1 = spark.read
-        .option("inferSchema", true).option("samplingRatio", 0.1)
+        .option("inferSchema", true)
+        .option("samplingRatio", 0.1)
         .csv(path.getCanonicalPath)
       assert(readback1.schema == new StructType().add("_c0", IntegerType))
 
@@ -1836,7 +1824,8 @@ abstract class CSVSuite
         // This results in reading more data than necessary and causes different schema to be
         // inferred when sampling ratio is involved.
         val readback2 = spark.read
-          .option("inferSchema", true).option("samplingRatio", 0.1)
+          .option("inferSchema", true)
+          .option("samplingRatio", 0.1)
           .option("path", path.getCanonicalPath)
           .format("csv")
           .load()
@@ -1848,7 +1837,8 @@ abstract class CSVSuite
   test("SPARK-23846: usage of samplingRatio while parsing a dataset of strings") {
     val ds = sampledTestData.coalesce(1)
     val readback = spark.read
-      .option("inferSchema", true).option("samplingRatio", 0.1)
+      .option("inferSchema", true)
+      .option("samplingRatio", 0.1)
       .csv(ds)
 
     assert(readback.schema == new StructType().add("_c0", IntegerType))
@@ -1873,12 +1863,7 @@ abstract class CSVSuite
 
   test("SPARK-17916: An empty string should not be coerced to null when nullValue is passed.") {
     val litNull: String = null
-    val df = Seq(
-      (1, "John Doe"),
-      (2, ""),
-      (3, "-"),
-      (4, litNull)
-    ).toDF("id", "name")
+    val df = Seq((1, "John Doe"), (2, ""), (3, "-"), (4, litNull)).toDF("id", "name")
 
     // Checks for new behavior where an empty string is not coerced to null when `nullValue` is
     // set to anything but an empty string literal.
@@ -1890,12 +1875,7 @@ abstract class CSVSuite
         .option("nullValue", "-")
         .schema(df.schema)
         .csv(path.getAbsolutePath)
-      val expected = Seq(
-        (1, "John Doe"),
-        (2, ""),
-        (3, litNull),
-        (4, litNull)
-      ).toDF("id", "name")
+      val expected = Seq((1, "John Doe"), (2, ""), (3, litNull), (4, litNull)).toDF("id", "name")
 
       checkAnswer(computed, expected)
     }
@@ -1906,12 +1886,7 @@ abstract class CSVSuite
       val computed = spark.read
         .schema(df.schema)
         .csv(path.getAbsolutePath)
-      val expected = Seq(
-        (1, "John Doe"),
-        (2, litNull),
-        (3, "-"),
-        (4, litNull)
-      ).toDF("id", "name")
+      val expected = Seq((1, "John Doe"), (2, litNull), (3, "-"), (4, litNull)).toDF("id", "name")
 
       checkAnswer(computed, expected)
     }
@@ -1919,12 +1894,7 @@ abstract class CSVSuite
 
   test("SPARK-25241: An empty string should not be coerced to null when emptyValue is passed.") {
     val litNull: String = null
-    val df = Seq(
-      (1, "John Doe"),
-      (2, ""),
-      (3, "-"),
-      (4, litNull)
-    ).toDF("id", "name")
+    val df = Seq((1, "John Doe"), (2, ""), (3, "-"), (4, litNull)).toDF("id", "name")
 
     // Checks for new behavior where a null is not coerced to an empty string when `emptyValue` is
     // set to anything but an empty string literal.
@@ -1936,12 +1906,7 @@ abstract class CSVSuite
         .option("emptyValue", "-")
         .schema(df.schema)
         .csv(path.getAbsolutePath)
-      val expected = Seq(
-        (1, "John Doe"),
-        (2, "-"),
-        (3, "-"),
-        (4, null)
-      ).toDF("id", "name")
+      val expected = Seq((1, "John Doe"), (2, "-"), (3, "-"), (4, null)).toDF("id", "name")
 
       checkAnswer(computed, expected)
     }
@@ -1952,12 +1917,7 @@ abstract class CSVSuite
       val computed = spark.read
         .schema(df.schema)
         .csv(path.getAbsolutePath)
-      val expected = Seq(
-        (1, "John Doe"),
-        (2, litNull),
-        (3, "-"),
-        (4, litNull)
-      ).toDF("id", "name")
+      val expected = Seq((1, "John Doe"), (2, litNull), (3, "-"), (4, litNull)).toDF("id", "name")
 
       checkAnswer(computed, expected)
     }
@@ -1965,8 +1925,7 @@ abstract class CSVSuite
 
   test("SPARK-24329: skip lines with comments, and one or multiple whitespaces") {
     val schema = new StructType().add("colA", StringType)
-    val ds = spark
-      .read
+    val ds = spark.read
       .schema(schema)
       .option("multiLine", false)
       .option("header", true)
@@ -1982,16 +1941,27 @@ abstract class CSVSuite
     withTempPath { path =>
       import scala.jdk.CollectionConverters._
       val schema = new StructType()
-        .add("f1", IntegerType).add("f2", IntegerType).add("f3", IntegerType)
-        .add("f4", IntegerType).add("f5", IntegerType).add("f6", IntegerType)
-        .add("f7", IntegerType).add("f8", IntegerType).add("f9", IntegerType)
-        .add("f10", IntegerType).add("f11", IntegerType).add("f12", IntegerType)
-        .add("f13", IntegerType).add("f14", IntegerType).add("f15", IntegerType)
+        .add("f1", IntegerType)
+        .add("f2", IntegerType)
+        .add("f3", IntegerType)
+        .add("f4", IntegerType)
+        .add("f5", IntegerType)
+        .add("f6", IntegerType)
+        .add("f7", IntegerType)
+        .add("f8", IntegerType)
+        .add("f9", IntegerType)
+        .add("f10", IntegerType)
+        .add("f11", IntegerType)
+        .add("f12", IntegerType)
+        .add("f13", IntegerType)
+        .add("f14", IntegerType)
+        .add("f15", IntegerType)
 
-      val odf = spark.createDataFrame(List(
-        Row(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15),
-        Row(-1, -2, -3, -4, -5, -6, -7, -8, -9, -10, -11, -12, -13, -14, -15)
-      ).asJava, schema)
+      val odf = spark.createDataFrame(
+        List(
+          Row(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15),
+          Row(-1, -2, -3, -4, -5, -6, -7, -8, -9, -10, -11, -12, -13, -14, -15)).asJava,
+        schema)
       odf.write.csv(path.getCanonicalPath)
       val idf = spark.read
         .schema(schema)
@@ -2023,7 +1993,8 @@ abstract class CSVSuite
           exception = exception,
           condition = "FAILED_READ_FILE.NO_HINT",
           parameters = Map("path" -> s".*${path.getCanonicalPath}.*"))
-        assert(exception.getCause.getMessage.contains("CSV header does not conform to the schema"))
+        assert(
+          exception.getCause.getMessage.contains("CSV header does not conform to the schema"))
 
         val shortSchema = new StructType().add("f1", DoubleType)
         val exceptionForShortSchema = intercept[SparkException] {
@@ -2039,8 +2010,9 @@ abstract class CSVSuite
           exception = exceptionForShortSchema,
           condition = "FAILED_READ_FILE.NO_HINT",
           parameters = Map("path" -> s".*${path.getCanonicalPath}.*"))
-        assert(exceptionForShortSchema.getCause.getMessage.contains(
-          "Number of column in CSV header is not equal to number of fields in the schema"))
+        assert(
+          exceptionForShortSchema.getCause.getMessage.contains(
+            "Number of column in CSV header is not equal to number of fields in the schema"))
 
         val longSchema = new StructType()
           .add("f1", DoubleType)
@@ -2060,8 +2032,8 @@ abstract class CSVSuite
           exception = exceptionForLongSchema,
           condition = "FAILED_READ_FILE.NO_HINT",
           parameters = Map("path" -> s".*${path.getCanonicalPath}.*"))
-        assert(exceptionForLongSchema.getCause.getMessage.contains(
-          "Header length: 2, schema size: 3"))
+        assert(
+          exceptionForLongSchema.getCause.getMessage.contains("Header length: 2, schema size: 3"))
 
         val caseSensitiveSchema = new StructType().add("F1", DoubleType).add("f2", DoubleType)
         val caseSensitiveException = intercept[SparkException] {
@@ -2077,8 +2049,9 @@ abstract class CSVSuite
           exception = caseSensitiveException,
           condition = "FAILED_READ_FILE.NO_HINT",
           parameters = Map("path" -> s".*${path.getCanonicalPath}.*"))
-        assert(caseSensitiveException.getCause.getMessage.contains(
-          "CSV header does not conform to the schema"))
+        assert(
+          caseSensitiveException.getCause.getMessage.contains(
+            "CSV header does not conform to the schema"))
       }
     }
   }
@@ -2098,10 +2071,10 @@ abstract class CSVSuite
       odf.write.option("header", false).csv(path.getCanonicalPath)
       val ischema = new StructType().add("f2", DoubleType).add("f1", DoubleType)
       val idf = spark.read
-          .schema(ischema)
-          .option("header", false)
-          .option("enforceSchema", false)
-          .csv(path.getCanonicalPath)
+        .schema(ischema)
+        .option("header", false)
+        .option("enforceSchema", false)
+        .csv(path.getCanonicalPath)
 
       checkAnswer(idf, odf)
     }
@@ -2114,7 +2087,8 @@ abstract class CSVSuite
         val odf = spark.createDataFrame(List(Row("0")).asJava, oschema)
         odf.write.option("header", true).csv(path.getCanonicalPath)
         val ischema = new StructType().add("a", StringType)
-        val idf = spark.read.schema(ischema)
+        val idf = spark.read
+          .schema(ischema)
           .option("header", true)
           .option("enforceSchema", false)
           .csv(path.getCanonicalPath)
@@ -2131,8 +2105,9 @@ abstract class CSVSuite
         spark.read.schema(ischema).option("header", true).option("enforceSchema", false).csv(ds)
       },
       condition = "_LEGACY_ERROR_TEMP_3241",
-      parameters = Map("msg" ->
-        """CSV header does not conform to the schema.
+      parameters = Map(
+        "msg" ->
+          """CSV header does not conform to the schema.
           | Header: columnA, columnB
           | Schema: columnB, columnA
           |Expected: columnB but found: columnA
@@ -2170,8 +2145,9 @@ abstract class CSVSuite
           .csv(Seq("col1,col2", "1.0,a").toDS())
       },
       condition = "_LEGACY_ERROR_TEMP_3241",
-      parameters = Map("msg" ->
-        """CSV header does not conform to the schema.
+      parameters = Map(
+        "msg" ->
+          """CSV header does not conform to the schema.
           | Header: col1, col2
           | Schema: colA, colB
           |Expected: colA but found: col1
@@ -2215,31 +2191,35 @@ abstract class CSVSuite
       Seq(false, true).foreach { multiLine =>
         withTempPath { path =>
           val dir = path.getAbsolutePath
-          Seq(("a", "b")).toDF("columnA", "columnB").write
+          Seq(("a", "b"))
+            .toDF("columnA", "columnB")
+            .write
             .format("csv")
             .option("header", true)
             .save(dir)
 
           // schema with one column
-          checkAnswer(spark.read
-            .format("csv")
-            .option("header", true)
-            .option("enforceSchema", false)
-            .option("multiLine", multiLine)
-            .option("columnPruning", true)
-            .load(dir)
-            .select("columnA"),
+          checkAnswer(
+            spark.read
+              .format("csv")
+              .option("header", true)
+              .option("enforceSchema", false)
+              .option("multiLine", multiLine)
+              .option("columnPruning", true)
+              .load(dir)
+              .select("columnA"),
             Row("a"))
 
           // empty schema
-          assert(spark.read
-            .format("csv")
-            .option("header", true)
-            .option("enforceSchema", false)
-            .option("multiLine", multiLine)
-            .option("columnPruning", true)
-            .load(dir)
-            .count() === 1L)
+          assert(
+            spark.read
+              .format("csv")
+              .option("header", true)
+              .option("enforceSchema", false)
+              .option("multiLine", multiLine)
+              .option("columnPruning", true)
+              .load(dir)
+              .count() === 1L)
         }
       }
     }
@@ -2259,8 +2239,13 @@ abstract class CSVSuite
     withSQLConf(SQLConf.CSV_PARSER_COLUMN_PRUNING.key -> "false") {
       withTempPath { path =>
         val dir = path.getAbsolutePath
-        spark.range(10).selectExpr("id % 2 AS p", "id AS c0", "id AS c1").write.partitionBy("p")
-          .option("header", "true").csv(dir)
+        spark
+          .range(10)
+          .selectExpr("id % 2 AS p", "id AS c0", "id AS c1")
+          .write
+          .partitionBy("p")
+          .option("header", "true")
+          .csv(dir)
         val df1 = spark.read.option("header", true).csv(dir).selectExpr("sum(p)", "count(c0)")
         checkAnswer(df1, Row(5, 10))
 
@@ -2277,8 +2262,11 @@ abstract class CSVSuite
         val df1 = spark.read.schema("c0 int").format("csv").option("mode", "permissive").load(dir)
         checkAnswer(df1, Row(1))
         // less tokens
-        val df2 = spark.read.schema("c0 int, c1 int, c2 int").format("csv")
-          .option("mode", "permissive").load(dir)
+        val df2 = spark.read
+          .schema("c0 int, c1 int, c2 int")
+          .format("csv")
+          .option("mode", "permissive")
+          .load(dir)
         checkAnswer(df2, Row(1, 2, null))
       }
     }
@@ -2299,8 +2287,7 @@ abstract class CSVSuite
         Seq(validRec, "?"),
         Seq("0xAC", validRec),
         Seq(validRec, "0.314"),
-        Seq("\\\\\\", validRec)
-      )
+        Seq("\\\\\\", validRec))
       inputs.foreach { input =>
         countForMalformedCSV(expected, input)
       }
@@ -2330,8 +2317,9 @@ abstract class CSVSuite
         .schema(schema)
         .csv(input),
       Row(null, "\u0001\u0000\u0001234"))
-    assert(spark.read.schema(schema).csv(input).collect().toSet ==
-      Set(Row(null, "\u0001\u0000\u0001234")))
+    assert(
+      spark.read.schema(schema).csv(input).collect().toSet ==
+        Set(Row(null, "\u0001\u0000\u0001234")))
   }
 
   test("field names of inferred schema shouldn't compare to the first row") {
@@ -2344,10 +2332,13 @@ abstract class CSVSuite
     val input = Seq("""abc\1""").toDS()
     val delimiter = """\\"""
     checkAnswer(spark.read.option("delimiter", delimiter).csv(input), Row("abc", "1"))
-    checkAnswer(spark.read.option("inferSchema", true).option("delimiter", delimiter).csv(input),
+    checkAnswer(
+      spark.read.option("inferSchema", true).option("delimiter", delimiter).csv(input),
       Row("abc", 1))
     val schema = new StructType().add("a", StringType).add("b", IntegerType)
-    checkAnswer(spark.read.schema(schema).option("delimiter", delimiter).csv(input), Row("abc", 1))
+    checkAnswer(
+      spark.read.schema(schema).option("delimiter", delimiter).csv(input),
+      Row("abc", 1))
   }
 
   test("using spark.sql.columnNameOfCorruptRecord") {
@@ -2397,7 +2388,11 @@ abstract class CSVSuite
     }
   }
 
-  def testLineSeparator(lineSep: String, encoding: String, inferSchema: Boolean, id: Int): Unit = {
+  def testLineSeparator(
+      lineSep: String,
+      encoding: String,
+      inferSchema: Boolean,
+      id: Int): Unit = {
     test(s"Support line separator in ${encoding} #${id}") {
       // Read
       val data =
@@ -2409,15 +2404,15 @@ abstract class CSVSuite
       Seq(data, dataWithTrailingLineSep).foreach { lines =>
         withTempPath { path =>
           Files.write(path.toPath, lines.getBytes(encoding))
-          val schema = StructType(StructField("_c0", StringType)
-            :: StructField("_c1", LongType) :: Nil)
+          val schema = StructType(
+            StructField("_c0", StringType)
+              :: StructField("_c1", LongType) :: Nil)
 
           val expected = Seq(("a", 1), ("\nc", 2), ("\nd", 3))
             .toDF("_c0", "_c1")
           withSQLConf(SQLConf.LEGACY_JAVA_CHARSETS.key -> "true") {
             Seq(false, true).foreach { multiLine =>
-              val reader = spark
-                .read
+              val reader = spark.read
                 .option("lineSep", lineSep)
                 .option("multiLine", multiLine)
                 .option("encoding", encoding)
@@ -2435,7 +2430,9 @@ abstract class CSVSuite
       // Write
       withTempPath { path =>
         withSQLConf(SQLConf.LEGACY_JAVA_CHARSETS.key -> "true") {
-          Seq("a", "b", "c").toDF("value").coalesce(1)
+          Seq("a", "b", "c")
+            .toDF("value")
+            .coalesce(1)
             .write
             .option("lineSep", lineSep)
             .option("encoding", encoding)
@@ -2455,8 +2452,7 @@ abstract class CSVSuite
             .option("lineSep", lineSep)
             .option("encoding", encoding)
             .csv(path.getAbsolutePath)
-          val readBack = spark
-            .read
+          val readBack = spark.read
             .option("lineSep", lineSep)
             .option("encoding", encoding)
             .csv(path.getAbsolutePath)
@@ -2472,14 +2468,13 @@ abstract class CSVSuite
     (1, "^", "UTF-16BE", true),
     (2, ":", "ISO-8859-1", true),
     (3, "!", "UTF-32LE", false),
-    (4, 0x1E.toChar.toString, "UTF-8", true),
+    (4, 0x1e.toChar.toString, "UTF-8", true),
     (5, "아", "UTF-32BE", false),
     (6, "у", "CP1251", true),
     (8, "\r", "UTF-16LE", true),
     (9, "\u000d", "UTF-32BE", false),
     (10, "=", "US-ASCII", false),
-    (11, "$", "utf-32le", true)
-  ).foreach { case (testNum, sep, encoding, inferSchema) =>
+    (11, "$", "utf-32le", true)).foreach { case (testNum, sep, encoding, inferSchema) =>
     testLineSeparator(sep, encoding, inferSchema, testNum)
   }
   // scalastyle:on nonascii
@@ -2520,9 +2515,8 @@ abstract class CSVSuite
             }
             if (newLine.length == 2) {
               val message = "It is not recommended to set 'lineSep' with 2 characters due to"
-              assert(logAppender.loggingEvents.exists(
-                e => e.getLevel == Level.WARN && e.getMessage.getFormattedMessage.contains(message)
-              ))
+              assert(logAppender.loggingEvents.exists(e =>
+                e.getLevel == Level.WARN && e.getMessage.getFormattedMessage.contains(message)))
             }
           }
         }
@@ -2536,7 +2530,10 @@ abstract class CSVSuite
       // we have 2 partitions but they are both empty and will be filtered out upon writing
       // thanks to SPARK-23271 one new empty partition will be inserted
       df1.write.format("csv").option("header", true).save(path.getAbsolutePath)
-      val df2 = spark.read.format("csv").option("header", true).option("inferSchema", false)
+      val df2 = spark.read
+        .format("csv")
+        .option("header", true)
+        .option("inferSchema", false)
         .load(path.getAbsolutePath)
       assert(df1.schema === df2.schema)
       checkAnswer(df1, df2)
@@ -2546,26 +2543,28 @@ abstract class CSVSuite
   test("Do not reuse last good value for bad input field") {
     val schema = StructType(
       StructField("col1", StringType) ::
-      StructField("col2", DateType) ::
-      Nil
-    )
+        StructField("col2", DateType) ::
+        Nil)
     val rows = spark.read
       .schema(schema)
       .format("csv")
       .load(testFile(badAfterGoodFile))
 
-    val expectedRows = Seq(
-      Row("good record", java.sql.Date.valueOf("1999-08-01")),
-      Row("bad record", null))
+    val expectedRows =
+      Seq(Row("good record", java.sql.Date.valueOf("1999-08-01")), Row("bad record", null))
 
     checkAnswer(rows, expectedRows)
   }
 
   test("SPARK-27512: Decimal type inference should not handle ',' for backward compatibility") {
-    assert(spark.read
-      .option("delimiter", "|")
-      .option("inferSchema", "true")
-      .csv(Seq("1,2").toDS()).schema.head.dataType === StringType)
+    assert(
+      spark.read
+        .option("delimiter", "|")
+        .option("inferSchema", "true")
+        .csv(Seq("1,2").toDS())
+        .schema
+        .head
+        .dataType === StringType)
   }
 
   test("SPARK-27873: disabling enforceSchema should not fail columnNameOfCorruptRecord") {
@@ -2580,8 +2579,7 @@ abstract class CSVSuite
           val schema = StructType.fromDDL("a int, b date")
           val columnNameOfCorruptRecord = "_unparsed"
           val schemaWithCorrField = schema.add(columnNameOfCorruptRecord, StringType)
-          val readDF = spark
-            .read
+          val readDF = spark.read
             .option("mode", "Permissive")
             .option("header", "true")
             .option("enforceSchema", false)
@@ -2602,8 +2600,8 @@ abstract class CSVSuite
       Files.write(
         path.toPath,
         str.getBytes(StandardCharsets.UTF_8),
-        StandardOpenOption.CREATE, StandardOpenOption.WRITE
-      )
+        StandardOpenOption.CREATE,
+        StandardOpenOption.WRITE)
 
       val errMsg = intercept[TextParsingException] {
         spark.read
@@ -2612,7 +2610,8 @@ abstract class CSVSuite
           .count()
       }.getMessage
 
-      assert(errMsg.contains("..."),
+      assert(
+        errMsg.contains("..."),
         "expect the TextParsingException truncate the error content to be 1000 length.")
     }
   }
@@ -2645,7 +2644,8 @@ abstract class CSVSuite
   test("Roundtrip in reading and writing timestamps in microsecond precision") {
     withTempPath { path =>
       val timestamp = Timestamp.valueOf("2019-11-18 11:56:00.123456")
-      Seq(timestamp).toDF("t")
+      Seq(timestamp)
+        .toDF("t")
         .write
         .option("timestampFormat", "yyyy-MM-dd HH:mm:ss.SSSSSS")
         .csv(path.getAbsolutePath)
@@ -2684,12 +2684,11 @@ abstract class CSVSuite
 
           withTempPath { path =>
             val t = "2019-12-17 00:01:02"
-            Seq(
-              "c0,c1,c2",
-              "abc,1,2019-11-14 20:35:30",
-              s"def,2,$t").toDF("data")
+            Seq("c0,c1,c2", "abc,1,2019-11-14 20:35:30", s"def,2,$t")
+              .toDF("data")
               .repartition(1)
-              .write.text(path.getAbsolutePath)
+              .write
+              .text(path.getAbsolutePath)
             Seq(true, false).foreach { multiLine =>
               Seq("PERMISSIVE", "DROPMALFORMED", "FAILFAST").foreach { mode =>
                 val readback = spark.read
@@ -2720,12 +2719,11 @@ abstract class CSVSuite
     Seq(true, false).foreach { filterPushdown =>
       withSQLConf(SQLConf.CSV_FILTER_PUSHDOWN_ENABLED.key -> filterPushdown.toString) {
         withTempPath { path =>
-          Seq(
-            "c0,c1,c2",
-            invalidRow,
-            s"1,$validTs,999").toDF("data")
+          Seq("c0,c1,c2", invalidRow, s"1,$validTs,999")
+            .toDF("data")
             .repartition(1)
-            .write.text(path.getAbsolutePath)
+            .write
+            .text(path.getAbsolutePath)
           def checkReadback(condition: Column, expected: Seq[Row]): Unit = {
             val readback = spark.read
               .option("mode", "PERMISSIVE")
@@ -2761,9 +2759,11 @@ abstract class CSVSuite
           ",4.0,",
           "500.0,,",
           ",6.0,",
-          "-500.0,50.5").toDF("data")
+          "-500.0,50.5")
+          .toDF("data")
           .repartition(1)
-          .write.text(path.getAbsolutePath)
+          .write
+          .text(path.getAbsolutePath)
         val schema = new StructType().add("floats", FloatType).add("more_floats", FloatType)
         val readback = spark.read
           .schema(schema)
@@ -2792,7 +2792,8 @@ abstract class CSVSuite
     val csv = spark.read
       .option("header", false)
       .option("timestampFormat", "yyyy-MM-dd'T'HH:mm:ss.SSSz")
-      .schema("t timestamp").csv(ds)
+      .schema("t timestamp")
+      .csv(ds)
     withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "exception") {
       checkError(
         exception = intercept[SparkUpgradeException] {
@@ -2814,7 +2815,8 @@ abstract class CSVSuite
   test("SPARK-32025: infer the schema from mixed-type values") {
     withTempPath { path =>
       Seq("col_mixed_types", "2012", "1997", "True").toDS().write.text(path.getCanonicalPath)
-      val df = spark.read.format("csv")
+      val df = spark.read
+        .format("csv")
         .option("header", "true")
         .option("inferSchema", "true")
         .load(path.getCanonicalPath)
@@ -2826,7 +2828,8 @@ abstract class CSVSuite
   test("SPARK-32614: don't treat rows starting with null char as comment") {
     withTempPath { path =>
       Seq("\u0000foo", "bar", "baz").toDS().write.text(path.getCanonicalPath)
-      val df = spark.read.format("csv")
+      val df = spark.read
+        .format("csv")
         .option("header", "false")
         .option("inferSchema", "true")
         .load(path.getCanonicalPath)
@@ -2838,19 +2841,22 @@ abstract class CSVSuite
     Seq(true, false).foreach { filterPushdown =>
       withSQLConf(SQLConf.CSV_FILTER_PUSHDOWN_ENABLED.key -> filterPushdown.toString) {
         withTempPath { path =>
-          Seq(
-            """aaa,BBB""",
-            """0,1""",
-            """2,3""").toDF().repartition(1).write.text(path.getCanonicalPath)
+          Seq("""aaa,BBB""", """0,1""", """2,3""")
+            .toDF()
+            .repartition(1)
+            .write
+            .text(path.getCanonicalPath)
           withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
-            val readback = spark.read.schema("aaa integer, BBB integer")
+            val readback = spark.read
+              .schema("aaa integer, BBB integer")
               .option("header", true)
               .csv(path.getCanonicalPath)
             checkAnswer(readback, Seq(Row(2, 3), Row(0, 1)))
             checkAnswer(readback.filter($"AAA" === 2 && $"bbb" === 3), Seq(Row(2, 3)))
           }
           withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-            val readback = spark.read.schema("aaa integer, BBB integer")
+            val readback = spark.read
+              .schema("aaa integer, BBB integer")
               .option("header", true)
               .csv(path.getCanonicalPath)
             checkAnswer(readback, Seq(Row(2, 3), Row(0, 1)))
@@ -2868,8 +2874,9 @@ abstract class CSVSuite
     }
   }
 
-  test("SPARK-32810: CSV data source should be able to read files with " +
-    "escaped glob metacharacter in the paths") {
+  test(
+    "SPARK-32810: CSV data source should be able to read files with " +
+      "escaped glob metacharacter in the paths") {
     withTempDir { dir =>
       val basePath = dir.getCanonicalPath
       // test CSV writer / reader without specifying schema
@@ -2881,8 +2888,9 @@ abstract class CSVSuite
     }
   }
 
-  test("SPARK-33566: configure UnescapedQuoteHandling to parse " +
-    "unescaped quotes and unescaped delimiter data correctly") {
+  test(
+    "SPARK-33566: configure UnescapedQuoteHandling to parse " +
+      "unescaped quotes and unescaped delimiter data correctly") {
     withTempPath { path =>
       val dataPath = path.getCanonicalPath
       val row1 = Row("""a,""b,c""", "xyz")
@@ -2892,14 +2900,18 @@ abstract class CSVSuite
         """c1,c2""",
         s""""${row1.getString(0)}","${row1.getString(1)}"""",
         s""""${row2.getString(0)}","${row2.getString(1)}"""")
-        .toDF().repartition(1).write.text(dataPath)
+        .toDF()
+        .repartition(1)
+        .write
+        .text(dataPath)
       // Without configure UnescapedQuoteHandling to STOP_AT_CLOSING_QUOTE,
       // the result will be Row(""""a,""b""", """c""""), Row("""a,b,c""", """"x""yz"""")
       val result = spark.read
         .option("inferSchema", "true")
         .option("header", "true")
         .option("unescapedQuoteHandling", "STOP_AT_CLOSING_QUOTE")
-        .csv(dataPath).collect()
+        .csv(dataPath)
+        .collect()
       val exceptResults = Array(row1, row2)
       assert(result.sameElements(exceptResults))
     }
@@ -2910,23 +2922,28 @@ abstract class CSVSuite
     val line = "X".repeat(bufSize - 1) + "| |"
     withTempPath { path =>
       Seq(line).toDF().write.text(path.getAbsolutePath)
-      assert(spark.read.format("csv")
-        .option("delimiter", "|")
-        .option("ignoreTrailingWhiteSpace", "true").load(path.getAbsolutePath).count() == 1)
+      assert(
+        spark.read
+          .format("csv")
+          .option("delimiter", "|")
+          .option("ignoreTrailingWhiteSpace", "true")
+          .load(path.getAbsolutePath)
+          .count() == 1)
     }
   }
 
   test("SPARK-35912: turn non-nullable schema into a nullable schema") {
     val inputCSVString = """1,"""
 
-    val schema = StructType(Seq(
-      StructField("c1", IntegerType, nullable = false),
-      StructField("c2", IntegerType, nullable = false)))
+    val schema = StructType(
+      Seq(
+        StructField("c1", IntegerType, nullable = false),
+        StructField("c2", IntegerType, nullable = false)))
     val expected = schema.asNullable
 
     Seq("DROPMALFORMED", "FAILFAST", "PERMISSIVE").foreach { mode =>
-      val csv = spark.createDataset(
-        spark.sparkContext.parallelize(inputCSVString:: Nil))(Encoders.STRING)
+      val csv = spark.createDataset(spark.sparkContext.parallelize(inputCSVString :: Nil))(
+        Encoders.STRING)
       val df = spark.read
         .option("mode", mode)
         .schema(schema)
@@ -2937,11 +2954,11 @@ abstract class CSVSuite
 
     withSQLConf(SQLConf.LEGACY_RESPECT_NULLABILITY_IN_TEXT_DATASET_CONVERSION.key -> "true") {
       checkAnswer(
-        spark.read.schema(
-          StructType(
-            StructField("f1", StringType, nullable = false) ::
-            StructField("f2", StringType, nullable = false) :: Nil)
-        ).option("mode", "DROPMALFORMED").csv(Seq("a,", "a,b").toDS()),
+        spark.read
+          .schema(StructType(StructField("f1", StringType, nullable = false) ::
+            StructField("f2", StringType, nullable = false) :: Nil))
+          .option("mode", "DROPMALFORMED")
+          .csv(Seq("a,", "a,b").toDS()),
         Row("a", "b"))
     }
   }
@@ -2956,21 +2973,33 @@ abstract class CSVSuite
           """2021,2021,2021""",
           """2021-01,2021-01 ,2021-01""",
           """ 2021-2-1,2021-3-02,2021-10-1""",
-          """2021-8-18 00:00:00,2021-8-18 21:44:30Z,2021-8-18T21:44:30.123"""
-        ).toDF().repartition(1).write.text(path.getCanonicalPath)
-        val readback = spark.read.schema("d date, ts_ltz timestamp_ltz, ts_ntz timestamp_ntz")
+          """2021-8-18 00:00:00,2021-8-18 21:44:30Z,2021-8-18T21:44:30.123""")
+          .toDF()
+          .repartition(1)
+          .write
+          .text(path.getCanonicalPath)
+        val readback = spark.read
+          .schema("d date, ts_ltz timestamp_ltz, ts_ntz timestamp_ntz")
           .option("header", true)
           .csv(path.getCanonicalPath)
         checkAnswer(
           readback,
           Seq(
-            Row(LocalDate.of(2021, 1, 1), Instant.parse("2021-01-01T00:00:00Z"),
+            Row(
+              LocalDate.of(2021, 1, 1),
+              Instant.parse("2021-01-01T00:00:00Z"),
               LocalDateTime.of(2021, 1, 1, 0, 0, 0)),
-            Row(LocalDate.of(2021, 1, 1), Instant.parse("2021-01-01T00:00:00Z"),
+            Row(
+              LocalDate.of(2021, 1, 1),
+              Instant.parse("2021-01-01T00:00:00Z"),
               LocalDateTime.of(2021, 1, 1, 0, 0, 0)),
-            Row(LocalDate.of(2021, 2, 1), Instant.parse("2021-03-02T00:00:00Z"),
+            Row(
+              LocalDate.of(2021, 2, 1),
+              Instant.parse("2021-03-02T00:00:00Z"),
               LocalDateTime.of(2021, 10, 1, 0, 0, 0)),
-            Row(LocalDate.of(2021, 8, 18), Instant.parse("2021-08-18T21:44:30Z"),
+            Row(
+              LocalDate.of(2021, 8, 18),
+              Instant.parse("2021-08-18T21:44:30Z"),
               LocalDateTime.of(2021, 8, 18, 21, 44, 30, 123000000))))
       }
     }
@@ -2979,31 +3008,31 @@ abstract class CSVSuite
   test("SPARK-36831: Support reading and writing ANSI intervals") {
     Seq(
       YearMonthIntervalType() -> ((i: Int) => Period.of(i, i, 0)),
-      DayTimeIntervalType() -> ((i: Int) => Duration.ofDays(i).plusSeconds(i))
-    ).foreach { case (it, f) =>
-      val data = (1 to 10).map(i => Row(i, f(i)))
-      val schema = StructType(Array(StructField("d", IntegerType, false),
-        StructField("i", it, false)))
-      withTempPath { file =>
-        val df = spark.createDataFrame(sparkContext.parallelize(data), schema)
-        df.write.csv(file.getCanonicalPath)
-        val df2 = spark.read.csv(file.getCanonicalPath)
-        checkAnswer(df2, df.select($"d".cast(StringType), $"i".cast(StringType)).collect().toSeq)
-        val df3 = spark.read.schema(schema).csv(file.getCanonicalPath)
-        checkAnswer(df3, df.collect().toSeq)
-      }
+      DayTimeIntervalType() -> ((i: Int) => Duration.ofDays(i).plusSeconds(i))).foreach {
+      case (it, f) =>
+        val data = (1 to 10).map(i => Row(i, f(i)))
+        val schema =
+          StructType(Array(StructField("d", IntegerType, false), StructField("i", it, false)))
+        withTempPath { file =>
+          val df = spark.createDataFrame(sparkContext.parallelize(data), schema)
+          df.write.csv(file.getCanonicalPath)
+          val df2 = spark.read.csv(file.getCanonicalPath)
+          checkAnswer(
+            df2,
+            df.select($"d".cast(StringType), $"i".cast(StringType)).collect().toSeq)
+          val df3 = spark.read.schema(schema).csv(file.getCanonicalPath)
+          checkAnswer(df3, df.collect().toSeq)
+        }
     }
   }
 
   test("SPARK-39469: Infer schema for columns with all dates") {
     withTempPath { path =>
-      Seq(
-        "2001-09-08",
-        "1941-01-02",
-        "0293-11-07"
-      ).toDF()
+      Seq("2001-09-08", "1941-01-02", "0293-11-07")
+        .toDF()
         .repartition(1)
-        .write.text(path.getAbsolutePath)
+        .write
+        .text(path.getAbsolutePath)
 
       val options = Map(
         "header" -> "false",
@@ -3017,17 +3046,12 @@ abstract class CSVSuite
 
       val expected = if (SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {
         // When legacy parser is enabled, `preferDate` will be disabled
-        Seq(
-          Row("2001-09-08"),
-          Row("1941-01-02"),
-          Row("0293-11-07")
-        )
+        Seq(Row("2001-09-08"), Row("1941-01-02"), Row("0293-11-07"))
       } else {
         Seq(
           Row(Date.valueOf("2001-9-8")),
           Row(Date.valueOf("1941-1-2")),
-          Row(Date.valueOf("0293-11-7"))
-        )
+          Row(Date.valueOf("0293-11-7")))
       }
 
       checkAnswer(df, expected)
@@ -3036,11 +3060,8 @@ abstract class CSVSuite
 
   test("SPARK-40474: Infer schema for columns with a mix of dates and timestamp") {
     withTempPath { path =>
-      val input = Seq(
-        "1423-11-12T23:41:00",
-        "1765-03-28",
-        "2016-01-28T20:00:00"
-      ).toDF().repartition(1)
+      val input =
+        Seq("1423-11-12T23:41:00", "1765-03-28", "2016-01-28T20:00:00").toDF().repartition(1)
       input.write.text(path.getAbsolutePath)
 
       if (SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {
@@ -3067,9 +3088,7 @@ abstract class CSVSuite
 
         // When timestampFormat is not specified, infer and parse the column as
         // timestamp type if possible
-        val options2 = Map(
-          "header" -> "false",
-          "inferSchema" -> "true")
+        val options2 = Map("header" -> "false", "inferSchema" -> "true")
         val df2 = spark.read
           .format("csv")
           .options(options2)
@@ -3077,8 +3096,7 @@ abstract class CSVSuite
         val expected2 = Seq(
           Row(Timestamp.valueOf("1765-03-28 00:00:00.0")),
           Row(Timestamp.valueOf("1423-11-12 23:41:00.0")),
-          Row(Timestamp.valueOf("2016-01-28 20:00:00.0"))
-        )
+          Row(Timestamp.valueOf("2016-01-28 20:00:00.0")))
         checkAnswer(df2, expected2)
       }
     }
@@ -3086,16 +3104,17 @@ abstract class CSVSuite
 
   test("SPARK-50616: We can write with a tsv file extension") {
     withTempPath { path =>
-      val input = Seq(
-        "1423-11-12T23:41:00",
-        "1765-03-28",
-        "2016-01-28T20:00:00"
-      ).toDF().repartition(1)
+      val input =
+        Seq("1423-11-12T23:41:00", "1765-03-28", "2016-01-28T20:00:00").toDF().repartition(1)
       input.write.option("extension", "tsv").csv(path.getAbsolutePath)
 
-      val files = Files.list(path.toPath)
-        .iterator().asScala.map(x => x.getFileName.toString)
-        .toList.filter(x => x.takeRight(3).equals("tsv"))
+      val files = Files
+        .list(path.toPath)
+        .iterator()
+        .asScala
+        .map(x => x.getFileName.toString)
+        .toList
+        .filter(x => x.takeRight(3).equals("tsv"))
 
       assert(files.size == 1)
     }
@@ -3103,13 +3122,11 @@ abstract class CSVSuite
 
   test("SPARK-39904: Parse incorrect timestamp values") {
     withTempPath { path =>
-      Seq(
-        "2020-02-01 12:34:56",
-        "2020-02-02",
-        "invalid"
-      ).toDF()
+      Seq("2020-02-01 12:34:56", "2020-02-02", "invalid")
+        .toDF()
         .repartition(1)
-        .write.text(path.getAbsolutePath)
+        .write
+        .text(path.getAbsolutePath)
 
       val schema = new StructType()
         .add("ts", TimestampType)
@@ -3125,20 +3142,18 @@ abstract class CSVSuite
           Seq(
             Row(Timestamp.valueOf("2020-02-01 12:34:56")),
             Row(Timestamp.valueOf("2020-02-02 00:00:00")),
-            Row(null)
-          )
-        )
+            Row(null)))
       }
     }
   }
 
   test("SPARK-39731: Correctly parse dates and timestamps with yyyyMMdd pattern") {
     withTempPath { path =>
-      Seq(
-        "1,2020011,2020011",
-        "2,20201203,20201203").toDF()
+      Seq("1,2020011,2020011", "2,20201203,20201203")
+        .toDF()
         .repartition(1)
-        .write.text(path.getAbsolutePath)
+        .write
+        .text(path.getAbsolutePath)
       val schema = new StructType()
         .add("id", IntegerType)
         .add("date", DateType)
@@ -3159,17 +3174,13 @@ abstract class CSVSuite
         "legacy",
         Seq(
           Row(1, Date.valueOf("2020-01-01"), Timestamp.valueOf("2020-01-01 00:00:00")),
-          Row(2, Date.valueOf("2020-12-03"), Timestamp.valueOf("2020-12-03 00:00:00"))
-        )
-      )
+          Row(2, Date.valueOf("2020-12-03"), Timestamp.valueOf("2020-12-03 00:00:00"))))
 
       check(
         "corrected",
         Seq(
           Row(1, null, null),
-          Row(2, Date.valueOf("2020-12-03"), Timestamp.valueOf("2020-12-03 00:00:00"))
-        )
-      )
+          Row(2, Date.valueOf("2020-12-03"), Timestamp.valueOf("2020-12-03 00:00:00"))))
 
       intercept[SparkUpgradeException] {
         check("exception", Nil)
@@ -3179,9 +3190,11 @@ abstract class CSVSuite
 
   test("SPARK-39731: Handle date and timestamp parsing fallback") {
     withTempPath { path =>
-      Seq("2020-01-01,2020-01-01").toDF()
+      Seq("2020-01-01,2020-01-01")
+        .toDF()
         .repartition(1)
-        .write.text(path.getAbsolutePath)
+        .write
+        .text(path.getAbsolutePath)
       val schema = new StructType()
         .add("date", DateType)
         .add("ts", TimestampType)
@@ -3195,26 +3208,24 @@ abstract class CSVSuite
 
       checkAnswer(
         output(enableFallback = true),
-        Seq(Row(Date.valueOf("2020-01-01"), Timestamp.valueOf("2020-01-01 00:00:00")))
-      )
+        Seq(Row(Date.valueOf("2020-01-01"), Timestamp.valueOf("2020-01-01 00:00:00"))))
 
-      checkAnswer(
-        output(enableFallback = false),
-        Seq(Row(null, null))
-      )
+      checkAnswer(output(enableFallback = false), Seq(Row(null, null)))
     }
   }
 
   test("SPARK-40215: enable parsing fallback for CSV in CORRECTED mode with a SQL config") {
     withTempPath { path =>
-      Seq("2020-01-01,2020-01-01").toDF()
+      Seq("2020-01-01,2020-01-01")
+        .toDF()
         .repartition(1)
-        .write.text(path.getAbsolutePath)
+        .write
+        .text(path.getAbsolutePath)
 
       for (fallbackEnabled <- Seq(true, false)) {
         withSQLConf(
-            SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "CORRECTED",
-            SQLConf.LEGACY_CSV_ENABLE_DATE_TIME_PARSING_FALLBACK.key -> s"$fallbackEnabled") {
+          SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "CORRECTED",
+          SQLConf.LEGACY_CSV_ENABLE_DATE_TIME_PARSING_FALLBACK.key -> s"$fallbackEnabled") {
           val df = spark.read
             .schema("date date, ts timestamp")
             .option("dateFormat", "invalid")
@@ -3224,13 +3235,9 @@ abstract class CSVSuite
           if (fallbackEnabled) {
             checkAnswer(
               df,
-              Seq(Row(Date.valueOf("2020-01-01"), Timestamp.valueOf("2020-01-01 00:00:00")))
-            )
+              Seq(Row(Date.valueOf("2020-01-01"), Timestamp.valueOf("2020-01-01 00:00:00"))))
           } else {
-            checkAnswer(
-              df,
-              Seq(Row(null, null))
-            )
+            checkAnswer(df, Seq(Row(null, null)))
           }
         }
       }
@@ -3245,15 +3252,21 @@ abstract class CSVSuite
     for (policy <- Seq("exception", "corrected")) {
       withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> policy) {
         withTempPath { path =>
-          Seq("2020-01-01").toDF()
+          Seq("2020-01-01")
+            .toDF()
             .repartition(1)
-            .write.text(path.getAbsolutePath)
+            .write
+            .text(path.getAbsolutePath)
 
-          var df = spark.read.schema("col date").option("dateFormat", "yyyy/MM/dd")
+          var df = spark.read
+            .schema("col date")
+            .option("dateFormat", "yyyy/MM/dd")
             .csv(path.getAbsolutePath)
           checkAnswer(df, Seq(Row(null)))
 
-          df = spark.read.schema("col timestamp").option("timestampFormat", "yyyy/MM/dd HH:mm:ss")
+          df = spark.read
+            .schema("col timestamp")
+            .option("timestampFormat", "yyyy/MM/dd HH:mm:ss")
             .csv(path.getAbsolutePath)
 
           checkAnswer(df, Seq(Row(null)))
@@ -3272,9 +3285,7 @@ abstract class CSVSuite
             .format(dataSourceFormat)
             .save(path.getCanonicalPath)
           val expectedStr = ToStringBase.getBinaryFormatter("Spark SQL".getBytes())
-          checkAnswer(
-            spark.read.csv(path.getCanonicalPath),
-            Row("1", expectedStr.toString))
+          checkAnswer(spark.read.csv(path.getCanonicalPath), Row("1", expectedStr.toString))
           checkAnswer(
             spark.read.schema(df.schema).csv(path.getCanonicalPath),
             Row(1, expectedStr.getBytes))
@@ -3283,31 +3294,34 @@ abstract class CSVSuite
     }
   }
 
-  test("SPARK-42335: Pass the comment option through to univocity " +
-    "if users set it explicitly in CSV dataSource") {
+  test(
+    "SPARK-42335: Pass the comment option through to univocity " +
+      "if users set it explicitly in CSV dataSource") {
     withTempPath { path =>
-      Seq("#abc", "\u0000def", "xyz").toDF()
-        .write.option("comment", "\u0000").csv(path.getCanonicalPath)
+      Seq("#abc", "\u0000def", "xyz")
+        .toDF()
+        .write
+        .option("comment", "\u0000")
+        .csv(path.getCanonicalPath)
       checkAnswer(
         spark.read.text(path.getCanonicalPath),
-        Seq(Row("#abc"), Row("\"def\""), Row("xyz"))
-      )
+        Seq(Row("#abc"), Row("\"def\""), Row("xyz")))
     }
     withTempPath { path =>
-      Seq("#abc", "\u0000def", "xyz").toDF()
-        .write.option("comment", "#").csv(path.getCanonicalPath)
+      Seq("#abc", "\u0000def", "xyz")
+        .toDF()
+        .write
+        .option("comment", "#")
+        .csv(path.getCanonicalPath)
       checkAnswer(
         spark.read.text(path.getCanonicalPath),
-        Seq(Row("\"#abc\""), Row("def"), Row("xyz"))
-      )
+        Seq(Row("\"#abc\""), Row("def"), Row("xyz")))
     }
     withTempPath { path =>
-      Seq("#abc", "\u0000def", "xyz").toDF()
-        .write.csv(path.getCanonicalPath)
+      Seq("#abc", "\u0000def", "xyz").toDF().write.csv(path.getCanonicalPath)
       checkAnswer(
         spark.read.text(path.getCanonicalPath),
-        Seq(Row("\"#abc\""), Row("def"), Row("xyz"))
-      )
+        Seq(Row("\"#abc\""), Row("def"), Row("xyz")))
     }
     withTempPath { path =>
       Seq("#abc", "\u0000def", "xyz").toDF().write.text(path.getCanonicalPath)
@@ -3325,8 +3339,7 @@ abstract class CSVSuite
       Seq("#abc", "\u0000def", "xyz").toDF().write.text(path.getCanonicalPath)
       checkAnswer(
         spark.read.csv(path.getCanonicalPath),
-        Seq(Row("#abc"), Row("\u0000def"), Row("xyz"))
-      )
+        Seq(Row("#abc"), Row("\u0000def"), Row("xyz")))
     }
   }
 
@@ -3410,8 +3423,7 @@ abstract class CSVSuite
 
   test("SPARK-46890: CSV fails on a column with default and without enforcing schema") {
     withTable("CarsTable") {
-      spark.sql(
-        s"""
+      spark.sql(s"""
            |CREATE TABLE CarsTable(
            |  year INT,
            |  make STRING,
@@ -3426,18 +3438,12 @@ abstract class CSVSuite
            |  path "${testFile(carsFile)}"
            |)
        """.stripMargin)
-      val expected = Seq(
-        Row("No comment"),
-        Row("Go get one now they are going fast"))
+      val expected = Seq(Row("No comment"), Row("Go get one now they are going fast"))
+      checkAnswer(sql("SELECT comment FROM CarsTable WHERE year < 2014"), expected)
       checkAnswer(
-        sql("SELECT comment FROM CarsTable WHERE year < 2014"),
-        expected)
-      checkAnswer(
-        spark.read.format("csv")
-          .options(Map(
-            "header" -> "true",
-            "inferSchema" -> "true",
-            "enforceSchema" -> "false"))
+        spark.read
+          .format("csv")
+          .options(Map("header" -> "true", "inferSchema" -> "true", "enforceSchema" -> "false"))
           .load(testFile(carsFile))
           .select("comment")
           .where("year < 2014"),
@@ -3447,8 +3453,7 @@ abstract class CSVSuite
 
   test("SPARK-48241: CSV parsing failure with char/varchar type columns") {
     withTable("charVarcharTable") {
-      spark.sql(
-        s"""
+      spark.sql(s"""
            |CREATE TABLE charVarcharTable(
            |  color char(4),
            |  name varchar(10))
@@ -3458,13 +3463,8 @@ abstract class CSVSuite
            |  path "${testFile(charFile)}"
            |)
        """.stripMargin)
-      val expected = Seq(
-        Row("pink", "Bob"),
-        Row("blue", "Mike"),
-        Row("grey", "Tom"))
-      checkAnswer(
-        sql("SELECT * FROM charVarcharTable"),
-        expected)
+      val expected = Seq(Row("pink", "Bob"), Row("blue", "Mike"), Row("grey", "Tom"))
+      checkAnswer(sql("SELECT * FROM charVarcharTable"), expected)
     }
   }
 
@@ -3474,8 +3474,7 @@ abstract class CSVSuite
       .add("decimalColumn", DecimalType(10, 2), nullable = true)
 
     val fileReadException = intercept[SparkException] {
-      spark
-        .read
+      spark.read
         .schema(schema)
         .option("header", "false")
         .option("maxColumns", "2")
@@ -3516,12 +3515,15 @@ abstract class CSVSuite
       def checkSingleVariant(options: Map[String, String], expected: String*): Unit = {
         val allOptions = options ++ Map("singleVariantColumn" -> "v")
         checkAnswer(
-          spark.read.options(allOptions).csv(path.getCanonicalPath).selectExpr("cast(v as string)"),
-          expected.map(Row(_))
-        )
+          spark.read
+            .options(allOptions)
+            .csv(path.getCanonicalPath)
+            .selectExpr("cast(v as string)"),
+          expected.map(Row(_)))
       }
 
-      checkSingleVariant(Map(),
+      checkSingleVariant(
+        Map(),
         """{"_c0":"field 1","_c1":"field2"}""",
         """{"_c0":"100","_c1":"1.1"}""",
         """{"_c0":"2000-01-01","_c1":"2000-01-01 01:02:03"}""",
@@ -3531,9 +3533,11 @@ abstract class CSVSuite
 
       // With a small enough partition size, every line is parsed in a separate partition, so every
       // value has the chance to try all scalar types.
-      withSQLConf(SQLConf.FILES_MAX_PARTITION_BYTES.key -> "10",
+      withSQLConf(
+        SQLConf.FILES_MAX_PARTITION_BYTES.key -> "10",
         SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
-        checkSingleVariant(Map(),
+        checkSingleVariant(
+          Map(),
           """{"_c0":"field 1","_c1":"field2"}""",
           """{"_c0":100,"_c1":1.1}""",
           """{"_c0":"2000-01-01","_c1":"2000-01-01 01:02:03+00:00"}""",
@@ -3543,7 +3547,8 @@ abstract class CSVSuite
       }
 
       withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
-        checkSingleVariant(Map("header" -> "true"),
+        checkSingleVariant(
+          Map("header" -> "true"),
           """{"field 1":100,"field2":1.1}""",
           """{"field 1":"2000-01-01","field2":"2000-01-01 01:02:03+00:00"}""",
           """{"field 1":null,"field2":true}""",
@@ -3553,9 +3558,11 @@ abstract class CSVSuite
 
       // Validate `CSVDataSource.setHeaderForSingleVariantColumn` works, no matter whether the
       // partition is at the file start.
-      withSQLConf(SQLConf.FILES_MAX_PARTITION_BYTES.key -> "10",
+      withSQLConf(
+        SQLConf.FILES_MAX_PARTITION_BYTES.key -> "10",
         SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
-        checkSingleVariant(Map("header" -> "true"),
+        checkSingleVariant(
+          Map("header" -> "true"),
           """{"field 1":100,"field2":1.1}""",
           """{"field 1":"2000-01-01","field2":"2000-01-01 01:02:03+00:00"}""",
           """{"field 1":null,"field2":true}""",
@@ -3566,7 +3573,8 @@ abstract class CSVSuite
       withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
         val options = Map("header" -> "true", "singleVariantColumn" -> "v")
         checkAnswer(
-          spark.read.options(options)
+          spark.read
+            .options(options)
             .schema("v variant, _corrupt_record string")
             .csv(path.getCanonicalPath)
             .selectExpr("cast(v as string)", "_corrupt_record"),
@@ -3582,24 +3590,27 @@ abstract class CSVSuite
 
       checkError(
         exception = intercept[SparkException] {
-          val options = Map("singleVariantColumn" -> "v", "header" -> "true", "mode" -> "failfast")
+          val options =
+            Map("singleVariantColumn" -> "v", "header" -> "true", "mode" -> "failfast")
           spark.read.options(options).csv(path.getCanonicalPath).collect()
         }.getCause.asInstanceOf[SparkException],
         condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
-        parameters = Map("badRecord" -> """[{"field 1":"1e9","field2":"hello"}]""",
-          "failFastMode" -> "FAILFAST")
-      )
+        parameters = Map(
+          "badRecord" -> """[{"field 1":"1e9","field2":"hello"}]""",
+          "failFastMode" -> "FAILFAST"))
 
       def checkSchema(options: Map[String, String], expected: (String, String)*): Unit = {
         checkAnswer(
-          spark.read.options(options).schema("`field 1` variant, field2 variant")
+          spark.read
+            .options(options)
+            .schema("`field 1` variant, field2 variant")
             .csv(path.getCanonicalPath)
             .selectExpr("cast(`field 1` as string)", "cast(field2 as string)"),
-          expected.map(f => Row(f._1, f._2))
-        )
+          expected.map(f => Row(f._1, f._2)))
       }
 
-      checkSchema(Map(),
+      checkSchema(
+        Map(),
         ("field 1", "field2"),
         ("100", "1.1"),
         ("2000-01-01", "2000-01-01 01:02:03"),
@@ -3607,7 +3618,8 @@ abstract class CSVSuite
         ("1e9", "hello"),
         ("missing", null))
 
-      checkSchema(Map("header" -> "true"),
+      checkSchema(
+        Map("header" -> "true"),
         ("100", "1.1"),
         ("2000-01-01", "2000-01-01 01:02:03"),
         (null, "true"),
@@ -3617,12 +3629,14 @@ abstract class CSVSuite
       checkError(
         exception = intercept[SparkException] {
           val options = Map("multiLine" -> "true", "header" -> "true", "mode" -> "failfast")
-          spark.read.options(options).schema("`field 1` variant, field2 variant")
-            .csv(path.getCanonicalPath).collect()
+          spark.read
+            .options(options)
+            .schema("`field 1` variant, field2 variant")
+            .csv(path.getCanonicalPath)
+            .collect()
         }.getCause.asInstanceOf[SparkException],
         condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
-        parameters = Map("badRecord" -> """["1e9","hello"]""", "failFastMode" -> "FAILFAST")
-      )
+        parameters = Map("badRecord" -> """["1e9","hello"]""", "failFastMode" -> "FAILFAST"))
 
       // Tests focusing on datetime parsing.
       val datetimeData =
@@ -3634,13 +3648,15 @@ abstract class CSVSuite
 
       // Default options. Row 1 is date. Row 2/3 is timestamp.
       withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
-        checkSingleVariant(Map(),
+        checkSingleVariant(
+          Map(),
           """{"_c0":"2000-01-01"}""",
           """{"_c0":"2000-01-01 01:02:03+00:00"}""",
           """{"_c0":"2000-01-01 00:02:03+00:00"}""")
       }
       withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
-        checkSingleVariant(Map(),
+        checkSingleVariant(
+          Map(),
           """{"_c0":"2000-01-01"}""",
           """{"_c0":"2000-01-01 01:02:03-08:00"}""",
           """{"_c0":"1999-12-31 16:02:03-08:00"}""")
@@ -3648,7 +3664,8 @@ abstract class CSVSuite
 
       // `preferDate` disabled. Row 1/2/3 is timestamp.
       withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
-        checkSingleVariant(Map("preferDate" -> "false"),
+        checkSingleVariant(
+          Map("preferDate" -> "false"),
           """{"_c0":"2000-01-01 00:00:00+00:00"}""",
           """{"_c0":"2000-01-01 01:02:03+00:00"}""",
           """{"_c0":"2000-01-01 00:02:03+00:00"}""")
@@ -3656,18 +3673,22 @@ abstract class CSVSuite
 
       // Session timestamp type is set to timestamp_ntz. Row 1 is date. Row 2 is timestamp_ntz.
       // Row 3 is timestamp.
-      withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> "TIMESTAMP_NTZ",
+      withSQLConf(
+        SQLConf.TIMESTAMP_TYPE.key -> "TIMESTAMP_NTZ",
         SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
-        checkSingleVariant(Map(),
+        checkSingleVariant(
+          Map(),
           """{"_c0":"2000-01-01"}""",
           """{"_c0":"2000-01-01 01:02:03"}""",
           """{"_c0":"2000-01-01 00:02:03+00:00"}""")
       }
 
       // `preferDate` disabled + timestamp_ntz. Row 1/2 is timestamp_ntz. Row 3 is timestamp.
-      withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> "TIMESTAMP_NTZ",
+      withSQLConf(
+        SQLConf.TIMESTAMP_TYPE.key -> "TIMESTAMP_NTZ",
         SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
-        checkSingleVariant(Map("preferDate" -> "false"),
+        checkSingleVariant(
+          Map("preferDate" -> "false"),
           """{"_c0":"2000-01-01 00:00:00"}""",
           """{"_c0":"2000-01-01 01:02:03"}""",
           """{"_c0":"2000-01-01 00:02:03+00:00"}""")
@@ -3681,8 +3702,7 @@ abstract class CSVSuite
         spark.sql("create table test_table(v variant) using csv")
       },
       condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
-      parameters = Map("columnName" -> "`v`", "columnType" -> "\"VARIANT\"", "format" -> "CSV")
-    )
+      parameters = Map("columnName" -> "`v`", "columnType" -> "\"VARIANT\"", "format" -> "CSV"))
     checkError(
       exception = intercept[AnalysisException] {
         withTempPath { path =>
@@ -3690,16 +3710,17 @@ abstract class CSVSuite
         }
       },
       condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
-      parameters = Map("columnName" -> "`v`", "columnType" -> "\"VARIANT\"", "format" -> "CSV")
-    )
+      parameters = Map("columnName" -> "`v`", "columnType" -> "\"VARIANT\"", "format" -> "CSV"))
   }
 
-  private def createTestFiles(dir: File, fileFormatWriter: Boolean,
-                              header: Boolean): Seq[Row] = {
+  private def createTestFiles(dir: File, fileFormatWriter: Boolean, header: Boolean): Seq[Row] = {
     val numRecord = 100
-    val codecExtensionMap = HadoopCompressionCodec.values()
-      .map(c => (c.lowerCaseName(),
-        Option(c.getCompressionCodec).map(_.getDefaultExtension).getOrElse(""))) ++
+    val codecExtensionMap = HadoopCompressionCodec
+      .values()
+      .map(c =>
+        (
+          c.lowerCaseName(),
+          Option(c.getCompressionCodec).map(_.getDefaultExtension).getOrElse(""))) ++
       Seq(("zstd", ".zst"), ("zstd", ".zstd"), ("gzip", ".gzip"))
 
     val codecFactory = new CompressionCodecFactory(spark.sessionState.newHadoopConf())
@@ -3711,7 +3732,8 @@ abstract class CSVSuite
       // file data source writers do not support zstd codec yet.
       if (fileFormatWriter && !codec.equals("zstd")) {
         val df = records.toDF("id", "value")
-        df.coalesce(1).write
+        df.coalesce(1)
+          .write
           .option("header", header.toString)
           .option("compression", codec)
           .csv(file.getCanonicalPath)
@@ -3731,9 +3753,11 @@ abstract class CSVSuite
         } else {
           ""
         }
-        val data = headerRow + records.map {
-          case (id, value) => s"${id},${value}"
-        }.mkString("\n")
+        val data = headerRow + records
+          .map { case (id, value) =>
+            s"${id},${value}"
+          }
+          .mkString("\n")
 
         val os = new FileOutputStream(file)
 
@@ -3750,32 +3774,27 @@ abstract class CSVSuite
       }
     }
 
-    val expectedOutput = codecExtensionMap.flatMap {
-      case (codec, ext) =>
-        val data = (1 to numRecord).map(i => Row(i, s"value_${codec}$ext"))
-        data
+    val expectedOutput = codecExtensionMap.flatMap { case (codec, ext) =>
+      val data = (1 to numRecord).map(i => Row(i, s"value_${codec}$ext"))
+      data
     }.toSeq
     assert(expectedOutput.length == codecExtensionMap.length * numRecord)
     expectedOutput
   }
 
   test("Test all supported codec and extension including zst, zstd and gzip") {
-    for (
-      multiLine <- Seq(true, false);
+    for (multiLine <- Seq(true, false);
       header <- Seq(true, false);
-      fileFormatWriter <- Seq(true, false)
-    ) {
+      fileFormatWriter <- Seq(true, false)) {
       logInfo(
         s"Testing with multiLine=$multiLine, " +
-          s"header=$header, fileFormatWriter=$fileFormatWriter"
-      )
+          s"header=$header, fileFormatWriter=$fileFormatWriter")
       withTempDir { dir =>
         val options = Map(
           "multiLine" -> multiLine.toString,
           "header" -> header.toString,
           "inferSchema" -> "true",
-          "recursiveFileLookup" -> "true"
-        )
+          "recursiveFileLookup" -> "true")
 
         val expectedOutput = createTestFiles(dir, fileFormatWriter, header)
         val df = spark.read.options(options).csv(dir.getCanonicalPath)
@@ -3786,8 +3805,7 @@ abstract class CSVSuite
 
   test("ZSTD compressed csv test with type inference") {
     Seq(zstCompressedCarsFile, zstHadoopCompressedCarsFile).foreach { file =>
-      val cars = spark
-        .read
+      val cars = spark.read
         .format("csv")
         .option("header", "true")
         .option("inferSchema", "true")
@@ -3817,7 +3835,9 @@ abstract class CSVSuite
         val ex = intercept[SparkException] {
           spark.read.format("csv").option("header", "true").load(dir.getAbsolutePath).collect()
         }
-        checkErrorMatchPVals(ex, "FAILED_READ_FILE.NO_HINT",
+        checkErrorMatchPVals(
+          ex,
+          "FAILED_READ_FILE.NO_HINT",
           Map("path" -> ".*corrupted.*\\.csv\\.zst"))
       }
     }
@@ -3826,8 +3846,7 @@ abstract class CSVSuite
 
 class CSVv1Suite extends CSVSuite {
   override protected def sparkConf: SparkConf =
-    super
-      .sparkConf
+    super.sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, "csv")
 
   test("test for FAILFAST parsing mode on CSV v1") {
@@ -3837,7 +3856,8 @@ class CSVv1Suite extends CSVSuite {
           .format("csv")
           .option("multiLine", multiLine)
           .options(Map("header" -> "true", "mode" -> "failfast"))
-          .load(testFile(carsFile)).collect()
+          .load(testFile(carsFile))
+          .collect()
       }
       checkErrorMatchPVals(
         exception = ex,
@@ -3846,18 +3866,15 @@ class CSVv1Suite extends CSVSuite {
       checkError(
         exception = ex.getCause.asInstanceOf[SparkException],
         condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
-        parameters = Map(
-          "badRecord" -> "[2015,Chevy,Volt,null,null]",
-          "failFastMode" -> "FAILFAST")
-      )
+        parameters =
+          Map("badRecord" -> "[2015,Chevy,Volt,null,null]", "failFastMode" -> "FAILFAST"))
     }
   }
 }
 
 class CSVv2Suite extends CSVSuite {
   override protected def sparkConf: SparkConf =
-    super
-      .sparkConf
+    super.sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, "")
 
   test("test for FAILFAST parsing mode on CSV v2") {
@@ -3868,12 +3885,12 @@ class CSVv2Suite extends CSVSuite {
             .format("csv")
             .option("multiLine", multiLine)
             .options(Map("header" -> "true", "mode" -> "failfast"))
-            .load(testFile(carsFile)).collect()
+            .load(testFile(carsFile))
+            .collect()
         },
         condition = "FAILED_READ_FILE.NO_HINT",
         parameters = Map("path" -> s".*$carsFile"),
-        matchPVals = true
-      )
+        matchPVals = true)
     }
   }
 
@@ -3882,12 +3899,17 @@ class CSVv2Suite extends CSVSuite {
 
     def testTimesForPrecision(p: Int): Seq[LocalTime] = {
       p match {
-        case 0 => Seq(LocalTime.of(0, 0, 0), LocalTime.of(14, 30, 45),
-          LocalTime.of(23, 59, 59))
-        case 3 => Seq(LocalTime.of(0, 0, 0, 0), LocalTime.of(14, 30, 45, 123000000),
-          LocalTime.of(23, 59, 59, 999000000))
-        case 6 => Seq(LocalTime.of(0, 0, 0, 0), LocalTime.of(14, 30, 45, 123456000),
-          LocalTime.of(23, 59, 59, 999999000))
+        case 0 => Seq(LocalTime.of(0, 0, 0), LocalTime.of(14, 30, 45), LocalTime.of(23, 59, 59))
+        case 3 =>
+          Seq(
+            LocalTime.of(0, 0, 0, 0),
+            LocalTime.of(14, 30, 45, 123000000),
+            LocalTime.of(23, 59, 59, 999000000))
+        case 6 =>
+          Seq(
+            LocalTime.of(0, 0, 0, 0),
+            LocalTime.of(14, 30, 45, 123456000),
+            LocalTime.of(23, 59, 59, 999999000))
       }
     }
 
@@ -3912,7 +3934,8 @@ class CSVv2Suite extends CSVSuite {
       val customDF = Seq(customTime).toDF("time").select($"time".cast(TimeType(6)))
       val customPath = s"${dir.getCanonicalPath}/time_custom.csv"
 
-      customDF.write.mode("overwrite")
+      customDF.write
+        .mode("overwrite")
         .option("timeFormat", "HH-mm-ss.SSSSSS")
         .csv(customPath)
 
@@ -3930,13 +3953,13 @@ class CSVv2Suite extends CSVSuite {
 class CSVLegacyTimeParserSuite extends CSVSuite {
 
   override def excluded: Seq[String] =
-    Seq("Write timestamps correctly in ISO8601 format by default",
+    Seq(
+      "Write timestamps correctly in ISO8601 format by default",
       // The result is different because the date/timestamp parser behavior is different. Not too
       // much value to test it.
       "csv with variant")
 
   override protected def sparkConf: SparkConf =
-    super
-      .sparkConf
+    super.sparkConf
       .set(SQLConf.LEGACY_TIME_PARSER_POLICY.key, "legacy")
 }

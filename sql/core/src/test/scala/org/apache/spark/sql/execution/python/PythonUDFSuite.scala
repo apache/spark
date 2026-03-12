@@ -32,44 +32,60 @@ class PythonUDFSuite extends QueryTest with SharedSparkSession {
   val pythonTestUDF = TestPythonUDF(name = "pyUDF", Some(LongType))
 
   lazy val base = Seq(
-    (Some(1), Some(1)), (Some(1), Some(2)), (Some(2), Some(1)),
-    (Some(2), Some(2)), (Some(3), Some(1)), (Some(3), Some(2)),
-    (None, Some(1)), (Some(3), None), (None, None)).toDF("a", "b")
+    (Some(1), Some(1)),
+    (Some(1), Some(2)),
+    (Some(2), Some(1)),
+    (Some(2), Some(2)),
+    (Some(3), Some(1)),
+    (Some(3), Some(2)),
+    (None, Some(1)),
+    (Some(3), None),
+    (None, None)).toDF("a", "b")
 
   test("SPARK-28445: PythonUDF as grouping key and aggregate expressions") {
     assume(shouldTestPythonUDFs)
-    val df1 = base.groupBy(scalaTestUDF(base("a") + 1))
+    val df1 = base
+      .groupBy(scalaTestUDF(base("a") + 1))
       .agg(scalaTestUDF(base("a") + 1), scalaTestUDF(count(base("b"))))
-    val df2 = base.groupBy(pythonTestUDF(base("a") + 1))
+    val df2 = base
+      .groupBy(pythonTestUDF(base("a") + 1))
       .agg(pythonTestUDF(base("a") + 1), pythonTestUDF(count(base("b"))))
     checkAnswer(df1, df2)
   }
 
   test("SPARK-28445: PythonUDF as grouping key and used in aggregate expressions") {
     assume(shouldTestPythonUDFs)
-    val df1 = base.groupBy(scalaTestUDF(base("a") + 1))
+    val df1 = base
+      .groupBy(scalaTestUDF(base("a") + 1))
       .agg(scalaTestUDF(base("a") + 1) + 1, scalaTestUDF(count(base("b"))))
-    val df2 = base.groupBy(pythonTestUDF(base("a") + 1))
+    val df2 = base
+      .groupBy(pythonTestUDF(base("a") + 1))
       .agg(pythonTestUDF(base("a") + 1) + 1, pythonTestUDF(count(base("b"))))
     checkAnswer(df1, df2)
   }
 
   test("SPARK-28445: PythonUDF in aggregate expression has grouping key in its arguments") {
     assume(shouldTestPythonUDFs)
-    val df1 = base.groupBy(scalaTestUDF(base("a") + 1))
+    val df1 = base
+      .groupBy(scalaTestUDF(base("a") + 1))
       .agg(scalaTestUDF(scalaTestUDF(base("a") + 1)), scalaTestUDF(count(base("b"))))
-    val df2 = base.groupBy(pythonTestUDF(base("a") + 1))
+    val df2 = base
+      .groupBy(pythonTestUDF(base("a") + 1))
       .agg(pythonTestUDF(pythonTestUDF(base("a") + 1)), pythonTestUDF(count(base("b"))))
     checkAnswer(df1, df2)
   }
 
   test("SPARK-28445: PythonUDF over grouping key is argument to aggregate function") {
     assume(shouldTestPythonUDFs)
-    val df1 = base.groupBy(scalaTestUDF(base("a") + 1))
-      .agg(scalaTestUDF(scalaTestUDF(base("a") + 1)),
+    val df1 = base
+      .groupBy(scalaTestUDF(base("a") + 1))
+      .agg(
+        scalaTestUDF(scalaTestUDF(base("a") + 1)),
         scalaTestUDF(count(scalaTestUDF(base("a") + 1))))
-    val df2 = base.groupBy(pythonTestUDF(base("a") + 1))
-      .agg(pythonTestUDF(pythonTestUDF(base("a") + 1)),
+    val df2 = base
+      .groupBy(pythonTestUDF(base("a") + 1))
+      .agg(
+        pythonTestUDF(pythonTestUDF(base("a") + 1)),
         pythonTestUDF(count(pythonTestUDF(base("a") + 1))))
     checkAnswer(df1, df2)
   }
@@ -80,8 +96,7 @@ class PythonUDFSuite extends QueryTest with SharedSparkSession {
 
     val pandasTestUDF = TestGroupedAggPandasUDF(name = "pandas_udf")
     val reorderedDf = df.select("b", "a")
-    val actual = reorderedDf.agg(
-      pandasTestUDF(reorderedDf("a")), pandasTestUDF(reorderedDf("b")))
+    val actual = reorderedDf.agg(pandasTestUDF(reorderedDf("a")), pandasTestUDF(reorderedDf("b")))
     val expected = df.agg(pandasTestUDF(df("a")), pandasTestUDF(df("b")))
 
     checkAnswer(actual, expected)
@@ -97,7 +112,8 @@ class PythonUDFSuite extends QueryTest with SharedSparkSession {
       "time to start Python workers",
       "time to run Python workers")
 
-    val df = base.groupBy(pythonTestUDF(base("a") + 1))
+    val df = base
+      .groupBy(pythonTestUDF(base("a") + 1))
       .agg(pythonTestUDF(pythonTestUDF(base("a") + 1)))
     df.count()
 
@@ -125,18 +141,22 @@ class PythonUDFSuite extends QueryTest with SharedSparkSession {
       },
       condition = "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_PYTHON_UDF",
       parameters = Map("funcName" -> "\"pyUDF(namedlambdavariable())\""),
-      context = ExpectedContext(
-        "transform", s".*${this.getClass.getSimpleName}.*"))
+      context = ExpectedContext("transform", s".*${this.getClass.getSimpleName}.*"))
   }
 
   test("SPARK-48666: Python UDF execution against partitioned column") {
     assume(shouldTestPythonUDFs)
     withTable("t") {
-      spark.range(1).selectExpr("id AS t", "(id + 1) AS p").write.partitionBy("p").saveAsTable("t")
+      spark
+        .range(1)
+        .selectExpr("id AS t", "(id + 1) AS p")
+        .write
+        .partitionBy("p")
+        .saveAsTable("t")
       val table = spark.table("t")
       val newTable = table.withColumn("new_column", pythonTestUDF(table("p")))
-      val df = newTable.as("t1").join(
-        newTable.as("t2"), col("t1.new_column") === col("t2.new_column"))
+      val df =
+        newTable.as("t1").join(newTable.as("t2"), col("t1.new_column") === col("t2.new_column"))
       checkAnswer(df, Row(0, 1, 1, 0, 1, 1))
     }
   }
@@ -150,7 +170,8 @@ class PythonUDFSuite extends QueryTest with SharedSparkSession {
     // This query should work without throwing an analysis exception
     // The UDF foo(value) appears in both grouping expressions and aggregate expressions
     // The fix ensures that both instances are properly mapped to the same attribute
-    val df = spark.range(1)
+    val df = spark
+      .range(1)
       .selectExpr("id", "id % 3 as value")
       .groupBy(pythonUDF(col("value")))
       .agg(avg("id"), pythonUDF(col("value")))
@@ -169,7 +190,8 @@ class PythonUDFSuite extends QueryTest with SharedSparkSession {
       "time to run Python workers",
       "time to execute Python code")
 
-    val df = base.groupBy(pythonTestUDF(base("a") + 1))
+    val df = base
+      .groupBy(pythonTestUDF(base("a") + 1))
       .agg(pythonTestUDF(pythonTestUDF(base("a") + 1)))
     df.count()
 
@@ -177,34 +199,35 @@ class PythonUDFSuite extends QueryTest with SharedSparkSession {
     val lastExecId = statusStore.executionsList().last.executionId
     val executionMetrics = statusStore.execution(lastExecId).get.metrics.mkString
     for (metric <- pythonSQLMetrics) {
-      assert(executionMetrics.contains(metric),
+      assert(
+        executionMetrics.contains(metric),
         s"Expected metric '$metric' not found in execution metrics")
     }
   }
 
-  test(
-    "SPARK-55046: pythonProcessingTime reflects actual UDF computation time"
-  ) {
+  test("SPARK-55046: pythonProcessingTime reflects actual UDF computation time") {
     assume(shouldTestPythonUDFs)
     val df = spark.range(10000)
     val result = df.select(pythonTestUDF(col("id")))
     result.collect()
 
-    val pythonExec = result.queryExecution.executedPlan.collectFirst {
-      case p: BatchEvalPythonExec => p
-    }.getOrElse {
-      fail("Expected BatchEvalPythonExec in executed plan")
-    }
+    val pythonExec = result.queryExecution.executedPlan
+      .collectFirst { case p: BatchEvalPythonExec =>
+        p
+      }
+      .getOrElse {
+        fail("Expected BatchEvalPythonExec in executed plan")
+      }
 
     val processingTime = pythonExec.metrics.get("pythonProcessingTime").map(_.value).getOrElse(0L)
     val pythonTotalTime = pythonExec.metrics.get("pythonTotalTime").map(_.value).getOrElse(0L)
 
     // Processing time should be non-zero
-    assert(processingTime > 0,
-      s"pythonProcessingTime should be > 0, but was $processingTime")
+    assert(processingTime > 0, s"pythonProcessingTime should be > 0, but was $processingTime")
 
     // Python total time should also be non-zero and >= processing time
-    assert(pythonTotalTime > 0 && pythonTotalTime >= processingTime,
+    assert(
+      pythonTotalTime > 0 && pythonTotalTime >= processingTime,
       s"pythonTotalTime should be > 0, but was $pythonTotalTime")
   }
 
@@ -224,9 +247,11 @@ class PythonUDFSuite extends QueryTest with SharedSparkSession {
         val processingTime = exec.metrics.get("pythonProcessingTime").map(_.value).getOrElse(0L)
         val pythonTotalTime = exec.metrics.get("pythonTotalTime").map(_.value).getOrElse(0L)
 
-        assert(processingTime > 0,
+        assert(
+          processingTime > 0,
           s"pythonProcessingTime should be > 0 for ArrowEvalPythonExec, but was $processingTime")
-        assert(pythonTotalTime > 0 && pythonTotalTime >= processingTime,
+        assert(
+          pythonTotalTime > 0 && pythonTotalTime >= processingTime,
           s"pythonTotalTime should be > 0 for ArrowEvalPythonExec, but was $pythonTotalTime")
       }
     }
@@ -239,25 +264,32 @@ class PythonUDFSuite extends QueryTest with SharedSparkSession {
     spark.udtf.registerPython(udtf.name, udtf.udtf)
     withTempView("t") {
       try {
-        spark.range(1000).selectExpr("id % 100 as a", "id % 50 as b")
+        spark
+          .range(1000)
+          .selectExpr("id % 100 as a", "id % 50 as b")
           .createOrReplaceTempView("t")
         val result = sql(s"SELECT f.* FROM t, LATERAL ${udtf.name}(a, b) f")
         result.collect()
 
-        val udtfExec = result.queryExecution.executedPlan.collectFirst {
-          case p: BatchEvalPythonUDTFExec => p
-        }.getOrElse {
-          fail("Expected BatchEvalPythonUDTFExec in executed plan")
-        }
+        val udtfExec = result.queryExecution.executedPlan
+          .collectFirst { case p: BatchEvalPythonUDTFExec =>
+            p
+          }
+          .getOrElse {
+            fail("Expected BatchEvalPythonUDTFExec in executed plan")
+          }
 
         // Verify the metric exists and has a positive value
-        val processingTime = udtfExec.metrics.get("pythonProcessingTime").map(_.value).getOrElse(0L)
+        val processingTime =
+          udtfExec.metrics.get("pythonProcessingTime").map(_.value).getOrElse(0L)
         val pythonTotalTime = udtfExec.metrics.get("pythonTotalTime").map(_.value).getOrElse(0L)
 
-        assert(processingTime > 0,
+        assert(
+          processingTime > 0,
           s"pythonProcessingTime should be > 0 for BatchEvalPythonUDTFExec," +
             s" but was $processingTime")
-        assert(pythonTotalTime > 0 && pythonTotalTime >= processingTime,
+        assert(
+          pythonTotalTime > 0 && pythonTotalTime >= processingTime,
           s"pythonTotalTime should be > 0 for BatchEvalPythonUDTFExec," +
             s" but was $pythonTotalTime")
       } finally {

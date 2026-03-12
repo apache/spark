@@ -28,10 +28,9 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 /**
- * SQL Scripting interpreter tests.
- * Output from the parser is provided to the interpreter.
- * Output from the interpreter (iterator over executable statements) is then checked - statements
- *   are executed and output DataFrames are compared with expected outputs.
+ * SQL Scripting interpreter tests. Output from the parser is provided to the interpreter. Output
+ * from the interpreter (iterator over executable statements) is then checked - statements are
+ * executed and output DataFrames are compared with expected outputs.
  */
 class SqlScriptingInterpreterSuite
     extends QueryTest
@@ -243,11 +242,7 @@ class SqlScriptingInterpreterSuite
       condition = "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
       sqlState = "42703",
       parameters = Map("objectName" -> s"`$varName`"),
-      context = ExpectedContext(
-        fragment = s"$varName",
-        start = 79,
-        stop = 89)
-    )
+      context = ExpectedContext(fragment = s"$varName", start = 79, stop = 89))
   }
 
   test("if") {
@@ -611,12 +606,9 @@ class SqlScriptingInterpreterSuite
         |""".stripMargin
 
     checkError(
-      exception = intercept[SqlScriptingException] (
-        runSqlScript(commands)
-      ),
+      exception = intercept[SqlScriptingException](runSqlScript(commands)),
       condition = "INVALID_BOOLEAN_STATEMENT",
-      parameters = Map("invalidStatement" -> "1")
-    )
+      parameters = Map("invalidStatement" -> "1"))
   }
 
   test("simple case") {
@@ -802,9 +794,7 @@ class SqlScriptingInterpreterSuite
         |""".stripMargin
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       checkError(
-        exception = intercept[SparkNumberFormatException](
-          runSqlScript(commands)
-        ),
+        exception = intercept[SparkNumberFormatException](runSqlScript(commands)),
         condition = "CAST_INVALID_INPUT",
         parameters = Map(
           "expression" -> "'one'",
@@ -835,8 +825,7 @@ class SqlScriptingInterpreterSuite
       checkError(
         exception = exception,
         condition = "INVALID_BOOLEAN_STATEMENT",
-        parameters = Map("invalidStatement" -> "1")
-      )
+        parameters = Map("invalidStatement" -> "1"))
       assert(exception.origin.line.isDefined)
       assert(exception.origin.line.get == 3)
     }
@@ -1106,12 +1095,9 @@ class SqlScriptingInterpreterSuite
         |""".stripMargin
 
     checkError(
-      exception = intercept[SqlScriptingException] (
-        runSqlScript(commands)
-      ),
+      exception = intercept[SqlScriptingException](runSqlScript(commands)),
       condition = "INVALID_BOOLEAN_STATEMENT",
-      parameters = Map("invalidStatement" -> "1")
-    )
+      parameters = Map("invalidStatement" -> "1"))
   }
 
   test("leave compound block") {
@@ -2853,10 +2839,10 @@ class SqlScriptingInterpreterSuite
         runSqlScript(commands1)
       },
       sqlState = "42823",
-      condition = "INVALID_SUBQUERY_EXPRESSION.SCALAR_SUBQUERY_RETURN_MORE_THAN_ONE_OUTPUT_COLUMN",
+      condition =
+        "INVALID_SUBQUERY_EXPRESSION.SCALAR_SUBQUERY_RETURN_MORE_THAN_ONE_OUTPUT_COLUMN",
       parameters = Map("number" -> "2"),
-      context = ExpectedContext(fragment = "(SELECT 1, 2)", start = 12, stop = 24)
-    )
+      context = ExpectedContext(fragment = "(SELECT 1, 2)", start = 12, stop = 24))
 
     withTable("t") {
       val commands2 =
@@ -2870,13 +2856,10 @@ class SqlScriptingInterpreterSuite
           |END
           |""".stripMargin
       checkError(
-        exception = intercept[SparkException] (
-          runSqlScript(commands2)
-        ),
+        exception = intercept[SparkException](runSqlScript(commands2)),
         condition = "SCALAR_SUBQUERY_TOO_MANY_ROWS",
         parameters = Map.empty,
-        context = ExpectedContext(fragment = "(SELECT * FROM t)", start = 95, stop = 111)
-      )
+        context = ExpectedContext(fragment = "(SELECT * FROM t)", start = 95, stop = 111))
     }
   }
 
@@ -2891,14 +2874,12 @@ class SqlScriptingInterpreterSuite
         |END
         |""".stripMargin
     checkError(
-      exception = intercept[AnalysisException] (
-        runSqlScript(commands1)
-      ),
+      exception = intercept[AnalysisException](runSqlScript(commands1)),
       sqlState = "42823",
-      condition = "INVALID_SUBQUERY_EXPRESSION.SCALAR_SUBQUERY_RETURN_MORE_THAN_ONE_OUTPUT_COLUMN",
+      condition =
+        "INVALID_SUBQUERY_EXPRESSION.SCALAR_SUBQUERY_RETURN_MORE_THAN_ONE_OUTPUT_COLUMN",
       parameters = Map("number" -> "2"),
-      context = ExpectedContext(fragment = "(SELECT 1, 2)", start = 18, stop = 30)
-    )
+      context = ExpectedContext(fragment = "(SELECT 1, 2)", start = 18, stop = 30))
 
     withTable("t") {
       val commands2 =
@@ -2913,13 +2894,10 @@ class SqlScriptingInterpreterSuite
           |END
           |""".stripMargin
       checkError(
-        exception = intercept[SparkException] (
-          runSqlScript(commands2)
-        ),
+        exception = intercept[SparkException](runSqlScript(commands2)),
         condition = "SCALAR_SUBQUERY_TOO_MANY_ROWS",
         parameters = Map.empty,
-        context = ExpectedContext(fragment = "(SELECT * FROM t)", start = 102, stop = 118)
-      )
+        context = ExpectedContext(fragment = "(SELECT * FROM t)", start = 102, stop = 118))
     }
   }
 
@@ -2938,10 +2916,10 @@ class SqlScriptingInterpreterSuite
         runSqlScript(commands1)
       },
       sqlState = "42823",
-      condition = "INVALID_SUBQUERY_EXPRESSION.SCALAR_SUBQUERY_RETURN_MORE_THAN_ONE_OUTPUT_COLUMN",
+      condition =
+        "INVALID_SUBQUERY_EXPRESSION.SCALAR_SUBQUERY_RETURN_MORE_THAN_ONE_OUTPUT_COLUMN",
       parameters = Map("number" -> "2"),
-      context = ExpectedContext(fragment = "(SELECT 1, 2)", start = 12, stop = 24)
-    )
+      context = ExpectedContext(fragment = "(SELECT 1, 2)", start = 12, stop = 24))
 
     withTable("t") {
       val commands2 =
@@ -2962,8 +2940,7 @@ class SqlScriptingInterpreterSuite
         sqlState = "21000",
         condition = "SCALAR_SUBQUERY_TOO_MANY_ROWS",
         parameters = Map.empty[String, String],
-        context = ExpectedContext(fragment = "(SELECT * FROM t)", start = 81, stop = 97)
-      )
+        context = ExpectedContext(fragment = "(SELECT * FROM t)", start = 81, stop = 97))
     }
   }
 
@@ -2977,14 +2954,12 @@ class SqlScriptingInterpreterSuite
         |END
         |""".stripMargin
     checkError(
-      exception = intercept[AnalysisException] (
-        runSqlScript(commands1)
-      ),
+      exception = intercept[AnalysisException](runSqlScript(commands1)),
       sqlState = "42823",
-      condition = "INVALID_SUBQUERY_EXPRESSION.SCALAR_SUBQUERY_RETURN_MORE_THAN_ONE_OUTPUT_COLUMN",
+      condition =
+        "INVALID_SUBQUERY_EXPRESSION.SCALAR_SUBQUERY_RETURN_MORE_THAN_ONE_OUTPUT_COLUMN",
       parameters = Map("number" -> "2"),
-      context = ExpectedContext(fragment = "(SELECT 1, 2)", start = 15, stop = 27)
-    )
+      context = ExpectedContext(fragment = "(SELECT 1, 2)", start = 15, stop = 27))
 
     withTable("t") {
       val commands2 =
@@ -2998,13 +2973,10 @@ class SqlScriptingInterpreterSuite
           |END
           |""".stripMargin
       checkError(
-        exception = intercept[SparkException] (
-          runSqlScript(commands2)
-        ),
+        exception = intercept[SparkException](runSqlScript(commands2)),
         condition = "SCALAR_SUBQUERY_TOO_MANY_ROWS",
         parameters = Map.empty,
-        context = ExpectedContext(fragment = "(SELECT * FROM t)", start = 98, stop = 114)
-      )
+        context = ExpectedContext(fragment = "(SELECT * FROM t)", start = 98, stop = 114))
     }
   }
 
@@ -3019,14 +2991,12 @@ class SqlScriptingInterpreterSuite
         |END
         |""".stripMargin
     checkError(
-      exception = intercept[AnalysisException] (
-        runSqlScript(commands1)
-      ),
+      exception = intercept[AnalysisException](runSqlScript(commands1)),
       sqlState = "42823",
-      condition = "INVALID_SUBQUERY_EXPRESSION.SCALAR_SUBQUERY_RETURN_MORE_THAN_ONE_OUTPUT_COLUMN",
+      condition =
+        "INVALID_SUBQUERY_EXPRESSION.SCALAR_SUBQUERY_RETURN_MORE_THAN_ONE_OUTPUT_COLUMN",
       parameters = Map("number" -> "2"),
-      context = ExpectedContext(fragment = "(SELECT 1, 2)", start = 39, stop = 51)
-    )
+      context = ExpectedContext(fragment = "(SELECT 1, 2)", start = 39, stop = 51))
 
     withTable("t") {
       val commands2 =
@@ -3041,13 +3011,10 @@ class SqlScriptingInterpreterSuite
           |END
           |""".stripMargin
       checkError(
-        exception = intercept[SparkException] (
-          runSqlScript(commands2)
-        ),
+        exception = intercept[SparkException](runSqlScript(commands2)),
         condition = "SCALAR_SUBQUERY_TOO_MANY_ROWS",
         parameters = Map.empty,
-        context = ExpectedContext(fragment = "(SELECT * FROM t)", start = 121, stop = 137)
-      )
+        context = ExpectedContext(fragment = "(SELECT * FROM t)", start = 121, stop = 137))
     }
   }
 
@@ -3078,12 +3045,9 @@ class SqlScriptingInterpreterSuite
         |END
         |""".stripMargin
     checkError(
-      exception = intercept[SqlScriptingException] (
-        runSqlScript(commands)
-      ),
+      exception = intercept[SqlScriptingException](runSqlScript(commands)),
       condition = "INVALID_BOOLEAN_STATEMENT",
-      parameters = Map("invalidStatement" -> "NULL")
-    )
+      parameters = Map("invalidStatement" -> "NULL"))
   }
 
   test("condition evaluation - searched case statement - null boolean constant") {
@@ -3471,8 +3435,7 @@ class SqlScriptingInterpreterSuite
         Seq.empty[Row], // insert
         Seq.empty[Row], // declare array_column
         Seq.empty[Row], // set array_column
-        Seq(Row(Seq(Row(1, null, Seq(10)), Row(2, "name", Seq.empty))))
-      )
+        Seq(Row(Seq(Row(1, null, Seq(10)), Row(2, "name", Seq.empty)))))
       verifySqlScriptResult(sqlScript, expected)
     }
   }
@@ -3496,8 +3459,7 @@ class SqlScriptingInterpreterSuite
         runSqlScript(sqlScript)
       },
       condition = "DUPLICATE_EXCEPTION_HANDLER.CONDITION",
-      parameters = Map("condition" -> "SQLEXCEPTION")
-    )
+      parameters = Map("condition" -> "SQLEXCEPTION"))
   }
 
   test("Duplicate NOT FOUND EXIT/EXIT Handler") {
@@ -3518,8 +3480,7 @@ class SqlScriptingInterpreterSuite
         runSqlScript(sqlScript)
       },
       condition = "DUPLICATE_EXCEPTION_HANDLER.CONDITION",
-      parameters = Map("condition" -> "NOT FOUND")
-    )
+      parameters = Map("condition" -> "NOT FOUND"))
   }
 
   test("Duplicate SQLEXCEPTION CONTINUE/CONTINUE Handler") {
@@ -3541,8 +3502,7 @@ class SqlScriptingInterpreterSuite
         runSqlScript(sqlScript)
       },
       condition = "DUPLICATE_EXCEPTION_HANDLER.CONDITION",
-      parameters = Map("condition" -> "SQLEXCEPTION")
-    )
+      parameters = Map("condition" -> "SQLEXCEPTION"))
   }
 
   test("Duplicate NOT FOUND CONTINUE/CONTINUE Handler") {
@@ -3563,8 +3523,7 @@ class SqlScriptingInterpreterSuite
         runSqlScript(sqlScript)
       },
       condition = "DUPLICATE_EXCEPTION_HANDLER.CONDITION",
-      parameters = Map("condition" -> "NOT FOUND")
-    )
+      parameters = Map("condition" -> "NOT FOUND"))
   }
 
   test("Duplicate SQLEXCEPTION EXIT/CONTINUE Handler") {
@@ -3586,8 +3545,7 @@ class SqlScriptingInterpreterSuite
         runSqlScript(sqlScript)
       },
       condition = "DUPLICATE_EXCEPTION_HANDLER.CONDITION",
-      parameters = Map("condition" -> "SQLEXCEPTION")
-    )
+      parameters = Map("condition" -> "SQLEXCEPTION"))
   }
 
   test("Duplicate NOT FOUND EXIT/CONTINUE Handler") {
@@ -3608,8 +3566,7 @@ class SqlScriptingInterpreterSuite
         runSqlScript(sqlScript)
       },
       condition = "DUPLICATE_EXCEPTION_HANDLER.CONDITION",
-      parameters = Map("condition" -> "NOT FOUND")
-    )
+      parameters = Map("condition" -> "NOT FOUND"))
   }
 
   test("Duplicate SQLEXCEPTION CONTINUE/EXIT Handler") {
@@ -3631,8 +3588,7 @@ class SqlScriptingInterpreterSuite
         runSqlScript(sqlScript)
       },
       condition = "DUPLICATE_EXCEPTION_HANDLER.CONDITION",
-      parameters = Map("condition" -> "SQLEXCEPTION")
-    )
+      parameters = Map("condition" -> "SQLEXCEPTION"))
   }
 
   test("Duplicate NOT FOUND CONTINUE/EXIT Handler") {
@@ -3653,7 +3609,6 @@ class SqlScriptingInterpreterSuite
         runSqlScript(sqlScript)
       },
       condition = "DUPLICATE_EXCEPTION_HANDLER.CONDITION",
-      parameters = Map("condition" -> "NOT FOUND")
-    )
+      parameters = Map("condition" -> "NOT FOUND"))
   }
 }

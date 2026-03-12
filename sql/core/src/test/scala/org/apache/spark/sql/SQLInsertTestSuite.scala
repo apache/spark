@@ -50,7 +50,8 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils with AdaptiveSparkP
       cols: Seq[String],
       colTypes: Seq[String],
       partCols: Seq[String] = Nil): Unit = {
-    val values = cols.zip(colTypes).map(tuple => tuple._1 + " " + tuple._2).mkString("(", ", ", ")")
+    val values =
+      cols.zip(colTypes).map(tuple => tuple._1 + " " + tuple._2).mkString("(", ", ", ")")
     val partitionSpec = if (partCols.nonEmpty) {
       partCols.mkString("PARTITIONED BY (", ",", ")")
     } else ""
@@ -110,7 +111,11 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils with AdaptiveSparkP
       createTable("t1", cols, Seq("int", "int", "int", "int"), cols.takeRight(2))
       Seq(false, true).foreach { m =>
         processInsert(
-          "t1", df.selectExpr("c1", "c2"), cols.take(2), Seq("c3=3", "c4=4"), overwrite = m)
+          "t1",
+          df.selectExpr("c1", "c2"),
+          cols.take(2),
+          Seq("c3=3", "c4=4"),
+          overwrite = m)
         verifyTable("t1", df)
       }
     }
@@ -118,8 +123,12 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils with AdaptiveSparkP
     withTable("t1") {
       createTable("t1", cols, Seq("int", "int", "int", "int"), cols.takeRight(2))
       Seq(false, true).foreach { m =>
-        processInsert("t1", df.selectExpr("c1", "c2", "c4"),
-          cols.filterNot(_ == "c3"), Seq("c3=3", "c4"), overwrite = m)
+        processInsert(
+          "t1",
+          df.selectExpr("c1", "c2", "c4"),
+          cols.filterNot(_ == "c3"),
+          Seq("c3=3", "c4"),
+          overwrite = m)
         verifyTable("t1", df)
       }
     }
@@ -158,15 +167,23 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils with AdaptiveSparkP
 
     withTable("t1") {
       createTable("t1", cols, Seq("int", "int", "int", "int"), cols.takeRight(2))
-      processInsert("t1", df.selectExpr("c2", "c1", "c4"),
-        partitionExprs = Seq("c3=3", "c4"), overwrite = false, byName = true)
+      processInsert(
+        "t1",
+        df.selectExpr("c2", "c1", "c4"),
+        partitionExprs = Seq("c3=3", "c4"),
+        overwrite = false,
+        byName = true)
       verifyTable("t1", df.selectExpr(cols: _*))
     }
 
     withTable("t1") {
       createTable("t1", cols, Seq("int", "int", "int", "int"), cols.takeRight(2))
-      processInsert("t1", df.selectExpr("c2", "c1"),
-        partitionExprs = Seq("c3=3", "c4=4"), overwrite = false, byName = true)
+      processInsert(
+        "t1",
+        df.selectExpr("c2", "c1"),
+        partitionExprs = Seq("c3=3", "c4=4"),
+        overwrite = false,
+        byName = true)
       verifyTable("t1", df.selectExpr(cols: _*))
     }
   }
@@ -188,21 +205,35 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils with AdaptiveSparkP
     val df = Seq((4, 3, 2, 1)).toDF(cols.reverse: _*)
     withTable("t1") {
       createTable("t1", cols, Seq("int", "int", "int", "int"), cols.takeRight(2))
-      processInsert("t1", df.selectExpr("c2", "c1", "c4"),
-        partitionExprs = Seq("c3=3", "c4"), overwrite = false)
+      processInsert(
+        "t1",
+        df.selectExpr("c2", "c1", "c4"),
+        partitionExprs = Seq("c3=3", "c4"),
+        overwrite = false)
       verifyTable("t1", df.selectExpr("c2", "c1", "c3", "c4"))
-      processInsert("t1", df.selectExpr("c2", "c1", "c4"),
-        partitionExprs = Seq("c3=3", "c4"), overwrite = true, byName = true)
+      processInsert(
+        "t1",
+        df.selectExpr("c2", "c1", "c4"),
+        partitionExprs = Seq("c3=3", "c4"),
+        overwrite = true,
+        byName = true)
       verifyTable("t1", df.selectExpr(cols: _*))
     }
 
     withTable("t1") {
       createTable("t1", cols, Seq("int", "int", "int", "int"), cols.takeRight(2))
-      processInsert("t1", df.selectExpr("c2", "c1"),
-        partitionExprs = Seq("c3=3", "c4=4"), overwrite = false)
+      processInsert(
+        "t1",
+        df.selectExpr("c2", "c1"),
+        partitionExprs = Seq("c3=3", "c4=4"),
+        overwrite = false)
       verifyTable("t1", df.selectExpr("c2", "c1", "c3", "c4"))
-      processInsert("t1", df.selectExpr("c2", "c1"),
-        partitionExprs = Seq("c3=3", "c4=4"), overwrite = true, byName = true)
+      processInsert(
+        "t1",
+        df.selectExpr("c2", "c1"),
+        partitionExprs = Seq("c3=3", "c4=4"),
+        overwrite = true,
+        byName = true)
       verifyTable("t1", df.selectExpr(cols: _*))
     }
   }
@@ -219,10 +250,9 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils with AdaptiveSparkP
         },
         v1ErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_COLUMNS",
         v2ErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_COLUMNS",
-        v1Parameters = Map("tableName" -> "`spark_catalog`.`default`.`t1`",
-          "extraColumns" -> "`x1`"),
-        v2Parameters = Map("tableName" -> "`testcat`.`t1`", "extraColumns" -> "`x1`")
-      )
+        v1Parameters =
+          Map("tableName" -> "`spark_catalog`.`default`.`t1`", "extraColumns" -> "`x1`"),
+        v2Parameters = Map("tableName" -> "`testcat`.`t1`", "extraColumns" -> "`x1`"))
       val df2 = Seq((3, 2, 1, 0)).toDF(Seq("c3", "c2", "c1", "c0"): _*)
       checkV1AndV2Error(
         exception = intercept[AnalysisException] {
@@ -230,13 +260,14 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils with AdaptiveSparkP
         },
         v1ErrorClass = "INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS",
         v2ErrorClass = "INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS",
-        v1Parameters = Map("tableName" -> "`spark_catalog`.`default`.`t1`",
+        v1Parameters = Map(
+          "tableName" -> "`spark_catalog`.`default`.`t1`",
           "tableColumns" -> "`c1`, `c2`, `c3`",
           "dataColumns" -> "`c3`, `c2`, `c1`, `c0`"),
-        v2Parameters = Map("tableName" -> "`testcat`.`t1`",
+        v2Parameters = Map(
+          "tableName" -> "`testcat`.`t1`",
           "tableColumns" -> "`c1`, `c2`, `c3`",
-          "dataColumns" -> "`c3`, `c2`, `c1`, `c0`")
-      )
+          "dataColumns" -> "`c3`, `c2`, `c1`, `c0`"))
     }
   }
 
@@ -255,7 +286,11 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils with AdaptiveSparkP
       createTable("t1", cols, Seq("int", "int", "int", "int"), cols.takeRight(2))
       Seq(false, true).foreach { m =>
         processInsert(
-          "t1", df.selectExpr("c1", "c2"), cols.take(2).reverse, Seq("c3=3", "c4=4"), overwrite = m)
+          "t1",
+          df.selectExpr("c1", "c2"),
+          cols.take(2).reverse,
+          Seq("c3=3", "c4=4"),
+          overwrite = m)
         verifyTable("t1", df.selectExpr("c2", "c1", "c3", "c4"))
       }
     }
@@ -263,8 +298,12 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils with AdaptiveSparkP
     withTable("t1") {
       createTable("t1", cols, Seq("int", "int", "int", "int"), cols.takeRight(2))
       Seq(false, true).foreach { m =>
-        processInsert("t1",
-          df.selectExpr("c1", "c2", "c4"), Seq("c4", "c2", "c1"), Seq("c3=3", "c4"), overwrite = m)
+        processInsert(
+          "t1",
+          df.selectExpr("c1", "c2", "c4"),
+          Seq("c4", "c2", "c1"),
+          Seq("c3=3", "c4"),
+          overwrite = m)
         verifyTable("t1", df.selectExpr("c4", "c2", "c3", "c1"))
       }
     }
@@ -275,8 +314,8 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils with AdaptiveSparkP
       val cols = Seq("c1", "c2", "c3")
       createTable("t1", cols, Seq("int", "long", "string"))
       checkError(
-        exception = intercept[AnalysisException](
-          sql(s"INSERT INTO t1 (c1, c2, c2) values(1, 2, 3)")),
+        exception =
+          intercept[AnalysisException](sql(s"INSERT INTO t1 (c1, c2, c2) values(1, 2, 3)")),
         condition = "COLUMN_ALREADY_EXISTS",
         parameters = Map("columnName" -> "`c2`"))
     }
@@ -292,9 +331,7 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils with AdaptiveSparkP
         condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         sqlState = None,
         parameters = Map("objectName" -> "`c4`", "proposal" -> "`c1`, `c2`, `c3`"),
-        context = ExpectedContext(
-          fragment = "INSERT INTO t1 (c1, c2, c4)", start = 0, stop = 26
-        ))
+        context = ExpectedContext(fragment = "INSERT INTO t1 (c1, c2, c4)", start = 0, stop = 26))
     }
   }
 
@@ -313,8 +350,7 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils with AdaptiveSparkP
             "tableName" -> ".*`t1`",
             "tableColumns" -> "`c1`, `c2`",
             "dataColumns" -> "`col1`, `col2`, `col3`"),
-          matchPVals = true
-        )
+          matchPVals = true)
         checkError(
           exception = intercept[AnalysisException] {
             sql(s"INSERT INTO t1 (c1, c2, c3) values(1, 2)")
@@ -325,8 +361,7 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils with AdaptiveSparkP
             "tableName" -> ".*`t1`",
             "tableColumns" -> "`c1`, `c2`, `c3`",
             "dataColumns" -> "`col1`, `col2`"),
-          matchPVals = true
-        )
+          matchPVals = true)
       }
     }
     withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "false") {
@@ -349,15 +384,13 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils with AdaptiveSparkP
     withTable("t1") {
       val binaryStr = "Spark SQL"
       val binaryHexStr = Hex.hex(UTF8String.fromString(binaryStr).getBytes).toString
-      sql(
-        """
+      sql("""
           | CREATE TABLE t1(name STRING, part1 DATE, part2 TIMESTAMP, part3 BINARY,
           |  part4 STRING, part5 STRING, part6 STRING, part7 STRING)
           | USING PARQUET PARTITIONED BY (part1, part2, part3, part4, part5, part6, part7)
          """.stripMargin)
 
-      sql(
-        s"""
+      sql(s"""
            | INSERT OVERWRITE t1 PARTITION(
            | part1 = date'2019-01-01',
            | part2 = timestamp'2019-01-01 11:11:11',
@@ -368,8 +401,8 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils with AdaptiveSparkP
            | part7 = X'$binaryHexStr'
            | ) VALUES('a')
         """.stripMargin)
-      checkAnswer(sql(
-        """
+      checkAnswer(
+        sql("""
           | SELECT
           |   name,
           |   CAST(part1 AS STRING),
@@ -381,8 +414,15 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils with AdaptiveSparkP
           |   part7
           | FROM t1
         """.stripMargin),
-        Row("a", "2019-01-01", "2019-01-01 11:11:11", "Spark SQL", "p1",
-          "2019-01-01", "2019-01-01 11:11:11", "Spark SQL"))
+        Row(
+          "a",
+          "2019-01-01",
+          "2019-01-01 11:11:11",
+          "Spark SQL",
+          "p1",
+          "2019-01-01",
+          "2019-01-01 11:11:11",
+          "Spark SQL"))
 
       val e = intercept[AnalysisException] {
         sql("CREATE TABLE t2(name STRING, part INTERVAL) USING PARQUET PARTITIONED BY (part)")
@@ -391,8 +431,9 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils with AdaptiveSparkP
     }
   }
 
-  test("SPARK-34556: " +
-    "checking duplicate static partition columns should respect case sensitive conf") {
+  test(
+    "SPARK-34556: " +
+      "checking duplicate static partition columns should respect case sensitive conf") {
     withTable("t") {
       sql(s"CREATE TABLE t(i STRING, c string) USING PARQUET PARTITIONED BY (c)")
       checkError(
@@ -402,8 +443,7 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils with AdaptiveSparkP
         sqlState = None,
         condition = "DUPLICATE_KEY",
         parameters = Map("keyColumn" -> "`c`"),
-        context = ExpectedContext("PARTITION (c='2', C='3')", 19, 42)
-      )
+        context = ExpectedContext("PARTITION (c='2', C='3')", 19, 42))
     }
     // The following code is skipped for Hive because columns stored in Hive Metastore is always
     // case insensitive and we cannot create such table in Hive Metastore.
@@ -426,12 +466,13 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils with AdaptiveSparkP
       SQLConf.StoreAssignmentPolicy.values
     }
 
-    def shouldThrowException(policy: SQLConf.StoreAssignmentPolicy.Value): Boolean = policy match {
-      case SQLConf.StoreAssignmentPolicy.ANSI | SQLConf.StoreAssignmentPolicy.STRICT =>
-        true
-      case SQLConf.StoreAssignmentPolicy.LEGACY =>
-        false
-    }
+    def shouldThrowException(policy: SQLConf.StoreAssignmentPolicy.Value): Boolean =
+      policy match {
+        case SQLConf.StoreAssignmentPolicy.ANSI | SQLConf.StoreAssignmentPolicy.STRICT =>
+          true
+        case SQLConf.StoreAssignmentPolicy.LEGACY =>
+          false
+      }
 
     testingPolicies.foreach { policy =>
       withSQLConf(SQLConf.STORE_ASSIGNMENT_POLICY.key -> policy.toString) {
@@ -447,10 +488,8 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils with AdaptiveSparkP
                 "expression" -> "'ansi'",
                 "sourceType" -> "\"STRING\"",
                 "targetType" -> "\"INT\"",
-                "ansiConfig" -> "\"spark.sql.ansi.enabled\""
-              ),
-              context = ExpectedContext("insert into t partition(a='ansi')", 0, 32)
-            )
+                "ansiConfig" -> "\"spark.sql.ansi.enabled\""),
+              context = ExpectedContext("insert into t partition(a='ansi')", 0, 32))
           } else {
             sql("insert into t partition(a='ansi') values('ansi')")
             checkAnswer(sql("select * from t"), Row("ansi", null) :: Nil)
@@ -477,16 +516,14 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils with AdaptiveSparkP
     }
   }
 
-  test("SPARK-41982: treat the partition field as string literal " +
-    "when keepPartitionSpecAsStringLiteral is enabled") {
+  test(
+    "SPARK-41982: treat the partition field as string literal " +
+      "when keepPartitionSpecAsStringLiteral is enabled") {
     withSQLConf(SQLConf.LEGACY_KEEP_PARTITION_SPEC_AS_STRING_LITERAL.key -> "true") {
       withTable("t") {
         sql("create table t(i string, j int) using orc partitioned by (dt string)")
         sql("insert into t partition(dt=08) values('a', 10)")
-        Seq(
-          "select * from t where dt='08'",
-          "select * from t where dt=08"
-        ).foreach { query =>
+        Seq("select * from t where dt='08'", "select * from t where dt=08").foreach { query =>
           checkAnswer(sql(query), Seq(Row("a", 10, "08")))
         }
         checkError(
@@ -495,11 +532,8 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils with AdaptiveSparkP
           },
           condition = "PARTITIONS_NOT_FOUND",
           sqlState = None,
-          parameters = Map(
-            "partitionList" -> "PARTITION \\(`dt` = 8\\)",
-            "tableName" -> ".*`t`"),
-          matchPVals = true
-        )
+          parameters = Map("partitionList" -> "PARTITION \\(`dt` = 8\\)", "tableName" -> ".*`t`"),
+          matchPVals = true)
       }
     }
 
@@ -515,11 +549,9 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils with AdaptiveSparkP
           },
           condition = "PARTITIONS_NOT_FOUND",
           sqlState = None,
-          parameters = Map(
-            "partitionList" -> "PARTITION \\(`dt` = 08\\)",
-            "tableName" -> ".*.`t`"),
-          matchPVals = true
-        )
+          parameters =
+            Map("partitionList" -> "PARTITION \\(`dt` = 08\\)", "tableName" -> ".*.`t`"),
+          matchPVals = true)
       }
     }
   }
@@ -530,18 +562,16 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils with AdaptiveSparkP
       createTable("t2", Seq("i"), Seq("int"))
       createTable("t3", Seq("i"), Seq("int"))
       sql(s"INSERT INTO t1 VALUES (1), (2), (3)")
-      val df = sql(
-        """
+      val df = sql("""
           |FROM (select /*+ REPARTITION(3) */ i from t1)
           |INSERT INTO t2 SELECT i
           |INSERT INTO t3 SELECT i
-          |""".stripMargin
-      )
+          |""".stripMargin)
       checkAnswer(spark.table("t2"), Seq(Row(1), Row(2), Row(3)))
       checkAnswer(spark.table("t3"), Seq(Row(1), Row(2), Row(3)))
 
-      val commandResults = df.queryExecution.executedPlan.collect {
-        case c: CommandResultExec => c
+      val commandResults = df.queryExecution.executedPlan.collect { case c: CommandResultExec =>
+        c
       }
       assert(commandResults.size == 1)
 
@@ -613,7 +643,10 @@ class FileSourceSQLInsertTestSuite extends SQLInsertTestSuite with SharedSparkSe
       v2ErrorClass: String,
       v1Parameters: Map[String, String],
       v2Parameters: Map[String, String]): Unit = {
-    checkError(exception = exception, sqlState = None, condition = v1ErrorClass,
+    checkError(
+      exception = exception,
+      sqlState = None,
+      condition = v1ErrorClass,
       parameters = v1Parameters)
   }
 
@@ -633,7 +666,10 @@ class DSV2SQLInsertTestSuite extends SQLInsertTestSuite with SharedSparkSession 
       v2ErrorClass: String,
       v1Parameters: Map[String, String],
       v2Parameters: Map[String, String]): Unit = {
-    checkError(exception = exception, sqlState = None, condition = v2ErrorClass,
+    checkError(
+      exception = exception,
+      sqlState = None,
+      condition = v2ErrorClass,
       parameters = v2Parameters)
   }
   protected override def sparkConf: SparkConf = {

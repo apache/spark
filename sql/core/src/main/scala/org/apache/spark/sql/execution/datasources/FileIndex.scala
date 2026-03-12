@@ -28,11 +28,13 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.ArrayImplicits._
 
 /**
- * A file status augmented with optional metadata, which tasks and file readers can use however they
- * see fit. For example, a custom [[FileIndex]] and [[FileFormat]] working together could expose
- * this extra metadata as file-constant fields of the file source metadata column.
+ * A file status augmented with optional metadata, which tasks and file readers can use however
+ * they see fit. For example, a custom [[FileIndex]] and [[FileFormat]] working together could
+ * expose this extra metadata as file-constant fields of the file source metadata column.
  */
-case class FileStatusWithMetadata(fileStatus: FileStatus, metadata: Map[String, Any] = Map.empty) {
+case class FileStatusWithMetadata(
+    fileStatus: FileStatus,
+    metadata: Map[String, Any] = Map.empty) {
   // Wrapper methods to improve source compatibility in code that still expects a [[FileStatus]].
   def getPath: Path = fileStatus.getPath
   def getLen: Long = fileStatus.getLen
@@ -53,30 +55,31 @@ case class PartitionDirectory(values: InternalRow, files: Seq[FileStatusWithMeta
 class FilePruningRunner(filters: Seq[Expression]) {
   // retrieve the file constant metadata filters and reduce to a final filter expression that can
   // be applied to files.
-  val fileMetadataFilterOpt = filters.filter { f =>
-    f.references.nonEmpty && f.references.forall {
-      case FileSourceConstantMetadataAttribute(metadataAttr) =>
-        // we only know block start and length after splitting files, so skip it here
-        metadataAttr.name != FileFormat.FILE_BLOCK_START &&
+  val fileMetadataFilterOpt = filters
+    .filter { f =>
+      f.references.nonEmpty && f.references.forall {
+        case FileSourceConstantMetadataAttribute(metadataAttr) =>
+          // we only know block start and length after splitting files, so skip it here
+          metadataAttr.name != FileFormat.FILE_BLOCK_START &&
           metadataAttr.name != FileFormat.FILE_BLOCK_LENGTH
-      case _ => false
+        case _ => false
+      }
     }
-  }.reduceOption(And)
+    .reduceOption(And)
 
   // - Retrieve all required metadata attributes and put them into a sequence
   // - Bind all file constant metadata attribute references to their respective index
   val requiredMetadataColumnNames: mutable.Buffer[String] = mutable.Buffer.empty
   val boundedFilterMetadataStructOpt = fileMetadataFilterOpt.map { fileMetadataFilter =>
-    Predicate.createInterpreted(fileMetadataFilter.transform {
-      case attr: AttributeReference =>
-        val existingMetadataColumnIndex = requiredMetadataColumnNames.indexOf(attr.name)
-        val metadataColumnIndex = if (existingMetadataColumnIndex >= 0) {
-          existingMetadataColumnIndex
-        } else {
-          requiredMetadataColumnNames += attr.name
-          requiredMetadataColumnNames.length - 1
-        }
-        BoundReference(metadataColumnIndex, attr.dataType, nullable = true)
+    Predicate.createInterpreted(fileMetadataFilter.transform { case attr: AttributeReference =>
+      val existingMetadataColumnIndex = requiredMetadataColumnNames.indexOf(attr.name)
+      val metadataColumnIndex = if (existingMetadataColumnIndex >= 0) {
+        existingMetadataColumnIndex
+      } else {
+        requiredMetadataColumnNames += attr.name
+        requiredMetadataColumnNames.length - 1
+      }
+      BoundReference(metadataColumnIndex, attr.dataType, nullable = true)
     })
   }
 
@@ -84,8 +87,12 @@ class FilePruningRunner(filters: Seq[Expression]) {
     // use option.forall, so if there is no filter no metadata struct, return true
     boundedFilterMetadataStructOpt.forall { boundedFilter =>
       val row =
-        FileFormat.createMetadataInternalRow(partitionValues, requiredMetadataColumnNames.toSeq,
-          SparkPath.fromFileStatus(f), f.getLen, f.getModificationTime)
+        FileFormat.createMetadataInternalRow(
+          partitionValues,
+          requiredMetadataColumnNames.toSeq,
+          SparkPath.fromFileStatus(f),
+          f.getLen,
+          f.getModificationTime)
       boundedFilter.eval(row)
     }
   }
@@ -121,22 +128,23 @@ trait FileIndex {
    * Returns all valid files grouped into partitions when the data is partitioned. If the data is
    * unpartitioned, this will return a single partition with no partition values.
    *
-   * @param partitionFilters The filters used to prune which partitions are returned. These filters
-   *                         must only refer to partition columns and this method will only return
-   *                         files where these predicates are guaranteed to evaluate to `true`.
-   *                         Thus, these filters will not need to be evaluated again on the
-   *                         returned data.
-   * @param dataFilters Filters that can be applied on non-partitioned columns. The implementation
-   *                    does not need to guarantee these filters are applied, i.e. the execution
-   *                    engine will ensure these filters are still applied on the returned files.
+   * @param partitionFilters
+   *   The filters used to prune which partitions are returned. These filters must only refer to
+   *   partition columns and this method will only return files where these predicates are
+   *   guaranteed to evaluate to `true`. Thus, these filters will not need to be evaluated again
+   *   on the returned data.
+   * @param dataFilters
+   *   Filters that can be applied on non-partitioned columns. The implementation does not need to
+   *   guarantee these filters are applied, i.e. the execution engine will ensure these filters
+   *   are still applied on the returned files.
    */
   def listFiles(
-      partitionFilters: Seq[Expression], dataFilters: Seq[Expression]): Seq[PartitionDirectory]
+      partitionFilters: Seq[Expression],
+      dataFilters: Seq[Expression]): Seq[PartitionDirectory]
 
   /**
    * Returns the list of files that will be read when scanning this relation. This call may be
-   * very expensive for large tables.
-   * The strings returned are expected to be url-encoded paths.
+   * very expensive for large tables. The strings returned are expected to be url-encoded paths.
    */
   def inputFiles: Array[String]
 
@@ -154,8 +162,8 @@ trait FileIndex {
    *
    * We do file listing in query optimization (in order to get the proper statistics) and we want
    * to account for file listing time in physical execution (as metrics). To do that, we save the
-   * file listing time in some implementations and physical execution calls it in this method
-   * to update the metrics.
+   * file listing time in some implementations and physical execution calls it in this method to
+   * update the metrics.
    */
   def metadataOpsTimeNs: Option[Long] = None
 

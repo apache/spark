@@ -23,6 +23,6 @@ import org.apache.spark.sql.execution.command.CreatePipelineDatasetAsSelectParse
  * The class contains tests for the `CREATE STREAMING TABLE ... AS ...` command
  */
 class CreateStreamingTableAsSelectParserSuite
-  extends CreatePipelineDatasetAsSelectParserSuiteBase {
+    extends CreatePipelineDatasetAsSelectParserSuiteBase {
   override val datasetSqlSyntax: String = "STREAMING TABLE"
 }

@@ -63,7 +63,9 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
       checkAnswer(spark.table("t"), (data ++ data).map(Row.fromTuple))
     }
     spark.sessionState.catalog.dropTable(
-      TableIdentifier("tmp"), ignoreIfNotExists = true, purge = false)
+      TableIdentifier("tmp"),
+      ignoreIfNotExists = true,
+      purge = false)
   }
 
   test("overwriting") {
@@ -74,7 +76,9 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
       checkAnswer(spark.table("t"), data.map(Row.fromTuple))
     }
     spark.sessionState.catalog.dropTable(
-      TableIdentifier("tmp"), ignoreIfNotExists = true, purge = false)
+      TableIdentifier("tmp"),
+      ignoreIfNotExists = true,
+      purge = false)
   }
 
   test("self-join") {
@@ -101,18 +105,22 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
   test("nested data - struct with array field") {
     val data = (1 to 10).map(i => Tuple1((i, Seq(s"val_$i"))))
     withParquetTable(data, "t") {
-      checkAnswer(sql("SELECT _1._2[0] FROM t"), data.map {
-        case Tuple1((_, Seq(string))) => Row(string)
-      })
+      checkAnswer(
+        sql("SELECT _1._2[0] FROM t"),
+        data.map { case Tuple1((_, Seq(string))) =>
+          Row(string)
+        })
     }
   }
 
   test("nested data - array of struct") {
     val data = (1 to 10).map(i => Tuple1(Seq(i -> s"val_$i")))
     withParquetTable(data, "t") {
-      checkAnswer(sql("SELECT _1[0]._2 FROM t"), data.map {
-        case Tuple1(Seq((_, string))) => Row(string)
-      })
+      checkAnswer(
+        sql("SELECT _1[0]._2 FROM t"),
+        data.map { case Tuple1(Seq((_, string))) =>
+          Row(string)
+        })
     }
   }
 
@@ -123,20 +131,24 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
   }
 
   test("SPARK-5309 strings stored using dictionary compression in parquet") {
-    withParquetTable((0 until 1000).map(i => ("same", "run_" + i /100, 1)), "t") {
+    withParquetTable((0 until 1000).map(i => ("same", "run_" + i / 100, 1)), "t") {
 
-      checkAnswer(sql("SELECT _1, _2, SUM(_3) FROM t GROUP BY _1, _2"),
+      checkAnswer(
+        sql("SELECT _1, _2, SUM(_3) FROM t GROUP BY _1, _2"),
         (0 until 10).map(i => Row("same", "run_" + i, 100)))
 
-      checkAnswer(sql("SELECT _1, _2, SUM(_3) FROM t WHERE _2 = 'run_5' GROUP BY _1, _2"),
+      checkAnswer(
+        sql("SELECT _1, _2, SUM(_3) FROM t WHERE _2 = 'run_5' GROUP BY _1, _2"),
         List(Row("same", "run_5", 100)))
     }
   }
 
   test("SPARK-6917 DecimalType should work with non-native types") {
     val data = (1 to 10).map(i => Row(Decimal(i, 18, 0), new java.sql.Timestamp(i)))
-    val schema = StructType(List(StructField("d", DecimalType(18, 0), false),
-      StructField("time", TimestampType, false)).toArray)
+    val schema = StructType(
+      List(
+        StructField("d", DecimalType(18, 0), false),
+        StructField("time", TimestampType, false)).toArray)
     withTempPath { file =>
       val df = spark.createDataFrame(sparkContext.parallelize(data), schema)
       df.write.parquet(file.getCanonicalPath)
@@ -151,11 +163,10 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
       sql("insert into ts values (1, timestamp'2016-01-01 10:11:12.123456')")
       sql("insert into ts values (2, null)")
       sql("insert into ts values (3, timestamp'1965-01-01 10:11:12.123456')")
-      val expected = Seq(
-        (1, "2016-01-01 10:11:12.123456"),
-        (2, null),
-        (3, "1965-01-01 10:11:12.123456"))
-        .toDS().select($"_1", $"_2".cast("timestamp"))
+      val expected =
+        Seq((1, "2016-01-01 10:11:12.123456"), (2, null), (3, "1965-01-01 10:11:12.123456"))
+          .toDS()
+          .select($"_1", $"_2".cast("timestamp"))
       checkAnswer(sql("select * from ts"), expected)
     }
   }
@@ -172,11 +183,10 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
           sql("insert into ts values (timestamp_ntz'1965-01-01 10:11:12.123456')")
           val expectedSchema = new StructType().add(StructField("c1", TimestampNTZType))
           assert(spark.table("ts").schema == expectedSchema)
-          val expected = Seq(
-            ("2016-01-01 10:11:12.123456"),
-            (null),
-            ("1965-01-01 10:11:12.123456"))
-            .toDS().select($"value".cast("timestamp_ntz"))
+          val expected =
+            Seq(("2016-01-01 10:11:12.123456"), (null), ("1965-01-01 10:11:12.123456"))
+              .toDS()
+              .select($"value".cast("timestamp_ntz"))
           withAllParquetReaders {
             checkAnswer(sql("select * from ts"), expected)
           }
@@ -240,8 +250,10 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
       ts.setNanos(2000)
       Row(i, ts)
     }
-    val schema = StructType(List(StructField("d", IntegerType, false),
-      StructField("time", TimestampType, false)).toArray)
+    val schema = StructType(
+      List(
+        StructField("d", IntegerType, false),
+        StructField("time", TimestampType, false)).toArray)
     withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> "TIMESTAMP_MICROS") {
       withTempPath { file =>
         val df = spark.createDataFrame(sparkContext.parallelize(data), schema)
@@ -284,8 +296,7 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
         classOf[SQLHadoopMapReduceCommitProtocol].getCanonicalName,
       SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> "true",
       SQLConf.PARQUET_SCHEMA_RESPECT_SUMMARIES.key -> "true",
-      ParquetOutputFormat.JOB_SUMMARY_LEVEL -> "ALL"
-    ) {
+      ParquetOutputFormat.JOB_SUMMARY_LEVEL -> "ALL") {
       testSchemaMerging(2)
     }
 
@@ -293,8 +304,7 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
       SQLConf.FILE_COMMIT_PROTOCOL_CLASS.key ->
         classOf[SQLHadoopMapReduceCommitProtocol].getCanonicalName,
       SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> "true",
-      SQLConf.PARQUET_SCHEMA_RESPECT_SUMMARIES.key -> "false"
-    ) {
+      SQLConf.PARQUET_SCHEMA_RESPECT_SUMMARIES.key -> "false") {
       testSchemaMerging(3)
     }
   }
@@ -325,10 +335,12 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
         spark.range(1).toDF("a").write.parquet(new Path(basePath, "first").toString)
         spark.range(1, 2).toDF("a").write.parquet(new Path(basePath, "second").toString)
         spark.range(2, 3).toDF("a").write.json(new Path(basePath, "third").toString)
-        val df = spark.read.options(options).parquet(
-          new Path(basePath, "first").toString,
-          new Path(basePath, "second").toString,
-          new Path(basePath, "third").toString)
+        val df = spark.read
+          .options(options)
+          .parquet(
+            new Path(basePath, "first").toString,
+            new Path(basePath, "second").toString,
+            new Path(basePath, "third").toString)
         checkAnswer(df, Seq(Row(0), Row(1)))
       }
     }
@@ -339,10 +351,13 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
         spark.range(1).toDF("a").write.parquet(new Path(basePath, "first").toString)
         spark.range(1, 2).toDF("a").write.parquet(new Path(basePath, "second").toString)
         spark.range(2, 3).toDF("a").write.json(new Path(basePath, "third").toString)
-        val df = spark.read.options(options).schema("a long").parquet(
-          new Path(basePath, "first").toString,
-          new Path(basePath, "second").toString,
-          new Path(basePath, "third").toString)
+        val df = spark.read
+          .options(options)
+          .schema("a long")
+          .parquet(
+            new Path(basePath, "first").toString,
+            new Path(basePath, "second").toString,
+            new Path(basePath, "third").toString)
         checkAnswer(df, Seq(Row(0), Row(1)))
       }
     }
@@ -382,9 +397,9 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
   }
 
   /**
-   * this is part of test 'Enabling/disabling ignoreCorruptFiles' but run in a loop
-   * to increase the chance of failure
-    */
+   * this is part of test 'Enabling/disabling ignoreCorruptFiles' but run in a loop to increase
+   * the chance of failure
+   */
   ignore("SPARK-20407 ParquetQuerySuite 'Enabling/disabling ignoreCorruptFiles' flaky test") {
     def testIgnoreCorruptFiles(): Unit = {
       withTempDir { dir =>
@@ -396,9 +411,7 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
           new Path(basePath, "first").toString,
           new Path(basePath, "second").toString,
           new Path(basePath, "third").toString)
-        checkAnswer(
-          df,
-          Seq(Row(0), Row(1)))
+        checkAnswer(df, Seq(Row(0), Row(1)))
       }
     }
 
@@ -464,11 +477,7 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
       withSQLConf(SQLConf.PARQUET_BINARY_AS_STRING.key -> "true") {
         checkAnswer(
           spark.read.option("mergeSchema", "true").parquet(path),
-          Seq(
-            Row(Row(1, 1, null)),
-            Row(Row(2, 2, null)),
-            Row(Row(1, 1, 1)),
-            Row(Row(2, 2, 2))))
+          Seq(Row(Row(1, 1, null)), Row(Row(2, 2, null)), Row(Row(1, 1, 1)), Row(Row(2, 2, 2))))
       }
     }
   }
@@ -477,14 +486,17 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
     withTempDir { dir =>
       withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_BATCH_SIZE.key -> "1") {
         val path = dir.getAbsolutePath
-        spark.range(0, 5)
+        spark
+          .range(0, 5)
           .selectExpr("concat(cast(id % 2 as string), 'a') as partCol", "id")
           .write
           .format("parquet")
           .mode("overwrite")
-          .partitionBy("partCol").save(path)
+          .partitionBy("partCol")
+          .save(path)
         val df = spark.read.format("parquet").load(path).selectExpr("partCol")
-        val expected = spark.range(0, 5)
+        val expected = spark
+          .range(0, 5)
           .selectExpr("concat(cast(id % 2 as string), 'a') as partCol")
           .collect()
 
@@ -508,22 +520,21 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
               .add("b", LongType, nullable = true),
             nullable = true)
 
-      checkAnswer(
-        spark.read.schema(userDefinedSchema).parquet(path),
-        Row(Row(0L, 1L)))
+      checkAnswer(spark.read.schema(userDefinedSchema).parquet(path), Row(Row(0L, 1L)))
     }
   }
 
   test("SPARK-11997 parquet with null partition values") {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
-      spark.range(1, 3)
+      spark
+        .range(1, 3)
         .selectExpr("if(id % 2 = 0, null, id) AS n", "id")
-        .write.partitionBy("n").parquet(path)
+        .write
+        .partitionBy("n")
+        .parquet(path)
 
-      checkAnswer(
-        spark.read.parquet(path).filter("n is null"),
-        Row(2, null))
+      checkAnswer(spark.read.parquet(path).filter("n is null"), Row(2, null))
     }
   }
 
@@ -543,9 +554,7 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
               .add("d", LongType, nullable = true),
             nullable = true)
 
-      checkAnswer(
-        spark.read.schema(userDefinedSchema).parquet(path),
-        Row(Row(null, null)))
+      checkAnswer(spark.read.schema(userDefinedSchema).parquet(path), Row(Row(null, null)))
     }
   }
 
@@ -612,9 +621,7 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
               .add("b", LongType, nullable = true),
             nullable = true)
 
-      checkAnswer(
-        spark.read.schema(userDefinedSchema).parquet(path),
-        Row(Row(0L, 1L)))
+      checkAnswer(spark.read.schema(userDefinedSchema).parquet(path), Row(Row(0L, 1L)))
     }
 
     withTempPath { dir =>
@@ -635,9 +642,7 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
               .add("d", LongType, nullable = true),
             nullable = true)
 
-      checkAnswer(
-        spark.read.schema(userDefinedSchema).parquet(path),
-        Row(Row(0L, 3L)))
+      checkAnswer(spark.read.schema(userDefinedSchema).parquet(path), Row(Row(0L, 3L)))
     }
   }
 
@@ -661,9 +666,7 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
               .add("d", LongType, nullable = true),
             nullable = true)
 
-      checkAnswer(
-        spark.read.schema(userDefinedSchema).parquet(path),
-        Row(Row(1L, 2L, null)))
+      checkAnswer(spark.read.schema(userDefinedSchema).parquet(path), Row(Row(1L, 2L, null)))
     }
   }
 
@@ -679,7 +682,8 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
       df.write.parquet(path)
 
       val userDefinedSchema = new StructType()
-        .add("s",
+        .add(
+          "s",
           new StructType()
             .add(
               "a",
@@ -691,9 +695,7 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
               nullable = true),
           nullable = true)
 
-      checkAnswer(
-        spark.read.schema(userDefinedSchema).parquet(path),
-        Row(Row(Seq(Row(0, null)))))
+      checkAnswer(spark.read.schema(userDefinedSchema).parquet(path), Row(Row(Seq(Row(0, null)))))
     }
   }
 
@@ -715,7 +717,8 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
       df2.write.mode(SaveMode.Append).parquet(path)
 
       val userDefinedSchema = new StructType()
-        .add("s",
+        .add(
+          "s",
           new StructType()
             .add("a", LongType, nullable = true)
             .add("b", LongType, nullable = true)
@@ -724,9 +727,7 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
 
       checkAnswer(
         spark.read.schema(userDefinedSchema).parquet(path),
-        Seq(
-          Row(Row(0, 1, null)),
-          Row(Row(null, 2, 4))))
+        Seq(Row(Row(0, 1, null)), Row(Row(null, 2, 4))))
     }
   }
 
@@ -748,14 +749,11 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
       df2.write.mode(SaveMode.Append).parquet(path)
 
       checkAnswer(
-        spark
-          .read
+        spark.read
           .option("mergeSchema", "true")
           .parquet(path)
           .selectExpr("s.a", "s.b", "s.c"),
-        Seq(
-          Row(0, null, 2),
-          Row(1, 2, 3)))
+        Seq(Row(0, null, 2), Row(1, 2, 3)))
     }
   }
 
@@ -765,8 +763,7 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
 
       val df = spark
         .range(1)
-        .selectExpr(
-          """NAMED_STRUCT(
+        .selectExpr("""NAMED_STRUCT(
             |  'f0', CAST(id AS STRING),
             |  'f1', NAMED_STRUCT(
             |    'a', CAST(id + 1 AS INT),
@@ -789,7 +786,7 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
 
       checkAnswer(
         spark.read.schema(userDefinedSchema).parquet(path),
-        Row(Row(TestNestedStruct(1, 2L, 3.5D))))
+        Row(Row(TestNestedStruct(1, 2L, 3.5d))))
     }
   }
 
@@ -799,8 +796,7 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
 
       val df = spark
         .range(1)
-        .selectExpr(
-          """NAMED_STRUCT(
+        .selectExpr("""NAMED_STRUCT(
             |  'f0', CAST(id AS STRING),
             |  'f1', NAMED_STRUCT(
             |    'a', CAST(id + 1 AS INT),
@@ -810,8 +806,7 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
             |  'f2', CAST(id + 4 AS INT),
             |  'f3', ARRAY(id + 5, id + 6)
             |) AS s
-          """.stripMargin
-        )
+          """.stripMargin)
         .coalesce(1)
 
       df.write.parquet(path)
@@ -824,16 +819,15 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
               .add("f0", StringType)
               .add("f1", new TestNestedStructUDT())
               .add("f2", new TestPrimitiveUDT())
-              .add("f3", new TestArrayUDT())
-          )
+              .add("f3", new TestArrayUDT()))
 
       Seq(true, false).foreach { enabled =>
         withSQLConf(
-            SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true",
-            SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> s"$enabled") {
+          SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true",
+          SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> s"$enabled") {
           checkAnswer(
             spark.read.schema(userDefinedSchema).parquet(path),
-            Row(Row("0", TestNestedStruct(1, 2L, 3.5D), TestPrimitive(4), TestArray(Seq(5, 6)))))
+            Row(Row("0", TestNestedStruct(1, 2L, 3.5d), TestPrimitive(4), TestArray(Seq(5, 6)))))
         }
       }
     }
@@ -842,9 +836,9 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
   test("SPARK-39086: support UDT type in ColumnVector") {
     val schema = StructType(
       StructField("col1", ArrayType(new TestPrimitiveUDT())) ::
-      StructField("col2", ArrayType(new TestArrayUDT())) ::
-      StructField("col3", ArrayType(new TestNestedStructUDT())) ::
-      Nil)
+        StructField("col2", ArrayType(new TestArrayUDT())) ::
+        StructField("col3", ArrayType(new TestNestedStructUDT())) ::
+        Nil)
 
     withTempPath { dir =>
       val rows = sparkContext.parallelize(0 until 2).map { _ =>
@@ -876,16 +870,12 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
   test("expand UDT in ArrayType") {
     val schema = new StructType().add(
       "n",
-      ArrayType(
-        elementType = new TestNestedStructUDT,
-        containsNull = false),
+      ArrayType(elementType = new TestNestedStructUDT, containsNull = false),
       nullable = true)
 
     val expected = new StructType().add(
       "n",
-      ArrayType(
-        elementType = new TestNestedStructUDT().sqlType,
-        containsNull = false),
+      ArrayType(elementType = new TestNestedStructUDT().sqlType, containsNull = false),
       nullable = true)
 
     assert(ParquetReadSupport.expandUDT(schema) === expected)
@@ -946,10 +936,7 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
       val path = dir.getCanonicalPath
       Seq(Tuple1(Array(SingleElement(42)))).toDF("f").write.parquet(path)
 
-      checkAnswer(
-        sqlContext.read.parquet(path),
-        Row(Array(Row(42)))
-      )
+      checkAnswer(sqlContext.read.parquet(path), Row(Array(Row(42))))
     }
   }
 
@@ -989,12 +976,12 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
     }
   }
 
-  test("SPARK-26677: negated null-safe equality comparison should not filter matched row groups") {
+  test(
+    "SPARK-26677: negated null-safe equality comparison should not filter matched row groups") {
     withAllParquetReaders {
       withTempPath { path =>
         // Repeated values for dictionary encoding.
-        Seq(Some("A"), Some("A"), None).toDF().repartition(1)
-          .write.parquet(path.getAbsolutePath)
+        Seq(Some("A"), Some("A"), None).toDF().repartition(1).write.parquet(path.getAbsolutePath)
         val df = spark.read.parquet(path.getAbsolutePath)
         checkAnswer(stripSparkFilter(df.where("NOT (value <=> 'A')")), df)
       }
@@ -1025,7 +1012,8 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
 
       Seq(false, true).foreach { mergeSchema =>
         withTempPath { file =>
-          checkAppend(_.parquet(file.getCanonicalPath),
+          checkAppend(
+            _.parquet(file.getCanonicalPath),
             spark.read.option("mergeSchema", mergeSchema).parquet(file.getCanonicalPath))
         }
 
@@ -1068,7 +1056,7 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
       }
 
       withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
-       val schema1 = "a DECIMAL(3, 2), b DECIMAL(18, 3), c DECIMAL(37, 3)"
+        val schema1 = "a DECIMAL(3, 2), b DECIMAL(18, 3), c DECIMAL(37, 3)"
         checkAnswer(readParquet(schema1, path), df)
         Seq("a DECIMAL(3, 0)", "b DECIMAL(18, 1)", "c DECIMAL(37, 1)").foreach { schema =>
           val e = intercept[SparkException] {
@@ -1081,7 +1069,8 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
 
     // tests for parquet types without decimal metadata.
     withTempPath { path =>
-      val df = sql(s"SELECT 1 a, 123456 b, ${Int.MaxValue.toLong * 10} c, CAST('1.2' AS BINARY) d")
+      val df =
+        sql(s"SELECT 1 a, 123456 b, ${Int.MaxValue.toLong * 10} c, CAST('1.2' AS BINARY) d")
       df.write.parquet(path.toString)
 
       withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
@@ -1096,7 +1085,8 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
           readParquet("d DECIMAL(3, 2)", path).collect()
         }
         assert(e.getCondition.startsWith("FAILED_READ_FILE"))
-        assert(e.getCause.getMessage.contains("Please read this column/field as Spark BINARY type"))
+        assert(
+          e.getCause.getMessage.contains("Please read this column/field as Spark BINARY type"))
       }
 
       withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
@@ -1118,10 +1108,15 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
       val data2 = Seq(Row(new BigDecimal("1234567890000.11")))
       val schema2 = StructType(StructField("col", DecimalType(17, 2)) :: Nil)
 
-      spark.createDataFrame(sparkContext.parallelize(data1, 1), schema1)
-        .write.parquet(path.toString)
-      spark.createDataFrame(sparkContext.parallelize(data2, 1), schema2)
-        .write.mode("append").parquet(path.toString)
+      spark
+        .createDataFrame(sparkContext.parallelize(data1, 1), schema1)
+        .write
+        .parquet(path.toString)
+      spark
+        .createDataFrame(sparkContext.parallelize(data2, 1), schema2)
+        .write
+        .mode("append")
+        .parquet(path.toString)
 
       withAllParquetReaders {
         val res = spark.read.option("mergeSchema", "true").parquet(path.toString)
@@ -1163,7 +1158,8 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
     withTable("tbl") {
       sql("create table tbl (value struct<f1:array<int>,f2:array<int>>) using parquet")
       sql("insert into tbl values (named_struct('f1', array(1, 2, 3), 'f2', array(1, 1, 2)))")
-      val df = sql("select cast(value as struct<f1:array<double>,f2:array<int>>) AS value from tbl")
+      val df =
+        sql("select cast(value as struct<f1:array<double>,f2:array<int>>) AS value from tbl")
       val expected = Row(Row(Array(1.0d, 2.0d, 3.0d), Array(1, 1, 2))) :: Nil
       checkAnswer(df, expected)
     }
@@ -1174,9 +1170,9 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
       sql("create table tbl (c1 time(6), c2 time) using parquet")
       sql("insert into tbl values (time'12:13:14.001001', time'23:59:59')")
       sql("insert into tbl values (null, null)")
-      val expected = Seq(
-        (LocalTime.parse("12:13:14.001001"), LocalTime.parse("23:59:59")),
-        (null, null)).toDF()
+      val expected =
+        Seq((LocalTime.parse("12:13:14.001001"), LocalTime.parse("23:59:59")), (null, null))
+          .toDF()
       checkAnswer(sql("select * from tbl"), expected)
     }
   }
@@ -1186,15 +1182,14 @@ class ParquetV1QuerySuite extends ParquetQuerySuite {
   import testImplicits._
 
   override protected def sparkConf: SparkConf =
-    super
-      .sparkConf
+    super.sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, "parquet")
 
   test("returning batch for wide table") {
     withSQLConf(SQLConf.WHOLESTAGE_MAX_NUM_FIELDS.key -> "10") {
       withTempPath { dir =>
         val path = dir.getCanonicalPath
-        val df = spark.range(10).select(Seq.tabulate(11) {i => ($"id" + i).as(s"c$i")} : _*)
+        val df = spark.range(10).select(Seq.tabulate(11) { i => ($"id" + i).as(s"c$i") }: _*)
         df.write.mode(SaveMode.Overwrite).parquet(path)
 
         // do not return batch - whole stage codegen is disabled for wide table (>200 columns)
@@ -1204,29 +1199,32 @@ class ParquetV1QuerySuite extends ParquetQuerySuite {
         checkAnswer(df2, df)
 
         // return batch
-        val columns = Seq.tabulate(9) {i => s"c$i"}
-        val df3 = df2.selectExpr(columns : _*)
+        val columns = Seq.tabulate(9) { i => s"c$i" }
+        val df3 = df2.selectExpr(columns: _*)
         val fileScan3 = df3.queryExecution.sparkPlan.find(_.isInstanceOf[FileSourceScanExec]).get
         assert(fileScan3.asInstanceOf[FileSourceScanExec].supportsColumnar)
-        checkAnswer(df3, df.selectExpr(columns : _*))
+        checkAnswer(df3, df.selectExpr(columns: _*))
 
         withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true") {
-          val df4 = spark.range(10).select(struct(
-            Seq.tabulate(11) {i => ($"id" + i).as(s"c$i")} : _*).as("nested"))
+          val df4 = spark
+            .range(10)
+            .select(struct(Seq.tabulate(11) { i => ($"id" + i).as(s"c$i") }: _*).as("nested"))
           df4.write.mode(SaveMode.Overwrite).parquet(path)
 
           // do not return batch - whole stage codegen is disabled for wide table (>200 columns)
           val df5 = spark.read.parquet(path)
-          val fileScan5 = df5.queryExecution.sparkPlan.find(_.isInstanceOf[FileSourceScanExec]).get
+          val fileScan5 =
+            df5.queryExecution.sparkPlan.find(_.isInstanceOf[FileSourceScanExec]).get
           assert(!fileScan5.asInstanceOf[FileSourceScanExec].supportsColumnar)
           checkAnswer(df5, df4)
 
           // return batch
-          val columns2 = Seq.tabulate(9) {i => s"nested.c$i"}
-          val df6 = df5.selectExpr(columns2 : _*)
-          val fileScan6 = df6.queryExecution.sparkPlan.find(_.isInstanceOf[FileSourceScanExec]).get
+          val columns2 = Seq.tabulate(9) { i => s"nested.c$i" }
+          val df6 = df5.selectExpr(columns2: _*)
+          val fileScan6 =
+            df6.queryExecution.sparkPlan.find(_.isInstanceOf[FileSourceScanExec]).get
           assert(fileScan6.asInstanceOf[FileSourceScanExec].supportsColumnar)
-          checkAnswer(df6, df4.selectExpr(columns2 : _*))
+          checkAnswer(df6, df4.selectExpr(columns2: _*))
         }
       }
     }
@@ -1270,15 +1268,14 @@ class ParquetV2QuerySuite extends ParquetQuerySuite {
 
   // TODO: enable Parquet V2 write path after file source V2 writers are workable.
   override protected def sparkConf: SparkConf =
-    super
-      .sparkConf
+    super.sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, "")
 
   test("returning batch for wide table") {
     withSQLConf(SQLConf.WHOLESTAGE_MAX_NUM_FIELDS.key -> "10") {
       withTempPath { dir =>
         val path = dir.getCanonicalPath
-        val df = spark.range(10).select(Seq.tabulate(11) {i => ($"id" + i).as(s"c$i")} : _*)
+        val df = spark.range(10).select(Seq.tabulate(11) { i => ($"id" + i).as(s"c$i") }: _*)
         df.write.mode(SaveMode.Overwrite).parquet(path)
 
         // do not return batch - whole stage codegen is disabled for wide table (>200 columns)
@@ -1291,16 +1288,17 @@ class ParquetV2QuerySuite extends ParquetQuerySuite {
         checkAnswer(df2, df)
 
         // return batch
-        val columns = Seq.tabulate(9) {i => s"c$i"}
-        val df3 = df2.selectExpr(columns : _*)
+        val columns = Seq.tabulate(9) { i => s"c$i" }
+        val df3 = df2.selectExpr(columns: _*)
         val fileScan3 = df3.queryExecution.sparkPlan.find(_.isInstanceOf[BatchScanExec]).get
         val parquetScan3 = fileScan3.asInstanceOf[BatchScanExec].scan.asInstanceOf[ParquetScan]
         assert(parquetScan3.createReaderFactory().supportColumnarReads(null))
-        checkAnswer(df3, df.selectExpr(columns : _*))
+        checkAnswer(df3, df.selectExpr(columns: _*))
 
         withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true") {
-          val df4 = spark.range(10).select(struct(
-            Seq.tabulate(11) {i => ($"id" + i).as(s"c$i")} : _*).as("nested"))
+          val df4 = spark
+            .range(10)
+            .select(struct(Seq.tabulate(11) { i => ($"id" + i).as(s"c$i") }: _*).as("nested"))
           df4.write.mode(SaveMode.Overwrite).parquet(path)
 
           // do not return batch - whole stage codegen is disabled for wide table (>200 columns)
@@ -1313,12 +1311,12 @@ class ParquetV2QuerySuite extends ParquetQuerySuite {
           checkAnswer(df5, df4)
 
           // return batch
-          val columns2 = Seq.tabulate(9) {i => s"nested.c$i"}
-          val df6 = df5.selectExpr(columns2 : _*)
+          val columns2 = Seq.tabulate(9) { i => s"nested.c$i" }
+          val df6 = df5.selectExpr(columns2: _*)
           val fileScan6 = df6.queryExecution.sparkPlan.find(_.isInstanceOf[BatchScanExec]).get
           val parquetScan6 = fileScan6.asInstanceOf[BatchScanExec].scan.asInstanceOf[ParquetScan]
           assert(parquetScan6.createReaderFactory().supportColumnarReads(null))
-          checkAnswer(df6, df4.selectExpr(columns2 : _*))
+          checkAnswer(df6, df4.selectExpr(columns2: _*))
         }
       }
     }

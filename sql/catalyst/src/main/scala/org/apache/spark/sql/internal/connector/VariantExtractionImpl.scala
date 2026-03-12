@@ -23,15 +23,18 @@ import org.apache.spark.sql.types.{DataType, Metadata}
 /**
  * Implementation of [[VariantExtraction]].
  *
- * @param columnName Path to the variant column (e.g., Array("v") for top-level,
- *                   Array("struct1", "v") for nested)
- * @param metadata The metadata for extraction including JSON path, failOnError, and timeZoneId
- * @param expectedDataType The expected data type for the extracted value
+ * @param columnName
+ *   Path to the variant column (e.g., Array("v") for top-level, Array("struct1", "v") for nested)
+ * @param metadata
+ *   The metadata for extraction including JSON path, failOnError, and timeZoneId
+ * @param expectedDataType
+ *   The expected data type for the extracted value
  */
 case class VariantExtractionImpl(
     columnName: Array[String],
     metadata: Metadata,
-    expectedDataType: DataType) extends VariantExtraction {
+    expectedDataType: DataType)
+    extends VariantExtraction {
 
   require(columnName != null, "columnName cannot be null")
   require(metadata != null, "metadata cannot be null")

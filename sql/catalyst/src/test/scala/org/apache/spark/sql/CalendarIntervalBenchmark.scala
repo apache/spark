@@ -25,9 +25,8 @@ import org.apache.spark.sql.types.{CalendarIntervalType, DataType, StructType}
 import org.apache.spark.unsafe.types.CalendarInterval
 
 /**
- * Benchmark for read/write CalendarInterval with two int vs
- * read/write CalendarInterval with one long.
- * To run this benchmark:
+ * Benchmark for read/write CalendarInterval with two int vs read/write CalendarInterval with one
+ * long. To run this benchmark:
  * {{{
  *   1. without sbt:
  *      bin/spark-submit --class <this class> --jars <spark core test jar> <spark catalyst test jar>

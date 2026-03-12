@@ -92,8 +92,7 @@ class MicroBatchExecutionSuite extends StreamTest with BeforeAndAfter with Match
               .map(file => file.getName.toInt)
               .sorted should equal(Array(1, 2, 3))
           },
-          StopStream
-        )
+          StopStream)
       }
     }
   }
@@ -124,7 +123,8 @@ class MicroBatchExecutionSuite extends StreamTest with BeforeAndAfter with Match
 
   test("SPARK-24156: do not plan a no-data batch again after it has already been planned") {
     val inputData = MemoryStream[Int]
-    val df = inputData.toDF()
+    val df = inputData
+      .toDF()
       .withColumn("eventTime", timestamp_seconds($"value"))
       .withWatermark("eventTime", "10 seconds")
       .groupBy(window($"eventTime", "5 seconds") as Symbol("window"))
@@ -135,7 +135,7 @@ class MicroBatchExecutionSuite extends StreamTest with BeforeAndAfter with Match
       AddData(inputData, 10, 11, 12, 13, 14, 15), // Set watermark to 5
       CheckAnswer(),
       AddData(inputData, 25), // Set watermark to 15 to make MicroBatchExecution run no-data batch
-      CheckAnswer((10, 5)),   // Last batch should be a no-data batch
+      CheckAnswer((10, 5)), // Last batch should be a no-data batch
       StopStream,
       Execute { q =>
         // Delete the last committed batch from the commit log to signify that the last batch
@@ -148,7 +148,7 @@ class MicroBatchExecutionSuite extends StreamTest with BeforeAndAfter with Match
       // new data.
       AddData(inputData, 30),
       StartStream(),
-      CheckNewAnswer((15, 1)),   // This should not throw the error reported in SPARK-24156
+      CheckNewAnswer((15, 1)), // This should not throw the error reported in SPARK-24156
       StopStream,
       Execute { q =>
         // Delete the entire commit log
@@ -157,7 +157,7 @@ class MicroBatchExecutionSuite extends StreamTest with BeforeAndAfter with Match
       },
       AddData(inputData, 50),
       StartStream(),
-      CheckNewAnswer((25, 1), (30, 1))   // This should not throw the error reported in SPARK-24156
+      CheckNewAnswer((25, 1), (30, 1)) // This should not throw the error reported in SPARK-24156
     )
   }
 
@@ -165,8 +165,9 @@ class MicroBatchExecutionSuite extends StreamTest with BeforeAndAfter with Match
     val inputData = MemoryStream[Int]
     val streamEvent = inputData.toDF().select("value")
 
-    val resourceUri = this.getClass.getResource(
-      "/structured-streaming/checkpoint-test-offsetId-commitId-inconsistent/").toURI
+    val resourceUri = this.getClass
+      .getResource("/structured-streaming/checkpoint-test-offsetId-commitId-inconsistent/")
+      .toURI
 
     val checkpointDir = Utils.createTempDir().getCanonicalFile
     // Copy the checkpoint to a temp dir to prevent changes to the original.
@@ -175,19 +176,19 @@ class MicroBatchExecutionSuite extends StreamTest with BeforeAndAfter with Match
 
     // Disable this check so it fails where we throw the exception we are verifying
     withSQLConf(SQLConf.STREAMING_CHECK_UNFINISHED_REPARTITION_ON_RESTART.key -> "false") {
-      testStream(streamEvent) (
+      testStream(streamEvent)(
         AddData(inputData, 1, 2, 3, 4, 5, 6),
         StartStream(Trigger.AvailableNow(), checkpointLocation = checkpointDir.getAbsolutePath),
         ExpectFailure[IllegalStateException] { e =>
           assert(e.getMessage.contains("batch 3 doesn't exist"))
-        }
-      )
+        })
     }
   }
 
   test("no-data-batch re-executed after restart should call V1 source.getBatch()") {
     val testSource = ReExecutedBatchTestSource(spark)
-    val df = testSource.toDF()
+    val df = testSource
+      .toDF()
       .withColumn("eventTime", timestamp_seconds($"value"))
       .withWatermark("eventTime", "10 seconds")
       .groupBy(window($"eventTime", "5 seconds") as Symbol("window"))
@@ -196,25 +197,26 @@ class MicroBatchExecutionSuite extends StreamTest with BeforeAndAfter with Match
 
     /** Reset this test source so that it appears to be a new source requiring initialization */
     def resetSource(): StreamAction = Execute("reset source") { _ =>
-      testSource.reset()  // Make it look like a new source that needs to be re-initialized
+      testSource.reset() // Make it look like a new source that needs to be re-initialized
       require(testSource.currentOffset === 0)
       require(testSource.getBatchCallCount === 0)
     }
 
     /** Add data to this test source by incrementing its available offset */
     def addData(numNewRows: Int): StreamAction = new AddData {
-      override def addData(query: Option[StreamExecution]): (SparkDataStream, streaming.Offset) = {
+      override def addData(
+          query: Option[StreamExecution]): (SparkDataStream, streaming.Offset) = {
         testSource.incrementAvailableOffset(numNewRows)
         (testSource, testSource.getOffset.get)
       }
     }
 
     testStream(df)(
-      addData(numNewRows = 10),   // generate values 1...10, sets watermark to 0
+      addData(numNewRows = 10), // generate values 1...10, sets watermark to 0
       CheckAnswer(),
-      addData(numNewRows = 10),   // generate values 11...20, sets watermark to 10
-      ProcessAllAvailable(),      // let no-data-batch be executed
-      CheckAnswer(0, 5),          // start time of windows closed and outputted
+      addData(numNewRows = 10), // generate values 11...20, sets watermark to 10
+      ProcessAllAvailable(), // let no-data-batch be executed
+      CheckAnswer(0, 5), // start time of windows closed and outputted
       Execute("verify source internal state before stop") { q =>
         // Last batch should be a no-data batch
         require(q.lastProgress.numInputRows === 0)
@@ -234,14 +236,14 @@ class MicroBatchExecutionSuite extends StreamTest with BeforeAndAfter with Match
       },
       resetSource(),
       StartStream(),
-      ProcessAllAvailable(),  // allow initialization and re-execution
+      ProcessAllAvailable(), // allow initialization and re-execution
       Execute("verify source.getBatch() called after re-executed no-data-batch") { q =>
         // After restart, getBatch() should be called once even for no-data batch
         assert(testSource.getBatchCallCount === 1)
         assert(testSource.currentOffset === 20)
       },
-      addData(numNewRows = 10),   // generate values 21...30, sets watermark to 20
-      ProcessAllAvailable(),      // let no-data-batch be executed
+      addData(numNewRows = 10), // generate values 21...30, sets watermark to 20
+      ProcessAllAvailable(), // let no-data-batch be executed
       CheckAnswer(0, 5, 10, 15),
       StopStream,
 
@@ -252,16 +254,15 @@ class MicroBatchExecutionSuite extends StreamTest with BeforeAndAfter with Match
       },
       resetSource(),
       StartStream(),
-      ProcessAllAvailable(),      // allow initialization to completed
+      ProcessAllAvailable(), // allow initialization to completed
       Execute("verify source.getBatch() called even if no-data-batch was not re-executed") { q =>
         // After restart, getBatch() should be called even for no-data batch, but only once
         assert(testSource.getBatchCallCount === 1)
         assert(testSource.currentOffset === 30)
       },
-      addData(numNewRows = 10),   // generate values 31...40, sets watermark to 30
-      ProcessAllAvailable(),      // let no-data-batch be executed
-      CheckAnswer(0, 5, 10, 15, 20, 25)
-    )
+      addData(numNewRows = 10), // generate values 31...40, sets watermark to 30
+      ProcessAllAvailable(), // let no-data-batch be executed
+      CheckAnswer(0, 5, 10, 15, 20, 25))
   }
 
   test("Query cannot be started if there's an unfinished repartition batch") {
@@ -276,8 +277,7 @@ class MicroBatchExecutionSuite extends StreamTest with BeforeAndAfter with Match
           StartStream(checkpointLocation = checkpointLocation.getAbsolutePath),
           AddData(inputData, 1, 2, 3),
           CheckNewAnswer((1, 1), (2, 1), (3, 1)),
-          StopStream
-        )
+          StopStream)
 
         // Simulate an uncommitted repartition batch by adding a new offset log entry
         // with different shuffle partitions
@@ -286,13 +286,10 @@ class MicroBatchExecutionSuite extends StreamTest with BeforeAndAfter with Match
         val latestMetadata = latestOffsetSeq.metadataOpt.get.asInstanceOf[OffsetSeqMetadata]
 
         val newShufflePartitions = numPartitions * 2
-        val newMetadata = latestMetadata.copy(
-          conf = latestMetadata.conf +
-            (SQLConf.SHUFFLE_PARTITIONS.key -> newShufflePartitions.toString)
-        )
-        val newOffsetSeq = latestOffsetSeq.asInstanceOf[OffsetSeq].copy(
-          metadataOpt = Some(newMetadata)
-        )
+        val newMetadata = latestMetadata.copy(conf = latestMetadata.conf +
+          (SQLConf.SHUFFLE_PARTITIONS.key -> newShufflePartitions.toString))
+        val newOffsetSeq =
+          latestOffsetSeq.asInstanceOf[OffsetSeq].copy(metadataOpt = Some(newMetadata))
 
         // Write the new offset log entry (without committing it)
         val newBatchId = latestBatchId + 1
@@ -305,11 +302,10 @@ class MicroBatchExecutionSuite extends StreamTest with BeforeAndAfter with Match
             checkError(
               ex.asInstanceOf[SparkThrowable],
               condition = "STREAMING_UNFINISHED_REPARTITION_DETECTED",
-              parameters = Map("batchId" -> newBatchId.toString,
-                "lastCommittedBatchId" -> latestBatchId.toString)
-            )
-          }
-        )
+              parameters = Map(
+                "batchId" -> newBatchId.toString,
+                "lastCommittedBatchId" -> latestBatchId.toString))
+          })
       }
     }
   }
@@ -326,7 +322,10 @@ class MicroBatchExecutionSuite extends StreamTest with BeforeAndAfter with Match
       getBatchCallCount = getBatchCallCount + 1
       if (currentOffset == 0) currentOffset = getOffsetValue(end)
       val plan = Range(
-        start.map(getOffsetValue).getOrElse(0L) + 1L, getOffsetValue(end) + 1L, 1, None,
+        start.map(getOffsetValue).getOrElse(0L) + 1L,
+        getOffsetValue(end) + 1L,
+        1,
+        None,
         isStreaming = true)
       Dataset.ofRows(spark, plan)
     }

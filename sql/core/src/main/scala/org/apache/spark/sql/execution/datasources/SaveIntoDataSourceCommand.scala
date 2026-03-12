@@ -33,8 +33,8 @@ import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider}
 /**
  * Saves the results of `query` in to a data source.
  *
- * Note that this command is different from [[InsertIntoDataSourceCommand]]. This command will call
- * `CreatableRelationProvider.createRelation` to write out the data, while
+ * Note that this command is different from [[InsertIntoDataSourceCommand]]. This command will
+ * call `CreatableRelationProvider.createRelation` to write out the data, while
  * [[InsertIntoDataSourceCommand]] calls `InsertableRelation.insert`. Ideally these 2 data source
  * interfaces should do the same thing, but as we've already published these 2 interfaces and the
  * implementations may have different logic, we have to keep these 2 different commands.
@@ -43,7 +43,9 @@ case class SaveIntoDataSourceCommand(
     query: LogicalPlan,
     dataSource: CreatableRelationProvider,
     options: Map[String, String],
-    mode: SaveMode) extends LeafRunnableCommand with CTEInChildren {
+    mode: SaveMode)
+    extends LeafRunnableCommand
+    with CTEInChildren {
 
   override def innerChildren: Seq[QueryPlan[_]] = Seq(query)
 
@@ -52,7 +54,10 @@ case class SaveIntoDataSourceCommand(
 
     try {
       relation = dataSource.createRelation(
-        sparkSession.sqlContext, mode, options, Dataset.ofRows(sparkSession, query))
+        sparkSession.sqlContext,
+        mode,
+        options,
+        Dataset.ofRows(sparkSession, query))
     } catch {
       case e: SparkThrowable =>
         // We should avoid wrapping `SparkThrowable` exceptions into another `AnalysisException`.
@@ -70,12 +75,12 @@ case class SaveIntoDataSourceCommand(
     }
 
     try {
-      val logicalRelation = LogicalRelation(relation, toAttributes(relation.schema), None,
-        false, None)
+      val logicalRelation =
+        LogicalRelation(relation, toAttributes(relation.schema), None, false, None)
       sparkSession.sharedState.cacheManager.recacheByPlan(sparkSession, logicalRelation)
     } catch {
       case NonFatal(_) =>
-        // some data source can not support return a valid relation, e.g. `KafkaSourceProvider`
+      // some data source can not support return a valid relation, e.g. `KafkaSourceProvider`
     }
 
     Seq.empty[Row]

@@ -22,12 +22,15 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 
 /**
  * Stores the result of resolution of lateral column aliases in an [[Aggregate]].
- * @param resolvedOperator The resolved operator.
- * @param outputList The output list of the resolved operator.
- * @param aggregateListAliases List of aliases from aggregate list and all artificially inserted
- *   [[Project]] nodes.
- * @param baseAggregate [[Aggregate]] node constructed by [[LateralColumnAliasResolver]] while
- *   resolving lateral column references in [[Aggregate]].
+ * @param resolvedOperator
+ *   The resolved operator.
+ * @param outputList
+ *   The output list of the resolved operator.
+ * @param aggregateListAliases
+ *   List of aliases from aggregate list and all artificially inserted [[Project]] nodes.
+ * @param baseAggregate
+ *   [[Aggregate]] node constructed by [[LateralColumnAliasResolver]] while resolving lateral
+ *   column references in [[Aggregate]].
  */
 case class AggregateWithLcaResolutionResult(
     resolvedOperator: LogicalPlan,

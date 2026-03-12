@@ -30,7 +30,8 @@ import org.apache.spark.util.Utils
  *   - V2 catalog tests: `org.apache.spark.sql.execution.command.v2.ShowFunctionsSuite`
  *   - V1 catalog tests: `org.apache.spark.sql.execution.command.v1.ShowFunctionsSuiteBase`
  *     - V1 In-Memory catalog: `org.apache.spark.sql.execution.command.v1.ShowFunctionsSuite`
- *     - V1 Hive External catalog: `org.apache.spark.sql.hive.execution.command.ShowFunctionsSuite`
+ *     - V1 Hive External catalog:
+ *       `org.apache.spark.sql.hive.execution.command.ShowFunctionsSuite`
  */
 trait ShowFunctionsSuiteBase extends QueryTest with DDLCommandTestUtils {
   override val command = "SHOW FUNCTIONS"
@@ -51,8 +52,8 @@ trait ShowFunctionsSuiteBase extends QueryTest with DDLCommandTestUtils {
     }
   }
 
-  protected def withNamespaceAndFuns(ns: String, funNames: Seq[String])
-      (f: (String, Seq[String]) => Unit): Unit = {
+  protected def withNamespaceAndFuns(ns: String, funNames: Seq[String])(
+      f: (String, Seq[String]) => Unit): Unit = {
     val nsCat = s"$funCatalog.$ns"
     withNamespace(nsCat) {
       sql(s"CREATE NAMESPACE $nsCat")
@@ -63,8 +64,8 @@ trait ShowFunctionsSuiteBase extends QueryTest with DDLCommandTestUtils {
     }
   }
 
-  protected def withNamespaceAndFun(ns: String, funName: String)
-      (f: (String, String) => Unit): Unit = {
+  protected def withNamespaceAndFun(ns: String, funName: String)(
+      f: (String, String) => Unit): Unit = {
     withNamespaceAndFuns(ns, Seq(funName)) { case (ns, Seq(name)) =>
       f(ns, name)
     }
@@ -101,9 +102,7 @@ trait ShowFunctionsSuiteBase extends QueryTest with DDLCommandTestUtils {
         QueryTest.checkAnswer(
           sql(s"SHOW ALL FUNCTIONS IN $ns").filter(s"function='$f1'"),
           Row(f1) :: Nil)
-        QueryTest.checkAnswer(
-          sql(s"SHOW SYSTEM FUNCTIONS IN $ns").filter(s"function='$f1'"),
-          Nil)
+        QueryTest.checkAnswer(sql(s"SHOW SYSTEM FUNCTIONS IN $ns").filter(s"function='$f1'"), Nil)
       }
     }
   }

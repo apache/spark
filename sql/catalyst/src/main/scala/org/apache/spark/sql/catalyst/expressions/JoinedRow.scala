@@ -23,8 +23,8 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types._
 
 /**
- * A mutable wrapper that makes two rows appear as a single concatenated row.  Designed to
- * be instantiated once per thread and reused.
+ * A mutable wrapper that makes two rows appear as a single concatenated row. Designed to be
+ * instantiated once per thread and reused.
  */
 class JoinedRow extends InternalRow {
   private[this] var row1: InternalRow = _

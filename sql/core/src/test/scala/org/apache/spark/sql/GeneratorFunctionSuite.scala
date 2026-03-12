@@ -40,18 +40,23 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df.selectExpr("stack(1, 1, 2, 3)"), Row(1, 2, 3) :: Nil)
     checkAnswer(df.selectExpr("stack(2, 1, 2, 3)"), Row(1, 2) :: Row(3, null) :: Nil)
     checkAnswer(df.selectExpr("stack(3, 1, 2, 3)"), Row(1) :: Row(2) :: Row(3) :: Nil)
-    checkAnswer(df.selectExpr("stack(4, 1, 2, 3)"), Row(1) :: Row(2) :: Row(3) :: Row(null) :: Nil)
+    checkAnswer(
+      df.selectExpr("stack(4, 1, 2, 3)"),
+      Row(1) :: Row(2) :: Row(3) :: Row(null) :: Nil)
 
     // Various column types
-    checkAnswer(df.selectExpr("stack(3, 1, 1.1, 'a', 2, 2.2, 'b', 3, 3.3, 'c')"),
+    checkAnswer(
+      df.selectExpr("stack(3, 1, 1.1, 'a', 2, 2.2, 'b', 3, 3.3, 'c')"),
       Row(1, 1.1, "a") :: Row(2, 2.2, "b") :: Row(3, 3.3, "c") :: Nil)
 
     // Null values
-    checkAnswer(df.selectExpr("stack(3, 1, 1.1, null, 2, null, 'b', null, 3.3, 'c')"),
+    checkAnswer(
+      df.selectExpr("stack(3, 1, 1.1, null, 2, null, 'b', null, 3.3, 'c')"),
       Row(1, 1.1, null) :: Row(2, null, "b") :: Row(null, 3.3, "c") :: Nil)
 
     // Repeat generation at every input row
-    checkAnswer(spark.range(2).selectExpr("stack(2, 1, 2, 3)"),
+    checkAnswer(
+      spark.range(2).selectExpr("stack(2, 1, 2, 3)"),
       Row(1, 2) :: Row(3, null) :: Row(1, 2) :: Row(3, null) :: Nil)
 
     // The first argument must be a positive constant integer.
@@ -66,12 +71,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
         "inputSql" -> "\"1.1\"",
         "inputType" -> "\"DECIMAL(2,1)\"",
         "requiredType" -> "\"INT\""),
-      context = ExpectedContext(
-        fragment = "stack(1.1, 1, 2, 3)",
-        start = 0,
-        stop = 18
-      )
-    )
+      context = ExpectedContext(fragment = "stack(1.1, 1, 2, 3)", start = 0, stop = 18))
 
     checkError(
       exception = intercept[AnalysisException] {
@@ -83,12 +83,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
         "exprName" -> "`n`",
         "valueRange" -> "(0, 2147483647]",
         "currentValue" -> "-1"),
-      context = ExpectedContext(
-        fragment = "stack(-1, 1, 2, 3)",
-        start = 0,
-        stop = 17
-      )
-    )
+      context = ExpectedContext(fragment = "stack(-1, 1, 2, 3)", start = 0, stop = 17))
 
     // The data for the same column should have the same type.
     checkError(
@@ -103,12 +98,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
         "leftType" -> "\"INT\"",
         "rightParamIndex" -> "2",
         "rightType" -> "\"STRING\""),
-      context = ExpectedContext(
-        fragment = "stack(2, 1, '2.2')",
-        start = 0,
-        stop = 17
-      )
-    )
+      context = ExpectedContext(fragment = "stack(2, 1, '2.2')", start = 0, stop = 17))
 
     // stack on column data
     val df2 = Seq((2, 1, 2, 3)).toDF("n", "a", "b", "c")
@@ -124,12 +114,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
         "inputName" -> "`n`",
         "inputType" -> "\"INT\"",
         "inputExpr" -> "\"n\""),
-      context = ExpectedContext(
-        fragment = "stack(n, a, b, c)",
-        start = 0,
-        stop = 16
-      )
-    )
+      context = ExpectedContext(fragment = "stack(n, a, b, c)", start = 0, stop = 16))
 
     val df3 = Seq((2, 1, 2.0)).toDF("n", "a", "b")
     checkError(
@@ -144,19 +129,12 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
         "leftType" -> "\"INT\"",
         "rightParamIndex" -> "2",
         "rightType" -> "\"DOUBLE\""),
-      context = ExpectedContext(
-        fragment = "stack(2, a, b)",
-        start = 0,
-        stop = 13
-      )
-    )
+      context = ExpectedContext(fragment = "stack(2, a, b)", start = 0, stop = 13))
   }
 
   test("single explode") {
     val df = Seq((1, Seq(1, 2, 3))).toDF("a", "intList")
-    checkAnswer(
-      df.select(explode($"intList")),
-      Row(1) :: Row(2) :: Row(3) :: Nil)
+    checkAnswer(df.select(explode($"intList")), Row(1) :: Row(2) :: Row(3) :: Nil)
   }
 
   test("single explode_outer") {
@@ -168,9 +146,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
 
   test("single posexplode") {
     val df = Seq((1, Seq(1, 2, 3))).toDF("a", "intList")
-    checkAnswer(
-      df.select(posexplode($"intList")),
-      Row(0, 1) :: Row(1, 2) :: Row(2, 3) :: Nil)
+    checkAnswer(df.select(posexplode($"intList")), Row(0, 1) :: Row(1, 2) :: Row(2, 3) :: Nil)
   }
 
   test("single posexplode_outer") {
@@ -186,14 +162,14 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df.select($"a", explode($"intList")),
       Row(1, 1) ::
-      Row(1, 2) ::
-      Row(1, 3) :: Nil)
+        Row(1, 2) ::
+        Row(1, 3) :: Nil)
 
     checkAnswer(
       df.select($"*", explode($"intList")),
       Row(1, Seq(1, 2, 3), 1) ::
-      Row(1, Seq(1, 2, 3), 2) ::
-      Row(1, Seq(1, 2, 3), 3) :: Nil)
+        Row(1, Seq(1, 2, 3), 2) ::
+        Row(1, Seq(1, 2, 3), 3) :: Nil)
   }
 
   test("explode_outer and other columns") {
@@ -223,9 +199,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
       df.select(explode($"intList").as("int")).select($"int"),
       Row(1) :: Row(2) :: Row(3) :: Nil)
 
-    checkAnswer(
-      df.select(explode($"intList").as("int")).select(sum($"int")),
-      Row(6) :: Nil)
+    checkAnswer(df.select(explode($"intList").as("int")).select(sum($"int")), Row(6) :: Nil)
   }
 
   test("aliased explode_outer") {
@@ -235,22 +209,18 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
       df.select(explode_outer($"intList").as("int")).select($"int"),
       Row(1) :: Row(2) :: Row(3) :: Row(null) :: Nil)
 
-    checkAnswer(
-      df.select(explode($"intList").as("int")).select(sum($"int")),
-      Row(6) :: Nil)
+    checkAnswer(df.select(explode($"intList").as("int")).select(sum($"int")), Row(6) :: Nil)
   }
 
   test("explode on map") {
     val df = Seq((1, Map("a" -> "b"))).toDF("a", "map")
 
-    checkAnswer(
-      df.select(explode($"map")),
-      Row("a", "b"))
+    checkAnswer(df.select(explode($"map")), Row("a", "b"))
   }
 
   test("explode_outer on map") {
-    val df = Seq((1, Map("a" -> "b")), (2, Map[String, String]()),
-      (3, Map("c" -> "d"))).toDF("a", "map")
+    val df =
+      Seq((1, Map("a" -> "b")), (2, Map[String, String]()), (3, Map("c" -> "d"))).toDF("a", "map")
 
     checkAnswer(
       df.select(explode_outer($"map")),
@@ -294,22 +264,24 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
         "inputSql" -> "\"array()\"",
         "inputType" -> "\"ARRAY<VOID>\"",
         "requiredType" -> "\"ARRAY<STRUCT>\""),
-      context = ExpectedContext(
-        fragment = "inline",
-        callSitePattern = getCurrentClassCallSitePattern)
-    )
+      context =
+        ExpectedContext(fragment = "inline", callSitePattern = getCurrentClassCallSitePattern))
   }
 
   test("inline with empty table") {
-    checkAnswer(
-      spark.range(0).select(inline(array(struct(lit(10), lit(100))))),
-      Nil)
+    checkAnswer(spark.range(0).select(inline(array(struct(lit(10), lit(100))))), Nil)
   }
 
   test("inline on literal") {
     checkAnswer(
-      spark.range(2).select(inline(array(struct(lit(10), lit(100)), struct(lit(20), lit(200)),
-        struct(lit(30), lit(300))))),
+      spark
+        .range(2)
+        .select(
+          inline(
+            array(
+              struct(lit(10), lit(100)),
+              struct(lit(20), lit(200)),
+              struct(lit(30), lit(300))))),
       Row(10, 100) :: Row(20, 200) :: Row(30, 300) ::
         Row(10, 100) :: Row(20, 200) :: Row(30, 300) :: Nil)
   }
@@ -322,7 +294,8 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
       Row(1) :: Row(1) :: Nil)
 
     checkAnswer(
-      df.select(inline(array(struct(Symbol("a"), Symbol("b")), struct(Symbol("a"), Symbol("b"))))),
+      df.select(
+        inline(array(struct(Symbol("a"), Symbol("b")), struct(Symbol("a"), Symbol("b"))))),
       Row(1, 2) :: Row(1, 2) :: Nil)
 
     // Spark think [struct<a:int>, struct<b:int>] is heterogeneous due to name difference.
@@ -335,9 +308,8 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
         "sqlExpr" -> "\"array(struct(a), struct(b))\"",
         "functionName" -> "`array`",
         "dataType" -> "(\"STRUCT<a: INT NOT NULL>\" or \"STRUCT<b: INT NOT NULL>\")"),
-      context = ExpectedContext(
-        fragment = "array",
-        callSitePattern = getCurrentClassCallSitePattern))
+      context =
+        ExpectedContext(fragment = "array", callSitePattern = getCurrentClassCallSitePattern))
 
     checkAnswer(
       df.select(inline(array(struct(Symbol("a")), struct(Symbol("b").alias("a"))))),
@@ -353,43 +325,35 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
         "sqlExpr" -> "\"array(struct(a), struct(2))\"",
         "functionName" -> "`array`",
         "dataType" -> "(\"STRUCT<a: INT NOT NULL>\" or \"STRUCT<col1: INT NOT NULL>\")"),
-      context = ExpectedContext(
-        fragment = "array",
-        callSitePattern = getCurrentClassCallSitePattern))
+      context =
+        ExpectedContext(fragment = "array", callSitePattern = getCurrentClassCallSitePattern))
 
     checkAnswer(
       df.select(inline(array(struct(Symbol("a")), struct(lit(2).alias("a"))))),
       Row(1) :: Row(2) :: Nil)
 
-    checkAnswer(
-      df.select(struct(Symbol("a"))).select(inline(array("*"))),
-      Row(1) :: Nil)
+    checkAnswer(df.select(struct(Symbol("a"))).select(inline(array("*"))), Row(1) :: Nil)
 
     checkAnswer(
-      df.select(array(struct(Symbol("a")),
-        struct(Symbol("b").alias("a")))).selectExpr("inline(*)"),
+      df.select(array(struct(Symbol("a")), struct(Symbol("b").alias("a"))))
+        .selectExpr("inline(*)"),
       Row(1) :: Row(2) :: Nil)
   }
 
   test("inline_outer") {
     val df = Seq((1, "2"), (3, "4"), (5, "6")).toDF("col1", "col2")
-    val df2 = df.select(
-      when($"col1" === 1, null).otherwise(array(struct($"col1", $"col2"))).as("col1"))
-    checkAnswer(
-      df2.select(inline(Symbol("col1"))),
-      Row(3, "4") :: Row(5, "6") :: Nil
-    )
+    val df2 =
+      df.select(when($"col1" === 1, null).otherwise(array(struct($"col1", $"col2"))).as("col1"))
+    checkAnswer(df2.select(inline(Symbol("col1"))), Row(3, "4") :: Row(5, "6") :: Nil)
     checkAnswer(
       df2.select(inline_outer(Symbol("col1"))),
-      Row(null, null) :: Row(3, "4") :: Row(5, "6") :: Nil
-    )
+      Row(null, null) :: Row(3, "4") :: Row(5, "6") :: Nil)
   }
 
   test("SPARK-14986: Outer lateral view with empty generate expression") {
     checkAnswer(
       sql("select nil from values 1 lateral view outer explode(array()) n as nil"),
-      Row(null) :: Nil
-    )
+      Row(null) :: Nil)
   }
 
   test("outer explode()") {
@@ -409,33 +373,25 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
   test("generator in aggregate expression") {
     withTempView("t1") {
       Seq((1, 1), (1, 2), (2, 3)).toDF("c1", "c2").createTempView("t1")
-      checkAnswer(
-        sql("select explode(array(min(c2), max(c2))) from t1"),
-        Row(1) :: Row(3) :: Nil
-      )
+      checkAnswer(sql("select explode(array(min(c2), max(c2))) from t1"), Row(1) :: Row(3) :: Nil)
       checkAnswer(
         sql("select posexplode(array(min(c2), max(c2))) from t1 group by c1"),
-        Row(0, 1) :: Row(1, 2) :: Row(0, 3) :: Row(1, 3) :: Nil
-      )
+        Row(0, 1) :: Row(1, 2) :: Row(0, 3) :: Row(1, 3) :: Nil)
       // test generator "stack" which require foldable argument
       checkAnswer(
         sql("select stack(2, min(c1), max(c1), min(c2), max(c2)) from t1"),
-        Row(1, 2) :: Row(1, 3) :: Nil
-      )
+        Row(1, 2) :: Row(1, 3) :: Nil)
 
       checkError(
         exception = intercept[AnalysisException] {
           sql("select 1 + explode(array(min(c2), max(c2))) from t1 group by c1")
         },
         condition = "UNSUPPORTED_GENERATOR.NESTED_IN_EXPRESSIONS",
-        parameters = Map(
-          "expression" -> "\"(1 + explode(array(min(c2), max(c2))))\""))
-
+        parameters = Map("expression" -> "\"(1 + explode(array(min(c2), max(c2))))\""))
 
       checkError(
         exception = intercept[AnalysisException] {
-          sql(
-            """select
+          sql("""select
               |  explode(array(min(c2), max(c2))),
               |  posexplode(array(min(c2), max(c2)))
               |from t1 group by c1""".stripMargin)
@@ -479,8 +435,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
       Row(1, null) :: Row(2, null) :: Nil)
 
     withTempView("t1") {
-      sql(
-        """select * from values
+      sql("""select * from values
           |array(struct(0, 1), struct(3, 4)),
           |array(struct(6, 7)),
           |array(),
@@ -494,8 +449,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
   }
 
   def testNullStruct(): Unit = {
-    val df = sql(
-      """select * from values
+    val df = sql("""select * from values
         |(
         |  1,
         |  array(
@@ -530,8 +484,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
   test("SPARK-40963: generator output has correct nullability") {
     // This test does not check nullability directly. Before SPARK-40963,
     // the below query got wrong results due to incorrect nullability.
-    val df = sql(
-      """select c1, explode(c4) as c5 from (
+    val df = sql("""select c1, explode(c4) as c5 from (
         |  select c1, array(c3) as c4 from (
         |    select c1, explode_outer(c2) as c3
         |    from values
@@ -542,8 +495,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
         |  )
         |)
         |""".stripMargin)
-    checkAnswer(df,
-      Row(1, 1) :: Row(1, 2) :: Row(2, 2) :: Row(2, 3) :: Row(3, null) :: Nil)
+    checkAnswer(df, Row(1, 1) :: Row(1, 2) :: Row(2, 2) :: Row(2, 3) :: Row(3, null) :: Nil)
   }
 
   test("SPARK-45171: Handle evaluated nondeterministic expression") {
@@ -555,8 +507,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-47241: two generator functions in SELECT") {
     def testTwoGenerators(needImplicitCast: Boolean): Unit = {
-      val df = sql(
-        s"""
+      val df = sql(s"""
           |SELECT
           |explode(array('a', 'b')) as c1,
           |explode(array(0L, ${if (needImplicitCast) "0L + 1" else "1L"})) as c2
@@ -568,8 +519,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-47241: generator function after wildcard in SELECT") {
-    val df = sql(
-      s"""
+    val df = sql(s"""
          |SELECT *, explode(array('a', 'b')) as c1
          |FROM
          |(
@@ -584,39 +534,30 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
     val alias = ($"a" + 1).as("a")
     checkAnswer(
       df.select(alias).select(alias).select(alias),
-      Seq(Row(8), Row(9), Row(10), Row(11), Row(12))
-    )
+      Seq(Row(8), Row(9), Row(10), Row(11), Row(12)))
   }
 
   test("generator in self-join with aliased columns") {
     val df1 = sql("SELECT explode(array(1, 2, 3)) AS col")
     val df2 = df1.select($"col".as("col2"))
-    checkAnswer(
-      df1.join(df2, df1("col") === df2("col2")),
-      Seq(Row(1, 1), Row(2, 2), Row(3, 3))
-    )
+    checkAnswer(df1.join(df2, df1("col") === df2("col2")), Seq(Row(1, 1), Row(2, 2), Row(3, 3)))
   }
 
   test("generator in self-union") {
     val df1 = sql("SELECT explode(array(1, 2, 3)) AS col")
-    checkAnswer(
-      df1.union(df1),
-      Seq(Row(1), Row(2), Row(3), Row(1), Row(2), Row(3))
-    )
+    checkAnswer(df1.union(df1), Seq(Row(1), Row(2), Row(3), Row(1), Row(2), Row(3)))
   }
 
   test("explode with nested aliases using DataFrame API") {
     checkAnswer(
       spark.range(1).select(explode(array(lit(1), lit(2), lit(3))).as("first").as("second")),
-      Seq(Row(1), Row(2), Row(3))
-    )
+      Seq(Row(1), Row(2), Row(3)))
   }
 
   test("posexplode with multi-alias using DataFrame API") {
     checkAnswer(
       spark.range(1).select(posexplode(array(lit(10), lit(20))).as(Seq("idx", "val"))),
-      Seq(Row(0, 10), Row(1, 20))
-    )
+      Seq(Row(0, 10), Row(1, 20)))
   }
 
   test("posexplode with chained aliases using DataFrame API should fail") {
@@ -629,8 +570,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
             .as(Seq("pos", "val"))
             .as(Seq("pos", "val", "kek"))
             .as(Seq("pos2", "val2"))
-            .as("lolkek")
-        )
+            .as("lolkek"))
         .collect()
     }
     assert(exception.getCondition == "UDTF_ALIAS_NUMBER_MISMATCH")
@@ -645,10 +585,8 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
             .as("lolkek")
             .as(Seq("pos", "val"))
             .as(Seq("pos", "val", "kek"))
-            .as(Seq("pos2", "val2"))
-        ),
-      Seq(Row(0, 1), Row(1, 2), Row(2, 3))
-    )
+            .as(Seq("pos2", "val2"))),
+      Seq(Row(0, 1), Row(1, 2), Row(2, 3)))
   }
 
   test("explode with chained aliases and LCA reference using DataFrame API should fail") {
@@ -659,8 +597,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
           explode(array(lit(1), lit(2), lit(3)))
             .as("first")
             .as("second"),
-          $"first"
-        )
+          $"first")
         .collect()
     }
     assert(exception.getCondition == "UNRESOLVED_COLUMN.WITH_SUGGESTION")
@@ -674,10 +611,8 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
           explode(array(lit(1), lit(2), lit(3)))
             .as("first")
             .as("second"),
-          $"second"
-        ),
-      Seq(Row(1, 1), Row(2, 2), Row(3, 3))
-    )
+          $"second"),
+      Seq(Row(1, 1), Row(2, 2), Row(3, 3)))
   }
 
   test("explode_outer with chained aliases using DataFrame API") {
@@ -687,10 +622,8 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
         .select(
           explode_outer(array(lit(1), lit(2), lit(3)))
             .as("first")
-            .as("second")
-        ),
-      Seq(Row(1), Row(2), Row(3))
-    )
+            .as("second")),
+      Seq(Row(1), Row(2), Row(3)))
   }
 
   test("explode_outer with chained aliases and final alias reference using DataFrame API") {
@@ -701,10 +634,8 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
           explode_outer(array(lit(1), lit(2), lit(3)))
             .as("first")
             .as("second"),
-          $"second"
-        ),
-      Seq(Row(1, 1), Row(2, 2), Row(3, 3))
-    )
+          $"second"),
+      Seq(Row(1, 1), Row(2, 2), Row(3, 3)))
   }
 
   test("posexplode_outer with chained aliases using DataFrame API should fail") {
@@ -717,14 +648,14 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
             .as(Seq("pos", "val"))
             .as(Seq("pos", "val", "kek"))
             .as(Seq("pos2", "val2"))
-            .as("lolkek")
-        )
+            .as("lolkek"))
         .collect()
     }
     assert(exception.getCondition == "UDTF_ALIAS_NUMBER_MISMATCH")
   }
 
-  test("posexplode_outer with chained aliases ending with valid multi-alias using DataFrame API") {
+  test(
+    "posexplode_outer with chained aliases ending with valid multi-alias using DataFrame API") {
     checkAnswer(
       spark
         .range(1)
@@ -733,22 +664,17 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
             .as("lolkek")
             .as(Seq("pos", "val"))
             .as(Seq("pos", "val", "kek"))
-            .as(Seq("pos2", "val2"))
-        ),
-      Seq(Row(0, 1), Row(1, 2), Row(2, 3))
-    )
+            .as(Seq("pos2", "val2"))),
+      Seq(Row(0, 1), Row(1, 2), Row(2, 3)))
   }
 
   test("posexplode_outer with multi-alias using DataFrame API") {
     checkAnswer(
       spark
         .range(1)
-        .select(
-          posexplode_outer(array(lit(10), lit(20)))
-            .as(Seq("idx", "val"))
-        ),
-      Seq(Row(0, 10), Row(1, 20))
-    )
+        .select(posexplode_outer(array(lit(10), lit(20)))
+          .as(Seq("idx", "val"))),
+      Seq(Row(0, 10), Row(1, 20)))
   }
 
   test("posexplode_outer with chained multi-alias and final reference using DataFrame API") {
@@ -760,10 +686,8 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
             .as(Seq("pos1", "val1"))
             .as(Seq("pos2", "val2")),
           $"pos2",
-          $"val2"
-        ),
-      Seq(Row(0, 10, 0, 10), Row(1, 20, 1, 20))
-    )
+          $"val2"),
+      Seq(Row(0, 10, 0, 10), Row(1, 20, 1, 20)))
   }
 }
 

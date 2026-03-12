@@ -28,13 +28,14 @@ class UnwrapUDTExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("Input type should be UserDefinedType") {
     val b1 = Literal.create(false, BooleanType)
     val unwrapUDTExpression = UnwrapUDT(b1)
-    assert(unwrapUDTExpression.checkInputDataTypes() ==
-      DataTypeMismatch(
-        errorSubClass = "UNEXPECTED_INPUT_TYPE",
-        messageParameters = Map(
-          "paramIndex" -> ordinalNumber(0),
-          "requiredType" -> toSQLType("UserDefinedType"),
-          "inputSql" -> "\"false\"",
-          "inputType" -> "\"BOOLEAN\"")))
+    assert(
+      unwrapUDTExpression.checkInputDataTypes() ==
+        DataTypeMismatch(
+          errorSubClass = "UNEXPECTED_INPUT_TYPE",
+          messageParameters = Map(
+            "paramIndex" -> ordinalNumber(0),
+            "requiredType" -> toSQLType("UserDefinedType"),
+            "inputSql" -> "\"false\"",
+            "inputType" -> "\"BOOLEAN\"")))
   }
 }

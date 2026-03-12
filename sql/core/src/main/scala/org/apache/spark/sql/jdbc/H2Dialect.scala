@@ -40,18 +40,73 @@ private[sql] case class H2Dialect() extends JdbcDialect with NoLegacyJDBCError {
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:h2")
 
   private val distinctUnsupportedAggregateFunctions =
-    Set("COVAR_POP", "COVAR_SAMP", "CORR", "REGR_INTERCEPT", "REGR_R2", "REGR_SLOPE", "REGR_SXY",
-      "MODE", "PERCENTILE_CONT", "PERCENTILE_DISC")
+    Set(
+      "COVAR_POP",
+      "COVAR_SAMP",
+      "CORR",
+      "REGR_INTERCEPT",
+      "REGR_R2",
+      "REGR_SLOPE",
+      "REGR_SXY",
+      "MODE",
+      "PERCENTILE_CONT",
+      "PERCENTILE_DISC")
 
-  private val supportedAggregateFunctions = Set("MAX", "MIN", "SUM", "COUNT", "AVG",
-    "VAR_POP", "VAR_SAMP", "STDDEV_POP", "STDDEV_SAMP") ++ distinctUnsupportedAggregateFunctions
+  private val supportedAggregateFunctions = Set(
+    "MAX",
+    "MIN",
+    "SUM",
+    "COUNT",
+    "AVG",
+    "VAR_POP",
+    "VAR_SAMP",
+    "STDDEV_POP",
+    "STDDEV_SAMP") ++ distinctUnsupportedAggregateFunctions
 
   private val supportedFunctions = supportedAggregateFunctions ++
-    Set("ABS", "COALESCE", "GREATEST", "LEAST", "RAND", "LOG", "LOG10", "LN", "EXP",
-      "POWER", "SQRT", "FLOOR", "CEIL", "ROUND", "SIN", "SINH", "COS", "COSH", "TAN",
-      "TANH", "COT", "ASIN", "ACOS", "ATAN", "ATAN2", "DEGREES", "RADIANS", "SIGN",
-      "PI", "SUBSTRING", "UPPER", "LOWER", "TRANSLATE", "TRIM", "MD5", "SHA1", "SHA2",
-      "BIT_LENGTH", "CHAR_LENGTH", "CONCAT", "RPAD", "LPAD")
+    Set(
+      "ABS",
+      "COALESCE",
+      "GREATEST",
+      "LEAST",
+      "RAND",
+      "LOG",
+      "LOG10",
+      "LN",
+      "EXP",
+      "POWER",
+      "SQRT",
+      "FLOOR",
+      "CEIL",
+      "ROUND",
+      "SIN",
+      "SINH",
+      "COS",
+      "COSH",
+      "TAN",
+      "TANH",
+      "COT",
+      "ASIN",
+      "ACOS",
+      "ATAN",
+      "ATAN2",
+      "DEGREES",
+      "RADIANS",
+      "SIGN",
+      "PI",
+      "SUBSTRING",
+      "UPPER",
+      "LOWER",
+      "TRANSLATE",
+      "TRIM",
+      "MD5",
+      "SHA1",
+      "SHA2",
+      "BIT_LENGTH",
+      "CHAR_LENGTH",
+      "CONCAT",
+      "RPAD",
+      "LPAD")
 
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
@@ -66,7 +121,10 @@ private[sql] case class H2Dialect() extends JdbcDialect with NoLegacyJDBCError {
   }
 
   override def getCatalystType(
-      sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
+      sqlType: Int,
+      typeName: String,
+      size: Int,
+      md: MetadataBuilder): Option[DataType] = {
     sqlType match {
       case Types.NUMERIC if size > 38 =>
         // H2 supports very large decimal precision like 100000. The max precision in Spark is only
@@ -84,8 +142,7 @@ private[sql] case class H2Dialect() extends JdbcDialect with NoLegacyJDBCError {
     case StringType => Option(JdbcType("CLOB", Types.CLOB))
     case BooleanType => Some(JdbcType("BOOLEAN", Types.BOOLEAN))
     case ShortType | ByteType => Some(JdbcType("SMALLINT", Types.SMALLINT))
-    case t: DecimalType => Some(
-      JdbcType(s"NUMERIC(${t.precision},${t.scale})", Types.NUMERIC))
+    case t: DecimalType => Some(JdbcType(s"NUMERIC(${t.precision},${t.scale})", Types.NUMERIC))
     case _ => JdbcUtils.getCommonJDBCType(dt)
   }
 
@@ -174,15 +231,22 @@ private[sql] case class H2Dialect() extends JdbcDialect with NoLegacyJDBCError {
           val indexComment = rs.getString("REMARKS")
           if (indexMap.contains(indexName)) {
             val index = indexMap(indexName)
-            val newIndex = new TableIndex(indexName, indexType,
+            val newIndex = new TableIndex(
+              indexName,
+              indexType,
               index.columns() :+ FieldReference(colName),
-              index.columnProperties, index.properties)
+              index.columnProperties,
+              index.properties)
             indexMap += (indexName -> newIndex)
           } else {
             val properties = new util.Properties()
             if (SparkStringUtils.isNotEmpty(indexComment)) properties.put("COMMENT", indexComment)
-            val index = new TableIndex(indexName, indexType, Array(FieldReference(colName)),
-              new util.HashMap[NamedReference, util.Properties](), properties)
+            val index = new TableIndex(
+              indexName,
+              indexType,
+              Array(FieldReference(colName)),
+              new util.HashMap[NamedReference, util.Properties](),
+              properties)
             indexMap += (indexName -> index)
           }
         }
@@ -235,14 +299,17 @@ private[sql] case class H2Dialect() extends JdbcDialect with NoLegacyJDBCError {
             val regex = """"((?:[^"\\]|\\[\\"ntbrf])+)"""".r
             val name = regex.findFirstMatchIn(e.getMessage).get.group(1)
             val quotedName = org.apache.spark.sql.catalyst.util.quoteIdentifier(name)
-            throw new NoSuchNamespaceException(errorClass = "SCHEMA_NOT_FOUND",
+            throw new NoSuchNamespaceException(
+              errorClass = "SCHEMA_NOT_FOUND",
               messageParameters = Map("schemaName" -> quotedName))
           // INDEX_ALREADY_EXISTS_1
           case 42111 if condition == "FAILED_JDBC.CREATE_INDEX" =>
             val indexName = messageParameters("indexName")
             val tableName = messageParameters("tableName")
             throw new IndexAlreadyExistsException(
-              indexName = indexName, tableName = tableName, cause = Some(e))
+              indexName = indexName,
+              tableName = tableName,
+              cause = Some(e))
           // INDEX_NOT_FOUND_1
           case 42112 if condition == "FAILED_JDBC.DROP_INDEX" =>
             val indexName = messageParameters("indexName")
@@ -269,13 +336,13 @@ private[sql] case class H2Dialect() extends JdbcDialect with NoLegacyJDBCError {
   class H2SQLBuilder extends JDBCSQLBuilder {
 
     override def visitAggregateFunction(
-        funcName: String, isDistinct: Boolean, inputs: Array[String]): String =
+        funcName: String,
+        isDistinct: Boolean,
+        inputs: Array[String]): String =
       if (isDistinct && distinctUnsupportedAggregateFunctions.contains(funcName)) {
         throw new SparkUnsupportedOperationException(
           errorClass = "_LEGACY_ERROR_TEMP_3184",
-          messageParameters = Map(
-            "class" -> this.getClass.getSimpleName,
-            "funcName" -> funcName))
+          messageParameters = Map("class" -> this.getClass.getSimpleName, "funcName" -> funcName))
       } else {
         super.visitAggregateFunction(funcName, isDistinct, inputs)
       }

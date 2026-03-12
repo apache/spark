@@ -31,8 +31,8 @@ class RuleExecutorSuite extends SparkFunSuite with SQLConfHelper {
   }
 
   object SetToZero extends Rule[Expression] {
-    def apply(e: Expression): Expression = e transform {
-      case IntegerLiteral(_) => Literal(0)
+    def apply(e: Expression): Expression = e transform { case IntegerLiteral(_) =>
+      Literal(0)
     }
   }
 
@@ -42,8 +42,9 @@ class RuleExecutorSuite extends SparkFunSuite with SQLConfHelper {
     }
 
     assert(ApplyIdempotent.execute(Literal(10)) === Literal(0))
-    assert(ApplyIdempotent.execute(ApplyIdempotent.execute(Literal(10))) ===
-      ApplyIdempotent.execute(Literal(10)))
+    assert(
+      ApplyIdempotent.execute(ApplyIdempotent.execute(Literal(10))) ===
+        ApplyIdempotent.execute(Literal(10)))
   }
 
   test("only once") {
@@ -151,7 +152,8 @@ class RuleExecutorSuite extends SparkFunSuite with SQLConfHelper {
               OptimizerWithLightweightValidation.execute(Literal(1))
             }
             val ruleName = DecrementLiterals.ruleName
-            assert(e.getMessage.contains(s"Rule $ruleName in batch once generated an invalid plan"))
+            assert(
+              e.getMessage.contains(s"Rule $ruleName in batch once generated an invalid plan"))
             assert(e.getMessage.contains("value changed"))
           }
         }

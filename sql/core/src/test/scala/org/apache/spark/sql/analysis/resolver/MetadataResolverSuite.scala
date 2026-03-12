@@ -30,22 +30,12 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-class MetadataResolverSuite
-    extends QueryTest
-    with SharedSparkSession {
+class MetadataResolverSuite extends QueryTest with SharedSparkSession {
   private val catalogName = "spark_catalog"
 
   private val keyValueTableSchema = StructType(
-    Seq(
-      StructField("key", IntegerType, true),
-      StructField("value", StringType, true)
-    )
-  )
-  private val fileTableSchema = StructType(
-    Seq(
-      StructField("id", LongType, true)
-    )
-  )
+    Seq(StructField("key", IntegerType, true), StructField("value", StringType, true)))
+  private val fileTableSchema = StructType(Seq(StructField("id", LongType, true)))
 
   test("Single CSV relation") {
     withTable("src_csv") {
@@ -53,8 +43,7 @@ class MetadataResolverSuite
 
       checkResolve(
         sqlText = "SELECT * FROM src_csv",
-        expectedTableData = Seq(createTableData("src_csv"))
-      )
+        expectedTableData = Seq(createTableData("src_csv")))
     }
   }
 
@@ -64,8 +53,7 @@ class MetadataResolverSuite
 
       checkResolve(
         sqlText = "SELECT * FROM src_orc",
-        expectedTableData = Seq(createTableData("src_orc"))
-      )
+        expectedTableData = Seq(createTableData("src_orc")))
     }
   }
 
@@ -75,8 +63,7 @@ class MetadataResolverSuite
 
       checkResolve(
         sqlText = "SELECT * FROM VALUES (1) WHERE EXISTS (SELECT col1 FROM src)",
-        expectedTableData = Seq(createTableData("src"))
-      )
+        expectedTableData = Seq(createTableData("src")))
     }
   }
 
@@ -86,8 +73,7 @@ class MetadataResolverSuite
 
       checkResolve(
         sqlText = "SELECT * FROM VALUES (1) WHERE col1 IN (SELECT col1 FROM src)",
-        expectedTableData = Seq(createTableData("src"))
-      )
+        expectedTableData = Seq(createTableData("src")))
     }
   }
 
@@ -106,8 +92,7 @@ class MetadataResolverSuite
           FROM
             VALUES (1)
           """,
-        expectedTableData = Seq(createTableData("src"))
-      )
+        expectedTableData = Seq(createTableData("src")))
     }
   }
 
@@ -120,8 +105,7 @@ class MetadataResolverSuite
           WITH cte AS (SELECT key FROM src)
           SELECT * FROM cte
           """,
-        expectedTableData = Seq(createTableData("src"))
-      )
+        expectedTableData = Seq(createTableData("src")))
     }
   }
 
@@ -136,8 +120,7 @@ class MetadataResolverSuite
             SELECT 1
           )
           """,
-        expectedTableData = Seq(createTableData("src"))
-      )
+        expectedTableData = Seq(createTableData("src")))
     }
   }
 
@@ -157,8 +140,7 @@ class MetadataResolverSuite
           FROM
             VALUES (1)
           """,
-        expectedTableData = Seq(createTableData("src"))
-      )
+        expectedTableData = Seq(createTableData("src")))
     }
   }
 
@@ -169,14 +151,10 @@ class MetadataResolverSuite
       checkResolve(
         sqlText = s"select id from json.`${f.getCanonicalPath}`",
         expectedTableData = Seq(
-          RelationId(
-            multipartIdentifier = Seq(catalogName, "json", s"${f.getCanonicalPath}")
-          ) -> TestTableData(
+          RelationId(multipartIdentifier =
+            Seq(catalogName, "json", s"${f.getCanonicalPath}")) -> TestTableData(
             name = s"file:${f.getCanonicalPath}",
-            schema = fileTableSchema
-          )
-        )
-      )
+            schema = fileTableSchema)))
     })
   }
 
@@ -187,14 +165,12 @@ class MetadataResolverSuite
       val analyzerBridgeState = new AnalyzerBridgeState
       analyzerBridgeState.relationsWithResolvedMetadata.put(
         BridgedRelationId(UnresolvedRelation(Seq("src")), Seq.empty),
-        createUnresolvedCatalogRelation("src")
-      )
+        createUnresolvedCatalogRelation("src"))
 
       checkResolve(
         sqlText = "SELECT * FROM src",
         expectedTableData = Seq(createTableData("src")),
-        analyzerBridgeState = Some(analyzerBridgeState)
-      )
+        analyzerBridgeState = Some(analyzerBridgeState))
     }
   }
 
@@ -205,8 +181,7 @@ class MetadataResolverSuite
       checkResolve(
         sqlText = "SELECT * FROM src",
         expectedTableData = Seq.empty,
-        analyzerBridgeState = Some(new AnalyzerBridgeState)
-      )
+        analyzerBridgeState = Some(new AnalyzerBridgeState))
     }
   }
 
@@ -223,16 +198,9 @@ class MetadataResolverSuite
             createTableData(
               "v1",
               Some(
-                StructType(
-                  Seq(
-                    StructField("col1", IntegerType, true),
-                    StructField("col2", IntegerType, true)
-                  )
-                )
-              )
-            )
-          )
-        )
+                StructType(Seq(
+                  StructField("col1", IntegerType, true),
+                  StructField("col2", IntegerType, true)))))))
       }
     }
   }
@@ -256,14 +224,8 @@ class MetadataResolverSuite
                 StructType(
                   Seq(
                     StructField("col1", IntegerType, true),
-                    StructField("col2", IntegerType, true)
-                  )
-                )
-              )
-            ),
-            createTableData("t3", Some(StructType(Seq(StructField("col3", IntegerType, true)))))
-          )
-        )
+                    StructField("col2", IntegerType, true))))),
+            createTableData("t3", Some(StructType(Seq(StructField("col3", IntegerType, true)))))))
       }
     }
   }
@@ -276,11 +238,8 @@ class MetadataResolverSuite
       withView("v1", "v2", "v3") {
         spark.sql("CREATE VIEW v1 AS SELECT col1 FROM t1")
         spark.sql(
-          "CREATE VIEW v2 AS WITH cte1 AS (SELECT col1, col2 FROM v1, t2) SELECT * FROM cte1"
-        )
-        spark.sql(
-          "CREATE VIEW v3 AS WITH cte1 AS (SELECT col1, col2 FROM v2) SELECT * FROM cte1"
-        )
+          "CREATE VIEW v2 AS WITH cte1 AS (SELECT col1, col2 FROM v1, t2) SELECT * FROM cte1")
+        spark.sql("CREATE VIEW v3 AS WITH cte1 AS (SELECT col1, col2 FROM v2) SELECT * FROM cte1")
 
         checkResolve(
           sqlText = "SELECT * FROM v3, t3",
@@ -291,14 +250,8 @@ class MetadataResolverSuite
                 StructType(
                   Seq(
                     StructField("col1", IntegerType, true),
-                    StructField("col2", IntegerType, true)
-                  )
-                )
-              )
-            ),
-            createTableData("t3", Some(StructType(Seq(StructField("col3", IntegerType, true)))))
-          )
-        )
+                    StructField("col2", IntegerType, true))))),
+            createTableData("t3", Some(StructType(Seq(StructField("col3", IntegerType, true)))))))
       }
     }
   }
@@ -317,16 +270,16 @@ class MetadataResolverSuite
           spark.sessionState.catalogManager,
           Resolver.createRelationResolution(spark.sessionState.catalogManager),
           analyzerBridgeState,
-          new ViewResolver(resolver = resolver, catalogManager = spark.sessionState.catalogManager)
-        )
+          new ViewResolver(
+            resolver = resolver,
+            catalogManager = spark.sessionState.catalogManager))
       case None =>
         val relationResolution =
           Resolver.createRelationResolution(spark.sessionState.catalogManager)
         new MetadataResolver(
           spark.sessionState.catalogManager,
           relationResolution,
-          Seq(new FileResolver(spark))
-        )
+          Seq(new FileResolver(spark)))
     }
 
     val actualTableData = new mutable.HashMap[RelationId, TestTableData]
@@ -341,14 +294,13 @@ class MetadataResolverSuite
           metadataResolver.TestOnly.getRelationsWithResolvedMetadata
       }
 
-      relationsWithResolvedMetadata.forEach {
-        case (relationId, plan) =>
-          val relation = plan match {
-            case SubqueryAlias(_, relation) => relation
-            case relation => relation
-          }
-          actualTableData(relationId) =
-            TestTableData(getTableName(relation), getTableSchema(relation))
+      relationsWithResolvedMetadata.forEach { case (relationId, plan) =>
+        val relation = plan match {
+          case SubqueryAlias(_, relation) => relation
+          case relation => relation
+        }
+        actualTableData(relationId) =
+          TestTableData(getTableName(relation), getTableSchema(relation))
       }
     }
 
@@ -376,20 +328,15 @@ class MetadataResolverSuite
   }
 
   private def createTableData(name: String, schema: Option[StructType] = None) =
-    RelationId(
-      multipartIdentifier = Seq(catalogName, "default", name)
-    ) -> TestTableData(
+    RelationId(multipartIdentifier = Seq(catalogName, "default", name)) -> TestTableData(
       name = s"$catalogName.default.$name",
-      schema = schema.getOrElse(keyValueTableSchema)
-    )
+      schema = schema.getOrElse(keyValueTableSchema))
 
   private def createUnresolvedCatalogRelation(name: String) = SubqueryAlias(
     AliasIdentifier(name),
     UnresolvedCatalogRelation(
       spark.sessionState.catalog.getTableMetadata(TableIdentifier(name)),
-      CaseInsensitiveStringMap.empty
-    )
-  )
+      CaseInsensitiveStringMap.empty))
 
   private case class TestTableData(name: String, schema: StructType)
 }

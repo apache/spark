@@ -19,6 +19,7 @@ package org.apache.spark.sql.types
 import org.apache.spark.sql.catalyst.expressions.Expression
 
 private[sql] abstract class DataTypeExpression(val dataType: DataType) {
+
   /**
    * Enables matching against DataType for expressions:
    * {{{
@@ -31,6 +32,7 @@ private[sql] abstract class DataTypeExpression(val dataType: DataType) {
 
 private[sql] case object BooleanTypeExpression extends DataTypeExpression(BooleanType)
 private[sql] case object StringTypeExpression {
+
   /**
    * Enables matching against StringType for expressions:
    * {{{
@@ -52,6 +54,7 @@ private[sql] case object DoubleTypeExpression extends DataTypeExpression(DoubleT
 private[sql] case object FloatTypeExpression extends DataTypeExpression(FloatType)
 
 private[sql] object NumericTypeExpression {
+
   /**
    * Enables matching against NumericType for expressions:
    * {{{
@@ -65,6 +68,7 @@ private[sql] object NumericTypeExpression {
 }
 
 private[sql] object IntegralTypeExpression {
+
   /**
    * Enables matching against IntegralType for expressions:
    * {{{

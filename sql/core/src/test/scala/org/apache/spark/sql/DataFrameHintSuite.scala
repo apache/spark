@@ -28,44 +28,30 @@ class DataFrameHintSuite extends AnalysisTest with SharedSparkSession {
   lazy val df = spark.range(10)
 
   private def check(df: Dataset[_], expected: LogicalPlan) = {
-    comparePlans(
-      df.queryExecution.logical,
-      expected
-    )
+    comparePlans(df.queryExecution.logical, expected)
   }
 
   test("various hint parameters") {
-    check(
-      df.hint("hint1"),
-      UnresolvedHint("hint1", Seq(),
-        df.logicalPlan
-      )
-    )
+    check(df.hint("hint1"), UnresolvedHint("hint1", Seq(), df.logicalPlan))
 
     check(
       df.hint("hint1", 1, "a"),
-      UnresolvedHint("hint1", Seq(Literal(1), Literal("a")), df.logicalPlan)
-    )
+      UnresolvedHint("hint1", Seq(Literal(1), Literal("a")), df.logicalPlan))
 
     check(
       df.hint("hint1", 1, $"a"),
-      UnresolvedHint("hint1", Seq(Literal(1), $"a".expr),
-        df.logicalPlan
-      )
-    )
+      UnresolvedHint("hint1", Seq(Literal(1), $"a".expr), df.logicalPlan))
 
     check(
       df.hint("hint1", Array(1, 2, 3), array($"a", $"b", $"c")),
-      UnresolvedHint("hint1", Seq(Literal(Array(1, 2, 3)), array($"a", $"b", $"c").expr),
-        df.logicalPlan
-      )
-    )
+      UnresolvedHint(
+        "hint1",
+        Seq(Literal(Array(1, 2, 3)), array($"a", $"b", $"c").expr),
+        df.logicalPlan))
   }
 
   test("coalesce, repartition and rebalance hint") {
-    check(
-      df.hint("COALESCE", 10),
-      UnresolvedHint("COALESCE", Seq(Literal(10)), df.logicalPlan))
+    check(df.hint("COALESCE", 10), UnresolvedHint("COALESCE", Seq(Literal(10)), df.logicalPlan))
 
     check(
       df.hint("REPARTITION", 100),

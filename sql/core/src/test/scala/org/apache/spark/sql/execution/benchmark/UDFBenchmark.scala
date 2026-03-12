@@ -24,8 +24,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{IntegerType, StringType}
 
 /**
- * Synthetic benchmark for Scala User Defined Functions.
- * To run this benchmark:
+ * Synthetic benchmark for Scala User Defined Functions. To run this benchmark:
  * {{{
  *   1. without sbt:
  *      bin/spark-submit --class <this class>
@@ -40,20 +39,23 @@ object UDFBenchmark extends SqlBasedBenchmark {
 
   private def doRunBenchmarkWithMixedTypes(udf: UserDefinedFunction, cardinality: Int): Unit = {
     val idCol = col("id")
-    val nullableIntCol = when(
-      idCol % 2 === 0, idCol.cast(IntegerType)).otherwise(Literal(null, IntegerType))
+    val nullableIntCol =
+      when(idCol % 2 === 0, idCol.cast(IntegerType)).otherwise(Literal(null, IntegerType))
     val stringCol = idCol.cast(StringType)
-    spark.range(cardinality)
+    spark
+      .range(cardinality)
       .select(udf(idCol, nullableIntCol, stringCol))
       .noop()
   }
 
   private def doRunBenchmarkWithPrimitiveTypes(
-      udf: UserDefinedFunction, cardinality: Int): Unit = {
+      udf: UserDefinedFunction,
+      cardinality: Int): Unit = {
     val idCol = col("id")
-    val nullableIntCol = when(
-      idCol % 2 === 0, idCol.cast(IntegerType)).otherwise(Literal(null, IntegerType))
-    spark.range(cardinality)
+    val nullableIntCol =
+      when(idCol % 2 === 0, idCol.cast(IntegerType)).otherwise(Literal(null, IntegerType))
+    spark
+      .range(cardinality)
       .select(udf(idCol, nullableIntCol))
       .noop()
   }
@@ -62,21 +64,21 @@ object UDFBenchmark extends SqlBasedBenchmark {
     val cardinality = 100000
     runBenchmark("UDF with mixed input types") {
       codegenBenchmark("long/nullable int/string to string", cardinality) {
-        val sampleUDF = udf {(a: Long, b: java.lang.Integer, c: String) =>
+        val sampleUDF = udf { (a: Long, b: java.lang.Integer, c: String) =>
           s"$a,$b,$c"
         }
         doRunBenchmarkWithMixedTypes(sampleUDF, cardinality)
       }
 
       codegenBenchmark("long/nullable int/string to option", cardinality) {
-        val sampleUDF = udf {(_: Long, b: java.lang.Integer, _: String) =>
+        val sampleUDF = udf { (_: Long, b: java.lang.Integer, _: String) =>
           Option(b)
         }
         doRunBenchmarkWithMixedTypes(sampleUDF, cardinality)
       }
 
       codegenBenchmark("long/nullable int/string to primitive", cardinality) {
-        val sampleUDF = udf {(a: Long, b: java.lang.Integer, _: String) =>
+        val sampleUDF = udf { (a: Long, b: java.lang.Integer, _: String) =>
           Option(b).map(_.longValue()).getOrElse(a)
         }
         doRunBenchmarkWithMixedTypes(sampleUDF, cardinality)
@@ -85,21 +87,21 @@ object UDFBenchmark extends SqlBasedBenchmark {
 
     runBenchmark("UDF with primitive types") {
       codegenBenchmark("long/nullable int to string", cardinality) {
-        val sampleUDF = udf {(a: Long, b: java.lang.Integer) =>
+        val sampleUDF = udf { (a: Long, b: java.lang.Integer) =>
           s"$a,$b"
         }
         doRunBenchmarkWithPrimitiveTypes(sampleUDF, cardinality)
       }
 
       codegenBenchmark("long/nullable int to option", cardinality) {
-        val sampleUDF = udf {(_: Long, b: java.lang.Integer) =>
+        val sampleUDF = udf { (_: Long, b: java.lang.Integer) =>
           Option(b)
         }
         doRunBenchmarkWithPrimitiveTypes(sampleUDF, cardinality)
       }
 
       codegenBenchmark("long/nullable int to primitive", cardinality) {
-        val sampleUDF = udf {(a: Long, b: java.lang.Integer) =>
+        val sampleUDF = udf { (a: Long, b: java.lang.Integer) =>
           Option(b).map(_.longValue()).getOrElse(a)
         }
         doRunBenchmarkWithPrimitiveTypes(sampleUDF, cardinality)
@@ -108,18 +110,17 @@ object UDFBenchmark extends SqlBasedBenchmark {
       val benchmark = new Benchmark("UDF identity overhead", cardinality, output = output)
 
       benchmark.addCase(s"Baseline", numIters = 5) { _ =>
-        spark.range(cardinality)
+        spark
+          .range(cardinality)
           .select(col("id"), col("id") * 2, col("id") * 3)
           .noop()
       }
 
       val identityUDF = udf { x: Long => x }
       benchmark.addCase(s"With identity UDF", numIters = 5) { _ =>
-        spark.range(cardinality)
-          .select(
-            identityUDF(col("id")),
-            identityUDF(col("id") * 2),
-            identityUDF(col("id") * 3))
+        spark
+          .range(cardinality)
+          .select(identityUDF(col("id")), identityUDF(col("id") * 2), identityUDF(col("id") * 3))
           .noop()
       }
 

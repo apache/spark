@@ -31,11 +31,10 @@ case class OtherTuple(_1: Int, _2: Int)
 class EliminateSerializationSuite extends PlanTest {
   private object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
-      Batch("Serialization", FixedPoint(100),
-        EliminateSerialization) :: Nil
+      Batch("Serialization", FixedPoint(100), EliminateSerialization) :: Nil
   }
 
-  implicit private def productEncoder[T <: Product : TypeTag]: ExpressionEncoder[T] =
+  implicit private def productEncoder[T <: Product: TypeTag]: ExpressionEncoder[T] =
     ExpressionEncoder[T]()
   implicit private def intEncoder: ExpressionEncoder[Int] = ExpressionEncoder[Int]()
 

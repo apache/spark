@@ -27,16 +27,18 @@ import org.apache.spark.sql.classic.{DataFrame, SparkSession}
 import org.apache.spark.sql.types.StructType
 
 /**
- * SQL scripting executor - executes script and returns result statements.
- * This supports returning multiple result statements from a single script.
- * The caller of the SqlScriptingExecution API must wrap the interpretation and execution of
- * statements with the [[withContextManager]] method, and adhere to the contract of executing
- * the returned statement before continuing iteration. Executing the statement needs to be done
- * inside withErrorHandling block.
+ * SQL scripting executor - executes script and returns result statements. This supports returning
+ * multiple result statements from a single script. The caller of the SqlScriptingExecution API
+ * must wrap the interpretation and execution of statements with the [[withContextManager]]
+ * method, and adhere to the contract of executing the returned statement before continuing
+ * iteration. Executing the statement needs to be done inside withErrorHandling block.
  *
- * @param sqlScript CompoundBody which need to be executed.
- * @param session Spark session that SQL script is executed within.
- * @param args A map of parameter names to SQL literal expressions.
+ * @param sqlScript
+ *   CompoundBody which need to be executed.
+ * @param session
+ *   Spark session that SQL script is executed within.
+ * @param args
+ *   A map of parameter names to SQL literal expressions.
  */
 class SqlScriptingExecution(
     sqlScript: CompoundBody,
@@ -73,8 +75,10 @@ class SqlScriptingExecution(
 
   /**
    * Helper method to inject leave statement into the execution plan.
-   * @param executionPlan Execution plan to inject leave statement into.
-   * @param label Label of the leave statement.
+   * @param executionPlan
+   *   Execution plan to inject leave statement into.
+   * @param label
+   *   Label of the leave statement.
    */
   private def injectLeaveStatement(executionPlan: NonLeafStatementExec, label: String): Unit = {
     // Go as deep as possible, to find a leaf node. Instead of a statement that
@@ -87,10 +91,11 @@ class SqlScriptingExecution(
   }
 
   /**
-   * Helper method to execute interrupts to ConditionalStatements.
-   * This method should only interrupt when the exception was thrown during evaluation of
-   * the conditional statement's condition.
-   * @param executionPlan Execution plan.
+   * Helper method to execute interrupts to ConditionalStatements. This method should only
+   * interrupt when the exception was thrown during evaluation of the conditional statement's
+   * condition.
+   * @param executionPlan
+   *   Execution plan.
    */
   private def interruptConditionalStatements(executionPlan: NonLeafStatementExec): Unit = {
     // Go as deep as possible into the execution plan children nodes, to find a leaf node.
@@ -118,7 +123,7 @@ class SqlScriptingExecution(
         val shouldInterrupt =
           exec match {
             case simpleCaseStmt: SimpleCaseStatementExec
-              if simpleCaseStmt.hasStartedCaseVariableEvaluation =>
+                if simpleCaseStmt.hasStartedCaseVariableEvaluation =>
               // Only interrupt if case variable evaluation was attempted.
               true
             case forStmt: ForStatementExec =>
@@ -160,7 +165,7 @@ class SqlScriptingExecution(
       // If the last frame is an EXIT handler, set leave statement to be the next one in the
       // innermost scope that should be exited.
       if (lastFrame.frameType == SqlScriptingFrameType.EXIT_HANDLER
-          && context.frames.nonEmpty) {
+        && context.frames.nonEmpty) {
         // Remove the scope if handler is executed.
         if (context.firstHandlerScopeLabel.isDefined
           && lastFrame.scopeLabel.get == context.firstHandlerScopeLabel.get) {
@@ -174,7 +179,7 @@ class SqlScriptingExecution(
       // If the last frame is a CONTINUE handler, leave the handler without injecting anything, but
       // skip the conditional statement if the exception originated from its conditional expression.
       if (lastFrame.frameType == SqlScriptingFrameType.CONTINUE_HANDLER
-          && context.frames.nonEmpty) {
+        && context.frames.nonEmpty) {
         // Remove the scope if handler is executed.
         if (context.firstHandlerScopeLabel.isDefined
           && lastFrame.scopeLabel.get == context.firstHandlerScopeLabel.get) {
@@ -214,15 +219,16 @@ class SqlScriptingExecution(
   }
 
   /**
-   * Advances through the script and executes statements until a result statement or
-   * end of script is encountered.
+   * Advances through the script and executes statements until a result statement or end of script
+   * is encountered.
    *
    * To know if there is result statement available, the method has to advance through script and
-   * execute statements until the result statement or end of script is encountered. For that reason
-   * the returned result must be executed before subsequent calls. Multiple calls without executing
-   * the intermediate results will lead to incorrect behavior.
+   * execute statements until the result statement or end of script is encountered. For that
+   * reason the returned result must be executed before subsequent calls. Multiple calls without
+   * executing the intermediate results will lead to incorrect behavior.
    *
-   * @return Result DataFrame if it is available, otherwise None.
+   * @return
+   *   Result DataFrame if it is available, otherwise None.
    */
   def getNextResult: Option[DataFrame] = {
     try {
@@ -246,11 +252,8 @@ class SqlScriptingExecution(
           } else {
             SqlScriptingFrameType.EXIT_HANDLER
           },
-          handler.scopeLabel
-        )
-        context.frames.append(
-          handlerFrame
-        )
+          handler.scopeLabel)
+        context.frames.append(handlerFrame)
         handler.reset()
         handlerFrame.executionPlan.enterScope()
       case None =>
@@ -265,8 +268,8 @@ class SqlScriptingExecution(
           // Exception condition - resignal (throw)
           throw e.asInstanceOf[Throwable]
         }
-        // Otherwise: Completion condition (no data) - continue execution without throwing
-        // This allows statements like FETCH to return "no data" without causing script failure
+      // Otherwise: Completion condition (no data) - continue execution without throwing
+      // This allows statements like FETCH to return "no data" without causing script failure
     }
   }
 
@@ -285,12 +288,15 @@ class SqlScriptingExecution(
 object SqlScriptingExecution {
 
   /**
-   * Executes given script and return the result of the last statement.
-   * If script contains no queries, an empty `DataFrame` is returned.
+   * Executes given script and return the result of the last statement. If script contains no
+   * queries, an empty `DataFrame` is returned.
    *
-   * @param script A SQL script to execute.
-   * @param args   A map of parameter names to SQL literal expressions.
-   * @return The result as a `DataFrame`.
+   * @param script
+   *   A SQL script to execute.
+   * @param args
+   *   A map of parameter names to SQL literal expressions.
+   * @return
+   *   The result as a `DataFrame`.
    */
   def executeSqlScript(
       session: SparkSession,

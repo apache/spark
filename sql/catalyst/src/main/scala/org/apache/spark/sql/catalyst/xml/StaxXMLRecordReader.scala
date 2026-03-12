@@ -29,9 +29,9 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.util.SparkErrorUtils
 
 /**
- * XML record reader that reads the next XML record in the underlying XML stream. It can support XSD
- * schema validation by maintaining a separate XML reader and keep it in sync with the primary XML
- * reader.
+ * XML record reader that reads the next XML record in the underlying XML stream. It can support
+ * XSD schema validation by maintaining a separate XML reader and keep it in sync with the primary
+ * XML reader.
  */
 case class StaxXMLRecordReader(inputStream: () => InputStream, options: XmlOptions)
     extends XMLEventReader
@@ -51,8 +51,8 @@ case class StaxXMLRecordReader(inputStream: () => InputStream, options: XmlOptio
   final var hasMoreRecord: Boolean = true
 
   /**
-   * Skip through the XML stream until we find the next row start element.
-   * Returns true if a row start element is found, false if end of stream is reached.
+   * Skip through the XML stream until we find the next row start element. Returns true if a row
+   * start element is found, false if end of stream is reached.
    */
   def skipToNextRecord(): Boolean = {
     hasMoreRecord = skipToNextRowStart()
@@ -99,7 +99,7 @@ case class StaxXMLRecordReader(inputStream: () => InputStream, options: XmlOptio
     // events.
     def rowTagStarted: Boolean =
       streamReader.getEventType == XMLStreamConstants.START_ELEMENT &&
-      StaxXmlParserUtils.getName(streamReader.getName, options) == options.rowTag
+        StaxXmlParserUtils.getName(streamReader.getName, options) == options.rowTag
     while (!rowTagStarted && streamReader.hasNext) {
       streamReader.next()
     }

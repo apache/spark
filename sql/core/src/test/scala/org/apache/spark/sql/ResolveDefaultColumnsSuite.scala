@@ -27,12 +27,10 @@ class ResolveDefaultColumnsSuite extends QueryTest with SharedSparkSession {
 
       // INSERT with user-defined columns
       sql("insert into t (c2) values (timestamp'2020-12-31')")
-      checkAnswer(spark.table("t"),
-        sql("select null, timestamp'2020-12-31'").collect().head)
+      checkAnswer(spark.table("t"), sql("select null, timestamp'2020-12-31'").collect().head)
       sql("truncate table t")
       sql("insert into t (c1) values (timestamp'2020-12-31')")
-      checkAnswer(spark.table("t"),
-        sql("select timestamp'2020-12-31', null").collect().head)
+      checkAnswer(spark.table("t"), sql("select timestamp'2020-12-31', null").collect().head)
 
       // INSERT without user-defined columns
       sql("truncate table t")
@@ -50,16 +48,19 @@ class ResolveDefaultColumnsSuite extends QueryTest with SharedSparkSession {
 
   test("column with default value defined") {
     withTable("t") {
-      sql("create table t(c1 timestamp DEFAULT timestamp'2020-01-01', " +
-        "c2 timestamp DEFAULT timestamp'2020-01-01') using parquet")
+      sql(
+        "create table t(c1 timestamp DEFAULT timestamp'2020-01-01', " +
+          "c2 timestamp DEFAULT timestamp'2020-01-01') using parquet")
 
       // INSERT with user-defined columns
       sql("insert into t (c1) values (timestamp'2020-12-31')")
-      checkAnswer(spark.table("t"),
+      checkAnswer(
+        spark.table("t"),
         sql("select timestamp'2020-12-31', timestamp'2020-01-01'").collect().head)
       sql("truncate table t")
       sql("insert into t (c2) values (timestamp'2020-12-31')")
-      checkAnswer(spark.table("t"),
+      checkAnswer(
+        spark.table("t"),
         sql("select timestamp'2020-01-01', timestamp'2020-12-31'").collect().head)
 
       // INSERT without user-defined columns
@@ -138,15 +139,13 @@ class ResolveDefaultColumnsSuite extends QueryTest with SharedSparkSession {
       withTable("demos.test_ts") {
         sql("create table demos.test_ts (id int, ts timestamp) using parquet")
         sql("insert into demos.test_ts(ts) values (timestamp'2023-01-01')")
-        checkAnswer(spark.table("demos.test_ts"),
-          sql("select null, timestamp'2023-01-01'"))
+        checkAnswer(spark.table("demos.test_ts"), sql("select null, timestamp'2023-01-01'"))
       }
       withTable("demos.test_ts") {
         sql("create table demos.test_ts (id int, ts timestamp) using parquet")
         sql("use database demos")
         sql("insert into test_ts(ts) values (timestamp'2023-01-01')")
-        checkAnswer(spark.table("demos.test_ts"),
-          sql("select null, timestamp'2023-01-01'"))
+        checkAnswer(spark.table("demos.test_ts"), sql("select null, timestamp'2023-01-01'"))
       }
     }
   }
@@ -157,15 +156,15 @@ class ResolveDefaultColumnsSuite extends QueryTest with SharedSparkSession {
       withTable("demos.test_ts") {
         // If the provided default value is a literal of a wider type than the target column, but
         // the literal value fits within the narrower type, just coerce it for convenience.
-        sql(
-          """create table demos.test_ts (
+        sql("""create table demos.test_ts (
             |a int default 42L,
             |b timestamp_ntz default '2022-01-02',
             |c date default '2022-01-03',
             |f float default 0D
             |) using parquet""".stripMargin)
         sql("insert into demos.test_ts(a) values (default)")
-        checkAnswer(spark.table("demos.test_ts"),
+        checkAnswer(
+          spark.table("demos.test_ts"),
           sql("select 42, timestamp_ntz'2022-01-02', date'2022-01-03', 0f"))
         // If the provided default value is a literal of a different type than the target column
         // such that no coercion is possible, throw an error.
@@ -261,8 +260,9 @@ class ResolveDefaultColumnsSuite extends QueryTest with SharedSparkSession {
     val defaults = Seq("timestamp '2018-11-17'", "CAST(timestamp '2018-11-17' AS STRING)")
     defaults.foreach { default =>
       withTable("t") {
-        sql(s"CREATE TABLE t(key int, c STRING DEFAULT $default) " +
-          s"USING parquet")
+        sql(
+          s"CREATE TABLE t(key int, c STRING DEFAULT $default) " +
+            s"USING parquet")
         sql("INSERT INTO t (key) VALUES(1)")
         checkAnswer(sql("select * from t"), Row(1, "2018-11-17 00:00:00"))
       }
@@ -273,8 +273,9 @@ class ResolveDefaultColumnsSuite extends QueryTest with SharedSparkSession {
     withTable("t") {
       // If the provided default value is a literal of a wider type than the target column, but
       // the literal value fits within the narrower type, just coerce it for convenience.
-      sql(s"CREATE TABLE t(key int, c timestamp DEFAULT '2018-11-17 13:33:33') " +
-        s"USING parquet")
+      sql(
+        s"CREATE TABLE t(key int, c timestamp DEFAULT '2018-11-17 13:33:33') " +
+          s"USING parquet")
       sql("INSERT INTO t (key) VALUES(1)")
       checkAnswer(sql("select CAST(c as STRING) from t"), Row("2018-11-17 13:33:33"))
     }

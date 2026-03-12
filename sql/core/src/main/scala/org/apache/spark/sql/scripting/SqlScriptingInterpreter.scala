@@ -35,8 +35,8 @@ import org.apache.spark.sql.errors.SqlScriptingErrors
 case class SqlScriptingInterpreter(session: SparkSession) {
 
   /**
-   * Build execution plan and return statements that need to be executed,
-   *   wrapped in the execution node.
+   * Build execution plan and return statements that need to be executed, wrapped in the execution
+   * node.
    *
    * @param compound
    *   CompoundBody for which to build the plan.
@@ -57,7 +57,7 @@ case class SqlScriptingInterpreter(session: SparkSession) {
 
   /**
    * Transform [[CompoundBody]] into [[CompoundBodyExec]].
- *
+   *
    * @param compoundBody
    *   CompoundBody to be transformed into CompoundBodyExec.
    * @param args
@@ -82,10 +82,7 @@ case class SqlScriptingInterpreter(session: SparkSession) {
 
     compoundBody.handlers.foreach(handler => {
       val handlerBodyExec =
-        transformBodyIntoExec(
-          handler.body,
-          args,
-          context)
+        transformBodyIntoExec(handler.body, args, context)
 
       val handlerExec = new ExceptionHandlerExec(
         body = handlerBodyExec,
@@ -117,7 +114,9 @@ case class SqlScriptingInterpreter(session: SparkSession) {
       // Get NOT FOUND handler.
       notFoundHandler = if (handler.exceptionHandlerTriggers.notFound) {
         if (notFoundHandler.isDefined) {
-          throw SqlScriptingErrors.duplicateHandlerForSameCondition(CurrentOrigin.get, "NOT FOUND")
+          throw SqlScriptingErrors.duplicateHandlerForSameCondition(
+            CurrentOrigin.get,
+            "NOT FOUND")
         } else {
           Some(handlerExec)
         }
@@ -188,7 +187,10 @@ case class SqlScriptingInterpreter(session: SparkSession) {
         val unconditionalBodiesExec = elseBody.map(body =>
           transformTreeIntoExecutable(body, args, context).asInstanceOf[CompoundBodyExec])
         new IfElseStatementExec(
-          conditionsExec, conditionalBodiesExec, unconditionalBodiesExec, session)
+          conditionsExec,
+          conditionalBodiesExec,
+          unconditionalBodiesExec,
+          session)
 
       case SearchedCaseStatement(conditions, conditionalBodies, elseBody) =>
         val conditionsExec = conditions.map(condition =>
@@ -203,7 +205,10 @@ case class SqlScriptingInterpreter(session: SparkSession) {
         val unconditionalBodiesExec = elseBody.map(body =>
           transformTreeIntoExecutable(body, args, context).asInstanceOf[CompoundBodyExec])
         new SearchedCaseStatementExec(
-          conditionsExec, conditionalBodiesExec, unconditionalBodiesExec, session)
+          conditionsExec,
+          conditionalBodiesExec,
+          unconditionalBodiesExec,
+          session)
 
       case SimpleCaseStatement(caseExpr, conditionExpressions, conditionalBodies, elseBody) =>
         val caseValueStmt = SingleStatement(
@@ -219,7 +224,12 @@ case class SqlScriptingInterpreter(session: SparkSession) {
         val elseBodyExec = elseBody.map(body =>
           transformTreeIntoExecutable(body, args, context).asInstanceOf[CompoundBodyExec])
         new SimpleCaseStatementExec(
-          caseVarExec, conditionExpressions, conditionalBodiesExec, elseBodyExec, session, context)
+          caseVarExec,
+          conditionExpressions,
+          conditionalBodiesExec,
+          elseBodyExec,
+          session,
+          context)
 
       case WhileStatement(condition, body, label) =>
         val conditionExec =
@@ -261,7 +271,12 @@ case class SqlScriptingInterpreter(session: SparkSession) {
         val bodyExec =
           transformTreeIntoExecutable(body, args, context).asInstanceOf[CompoundBodyExec]
         new ForStatementExec(
-          queryExec, variableNameOpt, bodyExec.statements, label, session, context)
+          queryExec,
+          variableNameOpt,
+          bodyExec.statements,
+          label,
+          session,
+          context)
 
       case leaveStatement: LeaveStatement =>
         new LeaveStatementExec(leaveStatement.label)

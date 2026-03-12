@@ -48,7 +48,8 @@ case class ParquetScan(
     pushedAggregate: Option[Aggregation] = None,
     partitionFilters: Seq[Expression] = Seq.empty,
     dataFilters: Seq[Expression] = Seq.empty,
-    pushedVariantExtractions: Array[VariantExtraction] = Array.empty) extends FileScan {
+    pushedVariantExtractions: Array[VariantExtraction] = Array.empty)
+    extends FileScan {
   override def isSplitable(path: Path): Boolean = {
     // If aggregate is pushed down, only the file footer will be read once,
     // so file should not be split across multiple tasks.
@@ -72,7 +73,10 @@ case class ParquetScan(
         // Build struct schema with ordinal-named fields for each extraction
         var fields = extractions.zipWithIndex.map { case (extraction, idx) =>
           // Attach VariantMetadata so Parquet reader knows this is a variant extraction
-          StructField(idx.toString, extraction.expectedDataType(), nullable = true,
+          StructField(
+            idx.toString,
+            extraction.expectedDataType(),
+            nullable = true,
             extraction.metadata())
         }
 
@@ -80,14 +84,14 @@ case class ParquetScan(
         // if the variant is not used, or only used in `IsNotNull/IsNull` expressions.
         // The value of the placeholder field doesn't matter.
         if (fields.size == 1 && fields.head.dataType.isInstanceOf[VariantType]) {
-          val placeholder = VariantMetadata("$.__placeholder_field__",
-            failOnError = false, timeZoneId = "UTC")
-          fields = Array(StructField("0", BooleanType,
-            metadata = placeholder.toMetadata))
+          val placeholder =
+            VariantMetadata("$.__placeholder_field__", failOnError = false, timeZoneId = "UTC")
+          fields = Array(StructField("0", BooleanType, metadata = placeholder.toMetadata))
         }
 
         colName -> StructType(fields)
-      }.toMap
+      }
+      .toMap
 
     rewriteType(schema, Seq.empty, variantSchemaMap).asInstanceOf[StructType]
   }
@@ -132,35 +136,21 @@ case class ParquetScan(
     val effectiveSchema = effectiveReadDataSchema
     val readDataSchemaAsJson = effectiveSchema.json
     hadoopConf.set(ParquetInputFormat.READ_SUPPORT_CLASS, classOf[ParquetReadSupport].getName)
-    hadoopConf.set(
-      ParquetReadSupport.SPARK_ROW_REQUESTED_SCHEMA,
-      readDataSchemaAsJson)
-    hadoopConf.set(
-      ParquetWriteSupport.SPARK_ROW_SCHEMA,
-      readDataSchemaAsJson)
-    hadoopConf.set(
-      SQLConf.SESSION_LOCAL_TIMEZONE.key,
-      conf.sessionLocalTimeZone)
+    hadoopConf.set(ParquetReadSupport.SPARK_ROW_REQUESTED_SCHEMA, readDataSchemaAsJson)
+    hadoopConf.set(ParquetWriteSupport.SPARK_ROW_SCHEMA, readDataSchemaAsJson)
+    hadoopConf.set(SQLConf.SESSION_LOCAL_TIMEZONE.key, conf.sessionLocalTimeZone)
     hadoopConf.setBoolean(
       SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.key,
       conf.nestedSchemaPruningEnabled)
-    hadoopConf.setBoolean(
-      SQLConf.CASE_SENSITIVE.key,
-      conf.caseSensitiveAnalysis)
+    hadoopConf.setBoolean(SQLConf.CASE_SENSITIVE.key, conf.caseSensitiveAnalysis)
 
     // Sets flags for `ParquetToSparkSchemaConverter`
-    hadoopConf.setBoolean(
-      SQLConf.PARQUET_BINARY_AS_STRING.key,
-      conf.isParquetBinaryAsString)
-    hadoopConf.setBoolean(
-      SQLConf.PARQUET_INT96_AS_TIMESTAMP.key,
-      conf.isParquetINT96AsTimestamp)
+    hadoopConf.setBoolean(SQLConf.PARQUET_BINARY_AS_STRING.key, conf.isParquetBinaryAsString)
+    hadoopConf.setBoolean(SQLConf.PARQUET_INT96_AS_TIMESTAMP.key, conf.isParquetINT96AsTimestamp)
     hadoopConf.setBoolean(
       SQLConf.PARQUET_INFER_TIMESTAMP_NTZ_ENABLED.key,
       conf.parquetInferTimestampNTZEnabled)
-    hadoopConf.setBoolean(
-      SQLConf.LEGACY_PARQUET_NANOS_AS_LONG.key,
-      conf.legacyParquetNanosAsLong)
+    hadoopConf.setBoolean(SQLConf.LEGACY_PARQUET_NANOS_AS_LONG.key, conf.legacyParquetNanosAsLong)
 
     val broadcastedConf =
       SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
@@ -183,18 +173,20 @@ case class ParquetScan(
         pushedAggregate.isEmpty && p.pushedAggregate.isEmpty
       }
       val pushedVariantEqual =
-        java.util.Arrays.equals(pushedVariantExtractions.asInstanceOf[Array[Object]],
+        java.util.Arrays.equals(
+          pushedVariantExtractions.asInstanceOf[Array[Object]],
           p.pushedVariantExtractions.asInstanceOf[Array[Object]])
       super.equals(p) && dataSchema == p.dataSchema && options == p.options &&
-        equivalentFilters(pushedFilters, p.pushedFilters) && pushedDownAggEqual &&
-        pushedVariantEqual
+      equivalentFilters(pushedFilters, p.pushedFilters) && pushedDownAggEqual &&
+      pushedVariantEqual
     case _ => false
   }
 
   override def hashCode(): Int = getClass.hashCode()
 
   lazy private val (pushedAggregationsStr, pushedGroupByStr) = if (pushedAggregate.nonEmpty) {
-    (seqToString(pushedAggregate.get.aggregateExpressions.toImmutableArraySeq),
+    (
+      seqToString(pushedAggregate.get.aggregateExpressions.toImmutableArraySeq),
       seqToString(pushedAggregate.get.groupByExpressions.toImmutableArraySeq))
   } else {
     ("[]", "[]")
@@ -202,14 +194,17 @@ case class ParquetScan(
 
   override def getMetaData(): Map[String, String] = {
     val variantExtractionStr = if (pushedVariantExtractions.nonEmpty) {
-      pushedVariantExtractions.map { extraction =>
-        val colName = extraction.columnName().mkString(".")
-        s"$colName:${extraction.metadata()}:${extraction.expectedDataType()}"
-      }.mkString("[", ", ", "]")
+      pushedVariantExtractions
+        .map { extraction =>
+          val colName = extraction.columnName().mkString(".")
+          s"$colName:${extraction.metadata()}:${extraction.expectedDataType()}"
+        }
+        .mkString("[", ", ", "]")
     } else {
       "[]"
     }
-    super.getMetaData() ++ Map("PushedFilters" -> seqToString(pushedFilters.toImmutableArraySeq)) ++
+    super.getMetaData() ++ Map(
+      "PushedFilters" -> seqToString(pushedFilters.toImmutableArraySeq)) ++
       Map("PushedAggregation" -> pushedAggregationsStr) ++
       Map("PushedGroupBy" -> pushedGroupByStr) ++
       Map("PushedVariantExtractions" -> variantExtractionStr)

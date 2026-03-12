@@ -39,40 +39,43 @@ class SpecialDatetimeValuesSuite extends PlanTest {
         LocalDate.ofEpochDay(0),
         LocalDate.now(zoneId),
         LocalDate.now(zoneId).minusDays(1),
-        LocalDate.now(zoneId).plusDays(1)
-      ).map(_.toEpochDay.toInt)
-      val in = Project(Seq(
-        Alias(Cast(Literal("epoch"), DateType, Some(zoneId.getId)), "epoch")(),
-        Alias(Cast(Literal("today"), DateType, Some(zoneId.getId)), "today")(),
-        Alias(Cast(Literal("yesterday"), DateType, Some(zoneId.getId)), "yesterday")(),
-        Alias(Cast(Literal("tomorrow"), DateType, Some(zoneId.getId)), "tomorrow")()),
+        LocalDate.now(zoneId).plusDays(1)).map(_.toEpochDay.toInt)
+      val in = Project(
+        Seq(
+          Alias(Cast(Literal("epoch"), DateType, Some(zoneId.getId)), "epoch")(),
+          Alias(Cast(Literal("today"), DateType, Some(zoneId.getId)), "today")(),
+          Alias(Cast(Literal("yesterday"), DateType, Some(zoneId.getId)), "yesterday")(),
+          Alias(Cast(Literal("tomorrow"), DateType, Some(zoneId.getId)), "tomorrow")()),
         LocalRelation())
 
       val plan = Optimize.execute(in.analyze).asInstanceOf[Project]
       val lits = new scala.collection.mutable.ArrayBuffer[Int]
-      plan.transformAllExpressions { case e: Literal if e.dataType == DateType =>
-        lits += e.value.asInstanceOf[Int]
-        e
+      plan.transformAllExpressions {
+        case e: Literal if e.dataType == DateType =>
+          lits += e.value.asInstanceOf[Int]
+          e
       }
       assert(expected === lits.toSet)
     }
   }
 
   private def testSpecialTs(tsType: AtomicType, expected: Set[Long], zoneId: ZoneId): Unit = {
-    val in = Project(Seq(
-      Alias(Cast(Literal("epoch"), tsType, Some(zoneId.getId)), "epoch")(),
-      Alias(Cast(Literal("now"), tsType, Some(zoneId.getId)), "now")(),
-      Alias(Cast(Literal("tomorrow"), tsType, Some(zoneId.getId)), "tomorrow")(),
-      Alias(Cast(Literal("yesterday"), tsType, Some(zoneId.getId)), "yesterday")()),
+    val in = Project(
+      Seq(
+        Alias(Cast(Literal("epoch"), tsType, Some(zoneId.getId)), "epoch")(),
+        Alias(Cast(Literal("now"), tsType, Some(zoneId.getId)), "now")(),
+        Alias(Cast(Literal("tomorrow"), tsType, Some(zoneId.getId)), "tomorrow")(),
+        Alias(Cast(Literal("yesterday"), tsType, Some(zoneId.getId)), "yesterday")()),
       LocalRelation())
 
     val plan = Optimize.execute(in.analyze).asInstanceOf[Project]
     val lits = new scala.collection.mutable.ArrayBuffer[Long]
-    plan.transformAllExpressions { case e: Literal if e.dataType == tsType =>
-      lits += e.value.asInstanceOf[Long]
-      e
+    plan.transformAllExpressions {
+      case e: Literal if e.dataType == tsType =>
+        lits += e.value.asInstanceOf[Long]
+        e
     }
-    assert(lits.forall(ts => expected.exists(ets => Math.abs(ets -ts) <= MICROS_PER_MINUTE)))
+    assert(lits.forall(ts => expected.exists(ets => Math.abs(ets - ts) <= MICROS_PER_MINUTE)))
   }
 
   test("special timestamp_ltz values") {
@@ -81,8 +84,8 @@ class SpecialDatetimeValuesSuite extends PlanTest {
         Instant.ofEpochSecond(0),
         Instant.now(),
         Instant.now().atZone(zoneId).`with`(LocalTime.MIDNIGHT).plusDays(1).toInstant,
-        Instant.now().atZone(zoneId).`with`(LocalTime.MIDNIGHT).minusDays(1).toInstant
-      ).map(instantToMicros)
+        Instant.now().atZone(zoneId).`with`(LocalTime.MIDNIGHT).minusDays(1).toInstant)
+        .map(instantToMicros)
       testSpecialTs(TimestampType, expected, zoneId)
     }
   }
@@ -93,8 +96,8 @@ class SpecialDatetimeValuesSuite extends PlanTest {
         LocalDateTime.of(1970, 1, 1, 0, 0),
         LocalDateTime.now(zoneId),
         LocalDateTime.now(zoneId).`with`(LocalTime.MIDNIGHT).plusDays(1),
-        LocalDateTime.now(zoneId).`with`(LocalTime.MIDNIGHT).minusDays(1)
-      ).map(localDateTimeToMicros)
+        LocalDateTime.now(zoneId).`with`(LocalTime.MIDNIGHT).minusDays(1))
+        .map(localDateTimeToMicros)
       testSpecialTs(TimestampNTZType, expected, zoneId)
     }
   }

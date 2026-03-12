@@ -34,12 +34,13 @@ import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileMana
 import org.apache.spark.util.Utils
 
 /**
- * Contains metadata associated with a [[org.apache.spark.sql.streaming.StreamingQuery]].
- * This information is written in the checkpoint location the first time a query is started
- * and recovered every time the query is restarted.
+ * Contains metadata associated with a [[org.apache.spark.sql.streaming.StreamingQuery]]. This
+ * information is written in the checkpoint location the first time a query is started and
+ * recovered every time the query is restarted.
  *
- * @param id  unique id of the [[org.apache.spark.sql.streaming.StreamingQuery]]
- *            that needs to be persisted across restarts
+ * @param id
+ *   unique id of the [[org.apache.spark.sql.streaming.StreamingQuery]] that needs to be persisted
+ *   across restarts
  */
 case class StreamMetadata(id: String) {
   def json: String = Serialization.write(this)(StreamMetadata.format)
@@ -70,10 +71,7 @@ object StreamMetadata extends Logging {
   }
 
   /** Write metadata to file */
-  def write(
-      metadata: StreamMetadata,
-      metadataFile: Path,
-      hadoopConf: Configuration): Unit = {
+  def write(metadata: StreamMetadata, metadataFile: Path, hadoopConf: Configuration): Unit = {
     var output: CancellableFSDataOutputStream = null
     try {
       val fileManager = CheckpointFileManager.create(metadataFile.getParent, hadoopConf)
@@ -87,13 +85,16 @@ object StreamMetadata extends Logging {
           output.cancel()
         }
         throw QueryExecutionErrors.multiStreamingQueriesUsingPathConcurrentlyError(
-          metadataFile.getName, e)
+          metadataFile.getName,
+          e)
       case e: Throwable =>
         if (output != null) {
           output.cancel()
         }
-        logError(log"Error writing stream metadata ${MDC(LogKeys.METADATA, metadata)} to " +
-          log"${MDC(LogKeys.PATH, metadataFile)}", e)
+        logError(
+          log"Error writing stream metadata ${MDC(LogKeys.METADATA, metadata)} to " +
+            log"${MDC(LogKeys.PATH, metadataFile)}",
+          e)
         throw e
     }
   }

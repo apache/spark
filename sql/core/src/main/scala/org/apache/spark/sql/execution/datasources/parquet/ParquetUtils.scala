@@ -144,17 +144,17 @@ object ParquetUtils extends Logging {
 
     FileTypes(
       data = leaves.filterNot(f => isSummaryFile(f.getPath)).toImmutableArraySeq,
-      metadata =
-        leaves.filter(_.getPath.getName == ParquetFileWriter.PARQUET_METADATA_FILE)
-          .toImmutableArraySeq,
-      commonMetadata =
-        leaves.filter(_.getPath.getName == ParquetFileWriter.PARQUET_COMMON_METADATA_FILE)
-          .toImmutableArraySeq)
+      metadata = leaves
+        .filter(_.getPath.getName == ParquetFileWriter.PARQUET_METADATA_FILE)
+        .toImmutableArraySeq,
+      commonMetadata = leaves
+        .filter(_.getPath.getName == ParquetFileWriter.PARQUET_COMMON_METADATA_FILE)
+        .toImmutableArraySeq)
   }
 
   private def isSummaryFile(file: Path): Boolean = {
     file.getName == ParquetFileWriter.PARQUET_COMMON_METADATA_FILE ||
-      file.getName == ParquetFileWriter.PARQUET_METADATA_FILE
+    file.getName == ParquetFileWriter.PARQUET_METADATA_FILE
   }
 
   /**
@@ -163,8 +163,8 @@ object ParquetUtils extends Logging {
   val FIELD_ID_METADATA_KEY = "parquet.field.id"
 
   /**
-   * Whether there exists a field in the schema, whether inner or leaf, has the parquet field
-   * ID metadata.
+   * Whether there exists a field in the schema, whether inner or leaf, has the parquet field ID
+   * metadata.
    */
   def hasFieldIds(schema: StructType): Boolean = {
     def recursiveCheck(schema: DataType): Boolean = {
@@ -188,7 +188,8 @@ object ParquetUtils extends Logging {
     field.metadata.contains(FIELD_ID_METADATA_KEY)
 
   def getFieldId(field: StructField): Int = {
-    require(hasFieldId(field),
+    require(
+      hasFieldId(field),
       s"The key `$FIELD_ID_METADATA_KEY` doesn't exist in the metadata of " + field)
     try {
       Math.toIntExact(field.metadata.getLong(FIELD_ID_METADATA_KEY))
@@ -213,14 +214,14 @@ object ParquetUtils extends Logging {
       sqlConf.parquetVectorizedReaderNullTypeEnabled
     case at: ArrayType =>
       sqlConf.parquetVectorizedReaderNestedColumnEnabled &&
-        isBatchReadSupported(sqlConf, at.elementType)
+      isBatchReadSupported(sqlConf, at.elementType)
     case mt: MapType =>
       sqlConf.parquetVectorizedReaderNestedColumnEnabled &&
-        isBatchReadSupported(sqlConf, mt.keyType) &&
-        isBatchReadSupported(sqlConf, mt.valueType)
+      isBatchReadSupported(sqlConf, mt.keyType) &&
+      isBatchReadSupported(sqlConf, mt.valueType)
     case st: StructType =>
       sqlConf.parquetVectorizedReaderNestedColumnEnabled &&
-        st.fields.forall(f => isBatchReadSupported(sqlConf, f.dataType))
+      st.fields.forall(f => isBatchReadSupported(sqlConf, f.dataType))
     case udt: UserDefinedType[_] =>
       isBatchReadSupported(sqlConf, udt.sqlType)
     case _ =>
@@ -230,12 +231,13 @@ object ParquetUtils extends Logging {
   /**
    * When the partial aggregates (Max/Min/Count) are pushed down to Parquet, we don't need to
    * createRowBaseReader to read data from Parquet and aggregate at Spark layer. Instead we want
-   * to get the partial aggregates (Max/Min/Count) result using the statistics information
-   * from Parquet file footer, and then construct an InternalRow from these aggregate results.
+   * to get the partial aggregates (Max/Min/Count) result using the statistics information from
+   * Parquet file footer, and then construct an InternalRow from these aggregate results.
    *
    * NOTE: if statistics is missing from Parquet file footer, exception would be thrown.
    *
-   * @return Aggregate results in the format of InternalRow
+   * @return
+   *   Aggregate results in the format of InternalRow
    */
   private[sql] def createAggInternalRowFromFooter(
       footer: ParquetMetadata,
@@ -246,8 +248,8 @@ object ParquetUtils extends Logging {
       aggSchema: StructType,
       partitionValues: InternalRow,
       datetimeRebaseSpec: RebaseSpec): InternalRow = {
-    val (primitiveTypes, values) = getPushedDownAggResult(
-      footer, filePath, dataSchema, partitionSchema, aggregation)
+    val (primitiveTypes, values) =
+      getPushedDownAggResult(footer, filePath, dataSchema, partitionSchema, aggregation)
 
     val builder = Types.buildMessage
     primitiveTypes.foreach(t => builder.addField(t))
@@ -295,8 +297,8 @@ object ParquetUtils extends Logging {
     }
 
     if (aggregation.groupByExpressions.nonEmpty) {
-      val reorderedPartitionValues = AggregatePushDownUtils.reOrderPartitionCol(
-        partitionSchema, aggregation, partitionValues)
+      val reorderedPartitionValues =
+        AggregatePushDownUtils.reOrderPartitionCol(partitionSchema, aggregation, partitionValues)
       new JoinedRow(reorderedPartitionValues, converter.currentRecord)
     } else {
       converter.currentRecord
@@ -304,20 +306,19 @@ object ParquetUtils extends Logging {
   }
 
   /**
-   * Calculate the pushed down aggregates (Max/Min/Count) result using the statistics
-   * information from Parquet footer file.
+   * Calculate the pushed down aggregates (Max/Min/Count) result using the statistics information
+   * from Parquet footer file.
    *
-   * @return A tuple of `Array[PrimitiveType]` and Array[Any].
-   *         The first element is the Parquet PrimitiveType of the aggregate column,
-   *         and the second element is the aggregated value.
+   * @return
+   *   A tuple of `Array[PrimitiveType]` and Array[Any]. The first element is the Parquet
+   *   PrimitiveType of the aggregate column, and the second element is the aggregated value.
    */
   private[sql] def getPushedDownAggResult(
       footer: ParquetMetadata,
       filePath: String,
       dataSchema: StructType,
       partitionSchema: StructType,
-      aggregation: Aggregation)
-  : (Array[PrimitiveType], Array[Any]) = {
+      aggregation: Aggregation): (Array[PrimitiveType], Array[Any]) = {
     val footerFileMetaData = footer.getFileMetaData
     val fields = footerFileMetaData.getSchema.getFields
     val blocks = footer.getBlocks
@@ -376,7 +377,8 @@ object ParquetUtils extends Logging {
       } else {
         valuesBuilder += value
         val field = fields.get(index)
-        primitiveTypeBuilder += Types.required(field.asPrimitiveType.getPrimitiveTypeName)
+        primitiveTypeBuilder += Types
+          .required(field.asPrimitiveType.getPrimitiveTypeName)
           .as(field.getLogicalTypeAnnotation)
           .length(field.asPrimitiveType.getTypeLength)
           .named(schemaName)
@@ -388,7 +390,8 @@ object ParquetUtils extends Logging {
   /**
    * Get the Max or Min value for ith column in the current block
    *
-   * @return the Max or Min value
+   * @return
+   *   the Max or Min value
    */
   private def getCurrentBlockMaxOrMin(
       filePath: String,
@@ -399,9 +402,8 @@ object ParquetUtils extends Logging {
     if (!statistics.hasNonNullValue) {
       throw new SparkUnsupportedOperationException(
         errorClass = "_LEGACY_ERROR_TEMP_3172",
-        messageParameters = Map(
-          "filePath" -> filePath,
-          "config" -> PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key))
+        messageParameters =
+          Map("filePath" -> filePath, "config" -> PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key))
     } else {
       if (isMax) statistics.genericGetMax else statistics.genericGetMin
     }
@@ -415,9 +417,8 @@ object ParquetUtils extends Logging {
     if (!statistics.isNumNullsSet) {
       throw new SparkUnsupportedOperationException(
         errorClass = "_LEGACY_ERROR_TEMP_3171",
-        messageParameters = Map(
-          "filePath" -> filePath,
-          "config" -> PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key))
+        messageParameters =
+          Map("filePath" -> filePath, "config" -> PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key))
     }
     statistics.getNumNulls;
   }
@@ -426,15 +427,15 @@ object ParquetUtils extends Logging {
   // Used for testing, where we force a single shredding schema for all Variant fields.
   // Does not touch Variant fields nested in arrays, maps, or UDTs.
   private def replaceVariantTypes(schema: StructType, shreddingSchema: StructType): StructType = {
-    val newFields = schema.fields.zip(shreddingSchema.fields).map {
-      case (field, shreddingField) =>
+    val newFields =
+      schema.fields.zip(shreddingSchema.fields).map { case (field, shreddingField) =>
         field.dataType match {
           case s: StructType =>
             field.copy(dataType = replaceVariantTypes(s, shreddingSchema))
           case VariantType => field.copy(dataType = shreddingSchema)
           case _ => field
         }
-    }
+      }
     StructType(newFields)
   }
 
@@ -467,17 +468,16 @@ object ParquetUtils extends Logging {
         classOf[OutputCommitter])
 
     if (conf.get(SQLConf.PARQUET_OUTPUT_COMMITTER_CLASS.key) == null) {
-      logInfo(log"Using default output committer for Parquet: " +
-        log"${MDC(CLASS_NAME, classOf[ParquetOutputCommitter].getCanonicalName)}")
+      logInfo(
+        log"Using default output committer for Parquet: " +
+          log"${MDC(CLASS_NAME, classOf[ParquetOutputCommitter].getCanonicalName)}")
     } else {
-      logInfo(log"Using user defined output committer for Parquet: " +
-        log"${MDC(CLASS_NAME, committerClass.getCanonicalName)}")
+      logInfo(
+        log"Using user defined output committer for Parquet: " +
+          log"${MDC(CLASS_NAME, committerClass.getCanonicalName)}")
     }
 
-    conf.setClass(
-      SQLConf.OUTPUT_COMMITTER_CLASS.key,
-      committerClass,
-      classOf[OutputCommitter])
+    conf.setClass(SQLConf.OUTPUT_COMMITTER_CLASS.key, committerClass, classOf[OutputCommitter])
 
     // We're not really using `ParquetOutputFormat[Row]` for writing data here, because we override
     // it in `ParquetOutputWriter` to support appending and dynamic partitioning.  The reason why
@@ -487,19 +487,19 @@ object ParquetUtils extends Logging {
 
     ParquetOutputFormat.setWriteSupportClass(job, classOf[ParquetWriteSupport])
 
-    val shreddingSchema = if (sqlConf.getConf(SQLConf.VARIANT_WRITE_SHREDDING_ENABLED) &&
+    val shreddingSchema =
+      if (sqlConf.getConf(SQLConf.VARIANT_WRITE_SHREDDING_ENABLED) &&
         !sqlConf.getConf(SQLConf.VARIANT_FORCE_SHREDDING_SCHEMA_FOR_TEST).isEmpty) {
-      // Convert the schema to a shredding schema, and replace it anywhere that there is a
-      // VariantType in the original schema.
-      val simpleShreddingSchema = DataType.fromDDL(
-        sqlConf.getConf(SQLConf.VARIANT_FORCE_SHREDDING_SCHEMA_FOR_TEST)
-      )
-      val oneShreddingSchema = SparkShreddingUtils.variantShreddingSchema(simpleShreddingSchema)
-      val schemaWithMetadata = SparkShreddingUtils.addWriteShreddingMetadata(oneShreddingSchema)
-      Some(replaceVariantTypes(dataSchema, schemaWithMetadata))
-    } else {
-      None
-    }
+        // Convert the schema to a shredding schema, and replace it anywhere that there is a
+        // VariantType in the original schema.
+        val simpleShreddingSchema =
+          DataType.fromDDL(sqlConf.getConf(SQLConf.VARIANT_FORCE_SHREDDING_SCHEMA_FOR_TEST))
+        val oneShreddingSchema = SparkShreddingUtils.variantShreddingSchema(simpleShreddingSchema)
+        val schemaWithMetadata = SparkShreddingUtils.addWriteShreddingMetadata(oneShreddingSchema)
+        Some(replaceVariantTypes(dataSchema, schemaWithMetadata))
+      } else {
+        None
+      }
 
     // This metadata is useful for keeping UDTs like Vector/Matrix.
     ParquetWriteSupport.setSchema(dataSchema, conf)
@@ -507,9 +507,7 @@ object ParquetUtils extends Logging {
 
     // Sets flags for `ParquetWriteSupport`, which converts Catalyst schema to Parquet
     // schema and writes actual rows to Parquet files.
-    conf.set(
-      SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key,
-      sqlConf.writeLegacyParquetFormat.toString)
+    conf.set(SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key, sqlConf.writeLegacyParquetFormat.toString)
 
     conf.set(
       SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key,
@@ -519,9 +517,7 @@ object ParquetUtils extends Logging {
       SQLConf.PARQUET_FIELD_ID_WRITE_ENABLED.key,
       sqlConf.parquetFieldIdWriteEnabled.toString)
 
-    conf.set(
-      SQLConf.LEGACY_PARQUET_NANOS_AS_LONG.key,
-      sqlConf.legacyParquetNanosAsLong.toString)
+    conf.set(SQLConf.LEGACY_PARQUET_NANOS_AS_LONG.key, sqlConf.legacyParquetNanosAsLong.toString)
 
     conf.set(
       SQLConf.PARQUET_ANNOTATE_VARIANT_LOGICAL_TYPE.key,
@@ -539,14 +535,15 @@ object ParquetUtils extends Logging {
     if (ParquetOutputFormat.getJobSummaryLevel(conf) != JobSummaryLevel.NONE
       && !classOf[ParquetOutputCommitter].isAssignableFrom(committerClass)) {
       // output summary is requested, but the class is not a Parquet Committer
-      logWarning(log"Committer ${MDC(CLASS_NAME, committerClass)} is not a " +
-        log"ParquetOutputCommitter and cannot create job summaries. Set Parquet option " +
-        log"${MDC(CONFIG, ParquetOutputFormat.JOB_SUMMARY_LEVEL)} to NONE.")
+      logWarning(
+        log"Committer ${MDC(CLASS_NAME, committerClass)} is not a " +
+          log"ParquetOutputCommitter and cannot create job summaries. Set Parquet option " +
+          log"${MDC(CONFIG, ParquetOutputFormat.JOB_SUMMARY_LEVEL)} to NONE.")
     }
 
     val useVariantShreddingWriter = needShreddingInference(parquetOptions, dataSchema)
     val shreddingSchemaForced =
-        sqlConf.getConf(SQLConf.VARIANT_FORCE_SHREDDING_SCHEMA_FOR_TEST).nonEmpty
+      sqlConf.getConf(SQLConf.VARIANT_FORCE_SHREDDING_SCHEMA_FOR_TEST).nonEmpty
 
     new OutputWriterFactory {
       override def newInstance(
@@ -555,8 +552,11 @@ object ParquetUtils extends Logging {
           context: TaskAttemptContext): OutputWriter = {
         if (useVariantShreddingWriter) {
           val inferenceHelper = new InferVariantShreddingSchema(dataSchema)
-          new ParquetOutputWriterWithVariantShredding(path, context, inferenceHelper,
-              shreddingSchemaForced)
+          new ParquetOutputWriterWithVariantShredding(
+            path,
+            context,
+            inferenceHelper,
+            shreddingSchemaForced)
         } else {
           new ParquetOutputWriter(path, context)
         }

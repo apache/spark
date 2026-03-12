@@ -31,24 +31,29 @@ import org.apache.spark.sql.util.SchemaValidationMode.ALLOW_NEW_FIELDS
 import org.apache.spark.sql.util.SchemaValidationMode.PROHIBIT_CHANGES
 
 private[sql] object V2TableRefreshUtil extends SQLConfHelper with Logging {
+
   /**
    * Refreshes table metadata for tables in the plan.
    *
    * This method reloads table metadata from the catalog and validates:
-   *  - Table identity: Ensures table ID has not changed
-   *  - Data columns: Verifies captured columns align with the current schema
-   *  - Metadata columns: Checks metadata column consistency
+   *   - Table identity: Ensures table ID has not changed
+   *   - Data columns: Verifies captured columns align with the current schema
+   *   - Metadata columns: Checks metadata column consistency
    *
-   * Tables with time travel specifications are skipped as they reference a specific point
-   * in time and don't have to be refreshed.
+   * Tables with time travel specifications are skipped as they reference a specific point in time
+   * and don't have to be refreshed.
    *
-   * Schema validation mode depends on the underlying plan. Commands, for instance,
-   * prohibit any schema changes while queries permit adding columns.
+   * Schema validation mode depends on the underlying plan. Commands, for instance, prohibit any
+   * schema changes while queries permit adding columns.
    *
-   * @param spark the currently active Spark session
-   * @param plan the logical plan to refresh
-   * @param versionedOnly indicates whether to refresh only versioned tables
-   * @return plan with refreshed table metadata
+   * @param spark
+   *   the currently active Spark session
+   * @param plan
+   *   the logical plan to refresh
+   * @param versionedOnly
+   *   indicates whether to refresh only versioned tables
+   * @return
+   *   plan with refreshed table metadata
    */
   def refresh(
       spark: SparkSession,
@@ -61,18 +66,23 @@ private[sql] object V2TableRefreshUtil extends SQLConfHelper with Logging {
    * Refreshes table metadata for tables in the plan.
    *
    * This method reloads table metadata from the catalog and validates:
-   *  - Table identity: Ensures table ID has not changed
-   *  - Data columns: Verifies captured columns align with the current schema
-   *  - Metadata columns: Checks metadata column consistency
+   *   - Table identity: Ensures table ID has not changed
+   *   - Data columns: Verifies captured columns align with the current schema
+   *   - Metadata columns: Checks metadata column consistency
    *
-   * Tables with time travel specifications are skipped as they reference a specific point
-   * in time and don't have to be refreshed.
+   * Tables with time travel specifications are skipped as they reference a specific point in time
+   * and don't have to be refreshed.
    *
-   * @param spark the currently active Spark session
-   * @param plan the logical plan to refresh
-   * @param versionedOnly indicates whether to refresh only versioned tables
-   * @param schemaValidationMode schema validation mode to use
-   * @return plan with refreshed table metadata
+   * @param spark
+   *   the currently active Spark session
+   * @param plan
+   *   the logical plan to refresh
+   * @param versionedOnly
+   *   indicates whether to refresh only versioned tables
+   * @param schemaValidationMode
+   *   schema validation mode to use
+   * @return
+   *   plan with refreshed table metadata
    */
   def refresh(
       spark: SparkSession,
@@ -83,17 +93,18 @@ private[sql] object V2TableRefreshUtil extends SQLConfHelper with Logging {
     plan transformWithSubqueries {
       case r @ ExtractV2CatalogAndIdentifier(catalog, ident)
           if (r.isVersioned || !versionedOnly) && r.timeTravelSpec.isEmpty =>
-        val currentTable = currentTables.getOrElseUpdate((catalog, ident), {
-          val tableName = V2TableUtil.toQualifiedName(catalog, ident)
-          lookupCachedRelation(spark, catalog, ident, r.table) match {
-            case Some(cached) =>
-              logDebug(s"Refreshing table metadata for $tableName using shared relation cache")
-              cached.table
-            case None =>
-              logDebug(s"Refreshing table metadata for $tableName using catalog")
-              catalog.loadTable(ident)
-          }
-        })
+        val currentTable = currentTables.getOrElseUpdate(
+          (catalog, ident), {
+            val tableName = V2TableUtil.toQualifiedName(catalog, ident)
+            lookupCachedRelation(spark, catalog, ident, r.table) match {
+              case Some(cached) =>
+                logDebug(s"Refreshing table metadata for $tableName using shared relation cache")
+                cached.table
+              case None =>
+                logDebug(s"Refreshing table metadata for $tableName using catalog")
+                catalog.loadTable(ident)
+            }
+          })
         validateTableIdentity(currentTable, r)
         validateDataColumns(currentTable, r, schemaValidationMode)
         validateMetadataColumns(currentTable, r, schemaValidationMode)
@@ -106,7 +117,12 @@ private[sql] object V2TableRefreshUtil extends SQLConfHelper with Logging {
       catalog: TableCatalog,
       ident: Identifier,
       table: Table): Option[DataSourceV2Relation] = {
-    CatalogV2Util.lookupCachedRelation(spark.sharedState.relationCache, catalog, ident, table, conf)
+    CatalogV2Util.lookupCachedRelation(
+      spark.sharedState.relationCache,
+      catalog,
+      ident,
+      table,
+      conf)
   }
 
   // it is not safe to allow any schema changes in commands (e.g. CTAS, RTAS, MERGE)

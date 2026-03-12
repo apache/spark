@@ -47,16 +47,21 @@ class HistogramNumericSuite extends SparkFunSuite with SQLHelper {
     // Check empty serialize and de-serialize
     val emptyBuffer = new NumericHistogram()
     emptyBuffer.allocate(5)
-    assert(compareEquals(emptyBuffer,
-      NumericHistogramSerializer.deserialize(NumericHistogramSerializer.serialize(emptyBuffer))))
+    assert(
+      compareEquals(
+        emptyBuffer,
+        NumericHistogramSerializer.deserialize(
+          NumericHistogramSerializer.serialize(emptyBuffer))))
 
     val buffer = new NumericHistogram()
     buffer.allocate(data.size / 3)
     data.foreach { value =>
       buffer.add(value)
     }
-    assert(compareEquals(buffer,
-      NumericHistogramSerializer.deserialize(NumericHistogramSerializer.serialize(buffer))))
+    assert(
+      compareEquals(
+        buffer,
+        NumericHistogramSerializer.deserialize(NumericHistogramSerializer.serialize(buffer))))
 
     val agg = new HistogramNumeric(BoundReference(0, DoubleType, true), Literal(5))
     assert(compareEquals(agg.deserialize(agg.serialize(buffer)), buffer))
@@ -82,11 +87,13 @@ class HistogramNumericSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("class HistogramNumeric, sql string") {
-    assertEqual(s"histogram_numeric(a, 3)",
+    assertEqual(
+      s"histogram_numeric(a, 3)",
       new HistogramNumeric("a".attr, Literal(3)).sql: String)
 
     // sql(isDistinct = true), array of percentile
-    assertEqual(s"histogram_numeric(DISTINCT a, 3)",
+    assertEqual(
+      s"histogram_numeric(DISTINCT a, 3)",
       new HistogramNumeric("a".attr, Literal(3)).sql(isDistinct = true))
   }
 
@@ -98,13 +105,8 @@ class HistogramNumericSuite extends SparkFunSuite with SQLHelper {
       wrongNB.checkInputDataTypes(),
       DataTypeMismatch(
         errorSubClass = "NON_FOLDABLE_INPUT",
-        messageParameters = Map(
-          "inputName" -> "`nb`",
-          "inputType" -> "\"INT\"",
-          "inputExpr" -> "\"b\""
-        )
-      )
-    )
+        messageParameters =
+          Map("inputName" -> "`nb`", "inputType" -> "\"INT\"", "inputExpr" -> "\"b\"")))
   }
 
   test("class HistogramNumeric, fails analysis if nBins is invalid") {
@@ -118,16 +120,14 @@ class HistogramNumericSuite extends SparkFunSuite with SQLHelper {
         messageParameters = Map(
           "exprName" -> "nb",
           "valueRange" -> s"[2, ${Int.MaxValue}]",
-          "currentValue" -> "1"
-        )
-      )
-    )
+          "currentValue" -> "1")))
   }
 
   test("class HistogramNumeric, automatically add type casting for parameters") {
     // These are the types of input relations under test. We exercise the unit test with several
     // input column types to inspect the behavior of query analysis for the aggregate function.
-    val relations = Seq(LocalRelation($"a".double),
+    val relations = Seq(
+      LocalRelation($"a".double),
       LocalRelation($"a".int),
       LocalRelation($"a".timestamp),
       LocalRelation($"a".dayTimeInterval()),
@@ -135,11 +135,8 @@ class HistogramNumericSuite extends SparkFunSuite with SQLHelper {
 
     // These are the types of the second 'nbins' argument to the aggregate function.
     // These accuracy types must be integral, no type casting is allowed.
-    val nBinsExpressions = Seq(
-      Literal(2.toByte),
-      Literal(100.toShort),
-      Literal(100),
-      Literal(1000L))
+    val nBinsExpressions =
+      Seq(Literal(2.toByte), Literal(100.toShort), Literal(100), Literal(1000L))
 
     // Iterate through each of the input relation column types and 'nbins' expression types under
     // test.
@@ -161,10 +158,11 @@ class HistogramNumericSuite extends SparkFunSuite with SQLHelper {
           // where the first element of each struct has the same type as the original input
           // attribute.
           val expectedType =
-          ArrayType(
-            StructType(Seq(
-              StructField("x", relationAttributeType, nullable = true),
-              StructField("y", DoubleType, nullable = true))))
+            ArrayType(
+              StructType(
+                Seq(
+                  StructField("x", relationAttributeType, nullable = true),
+                  StructField("y", DoubleType, nullable = true))))
           assert(agg.dataType == expectedType)
         case _ => fail()
       }
@@ -173,14 +171,11 @@ class HistogramNumericSuite extends SparkFunSuite with SQLHelper {
 
   test("HistogramNumeric: nulls in nBins expression") {
     assertEqual(
-      new HistogramNumeric(
-        AttributeReference("a", DoubleType)(),
-        Literal(null, IntegerType)).checkInputDataTypes(),
+      new HistogramNumeric(AttributeReference("a", DoubleType)(), Literal(null, IntegerType))
+        .checkInputDataTypes(),
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_NULL",
-        messageParameters = Map("exprName" -> "nb")
-      )
-    )
+        messageParameters = Map("exprName" -> "nb")))
   }
 
   test("class HistogramNumeric, null handling") {
@@ -201,53 +196,44 @@ class HistogramNumericSuite extends SparkFunSuite with SQLHelper {
 
   test("class HistogramNumeric, exercise many different numeric input types") {
     val inputs = Seq(
-      (Literal(null),
-        Literal(null),
-        Literal(null)),
-      (Literal(0),
-        Literal(1),
-        Literal(2)),
-      (Literal(0L),
-        Literal(1L),
-        Literal(2L)),
-      (Literal(0.toShort),
-        Literal(1.toShort),
-        Literal(2.toShort)),
-      (Literal(0F),
-        Literal(1F),
-        Literal(2F)),
-      (Literal(0D),
-        Literal(1D),
-        Literal(2D)),
-      (Literal(Timestamp.valueOf("2017-03-01 00:00:00")),
+      (Literal(null), Literal(null), Literal(null)),
+      (Literal(0), Literal(1), Literal(2)),
+      (Literal(0L), Literal(1L), Literal(2L)),
+      (Literal(0.toShort), Literal(1.toShort), Literal(2.toShort)),
+      (Literal(0f), Literal(1f), Literal(2f)),
+      (Literal(0d), Literal(1d), Literal(2d)),
+      (
+        Literal(Timestamp.valueOf("2017-03-01 00:00:00")),
         Literal(Timestamp.valueOf("2017-03-02 00:00:00")),
         Literal(Timestamp.valueOf("2017-03-03 00:00:00"))),
-      (Literal(Duration.ofSeconds(1111)),
+      (
+        Literal(Duration.ofSeconds(1111)),
         Literal(Duration.ofSeconds(1211)),
         Literal(Duration.ofSeconds(1311))),
-      (Literal(Period.ofMonths(10)),
-        Literal(Period.ofMonths(11)),
-        Literal(Period.ofMonths(12))))
+      (Literal(Period.ofMonths(10)), Literal(Period.ofMonths(11)), Literal(Period.ofMonths(12))))
     for ((left, middle, right) <- inputs) {
       // Check that the 'propagateInputType' bit correctly toggles the output type.
       withSQLConf(SQLConf.HISTOGRAM_NUMERIC_PROPAGATE_INPUT_TYPE.key -> "false") {
-        val aggDoubleOutputType = new HistogramNumeric(
-          BoundReference(0, left.dataType, nullable = true), Literal(5))
+        val aggDoubleOutputType =
+          new HistogramNumeric(BoundReference(0, left.dataType, nullable = true), Literal(5))
         assert(aggDoubleOutputType.dataType match {
-          case ArrayType(StructType(Array(
-          StructField("x", DoubleType, _, _),
-          StructField("y", _, _, _))), true) => true
+          case ArrayType(
+                StructType(Array(StructField("x", DoubleType, _, _), StructField("y", _, _, _))),
+                true) =>
+            true
         })
       }
-      val aggPropagateOutputType = new HistogramNumeric(
-        BoundReference(0, left.dataType, nullable = true), Literal(5))
-      assert(aggPropagateOutputType.left.dataType ==
-        (aggPropagateOutputType.dataType match {
-          case
-            ArrayType(StructType(Array(
-            StructField("x", lhs@_, true, _),
-            StructField("y", _, true, _))), true) => lhs
-        }))
+      val aggPropagateOutputType =
+        new HistogramNumeric(BoundReference(0, left.dataType, nullable = true), Literal(5))
+      assert(
+        aggPropagateOutputType.left.dataType ==
+          (aggPropagateOutputType.dataType match {
+            case ArrayType(
+                  StructType(
+                    Array(StructField("x", lhs @ _, true, _), StructField("y", _, true, _))),
+                  true) =>
+              lhs
+          }))
       // Now consume some input values and check the result.
       val buffer = new GenericInternalRow(new Array[Any](1))
       aggPropagateOutputType.initialize(buffer)
@@ -279,11 +265,11 @@ class HistogramNumericSuite extends SparkFunSuite with SQLHelper {
 
   private def compareEquals(left: NumericHistogram, right: NumericHistogram): Boolean = {
     left.getNumBins == right.getNumBins && left.getUsedBins == right.getUsedBins &&
-      (0 until left.getUsedBins).forall { i =>
-        val leftCoord = left.getBin(i)
-        val rightCoord = right.getBin(i)
-        leftCoord.x == rightCoord.x && leftCoord.y == rightCoord.y
-      }
+    (0 until left.getUsedBins).forall { i =>
+      val leftCoord = left.getBin(i)
+      val rightCoord = right.getBin(i)
+      leftCoord.x == rightCoord.x && leftCoord.y == rightCoord.y
+    }
   }
 
   private def assertEqual[T](left: T, right: T): Unit = {

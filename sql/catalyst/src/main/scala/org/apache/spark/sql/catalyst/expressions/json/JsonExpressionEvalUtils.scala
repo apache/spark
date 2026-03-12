@@ -54,8 +54,8 @@ object JsonPathParser extends RegexParsers {
 
   def root: Parser[Char] = '$'
 
-  def long: Parser[Long] = "\\d+".r ^? {
-    case x => x.toLong
+  def long: Parser[Long] = "\\d+".r ^? { case x =>
+    x.toLong
   }
 
   // parse `[*]` and `[123]` subscripts
@@ -166,8 +166,8 @@ case class StructsToJsonEvaluator(
   private lazy val writer = new CharArrayWriter()
 
   @transient
-  private lazy val gen = new JacksonGenerator(
-    inputSchema, writer, new JSONOptions(options, timeZoneId.get))
+  private lazy val gen =
+    new JacksonGenerator(inputSchema, writer, new JSONOptions(options, timeZoneId.get))
 
   // This converts rows to the JSON output according to the given schema.
   @transient
@@ -227,8 +227,7 @@ case class SchemaOfJsonEvaluator(options: Map[String, String]) {
             .map(ArrayType(_, containsNull = at.containsNull))
             .getOrElse(ArrayType(StructType(Nil), containsNull = at.containsNull))
         case other: DataType =>
-          jsonInferSchema.canonicalizeType(other, jsonOptions).getOrElse(
-            StringType)
+          jsonInferSchema.canonicalizeType(other, jsonOptions).getOrElse(StringType)
       }
     }
 
@@ -335,7 +334,9 @@ case class JsonTupleEvaluator(foldableFieldNames: Array[Option[String]]) {
     }
   }
 
-  final def evaluate(json: UTF8String, fieldNames: Array[UTF8String]): IterableOnce[InternalRow] = {
+  final def evaluate(
+      json: UTF8String,
+      fieldNames: Array[UTF8String]): IterableOnce[InternalRow] = {
     if (json == null) return nullRow
     try {
       /* We know the bytes are UTF-8 encoded. Pass a Reader to avoid having Jackson
@@ -392,11 +393,12 @@ case class GetJsonObjectEvaluator(cachedPath: UTF8String) {
           detect character encoding which could fail for some malformed strings */
         Utils.tryWithResource(CreateJacksonParser.utf8String(jsonFactory, jsonStr)) { parser =>
           val output = new ByteArrayOutputStream()
-          val matched = Utils.tryWithResource(
-            jsonFactory.createGenerator(output, JsonEncoding.UTF8)) { generator =>
-            parser.nextToken()
-            evaluatePath(parser, generator, RawStyle, parsed.get)
-          }
+          val matched =
+            Utils.tryWithResource(jsonFactory.createGenerator(output, JsonEncoding.UTF8)) {
+              generator =>
+                parser.nextToken()
+                evaluatePath(parser, generator, RawStyle, parsed.get)
+            }
           if (matched) {
             UTF8String.fromBytes(output.toByteArray)
           } else {
@@ -542,7 +544,7 @@ case class GetJsonObjectEvaluator(cachedPath: UTF8String) {
 
         dirty
 
-      case (START_ARRAY, Subscript :: Index(idx) :: (xs@Subscript :: Wildcard :: _)) =>
+      case (START_ARRAY, Subscript :: Index(idx) :: (xs @ Subscript :: Wildcard :: _)) =>
         p.nextToken()
         // we're going to have 1 or more results, switch to QuotedStyle
         arrayIndex(p, () => evaluatePath(p, g, QuotedStyle, xs))(idx)

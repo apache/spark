@@ -30,10 +30,10 @@ import org.apache.spark.sql.types._
 import org.apache.spark.util.HadoopFSUtils
 
 abstract class ParquetFileFormatSuite
-  extends QueryTest
-  with ParquetTest
-  with SharedSparkSession
-  with CommonFileDataSourceSuite {
+    extends QueryTest
+    with ParquetTest
+    with SharedSparkSession
+    with CommonFileDataSourceSuite {
 
   import testImplicits._
 
@@ -53,13 +53,14 @@ abstract class ParquetFileFormatSuite
         spark.range(2, 3).toDF("a").coalesce(1).write.json(path3.toString)
 
         val hadoopConf = spark.sessionState.newHadoopConf()
-        val fileStatuses = HadoopFSUtils.listFiles(
-          new Path(basePath),
-          hadoopConf,
-          (path: Path) => path.getName != "_SUCCESS").flatMap(_._2)
+        val fileStatuses = HadoopFSUtils
+          .listFiles(new Path(basePath), hadoopConf, (path: Path) => path.getName != "_SUCCESS")
+          .flatMap(_._2)
 
         val footers = ParquetFileFormat.readParquetFootersInParallel(
-          hadoopConf, fileStatuses, ignoreCorruptFiles)
+          hadoopConf,
+          fileStatuses,
+          ignoreCorruptFiles)
 
         assert(footers.size == 2)
       }
@@ -71,28 +72,28 @@ abstract class ParquetFileFormatSuite
         testReadFooters(false)
       }.getCause.asInstanceOf[SparkException],
       condition = "FAILED_READ_FILE.CANNOT_READ_FILE_FOOTER",
-      parameters = Map("path" -> "file:.*")
-    )
+      parameters = Map("path" -> "file:.*"))
   }
 
-  test("SPARK-36825, SPARK-36854: year-month/day-time intervals written and read as INT32/INT64") {
+  test(
+    "SPARK-36825, SPARK-36854: year-month/day-time intervals written and read as INT32/INT64") {
     Seq(false, true).foreach { offHeapEnabled =>
       withSQLConf(SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> offHeapEnabled.toString) {
         Seq(
           YearMonthIntervalType() -> ((i: Int) => Period.of(i, i, 0)),
-          DayTimeIntervalType() -> ((i: Int) => Duration.ofDays(i).plusSeconds(i))
-        ).foreach { case (it, f) =>
-          val data = (1 to 10).map(i => Row(i, f(i)))
-          val schema = StructType(Array(StructField("d", IntegerType, false),
-            StructField("i", it, false)))
-          withTempPath { file =>
-            val df = spark.createDataFrame(sparkContext.parallelize(data), schema)
-            df.write.parquet(file.getCanonicalPath)
-            withAllParquetReaders {
-              val df2 = spark.read.parquet(file.getCanonicalPath)
-              checkAnswer(df2, df.collect().toSeq)
+          DayTimeIntervalType() -> ((i: Int) => Duration.ofDays(i).plusSeconds(i))).foreach {
+          case (it, f) =>
+            val data = (1 to 10).map(i => Row(i, f(i)))
+            val schema =
+              StructType(Array(StructField("d", IntegerType, false), StructField("i", it, false)))
+            withTempPath { file =>
+              val df = spark.createDataFrame(sparkContext.parallelize(data), schema)
+              df.write.parquet(file.getCanonicalPath)
+              withAllParquetReaders {
+                val df2 = spark.read.parquet(file.getCanonicalPath)
+                checkAnswer(df2, df.collect().toSeq)
+              }
             }
-          }
         }
       }
     }
@@ -101,13 +102,17 @@ abstract class ParquetFileFormatSuite
   test("support batch reads for schema") {
     val testUDT = new TestUDT.MyDenseVectorUDT
     Seq(true, false).foreach { enabled =>
-      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> enabled.toString) {
+      withSQLConf(
+        SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> enabled.toString) {
         Seq(
           Seq(StructField("f1", IntegerType), StructField("f2", BooleanType)) -> true,
-          Seq(StructField("f1", IntegerType), StructField("f2", ArrayType(IntegerType))) -> enabled,
-          Seq(StructField("f1", BooleanType), StructField("f2", testUDT)) -> enabled
-        ).foreach { case (schema, expected) =>
-          assert(ParquetUtils.isBatchReadSupportedForSchema(conf, StructType(schema)) == expected)
+          Seq(
+            StructField("f1", IntegerType),
+            StructField("f2", ArrayType(IntegerType))) -> enabled,
+          Seq(StructField("f1", BooleanType), StructField("f2", testUDT)) -> enabled).foreach {
+          case (schema, expected) =>
+            assert(
+              ParquetUtils.isBatchReadSupportedForSchema(conf, StructType(schema)) == expected)
         }
       }
     }
@@ -116,20 +121,23 @@ abstract class ParquetFileFormatSuite
   test("support batch reads for data type") {
     val testUDT = new TestUDT.MyDenseVectorUDT
     Seq(true, false).foreach { enabled =>
-      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> enabled.toString) {
+      withSQLConf(
+        SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> enabled.toString) {
         Seq(
           IntegerType -> true,
           BooleanType -> true,
           ArrayType(TimestampType) -> enabled,
-          StructType(Seq(StructField("f1", DecimalType.SYSTEM_DEFAULT),
-            StructField("f2", StringType))) -> enabled,
+          StructType(
+            Seq(
+              StructField("f1", DecimalType.SYSTEM_DEFAULT),
+              StructField("f2", StringType))) -> enabled,
           MapType(keyType = LongType, valueType = DateType) -> enabled,
           testUDT -> enabled,
           ArrayType(testUDT) -> enabled,
           StructType(Seq(StructField("f1", ByteType), StructField("f2", testUDT))) -> enabled,
-          MapType(keyType = testUDT, valueType = BinaryType) -> enabled
-        ).foreach { case (dt, expected) =>
-          assert(ParquetUtils.isBatchReadSupported(conf, dt) == expected)
+          MapType(keyType = testUDT, valueType = BinaryType) -> enabled).foreach {
+          case (dt, expected) =>
+            assert(ParquetUtils.isBatchReadSupported(conf, dt) == expected)
         }
       }
     }
@@ -157,14 +165,12 @@ abstract class ParquetFileFormatSuite
 
 class ParquetFileFormatV1Suite extends ParquetFileFormatSuite {
   override protected def sparkConf: SparkConf =
-    super
-      .sparkConf
+    super.sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, "parquet")
 }
 
 class ParquetFileFormatV2Suite extends ParquetFileFormatSuite {
   override protected def sparkConf: SparkConf =
-    super
-      .sparkConf
+    super.sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, "")
 }

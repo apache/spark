@@ -25,21 +25,17 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 
 /**
- * This test suite ensures that the [[PushDownPredicates]] actually does predicate pushdown in
- * an efficient manner. This is enforced by asserting that a single predicate pushdown can push
- * all predicate to bottom as much as possible.
+ * This test suite ensures that the [[PushDownPredicates]] actually does predicate pushdown in an
+ * efficient manner. This is enforced by asserting that a single predicate pushdown can push all
+ * predicate to bottom as much as possible.
  */
 class FilterPushdownOnePassSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
-      Batch("Subqueries", Once,
-        EliminateSubqueryAliases) ::
-      // this batch must reach expected state in one pass
-      Batch("Filter Pushdown One Pass", Once,
-        ReorderJoin,
-        PushDownPredicates
-      ) :: Nil
+      Batch("Subqueries", Once, EliminateSubqueryAliases) ::
+        // this batch must reach expected state in one pass
+        Batch("Filter Pushdown One Pass", Once, ReorderJoin, PushDownPredicates) :: Nil
   }
 
   val testRelation1 = LocalRelation($"a".int, $"b".int, $"c".int)
@@ -81,7 +77,8 @@ class FilterPushdownOnePassSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer =
       x.where("x.c".attr < 0 && "x.a".attr === 1)
-        .join(y.where("y.d".attr > 1 && "y.d".attr < 2)).analyze
+        .join(y.where("y.d".attr > 1 && "y.d".attr < 2))
+        .analyze
 
     comparePlans(optimized, correctAnswer)
   }
@@ -105,14 +102,18 @@ class FilterPushdownOnePassSuite extends PlanTest {
     val y2 = testRelation2.subquery("y2")
 
     val originalQuery =
-      y1.join(x).join(x)
+      y1.join(x)
+        .join(x)
         .join(y2.join(x).join(x))
         .where("y1.d".attr === 0 && "y2.d".attr === 3)
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer =
-      y1.where("y1.d".attr === 0).join(x).join(x)
-        .join(y2.where("y2.d".attr === 3).join(x).join(x)).analyze
+      y1.where("y1.d".attr === 0)
+        .join(x)
+        .join(x)
+        .join(y2.where("y2.d".attr === 3).join(x).join(x))
+        .analyze
 
     comparePlans(optimized, correctAnswer)
   }
@@ -122,14 +123,17 @@ class FilterPushdownOnePassSuite extends PlanTest {
     val y = testRelation2.subquery("y")
 
     val originalQuery =
-      x.where($"a" > 0).select($"a", $"b")
+      x.where($"a" > 0)
+        .select($"a", $"b")
         .join(y.where($"d" < 100).select($"e"))
         .where("x.a".attr < 100)
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer =
-      x.where($"a" > 0 && $"a" < 100).select($"a", $"b")
-        .join(y.where($"d" < 100).select($"e")).analyze
+      x.where($"a" > 0 && $"a" < 100)
+        .select($"a", $"b")
+        .join(y.where($"d" < 100).select($"e"))
+        .analyze
 
     comparePlans(optimized, correctAnswer)
   }
@@ -152,7 +156,8 @@ class FilterPushdownOnePassSuite extends PlanTest {
         .select(($"a1" + 1) as "a2", $"b")
         .select(($"a2" + 1) as "a3", $"b")
         .select(($"a3" + 1) as "a4", $"b")
-        .select($"b").analyze
+        .select($"b")
+        .analyze
 
     comparePlans(optimized, correctAnswer)
   }
@@ -170,11 +175,13 @@ class FilterPushdownOnePassSuite extends PlanTest {
       .groupBy($"a")($"a", count($"d"))
       .subquery("right")
     val originalQuery = left
-      .join(right).where("left.a".attr < 100 && "right.a".attr < 100)
+      .join(right)
+      .where("left.a".attr < 100 && "right.a".attr < 100)
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer =
-      x.where($"c" > 0 && $"a" < 100).groupBy($"a")($"a", count($"b"))
+      x.where($"c" > 0 && $"a" < 100)
+        .groupBy($"a")($"a", count($"b"))
         .join(y.where($"d" < 0 && $"a" < 100).groupBy($"a")($"a", count($"d")))
         .analyze
 

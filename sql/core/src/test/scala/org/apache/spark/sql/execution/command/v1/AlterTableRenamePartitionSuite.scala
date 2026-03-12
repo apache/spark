@@ -71,9 +71,9 @@ trait AlterTableRenamePartitionSuiteBase extends command.AlterTableRenamePartiti
 }
 
 /**
- * The class contains tests for the `ALTER TABLE .. RENAME PARTITION` command to check
- * V1 In-Memory table catalog.
+ * The class contains tests for the `ALTER TABLE .. RENAME PARTITION` command to check V1
+ * In-Memory table catalog.
  */
 class AlterTableRenamePartitionSuite
-  extends AlterTableRenamePartitionSuiteBase
-  with CommandSuiteBase
+    extends AlterTableRenamePartitionSuiteBase
+    with CommandSuiteBase

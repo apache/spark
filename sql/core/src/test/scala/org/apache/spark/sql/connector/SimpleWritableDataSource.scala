@@ -34,9 +34,9 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.SerializableConfiguration
 
 /**
- * A HDFS based transactional writable data source.
- * Each task writes data to `target/_temporary/uniqueId/$jobId-$partitionId-$attemptNumber`.
- * Each job moves files from `target/_temporary/uniqueId/` to `target`.
+ * A HDFS based transactional writable data source. Each task writes data to
+ * `target/_temporary/uniqueId/$jobId-$partitionId-$attemptNumber`. Each job moves files from
+ * `target/_temporary/uniqueId/` to `target`.
  */
 class SimpleWritableDataSource extends TestingV2Source {
 
@@ -45,12 +45,15 @@ class SimpleWritableDataSource extends TestingV2Source {
       val dataPath = new Path(path)
       val fs = dataPath.getFileSystem(conf)
       if (fs.exists(dataPath)) {
-        fs.listStatus(dataPath).filterNot { status =>
-          val name = status.getPath.getName
-          name.startsWith("_") || name.startsWith(".")
-        }.map { f =>
-          CSVInputPartitionReader(f.getPath.toUri.toString)
-        }.toArray
+        fs.listStatus(dataPath)
+          .filterNot { status =>
+            val name = status.getPath.getName
+            name.startsWith("_") || name.startsWith(".")
+          }
+          .map { f =>
+            CSVInputPartitionReader(f.getPath.toUri.toString)
+          }
+          .toArray
       } else {
         Array.empty
       }
@@ -63,7 +66,8 @@ class SimpleWritableDataSource extends TestingV2Source {
   }
 
   class MyWriteBuilder(path: String, info: LogicalWriteInfo)
-      extends WriteBuilder with SupportsTruncate {
+      extends WriteBuilder
+      with SupportsTruncate {
     protected val queryId: String = info.queryId()
     protected var needTruncate = false
 
@@ -123,8 +127,7 @@ class SimpleWritableDataSource extends TestingV2Source {
     }
   }
 
-  class MyTable(options: CaseInsensitiveStringMap)
-    extends SimpleBatchTable with SupportsWrite {
+  class MyTable(options: CaseInsensitiveStringMap) extends SimpleBatchTable with SupportsWrite {
 
     protected val path = options.get("path")
     protected val conf = SparkContext.getActive.get.hadoopConfiguration
@@ -148,8 +151,7 @@ class SimpleWritableDataSource extends TestingV2Source {
 
 case class CSVInputPartitionReader(path: String) extends InputPartition
 
-class CSVReaderFactory(conf: SerializableConfiguration)
-  extends PartitionReaderFactory {
+class CSVReaderFactory(conf: SerializableConfiguration) extends PartitionReaderFactory {
 
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
     val path = partition.asInstanceOf[CSVInputPartitionReader].path
@@ -160,7 +162,9 @@ class CSVReaderFactory(conf: SerializableConfiguration)
       import org.apache.spark.util.ArrayImplicits._
       private val inputStream = fs.open(filePath)
       private val lines = new BufferedReader(new InputStreamReader(inputStream))
-        .lines().iterator().asScala
+        .lines()
+        .iterator()
+        .asScala
 
       private var currentLine: String = _
 
@@ -200,11 +204,9 @@ private[connector] object SimpleCounter {
 }
 
 class CSVDataWriterFactory(path: String, jobId: String, conf: SerializableConfiguration)
-  extends DataWriterFactory {
+    extends DataWriterFactory {
 
-  override def createWriter(
-      partitionId: Int,
-      taskId: Long): DataWriter[InternalRow] = {
+  override def createWriter(partitionId: Int, taskId: Long): DataWriter[InternalRow] = {
     val jobPath = new Path(new Path(path, "_temporary"), jobId)
     val filePath = new Path(jobPath, s"$jobId-$partitionId-$taskId")
     val fs = filePath.getFileSystem(conf.value)

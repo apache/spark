@@ -56,24 +56,30 @@ private[sql] object AvroUtils extends Logging {
     val parsedOptions = new AvroOptions(options, conf)
 
     if (parsedOptions.parameters.contains(IGNORE_EXTENSION)) {
-      logWarning(log"Option ${MDC(CONFIG, IGNORE_EXTENSION)} is deprecated. Please use the " +
-        log"general data source option pathGlobFilter for filtering file names.")
+      logWarning(
+        log"Option ${MDC(CONFIG, IGNORE_EXTENSION)} is deprecated. Please use the " +
+          log"general data source option pathGlobFilter for filtering file names.")
     }
     // User can specify an optional avro json schema.
     val avroSchema = parsedOptions.schema
       .getOrElse {
-        inferAvroSchemaFromFiles(files, conf, parsedOptions.ignoreExtension,
+        inferAvroSchemaFromFiles(
+          files,
+          conf,
+          parsedOptions.ignoreExtension,
           new FileSourceOptions(CaseInsensitiveMap(options)).ignoreCorruptFiles)
       }
 
-    SchemaConverters.toSqlType(
-      avroSchema,
-      parsedOptions.useStableIdForUnionType,
-      parsedOptions.stableIdPrefixForUnionType,
-      parsedOptions.recursiveFieldMaxDepth).dataType match {
+    SchemaConverters
+      .toSqlType(
+        avroSchema,
+        parsedOptions.useStableIdForUnionType,
+        parsedOptions.stableIdPrefixForUnionType,
+        parsedOptions.recursiveFieldMaxDepth)
+      .dataType match {
       case t: StructType => Some(t)
-      case _ => throw new RuntimeException(
-        s"""Avro schema cannot be converted to a Spark SQL StructType:
+      case _ =>
+        throw new RuntimeException(s"""Avro schema cannot be converted to a Spark SQL StructType:
            |
            |${SchemaFormatter.format(JSON_PRETTY_FORMAT, avroSchema)}
            |""".stripMargin)
@@ -108,13 +114,18 @@ private[sql] object AvroUtils extends Logging {
       dataSchema: StructType): OutputWriterFactory = {
     val parsedOptions = new AvroOptions(options, job.getConfiguration)
     val outputAvroSchema: Schema = parsedOptions.schema
-      .getOrElse(SchemaConverters.toAvroType(dataSchema, nullable = false,
-        parsedOptions.recordName, parsedOptions.recordNamespace))
+      .getOrElse(
+        SchemaConverters.toAvroType(
+          dataSchema,
+          nullable = false,
+          parsedOptions.recordName,
+          parsedOptions.recordNamespace))
 
     AvroJob.setOutputKeySchema(job, outputAvroSchema)
 
     parsedOptions.compression.toLowerCase(Locale.ROOT) match {
-      case codecName if AvroCompressionCodec.values().exists(c => c.lowerCaseName() == codecName) =>
+      case codecName
+          if AvroCompressionCodec.values().exists(c => c.lowerCaseName() == codecName) =>
         val jobConf = job.getConfiguration
         AvroCompressionCodec.fromString(codecName) match {
           case UNCOMPRESSED =>
@@ -127,14 +138,16 @@ private[sql] object AvroUtils extends Logging {
                 case DEFLATE => Some(sqlConf.getConf(SQLConf.AVRO_DEFLATE_LEVEL), codecName)
                 case XZ => Some(sqlConf.getConf(SQLConf.AVRO_XZ_LEVEL), codecName)
                 case ZSTANDARD =>
-                  jobConf.setBoolean(AvroOutputFormat.ZSTD_BUFFERPOOL_KEY,
+                  jobConf.setBoolean(
+                    AvroOutputFormat.ZSTD_BUFFERPOOL_KEY,
                     sqlConf.getConf(SQLConf.AVRO_ZSTANDARD_BUFFER_POOL_ENABLED))
                   Some(sqlConf.getConf(SQLConf.AVRO_ZSTANDARD_LEVEL), "zstd")
                 case _ => None
               }
               levelAndCodecName.foreach { case (level, mapredCodecName) =>
-                logInfo(log"Compressing Avro output using the ${MDC(CODEC_NAME, codecName)} " +
-                  log"codec at level ${MDC(CODEC_LEVEL, level)}")
+                logInfo(
+                  log"Compressing Avro output using the ${MDC(CODEC_NAME, codecName)} " +
+                    log"codec at level ${MDC(CODEC_LEVEL, level)}")
                 jobConf.setInt(s"avro.mapred.$mapredCodecName.level", level.toInt)
               }
             } else {
@@ -143,10 +156,12 @@ private[sql] object AvroUtils extends Logging {
         }
       case unknown =>
         throw new SparkIllegalArgumentException(
-          "CODEC_SHORT_NAME_NOT_FOUND", Map("codecName" -> unknown))
+          "CODEC_SHORT_NAME_NOT_FOUND",
+          Map("codecName" -> unknown))
     }
 
-    new AvroOutputWriterFactory(dataSchema,
+    new AvroOutputWriterFactory(
+      dataSchema,
       outputAvroSchema.toString,
       parsedOptions.positionalFieldMatching)
   }
@@ -158,30 +173,32 @@ private[sql] object AvroUtils extends Logging {
       ignoreCorruptFiles: Boolean): Schema = {
     // Schema evolution is not supported yet. Here we only pick first random readable sample file to
     // figure out the schema of the whole dataset.
-    val avroReader = files.iterator.map { f =>
-      val path = f.getPath
-      if (!ignoreExtension && !path.getName.endsWith(".avro")) {
-        None
-      } else {
-        Utils.tryWithResource {
-          new FsInput(path, conf)
-        } { in =>
-          try {
-            Some(DataFileReader.openReader(in, new GenericDatumReader[GenericRecord]()))
-          } catch {
-            case e: IOException =>
-              if (ignoreCorruptFiles) {
-                logWarning(log"Skipped the footer in the corrupted file: ${MDC(PATH, path)}", e)
-                None
-              } else {
-                throw new SparkException(s"Could not read file: $path", e)
-              }
+    val avroReader = files.iterator
+      .map { f =>
+        val path = f.getPath
+        if (!ignoreExtension && !path.getName.endsWith(".avro")) {
+          None
+        } else {
+          Utils.tryWithResource {
+            new FsInput(path, conf)
+          } { in =>
+            try {
+              Some(DataFileReader.openReader(in, new GenericDatumReader[GenericRecord]()))
+            } catch {
+              case e: IOException =>
+                if (ignoreCorruptFiles) {
+                  logWarning(log"Skipped the footer in the corrupted file: ${MDC(PATH, path)}", e)
+                  None
+                } else {
+                  throw new SparkException(s"Could not read file: $path", e)
+                }
+            }
           }
         }
       }
-    }.collectFirst {
-      case Some(reader) => reader
-    }
+      .collectFirst { case Some(reader) =>
+        reader
+      }
 
     avroReader match {
       case Some(reader) =>
@@ -253,13 +270,17 @@ private[sql] object AvroUtils extends Logging {
    * the Avro schema for each field in the Catalyst schema and vice-versa, respecting settings for
    * case sensitivity. The match results can be accessed using the getter methods.
    *
-   * @param avroSchema The schema in which to search for fields. Must be of type RECORD.
-   * @param catalystSchema The Catalyst schema to use for matching.
-   * @param avroPath The seq of parent field names leading to `avroSchema`.
-   * @param catalystPath The seq of parent field names leading to `catalystSchema`.
-   * @param positionalFieldMatch If true, perform field matching in a positional fashion
-   *                             (structural comparison between schemas, ignoring names);
-   *                             otherwise, perform field matching using field names.
+   * @param avroSchema
+   *   The schema in which to search for fields. Must be of type RECORD.
+   * @param catalystSchema
+   *   The Catalyst schema to use for matching.
+   * @param avroPath
+   *   The seq of parent field names leading to `avroSchema`.
+   * @param catalystPath
+   *   The seq of parent field names leading to `catalystSchema`.
+   * @param positionalFieldMatch
+   *   If true, perform field matching in a positional fashion (structural comparison between
+   *   schemas, ignoring names); otherwise, perform field matching using field names.
    */
   class AvroSchemaHelper(
       avroSchema: Schema,
@@ -285,8 +306,8 @@ private[sql] object AvroUtils extends Logging {
 
     /**
      * Validate that there are no Catalyst fields which don't have a matching Avro field, throwing
-     * [[IncompatibleSchemaException]] if such extra fields are found. If `ignoreNullable` is false,
-     * consider nullable Catalyst fields to be eligible to be an extra field; otherwise,
+     * [[IncompatibleSchemaException]] if such extra fields are found. If `ignoreNullable` is
+     * false, consider nullable Catalyst fields to be eligible to be an extra field; otherwise,
      * ignore nullable Catalyst fields when checking for extras.
      */
     def validateNoExtraCatalystFields(ignoreNullable: Boolean): Unit =
@@ -305,8 +326,8 @@ private[sql] object AvroUtils extends Logging {
 
     /**
      * Validate that there are no Avro fields which don't have a matching Catalyst field, throwing
-     * [[IncompatibleSchemaException]] if such extra fields are found. Only required (non-nullable)
-     * fields are checked; nullable fields are ignored.
+     * [[IncompatibleSchemaException]] if such extra fields are found. Only required
+     * (non-nullable) fields are checked; nullable fields are ignored.
      */
     def validateNoExtraRequiredAvroFields(): Unit = {
       val extraFields = avroFieldArray.toSet -- matchedFields.map(_.avroField)
@@ -327,8 +348,10 @@ private[sql] object AvroUtils extends Logging {
      * Extract a single field from the contained avro schema which has the desired field name,
      * performing the matching with proper case sensitivity according to SQLConf.resolver.
      *
-     * @param name The name of the field to search for.
-     * @return `Some(match)` if a matching Avro field is found, otherwise `None`.
+     * @param name
+     *   The name of the field to search for.
+     * @return
+     *   `Some(match)` if a matching Avro field is found, otherwise `None`.
      */
     private[avro] def getFieldByName(name: String): Option[Schema.Field] = {
 
@@ -339,10 +362,11 @@ private[sql] object AvroUtils extends Logging {
       candidates.filter(f => SQLConf.get.resolver(f.name(), name)) match {
         case Seq(avroField) => Some(avroField)
         case Seq() => None
-        case matches => throw new IncompatibleSchemaException(s"Searching for '$name' in Avro " +
-          s"schema at ${toFieldStr(avroPath)} gave ${matches.size} matches. Candidates: " +
-          matches.map(_.name()).mkString("[", ", ", "]")
-        )
+        case matches =>
+          throw new IncompatibleSchemaException(
+            s"Searching for '$name' in Avro " +
+              s"schema at ${toFieldStr(avroPath)} gave ${matches.size} matches. Candidates: " +
+              matches.map(_.name()).mkString("[", ", ", "]"))
       }
     }
 

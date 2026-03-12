@@ -26,7 +26,8 @@ import org.apache.spark.sql.execution.metric.SQLMetric
 class WholeStageCodegenEvaluatorFactory(
     cleanedSourceOpt: Either[Broadcast[CodeAndComment], CodeAndComment],
     durationMs: SQLMetric,
-    references: Array[Any]) extends PartitionEvaluatorFactory[InternalRow, InternalRow] {
+    references: Array[Any])
+    extends PartitionEvaluatorFactory[InternalRow, InternalRow] {
 
   override def createEvaluator(): PartitionEvaluator[InternalRow, InternalRow] = {
     new WholeStageCodegenPartitionEvaluator()

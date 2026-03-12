@@ -118,12 +118,11 @@ trait BroadcastExchangeLike extends Exchange {
 }
 
 /**
- * A [[BroadcastExchangeExec]] collects, transforms and finally broadcasts the result of
- * a transformed SparkPlan.
+ * A [[BroadcastExchangeExec]] collects, transforms and finally broadcasts the result of a
+ * transformed SparkPlan.
  */
-case class BroadcastExchangeExec(
-    mode: BroadcastMode,
-    child: SparkPlan) extends BroadcastExchangeLike {
+case class BroadcastExchangeExec(mode: BroadcastMode, child: SparkPlan)
+    extends BroadcastExchangeLike {
 
   override lazy val metrics = Map(
     "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size"),
@@ -163,9 +162,9 @@ case class BroadcastExchangeExec(
   @transient
   private lazy val maxBroadcastRows = mode match {
     case HashedRelationBroadcastMode(key, _)
-      // NOTE: LongHashedRelation is used for single key with LongType. This should be kept
-      // consistent with HashedRelation.apply.
-      if !(key.length == 1 && key.head.dataType == LongType) =>
+        // NOTE: LongHashedRelation is used for single key with LongType. This should be kept
+        // consistent with HashedRelation.apply.
+        if !(key.length == 1 && key.head.dataType == LongType) =>
       // Since the maximum number of keys that BytesToBytesMap supports is 1 << 29,
       // and only 70% of the slots can be used before growing in UnsafeHashedRelation,
       // here the limitation should not be over 341 million.
@@ -176,72 +175,75 @@ case class BroadcastExchangeExec(
   @transient
   override lazy val relationFuture: Future[broadcast.Broadcast[Any]] = {
     SQLExecution.withThreadLocalCaptured[broadcast.Broadcast[Any]](
-      session, BroadcastExchangeExec.executionContext) {
-          try {
-            // Setup a job tag here so later it may get cancelled by tag if necessary.
-            sparkContext.addJobTag(jobTag)
-            sparkContext.setInterruptOnCancel(true)
-            val beforeCollect = System.nanoTime()
-            // Use executeCollect/executeCollectIterator to avoid conversion to Scala types
-            val (numRows, input) = child.executeCollectIterator()
-            longMetric("numOutputRows") += numRows
-            if (numRows >= maxBroadcastRows) {
-              throw QueryExecutionErrors.cannotBroadcastTableOverMaxTableRowsError(
-                maxBroadcastRows, numRows)
-            }
+      session,
+      BroadcastExchangeExec.executionContext) {
+      try {
+        // Setup a job tag here so later it may get cancelled by tag if necessary.
+        sparkContext.addJobTag(jobTag)
+        sparkContext.setInterruptOnCancel(true)
+        val beforeCollect = System.nanoTime()
+        // Use executeCollect/executeCollectIterator to avoid conversion to Scala types
+        val (numRows, input) = child.executeCollectIterator()
+        longMetric("numOutputRows") += numRows
+        if (numRows >= maxBroadcastRows) {
+          throw QueryExecutionErrors.cannotBroadcastTableOverMaxTableRowsError(
+            maxBroadcastRows,
+            numRows)
+        }
 
-            val beforeBuild = System.nanoTime()
-            longMetric("collectTime") += NANOSECONDS.toMillis(beforeBuild - beforeCollect)
+        val beforeBuild = System.nanoTime()
+        longMetric("collectTime") += NANOSECONDS.toMillis(beforeBuild - beforeCollect)
 
-            // Construct the relation.
-            val relation = mode.transform(input, Some(numRows))
+        // Construct the relation.
+        val relation = mode.transform(input, Some(numRows))
 
-            val dataSize = relation match {
-              case map: HashedRelation =>
-                map.estimatedSize
-              case arr: Array[InternalRow] =>
-                arr.map(_.asInstanceOf[UnsafeRow].getSizeInBytes.toLong).sum
-              case _ =>
-                throw new SparkException("[BUG] BroadcastMode.transform returned unexpected " +
-                  s"type: ${relation.getClass.getName}")
-            }
+        val dataSize = relation match {
+          case map: HashedRelation =>
+            map.estimatedSize
+          case arr: Array[InternalRow] =>
+            arr.map(_.asInstanceOf[UnsafeRow].getSizeInBytes.toLong).sum
+          case _ =>
+            throw new SparkException(
+              "[BUG] BroadcastMode.transform returned unexpected " +
+                s"type: ${relation.getClass.getName}")
+        }
 
-            longMetric("dataSize") += dataSize
-            val maxBroadcastTableSizeInBytes = conf.maxBroadcastTableSizeInBytes
-            if (dataSize >= maxBroadcastTableSizeInBytes) {
-              throw QueryExecutionErrors.cannotBroadcastTableOverMaxTableBytesError(
-                maxBroadcastTableSizeInBytes, dataSize)
-            }
+        longMetric("dataSize") += dataSize
+        val maxBroadcastTableSizeInBytes = conf.maxBroadcastTableSizeInBytes
+        if (dataSize >= maxBroadcastTableSizeInBytes) {
+          throw QueryExecutionErrors.cannotBroadcastTableOverMaxTableBytesError(
+            maxBroadcastTableSizeInBytes,
+            dataSize)
+        }
 
-            val beforeBroadcast = System.nanoTime()
-            longMetric("buildTime") += NANOSECONDS.toMillis(beforeBroadcast - beforeBuild)
+        val beforeBroadcast = System.nanoTime()
+        longMetric("buildTime") += NANOSECONDS.toMillis(beforeBroadcast - beforeBuild)
 
-            // SPARK-39983 - Broadcast the relation without caching the unserialized object.
-            val broadcasted = sparkContext.broadcastInternal(relation, serializedOnly = true)
-            longMetric("broadcastTime") += NANOSECONDS.toMillis(
-              System.nanoTime() - beforeBroadcast)
-            val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
-            SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toSeq)
-            promise.trySuccess(broadcasted)
-            broadcasted
-          } catch {
-            // SPARK-24294: To bypass scala bug: https://github.com/scala/bug/issues/9554, we throw
-            // SparkFatalException, which is a subclass of Exception. ThreadUtils.awaitResult
-            // will catch this exception and re-throw the wrapped fatal throwable.
-            case oe: OutOfMemoryError =>
-              val tables = child.collect { case f: FileSourceScanExec => f.tableIdentifier }.flatten
-              val ex = new SparkFatalException(
-                QueryExecutionErrors.notEnoughMemoryToBuildAndBroadcastTableError(oe, tables))
-              promise.tryFailure(ex)
-              throw ex
-            case e if !NonFatal(e) =>
-              val ex = new SparkFatalException(e)
-              promise.tryFailure(ex)
-              throw ex
-            case e: Throwable =>
-              promise.tryFailure(e)
-              throw e
-          }
+        // SPARK-39983 - Broadcast the relation without caching the unserialized object.
+        val broadcasted = sparkContext.broadcastInternal(relation, serializedOnly = true)
+        longMetric("broadcastTime") += NANOSECONDS.toMillis(System.nanoTime() - beforeBroadcast)
+        val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
+        SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toSeq)
+        promise.trySuccess(broadcasted)
+        broadcasted
+      } catch {
+        // SPARK-24294: To bypass scala bug: https://github.com/scala/bug/issues/9554, we throw
+        // SparkFatalException, which is a subclass of Exception. ThreadUtils.awaitResult
+        // will catch this exception and re-throw the wrapped fatal throwable.
+        case oe: OutOfMemoryError =>
+          val tables = child.collect { case f: FileSourceScanExec => f.tableIdentifier }.flatten
+          val ex = new SparkFatalException(
+            QueryExecutionErrors.notEnoughMemoryToBuildAndBroadcastTableError(oe, tables))
+          promise.tryFailure(ex)
+          throw ex
+        case e if !NonFatal(e) =>
+          val ex = new SparkFatalException(e)
+          promise.tryFailure(ex)
+          throw ex
+        case e: Throwable =>
+          promise.tryFailure(e)
+          throw e
+      }
     }
   }
 
@@ -274,6 +276,7 @@ case class BroadcastExchangeExec(
 
 object BroadcastExchangeExec {
   private[execution] val executionContext = ExecutionContext.fromExecutorService(
-      ThreadUtils.newDaemonCachedThreadPool("broadcast-exchange",
-        SQLConf.get.getConf(StaticSQLConf.BROADCAST_EXCHANGE_MAX_THREAD_THRESHOLD)))
+    ThreadUtils.newDaemonCachedThreadPool(
+      "broadcast-exchange",
+      SQLConf.get.getConf(StaticSQLConf.BROADCAST_EXCHANGE_MAX_THREAD_THRESHOLD)))
 }

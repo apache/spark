@@ -65,18 +65,37 @@ class SQLJsonProtocolSuite extends SparkFunSuite with LocalSparkSession {
         if (newExecutionStartEvent) {
           // queryId should be None when parsing legacy event logs
           val expectedEvent = if (newExecutionStartJson) {
-            SparkListenerSQLExecutionStart(0, Some(1), "test desc", "test detail",
-              "test plan", new SparkPlanInfo("TestNode", "test string", Nil, Map(), Nil), 0,
-              Map("k1" -> "v1"), queryId = None)
+            SparkListenerSQLExecutionStart(
+              0,
+              Some(1),
+              "test desc",
+              "test detail",
+              "test plan",
+              new SparkPlanInfo("TestNode", "test string", Nil, Map(), Nil),
+              0,
+              Map("k1" -> "v1"),
+              queryId = None)
           } else {
-            SparkListenerSQLExecutionStart(0, None, "test desc", "test detail",
-              "test plan", new SparkPlanInfo("TestNode", "test string", Nil, Map(), Nil), 0,
-              Map("k1" -> "v1"), queryId = None)
+            SparkListenerSQLExecutionStart(
+              0,
+              None,
+              "test desc",
+              "test detail",
+              "test plan",
+              new SparkPlanInfo("TestNode", "test string", Nil, Map(), Nil),
+              0,
+              Map("k1" -> "v1"),
+              queryId = None)
           }
           assert(reconstructedEvent == expectedEvent)
         } else {
-          val expectedOldEvent = OldVersionSQLExecutionStart(0, "test desc", "test detail",
-            "test plan", new SparkPlanInfo("TestNode", "test string", Nil, Map(), Nil), 0)
+          val expectedOldEvent = OldVersionSQLExecutionStart(
+            0,
+            "test desc",
+            "test detail",
+            "test plan",
+            new SparkPlanInfo("TestNode", "test string", Nil, Map(), Nil),
+            0)
           assert(reconstructedEvent == expectedOldEvent)
         }
       }
@@ -96,8 +115,7 @@ class SQLJsonProtocolSuite extends SparkFunSuite with LocalSparkSession {
     event.executionFailure = Some(exception)
     val json = JsonProtocol.sparkEventToJsonString(event)
     // scalastyle:off line.size.limit
-    assert(parse(json) == parse(
-      s"""
+    assert(parse(json) == parse(s"""
         |{
         |  "Event" : "org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionEnd",
         |  "executionId" : 1,
@@ -153,7 +171,7 @@ private case class OldVersionSQLExecutionStart(
     physicalPlanDescription: String,
     sparkPlanInfo: SparkPlanInfo,
     time: Long)
-  extends SparkListenerEvent
+    extends SparkListenerEvent
 
 private case class OldVersionSQLExecutionEnd(executionId: Long, time: Long)
-  extends SparkListenerEvent
+    extends SparkListenerEvent

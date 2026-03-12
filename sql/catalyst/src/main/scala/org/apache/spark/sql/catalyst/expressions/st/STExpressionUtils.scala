@@ -41,8 +41,7 @@ private[sql] object STExpressionUtils {
       case _ if !SQLConf.get.geospatialEnabled =>
         throw new AnalysisException(
           errorClass = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED",
-          messageParameters = Map.empty
-        )
+          messageParameters = Map.empty)
       case _: GeometryType =>
         geometryTypeWithSrid(srid)
       case _: GeographyType =>
@@ -53,8 +52,9 @@ private[sql] object STExpressionUtils {
   }
 
   /**
-   * Returns the input GEOMETRY value with the specified SRID. If the SRID expression is a literal,
-   * the SRID value can be directly extracted. Otherwise, only the mixed SRID value can be used.
+   * Returns the input GEOMETRY value with the specified SRID. If the SRID expression is a
+   * literal, the SRID value can be directly extracted. Otherwise, only the mixed SRID value can
+   * be used.
    */
   def geometryTypeWithSrid(srid: Expression): GeometryType = {
     srid match {
@@ -68,8 +68,9 @@ private[sql] object STExpressionUtils {
   }
 
   /**
-   * Returns the input GEOGRAPHY value with the specified SRID. If the SRID expression is a literal,
-   * the SRID value can be directly extracted. Otherwise, only the mixed SRID value can be used.
+   * Returns the input GEOGRAPHY value with the specified SRID. If the SRID expression is a
+   * literal, the SRID value can be directly extracted. Otherwise, only the mixed SRID value can
+   * be used.
    */
   private def geographyTypeWithSrid(srid: Expression): GeographyType = {
     srid match {

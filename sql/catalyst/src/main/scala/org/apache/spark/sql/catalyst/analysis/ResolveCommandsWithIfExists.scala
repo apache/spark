@@ -22,14 +22,14 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.COMMAND
 
 /**
- * A rule for handling commands when the table or temp view is not resolved.
- * These commands support a flag, "ifExists", so that they do not fail when a relation is not
- * resolved. If the "ifExists" flag is set to true. the plan is resolved to [[NoopCommand]],
+ * A rule for handling commands when the table or temp view is not resolved. These commands
+ * support a flag, "ifExists", so that they do not fail when a relation is not resolved. If the
+ * "ifExists" flag is set to true. the plan is resolved to [[NoopCommand]],
  */
 object ResolveCommandsWithIfExists extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
-    _.containsPattern(COMMAND)) {
-    case UncacheTable(u: UnresolvedRelation, ifExists, _) if ifExists =>
-      NoopCommand("UNCACHE TABLE", u.multipartIdentifier)
-  }
+  def apply(plan: LogicalPlan): LogicalPlan =
+    plan.resolveOperatorsUpWithPruning(_.containsPattern(COMMAND)) {
+      case UncacheTable(u: UnresolvedRelation, ifExists, _) if ifExists =>
+        NoopCommand("UNCACHE TABLE", u.multipartIdentifier)
+    }
 }

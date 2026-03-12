@@ -29,6 +29,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 object DeserializerBuildHelper {
+
   /** Returns the current path with a sub-field extracted. */
   def addToPath(
       path: Expression,
@@ -70,15 +71,8 @@ object DeserializerBuildHelper {
     }
   }
 
-  def createDeserializerForTypesSupportValueOf(
-      path: Expression,
-      clazz: Class[_]): Expression = {
-    StaticInvoke(
-      clazz,
-      ObjectType(clazz),
-      "valueOf",
-      path :: Nil,
-      returnNullable = false)
+  def createDeserializerForTypesSupportValueOf(path: Expression, clazz: Class[_]): Expression = {
+    StaticInvoke(clazz, ObjectType(clazz), "valueOf", path :: Nil, returnNullable = false)
   }
 
   def createDeserializerForGeometryType(inputObject: Expression, gt: GeometryType): Expression = {
@@ -90,7 +84,9 @@ object DeserializerBuildHelper {
       returnNullable = false)
   }
 
-  def createDeserializerForGeographyType(inputObject: Expression, gt: GeographyType): Expression = {
+  def createDeserializerForGeographyType(
+      inputObject: Expression,
+      gt: GeographyType): Expression = {
     StaticInvoke(
       classOf[STUtils],
       ObjectType(classOf[Geography]),
@@ -126,7 +122,10 @@ object DeserializerBuildHelper {
   }
 
   def createDeserializerForString(path: Expression, returnNullable: Boolean): Expression = {
-    Invoke(path, "toString", ObjectType(classOf[java.lang.String]),
+    Invoke(
+      path,
+      "toString",
+      ObjectType(classOf[java.lang.String]),
       returnNullable = returnNullable)
   }
 
@@ -187,7 +186,10 @@ object DeserializerBuildHelper {
   def createDeserializerForJavaBigDecimal(
       path: Expression,
       returnNullable: Boolean): Expression = {
-    Invoke(path, "toJavaBigDecimal", ObjectType(classOf[java.math.BigDecimal]),
+    Invoke(
+      path,
+      "toJavaBigDecimal",
+      ObjectType(classOf[java.math.BigDecimal]),
       returnNullable = returnNullable)
   }
 
@@ -200,13 +202,15 @@ object DeserializerBuildHelper {
   def createDeserializerForJavaBigInteger(
       path: Expression,
       returnNullable: Boolean): Expression = {
-    Invoke(path, "toJavaBigInteger", ObjectType(classOf[java.math.BigInteger]),
+    Invoke(
+      path,
+      "toJavaBigInteger",
+      ObjectType(classOf[java.math.BigInteger]),
       returnNullable = returnNullable)
   }
 
   def createDeserializerForScalaBigInt(path: Expression): Expression = {
-    Invoke(path, "toScalaBigInt", ObjectType(classOf[scala.math.BigInt]),
-      returnNullable = false)
+    Invoke(path, "toScalaBigInt", ObjectType(classOf[scala.math.BigInt]), returnNullable = false)
   }
 
   def createDeserializerForDuration(path: Expression): Expression = {
@@ -228,15 +232,15 @@ object DeserializerBuildHelper {
   }
 
   /**
-   * When we build the `deserializer` for an encoder, we set up a lot of "unresolved" stuff
-   * and lost the required data type, which may lead to runtime error if the real type doesn't
-   * match the encoder's schema.
-   * For example, we build an encoder for `case class Data(a: Int, b: String)` and the real type
-   * is [a: int, b: long], then we will hit runtime error and say that we can't construct class
-   * `Data` with int and long, because we lost the information that `b` should be a string.
+   * When we build the `deserializer` for an encoder, we set up a lot of "unresolved" stuff and
+   * lost the required data type, which may lead to runtime error if the real type doesn't match
+   * the encoder's schema. For example, we build an encoder for
+   * `case class Data(a: Int, b: String)` and the real type is [a: int, b: long], then we will hit
+   * runtime error and say that we can't construct class `Data` with int and long, because we lost
+   * the information that `b` should be a string.
    *
-   * This method help us "remember" the required data type by adding a `UpCast`. Note that we
-   * only need to do this for leaf nodes.
+   * This method help us "remember" the required data type by adding a `UpCast`. Note that we only
+   * need to do this for leaf nodes.
    */
   private[catalyst] def upCastToExpectedType(
       expr: Expression,
@@ -254,16 +258,17 @@ object DeserializerBuildHelper {
 
   /**
    * Returns an expression for deserializing the Spark SQL representation of an object into its
-   * external form. The mapping between the internal and external representations is
-   * described by encoder `enc`. The Spark SQL representation is located at ordinal 0 of
-   * a row, i.e., `GetColumnByOrdinal(0, _)`. Nested classes will have their fields accessed using
+   * external form. The mapping between the internal and external representations is described by
+   * encoder `enc`. The Spark SQL representation is located at ordinal 0 of a row, i.e.,
+   * `GetColumnByOrdinal(0, _)`. Nested classes will have their fields accessed using
    * `UnresolvedExtractValue`.
    *
-   * The returned expression is used by `ExpressionEncoder`. The encoder will resolve and bind this
-   * deserializer expression when using it.
+   * The returned expression is used by `ExpressionEncoder`. The encoder will resolve and bind
+   * this deserializer expression when using it.
    *
-   * @param enc encoder that describes the mapping between the Spark SQL representation and the
-   *            external representation.
+   * @param enc
+   *   encoder that describes the mapping between the Spark SQL representation and the external
+   *   representation.
    */
   def createDeserializer[T](enc: AgnosticEncoder[T]): Expression = {
     val walkedTypePath = WalkedTypePath().recordRoot(enc.clsTag.runtimeClass.getName)
@@ -279,14 +284,18 @@ object DeserializerBuildHelper {
 
   /**
    * Returns an expression for deserializing the value of an input expression into its external
-   * representation. The mapping between the internal and external representations is
-   * described by encoder `enc`.
+   * representation. The mapping between the internal and external representations is described by
+   * encoder `enc`.
    *
-   * @param enc encoder that describes the mapping between the Spark SQL representation and the
-   *            external representation.
-   * @param path The expression which can be used to extract serialized value.
-   * @param walkedTypePath The paths from top to bottom to access current field when deserializing.
-   * @param isTopLevel true if we are creating a deserializer for the top level value.
+   * @param enc
+   *   encoder that describes the mapping between the Spark SQL representation and the external
+   *   representation.
+   * @param path
+   *   The expression which can be used to extract serialized value.
+   * @param walkedTypePath
+   *   The paths from top to bottom to access current field when deserializing.
+   * @param isTopLevel
+   *   true if we are creating a deserializer for the top level value.
    */
   private def createDeserializer(
       enc: AgnosticEncoder[_],
@@ -309,7 +318,7 @@ object DeserializerBuildHelper {
         "withName",
         createDeserializerForString(path, returnNullable = false) :: Nil,
         returnNullable = false)
-    case _ @ (_: GeographyEncoder | _: GeometryEncoder) if !SQLConf.get.geospatialEnabled =>
+    case _ @(_: GeographyEncoder | _: GeometryEncoder) if !SQLConf.get.geospatialEnabled =>
       throw new org.apache.spark.sql.AnalysisException(
         errorClass = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED",
         messageParameters = scala.collection.immutable.Map.empty)
@@ -359,12 +368,7 @@ object DeserializerBuildHelper {
 
     case ArrayEncoder(elementEnc: AgnosticEncoder[_], containsNull) =>
       Invoke(
-        deserializeArray(
-          path,
-          elementEnc,
-          containsNull,
-          None,
-          walkedTypePath),
+        deserializeArray(path, elementEnc, containsNull, None, walkedTypePath),
         toArrayMethodName(elementEnc),
         ObjectType(enc.clsTag.runtimeClass),
         returnNullable = false)
@@ -378,7 +382,7 @@ object DeserializerBuildHelper {
         walkedTypePath)
 
     case MapEncoder(tag, keyEncoder, valueEncoder, _)
-      if classOf[java.util.Map[_, _]].isAssignableFrom(tag.runtimeClass) =>
+        if classOf[java.util.Map[_, _]].isAssignableFrom(tag.runtimeClass) =>
       // TODO (hvanhovell) this is can be improved.
       val newTypePath = walkedTypePath.recordMap(
         keyEncoder.clsTag.runtimeClass.getName,
@@ -421,21 +425,19 @@ object DeserializerBuildHelper {
       val cls = tag.runtimeClass
       val dt = ObjectType(cls)
       val isTuple = cls.getName.startsWith("scala.Tuple")
-      val arguments = fields.zipWithIndex.map {
-        case (field, i) =>
-          val newTypePath = walkedTypePath.recordField(
-            field.enc.clsTag.runtimeClass.getName,
-            field.name)
-          // For tuples, we grab the inner fields by ordinal instead of name.
-          val getter = if (isTuple) {
-            addToPathOrdinal(path, i, field.enc.dataType, newTypePath)
-          } else {
-            addToPath(path, field.name, field.enc.dataType, newTypePath)
-          }
-          expressionWithNullSafety(
-            createDeserializer(field.enc, getter, newTypePath),
-            field.enc.nullable,
-            newTypePath)
+      val arguments = fields.zipWithIndex.map { case (field, i) =>
+        val newTypePath =
+          walkedTypePath.recordField(field.enc.clsTag.runtimeClass.getName, field.name)
+        // For tuples, we grab the inner fields by ordinal instead of name.
+        val getter = if (isTuple) {
+          addToPathOrdinal(path, i, field.enc.dataType, newTypePath)
+        } else {
+          addToPath(path, field.name, field.enc.dataType, newTypePath)
+        }
+        expressionWithNullSafety(
+          createDeserializer(field.enc, getter, newTypePath),
+          field.enc.nullable,
+          newTypePath)
       }
       exprs.If(
         IsNull(path),
@@ -444,9 +446,7 @@ object DeserializerBuildHelper {
 
     case AgnosticEncoders.RowEncoder(fields) =>
       val convertedFields = fields.zipWithIndex.map { case (f, i) =>
-        val newTypePath = walkedTypePath.recordField(
-          f.enc.clsTag.runtimeClass.getName,
-          f.name)
+        val newTypePath = walkedTypePath.recordField(f.enc.clsTag.runtimeClass.getName, f.name)
         val deserializer = createDeserializer(f.enc, GetStructField(path, i), newTypePath)
         if (!isTopLevel) {
           exprs.If(
@@ -457,7 +457,8 @@ object DeserializerBuildHelper {
           deserializer
         }
       }
-      exprs.If(IsNull(path),
+      exprs.If(
+        IsNull(path),
         exprs.Literal.create(null, externalDataTypeFor(enc)),
         CreateExternalRow(convertedFields, enc.schema))
 
@@ -465,18 +466,16 @@ object DeserializerBuildHelper {
       val setters = fields
         .filter(_.writeMethod.isDefined)
         .map { f =>
-        val newTypePath = walkedTypePath.recordField(
-          f.enc.clsTag.runtimeClass.getName,
-          f.name)
-        val setter = expressionWithNullSafety(
-          createDeserializer(
-            f.enc,
-            addToPath(path, f.name, f.enc.dataType, newTypePath),
-            newTypePath),
-          nullable = f.nullable,
-          newTypePath)
-        f.writeMethod.get -> setter
-      }
+          val newTypePath = walkedTypePath.recordField(f.enc.clsTag.runtimeClass.getName, f.name)
+          val setter = expressionWithNullSafety(
+            createDeserializer(
+              f.enc,
+              addToPath(path, f.name, f.enc.dataType, newTypePath),
+              newTypePath),
+            nullable = f.nullable,
+            newTypePath)
+          f.writeMethod.get -> setter
+        }
 
       val cls = tag.runtimeClass
       val newInstance = NewInstance(cls, Nil, ObjectType(cls), propagateNull = false)

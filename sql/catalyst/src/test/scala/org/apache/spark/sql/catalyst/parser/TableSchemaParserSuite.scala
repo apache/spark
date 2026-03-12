@@ -35,11 +35,13 @@ class TableSchemaParserSuite extends SparkFunSuite {
   checkTableSchema("a INT", new StructType().add("a", "int"))
   checkTableSchema("`!@#$%.^&*()` string", new StructType().add("!@#$%.^&*()", "string"))
   checkTableSchema("a int, b long", new StructType().add("a", "int").add("b", "long"))
-  checkTableSchema("a STRUCT<intType: int, ts:timestamp>",
+  checkTableSchema(
+    "a STRUCT<intType: int, ts:timestamp>",
     StructType(
-      StructField("a", StructType(
-        StructField("intType", IntegerType) ::
-        StructField("ts", TimestampType) :: Nil)) :: Nil))
+      StructField(
+        "a",
+        StructType(StructField("intType", IntegerType) ::
+          StructField("ts", TimestampType) :: Nil)) :: Nil))
   checkTableSchema(
     "a int comment 'test'",
     new StructType().add("a", "int", nullable = true, "test"))
@@ -56,14 +58,16 @@ class TableSchemaParserSuite extends SparkFunSuite {
 
     val expectedDataType =
       StructType(
-        StructField("complexStructCol", StructType(
-          StructField("struct",
-            StructType(
-              StructField("deciMal", DecimalType.USER_DEFAULT) ::
+        StructField(
+          "complexStructCol",
+          StructType(
+            StructField(
+              "struct",
+              StructType(StructField("deciMal", DecimalType.USER_DEFAULT) ::
                 StructField("anotherDecimal", DecimalType(5, 2)) :: Nil)) ::
-            StructField("MAP", MapType(TimestampType, VarcharType(10))) ::
-            StructField("arrAy", ArrayType(DoubleType)) ::
-            StructField("anotherArray", ArrayType(CharType(9))) :: Nil)) :: Nil)
+              StructField("MAP", MapType(TimestampType, VarcharType(10))) ::
+              StructField("arrAy", ArrayType(DoubleType)) ::
+              StructField("anotherArray", ArrayType(CharType(9))) :: Nil)) :: Nil)
 
     assert(parse(tableSchemaString) === expectedDataType)
   }
@@ -73,9 +77,7 @@ class TableSchemaParserSuite extends SparkFunSuite {
     def parseException(sql: String): SparkThrowable =
       intercept[ParseException](CatalystSqlParser.parseTableSchema(sql))
 
-    checkError(
-      exception = parseException(""),
-      condition = "PARSE_EMPTY_STATEMENT")
+    checkError(exception = parseException(""), condition = "PARSE_EMPTY_STATEMENT")
     checkError(
       exception = parseException("a"),
       condition = "PARSE_SYNTAX_ERROR",

@@ -157,8 +157,7 @@ class StringUtilsSuite extends SparkFunSuite with SQLHelper {
     assert(stripComment("-- comment") == "")
     assert(stripComment("--comment") == "")
     assert(stripComment("-- SELECT * FROM table") == "")
-    assert(stripComment(
-      """-- comment
+    assert(stripComment("""-- comment
         |SELECT * FROM table""".stripMargin) == "\nSELECT * FROM table")
     assert(stripComment("SELECT * FROM table -- comment") == "SELECT * FROM table ")
     assert(stripComment("SELECT '-- not a comment'") == "SELECT '-- not a comment'")
@@ -166,17 +165,16 @@ class StringUtilsSuite extends SparkFunSuite with SQLHelper {
     assert(stripComment("SELECT 1 -- -- nested comment") == "SELECT 1 ")
     assert(stripComment("SELECT ' \\' --not a comment'") == "SELECT ' \\' --not a comment'")
 
-
     // multiline comment tests
     assert(stripComment("SELECT /* inline comment */1-- comment") == "SELECT 1")
     assert(stripComment("SELECT /* inline comment */1") == "SELECT 1")
-    assert(stripComment(
-      """/* my
+    assert(stripComment("""/* my
         |* multiline
         | comment */ SELECT * FROM table""".stripMargin) == " SELECT * FROM table")
     assert(stripComment("SELECT '/* not a comment */'") == "SELECT '/* not a comment */'")
-    assert(StringUtils.stripComment(
-      "SELECT \"/* not a comment */\"") == "SELECT \"/* not a comment */\"")
+    assert(
+      StringUtils.stripComment(
+        "SELECT \"/* not a comment */\"") == "SELECT \"/* not a comment */\"")
     assert(stripComment("SELECT 1/* /* nested comment */") == "SELECT 1")
     assert(stripComment("SELECT ' \\'/*not a comment*/'") == "SELECT ' \\'/*not a comment*/'")
   }
@@ -185,14 +183,12 @@ class StringUtilsSuite extends SparkFunSuite with SQLHelper {
     assert(isSqlScript("  BEGIN END"))
     assert(isSqlScript("BEGIN END;"))
     assert(isSqlScript("BEGIN END"))
-    assert(isSqlScript(
-      """
+    assert(isSqlScript("""
         |BEGIN
         |
         |END
         |""".stripMargin))
-    assert(isSqlScript(
-      """
+    assert(isSqlScript("""
         |BEGIN
         |
         |END;
@@ -200,14 +196,12 @@ class StringUtilsSuite extends SparkFunSuite with SQLHelper {
     assert(isSqlScript("BEGIN BEGIN END END"))
     assert(isSqlScript("BEGIN end"))
     assert(isSqlScript("begin END"))
-    assert(isSqlScript(
-      """/* header comment
+    assert(isSqlScript("""/* header comment
         |*/
         |BEGIN
         |END;
         |""".stripMargin))
-    assert(isSqlScript(
-      """-- header comment
+    assert(isSqlScript("""-- header comment
         |BEGIN
         |END;
         |""".stripMargin))
@@ -232,9 +226,7 @@ class StringUtilsSuite extends SparkFunSuite with SQLHelper {
           |USE DATABASE db""".stripMargin,
         enableSqlScripting = false) == Seq(
         "\nSELECT \"string;with;semicolons\"",
-        "\nUSE DATABASE db"
-      )
-    )
+        "\nUSE DATABASE db"))
 
     // semicolon shouldn't delimit if in backticks
     assert(
@@ -244,9 +236,7 @@ class StringUtilsSuite extends SparkFunSuite with SQLHelper {
           |USE DATABASE db""".stripMargin,
         enableSqlScripting = false) == Seq(
         "\nSELECT `escaped;sequence;with;semicolons`",
-        "\nUSE DATABASE db"
-      )
-    )
+        "\nUSE DATABASE db"))
 
     // white space around command is included in split string
     assert(
@@ -259,12 +249,9 @@ class StringUtilsSuite extends SparkFunSuite with SQLHelper {
           |-- comment 3
           |SELECT 2
           |""".stripMargin,
-        enableSqlScripting = false
-      ) == Seq(
+        enableSqlScripting = false) == Seq(
         "\n-- comment 1\n-- comment 2\n\nSELECT 1",
-        "\t\n-- comment 3\nSELECT 2\n"
-      )
-    )
+        "\t\n-- comment 3\nSELECT 2\n"))
 
     // SQL procedures are respected and not split, if configured
     assert(
@@ -273,13 +260,9 @@ class StringUtilsSuite extends SparkFunSuite with SQLHelper {
           | SELECT 1;
           | SELECT 2;
           |END""".stripMargin,
-        enableSqlScripting = true
-      ) == Seq(
-        """CREATE PROCEDURE p() BEGIN
+        enableSqlScripting = true) == Seq("""CREATE PROCEDURE p() BEGIN
           | SELECT 1;
           | SELECT 2;
-          |END""".stripMargin
-      )
-    )
+          |END""".stripMargin))
   }
 }

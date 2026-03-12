@@ -30,7 +30,9 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
-      Batch("InferAndPushDownFilters", FixedPoint(100),
+      Batch(
+        "InferAndPushDownFilters",
+        FixedPoint(100),
         PushPredicateThroughJoin,
         PushPredicateThroughNonJoin,
         InferFiltersFromConstraints,
@@ -57,8 +59,11 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
 
   test("filter: filter out constraints in condition") {
     val originalQuery = testRelation.where($"a" === 1 && $"a" === $"b").analyze
-    val correctAnswer = testRelation.where(IsNotNull($"a") && IsNotNull($"b") &&
-      $"a" === $"b" && $"a" === 1 && $"b" === 1).analyze
+    val correctAnswer = testRelation
+      .where(
+        IsNotNull($"a") && IsNotNull($"b") &&
+          $"a" === $"b" && $"a" === 1 && $"b" === 1)
+      .analyze
     val optimized = Optimize.execute(originalQuery)
     comparePlans(optimized, correctAnswer)
   }
@@ -66,8 +71,10 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
   test("single inner join: filter out values on either side on equi-join keys") {
     val x = testRelation.subquery("x")
     val y = testRelation.subquery("y")
-    val originalQuery = x.join(y,
-      condition = Some(("x.a".attr === "y.a".attr) && ("x.a".attr === 1) && ("y.c".attr > 5)))
+    val originalQuery = x
+      .join(
+        y,
+        condition = Some(("x.a".attr === "y.a".attr) && ("x.a".attr === 1) && ("y.c".attr > 5)))
       .analyze
     val left = x.where(IsNotNull($"a") && "x.a".attr === 1)
     val right = y.where(IsNotNull($"a") && IsNotNull($"c") && "y.c".attr > 5 && "y.a".attr === 1)
@@ -79,8 +86,10 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
   test("single inner join: filter out nulls on either side on non equal keys") {
     val x = testRelation.subquery("x")
     val y = testRelation.subquery("y")
-    val originalQuery = x.join(y,
-      condition = Some(("x.a".attr =!= "y.a".attr) && ("x.b".attr === 1) && ("y.c".attr > 5)))
+    val originalQuery = x
+      .join(
+        y,
+        condition = Some(("x.a".attr =!= "y.a".attr) && ("x.b".attr === 1) && ("y.c".attr > 5)))
       .analyze
     val left = x.where(IsNotNull($"a") && IsNotNull($"b") && "x.b".attr === 1)
     val right = y.where(IsNotNull($"a") && IsNotNull($"c") && "y.c".attr > 5)
@@ -92,12 +101,17 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
   test("single inner join with pre-existing filters: filter out values on either side") {
     val x = testRelation.subquery("x")
     val y = testRelation.subquery("y")
-    val originalQuery = x.where($"b" > 5).join(y.where($"a" === 10),
-      condition = Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr)).analyze
+    val originalQuery = x
+      .where($"b" > 5)
+      .join(
+        y.where($"a" === 10),
+        condition = Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr))
+      .analyze
     val left = x.where(IsNotNull($"a") && $"a" === 10 && IsNotNull($"b") && $"b" > 5)
     val right = y.where(IsNotNull($"a") && IsNotNull($"b") && $"a" === 10 && $"b" > 5)
-    val correctAnswer = left.join(right,
-      condition = Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr)).analyze
+    val correctAnswer = left
+      .join(right, condition = Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr))
+      .analyze
     val optimized = Optimize.execute(originalQuery)
     comparePlans(optimized, correctAnswer)
   }
@@ -105,8 +119,7 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
   test("single outer join: no null filters are generated") {
     val x = testRelation.subquery("x")
     val y = testRelation.subquery("y")
-    val originalQuery = x.join(y, FullOuter,
-      condition = Some("x.a".attr === "y.a".attr)).analyze
+    val originalQuery = x.join(y, FullOuter, condition = Some("x.a".attr === "y.a".attr)).analyze
     val optimized = Optimize.execute(originalQuery)
     comparePlans(optimized, originalQuery)
   }
@@ -117,11 +130,14 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     val t3 = testRelation.subquery("t3")
     val t4 = testRelation.subquery("t4")
 
-    val originalQuery = t1.where($"b" > 5)
+    val originalQuery = t1
+      .where($"b" > 5)
       .join(t2, condition = Some("t1.b".attr === "t2.b".attr))
       .join(t3, condition = Some("t2.b".attr === "t3.b".attr))
-      .join(t4, condition = Some("t3.b".attr === "t4.b".attr)).analyze
-    val correctAnswer = t1.where(IsNotNull($"b") && $"b" > 5)
+      .join(t4, condition = Some("t3.b".attr === "t4.b".attr))
+      .analyze
+    val correctAnswer = t1
+      .where(IsNotNull($"b") && $"b" > 5)
       .join(t2.where(IsNotNull($"b") && $"b" > 5), condition = Some("t1.b".attr === "t2.b".attr))
       .join(t3.where(IsNotNull($"b") && $"b" > 5), condition = Some("t2.b".attr === "t3.b".attr))
       .join(t4.where(IsNotNull($"b") && $"b" > 5), condition = Some("t3.b".attr === "t4.b".attr))
@@ -136,7 +152,8 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
 
     val originalQuery =
       x.join(y, Inner, Some("x.a".attr === "y.a".attr)).where("x.a".attr > 5).analyze
-    val correctAnswer = x.where(IsNotNull($"a") && $"a".attr > 5)
+    val correctAnswer = x
+      .where(IsNotNull($"a") && $"a".attr > 5)
       .join(y.where(IsNotNull($"a") && $"a".attr > 5), Inner, Some("x.a".attr === "y.a".attr))
       .analyze
     val optimized = Optimize.execute(originalQuery)
@@ -147,14 +164,19 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     val t1 = testRelation.subquery("t1")
     val t2 = testRelation.subquery("t2")
 
-    val originalQuery = t1.select($"a", Coalesce(Seq($"a", $"b")).as("int_col")).as("t")
+    val originalQuery = t1
+      .select($"a", Coalesce(Seq($"a", $"b")).as("int_col"))
+      .as("t")
       .join(t2, Inner, Some("t.a".attr === "t2.a".attr && "t.int_col".attr === "t2.a".attr))
       .analyze
     val correctAnswer = t1
       .where(IsNotNull($"a") && IsNotNull(Coalesce(Seq($"a", $"b"))) &&
         $"a" === Coalesce(Seq($"a", $"b")))
-      .select($"a", Coalesce(Seq($"a", $"b")).as("int_col")).as("t")
-      .join(t2.where(IsNotNull($"a")), Inner,
+      .select($"a", Coalesce(Seq($"a", $"b")).as("int_col"))
+      .as("t")
+      .join(
+        t2.where(IsNotNull($"a")),
+        Inner,
         Some("t.a".attr === "t2.a".attr && "t.int_col".attr === "t2.a".attr))
       .analyze
     val optimized = Optimize.execute(originalQuery)
@@ -165,13 +187,18 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     val t1 = testRelation.subquery("t1")
     val t2 = testRelation.subquery("t2")
 
-    val originalQuery = t1.select($"a", $"b".as("d")).as("t")
+    val originalQuery = t1
+      .select($"a", $"b".as("d"))
+      .as("t")
       .join(t2, Inner, Some("t.a".attr === "t2.a".attr && "t.d".attr === "t2.a".attr))
       .analyze
     val correctAnswer = t1
-      .where(IsNotNull($"a") && IsNotNull($"b") &&$"a" === $"b")
-      .select($"a", $"b".as("d")).as("t")
-      .join(t2.where(IsNotNull($"a")), Inner,
+      .where(IsNotNull($"a") && IsNotNull($"b") && $"a" === $"b")
+      .select($"a", $"b".as("d"))
+      .as("t")
+      .join(
+        t2.where(IsNotNull($"a")),
+        Inner,
         Some("t.a".attr === "t2.a".attr && "t.d".attr === "t2.a".attr))
       .analyze
     val optimized = Optimize.execute(originalQuery)
@@ -181,11 +208,14 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
   test("generate correct filters for alias that don't produce recursive constraints") {
     val t1 = testRelation.subquery("t1")
 
-    val originalQuery = t1.select($"a".as("x"), $"b".as("y"))
-      .where($"x" === 1 && $"x" === $"y").analyze
+    val originalQuery = t1
+      .select($"a".as("x"), $"b".as("y"))
+      .where($"x" === 1 && $"x" === $"y")
+      .analyze
     val correctAnswer =
       t1.where($"a" === 1 && $"b" === 1 && $"a" === $"b" && IsNotNull($"a") && IsNotNull($"b"))
-        .select($"a".as("x"), $"b".as("y")).analyze
+        .select($"a".as("x"), $"b".as("y"))
+        .analyze
     val optimized = Optimize.execute(originalQuery)
     comparePlans(optimized, correctAnswer)
   }
@@ -200,11 +230,12 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
 
   test("constraints should be inferred from aliased literals") {
     val originalLeft = testRelation.subquery("left").as("left")
-    val optimizedLeft = testRelation.subquery("left")
-      .where(IsNotNull($"a") && $"a" <=> 2).as("left")
+    val optimizedLeft = testRelation
+      .subquery("left")
+      .where(IsNotNull($"a") && $"a" <=> 2)
+      .as("left")
 
-    val right = Project(Seq(Literal(2).as("two")),
-      testRelation.subquery("right")).as("right")
+    val right = Project(Seq(Literal(2).as("two")), testRelation.subquery("right")).as("right")
     val condition = Some("left.a".attr === "right.two".attr)
 
     val original = originalLeft.join(right, Inner, condition)
@@ -247,8 +278,10 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     val x = testRelation.subquery("x")
     val y = testRelation.subquery("y")
     testConstraintsAfterJoin(
-      x, y.where("a".attr === 1),
-      x, y.where(IsNotNull($"a") && $"a" === 1),
+      x,
+      y.where("a".attr === 1),
+      x,
+      y.where(IsNotNull($"a") && $"a" === 1),
       LeftOuter)
   }
 
@@ -276,16 +309,19 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     val originalLeft = testRelation1.subquery("left")
     val originalRight = testRelation2.where($"b" === 1L).subquery("right")
 
-    val left = testRelation1.where(IsNotNull($"a") && $"a".cast(LongType) === 1L)
+    val left = testRelation1
+      .where(IsNotNull($"a") && $"a".cast(LongType) === 1L)
       .subquery("left")
     val right = testRelation2.where(IsNotNull($"b") && $"b" === 1L).subquery("right")
 
-    Seq(Some("left.a".attr.cast(LongType) === "right.b".attr),
+    Seq(
+      Some("left.a".attr.cast(LongType) === "right.b".attr),
       Some("right.b".attr === "left.a".attr.cast(LongType))).foreach { condition =>
       testConstraintsAfterJoin(originalLeft, originalRight, left, right, Inner, condition)
     }
 
-    Seq(Some("left.a".attr === "right.b".attr.cast(IntegerType)),
+    Seq(
+      Some("left.a".attr === "right.b".attr.cast(IntegerType)),
       Some("right.b".attr.cast(IntegerType) === "left.a".attr)).foreach { condition =>
       testConstraintsAfterJoin(
         originalLeft,
@@ -297,7 +333,8 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     }
   }
 
-  test("Constraints shouldn't be inferred from cast equality constraint(filter lower data type)") {
+  test(
+    "Constraints shouldn't be inferred from cast equality constraint(filter lower data type)") {
     val testRelation1 = LocalRelation($"a".int)
     val testRelation2 = LocalRelation($"b".long)
     val originalLeft = testRelation1.where($"a" === 1).subquery("left")
@@ -306,49 +343,61 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     val left = testRelation1.where(IsNotNull($"a") && $"a" === 1).subquery("left")
     val right = testRelation2.where(IsNotNull($"b")).subquery("right")
 
-    Seq(Some("left.a".attr.cast(LongType) === "right.b".attr),
+    Seq(
+      Some("left.a".attr.cast(LongType) === "right.b".attr),
       Some("right.b".attr === "left.a".attr.cast(LongType))).foreach { condition =>
       testConstraintsAfterJoin(originalLeft, originalRight, left, right, Inner, condition)
     }
 
-    Seq(Some("left.a".attr === "right.b".attr.cast(IntegerType)),
+    Seq(
+      Some("left.a".attr === "right.b".attr.cast(IntegerType)),
       Some("right.b".attr.cast(IntegerType) === "left.a".attr)).foreach { condition =>
       testConstraintsAfterJoin(
         originalLeft,
         originalRight,
         left,
-        testRelation2.where(IsNotNull($"b") && $"b".attr.cast(IntegerType) === 1)
+        testRelation2
+          .where(IsNotNull($"b") && $"b".attr.cast(IntegerType) === 1)
           .subquery("right"),
         Inner,
         condition)
     }
   }
 
-  test("SPARK-36978: IsNotNull constraints on structs should apply at the member field " +
-    "instead of the root level nested type") {
-    val structTestRelation = LocalRelation($"a".struct(StructType(
-      StructField("cstruct", StructType(StructField("cstr", StringType) :: Nil))
-        :: StructField("cint", IntegerType) :: Nil)))
+  test(
+    "SPARK-36978: IsNotNull constraints on structs should apply at the member field " +
+      "instead of the root level nested type") {
+    val structTestRelation = LocalRelation(
+      $"a".struct(
+        StructType(StructField("cstruct", StructType(StructField("cstr", StringType) :: Nil))
+          :: StructField("cint", IntegerType) :: Nil)))
     val originalQuery = structTestRelation
-      .where($"a".getField("cint") === 1 && $"a".getField("cstruct")
-        .getField("cstr") === "abc").analyze
+      .where(
+        $"a".getField("cint") === 1 && $"a"
+          .getField("cstruct")
+          .getField("cstr") === "abc")
+      .analyze
 
     val correctAnswer = structTestRelation
-      .where(IsNotNull($"a".getField("cint"))
-        && IsNotNull($"a".getField("cstruct").getField("cstr"))
-        && $"a".getField("cint") === 1 && $"a".getField("cstruct").getField("cstr") === "abc")
+      .where(
+        IsNotNull($"a".getField("cint"))
+          && IsNotNull($"a".getField("cstruct").getField("cstr"))
+          && $"a".getField("cint") === 1 && $"a".getField("cstruct").getField("cstr") === "abc")
       .analyze
     val optimized = Optimize.execute(originalQuery)
     comparePlans(optimized, correctAnswer)
   }
 
-  test("SPARK-36978: IsNotNull constraints on array of structs should apply at the member field " +
-    "instead of the root level nested type") {
+  test(
+    "SPARK-36978: IsNotNull constraints on array of structs should apply at the member field " +
+      "instead of the root level nested type") {
     val intStructField = StructField("cint", IntegerType)
     val arrayOfStructsTestRelation = LocalRelation($"a".array(StructType(intStructField :: Nil)))
-    val getArrayStructField = GetArrayStructFields($"a", intStructField, 0, 1, containsNull = true)
+    val getArrayStructField =
+      GetArrayStructFields($"a", intStructField, 0, 1, containsNull = true)
     val originalQuery = arrayOfStructsTestRelation
-      .where(GetArrayItem(getArrayStructField, 0) === 1).analyze
+      .where(GetArrayItem(getArrayStructField, 0) === 1)
+      .analyze
 
     val correctAnswer = arrayOfStructsTestRelation
       .where(IsNotNull(getArrayStructField) && GetArrayItem(getArrayStructField, 0) === 1)
@@ -357,16 +406,18 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("SPARK-36978: IsNotNull constraints for nested types apply to the ExtractValue which " +
-    "only has ExtractValue/Attribute children") {
+  test(
+    "SPARK-36978: IsNotNull constraints for nested types apply to the ExtractValue which " +
+      "only has ExtractValue/Attribute children") {
     val arrayTestRelation = LocalRelation($"a".array(IntegerType))
     val originalQuery = arrayTestRelation
       .where(GetArrayItem(ArrayDistinct($"a"), 0) === 1 && GetArrayItem($"a", 1) === 1)
       .analyze
 
     val correctAnswer = arrayTestRelation
-      .where(IsNotNull($"a") && GetArrayItem(ArrayDistinct($"a"), 0) === 1
-        && GetArrayItem($"a", 1) === 1)
+      .where(
+        IsNotNull($"a") && GetArrayItem(ArrayDistinct($"a"), 0) === 1
+          && GetArrayItem($"a", 1) === 1)
       .analyze
     val optimized = Optimize.execute(originalQuery)
     comparePlans(optimized, correctAnswer)
@@ -379,21 +430,29 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
 
     // Removes EqualNullSafe when constructing candidate constraints
     comparePlans(
-      InferFiltersFromConstraints(x.select($"x.a", $"x.a".as("xa"))
-        .where($"xa" <=> $"x.a" && $"xa" === $"x.a").analyze),
+      InferFiltersFromConstraints(
+        x.select($"x.a", $"x.a".as("xa"))
+          .where($"xa" <=> $"x.a" && $"xa" === $"x.a")
+          .analyze),
       x.select($"x.a", $"x.a".as("xa"))
-        .where($"xa".isNotNull && $"x.a".isNotNull && $"xa" <=> $"x.a" && $"xa" === $"x.a").analyze)
+        .where($"xa".isNotNull && $"x.a".isNotNull && $"xa" <=> $"x.a" && $"xa" === $"x.a")
+        .analyze)
 
     // Once strategy's idempotence is not broken
     val originalQuery =
       x.join(y, condition = Some($"x.a" === $"y.a"))
-        .select($"x.a", $"x.a".as("xa")).as("xy")
-        .join(z, condition = Some($"xy.a" === $"z.a")).analyze
+        .select($"x.a", $"x.a".as("xa"))
+        .as("xy")
+        .join(z, condition = Some($"xy.a" === $"z.a"))
+        .analyze
 
     val correctAnswer =
-      x.where($"a".isNotNull).join(y.where($"a".isNotNull), condition = Some($"x.a" === $"y.a"))
-        .select($"x.a", $"x.a".as("xa")).as("xy")
-        .join(z.where($"a".isNotNull), condition = Some($"xy.a" === $"z.a")).analyze
+      x.where($"a".isNotNull)
+        .join(y.where($"a".isNotNull), condition = Some($"x.a" === $"y.a"))
+        .select($"x.a", $"x.a".as("xa"))
+        .as("xy")
+        .join(z.where($"a".isNotNull), condition = Some($"xy.a" === $"z.a"))
+        .analyze
 
     val optimizedQuery = InferFiltersFromConstraints(originalQuery)
     comparePlans(optimizedQuery, correctAnswer)

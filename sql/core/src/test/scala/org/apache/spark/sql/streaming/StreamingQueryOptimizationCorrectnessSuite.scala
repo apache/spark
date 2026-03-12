@@ -25,8 +25,8 @@ import org.apache.spark.sql.functions.{count, expr, lit, timestamp_seconds, wind
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * This test ensures that any optimizations done by Spark SQL optimizer are
- * correct for Streaming queries.
+ * This test ensures that any optimizations done by Spark SQL optimizer are correct for Streaming
+ * queries.
  */
 class StreamingQueryOptimizationCorrectnessSuite extends StreamTest {
   import testImplicits._
@@ -47,7 +47,8 @@ class StreamingQueryOptimizationCorrectnessSuite extends StreamTest {
       .select("name", "count")
 
     val result =
-      ds1.union(ds2)
+      ds1
+        .union(ds2)
         .groupBy("name")
         .count()
 
@@ -56,12 +57,12 @@ class StreamingQueryOptimizationCorrectnessSuite extends StreamTest {
       ProcessAllAvailable(),
       AddData(inputStream2, 1),
       ProcessAllAvailable(),
-      CheckNewAnswer(Row("ds1", 1), Row("ds2", 1))
-    )
+      CheckNewAnswer(Row("ds1", 1), Row("ds2", 1)))
   }
 
-  test("streaming aggregate with literal and watermark after literal column" +
-    " produces correct results on query change") {
+  test(
+    "streaming aggregate with literal and watermark after literal column" +
+      " produces correct results on query change") {
     withTempDir { dir =>
       val inputStream1 = MemoryStream[Timestamp]
       val ds1 = inputStream1
@@ -77,8 +78,7 @@ class StreamingQueryOptimizationCorrectnessSuite extends StreamTest {
       testStream(result, OutputMode.Complete())(
         StartStream(checkpointLocation = dir.getAbsolutePath),
         AddData(inputStream1, Timestamp.valueOf("2023-01-02 00:00:00")),
-        ProcessAllAvailable()
-      )
+        ProcessAllAvailable())
 
       val ds2 = inputStream1
         .toDS()
@@ -97,13 +97,13 @@ class StreamingQueryOptimizationCorrectnessSuite extends StreamTest {
         CheckNewAnswer(Row("ds1", 1), Row("ds2", 1)),
         AddData(inputStream1, Timestamp.valueOf("2023-01-04 00:00:00")),
         ProcessAllAvailable(),
-        CheckNewAnswer(Row("ds1", 1), Row("ds2", 2))
-      )
+        CheckNewAnswer(Row("ds1", 1), Row("ds2", 2)))
     }
   }
 
-  test("streaming aggregate with literal and watermark before literal column" +
-    " produces correct results on query change") {
+  test(
+    "streaming aggregate with literal and watermark before literal column" +
+      " produces correct results on query change") {
     withTempDir { dir =>
       val inputStream1 = MemoryStream[Timestamp]
       val ds1 = inputStream1
@@ -119,8 +119,7 @@ class StreamingQueryOptimizationCorrectnessSuite extends StreamTest {
       testStream(result, OutputMode.Complete())(
         StartStream(checkpointLocation = dir.getAbsolutePath),
         AddData(inputStream1, Timestamp.valueOf("2023-01-02 00:00:00")),
-        ProcessAllAvailable()
-      )
+        ProcessAllAvailable())
 
       val ds2 = inputStream1
         .toDS()
@@ -139,13 +138,13 @@ class StreamingQueryOptimizationCorrectnessSuite extends StreamTest {
         CheckNewAnswer(Row("ds1", 1), Row("ds2", 1)),
         AddData(inputStream1, Timestamp.valueOf("2023-01-04 00:00:00")),
         ProcessAllAvailable(),
-        CheckNewAnswer(Row("ds1", 1), Row("ds2", 2))
-      )
+        CheckNewAnswer(Row("ds1", 1), Row("ds2", 2)))
     }
   }
 
-  test("streaming aggregate with literal" +
-    " produces correct results on query change") {
+  test(
+    "streaming aggregate with literal" +
+      " produces correct results on query change") {
     withTempDir { dir =>
       val inputStream1 = MemoryStream[Int]
       val ds1 = inputStream1
@@ -160,8 +159,7 @@ class StreamingQueryOptimizationCorrectnessSuite extends StreamTest {
       testStream(result, OutputMode.Complete())(
         StartStream(checkpointLocation = dir.getAbsolutePath),
         AddData(inputStream1, 1),
-        ProcessAllAvailable()
-      )
+        ProcessAllAvailable())
 
       val ds2 = inputStream1
         .toDS()
@@ -176,13 +174,13 @@ class StreamingQueryOptimizationCorrectnessSuite extends StreamTest {
         StartStream(checkpointLocation = dir.getAbsolutePath),
         AddData(inputStream1, 1),
         ProcessAllAvailable(),
-        CheckNewAnswer(Row("ds1", 1), Row("ds2", 1))
-      )
+        CheckNewAnswer(Row("ds1", 1), Row("ds2", 1)))
     }
   }
 
-  test("stream stream join with literal" +
-    " produces correct results") {
+  test(
+    "stream stream join with literal" +
+      " produces correct results") {
     withTempDir { dir =>
       import java.sql.Timestamp
       val inputStream1 = MemoryStream[Int]
@@ -200,9 +198,9 @@ class StreamingQueryOptimizationCorrectnessSuite extends StreamTest {
         .withWatermark("name", "1 minutes")
         .withColumn("count2", lit(2))
 
-
       val result =
-        ds1.join(ds2, "name", "full")
+        ds1
+          .join(ds2, "name", "full")
           .select("name", "count1", "count2")
 
       testStream(result, OutputMode.Append())(
@@ -215,8 +213,7 @@ class StreamingQueryOptimizationCorrectnessSuite extends StreamTest {
         ProcessAllAvailable(),
         AddData(inputStream2, 2),
         ProcessAllAvailable(),
-        CheckNewAnswer()
-      )
+        CheckNewAnswer())
 
       // modify the query and update literal values for name
       val ds3 = inputStream1
@@ -232,7 +229,8 @@ class StreamingQueryOptimizationCorrectnessSuite extends StreamTest {
         .withColumn("count2", lit(4))
 
       val result2 =
-        ds3.join(ds4, "name", "full")
+        ds3
+          .join(ds4, "name", "full")
           .select("name", "count1", "count2")
 
       testStream(result2, OutputMode.Append())(
@@ -246,21 +244,16 @@ class StreamingQueryOptimizationCorrectnessSuite extends StreamTest {
         AddData(inputStream2, 2),
         ProcessAllAvailable(),
         CheckNewAnswer(
-          Row(Timestamp.valueOf("2023-01-01 00:00:00"),
-            1, null.asInstanceOf[java.lang.Integer]),
-          Row(Timestamp.valueOf("2023-01-01 00:00:00"),
-            1, null.asInstanceOf[java.lang.Integer]),
-          Row(Timestamp.valueOf("2023-01-02 00:00:00"),
-            null.asInstanceOf[java.lang.Integer], 2),
-          Row(Timestamp.valueOf("2023-01-02 00:00:00"),
-            null.asInstanceOf[java.lang.Integer], 2)
-        )
-      )
+          Row(Timestamp.valueOf("2023-01-01 00:00:00"), 1, null.asInstanceOf[java.lang.Integer]),
+          Row(Timestamp.valueOf("2023-01-01 00:00:00"), 1, null.asInstanceOf[java.lang.Integer]),
+          Row(Timestamp.valueOf("2023-01-02 00:00:00"), null.asInstanceOf[java.lang.Integer], 2),
+          Row(Timestamp.valueOf("2023-01-02 00:00:00"), null.asInstanceOf[java.lang.Integer], 2)))
     }
   }
 
-  test("streaming SQL distinct usage with literal grouping" +
-    " key produces correct results") {
+  test(
+    "streaming SQL distinct usage with literal grouping" +
+      " key produces correct results") {
     val inputStream1 = MemoryStream[Int]
     val ds1 = inputStream1
       .toDS()
@@ -276,7 +269,8 @@ class StreamingQueryOptimizationCorrectnessSuite extends StreamTest {
       .select("name", "count")
 
     val result =
-      ds1.union(ds2)
+      ds1
+        .union(ds2)
         .groupBy("name")
         .as[String, (String, Int, Int)]
         .keys
@@ -286,12 +280,12 @@ class StreamingQueryOptimizationCorrectnessSuite extends StreamTest {
       ProcessAllAvailable(),
       AddData(inputStream2, 1),
       ProcessAllAvailable(),
-      CheckNewAnswer(Row("ds1"), Row("ds2"))
-    )
+      CheckNewAnswer(Row("ds1"), Row("ds2")))
   }
 
-  test("streaming window aggregation with literal time column" +
-    " key produces correct results") {
+  test(
+    "streaming window aggregation with literal time column" +
+      " key produces correct results") {
     val inputStream1 = MemoryStream[Int]
     val ds1 = inputStream1
       .toDS()
@@ -307,10 +301,9 @@ class StreamingQueryOptimizationCorrectnessSuite extends StreamTest {
       .select("name", "count")
 
     val result =
-      ds1.union(ds2)
-        .groupBy(
-          window($"name", "1 second", "1 second")
-        )
+      ds1
+        .union(ds2)
+        .groupBy(window($"name", "1 second", "1 second"))
         .count()
 
     testStream(result, OutputMode.Complete())(
@@ -324,8 +317,7 @@ class StreamingQueryOptimizationCorrectnessSuite extends StreamTest {
           1),
         Row(
           Row(Timestamp.valueOf("2023-01-02 00:00:00"), Timestamp.valueOf("2023-01-02 00:00:01")),
-          1))
-    )
+          1)))
   }
 
   test("stream stream join with literals produces correct value") {
@@ -355,8 +347,7 @@ class StreamingQueryOptimizationCorrectnessSuite extends StreamTest {
         ProcessAllAvailable(),
         AddData(input2, 1),
         ProcessAllAvailable(),
-        CheckAnswer(Row(1, 1, 2))
-      )
+        CheckAnswer(Row(1, 1, 2)))
     }
   }
 
@@ -386,8 +377,7 @@ class StreamingQueryOptimizationCorrectnessSuite extends StreamTest {
         AddData(input1, 1),
         ProcessAllAvailable(),
         AddData(input2, 1),
-        ProcessAllAvailable()
-      )
+        ProcessAllAvailable())
 
       val df3 = input1
         .toDF()
@@ -411,10 +401,7 @@ class StreamingQueryOptimizationCorrectnessSuite extends StreamTest {
         ProcessAllAvailable(),
         AddData(input2, 1),
         ProcessAllAvailable(),
-        CheckAnswer(
-          Row("key1", 1, 4),
-          Row("key2", 3, 2))
-      )
+        CheckAnswer(Row("key1", 1, 4), Row("key2", 3, 2)))
     }
   }
 
@@ -429,16 +416,15 @@ class StreamingQueryOptimizationCorrectnessSuite extends StreamTest {
       // NOTE: The column 'ref_code' is known to be non-nullable.
       val batchDf = spark.range(1, 5).select($"id".as("ref_code"))
 
-      val unionDf = df1.union(df2)
+      val unionDf = df1
+        .union(df2)
         .join(batchDf, expr("code = ref_code"))
         .select("value")
 
       testStream(unionDf)(
         StartStream(checkpointLocation = dir.getAbsolutePath),
-
         AddData(input1, 1, 2, 3),
         CheckNewAnswer(1, 2, 3),
-
         AddData(input2, 1, 2, 3),
         // The test failed before SPARK-47305 - the test failed with below error message:
         // org.apache.spark.sql.streaming.StreamingQueryException: Stream-stream join without
@@ -448,8 +434,7 @@ class StreamingQueryOptimizationCorrectnessSuite extends StreamTest {
         // +- LocalRelation <empty>
         // Note that LocalRelation <empty> is actually a batch source (Range) but due to
         // a bug, it was incorrect marked to the streaming. SPARK-47305 fixed the bug.
-        CheckNewAnswer()
-      )
+        CheckNewAnswer())
     }
   }
 
@@ -465,16 +450,14 @@ class StreamingQueryOptimizationCorrectnessSuite extends StreamTest {
         ds2.createOrReplaceTempView("tv2")
 
         // DISTINCT is rewritten to AGGREGATE, hence an AGGREGATEs for each source
-        val unioned = spark.sql(
-          """
+        val unioned = spark.sql("""
             | WITH u AS (
             |   SELECT DISTINCT value AS value FROM tv1
             | ), v AS (
             |   SELECT DISTINCT value AS value FROM tv2
             | )
             | SELECT value FROM u UNION ALL SELECT value FROM v
-            |""".stripMargin
-        )
+            |""".stripMargin)
 
         testStream(unioned, OutputMode.Update())(
           MultiAddData(inputStream1, 1, 1, 2)(inputStream2, 1, 1, 2),
@@ -498,10 +481,12 @@ class StreamingQueryOptimizationCorrectnessSuite extends StreamTest {
             val stateOperators = qe.lastProgress.stateOperators
             // Aggregate should be "stateful" one
             assert(stateOperators.length === numExpectedStatefulOperatorsForOneEmptySource)
-            val opWithUpdatedRows = stateOperators.zipWithIndex.filterNot(_._1.numRowsUpdated == 0)
+            val opWithUpdatedRows =
+              stateOperators.zipWithIndex.filterNot(_._1.numRowsUpdated == 0)
             assert(opWithUpdatedRows.length === 1)
             // If this were dropDuplicates, numRowsUpdated should have been 1.
-            assert(opWithUpdatedRows.head._1.numRowsUpdated === 2,
+            assert(
+              opWithUpdatedRows.head._1.numRowsUpdated === 2,
               s"stateful OP ID: ${opWithUpdatedRows.head._2}")
           },
           AddData(inputStream1, 4, 4, 5),
@@ -509,12 +494,13 @@ class StreamingQueryOptimizationCorrectnessSuite extends StreamTest {
           Execute { qe =>
             val stateOperators = qe.lastProgress.stateOperators
             assert(stateOperators.length === numExpectedStatefulOperatorsForOneEmptySource)
-            val opWithUpdatedRows = stateOperators.zipWithIndex.filterNot(_._1.numRowsUpdated == 0)
+            val opWithUpdatedRows =
+              stateOperators.zipWithIndex.filterNot(_._1.numRowsUpdated == 0)
             assert(opWithUpdatedRows.length === 1)
-            assert(opWithUpdatedRows.head._1.numRowsUpdated === 2,
+            assert(
+              opWithUpdatedRows.head._1.numRowsUpdated === 2,
               s"stateful OP ID: ${opWithUpdatedRows.head._2}")
-          }
-        )
+          })
       }
     }
 
@@ -527,7 +513,8 @@ class StreamingQueryOptimizationCorrectnessSuite extends StreamTest {
 
   test("SPARK-49699: observe node is not pruned out from PruneFilters") {
     val input1 = MemoryStream[Int]
-    val df = input1.toDF()
+    val df = input1
+      .toDF()
       .withColumn("eventTime", timestamp_seconds($"value"))
       .observe("observation", count(lit(1)).as("rows"))
       // Enforce PruneFilters to come into play and prune subtree. We could do the same
@@ -540,8 +527,7 @@ class StreamingQueryOptimizationCorrectnessSuite extends StreamTest {
       Execute { qe =>
         val observeRow = qe.lastExecution.observedMetrics.get("observation")
         assert(observeRow.get.getAs[Long]("rows") == 3L)
-      }
-    )
+      })
   }
 
   test("SPARK-49699: watermark node is not pruned out from PruneFilters") {
@@ -552,7 +538,8 @@ class StreamingQueryOptimizationCorrectnessSuite extends StreamTest {
     // watermark node, so the node is retained. The test is added for preventing regression.
 
     val input1 = MemoryStream[Int]
-    val df = input1.toDF()
+    val df = input1
+      .toDF()
       .withColumn("eventTime", timestamp_seconds($"value"))
       .withWatermark("eventTime", "0 second")
       // Enforce PruneFilter to come into play and prune subtree. We could do the same
@@ -565,13 +552,13 @@ class StreamingQueryOptimizationCorrectnessSuite extends StreamTest {
       Execute { qe =>
         // If the watermark node is pruned out, this would be null.
         assert(qe.lastProgress.eventTime.get("watermark") != null)
-      }
-    )
+      })
   }
 
   test("SPARK-49699: stateful operator node is not pruned out from PruneFilters") {
     val input1 = MemoryStream[Int]
-    val df = input1.toDF()
+    val df = input1
+      .toDF()
       .groupBy("value")
       .count()
       // Enforce PruneFilter to come into play and prune subtree. We could do the same
@@ -583,7 +570,6 @@ class StreamingQueryOptimizationCorrectnessSuite extends StreamTest {
       CheckNewAnswer(),
       Execute { qe =>
         assert(qe.lastProgress.stateOperators.length == 1)
-      }
-    )
+      })
   }
 }

@@ -22,17 +22,15 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.util.BoundedPriorityQueue
 
-
 /**
  * A simple utility for tracking runtime and associated stats in query planning.
  *
  * There are two separate concepts we track:
  *
- * 1. Phases: These are broad scope phases in query planning, as listed below, i.e. analysis,
- * optimization and physical planning (just planning).
- *
- * 2. Rules: These are the individual Catalyst rules that we track. In addition to time, we also
- * track the number of invocations and effective invocations.
+ *   1. Phases: These are broad scope phases in query planning, as listed below, i.e. analysis,
+ *      optimization and physical planning (just planning).
+ *   2. Rules: These are the individual Catalyst rules that we track. In addition to time, we also
+ *      track the number of invocations and effective invocations.
  */
 object QueryPlanningTracker {
 
@@ -44,13 +42,17 @@ object QueryPlanningTracker {
 
   /**
    * Summary for a rule.
-   * @param totalTimeNs total amount of time, in nanosecs, spent in this rule.
-   * @param numInvocations number of times the rule has been invoked.
-   * @param numEffectiveInvocations number of times the rule has been invoked and
-   *                                resulted in a plan change.
+   * @param totalTimeNs
+   *   total amount of time, in nanosecs, spent in this rule.
+   * @param numInvocations
+   *   number of times the rule has been invoked.
+   * @param numEffectiveInvocations
+   *   number of times the rule has been invoked and resulted in a plan change.
    */
   class RuleSummary(
-    var totalTimeNs: Long, var numInvocations: Long, var numEffectiveInvocations: Long) {
+      var totalTimeNs: Long,
+      var numInvocations: Long,
+      var numEffectiveInvocations: Long) {
 
     def this() = this(totalTimeNs = 0, numInvocations = 0, numEffectiveInvocations = 0)
 
@@ -86,7 +88,8 @@ object QueryPlanningTracker {
   def withTracker[T](tracker: QueryPlanningTracker)(f: => T): T = {
     val originalTracker = localTracker.get()
     localTracker.set(tracker)
-    try f finally { localTracker.set(originalTracker) }
+    try f
+    finally { localTracker.set(originalTracker) }
   }
 }
 
@@ -94,38 +97,43 @@ object QueryPlanningTracker {
  * Callbacks after planning phase completion.
  */
 abstract class QueryPlanningTrackerCallback {
+
   /**
    * Called when query fails analysis
    *
-   * @param tracker      tracker that triggered the callback.
-   * @param parsedPlan   The plan prior to analysis
-   *                     see @org.apache.spark.sql.catalyst.analysis.Analyzer
+   * @param tracker
+   *   tracker that triggered the callback.
+   * @param parsedPlan
+   *   The plan prior to analysis see @org.apache.spark.sql.catalyst.analysis.Analyzer
    */
   def analysisFailed(tracker: QueryPlanningTracker, parsedPlan: LogicalPlan): Unit = {
     // Noop by default for backward compatibility
   }
+
   /**
    * Called when query has been analyzed.
    *
-   * @param tracker tracker that triggered the callback.
-   * @param analyzedPlan The plan after analysis,
-   *                     see @org.apache.spark.sql.catalyst.analysis.Analyzer
+   * @param tracker
+   *   tracker that triggered the callback.
+   * @param analyzedPlan
+   *   The plan after analysis, see @org.apache.spark.sql.catalyst.analysis.Analyzer
    */
   def analyzed(tracker: QueryPlanningTracker, analyzedPlan: LogicalPlan): Unit
 
   /**
-   * Called when query is ready for execution.
-   * This is after analysis for eager commands and after planning for other queries.
-   * @param tracker tracker that triggered the callback.
+   * Called when query is ready for execution. This is after analysis for eager commands and after
+   * planning for other queries.
+   * @param tracker
+   *   tracker that triggered the callback.
    */
   def readyForExecution(tracker: QueryPlanningTracker): Unit
 }
 
 /**
- * @param trackerCallback Callback to be notified of planning phase completion.
+ * @param trackerCallback
+ *   Callback to be notified of planning phase completion.
  */
-class QueryPlanningTracker(
-    trackerCallback: Option[QueryPlanningTrackerCallback] = None) {
+class QueryPlanningTracker(trackerCallback: Option[QueryPlanningTrackerCallback] = None) {
 
   import QueryPlanningTracker._
 
@@ -158,31 +166,30 @@ class QueryPlanningTracker(
   }
 
   /**
-   * Set when the query has been parsed but failed to be analyzed.
-   * Can be called multiple times upon plan change.
+   * Set when the query has been parsed but failed to be analyzed. Can be called multiple times
+   * upon plan change.
    *
-   * @param parsedPlan The plan prior analysis
-   *                   see @org.apache.spark.sql.catalyst.analysis.Analyzer
+   * @param parsedPlan
+   *   The plan prior analysis see @org.apache.spark.sql.catalyst.analysis.Analyzer
    */
   private[sql] def setAnalysisFailed(parsedPlan: LogicalPlan): Unit = {
     trackerCallback.foreach(_.analysisFailed(this, parsedPlan))
   }
 
   /**
-   * Set when the query has been analysed.
-   * Can be called multiple times upon plan change.
-   * @param analyzedPlan The plan after analysis,
-   *                     see @org.apache.spark.sql.catalyst.analysis.Analyzer
+   * Set when the query has been analysed. Can be called multiple times upon plan change.
+   * @param analyzedPlan
+   *   The plan after analysis, see @org.apache.spark.sql.catalyst.analysis.Analyzer
    */
   private[sql] def setAnalyzed(analyzedPlan: LogicalPlan): Unit = {
     trackerCallback.foreach(_.analyzed(this, analyzedPlan))
   }
 
   /**
-   * Set when the query is ready for execution. This is after analysis for
-   * eager commands and after planning for other queries.
-   * see @link org.apache.spark.sql.execution.CommandExecutionMode
-   * When called multiple times, ignores subsequent call.
+   * Set when the query is ready for execution. This is after analysis for eager commands and
+   * after planning for other queries. see @link
+   * org.apache.spark.sql.execution.CommandExecutionMode When called multiple times, ignores
+   * subsequent call.
    */
   private[sql] def setReadyForExecution(): Unit = {
     if (!readyForExecution) {
@@ -194,9 +201,12 @@ class QueryPlanningTracker(
   /**
    * Record a specific invocation of a rule.
    *
-   * @param rule name of the rule
-   * @param timeNs time taken to run this invocation
-   * @param effective whether the invocation has resulted in a plan change
+   * @param rule
+   *   name of the rule
+   * @param timeNs
+   *   time taken to run this invocation
+   * @param effective
+   *   whether the invocation has resulted in a plan change
    */
   def recordRuleInvocation(rule: String, timeNs: Long, effective: Boolean): Unit = {
     var s = rulesMap.get(rule)
@@ -218,7 +228,8 @@ class QueryPlanningTracker(
 
   /**
    * Returns the top k most expensive rules (as measured by time). If k is larger than the rules
-   * seen so far, return all the rules. If there is no rule seen so far or k <= 0, return empty seq.
+   * seen so far, return all the rules. If there is no rule seen so far or k <= 0, return empty
+   * seq.
    */
   def topRulesByTime(k: Int): Seq[(String, RuleSummary)] = {
     if (k <= 0) {

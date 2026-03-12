@@ -28,27 +28,29 @@ class DropTableParserSuite extends AnalysisTest with SharedSparkSession {
   }
 
   test("drop table") {
-    parseCompare("DROP TABLE testcat.ns1.ns2.tbl",
-      DropTable(UnresolvedIdentifier(Seq("testcat", "ns1", "ns2", "tbl"), true),
+    parseCompare(
+      "DROP TABLE testcat.ns1.ns2.tbl",
+      DropTable(
+        UnresolvedIdentifier(Seq("testcat", "ns1", "ns2", "tbl"), true),
         ifExists = false,
         purge = false))
-    parseCompare(s"DROP TABLE db.tab",
-      DropTable(
-        UnresolvedIdentifier(Seq("db", "tab"), true),
-        ifExists = false,
-        purge = false))
-    parseCompare(s"DROP TABLE IF EXISTS db.tab",
-      DropTable(
-        UnresolvedIdentifier(Seq("db", "tab"), true),
-        ifExists = true,
-        purge = false))
-    parseCompare(s"DROP TABLE tab",
+    parseCompare(
+      s"DROP TABLE db.tab",
+      DropTable(UnresolvedIdentifier(Seq("db", "tab"), true), ifExists = false, purge = false))
+    parseCompare(
+      s"DROP TABLE IF EXISTS db.tab",
+      DropTable(UnresolvedIdentifier(Seq("db", "tab"), true), ifExists = true, purge = false))
+    parseCompare(
+      s"DROP TABLE tab",
       DropTable(UnresolvedIdentifier(Seq("tab"), true), ifExists = false, purge = false))
-    parseCompare(s"DROP TABLE IF EXISTS tab",
+    parseCompare(
+      s"DROP TABLE IF EXISTS tab",
       DropTable(UnresolvedIdentifier(Seq("tab"), true), ifExists = true, purge = false))
-    parseCompare(s"DROP TABLE tab PURGE",
+    parseCompare(
+      s"DROP TABLE tab PURGE",
       DropTable(UnresolvedIdentifier(Seq("tab"), true), ifExists = false, purge = true))
-    parseCompare(s"DROP TABLE IF EXISTS tab PURGE",
+    parseCompare(
+      s"DROP TABLE IF EXISTS tab PURGE",
       DropTable(UnresolvedIdentifier(Seq("tab"), true), ifExists = true, purge = true))
   }
 }

@@ -22,11 +22,10 @@ import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
 /**
- * Trait providing parameterized query execution capabilities.
- * This trait unifies the logic for parsing and executing SQL queries with parameter binding,
- * which is shared between:
- * - EXECUTE IMMEDIATE (ResolveExecuteImmediate)
- * - OPEN CURSOR with USING clause (OpenCursorExec)
+ * Trait providing parameterized query execution capabilities. This trait unifies the logic for
+ * parsing and executing SQL queries with parameter binding, which is shared between:
+ *   - EXECUTE IMMEDIATE (ResolveExecuteImmediate)
+ *   - OPEN CURSOR with USING clause (OpenCursorExec)
  *
  * The trait provides a single source of truth for how parameterized queries are executed,
  * ensuring consistent behavior across different SQL features.
@@ -42,13 +41,18 @@ trait ParameterizedQueryExecutor {
    * Executes a parameterized SQL query by parsing and analyzing it with bound parameters.
    *
    * This method handles both parameterized and non-parameterized queries:
-   * - Parameterized queries: Uses ParameterBindingUtils to bind parameters to markers (? or :name)
-   * - Non-parameterized queries: Directly parses and analyzes the SQL text
+   *   - Parameterized queries: Uses ParameterBindingUtils to bind parameters to markers (? or
+   *     :name)
+   *   - Non-parameterized queries: Directly parses and analyzes the SQL text
    *
-   * @param queryText The SQL query text (may contain parameter markers ? or :name)
-   * @param args Parameter expressions from USING clause (empty for non-parameterized queries)
-   * @param paramNames Parameter names extracted at parse time (empty for positional parameters)
-   * @return The analyzed logical plan with parameters bound
+   * @param queryText
+   *   The SQL query text (may contain parameter markers ? or :name)
+   * @param args
+   *   Parameter expressions from USING clause (empty for non-parameterized queries)
+   * @param paramNames
+   *   Parameter names extracted at parse time (empty for positional parameters)
+   * @return
+   *   The analyzed logical plan with parameters bound
    */
   protected def executeParameterizedQuery(
       queryText: String,
@@ -59,13 +63,15 @@ trait ParameterizedQueryExecutor {
       val (paramValues, paramNamesArray) =
         ParameterBindingUtils.buildUnifiedParameters(args, paramNames)
 
-      val df = session.asInstanceOf[org.apache.spark.sql.classic.SparkSession]
+      val df = session
+        .asInstanceOf[org.apache.spark.sql.classic.SparkSession]
         .sql(queryText, paramValues, paramNamesArray)
 
       df.queryExecution.analyzed
     } else {
       // Non-parameterized query: parse without parameters
-      val df = session.asInstanceOf[org.apache.spark.sql.classic.SparkSession]
+      val df = session
+        .asInstanceOf[org.apache.spark.sql.classic.SparkSession]
         .sql(queryText)
 
       df.queryExecution.analyzed

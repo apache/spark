@@ -33,28 +33,22 @@ import org.apache.spark.unsafe.types.CalendarInterval
 /**
  * Property is a high-level specification of behavior that should hold for a range of data points.
  *
- * For example, while we are evaluating a deterministic expression for some input, we should always
- * hold the property that the result never changes, regardless of how we get the result,
+ * For example, while we are evaluating a deterministic expression for some input, we should
+ * always hold the property that the result never changes, regardless of how we get the result,
  * via interpreted or codegen.
  *
- * In ScalaTest, properties are specified as functions and the data points used to check properties
- * can be supplied by either tables or generators.
+ * In ScalaTest, properties are specified as functions and the data points used to check
+ * properties can be supplied by either tables or generators.
  *
  * Generator-driven property checks are performed via integration with ScalaCheck.
  *
- * @example {{{
- *   def toTest(i: Int): Boolean = if (i % 2 == 0) true else false
+ * @example
+ *   {{{ def toTest(i: Int): Boolean = if (i % 2 == 0) true else false
  *
- *   import org.scalacheck.Gen
+ * import org.scalacheck.Gen
  *
- *   test ("true if param is even") {
- *     val evenInts = for (n <- Gen.choose(-1000, 1000)) yield 2 * n
- *     forAll(evenInts) { (i: Int) =>
- *       assert (toTest(i) === true)
- *     }
- *   }
- * }}}
- *
+ * test ("true if param is even") { val evenInts = for (n <- Gen.choose(-1000, 1000)) yield 2 * n
+ * forAll(evenInts) { (i: Int) => assert (toTest(i) === true) } } }}}
  */
 object LiteralGenerator {
 
@@ -77,20 +71,34 @@ object LiteralGenerator {
     for {
       f <- Gen.oneOf(
         Gen.oneOf(
-          Float.NaN, Float.PositiveInfinity, Float.NegativeInfinity, Float.MinPositiveValue,
-          Float.MaxValue, -Float.MaxValue, 0.0f, -0.0f, 1.0f, -1.0f),
-        Arbitrary.arbFloat.arbitrary
-      )
+          Float.NaN,
+          Float.PositiveInfinity,
+          Float.NegativeInfinity,
+          Float.MinPositiveValue,
+          Float.MaxValue,
+          -Float.MaxValue,
+          0.0f,
+          -0.0f,
+          1.0f,
+          -1.0f),
+        Arbitrary.arbFloat.arbitrary)
     } yield Literal.create(f, FloatType)
 
   lazy val doubleLiteralGen: Gen[Literal] =
     for {
       f <- Gen.oneOf(
         Gen.oneOf(
-          Double.NaN, Double.PositiveInfinity, Double.NegativeInfinity, Double.MinPositiveValue,
-          Double.MaxValue, -Double.MaxValue, 0.0, -0.0, 1.0, -1.0),
-        Arbitrary.arbDouble.arbitrary
-      )
+          Double.NaN,
+          Double.PositiveInfinity,
+          Double.NegativeInfinity,
+          Double.MinPositiveValue,
+          Double.MaxValue,
+          -Double.MaxValue,
+          0.0,
+          -0.0,
+          1.0,
+          -1.0),
+        Arbitrary.arbDouble.arbitrary)
     } yield Literal.create(f, DoubleType)
 
   // TODO cache the generated data
@@ -110,8 +118,9 @@ object LiteralGenerator {
     for { s <- Arbitrary.arbString.arbitrary } yield Literal.create(s, StringType)
 
   lazy val binaryLiteralGen: Gen[Literal] =
-    for { ab <- Gen.listOf[Byte](Arbitrary.arbByte.arbitrary) }
-      yield Literal.create(ab.toArray, BinaryType)
+    for { ab <- Gen.listOf[Byte](Arbitrary.arbByte.arbitrary) } yield Literal.create(
+      ab.toArray,
+      BinaryType)
 
   lazy val booleanLiteralGen: Gen[Literal] =
     for { b <- Arbitrary.arbBool.arbitrary } yield Literal.create(b, BooleanType)
@@ -120,16 +129,16 @@ object LiteralGenerator {
     // Valid range for DateType is [0001-01-01, 9999-12-31]
     val minDay = LocalDate.of(1, 1, 1).toEpochDay
     val maxDay = LocalDate.of(9999, 12, 31).toEpochDay
-    for { day <- Gen.choose(minDay, maxDay) }
-      yield Literal.create(new Date(day * MILLIS_PER_DAY), DateType)
+    for { day <- Gen.choose(minDay, maxDay) } yield Literal.create(
+      new Date(day * MILLIS_PER_DAY),
+      DateType)
   }
 
   lazy val timeLiteralGen: Gen[Literal] = {
     // Valid range for TimeType is [00:00:00, 23:59:59.999999]
     val minTime = nanosToMicros(localTimeToNanos(LocalTime.MIN)) * NANOS_PER_MICROS
     val maxTime = nanosToMicros(localTimeToNanos(LocalTime.MAX)) * NANOS_PER_MICROS
-    for { t <- Gen.choose(minTime, maxTime) }
-      yield Literal(t, TimeType())
+    for { t <- Gen.choose(minTime, maxTime) } yield Literal(t, TimeType())
   }
 
   private def millisGen = {
@@ -144,28 +153,29 @@ object LiteralGenerator {
   }
 
   lazy val timestampLiteralGen: Gen[Literal] = {
-    for { millis <- millisGen }
-      yield Literal.create(new Timestamp(millis), TimestampType)
+    for { millis <- millisGen } yield Literal.create(new Timestamp(millis), TimestampType)
   }
 
   lazy val timestampNTZLiteralGen: Gen[Literal] = {
-    for { millis <- millisGen }
-      yield Literal.create(
-        DateTimeUtils.microsToLocalDateTime(millis * MICROS_PER_MILLIS), TimestampNTZType)
+    for { millis <- millisGen } yield Literal.create(
+      DateTimeUtils.microsToLocalDateTime(millis * MICROS_PER_MILLIS),
+      TimestampNTZType)
   }
 
   // Valid range for DateType and TimestampType is [0001-01-01, 9999-12-31]
   private val maxIntervalInMonths: Int = 10000 * 12
 
   lazy val monthIntervalLiterGen: Gen[Literal] = {
-    for { months <- Gen.choose(-1 * maxIntervalInMonths, maxIntervalInMonths) }
-      yield Literal.create(months, IntegerType)
+    for { months <- Gen.choose(-1 * maxIntervalInMonths, maxIntervalInMonths) } yield Literal
+      .create(months, IntegerType)
   }
 
   lazy val calendarIntervalLiterGen: Gen[Literal] = {
-    val maxDurationInSec = Duration.between(
-      Instant.parse("0001-01-01T00:00:00.000000Z"),
-      Instant.parse("9999-12-31T23:59:59.999999Z")).getSeconds
+    val maxDurationInSec = Duration
+      .between(
+        Instant.parse("0001-01-01T00:00:00.000000Z"),
+        Instant.parse("9999-12-31T23:59:59.999999Z"))
+      .getSeconds
     val maxMicros = TimeUnit.SECONDS.toMicros(maxDurationInSec)
     val maxDays = TimeUnit.SECONDS.toDays(maxDurationInSec).toInt
     for {
@@ -174,7 +184,6 @@ object LiteralGenerator {
       days <- Gen.choose(-1 * maxDays, maxDays)
     } yield Literal.create(new CalendarInterval(months, days, micros), CalendarIntervalType)
   }
-
 
   // Sometimes, it would be quite expensive when unlimited value is used,
   // for example, the `times` arguments for StringRepeat would hang the test 'forever'
@@ -192,8 +201,8 @@ object LiteralGenerator {
   }
 
   lazy val yearMonthIntervalLiteralGen: Gen[Literal] = {
-    for { months <- Gen.choose(-1 * maxIntervalInMonths, maxIntervalInMonths) }
-      yield Literal.create(Period.ofMonths(months), YearMonthIntervalType())
+    for { months <- Gen.choose(-1 * maxIntervalInMonths, maxIntervalInMonths) } yield Literal
+      .create(Period.ofMonths(months), YearMonthIntervalType())
   }
 
   def randomGen(dt: DataType): Gen[Literal] = {

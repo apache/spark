@@ -41,10 +41,10 @@ class TimeFormatterSuite extends SparkFunSuite with SQLHelper {
         ((12 * 3600 + 34 * 60 + 56) * 1000000000L + 789012000),
       ("23:59:59.000000", "HH:mm:ss.SSSSSS") -> (23 * 3600 + 59 * 60 + 59) * 1000000000L,
       ("23:59:59.999999", "HH:mm:ss.SSSSSS") ->
-        ((23 * 3600 + 59 * 60 + 59) * 1000000000L + 999999000)
-    ).foreach { case ((inputStr, pattern), expectedMicros) =>
-      val formatter = TimeFormatter(format = pattern, isParsing = true)
-      assert(formatter.parse(inputStr) === expectedMicros)
+        ((23 * 3600 + 59 * 60 + 59) * 1000000000L + 999999000)).foreach {
+      case ((inputStr, pattern), expectedMicros) =>
+        val formatter = TimeFormatter(format = pattern, isParsing = true)
+        assert(formatter.parse(inputStr) === expectedMicros)
     }
   }
 
@@ -73,8 +73,7 @@ class TimeFormatterSuite extends SparkFunSuite with SQLHelper {
         "12:34:56.789012",
       ((23 * 3600 + 59 * 60 + 59) * 1000000000L, "HH:mm:ss.SSSSSS") -> "23:59:59.000000",
       ((23 * 3600 + 59 * 60 + 59) * 1000000000L + 999999000, "HH:mm:ss.SSSSSS") ->
-        "23:59:59.999999"
-    ).foreach { case ((micros, pattern), expectedStr) =>
+        "23:59:59.999999").foreach { case ((micros, pattern), expectedStr) =>
       val formatter = TimeFormatter(format = pattern)
       assert(formatter.format(micros) === expectedStr)
     }
@@ -87,7 +86,8 @@ class TimeFormatterSuite extends SparkFunSuite with SQLHelper {
     }
 
     assertError(-1000, "Invalid value for NanoOfDay (valid values 0 - 86399999999999): -1000")
-    assertError(25L * 3600 * 1000 * 1000 * 1000,
+    assertError(
+      25L * 3600 * 1000 * 1000 * 1000,
       "Invalid value for NanoOfDay (valid values 0 - 86399999999999): 90000000000000")
   }
 
@@ -98,9 +98,7 @@ class TimeFormatterSuite extends SparkFunSuite with SQLHelper {
           TimeFormatter(invalidPattern)
         },
         condition = "INVALID_DATETIME_PATTERN.WITH_SUGGESTION",
-        parameters = Map(
-          "pattern" -> s"'$invalidPattern'",
-          "docroot" -> SPARK_DOC_ROOT))
+        parameters = Map("pattern" -> s"'$invalidPattern'", "docroot" -> SPARK_DOC_ROOT))
     }
   }
 
@@ -155,16 +153,14 @@ class TimeFormatterSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("default parsing w/o pattern") {
-    val formatter = new DefaultTimeFormatter(
-      locale = DateFormatter.defaultLocale,
-      isParsing = true)
+    val formatter =
+      new DefaultTimeFormatter(locale = DateFormatter.defaultLocale, isParsing = true)
     Seq(
       "00:00:00" -> localTime(),
       "00:00:00.000001" -> localTime(micros = 1),
       "01:02:03" -> localTime(1, 2, 3),
       "1:2:3.999999" -> localTime(1, 2, 3, 999999),
-      "23:59:59.1" -> localTime(23, 59, 59, 100000)
-    ).foreach { case (inputStr, micros) =>
+      "23:59:59.1" -> localTime(23, 59, 59, 100000)).foreach { case (inputStr, micros) =>
       assert(formatter.parse(inputStr) === micros)
     }
 

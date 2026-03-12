@@ -34,8 +34,7 @@ class ForeignKeyConstraintParseSuite extends ConstraintParseSuiteBase {
       tableName = "t",
       childColumns = Seq("a"),
       parentTableId = Seq("parent"),
-      parentColumns = Seq("id")
-    )
+      parentColumns = Seq("id"))
     val constraints = Seq(constraint)
     verifyConstraints(sql, constraints)
   }
@@ -48,8 +47,7 @@ class ForeignKeyConstraintParseSuite extends ConstraintParseSuiteBase {
       parentTableId = Seq("parent"),
       parentColumns = Seq("id"),
       userProvidedName = "fk1",
-      tableName = "t"
-    )
+      tableName = "t")
     val constraints = Seq(constraint)
     verifyConstraints(sql, constraints)
   }
@@ -60,21 +58,20 @@ class ForeignKeyConstraintParseSuite extends ConstraintParseSuiteBase {
       tableName = "t",
       childColumns = Seq("a"),
       parentTableId = Seq("parent"),
-      parentColumns = Seq("id")
-    )
+      parentColumns = Seq("id"))
     val constraints = Seq(constraint)
     verifyConstraints(sql, constraints)
   }
 
   test("Create table with named foreign key - column level") {
-    val sql = "CREATE TABLE t (a INT CONSTRAINT fk1 REFERENCES parent(id), b STRING) USING parquet"
+    val sql =
+      "CREATE TABLE t (a INT CONSTRAINT fk1 REFERENCES parent(id), b STRING) USING parquet"
     val constraint = ForeignKeyConstraint(
       childColumns = Seq("a"),
       parentTableId = Seq("parent"),
       parentColumns = Seq("id"),
       userProvidedName = "fk1",
-      tableName = "t"
-    )
+      tableName = "t")
     val constraints = Seq(constraint)
     verifyConstraints(sql, constraints)
   }
@@ -86,8 +83,7 @@ class ForeignKeyConstraintParseSuite extends ConstraintParseSuiteBase {
       tableName = "t",
       childColumns = Seq("a"),
       parentTableId = Seq("parent"),
-      parentColumns = Seq("id")
-    )
+      parentColumns = Seq("id"))
     val constraints = Seq(constraint)
     verifyConstraints(sql, constraints, isCreateTable = false)
   }
@@ -100,8 +96,7 @@ class ForeignKeyConstraintParseSuite extends ConstraintParseSuiteBase {
       parentTableId = Seq("parent"),
       parentColumns = Seq("id"),
       userProvidedName = "fk1",
-      tableName = "t"
-    )
+      tableName = "t")
     val constraints = Seq(constraint)
     verifyConstraints(sql, constraints, isCreateTable = false)
   }
@@ -112,29 +107,26 @@ class ForeignKeyConstraintParseSuite extends ConstraintParseSuiteBase {
       tableName = "t",
       childColumns = Seq("a"),
       parentTableId = Seq("parent"),
-      parentColumns = Seq("id")
-    )
+      parentColumns = Seq("id"))
     val constraints = Seq(constraint)
     verifyConstraints(sql, constraints, isCreateTable = false)
   }
 
   test("Replace table with named foreign key - column level") {
-    val sql = "REPLACE TABLE t (a INT CONSTRAINT fk1 REFERENCES parent(id), b STRING) USING parquet"
+    val sql =
+      "REPLACE TABLE t (a INT CONSTRAINT fk1 REFERENCES parent(id), b STRING) USING parquet"
     val constraint = ForeignKeyConstraint(
       childColumns = Seq("a"),
       parentTableId = Seq("parent"),
       parentColumns = Seq("id"),
       userProvidedName = "fk1",
-      tableName = "t"
-    )
+      tableName = "t")
     val constraints = Seq(constraint)
     verifyConstraints(sql, constraints, isCreateTable = false)
   }
 
   test("Add foreign key constraint") {
-    Seq(
-      ("", null),
-      ("CONSTRAINT fk1", "fk1")).foreach { case (constraintName, expectedName) =>
+    Seq(("", null), ("CONSTRAINT fk1", "fk1")).foreach { case (constraintName, expectedName) =>
       val sql =
         s"""
            |ALTER TABLE orders ADD $constraintName FOREIGN KEY (customer_id)
@@ -142,16 +134,13 @@ class ForeignKeyConstraintParseSuite extends ConstraintParseSuiteBase {
            |""".stripMargin
       val parsed = parsePlan(sql)
       val expected = AddConstraint(
-        UnresolvedTable(
-          Seq("orders"),
-          "ALTER TABLE ... ADD CONSTRAINT"),
+        UnresolvedTable(Seq("orders"), "ALTER TABLE ... ADD CONSTRAINT"),
         ForeignKeyConstraint(
           userProvidedName = expectedName,
           tableName = "orders",
           childColumns = Seq("customer_id"),
           parentTableId = Seq("customers"),
-          parentColumns = Seq("id")
-        ))
+          parentColumns = Seq("id")))
       comparePlans(parsed, expected)
     }
   }
@@ -189,17 +178,14 @@ class ForeignKeyConstraintParseSuite extends ConstraintParseSuiteBase {
            |""".stripMargin
       val parsed = parsePlan(sql)
       val expected = AddConstraint(
-        UnresolvedTable(
-          Seq("orders"),
-          "ALTER TABLE ... ADD CONSTRAINT"),
+        UnresolvedTable(Seq("orders"), "ALTER TABLE ... ADD CONSTRAINT"),
         ForeignKeyConstraint(
           userProvidedName = "fk1",
           tableName = "orders",
           childColumns = Seq("customer_id"),
           parentTableId = Seq("customers"),
           parentColumns = Seq("id"),
-          userProvidedCharacteristic = characteristic
-        ))
+          userProvidedCharacteristic = characteristic))
       comparePlans(parsed, expected)
     }
   }
@@ -219,8 +205,7 @@ class ForeignKeyConstraintParseSuite extends ConstraintParseSuiteBase {
         fragment = s"CONSTRAINT fk1 FOREIGN KEY (customer_id)\nREFERENCES customers (id) " +
           s"$characteristic1 $characteristic2",
         start = 24,
-        stop = 91 + characteristic1.length + characteristic2.length
-      )
+        stop = 91 + characteristic1.length + characteristic2.length)
       checkError(
         exception = e,
         condition = "INVALID_CONSTRAINT_CHARACTERISTICS",
@@ -244,8 +229,7 @@ class ForeignKeyConstraintParseSuite extends ConstraintParseSuiteBase {
       val expectedContext = ExpectedContext(
         fragment = s"REFERENCES parent(id) $characteristic",
         start = 23,
-        stop = 44 + characteristic.length
-      )
+        stop = 44 + characteristic.length)
       checkError(
         exception = error,
         condition = "UNSUPPORTED_CONSTRAINT_CHARACTERISTIC",
@@ -270,8 +254,7 @@ class ForeignKeyConstraintParseSuite extends ConstraintParseSuiteBase {
       val expectedContext = ExpectedContext(
         fragment = s"CONSTRAINT fk1 FOREIGN KEY (id) REFERENCES parent(id) $characteristic",
         start = 24,
-        stop = 77 + characteristic.length
-      )
+        stop = 77 + characteristic.length)
       checkError(
         exception = error,
         condition = "UNSUPPORTED_CONSTRAINT_CHARACTERISTIC",
@@ -296,8 +279,7 @@ class ForeignKeyConstraintParseSuite extends ConstraintParseSuiteBase {
       val expectedContext = ExpectedContext(
         fragment = s"CONSTRAINT fk1 FOREIGN KEY (id) REFERENCES parent(id) $characteristic",
         start = 22,
-        stop = 75 + characteristic.length
-      )
+        stop = 75 + characteristic.length)
       checkError(
         exception = error,
         condition = "UNSUPPORTED_CONSTRAINT_CHARACTERISTIC",

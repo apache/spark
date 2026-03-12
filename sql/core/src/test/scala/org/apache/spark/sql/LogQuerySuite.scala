@@ -49,8 +49,7 @@ class LogQuerySuite extends QueryTest with SharedSparkSession with Logging {
   }
 
   private def createTempView(viewName: String): Unit = {
-    spark
-      .read
+    spark.read
       .schema(SPARK_LOG_SCHEMA)
       .json(logFile.getCanonicalPath)
       .createOrReplaceTempView(viewName)
@@ -63,9 +62,13 @@ class LogQuerySuite extends QueryTest with SharedSparkSession with Logging {
     withTempView("logs") {
       createTempView("logs")
       checkAnswer(
-        spark.sql(s"SELECT level, msg, context, exception FROM logs WHERE msg = '${msg.message}'"),
-        Row("ERROR", msg.message,
-          Map(LogKeys.EXECUTOR_ID.name.toLowerCase(Locale.ROOT) -> "1"), null) :: Nil)
+        spark.sql(
+          s"SELECT level, msg, context, exception FROM logs WHERE msg = '${msg.message}'"),
+        Row(
+          "ERROR",
+          msg.message,
+          Map(LogKeys.EXECUTOR_ID.name.toLowerCase(Locale.ROOT) -> "1"),
+          null) :: Nil)
     }
   }
 
@@ -78,8 +81,9 @@ class LogQuerySuite extends QueryTest with SharedSparkSession with Logging {
       createTempView("logs")
       val expectedMDC = Map(LogKeys.TASK_ID.name.toLowerCase(Locale.ROOT) -> "2")
       checkAnswer(
-        spark.sql("SELECT level, msg, context, exception.class, exception.msg FROM logs " +
-          s"WHERE msg = '${msg.message}'"),
+        spark.sql(
+          "SELECT level, msg, context, exception.class, exception.msg FROM logs " +
+            s"WHERE msg = '${msg.message}'"),
         Row("ERROR", msg.message, expectedMDC, "java.lang.RuntimeException", "OOM") :: Nil)
 
       val stacktrace =

@@ -65,8 +65,7 @@ object OperatorWithUncomparableTypeValidator {
       unresolvedPlan: LogicalPlan): Unit = {
     throw QueryCompilationErrors.unsupportedSetOperationOnMapType(
       mapCol = mapCol,
-      origin = unresolvedPlan.origin
-    )
+      origin = unresolvedPlan.origin)
   }
 
   private def throwUnsupportedSetOperationOnVariantType(
@@ -74,7 +73,6 @@ object OperatorWithUncomparableTypeValidator {
       unresolvedPlan: LogicalPlan): Unit = {
     throw QueryCompilationErrors.unsupportedSetOperationOnVariantType(
       variantCol = variantCol,
-      origin = unresolvedPlan.origin
-    )
+      origin = unresolvedPlan.origin)
   }
 }

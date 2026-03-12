@@ -42,31 +42,40 @@ class SchemaPruningSuite extends SparkFunSuite with SQLHelper {
       StructType.fromDDL("a int, b int"))
 
     val structOfStruct = StructType.fromDDL("a struct<a:int, b:int>, b int")
-    testPrunedSchema(structOfStruct,
+    testPrunedSchema(
+      structOfStruct,
       Seq(StructField("a", StructType.fromDDL("a int")), StructField("b", IntegerType)),
       StructType.fromDDL("a struct<a:int>, b int"))
-    testPrunedSchema(structOfStruct,
+    testPrunedSchema(
+      structOfStruct,
       Seq(StructField("a", StructType.fromDDL("a int"))),
       StructType.fromDDL("a struct<a:int>, b int"))
 
     val arrayOfStruct = StructField("a", ArrayType(StructType.fromDDL("a int, b int, c string")))
-    val mapOfStruct = StructField("d", MapType(StructType.fromDDL("a int, b int, c string"),
-      StructType.fromDDL("d int, e int, f string")))
+    val mapOfStruct = StructField(
+      "d",
+      MapType(
+        StructType.fromDDL("a int, b int, c string"),
+        StructType.fromDDL("d int, e int, f string")))
 
     val complexStruct = StructType(
       arrayOfStruct :: StructField("b", structOfStruct) :: StructField("c", IntegerType) ::
         mapOfStruct :: Nil)
 
-    testPrunedSchema(complexStruct,
-      Seq(StructField("a", ArrayType(StructType.fromDDL("b int"))),
+    testPrunedSchema(
+      complexStruct,
+      Seq(
+        StructField("a", ArrayType(StructType.fromDDL("b int"))),
         StructField("b", StructType.fromDDL("a int"))),
       StructType(
         StructField("a", ArrayType(StructType.fromDDL("b int"))) ::
           StructField("b", StructType.fromDDL("a int")) ::
           StructField("c", IntegerType) ::
           mapOfStruct :: Nil))
-    testPrunedSchema(complexStruct,
-      Seq(StructField("a", ArrayType(StructType.fromDDL("b int, c string"))),
+    testPrunedSchema(
+      complexStruct,
+      Seq(
+        StructField("a", ArrayType(StructType.fromDDL("b int, c string"))),
         StructField("b", StructType.fromDDL("b int"))),
       StructType(
         StructField("a", ArrayType(StructType.fromDDL("b int, c string"))) ::
@@ -74,9 +83,11 @@ class SchemaPruningSuite extends SparkFunSuite with SQLHelper {
           StructField("c", IntegerType) ::
           mapOfStruct :: Nil))
 
-    val selectFieldInMap = StructField("d", MapType(StructType.fromDDL("a int, b int"),
-      StructType.fromDDL("e int, f string")))
-    testPrunedSchema(complexStruct,
+    val selectFieldInMap = StructField(
+      "d",
+      MapType(StructType.fromDDL("a int, b int"), StructType.fromDDL("e int, f string")))
+    testPrunedSchema(
+      complexStruct,
       Seq(StructField("c", IntegerType), selectFieldInMap),
       StructType(
         arrayOfStruct ::
@@ -98,15 +109,9 @@ class SchemaPruningSuite extends SparkFunSuite with SQLHelper {
             upperCaseSchema,
             upperCaseRequestedFields,
             StructType.fromDDL("A struct<A:int>, B int"))
-          testPrunedSchema(
-            upperCaseSchema,
-            lowerCaseRequestedFields,
-            upperCaseSchema)
+          testPrunedSchema(upperCaseSchema, lowerCaseRequestedFields, upperCaseSchema)
 
-          testPrunedSchema(
-            lowerCaseSchema,
-            upperCaseRequestedFields,
-            lowerCaseSchema)
+          testPrunedSchema(lowerCaseSchema, upperCaseRequestedFields, lowerCaseSchema)
           testPrunedSchema(
             lowerCaseSchema,
             lowerCaseRequestedFields,

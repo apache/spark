@@ -25,27 +25,22 @@ class DropNamespaceParserSuite extends AnalysisTest {
   test("drop namespace") {
     comparePlans(
       parsePlan("DROP NAMESPACE a.b.c"),
-      DropNamespace(
-        UnresolvedNamespace(Seq("a", "b", "c")), ifExists = false, cascade = false))
+      DropNamespace(UnresolvedNamespace(Seq("a", "b", "c")), ifExists = false, cascade = false))
 
     comparePlans(
       parsePlan("DROP NAMESPACE IF EXISTS a.b.c"),
-      DropNamespace(
-        UnresolvedNamespace(Seq("a", "b", "c")), ifExists = true, cascade = false))
+      DropNamespace(UnresolvedNamespace(Seq("a", "b", "c")), ifExists = true, cascade = false))
 
     comparePlans(
       parsePlan("DROP NAMESPACE IF EXISTS a.b.c RESTRICT"),
-      DropNamespace(
-        UnresolvedNamespace(Seq("a", "b", "c")), ifExists = true, cascade = false))
+      DropNamespace(UnresolvedNamespace(Seq("a", "b", "c")), ifExists = true, cascade = false))
 
     comparePlans(
       parsePlan("DROP NAMESPACE IF EXISTS a.b.c CASCADE"),
-      DropNamespace(
-        UnresolvedNamespace(Seq("a", "b", "c")), ifExists = true, cascade = true))
+      DropNamespace(UnresolvedNamespace(Seq("a", "b", "c")), ifExists = true, cascade = true))
 
     comparePlans(
       parsePlan("DROP NAMESPACE a.b.c CASCADE"),
-      DropNamespace(
-        UnresolvedNamespace(Seq("a", "b", "c")), ifExists = false, cascade = true))
+      DropNamespace(UnresolvedNamespace(Seq("a", "b", "c")), ifExists = false, cascade = true))
   }
 }

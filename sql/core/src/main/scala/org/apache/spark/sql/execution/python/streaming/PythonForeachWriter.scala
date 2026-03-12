@@ -36,11 +36,11 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{NextIterator, Utils}
 
 /**
- * Writes the rows buffered in [[UnsafeRowBuffer]] to the Python worker.
- * Any exceptions encountered will be cached to be read later by the parent thread.
+ * Writes the rows buffered in [[UnsafeRowBuffer]] to the Python worker. Any exceptions
+ * encountered will be cached to be read later by the parent thread.
  */
 class WriterThread(outputIterator: Iterator[Array[Byte]])
-  extends Thread(s"Thread streaming data to the Python worker") {
+    extends Thread(s"Thread streaming data to the Python worker") {
 
   @volatile var _exception: Throwable = _
 
@@ -67,16 +67,16 @@ class WriterThread(outputIterator: Iterator[Array[Byte]])
 
 /**
  * The class proceeds as follows:
- *  - Rows streamed through a `process()` call on the
+ *   - Rows streamed through a `process()` call on the
  * [[org.apache.spark.sql.execution.streaming.QueryExecutionThread]] are buffered in the
  * `UnsafeRowBuffer`.
- * - The [[WriterThread]] streams the buffered data to the Python worker.
- * - Once the streaming query ends, [[close()]] is called which signals the buffer to mark the
- * end of streaming input. The streaming query execution thread waits for the [[WriterThread]] to
- * complete and throws any exceptions seen by the [[WriterThread]].
+ *   - The [[WriterThread]] streams the buffered data to the Python worker.
+ *   - Once the streaming query ends, [[close()]] is called which signals the buffer to mark the
+ *     end of streaming input. The streaming query execution thread waits for the [[WriterThread]]
+ *     to complete and throws any exceptions seen by the [[WriterThread]].
  */
 class PythonForeachWriter(func: PythonFunction, schema: StructType)
-  extends ForeachWriter[UnsafeRow] {
+    extends ForeachWriter[UnsafeRow] {
 
   private lazy val context = TaskContext.get()
   private lazy val buffer = new PythonForeachWriter.UnsafeRowBuffer(
@@ -98,8 +98,7 @@ class PythonForeachWriter(func: PythonFunction, schema: StructType)
   private lazy val pythonRunner = {
     new PythonRunner(Seq(ChainedPythonFunctions(Seq(func))), jobArtifactUUID) {
       override val pythonExec: String =
-        SQLConf.get.pysparkWorkerPythonExecutable.getOrElse(
-          funcs.head.funcs.head.pythonExec)
+        SQLConf.get.pysparkWorkerPythonExecutable.getOrElse(funcs.head.funcs.head.pythonExec)
 
       override val faultHandlerEnabled: Boolean = SQLConf.get.pythonUDFWorkerFaulthandlerEnabled
       override val idleTimeoutSeconds: Long = SQLConf.get.pythonUDFWorkerIdleTimeoutSeconds
@@ -120,7 +119,7 @@ class PythonForeachWriter(func: PythonFunction, schema: StructType)
   private lazy val writerThread = new WriterThread(outputIterator)
 
   override def open(partitionId: Long, version: Long): Boolean = {
-    outputIterator  // initialize everything
+    outputIterator // initialize everything
     writerThread.start()
     TaskContext.get().addTaskCompletionListener[Unit] { _ => buffer.close() }
     true
@@ -145,27 +144,27 @@ class PythonForeachWriter(func: PythonFunction, schema: StructType)
 object PythonForeachWriter {
 
   /**
-   * A buffer that is designed for the sole purpose of buffering UnsafeRows in PythonForeachWriter.
-   * It is designed to be used with only two threads: the QueryExecutionThread which writes data
-   * to the buffer and [[WriterThread]] thread that reads from the buffer and writes to the
-   * Python worker stdin. Adds to the buffer are non-blocking, and reads through the buffer's
-   * iterator are blocking, that is, it blocks until new data is available or all data has been
-   * added.
+   * A buffer that is designed for the sole purpose of buffering UnsafeRows in
+   * PythonForeachWriter. It is designed to be used with only two threads: the
+   * QueryExecutionThread which writes data to the buffer and [[WriterThread]] thread that reads
+   * from the buffer and writes to the Python worker stdin. Adds to the buffer are non-blocking,
+   * and reads through the buffer's iterator are blocking, that is, it blocks until new data is
+   * available or all data has been added.
    *
    * Internally, it uses a [[HybridRowQueue]] to buffer the rows in a practically unlimited queue
    * across memory and local disk. However, HybridRowQueue is designed to be used only with
    * EvalPythonExec where the buffer's consumer is always behind the buffer's populator, that is,
-   * the [[WriterThread]] does not try to read n + 1 rows if the streaming thread has only
-   * written n rows at any point of time. This assumption is not true for PythonForeachWriter
-   * where rows may be added at a different rate as they are consumed by the Python worker.
-   * Hence, to maintain the invariant of the reader being behind the writer while using
-   * HybridRowQueue, the buffer does the following:
-   * - Keeps a count of the rows in the HybridRowQueue
-   * - Blocks the buffer's consuming iterator when the count is 0 so that the reader does not
-   *   try to read more rows than what has been written.
+   * the [[WriterThread]] does not try to read n + 1 rows if the streaming thread has only written
+   * n rows at any point of time. This assumption is not true for PythonForeachWriter where rows
+   * may be added at a different rate as they are consumed by the Python worker. Hence, to
+   * maintain the invariant of the reader being behind the writer while using HybridRowQueue, the
+   * buffer does the following:
+   *   - Keeps a count of the rows in the HybridRowQueue
+   *   - Blocks the buffer's consuming iterator when the count is 0 so that the reader does not
+   *     try to read more rows than what has been written.
    *
-   * The implementation of the blocking iterator (ReentrantLock, Condition, etc.) has been borrowed
-   * from that of ArrayBlockingQueue.
+   * The implementation of the blocking iterator (ReentrantLock, Condition, etc.) has been
+   * borrowed from that of ArrayBlockingQueue.
    */
   class UnsafeRowBuffer(taskMemoryManager: TaskMemoryManager, tempDir: File, numFields: Int)
       extends Logging {
@@ -184,7 +183,7 @@ object PythonForeachWriter {
         if (row == null) finished = true
         row
       }
-      override protected def close(): Unit = { }
+      override protected def close(): Unit = {}
     }
 
     def add(row: UnsafeRow): Unit = withLock {
@@ -204,8 +203,10 @@ object PythonForeachWriter {
 
       if (count > 0) {
         val row = queue.remove()
-        assert(row != null, "HybridRowQueue.remove() returned null " +
-          s"[count = $count, allAdded = $allAdded, exception = $exception]")
+        assert(
+          row != null,
+          "HybridRowQueue.remove() returned null " +
+            s"[count = $count, allAdded = $allAdded, exception = $exception]")
         count -= 1
         logTrace(s"Removed $row, $count left")
         row
@@ -223,7 +224,8 @@ object PythonForeachWriter {
 
     private def withLock[T](f: => T): T = {
       lock.lockInterruptibly()
-      try { f } catch {
+      try { f }
+      catch {
         case e: Throwable =>
           if (exception == null) exception = e
           throw e
@@ -231,4 +233,3 @@ object PythonForeachWriter {
     }
   }
 }
-

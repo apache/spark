@@ -31,8 +31,8 @@ import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.util.Utils
 
 /**
- * The common settings and utility functions for all v1 and v2 test suites. When a function
- * is not applicable to all supported catalogs, it should be placed to a specific trait:
+ * The common settings and utility functions for all v1 and v2 test suites. When a function is not
+ * applicable to all supported catalogs, it should be placed to a specific trait:
  *
  *   - V1 In-Memory catalog: `org.apache.spark.sql.execution.command.v1.CommandSuiteBase`
  *   - V1 Hive External catalog: `org.apache.spark.sql.hive.execution.command.CommandSuiteBase`
@@ -52,14 +52,14 @@ trait DDLCommandTestUtils extends SQLTestUtils {
 
   // Overrides the `test` method, and adds a prefix to easily find identify the catalog to which
   // the failed test in logs belongs to.
-  override def test(testName: String, testTags: Tag*)(testFun: => Any)
-    (implicit pos: Position): Unit = {
+  override def test(testName: String, testTags: Tag*)(testFun: => Any)(implicit
+      pos: Position): Unit = {
     val testNamePrefix = s"$command using $catalogVersion catalog $commandVersion command"
     super.test(s"$testNamePrefix: $testName", testTags: _*)(testFun)
   }
 
-  protected def withNamespaceAndTable(ns: String, tableName: String, cat: String = catalog)
-      (f: String => Unit): Unit = {
+  protected def withNamespaceAndTable(ns: String, tableName: String, cat: String = catalog)(
+      f: String => Unit): Unit = {
     val nsCat = s"$cat.$ns"
     withNamespace(nsCat) {
       sql(s"CREATE NAMESPACE IF NOT EXISTS $nsCat")
@@ -118,10 +118,12 @@ trait DDLCommandTestUtils extends SQLTestUtils {
   }
 
   def partSpecToString(spec: Map[String, Any]): String = {
-    spec.map {
-      case (k, v: String) => s"$k = '$v'"
-      case (k, v) => s"$k = $v"
-    }.mkString("PARTITION (", ", ", ")")
+    spec
+      .map {
+        case (k, v: String) => s"$k = '$v'"
+        case (k, v) => s"$k = $v"
+      }
+      .mkString("PARTITION (", ", ", ")")
   }
 
   def cacheRelation(name: String): Unit = {
@@ -159,7 +161,8 @@ trait DDLCommandTestUtils extends SQLTestUtils {
     val in = if (catalogAndNs.isEmpty) "" else s"IN ${catalogAndNs.mkString(".")}"
     val information = sql(s"SHOW TABLE EXTENDED $in LIKE '$table' PARTITION ($part)")
       .select("information")
-      .first().getString(0)
+      .first()
+      .getString(0)
     information
       .split("\\r?\\n")
       .filter(_.startsWith("Location:"))

@@ -44,7 +44,7 @@ case class CSVScan(
     pushedFilters: Array[Filter],
     partitionFilters: Seq[Expression] = Seq.empty,
     dataFilters: Seq[Expression] = Seq.empty)
-  extends TextBasedFileScan(sparkSession, options) {
+    extends TextBasedFileScan(sparkSession, options) {
 
   val columnPruning = conf.csvColumnPruning
   private lazy val parsedOptions: CSVOptions = new CSVOptions(
@@ -87,13 +87,19 @@ case class CSVScan(
       SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
     // The partition values are already truncated in `FileScan.partitions`.
     // We should use `readPartitionSchema` as the partition schema here.
-    CSVPartitionReaderFactory(conf, broadcastedConf,
-      dataSchema, readDataSchema, readPartitionSchema, parsedOptions,
+    CSVPartitionReaderFactory(
+      conf,
+      broadcastedConf,
+      dataSchema,
+      readDataSchema,
+      readPartitionSchema,
+      parsedOptions,
       actualFilters.toImmutableArraySeq)
   }
 
   override def equals(obj: Any): Boolean = obj match {
-    case c: CSVScan => super.equals(c) && dataSchema == c.dataSchema && options == c.options &&
+    case c: CSVScan =>
+      super.equals(c) && dataSchema == c.dataSchema && options == c.options &&
       equivalentFilters(pushedFilters, c.pushedFilters)
     case _ => false
   }

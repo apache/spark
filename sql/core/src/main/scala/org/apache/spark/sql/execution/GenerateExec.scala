@@ -28,11 +28,11 @@ import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
 
 /**
- * For lazy computing, be sure the generator.terminate() called in the very last
- * TODO reusing the CompletionIterator?
+ * For lazy computing, be sure the generator.terminate() called in the very last TODO reusing the
+ * CompletionIterator?
  */
 private[execution] sealed case class LazyIterator(func: () => IterableOnce[InternalRow])
-  extends Iterator[InternalRow] {
+    extends Iterator[InternalRow] {
 
   lazy val results: Iterator[InternalRow] = func().iterator
   override def hasNext: Boolean = results.hasNext
@@ -40,21 +40,23 @@ private[execution] sealed case class LazyIterator(func: () => IterableOnce[Inter
 }
 
 /**
- * Applies a [[Generator]] to a stream of input rows, combining the
- * output of each into a new stream of rows.  This operation is similar to a `flatMap` in functional
- * programming with one important additional feature, which allows the input rows to be joined with
- * their output.
+ * Applies a [[Generator]] to a stream of input rows, combining the output of each into a new
+ * stream of rows. This operation is similar to a `flatMap` in functional programming with one
+ * important additional feature, which allows the input rows to be joined with their output.
  *
  * This operator supports whole stage code generation for generators that do not implement
  * terminate().
  *
- * @param generator the generator expression
- * @param requiredChildOutput required attributes from child's output
- * @param outer when true, each input row will be output at least once, even if the output of the
- *              given `generator` is empty.
- * @param generatorOutput the qualified output attributes of the generator of this node, which
- *                        constructed in analysis phase, and we can not change it, as the
- *                        parent node bound with it already.
+ * @param generator
+ *   the generator expression
+ * @param requiredChildOutput
+ *   required attributes from child's output
+ * @param outer
+ *   when true, each input row will be output at least once, even if the output of the given
+ *   `generator` is empty.
+ * @param generatorOutput
+ *   the qualified output attributes of the generator of this node, which constructed in analysis
+ *   phase, and we can not change it, as the parent node bound with it already.
  */
 case class GenerateExec(
     generator: Generator,
@@ -62,7 +64,8 @@ case class GenerateExec(
     outer: Boolean,
     generatorOutput: Seq[Attribute],
     child: SparkPlan)
-  extends UnaryExecNode with CodegenSupport {
+    extends UnaryExecNode
+    with CodegenSupport {
 
   override def output: Seq[Attribute] = requiredChildOutput ++ generatorOutput
 
@@ -174,9 +177,10 @@ case class GenerateExec(
     // Add position
     val position = if (e.position) {
       if (outer) {
-        Seq(ExprCode(
-          JavaCode.isNullExpression(s"$index == -1"),
-          JavaCode.variable(index, IntegerType)))
+        Seq(
+          ExprCode(
+            JavaCode.isNullExpression(s"$index == -1"),
+            JavaCode.variable(index, IntegerType)))
       } else {
         Seq(ExprCode(FalseLiteral, JavaCode.variable(index, IntegerType)))
       }

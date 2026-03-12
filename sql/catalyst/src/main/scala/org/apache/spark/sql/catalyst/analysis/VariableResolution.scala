@@ -21,41 +21,37 @@ import java.util.Locale
 
 import org.apache.spark.sql.catalyst.{SQLConfHelper, SqlScriptingContextManager}
 import org.apache.spark.sql.catalyst.catalog.TempVariableManager
-import org.apache.spark.sql.catalyst.expressions.{
-  Expression,
-  ExtractValue,
-  Literal,
-  VariableReference
-}
+import org.apache.spark.sql.catalyst.expressions.{Expression, ExtractValue, Literal, VariableReference}
 import org.apache.spark.sql.catalyst.parser.SqlScriptingLabelContext.isForbiddenLabelOrForVariableName
-import org.apache.spark.sql.connector.catalog.{
-  CatalogManager,
-  Identifier
-}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier}
 
 class VariableResolution(tempVariableManager: TempVariableManager) extends SQLConfHelper {
 
   /**
    * Resolves a `multipartName` to an [[Expression]] tree, supporting nested field access.
    *
-   * This method implements a longest-match strategy similar to column resolution,
-   * preferring fully qualified variable names to avoid naming conflicts. It supports
-   * accessing nested fields within variables through dot notation.
+   * This method implements a longest-match strategy similar to column resolution, preferring
+   * fully qualified variable names to avoid naming conflicts. It supports accessing nested fields
+   * within variables through dot notation.
    *
    * The resolution process works as follows:
-   * 1. Attempts to resolve the full name as a variable
-   * 2. If unsuccessful, treats the rightmost parts as nested field access
-   * 3. Continues until a variable is found or all combinations are exhausted
-   * 4. Wraps the result in ExtractValue expressions for nested field access
+   *   1. Attempts to resolve the full name as a variable
+   *   2. If unsuccessful, treats the rightmost parts as nested field access
+   *   3. Continues until a variable is found or all combinations are exhausted
+   *   4. Wraps the result in ExtractValue expressions for nested field access
    *
-   * @param nameParts The sequence of name parts representing the variable identifier
-   *   (e.g., ["catalog", "schema", "variable", "field1", "field2"])
-   * @param resolvingView Whether this resolution is happening within a view context.
-   *   When true, only variables explicitly referred to in the view definition are accessible.
-   * @param referredTempVariableNames When resolving within a view, this contains the list of
-   *   variable names that the view explicitly references and should have access to.
+   * @param nameParts
+   *   The sequence of name parts representing the variable identifier (e.g., ["catalog",
+   *   "schema", "variable", "field1", "field2"])
+   * @param resolvingView
+   *   Whether this resolution is happening within a view context. When true, only variables
+   *   explicitly referred to in the view definition are accessible.
+   * @param referredTempVariableNames
+   *   When resolving within a view, this contains the list of variable names that the view
+   *   explicitly references and should have access to.
    *
-   * @return Some(Expression) if a variable is successfully resolved, potentially wrapped in
+   * @return
+   *   Some(Expression) if a variable is successfully resolved, potentially wrapped in
    *   [[ExtractValue]] expressions for nested field access. None if no variable can be resolved
    *   from the given name parts.
    */
@@ -72,8 +68,7 @@ class VariableResolution(tempVariableManager: TempVariableManager) extends SQLCo
       resolvedVariable = resolveVariable(
         nameParts = nameParts.dropRight(numInnerFields),
         resolvingView = resolvingView,
-        referredTempVariableNames = referredTempVariableNames
-      )
+        referredTempVariableNames = referredTempVariableNames)
 
       if (resolvedVariable.isEmpty) {
         numInnerFields += 1
@@ -93,11 +88,12 @@ class VariableResolution(tempVariableManager: TempVariableManager) extends SQLCo
   }
 
   /**
-   * Look up variable by nameParts.
-   * If in SQL Script, first check local variables.
-   * If not found fall back to session variables.
-   * @param nameParts NameParts of the variable.
-   * @return Reference to the variable.
+   * Look up variable by nameParts. If in SQL Script, first check local variables. If not found
+   * fall back to session variables.
+   * @param nameParts
+   *   NameParts of the variable.
+   * @return
+   *   Reference to the variable.
    */
   def lookupVariable(nameParts: Seq[String]): Option[VariableReference] = {
     val namePartsCaseAdjusted = if (conf.caseSensitiveAnalysis) {
@@ -110,36 +106,30 @@ class VariableResolution(tempVariableManager: TempVariableManager) extends SQLCo
       .get()
       .flatMap(_.getVariableManager)
       // If variable name is qualified with session.<varName> treat it as a session variable.
-      .filterNot(
-        _ =>
-          nameParts.length > 2
-          || (nameParts.length == 2 && isForbiddenLabelOrForVariableName(nameParts.head))
-      )
+      .filterNot(_ =>
+        nameParts.length > 2
+          || (nameParts.length == 2 && isForbiddenLabelOrForVariableName(nameParts.head)))
       .flatMap(_.get(namePartsCaseAdjusted))
       .map { varDef =>
         VariableReference(
           nameParts,
           FakeLocalCatalog,
           Identifier.of(Array(varDef.identifier.namespace().last), namePartsCaseAdjusted.last),
-          varDef
-        )
+          varDef)
       }
-      .orElse(
-        if (maybeTempVariableName(nameParts)) {
-          tempVariableManager
-            .get(namePartsCaseAdjusted)
-            .map { varDef =>
-              VariableReference(
-                nameParts,
-                FakeSystemCatalog,
-                Identifier.of(Array(CatalogManager.SESSION_NAMESPACE), namePartsCaseAdjusted.last),
-                varDef
-              )
-            }
-        } else {
-          None
-        }
-      )
+      .orElse(if (maybeTempVariableName(nameParts)) {
+        tempVariableManager
+          .get(namePartsCaseAdjusted)
+          .map { varDef =>
+            VariableReference(
+              nameParts,
+              FakeSystemCatalog,
+              Identifier.of(Array(CatalogManager.SESSION_NAMESPACE), namePartsCaseAdjusted.last),
+              varDef)
+          }
+      } else {
+        None
+      })
   }
 
   private def resolveVariable(

@@ -35,7 +35,10 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.util.Utils
 
-abstract class TextSuite extends QueryTest with SharedSparkSession with CommonFileDataSourceSuite {
+abstract class TextSuite
+    extends QueryTest
+    with SharedSparkSession
+    with CommonFileDataSourceSuite {
   import testImplicits._
 
   override protected def dataSourceFormat = "text"
@@ -74,8 +77,11 @@ abstract class TextSuite extends QueryTest with SharedSparkSession with CommonFi
   }
 
   test("reading partitioned data using read.textFile()") {
-    val partitionedData = Thread.currentThread().getContextClassLoader
-      .getResource("test-data/text-partitioned").toString
+    val partitionedData = Thread
+      .currentThread()
+      .getContextClassLoader
+      .getResource("test-data/text-partitioned")
+      .toString
     val ds = spark.read.textFile(partitionedData)
     val data = ds.collect()
 
@@ -84,8 +90,11 @@ abstract class TextSuite extends QueryTest with SharedSparkSession with CommonFi
   }
 
   test("support for partitioned reading using read.text()") {
-    val partitionedData = Thread.currentThread().getContextClassLoader
-      .getResource("test-data/text-partitioned").toString
+    val partitionedData = Thread
+      .currentThread()
+      .getContextClassLoader
+      .getResource("test-data/text-partitioned")
+      .toString
     val df = spark.read.text(partitionedData)
     val data = df.filter("year = '2015'").select("value").collect()
 
@@ -97,27 +106,27 @@ abstract class TextSuite extends QueryTest with SharedSparkSession with CommonFi
     val testDf = spark.read.text(testFile)
     val extensionNameMap = Seq(BZIP2, DEFLATE, GZIP, LZ4, SNAPPY)
       .map(codec => codec.lowerCaseName() -> codec.getCompressionCodec.getDefaultExtension)
-    extensionNameMap.foreach {
-      case (codecName, extension) =>
-        val tempDir = Utils.createTempDir()
-        val tempDirPath = tempDir.getAbsolutePath
-        testDf.write.option("compression", codecName).mode(SaveMode.Overwrite).text(tempDirPath)
-        val compressedFiles = new File(tempDirPath).listFiles()
-        assert(compressedFiles.exists(_.getName.endsWith(s".txt$extension")))
-        verifyFrame(spark.read.text(tempDirPath))
+    extensionNameMap.foreach { case (codecName, extension) =>
+      val tempDir = Utils.createTempDir()
+      val tempDirPath = tempDir.getAbsolutePath
+      testDf.write.option("compression", codecName).mode(SaveMode.Overwrite).text(tempDirPath)
+      val compressedFiles = new File(tempDirPath).listFiles()
+      assert(compressedFiles.exists(_.getName.endsWith(s".txt$extension")))
+      verifyFrame(spark.read.text(tempDirPath))
     }
 
     withTempDir { dir =>
       checkError(
         exception = intercept[SparkIllegalArgumentException] {
-          testDf.write.option("compression", "illegal").mode(
-            SaveMode.Overwrite).text(dir.getAbsolutePath)
+          testDf.write
+            .option("compression", "illegal")
+            .mode(SaveMode.Overwrite)
+            .text(dir.getAbsolutePath)
         },
         condition = "CODEC_NOT_AVAILABLE.WITH_AVAILABLE_CODECS_SUGGESTION",
         parameters = Map(
           "codecName" -> "illegal",
-          "availableCodecs" -> "bzip2, deflate, uncompressed, snappy, none, lz4, gzip")
-      )
+          "availableCodecs" -> "bzip2, deflate, uncompressed, snappy, none, lz4, gzip"))
     }
   }
 
@@ -127,13 +136,15 @@ abstract class TextSuite extends QueryTest with SharedSparkSession with CommonFi
       "mapreduce.output.fileoutputformat.compress.type" -> CompressionType.BLOCK.toString,
       "mapreduce.map.output.compress" -> "true",
       "mapreduce.output.fileoutputformat.compress.codec" -> classOf[GzipCodec].getName,
-      "mapreduce.map.output.compress.codec" -> classOf[GzipCodec].getName
-    )
+      "mapreduce.map.output.compress.codec" -> classOf[GzipCodec].getName)
     withTempDir { dir =>
       val testDf = spark.read.text(testFile)
       val tempDirPath = dir.getAbsolutePath
-      testDf.write.option("compression", NONE.lowerCaseName())
-        .options(extraOptions).mode(SaveMode.Overwrite).text(tempDirPath)
+      testDf.write
+        .option("compression", NONE.lowerCaseName())
+        .options(extraOptions)
+        .mode(SaveMode.Overwrite)
+        .text(tempDirPath)
       val compressedFiles = new File(tempDirPath).listFiles()
       assert(compressedFiles.exists(!_.getName.endsWith(".txt.gz")))
       verifyFrame(spark.read.options(extraOptions).text(tempDirPath))
@@ -146,13 +157,15 @@ abstract class TextSuite extends QueryTest with SharedSparkSession with CommonFi
       "mApReDuCe.output.fileoutputformat.compress.type" -> CompressionType.BLOCK.toString,
       "mApReDuCe.map.output.compress" -> "true",
       "mApReDuCe.output.fileoutputformat.compress.codec" -> classOf[GzipCodec].getName,
-      "mApReDuCe.map.output.compress.codec" -> classOf[GzipCodec].getName
-    )
+      "mApReDuCe.map.output.compress.codec" -> classOf[GzipCodec].getName)
     withTempDir { dir =>
       val testDf = spark.read.text(testFile)
       val tempDirPath = dir.getAbsolutePath
-      testDf.write.option("CoMpReSsIoN", NONE.lowerCaseName())
-        .options(extraOptions).mode(SaveMode.Overwrite).text(tempDirPath)
+      testDf.write
+        .option("CoMpReSsIoN", NONE.lowerCaseName())
+        .options(extraOptions)
+        .mode(SaveMode.Overwrite)
+        .text(tempDirPath)
       val compressedFiles = new File(tempDirPath).listFiles()
       assert(compressedFiles.exists(!_.getName.endsWith(".txt.gz")))
       verifyFrame(spark.read.options(extraOptions).text(tempDirPath))
@@ -204,9 +217,9 @@ abstract class TextSuite extends QueryTest with SharedSparkSession with CommonFi
 
       // Write
       withTempPath { path =>
-        values.toDF().coalesce(1)
-          .write.option("lineSep", lineSep).text(path.getAbsolutePath)
-        val partFile = TestUtils.recursiveList(path).filter(f => f.getName.startsWith("part-")).head
+        values.toDF().coalesce(1).write.option("lineSep", lineSep).text(path.getAbsolutePath)
+        val partFile =
+          TestUtils.recursiveList(path).filter(f => f.getName.startsWith("part-")).head
         val readBack = new String(Files.readAllBytes(partFile.toPath), StandardCharsets.UTF_8)
         assert(readBack === s"a${lineSep}b${lineSep}\nc${lineSep}")
       }
@@ -222,7 +235,7 @@ abstract class TextSuite extends QueryTest with SharedSparkSession with CommonFi
   }
 
   // scalastyle:off nonascii
-  Seq("|", "^", "::", "!!!@3", 0x1E.toChar.toString, "아").foreach { lineSep =>
+  Seq("|", "^", "::", "!!!@3", 0x1e.toChar.toString, "아").foreach { lineSep =>
     testLineSeparator(lineSep)
   }
   // scalastyle:on nonascii
@@ -256,12 +269,17 @@ abstract class TextSuite extends QueryTest with SharedSparkSession with CommonFi
     assert(TextOptions.isValidOption("lineSep"))
   }
 
-  private def createTestFiles(dir: File, fileFormatWriter: Boolean,
-    wholeText: Boolean): Seq[Row] = {
+  private def createTestFiles(
+      dir: File,
+      fileFormatWriter: Boolean,
+      wholeText: Boolean): Seq[Row] = {
     val numRecord = 100
-    val codecExtensionMap = HadoopCompressionCodec.values()
-      .map(c => (c.lowerCaseName(),
-        Option(c.getCompressionCodec).map(_.getDefaultExtension).getOrElse(""))) ++
+    val codecExtensionMap = HadoopCompressionCodec
+      .values()
+      .map(c =>
+        (
+          c.lowerCaseName(),
+          Option(c.getCompressionCodec).map(_.getDefaultExtension).getOrElse(""))) ++
       Seq(("zstd", ".zst"), ("zstd", ".zstd"), ("gzip", ".gzip"))
 
     val codecFactory = new CompressionCodecFactory(spark.sessionState.newHadoopConf())
@@ -273,7 +291,8 @@ abstract class TextSuite extends QueryTest with SharedSparkSession with CommonFi
       // file data source writers do not support zstd codec yet.
       if (fileFormatWriter && !codec.equals("zstd")) {
         val df = Seq(data).toDF("value")
-        df.coalesce(1).write
+        df.coalesce(1)
+          .write
           .format("text")
           .option("compression", codec)
           .save(file.getCanonicalPath)
@@ -303,18 +322,17 @@ abstract class TextSuite extends QueryTest with SharedSparkSession with CommonFi
       }
     }
 
-    val expectedOutput = codecExtensionMap.flatMap {
-      case (codec, ext) =>
-        val data = (1 to numRecord).map(i => s"$i, value_${codec}$ext")
-        if (wholeText) {
-          if (fileFormatWriter && !codec.equals("zstd")) {
-            Seq(Row(data.mkString("", "\n", "\n")))
-          } else {
-            Seq(Row(data.mkString("\n")))
-          }
+    val expectedOutput = codecExtensionMap.flatMap { case (codec, ext) =>
+      val data = (1 to numRecord).map(i => s"$i, value_${codec}$ext")
+      if (wholeText) {
+        if (fileFormatWriter && !codec.equals("zstd")) {
+          Seq(Row(data.mkString("", "\n", "\n")))
         } else {
-          data.map(Row(_))
+          Seq(Row(data.mkString("\n")))
         }
+      } else {
+        data.map(Row(_))
+      }
     }.toSeq
     val numRows = if (wholeText) 1 else numRecord
     assert(expectedOutput.length == codecExtensionMap.length * numRows)
@@ -322,17 +340,12 @@ abstract class TextSuite extends QueryTest with SharedSparkSession with CommonFi
   }
 
   test("Test all supported codec and extension including zst, zstd and gzip") {
-    for (
-      wholeText <- Seq(true, false);
-      fileFormatWriter <- Seq(true, false)
-    ) {
+    for (wholeText <- Seq(true, false);
+      fileFormatWriter <- Seq(true, false)) {
       logInfo(s"Testing with wholeText=$wholeText, fileFormatWriter=$fileFormatWriter")
 
       withTempDir { dir =>
-        val options = Map(
-          "wholeText" -> wholeText.toString,
-          "recursiveFileLookup" -> "true"
-        )
+        val options = Map("wholeText" -> wholeText.toString, "recursiveFileLookup" -> "true")
 
         val expectedOutput = createTestFiles(dir, fileFormatWriter, wholeText)
         val df = spark.read.options(options).text(dir.getCanonicalPath)
@@ -344,14 +357,12 @@ abstract class TextSuite extends QueryTest with SharedSparkSession with CommonFi
 
 class TextV1Suite extends TextSuite {
   override protected def sparkConf: SparkConf =
-    super
-      .sparkConf
+    super.sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, "text")
 }
 
 class TextV2Suite extends TextSuite {
   override protected def sparkConf: SparkConf =
-    super
-      .sparkConf
+    super.sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, "")
 }

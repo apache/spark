@@ -36,9 +36,11 @@ import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, Column
  * TransformWithStateInPySpark.
  */
 class TransformWithStateInPySparkDeserializer(deserializer: ExpressionEncoder.Deserializer[Row])
-  extends Logging {
+    extends Logging {
   private lazy val allocator = ArrowUtils.rootAllocator.newChildAllocator(
-        s"stdin reader for transformWithStateInPySpark state socket", 0, Long.MaxValue)
+    s"stdin reader for transformWithStateInPySpark state socket",
+    0,
+    Long.MaxValue)
 
   /**
    * Read Arrow batches from the given stream and deserialize them into rows.
@@ -46,9 +48,11 @@ class TransformWithStateInPySparkDeserializer(deserializer: ExpressionEncoder.De
   def readArrowBatches(stream: DataInputStream): Seq[Row] = {
     val reader = new ArrowStreamReader(stream, allocator)
     val root = reader.getVectorSchemaRoot
-    val vectors = root.getFieldVectors.asScala.map { vector =>
-      new ArrowColumnVector(vector)
-    }.toArray[ColumnVector]
+    val vectors = root.getFieldVectors.asScala
+      .map { vector =>
+        new ArrowColumnVector(vector)
+      }
+      .toArray[ColumnVector]
     val rows = ArrayBuffer[Row]()
     while (reader.loadNextBatch()) {
       val batch = new ColumnarBatch(vectors)
@@ -70,8 +74,8 @@ class TransformWithStateInPySparkDeserializer(deserializer: ExpressionEncoder.De
       } else {
         val bytes = new Array[Byte](size)
         stream.read(bytes, 0, size)
-        val newRow = PythonSQLUtils.toJVMRow(bytes, listStateInfo.schema,
-          listStateInfo.deserializer)
+        val newRow =
+          PythonSQLUtils.toJVMRow(bytes, listStateInfo.schema, listStateInfo.deserializer)
         rows.append(newRow)
       }
     }

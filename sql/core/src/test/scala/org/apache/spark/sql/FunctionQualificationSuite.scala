@@ -23,10 +23,9 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.IntegerType
 
 /**
- * Comprehensive test suite for function qualification and resolution.
- * Tests builtin/temp/persistent function name disambiguation with qualified names.
- * This tests the system.builtin, system.session, and system.extension namespaces.
- *
+ * Comprehensive test suite for function qualification and resolution. Tests
+ * builtin/temp/persistent function name disambiguation with qualified names. This tests the
+ * system.builtin, system.session, and system.extension namespaces.
  */
 class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
 
@@ -101,10 +100,7 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
         exception = intercept[AnalysisException] { sql("SELECT * FROM abs()") },
         condition = "NOT_A_TABLE_FUNCTION",
         parameters = Map("functionName" -> "`abs`"),
-        context = ExpectedContext(
-          fragment = "abs()",
-          start = 14,
-          stop = 18))
+        context = ExpectedContext(fragment = "abs()", start = 14, stop = 18))
       checkAnswer(sql("SELECT builtin.abs(-5)"), Row(5))
       checkAnswer(sql("SELECT * FROM session.abs()"), Row(42))
     } finally {
@@ -121,9 +117,7 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
 
     try {
       // Builtin table range still works unqualified in table context
-      checkAnswer(
-        sql("SELECT * FROM range(5)"),
-        Seq(Row(0), Row(1), Row(2), Row(3), Row(4)))
+      checkAnswer(sql("SELECT * FROM range(5)"), Seq(Row(0), Row(1), Row(2), Row(3), Row(4)))
 
       // Temp scalar function 'range' is shadowed/blocked by builtin table 'range' in scalar context
       // in the current resolution logic.
@@ -133,8 +127,7 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
         },
         condition = "NOT_A_SCALAR_FUNCTION",
         parameters = Map("functionName" -> "`range`"),
-        context = ExpectedContext(fragment = "range()", start = 7, stop = 13)
-      )
+        context = ExpectedContext(fragment = "range()", start = 7, stop = 13))
 
       // Both accessible with explicit qualification (if we could qualify temp function as 'range'?)
       // session.range() maps to temp function
@@ -160,12 +153,7 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
       },
       condition = "NOT_A_TABLE_FUNCTION",
       parameters = Map("functionName" -> "`scalar_only`"),
-      context = ExpectedContext(
-        fragment = "scalar_only()",
-        start = 14,
-        stop = 26
-      )
-    )
+      context = ExpectedContext(fragment = "scalar_only()", start = 14, stop = 26))
 
     sql("DROP TEMPORARY FUNCTION scalar_only")
   }
@@ -182,12 +170,7 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
       },
       condition = "NOT_A_SCALAR_FUNCTION",
       parameters = Map("functionName" -> "`table_only`"),
-      context = ExpectedContext(
-        fragment = "table_only()",
-        start = 7,
-        stop = 18
-      )
-    )
+      context = ExpectedContext(fragment = "table_only()", start = 7, stop = 18))
 
     sql("DROP TEMPORARY FUNCTION table_only")
   }
@@ -209,10 +192,7 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
           exception = intercept[AnalysisException] { sql("SELECT * FROM abs()") },
           condition = "NOT_A_TABLE_FUNCTION",
           parameters = Map("functionName" -> "`abs`"),
-          context = ExpectedContext(
-            fragment = "abs()",
-            start = 14,
-            stop = 18))
+          context = ExpectedContext(fragment = "abs()", start = 14, stop = 18))
         checkAnswer(sql("SELECT abs(-5)"), Row(5))
       } finally {
         sql("DROP TEMPORARY FUNCTION abs")
@@ -274,7 +254,7 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
     checkAnswer(sql("SELECT type_change()"), Row(42))
     sql(
       "CREATE OR REPLACE TEMPORARY FUNCTION type_change() " +
-      "RETURNS TABLE(val INT) RETURN SELECT 99")
+        "RETURNS TABLE(val INT) RETURN SELECT 99")
     checkAnswer(sql("SELECT * FROM type_change()"), Row(99))
     sql("DROP TEMPORARY FUNCTION type_change")
   }
@@ -290,9 +270,7 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
       context = ExpectedContext(
         fragment = "CREATE TEMPORARY FUNCTION IF NOT EXISTS exists_test() RETURNS INT RETURN 1",
         start = 0,
-        stop = 73
-      )
-    )
+        stop = 73))
 
     // SELECT on non-existent function should fail
     checkError(
@@ -302,20 +280,14 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
       condition = "UNRESOLVED_ROUTINE",
       parameters = Map(
         "routineName" -> "`exists_test`",
-        "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
-      ),
-      context = ExpectedContext(
-        fragment = "exists_test()",
-        start = 7,
-        stop = 19
-      )
-    )
+        "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"),
+      context = ExpectedContext(fragment = "exists_test()", start = 7, stop = 19))
 
     checkError(
       exception = intercept[ParseException] {
         sql(
           "CREATE TEMPORARY FUNCTION IF NOT EXISTS system.session.exists_test() " +
-          "RETURNS INT RETURN 2")
+            "RETURNS INT RETURN 2")
       },
       condition = "INVALID_SQL_SYNTAX.CREATE_TEMP_FUNC_WITH_IF_NOT_EXISTS",
       parameters = Map.empty[String, String],
@@ -323,9 +295,7 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
         fragment = "CREATE TEMPORARY FUNCTION IF NOT EXISTS system.session.exists_test() " +
           "RETURNS INT RETURN 2",
         start = 0,
-        stop = 88
-      )
-    )
+        stop = 88))
 
     // SELECT on non-existent function should still fail
     checkError(
@@ -335,14 +305,8 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
       condition = "UNRESOLVED_ROUTINE",
       parameters = Map(
         "routineName" -> "`exists_test`",
-        "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
-      ),
-      context = ExpectedContext(
-        fragment = "exists_test()",
-        start = 7,
-        stop = 19
-      )
-    )
+        "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"),
+      context = ExpectedContext(fragment = "exists_test()", start = 7, stop = 19))
   }
 
   test("SECTION 6f: DDL Operations - SHOW FUNCTIONS") {
@@ -368,14 +332,8 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "objectName" -> "`my_builtin`",
         "objectType" -> "FUNCTION",
-        "qualifier" -> "`system`.`builtin`"
-      ),
-      context = ExpectedContext(
-        fragment = sqlText,
-        start = 0,
-        stop = sqlText.length - 1
-      )
-    )
+        "qualifier" -> "`system`.`builtin`"),
+      context = ExpectedContext(fragment = sqlText, start = 0, stop = sqlText.length - 1))
   }
 
   test("SECTION 7b: Error Cases - cannot create temp function with invalid database") {
@@ -386,17 +344,9 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
       },
       condition = "INVALID_TEMP_OBJ_QUALIFIER",
       sqlState = "42602",
-      parameters = Map(
-        "objectName" -> "`my_func`",
-        "objectType" -> "FUNCTION",
-        "qualifier" -> "`mydb`"
-      ),
-      context = ExpectedContext(
-        fragment = sqlText,
-        start = 0,
-        stop = sqlText.length - 1
-      )
-    )
+      parameters =
+        Map("objectName" -> "`my_func`", "objectType" -> "FUNCTION", "qualifier" -> "`mydb`"),
+      context = ExpectedContext(fragment = sqlText, start = 0, stop = sqlText.length - 1))
   }
 
   test("SECTION 7c: Error Cases - cannot drop builtin function (DROP FUNCTION)") {
@@ -406,27 +356,20 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
       },
       condition = "FORBIDDEN_OPERATION",
       sqlState = "42809",
-      parameters = Map(
-        "statement" -> "DROP",
-        "objectType" -> "FUNCTION",
-        "objectName" -> "`abs`"
-      )
-    )
+      parameters =
+        Map("statement" -> "DROP", "objectType" -> "FUNCTION", "objectName" -> "`abs`"))
   }
 
-  test("SECTION 7d: Error Cases - cannot create function in builtin namespace (CREATE FUNCTION)") {
+  test(
+    "SECTION 7d: Error Cases - cannot create function in builtin namespace (CREATE FUNCTION)") {
     checkError(
       exception = intercept[AnalysisException] {
         sql("CREATE FUNCTION system.builtin.my_func() RETURNS INT RETURN 1")
       },
       condition = "FORBIDDEN_OPERATION",
       sqlState = "42809",
-      parameters = Map(
-        "statement" -> "CREATE",
-        "objectType" -> "FUNCTION",
-        "objectName" -> "`my_func`"
-      )
-    )
+      parameters =
+        Map("statement" -> "CREATE", "objectType" -> "FUNCTION", "objectName" -> "`my_func`"))
   }
 
   test("SECTION 7d2: 2-part names with 'builtin' schema are not system namespace references") {
@@ -457,9 +400,7 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "existingRoutineType" -> "routine",
         "newRoutineType" -> "routine",
-        "routineName" -> "`dup_test`"
-      )
-    )
+        "routineName" -> "`dup_test`"))
 
     sql("DROP TEMPORARY FUNCTION dup_test")
   }
@@ -472,14 +413,8 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
       condition = "UNRESOLVED_ROUTINE",
       parameters = Map(
         "routineName" -> "`non_existent_func`",
-        "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
-      ),
-      context = ExpectedContext(
-        fragment = "non_existent_func()",
-        start = 7,
-        stop = 25
-      )
-    )
+        "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"),
+      context = ExpectedContext(fragment = "non_existent_func()", start = 7, stop = 25))
   }
 
   test("SECTION 8a: Views - temp view can reference temp function") {
@@ -548,12 +483,12 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
       },
       condition = "USER_DEFINED_FUNCTIONS.CANNOT_CONTAIN_COMPLEX_FUNCTIONS",
       sqlState = "42601",
-      parameters = Map("queryText" -> "avg(x)")
-    )
+      parameters = Map("queryText" -> "avg(x)"))
   }
 
   test("SECTION 9c: Multiple Functions - table function with qualified names") {
-    sql("CREATE TEMPORARY FUNCTION my_range() RETURNS TABLE(id INT) RETURN SELECT * FROM range(3)")
+    sql(
+      "CREATE TEMPORARY FUNCTION my_range() RETURNS TABLE(id INT) RETURN SELECT * FROM range(3)")
     try {
       checkAnswer(sql("SELECT * FROM my_range()"), Seq(Row(0), Row(1), Row(2)))
       checkAnswer(sql("SELECT * FROM session.my_range()"), Seq(Row(0), Row(1), Row(2)))
@@ -588,14 +523,9 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
       condition = "UNRESOLVED_ROUTINE",
       parameters = Map(
         "routineName" -> "`spark_catalog`.`default`.`count`",
-        "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
-      ),
-      context = ExpectedContext(
-        fragment = "spark_catalog.default.count(*)",
-        start = 7,
-        stop = 36
-      )
-    )
+        "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"),
+      context =
+        ExpectedContext(fragment = "spark_catalog.default.count(*)", start = 7, stop = 36))
 
     // 2-part name spark_catalog.count is rejected as invalid (empty namespace on session catalog)
     checkError(
@@ -603,11 +533,7 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
         sql("SELECT spark_catalog.count(*) FROM VALUES (1), (2), (3) AS t(a)")
       },
       condition = "REQUIRES_SINGLE_PART_NAMESPACE",
-      parameters = Map(
-        "sessionCatalog" -> "spark_catalog",
-        "identifier" -> "`count`"
-      )
-    )
+      parameters = Map("sessionCatalog" -> "spark_catalog", "identifier" -> "`count`"))
   }
 
   test("SECTION 10c: COUNT(*) - count(tbl.*) blocking") {
@@ -620,8 +546,7 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
       },
       condition = "INVALID_USAGE_OF_STAR_WITH_TABLE_IDENTIFIER_IN_COUNT",
       sqlState = "42000",
-      parameters = Map("tableName" -> "`count_test_view`")
-    )
+      parameters = Map("tableName" -> "`count_test_view`"))
 
     // Qualified count with table.*
     checkError(
@@ -630,8 +555,7 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
       },
       condition = "INVALID_USAGE_OF_STAR_WITH_TABLE_IDENTIFIER_IN_COUNT",
       sqlState = "42000",
-      parameters = Map("tableName" -> "`count_test_view`")
-    )
+      parameters = Map("tableName" -> "`count_test_view`"))
 
     checkError(
       exception = intercept[AnalysisException] {
@@ -639,8 +563,7 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
       },
       condition = "INVALID_USAGE_OF_STAR_WITH_TABLE_IDENTIFIER_IN_COUNT",
       sqlState = "42000",
-      parameters = Map("tableName" -> "`count_test_view`")
-    )
+      parameters = Map("tableName" -> "`count_test_view`"))
 
     sql("DROP VIEW count_test_view")
   }
@@ -728,42 +651,24 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
         sql("SELECT system.builtin.current_user")
       },
       condition = "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-      parameters = Map(
-        "objectName" -> "`system`.`builtin`.`current_user`"
-      ),
-      context = ExpectedContext(
-        fragment = "system.builtin.current_user",
-        start = 7,
-        stop = 33)
-    )
+      parameters = Map("objectName" -> "`system`.`builtin`.`current_user`"),
+      context = ExpectedContext(fragment = "system.builtin.current_user", start = 7, stop = 33))
 
     checkError(
       exception = intercept[AnalysisException] {
         sql("SELECT builtin.current_user")
       },
       condition = "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-      parameters = Map(
-        "objectName" -> "`builtin`.`current_user`"
-      ),
-      context = ExpectedContext(
-        fragment = "builtin.current_user",
-        start = 7,
-        stop = 26)
-    )
+      parameters = Map("objectName" -> "`builtin`.`current_user`"),
+      context = ExpectedContext(fragment = "builtin.current_user", start = 7, stop = 26))
 
     checkError(
       exception = intercept[AnalysisException] {
         sql("SELECT system.builtin.current_schema")
       },
       condition = "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-      parameters = Map(
-        "objectName" -> "`system`.`builtin`.`current_schema`"
-      ),
-      context = ExpectedContext(
-        fragment = "system.builtin.current_schema",
-        start = 7,
-        stop = 35)
-    )
+      parameters = Map("objectName" -> "`system`.`builtin`.`current_schema`"),
+      context = ExpectedContext(fragment = "system.builtin.current_schema", start = 7, stop = 35))
   }
 
   // ============================================================================
@@ -800,7 +705,8 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
 
     // Unqualified call should still resolve to builtin (security!)
     val unqualifiedResult = sql("SELECT current_user()").collect().head.getString(0)
-    assert(unqualifiedResult == actualUser,
+    assert(
+      unqualifiedResult == actualUser,
       s"Built-in current_user() was shadowed! Got '$unqualifiedResult', expected '$actualUser'")
 
     // But we can access the temp function via qualification
@@ -811,7 +717,8 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
 
   test("SECTION 12d: Extension - SHOW FUNCTIONS includes extension functions") {
     val functions = sql("SHOW FUNCTIONS").collect().map(_.getString(0))
-    assert(functions.contains("test_ext_func"),
+    assert(
+      functions.contains("test_ext_func"),
       s"Extension function test_ext_func not found in SHOW FUNCTIONS output")
   }
 
@@ -833,9 +740,7 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
         parameters = Map(
           "routineName" -> "`abs`",
           "newRoutineType" -> "routine",
-          "existingRoutineType" -> "routine"
-        )
-      )
+          "existingRoutineType" -> "routine"))
 
       // Try to create a temp function that shadows an extension function
       // (Extensions are stored as builtins, so same error)
@@ -847,9 +752,7 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
         parameters = Map(
           "routineName" -> "`test_ext_func`",
           "newRoutineType" -> "routine",
-          "existingRoutineType" -> "routine"
-        )
-      )
+          "existingRoutineType" -> "routine"))
     }
   }
 
@@ -863,22 +766,13 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
 
         try {
           // Unqualified abs should resolve to Scala UDF (NOT builtin)
-          checkAnswer(
-            sql("SELECT abs(5) FROM test_data"),
-            Row(105)
-          )
+          checkAnswer(sql("SELECT abs(5) FROM test_data"), Row(105))
 
           // Qualified builtin.abs should still work (returns absolute value)
-          checkAnswer(
-            sql("SELECT builtin.abs(-5) FROM test_data"),
-            Row(5)
-          )
+          checkAnswer(sql("SELECT builtin.abs(-5) FROM test_data"), Row(5))
 
           // system.builtin.abs should also work
-          checkAnswer(
-            sql("SELECT system.builtin.abs(-5) FROM test_data"),
-            Row(5)
-          )
+          checkAnswer(sql("SELECT system.builtin.abs(-5) FROM test_data"), Row(5))
         } finally {
           spark.sessionState.catalog.dropTempFunction("abs", ignoreIfNotExists = true)
         }
@@ -897,16 +791,10 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
         try {
           // With legacy mode, Scala UDF should shadow builtin
           // Resolution order: session (temp) -> builtin
-          checkAnswer(
-            sql("SELECT upper('test') FROM test_data"),
-            Row("TEMP_test")
-          )
+          checkAnswer(sql("SELECT upper('test') FROM test_data"), Row("TEMP_test"))
 
           // Explicit builtin qualification should still work
-          checkAnswer(
-            sql("SELECT builtin.upper('test') FROM test_data"),
-            Row("TEST")
-          )
+          checkAnswer(sql("SELECT builtin.upper('test') FROM test_data"), Row("TEST"))
         } finally {
           spark.sessionState.catalog.dropTempFunction("upper", ignoreIfNotExists = true)
         }
@@ -921,14 +809,8 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
         spark.udf.register("upper", (s: String) => "TEMP_" + s)
         try {
           // Unqualified upper resolves to builtin first (session is last)
-          checkAnswer(
-            sql("SELECT upper('test') FROM test_data"),
-            Row("TEST")
-          )
-          checkAnswer(
-            sql("SELECT session.upper('test') FROM test_data"),
-            Row("TEMP_test")
-          )
+          checkAnswer(sql("SELECT upper('test') FROM test_data"), Row("TEST"))
+          checkAnswer(sql("SELECT session.upper('test') FROM test_data"), Row("TEMP_test"))
         } finally {
           spark.sessionState.catalog.dropTempFunction("upper", ignoreIfNotExists = true)
         }
@@ -959,12 +841,8 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
         condition = "UNRESOLVED_ROUTINE",
         parameters = Map(
           "routineName" -> "`no_such_func_xyz`",
-          "searchPath" -> "[`system`.`session`, `system`.`builtin`, `spark_catalog`.`default`]"
-        ),
-        context = ExpectedContext(
-          fragment = "no_such_func_xyz()",
-          start = 7,
-          stop = 24))
+          "searchPath" -> "[`system`.`session`, `system`.`builtin`, `spark_catalog`.`default`]"),
+        context = ExpectedContext(fragment = "no_such_func_xyz()", start = 7, stop = 24))
     }
     withSQLConf("spark.sql.functionResolution.sessionOrder" -> "last") {
       checkError(
@@ -972,26 +850,21 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
         condition = "UNRESOLVED_ROUTINE",
         parameters = Map(
           "routineName" -> "`no_such_func_xyz`",
-          "searchPath" -> "[`system`.`builtin`, `spark_catalog`.`default`, `system`.`session`]"
-        ),
-        context = ExpectedContext(
-          fragment = "no_such_func_xyz()",
-          start = 7,
-          stop = 24))
+          "searchPath" -> "[`system`.`builtin`, `spark_catalog`.`default`, `system`.`session`]"),
+        context = ExpectedContext(fragment = "no_such_func_xyz()", start = 7, stop = 24))
     }
   }
 
-  test("SECTION 13g: Multi-part name with invalid namespace yields " +
-    "REQUIRES_SINGLE_PART_NAMESPACE") {
+  test(
+    "SECTION 13g: Multi-part name with invalid namespace yields " +
+      "REQUIRES_SINGLE_PART_NAMESPACE") {
     // A 3-part name like x.y.func where x is not a known catalog falls back to the session
     // catalog with a multi-part namespace, which the session catalog does not support.
     checkError(
       exception = intercept[AnalysisException] { sql("SELECT x.y.no_such_xyz()") },
       condition = "REQUIRES_SINGLE_PART_NAMESPACE",
-      parameters = Map(
-        "sessionCatalog" -> "spark_catalog",
-        "identifier" -> "`x`.`y`.`no_such_xyz`"
-      ))
+      parameters =
+        Map("sessionCatalog" -> "spark_catalog", "identifier" -> "`x`.`y`.`no_such_xyz`"))
   }
 
   test("SECTION 13h: Legacy mode - default behavior allows registration but builtin wins") {
@@ -1006,14 +879,11 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
         // Unqualified length should resolve to builtin (NOT temp function)
         checkAnswer(
           sql("SELECT length(str) FROM test_data"),
-          Row(4)  // builtin length of "test"
+          Row(4) // builtin length of "test"
         )
 
         // session.length should resolve to temp function
-        checkAnswer(
-          sql("SELECT session.length(str) FROM test_data"),
-          Row(999)
-        )
+        checkAnswer(sql("SELECT session.length(str) FROM test_data"), Row(999))
       }
     } finally {
       spark.sessionState.catalog.dropTempFunction("length", ignoreIfNotExists = true)
@@ -1029,14 +899,12 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
 
       try {
         // Verify the function works
-        checkAnswer(
-          sql("SELECT test_temp_func(5) FROM test_data"),
-          Row(6)
-        )
+        checkAnswer(sql("SELECT test_temp_func(5) FROM test_data"), Row(6))
 
         // Check internal structure - temporary functions should have both database and catalog set
         val catalog = spark.sessionState.catalog
-        val tempFuncIdent = catalog.listFunctions("default", "test_temp_func")
+        val tempFuncIdent = catalog
+          .listFunctions("default", "test_temp_func")
           .find(_._1.funcName == "test_temp_func")
 
         assert(tempFuncIdent.isDefined, "Temporary function should be found")
@@ -1044,16 +912,10 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
         // This is an implementation detail but important for disambiguation
 
         // Verify extension functions work - they are treated as builtins
-        checkAnswer(
-          sql("SELECT test_ext_func() FROM test_data"),
-          Row(9999)
-        )
+        checkAnswer(sql("SELECT test_ext_func() FROM test_data"), Row(9999))
 
         // Builtin qualification works for extensions too
-        checkAnswer(
-          sql("SELECT builtin.test_ext_func() FROM test_data"),
-          Row(9999)
-        )
+        checkAnswer(sql("SELECT builtin.test_ext_func() FROM test_data"), Row(9999))
       } finally {
         spark.sessionState.catalog.dropTempFunction("test_temp_func", ignoreIfNotExists = true)
       }
@@ -1100,36 +962,143 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
   test("SECTION 15c: Fallback to Session Catalog - missing persistent func in 'builtin'") {
     withDatabase("builtin") {
       sql("CREATE DATABASE builtin")
-      // builtin.abs does NOT exist in the persistent 'builtin' database
-      // So 'builtin.abs' should fall back to the session catalog's builtin namespace
+      // builtin.abs does NOT exist in the persistent 'builtin' database.
+      // With default prioritizeSystemCatalog=true, builtin.abs resolves to system builtin.
       checkAnswer(sql("SELECT builtin.abs(-5)"), Row(5))
+    }
+  }
+
+  test("SECTION 16: Default PrioritizeSystemCatalog is true - system wins without config") {
+    // Verify default: do not set spark.sql.legacy.prioritizeSystemCatalog
+    withDatabase("builtin") {
+      sql("CREATE DATABASE builtin")
+      sql("CREATE FUNCTION builtin.abs(x INT) RETURNS INT RETURN x * 100")
+
+      // Default is true: builtin.abs should resolve to system.builtin.abs
+      checkAnswer(sql("SELECT builtin.abs(-5)"), Row(5))
+      checkAnswer(sql("SELECT system.builtin.abs(-5)"), Row(5))
+    }
+  }
+
+  test("SECTION 16a: PrioritizeSystemCatalog=true (explicit) - system catalog wins") {
+    withSQLConf("spark.sql.legacy.prioritizeSystemCatalog" -> "true") {
+      withDatabase("builtin") {
+        sql("CREATE DATABASE builtin")
+        // Create a persistent function that could shadow the builtin
+        sql("CREATE FUNCTION builtin.abs(x INT) RETURNS INT RETURN x * 100")
+
+        // With prioritizeSystemCatalog=true (default), system.builtin.abs should win
+        checkAnswer(sql("SELECT builtin.abs(-5)"), Row(5))
+
+        // Fully qualified should still work
+        checkAnswer(sql("SELECT system.builtin.abs(-5)"), Row(5))
+      }
+    }
+  }
+
+  test("SECTION 16b: PrioritizeSystemCatalog=false (explicit) - persistent catalog wins") {
+    withSQLConf("spark.sql.legacy.prioritizeSystemCatalog" -> "false") {
+      withDatabase("builtin") {
+        sql("CREATE DATABASE builtin")
+        // Create a persistent function that shadows the builtin
+        sql("CREATE FUNCTION builtin.abs(x INT) RETURNS INT RETURN x * 100")
+
+        // With prioritizeSystemCatalog=false, persistent builtin.abs should win
+        checkAnswer(sql("SELECT builtin.abs(5)"), Row(500))
+
+        // System builtin should still be accessible via fully qualified name
+        checkAnswer(sql("SELECT system.builtin.abs(-5)"), Row(5))
+      }
+    }
+  }
+
+  test("SECTION 16c: PrioritizeSystemCatalog=true - session namespace prioritization") {
+    withSQLConf("spark.sql.legacy.prioritizeSystemCatalog" -> "true") {
+      withDatabase("session") {
+        sql("CREATE DATABASE session")
+        // Create a persistent function that could shadow session temp
+        sql("CREATE FUNCTION session.test_func() RETURNS STRING RETURN 'persistent'")
+
+        // Create a temp function
+        sql("CREATE TEMPORARY FUNCTION test_func() RETURNS STRING RETURN 'temp'")
+
+        try {
+          // With prioritizeSystemCatalog=true, system.session.test_func should win
+          checkAnswer(sql("SELECT session.test_func()"), Row("temp"))
+
+          // Fully qualified should still work
+          checkAnswer(sql("SELECT system.session.test_func()"), Row("temp"))
+        } finally {
+          sql("DROP TEMPORARY FUNCTION test_func")
+        }
+      }
+    }
+  }
+
+  test("SECTION 16d: PrioritizeSystemCatalog=false - session namespace fallback") {
+    withSQLConf("spark.sql.legacy.prioritizeSystemCatalog" -> "false") {
+      withDatabase("session") {
+        sql("CREATE DATABASE session")
+        // Persistent function in database named "session"; with config false it should resolve.
+        sql("CREATE FUNCTION session.test_func() RETURNS STRING RETURN 'persistent'")
+
+        // With prioritizeSystemCatalog=false, persistent session.test_func should resolve
+        // (no temp function with same name - Spark does not allow both to coexist).
+        checkAnswer(sql("SELECT session.test_func()"), Row("persistent"))
+
+        // Fully qualified system.session still resolves to same persistent function
+        checkAnswer(sql("SELECT system.session.test_func()"), Row("persistent"))
+      }
+    }
+  }
+
+  test("SECTION 16e: PrioritizeSystemCatalog=true - fallback when persistent doesn't exist") {
+    withSQLConf("spark.sql.legacy.prioritizeSystemCatalog" -> "true") {
+      withDatabase("builtin") {
+        sql("CREATE DATABASE builtin")
+        // No persistent function exists, should fall back to system builtin
+        checkAnswer(sql("SELECT builtin.abs(-5)"), Row(5))
+        checkAnswer(sql("SELECT builtin.coalesce(1, 2)"), Row(1))
+      }
+    }
+  }
+
+  test("SECTION 16f: PrioritizeSystemCatalog=false - fallback when persistent doesn't exist") {
+    withSQLConf("spark.sql.legacy.prioritizeSystemCatalog" -> "false") {
+      withDatabase("builtin") {
+        sql("CREATE DATABASE builtin")
+        // No persistent function exists, should fall back to system builtin
+        checkAnswer(sql("SELECT builtin.abs(-5)"), Row(5))
+        checkAnswer(sql("SELECT builtin.coalesce(1, 2)"), Row(1))
+      }
     }
   }
 }
 
 /**
- * Test extension that registers mock extension functions.
- * This simulates what real extensions like Apache Sedona would do.
+ * Test extension that registers mock extension functions. This simulates what real extensions
+ * like Apache Sedona would do.
  */
 class TestExtensions extends (SparkSessionExtensions => Unit) {
   override def apply(extensions: SparkSessionExtensions): Unit = {
     // Register a mock extension function
     // Use the full 11-parameter ExpressionInfo constructor
     extensions.injectFunction(
-      (org.apache.spark.sql.catalyst.FunctionIdentifier("test_ext_func"),
-       new ExpressionInfo(
-         "org.apache.spark.sql.FunctionQualificationSuite",  // className
-         "",                                                  // db
-         "test_ext_func",                                     // name
-         "Returns 9999 for testing",                          // usage
-         "",                                                  // arguments
-         "",                                                  // examples
-         "",                                                  // note
-         "",                                                  // group
-         "4.2.0",                                             // since
-         "",                                                  // deprecated
-         ""),                                                 // source (empty is allowed)
-       (exprs: Seq[Expression]) => Literal(9999, IntegerType))
-    )
+      (
+        org.apache.spark.sql.catalyst.FunctionIdentifier("test_ext_func"),
+        new ExpressionInfo(
+          "org.apache.spark.sql.FunctionQualificationSuite", // className
+          "", // db
+          "test_ext_func", // name
+          "Returns 9999 for testing", // usage
+          "", // arguments
+          "", // examples
+          "", // note
+          "", // group
+          "4.2.0", // since
+          "", // deprecated
+          ""
+        ), // source (empty is allowed)
+        (exprs: Seq[Expression]) => Literal(9999, IntegerType)))
   }
 }

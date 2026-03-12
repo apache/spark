@@ -25,8 +25,7 @@ import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.hash.Murmur3_x86_32
 
 /**
- * Synthetic benchmark for MurMurHash 3 and xxHash64.
- * To run this benchmark:
+ * Synthetic benchmark for MurMurHash 3 and xxHash64. To run this benchmark:
  * {{{
  *   1. without sbt:
  *      bin/spark-submit --class <this class> --jars <spark core test jar> <spark catalyst test jar>
@@ -46,7 +45,9 @@ object HashByteArrayBenchmark extends BenchmarkBase {
     }
 
     val benchmark = new Benchmark(
-      "Hash byte arrays with length " + length, iters * numArrays.toLong, output = output)
+      "Hash byte arrays with length " + length,
+      iters * numArrays.toLong,
+      output = output)
     benchmark.addCase("Murmur3_x86_32") { _: Int =>
       var sum = 0L
       for (_ <- 0L until iters) {

@@ -37,7 +37,8 @@ object SubqueryExpressionInLambdaOrHigherOrderFunctionValidator {
   def apply(expression: Expression): Unit = {
     if (expression.containsPattern(PLAN_EXPRESSION) &&
       !conf.getConf(SQLConf.ALLOW_SUBQUERY_EXPRESSIONS_IN_LAMBDAS_AND_HIGHER_ORDER_FUNCTIONS)) {
-      throw QueryCompilationErrors.subqueryExpressionInLambdaOrHigherOrderFunctionNotAllowedError()
+      throw QueryCompilationErrors
+        .subqueryExpressionInLambdaOrHigherOrderFunctionNotAllowedError()
     }
   }
 }

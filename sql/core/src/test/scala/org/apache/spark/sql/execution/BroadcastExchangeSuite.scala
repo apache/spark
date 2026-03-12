@@ -32,9 +32,10 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.tags.ExtendedSQLTest
 
 @ExtendedSQLTest
-class BroadcastExchangeSuite extends SparkPlanTest
-  with SharedSparkSession
-  with AdaptiveSparkPlanHelper {
+class BroadcastExchangeSuite
+    extends SparkPlanTest
+    with SharedSparkSession
+    with AdaptiveSparkPlanHelper {
 
   import testImplicits._
 
@@ -54,14 +55,18 @@ class BroadcastExchangeSuite extends SparkPlanTest
     })
 
     withSQLConf(SQLConf.BROADCAST_TIMEOUT.key -> "0") {
-      val df = spark.range(100).join(spark.range(15).as[Long].map { x =>
-        Thread.sleep(5000)
-        x
-      }).where("id = value")
+      val df = spark
+        .range(100)
+        .join(spark.range(15).as[Long].map { x =>
+          Thread.sleep(5000)
+          x
+        })
+        .where("id = value")
 
       // get the exchange physical plan
-      val hashExchange = collect(
-        df.queryExecution.executedPlan) { case p: BroadcastExchangeExec => p }.head
+      val hashExchange = collect(df.queryExecution.executedPlan) {
+        case p: BroadcastExchangeExec => p
+      }.head
 
       // materialize the future and wait for the job being scheduled
       hashExchange.prepare()
@@ -81,9 +86,13 @@ class BroadcastExchangeSuite extends SparkPlanTest
     def jobCancelled(): Boolean = {
       val events = jobEvents.toArray
       val hasStart = events(0).isInstanceOf[SparkListenerJobStart]
-      val hasCancelled = events(1).asInstanceOf[SparkListenerJobEnd].jobResult
+      val hasCancelled = events(1)
+        .asInstanceOf[SparkListenerJobEnd]
+        .jobResult
         .asInstanceOf[JobFailed]
-        .exception.getMessage.contains("The corresponding broadcast query has failed.")
+        .exception
+        .getMessage
+        .contains("The corresponding broadcast query has failed.")
       events.length == 2 && hasStart && hasCancelled
     }
   }
@@ -92,8 +101,9 @@ class BroadcastExchangeSuite extends SparkPlanTest
     withSQLConf(SQLConf.BROADCAST_TIMEOUT.key -> "-1") {
       val df = spark.range(1).toDF()
       val joinDF = df.join(broadcast(df), "id")
-      val broadcastExchangeExec = collect(
-        joinDF.queryExecution.executedPlan) { case p: BroadcastExchangeExec => p }
+      val broadcastExchangeExec = collect(joinDF.queryExecution.executedPlan) {
+        case p: BroadcastExchangeExec => p
+      }
       assert(broadcastExchangeExec.size == 1, "one and only BroadcastExchangeExec")
       assert(joinDF.collect().length == 1)
     }
@@ -103,8 +113,9 @@ class BroadcastExchangeSuite extends SparkPlanTest
     val df = spark.range(1).toDF()
     val joinDF = df.join(broadcast(df), "id")
     joinDF.collect()
-    val broadcastExchangeExec = collect(
-      joinDF.queryExecution.executedPlan) { case p: BroadcastExchangeExec => p }
+    val broadcastExchangeExec = collect(joinDF.queryExecution.executedPlan) {
+      case p: BroadcastExchangeExec => p
+    }
     assert(broadcastExchangeExec.size == 1, "one and only BroadcastExchangeExec")
 
     val broadcastExchangeNode = broadcastExchangeExec.head
@@ -118,7 +129,9 @@ class BroadcastExchangeSuite extends SparkPlanTest
 // Additional tests run in 'local-cluster' mode.
 @ExtendedSQLTest
 class BroadcastExchangeExecSparkSuite
-  extends SparkFunSuite with LocalSparkContext with AdaptiveSparkPlanHelper {
+    extends SparkFunSuite
+    with LocalSparkContext
+    with AdaptiveSparkPlanHelper {
 
   test("SPARK-39983 - Broadcasted relation is not cached on the driver") {
     // Use distributed cluster as in local mode the broabcast value is actually cached.
@@ -130,8 +143,9 @@ class BroadcastExchangeExecSparkSuite
 
     val df = spark.range(1).toDF()
     val joinDF = df.join(broadcast(df), "id")
-    val broadcastExchangeExec = collect(
-      joinDF.queryExecution.executedPlan) { case p: BroadcastExchangeExec => p }
+    val broadcastExchangeExec = collect(joinDF.queryExecution.executedPlan) {
+      case p: BroadcastExchangeExec => p
+    }
     assert(broadcastExchangeExec.size == 1, "one and only BroadcastExchangeExec")
 
     // The broadcasted relation should not be cached on the driver.

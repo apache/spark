@@ -41,10 +41,11 @@ case class UpdatingSessionsExec(
     numShufflePartitions: Option[Int],
     groupingExpression: Seq[Attribute],
     sessionExpression: Attribute,
-    child: SparkPlan) extends UnaryExecNode {
+    child: SparkPlan)
+    extends UnaryExecNode {
 
-  private val groupingWithoutSessionExpression = groupingExpression.filterNot {
-    p => p.semanticEquals(sessionExpression)
+  private val groupingWithoutSessionExpression = groupingExpression.filterNot { p =>
+    p.semanticEquals(sessionExpression)
   }
   private val groupingWithoutSessionAttributes =
     groupingWithoutSessionExpression.map(_.toAttribute)
@@ -55,8 +56,14 @@ case class UpdatingSessionsExec(
     val spillSizeThreshold = conf.sessionWindowBufferSpillSizeThreshold
 
     child.execute().mapPartitions { iter =>
-      new UpdatingSessionsIterator(iter, groupingExpression, sessionExpression,
-        child.output, inMemoryThreshold, spillThreshold, spillSizeThreshold)
+      new UpdatingSessionsIterator(
+        iter,
+        groupingExpression,
+        sessionExpression,
+        child.output,
+        inMemoryThreshold,
+        spillThreshold,
+        spillSizeThreshold)
     }
   }
 
@@ -72,11 +79,14 @@ case class UpdatingSessionsExec(
         numShufflePartitions match {
           case Some(parts) =>
             StatefulOperatorPartitioning.getCompatibleDistribution(
-              groupingWithoutSessionExpression, parts, conf) :: Nil
+              groupingWithoutSessionExpression,
+              parts,
+              conf) :: Nil
 
           case _ =>
-            throw SparkException.internalError("Expected to set the number of partitions before " +
-              "constructing required child distribution!")
+            throw SparkException.internalError(
+              "Expected to set the number of partitions before " +
+                "constructing required child distribution!")
         }
 
       } else {
@@ -86,8 +96,9 @@ case class UpdatingSessionsExec(
   }
 
   override def requiredChildOrdering: Seq[Seq[SortOrder]] = {
-    Seq((groupingWithoutSessionAttributes ++ Seq(sessionExpression))
-      .map(SortOrder(_, Ascending)))
+    Seq(
+      (groupingWithoutSessionAttributes ++ Seq(sessionExpression))
+        .map(SortOrder(_, Ascending)))
   }
 
   override protected def withNewChildInternal(newChild: SparkPlan): UpdatingSessionsExec =

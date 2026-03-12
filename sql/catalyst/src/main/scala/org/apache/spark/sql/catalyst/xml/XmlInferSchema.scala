@@ -99,7 +99,8 @@ class XmlInferSchema(private val options: XmlOptions, private val caseSensitive:
       case FailFastMode =>
         parser.close()
         throw QueryExecutionErrors.malformedRecordsDetectedInSchemaInferenceError(
-          e, columnNameOfCorruptRecord)
+          e,
+          columnNameOfCorruptRecord)
     }
   }
 
@@ -119,9 +120,12 @@ class XmlInferSchema(private val options: XmlOptions, private val caseSensitive:
     val mergedTypesFromPartitions = schemaData.mapPartitions { iter =>
       val xsdSchema = Option(options.rowValidationXSDPath).map(ValidatorUtil.getSchema)
 
-      iter.flatMap { xml =>
-        infer(xml, xsdSchema)
-      }.reduceOption(compatibleType(caseSensitive, options.valueTag)).iterator
+      iter
+        .flatMap { xml =>
+          infer(xml, xsdSchema)
+        }
+        .reduceOption(compatibleType(caseSensitive, options.valueTag))
+        .iterator
     }
 
     // Here we manually submit a fold-like Spark job, so that we can set the SQLConf when running
@@ -149,7 +153,8 @@ class XmlInferSchema(private val options: XmlOptions, private val caseSensitive:
   def infer(xml: String, xsdSchema: Option[Schema] = None): Option[DataType] = {
     var parser: XMLEventReader = null
     try {
-      val xsd = xsdSchema.orElse(Option(options.rowValidationXSDPath).map(ValidatorUtil.getSchema))
+      val xsd =
+        xsdSchema.orElse(Option(options.rowValidationXSDPath).map(ValidatorUtil.getSchema))
       xsd.foreach { schema =>
         schema.newValidator().validate(new StreamSource(new StringReader(xml)))
       }
@@ -160,7 +165,11 @@ class XmlInferSchema(private val options: XmlOptions, private val caseSensitive:
       schema
     } catch {
       case e @ (_: XMLStreamException | _: MalformedInputException | _: SAXException) =>
-        handleXmlErrorsByParseMode(parser, options.parseMode, options.columnNameOfCorruptRecord, e)
+        handleXmlErrorsByParseMode(
+          parser,
+          options.parseMode,
+          options.columnNameOfCorruptRecord,
+          e)
       case e: CharConversionException if options.charset.isEmpty =>
         val msg =
           """XML parser cannot handle a character in its input.
@@ -177,12 +186,16 @@ class XmlInferSchema(private val options: XmlOptions, private val caseSensitive:
         logWarning("Skipped missing file", e)
         Some(StructType(Nil))
       case e: FileNotFoundException if !options.ignoreMissingFiles => throw e
-      case e @ (_ : AccessControlException | _ : BlockMissingException) => throw e
+      case e @ (_: AccessControlException | _: BlockMissingException) => throw e
       case e @ (_: IOException | _: RuntimeException) if options.ignoreCorruptFiles =>
         logWarning("Skipped the rest of the content in the corrupted file", e)
         Some(StructType(Nil))
       case NonFatal(e) =>
-        handleXmlErrorsByParseMode(parser, options.parseMode, options.columnNameOfCorruptRecord, e)
+        handleXmlErrorsByParseMode(
+          parser,
+          options.parseMode,
+          options.columnNameOfCorruptRecord,
+          e)
     } finally {
       if (parser != null) {
         parser.close()
@@ -198,9 +211,12 @@ class XmlInferSchema(private val options: XmlOptions, private val caseSensitive:
     }
     // perform schema inference on each row and merge afterwards
     val mergedTypesFromPartitions = sampledRecordReader.mapPartitions { iter =>
-      iter.flatMap { xmlReader =>
-        infer(xmlReader)
-      }.reduceOption(compatibleType(caseSensitive, options.valueTag)).iterator
+      iter
+        .flatMap { xmlReader =>
+          infer(xmlReader)
+        }
+        .reduceOption(compatibleType(caseSensitive, options.valueTag))
+        .iterator
     }
 
     // Here we manually submit a fold-like Spark job, so that we can set the SQLConf when running
@@ -226,10 +242,10 @@ class XmlInferSchema(private val options: XmlOptions, private val caseSensitive:
   }
 
   /**
-   * Infer the schema of the next XML record in the XML event stream.
-   * Note that the method will **NOT** close the XML event stream as there could have more XML
-   * records to parse. The StaxXMLRecordReader will automatically close the stream when there are
-   * no more XML records to parse.
+   * Infer the schema of the next XML record in the XML event stream. Note that the method will
+   * **NOT** close the XML event stream as there could have more XML records to parse. The
+   * StaxXMLRecordReader will automatically close the stream when there are no more XML records to
+   * parse.
    */
   def infer(parser: StaxXMLRecordReader): Option[DataType] = {
     try {
@@ -270,8 +286,7 @@ class XmlInferSchema(private val options: XmlOptions, private val caseSensitive:
               parser = parser,
               parseMode = options.parseMode,
               columnNameOfCorruptRecord = options.columnNameOfCorruptRecord,
-              e = e
-            )
+              e = e)
           case _: SAXException =>
             // For XSD validation errors, don't close the parser as there might be more valid
             // records to parse.
@@ -281,8 +296,7 @@ class XmlInferSchema(private val options: XmlOptions, private val caseSensitive:
               parser = parser,
               parseMode = options.parseMode,
               columnNameOfCorruptRecord = options.columnNameOfCorruptRecord,
-              e = e
-            )
+              e = e)
           case _: AccessControlException | _: BlockMissingException =>
             parser.close()
             throw e
@@ -301,8 +315,7 @@ class XmlInferSchema(private val options: XmlOptions, private val caseSensitive:
               parser = parser,
               parseMode = options.parseMode,
               columnNameOfCorruptRecord = options.columnNameOfCorruptRecord,
-              e = e
-            )
+              e = e)
         }
     }
   }
@@ -347,8 +360,8 @@ class XmlInferSchema(private val options: XmlOptions, private val caseSensitive:
             NullType
           case simpleType
               if structType.fields.length == 1
-              && isPrimitiveType(structType.fields.head.dataType)
-              && isValueTagField(structType.fields.head, caseSensitive) =>
+                && isPrimitiveType(structType.fields.head.dataType)
+                && isValueTagField(structType.fields.head, caseSensitive) =>
             simpleType.fields.head.dataType
           case _ => structType
         }
@@ -365,24 +378,23 @@ class XmlInferSchema(private val options: XmlOptions, private val caseSensitive:
   private def inferObject(
       parser: XMLEventReader,
       rootAttributes: Array[Attribute] = Array.empty): DataType = {
+
     /**
-     * Retrieves the field name with respect to the case sensitivity setting.
-     * We pick the first name we encountered.
+     * Retrieves the field name with respect to the case sensitivity setting. We pick the first
+     * name we encountered.
      *
-     * If case sensitivity is enabled, the original field name is returned.
-     * If not, the field name is managed in a case-insensitive map.
+     * If case sensitivity is enabled, the original field name is returned. If not, the field name
+     * is managed in a case-insensitive map.
      *
-     * For instance, if we encounter the following field names:
-     * foo, Foo, FOO
+     * For instance, if we encounter the following field names: foo, Foo, FOO
      *
-     * In case-sensitive mode: we will infer three fields: foo, Foo, FOO
-     * In case-insensitive mode, we will infer an array named by foo
-     * (as it's the first one we encounter)
+     * In case-sensitive mode: we will infer three fields: foo, Foo, FOO In case-insensitive mode,
+     * we will infer an array named by foo (as it's the first one we encounter)
      */
-    val caseSensitivityOrdering: Ordering[String] = if (caseSensitive) {
-      (x: String, y: String) => x.compareTo(y)
-    } else {
-      (x: String, y: String) => x.compareToIgnoreCase(y)
+    val caseSensitivityOrdering: Ordering[String] = if (caseSensitive) { (x: String, y: String) =>
+      x.compareTo(y)
+    } else { (x: String, y: String) =>
+      x.compareToIgnoreCase(y)
     }
 
     val nameToDataType =
@@ -391,9 +403,8 @@ class XmlInferSchema(private val options: XmlOptions, private val caseSensitive:
     // If there are attributes, then we should process them first.
     val rootValuesMap =
       StaxXmlParserUtils.convertAttributesToValuesMap(rootAttributes, options)
-    rootValuesMap.foreach {
-      case (f, v) =>
-        addOrUpdateType(nameToDataType, f, inferFrom(v))
+    rootValuesMap.foreach { case (f, v) =>
+      addOrUpdateType(nameToDataType, f, inferFrom(v))
     }
     var shouldStop = false
     while (!shouldStop) {
@@ -407,9 +418,8 @@ class XmlInferSchema(private val options: XmlOptions, private val caseSensitive:
               // Merge attributes to the field
               val nestedBuilder = ArrayBuffer[StructField]()
               nestedBuilder ++= st.fields
-              valuesMap.foreach {
-                case (f, v) =>
-                  nestedBuilder += StructField(f, inferFrom(v), nullable = true)
+              valuesMap.foreach { case (f, v) =>
+                nestedBuilder += StructField(f, inferFrom(v), nullable = true)
               }
               StructType(nestedBuilder.sortBy(_.name).toArray)
 
@@ -419,9 +429,8 @@ class XmlInferSchema(private val options: XmlOptions, private val caseSensitive:
               if (!dt.isInstanceOf[NullType]) {
                 nestedBuilder += StructField(options.valueTag, dt, nullable = true)
               }
-              valuesMap.foreach {
-                case (f, v) =>
-                  nestedBuilder += StructField(f, inferFrom(v), nullable = true)
+              valuesMap.foreach { case (f, v) =>
+                nestedBuilder += StructField(f, inferFrom(v), nullable = true)
               }
               StructType(nestedBuilder.sortBy(_.name).toArray)
 
@@ -443,9 +452,13 @@ class XmlInferSchema(private val options: XmlOptions, private val caseSensitive:
     }
 
     // Note: other code relies on this sorting for correctness, so don't remove it!
-    StructType(nameToDataType.map{
-      case (name, dataType) => StructField(name, dataType)
-    }.toList.sortBy(_.name))
+    StructType(
+      nameToDataType
+        .map { case (name, dataType) =>
+          StructField(name, dataType)
+        }
+        .toList
+        .sortBy(_.name))
   }
 
   /**
@@ -472,9 +485,9 @@ class XmlInferSchema(private val options: XmlOptions, private val caseSensitive:
     }
     // Rule out strings ending in D or F, as they will parse as double but should be disallowed
     if (signSafeValue.last match {
-      case 'd' | 'D' | 'f' | 'F' => true
-      case _ => false
-    }) {
+        case 'd' | 'D' | 'f' | 'F' => true
+        case _ => false
+      }) {
       return None
     }
 
@@ -498,9 +511,9 @@ class XmlInferSchema(private val options: XmlOptions, private val caseSensitive:
     }
     // Rule out strings ending in D or F, as they will parse as double but should be disallowed
     if (signSafeValue.last match {
-      case 'd' | 'D' | 'f' | 'F' => true
-      case _ => false
-    }) {
+        case 'd' | 'D' | 'f' | 'F' => true
+        case _ => false
+      }) {
       return false
     }
     (allCatch opt signSafeValue.toDouble).isDefined
@@ -535,7 +548,7 @@ class XmlInferSchema(private val options: XmlOptions, private val caseSensitive:
     val timestampType = SQLConf.get.timestampType
     try {
       if ((SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY ||
-        timestampType == TimestampNTZType) &&
+          timestampType == TimestampNTZType) &&
         timestampNTZFormatter.parseWithoutTimeZoneOptional(field, false).isDefined) {
         return Some(timestampType)
       }
@@ -578,7 +591,6 @@ class XmlInferSchema(private val options: XmlOptions, private val caseSensitive:
     case NullType => Some(StringType)
     case other => Some(other)
   }
-
 
   private def addOrUpdateType(
       nameToDataType: collection.mutable.TreeMap[String, DataType],
@@ -628,8 +640,9 @@ object XmlInferSchema {
   /**
    * Returns the most general data type for two given data types.
    */
-  private[xml] def compatibleType(caseSensitive: Boolean, valueTag: String)
-    (t1: DataType, t2: DataType): DataType = {
+  private[xml] def compatibleType(caseSensitive: Boolean, valueTag: String)(
+      t1: DataType,
+      t2: DataType): DataType = {
 
     // TODO: Optimise this logic.
     TypeCoercion.findTightestCommonType(t1, t2).getOrElse {
@@ -654,22 +667,23 @@ object XmlInferSchema {
 
         case (StructType(fields1), StructType(fields2)) =>
           val newFields = (fields1 ++ fields2)
-           // normalize field name and pair it with original field
-           .map(field => (normalize(field.name, caseSensitive), field))
-           .groupBy(_._1) // group by normalized field name
-           .map { case (_: String, fields: Array[(String, StructField)]) =>
-             val fieldTypes = fields.map(_._2)
-             val dataType = fieldTypes.map(_.dataType)
-               .reduce(compatibleType(caseSensitive, valueTag))
-             // we pick up the first field name that we've encountered for the field
-             StructField(fields.head._2.name, dataType)
-           }
-           StructType(newFields.toArray.sortBy(_.name))
+            // normalize field name and pair it with original field
+            .map(field => (normalize(field.name, caseSensitive), field))
+            .groupBy(_._1) // group by normalized field name
+            .map { case (_: String, fields: Array[(String, StructField)]) =>
+              val fieldTypes = fields.map(_._2)
+              val dataType = fieldTypes
+                .map(_.dataType)
+                .reduce(compatibleType(caseSensitive, valueTag))
+              // we pick up the first field name that we've encountered for the field
+              StructField(fields.head._2.name, dataType)
+            }
+          StructType(newFields.toArray.sortBy(_.name))
 
         case (ArrayType(elementType1, containsNull1), ArrayType(elementType2, containsNull2)) =>
           ArrayType(
-            compatibleType(caseSensitive, valueTag)(
-              elementType1, elementType2), containsNull1 || containsNull2)
+            compatibleType(caseSensitive, valueTag)(elementType1, elementType2),
+            containsNull1 || containsNull2)
 
         // In XML datasource, since StructType can be compared with ArrayType.
         // In this case, ArrayType wraps the StructType.

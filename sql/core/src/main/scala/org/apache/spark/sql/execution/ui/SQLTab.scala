@@ -22,7 +22,8 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.ui.{SparkUI, SparkUITab}
 
 class SQLTab(val sqlStore: SQLAppStatusStore, sparkUI: SparkUI)
-  extends SparkUITab(sparkUI, "SQL") with Logging {
+    extends SparkUITab(sparkUI, "SQL")
+    with Logging {
 
   def conf: SparkConf = sparkUI.conf
 

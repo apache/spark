@@ -28,8 +28,7 @@ import org.apache.spark.sql.connector.catalog.procedures.{ProcedureParameter, Si
 import org.apache.spark.sql.types.StringType
 
 /**
- * A command for users to describe a procedure.
- * The syntax of using this command in SQL is:
+ * A command for users to describe a procedure. The syntax of using this command in SQL is:
  * {{{
  *   DESC PROCEDURE procedure_name
  * }}}
@@ -37,8 +36,8 @@ import org.apache.spark.sql.types.StringType
 case class DescribeProcedureCommand(
     child: LogicalPlan,
     override val output: Seq[Attribute] = Seq(
-      AttributeReference("procedure_desc", StringType, nullable = false)()
-    )) extends UnaryRunnableCommand {
+      AttributeReference("procedure_desc", StringType, nullable = false)()))
+    extends UnaryRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     child match {
@@ -65,7 +64,7 @@ case class DescribeProcedureCommand(
           append(buffer, "Parameters:", "()")
         }
       case _ =>
-        // Do not show parameters for non-simple procedures
+      // Do not show parameters for non-simple procedures
     }
 
     val keys = tabulate(buffer.map(_._1).toSeq)

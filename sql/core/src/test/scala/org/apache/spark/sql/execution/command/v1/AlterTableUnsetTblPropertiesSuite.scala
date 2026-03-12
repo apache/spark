@@ -22,16 +22,17 @@ import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 
 /**
- * This base suite contains unified tests for the `ALTER TABLE .. UNSET TBLPROPERTIES`
- * command that check V1 table catalogs. The tests that cannot run for all V1 catalogs
- * are located in more specific test suites:
+ * This base suite contains unified tests for the `ALTER TABLE .. UNSET TBLPROPERTIES` command
+ * that check V1 table catalogs. The tests that cannot run for all V1 catalogs are located in more
+ * specific test suites:
  *
  *   - V1 In-Memory catalog:
- *      `org.apache.spark.sql.execution.command.v1.AlterTableUnsetTblPropertiesSuite`
+ *     `org.apache.spark.sql.execution.command.v1.AlterTableUnsetTblPropertiesSuite`
  *   - V1 Hive External catalog:
  *     `org.apache.spark.sql.hive.execution.command.AlterTableUnsetTblPropertiesSuite`
  */
-trait AlterTableUnsetTblPropertiesSuiteBase extends command.AlterTableUnsetTblPropertiesSuiteBase {
+trait AlterTableUnsetTblPropertiesSuiteBase
+    extends command.AlterTableUnsetTblPropertiesSuiteBase {
   private[sql] lazy val sessionCatalog = spark.sessionState.catalog
 
   private def isUsingHiveMetastore: Boolean = {
@@ -46,7 +47,8 @@ trait AlterTableUnsetTblPropertiesSuiteBase extends command.AlterTableUnsetTblPr
     sessionCatalog.getTableMetadata(tableIdent).properties
   }
 
-  override def checkTblProps(tableIdent: TableIdentifier,
+  override def checkTblProps(
+      tableIdent: TableIdentifier,
       expectedTblProps: Map[String, String]): Unit = {
     val actualTblProps = getTableProperties(tableIdent)
     if (isUsingHiveMetastore) {
@@ -62,4 +64,5 @@ trait AlterTableUnsetTblPropertiesSuiteBase extends command.AlterTableUnsetTblPr
 }
 
 class AlterTableUnsetTblPropertiesSuite
-  extends AlterTableUnsetTblPropertiesSuiteBase with CommandSuiteBase
+    extends AlterTableUnsetTblPropertiesSuiteBase
+    with CommandSuiteBase

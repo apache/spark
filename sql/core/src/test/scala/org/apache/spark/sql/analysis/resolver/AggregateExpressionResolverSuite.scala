@@ -25,10 +25,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.test.SharedSparkSession
 
 class AggregateExpressionResolverSuite extends QueryTest with SharedSparkSession {
-  private val table = LocalRelation.fromExternalRows(
-    Seq("a".attr.int),
-    Seq(Row(1))
-  )
+  private val table = LocalRelation.fromExternalRows(Seq("a".attr.int), Seq(Row(1)))
 
   test("Valid aggregate expression") {
     val resolver = createResolver()
@@ -44,11 +41,7 @@ class AggregateExpressionResolverSuite extends QueryTest with SharedSparkSession
         resolver.resolve(query)
       },
       condition = "INVALID_WHERE_CONDITION",
-      parameters = Map(
-        "condition" -> "\"(count(a) > 0)\"",
-        "expressionList" -> "count(a)"
-      )
-    )
+      parameters = Map("condition" -> "\"(count(a) > 0)\"", "expressionList" -> "count(a)"))
   }
 
   test("Nested aggregate expression") {
@@ -60,14 +53,12 @@ class AggregateExpressionResolverSuite extends QueryTest with SharedSparkSession
         resolver.resolve(query)
       },
       condition = "NESTED_AGGREGATE_FUNCTION",
-      parameters = Map.empty
-    )
+      parameters = Map.empty)
   }
 
   private def createResolver(): Resolver = {
     new Resolver(
       catalogManager = spark.sessionState.catalogManager,
-      extensions = spark.sessionState.analyzer.singlePassResolverExtensions
-    )
+      extensions = spark.sessionState.analyzer.singlePassResolverExtensions)
   }
 }

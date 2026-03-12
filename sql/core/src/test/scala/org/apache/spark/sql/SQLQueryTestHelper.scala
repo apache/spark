@@ -48,11 +48,10 @@ trait SQLQueryTestHelper extends SQLConfHelper with Logging {
   protected val validFileExtensions = ".sql"
 
   protected def replaceNotIncludedMsg(line: String): String = {
-    line.replaceAll("#\\d+", "#x")
+    line
+      .replaceAll("#\\d+", "#x")
       .replaceAll("plan_id=\\d+", "plan_id=x")
-      .replaceAll(
-        s"Location.*$clsName/",
-        s"Location $notIncludedMsg/{warehouse_dir}/")
+      .replaceAll(s"Location.*$clsName/", s"Location $notIncludedMsg/{warehouse_dir}/")
       .replaceAll(s"file:[^\\s,]*$clsName", s"file:$notIncludedMsg/{warehouse_dir}")
       .replaceAll("Created By.*", s"Created By $notIncludedMsg")
       .replaceAll("Created Time.*", s"Created Time $notIncludedMsg")
@@ -72,11 +71,13 @@ trait SQLQueryTestHelper extends SQLConfHelper with Logging {
       .replaceAll(s""""created_by":".*?"""", s""""created_by $notIncludedMsg":"None"""")
       .replaceAll(s""""created_time":".*?"""", s""""created_time $notIncludedMsg":"None"""")
       .replaceAll(s"transient_lastDdlTime=\\d+", s"transient_lastDdlTime=$notIncludedMsg")
-      .replaceAll(s""""transient_lastDdlTime":"\\d+"""",
+      .replaceAll(
+        s""""transient_lastDdlTime":"\\d+"""",
         s""""transient_lastDdlTime $notIncludedMsg":"None"""")
       .replaceAll(s""""last_access":".*?"""", s""""last_access $notIncludedMsg":"None"""")
       .replaceAll(s""""owner":".*?"""", s""""owner $notIncludedMsg":"None"""")
-      .replaceAll(s""""partition_statistics":"\\d+"""",
+      .replaceAll(
+        s""""partition_statistics":"\\d+"""",
         s""""partition_statistics $notIncludedMsg":"None"""")
       .replaceAll("cterelationdef \\d+,", "cterelationdef xxxx,")
       .replaceAll("cterelationref \\d+,", "cterelationref xxxx,")
@@ -87,7 +88,8 @@ trait SQLQueryTestHelper extends SQLConfHelper with Logging {
    * tree string representation).
    */
   protected def getNormalizedQueryAnalysisResult(
-      session: SparkSession, sql: String): (String, Seq[String]) = {
+      session: SparkSession,
+      sql: String): (String, Seq[String]) = {
     // Note that creating the following DataFrame includes eager execution for commands that create
     // objects such as views. Therefore any following queries that reference these objects should
     // find them in the catalog.
@@ -134,17 +136,17 @@ trait SQLQueryTestHelper extends SQLConfHelper with Logging {
    */
   protected def isSemanticallySorted(plan: LogicalPlan): Boolean = plan match {
     case _: Join | _: Aggregate | _: Generate | _: Sample | _: Distinct => false
-    case _: DescribeCommandBase
-         | _: DescribeColumnCommand
-         | _: DescribeRelation
-         | _: DescribeColumn => true
+    case _: DescribeCommandBase | _: DescribeColumnCommand | _: DescribeRelation |
+        _: DescribeColumn =>
+      true
     case PhysicalOperation(_, _, Sort(_, true, _, _)) => true
     case _ => plan.children.iterator.exists(isSemanticallySorted)
   }
 
   /** Executes a query and returns the result as (schema of the output, normalized output). */
   protected def getNormalizedQueryExecutionResult(
-      session: SparkSession, sql: String): (String, Seq[String]) = {
+      session: SparkSession,
+      sql: String): (String, Seq[String]) = {
     // Returns true if the plan is supposed to be sorted.
     val df = session.sql(sql)
     val schema = df.schema.catalogString
@@ -165,7 +167,8 @@ trait SQLQueryTestHelper extends SQLConfHelper with Logging {
    * This method handles exceptions occurred during query execution as they may need special care
    * to become comparable to the expected output.
    *
-   * @param result a function that returns a pair of schema and output
+   * @param result
+   *   a function that returns a pair of schema and output
    */
   protected def handleExceptions(result: => (String, Seq[String])): (String, Seq[String]) = {
     val format = MINIMAL
@@ -235,26 +238,29 @@ trait SQLQueryTestHelper extends SQLConfHelper with Logging {
     val udtfSet: TestUDTFSet
   }
 
-  protected case class RegularTestCase(
-      name: String, inputFile: String, resultFile: String) extends TestCase {
+  protected case class RegularTestCase(name: String, inputFile: String, resultFile: String)
+      extends TestCase {
     override def asAnalyzerTest(newName: String, newResultFile: String): TestCase =
       RegularAnalyzerTestCase(newName, inputFile, newResultFile)
   }
 
   /** An ANSI-related test case. */
-  protected case class NonAnsiTestCase(
-      name: String, inputFile: String, resultFile: String) extends TestCase with NonAnsiTest {
+  protected case class NonAnsiTestCase(name: String, inputFile: String, resultFile: String)
+      extends TestCase
+      with NonAnsiTest {
     override def asAnalyzerTest(newName: String, newResultFile: String): TestCase =
       NonAnsiAnalyzerTestCase(newName, inputFile, newResultFile)
   }
 
   /** An analyzer test that shows the analyzed plan string as output. */
-  protected case class AnalyzerTestCase(
-      name: String, inputFile: String, resultFile: String) extends TestCase with AnalyzerTest
+  protected case class AnalyzerTestCase(name: String, inputFile: String, resultFile: String)
+      extends TestCase
+      with AnalyzerTest
 
   /** A PostgreSQL test case. */
-  protected case class PgSQLTestCase(
-      name: String, inputFile: String, resultFile: String) extends TestCase with PgSQLTest {
+  protected case class PgSQLTestCase(name: String, inputFile: String, resultFile: String)
+      extends TestCase
+      with PgSQLTest {
     override def asAnalyzerTest(newName: String, newResultFile: String): TestCase =
       PgSQLAnalyzerTestCase(newName, inputFile, newResultFile)
   }
@@ -264,7 +270,9 @@ trait SQLQueryTestHelper extends SQLConfHelper with Logging {
       name: String,
       inputFile: String,
       resultFile: String,
-      udf: TestUDF) extends TestCase with UDFTest {
+      udf: TestUDF)
+      extends TestCase
+      with UDFTest {
     override def asAnalyzerTest(newName: String, newResultFile: String): TestCase =
       UDFAnalyzerTestCase(newName, inputFile, newResultFile, udf)
   }
@@ -273,7 +281,9 @@ trait SQLQueryTestHelper extends SQLConfHelper with Logging {
       name: String,
       inputFile: String,
       resultFile: String,
-      udtfSet: TestUDTFSet) extends TestCase with UDTFSetTest {
+      udtfSet: TestUDTFSet)
+      extends TestCase
+      with UDTFSetTest {
 
     override def asAnalyzerTest(newName: String, newResultFile: String): TestCase =
       UDTFSetAnalyzerTestCase(newName, inputFile, newResultFile, udtfSet)
@@ -284,7 +294,9 @@ trait SQLQueryTestHelper extends SQLConfHelper with Logging {
       name: String,
       inputFile: String,
       resultFile: String,
-      udf: TestUDF) extends TestCase with UDFTest {
+      udf: TestUDF)
+      extends TestCase
+      with UDFTest {
     override def asAnalyzerTest(newName: String, newResultFile: String): TestCase =
       UDAFAnalyzerTestCase(newName, inputFile, newResultFile, udf)
   }
@@ -294,21 +306,25 @@ trait SQLQueryTestHelper extends SQLConfHelper with Logging {
       name: String,
       inputFile: String,
       resultFile: String,
-      udf: TestUDF) extends TestCase with UDFTest with PgSQLTest {
+      udf: TestUDF)
+      extends TestCase
+      with UDFTest
+      with PgSQLTest {
     override def asAnalyzerTest(newName: String, newResultFile: String): TestCase =
       UDFPgSQLAnalyzerTestCase(newName, inputFile, newResultFile, udf)
   }
 
   /** An date time test case with default timestamp as TimestampNTZType */
-  protected case class TimestampNTZTestCase(
-      name: String, inputFile: String, resultFile: String) extends TestCase with TimestampNTZTest {
+  protected case class TimestampNTZTestCase(name: String, inputFile: String, resultFile: String)
+      extends TestCase
+      with TimestampNTZTest {
     override def asAnalyzerTest(newName: String, newResultFile: String): TestCase =
       TimestampNTZAnalyzerTestCase(newName, inputFile, newResultFile)
   }
 
   /** A CTE test case with special handling */
   protected case class CTETestCase(name: String, inputFile: String, resultFile: String)
-    extends TestCase
+      extends TestCase
       with CTETest {
     override def asAnalyzerTest(newName: String, newResultFile: String): TestCase =
       CTEAnalyzerTestCase(newName, inputFile, newResultFile)
@@ -316,32 +332,57 @@ trait SQLQueryTestHelper extends SQLConfHelper with Logging {
 
   /** These are versions of the above test cases, but only exercising analysis. */
   protected case class RegularAnalyzerTestCase(
-      name: String, inputFile: String, resultFile: String)
-    extends AnalyzerTest
+      name: String,
+      inputFile: String,
+      resultFile: String)
+      extends AnalyzerTest
   protected case class NonAnsiAnalyzerTestCase(
-      name: String, inputFile: String, resultFile: String)
-    extends AnalyzerTest with NonAnsiTest
-  protected case class PgSQLAnalyzerTestCase(
-      name: String, inputFile: String, resultFile: String)
-    extends AnalyzerTest with PgSQLTest
+      name: String,
+      inputFile: String,
+      resultFile: String)
+      extends AnalyzerTest
+      with NonAnsiTest
+  protected case class PgSQLAnalyzerTestCase(name: String, inputFile: String, resultFile: String)
+      extends AnalyzerTest
+      with PgSQLTest
   protected case class UDFAnalyzerTestCase(
-      name: String, inputFile: String, resultFile: String, udf: TestUDF)
-    extends AnalyzerTest with UDFTest
+      name: String,
+      inputFile: String,
+      resultFile: String,
+      udf: TestUDF)
+      extends AnalyzerTest
+      with UDFTest
   protected case class UDTFSetAnalyzerTestCase(
-      name: String, inputFile: String, resultFile: String, udtfSet: TestUDTFSet)
-    extends AnalyzerTest with UDTFSetTest
+      name: String,
+      inputFile: String,
+      resultFile: String,
+      udtfSet: TestUDTFSet)
+      extends AnalyzerTest
+      with UDTFSetTest
   protected case class UDAFAnalyzerTestCase(
-      name: String, inputFile: String, resultFile: String, udf: TestUDF)
-    extends AnalyzerTest with UDFTest
+      name: String,
+      inputFile: String,
+      resultFile: String,
+      udf: TestUDF)
+      extends AnalyzerTest
+      with UDFTest
   protected case class UDFPgSQLAnalyzerTestCase(
-      name: String, inputFile: String, resultFile: String, udf: TestUDF)
-    extends AnalyzerTest with UDFTest with PgSQLTest
+      name: String,
+      inputFile: String,
+      resultFile: String,
+      udf: TestUDF)
+      extends AnalyzerTest
+      with UDFTest
+      with PgSQLTest
   protected case class TimestampNTZAnalyzerTestCase(
-      name: String, inputFile: String, resultFile: String)
-    extends AnalyzerTest with TimestampNTZTest
-  protected case class CTEAnalyzerTestCase(
-      name: String, inputFile: String, resultFile: String)
-    extends AnalyzerTest with CTETest
+      name: String,
+      inputFile: String,
+      resultFile: String)
+      extends AnalyzerTest
+      with TimestampNTZTest
+  protected case class CTEAnalyzerTestCase(name: String, inputFile: String, resultFile: String)
+      extends AnalyzerTest
+      with CTETest
 
   /** A single SQL query's output. */
   trait QueryTestOutput {
@@ -352,10 +393,8 @@ trait SQLQueryTestHelper extends SQLConfHelper with Logging {
   }
 
   /** A single SQL query's execution output. */
-  case class ExecutionOutput(
-      sql: String,
-      schema: Option[String],
-      output: String) extends QueryTestOutput {
+  case class ExecutionOutput(sql: String, schema: Option[String], output: String)
+      extends QueryTestOutput {
     override def toString: String = {
       // We are explicitly not using multi-line string due to stripMargin removing "|" in output.
       val schemaString = if (schema.nonEmpty) {
@@ -370,14 +409,13 @@ trait SQLQueryTestHelper extends SQLConfHelper with Logging {
         output
     }
 
-    override def numSegments: Int = if (schema.isDefined) { 3 } else { 2 }
+    override def numSegments: Int = if (schema.isDefined) { 3 }
+    else { 2 }
   }
 
   /** A single SQL query's analysis results. */
-  case class AnalyzerOutput(
-      sql: String,
-      schema: Option[String],
-      output: String) extends QueryTestOutput {
+  case class AnalyzerOutput(sql: String, schema: Option[String], output: String)
+      extends QueryTestOutput {
     override def toString: String = {
       // We are explicitly not using multi-line string due to stripMargin removing "|" in output.
       s"-- !query\n" +
@@ -401,14 +439,16 @@ trait SQLQueryTestHelper extends SQLConfHelper with Logging {
     input.split("\n").partition { line =>
       val newLine = line.trim
       newLine.startsWith("--") && !newLine.startsWith("--QUERY-DELIMITER") &&
-        newLine != "--DEBUG"
+      newLine != "--DEBUG"
     }
 
   /**
    * Parses queries from code lines and returns each query paired with a Boolean indicating
    * whether it was preceded by a --DEBUG marker.
    */
-  protected def getQueriesWithDebugFlag(code: Array[String], comments: Array[String],
+  protected def getQueriesWithDebugFlag(
+      code: Array[String],
+      comments: Array[String],
       allTestCases: Seq[TestCase]): Seq[(String, Boolean)] = {
     def splitWithSemicolon(seq: Seq[String]) = {
       seq.mkString("\n").split("(?<=[^\\\\]);")
@@ -456,15 +496,21 @@ trait SQLQueryTestHelper extends SQLConfHelper with Logging {
     }
 
     // Detect --DEBUG markers before stripping comment lines from each query.
-    tempQueries.map(_.trim).filter(_ != "").map { query =>
-      val lines = query.split("\n")
-      val isDebug = lines.exists(_.trim == "--DEBUG")
-      val cleanedQuery = lines.filterNot(_.startsWith("--")).mkString("\n").trim
-      (cleanedQuery, isDebug)
-    }.filter(_._1 != "")
+    tempQueries
+      .map(_.trim)
+      .filter(_ != "")
+      .map { query =>
+        val lines = query.split("\n")
+        val isDebug = lines.exists(_.trim == "--DEBUG")
+        val cleanedQuery = lines.filterNot(_.startsWith("--")).mkString("\n").trim
+        (cleanedQuery, isDebug)
+      }
+      .filter(_._1 != "")
   }
 
-  protected def getQueries(code: Array[String], comments: Array[String],
+  protected def getQueries(
+      code: Array[String],
+      comments: Array[String],
       allTestCases: Seq[TestCase]): Seq[String] = {
     getQueriesWithDebugFlag(code, comments, allTestCases).map(_._1)
   }
@@ -486,10 +532,15 @@ trait SQLQueryTestHelper extends SQLConfHelper with Logging {
     // config sets, and run the query once for each config set.
     val configDimLines = comments.filter(_.startsWith("--CONFIG_DIM")).map(_.substring(12))
     val configDims = configDimLines.groupBy(_.takeWhile(_ != ' ')).view.mapValues { lines =>
-      lines.map(_.dropWhile(_ != ' ').substring(1)).map(_.split(",").map { kv =>
-        val (conf, value) = kv.span(_ != '=')
-        conf.trim -> value.substring(1).trim
-      }.toSeq).toSeq
+      lines
+        .map(_.dropWhile(_ != ' ').substring(1))
+        .map(_.split(",")
+          .map { kv =>
+            val (conf, value) = kv.span(_ != '=')
+            conf.trim -> value.substring(1).trim
+          }
+          .toSeq)
+        .toSeq
     }
 
     configDims.values.foldLeft(Seq(Seq[(String, String)]())) { (res, dim) =>
@@ -501,14 +552,17 @@ trait SQLQueryTestHelper extends SQLConfHelper with Logging {
   def normalizeTestResults(output: String): String = {
     val strippedPythonErrors: String = {
       var traceback = false
-      output.split("\n").filter { line: String =>
-        if (line == "Traceback (most recent call last):") {
-          traceback = true
-        } else if (!line.startsWith(" ")) {
-          traceback = false
+      output
+        .split("\n")
+        .filter { line: String =>
+          if (line == "Traceback (most recent call last):") {
+            traceback = true
+          } else if (!line.startsWith(" ")) {
+            traceback = false
+          }
+          !traceback
         }
-        !traceback
-      }.mkString("\n")
+        .mkString("\n")
     }
     strippedPythonErrors.replaceAll("\\s+$", "")
   }

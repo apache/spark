@@ -30,8 +30,8 @@ import org.apache.spark.sql.vectorized.ColumnarBatch
  * Base class for operators that exchange data among multiple threads or processes.
  *
  * Exchanges are the key class of operators that enable parallelism. Although the implementation
- * differs significantly, the concept is similar to the exchange operator described in
- * "Volcano -- An Extensible and Parallel Query Evaluation System" by Goetz Graefe.
+ * differs significantly, the concept is similar to the exchange operator described in "Volcano --
+ * An Extensible and Parallel Query Evaluation System" by Goetz Graefe.
  */
 abstract class Exchange extends UnaryExecNode {
   override def output: Seq[Attribute] = child.output
@@ -46,7 +46,7 @@ abstract class Exchange extends UnaryExecNode {
  * preserve the original ids because they're what downstream operators are expecting.
  */
 case class ReusedExchangeExec(override val output: Seq[Attribute], child: Exchange)
-  extends LeafExecNode {
+    extends LeafExecNode {
 
   override def supportsColumnar: Boolean = child.supportsColumnar
 
@@ -69,9 +69,10 @@ case class ReusedExchangeExec(override val output: Seq[Attribute], child: Exchan
   // to update the attribute ids in `outputPartitioning` and `outputOrdering`.
   private[sql] lazy val updateAttr: Expression => Expression = {
     val originalAttrToNewAttr = AttributeMap(child.output.zip(output))
-    e => e.transform {
-      case attr: Attribute => originalAttrToNewAttr.getOrElse(attr, attr)
-    }
+    e =>
+      e.transform { case attr: Attribute =>
+        originalAttrToNewAttr.getOrElse(attr, attr)
+      }
   }
 
   override def outputPartitioning: Partitioning = child.outputPartitioning match {

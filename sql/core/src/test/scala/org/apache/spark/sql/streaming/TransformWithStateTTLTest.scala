@@ -25,25 +25,18 @@ import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithEncodingTypes
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
 
-case class InputEvent(
-    key: String,
-    action: String,
-    value: Int,
-    eventTime: Timestamp = null)
+case class InputEvent(key: String, action: String, value: Int, eventTime: Timestamp = null)
 
-case class OutputEvent(
-    key: String,
-    value: Int,
-    isTTLValue: Boolean,
-    ttlValue: Long)
+case class OutputEvent(key: String, value: Int, isTTLValue: Boolean, ttlValue: Long)
 
 /**
  * Test suite base for TransformWithState with TTL support.
  */
 abstract class TransformWithStateTTLTest
-  extends StreamTest with AlsoTestWithEncodingTypes
-  with AlsoTestWithRocksDBFeatures
-  with StateStoreMetricsTest {
+    extends StreamTest
+    with AlsoTestWithEncodingTypes
+    with AlsoTestWithRocksDBFeatures
+    with StateStoreMetricsTest {
   import testImplicits._
 
   def getProcessor(ttlConfig: TTLConfig): StatefulProcessor[String, InputEvent, OutputEvent]
@@ -51,12 +44,14 @@ abstract class TransformWithStateTTLTest
   def getStateTTLMetricName: String
 
   test("validate state is evicted at ttl expiry") {
-    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-      classOf[RocksDBStateStoreProvider].getName) {
+    withSQLConf(
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+        classOf[RocksDBStateStoreProvider].getName) {
       withTempDir { dir =>
         val inputStream = MemoryStream[InputEvent]
         val ttlConfig = TTLConfig(ttlDuration = Duration.ofMinutes(1))
-        val result = inputStream.toDS()
+        val result = inputStream
+          .toDS()
           .groupByKey(x => x.key)
           .transformWithState(
             getProcessor(ttlConfig),
@@ -116,23 +111,30 @@ abstract class TransformWithStateTTLTest
             // Filter for idle progress events and then verify the custom metrics
             // for stateful operator
             val progData = q.recentProgress.filter(prog => prog.stateOperators.size > 0)
-            assert(progData.filter(prog =>
-              prog.stateOperators(0).customMetrics.get(getStateTTLMetricName) > 0).size > 0)
-            assert(progData.filter(prog =>
-              prog.stateOperators(0).customMetrics
-                .get("numValuesRemovedDueToTTLExpiry") > 0).size > 0)
-          }
-        )
+            assert(progData
+              .filter(prog => prog.stateOperators(0).customMetrics.get(getStateTTLMetricName) > 0)
+              .size > 0)
+            assert(
+              progData
+                .filter(prog =>
+                  prog
+                    .stateOperators(0)
+                    .customMetrics
+                    .get("numValuesRemovedDueToTTLExpiry") > 0)
+                .size > 0)
+          })
       }
     }
   }
 
   test("validate state update updates the expiration timestamp") {
-    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-      classOf[RocksDBStateStoreProvider].getName) {
+    withSQLConf(
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+        classOf[RocksDBStateStoreProvider].getName) {
       val inputStream = MemoryStream[InputEvent]
       val ttlConfig = TTLConfig(ttlDuration = Duration.ofMinutes(1))
-      val result = inputStream.toDS()
+      val result = inputStream
+        .toDS()
         .groupByKey(x => x.key)
         .transformWithState(
           getProcessor(ttlConfig),
@@ -158,7 +160,6 @@ abstract class TransformWithStateTTLTest
         AddData(inputStream, InputEvent("k1", "get_ttl_value_from_state", -1)),
         AdvanceManualClock(1 * 1000),
         CheckNewAnswer(OutputEvent("k1", 1, isTTLValue = true, 61000)),
-
         AddData(inputStream, InputEvent("k1", "get_values_in_ttl_state", -1)),
         AdvanceManualClock(1 * 1000),
         CheckNewAnswer(OutputEvent("k1", -1, isTTLValue = true, 61000)),
@@ -184,7 +185,7 @@ abstract class TransformWithStateTTLTest
         // validate ttl state has only the newer ttl value present
         AddData(inputStream, InputEvent("k1", "get_values_in_ttl_state", -1)),
         AdvanceManualClock(1 * 1000),
-        CheckNewAnswer( OutputEvent("k1", -1, isTTLValue = true, 95000)),
+        CheckNewAnswer(OutputEvent("k1", -1, isTTLValue = true, 95000)),
 
         // advance clock after original expiration value; this shouldn't do anything
         AdvanceManualClock(30 * 1000),
@@ -196,17 +197,18 @@ abstract class TransformWithStateTTLTest
         // validate that the ttl index still has the newer value
         AddData(inputStream, InputEvent("k1", "get_values_in_ttl_state", -1)),
         AdvanceManualClock(1 * 1000),
-        CheckNewAnswer(OutputEvent("k1", -1, isTTLValue = true, 95000))
-      )
+        CheckNewAnswer(OutputEvent("k1", -1, isTTLValue = true, 95000)))
     }
   }
 
   test("validate state is evicted at ttl expiry for no data batch") {
-    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-    classOf[RocksDBStateStoreProvider].getName) {
+    withSQLConf(
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+        classOf[RocksDBStateStoreProvider].getName) {
       val inputStream = MemoryStream[InputEvent]
       val ttlConfig = TTLConfig(ttlDuration = Duration.ofMinutes(1))
-      val result = inputStream.toDS()
+      val result = inputStream
+        .toDS()
         .groupByKey(x => x.key)
         .transformWithState(
           getProcessor(ttlConfig),
@@ -215,9 +217,7 @@ abstract class TransformWithStateTTLTest
 
       val clock = new StreamManualClock
       testStream(result)(
-        StartStream(
-          Trigger.ProcessingTime("1 second"),
-          triggerClock = clock),
+        StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
         AddData(inputStream, InputEvent("k1", "put", 1)),
         // advance clock to trigger processing
         AdvanceManualClock(1 * 1000),
@@ -247,18 +247,19 @@ abstract class TransformWithStateTTLTest
         CheckNewAnswer(),
         AddData(inputStream, InputEvent("k1", "get_values_in_ttl_state", -1)),
         AdvanceManualClock(1 * 1000),
-        CheckNewAnswer()
-      )
+        CheckNewAnswer())
     }
   }
 
   test("validate only expired keys are removed from the state") {
-    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-      classOf[RocksDBStateStoreProvider].getName,
+    withSQLConf(
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+        classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
       val inputStream = MemoryStream[InputEvent]
       val ttlConfig = TTLConfig(ttlDuration = Duration.ofMinutes(1))
-      val result = inputStream.toDS()
+      val result = inputStream
+        .toDS()
         .groupByKey(x => x.key)
         .transformWithState(
           getProcessor(ttlConfig),
@@ -295,18 +296,19 @@ abstract class TransformWithStateTTLTest
         AdvanceManualClock(1 * 1000),
         CheckNewAnswer(
           OutputEvent("k2", 2, isTTLValue = true, 92000),
-          OutputEvent("k2", -1, isTTLValue = true, 92000))
-      )
+          OutputEvent("k2", -1, isTTLValue = true, 92000)))
     }
   }
 
   test("validate that clear only clears the current grouping key") {
-    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-      classOf[RocksDBStateStoreProvider].getName,
+    withSQLConf(
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+        classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
       val inputStream = MemoryStream[InputEvent]
       val ttlConfig = TTLConfig(ttlDuration = Duration.ofMinutes(1))
-      val result = inputStream.toDS()
+      val result = inputStream
+        .toDS()
         .groupByKey(x => x.key)
         .transformWithState(
           getProcessor(ttlConfig),
@@ -316,42 +318,35 @@ abstract class TransformWithStateTTLTest
       val clock = new StreamManualClock
       testStream(result)(
         StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
-        AddData(inputStream,
+        AddData(
+          inputStream,
           InputEvent("k1", "put", 1),
           InputEvent("k2", "put", 2),
-          InputEvent("k3", "put", 3)
-        ),
+          InputEvent("k3", "put", 3)),
         // advance clock to trigger processing
         AdvanceManualClock(1 * 1000),
         CheckNewAnswer(),
-
         AddData(
           inputStream,
           InputEvent("k1", "clear", -1),
           InputEvent("k1", "get_ttl_value_from_state", -1),
-          InputEvent("k1", "get_values_in_ttl_state", -1)
-        ),
+          InputEvent("k1", "get_values_in_ttl_state", -1)),
         // advance clock to trigger processing
         AdvanceManualClock(1 * 1000),
         CheckNewAnswer(),
-
-        AddData(inputStream,
+        AddData(
+          inputStream,
           InputEvent("k2", "get_ttl_value_from_state", -1),
           InputEvent("k2", "get_values_in_ttl_state", -1),
-
           InputEvent("k3", "get_ttl_value_from_state", -1),
-          InputEvent("k3", "get_values_in_ttl_state", -1)
-        ),
+          InputEvent("k3", "get_values_in_ttl_state", -1)),
         // advance clock to trigger processing
         AdvanceManualClock(1 * 1000),
         CheckNewAnswer(
           OutputEvent("k2", 2, isTTLValue = true, 61000),
           OutputEvent("k2", -1, isTTLValue = true, 61000),
-
           OutputEvent("k3", 3, isTTLValue = true, 61000),
-          OutputEvent("k3", -1, isTTLValue = true, 61000)
-        )
-      )
+          OutputEvent("k3", -1, isTTLValue = true, 61000)))
     }
   }
 }

@@ -27,7 +27,6 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSparkSession}
 import org.apache.spark.sql.types.{YearMonthIntervalType, YearMonthIntervalType => YM}
 
-
 class HiveResultSuite extends SharedSparkSession {
   import testImplicits._
 
@@ -47,11 +46,7 @@ class HiveResultSuite extends SharedSparkSession {
   }
 
   test("time formatting in hive result") {
-    val times = Seq(
-      "00:00:00",
-      "00:01:02.003004",
-      "12:13:14.999999",
-      "23:59:59.1234")
+    val times = Seq("00:00:00", "00:01:02.003004", "12:13:14.999999", "23:59:59.1234")
     val df = times.toDF("a").selectExpr("cast(a as time) as b")
     val executedPlan1 = df.queryExecution.executedPlan
     val result = hiveResultString(executedPlan1)
@@ -79,8 +74,9 @@ class HiveResultSuite extends SharedSparkSession {
   test("toHiveString correctly handles UDTs") {
     val point = new ExamplePoint(50.0, 50.0)
     val tpe = new ExamplePointUDT()
-    assert(toHiveString((point, tpe), false, getTimeFormatters, getBinaryFormatter) ===
-      "(50.0, 50.0)")
+    assert(
+      toHiveString((point, tpe), false, getTimeFormatters, getBinaryFormatter) ===
+        "(50.0, 50.0)")
   }
 
   test("decimal formatting in hive result") {
@@ -92,8 +88,11 @@ class HiveResultSuite extends SharedSparkSession {
       assert(result.head.split("\\.").last.length === scala)
     }
 
-    val executedPlan = Seq(java.math.BigDecimal.ZERO).toDS()
-      .selectExpr(s"CAST(value AS decimal(38, 8))").queryExecution.executedPlan
+    val executedPlan = Seq(java.math.BigDecimal.ZERO)
+      .toDS()
+      .selectExpr(s"CAST(value AS decimal(38, 8))")
+      .queryExecution
+      .executedPlan
     val result = hiveResultString(executedPlan)
     assert(result.head === "0.00000000")
   }
@@ -156,12 +155,14 @@ class HiveResultSuite extends SharedSparkSession {
       "1-1" -> (13, YM.YEAR, YM.MONTH),
       "-1-1" -> (-13, YM.YEAR, YM.MONTH),
       "1-1" -> (13, YM.MONTH, YM.MONTH),
-      "-1-1" -> (-13, YM.MONTH, YM.MONTH)
-    ).foreach { case (hiveString, (months, startField, endField)) =>
-      assert(toHiveString((Period.ofMonths(months), YearMonthIntervalType(startField, endField)),
-        false,
-        getTimeFormatters,
-        getBinaryFormatter) === hiveString)
+      "-1-1" -> (-13, YM.MONTH, YM.MONTH)).foreach {
+      case (hiveString, (months, startField, endField)) =>
+        assert(
+          toHiveString(
+            (Period.ofMonths(months), YearMonthIntervalType(startField, endField)),
+            false,
+            getTimeFormatters,
+            getBinaryFormatter) === hiveString)
     }
   }
 
@@ -175,26 +176,25 @@ class HiveResultSuite extends SharedSparkSession {
 
   test("geometry formatting in hive result") {
     // Geometry with no SRID.
-    val df = spark.sql(
-      "SELECT ST_GeomFromWKB(X'0101000000000000000000f03f0000000000000040')")
+    val df = spark.sql("SELECT ST_GeomFromWKB(X'0101000000000000000000f03f0000000000000040')")
     val result = hiveResultString(df.queryExecution.executedPlan)
     assert(result === Seq("POINT(1 2)"))
     // Geometry with SRID 0.
-    val dfSrid0 = spark.sql(
-      "SELECT ST_GeomFromWKB(X'0101000000000000000000f03f0000000000000040', 0)")
+    val dfSrid0 =
+      spark.sql("SELECT ST_GeomFromWKB(X'0101000000000000000000f03f0000000000000040', 0)")
     val resultSrid0 = hiveResultString(dfSrid0.queryExecution.executedPlan)
     assert(resultSrid0 === Seq("POINT(1 2)"))
     // Geometry with SRID 4326.
-    val dfSrid4326 = spark.sql(
-      "SELECT ST_GeomFromWKB(X'0101000000000000000000f03f0000000000000040', 4326)")
+    val dfSrid4326 =
+      spark.sql("SELECT ST_GeomFromWKB(X'0101000000000000000000f03f0000000000000040', 4326)")
     val resultSrid4326 = hiveResultString(dfSrid4326.queryExecution.executedPlan)
     assert(resultSrid4326 === Seq("SRID=4326;POINT(1 2)"))
   }
 
   test("nested geometry formatting in hive result") {
     // Geometry with no SRID.
-    val df = spark.sql(
-      "SELECT array(ST_GeomFromWKB(X'0101000000000000000000f03f0000000000000040'))")
+    val df =
+      spark.sql("SELECT array(ST_GeomFromWKB(X'0101000000000000000000f03f0000000000000040'))")
     val result = hiveResultString(df.queryExecution.executedPlan)
     assert(result === Seq("[\"POINT(1 2)\"]"))
     // Geometry with SRID 4326.
@@ -205,15 +205,14 @@ class HiveResultSuite extends SharedSparkSession {
   }
 
   test("geography formatting in hive result") {
-    val df = spark.sql(
-      "SELECT ST_GeogFromWKB(X'0101000000000000000000f03f0000000000000040')")
+    val df = spark.sql("SELECT ST_GeogFromWKB(X'0101000000000000000000f03f0000000000000040')")
     val result = hiveResultString(df.queryExecution.executedPlan)
     assert(result === Seq("SRID=4326;POINT(1 2)"))
   }
 
   test("nested geography formatting in hive result") {
-    val df = spark.sql(
-      "SELECT array(ST_GeogFromWKB(X'0101000000000000000000f03f0000000000000040'))")
+    val df =
+      spark.sql("SELECT array(ST_GeogFromWKB(X'0101000000000000000000f03f0000000000000040'))")
     val result = hiveResultString(df.queryExecution.executedPlan)
     assert(result === Seq("[\"SRID=4326;POINT(1 2)\"]"))
   }
@@ -221,14 +220,18 @@ class HiveResultSuite extends SharedSparkSession {
   test("SPARK-52650: Use stringifyValue to get UDT string representation") {
     val year = Year.of(18)
     val tpe = new YearUDT()
-    assert(toHiveString((year, tpe),
-      nested = false, getTimeFormatters, getBinaryFormatter) === "18")
+    assert(
+      toHiveString((year, tpe), nested = false, getTimeFormatters, getBinaryFormatter) === "18")
     val tpe2 = new YearUDT() {
       override def stringifyValue(obj: Any): String = {
         f"${obj.asInstanceOf[Year].getValue}%04d"
       }
     }
-    assert(toHiveString((year, tpe2),
-      nested = false, getTimeFormatters, getBinaryFormatter) === "0018")
+    assert(
+      toHiveString(
+        (year, tpe2),
+        nested = false,
+        getTimeFormatters,
+        getBinaryFormatter) === "0018")
   }
 }

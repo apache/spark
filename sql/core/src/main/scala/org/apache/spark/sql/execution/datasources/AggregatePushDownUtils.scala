@@ -74,8 +74,8 @@ object AggregatePushDownUtils {
         // (https://issues.apache.org/jira/browse/PARQUET-1685), Parquet Binary
         // could be Spark StringType, BinaryType or DecimalType.
         // not push down for ORC with same reason.
-        case BooleanType | ByteType | ShortType | IntegerType
-             | LongType | FloatType | DoubleType | DateType =>
+        case BooleanType | ByteType | ShortType | IntegerType | LongType | FloatType |
+            DoubleType | DateType =>
           finalSchema = finalSchema.add(structField.copy(s"$aggType(" + structField.name + ")"))
           true
         case _ =>
@@ -120,7 +120,7 @@ object AggregatePushDownUtils {
       case min: Min =>
         if (!processMinOrMax(min)) return None
       case count: Count
-        if V2ColumnUtils.extractV2Column(count.column).isDefined && !count.isDistinct =>
+          if V2ColumnUtils.extractV2Column(count.column).isDefined && !count.isDistinct =>
         val columnName = V2ColumnUtils.extractV2Column(count.column).get
         finalSchema = finalSchema.add(StructField(s"count($columnName)", LongType))
       case _: CountStar =>
@@ -136,15 +136,17 @@ object AggregatePushDownUtils {
    * Check if two Aggregation `a` and `b` is equal or not.
    */
   def equivalentAggregations(a: Aggregation, b: Aggregation): Boolean = {
-    a.aggregateExpressions.sortBy(_.hashCode())
+    a.aggregateExpressions
+      .sortBy(_.hashCode())
       .sameElements(b.aggregateExpressions.sortBy(_.hashCode())) &&
-      a.groupByExpressions.sortBy(_.hashCode())
-        .sameElements(b.groupByExpressions.sortBy(_.hashCode()))
+    a.groupByExpressions
+      .sortBy(_.hashCode())
+      .sameElements(b.groupByExpressions.sortBy(_.hashCode()))
   }
 
   /**
-   * Convert the aggregates result from `InternalRow` to `ColumnarBatch`.
-   * This is used for columnar reader.
+   * Convert the aggregates result from `InternalRow` to `ColumnarBatch`. This is used for
+   * columnar reader.
    */
   def convertAggregatesRowToBatch(
       aggregatesAsRow: InternalRow,
@@ -182,11 +184,13 @@ object AggregatePushDownUtils {
       aggregation: Aggregation,
       partitionValues: InternalRow): InternalRow = {
     val groupByColNames = aggregation.groupByExpressions.flatMap(extractColName)
-    assert(groupByColNames.length == partitionSchema.length &&
-      groupByColNames.length == partitionValues.numFields, "The number of group by columns " +
-      s"${groupByColNames.length} should be the same as partition schema length " +
-      s"${partitionSchema.length} and the number of fields ${partitionValues.numFields} " +
-      s"in partitionValues")
+    assert(
+      groupByColNames.length == partitionSchema.length &&
+        groupByColNames.length == partitionValues.numFields,
+      "The number of group by columns " +
+        s"${groupByColNames.length} should be the same as partition schema length " +
+        s"${partitionSchema.length} and the number of fields ${partitionValues.numFields} " +
+        s"in partitionValues")
     var reorderedPartColValues = Array.empty[Any]
     if (!partitionSchema.names.sameElements(groupByColNames)) {
       groupByColNames.foreach { col =>

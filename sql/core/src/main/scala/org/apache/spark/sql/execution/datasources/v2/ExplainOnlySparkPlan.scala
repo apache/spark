@@ -24,7 +24,9 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.LeafLike
 import org.apache.spark.sql.execution.SparkPlan
 
-case class ExplainOnlySparkPlan(toExplain: LogicalPlan) extends SparkPlan with LeafLike[SparkPlan] {
+case class ExplainOnlySparkPlan(toExplain: LogicalPlan)
+    extends SparkPlan
+    with LeafLike[SparkPlan] {
 
   override def output: Seq[Attribute] = Nil
 

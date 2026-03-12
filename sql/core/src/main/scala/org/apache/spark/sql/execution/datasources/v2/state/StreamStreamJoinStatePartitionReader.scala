@@ -31,37 +31,47 @@ import org.apache.spark.sql.types.{BooleanType, StructType}
 import org.apache.spark.util.SerializableConfiguration
 
 /**
- * An implementation of [[PartitionReaderFactory]] for State Store data source, specifically
- * to build a [[PartitionReader]] for reading the state from stream-stream join.
+ * An implementation of [[PartitionReaderFactory]] for State Store data source, specifically to
+ * build a [[PartitionReader]] for reading the state from stream-stream join.
  */
 class StreamStreamJoinStatePartitionReaderFactory(
     storeConf: StateStoreConf,
     hadoopConf: SerializableConfiguration,
     userFacingSchema: StructType,
-    stateSchema: StructType) extends PartitionReaderFactory {
+    stateSchema: StructType)
+    extends PartitionReaderFactory {
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
-    new StreamStreamJoinStatePartitionReader(storeConf, hadoopConf,
-      partition.asInstanceOf[StateStoreInputPartition], userFacingSchema, stateSchema)
+    new StreamStreamJoinStatePartitionReader(
+      storeConf,
+      hadoopConf,
+      partition.asInstanceOf[StateStoreInputPartition],
+      userFacingSchema,
+      stateSchema)
   }
 }
 
 /**
- * An implementation of [[PartitionReader]] for State Store data source, specifically to read
- * the partition for the state from stream-stream join.
+ * An implementation of [[PartitionReader]] for State Store data source, specifically to read the
+ * partition for the state from stream-stream join.
  */
 class StreamStreamJoinStatePartitionReader(
     storeConf: StateStoreConf,
     hadoopConf: SerializableConfiguration,
     partition: StateStoreInputPartition,
     userFacingSchema: StructType,
-    stateSchema: StructType) extends PartitionReader[InternalRow] with Logging {
+    stateSchema: StructType)
+    extends PartitionReader[InternalRow]
+    with Logging {
 
-  private val keySchema = SchemaUtil.getSchemaAsDataType(stateSchema, "key")
+  private val keySchema = SchemaUtil
+    .getSchemaAsDataType(stateSchema, "key")
     .asInstanceOf[StructType]
-  private val valueSchema = SchemaUtil.getSchemaAsDataType(stateSchema, "value")
+  private val valueSchema = SchemaUtil
+    .getSchemaAsDataType(stateSchema, "value")
     .asInstanceOf[StructType]
 
-  private val userFacingValueSchema = SchemaUtil.getSchemaAsDataType(userFacingSchema, "value")
+  private val userFacingValueSchema = SchemaUtil
+    .getSchemaAsDataType(userFacingSchema, "value")
     .asInstanceOf[StructType]
 
   private val joinSide: JoinSide = partition.sourceOptions.joinSide match {
@@ -136,13 +146,14 @@ class StreamStreamJoinStatePartitionReader(
       }
     }
 
-    assert(fields.toArray.sameElements(userFacingValueSchema.fields),
+    assert(
+      fields.toArray.sameElements(userFacingValueSchema.fields),
       "Exposed fields should be same with given user facing schema for value! " +
         s"Exposed fields: ${fields.mkString("(", ", ", ")")} / " +
         s"User facing value fields: ${userFacingValueSchema.fields.mkString("(", ", ", ")")}")
 
-    val attrs = fields.map {
-      f => AttributeReference(f.name, f.dataType, f.nullable)()
+    val attrs = fields.map { f =>
+      AttributeReference(f.name, f.dataType, f.nullable)()
     }
     (attrs, version)
   }
@@ -158,8 +169,11 @@ class StreamStreamJoinStatePartitionReader(
       // there and pass it in.
       val stateInfo = StatefulOperatorStateInfo(
         partition.sourceOptions.stateCheckpointLocation.toString,
-        partition.queryId, partition.sourceOptions.operatorId,
-        partition.sourceOptions.batchId + 1, -1, None)
+        partition.queryId,
+        partition.sourceOptions.operatorId,
+        partition.sourceOptions.batchId + 1,
+        -1,
+        None)
       joinStateManager = SymmetricHashJoinStateManager(
         joinSide,
         inputAttributes,
@@ -173,23 +187,22 @@ class StreamStreamJoinStatePartitionReader(
         formatVersion,
         skippedNullValueCount = None,
         useStateStoreCoordinator = false,
-        snapshotOptions =
-          partition.sourceOptions.fromSnapshotOptions.map(opts => SnapshotOptions(
+        snapshotOptions = partition.sourceOptions.fromSnapshotOptions.map(opts =>
+          SnapshotOptions(
             snapshotVersion = opts.snapshotStartBatchId + 1,
             endVersion = partition.sourceOptions.batchId + 1,
             startKeyToNumValuesStateStoreCkptId = startKeyToNumValuesStateStoreCkptId,
             startKeyWithIndexToValueStateStoreCkptId = startKeyWithIndexToValueStateStoreCkptId,
             endKeyToNumValuesStateStoreCkptId = endKeyToNumValuesStateStoreCkptId,
             endKeyWithIndexToValueStateStoreCkptId = endKeyWithIndexToValueStateStoreCkptId)),
-        joinStoreGenerator = new JoinStateManagerStoreGenerator()
-      )
+        joinStoreGenerator = new JoinStateManagerStoreGenerator())
     }
 
     // state format 2
     val valueWithMatchedExprs = inputAttributes :+ Literal(true)
     val indexOrdinalInValueWithMatchedRow = inputAttributes.size
-    val valueWithMatchedRowGenerator = UnsafeProjection.create(valueWithMatchedExprs,
-      inputAttributes)
+    val valueWithMatchedRowGenerator =
+      UnsafeProjection.create(valueWithMatchedExprs, inputAttributes)
 
     joinStateManager.iterator.map { pair =>
       if (formatVersion >= 2) {

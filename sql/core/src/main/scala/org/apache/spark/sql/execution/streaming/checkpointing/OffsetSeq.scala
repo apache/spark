@@ -44,31 +44,35 @@ trait OffsetSeqBase {
 
   override def toString: String = this match {
     case offsetMap: OffsetMap =>
-      offsetMap.offsetsMap.map { case (sourceId, offsetOpt) =>
-        s"$sourceId: ${offsetOpt.map(_.json).getOrElse("-")}"
-      }.mkString("{", ", ", "}")
+      offsetMap.offsetsMap
+        .map { case (sourceId, offsetOpt) =>
+          s"$sourceId: ${offsetOpt.map(_.json).getOrElse("-")}"
+        }
+        .mkString("{", ", ", "}")
     case _ =>
       offsets.map(_.map(_.json).getOrElse("-")).mkString("[", ", ", "]")
   }
 
   /**
-   * Unpacks an offset into [[StreamProgress]] by associating each offset with the
-   * ordered list of sources.
+   * Unpacks an offset into [[StreamProgress]] by associating each offset with the ordered list of
+   * sources.
    *
-   * This method is typically used to associate a serialized offset with actual
-   * sources (which cannot be serialized).
+   * This method is typically used to associate a serialized offset with actual sources (which
+   * cannot be serialized).
    */
   def toStreamProgress(sources: Seq[SparkDataStream]): StreamProgress = {
     assert(!this.isInstanceOf[OffsetMap], "toStreamProgress must be called with map")
-    assert(sources.size == offsets.size, s"There are [${offsets.size}] sources in the " +
-      s"checkpoint offsets and now there are [${sources.size}] sources requested by " +
-      s"the query. Cannot continue.")
+    assert(
+      sources.size == offsets.size,
+      s"There are [${offsets.size}] sources in the " +
+        s"checkpoint offsets and now there are [${sources.size}] sources requested by " +
+        s"the query. Cannot continue.")
     new StreamProgress ++ sources.zip(offsets).collect { case (s, Some(o)) => (s, o) }
   }
 
   /**
-   * Converts OffsetMap to StreamProgress using source ID mapping.
-   * This method is specific to OffsetMap and requires a mapping from sourceId to SparkDataStream.
+   * Converts OffsetMap to StreamProgress using source ID mapping. This method is specific to
+   * OffsetMap and requires a mapping from sourceId to SparkDataStream.
    */
   def toStreamProgress(
       sources: Seq[SparkDataStream],
@@ -89,27 +93,28 @@ trait OffsetSeqBase {
 }
 
 /**
- * An ordered collection of offsets, used to track the progress of processing data from one or more
- * [[Source]]s that are present in a streaming query. This is similar to simplified, single-instance
- * vector clock that must progress linearly forward.
+ * An ordered collection of offsets, used to track the progress of processing data from one or
+ * more [[Source]]s that are present in a streaming query. This is similar to simplified,
+ * single-instance vector clock that must progress linearly forward.
  */
 case class OffsetSeq(
     offsets: Seq[Option[OffsetV2]],
-    metadataOpt: Option[OffsetSeqMetadata] = None) extends OffsetSeqBase {
+    metadataOpt: Option[OffsetSeqMetadata] = None)
+    extends OffsetSeqBase {
   override def version: Int = OffsetSeqLog.VERSION_1
 }
 
 object OffsetSeq {
 
   /**
-   * Returns a [[OffsetSeq]] with a variable sequence of offsets.
-   * `nulls` in the sequence are converted to `None`s.
+   * Returns a [[OffsetSeq]] with a variable sequence of offsets. `nulls` in the sequence are
+   * converted to `None`s.
    */
   def fill(offsets: OffsetV2*): OffsetSeq = OffsetSeq.fill(None, offsets: _*)
 
   /**
-   * Returns a [[OffsetSeq]] with metadata and a variable sequence of offsets.
-   * `nulls` in the sequence are converted to `None`s.
+   * Returns a [[OffsetSeq]] with metadata and a variable sequence of offsets. `nulls` in the
+   * sequence are converted to `None`s.
    */
   def fill(metadataOpt: Option[String], offsets: OffsetV2*): OffsetSeq = {
     OffsetSeq(offsets.map(Option(_)), metadataOpt.map(OffsetSeqMetadata.apply))
@@ -117,17 +122,16 @@ object OffsetSeq {
 }
 
 /**
- * A map-based collection of offsets, used to track the progress of processing data from one or more
- * streaming sources. Each source is identified by a string key (initially sourceId.toString()).
- * This replaces the sequence-based approach with a more flexible map-based approach to support
- * named source identities.
+ * A map-based collection of offsets, used to track the progress of processing data from one or
+ * more streaming sources. Each source is identified by a string key (initially
+ * sourceId.toString()). This replaces the sequence-based approach with a more flexible map-based
+ * approach to support named source identities.
  *
  * Unlike [[OffsetSeq]], metadata is required (not optional) for [[OffsetMap]] as it contains
  * essential information like source metadata.
  */
-case class OffsetMap(
-    offsetsMap: Map[String, Option[OffsetV2]],
-    metadata: OffsetSeqMetadataV2) extends OffsetSeqBase {
+case class OffsetMap(offsetsMap: Map[String, Option[OffsetV2]], metadata: OffsetSeqMetadataV2)
+    extends OffsetSeqBase {
   override def version: Int = OffsetSeqLog.VERSION_2
 
   // OffsetMap does not support sequence-based access
@@ -143,8 +147,8 @@ case class OffsetMap(
  * Base trait for offset sequence metadata.
  *
  * Valid combinations of offset log versions and metadata types:
- * - VERSION_1 (sequence-based offset log): Uses [[OffsetSeq]] with [[OffsetSeqMetadata]]
- * - VERSION_2 (map-based offset log): Uses [[OffsetMap]] with [[OffsetSeqMetadataV2]]
+ *   - VERSION_1 (sequence-based offset log): Uses [[OffsetSeq]] with [[OffsetSeqMetadata]]
+ *   - VERSION_2 (map-based offset log): Uses [[OffsetMap]] with [[OffsetSeqMetadataV2]]
  *
  * The metadata version must match the offset log version for proper serialization and
  * deserialization.
@@ -160,26 +164,29 @@ trait OffsetSeqMetadataBase extends Serializable {
 }
 
 /**
- * Contains metadata associated with a [[OffsetSeq]]. This information is
- * persisted to the offset log in the checkpoint location via the [[OffsetSeq]] metadata field.
+ * Contains metadata associated with a [[OffsetSeq]]. This information is persisted to the offset
+ * log in the checkpoint location via the [[OffsetSeq]] metadata field.
  *
  * This is VERSION_1 metadata, used with sequence-based [[OffsetSeq]].
  *
- * @param batchWatermarkMs: The current eventTime watermark, used to
- * bound the lateness of data that will processed. Time unit: milliseconds
- * @param batchTimestampMs: The current batch processing timestamp.
- * Time unit: milliseconds
- * @param conf: Additional conf_s to be persisted across batches, e.g. number of shuffle partitions.
- * CAVEAT: This does not apply the logic we handle in [[OffsetSeqMetadata]] object, e.g.
- * deducing the default value of SQL config if the entry does not exist in the offset log,
- * resolving the re-bind of config key (the config key in offset log is not same with the
- * actual key in session), etc. If you need to get the value with applying the logic, use
- * [[OffsetSeqMetadata.readValue()]].
+ * @param batchWatermarkMs:
+ *   The current eventTime watermark, used to bound the lateness of data that will processed. Time
+ *   unit: milliseconds
+ * @param batchTimestampMs:
+ *   The current batch processing timestamp. Time unit: milliseconds
+ * @param conf:
+ *   Additional conf_s to be persisted across batches, e.g. number of shuffle partitions. CAVEAT:
+ *   This does not apply the logic we handle in [[OffsetSeqMetadata]] object, e.g. deducing the
+ *   default value of SQL config if the entry does not exist in the offset log, resolving the
+ *   re-bind of config key (the config key in offset log is not same with the actual key in
+ *   session), etc. If you need to get the value with applying the logic, use
+ *   [[OffsetSeqMetadata.readValue()]].
  */
 case class OffsetSeqMetadata(
     batchWatermarkMs: Long = 0,
     batchTimestampMs: Long = 0,
-    conf: Map[String, String] = Map.empty) extends OffsetSeqMetadataBase {
+    conf: Map[String, String] = Map.empty)
+    extends OffsetSeqMetadataBase {
   override def json: String = Serialization.write(this)(OffsetSeqMetadata.format)
 
   override def version: Int = OffsetSeqLog.VERSION_1
@@ -191,36 +198,42 @@ case class OffsetSeqMetadata(
 
 object OffsetSeqMetadata extends Logging {
   private[checkpointing] implicit val format: Formats = Serialization.formats(NoTypeHints)
-  /**
-   * These configs are related to streaming query execution and should not be changed across
-   * batches of a streaming query. The values of these configs are persisted into the offset
-   * log in the checkpoint position.
-   */
-  private[checkpointing] val relevantSQLConfs = Seq(
-    STATE_STORE_PROVIDER_CLASS, STREAMING_MULTIPLE_WATERMARK_POLICY,
-    FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION, STREAMING_AGGREGATION_STATE_FORMAT_VERSION,
-    STREAMING_JOIN_STATE_FORMAT_VERSION, STATE_STORE_COMPRESSION_CODEC,
-    STATE_STORE_ROCKSDB_FORMAT_VERSION, STATE_STORE_ROCKSDB_MERGE_OPERATOR_VERSION,
-    STATEFUL_OPERATOR_USE_STRICT_DISTRIBUTION,
-    PRUNE_FILTERS_CAN_PRUNE_STREAMING_SUBPLAN, STREAMING_STATE_STORE_ENCODING_FORMAT,
-    STATE_STORE_ROW_CHECKSUM_ENABLED, PROTOBUF_EXTENSIONS_SUPPORT_ENABLED,
-    ENABLE_STREAMING_SOURCE_EVOLUTION
-  )
 
   /**
-   * This is an extension of `relevantSQLConfs`. The characteristic is the same, but we persist the
-   * value of config A as config B in offset log. This exists for compatibility purpose e.g. if
-   * user upgrades Spark and runs a streaming query, but has to downgrade due to some issues.
+   * These configs are related to streaming query execution and should not be changed across
+   * batches of a streaming query. The values of these configs are persisted into the offset log
+   * in the checkpoint position.
+   */
+  private[checkpointing] val relevantSQLConfs = Seq(
+    STATE_STORE_PROVIDER_CLASS,
+    STREAMING_MULTIPLE_WATERMARK_POLICY,
+    FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION,
+    STREAMING_AGGREGATION_STATE_FORMAT_VERSION,
+    STREAMING_JOIN_STATE_FORMAT_VERSION,
+    STATE_STORE_COMPRESSION_CODEC,
+    STATE_STORE_ROCKSDB_FORMAT_VERSION,
+    STATE_STORE_ROCKSDB_MERGE_OPERATOR_VERSION,
+    STATEFUL_OPERATOR_USE_STRICT_DISTRIBUTION,
+    PRUNE_FILTERS_CAN_PRUNE_STREAMING_SUBPLAN,
+    STREAMING_STATE_STORE_ENCODING_FORMAT,
+    STATE_STORE_ROW_CHECKSUM_ENABLED,
+    PROTOBUF_EXTENSIONS_SUPPORT_ENABLED,
+    ENABLE_STREAMING_SOURCE_EVOLUTION)
+
+  /**
+   * This is an extension of `relevantSQLConfs`. The characteristic is the same, but we persist
+   * the value of config A as config B in offset log. This exists for compatibility purpose e.g.
+   * if user upgrades Spark and runs a streaming query, but has to downgrade due to some issues.
    *
-   * A config should be only bound to either `relevantSQLConfs` or `rebindSQLConfs` (key or value).
+   * A config should be only bound to either `relevantSQLConfs` or `rebindSQLConfs` (key or
+   * value).
    */
   private val rebindSQLConfsSessionToOffsetLog: Map[ConfigEntry[_], ConfigEntry[_]] = {
     Map(
       // TODO: The proper way to handle this is to make the number of partitions in the state
       //  metadata as the source of truth, but it requires major changes if we want to take care
       //  of compatibility.
-      STATEFUL_SHUFFLE_PARTITIONS_INTERNAL -> SHUFFLE_PARTITIONS
-    )
+      STATEFUL_SHUFFLE_PARTITIONS_INTERNAL -> SHUFFLE_PARTITIONS)
   }
 
   /**
@@ -230,11 +243,10 @@ object OffsetSeqMetadata extends Logging {
     rebindSQLConfsSessionToOffsetLog.map { case (k, v) => (v, k) }.toMap
 
   /**
-   * Default values of relevant configurations that are used for backward compatibility.
-   * As new configurations are added to the metadata, existing checkpoints may not have those
-   * confs. The values in this list ensures that the confs without recovered values are
-   * set to a default value that ensure the same behavior of the streaming query as it was before
-   * the restart.
+   * Default values of relevant configurations that are used for backward compatibility. As new
+   * configurations are added to the metadata, existing checkpoints may not have those confs. The
+   * values in this list ensures that the confs without recovered values are set to a default
+   * value that ensure the same behavior of the streaming query as it was before the restart.
    *
    * Note, that this is optional; set values here if you *have* to override existing session conf
    * with a specific default value for ensuring same behavior of the query as before.
@@ -254,8 +266,7 @@ object OffsetSeqMetadata extends Logging {
     STATE_STORE_ROW_CHECKSUM_ENABLED.key -> "false",
     STATE_STORE_ROCKSDB_MERGE_OPERATOR_VERSION.key -> "1",
     PROTOBUF_EXTENSIONS_SUPPORT_ENABLED.key -> "false",
-    ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "false"
-  )
+    ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "false")
 
   def readValue[T](metadataLog: OffsetSeqMetadataBase, confKey: ConfigEntry[T]): String = {
     readValueOpt(metadataLog, confKey).getOrElse(confKey.defaultValueString)
@@ -282,7 +293,7 @@ object OffsetSeqMetadata extends Logging {
       case (confInSession, confInOffsetLog) =>
         confInOffsetLog.key -> sessionConf.get(confInSession.key)
     }.toMap
-    OffsetSeqMetadata(batchWatermarkMs, batchTimestampMs, confs++ confsFromRebind)
+    OffsetSeqMetadata(batchWatermarkMs, batchTimestampMs, confs ++ confsFromRebind)
   }
 
   /** Set the SparkSession configuration with the values in the metadata */
@@ -294,9 +305,10 @@ object OffsetSeqMetadata extends Logging {
           // Config value exists in the metadata, update the session config with this value
           val optionalValueInSession = sessionConf.getConfString(confKeyInSession, null)
           if (optionalValueInSession != null && optionalValueInSession != valueInMetadata) {
-            logWarning(log"Updating the value of conf '${MDC(CONFIG, confKeyInSession)}' in " +
-              log"current session from '${MDC(OLD_VALUE, optionalValueInSession)}' " +
-              log"to '${MDC(NEW_VALUE, valueInMetadata)}'.")
+            logWarning(
+              log"Updating the value of conf '${MDC(CONFIG, confKeyInSession)}' in " +
+                log"current session from '${MDC(OLD_VALUE, optionalValueInSession)}' " +
+                log"to '${MDC(NEW_VALUE, valueInMetadata)}'.")
           }
           sessionConf.setConfString(confKeyInSession, valueInMetadata)
 
@@ -308,8 +320,9 @@ object OffsetSeqMetadata extends Logging {
 
             case Some(defaultValue) =>
               sessionConf.setConfString(confKeyInSession, defaultValue)
-              logWarning(log"Conf '${MDC(CONFIG, confKeyInSession)}' was not found in the offset " +
-                log"log, using default value '${MDC(DEFAULT_VALUE, defaultValue)}'")
+              logWarning(
+                log"Conf '${MDC(CONFIG, confKeyInSession)}' was not found in the offset " +
+                  log"log, using default value '${MDC(DEFAULT_VALUE, defaultValue)}'")
 
             case None =>
               val value = sessionConf.getConfString(confKeyInSession, null)
@@ -318,8 +331,9 @@ object OffsetSeqMetadata extends Logging {
               } else {
                 " No value set in session conf."
               }
-              logWarning(log"Conf '${MDC(CONFIG, confKeyInSession)}' was not found in the " +
-                log"offset log. ${MDC(TIP, valueStr)}")
+              logWarning(
+                log"Conf '${MDC(CONFIG, confKeyInSession)}' was not found in the " +
+                  log"offset log. ${MDC(TIP, valueStr)}")
           }
       }
     }
@@ -328,33 +342,34 @@ object OffsetSeqMetadata extends Logging {
       setOneSessionConf(confKey, confKey)
     }
 
-    rebindSQLConfsOffsetLogToSession.foreach {
-      case (confInOffsetLog, confInSession) =>
-        setOneSessionConf(confInOffsetLog.key, confInSession.key)
+    rebindSQLConfsOffsetLogToSession.foreach { case (confInOffsetLog, confInSession) =>
+      setOneSessionConf(confInOffsetLog.key, confInSession.key)
     }
   }
 }
 
 /**
- * This class is used to store the metadata for a source in the offset log within the
- * streaming checkpoint.
+ * This class is used to store the metadata for a source in the offset log within the streaming
+ * checkpoint.
  *
- * @param sourceId: The ID of the source.
- * @param providerName: The name of the provider.
- * @param apiVersion: The API version for the source - whether it is DSv1 or DSv2.
+ * @param sourceId:
+ *   The ID of the source.
+ * @param providerName:
+ *   The name of the provider.
+ * @param apiVersion:
+ *   The API version for the source - whether it is DSv1 or DSv2.
  */
-case class SourceMetadataInfo(
-    sourceId: String,
-    providerName: String,
-    apiVersion: String) {
+case class SourceMetadataInfo(sourceId: String, providerName: String, apiVersion: String) {
   def json: String = Serialization.write(this)(OffsetSeqMetadata.format)
 }
 
 /**
  * This class is used to store metadata about the type of control batch in the offset log.
  *
- * @param operationType The type of control batch operation.
- * @param operationInfo Additional info about the control batch operation.
+ * @param operationType
+ *   The type of control batch operation.
+ * @param operationInfo
+ *   Additional info about the control batch operation.
  */
 case class OffsetSeqControlBatchInfo(
     operationType: String,
@@ -367,9 +382,9 @@ object OffsetSeqControlBatchInfo {
 }
 
 /**
- * An offset type for Sequential Union operations, stored directly in the offset log.
- * Sequential Union enables seamless backfill-to-live streaming scenarios by processing multiple
- * sources sequentially rather than concurrently.
+ * An offset type for Sequential Union operations, stored directly in the offset log. Sequential
+ * Union enables seamless backfill-to-live streaming scenarios by processing multiple sources
+ * sequentially rather than concurrently.
  *
  * This is stored as an entry in the offset map (just like source offsets), allowing multiple
  * sequential unions per query to each track their own state.
@@ -377,23 +392,30 @@ object OffsetSeqControlBatchInfo {
  * All source tracking is name-based (not index-based) to ensure stability across query restarts
  * and to integrate with the query evolution feature.
  *
- * @param activeSourceName The name of the currently active source being processed.
- * @param allSourceNames All source names in the order they should be processed.
- * @param completedSourceNames Set of source names that have finished processing.
+ * @param activeSourceName
+ *   The name of the currently active source being processed.
+ * @param allSourceNames
+ *   All source names in the order they should be processed.
+ * @param completedSourceNames
+ *   Set of source names that have finished processing.
  */
 case class SequentialUnionOffset(
     activeSourceName: String,
     allSourceNames: Seq[String],
-    completedSourceNames: Set[String]) extends OffsetV2 {
+    completedSourceNames: Set[String])
+    extends OffsetV2 {
 
   // Validate on construction
   require(allSourceNames.nonEmpty, "allSourceNames must not be empty")
-  require(allSourceNames.contains(activeSourceName),
+  require(
+    allSourceNames.contains(activeSourceName),
     s"activeSourceName '$activeSourceName' must be in allSourceNames: " +
       s"${allSourceNames.mkString(", ")}")
-  require(completedSourceNames.subsetOf(allSourceNames.toSet),
+  require(
+    completedSourceNames.subsetOf(allSourceNames.toSet),
     s"completedSourceNames must be a subset of allSourceNames")
-  require(!completedSourceNames.contains(activeSourceName),
+  require(
+    !completedSourceNames.contains(activeSourceName),
     s"activeSourceName '$activeSourceName' cannot be in completedSourceNames")
 
   override def json(): String = Serialization.write(this)(SequentialUnionOffset.format)
@@ -408,28 +430,31 @@ object SequentialUnionOffset {
 }
 
 /**
- * Contains metadata associated with a [[OffsetMap]]. This information is
- * persisted to the offset log in the checkpoint location via the [[OffsetMap]] metadata field.
+ * Contains metadata associated with a [[OffsetMap]]. This information is persisted to the offset
+ * log in the checkpoint location via the [[OffsetMap]] metadata field.
  *
  * This is VERSION_2 metadata, used with map-based [[OffsetMap]].
  *
- * @param batchWatermarkMs: The current eventTime watermark, used to
- * bound the lateness of data that will processed. Time unit: milliseconds
- * @param batchTimestampMs: The current batch processing timestamp.
- * Time unit: milliseconds
- * @param conf: Additional conf_s to be persisted across batches,
- * e.g. number of shuffle partitions.
- * @param sourceMetadataInfo: The source related metadata for the streaming query,
- * mapped by sourceId.
- * @param controlBatchInfo: The control batch information if the current batch is a
- * control batch. Value of None means current batch is a data batch.
+ * @param batchWatermarkMs:
+ *   The current eventTime watermark, used to bound the lateness of data that will processed. Time
+ *   unit: milliseconds
+ * @param batchTimestampMs:
+ *   The current batch processing timestamp. Time unit: milliseconds
+ * @param conf:
+ *   Additional conf_s to be persisted across batches, e.g. number of shuffle partitions.
+ * @param sourceMetadataInfo:
+ *   The source related metadata for the streaming query, mapped by sourceId.
+ * @param controlBatchInfo:
+ *   The control batch information if the current batch is a control batch. Value of None means
+ *   current batch is a data batch.
  */
 case class OffsetSeqMetadataV2(
     batchWatermarkMs: Long = 0,
     batchTimestampMs: Long = 0,
     conf: Map[String, String] = Map.empty,
     sourceMetadataInfo: Map[String, SourceMetadataInfo] = Map.empty,
-    controlBatchInfo: Option[OffsetSeqControlBatchInfo] = None) extends OffsetSeqMetadataBase {
+    controlBatchInfo: Option[OffsetSeqControlBatchInfo] = None)
+    extends OffsetSeqMetadataBase {
   override def version: Int = OffsetSeqLog.VERSION_2
 
   override def sourceMetadataInfoOpt: Option[Map[String, SourceMetadataInfo]] =
@@ -449,8 +474,8 @@ object OffsetSeqMetadataV2 {
       batchWatermarkMs: Long,
       batchTimestampMs: Long,
       sessionConf: RuntimeConfig): OffsetSeqMetadataV2 = {
-    val confs = OffsetSeqMetadata.relevantSQLConfs.map {
-      conf => conf.key -> sessionConf.get(conf.key)
+    val confs = OffsetSeqMetadata.relevantSQLConfs.map { conf =>
+      conf.key -> sessionConf.get(conf.key)
     }.toMap
     OffsetSeqMetadataV2(batchWatermarkMs, batchTimestampMs, confs)
   }

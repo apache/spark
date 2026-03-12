@@ -24,10 +24,11 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute}
 
 /**
  * Base class for lateral column alias registry. This class is extended by 2 implementations:
- *  1. [[LateralColumnAliasRegistryImpl]] - When [[SQLConf.LATERAL_COLUMN_ALIAS_IMPLICIT_ENABLED]]
- *  is enabled, this class implements logic for LCA resolution.
- *  2. [[LateralColumnAliasProhibitedRegistry]] - Dummy class whose methods throw exceptions when
- *  LCA resolution is disabled by [[SQLConf.LATERAL_COLUMN_ALIAS_IMPLICIT_ENABLED]].
+ *   1. [[LateralColumnAliasRegistryImpl]] - When
+ *      [[SQLConf.LATERAL_COLUMN_ALIAS_IMPLICIT_ENABLED]] is enabled, this class implements logic
+ *      for LCA resolution.
+ *   2. [[LateralColumnAliasProhibitedRegistry]] - Dummy class whose methods throw exceptions when
+ *      LCA resolution is disabled by [[SQLConf.LATERAL_COLUMN_ALIAS_IMPLICIT_ENABLED]].
  */
 abstract class LateralColumnAliasRegistry {
   def withNewLcaScope(isTopLevelAlias: Boolean)(body: => Alias): Alias

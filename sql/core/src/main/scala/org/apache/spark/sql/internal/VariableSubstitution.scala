@@ -21,8 +21,8 @@ import org.apache.spark.internal.config._
 import org.apache.spark.sql.catalyst.SQLConfHelper
 
 /**
- * A helper class that enables substitution using syntax like
- * `${var}`, `${system:var}` and `${env:var}`.
+ * A helper class that enables substitution using syntax like `${var}`, `${system:var}` and
+ * `${env:var}`.
  *
  * Variable substitution is controlled by `SQLConf.variableSubstituteEnabled`.
  */

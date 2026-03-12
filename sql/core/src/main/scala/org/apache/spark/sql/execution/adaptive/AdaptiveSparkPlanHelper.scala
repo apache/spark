@@ -28,8 +28,8 @@ import org.apache.spark.sql.execution.SparkPlan
 trait AdaptiveSparkPlanHelper {
 
   /**
-   * Find the first [[SparkPlan]] that satisfies the condition specified by `f`.
-   * The condition is recursively applied to this node and all of its children (pre-order).
+   * Find the first [[SparkPlan]] that satisfies the condition specified by `f`. The condition is
+   * recursively applied to this node and all of its children (pre-order).
    */
   def find(p: SparkPlan)(f: SparkPlan => Boolean): Option[SparkPlan] = if (f(p)) {
     Some(p)
@@ -39,7 +39,8 @@ trait AdaptiveSparkPlanHelper {
 
   /**
    * Runs the given function on this node and then recursively on children.
-   * @param f the function to be applied to each node in the tree.
+   * @param f
+   *   the function to be applied to each node in the tree.
    */
   def foreach(p: SparkPlan)(f: SparkPlan => Unit): Unit = {
     f(p)
@@ -48,7 +49,8 @@ trait AdaptiveSparkPlanHelper {
 
   /**
    * Runs the given function recursively on children then on this node.
-   * @param f the function to be applied to each node in the tree.
+   * @param f
+   *   the function to be applied to each node in the tree.
    */
   def foreachUp(p: SparkPlan)(f: SparkPlan => Unit): Unit = {
     allChildren(p).foreach(foreachUp(_)(f))
@@ -56,9 +58,10 @@ trait AdaptiveSparkPlanHelper {
   }
 
   /**
-   * Returns a Seq containing the result of applying the given function to each
-   * node in this tree in a preorder traversal.
-   * @param f the function to be applied.
+   * Returns a Seq containing the result of applying the given function to each node in this tree
+   * in a preorder traversal.
+   * @param f
+   *   the function to be applied.
    */
   def mapPlans[A](p: SparkPlan)(f: SparkPlan => A): Seq[A] = {
     val ret = new collection.mutable.ArrayBuffer[A]()
@@ -95,8 +98,8 @@ trait AdaptiveSparkPlanHelper {
   }
 
   /**
-   * Finds and returns the first [[SparkPlan]] of the tree for which the given partial function
-   * is defined (pre-order), and applies the partial function to it.
+   * Finds and returns the first [[SparkPlan]] of the tree for which the given partial function is
+   * defined (pre-order), and applies the partial function to it.
    */
   def collectFirst[B](p: SparkPlan)(pf: PartialFunction[SparkPlan, B]): Option[B] = {
     val lifted = pf.lift
@@ -106,8 +109,8 @@ trait AdaptiveSparkPlanHelper {
   }
 
   /**
-   * Returns a sequence containing the result of applying a partial function to all elements in this
-   * plan, also considering all the plans in its (nested) subqueries
+   * Returns a sequence containing the result of applying a partial function to all elements in
+   * this plan, also considering all the plans in its (nested) subqueries
    */
   def collectWithSubqueries[B](p: SparkPlan)(f: PartialFunction[SparkPlan, B]): Seq[B] = {
     (p +: subqueriesAll(p)).flatMap(collect(_)(f))
@@ -129,8 +132,8 @@ trait AdaptiveSparkPlanHelper {
   }
 
   /**
-   * Strip the top [[AdaptiveSparkPlanExec]] and [[ResultQueryStageExec]] nodes off
-   * the [[SparkPlan]].
+   * Strip the top [[AdaptiveSparkPlanExec]] and [[ResultQueryStageExec]] nodes off the
+   * [[SparkPlan]].
    */
   def stripAQEPlan(p: SparkPlan): SparkPlan = p match {
     case a: AdaptiveSparkPlanExec => stripAQEPlan(a.executedPlan)

@@ -68,8 +68,7 @@ class CollationExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("collation on explicitly collated string") {
     checkEvaluation(
-      Collation(Literal.create("abc",
-        StringType(CollationFactory.UTF8_LCASE_COLLATION_ID))),
+      Collation(Literal.create("abc", StringType(CollationFactory.UTF8_LCASE_COLLATION_ID))),
       fullyQualifiedPrefix + "UTF8_LCASE")
     checkEvaluation(
       Collation(Collate(Literal("abc"), UTF8_LCASE_COLLATION_NAME)),
@@ -78,10 +77,7 @@ class CollationExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("Array operations on arrays of collated strings") {
     val arrayLiteral = (arr: Seq[String], collName: String) =>
-      Literal.create(
-        arr,
-        ArrayType(StringType(CollationFactory.collationNameToId(collName)))
-      )
+      Literal.create(arr, ArrayType(StringType(CollationFactory.collationNameToId(collName))))
 
     // arrays_overlap
     val overlap = Seq(
@@ -94,8 +90,7 @@ class CollationExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       (Seq("a", "B"), Seq("A", "b"), true, "UNICODE_CI"),
       (Seq("c"), Seq("C"), false, "SR"),
       (Seq("c"), Seq("C"), true, "SR_CI"),
-      (Seq("a", "c"), Seq("b", "C"), true, "SR_CI_AI")
-    )
+      (Seq("a", "c"), Seq("b", "C"), true, "SR_CI_AI"))
     for ((inLeft, inRight, out, collName) <- overlap) {
       val left = arrayLiteral(inLeft, collName)
       val right = arrayLiteral(inRight, collName)
@@ -109,8 +104,7 @@ class CollationExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       (Seq("aaa", "AAA", "Aaa", "aAa"), Seq("aaa", "AAA", "Aaa", "aAa"), "UTF8_BINARY"),
       (Seq("aaa", "AAA", "Aaa", "aAa"), Seq("aaa"), "UTF8_LCASE"),
       (Seq("aaa", "AAA", "Aaa", "aAa", "b"), Seq("aaa", "b"), "UTF8_LCASE"),
-      (Seq("aaa", "AAA", "Aaa", "aAa"), Seq("aaa"), "UNICODE_CI")
-    )
+      (Seq("aaa", "AAA", "Aaa", "aAa"), Seq("aaa"), "UNICODE_CI"))
     for ((in, out, collName) <- distinct)
       checkEvaluation(ArrayDistinct(arrayLiteral(in, collName)), out)
 
@@ -122,8 +116,7 @@ class CollationExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       (Seq("a"), Seq("A"), Seq("a"), "UTF8_LCASE"),
       (Seq("a", "B"), Seq("A", "b"), Seq("a", "B"), "UTF8_LCASE"),
       (Seq("a"), Seq("A"), Seq("a", "A"), "UNICODE"),
-      (Seq("a", "B"), Seq("A", "b"), Seq("a", "B"), "UNICODE_CI")
-    )
+      (Seq("a", "B"), Seq("A", "b"), Seq("a", "B"), "UNICODE_CI"))
     for ((inLeft, inRight, out, collName) <- union) {
       val left = arrayLiteral(inLeft, collName)
       val right = arrayLiteral(inRight, collName)
@@ -138,8 +131,7 @@ class CollationExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       (Seq("a"), Seq("A"), Seq("a"), "UTF8_LCASE"),
       (Seq("a", "B"), Seq("A", "b"), Seq("a", "B"), "UTF8_LCASE"),
       (Seq("a"), Seq("A"), Seq.empty, "UNICODE"),
-      (Seq("a", "B"), Seq("A", "b"), Seq("a", "B"), "UNICODE_CI")
-    )
+      (Seq("a", "B"), Seq("A", "b"), Seq("a", "B"), "UNICODE_CI"))
     for ((inLeft, inRight, out, collName) <- intersect) {
       val left = arrayLiteral(inLeft, collName)
       val right = arrayLiteral(inRight, collName)
@@ -154,8 +146,7 @@ class CollationExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       (Seq("a"), Seq("A"), Seq.empty, "UTF8_LCASE"),
       (Seq("a", "B"), Seq("A", "b"), Seq.empty, "UTF8_LCASE"),
       (Seq("a"), Seq("A"), Seq("a"), "UNICODE"),
-      (Seq("a", "B"), Seq("A", "b"), Seq.empty, "UNICODE_CI")
-    )
+      (Seq("a", "B"), Seq("A", "b"), Seq.empty, "UNICODE_CI"))
     for ((inLeft, inRight, out, collName) <- except) {
       val left = arrayLiteral(inLeft, collName)
       val right = arrayLiteral(inRight, collName)
@@ -165,7 +156,7 @@ class CollationExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("CollationKey generates correct collation key for collated string") {
     // In version `75.1`, its value is 0x2A (42), while in version `76.1`, its value is 0x2B (43)
-    val b: Byte = 0x2B
+    val b: Byte = 0x2b
     val testCases = Seq(
       ("", "UTF8_BINARY", UTF8String.fromString("").getBytes),
       ("aa", "UTF8_BINARY", UTF8String.fromString("aa").getBytes),
@@ -186,8 +177,7 @@ class CollationExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       ("aa", "UNICODE_CI", Array[Byte](b, b, 1, 6, 0)),
       ("aa ", "UNICODE_CI_RTRIM", Array[Byte](b, b, 1, 6, 0)),
       ("AA", "UNICODE_CI", Array[Byte](b, b, 1, 6, 0)),
-      ("aA", "UNICODE_CI", Array[Byte](b, b, 1, 6, 0))
-    )
+      ("aA", "UNICODE_CI", Array[Byte](b, b, 1, 6, 0)))
     for ((input, collation, expected) <- testCases) {
       val str = Literal.create(input, StringType(collation))
       checkEvaluation(CollationKey(str), expected)
@@ -214,11 +204,10 @@ class CollationExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       ("EN_USA", "en_USA"),
       ("SR_CYRL", "sr_Cyrl"),
       ("sr_cyrl_srb", "sr_Cyrl_SRB"),
-      ("sR_cYRl_sRb", "sr_Cyrl_SRB")
-    ).foreach {
-      case (collation, normalized) =>
-        checkEvaluation(Collation(Literal.create("abc", StringType(collation))),
-          fullyQualifiedPrefix + normalized)
+      ("sR_cYRl_sRb", "sr_Cyrl_SRB")).foreach { case (collation, normalized) =>
+      checkEvaluation(
+        Collation(Literal.create("abc", StringType(collation))),
+        fullyQualifiedPrefix + normalized)
     }
   }
 
@@ -236,32 +225,32 @@ class CollationExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       (" aa ", "UTF8_BINARY_RTRIM", Set(" aa")) -> true,
       ("a  ", "UTF8_BINARY_RTRIM", Set()) -> false,
       ("a  ", "UTF8_BINARY_RTRIM", Set("a", "b", null)) -> true,
-      (null, "UTF8_BINARY_RTRIM", Set("1", "2")) -> null
-    ).foreach { case ((elem, collation, inputSet), result) =>
-      checkEvaluation(
-        InSet(
-          Literal.create(
-            elem,
-            StringType(collation)),
-          inputSet.map(UTF8String.fromString).asInstanceOf[Set[Any]]),
-        result)
-      def arr(s: String): GenericArrayData = new GenericArrayData(Array(UTF8String.fromString(s)))
-      checkEvaluation(
-        InSet(
-          Literal.create(
-            if (elem == null) null else arr(elem),
-            ArrayType(StringType(collation))),
-          inputSet.map(arr).asInstanceOf[Set[Any]]),
-        result)
-      checkEvaluation(
-        InSet(
-          Literal.create(
-            if (elem == null) null
-            else new ArrayBasedMapData(arr(elem), arr("aBc")),
-            MapType(StringType(collation), StringType("UTF8_BINARY"))),
-          inputSet
-            .map(s => new ArrayBasedMapData(arr(s), arr("aBc"))).asInstanceOf[Set[Any]]),
-        result)
+      (null, "UTF8_BINARY_RTRIM", Set("1", "2")) -> null).foreach {
+      case ((elem, collation, inputSet), result) =>
+        checkEvaluation(
+          InSet(
+            Literal.create(elem, StringType(collation)),
+            inputSet.map(UTF8String.fromString).asInstanceOf[Set[Any]]),
+          result)
+        def arr(s: String): GenericArrayData =
+          new GenericArrayData(Array(UTF8String.fromString(s)))
+        checkEvaluation(
+          InSet(
+            Literal.create(
+              if (elem == null) null else arr(elem),
+              ArrayType(StringType(collation))),
+            inputSet.map(arr).asInstanceOf[Set[Any]]),
+          result)
+        checkEvaluation(
+          InSet(
+            Literal.create(
+              if (elem == null) null
+              else new ArrayBasedMapData(arr(elem), arr("aBc")),
+              MapType(StringType(collation), StringType("UTF8_BINARY"))),
+            inputSet
+              .map(s => new ArrayBasedMapData(arr(s), arr("aBc")))
+              .asInstanceOf[Set[Any]]),
+          result)
     }
   }
 }

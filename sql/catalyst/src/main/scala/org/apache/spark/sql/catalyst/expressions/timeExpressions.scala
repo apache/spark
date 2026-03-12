@@ -75,7 +75,9 @@ trait TimeExpression extends Expression {
   since = "4.1.0")
 // scalastyle:on line.size.limit
 case class ToTime(str: Expression, format: Option[Expression])
-  extends RuntimeReplaceable with ExpectsInputTypes with TimeExpression {
+    extends RuntimeReplaceable
+    with ExpectsInputTypes
+    with TimeExpression {
 
   def this(str: Expression, format: Expression) = this(str, Option(format))
   def this(str: Expression) = this(str, None)
@@ -124,8 +126,9 @@ case class ToTimeParser(fmt: Option[String]) {
 
   def this() = this(None)
 
-  private def withErrorCondition(input: => UTF8String, fmt: => Option[String])
-      (f: => Long): Long = {
+  private def withErrorCondition(
+      input: => UTF8String,
+      fmt: => Option[String])(f: => Long): Long = {
     try f
     catch {
       case e: DateTimeException =>
@@ -210,16 +213,16 @@ object TryToTimeExpressionBuilder extends ExpressionBuilder {
   group = "datetime_funcs")
 // scalastyle:on line.size.limit
 case class MinutesOfTime(child: Expression)
-  extends RuntimeReplaceable
-    with ExpectsInputTypes with TimeExpression {
+    extends RuntimeReplaceable
+    with ExpectsInputTypes
+    with TimeExpression {
 
   override def replacement: Expression = StaticInvoke(
     classOf[DateTimeUtils.type],
     IntegerType,
     "getMinutesOfTime",
     Seq(child),
-    Seq(child.dataType)
-  )
+    Seq(child.dataType))
 
   override def inputTypes: Seq[AbstractDataType] = Seq(AnyTimeType)
 
@@ -228,7 +231,7 @@ case class MinutesOfTime(child: Expression)
   override def prettyName: String = "minute"
 
   override protected def withNewChildrenInternal(
-    newChildren: IndexedSeq[Expression]): Expression = {
+      newChildren: IndexedSeq[Expression]): Expression = {
     copy(child = newChildren.head)
   }
 }
@@ -269,16 +272,16 @@ object MinuteExpressionBuilder extends ExpressionBuilder {
 }
 
 case class HoursOfTime(child: Expression)
-  extends RuntimeReplaceable
-    with ExpectsInputTypes with TimeExpression {
+    extends RuntimeReplaceable
+    with ExpectsInputTypes
+    with TimeExpression {
 
   override def replacement: Expression = StaticInvoke(
     classOf[DateTimeUtils.type],
     IntegerType,
     "getHoursOfTime",
     Seq(child),
-    Seq(child.dataType)
-  )
+    Seq(child.dataType))
 
   override def inputTypes: Seq[AbstractDataType] = Seq(AnyTimeType)
 
@@ -287,7 +290,7 @@ case class HoursOfTime(child: Expression)
   override def prettyName: String = "hour"
 
   override protected def withNewChildrenInternal(
-    newChildren: IndexedSeq[Expression]): Expression = {
+      newChildren: IndexedSeq[Expression]): Expression = {
     copy(child = newChildren.head)
   }
 }
@@ -326,8 +329,9 @@ object HourExpressionBuilder extends ExpressionBuilder {
 }
 
 case class SecondsOfTimeWithFraction(child: Expression)
-  extends RuntimeReplaceable
-  with ExpectsInputTypes with TimeExpression {
+    extends RuntimeReplaceable
+    with ExpectsInputTypes
+    with TimeExpression {
   override def replacement: Expression = {
     val precision = child.dataType match {
       case TimeType(p) => p
@@ -352,16 +356,16 @@ case class SecondsOfTimeWithFraction(child: Expression)
 }
 
 case class SecondsOfTime(child: Expression)
-  extends RuntimeReplaceable
-    with ExpectsInputTypes with TimeExpression {
+    extends RuntimeReplaceable
+    with ExpectsInputTypes
+    with TimeExpression {
 
   override def replacement: Expression = StaticInvoke(
     classOf[DateTimeUtils.type],
     IntegerType,
     "getSecondsOfTime",
     Seq(child),
-    Seq(child.dataType)
-  )
+    Seq(child.dataType))
 
   override def inputTypes: Seq[AbstractDataType] = Seq(AnyTimeType)
 
@@ -370,8 +374,8 @@ case class SecondsOfTime(child: Expression)
   override def prettyName: String = "second"
 
   override protected def withNewChildrenInternal(
-    newChildren: IndexedSeq[Expression]): Expression = {
-      copy(child = newChildren.head)
+      newChildren: IndexedSeq[Expression]): Expression = {
+    copy(child = newChildren.head)
   }
 }
 
@@ -409,8 +413,8 @@ object SecondExpressionBuilder extends ExpressionBuilder {
 }
 
 /**
- * Returns the current time at the start of query evaluation.
- * There is no code generation since this expression should get constant folded by the optimizer.
+ * Returns the current time at the start of query evaluation. There is no code generation since
+ * this expression should get constant folded by the optimizer.
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
@@ -439,13 +443,15 @@ object SecondExpressionBuilder extends ExpressionBuilder {
        15:49:11.91
   """,
   group = "datetime_funcs",
-  since = "4.1.0"
-)
+  since = "4.1.0")
 case class CurrentTime(
     child: Expression = Literal(TimeType.MICROS_PRECISION),
-    timeZoneId: Option[String] = None) extends UnaryExpression
-  with TimeZoneAwareExpression with ImplicitCastInputTypes with CodegenFallback
-  with TimeExpression {
+    timeZoneId: Option[String] = None)
+    extends UnaryExpression
+    with TimeZoneAwareExpression
+    with ImplicitCastInputTypes
+    with CodegenFallback
+    with TimeExpression {
 
   def this() = {
     this(Literal(TimeType.MICROS_PRECISION), None)
@@ -469,9 +475,7 @@ case class CurrentTime(
         messageParameters = Map(
           "inputName" -> toSQLId("precision"),
           "inputType" -> toSQLType(child.dataType),
-          "inputExpr" -> toSQLExpr(child)
-        )
-      )
+          "inputExpr" -> toSQLExpr(child)))
     }
 
     // Evaluate
@@ -492,9 +496,7 @@ case class CurrentTime(
             messageParameters = Map(
               "exprName" -> toSQLId("precision"),
               "valueRange" -> s"[${TimeType.MIN_PRECISION}, ${TimeType.MICROS_PRECISION}]",
-              "currentValue" -> toSQLValue(p, IntegerType)
-            )
-          )
+              "currentValue" -> toSQLValue(p, IntegerType)))
         }
       case _ =>
         return DataTypeMismatch(
@@ -503,8 +505,7 @@ case class CurrentTime(
             "paramIndex" -> ordinalNumber(0),
             "requiredType" -> toSQLType(IntegerType),
             "inputSql" -> toSQLExpr(child),
-            "inputType" -> toSQLType(child.dataType))
-        )
+            "inputType" -> toSQLType(child.dataType)))
     }
     TypeCheckSuccess
   }
@@ -534,7 +535,8 @@ case class CurrentTime(
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(hour, minute, second) - Create time from hour, minute and second fields. For invalid inputs it will throw an error.",
+  usage =
+    "_FUNC_(hour, minute, second) - Create time from hour, minute and second fields. For invalid inputs it will throw an error.",
   arguments = """
     Arguments:
       * hour - the hour to represent, from 0 to 23
@@ -551,18 +553,17 @@ case class CurrentTime(
   group = "datetime_funcs",
   since = "4.1.0")
 // scalastyle:on line.size.limit
-case class MakeTime(
-    hours: Expression,
-    minutes: Expression,
-    secsAndMicros: Expression)
-  extends RuntimeReplaceable
+case class MakeTime(hours: Expression, minutes: Expression, secsAndMicros: Expression)
+    extends RuntimeReplaceable
     with ImplicitCastInputTypes
-    with ExpectsInputTypes with TimeExpression {
+    with ExpectsInputTypes
+    with TimeExpression {
 
   // Accept `sec` as DecimalType to avoid loosing precision of microseconds while converting
   // it to the fractional part of `sec`. If `sec` is an IntegerType, it can be cast into decimal
   // safely because we use DecimalType(16, 6) which is wider than DecimalType(10, 0).
-  override def inputTypes: Seq[AbstractDataType] = Seq(IntegerType, IntegerType, DecimalType(16, 6))
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(IntegerType, IntegerType, DecimalType(16, 6))
   override def children: Seq[Expression] = Seq(hours, minutes, secsAndMicros)
   override def prettyName: String = "make_time"
 
@@ -571,8 +572,7 @@ case class MakeTime(
     TimeType(TimeType.MICROS_PRECISION),
     "makeTime",
     children,
-    inputTypes
-  )
+    inputTypes)
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): MakeTime =
     copy(hours = newChildren(0), minutes = newChildren(1), secsAndMicros = newChildren(2))
@@ -582,8 +582,10 @@ case class MakeTime(
  * Adds day-time interval to time.
  */
 case class TimeAddInterval(time: Expression, interval: Expression)
-  extends BinaryExpression with RuntimeReplaceable with ExpectsInputTypes
-  with TimeExpression {
+    extends BinaryExpression
+    with RuntimeReplaceable
+    with ExpectsInputTypes
+    with TimeExpression {
   override def nullIntolerant: Boolean = true
 
   override def left: Expression = time
@@ -596,8 +598,10 @@ case class TimeAddInterval(time: Expression, interval: Expression)
   override def replacement: Expression = {
     val (timePrecision, intervalEndField) = (time.dataType, interval.dataType) match {
       case (TimeType(p), DayTimeIntervalType(_, endField)) => (p, endField)
-      case _ => throw SparkException.internalError("Unexpected input types: " +
-        s"time type ${time.dataType.sql}, interval type ${interval.dataType.sql}.")
+      case _ =>
+        throw SparkException.internalError(
+          "Unexpected input types: " +
+            s"time type ${time.dataType.sql}, interval type ${interval.dataType.sql}.")
     }
     val intervalPrecision = if (intervalEndField < SECOND) {
       TimeType.MIN_PRECISION
@@ -609,14 +613,19 @@ case class TimeAddInterval(time: Expression, interval: Expression)
       classOf[DateTimeUtils.type],
       TimeType(targetPrecision),
       "timeAddInterval",
-      Seq(time, Literal(timePrecision), interval, Literal(intervalEndField),
+      Seq(
+        time,
+        Literal(timePrecision),
+        interval,
+        Literal(intervalEndField),
         Literal(targetPrecision)),
       Seq(AnyTimeType, IntegerType, DayTimeIntervalType, ByteType, IntegerType),
       propagateNull = nullIntolerant)
   }
 
   override protected def withNewChildrenInternal(
-      newTime: Expression, newInterval: Expression): TimeAddInterval =
+      newTime: Expression,
+      newInterval: Expression): TimeAddInterval =
     copy(time = newTime, interval = newInterval)
 }
 
@@ -624,8 +633,10 @@ case class TimeAddInterval(time: Expression, interval: Expression)
  * Returns a day-time interval between time values.
  */
 case class SubtractTimes(left: Expression, right: Expression)
-  extends BinaryExpression with RuntimeReplaceable with ExpectsInputTypes
-  with TimeExpression {
+    extends BinaryExpression
+    with RuntimeReplaceable
+    with ExpectsInputTypes
+    with TimeExpression {
   override def nullIntolerant: Boolean = true
   override def inputTypes: Seq[AbstractDataType] = Seq(AnyTimeType, AnyTimeType)
 
@@ -641,7 +652,8 @@ case class SubtractTimes(left: Expression, right: Expression)
   override def sql: String = s"${left.sql} - ${right.sql}"
 
   override protected def withNewChildrenInternal(
-      newLeft: Expression, newRight: Expression): SubtractTimes =
+      newLeft: Expression,
+      newRight: Expression): SubtractTimes =
     copy(left = newLeft, right = newRight)
 }
 
@@ -676,14 +688,11 @@ case class SubtractTimes(left: Expression, right: Expression)
   group = "datetime_funcs",
   since = "4.1.0")
 // scalastyle:on line.size.limit
-case class TimeDiff(
-    unit: Expression,
-    start: Expression,
-    end: Expression)
-  extends TernaryExpression
-  with RuntimeReplaceable
-  with ImplicitCastInputTypes
-  with TimeExpression {
+case class TimeDiff(unit: Expression, start: Expression, end: Expression)
+    extends TernaryExpression
+    with RuntimeReplaceable
+    with ImplicitCastInputTypes
+    with TimeExpression {
 
   override def first: Expression = unit
   override def second: Expression = start
@@ -697,7 +706,9 @@ case class TimeDiff(
   override def prettyName: String = "time_diff"
 
   override protected def withNewChildrenInternal(
-      newUnit: Expression, newStart: Expression, newEnd: Expression): TimeDiff = {
+      newUnit: Expression,
+      newStart: Expression,
+      newEnd: Expression): TimeDiff = {
     copy(unit = newUnit, start = newStart, end = newEnd)
   }
 
@@ -707,8 +718,7 @@ case class TimeDiff(
       dataType,
       "timeDiff",
       Seq(unit, start, end),
-      Seq(unit.dataType, start.dataType, end.dataType)
-    )
+      Seq(unit.dataType, start.dataType, end.dataType))
   }
 }
 
@@ -738,8 +748,10 @@ case class TimeDiff(
   since = "4.1.0")
 // scalastyle:on line.size.limit
 case class TimeTrunc(unit: Expression, time: Expression)
-  extends BinaryExpression with RuntimeReplaceable with ImplicitCastInputTypes
-  with TimeExpression {
+    extends BinaryExpression
+    with RuntimeReplaceable
+    with ImplicitCastInputTypes
+    with TimeExpression {
 
   override def left: Expression = unit
   override def right: Expression = time
@@ -752,7 +764,8 @@ case class TimeTrunc(unit: Expression, time: Expression)
   override def prettyName: String = "time_trunc"
 
   override protected def withNewChildrenInternal(
-      newUnit: Expression, newTime: Expression): TimeTrunc =
+      newUnit: Expression,
+      newTime: Expression): TimeTrunc =
     copy(unit = newUnit, time = newTime)
 
   override def replacement: Expression = {
@@ -761,13 +774,15 @@ case class TimeTrunc(unit: Expression, time: Expression)
       dataType,
       "timeTrunc",
       Seq(unit, time),
-      Seq(unit.dataType, time.dataType)
-    )
+      Seq(unit.dataType, time.dataType))
   }
 }
 
-abstract class TimeFromBase extends UnaryExpression with RuntimeReplaceable with ExpectsInputTypes
-  with TimeExpression {
+abstract class TimeFromBase
+    extends UnaryExpression
+    with RuntimeReplaceable
+    with ExpectsInputTypes
+    with TimeExpression {
   protected def timeConversionMethod: String
 
   override def inputTypes: Seq[AbstractDataType] = Seq(IntegralType)
@@ -778,8 +793,7 @@ abstract class TimeFromBase extends UnaryExpression with RuntimeReplaceable with
     dataType,
     timeConversionMethod,
     Seq(child),
-    Seq(child.dataType)
-  )
+    Seq(child.dataType))
 }
 
 // scalastyle:off line.size.limit
@@ -871,8 +885,11 @@ case class TimeFromMicros(child: Expression) extends TimeFromBase {
     copy(child = newChild)
 }
 
-abstract class TimeToBase extends UnaryExpression with RuntimeReplaceable with ExpectsInputTypes
-  with TimeExpression {
+abstract class TimeToBase
+    extends UnaryExpression
+    with RuntimeReplaceable
+    with ExpectsInputTypes
+    with TimeExpression {
   protected def timeConversionMethod: String
 
   override def inputTypes: Seq[AbstractDataType] = Seq(AnyTimeType)
@@ -883,14 +900,12 @@ abstract class TimeToBase extends UnaryExpression with RuntimeReplaceable with E
     dataType,
     timeConversionMethod,
     Seq(child),
-    Seq(child.dataType)
-  )
+    Seq(child.dataType))
 }
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage =
-    "_FUNC_(time) - Returns the number of seconds since midnight for the given TIME value.",
+  usage = "_FUNC_(time) - Returns the number of seconds since midnight for the given TIME value.",
   arguments = """
     Arguments:
       * time - TIME value to convert

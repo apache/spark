@@ -64,17 +64,19 @@ class LookupCatalogSuite extends SparkFunSuite with LookupCatalog with Inside {
       ("ns1.ns2.tbl", sessionCatalog, Seq("ns1", "ns2"), "tbl"),
       ("`db.tbl`", sessionCatalog, Seq("default"), "db.tbl"),
       ("parquet.`file:/tmp/db.tbl`", sessionCatalog, Seq("parquet"), "file:/tmp/db.tbl"),
-      ("`org.apache.spark.sql.json`.`s3://buck/tmp/abc.json`", sessionCatalog,
-        Seq("org.apache.spark.sql.json"), "s3://buck/tmp/abc.json"),
+      (
+        "`org.apache.spark.sql.json`.`s3://buck/tmp/abc.json`",
+        sessionCatalog,
+        Seq("org.apache.spark.sql.json"),
+        "s3://buck/tmp/abc.json"),
       ("prod.func", catalogs("prod"), Seq.empty, "func"),
       ("prod.db.tbl", catalogs("prod"), Seq("db"), "tbl"),
       ("test.db.tbl", catalogs("test"), Seq("db"), "tbl"),
       ("test.ns1.ns2.ns3.tbl", catalogs("test"), Seq("ns1", "ns2", "ns3"), "tbl")).foreach {
       case (sql, expectedCatalog, namespace, name) =>
-        inside(parseMultipartIdentifier(sql)) {
-          case CatalogAndIdentifier(catalog, ident) =>
-            catalog shouldEqual expectedCatalog
-            ident shouldEqual Identifier.of(namespace.toArray, name)
+        inside(parseMultipartIdentifier(sql)) { case CatalogAndIdentifier(catalog, ident) =>
+          catalog shouldEqual expectedCatalog
+          ident shouldEqual Identifier.of(namespace.toArray, name)
         }
     }
   }
@@ -85,18 +87,15 @@ class LookupCatalogSuite extends SparkFunSuite with LookupCatalog with Inside {
       ("db.tbl", "tbl", Some("db")),
       ("`db.tbl`", "db.tbl", None),
       ("parquet.`file:/tmp/db.tbl`", "file:/tmp/db.tbl", Some("parquet")),
-      ("`org.apache.spark.sql.json`.`s3://buck/tmp/abc.json`", "s3://buck/tmp/abc.json",
-        Some("org.apache.spark.sql.json"))).foreach {
-      case (sql, table, db) =>
-        inside (parseMultipartIdentifier(sql)) {
-          case AsTableIdentifier(ident) =>
-            ident shouldEqual TableIdentifier(table, db)
-        }
+      (
+        "`org.apache.spark.sql.json`.`s3://buck/tmp/abc.json`",
+        "s3://buck/tmp/abc.json",
+        Some("org.apache.spark.sql.json"))).foreach { case (sql, table, db) =>
+      inside(parseMultipartIdentifier(sql)) { case AsTableIdentifier(ident) =>
+        ident shouldEqual TableIdentifier(table, db)
+      }
     }
-    Seq(
-      "prod.func",
-      "prod.db.tbl",
-      "ns1.ns2.tbl").foreach { sql =>
+    Seq("prod.func", "prod.db.tbl", "ns1.ns2.tbl").foreach { sql =>
       parseMultipartIdentifier(sql) match {
         case AsTableIdentifier(_) =>
           fail(s"$sql should not be resolved as TableIdentifier")
@@ -133,14 +132,15 @@ class LookupCatalogWithDefaultSuite extends SparkFunSuite with LookupCatalog wit
       ("test.ns1.ns2.ns3.tbl", catalogs("test"), Seq("ns1", "ns2", "ns3"), "tbl"),
       ("`db.tbl`", catalogs("prod"), Seq.empty, "db.tbl"),
       ("parquet.`file:/tmp/db.tbl`", catalogs("prod"), Seq("parquet"), "file:/tmp/db.tbl"),
-      ("`org.apache.spark.sql.json`.`s3://buck/tmp/abc.json`", catalogs("prod"),
-          Seq("org.apache.spark.sql.json"), "s3://buck/tmp/abc.json")).foreach {
-      case (sql, expectedCatalog, namespace, name) =>
-        inside(parseMultipartIdentifier(sql)) {
-          case CatalogAndIdentifier(catalog, ident) =>
-            catalog shouldEqual expectedCatalog
-            ident shouldEqual Identifier.of(namespace.toArray, name)
-        }
+      (
+        "`org.apache.spark.sql.json`.`s3://buck/tmp/abc.json`",
+        catalogs("prod"),
+        Seq("org.apache.spark.sql.json"),
+        "s3://buck/tmp/abc.json")).foreach { case (sql, expectedCatalog, namespace, name) =>
+      inside(parseMultipartIdentifier(sql)) { case CatalogAndIdentifier(catalog, ident) =>
+        catalog shouldEqual expectedCatalog
+        ident shouldEqual Identifier.of(namespace.toArray, name)
+      }
     }
   }
 

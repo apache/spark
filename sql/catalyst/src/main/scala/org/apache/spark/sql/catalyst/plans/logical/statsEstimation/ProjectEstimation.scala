@@ -27,13 +27,16 @@ object ProjectEstimation {
     if (rowCountsExist(project.child)) {
       val childStats = project.child.stats
       val aliasStats = EstimationUtils.getAliasStats(
-        project.expressions, childStats.attributeStats, childStats.rowCount.get)
+        project.expressions,
+        childStats.attributeStats,
+        childStats.rowCount.get)
 
       val outputAttrStats =
         getOutputMap(AttributeMap(childStats.attributeStats.toSeq ++ aliasStats), project.output)
-      Some(childStats.copy(
-        sizeInBytes = getOutputSize(project.output, childStats.rowCount.get, outputAttrStats),
-        attributeStats = outputAttrStats))
+      Some(
+        childStats.copy(
+          sizeInBytes = getOutputSize(project.output, childStats.rowCount.get, outputAttrStats),
+          attributeStats = outputAttrStats))
     } else {
       None
     }

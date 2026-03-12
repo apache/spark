@@ -26,42 +26,29 @@ import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
 
 import org.apache.spark.{SparkEnv, TaskContext}
-import org.apache.spark.rpc.{
-  RpcAddress,
-  RpcEndpointRef,
-  RpcEnv,
-  ThreadSafeRpcEndpoint
-}
+import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.sql.{Encoder, SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.connector.read.InputPartition
 import org.apache.spark.sql.connector.read.PartitionReader
 import org.apache.spark.sql.connector.read.PartitionReaderFactory
-import org.apache.spark.sql.connector.read.streaming.{
-  Offset => OffsetV2,
-  PartitionOffset,
-  ReadLimit,
-  SupportsRealTimeMode,
-  SupportsRealTimeRead
-}
+import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2, PartitionOffset, ReadLimit, SupportsRealTimeMode, SupportsRealTimeRead}
 import org.apache.spark.sql.connector.read.streaming.SupportsRealTimeRead.RecordStatus
 import org.apache.spark.sql.execution.datasources.v2.LowLatencyClock
 import org.apache.spark.sql.execution.streaming.runtime._
 import org.apache.spark.util.{Clock, RpcUtils}
 
 /**
- * A low latency memory source from memory, only for unit test purpose.
- * This class is very similar to ContinuousMemoryStream, except that it implements the
- * interface of SupportsRealTimeMode, rather than ContinuousStream
- * The overall strategy here is:
- *  * LowLatencyMemoryStream maintains a list of records for each partition. addData() will
- *    distribute records evenly-ish across partitions.
- *  * RecordEndpoint is set up as an endpoint for executor-side
- *    LowLatencyMemoryStreamInputPartitionReader instances to poll. It returns the record at
- *    the specified offset within the list, or null if that offset doesn't yet have a record.
- * This differs from the existing memory source implementation as data is sent once to
- * tasks as part of the Partition/Split metadata at the beginning of a batch.
+ * A low latency memory source from memory, only for unit test purpose. This class is very similar
+ * to ContinuousMemoryStream, except that it implements the interface of SupportsRealTimeMode,
+ * rather than ContinuousStream The overall strategy here is: * LowLatencyMemoryStream maintains a
+ * list of records for each partition. addData() will distribute records evenly-ish across
+ * partitions. * RecordEndpoint is set up as an endpoint for executor-side
+ * LowLatencyMemoryStreamInputPartitionReader instances to poll. It returns the record at the
+ * specified offset within the list, or null if that offset doesn't yet have a record. This
+ * differs from the existing memory source implementation as data is sent once to tasks as part of
+ * the Partition/Split metadata at the beginning of a batch.
  */
 class LowLatencyMemoryStream[A: Encoder](
     id: Int,
@@ -82,10 +69,9 @@ class LowLatencyMemoryStream[A: Encoder](
   override def addData(data: IterableOnce[A]): Offset = synchronized {
     // Distribute data evenly among partition lists.
     val timestamp = clock.getTimeMillis()
-    data.iterator.to(Seq).zipWithIndex.map {
-      case (item, index) =>
-        val partitionId = index % numPartitions
-        records(partitionId) += ((toRow(item).copy().asInstanceOf[UnsafeRow], timestamp))
+    data.iterator.to(Seq).zipWithIndex.map { case (item, index) =>
+      val partitionId = index % numPartitions
+      records(partitionId) += ((toRow(item).copy().asInstanceOf[UnsafeRow], timestamp))
     }
 
     // The new target offset is the offset where all records in all partitions have been processed.
@@ -95,8 +81,7 @@ class LowLatencyMemoryStream[A: Encoder](
   def addData(partitionId: Int, data: IterableOnce[A]): Offset = synchronized {
     require(
       partitionId >= 0 && partitionId < numPartitions,
-      s"Partition ID $partitionId is out of bounds for $numPartitions partitions."
-    )
+      s"Partition ID $partitionId is out of bounds for $numPartitions partitions.")
 
     // Add data to the specified partition.
     val timestamp = clock.getTimeMillis()
@@ -121,11 +106,9 @@ class LowLatencyMemoryStream[A: Encoder](
   }
 
   override def mergeOffsets(offsets: Array[PartitionOffset]): LowLatencyMemoryStreamOffset = {
-    LowLatencyMemoryStreamOffset(
-      offsets.map {
-        case ContinuousRecordPartitionOffset(part, num) => (part, num)
-      }.toMap
-    )
+    LowLatencyMemoryStreamOffset(offsets.map { case ContinuousRecordPartitionOffset(part, num) =>
+      (part, num)
+    }.toMap)
   }
 
   override def planInputPartitions(start: OffsetV2): Array[InputPartition] = {
@@ -134,15 +117,13 @@ class LowLatencyMemoryStream[A: Encoder](
       val endpointName = s"LowLatencyRecordEndpoint-${java.util.UUID.randomUUID()}-$id"
       endpointRef = recordEndpoint.rpcEnv.setupEndpoint(endpointName, recordEndpoint)
 
-      startOffset.partitionNums.map {
-        case (part, index) =>
-          LowLatencyMemoryStreamInputPartition(
-            endpointName,
-            endpointRef.address,
-            part,
-            index,
-            Int.MaxValue
-          )
+      startOffset.partitionNums.map { case (part, index) =>
+        LowLatencyMemoryStreamInputPartition(
+          endpointName,
+          endpointRef.address,
+          part,
+          index,
+          Int.MaxValue)
       }.toArray
     }
   }
@@ -154,15 +135,13 @@ class LowLatencyMemoryStream[A: Encoder](
       val endpointName = s"LowLatencyRecordEndpoint-${java.util.UUID.randomUUID()}-$id"
       endpointRef = recordEndpoint.rpcEnv.setupEndpoint(endpointName, recordEndpoint)
 
-      startOffset.partitionNums.map {
-        case (part, index) =>
-          LowLatencyMemoryStreamInputPartition(
-            endpointName,
-            endpointRef.address,
-            part,
-            index,
-            endOffset.partitionNums(part)
-          )
+      startOffset.partitionNums.map { case (part, index) =>
+        LowLatencyMemoryStreamInputPartition(
+          endpointName,
+          endpointRef.address,
+          part,
+          index,
+          endOffset.partitionNums(part))
       }.toArray
     }
   }
@@ -191,8 +170,8 @@ object LowLatencyMemoryStream {
     new LowLatencyMemoryStream[A](memoryStreamId.getAndIncrement(), sqlContext.sparkSession)
 
   /** Creates a LowLatencyMemoryStream with specified partitions (SQLContext). */
-  def apply[A: Encoder](numPartitions: Int)(
-      implicit sqlContext: SQLContext): LowLatencyMemoryStream[A] =
+  def apply[A: Encoder](numPartitions: Int)(implicit
+      sqlContext: SQLContext): LowLatencyMemoryStream[A] =
     new LowLatencyMemoryStream[A](
       memoryStreamId.getAndIncrement(),
       sqlContext.sparkSession,
@@ -203,7 +182,9 @@ object LowLatencyMemoryStream {
     new LowLatencyMemoryStream[A](memoryStreamId.getAndIncrement(), sparkSession)
 
   /** Creates a LowLatencyMemoryStream with specified partitions (SparkSession). */
-  def apply[A: Encoder](sparkSession: SparkSession, numPartitions: Int): LowLatencyMemoryStream[A] =
+  def apply[A: Encoder](
+      sparkSession: SparkSession,
+      numPartitions: Int): LowLatencyMemoryStream[A] =
     new LowLatencyMemoryStream[A](
       memoryStreamId.getAndIncrement(),
       sparkSession,
@@ -238,8 +219,7 @@ class LowLatencyMemoryStreamReaderFactory(clock: Clock) extends PartitionReaderF
       p.partition,
       p.startOffset,
       p.endOffset,
-      clock
-    )
+      clock)
   }
 }
 
@@ -264,8 +244,7 @@ class LowLatencyMemoryStreamPartitionReader(
     driverEndpointName,
     driverEndpointAddress.host,
     driverEndpointAddress.port,
-    SparkEnv.get.rpcEnv
-  )
+    SparkEnv.get.rpcEnv)
 
   private var currentOffset = startOffset
   private var current: Option[(InternalRow, Long)] = None
@@ -278,7 +257,8 @@ class LowLatencyMemoryStreamPartitionReader(
     throw new IllegalStateException("Task context was not set!")
   }
   override def nextWithTimeout(
-      startTimeMs: java.lang.Long, timeoutMs: java.lang.Long): RecordStatus = {
+      startTimeMs: java.lang.Long,
+      timeoutMs: java.lang.Long): RecordStatus = {
     // SPARK-55699: Use the reference time passed in by the caller instead of getting the latest
     // time from LowLatencyClock, to avoid inconsistent reading when LowLatencyClock is a
     // manual clock.
@@ -318,8 +298,7 @@ class LowLatencyMemoryStreamPartitionReader(
       return None
     }
     endpoint.askSync[Option[(InternalRow, Long)]](
-      GetRecord(ContinuousRecordPartitionOffset(partition, currentOffset))
-    )
+      GetRecord(ContinuousRecordPartitionOffset(partition, currentOffset)))
   }
 }
 
@@ -333,13 +312,12 @@ case class LowLatencyMemoryStreamOffset(partitionNums: Map[Int, Int]) extends Of
  */
 class LowLatencyMemoryStreamEndpoint(
     records: Seq[scala.collection.mutable.Seq[(UnsafeRow, Long)]],
-    lock: Object
-) extends ThreadSafeRpcEndpoint {
+    lock: Object)
+    extends ThreadSafeRpcEndpoint {
   override val rpcEnv: RpcEnv = SparkEnv.get.rpcEnv
 
   override def receiveAndReply(
-      context: org.apache.spark.rpc.RpcCallContext
-  ): PartialFunction[Any, Unit] = {
+      context: org.apache.spark.rpc.RpcCallContext): PartialFunction[Any, Unit] = {
     case GetRecord(ContinuousRecordPartitionOffset(partitionId, offset)) =>
       lock.synchronized {
         val buf = records(partitionId)

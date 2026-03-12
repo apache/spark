@@ -29,11 +29,11 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 
 /**
- * This class is a proxy to invoke commit or abort methods in Python DataSourceStreamWriter.
- * A runner spawns a python worker process. In the main function, set up communication
- * between JVM and python process through socket and create a DataSourceStreamWriter instance.
- * In an infinite loop, the python worker process receive write commit messages
- * from the socket, then commit or abort a microbatch.
+ * This class is a proxy to invoke commit or abort methods in Python DataSourceStreamWriter. A
+ * runner spawns a python worker process. In the main function, set up communication between JVM
+ * and python process through socket and create a DataSourceStreamWriter instance. In an infinite
+ * loop, the python worker process receive write commit messages from the socket, then commit or
+ * abort a microbatch.
  */
 class PythonStreamingSinkCommitRunner(
     dataSourceCls: PythonFunction,
@@ -41,13 +41,14 @@ class PythonStreamingSinkCommitRunner(
     messages: Array[WriterCommitMessage],
     batchId: Long,
     overwrite: Boolean,
-    abort: Boolean) extends PythonPlannerRunner[Unit](dataSourceCls) {
+    abort: Boolean)
+    extends PythonPlannerRunner[Unit](dataSourceCls) {
   override val workerModule: String = "pyspark.sql.worker.python_streaming_sink_runner"
 
   override protected def runnerConf: Map[String, String] = {
-    super.runnerConf ++ SQLConf.get.pythonDataSourceProfiler.map(p =>
-      Map(SQLConf.PYTHON_DATA_SOURCE_PROFILER.key -> p)
-    ).getOrElse(Map.empty)
+    super.runnerConf ++ SQLConf.get.pythonDataSourceProfiler
+      .map(p => Map(SQLConf.PYTHON_DATA_SOURCE_PROFILER.key -> p))
+      .getOrElse(Map.empty)
   }
 
   override protected def writeToPython(dataOut: DataOutputStream, pickler: Pickler): Unit = {
@@ -65,7 +66,8 @@ class PythonStreamingSinkCommitRunner(
         dataOut.writeInt(SpecialLengths.NULL)
       } else {
         PythonWorkerUtils.writeBytes(
-          message.asInstanceOf[PythonWriterCommitMessage].pickledMessage, dataOut)
+          message.asInstanceOf[PythonWriterCommitMessage].pickledMessage,
+          dataOut)
       }
     }
     dataOut.writeLong(batchId)

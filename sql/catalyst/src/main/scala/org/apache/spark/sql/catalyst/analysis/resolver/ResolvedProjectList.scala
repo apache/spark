@@ -22,15 +22,16 @@ import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 
 /**
  * Structure used to return results of the resolved project list.
- *  - expressions: The resolved expressions. It is resolved using the
- *                 `resolveExpressionTreeInOperator`.
- *  - hasAggregateExpressions: True if the resolved project list contains any aggregate
- *                             expressions.
- *  - hasLateralColumnAlias: True if the resolved project list contains any lateral column aliases.
- *  - aggregateListAliases: List of aliases in aggregate list if there are aggregate expressions in
- *                          the [[Project]].
- *  - baseAggregate: Base [[Aggregate]] node constructed by [[LateralColumnAliasResolver]] while
- *                          resolving lateral column references in [[Aggregate]].
+ *   - expressions: The resolved expressions. It is resolved using the
+ *     `resolveExpressionTreeInOperator`.
+ *   - hasAggregateExpressions: True if the resolved project list contains any aggregate
+ *     expressions.
+ *   - hasLateralColumnAlias: True if the resolved project list contains any lateral column
+ *     aliases.
+ *   - aggregateListAliases: List of aliases in aggregate list if there are aggregate expressions
+ *     in the [[Project]].
+ *   - baseAggregate: Base [[Aggregate]] node constructed by [[LateralColumnAliasResolver]] while
+ *     resolving lateral column references in [[Aggregate]].
  */
 case class ResolvedProjectList(
     expressions: Seq[NamedExpression],

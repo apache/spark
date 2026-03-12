@@ -26,35 +26,32 @@ import org.apache.spark.types.variant.VariantUtil.Type
 import org.apache.spark.unsafe.types._
 
 /**
- *
- * Infer a schema when there are Variant values in the shredding schema.
- * Only VariantType values at the top level or nested in struct fields are shredded.
- * VariantType nested in arrays or maps are not shredded.
- * @param schema The original schema, with no shredding.
+ * Infer a schema when there are Variant values in the shredding schema. Only VariantType values
+ * at the top level or nested in struct fields are shredded. VariantType nested in arrays or maps
+ * are not shredded.
+ * @param schema
+ *   The original schema, with no shredding.
  */
 class InferVariantShreddingSchema(val schema: StructType) {
 
   /**
-   * Create a list of paths to Variant values in the schema.
-   * Variant fields nested in arrays or maps are not included.
-   * For example, if the schema is
-   * struct<v: variant, struct<a: int, b: int, c: variant>>
-   * the function will return [[0], [1, 2]
+   * Create a list of paths to Variant values in the schema. Variant fields nested in arrays or
+   * maps are not included. For example, if the schema is struct<v: variant, struct<a: int, b:
+   * int, c: variant>> the function will return [[0], [1, 2]
    */
   private def getPathsToVariant(schema: StructType): Seq[Seq[Int]] = {
     schema.fields.zipWithIndex
-      .map {
-        case (field, idx) =>
-          field.dataType match {
-            case VariantType =>
-              Seq(Seq(idx))
-            case inner: StructType =>
-              // Prepend this index to each downstream path.
-              getPathsToVariant(inner).map { path =>
-                idx +: path
-              }
-            case _ => Seq()
-          }
+      .map { case (field, idx) =>
+        field.dataType match {
+          case VariantType =>
+            Seq(Seq(idx))
+          case inner: StructType =>
+            // Prepend this index to each downstream path.
+            getPathsToVariant(inner).map { path =>
+              idx +: path
+            }
+          case _ => Seq()
+        }
       }
       .toSeq
       .flatten
@@ -65,8 +62,10 @@ class InferVariantShreddingSchema(val schema: StructType) {
    * its containing structs is null.
    */
   @scala.annotation.tailrec
-  private def getValueAtPath(schema: StructType, row: InternalRow, path: Seq[Int]):
-      Option[VariantVal] = {
+  private def getValueAtPath(
+      schema: StructType,
+      row: InternalRow,
+      path: Seq[Int]): Option[VariantVal] = {
     if (row.isNullAt(path.head)) {
       None
     } else if (path.length == 1) {
@@ -75,11 +74,7 @@ class InferVariantShreddingSchema(val schema: StructType) {
     } else {
       // The field must be a struct.
       val childStruct = schema.fields(path.head).dataType.asInstanceOf[StructType]
-      getValueAtPath(
-        childStruct,
-        row.getStruct(path.head, childStruct.length),
-        path.tail
-      )
+      getValueAtPath(childStruct, row.getStruct(path.head, childStruct.length), path.tail)
     }
   }
 
@@ -94,14 +89,13 @@ class InferVariantShreddingSchema(val schema: StructType) {
   private val COUNT_METADATA_KEY = "COUNT"
 
   /**
-   * Return an appropriate schema for shredding a Variant value.
-   * It is similar to the SchemaOfVariant expression, but the rules are somewhat different, because
-   * we want the types to be consistent with what will be allowed during shredding. E.g.
-   * SchemaOfVariant will consider the common type across Integer and Double to be double, but we
-   * consider it to be VariantType, since shredding will not allow those types to be written to
-   * the same typed_value.
-   * We also maintain metadata on struct fields to track how frequently they occur. Rare fields
-   * are dropped in the final schema.
+   * Return an appropriate schema for shredding a Variant value. It is similar to the
+   * SchemaOfVariant expression, but the rules are somewhat different, because we want the types
+   * to be consistent with what will be allowed during shredding. E.g. SchemaOfVariant will
+   * consider the common type across Integer and Double to be double, but we consider it to be
+   * VariantType, since shredding will not allow those types to be written to the same
+   * typed_value. We also maintain metadata on struct fields to track how frequently they occur.
+   * Rare fields are dropped in the final schema.
    */
   private def schemaOf(v: Variant, maxDepth: Int): DataType = v.getType match {
     case Type.OBJECT =>
@@ -110,7 +104,9 @@ class InferVariantShreddingSchema(val schema: StructType) {
       val fields = new Array[StructField](size)
       for (i <- 0 until size) {
         val field = v.getFieldAtIndex(i)
-        fields(i) = StructField(field.key, schemaOf(field.value, maxDepth - 1),
+        fields(i) = StructField(
+          field.key,
+          schemaOf(field.value, maxDepth - 1),
           metadata = new MetadataBuilder().putLong(COUNT_METADATA_KEY, 1).build())
       }
       // According to the variant spec, object fields must be sorted alphabetically. So we don't
@@ -119,8 +115,7 @@ class InferVariantShreddingSchema(val schema: StructType) {
         if (fields(i - 1).name >= fields(i).name) {
           throw new SparkRuntimeException(
             errorClass = "MALFORMED_VARIANT",
-            messageParameters = Map.empty
-          )
+            messageParameters = Map.empty)
         }
       }
       StructType(fields)
@@ -223,9 +218,7 @@ class InferVariantShreddingSchema(val schema: StructType) {
               StructField(
                 f1Name,
                 dataType,
-                metadata = new MetadataBuilder().putLong(COUNT_METADATA_KEY, c1 + c2).build()
-              )
-            )
+                metadata = new MetadataBuilder().putLong(COUNT_METADATA_KEY, c1 + c2).build()))
             f1Idx += 1
             f2Idx += 1
           } else if (comp < 0) { // f1Name < f2Name
@@ -260,20 +253,19 @@ class InferVariantShreddingSchema(val schema: StructType) {
       schema: StructType,
       inferredSchemas: Map[Seq[Int], StructType],
       path: Seq[Int] = Seq()): StructType = {
-    val newFields = schema.fields.zipWithIndex.map {
-      case (field, idx) =>
-        field.dataType match {
-          case VariantType =>
-            // Right now, we infer a schema for every VariantType that isn't nested in an array or
-            // map, so we should always find a replacement.
-            val fullPath = path :+ idx
-            assert(inferredSchemas.contains(fullPath))
-            field.copy(dataType = inferredSchemas(fullPath))
-          case inner: StructType =>
-            val newType = updateSchema(inner, inferredSchemas, path :+ idx)
-            field.copy(dataType = newType)
-          case dt => field
-        }
+    val newFields = schema.fields.zipWithIndex.map { case (field, idx) =>
+      field.dataType match {
+        case VariantType =>
+          // Right now, we infer a schema for every VariantType that isn't nested in an array or
+          // map, so we should always find a replacement.
+          val fullPath = path :+ idx
+          assert(inferredSchemas.contains(fullPath))
+          field.copy(dataType = inferredSchemas(fullPath))
+        case inner: StructType =>
+          val newType = updateSchema(inner, inferredSchemas, path :+ idx)
+          field.copy(dataType = newType)
+        case dt => field
+      }
     }
     StructType(newFields)
   }
@@ -284,11 +276,10 @@ class InferVariantShreddingSchema(val schema: StructType) {
   private case class MaxFields(var remaining: Int)
 
   /**
-   * Given the schema of a Variant type, finalize the schema. Specifically:
-   * 1) Widen integer types to LongType, since it adds flexibility for shredding, and
-   *    shouldn't have much storage size impact after encoding.
-   * 2) Replace empty structs with VariantType, since empty structs are invalid in Parquet.
-   * 3) Limit the total number of shredded fields in the schema
+   * Given the schema of a Variant type, finalize the schema. Specifically: 1) Widen integer types
+   * to LongType, since it adds flexibility for shredding, and shouldn't have much storage size
+   * impact after encoding. 2) Replace empty structs with VariantType, since empty structs are
+   * invalid in Parquet. 3) Limit the total number of shredded fields in the schema
    */
   private def finalizeSimpleSchema(
       dt: DataType,
@@ -310,10 +301,8 @@ class InferVariantShreddingSchema(val schema: StructType) {
           .foreach { field =>
             if (maxFields.remaining > 0) {
               newFields.add(
-                field.copy(
-                  dataType = finalizeSimpleSchema(field.dataType, minCardinality, maxFields)
-                )
-              )
+                field.copy(dataType =
+                  finalizeSimpleSchema(field.dataType, minCardinality, maxFields)))
             }
           }
         // If we weren't able to retain any fields, just use VariantType
@@ -357,17 +346,17 @@ class InferVariantShreddingSchema(val schema: StructType) {
     val maxFields = MaxFields(maxShreddedFieldsPerFile)
     val inferredSchemas = pathsToVariant.map { path =>
       var numNonNullValues = 0
-      val simpleSchema = rows.foldLeft(NullType: DataType) {
-        case (partialSchema, row) =>
-          getValueAtPath(schema, row, path).map { variantVal =>
+      val simpleSchema = rows.foldLeft(NullType: DataType) { case (partialSchema, row) =>
+        getValueAtPath(schema, row, path)
+          .map { variantVal =>
             numNonNullValues += 1
             val v = new Variant(variantVal.getValue, variantVal.getMetadata)
             val schemaOfRow = schemaOf(v, maxShreddingDepth)
             mergeSchema(partialSchema, schemaOfRow)
-          // If getValueAtPath returned None, the value is null in this row; just ignore.
+            // If getValueAtPath returned None, the value is null in this row; just ignore.
           }
           .getOrElse(partialSchema)
-        // If we didn't find any non-null rows, use an unshredded schema.
+      // If we didn't find any non-null rows, use an unshredded schema.
       }
 
       // Don't infer a schema for fields that appear in less than 10% of rows.

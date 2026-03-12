@@ -23,9 +23,8 @@ import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 /**
  * Common options for the file-based data source.
  */
-class FileSourceOptions(
-    @transient private val parameters: CaseInsensitiveMap[String])
-  extends Serializable {
+class FileSourceOptions(@transient private val parameters: CaseInsensitiveMap[String])
+    extends Serializable {
 
   def this(parameters: Map[String, String]) = this(CaseInsensitiveMap(parameters))
 
@@ -40,10 +39,14 @@ class FileSourceOptions(
       }
     }
 
-  val ignoreCorruptFiles: Boolean = parameters.get(IGNORE_CORRUPT_FILES).map(_.toBoolean)
+  val ignoreCorruptFiles: Boolean = parameters
+    .get(IGNORE_CORRUPT_FILES)
+    .map(_.toBoolean)
     .getOrElse(SQLConf.get.ignoreCorruptFiles)
 
-  val ignoreMissingFiles: Boolean = parameters.get(IGNORE_MISSING_FILES).map(_.toBoolean)
+  val ignoreMissingFiles: Boolean = parameters
+    .get(IGNORE_MISSING_FILES)
+    .map(_.toBoolean)
     .getOrElse(SQLConf.get.ignoreMissingFiles)
 }
 

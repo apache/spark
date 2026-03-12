@@ -28,10 +28,11 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
 
 /**
- * Thread local storage for sharing StateStore instances between RDDs.
- * This allows a ReadStateStore to be reused by a subsequent StateStore operation.
+ * Thread local storage for sharing StateStore instances between RDDs. This allows a
+ * ReadStateStore to be reused by a subsequent StateStore operation.
  */
 object StateStoreThreadLocalTracker {
+
   /** Case class to hold both the store and its usage state */
 
   private val storeInfo: ThreadLocal[ReadStateStore] = new ThreadLocal[ReadStateStore]
@@ -56,7 +57,8 @@ abstract class BaseStateStoreRDD[T: ClassTag, U: ClassTag](
     operatorId: Long,
     sessionState: SessionState,
     @transient private val storeCoordinator: Option[StateStoreCoordinatorRef],
-    extraOptions: Map[String, String] = Map.empty) extends RDD[U](dataRDD) {
+    extraOptions: Map[String, String] = Map.empty)
+    extends RDD[U](dataRDD) {
 
   protected val storeConf = new StateStoreConf(sessionState.conf, extraOptions)
 
@@ -83,9 +85,9 @@ abstract class BaseStateStoreRDD[T: ClassTag, U: ClassTag](
 }
 
 /**
- * An RDD that allows computations to be executed against [[ReadStateStore]]s. It
- * uses the [[StateStoreCoordinator]] to get the locations of loaded state stores
- * and use that as the preferred locations.
+ * An RDD that allows computations to be executed against [[ReadStateStore]]s. It uses the
+ * [[StateStoreCoordinator]] to get the locations of loaded state stores and use that as the
+ * preferred locations.
  */
 class ReadStateStoreRDD[T: ClassTag, U: ClassTag](
     dataRDD: RDD[T],
@@ -103,8 +105,14 @@ class ReadStateStoreRDD[T: ClassTag, U: ClassTag](
     @transient private val storeCoordinator: Option[StateStoreCoordinatorRef],
     useColumnFamilies: Boolean = false,
     extraOptions: Map[String, String] = Map.empty)
-  extends BaseStateStoreRDD[T, U](dataRDD, checkpointLocation, queryRunId, operatorId,
-    sessionState, storeCoordinator, extraOptions) {
+    extends BaseStateStoreRDD[T, U](
+      dataRDD,
+      checkpointLocation,
+      queryRunId,
+      operatorId,
+      sessionState,
+      storeCoordinator,
+      extraOptions) {
 
   override protected def getPartitions: Array[Partition] = dataRDD.partitions
 
@@ -113,19 +121,25 @@ class ReadStateStoreRDD[T: ClassTag, U: ClassTag](
 
     val inputIter = dataRDD.iterator(partition, ctxt)
     val store = StateStore.getReadOnly(
-      storeProviderId, keySchema, valueSchema, keyStateEncoderSpec, storeVersion,
+      storeProviderId,
+      keySchema,
+      valueSchema,
+      keyStateEncoderSpec,
+      storeVersion,
       stateStoreCkptIds.map(_.apply(partition.index).head),
       stateSchemaBroadcast,
-      useColumnFamilies, storeConf, hadoopConfBroadcast.value.value)
+      useColumnFamilies,
+      storeConf,
+      hadoopConfBroadcast.value.value)
     StateStoreThreadLocalTracker.setStore(store)
     storeReadFunction(store, inputIter)
   }
 }
 
 /**
- * An RDD that allows computations to be executed against [[StateStore]]s. It
- * uses the [[StateStoreCoordinator]] to get the locations of loaded state stores
- * and use that as the preferred locations.
+ * An RDD that allows computations to be executed against [[StateStore]]s. It uses the
+ * [[StateStoreCoordinator]] to get the locations of loaded state stores and use that as the
+ * preferred locations.
  */
 class StateStoreRDD[T: ClassTag, U: ClassTag](
     dataRDD: RDD[T],
@@ -144,8 +158,14 @@ class StateStoreRDD[T: ClassTag, U: ClassTag](
     useColumnFamilies: Boolean = false,
     extraOptions: Map[String, String] = Map.empty,
     useMultipleValuesPerKey: Boolean = false)
-  extends BaseStateStoreRDD[T, U](dataRDD, checkpointLocation, queryRunId, operatorId,
-    sessionState, storeCoordinator, extraOptions) {
+    extends BaseStateStoreRDD[T, U](
+      dataRDD,
+      checkpointLocation,
+      queryRunId,
+      operatorId,
+      sessionState,
+      storeCoordinator,
+      extraOptions) {
 
   override protected def getPartitions: Array[Partition] = dataRDD.partitions
 
@@ -155,18 +175,31 @@ class StateStoreRDD[T: ClassTag, U: ClassTag](
     val inputIter = dataRDD.iterator(partition, ctxt)
     val store = StateStoreThreadLocalTracker.getStore match {
       case Some(readStateStore: ReadStateStore) =>
-        StateStore.getWriteStore(readStateStore, storeProviderId,
-          keySchema, valueSchema, keyStateEncoderSpec, storeVersion,
+        StateStore.getWriteStore(
+          readStateStore,
+          storeProviderId,
+          keySchema,
+          valueSchema,
+          keyStateEncoderSpec,
+          storeVersion,
           uniqueId.map(_.apply(partition.index).head),
           stateSchemaBroadcast,
-          useColumnFamilies, storeConf, hadoopConfBroadcast.value.value,
+          useColumnFamilies,
+          storeConf,
+          hadoopConfBroadcast.value.value,
           useMultipleValuesPerKey)
       case None =>
         StateStore.get(
-          storeProviderId, keySchema, valueSchema, keyStateEncoderSpec, storeVersion,
+          storeProviderId,
+          keySchema,
+          valueSchema,
+          keyStateEncoderSpec,
+          storeVersion,
           uniqueId.map(_.apply(partition.index).head),
           stateSchemaBroadcast,
-          useColumnFamilies, storeConf, hadoopConfBroadcast.value.value,
+          useColumnFamilies,
+          storeConf,
+          hadoopConfBroadcast.value.value,
           useMultipleValuesPerKey)
     }
 

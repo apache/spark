@@ -28,7 +28,7 @@ import org.apache.spark.sql.connector.catalog.CatalogManager
  */
 object SimpleTestOptimizer extends SimpleTestOptimizer
 
-class SimpleTestOptimizer extends Optimizer(
-  new CatalogManager(
-    FakeV2SessionCatalog,
-    new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry, EmptyTableFunctionRegistry)))
+class SimpleTestOptimizer
+    extends Optimizer(new CatalogManager(
+      FakeV2SessionCatalog,
+      new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry, EmptyTableFunctionRegistry)))

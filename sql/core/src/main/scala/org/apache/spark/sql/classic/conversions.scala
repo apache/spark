@@ -30,9 +30,9 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, NamedExpression}
  * developers.
  *
  * We provide both a trait and an object. The trait is useful in situations where an extension
- * developer needs to use these conversions in a project covering multiple Spark versions. They can
- * create a shim for these conversions, the Spark 4+ version of the shim implements this trait, and
- * shims for older versions do not.
+ * developer needs to use these conversions in a project covering multiple Spark versions. They
+ * can create a shim for these conversions, the Spark 4+ version of the shim implements this
+ * trait, and shims for older versions do not.
  */
 @DeveloperApi
 trait ClassicConversions {
@@ -45,8 +45,9 @@ trait ClassicConversions {
   implicit def castToImpl(rgds: sql.RelationalGroupedDataset): RelationalGroupedDataset =
     rgds.asInstanceOf[RelationalGroupedDataset]
 
-  implicit def castToImpl[K, V](kvds: sql.KeyValueGroupedDataset[K, V])
-  : KeyValueGroupedDataset[K, V] = kvds.asInstanceOf[KeyValueGroupedDataset[K, V]]
+  implicit def castToImpl[K, V](
+      kvds: sql.KeyValueGroupedDataset[K, V]): KeyValueGroupedDataset[K, V] =
+    kvds.asInstanceOf[KeyValueGroupedDataset[K, V]]
 
   implicit def castToImpl(context: sql.SQLContext): SQLContext = context.asInstanceOf[SQLContext]
 
@@ -95,15 +96,17 @@ object ColumnConversions extends ColumnConversions {
 }
 
 /**
- * Helper class that adds the `expr` and `named` methods to a Column. This can be used to reinstate
- * the pre-Spark 4 Column functionality.
+ * Helper class that adds the `expr` and `named` methods to a Column. This can be used to
+ * reinstate the pre-Spark 4 Column functionality.
  */
 @DeveloperApi
 class RichColumn(column: Column, converter: ColumnNodeToExpressionConverter) {
+
   /**
    * Returns the expression for this column.
    */
   def expr: Expression = converter(column.node)
+
   /**
    * Returns the expression for this column either with an existing or auto assigned name.
    */

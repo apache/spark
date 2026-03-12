@@ -27,14 +27,14 @@ import org.apache.spark.util.Utils
 /**
  * The class contains tests for the `DESCRIBE TABLE` command to check V2 table catalogs.
  */
-class DescribeTableSuite extends command.DescribeTableSuiteBase
-  with CommandSuiteBase {
+class DescribeTableSuite extends command.DescribeTableSuiteBase with CommandSuiteBase {
   import testImplicits._
 
   test("Describing a partition is not supported") {
     withNamespaceAndTable("ns", "table") { tbl =>
-      spark.sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing " +
-        "PARTITIONED BY (id)")
+      spark.sql(
+        s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing " +
+          "PARTITIONED BY (id)")
       val e = intercept[AnalysisException] {
         sql(s"DESCRIBE TABLE $tbl PARTITION (id = 1)")
       }
@@ -44,8 +44,9 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
 
   test("DESCRIBE TABLE of a partitioned table by nested columns") {
     withNamespaceAndTable("ns", "table") { tbl =>
-      sql(s"CREATE TABLE $tbl (s struct<id:INT, a:BIGINT>, data string) " +
-        s"$defaultUsing PARTITIONED BY (s.id, s.a)")
+      sql(
+        s"CREATE TABLE $tbl (s struct<id:INT, a:BIGINT>, data string) " +
+          s"$defaultUsing PARTITIONED BY (s.id, s.a)")
       val descriptionDf = sql(s"DESCRIBE TABLE $tbl")
       checkAnswer(
         descriptionDf.filter("col_name != 'Created Time'"),
@@ -61,16 +62,18 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
 
   test("DESCRIBE TABLE EXTENDED of a partitioned table") {
     withNamespaceAndTable("ns", "table") { tbl =>
-      spark.sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing" +
-        " PARTITIONED BY (id)" +
-        " TBLPROPERTIES ('bar'='baz')" +
-        " COMMENT 'this is a test table'" +
-        " LOCATION 'file:/tmp/testcat/table_name'")
+      spark.sql(
+        s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing" +
+          " PARTITIONED BY (id)" +
+          " TBLPROPERTIES ('bar'='baz')" +
+          " COMMENT 'this is a test table'" +
+          " LOCATION 'file:/tmp/testcat/table_name'")
       val descriptionDf = spark.sql(s"DESCRIBE TABLE EXTENDED $tbl")
-      assert(descriptionDf.schema.map(field => (field.name, field.dataType)) === Seq(
-        ("col_name", StringType),
-        ("data_type", StringType),
-        ("comment", StringType)))
+      assert(
+        descriptionDf.schema.map(field => (field.name, field.dataType)) === Seq(
+          ("col_name", StringType),
+          ("data_type", StringType),
+          ("comment", StringType)))
       checkAnswer(
         descriptionDf,
         Seq(
@@ -109,14 +112,8 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
         },
         condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         sqlState = "42703",
-        parameters = Map(
-          "objectName" -> "`key1`",
-          "proposal" -> "`key`, `col`"),
-        context = ExpectedContext(
-          fragment = query,
-          start = 0,
-          stop = query.length -1)
-      )
+        parameters = Map("objectName" -> "`key1`", "proposal" -> "`key`, `col`"),
+        context = ExpectedContext(fragment = query, start = 0, stop = query.length - 1))
     }
   }
 
@@ -140,13 +137,8 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
           },
           condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
           sqlState = "42703",
-          parameters = Map(
-            "objectName" -> "`KEY`",
-            "proposal" -> "`key`"),
-          context = ExpectedContext(
-            fragment = query,
-            start = 0,
-            stop = query.length - 1))
+          parameters = Map("objectName" -> "`KEY`", "proposal" -> "`key`"),
+          context = ExpectedContext(fragment = query, start = 0, stop = query.length - 1))
       }
     }
   }
@@ -160,9 +152,10 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
 
       sql(s"INSERT INTO $tbl values (1, 'aaa'), (2, 'bbb'), (3, 'ccc'), (null, 'ddd')")
       val descriptionDf = sql(s"DESCRIBE TABLE EXTENDED $tbl key")
-      assert(descriptionDf.schema.map(field => (field.name, field.dataType)) === Seq(
-        ("info_name", StringType),
-        ("info_value", StringType)))
+      assert(
+        descriptionDf.schema.map(field => (field.name, field.dataType)) === Seq(
+          ("info_name", StringType),
+          ("info_value", StringType)))
       checkAnswer(
         descriptionDf,
         Seq(
@@ -180,36 +173,34 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
 
   test("SPARK-46535: describe extended (formatted) a column without col stats") {
     withNamespaceAndTable("ns", "tbl") { tbl =>
-      sql(
-        s"""
+      sql(s"""
            |CREATE TABLE $tbl
            |(key INT COMMENT 'column_comment', col STRING)
            |$defaultUsing""".stripMargin)
 
       val descriptionDf = sql(s"DESCRIBE TABLE EXTENDED $tbl key")
-      assert(descriptionDf.schema.map(field => (field.name, field.dataType)) === Seq(
-        ("info_name", StringType),
-        ("info_value", StringType)))
+      assert(
+        descriptionDf.schema.map(field => (field.name, field.dataType)) === Seq(
+          ("info_name", StringType),
+          ("info_value", StringType)))
       checkAnswer(
         descriptionDf,
-        Seq(
-          Row("col_name", "key"),
-          Row("data_type", "int"),
-          Row("comment", "column_comment")))
+        Seq(Row("col_name", "key"), Row("data_type", "int"), Row("comment", "column_comment")))
     }
   }
 
   test("describe extended table with stats") {
     withNamespaceAndTable("ns", "tbl") { tbl =>
-      sql(
-        s"""
+      sql(s"""
            |CREATE TABLE $tbl
            |(key INT, col STRING)
            |$defaultUsing""".stripMargin)
 
       sql(s"INSERT INTO $tbl values (1, 'aaa'), (2, 'bbb'), (3, 'ccc'), (null, 'ddd')")
       val descriptionDf = sql(s"DESCRIBE TABLE EXTENDED $tbl")
-      val stats = descriptionDf.filter("col_name == 'Statistics'").head()
+      val stats = descriptionDf
+        .filter("col_name == 'Statistics'")
+        .head()
         .getAs[String]("data_type")
       assert("""\d+\s+bytes,\s+4\s+rows""".r.matches(stats))
     }
@@ -218,12 +209,10 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
   test("desc table constraints") {
     withNamespaceAndTable("ns", "pk_table", nonPartitionCatalog) { tbl =>
       withNamespaceAndTable("ns", "fk_table", nonPartitionCatalog) { fkTable =>
-        sql(
-          s"""
+        sql(s"""
              |CREATE TABLE $fkTable (id INT PRIMARY KEY) $defaultUsing
         """.stripMargin)
-        sql(
-          s"""
+        sql(s"""
              |CREATE TABLE $tbl (
              |  id INT,
              |  a INT,
@@ -247,33 +236,40 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
           "uk_b,UNIQUE (b) NOT ENFORCED,",
           "uk_a_c,UNIQUE (a, c) NOT ENFORCED,",
           "c1,CHECK (c IS NOT NULL) ENFORCED,",
-          "c2,CHECK (id > 0) ENFORCED,"
-        )
-        var descDdL = sql(s"DESCRIBE EXTENDED $tbl").collect().map(_.mkString(","))
+          "c2,CHECK (id > 0) ENFORCED,")
+        var descDdL = sql(s"DESCRIBE EXTENDED $tbl")
+          .collect()
+          .map(_.mkString(","))
           .dropWhile(_ != "# Constraints,,")
         assert(descDdL === expectedConstraintsDdl)
 
         // Show non-default value for RELY.
         sql(s"ALTER TABLE $tbl ADD CONSTRAINT c3 CHECK (b IS NOT NULL) RELY")
-        descDdL = sql(s"DESCRIBE EXTENDED $tbl").collect().map(_.mkString(","))
+        descDdL = sql(s"DESCRIBE EXTENDED $tbl")
+          .collect()
+          .map(_.mkString(","))
           .dropWhile(_ != "# Constraints,,")
         expectedConstraintsDdl = expectedConstraintsDdl ++
           Array("c3,CHECK (b IS NOT NULL) ENFORCED RELY,")
         assert(descDdL === expectedConstraintsDdl)
 
         sql(s"ALTER TABLE $tbl DROP CONSTRAINT c1")
-        descDdL = sql(s"DESCRIBE EXTENDED $tbl").collect().map(_.mkString(","))
+        descDdL = sql(s"DESCRIBE EXTENDED $tbl")
+          .collect()
+          .map(_.mkString(","))
           .dropWhile(_ != "# Constraints,,")
-        assert(descDdL === expectedConstraintsDdl
-          .filter(_ != "c1,CHECK (c IS NOT NULL) ENFORCED,"))
+        assert(
+          descDdL === expectedConstraintsDdl
+            .filter(_ != "c1,CHECK (c IS NOT NULL) ENFORCED,"))
       }
     }
   }
 
   test("describe table with column having only current default value") {
     withNamespaceAndTable("ns", "tbl") { tbl =>
-      sql(s"CREATE TABLE $tbl (key int DEFAULT 13579) $defaultUsing " +
-        "TBLPROPERTIES ('dropExistsDefault'=true)")
+      sql(
+        s"CREATE TABLE $tbl (key int DEFAULT 13579) $defaultUsing " +
+          "TBLPROPERTIES ('dropExistsDefault'=true)")
       checkAnswer(
         sql(s"DESCRIBE TABLE EXTENDED $tbl").where($"comment" === "13579"),
         Seq(Row("key", "int", "13579")))

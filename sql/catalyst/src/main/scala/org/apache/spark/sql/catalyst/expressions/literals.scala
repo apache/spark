@@ -157,8 +157,8 @@ object Literal {
   }
 
   /**
-   * Constructs a [[Literal]] of [[ObjectType]], for example when you need to pass an object
-   * into code generation.
+   * Constructs a [[Literal]] of [[ObjectType]], for example when you need to pass an object into
+   * code generation.
    */
   def fromObject(obj: Any, objType: DataType): Literal = new Literal(obj, objType)
   def fromObject(obj: Any): Literal = new Literal(obj, ObjectType(obj.getClass))
@@ -176,7 +176,7 @@ object Literal {
     }
   }
 
-  def create[T : TypeTag](v: T): Literal = Try {
+  def create[T: TypeTag](v: T): Literal = Try {
     val ScalaReflection.Schema(dataType, _) = ScalaReflection.schemaFor[T]
     val convert = CatalystTypeConverters.createToCatalystConverter(dataType)
     Literal(convert(v), dataType)
@@ -207,10 +207,12 @@ object Literal {
     case it: DayTimeIntervalType => create(0L, it)
     case it: YearMonthIntervalType => create(0, it)
     case c: CharType =>
-      create(CharVarcharCodegenUtils.charTypeWriteSideCheck(UTF8String.fromString(""), c.length),
+      create(
+        CharVarcharCodegenUtils.charTypeWriteSideCheck(UTF8String.fromString(""), c.length),
         dataType)
     case v: VarcharType =>
-      create(CharVarcharCodegenUtils.varcharTypeWriteSideCheck(UTF8String.fromString(""), v.length),
+      create(
+        CharVarcharCodegenUtils.varcharTypeWriteSideCheck(UTF8String.fromString(""), v.length),
         dataType)
     case st: StringType => Literal(UTF8String.fromString(""), st)
     case BinaryType => Literal("".getBytes(StandardCharsets.UTF_8))
@@ -218,8 +220,7 @@ object Literal {
     case arr: ArrayType => create(Array(), arr)
     case map: MapType => create(Map(), map)
     case struct: StructType =>
-      create(new GenericInternalRow(
-        struct.fields.map(f => default(f.dataType).value)), struct)
+      create(new GenericInternalRow(struct.fields.map(f => default(f.dataType).value)), struct)
     case udt: UserDefinedType[_] => Literal(default(udt.sqlType).value, udt)
     case VariantType =>
       create(VariantExpressionEvalUtils.castToVariant(0, IntegerType), VariantType)
@@ -232,63 +233,63 @@ object Literal {
       case _ if v == null => true
       case ObjectType(cls) => cls.isInstance(v)
       case udt: UserDefinedType[_] => doValidate(v, udt.sqlType)
-      case dt => PhysicalDataType(dataType) match {
-        case PhysicalArrayType(et, _) =>
-          v.isInstanceOf[ArrayData] && {
-            val ar = v.asInstanceOf[ArrayData]
-            ar.numElements() == 0 || doValidate(ar.get(0, et), et)
-          }
-        case PhysicalBinaryType => v.isInstanceOf[Array[Byte]]
-        case PhysicalBooleanType => v.isInstanceOf[Boolean]
-        case PhysicalByteType => v.isInstanceOf[Byte]
-        case PhysicalCalendarIntervalType => v.isInstanceOf[CalendarInterval]
-        case PhysicalIntegerType => v.isInstanceOf[Int]
-        case _: PhysicalDecimalType => v.isInstanceOf[Decimal]
-        case PhysicalDoubleType => v.isInstanceOf[Double]
-        case PhysicalFloatType => v.isInstanceOf[Float]
-        case PhysicalLongType => v.isInstanceOf[Long]
-        case PhysicalMapType(kt, vt, _) =>
-          v.isInstanceOf[MapData] && {
-            val map = v.asInstanceOf[MapData]
-            doValidate(map.keyArray(), ArrayType(kt)) &&
-            doValidate(map.valueArray(), ArrayType(vt))
-          }
-        case PhysicalNullType => true
-        case PhysicalShortType => v.isInstanceOf[Short]
-        case _: PhysicalStringType => v.isInstanceOf[UTF8String]
-        case _: PhysicalGeographyType => v.isInstanceOf[GeographyVal]
-        case _: PhysicalGeometryType => v.isInstanceOf[GeometryVal]
-        case PhysicalVariantType => v.isInstanceOf[VariantVal]
-        case st: PhysicalStructType =>
-          v.isInstanceOf[InternalRow] && {
-            val row = v.asInstanceOf[InternalRow]
-            st.fields.map(_.dataType).zipWithIndex.forall {
-              case (fieldDataType, i) =>
+      case dt =>
+        PhysicalDataType(dataType) match {
+          case PhysicalArrayType(et, _) =>
+            v.isInstanceOf[ArrayData] && {
+              val ar = v.asInstanceOf[ArrayData]
+              ar.numElements() == 0 || doValidate(ar.get(0, et), et)
+            }
+          case PhysicalBinaryType => v.isInstanceOf[Array[Byte]]
+          case PhysicalBooleanType => v.isInstanceOf[Boolean]
+          case PhysicalByteType => v.isInstanceOf[Byte]
+          case PhysicalCalendarIntervalType => v.isInstanceOf[CalendarInterval]
+          case PhysicalIntegerType => v.isInstanceOf[Int]
+          case _: PhysicalDecimalType => v.isInstanceOf[Decimal]
+          case PhysicalDoubleType => v.isInstanceOf[Double]
+          case PhysicalFloatType => v.isInstanceOf[Float]
+          case PhysicalLongType => v.isInstanceOf[Long]
+          case PhysicalMapType(kt, vt, _) =>
+            v.isInstanceOf[MapData] && {
+              val map = v.asInstanceOf[MapData]
+              doValidate(map.keyArray(), ArrayType(kt)) &&
+              doValidate(map.valueArray(), ArrayType(vt))
+            }
+          case PhysicalNullType => true
+          case PhysicalShortType => v.isInstanceOf[Short]
+          case _: PhysicalStringType => v.isInstanceOf[UTF8String]
+          case _: PhysicalGeographyType => v.isInstanceOf[GeographyVal]
+          case _: PhysicalGeometryType => v.isInstanceOf[GeometryVal]
+          case PhysicalVariantType => v.isInstanceOf[VariantVal]
+          case st: PhysicalStructType =>
+            v.isInstanceOf[InternalRow] && {
+              val row = v.asInstanceOf[InternalRow]
+              st.fields.map(_.dataType).zipWithIndex.forall { case (fieldDataType, i) =>
                 // Do not need to validate null values.
                 row.isNullAt(i) || doValidate(row.get(i, fieldDataType), fieldDataType)
+              }
             }
-          }
-        case _ => false
-      }
+          case _ => false
+        }
     }
-    require(doValidate(value, dataType),
+    require(
+      doValidate(value, dataType),
       s"Literal must have a corresponding value to ${dataType.catalogString}, " +
-      s"but class ${Utils.getSimpleName(value.getClass)} found.")
+        s"but class ${Utils.getSimpleName(value.getClass)} found.")
   }
 
   /**
    * Inverse of [[Literal.sql]]
    */
   def fromSQL(sql: String): Expression = {
-    CatalystSqlParser.parseExpression(sql).transformUp {
-      case u: UnresolvedFunction =>
-        assert(u.nameParts.length == 1)
-        assert(!u.isDistinct)
-        assert(u.filter.isEmpty)
-        assert(u.ignoreNulls.isEmpty)
-        assert(u.orderingWithinGroup.isEmpty)
-        assert(!u.isInternal)
-        FunctionRegistry.builtin.lookupFunction(FunctionIdentifier(u.nameParts.head), u.arguments)
+    CatalystSqlParser.parseExpression(sql).transformUp { case u: UnresolvedFunction =>
+      assert(u.nameParts.length == 1)
+      assert(!u.isDistinct)
+      assert(u.filter.isEmpty)
+      assert(u.ignoreNulls.isEmpty)
+      assert(u.orderingWithinGroup.isEmpty)
+      assert(!u.isInternal)
+      FunctionRegistry.builtin.lookupFunction(FunctionIdentifier(u.nameParts.head), u.arguments)
     }
   }
 }
@@ -405,17 +406,18 @@ object LiteralTreeBits {
   val literalBits: BitSet = new ImmutableBitSet(TreePattern.maxId, LITERAL.id)
 
   // Singleton tree pattern BitSet for all Literals that are true or false.
-  val booleanLiteralBits: BitSet = new ImmutableBitSet(
-      TreePattern.maxId, LITERAL.id, TRUE_OR_FALSE_LITERAL.id)
+  val booleanLiteralBits: BitSet =
+    new ImmutableBitSet(TreePattern.maxId, LITERAL.id, TRUE_OR_FALSE_LITERAL.id)
 
   // Singleton tree pattern BitSet for all Literals that are nulls.
-  val nullLiteralBits: BitSet = new ImmutableBitSet(TreePattern.maxId, LITERAL.id, NULL_LITERAL.id)
+  val nullLiteralBits: BitSet =
+    new ImmutableBitSet(TreePattern.maxId, LITERAL.id, NULL_LITERAL.id)
 }
 
 /**
  * In order to do type checking, use Literal.create() instead of constructor
  */
-case class Literal (value: Any, dataType: DataType) extends LeafExpression {
+case class Literal(value: Any, dataType: DataType) extends LeafExpression {
 
   Literal.validateLiteralValue(value, dataType)
 
@@ -601,8 +603,8 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
           Literal(kv._1, kv._2).sql
         }
       val structFields: Array[String] =
-        structNames.zip(structValues).map {
-          kv => s"'${kv._1}', ${kv._2}"
+        structNames.zip(structValues).map { kv =>
+          s"'${kv._1}', ${kv._2}"
         }
       s"NAMED_STRUCT(${structFields.mkString(", ")})"
     case (data: ArrayBasedMapData, mapType: MapType) =>

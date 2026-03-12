@@ -28,11 +28,13 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.DataType
 
 object XmlUtils {
+
   /**
    * Sample XML dataset as configured by `samplingRatio`.
    */
   def sample(xml: Dataset[String], options: XmlOptions): Dataset[String] = {
-    require(options.samplingRatio > 0,
+    require(
+      options.samplingRatio > 0,
       s"samplingRatio (${options.samplingRatio}) should be greater than 0")
     if (options.samplingRatio > 0.99) {
       xml
@@ -45,7 +47,8 @@ object XmlUtils {
    * Sample XML RDD as configured by `samplingRatio`.
    */
   def sample(xml: RDD[PortableDataStream], options: XmlOptions): RDD[PortableDataStream] = {
-    require(options.samplingRatio > 0,
+    require(
+      options.samplingRatio > 0,
       s"samplingRatio (${options.samplingRatio}) should be greater than 0")
     if (options.samplingRatio > 0.99) {
       xml

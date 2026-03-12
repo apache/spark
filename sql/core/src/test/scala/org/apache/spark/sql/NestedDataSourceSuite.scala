@@ -29,7 +29,8 @@ trait NestedDataSourceSuiteBase extends QueryTest with SharedSparkSession {
     spark
       .range(1L)
       .selectExpr(selectExpr: _*)
-      .write.mode("overwrite")
+      .write
+      .mode("overwrite")
       .format(format)
       .save(path)
   }
@@ -43,49 +44,46 @@ trait NestedDataSourceSuiteBase extends QueryTest with SharedSparkSession {
           .add("camelcase", LongType)
           .add("CamelCase", LongType),
       Seq("NAMED_STRUCT('lowercase', id, 'camelCase', id + 1) AS StructColumn") ->
-        new StructType().add("StructColumn",
+        new StructType().add(
+          "StructColumn",
           new StructType()
             .add("LowerCase", LongType)
             .add("camelcase", LongType)
-            .add("CamelCase", LongType))
-    ).foreach { case (selectExpr: Seq[String], caseInsensitiveSchema: StructType) =>
-      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
-        nestedDataSources.map { format =>
-          withClue(s"format = $format select = ${selectExpr.mkString(",")}") {
-            withTempPath { dir =>
-              val path = dir.getCanonicalPath
-              save(selectExpr, format, path)
-              checkError(
-                exception = intercept[AnalysisException] {
-                  spark
-                    .read
-                    .options(readOptions(caseInsensitiveSchema))
-                    .schema(caseInsensitiveSchema)
-                    .format(format)
-                    .load(path)
-                    .collect()
-                },
-                condition = "COLUMN_ALREADY_EXISTS",
-                parameters = Map("columnName" -> "`camelcase`")
-              )
+            .add("CamelCase", LongType))).foreach {
+      case (selectExpr: Seq[String], caseInsensitiveSchema: StructType) =>
+        withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+          nestedDataSources.map { format =>
+            withClue(s"format = $format select = ${selectExpr.mkString(",")}") {
+              withTempPath { dir =>
+                val path = dir.getCanonicalPath
+                save(selectExpr, format, path)
+                checkError(
+                  exception = intercept[AnalysisException] {
+                    spark.read
+                      .options(readOptions(caseInsensitiveSchema))
+                      .schema(caseInsensitiveSchema)
+                      .format(format)
+                      .load(path)
+                      .collect()
+                  },
+                  condition = "COLUMN_ALREADY_EXISTS",
+                  parameters = Map("columnName" -> "`camelcase`"))
+              }
             }
           }
         }
-      }
     }
   }
 }
 
 class NestedDataSourceV1Suite extends NestedDataSourceSuiteBase {
   override protected def sparkConf: SparkConf =
-    super
-      .sparkConf
+    super.sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, nestedDataSources.mkString(","))
 }
 
 class NestedDataSourceV2Suite extends NestedDataSourceSuiteBase {
   override protected def sparkConf: SparkConf =
-    super
-      .sparkConf
+    super.sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, "")
 }

@@ -49,8 +49,8 @@ trait RelationMetadataProvider extends LookupCatalog {
 
   /**
    * Resolve metadata for the given `unresolvedPlan`. This method is called once per unresolved
-   * logical plan by the [[Resolver]] (for each SQL query/ DataFrame program and for each
-   * nested [[View]] operator).
+   * logical plan by the [[Resolver]] (for each SQL query/ DataFrame program and for each nested
+   * [[View]] operator).
    */
   def resolve(unresolvedPlan: LogicalPlan): Unit
 
@@ -62,10 +62,7 @@ trait RelationMetadataProvider extends LookupCatalog {
   def getRelationWithResolvedMetadata(
       unresolvedRelation: UnresolvedRelation): Option[LogicalPlan] = {
     Option(
-      relationsWithResolvedMetadata.get(
-        relationIdFromUnresolvedRelation(unresolvedRelation)
-      )
-    )
+      relationsWithResolvedMetadata.get(relationIdFromUnresolvedRelation(unresolvedRelation)))
   }
 
   /**
@@ -82,8 +79,7 @@ trait RelationMetadataProvider extends LookupCatalog {
           multipartIdentifier =
             Seq(catalog.name()) ++ ident.namespace().toImmutableArraySeq ++ Seq(ident.name()),
           options = unresolvedRelation.options,
-          isStreaming = unresolvedRelation.isStreaming
-        )
+          isStreaming = unresolvedRelation.isStreaming)
       case _ =>
         unresolvedRelation.tableNotFound(unresolvedRelation.multipartIdentifier)
     }

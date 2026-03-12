@@ -28,19 +28,23 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.functions.expr
 
 /**
- * `MergeIntoWriter` provides methods to define and execute merge actions based
- * on specified conditions.
+ * `MergeIntoWriter` provides methods to define and execute merge actions based on specified
+ * conditions.
  *
- * @tparam T the type of data in the Dataset.
- * @param table the name of the target table for the merge operation.
- * @param ds the source Dataset to merge into the target table.
- * @param on the merge condition.
+ * @tparam T
+ *   the type of data in the Dataset.
+ * @param table
+ *   the name of the target table for the merge operation.
+ * @param ds
+ *   the source Dataset to merge into the target table.
+ * @param on
+ *   the merge condition.
  *
  * @since 4.0.0
  */
 @Experimental
-class MergeIntoWriter[T] private[sql](table: String, ds: Dataset[T], on: Column)
-  extends sql.MergeIntoWriter[T] {
+class MergeIntoWriter[T] private[sql] (table: String, ds: Dataset[T], on: Column)
+    extends sql.MergeIntoWriter[T] {
 
   private val df: DataFrame = ds.toDF()
 
@@ -69,8 +73,9 @@ class MergeIntoWriter[T] private[sql](table: String, ds: Dataset[T], on: Column)
     }
 
     MergeIntoTable(
-      UnresolvedRelation(tableName).requireWritePrivileges(MergeIntoTable.getWritePrivileges(
-        matchedActions, notMatchedActions, notMatchedBySourceActions)),
+      UnresolvedRelation(tableName).requireWritePrivileges(
+        MergeIntoTable
+          .getWritePrivileges(matchedActions, notMatchedActions, notMatchedBySourceActions)),
       logicalPlan,
       on.expr,
       matchedActions.toSeq,
@@ -85,8 +90,8 @@ class MergeIntoWriter[T] private[sql](table: String, ds: Dataset[T], on: Column)
   }
 
   override protected[sql] def insert(
-    condition: Option[Column],
-    map: Map[String, Column]): this.type = {
+      condition: Option[Column],
+      map: Map[String, Column]): this.type = {
     this.notMatchedActions += InsertAction(condition.map(_.expr), mapToAssignments(map))
     this
   }

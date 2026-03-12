@@ -30,6 +30,7 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
 
 object SchemaMergeUtils extends Logging {
+
   /**
    * Figures out a merged Parquet/ORC schema with a distributed Spark job.
    */
@@ -59,7 +60,8 @@ object SchemaMergeUtils extends Logging {
 
     // Set the number of partitions to prevent following schema reads from generating many tasks
     // in case of a small number of orc files.
-    val numParallelism = Math.min(Math.max(partialFileStatusInfo.size, 1),
+    val numParallelism = Math.min(
+      Math.max(partialFileStatusInfo.size, 1),
       sparkSession.sparkContext.defaultParallelism)
 
     val ignoreCorruptFiles =
@@ -68,8 +70,7 @@ object SchemaMergeUtils extends Logging {
 
     // Issues a Spark job to read Parquet/ORC schema in parallel.
     val partiallyMergedSchemas =
-      sparkSession
-        .sparkContext
+      sparkSession.sparkContext
         .parallelize(partialFileStatusInfo, numParallelism)
         .mapPartitions { iterator =>
           // Resembles fake `FileStatus`es with serialized path and length information.
@@ -86,13 +87,15 @@ object SchemaMergeUtils extends Logging {
             schemas.tail.foreach { schema =>
               try {
                 mergedSchema = mergedSchema.merge(schema, caseSensitive)
-              } catch { case cause: SparkException =>
-                throw QueryExecutionErrors.failedMergingSchemaError(mergedSchema, schema, cause)
+              } catch {
+                case cause: SparkException =>
+                  throw QueryExecutionErrors.failedMergingSchemaError(mergedSchema, schema, cause)
               }
             }
             Iterator.single(mergedSchema)
           }
-        }.collect()
+        }
+        .collect()
 
     if (partiallyMergedSchemas.isEmpty) {
       None
@@ -101,8 +104,9 @@ object SchemaMergeUtils extends Logging {
       partiallyMergedSchemas.tail.foreach { schema =>
         try {
           finalSchema = finalSchema.merge(schema, caseSensitive)
-        } catch { case cause: SparkException =>
-          throw QueryExecutionErrors.failedMergingSchemaError(finalSchema, schema, cause)
+        } catch {
+          case cause: SparkException =>
+            throw QueryExecutionErrors.failedMergingSchemaError(finalSchema, schema, cause)
         }
       }
       Some(finalSchema)

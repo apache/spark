@@ -46,9 +46,14 @@ private[sql] abstract class ParquetCompatibilityTest extends QueryTest with Parq
     val hadoopConf = spark.sessionState.newHadoopConf()
     val fsPath = new Path(path)
     val fs = fsPath.getFileSystem(hadoopConf)
-    val parquetFiles = fs.listStatus(fsPath, new PathFilter {
-      override def accept(path: Path): Boolean = pathFilter(path)
-    }).toSeq.asJava
+    val parquetFiles = fs
+      .listStatus(
+        fsPath,
+        new PathFilter {
+          override def accept(path: Path): Boolean = pathFilter(path)
+        })
+      .toSeq
+      .asJava
 
     val footers =
       ParquetFileReader.readAllFootersInParallel(hadoopConf, parquetFiles, true)
@@ -56,8 +61,7 @@ private[sql] abstract class ParquetCompatibilityTest extends QueryTest with Parq
   }
 
   protected def logParquetSchema(path: String): Unit = {
-    logInfo(
-      s"""Schema of the Parquet file written by parquet-avro:
+    logInfo(s"""Schema of the Parquet file written by parquet-avro:
          |${readParquetSchema(path)}
        """.stripMargin)
   }
@@ -92,8 +96,10 @@ private[sql] abstract class ParquetCompatibilityTest extends QueryTest with Parq
     buf.array()
   }
 
-  /** Construct WKB for POLYGON in little-endian format from a single ring of (x, y) pairs.
-   *  An empty argument list produces an empty polygon (0 rings). */
+  /**
+   * Construct WKB for POLYGON in little-endian format from a single ring of (x, y) pairs. An
+   * empty argument list produces an empty polygon (0 rings).
+   */
   protected def makePolygonWkb(ring: (Double, Double)*): Array[Byte] = {
     if (ring.isEmpty) {
       val buf = ByteBuffer.allocate(9).order(ByteOrder.LITTLE_ENDIAN)
@@ -117,8 +123,8 @@ private[sql] abstract class ParquetCompatibilityTest extends QueryTest with Parq
   }
 
   /**
-   * Construct WKB for a multi/collection geometry in little-endian format.
-   * WKB types: MultiPoint=4, MultiLineString=5, MultiPolygon=6, GeometryCollection=7.
+   * Construct WKB for a multi/collection geometry in little-endian format. WKB types:
+   * MultiPoint=4, MultiLineString=5, MultiPolygon=6, GeometryCollection=7.
    */
   protected def makeMultiWkb(wkbType: Int, geometries: Array[Byte]*): Array[Byte] = {
     val totalSize = 9 + geometries.map(_.length).sum
@@ -165,7 +171,7 @@ private[sql] object ParquetCompatibilityTest {
    * records with arbitrary structures.
    */
   private class DirectWriteSupport(schema: MessageType, metadata: Map[String, String])
-    extends WriteSupport[RecordConsumer => Unit] {
+      extends WriteSupport[RecordConsumer => Unit] {
 
     private var recordConsumer: RecordConsumer = _
 
@@ -186,7 +192,10 @@ private[sql] object ParquetCompatibilityTest {
    * Writes arbitrary messages conforming to a given `schema` to a Parquet file located by `path`.
    * Records are produced by `recordWriters`.
    */
-  def writeDirect(path: String, schema: String, recordWriters: (RecordConsumer => Unit)*): Unit = {
+  def writeDirect(
+      path: String,
+      schema: String,
+      recordWriters: (RecordConsumer => Unit)*): Unit = {
     writeDirect(path, schema, Map.empty[String, String], recordWriters: _*)
   }
 
@@ -201,17 +210,20 @@ private[sql] object ParquetCompatibilityTest {
       recordWriters: (RecordConsumer => Unit)*): Unit = {
     val messageType = MessageTypeParser.parseMessageType(schema)
     val testWriteSupport = new DirectWriteSupport(messageType, metadata)
+
     /**
-     * Provide a builder for constructing a parquet writer - after PARQUET-248 directly constructing
-     * the writer is deprecated and should be done through a builder. The default builders include
-     * Avro - but for raw Parquet writing we must create our own builder.
+     * Provide a builder for constructing a parquet writer - after PARQUET-248 directly
+     * constructing the writer is deprecated and should be done through a builder. The default
+     * builders include Avro - but for raw Parquet writing we must create our own builder.
      */
-    class ParquetWriterBuilder() extends
-        ParquetWriter.Builder[RecordConsumer => Unit, ParquetWriterBuilder](new Path(path)) {
+    class ParquetWriterBuilder()
+        extends ParquetWriter.Builder[RecordConsumer => Unit, ParquetWriterBuilder](
+          new Path(path)) {
       override def getWriteSupport(conf: Configuration) = testWriteSupport
       override def self() = this
     }
     val parquetWriter = new ParquetWriterBuilder().build()
-    try recordWriters.foreach(parquetWriter.write) finally parquetWriter.close()
+    try recordWriters.foreach(parquetWriter.write)
+    finally parquetWriter.close()
   }
 }

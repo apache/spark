@@ -36,10 +36,7 @@ class ParquetProtobufCompatibilitySuite extends ParquetCompatibilityTest with Sh
 
     checkAnswer(
       readResourceParquetFile("test-data/proto-repeated-struct.parquet"),
-      Row(
-        Seq(
-          Row("0 - 1", "0 - 2", "0 - 3"),
-          Row("1 - 1", "1 - 2", "1 - 3"))))
+      Row(Seq(Row("0 - 1", "0 - 2", "0 - 3"), Row("1 - 1", "1 - 2", "1 - 3"))))
 
     checkAnswer(
       readResourceParquetFile("test-data/proto-struct-with-array-many.parquet"),
@@ -76,9 +73,6 @@ class ParquetProtobufCompatibilitySuite extends ParquetCompatibilityTest with Sh
   test("unannotated array of string") {
     checkAnswer(
       readResourceParquetFile("test-data/proto-repeated-string.parquet"),
-      Seq(
-        Row(Seq("hello", "world")),
-        Row(Seq("good", "bye")),
-        Row(Seq("one", "two", "three"))))
+      Seq(Row(Seq("hello", "world")), Row(Seq("good", "bye")), Row(Seq("one", "two", "three"))))
   }
 }

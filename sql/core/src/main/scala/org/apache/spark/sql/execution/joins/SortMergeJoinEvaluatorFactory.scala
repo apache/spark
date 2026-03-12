@@ -61,11 +61,13 @@ class SortMergeJoinEvaluatorFactory(
       val rightIter = inputs(1)
 
       val boundCondition: InternalRow => Boolean = {
-        condition.map { cond =>
-          Predicate.create(cond, left.output ++ right.output).eval _
-        }.getOrElse {
-          (r: InternalRow) => true
-        }
+        condition
+          .map { cond =>
+            Predicate.create(cond, left.output ++ right.output).eval _
+          }
+          .getOrElse { (r: InternalRow) =>
+            true
+          }
       }
 
       // An ordering that can be used to compare keys from both sides.

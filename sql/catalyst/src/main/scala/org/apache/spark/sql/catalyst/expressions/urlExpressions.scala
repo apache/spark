@@ -49,10 +49,10 @@ import org.apache.spark.unsafe.types.UTF8String
   group = "url_funcs")
 // scalastyle:on line.size.limit
 case class UrlEncode(child: Expression)
-  extends RuntimeReplaceable
-  with UnaryLike[Expression]
-  with ImplicitCastInputTypes
-  with DefaultStringProducingExpression {
+    extends RuntimeReplaceable
+    with UnaryLike[Expression]
+    with ImplicitCastInputTypes
+    with DefaultStringProducingExpression {
 
   override lazy val replacement: Expression =
     StaticInvoke(
@@ -90,10 +90,10 @@ case class UrlEncode(child: Expression)
   group = "url_funcs")
 // scalastyle:on line.size.limit
 case class UrlDecode(child: Expression, failOnError: Boolean = true)
-  extends RuntimeReplaceable
-  with UnaryLike[Expression]
-  with ImplicitCastInputTypes
-  with DefaultStringProducingExpression {
+    extends RuntimeReplaceable
+    with UnaryLike[Expression]
+    with ImplicitCastInputTypes
+    with DefaultStringProducingExpression {
 
   def this(child: Expression) = this(child, true)
 
@@ -133,7 +133,8 @@ case class UrlDecode(child: Expression, failOnError: Boolean = true)
   group = "url_funcs")
 // scalastyle:on line.size.limit
 case class TryUrlDecode(expr: Expression, replacement: Expression)
-  extends RuntimeReplaceable with InheritAnalysisRules {
+    extends RuntimeReplaceable
+    with InheritAnalysisRules {
 
   def this(expr: Expression) = this(expr, UrlDecode(expr, false))
 
@@ -164,7 +165,8 @@ object UrlCodec {
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(url, partToExtract[, key]) - This is a special version of `parse_url` that performs the same operation, but returns a NULL value instead of raising an error if the parsing cannot be performed.",
+  usage =
+    "_FUNC_(url, partToExtract[, key]) - This is a special version of `parse_url` that performs the same operation, but returns a NULL value instead of raising an error if the parsing cannot be performed.",
   examples = """
     Examples:
       > SELECT _FUNC_('http://spark.apache.org/path?query=1', 'HOST');
@@ -180,7 +182,8 @@ object UrlCodec {
   group = "url_funcs")
 // scalastyle:on line.size.limit
 case class TryParseUrl(params: Seq[Expression], replacement: Expression)
-  extends RuntimeReplaceable with InheritAnalysisRules {
+    extends RuntimeReplaceable
+    with InheritAnalysisRules {
   def this(children: Seq[Expression]) = this(children, ParseUrl(children, failOnError = false))
 
   override def prettyName: String = "try_parse_url"
@@ -208,13 +211,11 @@ case class TryParseUrl(params: Seq[Expression], replacement: Expression)
   """,
   since = "2.0.0",
   group = "url_funcs")
-case class ParseUrl(
-    children: Seq[Expression],
-    failOnError: Boolean = SQLConf.get.ansiEnabled)
-  extends Expression
-  with ExpectsInputTypes
-  with RuntimeReplaceable
-  with DefaultStringProducingExpression {
+case class ParseUrl(children: Seq[Expression], failOnError: Boolean = SQLConf.get.ansiEnabled)
+    extends Expression
+    with ExpectsInputTypes
+    with RuntimeReplaceable
+    with DefaultStringProducingExpression {
 
   def this(children: Seq[Expression]) = this(children, SQLConf.get.ansiEnabled)
 
@@ -226,8 +227,9 @@ case class ParseUrl(
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.size > 3 || children.size < 2) {
       throw QueryCompilationErrors.wrongNumArgsError(
-        toSQLId(prettyName), Seq("[2, 3]"), children.length
-      )
+        toSQLId(prettyName),
+        Seq("[2, 3]"),
+        children.length)
     } else {
       super[ExpectsInputTypes].checkInputDataTypes()
     }
@@ -253,16 +255,17 @@ case class ParseUrl(
   // If the key is a constant, cache the Pattern object so that we don't need to convert key
   // from UTF8String to String to StringBuilder to String to Pattern for every row.
   @transient private lazy val pattern = children.size match {
-    case 3 => children(2) match {
-      case Literal(key: UTF8String, _) if key ne null => key
-      case _ => null
-    }
+    case 3 =>
+      children(2) match {
+        case Literal(key: UTF8String, _) if key ne null => key
+        case _ => null
+      }
     case _ => null
   }
 
   @transient
-  private lazy val evaluator: ParseUrlEvaluator = ParseUrlEvaluator(
-    url, extractPart, pattern, failOnError)
+  private lazy val evaluator: ParseUrlEvaluator =
+    ParseUrlEvaluator(url, extractPart, pattern, failOnError)
 
   override def replacement: Expression = Invoke(
     Literal.create(evaluator, ObjectType(classOf[ParseUrlEvaluator])),

@@ -153,11 +153,11 @@ private[sql] trait LookupCatalog extends Logging {
       }
       parts match {
         case CatalogAndMultipartIdentifier(None, names)
-          if CatalogV2Util.isSessionCatalog(currentCatalog) =>
+            if CatalogV2Util.isSessionCatalog(currentCatalog) =>
           namesToTableIdentifier(names)
         case CatalogAndMultipartIdentifier(Some(catalog), names)
-          if CatalogV2Util.isSessionCatalog(catalog) &&
-             CatalogV2Util.isSessionCatalog(currentCatalog) =>
+            if CatalogV2Util.isSessionCatalog(catalog) &&
+              CatalogV2Util.isSessionCatalog(currentCatalog) =>
           namesToTableIdentifier(names)
         case _ => None
       }

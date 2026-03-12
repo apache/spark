@@ -29,7 +29,8 @@ class GroupBasedUpdateTableSuite extends UpdateTableSuiteBase {
   import testImplicits._
 
   test("update handles metadata columns correctly") {
-    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+    createAndInitTable(
+      "pk INT NOT NULL, id INT, dep STRING",
       """{ "pk": 1, "id": 1, "dep": "hr" }
         |{ "pk": 2, "id": 2, "dep": "software" }
         |{ "pk": 3, "id": 3, "dep": "hr" }
@@ -52,7 +53,8 @@ class GroupBasedUpdateTableSuite extends UpdateTableSuiteBase {
 
   test("update with subquery handles metadata columns correctly") {
     withTempView("updated_dep") {
-      createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+      createAndInitTable(
+        "pk INT NOT NULL, id INT, dep STRING",
         """{ "pk": 1, "id": 1, "dep": "hr" }
           |{ "pk": 2, "id": 2, "dep": "software" }
           |{ "pk": 3, "id": 3, "dep": "hr" }
@@ -61,8 +63,7 @@ class GroupBasedUpdateTableSuite extends UpdateTableSuiteBase {
       val updatedIdDF = Seq(Some("hr"), Some("it")).toDF()
       updatedIdDF.createOrReplaceTempView("updated_dep")
 
-      sql(
-        s"""UPDATE $tableNameAsString
+      sql(s"""UPDATE $tableNameAsString
            |SET id = -1
            |WHERE
            | id IN (1, 20)
@@ -88,8 +89,8 @@ class GroupBasedUpdateTableSuite extends UpdateTableSuiteBase {
     Seq(true, false).foreach { ddpEnabled =>
       Seq(true, false).foreach { aqeEnabled =>
         withSQLConf(
-            SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> ddpEnabled.toString,
-            SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqeEnabled.toString) {
+          SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> ddpEnabled.toString,
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqeEnabled.toString) {
           checkUpdateRuntimeGroupFiltering()
         }
       }
@@ -99,7 +100,8 @@ class GroupBasedUpdateTableSuite extends UpdateTableSuiteBase {
   private def checkUpdateRuntimeGroupFiltering(): Unit = {
     withTable(tableNameAsString) {
       withTempView("deleted_id") {
-        createAndInitTable("id INT, salary INT, dep STRING",
+        createAndInitTable(
+          "id INT, salary INT, dep STRING",
           """{ "id": 1, "salary": 300, "dep": 'hr' }
             |{ "id": 2, "salary": 150, "dep": 'software' }
             |{ "id": 3, "salary": 120, "dep": 'hr' }
@@ -133,7 +135,8 @@ class GroupBasedUpdateTableSuite extends UpdateTableSuiteBase {
   private def checkUpdateRuntimeFilterSubqueryReuse(): Unit = {
     withTable(tableNameAsString) {
       withTempView("deleted_id") {
-        createAndInitTable("id INT, salary INT, dep STRING",
+        createAndInitTable(
+          "id INT, salary INT, dep STRING",
           """{ "id": 1, "salary": 300, "dep": 'hr' }
             |{ "id": 2, "salary": 150, "dep": 'software' }
             |{ "id": 3, "salary": 120, "dep": 'hr' }
@@ -169,7 +172,8 @@ class GroupBasedUpdateTableSuite extends UpdateTableSuiteBase {
   }
 
   test("update with nondeterministic conditions") {
-    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+    createAndInitTable(
+      "pk INT NOT NULL, id INT, dep STRING",
       """{ "pk": 1, "id": 1, "dep": "hr" }
         |{ "pk": 2, "id": 2, "dep": "software" }
         |{ "pk": 3, "id": 3, "dep": "hr" }
@@ -185,21 +189,20 @@ class GroupBasedUpdateTableSuite extends UpdateTableSuiteBase {
       context = ExpectedContext(
         fragment = "UPDATE cat.ns1.test_table SET dep = 'invalid' WHERE id <= 1 AND rand() > 0.5",
         start = 0,
-        stop = 75)
-    )
+        stop = 75))
   }
 
   test("update does not double plan table (group filter enabled)") {
     withSQLConf(SQLConf.RUNTIME_ROW_LEVEL_OPERATION_GROUP_FILTER_ENABLED.key -> "true") {
-      createAndInitTable("id INT, salary INT, dep STRING",
+      createAndInitTable(
+        "id INT, salary INT, dep STRING",
         """{ "id": 1, "salary": 300, "dep": 'hr' }
           |{ "id": 2, "salary": 150, "dep": 'software' }
           |{ "id": 3, "salary": 120, "dep": 'hr' }
           |""".stripMargin)
 
       val (cond, groupFilterCond) = executeAndKeepConditions {
-        sql(
-          s"""UPDATE $tableNameAsString SET salary = -1
+        sql(s"""UPDATE $tableNameAsString SET salary = -1
              |WHERE id IN (SELECT id FROM $tableNameAsString WHERE salary > 200)
              |""".stripMargin)
       }
@@ -224,15 +227,15 @@ class GroupBasedUpdateTableSuite extends UpdateTableSuiteBase {
 
   test("update does not double plan table (group filter disabled)") {
     withSQLConf(SQLConf.RUNTIME_ROW_LEVEL_OPERATION_GROUP_FILTER_ENABLED.key -> "false") {
-      createAndInitTable("id INT, salary INT, dep STRING",
+      createAndInitTable(
+        "id INT, salary INT, dep STRING",
         """{ "id": 1, "salary": 300, "dep": 'hr' }
           |{ "id": 2, "salary": 150, "dep": 'software' }
           |{ "id": 3, "salary": 120, "dep": 'hr' }
           |""".stripMargin)
 
       val (cond, groupFilterCond) = executeAndKeepConditions {
-        sql(
-          s"""UPDATE $tableNameAsString SET salary = -1
+        sql(s"""UPDATE $tableNameAsString SET salary = -1
              |WHERE id IN (SELECT id FROM $tableNameAsString WHERE salary > 200)
              |""".stripMargin)
       }

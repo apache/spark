@@ -24,8 +24,8 @@ import org.apache.spark.sql.catalyst.rules.Rule
 
 /**
  * This rule removes [[SQLScalarFunction]] and [[SQLFunctionNode]] wrapper. They are respected
- * till the end of analysis stage because we want to see which part of an analyzed logical
- * plan is generated from a SQL function and also perform ACL checks.
+ * till the end of analysis stage because we want to see which part of an analyzed logical plan is
+ * generated from a SQL function and also perform ACL checks.
  */
 object EliminateSQLFunctionNode extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
@@ -36,12 +36,13 @@ object EliminateSQLFunctionNode extends Rule[LogicalPlan] {
       case f: SQLTableFunction =>
         throw SparkException.internalError(
           s"SQL table function plan should be rewritten during analysis: $f")
-      case p: LogicalPlan => p.transformExpressions {
-        case f: SQLScalarFunction => f.child
-        case f: SQLFunctionExpression =>
-          throw SparkException.internalError(
-            s"SQL function expression should be rewritten during analysis: $f")
-      }
+      case p: LogicalPlan =>
+        p.transformExpressions {
+          case f: SQLScalarFunction => f.child
+          case f: SQLFunctionExpression =>
+            throw SparkException.internalError(
+              s"SQL function expression should be rewritten during analysis: $f")
+        }
     }
   }
 }

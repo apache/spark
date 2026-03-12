@@ -50,18 +50,17 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession {
 
   test("unpartitioned table, single partition") {
     val table =
-      createTable(
-        files = Seq(
-          "file1" -> 1,
-          "file2" -> 1,
-          "file3" -> 1,
-          "file4" -> 1,
-          "file5" -> 1,
-          "file6" -> 1,
-          "file7" -> 1,
-          "file8" -> 1,
-          "file9" -> 1,
-          "file10" -> 1))
+      createTable(files = Seq(
+        "file1" -> 1,
+        "file2" -> 1,
+        "file3" -> 1,
+        "file4" -> 1,
+        "file5" -> 1,
+        "file6" -> 1,
+        "file7" -> 1,
+        "file8" -> 1,
+        "file9" -> 1,
+        "file10" -> 1))
 
     checkScan(table.select($"c1")) { partitions =>
       // 10 one byte files should fit in a single partition with 10 files.
@@ -78,13 +77,10 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession {
 
   test("unpartitioned table, multiple partitions") {
     val table =
-      createTable(
-        files = Seq(
-          "file1" -> 5,
-          "file2" -> 5,
-          "file3" -> 5))
+      createTable(files = Seq("file1" -> 5, "file2" -> 5, "file3" -> 5))
 
-    withSQLConf(SQLConf.FILES_MAX_PARTITION_BYTES.key -> "11",
+    withSQLConf(
+      SQLConf.FILES_MAX_PARTITION_BYTES.key -> "11",
       SQLConf.FILES_OPEN_COST_IN_BYTES.key -> "1") {
       checkScan(table.select($"c1")) { partitions =>
         // 5 byte files should be laid out [(5, 5), (5)]
@@ -104,12 +100,10 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession {
 
   test("Unpartitioned table, large file that gets split") {
     val table =
-      createTable(
-        files = Seq(
-          "file1" -> 15,
-          "file2" -> 3))
+      createTable(files = Seq("file1" -> 15, "file2" -> 3))
 
-    withSQLConf(SQLConf.FILES_MAX_PARTITION_BYTES.key -> "10",
+    withSQLConf(
+      SQLConf.FILES_MAX_PARTITION_BYTES.key -> "10",
       SQLConf.FILES_OPEN_COST_IN_BYTES.key -> "1") {
       checkScan(table.select($"c1")) { partitions =>
         // Files should be laid out [(0-10), (10-15, 4)]
@@ -133,17 +127,12 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession {
 
   test("Unpartitioned table, many files that get split") {
     val table =
-      createTable(
-        files = Seq(
-          "file1" -> 2,
-          "file2" -> 2,
-          "file3" -> 1,
-          "file4" -> 1,
-          "file5" -> 1,
-          "file6" -> 1))
+      createTable(files =
+        Seq("file1" -> 2, "file2" -> 2, "file3" -> 1, "file4" -> 1, "file5" -> 1, "file6" -> 1))
 
-    withSQLConf(SQLConf.FILES_MAX_PARTITION_BYTES.key -> "4",
-        SQLConf.FILES_OPEN_COST_IN_BYTES.key -> "1") {
+    withSQLConf(
+      SQLConf.FILES_MAX_PARTITION_BYTES.key -> "4",
+      SQLConf.FILES_OPEN_COST_IN_BYTES.key -> "1") {
       checkScan(table.select($"c1")) { partitions =>
         // Files should be laid out [(file1), (file2, file3), (file4, file5), (file6)]
         assert(partitions.size == 4, "when checking partitions")
@@ -180,10 +169,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession {
 
   test("partitioned table") {
     val table =
-      createTable(
-        files = Seq(
-          "p1=1/file1" -> 10,
-          "p1=2/file2" -> 10))
+      createTable(files = Seq("p1=1/file1" -> 10, "p1=2/file2" -> 10))
 
     // Only one file should be read.
     checkScan(table.where("p1 = 1")) { partitions =>
@@ -197,7 +183,8 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession {
     checkScan(table.where("p1 = 1 AND c1 = 1 AND (p1 + c1) = 2")) { partitions =>
       assert(partitions.size == 1, "when checking partitions")
       assert(partitions.head.files.length == 1, "when checking files in partition 1")
-      assert(partitions.head.files.head.partitionValues.getInt(0) == 1,
+      assert(
+        partitions.head.files.head.partitionValues.getInt(0) == 1,
         "when checking partition values")
     }
     // Only the filters that do not contain the partition column should be pushed down
@@ -207,10 +194,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession {
   test("partitioned table - case insensitive") {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
       val table =
-        createTable(
-          files = Seq(
-            "p1=1/file1" -> 10,
-            "p1=2/file2" -> 10))
+        createTable(files = Seq("p1=1/file1" -> 10, "p1=2/file2" -> 10))
 
       // Only one file should be read.
       checkScan(table.where("P1 = 1")) { partitions =>
@@ -224,7 +208,8 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession {
       checkScan(table.where("P1 = 1 AND C1 = 1 AND (P1 + C1) = 2")) { partitions =>
         assert(partitions.size == 1, "when checking partitions")
         assert(partitions.head.files.length == 1, "when checking files in partition 1")
-        assert(partitions.head.files.head.partitionValues.getInt(0) == 1,
+        assert(
+          partitions.head.files.head.partitionValues.getInt(0) == 1,
           "when checking partition values")
       }
       // Only the filters that do not contain the partition column should be pushed down
@@ -234,10 +219,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession {
 
   test("partitioned table - after scan filters") {
     val table =
-      createTable(
-        files = Seq(
-          "p1=1/file1" -> 10,
-          "p1=2/file2" -> 10))
+      createTable(files = Seq("p1=1/file1" -> 10, "p1=2/file2" -> 10))
 
     val df1 = table.where("p1 = 1 AND (p1 + c1) = 2 AND c1 = 1")
     // Filter on data only are advisory so we have to reevaluate.
@@ -285,19 +267,19 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession {
   }
 
   test("Locality support for FileScanRDD") {
-    val partition = FilePartition(0, Array(
-      PartitionedFile(InternalRow.empty, sp("fakePath0"), 0, 10, Array("host0", "host1")),
-      PartitionedFile(InternalRow.empty, sp("fakePath0"), 10, 20, Array("host1", "host2")),
-      PartitionedFile(InternalRow.empty, sp("fakePath1"), 0, 5, Array("host3")),
-      PartitionedFile(InternalRow.empty, sp("fakePath2"), 0, 5, Array("host4"))
-    ))
+    val partition = FilePartition(
+      0,
+      Array(
+        PartitionedFile(InternalRow.empty, sp("fakePath0"), 0, 10, Array("host0", "host1")),
+        PartitionedFile(InternalRow.empty, sp("fakePath0"), 10, 20, Array("host1", "host2")),
+        PartitionedFile(InternalRow.empty, sp("fakePath1"), 0, 5, Array("host3")),
+        PartitionedFile(InternalRow.empty, sp("fakePath2"), 0, 5, Array("host4"))))
 
     val fakeRDD = new FileScanRDD(
       spark,
       (file: PartitionedFile) => Iterator.empty,
       Seq(partition),
-      StructType(Seq.empty)
-    )
+      StructType(Seq.empty))
 
     assertResult(Set("host0", "host1", "host2")) {
       fakeRDD.preferredLocations(partition).toSet
@@ -306,14 +288,11 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession {
 
   test("Locality support for FileScanRDD - one file per partition") {
     withSQLConf(
-        SQLConf.FILES_MAX_PARTITION_BYTES.key -> "10",
-        "fs.file.impl" -> classOf[LocalityTestFileSystem].getName,
-        "fs.file.impl.disable.cache" -> "true") {
+      SQLConf.FILES_MAX_PARTITION_BYTES.key -> "10",
+      "fs.file.impl" -> classOf[LocalityTestFileSystem].getName,
+      "fs.file.impl.disable.cache" -> "true") {
       val table =
-        createTable(files = Seq(
-          "file1" -> 10,
-          "file2" -> 10
-        ))
+        createTable(files = Seq("file1" -> 10, "file2" -> 10))
 
       checkScan(table) { partitions =>
         val Seq(p1, p2) = partitions
@@ -330,15 +309,12 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession {
 
   test("Locality support for FileScanRDD - large file") {
     withSQLConf(
-        SQLConf.FILES_MAX_PARTITION_BYTES.key -> "10",
-        SQLConf.FILES_OPEN_COST_IN_BYTES.key -> "0",
-        "fs.file.impl" -> classOf[LocalityTestFileSystem].getName,
-        "fs.file.impl.disable.cache" -> "true") {
+      SQLConf.FILES_MAX_PARTITION_BYTES.key -> "10",
+      SQLConf.FILES_OPEN_COST_IN_BYTES.key -> "0",
+      "fs.file.impl" -> classOf[LocalityTestFileSystem].getName,
+      "fs.file.impl.disable.cache" -> "true") {
       val table =
-        createTable(files = Seq(
-          "file1" -> 15,
-          "file2" -> 5
-        ))
+        createTable(files = Seq("file1" -> 15, "file2" -> 5))
 
       checkScan(table) { partitions =>
         val Seq(p1, p2) = partitions
@@ -356,9 +332,8 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession {
   test("SPARK-15654 do not split non-splittable files") {
     // Check if a non-splittable file is not assigned into partitions
     Seq("gz", "snappy", "lz4").foreach { suffix =>
-       val table = createTable(
-        files = Seq(s"file1.${suffix}" -> 3, s"file2.${suffix}" -> 1, s"file3.${suffix}" -> 1)
-      )
+      val table = createTable(files =
+        Seq(s"file1.${suffix}" -> 3, s"file2.${suffix}" -> 1, s"file3.${suffix}" -> 1))
       withSQLConf(
         SQLConf.FILES_MAX_PARTITION_BYTES.key -> "2",
         SQLConf.FILES_OPEN_COST_IN_BYTES.key -> "0") {
@@ -372,9 +347,8 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession {
 
     // Check if a splittable compressed file is assigned into multiple partitions
     Seq("bz2").foreach { suffix =>
-       val table = createTable(
-         files = Seq(s"file1.${suffix}" -> 3, s"file2.${suffix}" -> 1, s"file3.${suffix}" -> 1)
-      )
+      val table = createTable(files =
+        Seq(s"file1.${suffix}" -> 3, s"file2.${suffix}" -> 1, s"file3.${suffix}" -> 1))
       withSQLConf(
         SQLConf.FILES_MAX_PARTITION_BYTES.key -> "2",
         SQLConf.FILES_OPEN_COST_IN_BYTES.key -> "0") {
@@ -425,7 +399,8 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession {
       withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> useV1ReaderList) {
         withTempPath { path =>
           val tempDir = path.getCanonicalPath
-          spark.range(100)
+          spark
+            .range(100)
             .selectExpr("id", "id as b")
             .write
             .partitionBy("id")
@@ -447,7 +422,8 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession {
     spark.conf.set(SQLConf.EXCHANGE_REUSE_ENABLED.key, true)
     withTempPath { path =>
       val tempDir = path.getCanonicalPath
-      spark.range(10)
+      spark
+        .range(10)
         .selectExpr("id % 2 as a", "id % 3 as b", "id as c")
         .write
         .partitionBy("a")
@@ -507,9 +483,12 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession {
   test("SPARK-29768: Column pruning through non-deterministic expressions") {
     withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
       withTempPath { path =>
-        spark.range(10)
+        spark
+          .range(10)
           .selectExpr("id as key", "id * 3 as s1", "id * 5 as s2")
-          .write.format("parquet").save(path.getAbsolutePath)
+          .write
+          .format("parquet")
+          .save(path.getAbsolutePath)
         val df1 = spark.read.parquet(path.getAbsolutePath)
         val df2 = df1.selectExpr("key", "rand()").where("key > 5")
         val plan = df2.queryExecution.sparkPlan
@@ -521,9 +500,12 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession {
 
     withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
       withTempPath { path =>
-        spark.range(10)
+        spark
+          .range(10)
           .selectExpr("id as key", "id * 3 as s1", "id * 5 as s2")
-          .write.format("parquet").save(path.getAbsolutePath)
+          .write
+          .format("parquet")
+          .save(path.getAbsolutePath)
         val df1 = spark.read.parquet(path.getAbsolutePath)
         val df2 = df1.selectExpr("key", "rand()").where("key > 5")
         val plan = df2.queryExecution.optimizedPlan
@@ -537,21 +519,13 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession {
   test("SPARK-32019: Add spark.sql.files.minPartitionNum config") {
     withSQLConf(SQLConf.FILES_MIN_PARTITION_NUM.key -> "1") {
       val table =
-        createTable(files = Seq(
-          "file1" -> 1,
-          "file2" -> 1,
-          "file3" -> 1
-        ))
+        createTable(files = Seq("file1" -> 1, "file2" -> 1, "file3" -> 1))
       assert(table.rdd.partitions.length == 1)
     }
 
     withSQLConf(SQLConf.FILES_MIN_PARTITION_NUM.key -> "10") {
       val table =
-        createTable(files = Seq(
-          "file1" -> 1,
-          "file2" -> 1,
-          "file3" -> 1
-        ))
+        createTable(files = Seq("file1" -> 1, "file2" -> 1, "file3" -> 1))
       assert(table.rdd.partitions.length == 3)
     }
 
@@ -576,12 +550,8 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-32352: Partially push down support data filter if it mixed in partition filters") {
     val table =
-      createTable(
-        files = Seq(
-          "p1=1/file1" -> 10,
-          "p1=2/file2" -> 10,
-          "p1=3/file3" -> 10,
-          "p1=4/file4" -> 10))
+      createTable(files =
+        Seq("p1=1/file1" -> 10, "p1=2/file2" -> 10, "p1=3/file3" -> 10, "p1=4/file4" -> 10))
 
     checkScan(table.where("(c1 = 1) OR (c1 = 2)")) { partitions =>
       assert(partitions.size == 1, "when checking partitions")
@@ -637,10 +607,12 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession {
     checkArgument("data filters", _.filters.toSet, _: Set[Filter])
 
   /** Helper for building checks on the arguments passed to the reader. */
-  protected def checkArgument[T](name: String, arg: LastArguments.type => T, expected: T): Unit = {
+  protected def checkArgument[T](
+      name: String,
+      arg: LastArguments.type => T,
+      expected: T): Unit = {
     if (arg(LastArguments) != expected) {
-      fail(
-        s"""
+      fail(s"""
            |Wrong $name
            |expected: $expected
            |actual: ${arg(LastArguments)}
@@ -655,10 +627,9 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession {
 
   /** Returns a set with all the filters present in the physical plan. */
   def getPhysicalFilters(df: DataFrame): ExpressionSet = {
-    ExpressionSet(
-      df.queryExecution.executedPlan.collect {
-        case execution.FilterExec(f, _) => splitConjunctivePredicates(f)
-      }.flatten)
+    ExpressionSet(df.queryExecution.executedPlan.collect { case execution.FilterExec(f, _) =>
+      splitConjunctivePredicates(f)
+    }.flatten)
   }
 
   /** Plans the query and calls the provided validation function with the planned partitioning. */
@@ -667,23 +638,20 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession {
   }
 
   /**
-   * Constructs a new table given a list of file names and sizes expressed in bytes. The table
-   * is written out in a temporary directory and any nested directories in the files names
-   * are automatically created.
+   * Constructs a new table given a list of file names and sizes expressed in bytes. The table is
+   * written out in a temporary directory and any nested directories in the files names are
+   * automatically created.
    *
    * When `buckets` is > 0 the returned [[DataFrame]] will have metadata specifying that number of
-   * buckets.  However, it is the responsibility of the caller to assign files to each bucket
-   * by appending the bucket id to the file names.
+   * buckets. However, it is the responsibility of the caller to assign files to each bucket by
+   * appending the bucket id to the file names.
    */
-  def createTable(
-      files: Seq[(String, Int)],
-      buckets: Int = 0): DataFrame = {
+  def createTable(files: Seq[(String, Int)], buckets: Int = 0): DataFrame = {
     val tempDir = Utils.createTempDir()
-    files.foreach {
-      case (name, size) =>
-        val file = new File(tempDir, name)
-        assert(file.getParentFile.exists() || Utils.createDirectory(file.getParentFile))
-        util.stringToFile(file, "*".repeat(size))
+    files.foreach { case (name, size) =>
+      val file = new File(tempDir, name)
+      assert(file.getParentFile.exists() || Utils.createDirectory(file.getParentFile))
+      util.stringToFile(file, "*".repeat(size))
     }
 
     val df = spark.read
@@ -693,9 +661,8 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession {
     if (buckets > 0) {
       val bucketed = df.queryExecution.analyzed transform {
         case l @ LogicalRelationWithTable(r: HadoopFsRelation, _) =>
-          l.copy(relation =
-            r.copy(bucketSpec =
-              Some(BucketSpec(numBuckets = buckets, "c1" :: Nil, Nil)))(r.sparkSession))
+          l.copy(relation = r.copy(bucketSpec =
+            Some(BucketSpec(numBuckets = buckets, "c1" :: Nil, Nil)))(r.sparkSession))
       }
       Dataset.ofRows(spark, bucketed)
     } else {
@@ -704,12 +671,15 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession {
   }
 
   def getFileScanRDD(df: DataFrame): FileScanRDD = {
-    df.queryExecution.executedPlan.collect {
-      case scan: DataSourceScanExec if scan.inputRDDs().head.isInstanceOf[FileScanRDD] =>
-        scan.inputRDDs().head.asInstanceOf[FileScanRDD]
-    }.headOption.getOrElse {
-      fail(s"No FileScan in query\n${df.queryExecution}")
-    }
+    df.queryExecution.executedPlan
+      .collect {
+        case scan: DataSourceScanExec if scan.inputRDDs().head.isInstanceOf[FileScanRDD] =>
+          scan.inputRDDs().head.asInstanceOf[FileScanRDD]
+      }
+      .headOption
+      .getOrElse {
+        fail(s"No FileScan in query\n${df.queryExecution}")
+      }
   }
 }
 
@@ -721,14 +691,16 @@ object LastArguments {
   var options: Map[String, String] = _
 }
 
-/** A test [[FileFormat]] that records the arguments passed to buildReader, and returns nothing. */
+/**
+ * A test [[FileFormat]] that records the arguments passed to buildReader, and returns nothing.
+ */
 case class TestFileFormat() extends TextBasedFileFormat {
 
   override def toString: String = "TestFileFormat"
 
   /**
-   * When possible, this method should return the schema of the given `files`.  When the format
-   * does not support inference, or no valid files are given should return None.  In these cases
+   * When possible, this method should return the schema of the given `files`. When the format
+   * does not support inference, or no valid files are given should return None. In these cases
    * Spark will require that user specify the schema manually.
    */
   override def inferSchema(
@@ -737,13 +709,13 @@ case class TestFileFormat() extends TextBasedFileFormat {
       files: Seq[FileStatus]): Option[StructType] =
     Some(
       StructType(Nil)
-          .add("c1", IntegerType)
-          .add("c2", IntegerType))
+        .add("c1", IntegerType)
+        .add("c2", IntegerType))
 
   /**
-   * Prepares a write job and returns an [[OutputWriterFactory]].  Client side job preparation can
-   * be put here.  For example, user defined output committer can be configured here
-   * by setting the output committer class in the conf of spark.sql.sources.outputCommitterClass.
+   * Prepares a write job and returns an [[OutputWriterFactory]]. Client side job preparation can
+   * be put here. For example, user defined output committer can be configured here by setting the
+   * output committer class in the conf of spark.sql.sources.outputCommitterClass.
    */
   override def prepareWrite(
       sparkSession: SparkSession,
@@ -772,12 +744,13 @@ case class TestFileFormat() extends TextBasedFileFormat {
   }
 }
 
-
 class LocalityTestFileSystem extends RawLocalFileSystem {
   private val invocations = new AtomicInteger(0)
 
   override def getFileBlockLocations(
-      file: FileStatus, start: Long, len: Long): Array[BlockLocation] = {
+      file: FileStatus,
+      start: Long,
+      len: Long): Array[BlockLocation] = {
     require(!file.isDirectory, "The file path can not be a directory.")
     val count = invocations.getAndAdd(1)
     Array(new BlockLocation(Array(s"host$count:50010"), Array(s"host$count"), 0, len))
@@ -789,7 +762,9 @@ class LocalityTestFileSystem extends RawLocalFileSystem {
 class MockDistributedFileSystem extends RawLocalFileSystem {
 
   override def getFileBlockLocations(
-      file: FileStatus, start: Long, len: Long): Array[BlockLocation] = {
+      file: FileStatus,
+      start: Long,
+      len: Long): Array[BlockLocation] = {
     require(!file.isDirectory, "The file path can not be a directory.")
     super.getFileBlockLocations(file, start, len)
   }

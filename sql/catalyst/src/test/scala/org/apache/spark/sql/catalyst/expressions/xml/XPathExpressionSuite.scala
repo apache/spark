@@ -28,7 +28,8 @@ import org.apache.spark.sql.types.StringType
 class XPathExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   /** A helper function that tests null and error behaviors for xpath expressions. */
-  private def testNullAndErrorBehavior[T <: AnyRef](testExpr: (String, String, T) => Unit): Unit = {
+  private def testNullAndErrorBehavior[T <: AnyRef](
+      testExpr: (String, String, T) => Unit): Unit = {
     // null input should lead to null output
     testExpr("<a><b>b1</b><b id='b_2'>b2</b></a>", null, null.asInstanceOf[T])
     testExpr(null, "a", null.asInstanceOf[T])
@@ -41,14 +42,16 @@ class XPathExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     // Test error message for invalid XML document
     val e1 = intercept[RuntimeException] { testExpr("<a>/a>", "a", null.asInstanceOf[T]) }
-    assert(e1.getCause.getCause.getMessage.contains(
-      "XML document structures must start and end within the same entity."))
+    assert(
+      e1.getCause.getCause.getMessage
+        .contains("XML document structures must start and end within the same entity."))
     assert(e1.getMessage.contains("<a>/a>"))
 
     // Test error message for invalid xpath
     val e2 = intercept[RuntimeException] { testExpr("<a></a>", "!#$", null.asInstanceOf[T]) }
-    assert(e2.getCause.getMessage.contains("Invalid XPath") &&
-      e2.getCause.getMessage.contains("!#$"))
+    assert(
+      e2.getCause.getMessage.contains("Invalid XPath") &&
+        e2.getCause.getMessage.contains("!#$"))
   }
 
   test("xpath_boolean") {
@@ -127,10 +130,11 @@ class XPathExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     testExpr("<a>this is not a number</a>", "a", Float.NaN)
-    testExpr("<a>try a boolean</a>", "a = 10", 0.0F)
-    testExpr("<a><b class=\"odd\">1</b><b class=\"even\">2</b><b class=\"odd\">4</b><c>8</c></a>",
+    testExpr("<a>try a boolean</a>", "a = 10", 0.0f)
+    testExpr(
+      "<a><b class=\"odd\">1</b><b class=\"even\">2</b><b class=\"odd\">4</b><c>8</c></a>",
       "sum(a/b[@class=\"odd\"])",
-      5.0F)
+      5.0f)
 
     testNullAndErrorBehavior(testExpr)
   }
@@ -144,7 +148,8 @@ class XPathExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     testExpr("<a>this is not a number</a>", "a", Double.NaN)
     testExpr("<a>try a boolean</a>", "a = 10", 0.0)
-    testExpr("<a><b class=\"odd\">1</b><b class=\"even\">2</b><b class=\"odd\">4</b><c>8</c></a>",
+    testExpr(
+      "<a><b class=\"odd\">1</b><b class=\"even\">2</b><b class=\"odd\">4</b><c>8</c></a>",
       "sum(a/b[@class=\"odd\"])",
       5.0)
 
@@ -176,19 +181,33 @@ class XPathExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
         expected)
     }
 
-    testExpr("<a><b>b1</b><b>b2</b><b>b3</b><c>c1</c><c>c2</c></a>", "a/text()", Seq.empty[String])
-    testExpr("<a><b>b1</b><b>b2</b><b>b3</b><c>c1</c><c>c2</c></a>", "a/*/text()",
+    testExpr(
+      "<a><b>b1</b><b>b2</b><b>b3</b><c>c1</c><c>c2</c></a>",
+      "a/text()",
+      Seq.empty[String])
+    testExpr(
+      "<a><b>b1</b><b>b2</b><b>b3</b><c>c1</c><c>c2</c></a>",
+      "a/*/text()",
       Seq("b1", "b2", "b3", "c1", "c2"))
-    testExpr("<a><b>b1</b><b>b2</b><b>b3</b><c>c1</c><c>c2</c></a>", "a/b/text()",
+    testExpr(
+      "<a><b>b1</b><b>b2</b><b>b3</b><c>c1</c><c>c2</c></a>",
+      "a/b/text()",
       Seq("b1", "b2", "b3"))
-    testExpr("<a><b>b1</b><b>b2</b><b>b3</b><c>c1</c><c>c2</c></a>", "a/c/text()", Seq("c1", "c2"))
-    testExpr("<a><b class='bb'>b1</b><b>b2</b><b>b3</b><c class='bb'>c1</c><c>c2</c></a>",
-      "a/*[@class='bb']/text()", Seq("b1", "c1"))
+    testExpr(
+      "<a><b>b1</b><b>b2</b><b>b3</b><c>c1</c><c>c2</c></a>",
+      "a/c/text()",
+      Seq("c1", "c2"))
+    testExpr(
+      "<a><b class='bb'>b1</b><b>b2</b><b>b3</b><c class='bb'>c1</c><c>c2</c></a>",
+      "a/*[@class='bb']/text()",
+      Seq("b1", "c1"))
 
     checkEvaluation(
-      Coalesce(Seq(
+      Coalesce(
+        Seq(
           GetArrayItem(XPathList(Literal("<a></a>"), Literal("a")), Literal(0)),
-          Literal("nul"))), "nul")
+          Literal("nul"))),
+      "nul")
 
     testNullAndErrorBehavior(testExpr)
   }
@@ -201,13 +220,13 @@ class XPathExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
       // Validate that non-foldable paths are not supported.
       val nonLitPath = exprCtor(Literal("abcd"), NonFoldableLiteral("/"))
-      assert(nonLitPath.checkInputDataTypes() == DataTypeMismatch(
-        errorSubClass = "NON_FOLDABLE_INPUT",
-        messageParameters = Map(
-          "inputName" -> "`path`",
-          "inputType" -> "\"STRING\"",
-          "inputExpr" -> "\"nonfoldableliteral()\"")
-      ))
+      assert(
+        nonLitPath.checkInputDataTypes() == DataTypeMismatch(
+          errorSubClass = "NON_FOLDABLE_INPUT",
+          messageParameters = Map(
+            "inputName" -> "`path`",
+            "inputType" -> "\"STRING\"",
+            "inputExpr" -> "\"nonfoldableliteral()\"")))
     }
 
     testExpr(XPathBoolean)

@@ -95,9 +95,9 @@ class DataTypeSuite extends SparkFunSuite {
   test("extract fields from a StructType") {
     val struct = StructType(
       StructField("a", IntegerType, true) ::
-      StructField("b", LongType, false) ::
-      StructField("c", StringType, true) ::
-      StructField("d", FloatType, true) :: Nil)
+        StructField("b", LongType, false) ::
+        StructField("c", StringType, true) ::
+        StructField("d", FloatType, true) :: Nil)
 
     assert(StructField("b", LongType, false) === struct("b"))
 
@@ -107,7 +107,7 @@ class DataTypeSuite extends SparkFunSuite {
 
     val expectedStruct = StructType(
       StructField("b", LongType, false) ::
-      StructField("d", FloatType, true) :: Nil)
+        StructField("d", FloatType, true) :: Nil)
 
     assert(expectedStruct === struct(Set("b", "d")))
     intercept[SparkIllegalArgumentException] {
@@ -118,7 +118,7 @@ class DataTypeSuite extends SparkFunSuite {
   test("extract field index from a StructType") {
     val struct = StructType(
       StructField("a", LongType) ::
-      StructField("b", FloatType) :: Nil)
+        StructField("b", FloatType) :: Nil)
 
     assert(struct.fieldIndex("a") === 0)
     assert(struct.fieldIndex("b") === 1)
@@ -131,20 +131,17 @@ class DataTypeSuite extends SparkFunSuite {
   test("fieldsMap returns map of name to StructField") {
     val struct = StructType(
       StructField("a", LongType) ::
-      StructField("b", FloatType) :: Nil)
+        StructField("b", FloatType) :: Nil)
 
     val mapped = StructType.fieldsMap(struct.fields)
 
-    val expected = Map(
-      "a" -> StructField("a", LongType),
-      "b" -> StructField("b", FloatType))
+    val expected = Map("a" -> StructField("a", LongType), "b" -> StructField("b", FloatType))
 
     assert(mapped === expected)
   }
 
   test("fieldNames and names returns field names") {
-    val struct = StructType(
-      StructField("a", LongType) :: StructField("b", FloatType) :: Nil)
+    val struct = StructType(StructField("a", LongType) :: StructField("b", FloatType) :: Nil)
 
     assert(struct.fieldNames === Seq("a", "b"))
     assert(struct.names === Seq("a", "b"))
@@ -153,25 +150,22 @@ class DataTypeSuite extends SparkFunSuite {
   test("merge where right contains type conflict") {
     val left = StructType(
       StructField("a", LongType) ::
-      StructField("b", FloatType) :: Nil)
+        StructField("b", FloatType) :: Nil)
 
-    val right = StructType(
-      StructField("b", LongType) :: Nil)
+    val right = StructType(StructField("b", LongType) :: Nil)
 
     checkError(
       exception = intercept[SparkException] {
         left.merge(right)
       },
       condition = "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE",
-      parameters = Map("left" -> "\"FLOAT\"", "right" -> "\"BIGINT\""
-      )
-    )
+      parameters = Map("left" -> "\"FLOAT\"", "right" -> "\"BIGINT\""))
   }
 
   test("existsRecursively") {
     val struct = StructType(
       StructField("a", LongType) ::
-      StructField("b", FloatType) :: Nil)
+        StructField("b", FloatType) :: Nil)
     assert(struct.existsRecursively(_.isInstanceOf[LongType]))
     assert(struct.existsRecursively(_.isInstanceOf[StructType]))
     assert(!struct.existsRecursively(_.isInstanceOf[IntegerType]))
@@ -308,10 +302,11 @@ class DataTypeSuite extends SparkFunSuite {
   val metadata = new MetadataBuilder()
     .putString("name", "age")
     .build()
-  val structType = StructType(Seq(
-    StructField("a", IntegerType, nullable = true),
-    StructField("b", ArrayType(DoubleType), nullable = false),
-    StructField("c", DoubleType, nullable = false, metadata)))
+  val structType = StructType(
+    Seq(
+      StructField("a", IntegerType, nullable = true),
+      StructField("b", ArrayType(DoubleType), nullable = false),
+      StructField("c", DoubleType, nullable = false, metadata)))
   checkDataTypeFromJson(structType)
   checkDataTypeFromDDL(structType)
 
@@ -361,8 +356,9 @@ class DataTypeSuite extends SparkFunSuite {
     val dt = DataType.fromJson(schema)
 
     assert(dt.simpleString equals "struct<c1:string>")
-    assert(dt.json equals
-      """
+    assert(
+      dt.json equals
+        """
         |{"type":"struct","fields":[{"name":"c1","type":"string","nullable":true,"metadata":{}}]}
         |""".stripMargin.trim)
   }
@@ -477,7 +473,6 @@ class DataTypeSuite extends SparkFunSuite {
     to = MapType(StringType, ArrayType(IntegerType, true), valueContainsNull = true),
     expected = true)
 
-
   checkEqualsIgnoreCompatibleNullability(
     from = StructType(StructField("a", StringType, nullable = true) :: Nil),
     to = StructType(StructField("a", StringType, nullable = true) :: Nil),
@@ -513,10 +508,10 @@ class DataTypeSuite extends SparkFunSuite {
   checkEqualsIgnoreCompatibleNullability(
     from = StructType(
       StructField("a", StringType, nullable = false) ::
-      StructField("b", StringType, nullable = true) :: Nil),
+        StructField("b", StringType, nullable = true) :: Nil),
     to = StructType(
       StructField("a", StringType, nullable = false) ::
-      StructField("b", StringType, nullable = false) :: Nil),
+        StructField("b", StringType, nullable = false) :: Nil),
     expected = false)
 
   def checkCatalogString(dt: DataType): Unit = {
@@ -525,8 +520,8 @@ class DataTypeSuite extends SparkFunSuite {
       assert(dt === dt2)
     }
   }
-  def createStruct(n: Int): StructType = new StructType(Array.tabulate(n) {
-    i => StructField(s"col$i", IntegerType, nullable = true)
+  def createStruct(n: Int): StructType = new StructType(Array.tabulate(n) { i =>
+    StructField(s"col$i", IntegerType, nullable = true)
   })
 
   checkCatalogString(NullType)
@@ -577,7 +572,10 @@ class DataTypeSuite extends SparkFunSuite {
   checkEqualsStructurally(ArrayType(CharType(5), true), ArrayType(CharType(5), true), true)
   checkEqualsStructurally(ArrayType(CharType(5), true), ArrayType(CharType(5), false), false)
   checkEqualsStructurally(ArrayType(VarcharType(5), true), ArrayType(VarcharType(5), true), true)
-  checkEqualsStructurally(ArrayType(VarcharType(5), true), ArrayType(VarcharType(5), false), false)
+  checkEqualsStructurally(
+    ArrayType(VarcharType(5), true),
+    ArrayType(VarcharType(5), false),
+    false)
 
   checkEqualsStructurally(
     new StructType().add("f1", IntegerType),
@@ -602,17 +600,22 @@ class DataTypeSuite extends SparkFunSuite {
     new StructType().add("f2", IntegerType).add("g", new StructType().add("f1", StringType)),
     true)
   checkEqualsStructurally(
-    new StructType().add("f1", IntegerType).add("f", new StructType().add("f2", StringType, false)),
+    new StructType()
+      .add("f1", IntegerType)
+      .add("f", new StructType().add("f2", StringType, false)),
     new StructType().add("f2", IntegerType).add("g", new StructType().add("f1", StringType)),
     false)
   checkEqualsStructurally(
-    new StructType().add("f1", IntegerType).add("f", new StructType().add("f2", StringType, false)),
+    new StructType()
+      .add("f1", IntegerType)
+      .add("f", new StructType().add("f2", StringType, false)),
     new StructType().add("f2", IntegerType).add("g", new StructType().add("f1", StringType)),
     true,
     ignoreNullability = true)
   checkEqualsStructurally(
     new StructType().add("f1", IntegerType).add("f", new StructType().add("f2", StringType)),
-    new StructType().add("f2", IntegerType, nullable = false)
+    new StructType()
+      .add("f2", IntegerType, nullable = false)
       .add("g", new StructType().add("f1", StringType)),
     true,
     ignoreNullability = true)
@@ -626,122 +629,92 @@ class DataTypeSuite extends SparkFunSuite {
     false)
 
   checkEqualsStructurally(
-    ArrayType(
-      ArrayType(IntegerType, true), true),
-    ArrayType(
-      ArrayType(IntegerType, true), true),
+    ArrayType(ArrayType(IntegerType, true), true),
+    ArrayType(ArrayType(IntegerType, true), true),
     true,
-     ignoreNullability = false)
+    ignoreNullability = false)
 
   checkEqualsStructurally(
-    ArrayType(
-      ArrayType(IntegerType, true), false),
-    ArrayType(
-      ArrayType(IntegerType, true), true),
+    ArrayType(ArrayType(IntegerType, true), false),
+    ArrayType(ArrayType(IntegerType, true), true),
     false,
     ignoreNullability = false)
 
   checkEqualsStructurally(
-    ArrayType(
-      ArrayType(IntegerType, true), true),
-    ArrayType(
-      ArrayType(IntegerType, false), true),
+    ArrayType(ArrayType(IntegerType, true), true),
+    ArrayType(ArrayType(IntegerType, false), true),
     false,
     ignoreNullability = false)
 
   checkEqualsStructurally(
-    ArrayType(
-      ArrayType(IntegerType, true), false),
-    ArrayType(
-      ArrayType(IntegerType, true), true),
+    ArrayType(ArrayType(IntegerType, true), false),
+    ArrayType(ArrayType(IntegerType, true), true),
     true,
     ignoreNullability = true)
 
   checkEqualsStructurally(
-    ArrayType(
-      ArrayType(IntegerType, true), false),
-    ArrayType(
-      ArrayType(IntegerType, false), true),
+    ArrayType(ArrayType(IntegerType, true), false),
+    ArrayType(ArrayType(IntegerType, false), true),
     true,
     ignoreNullability = true)
 
   checkEqualsStructurally(
-    ArrayType(
-      ArrayType(CharType(5), true), true),
-    ArrayType(
-      ArrayType(StringType, true), true),
+    ArrayType(ArrayType(CharType(5), true), true),
+    ArrayType(ArrayType(StringType, true), true),
     false,
     ignoreNullability = false)
 
   checkEqualsStructurally(
-    ArrayType(
-      ArrayType(VarcharType(5), true), true),
-    ArrayType(
-      ArrayType(StringType, true), true),
+    ArrayType(ArrayType(VarcharType(5), true), true),
+    ArrayType(ArrayType(StringType, true), true),
     false,
     ignoreNullability = false)
 
   checkEqualsStructurally(
-    MapType(
-      ArrayType(IntegerType, true), ArrayType(IntegerType, true), true),
-    MapType(
-      ArrayType(IntegerType, true), ArrayType(IntegerType, true), true),
+    MapType(ArrayType(IntegerType, true), ArrayType(IntegerType, true), true),
+    MapType(ArrayType(IntegerType, true), ArrayType(IntegerType, true), true),
     true,
     ignoreNullability = false)
 
   checkEqualsStructurally(
-    MapType(
-      ArrayType(IntegerType, true), ArrayType(IntegerType, true), true),
-    MapType(
-      ArrayType(IntegerType, true), ArrayType(IntegerType, true), false),
+    MapType(ArrayType(IntegerType, true), ArrayType(IntegerType, true), true),
+    MapType(ArrayType(IntegerType, true), ArrayType(IntegerType, true), false),
     false,
     ignoreNullability = false)
 
   checkEqualsStructurally(
-    MapType(
-      ArrayType(IntegerType, true), ArrayType(IntegerType, true), true),
-    MapType(
-      ArrayType(IntegerType, true), ArrayType(IntegerType, false), true),
+    MapType(ArrayType(IntegerType, true), ArrayType(IntegerType, true), true),
+    MapType(ArrayType(IntegerType, true), ArrayType(IntegerType, false), true),
     false,
     ignoreNullability = false)
 
   checkEqualsStructurally(
-    MapType(
-      ArrayType(IntegerType, true), ArrayType(IntegerType, true), true),
-    MapType(
-      ArrayType(IntegerType, true), ArrayType(IntegerType, true), false),
+    MapType(ArrayType(IntegerType, true), ArrayType(IntegerType, true), true),
+    MapType(ArrayType(IntegerType, true), ArrayType(IntegerType, true), false),
     true,
     ignoreNullability = true)
 
   checkEqualsStructurally(
-    MapType(
-      ArrayType(IntegerType, true), ArrayType(IntegerType, true), true),
-    MapType(
-      ArrayType(IntegerType, true), ArrayType(IntegerType, false), true),
+    MapType(ArrayType(IntegerType, true), ArrayType(IntegerType, true), true),
+    MapType(ArrayType(IntegerType, true), ArrayType(IntegerType, false), true),
     true,
     ignoreNullability = true)
 
   checkEqualsStructurally(
-    MapType(
-      ArrayType(IntegerType, false), ArrayType(IntegerType, true), true),
-    MapType(
-      ArrayType(IntegerType, true), ArrayType(IntegerType, true), true),
+    MapType(ArrayType(IntegerType, false), ArrayType(IntegerType, true), true),
+    MapType(ArrayType(IntegerType, true), ArrayType(IntegerType, true), true),
     true,
     ignoreNullability = true)
 
   checkEqualsStructurally(
-    MapType(
-      ArrayType(IntegerType, true), ArrayType(CharType(5), true), true),
-    MapType(
-      ArrayType(IntegerType, true), ArrayType(StringType, true), true),
+    MapType(ArrayType(IntegerType, true), ArrayType(CharType(5), true), true),
+    MapType(ArrayType(IntegerType, true), ArrayType(StringType, true), true),
     false,
     ignoreNullability = false)
 
   checkEqualsStructurally(
-    MapType(
-      ArrayType(IntegerType, true), ArrayType(VarcharType(5), true), true),
-    MapType(
-      ArrayType(IntegerType, true), ArrayType(StringType, true), true),
+    MapType(ArrayType(IntegerType, true), ArrayType(VarcharType(5), true), true),
+    MapType(ArrayType(IntegerType, true), ArrayType(StringType, true), true),
     false,
     ignoreNullability = false)
 
@@ -751,7 +724,7 @@ class DataTypeSuite extends SparkFunSuite {
       expected: Boolean,
       caseSensitive: Boolean = false): Unit = {
     val testName = s"SPARK-36918: equalsStructurallyByName: (from: $from, to: $to, " +
-        s"caseSensitive: $caseSensitive)"
+      s"caseSensitive: $caseSensitive)"
 
     val resolver = if (caseSensitive) {
       caseSensitiveResolution
@@ -765,10 +738,8 @@ class DataTypeSuite extends SparkFunSuite {
   }
 
   checkEqualsStructurallyByName(
-    ArrayType(
-      ArrayType(IntegerType)),
-    ArrayType(
-      ArrayType(IntegerType)),
+    ArrayType(ArrayType(IntegerType)),
+    ArrayType(ArrayType(IntegerType)),
     true)
 
   // Type doesn't matter
@@ -884,269 +855,216 @@ class DataTypeSuite extends SparkFunSuite {
   checkEqualsIgnoreCompatibleCollation(VarcharType(5), VarcharType(5), expected = true)
   checkEqualsIgnoreCompatibleCollation(VarcharType(5), VarcharType(10), expected = false)
   // Collated `StringType`.
-  checkEqualsIgnoreCompatibleCollation(StringType, StringType("UTF8_LCASE"),
+  checkEqualsIgnoreCompatibleCollation(StringType, StringType("UTF8_LCASE"), expected = true)
+  checkEqualsIgnoreCompatibleCollation(
+    StringType("UTF8_LCASE"),
+    StringType("UTF8_BINARY"),
     expected = true)
-  checkEqualsIgnoreCompatibleCollation(
-    StringType("UTF8_LCASE"), StringType("UTF8_BINARY"), expected = true)
-  checkEqualsIgnoreCompatibleCollation(
-    StringType("UTF8_LCASE"), CharType(5), expected = false)
-  checkEqualsIgnoreCompatibleCollation(
-    CharType(5), StringType("UTF8_LCASE"), expected = false)
-  checkEqualsIgnoreCompatibleCollation(
-    StringType("UTF8_LCASE"), VarcharType(5), expected = false)
-  checkEqualsIgnoreCompatibleCollation(
-    VarcharType(5), StringType("UTF8_LCASE"), expected = false)
+  checkEqualsIgnoreCompatibleCollation(StringType("UTF8_LCASE"), CharType(5), expected = false)
+  checkEqualsIgnoreCompatibleCollation(CharType(5), StringType("UTF8_LCASE"), expected = false)
+  checkEqualsIgnoreCompatibleCollation(StringType("UTF8_LCASE"), VarcharType(5), expected = false)
+  checkEqualsIgnoreCompatibleCollation(VarcharType(5), StringType("UTF8_LCASE"), expected = false)
   // Complex types.
   checkEqualsIgnoreCompatibleCollation(
     ArrayType(StringType),
     ArrayType(StringType("UTF8_LCASE")),
-    expected = true
-  )
+    expected = true)
   checkEqualsIgnoreCompatibleCollation(
     ArrayType(StringType),
     ArrayType(ArrayType(StringType("UTF8_LCASE"))),
-    expected = false
-  )
+    expected = false)
   checkEqualsIgnoreCompatibleCollation(
     ArrayType(ArrayType(StringType)),
     ArrayType(ArrayType(StringType("UTF8_LCASE"))),
-    expected = true
-  )
+    expected = true)
   checkEqualsIgnoreCompatibleCollation(
     ArrayType(ArrayType(StringType)),
     ArrayType(ArrayType(CharType(5))),
-    expected = false
-  )
+    expected = false)
   checkEqualsIgnoreCompatibleCollation(
     ArrayType(ArrayType(StringType("UTF8_LCASE"))),
     ArrayType(ArrayType(CharType(5))),
-    expected = false
-  )
+    expected = false)
   checkEqualsIgnoreCompatibleCollation(
     ArrayType(ArrayType(StringType)),
     ArrayType(ArrayType(VarcharType(5))),
-    expected = false
-  )
+    expected = false)
   checkEqualsIgnoreCompatibleCollation(
     ArrayType(ArrayType(StringType("UTF8_LCASE"))),
     ArrayType(ArrayType(VarcharType(5))),
-    expected = false
-  )
+    expected = false)
   checkEqualsIgnoreCompatibleCollation(
     MapType(StringType, StringType),
     MapType(StringType, StringType("UTF8_LCASE")),
-    expected = true
-  )
+    expected = true)
   checkEqualsIgnoreCompatibleCollation(
     MapType(StringType("UTF8_LCASE"), StringType),
     MapType(StringType, StringType),
-    expected = true
-  )
+    expected = true)
   checkEqualsIgnoreCompatibleCollation(
     MapType(StringType("UTF8_LCASE"), StringType),
     MapType(CharType(5), StringType),
-    expected = false
-  )
+    expected = false)
   checkEqualsIgnoreCompatibleCollation(
     MapType(StringType, StringType),
     MapType(CharType(5), StringType),
-    expected = false
-  )
+    expected = false)
   checkEqualsIgnoreCompatibleCollation(
     MapType(StringType("UTF8_LCASE"), StringType),
     MapType(VarcharType(5), StringType),
-    expected = false
-  )
+    expected = false)
   checkEqualsIgnoreCompatibleCollation(
     MapType(StringType, StringType),
     MapType(VarcharType(5), StringType),
-    expected = false
-  )
+    expected = false)
   checkEqualsIgnoreCompatibleCollation(
     MapType(StringType("UTF8_LCASE"), ArrayType(StringType)),
     MapType(StringType("UTF8_LCASE"), ArrayType(StringType("UTF8_LCASE"))),
-    expected = true
-  )
+    expected = true)
   checkEqualsIgnoreCompatibleCollation(
     MapType(StringType("UTF8_LCASE"), ArrayType(StringType)),
     MapType(StringType("UTF8_LCASE"), ArrayType(CharType(5))),
-    expected = false
-  )
+    expected = false)
   checkEqualsIgnoreCompatibleCollation(
     MapType(StringType("UTF8_LCASE"), ArrayType(StringType("UTF8_LCASE"))),
     MapType(StringType("UTF8_LCASE"), ArrayType(CharType(5))),
-    expected = false
-  )
+    expected = false)
   checkEqualsIgnoreCompatibleCollation(
     MapType(StringType("UTF8_LCASE"), ArrayType(StringType)),
     MapType(StringType("UTF8_LCASE"), ArrayType(VarcharType(5))),
-    expected = false
-  )
+    expected = false)
   checkEqualsIgnoreCompatibleCollation(
     MapType(StringType("UTF8_LCASE"), ArrayType(StringType("UTF8_LCASE"))),
     MapType(StringType("UTF8_LCASE"), ArrayType(VarcharType(5))),
-    expected = false
-  )
+    expected = false)
   checkEqualsIgnoreCompatibleCollation(
     MapType(ArrayType(StringType), IntegerType),
     MapType(ArrayType(StringType("UTF8_LCASE")), IntegerType),
-    expected = true
-  )
+    expected = true)
   checkEqualsIgnoreCompatibleCollation(
     MapType(ArrayType(StringType("UTF8_LCASE")), IntegerType),
     MapType(ArrayType(StringType("UTF8_LCASE")), IntegerType),
-    expected = true
-  )
+    expected = true)
   checkEqualsIgnoreCompatibleCollation(
     MapType(ArrayType(StringType), IntegerType),
     MapType(ArrayType(CharType(5)), IntegerType),
-    expected = false
-  )
+    expected = false)
   checkEqualsIgnoreCompatibleCollation(
     MapType(ArrayType(StringType("UTF8_LCASE")), IntegerType),
     MapType(ArrayType(CharType(5)), IntegerType),
-    expected = false
-  )
+    expected = false)
   checkEqualsIgnoreCompatibleCollation(
     MapType(ArrayType(StringType), IntegerType),
     MapType(ArrayType(VarcharType(5)), IntegerType),
-    expected = false
-  )
+    expected = false)
   checkEqualsIgnoreCompatibleCollation(
     MapType(ArrayType(StringType("UTF8_LCASE")), IntegerType),
     MapType(ArrayType(VarcharType(5)), IntegerType),
-    expected = false
-  )
+    expected = false)
   checkEqualsIgnoreCompatibleCollation(
     StructType(StructField("a", StringType) :: Nil),
     StructType(StructField("a", StringType("UTF8_LCASE")) :: Nil),
-    expected = true
-  )
+    expected = true)
   checkEqualsIgnoreCompatibleCollation(
     StructType(StructField("a", StringType) :: Nil),
     StructType(StructField("a", CharType(5)) :: Nil),
-    expected = false
-  )
+    expected = false)
   checkEqualsIgnoreCompatibleCollation(
     StructType(StructField("a", StringType("UTF8_LCASE")) :: Nil),
     StructType(StructField("a", CharType(5)) :: Nil),
-    expected = false
-  )
+    expected = false)
   checkEqualsIgnoreCompatibleCollation(
     StructType(StructField("a", StringType) :: Nil),
     StructType(StructField("a", VarcharType(5)) :: Nil),
-    expected = false
-  )
+    expected = false)
   checkEqualsIgnoreCompatibleCollation(
     StructType(StructField("a", StringType("UTF8_LCASE")) :: Nil),
     StructType(StructField("a", VarcharType(5)) :: Nil),
-    expected = false
-  )
+    expected = false)
   checkEqualsIgnoreCompatibleCollation(
     StructType(StructField("a", ArrayType(StringType)) :: Nil),
     StructType(StructField("a", ArrayType(StringType("UTF8_LCASE"))) :: Nil),
-    expected = true
-  )
+    expected = true)
   checkEqualsIgnoreCompatibleCollation(
     StructType(StructField("a", ArrayType(StringType)) :: Nil),
     StructType(StructField("a", ArrayType(CharType(5))) :: Nil),
-    expected = false
-  )
+    expected = false)
   checkEqualsIgnoreCompatibleCollation(
     StructType(StructField("a", ArrayType(StringType("UTF8_LCASE"))) :: Nil),
     StructType(StructField("a", ArrayType(CharType(5))) :: Nil),
-    expected = false
-  )
+    expected = false)
   checkEqualsIgnoreCompatibleCollation(
     StructType(StructField("a", ArrayType(StringType)) :: Nil),
     StructType(StructField("a", ArrayType(VarcharType(5))) :: Nil),
-    expected = false
-  )
+    expected = false)
   checkEqualsIgnoreCompatibleCollation(
     StructType(StructField("a", ArrayType(StringType("UTF8_LCASE"))) :: Nil),
     StructType(StructField("a", ArrayType(VarcharType(5))) :: Nil),
-    expected = false
-  )
+    expected = false)
   checkEqualsIgnoreCompatibleCollation(
     StructType(StructField("a", MapType(StringType, IntegerType)) :: Nil),
     StructType(StructField("a", MapType(StringType("UTF8_LCASE"), IntegerType)) :: Nil),
-    expected = true
-  )
+    expected = true)
   checkEqualsIgnoreCompatibleCollation(
     StructType(StructField("a", MapType(StringType, IntegerType)) :: Nil),
     StructType(StructField("a", MapType(CharType(5), IntegerType)) :: Nil),
-    expected = false
-  )
+    expected = false)
   checkEqualsIgnoreCompatibleCollation(
     StructType(StructField("a", MapType(StringType("UTF8_LCASE"), IntegerType)) :: Nil),
     StructType(StructField("a", MapType(CharType(5), IntegerType)) :: Nil),
-    expected = false
-  )
+    expected = false)
   checkEqualsIgnoreCompatibleCollation(
     StructType(StructField("a", MapType(StringType, IntegerType)) :: Nil),
     StructType(StructField("a", MapType(VarcharType(5), IntegerType)) :: Nil),
-    expected = false
-  )
+    expected = false)
   checkEqualsIgnoreCompatibleCollation(
     StructType(StructField("a", MapType(StringType("UTF8_LCASE"), IntegerType)) :: Nil),
     StructType(StructField("a", MapType(VarcharType(5), IntegerType)) :: Nil),
-    expected = false
-  )
+    expected = false)
   checkEqualsIgnoreCompatibleCollation(
     StructType(StructField("a", StringType) :: Nil),
     StructType(StructField("b", StringType("UTF8_LCASE")) :: Nil),
-    expected = false
-  )
+    expected = false)
   checkEqualsIgnoreCompatibleCollation(
     StructType(StructField("a", StringType) :: Nil),
     StructType(StructField("b", CharType(5)) :: Nil),
-    expected = false
-  )
+    expected = false)
   checkEqualsIgnoreCompatibleCollation(
     StructType(StructField("a", StringType("UTF8_LCASE")) :: Nil),
     StructType(StructField("b", CharType(5)) :: Nil),
-    expected = false
-  )
+    expected = false)
   checkEqualsIgnoreCompatibleCollation(
     StructType(StructField("a", StringType) :: Nil),
     StructType(StructField("b", VarcharType(5)) :: Nil),
-    expected = false
-  )
+    expected = false)
   checkEqualsIgnoreCompatibleCollation(
     StructType(StructField("a", StringType("UTF8_LCASE")) :: Nil),
     StructType(StructField("b", VarcharType(5)) :: Nil),
-    expected = false
-  )
+    expected = false)
   // Null compatibility checks.
   checkEqualsIgnoreCompatibleCollation(
     ArrayType(StringType, containsNull = true),
     ArrayType(StringType, containsNull = false),
-    expected = false
-  )
+    expected = false)
   checkEqualsIgnoreCompatibleCollation(
     ArrayType(StringType, containsNull = true),
     ArrayType(StringType("UTF8_LCASE"), containsNull = false),
-    expected = false
-  )
+    expected = false)
   checkEqualsIgnoreCompatibleCollation(
     MapType(StringType, StringType, valueContainsNull = true),
     MapType(StringType, StringType, valueContainsNull = false),
-    expected = false
-  )
+    expected = false)
   checkEqualsIgnoreCompatibleCollation(
     StructType(StructField("a", StringType) :: Nil),
     StructType(StructField("a", StringType, nullable = false) :: Nil),
-    expected = false
-  )
+    expected = false)
 
   test("SPARK-25031: MapType should produce current formatted string for complex types") {
-    val keyType: DataType = StructType(Seq(
-      StructField("a", DataTypes.IntegerType),
-      StructField("b", DataTypes.IntegerType)))
+    val keyType: DataType = StructType(
+      Seq(StructField("a", DataTypes.IntegerType), StructField("b", DataTypes.IntegerType)))
 
-    val valueType: DataType = StructType(Seq(
-      StructField("c", DataTypes.IntegerType),
-      StructField("d", DataTypes.IntegerType)))
+    val valueType: DataType = StructType(
+      Seq(StructField("c", DataTypes.IntegerType), StructField("d", DataTypes.IntegerType)))
 
     val stringConcat = new StringConcat
 
@@ -1170,56 +1088,70 @@ class DataTypeSuite extends SparkFunSuite {
 
     val standaloneArray = ArrayType(StringType(UNICODE_COLLATION_ID))
 
-    val standaloneMap = MapType(StringType(UNICODE_COLLATION_ID),
-      StringType(UTF8_LCASE_COLLATION_ID))
+    val standaloneMap =
+      MapType(StringType(UNICODE_COLLATION_ID), StringType(UTF8_LCASE_COLLATION_ID))
 
-    val standaloneNested = ArrayType(MapType(
-      StringType(UNICODE_COLLATION_ID),
-      ArrayType(StringType(UTF8_LCASE_COLLATION_ID))))
+    val standaloneNested = ArrayType(
+      MapType(StringType(UNICODE_COLLATION_ID), ArrayType(StringType(UTF8_LCASE_COLLATION_ID))))
 
-    val simpleStruct = StructType(
-      StructField("c1", StringType(UNICODE_COLLATION_ID)) :: Nil)
+    val simpleStruct = StructType(StructField("c1", StringType(UNICODE_COLLATION_ID)) :: Nil)
 
-    val nestedStruct = StructType(
-      StructField("nested", simpleStruct) :: Nil)
+    val nestedStruct = StructType(StructField("nested", simpleStruct) :: Nil)
 
     val caseInsensitiveNames = StructType(
       StructField("c1", StringType(UNICODE_COLLATION_ID)) ::
-      StructField("C1", StringType(UNICODE_COLLATION_ID)) :: Nil)
+        StructField("C1", StringType(UNICODE_COLLATION_ID)) :: Nil)
 
-    val specialCharsInName = StructType(
-      StructField("c1.*23?", StringType(UNICODE_COLLATION_ID)) :: Nil)
+    val specialCharsInName =
+      StructType(StructField("c1.*23?", StringType(UNICODE_COLLATION_ID)) :: Nil)
 
-    val arrayInSchema = StructType(
-      StructField("arrayField", ArrayType(StringType(UNICODE_COLLATION_ID))) :: Nil)
+    val arrayInSchema =
+      StructType(StructField("arrayField", ArrayType(StringType(UNICODE_COLLATION_ID))) :: Nil)
 
     val mapInSchema = StructType(
-      StructField("mapField",
+      StructField(
+        "mapField",
         MapType(StringType(UNICODE_COLLATION_ID), StringType(UNICODE_COLLATION_ID))) :: Nil)
 
     val mapWithKeyInNameInSchema = StructType(
       StructField("name.key", StringType) ::
-      StructField("name",
-        MapType(StringType(UNICODE_COLLATION_ID), StringType(UNICODE_COLLATION_ID))) :: Nil)
+        StructField(
+          "name",
+          MapType(StringType(UNICODE_COLLATION_ID), StringType(UNICODE_COLLATION_ID))) :: Nil)
 
     val arrayInMapInNestedSchema = StructType(
-      StructField("arrInMap",
-        MapType(StringType(UNICODE_COLLATION_ID),
-        ArrayType(StringType(UNICODE_COLLATION_ID)))) :: Nil)
+      StructField(
+        "arrInMap",
+        MapType(
+          StringType(UNICODE_COLLATION_ID),
+          ArrayType(StringType(UNICODE_COLLATION_ID)))) :: Nil)
 
     val nestedArrayInMap = StructType(
-      StructField("nestedArrayInMap",
-        ArrayType(MapType(StringType(UNICODE_COLLATION_ID),
-          ArrayType(ArrayType(StringType(UNICODE_COLLATION_ID)))))) :: Nil)
+      StructField(
+        "nestedArrayInMap",
+        ArrayType(
+          MapType(
+            StringType(UNICODE_COLLATION_ID),
+            ArrayType(ArrayType(StringType(UNICODE_COLLATION_ID)))))) :: Nil)
 
     val schemaWithMultipleFields = StructType(
       simpleStruct.fields ++ nestedStruct.fields ++ arrayInSchema.fields ++ mapInSchema.fields ++
         mapWithKeyInNameInSchema ++ arrayInMapInNestedSchema.fields ++ nestedArrayInMap.fields)
 
     Seq(
-      standaloneString, standaloneArray, standaloneMap, standaloneNested,
-      simpleStruct, caseInsensitiveNames, specialCharsInName, nestedStruct, arrayInSchema,
-      mapInSchema, mapWithKeyInNameInSchema, nestedArrayInMap, arrayInMapInNestedSchema,
+      standaloneString,
+      standaloneArray,
+      standaloneMap,
+      standaloneNested,
+      simpleStruct,
+      caseInsensitiveNames,
+      specialCharsInName,
+      nestedStruct,
+      arrayInSchema,
+      mapInSchema,
+      mapWithKeyInNameInSchema,
+      nestedArrayInMap,
+      arrayInMapInNestedSchema,
       schemaWithMultipleFields)
       .foreach { schema =>
         val json = schema.json
@@ -1253,8 +1185,7 @@ class DataTypeSuite extends SparkFunSuite {
         DataType.fromJson(json)
       },
       condition = "INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
-      parameters = Map("jsonType" -> "integer")
-    )
+      parameters = Map("jsonType" -> "integer"))
   }
 
   test("non string field in map key has collation metadata") {
@@ -1287,8 +1218,7 @@ class DataTypeSuite extends SparkFunSuite {
         DataType.fromJson(json)
       },
       condition = "INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
-      parameters = Map("jsonType" -> "integer")
-    )
+      parameters = Map("jsonType" -> "integer"))
   }
 
   test("map field has collation metadata") {
@@ -1321,8 +1251,7 @@ class DataTypeSuite extends SparkFunSuite {
         DataType.fromJson(json)
       },
       condition = "INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
-      parameters = Map("jsonType" -> "map")
-    )
+      parameters = Map("jsonType" -> "map"))
   }
 
   test("non existing collation provider") {
@@ -1350,8 +1279,7 @@ class DataTypeSuite extends SparkFunSuite {
         DataType.fromJson(json)
       },
       condition = "COLLATION_INVALID_PROVIDER",
-      parameters = Map("provider" -> "badProvider", "supportedProviders" -> "spark, icu")
-    )
+      parameters = Map("provider" -> "badProvider", "supportedProviders" -> "spark, icu"))
   }
 
   test("parse array type with collation metadata") {
@@ -1371,7 +1299,9 @@ class DataTypeSuite extends SparkFunSuite {
     assert(DataType.parseDataType(JsonMethods.parse(arrayJson)) === ArrayType(StringType))
 
     val parsedWithCollations = DataType.parseDataType(
-        JsonMethods.parse(arrayJson), fieldPath = "", collationsMap = collationsMap)
+      JsonMethods.parse(arrayJson),
+      fieldPath = "",
+      collationsMap = collationsMap)
     assert(parsedWithCollations === ArrayType(StringType(unicodeCollationId)))
   }
 
@@ -1393,9 +1323,12 @@ class DataTypeSuite extends SparkFunSuite {
     assert(DataType.parseDataType(JsonMethods.parse(mapJson)) === MapType(StringType, StringType))
 
     val parsedWithCollations = DataType.parseDataType(
-      JsonMethods.parse(mapJson), fieldPath = "", collationsMap = collationsMap)
-    assert(parsedWithCollations ===
-      MapType(StringType(unicodeCollationId), StringType(unicodeCollationId)))
+      JsonMethods.parse(mapJson),
+      fieldPath = "",
+      collationsMap = collationsMap)
+    assert(
+      parsedWithCollations ===
+        MapType(StringType(unicodeCollationId), StringType(unicodeCollationId)))
   }
 
   test("SPARK-48680: Add CharType and VarcharType to DataTypes JAVA API") {
@@ -1412,19 +1345,15 @@ class DataTypeSuite extends SparkFunSuite {
       assert(TimeType(p).sql == s"TIME($p)")
     }
 
-    Seq(
-      Int.MinValue,
-      TimeType.MIN_PRECISION - 1,
-      TimeType.MAX_PRECISION + 1,
-      Int.MaxValue).foreach { p =>
-      checkError(
-        exception = intercept[SparkException] {
-          TimeType(p)
-        },
-        condition = "UNSUPPORTED_TIME_PRECISION",
-        parameters = Map("precision" -> p.toString)
-      )
-    }
+    Seq(Int.MinValue, TimeType.MIN_PRECISION - 1, TimeType.MAX_PRECISION + 1, Int.MaxValue)
+      .foreach { p =>
+        checkError(
+          exception = intercept[SparkException] {
+            TimeType(p)
+          },
+          condition = "UNSUPPORTED_TIME_PRECISION",
+          parameters = Map("precision" -> p.toString))
+      }
   }
 
   test("Parse time(n) as TimeType(n)") {
@@ -1466,24 +1395,28 @@ class DataTypeSuite extends SparkFunSuite {
       (TimestampNTZType, classOf[TimestampNTZType]),
       (NullType, classOf[NullType]),
       (CalendarIntervalType, classOf[CalendarIntervalType]),
-      (VariantType, classOf[VariantType])
-    )
+      (VariantType, classOf[VariantType]))
 
     singletonTypes.foreach { case (singleton, clazz) =>
       val ctor = clazz.getDeclaredConstructor()
       ctor.setAccessible(true)
       val nonSingleton = ctor.newInstance()
-      assert(nonSingleton ne singleton,
+      assert(
+        nonSingleton ne singleton,
         s"${clazz.getSimpleName}: reflection should create a distinct instance")
 
-      assert(nonSingleton == singleton,
+      assert(
+        nonSingleton == singleton,
         s"${clazz.getSimpleName}: non-singleton == singleton should be true")
-      assert(singleton == nonSingleton,
+      assert(
+        singleton == nonSingleton,
         s"${clazz.getSimpleName}: singleton == non-singleton should be true")
-      assert(nonSingleton.hashCode == singleton.hashCode,
+      assert(
+        nonSingleton.hashCode == singleton.hashCode,
         s"${clazz.getSimpleName}: hashCode should be equal")
 
-      assert(PhysicalDataType(nonSingleton) != UninitializedPhysicalType,
+      assert(
+        PhysicalDataType(nonSingleton) != UninitializedPhysicalType,
         s"${clazz.getSimpleName}: PhysicalDataType should recognize non-singleton instance")
     }
   }

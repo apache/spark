@@ -22,8 +22,7 @@ import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, FullOuter, InnerLike,
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution, Partitioning, PartitioningCollection, UnknownPartitioning, UnspecifiedDistribution}
 
 /**
- * Holds common logic for join operators by shuffling two child relations
- * using the join keys.
+ * Holds common logic for join operators by shuffling two child relations using the join keys.
  */
 trait ShuffledJoin extends JoinCodegenSupport {
   def isSkewJoin: Boolean
@@ -52,8 +51,7 @@ trait ShuffledJoin extends JoinCodegenSupport {
     case FullOuter => UnknownPartitioning(left.outputPartitioning.numPartitions)
     case LeftExistence(_) => left.outputPartitioning
     case x =>
-      throw new IllegalArgumentException(
-        s"ShuffledJoin should not take $x as the JoinType")
+      throw new IllegalArgumentException(s"ShuffledJoin should not take $x as the JoinType")
   }
 
   override def output: Seq[Attribute] = {

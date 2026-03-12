@@ -21,11 +21,10 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  * The [[RelationId]] is a unique identifier for a relation. It is used to lookup the relations
- * which were processed by the [[MetadataResolver]] to substitute the unresolved relations in single
- * pass during the analysis phase.
+ * which were processed by the [[MetadataResolver]] to substitute the unresolved relations in
+ * single pass during the analysis phase.
  */
 case class RelationId(
     multipartIdentifier: Seq[String],
     options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty,
-    isStreaming: Boolean = false
-)
+    isStreaming: Boolean = false)

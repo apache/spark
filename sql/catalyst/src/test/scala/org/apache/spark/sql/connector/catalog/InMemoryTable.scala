@@ -47,20 +47,26 @@ class InMemoryTable(
     isDistributionStrictlyRequired: Boolean = true,
     override val numRowsPerSplit: Int = Int.MaxValue,
     override val id: String = UUID.randomUUID().toString)
-  extends InMemoryBaseTable(name, columns, partitioning, properties, constraints, distribution,
-    ordering, numPartitions, advisoryPartitionSize, isDistributionStrictlyRequired,
-    numRowsPerSplit) with SupportsDelete {
+    extends InMemoryBaseTable(
+      name,
+      columns,
+      partitioning,
+      properties,
+      constraints,
+      distribution,
+      ordering,
+      numPartitions,
+      advisoryPartitionSize,
+      isDistributionStrictlyRequired,
+      numRowsPerSplit)
+    with SupportsDelete {
 
   def this(
       name: String,
       schema: StructType,
       partitioning: Array[Transform],
       properties: util.Map[String, String]) = {
-    this(
-      name,
-      CatalogV2Util.structTypeToV2Columns(schema),
-      partitioning,
-      properties)
+    this(name, CatalogV2Util.structTypeToV2Columns(schema), partitioning, properties)
   }
 
   override def canDeleteWhere(filters: Array[Filter]): Boolean = {
@@ -82,22 +88,22 @@ class InMemoryTable(
     withData(data, CatalogV2Util.v2ColumnsToStructType(columns))
   }
 
-  override def withData(
-      data: Array[BufferedRows],
-      writeSchema: StructType): InMemoryTable = {
+  override def withData(data: Array[BufferedRows], writeSchema: StructType): InMemoryTable = {
     dataMap.synchronized {
-      data.foreach {
-        bufferedRow => {
+      data.foreach { bufferedRow =>
+        {
           bufferedRow.rows.foreach { row =>
             val key = getKey(row, writeSchema)
-            dataMap += dataMap.get(key)
+            dataMap += dataMap
+              .get(key)
               .map { splits =>
-                val newSplits = if ((splits.last.rows.size >= numRowsPerSplit) ||
-                  (splits.last.schema != writeSchema)) {
-                  splits :+ new BufferedRows(key, writeSchema)
-                } else {
-                  splits
-                }
+                val newSplits =
+                  if ((splits.last.rows.size >= numRowsPerSplit) ||
+                    (splits.last.schema != writeSchema)) {
+                    splits :+ new BufferedRows(key, writeSchema)
+                  } else {
+                    splits
+                  }
                 newSplits.last.withRow(row)
                 key -> newSplits
               }
@@ -107,8 +113,9 @@ class InMemoryTable(
         }
       }
 
-      if (data.exists(_.rows.exists(row => row.numFields == 1 &&
-          row.getInt(0) == InMemoryTable.uncommittableValue()))) {
+      if (data.exists(_.rows.exists(row =>
+          row.numFields == 1 &&
+            row.getInt(0) == InMemoryTable.uncommittableValue()))) {
         throw new IllegalArgumentException(s"Test only mock write failure")
       }
       increaseVersion()
@@ -176,7 +183,8 @@ class InMemoryTable(
   }
 
   class InMemoryWriterBuilderWithOverWrite(override val info: LogicalWriteInfo)
-    extends InMemoryWriterBuilder(info) with SupportsOverwrite {
+      extends InMemoryWriterBuilder(info)
+      with SupportsOverwrite {
 
     override def truncate(): WriteBuilder = {
       if (!writer.isInstanceOf[Append]) {
@@ -206,7 +214,9 @@ class InMemoryTable(
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
     override def commit(messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
       val deleteKeys = InMemoryTable.filtersToKeys(
-        dataMap.keys, partCols.map(_.toSeq.quoted).toImmutableArraySeq, filters)
+        dataMap.keys,
+        partCols.map(_.toSeq.quoted).toImmutableArraySeq,
+        filters)
       dataMap --= deleteKeys
       withData(messages.map(_.asInstanceOf[BufferedRows]))
     }
@@ -265,16 +275,16 @@ object InMemoryTable {
 }
 
 /**
- * A metadata table that returns snapshot (commit) information for a parent table.
- * Simulates data source tables with multi-part identifiers, ex Iceberg's db.table.snapshots.
+ * A metadata table that returns snapshot (commit) information for a parent table. Simulates data
+ * source tables with multi-part identifiers, ex Iceberg's db.table.snapshots.
  */
 class InMemorySnapshotsTable(parentTable: InMemoryTable) extends Table with SupportsRead {
   override def name(): String = parentTable.name + ".snapshots"
 
-  override def schema(): StructType = StructType(Seq(
-    StructField("committed_at", LongType, nullable = false),
-    StructField("snapshot_id", LongType, nullable = false)
-  ))
+  override def schema(): StructType = StructType(
+    Seq(
+      StructField("committed_at", LongType, nullable = false),
+      StructField("snapshot_id", LongType, nullable = false)))
 
   override def capabilities(): util.Set[TableCapability] = {
     util.EnumSet.of(TableCapability.BATCH_READ)
@@ -290,10 +300,10 @@ class InMemorySnapshotsScanBuilder(parentTable: InMemoryTable) extends ScanBuild
 }
 
 class InMemorySnapshotsScan(parentTable: InMemoryTable) extends Scan with Batch {
-  override def readSchema(): StructType = StructType(Seq(
-    StructField("committed_at", LongType, nullable = false),
-    StructField("snapshot_id", LongType, nullable = false)
-  ))
+  override def readSchema(): StructType = StructType(
+    Seq(
+      StructField("committed_at", LongType, nullable = false),
+      StructField("snapshot_id", LongType, nullable = false)))
 
   override def toBatch: Batch = this
 

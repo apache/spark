@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 import org.apache.spark.unsafe.KVIterator
 
-class SortBasedAggregationStoreSuite  extends SparkFunSuite with LocalSparkContext {
+class SortBasedAggregationStoreSuite extends SparkFunSuite with LocalSparkContext {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -50,7 +50,8 @@ class SortBasedAggregationStoreSuite  extends SparkFunSuite with LocalSparkConte
   // In this test, the aggregator is XOR checksum.
   test("merge input kv iterator and aggregation buffer iterator") {
 
-    val inputSchema = StructType(Seq(StructField("a", IntegerType), StructField("b", IntegerType)))
+    val inputSchema =
+      StructType(Seq(StructField("a", IntegerType), StructField("b", IntegerType)))
     val groupingSchema = StructType(Seq(StructField("b", IntegerType)))
 
     // Schema: a: Int, b: Int
@@ -101,9 +102,10 @@ class SortBasedAggregationStoreSuite  extends SparkFunSuite with LocalSparkConte
   }
 
   private def updateInputRow: (InternalRow, InternalRow) => Unit = {
-    (buffer: InternalRow, input: InternalRow) => {
-      buffer.setInt(0, buffer.getInt(0) ^ input.getInt(0))
-    }
+    (buffer: InternalRow, input: InternalRow) =>
+      {
+        buffer.setInt(0, buffer.getInt(0) ^ input.getInt(0))
+      }
   }
 
   private def mergeAggBuffer: (InternalRow, InternalRow) => Unit = updateInputRow
@@ -124,8 +126,8 @@ class SortBasedAggregationStoreSuite  extends SparkFunSuite with LocalSparkConte
   def createSortedAggBufferIterator(
       hashMap: ObjectAggregationMap): KVIterator[UnsafeRow, UnsafeRow] = {
 
-    val sortedIterator = hashMap.destructiveIterator().toList.sortBy(_.groupingKey.getInt(0))
-      .iterator
+    val sortedIterator =
+      hashMap.destructiveIterator().toList.sortBy(_.groupingKey.getInt(0)).iterator
     new KVIterator[UnsafeRow, UnsafeRow] {
       var key: UnsafeRow = null
       var value: UnsafeRow = null

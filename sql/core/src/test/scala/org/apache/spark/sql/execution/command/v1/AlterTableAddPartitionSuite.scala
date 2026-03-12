@@ -44,10 +44,8 @@ trait AlterTableAddPartitionSuiteBase extends command.AlterTableAddPartitionSuit
           sql(s"ALTER TABLE $t ADD PARTITION (p1 = '')")
         },
         condition = "_LEGACY_ERROR_TEMP_1076",
-        parameters = Map(
-          "details" -> "The spec ([p1=]) contains an empty partition column value"
-        )
-      )
+        parameters =
+          Map("details" -> "The spec ([p1=]) contains an empty partition column value"))
     }
   }
 
@@ -140,7 +138,9 @@ trait AlterTableAddPartitionSuiteBase extends command.AlterTableAddPartitionSuit
         cacheRelation(v2)
         val part3Loc = copyPartition(t, "part=0", "part=3")
         sql(s"ALTER TABLE $t ADD PARTITION (part=3) LOCATION '$part3Loc'")
-        checkCachedRelation(v2, Seq(Row(0, 0, "a"), Row(0, 1, "a"), Row(0, 2, "a"), Row(0, 3, "a")))
+        checkCachedRelation(
+          v2,
+          Seq(Row(0, 0, "a"), Row(0, 1, "a"), Row(0, 2, "a"), Row(0, 3, "a")))
       }
     }
   }
@@ -152,16 +152,18 @@ trait AlterTableAddPartitionSuiteBase extends command.AlterTableAddPartitionSuit
       sql(s"ALTER TABLE $t ADD PARTITION (id=2) LOCATION 'loc1'")
 
       val e = intercept[PartitionsAlreadyExistException] {
-        sql(s"ALTER TABLE $t ADD PARTITION (id=1) LOCATION 'loc'" +
-          " PARTITION (id=2) LOCATION 'loc1'")
+        sql(
+          s"ALTER TABLE $t ADD PARTITION (id=1) LOCATION 'loc'" +
+            " PARTITION (id=2) LOCATION 'loc1'")
       }
-      checkError(e,
+      checkError(
+        e,
         condition = "PARTITIONS_ALREADY_EXIST",
-        parameters = Map("partitionList" -> "PARTITION (`id` = 2)",
-          "tableName" -> "`ns`.`tbl`"))
+        parameters = Map("partitionList" -> "PARTITION (`id` = 2)", "tableName" -> "`ns`.`tbl`"))
 
-      sql(s"ALTER TABLE $t ADD IF NOT EXISTS PARTITION (id=1) LOCATION 'loc'" +
-        " PARTITION (id=2) LOCATION 'loc1'")
+      sql(
+        s"ALTER TABLE $t ADD IF NOT EXISTS PARTITION (id=1) LOCATION 'loc'" +
+          " PARTITION (id=2) LOCATION 'loc1'")
       checkPartitions(t, Map("id" -> "1"), Map("id" -> "2"))
     }
   }
@@ -180,7 +182,7 @@ trait AlterTableAddPartitionSuiteBase extends command.AlterTableAddPartitionSuit
 }
 
 /**
- * The class contains tests for the `ALTER TABLE .. ADD PARTITION` command to check
- * V1 In-Memory table catalog.
+ * The class contains tests for the `ALTER TABLE .. ADD PARTITION` command to check V1 In-Memory
+ * table catalog.
  */
 class AlterTableAddPartitionSuite extends AlterTableAddPartitionSuiteBase with CommandSuiteBase

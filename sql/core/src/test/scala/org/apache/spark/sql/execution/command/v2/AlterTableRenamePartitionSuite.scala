@@ -21,12 +21,12 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.command
 
 /**
- * The class contains tests for the `ALTER TABLE .. RENAME PARTITION` command
- * to check V2 table catalogs.
+ * The class contains tests for the `ALTER TABLE .. RENAME PARTITION` command to check V2 table
+ * catalogs.
  */
 class AlterTableRenamePartitionSuite
-  extends command.AlterTableRenamePartitionSuiteBase
-  with CommandSuiteBase {
+    extends command.AlterTableRenamePartitionSuiteBase
+    with CommandSuiteBase {
 
   test("with location") {
     withNamespaceAndTable("ns", "tbl") { t =>

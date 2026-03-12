@@ -35,49 +35,49 @@ class SchemaUtilsSuite extends SparkFunSuite {
   }
 
   Seq((true, ("a", "a"), ("b", "b")), (false, ("a", "A"), ("b", "B"))).foreach {
-      case (caseSensitive, (a0, a1), (b0, b1)) =>
+    case (caseSensitive, (a0, a1), (b0, b1)) =>
 
-    val testType = if (caseSensitive) "case-sensitive" else "case-insensitive"
-    test(s"Check column name duplication in $testType cases") {
-      def checkExceptionCases(schemaStr: String, duplicatedColumns: Seq[String]): Unit = {
+      val testType = if (caseSensitive) "case-sensitive" else "case-insensitive"
+      test(s"Check column name duplication in $testType cases") {
+        def checkExceptionCases(schemaStr: String, duplicatedColumns: Seq[String]): Unit = {
           duplicatedColumns.sorted.map(c => s"`${c.toLowerCase(Locale.ROOT)}`").mkString(", ")
-        val schema = StructType.fromDDL(schemaStr)
-        checkError(
-          exception = intercept[AnalysisException] {
-            SchemaUtils.checkSchemaColumnNameDuplication(schema, caseSensitive)
-          },
-          condition = "COLUMN_ALREADY_EXISTS",
-          parameters = Map("columnName" -> "`a`"))
-        checkError(
-          exception = intercept[AnalysisException] {
-            SchemaUtils.checkColumnNameDuplication(schema.map(_.name), resolver(caseSensitive))
-          },
-          condition = "COLUMN_ALREADY_EXISTS",
-          parameters = Map("columnName" -> "`a`"))
-        checkError(
-          exception = intercept[AnalysisException] {
-            SchemaUtils.checkColumnNameDuplication(
-              schema.map(_.name), caseSensitiveAnalysis = caseSensitive)
-          },
-          condition = "COLUMN_ALREADY_EXISTS",
-          parameters = Map("columnName" -> "`a`"))
-      }
+          val schema = StructType.fromDDL(schemaStr)
+          checkError(
+            exception = intercept[AnalysisException] {
+              SchemaUtils.checkSchemaColumnNameDuplication(schema, caseSensitive)
+            },
+            condition = "COLUMN_ALREADY_EXISTS",
+            parameters = Map("columnName" -> "`a`"))
+          checkError(
+            exception = intercept[AnalysisException] {
+              SchemaUtils.checkColumnNameDuplication(schema.map(_.name), resolver(caseSensitive))
+            },
+            condition = "COLUMN_ALREADY_EXISTS",
+            parameters = Map("columnName" -> "`a`"))
+          checkError(
+            exception = intercept[AnalysisException] {
+              SchemaUtils.checkColumnNameDuplication(
+                schema.map(_.name),
+                caseSensitiveAnalysis = caseSensitive)
+            },
+            condition = "COLUMN_ALREADY_EXISTS",
+            parameters = Map("columnName" -> "`a`"))
+        }
 
-      checkExceptionCases(s"$a0 INT, b INT, $a1 INT", a0 :: Nil)
-      checkExceptionCases(s"$a0 INT, b INT, $a1 INT, $a0 INT", a0 :: Nil)
-      checkExceptionCases(s"$a0 INT, $b0 INT, $a1 INT, $a0 INT, $b1 INT", b0 :: a0 :: Nil)
-    }
+        checkExceptionCases(s"$a0 INT, b INT, $a1 INT", a0 :: Nil)
+        checkExceptionCases(s"$a0 INT, b INT, $a1 INT, $a0 INT", a0 :: Nil)
+        checkExceptionCases(s"$a0 INT, $b0 INT, $a1 INT, $a0 INT, $b1 INT", b0 :: a0 :: Nil)
+      }
   }
 
   test("Check no exception thrown for valid schemas") {
     def checkNoExceptionCases(schemaStr: String, caseSensitive: Boolean): Unit = {
       val schema = StructType.fromDDL(schemaStr)
-      SchemaUtils.checkSchemaColumnNameDuplication(
-        schema, caseSensitiveAnalysis = caseSensitive)
+      SchemaUtils.checkSchemaColumnNameDuplication(schema, caseSensitiveAnalysis = caseSensitive)
+      SchemaUtils.checkColumnNameDuplication(schema.map(_.name), resolver(caseSensitive))
       SchemaUtils.checkColumnNameDuplication(
-        schema.map(_.name), resolver(caseSensitive))
-      SchemaUtils.checkColumnNameDuplication(
-        schema.map(_.name), caseSensitiveAnalysis = caseSensitive)
+        schema.map(_.name),
+        caseSensitiveAnalysis = caseSensitive)
     }
 
     checkNoExceptionCases("a INT, b INT, c INT", caseSensitive = true)

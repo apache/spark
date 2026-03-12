@@ -40,7 +40,9 @@ import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types.UTF8String
 
 class CollectionExpressionsSuite
-  extends SparkFunSuite with ExpressionEvalHelper with DataTypeErrorsBase {
+    extends SparkFunSuite
+    with ExpressionEvalHelper
+    with DataTypeErrorsBase {
 
   implicit def stringToUTF8Str(str: String): UTF8String = UTF8String.fromString(str)
 
@@ -64,15 +66,11 @@ class CollectionExpressionsSuite
     checkEvaluation(
       Size(Literal.create(null, MapType(StringType, StringType))),
       expected = sizeOfNull)
-    checkEvaluation(
-      Size(Literal.create(null, ArrayType(StringType))),
-      expected = sizeOfNull)
+    checkEvaluation(Size(Literal.create(null, ArrayType(StringType))), expected = sizeOfNull)
   }
 
   test("Array and Map Size - legacy") {
-    withSQLConf(
-      SQLConf.LEGACY_SIZE_OF_NULL.key -> "true",
-      SQLConf.ANSI_ENABLED.key -> "false") {
+    withSQLConf(SQLConf.LEGACY_SIZE_OF_NULL.key -> "true", SQLConf.ANSI_ENABLED.key -> "false") {
       testSize(sizeOfNull = -1)
     }
   }
@@ -82,9 +80,7 @@ class CollectionExpressionsSuite
       testSize(sizeOfNull = null)
     }
     // size(null) should return null under ansi mode.
-    withSQLConf(
-      SQLConf.LEGACY_SIZE_OF_NULL.key -> "true",
-      SQLConf.ANSI_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.LEGACY_SIZE_OF_NULL.key -> "true", SQLConf.ANSI_ENABLED.key -> "true") {
       testSize(sizeOfNull = null)
     }
   }
@@ -98,8 +94,7 @@ class CollectionExpressionsSuite
       condition = "INTERNAL_ERROR",
       parameters = Map(
         "message" -> ("The size function doesn't support the operand type " +
-          toSQLType(StringType))
-      ))
+          toSQLType(StringType))))
   }
 
   test("MapKeys/MapValues") {
@@ -118,12 +113,11 @@ class CollectionExpressionsSuite
   test("MapContainsKey") {
     val left = Literal.create(Map("a" -> "1", "b" -> "2"), MapType(StringType, StringType))
     val right = Literal.create(null, NullType)
-    assert(MapContainsKey(left, right).checkInputDataTypes() ==
-      DataTypeMismatch(
-        errorSubClass = "NULL_TYPE",
-        messageParameters = Map("functionName" -> "`map_contains_key`")
-      )
-    )
+    assert(
+      MapContainsKey(left, right).checkInputDataTypes() ==
+        DataTypeMismatch(
+          errorSubClass = "NULL_TYPE",
+          messageParameters = Map("functionName" -> "`map_contains_key`")))
   }
 
   test("ArrayContains") {
@@ -139,8 +133,7 @@ class CollectionExpressionsSuite
     // primitive type: boolean、byte、short、int、long、float、double
     // boolean
     // boolean foldable
-    val a0_0 = Literal.create(Seq(false, true),
-      ArrayType(BooleanType, containsNull = false))
+    val a0_0 = Literal.create(Seq(false, true), ArrayType(BooleanType, containsNull = false))
     checkEvaluation(ArrayBinarySearch(a0_0, Literal(true)), 1)
     val a0_1 = Literal.create(Seq(null, false, true), ArrayType(BooleanType))
     checkEvaluation(ArrayBinarySearch(a0_1, Literal(false)), 1)
@@ -153,8 +146,8 @@ class CollectionExpressionsSuite
     val a0_5 = CreateArray(Seq(Literal(null, BooleanType), Literal(false), Literal(true)))
     checkEvaluation(ArrayBinarySearch(a0_5, Literal(null, BooleanType)), null)
     // boolean non-foldable
-    val a0_6 = NonFoldableLiteral.create(Seq(false, true),
-      ArrayType(BooleanType, containsNull = false))
+    val a0_6 =
+      NonFoldableLiteral.create(Seq(false, true), ArrayType(BooleanType, containsNull = false))
     checkEvaluation(ArrayBinarySearch(a0_6, Literal(true)), 1)
     val a0_7 = NonFoldableLiteral.create(Seq(null, false, true), ArrayType(BooleanType))
     checkEvaluation(ArrayBinarySearch(a0_7, Literal(false)), 1)
@@ -163,75 +156,79 @@ class CollectionExpressionsSuite
 
     // byte
     // byte foldable
-    val a1_0 = Literal.create(Seq(1.toByte, 2.toByte, 3.toByte),
-      ArrayType(ByteType, containsNull = false))
+    val a1_0 =
+      Literal.create(Seq(1.toByte, 2.toByte, 3.toByte), ArrayType(ByteType, containsNull = false))
     checkEvaluation(ArrayBinarySearch(a1_0, Literal(3.toByte)), 2)
     val a1_1 = Literal.create(Seq(null, 1.toByte, 2.toByte, 3.toByte), ArrayType(ByteType))
     checkEvaluation(ArrayBinarySearch(a1_1, Literal(1.toByte)), 1)
     val a1_2 = Literal.create(Seq(null, 1.toByte, 2.toByte, 3.toByte), ArrayType(ByteType))
     checkEvaluation(ArrayBinarySearch(a1_2, Literal(null, ByteType)), null)
-    val a1_3 = Literal.create(Seq(1.toByte, 3.toByte, 4.toByte),
-      ArrayType(ByteType, containsNull = false))
+    val a1_3 =
+      Literal.create(Seq(1.toByte, 3.toByte, 4.toByte), ArrayType(ByteType, containsNull = false))
     checkEvaluation(ArrayBinarySearch(a1_3, Literal(2.toByte, ByteType)), -2)
     val a1_4 = CreateArray(Seq(Literal(1.toByte), Literal(2.toByte), Literal(3.toByte)))
     checkEvaluation(ArrayBinarySearch(a1_4, Literal(3.toByte)), 2)
-    val a1_5 = CreateArray(Seq(Literal(null, ByteType),
-      Literal(1.toByte), Literal(2.toByte), Literal(3.toByte)))
+    val a1_5 = CreateArray(
+      Seq(Literal(null, ByteType), Literal(1.toByte), Literal(2.toByte), Literal(3.toByte)))
     checkEvaluation(ArrayBinarySearch(a1_5, Literal(1.toByte)), 1)
-    val a1_6 = CreateArray(Seq(Literal(null, ByteType),
-      Literal(1.toByte), Literal(2.toByte), Literal(3.toByte)))
+    val a1_6 = CreateArray(
+      Seq(Literal(null, ByteType), Literal(1.toByte), Literal(2.toByte), Literal(3.toByte)))
     checkEvaluation(ArrayBinarySearch(a1_6, Literal(null, ByteType)), null)
     val a1_7 = CreateArray(Seq(Literal(1.toByte), Literal(3.toByte), Literal(4.toByte)))
     checkEvaluation(ArrayBinarySearch(a1_7, Literal(2.toByte, ByteType)), -2)
     // byte non-foldable
-    val a1_8 = NonFoldableLiteral.create(Seq(1.toByte, 2.toByte, 3.toByte),
+    val a1_8 = NonFoldableLiteral.create(
+      Seq(1.toByte, 2.toByte, 3.toByte),
       ArrayType(ByteType, containsNull = false))
     checkEvaluation(ArrayBinarySearch(a1_8, Literal(3.toByte)), 2)
-    val a1_9 = NonFoldableLiteral.create(Seq(null, 1.toByte, 2.toByte, 3.toByte),
-      ArrayType(ByteType))
+    val a1_9 =
+      NonFoldableLiteral.create(Seq(null, 1.toByte, 2.toByte, 3.toByte), ArrayType(ByteType))
     checkEvaluation(ArrayBinarySearch(a1_9, Literal(1.toByte)), 1)
-    val a1_10 = NonFoldableLiteral.create(Seq(null, 1.toByte, 2.toByte, 3.toByte),
-      ArrayType(ByteType))
+    val a1_10 =
+      NonFoldableLiteral.create(Seq(null, 1.toByte, 2.toByte, 3.toByte), ArrayType(ByteType))
     checkEvaluation(ArrayBinarySearch(a1_10, Literal(null, ByteType)), null)
-    val a1_11 = NonFoldableLiteral.create(Seq(1.toByte, 3.toByte, 4.toByte),
+    val a1_11 = NonFoldableLiteral.create(
+      Seq(1.toByte, 3.toByte, 4.toByte),
       ArrayType(ByteType, containsNull = false))
     checkEvaluation(ArrayBinarySearch(a1_11, Literal(2.toByte, ByteType)), -2)
 
     // short
     // short foldable
-    val a2_0 = Literal.create(Seq(1.toShort, 2.toShort, 3.toShort),
+    val a2_0 = Literal.create(
+      Seq(1.toShort, 2.toShort, 3.toShort),
       ArrayType(ShortType, containsNull = false))
     checkEvaluation(ArrayBinarySearch(a2_0, Literal(1.toShort)), 0)
-    val a2_1 = Literal.create(Seq(null, 1.toShort, 2.toShort, 3.toShort),
-      ArrayType(ShortType))
+    val a2_1 = Literal.create(Seq(null, 1.toShort, 2.toShort, 3.toShort), ArrayType(ShortType))
     checkEvaluation(ArrayBinarySearch(a2_1, Literal(2.toShort)), 2)
-    val a2_2 = Literal.create(Seq(null, 1.toShort, 2.toShort, 3.toShort),
-      ArrayType(ShortType))
+    val a2_2 = Literal.create(Seq(null, 1.toShort, 2.toShort, 3.toShort), ArrayType(ShortType))
     checkEvaluation(ArrayBinarySearch(a2_2, Literal(null, ShortType)), null)
-    val a2_3 = Literal.create(Seq(1.toShort, 3.toShort, 4.toShort),
+    val a2_3 = Literal.create(
+      Seq(1.toShort, 3.toShort, 4.toShort),
       ArrayType(ShortType, containsNull = false))
     checkEvaluation(ArrayBinarySearch(a2_3, Literal(2.toShort, ShortType)), -2)
     val a2_4 = CreateArray(Seq(Literal(1.toShort), Literal(2.toShort), Literal(3.toShort)))
     checkEvaluation(ArrayBinarySearch(a2_4, Literal(1.toShort)), 0)
-    val a2_5 = CreateArray(Seq(Literal(null, ShortType),
-      Literal(1.toShort), Literal(2.toShort), Literal(3.toShort)))
+    val a2_5 = CreateArray(
+      Seq(Literal(null, ShortType), Literal(1.toShort), Literal(2.toShort), Literal(3.toShort)))
     checkEvaluation(ArrayBinarySearch(a2_5, Literal(2.toShort)), 2)
-    val a2_6 = CreateArray(Seq(Literal(null, ShortType),
-      Literal(1.toShort), Literal(2.toShort), Literal(3.toShort)))
+    val a2_6 = CreateArray(
+      Seq(Literal(null, ShortType), Literal(1.toShort), Literal(2.toShort), Literal(3.toShort)))
     checkEvaluation(ArrayBinarySearch(a2_6, Literal(null, ShortType)), null)
     val a2_7 = CreateArray(Seq(Literal(1.toShort), Literal(3.toShort), Literal(4.toShort)))
     checkEvaluation(ArrayBinarySearch(a2_7, Literal(2.toShort, ShortType)), -2)
     // short non-foldable
-    val a2_8 = NonFoldableLiteral.create(Seq(1.toShort, 2.toShort, 3.toShort),
+    val a2_8 = NonFoldableLiteral.create(
+      Seq(1.toShort, 2.toShort, 3.toShort),
       ArrayType(ShortType, containsNull = false))
     checkEvaluation(ArrayBinarySearch(a2_8, Literal(1.toShort)), 0)
-    val a2_9 = NonFoldableLiteral.create(Seq(null, 1.toShort, 2.toShort, 3.toShort),
-      ArrayType(ShortType))
+    val a2_9 =
+      NonFoldableLiteral.create(Seq(null, 1.toShort, 2.toShort, 3.toShort), ArrayType(ShortType))
     checkEvaluation(ArrayBinarySearch(a2_9, Literal(2.toShort)), 2)
-    val a2_10 = NonFoldableLiteral.create(Seq(null, 1.toShort, 2.toShort, 3.toShort),
-      ArrayType(ShortType))
+    val a2_10 =
+      NonFoldableLiteral.create(Seq(null, 1.toShort, 2.toShort, 3.toShort), ArrayType(ShortType))
     checkEvaluation(ArrayBinarySearch(a2_10, Literal(null, ShortType)), null)
-    val a2_11 = NonFoldableLiteral.create(Seq(1.toShort, 3.toShort, 4.toShort),
+    val a2_11 = NonFoldableLiteral.create(
+      Seq(1.toShort, 3.toShort, 4.toShort),
       ArrayType(ShortType, containsNull = false))
     checkEvaluation(ArrayBinarySearch(a2_11, Literal(2.toShort, ShortType)), -2)
 
@@ -254,15 +251,15 @@ class CollectionExpressionsSuite
     val a3_7 = CreateArray(Seq(Literal(1), Literal(3), Literal(4)))
     checkEvaluation(ArrayBinarySearch(a3_7, Literal(2, IntegerType)), -2)
     // int non-foldable
-    val a3_8 = NonFoldableLiteral.create(Seq(1, 2, 3),
-      ArrayType(IntegerType, containsNull = false))
+    val a3_8 =
+      NonFoldableLiteral.create(Seq(1, 2, 3), ArrayType(IntegerType, containsNull = false))
     checkEvaluation(ArrayBinarySearch(a3_8, Literal(2)), 1)
     val a3_9 = NonFoldableLiteral.create(Seq(null, 1, 2, 3), ArrayType(IntegerType))
     checkEvaluation(ArrayBinarySearch(a3_9, Literal(2)), 2)
     val a3_10 = NonFoldableLiteral.create(Seq(null, 1, 2, 3), ArrayType(IntegerType))
     checkEvaluation(ArrayBinarySearch(a3_10, Literal(null, IntegerType)), null)
-    val a3_11 = NonFoldableLiteral.create(Seq(1, 3, 4),
-      ArrayType(IntegerType, containsNull = false))
+    val a3_11 =
+      NonFoldableLiteral.create(Seq(1, 3, 4), ArrayType(IntegerType, containsNull = false))
     checkEvaluation(ArrayBinarySearch(a3_11, Literal(2, IntegerType)), -2)
 
     // long
@@ -277,57 +274,55 @@ class CollectionExpressionsSuite
     checkEvaluation(ArrayBinarySearch(a4_3, Literal(2L, LongType)), -2)
     val a4_4 = CreateArray(Seq(Literal(1L), Literal(2L), Literal(3L)))
     checkEvaluation(ArrayBinarySearch(a4_4, Literal(2L)), 1)
-    val a4_5 = CreateArray(Seq(Literal(null, LongType),
-      Literal(1L), Literal(2L), Literal(3L)))
+    val a4_5 = CreateArray(Seq(Literal(null, LongType), Literal(1L), Literal(2L), Literal(3L)))
     checkEvaluation(ArrayBinarySearch(a4_5, Literal(2L)), 2)
-    val a4_6 = CreateArray(Seq(Literal(null, LongType),
-      Literal(1L), Literal(2L), Literal(3L)))
+    val a4_6 = CreateArray(Seq(Literal(null, LongType), Literal(1L), Literal(2L), Literal(3L)))
     checkEvaluation(ArrayBinarySearch(a4_6, Literal(null, LongType)), null)
     val a4_7 = CreateArray(Seq(Literal(1L), Literal(3L), Literal(4L)))
     checkEvaluation(ArrayBinarySearch(a4_7, Literal(2L, LongType)), -2)
     // long non-foldable
-    val a4_8 = NonFoldableLiteral.create(Seq(1L, 2L, 3L),
-      ArrayType(LongType, containsNull = false))
+    val a4_8 =
+      NonFoldableLiteral.create(Seq(1L, 2L, 3L), ArrayType(LongType, containsNull = false))
     checkEvaluation(ArrayBinarySearch(a4_8, Literal(2L)), 1)
     val a4_9 = NonFoldableLiteral.create(Seq(null, 1L, 2L, 3L), ArrayType(LongType))
     checkEvaluation(ArrayBinarySearch(a4_9, Literal(2L)), 2)
     val a4_10 = NonFoldableLiteral.create(Seq(null, 1L, 2L, 3L), ArrayType(LongType))
     checkEvaluation(ArrayBinarySearch(a4_10, Literal(null, LongType)), null)
-    val a4_11 = NonFoldableLiteral.create(Seq(1L, 3L, 4L),
-      ArrayType(LongType, containsNull = false))
+    val a4_11 =
+      NonFoldableLiteral.create(Seq(1L, 3L, 4L), ArrayType(LongType, containsNull = false))
     checkEvaluation(ArrayBinarySearch(a4_11, Literal(2L, LongType)), -2)
 
     // float
     // float foldable
-    val a5_0 = Literal.create(Seq(1.0F, 2.0F, 3.0F), ArrayType(FloatType, containsNull = false))
-    checkEvaluation(ArrayBinarySearch(a5_0, Literal(3.0F)), 2)
-    val a5_1 = Literal.create(Seq(null, 1.0F, 2.0F, 3.0F), ArrayType(FloatType))
-    checkEvaluation(ArrayBinarySearch(a5_1, Literal(1.0F)), 1)
-    val a5_2 = Literal.create(Seq(null, 1.0F, 2.0F, 3.0F), ArrayType(FloatType))
+    val a5_0 = Literal.create(Seq(1.0f, 2.0f, 3.0f), ArrayType(FloatType, containsNull = false))
+    checkEvaluation(ArrayBinarySearch(a5_0, Literal(3.0f)), 2)
+    val a5_1 = Literal.create(Seq(null, 1.0f, 2.0f, 3.0f), ArrayType(FloatType))
+    checkEvaluation(ArrayBinarySearch(a5_1, Literal(1.0f)), 1)
+    val a5_2 = Literal.create(Seq(null, 1.0f, 2.0f, 3.0f), ArrayType(FloatType))
     checkEvaluation(ArrayBinarySearch(a5_2, Literal(null, FloatType)), null)
-    val a5_3 = Literal.create(Seq(1.0F, 2.0F, 3.0F), ArrayType(FloatType, containsNull = false))
-    checkEvaluation(ArrayBinarySearch(a5_3, Literal(1.1F, FloatType)), -2)
-    val a5_4 = CreateArray(Seq(Literal(1.0F), Literal(2.0F), Literal(3.0F)))
-    checkEvaluation(ArrayBinarySearch(a5_4, Literal(3.0F)), 2)
-    val a5_5 = CreateArray(Seq(Literal(null, FloatType),
-      Literal(1.0F), Literal(2.0F), Literal(3.0F)))
-    checkEvaluation(ArrayBinarySearch(a5_5, Literal(1.0F)), 1)
-    val a5_6 = CreateArray(Seq(Literal(null, FloatType),
-      Literal(1.0F), Literal(2.0F), Literal(3.0F)))
+    val a5_3 = Literal.create(Seq(1.0f, 2.0f, 3.0f), ArrayType(FloatType, containsNull = false))
+    checkEvaluation(ArrayBinarySearch(a5_3, Literal(1.1f, FloatType)), -2)
+    val a5_4 = CreateArray(Seq(Literal(1.0f), Literal(2.0f), Literal(3.0f)))
+    checkEvaluation(ArrayBinarySearch(a5_4, Literal(3.0f)), 2)
+    val a5_5 =
+      CreateArray(Seq(Literal(null, FloatType), Literal(1.0f), Literal(2.0f), Literal(3.0f)))
+    checkEvaluation(ArrayBinarySearch(a5_5, Literal(1.0f)), 1)
+    val a5_6 =
+      CreateArray(Seq(Literal(null, FloatType), Literal(1.0f), Literal(2.0f), Literal(3.0f)))
     checkEvaluation(ArrayBinarySearch(a5_6, Literal(null, FloatType)), null)
-    val a5_7 = CreateArray(Seq(Literal(1.0F), Literal(2.0F), Literal(3.0F)))
-    checkEvaluation(ArrayBinarySearch(a5_7, Literal(1.1F, FloatType)), -2)
+    val a5_7 = CreateArray(Seq(Literal(1.0f), Literal(2.0f), Literal(3.0f)))
+    checkEvaluation(ArrayBinarySearch(a5_7, Literal(1.1f, FloatType)), -2)
     // float non-foldable
-    val a5_8 = NonFoldableLiteral.create(Seq(1.0F, 2.0F, 3.0F),
-      ArrayType(FloatType, containsNull = false))
-    checkEvaluation(ArrayBinarySearch(a5_8, Literal(3.0F)), 2)
-    val a5_9 = NonFoldableLiteral.create(Seq(null, 1.0F, 2.0F, 3.0F), ArrayType(FloatType))
-    checkEvaluation(ArrayBinarySearch(a5_9, Literal(1.0F)), 1)
-    val a5_10 = NonFoldableLiteral.create(Seq(null, 1.0F, 2.0F, 3.0F), ArrayType(FloatType))
+    val a5_8 =
+      NonFoldableLiteral.create(Seq(1.0f, 2.0f, 3.0f), ArrayType(FloatType, containsNull = false))
+    checkEvaluation(ArrayBinarySearch(a5_8, Literal(3.0f)), 2)
+    val a5_9 = NonFoldableLiteral.create(Seq(null, 1.0f, 2.0f, 3.0f), ArrayType(FloatType))
+    checkEvaluation(ArrayBinarySearch(a5_9, Literal(1.0f)), 1)
+    val a5_10 = NonFoldableLiteral.create(Seq(null, 1.0f, 2.0f, 3.0f), ArrayType(FloatType))
     checkEvaluation(ArrayBinarySearch(a5_10, Literal(null, FloatType)), null)
-    val a5_11 = NonFoldableLiteral.create(Seq(1.0F, 2.0F, 3.0F),
-      ArrayType(FloatType, containsNull = false))
-    checkEvaluation(ArrayBinarySearch(a5_11, Literal(1.1F, FloatType)), -2)
+    val a5_11 =
+      NonFoldableLiteral.create(Seq(1.0f, 2.0f, 3.0f), ArrayType(FloatType, containsNull = false))
+    checkEvaluation(ArrayBinarySearch(a5_11, Literal(1.1f, FloatType)), -2)
 
     // double
     // double foldable
@@ -341,23 +336,25 @@ class CollectionExpressionsSuite
     checkEvaluation(ArrayBinarySearch(a6_3, Literal(1.1d, DoubleType)), -2)
     val a6_4 = CreateArray(Seq(Literal(1.0d), Literal(2.0d), Literal(3.0d)))
     checkEvaluation(ArrayBinarySearch(a6_4, Literal(1.0d)), 0)
-    val a6_5 = CreateArray(Seq(Literal(null, DoubleType),
-      Literal(1.0d), Literal(2.0d), Literal(3.0d)))
+    val a6_5 =
+      CreateArray(Seq(Literal(null, DoubleType), Literal(1.0d), Literal(2.0d), Literal(3.0d)))
     checkEvaluation(ArrayBinarySearch(a6_5, Literal(1.0d)), 1)
-    val a6_6 = CreateArray(Seq(Literal(null, DoubleType),
-      Literal(1.0d), Literal(2.0d), Literal(3.0d)))
+    val a6_6 =
+      CreateArray(Seq(Literal(null, DoubleType), Literal(1.0d), Literal(2.0d), Literal(3.0d)))
     checkEvaluation(ArrayBinarySearch(a6_6, Literal(null, DoubleType)), null)
     val a6_7 = CreateArray(Seq(Literal(1.0d), Literal(2.0d), Literal(3.0d)))
     checkEvaluation(ArrayBinarySearch(a6_7, Literal(1.1d, DoubleType)), -2)
     // double non-foldable
-    val a6_8 = NonFoldableLiteral.create(Seq(1.0d, 2.0d, 3.0d),
+    val a6_8 = NonFoldableLiteral.create(
+      Seq(1.0d, 2.0d, 3.0d),
       ArrayType(DoubleType, containsNull = false))
     checkEvaluation(ArrayBinarySearch(a6_8, Literal(1.0d)), 0)
     val a6_9 = NonFoldableLiteral.create(Seq(null, 1.0d, 2.0d, 3.0d), ArrayType(DoubleType))
     checkEvaluation(ArrayBinarySearch(a6_9, Literal(1.0d)), 1)
     val a6_10 = NonFoldableLiteral.create(Seq(null, 1.0d, 2.0d, 3.0d), ArrayType(DoubleType))
     checkEvaluation(ArrayBinarySearch(a6_10, Literal(null, DoubleType)), null)
-    val a6_11 = NonFoldableLiteral.create(Seq(1.0d, 2.0d, 3.0d),
+    val a6_11 = NonFoldableLiteral.create(
+      Seq(1.0d, 2.0d, 3.0d),
       ArrayType(DoubleType, containsNull = false))
     checkEvaluation(ArrayBinarySearch(a6_11, Literal(1.1d, DoubleType)), -2)
 
@@ -373,24 +370,24 @@ class CollectionExpressionsSuite
     checkEvaluation(ArrayBinarySearch(a7_3, Literal(UTF8String.fromString("b"), StringType)), -2)
     val a7_4 = CreateArray(Seq(Literal("a"), Literal("b"), Literal("c")))
     checkEvaluation(ArrayBinarySearch(a7_4, Literal("a")), 0)
-    val a7_5 = CreateArray(Seq(Literal(null, StringType),
-      Literal("a"), Literal("b"), Literal("c")))
+    val a7_5 =
+      CreateArray(Seq(Literal(null, StringType), Literal("a"), Literal("b"), Literal("c")))
     checkEvaluation(ArrayBinarySearch(a7_5, Literal("c")), 3)
-    val a7_6 = CreateArray(Seq(Literal(null, StringType),
-      Literal("a"), Literal("b"), Literal("c")))
+    val a7_6 =
+      CreateArray(Seq(Literal(null, StringType), Literal("a"), Literal("b"), Literal("c")))
     checkEvaluation(ArrayBinarySearch(a7_6, Literal(null, StringType)), null)
     val a7_7 = CreateArray(Seq(Literal("a"), Literal("c"), Literal("d")))
     checkEvaluation(ArrayBinarySearch(a7_7, Literal(UTF8String.fromString("b"), StringType)), -2)
     // string non-foldable
-    val a7_8 = NonFoldableLiteral.create(Seq("a", "b", "c"),
-      ArrayType(StringType, containsNull = false))
+    val a7_8 =
+      NonFoldableLiteral.create(Seq("a", "b", "c"), ArrayType(StringType, containsNull = false))
     checkEvaluation(ArrayBinarySearch(a7_8, Literal("a")), 0)
     val a7_9 = NonFoldableLiteral.create(Seq(null, "a", "b", "c"), ArrayType(StringType))
     checkEvaluation(ArrayBinarySearch(a7_9, Literal("c")), 3)
     val a7_10 = NonFoldableLiteral.create(Seq(null, "a", "b", "c"), ArrayType(StringType))
     checkEvaluation(ArrayBinarySearch(a7_10, Literal(null, StringType)), null)
-    val a7_11 = NonFoldableLiteral.create(Seq("a", "c", "d"),
-      ArrayType(StringType, containsNull = false))
+    val a7_11 =
+      NonFoldableLiteral.create(Seq("a", "c", "d"), ArrayType(StringType, containsNull = false))
     checkEvaluation(ArrayBinarySearch(a7_11, Literal(UTF8String.fromString("b"), StringType)), -2)
   }
 
@@ -419,67 +416,74 @@ class CollectionExpressionsSuite
   }
 
   test("Map Concat") {
-    val m0 = Literal.create(create_map("a" -> "1", "b" -> "2"), MapType(StringType, StringType,
-      valueContainsNull = false))
-    val m1 = Literal.create(create_map("c" -> "3", "a" -> "4"), MapType(StringType, StringType,
-      valueContainsNull = false))
+    val m0 = Literal.create(
+      create_map("a" -> "1", "b" -> "2"),
+      MapType(StringType, StringType, valueContainsNull = false))
+    val m1 = Literal.create(
+      create_map("c" -> "3", "a" -> "4"),
+      MapType(StringType, StringType, valueContainsNull = false))
     val m2 = Literal.create(create_map("d" -> "4", "e" -> "5"), MapType(StringType, StringType))
     val m3 = Literal.create(create_map("f" -> "1", "g" -> "2"), MapType(StringType, StringType))
     val m4 = Literal.create(create_map("a" -> null, "c" -> "3"), MapType(StringType, StringType))
     val m5 = Literal.create(create_map("a" -> 1, "b" -> 2), MapType(StringType, IntegerType))
     val m6 = Literal.create(create_map("c" -> null, "d" -> 3), MapType(StringType, IntegerType))
-    val m7 = Literal.create(create_map(List(1, 2) -> 1, List(3, 4) -> 2),
+    val m7 = Literal.create(
+      create_map(List(1, 2) -> 1, List(3, 4) -> 2),
       MapType(ArrayType(IntegerType), IntegerType))
-    val m8 = Literal.create(create_map(List(5, 6) -> 3, List(7, 8) -> 4),
+    val m8 = Literal.create(
+      create_map(List(5, 6) -> 3, List(7, 8) -> 4),
       MapType(ArrayType(IntegerType), IntegerType))
-    val m9 = Literal.create(create_map(1 -> "1", 2 -> "2"), MapType(IntegerType, StringType,
-      valueContainsNull = false))
-    val m10 = Literal.create(create_map(3 -> "3", 4 -> "4"), MapType(IntegerType, StringType,
-      valueContainsNull = false))
-    val m11 = Literal.create(create_map(1 -> 2, 3 -> 4),
+    val m9 = Literal.create(
+      create_map(1 -> "1", 2 -> "2"),
+      MapType(IntegerType, StringType, valueContainsNull = false))
+    val m10 = Literal.create(
+      create_map(3 -> "3", 4 -> "4"),
+      MapType(IntegerType, StringType, valueContainsNull = false))
+    val m11 = Literal.create(
+      create_map(1 -> 2, 3 -> 4),
       MapType(IntegerType, IntegerType, valueContainsNull = false))
-    val m12 = Literal.create(create_map(5 -> 6),
+    val m12 = Literal.create(
+      create_map(5 -> 6),
       MapType(IntegerType, IntegerType, valueContainsNull = false))
-    val m13 = Literal.create(create_map(7 -> null),
+    val m13 = Literal.create(
+      create_map(7 -> null),
       MapType(IntegerType, IntegerType, valueContainsNull = true))
     val mNull = Literal.create(null, MapType(StringType, StringType))
 
     checkErrorInExpression[SparkRuntimeException](
       MapConcat(Seq(m0, m1)),
       condition = "DUPLICATED_MAP_KEY",
-      parameters = Map(
-        "key" -> "a",
-        "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"")
-    )
+      parameters = Map("key" -> "a", "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\""))
     withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
       // overlapping maps should remove duplicated map keys w.r.t. last win policy.
       checkEvaluation(MapConcat(Seq(m0, m1)), create_map("a" -> "4", "b" -> "2", "c" -> "3"))
     }
 
     // maps with no overlap
-    checkEvaluation(MapConcat(Seq(m0, m2)),
+    checkEvaluation(
+      MapConcat(Seq(m0, m2)),
       create_map("a" -> "1", "b" -> "2", "d" -> "4", "e" -> "5"))
 
     // 3 maps
-    checkEvaluation(MapConcat(Seq(m0, m2, m3)),
+    checkEvaluation(
+      MapConcat(Seq(m0, m2, m3)),
       create_map("a" -> "1", "b" -> "2", "d" -> "4", "e" -> "5", "f" -> "1", "g" -> "2"))
 
     // null reference values
-    checkEvaluation(MapConcat(Seq(m2, m4)),
+    checkEvaluation(
+      MapConcat(Seq(m2, m4)),
       create_map("d" -> "4", "e" -> "5", "a" -> null, "c" -> "3"))
 
     // null primitive values
-    checkEvaluation(MapConcat(Seq(m5, m6)),
-      create_map("a" -> 1, "b" -> 2, "c" -> null, "d" -> 3))
+    checkEvaluation(MapConcat(Seq(m5, m6)), create_map("a" -> 1, "b" -> 2, "c" -> null, "d" -> 3))
 
     // keys that are primitive
-    checkEvaluation(MapConcat(Seq(m9, m10)),
-      create_map(1 -> "1", 2 -> "2", 3 -> "3", 4 -> "4"))
+    checkEvaluation(MapConcat(Seq(m9, m10)), create_map(1 -> "1", 2 -> "2", 3 -> "3", 4 -> "4"))
 
     // keys that are arrays
-    checkEvaluation(MapConcat(Seq(m7, m8)),
+    checkEvaluation(
+      MapConcat(Seq(m7, m8)),
       create_map(List(1, 2) -> 1, List(3, 4) -> 2, List(5, 6) -> 3, List(7, 8) -> 4))
-
 
     // both keys and value are primitive and valueContainsNull = false
     checkEvaluation(MapConcat(Seq(m11, m12)), create_map(1 -> 2, 3 -> 4, 5 -> 6))
@@ -503,33 +507,28 @@ class CollectionExpressionsSuite
     val expectedKeys = (1 to 65).map(_.toString)
     val expectedValues = (1 to 65).map(_.toString)
     checkEvaluation(
-      MapConcat(
-        expectedKeys.zip(expectedValues).map {
-          case (k, v) => Literal.create(create_map(k -> v), MapType(StringType, StringType))
-        }),
+      MapConcat(expectedKeys.zip(expectedValues).map { case (k, v) =>
+        Literal.create(create_map(k -> v), MapType(StringType, StringType))
+      }),
       create_map(expectedKeys.zip(expectedValues): _*))
 
     // argument checking
     assert(MapConcat(Seq(m0, m1)).checkInputDataTypes().isSuccess)
     assert(MapConcat(Seq(m5, m6)).checkInputDataTypes().isSuccess)
-    assert(MapConcat(Seq(m0, m5)).checkInputDataTypes() ==
-      DataTypeMismatch(
-        errorSubClass = "DATA_DIFF_TYPES",
-        messageParameters = Map(
-          "functionName" -> "`map_concat`",
-          "dataType" -> "(\"MAP<STRING, STRING>\" or \"MAP<STRING, INT>\")"
-        )
-      )
-    )
-    assert(MapConcat(Seq(m0, Literal(12))).checkInputDataTypes() ==
-      DataTypeMismatch(
-        errorSubClass = "MAP_CONCAT_DIFF_TYPES",
-        messageParameters = Map(
-          "functionName" -> "`map_concat`",
-          "dataType" -> "[\"MAP<STRING, STRING>\", \"INT\"]"
-        )
-      )
-    )
+    assert(
+      MapConcat(Seq(m0, m5)).checkInputDataTypes() ==
+        DataTypeMismatch(
+          errorSubClass = "DATA_DIFF_TYPES",
+          messageParameters = Map(
+            "functionName" -> "`map_concat`",
+            "dataType" -> "(\"MAP<STRING, STRING>\" or \"MAP<STRING, INT>\")")))
+    assert(
+      MapConcat(Seq(m0, Literal(12))).checkInputDataTypes() ==
+        DataTypeMismatch(
+          errorSubClass = "MAP_CONCAT_DIFF_TYPES",
+          messageParameters = Map(
+            "functionName" -> "`map_concat`",
+            "dataType" -> "[\"MAP<STRING, STRING>\", \"INT\"]")))
     assert(MapConcat(Seq(m0, m1)).dataType.keyType == StringType)
     assert(MapConcat(Seq(m0, m1)).dataType.valueType == StringType)
     assert(!MapConcat(Seq(m0, m1)).dataType.valueContainsNull)
@@ -542,31 +541,39 @@ class CollectionExpressionsSuite
     assert(!MapConcat(Seq(m1, m2)).nullable)
     assert(MapConcat(Seq(m1, mNull)).nullable)
 
-    val mapConcat = MapConcat(Seq(
-      Literal.create(create_map(Seq(1, 2) -> Seq("a", "b")),
-        MapType(
-          ArrayType(IntegerType, containsNull = false),
-          ArrayType(StringType, containsNull = false),
-          valueContainsNull = false)),
-      Literal.create(create_map(Seq(3, 4, null) -> Seq("c", "d", null), Seq(6) -> null),
+    val mapConcat = MapConcat(
+      Seq(
+        Literal.create(
+          create_map(Seq(1, 2) -> Seq("a", "b")),
+          MapType(
+            ArrayType(IntegerType, containsNull = false),
+            ArrayType(StringType, containsNull = false),
+            valueContainsNull = false)),
+        Literal.create(
+          create_map(Seq(3, 4, null) -> Seq("c", "d", null), Seq(6) -> null),
+          MapType(
+            ArrayType(IntegerType, containsNull = true),
+            ArrayType(StringType, containsNull = true),
+            valueContainsNull = true))))
+    assert(
+      mapConcat.dataType ===
         MapType(
           ArrayType(IntegerType, containsNull = true),
           ArrayType(StringType, containsNull = true),
-          valueContainsNull = true))))
-    assert(mapConcat.dataType ===
-      MapType(
-        ArrayType(IntegerType, containsNull = true),
-        ArrayType(StringType, containsNull = true),
-        valueContainsNull = true))
-    checkEvaluation(mapConcat, create_map(
-      Seq(1, 2) -> Seq("a", "b"),
-      Seq(3, 4, null) -> Seq("c", "d", null),
-      Seq(6) -> null))
+          valueContainsNull = true))
+    checkEvaluation(
+      mapConcat,
+      create_map(
+        Seq(1, 2) -> Seq("a", "b"),
+        Seq(3, 4, null) -> Seq("c", "d", null),
+        Seq(6) -> null))
 
     // map key can't be map
-    val mapOfMap = Literal.create(Map(Map(1 -> 2, 3 -> 4) -> 1, Map(5 -> 6, 7 -> 8) -> 2),
+    val mapOfMap = Literal.create(
+      Map(Map(1 -> 2, 3 -> 4) -> 1, Map(5 -> 6, 7 -> 8) -> 2),
       MapType(MapType(IntegerType, IntegerType), IntegerType))
-    val mapOfMap2 = Literal.create(Map(Map(9 -> 10, 11 -> 12) -> 3, Map(1 -> 2, 3 -> 4) -> 4),
+    val mapOfMap2 = Literal.create(
+      Map(Map(9 -> 10, 11 -> 12) -> 3, Map(1 -> 2, 3 -> 4) -> 4),
       MapType(MapType(IntegerType, IntegerType), IntegerType))
     val map = MapConcat(Seq(mapOfMap, mapOfMap2))
     map.checkInputDataTypes() match {
@@ -578,12 +585,8 @@ class CollectionExpressionsSuite
   }
 
   test("MapFromEntries") {
-    def arrayType(keyType: DataType, valueType: DataType) : DataType = {
-      ArrayType(
-        StructType(Seq(
-          StructField("a", keyType),
-          StructField("b", valueType))),
-        true)
+    def arrayType(keyType: DataType, valueType: DataType): DataType = {
+      ArrayType(StructType(Seq(StructField("a", keyType), StructField("b", valueType))), true)
     }
     def row(values: Any*): InternalRow = create_row(values: _*)
 
@@ -607,18 +610,13 @@ class CollectionExpressionsSuite
     checkErrorInExpression[SparkRuntimeException](
       MapFromEntries(ai4),
       condition = "DUPLICATED_MAP_KEY",
-      parameters = Map(
-        "key" -> "1",
-        "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"")
-    )
+      parameters = Map("key" -> "1", "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\""))
     withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
       // Duplicated map keys will be removed w.r.t. the last wins policy.
       checkEvaluation(MapFromEntries(ai4), create_map(1 -> 20))
     }
     // Map key can't be null
-    checkErrorInExpression[SparkRuntimeException](
-      MapFromEntries(ai5),
-      "NULL_MAP_KEY")
+    checkErrorInExpression[SparkRuntimeException](MapFromEntries(ai5), "NULL_MAP_KEY")
     checkEvaluation(MapFromEntries(ai6), null)
 
     // Non-primitive-type keys and values
@@ -639,25 +637,21 @@ class CollectionExpressionsSuite
     checkErrorInExpression[SparkRuntimeException](
       MapFromEntries(as4),
       condition = "DUPLICATED_MAP_KEY",
-      parameters = Map(
-        "key" -> "a",
-        "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"")
-    )
+      parameters = Map("key" -> "a", "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\""))
     withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
       // Duplicated map keys will be removed w.r.t. the last wins policy.
       checkEvaluation(MapFromEntries(as4), create_map("a" -> "bb"))
     }
     // Map key can't be null
-    checkExceptionInExpression[SparkRuntimeException](
-      MapFromEntries(as5),
-      "NULL_MAP_KEY")
+    checkExceptionInExpression[SparkRuntimeException](MapFromEntries(as5), "NULL_MAP_KEY")
     checkEvaluation(MapFromEntries(as6), null)
 
     // map key can't be map
     val structOfMap = row(create_map(1 -> 1), 1)
-    val map = MapFromEntries(Literal.create(
-      Seq(structOfMap),
-      arrayType(keyType = MapType(IntegerType, IntegerType), valueType = IntegerType)))
+    val map = MapFromEntries(
+      Literal.create(
+        Seq(structOfMap),
+        arrayType(keyType = MapType(IntegerType, IntegerType), valueType = IntegerType)))
     map.checkInputDataTypes() match {
       case TypeCheckResult.TypeCheckSuccess => fail("should not allow map as map key")
       case TypeCheckResult.DataTypeMismatch(errorSubClass, messageParameters) =>
@@ -667,27 +661,27 @@ class CollectionExpressionsSuite
 
     // accepts only arrays of pair structs
     val mapWrongType = MapFromEntries(Literal(1))
-    assert(mapWrongType.checkInputDataTypes() ==
-      DataTypeMismatch(
-        errorSubClass = "UNEXPECTED_INPUT_TYPE",
-        messageParameters = Map(
-          "paramIndex" -> ordinalNumber(0),
-          "inputSql" -> "\"1\"",
-          "inputType" -> "\"INT\"",
-          "requiredType" -> "\"ARRAY\" of pair \"STRUCT\""
-        )
-      )
-    )
+    assert(
+      mapWrongType.checkInputDataTypes() ==
+        DataTypeMismatch(
+          errorSubClass = "UNEXPECTED_INPUT_TYPE",
+          messageParameters = Map(
+            "paramIndex" -> ordinalNumber(0),
+            "inputSql" -> "\"1\"",
+            "inputType" -> "\"INT\"",
+            "requiredType" -> "\"ARRAY\" of pair \"STRUCT\"")))
   }
 
   test("Sort Map") {
     val intKey = Literal.create(Map(2 -> 2, 1 -> 1, 3 -> 3), MapType(IntegerType, IntegerType))
     val boolKey = Literal.create(Map(true -> 2, false -> 1), MapType(BooleanType, IntegerType))
-    val stringKey = Literal.create(Map("2" -> 2, "1" -> 1, "3" -> 3),
-      MapType(StringType, IntegerType))
-    val arrayKey = Literal.create(Map(Seq(2) -> 2, Seq(1) -> 1, Seq(3) -> 3),
+    val stringKey =
+      Literal.create(Map("2" -> 2, "1" -> 1, "3" -> 3), MapType(StringType, IntegerType))
+    val arrayKey = Literal.create(
+      Map(Seq(2) -> 2, Seq(1) -> 1, Seq(3) -> 3),
       MapType(ArrayType(IntegerType), IntegerType))
-    val nestedArrayKey = Literal.create(Map(Seq(Seq(2)) -> 2, Seq(Seq(1)) -> 1, Seq(Seq(3)) -> 3),
+    val nestedArrayKey = Literal.create(
+      Map(Seq(Seq(2)) -> 2, Seq(Seq(1)) -> 1, Seq(Seq(3)) -> 3),
       MapType(ArrayType(ArrayType(IntegerType)), IntegerType))
     val structKey = Literal.create(
       Map(create_row(2) -> 2, create_row(1) -> 1, create_row(3) -> 3),
@@ -697,9 +691,11 @@ class CollectionExpressionsSuite
     checkEvaluation(MapSort(boolKey), Map(false -> 1, true -> 2))
     checkEvaluation(MapSort(stringKey), Map("1" -> 1, "2" -> 2, "3" -> 3))
     checkEvaluation(MapSort(arrayKey), Map(Seq(1) -> 1, Seq(2) -> 2, Seq(3) -> 3))
-    checkEvaluation(MapSort(nestedArrayKey),
+    checkEvaluation(
+      MapSort(nestedArrayKey),
       Map(Seq(Seq(1)) -> 1, Seq(Seq(2)) -> 2, Seq(Seq(3)) -> 3))
-    checkEvaluation(MapSort(structKey),
+    checkEvaluation(
+      MapSort(structKey),
       Map(create_row(1) -> 1, create_row(2) -> 2, create_row(3) -> 3))
   }
 
@@ -712,8 +708,8 @@ class CollectionExpressionsSuite
     val d2 = new Decimal().set(100)
     val a4 = Literal.create(Seq(d2, d1), ArrayType(DecimalType(10, 0)))
     val a5 = Literal.create(Seq(null, null), ArrayType(NullType))
-    val a6 = Literal.create(Seq(true, false, true, false),
-      ArrayType(BooleanType, containsNull = false))
+    val a6 =
+      Literal.create(Seq(true, false, true, false), ArrayType(BooleanType, containsNull = false))
     val a7 = Literal.create(Seq(true, false, true, false), ArrayType(BooleanType))
     val a8 = Literal.create(Seq(true, false, true, null, false), ArrayType(BooleanType))
 
@@ -764,8 +760,9 @@ class CollectionExpressionsSuite
     val a1 = Literal.create(Seq[String](null, ""), ArrayType(StringType))
     val a2 = Literal.create(Seq(null), ArrayType(LongType))
     val a3 = Literal.create(null, ArrayType(StringType))
-    val a4 = Literal.create(Seq(create_row(1)), ArrayType(StructType(Seq(
-      StructField("a", IntegerType, true)))))
+    val a4 = Literal.create(
+      Seq(create_row(1)),
+      ArrayType(StructType(Seq(StructField("a", IntegerType, true)))))
     // Explicitly mark the array type not nullable (spark-25308)
     val a5 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType, containsNull = false))
 
@@ -784,20 +781,26 @@ class CollectionExpressionsSuite
     checkEvaluation(ArrayContains(a3, Literal("")), null)
     checkEvaluation(ArrayContains(a3, Literal.create(null, StringType)), null)
 
-    checkEvaluation(ArrayContains(a4, Literal.create(create_row(1), StructType(Seq(
-      StructField("a", IntegerType, false))))), true)
-    checkEvaluation(ArrayContains(a4, Literal.create(create_row(0), StructType(Seq(
-      StructField("a", IntegerType, false))))), false)
+    checkEvaluation(
+      ArrayContains(
+        a4,
+        Literal.create(create_row(1), StructType(Seq(StructField("a", IntegerType, false))))),
+      true)
+    checkEvaluation(
+      ArrayContains(
+        a4,
+        Literal.create(create_row(0), StructType(Seq(StructField("a", IntegerType, false))))),
+      false)
 
     // binary
-    val b0 = Literal.create(Seq[Array[Byte]](Array[Byte](5, 6), Array[Byte](1, 2)),
+    val b0 = Literal.create(
+      Seq[Array[Byte]](Array[Byte](5, 6), Array[Byte](1, 2)),
       ArrayType(BinaryType))
-    val b1 = Literal.create(Seq[Array[Byte]](Array[Byte](2, 1), Array[Byte](4, 3)),
+    val b1 = Literal.create(
+      Seq[Array[Byte]](Array[Byte](2, 1), Array[Byte](4, 3)),
       ArrayType(BinaryType))
-    val b2 = Literal.create(Seq[Array[Byte]](Array[Byte](2, 1), null),
-      ArrayType(BinaryType))
-    val b3 = Literal.create(Seq[Array[Byte]](null, Array[Byte](1, 2)),
-      ArrayType(BinaryType))
+    val b2 = Literal.create(Seq[Array[Byte]](Array[Byte](2, 1), null), ArrayType(BinaryType))
+    val b3 = Literal.create(Seq[Array[Byte]](null, Array[Byte](1, 2)), ArrayType(BinaryType))
     val be = Literal.create(Array[Byte](1, 2), BinaryType)
     val nullBinary = Literal.create(null, BinaryType)
 
@@ -808,9 +811,11 @@ class CollectionExpressionsSuite
     checkEvaluation(ArrayContains(b3, be), true)
 
     // complex data types
-    val aa0 = Literal.create(Seq[Seq[Int]](Seq[Int](1, 2), Seq[Int](3, 4)),
+    val aa0 = Literal.create(
+      Seq[Seq[Int]](Seq[Int](1, 2), Seq[Int](3, 4)),
       ArrayType(ArrayType(IntegerType)))
-    val aa1 = Literal.create(Seq[Seq[Int]](Seq[Int](5, 6), Seq[Int](2, 1)),
+    val aa1 = Literal.create(
+      Seq[Seq[Int]](Seq[Int](5, 6), Seq[Int](2, 1)),
       ArrayType(ArrayType(IntegerType)))
     val aae = Literal.create(Seq[Int](1, 2), ArrayType(IntegerType))
     checkEvaluation(ArrayContains(aa0, aae), true)
@@ -844,22 +849,29 @@ class CollectionExpressionsSuite
 
     // null handling
     checkEvaluation(ArraysOverlap(emptyIntArray, a2), false)
-    checkEvaluation(ArraysOverlap(
-      emptyIntArray, Literal.create(Seq(null), ArrayType(IntegerType))), false)
+    checkEvaluation(
+      ArraysOverlap(emptyIntArray, Literal.create(Seq(null), ArrayType(IntegerType))),
+      false)
     checkEvaluation(ArraysOverlap(Literal.create(null, ArrayType(IntegerType)), a0), null)
     checkEvaluation(ArraysOverlap(a0, Literal.create(null, ArrayType(IntegerType))), null)
-    checkEvaluation(ArraysOverlap(
-      Literal.create(Seq(null), ArrayType(IntegerType)),
-      Literal.create(Seq(null), ArrayType(IntegerType))), null)
+    checkEvaluation(
+      ArraysOverlap(
+        Literal.create(Seq(null), ArrayType(IntegerType)),
+        Literal.create(Seq(null), ArrayType(IntegerType))),
+      null)
 
     // arrays of binaries
-    val b0 = Literal.create(Seq[Array[Byte]](Array[Byte](1, 2), Array[Byte](3, 4)),
+    val b0 = Literal.create(
+      Seq[Array[Byte]](Array[Byte](1, 2), Array[Byte](3, 4)),
       ArrayType(BinaryType))
-    val b1 = Literal.create(Seq[Array[Byte]](Array[Byte](5, 6), Array[Byte](1, 2)),
+    val b1 = Literal.create(
+      Seq[Array[Byte]](Array[Byte](5, 6), Array[Byte](1, 2)),
       ArrayType(BinaryType))
-    val b2 = Literal.create(Seq[Array[Byte]](Array[Byte](2, 1), Array[Byte](4, 3)),
+    val b2 = Literal.create(
+      Seq[Array[Byte]](Array[Byte](2, 1), Array[Byte](4, 3)),
       ArrayType(BinaryType))
-    val b3 = Literal.create(Seq[Array[Byte]](Array[Byte](1, 2), Array[Byte](3, 4)),
+    val b3 = Literal.create(
+      Seq[Array[Byte]](Array[Byte](1, 2), Array[Byte](3, 4)),
       ArrayType(BinaryType, containsNull = false))
 
     checkEvaluation(ArraysOverlap(b0, b1), true)
@@ -867,11 +879,14 @@ class CollectionExpressionsSuite
     checkEvaluation(ArraysOverlap(b3, b3), true)
 
     // arrays of complex data types
-    val aa0 = Literal.create(Seq[Array[String]](Array[String]("a", "b"), Array[String]("c", "d")),
+    val aa0 = Literal.create(
+      Seq[Array[String]](Array[String]("a", "b"), Array[String]("c", "d")),
       ArrayType(ArrayType(StringType)))
-    val aa1 = Literal.create(Seq[Array[String]](Array[String]("e", "f"), Array[String]("a", "b")),
+    val aa1 = Literal.create(
+      Seq[Array[String]](Array[String]("e", "f"), Array[String]("a", "b")),
       ArrayType(ArrayType(StringType)))
-    val aa2 = Literal.create(Seq[Array[String]](Array[String]("b", "a"), Array[String]("f", "g")),
+    val aa2 = Literal.create(
+      Seq[Array[String]](Array[String]("b", "a"), Array[String]("f", "g")),
       ArrayType(ArrayType(StringType)))
 
     checkEvaluation(ArraysOverlap(aa0, aa1), true)
@@ -904,20 +919,17 @@ class CollectionExpressionsSuite
       parameters = Map(
         "parameter" -> toSQLId("length"),
         "length" -> (-1).toString,
-        "functionName" -> toSQLId("slice")
-      ))
+        "functionName" -> toSQLId("slice")))
     checkErrorInExpression[SparkRuntimeException](
       expression = Slice(a0, Literal(0), Literal(1)),
       condition = "INVALID_PARAMETER_VALUE.START",
-      parameters = Map(
-        "parameter" -> toSQLId("start"),
-        "functionName" -> toSQLId("slice")
-      ))
+      parameters = Map("parameter" -> toSQLId("start"), "functionName" -> toSQLId("slice")))
     checkEvaluation(Slice(a0, Literal(-20), Literal(1)), Seq.empty[Int])
     checkEvaluation(Slice(a1, Literal(-20), Literal(1)), Seq.empty[String])
     checkEvaluation(Slice(a0, Literal.create(null, IntegerType), Literal(2)), null)
     checkEvaluation(Slice(a0, Literal(2), Literal.create(null, IntegerType)), null)
-    checkEvaluation(Slice(Literal.create(null, ArrayType(IntegerType)), Literal(1), Literal(2)),
+    checkEvaluation(
+      Slice(Literal.create(null, ArrayType(IntegerType)), Literal(1), Literal(2)),
       null)
 
     checkEvaluation(Slice(a1, Literal(1), Literal(2)), Seq("a", "b"))
@@ -938,7 +950,8 @@ class CollectionExpressionsSuite
       }
     }
 
-    val arrays = Seq(Literal.create(Seq[String]("a", "b"), ArrayType(StringType)),
+    val arrays = Seq(
+      Literal.create(Seq[String]("a", "b"), ArrayType(StringType)),
       Literal.create(Seq[String]("a", null, "b"), ArrayType(StringType)),
       Literal.create(Seq[String](null), ArrayType(StringType)),
       Literal.create(Seq[String]("a", "b", null), ArrayType(StringType)),
@@ -950,16 +963,21 @@ class CollectionExpressionsSuite
     testArrays(arrays, None, withoutNullReplacement)
     testArrays(arrays, Some(Literal("NULL")), withNullReplacement)
 
-    checkEvaluation(ArrayJoin(
-      Literal.create(null, ArrayType(StringType)), Literal(","), None), null)
-    checkEvaluation(ArrayJoin(
-      Literal.create(Seq[String](null), ArrayType(StringType)),
-      Literal.create(null, StringType),
-      None), null)
-    checkEvaluation(ArrayJoin(
-      Literal.create(Seq[String](null), ArrayType(StringType)),
-      Literal(","),
-      Some(Literal.create(null, StringType))), null)
+    checkEvaluation(
+      ArrayJoin(Literal.create(null, ArrayType(StringType)), Literal(","), None),
+      null)
+    checkEvaluation(
+      ArrayJoin(
+        Literal.create(Seq[String](null), ArrayType(StringType)),
+        Literal.create(null, StringType),
+        None),
+      null)
+    checkEvaluation(
+      ArrayJoin(
+        Literal.create(Seq[String](null), ArrayType(StringType)),
+        Literal(","),
+        Some(Literal.create(null, StringType))),
+      null)
   }
 
   test("ArraysZip") {
@@ -974,32 +992,40 @@ class CollectionExpressionsSuite
       Literal.create(Seq(null), ArrayType(NullType)),
       Literal.create(Seq(192.toByte), ArrayType(ByteType)),
       Literal.create(
-        Seq(Seq(1, 2, 3), null, Seq(4, 5), Seq(1, null, 3)), ArrayType(ArrayType(IntegerType))),
-      Literal.create(Seq(Array[Byte](1.toByte, 5.toByte)), ArrayType(BinaryType))
-    )
+        Seq(Seq(1, 2, 3), null, Seq(4, 5), Seq(1, null, 3)),
+        ArrayType(ArrayType(IntegerType))),
+      Literal.create(Seq(Array[Byte](1.toByte, 5.toByte)), ArrayType(BinaryType)))
 
-    checkEvaluation(ArraysZip(Seq(literals(0), literals(1))),
+    checkEvaluation(
+      ArraysZip(Seq(literals(0), literals(1))),
       List(Row(9001, null), Row(9002, 1L), Row(9003, null), Row(null, 4L), Row(null, 11L)))
 
-    checkEvaluation(ArraysZip(Seq(literals(0), literals(2))),
+    checkEvaluation(
+      ArraysZip(Seq(literals(0), literals(2))),
       List(Row(9001, -1), Row(9002, -3), Row(9003, 900), Row(null, null)))
 
-    checkEvaluation(ArraysZip(Seq(literals(0), literals(3))),
+    checkEvaluation(
+      ArraysZip(Seq(literals(0), literals(3))),
       List(Row(9001, "a"), Row(9002, null), Row(9003, "c"), Row(null, null)))
 
-    checkEvaluation(ArraysZip(Seq(literals(0), literals(4))),
+    checkEvaluation(
+      ArraysZip(Seq(literals(0), literals(4))),
       List(Row(9001, null), Row(9002, false), Row(9003, true), Row(null, null)))
 
-    checkEvaluation(ArraysZip(Seq(literals(0), literals(5))),
+    checkEvaluation(
+      ArraysZip(Seq(literals(0), literals(5))),
       List(Row(9001, 1.1), Row(9002, null), Row(9003, 1.3), Row(null, null)))
 
-    checkEvaluation(ArraysZip(Seq(literals(0), literals(6))),
+    checkEvaluation(
+      ArraysZip(Seq(literals(0), literals(6))),
       List(Row(9001, null), Row(9002, null), Row(9003, null), Row(null, null)))
 
-    checkEvaluation(ArraysZip(Seq(literals(0), literals(7))),
+    checkEvaluation(
+      ArraysZip(Seq(literals(0), literals(7))),
       List(Row(9001, null), Row(9002, null), Row(9003, null), Row(null, null)))
 
-    checkEvaluation(ArraysZip(Seq(literals(0), literals(1), literals(2), literals(3))),
+    checkEvaluation(
+      ArraysZip(Seq(literals(0), literals(1), literals(2), literals(3))),
       List(
         Row(9001, null, -1, "a"),
         Row(9002, 1L, -3, null),
@@ -1007,29 +1033,33 @@ class CollectionExpressionsSuite
         Row(null, 4L, null, null),
         Row(null, 11L, null, null)))
 
-    checkEvaluation(ArraysZip(Seq(literals(4), literals(5), literals(6), literals(7), literals(8))),
+    checkEvaluation(
+      ArraysZip(Seq(literals(4), literals(5), literals(6), literals(7), literals(8))),
       List(
         Row(null, 1.1, null, null, 192.toByte),
         Row(false, null, null, null, null),
         Row(true, 1.3, null, null, null),
         Row(null, null, null, null, null)))
 
-    checkEvaluation(ArraysZip(Seq(literals(9), literals(0))),
+    checkEvaluation(
+      ArraysZip(Seq(literals(9), literals(0))),
       List(
         Row(List(1, 2, 3), 9001),
         Row(null, 9002),
         Row(List(4, 5), 9003),
         Row(List(1, null, 3), null)))
 
-    checkEvaluation(ArraysZip(Seq(literals(7), literals(10))),
+    checkEvaluation(
+      ArraysZip(Seq(literals(7), literals(10))),
       List(Row(null, Array[Byte](1.toByte, 5.toByte))))
 
     val longLiteral =
       Literal.create((0 to 1000).toSeq, ArrayType(IntegerType))
 
-    checkEvaluation(ArraysZip(Seq(literals(0), longLiteral)),
+    checkEvaluation(
+      ArraysZip(Seq(literals(0), longLiteral)),
       List(Row(9001, 0), Row(9002, 1), Row(9003, 2)) ++
-      (3 to 1000).map { Row(null, _) }.toList)
+        (3 to 1000).map { Row(null, _) }.toList)
 
     val manyLiterals = (0 to 1000).map { _ =>
       Literal.create(Seq(1), ArrayType(IntegerType))
@@ -1040,31 +1070,38 @@ class CollectionExpressionsSuite
       Row(Seq(9002) ++ (0 to 1000).map { _ => null }.toSeq: _*),
       Row(Seq(9003) ++ (0 to 1000).map { _ => null }.toSeq: _*),
       Row(Seq(null) ++ (0 to 1000).map { _ => null }.toSeq: _*))
-    checkEvaluation(ArraysZip(Seq(literals(0)) ++ manyLiterals),
+    checkEvaluation(
+      ArraysZip(Seq(literals(0)) ++ manyLiterals),
       List(numbers(0), numbers(1), numbers(2), numbers(3)))
 
-    checkEvaluation(ArraysZip(Seq(literals(0), Literal.create(null, ArrayType(IntegerType)))), null)
+    checkEvaluation(
+      ArraysZip(Seq(literals(0), Literal.create(null, ArrayType(IntegerType)))),
+      null)
     checkEvaluation(ArraysZip(Seq()), List())
   }
 
   test("Array Min") {
     checkEvaluation(ArrayMin(Literal.create(Seq(-11, 10, 2), ArrayType(IntegerType))), -11)
     checkEvaluation(
-      ArrayMin(Literal.create(Seq[String](null, "abc", ""), ArrayType(StringType))), "")
+      ArrayMin(Literal.create(Seq[String](null, "abc", ""), ArrayType(StringType))),
+      "")
     checkEvaluation(ArrayMin(Literal.create(Seq(null), ArrayType(LongType))), null)
     checkEvaluation(ArrayMin(Literal.create(null, ArrayType(StringType))), null)
     checkEvaluation(
-      ArrayMin(Literal.create(Seq(1.123, 0.1234, 1.121), ArrayType(DoubleType))), 0.1234)
+      ArrayMin(Literal.create(Seq(1.123, 0.1234, 1.121), ArrayType(DoubleType))),
+      0.1234)
   }
 
   test("Array max") {
     checkEvaluation(ArrayMax(Literal.create(Seq(1, 10, 2), ArrayType(IntegerType))), 10)
     checkEvaluation(
-      ArrayMax(Literal.create(Seq[String](null, "abc", ""), ArrayType(StringType))), "abc")
+      ArrayMax(Literal.create(Seq[String](null, "abc", ""), ArrayType(StringType))),
+      "abc")
     checkEvaluation(ArrayMax(Literal.create(Seq(null), ArrayType(LongType))), null)
     checkEvaluation(ArrayMax(Literal.create(null, ArrayType(StringType))), null)
     checkEvaluation(
-      ArrayMax(Literal.create(Seq(1.123, 0.1234, 1.121), ArrayType(DoubleType))), 1.123)
+      ArrayMax(Literal.create(Seq(1.123, 0.1234, 1.121), ArrayType(DoubleType))),
+      1.123)
   }
 
   test("Sequence of numbers") {
@@ -1079,13 +1116,21 @@ class CollectionExpressionsSuite
     // test sequence boundaries checking
 
     checkExceptionInExpression[IllegalArgumentException](
-      new Sequence(Literal(1), Literal(2), Literal(0)), EmptyRow, "boundaries: 1 to 2 by 0")
+      new Sequence(Literal(1), Literal(2), Literal(0)),
+      EmptyRow,
+      "boundaries: 1 to 2 by 0")
     checkExceptionInExpression[IllegalArgumentException](
-      new Sequence(Literal(2), Literal(1), Literal(0)), EmptyRow, "boundaries: 2 to 1 by 0")
+      new Sequence(Literal(2), Literal(1), Literal(0)),
+      EmptyRow,
+      "boundaries: 2 to 1 by 0")
     checkExceptionInExpression[IllegalArgumentException](
-      new Sequence(Literal(2), Literal(1), Literal(1)), EmptyRow, "boundaries: 2 to 1 by 1")
+      new Sequence(Literal(2), Literal(1), Literal(1)),
+      EmptyRow,
+      "boundaries: 2 to 1 by 1")
     checkExceptionInExpression[IllegalArgumentException](
-      new Sequence(Literal(1), Literal(2), Literal(-1)), EmptyRow, "boundaries: 1 to 2 by -1")
+      new Sequence(Literal(1), Literal(2), Literal(-1)),
+      EmptyRow,
+      "boundaries: 1 to 2 by -1")
 
     // SPARK-43393: test Sequence overflow checking
     checkErrorInExpression[SparkRuntimeException](
@@ -1158,110 +1203,120 @@ class CollectionExpressionsSuite
   }
 
   test("Sequence of timestamps") {
-    checkEvaluation(new Sequence(
-      Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
-      Literal(Timestamp.valueOf("2018-01-02 00:00:00")),
-      Literal(stringToInterval("interval 12 hours"))),
+    checkEvaluation(
+      new Sequence(
+        Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
+        Literal(Timestamp.valueOf("2018-01-02 00:00:00")),
+        Literal(stringToInterval("interval 12 hours"))),
       Seq(
         Timestamp.valueOf("2018-01-01 00:00:00"),
         Timestamp.valueOf("2018-01-01 12:00:00"),
         Timestamp.valueOf("2018-01-02 00:00:00")))
 
-    checkEvaluation(new Sequence(
-      Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
-      Literal(Timestamp.valueOf("2018-01-02 00:00:01")),
-      Literal(stringToInterval("interval 12 hours"))),
+    checkEvaluation(
+      new Sequence(
+        Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
+        Literal(Timestamp.valueOf("2018-01-02 00:00:01")),
+        Literal(stringToInterval("interval 12 hours"))),
       Seq(
         Timestamp.valueOf("2018-01-01 00:00:00"),
         Timestamp.valueOf("2018-01-01 12:00:00"),
         Timestamp.valueOf("2018-01-02 00:00:00")))
 
-    checkEvaluation(new Sequence(
-      Literal(Timestamp.valueOf("2018-01-02 00:00:00")),
-      Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
-      Literal(negateExact(stringToInterval("interval 12 hours")))),
+    checkEvaluation(
+      new Sequence(
+        Literal(Timestamp.valueOf("2018-01-02 00:00:00")),
+        Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
+        Literal(negateExact(stringToInterval("interval 12 hours")))),
       Seq(
         Timestamp.valueOf("2018-01-02 00:00:00"),
         Timestamp.valueOf("2018-01-01 12:00:00"),
         Timestamp.valueOf("2018-01-01 00:00:00")))
 
-    checkEvaluation(new Sequence(
-      Literal(Timestamp.valueOf("2018-01-02 00:00:00")),
-      Literal(Timestamp.valueOf("2017-12-31 23:59:59")),
-      Literal(negateExact(stringToInterval("interval 12 hours")))),
+    checkEvaluation(
+      new Sequence(
+        Literal(Timestamp.valueOf("2018-01-02 00:00:00")),
+        Literal(Timestamp.valueOf("2017-12-31 23:59:59")),
+        Literal(negateExact(stringToInterval("interval 12 hours")))),
       Seq(
         Timestamp.valueOf("2018-01-02 00:00:00"),
         Timestamp.valueOf("2018-01-01 12:00:00"),
         Timestamp.valueOf("2018-01-01 00:00:00")))
 
-    checkEvaluation(new Sequence(
-      Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
-      Literal(Timestamp.valueOf("2018-03-01 00:00:00")),
-      Literal(stringToInterval("interval 1 month"))),
+    checkEvaluation(
+      new Sequence(
+        Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
+        Literal(Timestamp.valueOf("2018-03-01 00:00:00")),
+        Literal(stringToInterval("interval 1 month"))),
       Seq(
         Timestamp.valueOf("2018-01-01 00:00:00"),
         Timestamp.valueOf("2018-02-01 00:00:00"),
         Timestamp.valueOf("2018-03-01 00:00:00")))
 
-    checkEvaluation(new Sequence(
-      Literal(Timestamp.valueOf("2018-03-01 00:00:00")),
-      Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
-      Literal(negateExact(stringToInterval("interval 1 month")))),
+    checkEvaluation(
+      new Sequence(
+        Literal(Timestamp.valueOf("2018-03-01 00:00:00")),
+        Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
+        Literal(negateExact(stringToInterval("interval 1 month")))),
       Seq(
         Timestamp.valueOf("2018-03-01 00:00:00"),
         Timestamp.valueOf("2018-02-01 00:00:00"),
         Timestamp.valueOf("2018-01-01 00:00:00")))
 
-    checkEvaluation(new Sequence(
-      Literal(Timestamp.valueOf("2018-03-03 00:00:00")),
-      Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
-      Literal(negateExact(stringToInterval("interval 1 month 1 day")))),
+    checkEvaluation(
+      new Sequence(
+        Literal(Timestamp.valueOf("2018-03-03 00:00:00")),
+        Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
+        Literal(negateExact(stringToInterval("interval 1 month 1 day")))),
       Seq(
         Timestamp.valueOf("2018-03-03 00:00:00"),
         Timestamp.valueOf("2018-02-02 00:00:00"),
         Timestamp.valueOf("2018-01-01 00:00:00")))
 
-    checkEvaluation(new Sequence(
-      Literal(Timestamp.valueOf("2018-01-31 00:00:00")),
-      Literal(Timestamp.valueOf("2018-04-30 00:00:00")),
-      Literal(stringToInterval("interval 1 month"))),
+    checkEvaluation(
+      new Sequence(
+        Literal(Timestamp.valueOf("2018-01-31 00:00:00")),
+        Literal(Timestamp.valueOf("2018-04-30 00:00:00")),
+        Literal(stringToInterval("interval 1 month"))),
       Seq(
         Timestamp.valueOf("2018-01-31 00:00:00"),
         Timestamp.valueOf("2018-02-28 00:00:00"),
         Timestamp.valueOf("2018-03-31 00:00:00"),
         Timestamp.valueOf("2018-04-30 00:00:00")))
 
-    checkEvaluation(new Sequence(
-      Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
-      Literal(Timestamp.valueOf("2018-03-01 00:00:00")),
-      Literal(stringToInterval("interval 1 month 1 second"))),
-      Seq(
-        Timestamp.valueOf("2018-01-01 00:00:00"),
-        Timestamp.valueOf("2018-02-01 00:00:01")))
+    checkEvaluation(
+      new Sequence(
+        Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
+        Literal(Timestamp.valueOf("2018-03-01 00:00:00")),
+        Literal(stringToInterval("interval 1 month 1 second"))),
+      Seq(Timestamp.valueOf("2018-01-01 00:00:00"), Timestamp.valueOf("2018-02-01 00:00:01")))
 
-    checkEvaluation(new Sequence(
-      Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
-      Literal(Timestamp.valueOf("2018-03-01 00:04:06")),
-      Literal(stringToInterval("interval 1 month 2 minutes 3 seconds"))),
+    checkEvaluation(
+      new Sequence(
+        Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
+        Literal(Timestamp.valueOf("2018-03-01 00:04:06")),
+        Literal(stringToInterval("interval 1 month 2 minutes 3 seconds"))),
       Seq(
         Timestamp.valueOf("2018-01-01 00:00:00"),
         Timestamp.valueOf("2018-02-01 00:02:03"),
         Timestamp.valueOf("2018-03-01 00:04:06")))
 
-    checkEvaluation(new Sequence(
-      Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
-      Literal(Timestamp.valueOf("2023-01-01 00:00:00")),
-      Literal(fromYearMonthString("1-5"))),
+    checkEvaluation(
+      new Sequence(
+        Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
+        Literal(Timestamp.valueOf("2023-01-01 00:00:00")),
+        Literal(fromYearMonthString("1-5"))),
       Seq(
         Timestamp.valueOf("2018-01-01 00:00:00.000"),
         Timestamp.valueOf("2019-06-01 00:00:00.000"),
         Timestamp.valueOf("2020-11-01 00:00:00.000"),
         Timestamp.valueOf("2022-04-01 00:00:00.000")))
 
-    checkEvaluation(new Sequence(
-      Literal(Timestamp.valueOf("2022-04-01 00:00:00")),
-      Literal(Timestamp.valueOf("2017-01-01 00:00:00")),
-      Literal(negateExact(fromYearMonthString("1-5")))),
+    checkEvaluation(
+      new Sequence(
+        Literal(Timestamp.valueOf("2022-04-01 00:00:00")),
+        Literal(Timestamp.valueOf("2017-01-01 00:00:00")),
+        Literal(negateExact(fromYearMonthString("1-5")))),
       Seq(
         Timestamp.valueOf("2022-04-01 00:00:00.000"),
         Timestamp.valueOf("2020-11-01 00:00:00.000"),
@@ -1279,20 +1334,19 @@ class CollectionExpressionsSuite
 
     DateTimeTestUtils.withDefaultTimeZone(timeZone.toZoneId) {
       // Spring time change
-      checkEvaluation(new Sequence(
-        Literal(Timestamp.valueOf("2018-03-25 01:30:00")),
-        Literal(Timestamp.valueOf("2018-03-25 03:30:00")),
-        Literal(stringToInterval("interval 30 minutes"))),
-        Seq(
-          ts("2018-03-25 01:30:00"),
-          ts("2018-03-25 03:00:00"),
-          ts("2018-03-25 03:30:00")))
+      checkEvaluation(
+        new Sequence(
+          Literal(Timestamp.valueOf("2018-03-25 01:30:00")),
+          Literal(Timestamp.valueOf("2018-03-25 03:30:00")),
+          Literal(stringToInterval("interval 30 minutes"))),
+        Seq(ts("2018-03-25 01:30:00"), ts("2018-03-25 03:00:00"), ts("2018-03-25 03:30:00")))
 
       // Autumn time change
-      checkEvaluation(new Sequence(
-        Literal(Timestamp.valueOf("2018-10-28 01:30:00")),
-        Literal(Timestamp.valueOf("2018-10-28 03:30:00")),
-        Literal(stringToInterval("interval 30 minutes"))),
+      checkEvaluation(
+        new Sequence(
+          Literal(Timestamp.valueOf("2018-10-28 01:30:00")),
+          Literal(Timestamp.valueOf("2018-10-28 03:30:00")),
+          Literal(stringToInterval("interval 30 minutes"))),
         Seq(
           ts("2018-10-28 01:30:00"),
           ts("2018-10-28 02:00:00", noDST = true),
@@ -1306,48 +1360,47 @@ class CollectionExpressionsSuite
 
   test("Sequence of dates") {
     DateTimeTestUtils.withDefaultTimeZone(UTC) {
-      checkEvaluation(new Sequence(
-        Literal(Date.valueOf("2018-01-01")),
-        Literal(Date.valueOf("2018-01-05")),
-        Literal(stringToInterval("interval 2 days"))),
-        Seq(
-          Date.valueOf("2018-01-01"),
-          Date.valueOf("2018-01-03"),
-          Date.valueOf("2018-01-05")))
+      checkEvaluation(
+        new Sequence(
+          Literal(Date.valueOf("2018-01-01")),
+          Literal(Date.valueOf("2018-01-05")),
+          Literal(stringToInterval("interval 2 days"))),
+        Seq(Date.valueOf("2018-01-01"), Date.valueOf("2018-01-03"), Date.valueOf("2018-01-05")))
 
-      checkEvaluation(new Sequence(
-        Literal(Date.valueOf("2018-01-01")),
-        Literal(Date.valueOf("2018-03-01")),
-        Literal(stringToInterval("interval 1 month"))),
-        Seq(
-          Date.valueOf("2018-01-01"),
-          Date.valueOf("2018-02-01"),
-          Date.valueOf("2018-03-01")))
+      checkEvaluation(
+        new Sequence(
+          Literal(Date.valueOf("2018-01-01")),
+          Literal(Date.valueOf("2018-03-01")),
+          Literal(stringToInterval("interval 1 month"))),
+        Seq(Date.valueOf("2018-01-01"), Date.valueOf("2018-02-01"), Date.valueOf("2018-03-01")))
 
-      checkEvaluation(new Sequence(
-        Literal(Date.valueOf("2018-01-31")),
-        Literal(Date.valueOf("2018-04-30")),
-        Literal(stringToInterval("interval 1 month"))),
+      checkEvaluation(
+        new Sequence(
+          Literal(Date.valueOf("2018-01-31")),
+          Literal(Date.valueOf("2018-04-30")),
+          Literal(stringToInterval("interval 1 month"))),
         Seq(
           Date.valueOf("2018-01-31"),
           Date.valueOf("2018-02-28"),
           Date.valueOf("2018-03-31"),
           Date.valueOf("2018-04-30")))
 
-      checkEvaluation(new Sequence(
-        Literal(Date.valueOf("2018-01-01")),
-        Literal(Date.valueOf("2023-01-01")),
-        Literal(fromYearMonthString("1-5"))),
+      checkEvaluation(
+        new Sequence(
+          Literal(Date.valueOf("2018-01-01")),
+          Literal(Date.valueOf("2023-01-01")),
+          Literal(fromYearMonthString("1-5"))),
         Seq(
           Date.valueOf("2018-01-01"),
           Date.valueOf("2019-06-01"),
           Date.valueOf("2020-11-01"),
           Date.valueOf("2022-04-01")))
 
-      checkEvaluation(new Sequence(
-        Literal(Date.valueOf("2021-07-01")),
-        Literal(Date.valueOf("2021-07-10")),
-        Literal(fromDayTimeString("3 0:0:0"))),
+      checkEvaluation(
+        new Sequence(
+          Literal(Date.valueOf("2021-07-01")),
+          Literal(Date.valueOf("2021-07-10")),
+          Literal(fromDayTimeString("3 0:0:0"))),
         Seq(
           Date.valueOf("2021-07-01"),
           Date.valueOf("2021-07-04"),
@@ -1359,7 +1412,8 @@ class CollectionExpressionsSuite
           Literal(Date.valueOf("1970-01-02")),
           Literal(Date.valueOf("1970-01-01")),
           Literal(stringToInterval("interval 1 day"))),
-        EmptyRow, "sequence boundaries: 1 to 0 by 1")
+        EmptyRow,
+        "sequence boundaries: 1 to 0 by 1")
 
       checkExceptionInExpression[IllegalArgumentException](
         new Sequence(
@@ -1370,10 +1424,12 @@ class CollectionExpressionsSuite
         s"sequence boundaries: 0 to 2678400000000 by -1 months")
 
       // SPARK-32133: Sequence step must be a day interval if start and end values are dates
-      checkExceptionInExpression[IllegalArgumentException](Sequence(
-        Cast(Literal("2011-03-01"), DateType),
-        Cast(Literal("2011-04-01"), DateType),
-        Option(Literal(stringToInterval("interval 1 hour")))), null,
+      checkExceptionInExpression[IllegalArgumentException](
+        Sequence(
+          Cast(Literal("2011-03-01"), DateType),
+          Cast(Literal("2011-04-01"), DateType),
+          Option(Literal(stringToInterval("interval 1 hour")))),
+        null,
         "sequence step must be an interval of day granularity if start and end values are dates")
     }
   }
@@ -1381,10 +1437,11 @@ class CollectionExpressionsSuite
   test("SPARK-37544: Time zone should not affect date sequence with month interval") {
     outstandingZoneIds.foreach { zid =>
       DateTimeTestUtils.withDefaultTimeZone(zid) {
-        checkEvaluation(new Sequence(
-          Literal(Date.valueOf("2021-01-01")),
-          Literal(Date.valueOf("2022-01-01")),
-          Literal(stringToInterval("interval 3 month"))),
+        checkEvaluation(
+          new Sequence(
+            Literal(Date.valueOf("2021-01-01")),
+            Literal(Date.valueOf("2022-01-01")),
+            Literal(stringToInterval("interval 3 month"))),
           Seq(
             Date.valueOf("2021-01-01"),
             Date.valueOf("2021-04-01"),
@@ -1402,125 +1459,135 @@ class CollectionExpressionsSuite
     // In the UTC time zone, it instead returns 2022-03-13.
     // The sequence function should be consistent with the date arithmetic.
     DateTimeTestUtils.withDefaultTimeZone(LA) {
-      checkEvaluation(new Sequence(
-        Literal(Date.valueOf("2022-03-09")),
-        Literal(Date.valueOf("2022-03-15")),
-        Literal(stringToInterval("interval 4 days 23 hours"))),
-        Seq(
-          Date.valueOf("2022-03-09"),
-          Date.valueOf("2022-03-14")))
+      checkEvaluation(
+        new Sequence(
+          Literal(Date.valueOf("2022-03-09")),
+          Literal(Date.valueOf("2022-03-15")),
+          Literal(stringToInterval("interval 4 days 23 hours"))),
+        Seq(Date.valueOf("2022-03-09"), Date.valueOf("2022-03-14")))
     }
 
     DateTimeTestUtils.withDefaultTimeZone(UTC) {
-      checkEvaluation(new Sequence(
-        Literal(Date.valueOf("2022-03-09")),
-        Literal(Date.valueOf("2022-03-15")),
-        Literal(stringToInterval("interval 4 days 23 hours"))),
-        Seq(
-          Date.valueOf("2022-03-09"),
-          Date.valueOf("2022-03-13"))) // this is different from LA time zone above
+      checkEvaluation(
+        new Sequence(
+          Literal(Date.valueOf("2022-03-09")),
+          Literal(Date.valueOf("2022-03-15")),
+          Literal(stringToInterval("interval 4 days 23 hours"))),
+        Seq(Date.valueOf("2022-03-09"), Date.valueOf("2022-03-13"))
+      ) // this is different from LA time zone above
     }
   }
 
   test("SPARK-35088: Accept ANSI intervals by the Sequence expression") {
-    checkEvaluation(new Sequence(
-      Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
-      Literal(Timestamp.valueOf("2018-01-02 00:00:00")),
-      Literal(Duration.ofHours(12))),
+    checkEvaluation(
+      new Sequence(
+        Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
+        Literal(Timestamp.valueOf("2018-01-02 00:00:00")),
+        Literal(Duration.ofHours(12))),
       Seq(
         Timestamp.valueOf("2018-01-01 00:00:00"),
         Timestamp.valueOf("2018-01-01 12:00:00"),
         Timestamp.valueOf("2018-01-02 00:00:00")))
 
-    checkEvaluation(new Sequence(
-      Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
-      Literal(Timestamp.valueOf("2018-01-02 00:00:01")),
-      Literal(Duration.ofHours(12))),
+    checkEvaluation(
+      new Sequence(
+        Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
+        Literal(Timestamp.valueOf("2018-01-02 00:00:01")),
+        Literal(Duration.ofHours(12))),
       Seq(
         Timestamp.valueOf("2018-01-01 00:00:00"),
         Timestamp.valueOf("2018-01-01 12:00:00"),
         Timestamp.valueOf("2018-01-02 00:00:00")))
 
-    checkEvaluation(new Sequence(
-      Literal(Timestamp.valueOf("2018-01-02 00:00:00")),
-      Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
-      Literal(Duration.ofHours(-12))),
+    checkEvaluation(
+      new Sequence(
+        Literal(Timestamp.valueOf("2018-01-02 00:00:00")),
+        Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
+        Literal(Duration.ofHours(-12))),
       Seq(
         Timestamp.valueOf("2018-01-02 00:00:00"),
         Timestamp.valueOf("2018-01-01 12:00:00"),
         Timestamp.valueOf("2018-01-01 00:00:00")))
 
-    checkEvaluation(new Sequence(
-      Literal(Timestamp.valueOf("2018-01-02 00:00:00")),
-      Literal(Timestamp.valueOf("2017-12-31 23:59:59")),
-      Literal(Duration.ofHours(-12))),
+    checkEvaluation(
+      new Sequence(
+        Literal(Timestamp.valueOf("2018-01-02 00:00:00")),
+        Literal(Timestamp.valueOf("2017-12-31 23:59:59")),
+        Literal(Duration.ofHours(-12))),
       Seq(
         Timestamp.valueOf("2018-01-02 00:00:00"),
         Timestamp.valueOf("2018-01-01 12:00:00"),
         Timestamp.valueOf("2018-01-01 00:00:00")))
 
-    checkEvaluation(new Sequence(
-      Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
-      Literal(Timestamp.valueOf("2018-03-01 00:00:00")),
-      Literal(Period.ofMonths(1))),
+    checkEvaluation(
+      new Sequence(
+        Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
+        Literal(Timestamp.valueOf("2018-03-01 00:00:00")),
+        Literal(Period.ofMonths(1))),
       Seq(
         Timestamp.valueOf("2018-01-01 00:00:00"),
         Timestamp.valueOf("2018-02-01 00:00:00"),
         Timestamp.valueOf("2018-03-01 00:00:00")))
 
-    checkEvaluation(new Sequence(
-      Literal(Timestamp.valueOf("2018-03-01 00:00:00")),
-      Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
-      Literal(Period.ofMonths(-1))),
+    checkEvaluation(
+      new Sequence(
+        Literal(Timestamp.valueOf("2018-03-01 00:00:00")),
+        Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
+        Literal(Period.ofMonths(-1))),
       Seq(
         Timestamp.valueOf("2018-03-01 00:00:00"),
         Timestamp.valueOf("2018-02-01 00:00:00"),
         Timestamp.valueOf("2018-01-01 00:00:00")))
 
-    checkEvaluation(new Sequence(
-      Literal(Timestamp.valueOf("2018-01-31 00:00:00")),
-      Literal(Timestamp.valueOf("2018-04-30 00:00:00")),
-      Literal(Period.ofMonths(1))),
+    checkEvaluation(
+      new Sequence(
+        Literal(Timestamp.valueOf("2018-01-31 00:00:00")),
+        Literal(Timestamp.valueOf("2018-04-30 00:00:00")),
+        Literal(Period.ofMonths(1))),
       Seq(
         Timestamp.valueOf("2018-01-31 00:00:00"),
         Timestamp.valueOf("2018-02-28 00:00:00"),
         Timestamp.valueOf("2018-03-31 00:00:00"),
         Timestamp.valueOf("2018-04-30 00:00:00")))
 
-    checkEvaluation(new Sequence(
-      Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
-      Literal(Timestamp.valueOf("2023-01-01 00:00:00")),
-      Literal(Period.of(1, 5, 0))),
+    checkEvaluation(
+      new Sequence(
+        Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
+        Literal(Timestamp.valueOf("2023-01-01 00:00:00")),
+        Literal(Period.of(1, 5, 0))),
       Seq(
         Timestamp.valueOf("2018-01-01 00:00:00.000"),
         Timestamp.valueOf("2019-06-01 00:00:00.000"),
         Timestamp.valueOf("2020-11-01 00:00:00.000"),
         Timestamp.valueOf("2022-04-01 00:00:00.000")))
 
-    checkEvaluation(new Sequence(
-      Literal(Timestamp.valueOf("2022-04-01 00:00:00")),
-      Literal(Timestamp.valueOf("2017-01-01 00:00:00")),
-      Literal(Period.of(-1, -5, 0))),
+    checkEvaluation(
+      new Sequence(
+        Literal(Timestamp.valueOf("2022-04-01 00:00:00")),
+        Literal(Timestamp.valueOf("2017-01-01 00:00:00")),
+        Literal(Period.of(-1, -5, 0))),
       Seq(
         Timestamp.valueOf("2022-04-01 00:00:00.000"),
         Timestamp.valueOf("2020-11-01 00:00:00.000"),
         Timestamp.valueOf("2019-06-01 00:00:00.000"),
         Timestamp.valueOf("2018-01-01 00:00:00.000")))
 
-    checkEvaluation(new Sequence(
-      Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
-      Literal(Timestamp.valueOf("2018-01-04 00:00:00")),
-      Literal(Duration.ofDays(1))),
+    checkEvaluation(
+      new Sequence(
+        Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
+        Literal(Timestamp.valueOf("2018-01-04 00:00:00")),
+        Literal(Duration.ofDays(1))),
       Seq(
         Timestamp.valueOf("2018-01-01 00:00:00.000"),
         Timestamp.valueOf("2018-01-02 00:00:00.000"),
         Timestamp.valueOf("2018-01-03 00:00:00.000"),
         Timestamp.valueOf("2018-01-04 00:00:00.000")))
 
-    checkEvaluation(new Sequence(
-      Literal(Timestamp.valueOf("2018-01-04 00:00:00")),
-      Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
-      Literal(Duration.ofDays(-1))),
+    checkEvaluation(
+      new Sequence(
+        Literal(Timestamp.valueOf("2018-01-04 00:00:00")),
+        Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
+        Literal(Duration.ofDays(-1))),
       Seq(
         Timestamp.valueOf("2018-01-04 00:00:00.000"),
         Timestamp.valueOf("2018-01-03 00:00:00.000"),
@@ -1532,49 +1599,52 @@ class CollectionExpressionsSuite
         Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
         Literal(Timestamp.valueOf("2018-01-04 00:00:00")),
         Literal(Period.ofDays(1))),
-      EmptyRow, s"sequence boundaries: 1514793600000000 to 1515052800000000 by 0")
+      EmptyRow,
+      s"sequence boundaries: 1514793600000000 to 1515052800000000 by 0")
 
     checkExceptionInExpression[IllegalArgumentException](
       new Sequence(
         Literal(Timestamp.valueOf("2018-01-04 00:00:00")),
         Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
         Literal(Period.ofDays(-1))),
-      EmptyRow, s"sequence boundaries: 1515052800000000 to 1514793600000000 by 0")
+      EmptyRow,
+      s"sequence boundaries: 1515052800000000 to 1514793600000000 by 0")
 
     DateTimeTestUtils.withDefaultTimeZone(UTC) {
-      checkEvaluation(new Sequence(
-        Literal(Date.valueOf("2018-01-01")),
-        Literal(Date.valueOf("2018-03-01")),
-        Literal(Period.ofMonths(1))),
-        Seq(
-          Date.valueOf("2018-01-01"),
-          Date.valueOf("2018-02-01"),
-          Date.valueOf("2018-03-01")))
+      checkEvaluation(
+        new Sequence(
+          Literal(Date.valueOf("2018-01-01")),
+          Literal(Date.valueOf("2018-03-01")),
+          Literal(Period.ofMonths(1))),
+        Seq(Date.valueOf("2018-01-01"), Date.valueOf("2018-02-01"), Date.valueOf("2018-03-01")))
 
-      checkEvaluation(new Sequence(
-        Literal(Date.valueOf("2018-01-31")),
-        Literal(Date.valueOf("2018-04-30")),
-        Literal(Period.ofMonths(1))),
+      checkEvaluation(
+        new Sequence(
+          Literal(Date.valueOf("2018-01-31")),
+          Literal(Date.valueOf("2018-04-30")),
+          Literal(Period.ofMonths(1))),
         Seq(
           Date.valueOf("2018-01-31"),
           Date.valueOf("2018-02-28"),
           Date.valueOf("2018-03-31"),
           Date.valueOf("2018-04-30")))
 
-      checkEvaluation(new Sequence(
-        Literal(Date.valueOf("2018-01-01")),
-        Literal(Date.valueOf("2023-01-01")),
-        Literal(Period.of(1, 5, 0))),
+      checkEvaluation(
+        new Sequence(
+          Literal(Date.valueOf("2018-01-01")),
+          Literal(Date.valueOf("2023-01-01")),
+          Literal(Period.of(1, 5, 0))),
         Seq(
           Date.valueOf("2018-01-01"),
           Date.valueOf("2019-06-01"),
           Date.valueOf("2020-11-01"),
           Date.valueOf("2022-04-01")))
 
-      checkEvaluation(new Sequence(
-        Literal(Date.valueOf("2021-07-01")),
-        Literal(Date.valueOf("2021-07-10")),
-        Literal(Duration.ofDays(3))),
+      checkEvaluation(
+        new Sequence(
+          Literal(Date.valueOf("2021-07-01")),
+          Literal(Date.valueOf("2021-07-10")),
+          Literal(Duration.ofDays(3))),
         Seq(
           Date.valueOf("2021-07-01"),
           Date.valueOf("2021-07-04"),
@@ -1637,104 +1707,115 @@ class CollectionExpressionsSuite
   }
 
   test("SPARK-36090: Support TimestampNTZType in expression Sequence") {
-    checkEvaluation(new Sequence(
-      Literal(LocalDateTime.parse("2018-01-01T00:00:00")),
-      Literal(LocalDateTime.parse("2018-01-02T00:00:00")),
-      Literal(Duration.ofHours(12))),
+    checkEvaluation(
+      new Sequence(
+        Literal(LocalDateTime.parse("2018-01-01T00:00:00")),
+        Literal(LocalDateTime.parse("2018-01-02T00:00:00")),
+        Literal(Duration.ofHours(12))),
       Seq(
         LocalDateTime.parse("2018-01-01T00:00:00"),
         LocalDateTime.parse("2018-01-01T12:00:00"),
         LocalDateTime.parse("2018-01-02T00:00:00")))
 
-    checkEvaluation(new Sequence(
-      Literal(LocalDateTime.parse("2018-01-01T00:00:00")),
-      Literal(LocalDateTime.parse("2018-01-02T00:00:01")),
-      Literal(Duration.ofHours(12))),
+    checkEvaluation(
+      new Sequence(
+        Literal(LocalDateTime.parse("2018-01-01T00:00:00")),
+        Literal(LocalDateTime.parse("2018-01-02T00:00:01")),
+        Literal(Duration.ofHours(12))),
       Seq(
         LocalDateTime.parse("2018-01-01T00:00:00"),
         LocalDateTime.parse("2018-01-01T12:00:00"),
         LocalDateTime.parse("2018-01-02T00:00:00")))
 
-    checkEvaluation(new Sequence(
-      Literal(LocalDateTime.parse("2018-01-02T00:00:00")),
-      Literal(LocalDateTime.parse("2018-01-01T00:00:00")),
-      Literal(Duration.ofHours(-12))),
+    checkEvaluation(
+      new Sequence(
+        Literal(LocalDateTime.parse("2018-01-02T00:00:00")),
+        Literal(LocalDateTime.parse("2018-01-01T00:00:00")),
+        Literal(Duration.ofHours(-12))),
       Seq(
         LocalDateTime.parse("2018-01-02T00:00:00"),
         LocalDateTime.parse("2018-01-01T12:00:00"),
         LocalDateTime.parse("2018-01-01T00:00:00")))
 
-    checkEvaluation(new Sequence(
-      Literal(LocalDateTime.parse("2018-01-02T00:00:00")),
-      Literal(LocalDateTime.parse("2017-12-31T23:59:59")),
-      Literal(Duration.ofHours(-12))),
+    checkEvaluation(
+      new Sequence(
+        Literal(LocalDateTime.parse("2018-01-02T00:00:00")),
+        Literal(LocalDateTime.parse("2017-12-31T23:59:59")),
+        Literal(Duration.ofHours(-12))),
       Seq(
         LocalDateTime.parse("2018-01-02T00:00:00"),
         LocalDateTime.parse("2018-01-01T12:00:00"),
         LocalDateTime.parse("2018-01-01T00:00:00")))
 
-    checkEvaluation(new Sequence(
-      Literal(LocalDateTime.parse("2018-01-01T00:00:00")),
-      Literal(LocalDateTime.parse("2018-03-01T00:00:00")),
-      Literal(Period.ofMonths(1))),
+    checkEvaluation(
+      new Sequence(
+        Literal(LocalDateTime.parse("2018-01-01T00:00:00")),
+        Literal(LocalDateTime.parse("2018-03-01T00:00:00")),
+        Literal(Period.ofMonths(1))),
       Seq(
         LocalDateTime.parse("2018-01-01T00:00:00"),
         LocalDateTime.parse("2018-02-01T00:00:00"),
         LocalDateTime.parse("2018-03-01T00:00:00")))
 
-    checkEvaluation(new Sequence(
-      Literal(LocalDateTime.parse("2018-03-01T00:00:00")),
-      Literal(LocalDateTime.parse("2018-01-01T00:00:00")),
-      Literal(Period.ofMonths(-1))),
+    checkEvaluation(
+      new Sequence(
+        Literal(LocalDateTime.parse("2018-03-01T00:00:00")),
+        Literal(LocalDateTime.parse("2018-01-01T00:00:00")),
+        Literal(Period.ofMonths(-1))),
       Seq(
         LocalDateTime.parse("2018-03-01T00:00:00"),
         LocalDateTime.parse("2018-02-01T00:00:00"),
         LocalDateTime.parse("2018-01-01T00:00:00")))
 
-    checkEvaluation(new Sequence(
-      Literal(LocalDateTime.parse("2018-01-31T00:00:00")),
-      Literal(LocalDateTime.parse("2018-04-30T00:00:00")),
-      Literal(Period.ofMonths(1))),
+    checkEvaluation(
+      new Sequence(
+        Literal(LocalDateTime.parse("2018-01-31T00:00:00")),
+        Literal(LocalDateTime.parse("2018-04-30T00:00:00")),
+        Literal(Period.ofMonths(1))),
       Seq(
         LocalDateTime.parse("2018-01-31T00:00:00"),
         LocalDateTime.parse("2018-02-28T00:00:00"),
         LocalDateTime.parse("2018-03-31T00:00:00"),
         LocalDateTime.parse("2018-04-30T00:00:00")))
 
-    checkEvaluation(new Sequence(
-      Literal(LocalDateTime.parse("2018-01-01T00:00:00")),
-      Literal(LocalDateTime.parse("2023-01-01T00:00:00")),
-      Literal(Period.of(1, 5, 0))),
+    checkEvaluation(
+      new Sequence(
+        Literal(LocalDateTime.parse("2018-01-01T00:00:00")),
+        Literal(LocalDateTime.parse("2023-01-01T00:00:00")),
+        Literal(Period.of(1, 5, 0))),
       Seq(
         LocalDateTime.parse("2018-01-01T00:00:00.000"),
         LocalDateTime.parse("2019-06-01T00:00:00.000"),
         LocalDateTime.parse("2020-11-01T00:00:00.000"),
         LocalDateTime.parse("2022-04-01T00:00:00.000")))
 
-    checkEvaluation(new Sequence(
-      Literal(LocalDateTime.parse("2022-04-01T00:00:00")),
-      Literal(LocalDateTime.parse("2017-01-01T00:00:00")),
-      Literal(Period.of(-1, -5, 0))),
+    checkEvaluation(
+      new Sequence(
+        Literal(LocalDateTime.parse("2022-04-01T00:00:00")),
+        Literal(LocalDateTime.parse("2017-01-01T00:00:00")),
+        Literal(Period.of(-1, -5, 0))),
       Seq(
         LocalDateTime.parse("2022-04-01T00:00:00.000"),
         LocalDateTime.parse("2020-11-01T00:00:00.000"),
         LocalDateTime.parse("2019-06-01T00:00:00.000"),
         LocalDateTime.parse("2018-01-01T00:00:00.000")))
 
-    checkEvaluation(new Sequence(
-      Literal(LocalDateTime.parse("2018-01-01T00:00:00")),
-      Literal(LocalDateTime.parse("2018-01-04T00:00:00")),
-      Literal(Duration.ofDays(1))),
+    checkEvaluation(
+      new Sequence(
+        Literal(LocalDateTime.parse("2018-01-01T00:00:00")),
+        Literal(LocalDateTime.parse("2018-01-04T00:00:00")),
+        Literal(Duration.ofDays(1))),
       Seq(
         LocalDateTime.parse("2018-01-01T00:00:00.000"),
         LocalDateTime.parse("2018-01-02T00:00:00.000"),
         LocalDateTime.parse("2018-01-03T00:00:00.000"),
         LocalDateTime.parse("2018-01-04T00:00:00.000")))
 
-    checkEvaluation(new Sequence(
-      Literal(LocalDateTime.parse("2018-01-04T00:00:00")),
-      Literal(LocalDateTime.parse("2018-01-01T00:00:00")),
-      Literal(Duration.ofDays(-1))),
+    checkEvaluation(
+      new Sequence(
+        Literal(LocalDateTime.parse("2018-01-04T00:00:00")),
+        Literal(LocalDateTime.parse("2018-01-01T00:00:00")),
+        Literal(Duration.ofDays(-1))),
       Seq(
         LocalDateTime.parse("2018-01-04T00:00:00.000"),
         LocalDateTime.parse("2018-01-03T00:00:00.000"),
@@ -1746,14 +1827,16 @@ class CollectionExpressionsSuite
         Literal(LocalDateTime.parse("2018-01-01T00:00:00")),
         Literal(LocalDateTime.parse("2018-01-04T00:00:00")),
         Literal(Period.ofDays(1))),
-      EmptyRow, s"sequence boundaries: 1514764800000000 to 1515024000000000 by 0")
+      EmptyRow,
+      s"sequence boundaries: 1514764800000000 to 1515024000000000 by 0")
 
     checkExceptionInExpression[IllegalArgumentException](
       new Sequence(
         Literal(LocalDateTime.parse("2018-01-04T00:00:00")),
         Literal(LocalDateTime.parse("2018-01-01T00:00:00")),
         Literal(Period.ofDays(-1))),
-      EmptyRow, s"sequence boundaries: 1515024000000000 to 1514764800000000 by 0")
+      EmptyRow,
+      s"sequence boundaries: 1515024000000000 to 1514764800000000 by 0")
   }
 
   test("Sequence with default step") {
@@ -1762,51 +1845,47 @@ class CollectionExpressionsSuite
     checkEvaluation(new Sequence(Literal(3), Literal(1)), Seq(3, 2, 1))
 
     // +/- 1 day for timestamps
-    checkEvaluation(new Sequence(
-      Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
-      Literal(Timestamp.valueOf("2018-01-03 00:00:00"))),
+    checkEvaluation(
+      new Sequence(
+        Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
+        Literal(Timestamp.valueOf("2018-01-03 00:00:00"))),
       Seq(
         Timestamp.valueOf("2018-01-01 00:00:00"),
         Timestamp.valueOf("2018-01-02 00:00:00"),
         Timestamp.valueOf("2018-01-03 00:00:00")))
 
-    checkEvaluation(new Sequence(
-      Literal(Timestamp.valueOf("2018-01-03 00:00:00")),
-      Literal(Timestamp.valueOf("2018-01-01 00:00:00"))),
+    checkEvaluation(
+      new Sequence(
+        Literal(Timestamp.valueOf("2018-01-03 00:00:00")),
+        Literal(Timestamp.valueOf("2018-01-01 00:00:00"))),
       Seq(
         Timestamp.valueOf("2018-01-03 00:00:00"),
         Timestamp.valueOf("2018-01-02 00:00:00"),
         Timestamp.valueOf("2018-01-01 00:00:00")))
 
     // +/- 1 day for dates
-    checkEvaluation(new Sequence(
-      Literal(Date.valueOf("2018-01-01")),
-      Literal(Date.valueOf("2018-01-03"))),
-      Seq(
-        Date.valueOf("2018-01-01"),
-        Date.valueOf("2018-01-02"),
-        Date.valueOf("2018-01-03")))
+    checkEvaluation(
+      new Sequence(Literal(Date.valueOf("2018-01-01")), Literal(Date.valueOf("2018-01-03"))),
+      Seq(Date.valueOf("2018-01-01"), Date.valueOf("2018-01-02"), Date.valueOf("2018-01-03")))
 
-    checkEvaluation(new Sequence(
-      Literal(Date.valueOf("2018-01-03")),
-      Literal(Date.valueOf("2018-01-01"))),
-      Seq(
-        Date.valueOf("2018-01-03"),
-        Date.valueOf("2018-01-02"),
-        Date.valueOf("2018-01-01")))
+    checkEvaluation(
+      new Sequence(Literal(Date.valueOf("2018-01-03")), Literal(Date.valueOf("2018-01-01"))),
+      Seq(Date.valueOf("2018-01-03"), Date.valueOf("2018-01-02"), Date.valueOf("2018-01-01")))
 
     // +/- 1 day for LocalDateTimes
-    checkEvaluation(new Sequence(
-      Literal(LocalDateTime.parse("2018-01-01T00:00:00")),
-      Literal(LocalDateTime.parse("2018-01-03T00:00:00"))),
+    checkEvaluation(
+      new Sequence(
+        Literal(LocalDateTime.parse("2018-01-01T00:00:00")),
+        Literal(LocalDateTime.parse("2018-01-03T00:00:00"))),
       Seq(
         LocalDateTime.parse("2018-01-01T00:00:00"),
         LocalDateTime.parse("2018-01-02T00:00:00"),
         LocalDateTime.parse("2018-01-03T00:00:00")))
 
-    checkEvaluation(new Sequence(
-      Literal(LocalDateTime.parse("2018-01-03T00:00:00")),
-      Literal(LocalDateTime.parse("2018-01-01T00:00:00"))),
+    checkEvaluation(
+      new Sequence(
+        Literal(LocalDateTime.parse("2018-01-03T00:00:00")),
+        Literal(LocalDateTime.parse("2018-01-01T00:00:00"))),
       Seq(
         LocalDateTime.parse("2018-01-03T00:00:00"),
         LocalDateTime.parse("2018-01-02T00:00:00"),
@@ -1878,9 +1957,11 @@ class CollectionExpressionsSuite
     checkEvaluation(ArrayPosition(a3, Literal("")), null)
     checkEvaluation(ArrayPosition(a3, Literal.create(null, StringType)), null)
 
-    val aa0 = Literal.create(Seq[Seq[Int]](Seq[Int](1, 2), Seq[Int](3, 4)),
+    val aa0 = Literal.create(
+      Seq[Seq[Int]](Seq[Int](1, 2), Seq[Int](3, 4)),
       ArrayType(ArrayType(IntegerType)))
-    val aa1 = Literal.create(Seq[Seq[Int]](Seq[Int](5, 6), Seq[Int](2, 1)),
+    val aa1 = Literal.create(
+      Seq[Seq[Int]](Seq[Int](5, 6), Seq[Int](2, 1)),
       ArrayType(ArrayType(IntegerType)))
     val aae = Literal.create(Seq[Int](1, 2), ArrayType(IntegerType))
     checkEvaluation(ArrayPosition(aa0, aae), 1L)
@@ -1918,23 +1999,20 @@ class CollectionExpressionsSuite
 
     checkEvaluation(ElementAt(a3, Literal(1)), null)
 
-
     val m0 =
       Literal.create(Map("a" -> "1", "b" -> "2", "c" -> null), MapType(StringType, StringType))
     val m1 = Literal.create(Map[String, String](), MapType(StringType, StringType))
     val m2 = Literal.create(null, MapType(StringType, StringType))
 
-    assert(ElementAt(m0, Literal(1.0)).checkInputDataTypes() ==
-      DataTypeMismatch(
-        errorSubClass = "MAP_FUNCTION_DIFF_TYPES",
-        messageParameters = Map(
-          "functionName" -> "`element_at`",
-          "dataType" -> "\"MAP\"",
-          "leftType" -> "\"MAP<STRING, STRING>\"",
-          "rightType" -> "\"DOUBLE\""
-        )
-      )
-    )
+    assert(
+      ElementAt(m0, Literal(1.0)).checkInputDataTypes() ==
+        DataTypeMismatch(
+          errorSubClass = "MAP_FUNCTION_DIFF_TYPES",
+          messageParameters = Map(
+            "functionName" -> "`element_at`",
+            "dataType" -> "\"MAP\"",
+            "leftType" -> "\"MAP<STRING, STRING>\"",
+            "rightType" -> "\"DOUBLE\"")))
 
     withSQLConf(SQLConf.ANSI_ENABLED.key -> false.toString) {
       checkEvaluation(ElementAt(m0, Literal("d")), null)
@@ -1971,13 +2049,24 @@ class CollectionExpressionsSuite
       checkEvaluation(ElementAt(str, Literal(10), outOfBoundValue), UTF8String.fromString(""))
       checkEvaluation(ElementAt(str, Literal(-10), outOfBoundValue), UTF8String.fromString(""))
 
-      checkEvaluation(ElementAt(StringSplitSQL(Literal.create(null, StringType), delimiter),
-        Literal(1), outOfBoundValue), null)
-      checkEvaluation(ElementAt(StringSplitSQL(Literal.create("11.12.13", StringType),
-        Literal.create(null, StringType)), Literal(1), outOfBoundValue), null)
+      checkEvaluation(
+        ElementAt(
+          StringSplitSQL(Literal.create(null, StringType), delimiter),
+          Literal(1),
+          outOfBoundValue),
+        null)
+      checkEvaluation(
+        ElementAt(
+          StringSplitSQL(
+            Literal.create("11.12.13", StringType),
+            Literal.create(null, StringType)),
+          Literal(1),
+          outOfBoundValue),
+        null)
 
       checkExceptionInExpression[Exception](
-        ElementAt(str, Literal(0), outOfBoundValue), "The index 0 is invalid")
+        ElementAt(str, Literal(0), outOfBoundValue),
+        "The index 0 is invalid")
     }
   }
 
@@ -2065,11 +2154,14 @@ class CollectionExpressionsSuite
     val as3 = Literal.create(Seq(null, null), ArrayType(StringType, containsNull = true))
     val as4 = Literal.create(null, ArrayType(StringType, containsNull = false))
 
-    val aa0 = Literal.create(Seq(Seq("a", "b"), Seq("c")),
+    val aa0 = Literal.create(
+      Seq(Seq("a", "b"), Seq("c")),
       ArrayType(ArrayType(StringType, containsNull = false), containsNull = false))
-    val aa1 = Literal.create(Seq(Seq("d"), Seq("e", "f")),
+    val aa1 = Literal.create(
+      Seq(Seq("d"), Seq("e", "f")),
       ArrayType(ArrayType(StringType, containsNull = false), containsNull = false))
-    val aa2 = Literal.create(Seq(Seq("g", null), null),
+    val aa2 = Literal.create(
+      Seq(Seq("g", null), null),
       ArrayType(ArrayType(StringType, containsNull = true), containsNull = true))
 
     checkEvaluation(Concat(Seq(as0)), Seq("a", "b", "c"))
@@ -2088,10 +2180,12 @@ class CollectionExpressionsSuite
     assert(Concat(Seq(ai0, ai2)).dataType.asInstanceOf[ArrayType].containsNull)
     assert(Concat(Seq(as0, as1)).dataType.asInstanceOf[ArrayType].containsNull === false)
     assert(Concat(Seq(as0, as2)).dataType.asInstanceOf[ArrayType].containsNull)
-    assert(Concat(Seq(aa0, aa1)).dataType ===
-      ArrayType(ArrayType(StringType, containsNull = false), containsNull = false))
-    assert(Concat(Seq(aa0, aa2)).dataType ===
-      ArrayType(ArrayType(StringType, containsNull = true), containsNull = true))
+    assert(
+      Concat(Seq(aa0, aa1)).dataType ===
+        ArrayType(ArrayType(StringType, containsNull = false), containsNull = false))
+    assert(
+      Concat(Seq(aa0, aa2)).dataType ===
+        ArrayType(ArrayType(StringType, containsNull = true), containsNull = true))
 
     // force split expressions for input in generated code
     checkEvaluation(Concat(Seq.fill(100)(ai0)), Seq.fill(100)(Seq(1, 2, 3)).flatten)
@@ -2242,26 +2336,33 @@ class CollectionExpressionsSuite
     checkEvaluation(ArrayRemove(a6, Literal(false)), Seq(true, true))
 
     // complex data types
-    val b0 = Literal.create(Seq[Array[Byte]](Array[Byte](5, 6), Array[Byte](1, 2),
-      Array[Byte](1, 2), Array[Byte](5, 6)), ArrayType(BinaryType))
-    val b1 = Literal.create(Seq[Array[Byte]](Array[Byte](2, 1), null),
+    val b0 = Literal.create(
+      Seq[Array[Byte]](
+        Array[Byte](5, 6),
+        Array[Byte](1, 2),
+        Array[Byte](1, 2),
+        Array[Byte](5, 6)),
       ArrayType(BinaryType))
-    val b2 = Literal.create(Seq[Array[Byte]](null, Array[Byte](1, 2)),
-      ArrayType(BinaryType))
+    val b1 = Literal.create(Seq[Array[Byte]](Array[Byte](2, 1), null), ArrayType(BinaryType))
+    val b2 = Literal.create(Seq[Array[Byte]](null, Array[Byte](1, 2)), ArrayType(BinaryType))
     val nullBinary = Literal.create(null, BinaryType)
 
     val dataToRemove1 = Literal.create(Array[Byte](5, 6), BinaryType)
-    checkEvaluation(ArrayRemove(b0, dataToRemove1),
+    checkEvaluation(
+      ArrayRemove(b0, dataToRemove1),
       Seq[Array[Byte]](Array[Byte](1, 2), Array[Byte](1, 2)))
     checkEvaluation(ArrayRemove(b0, nullBinary), null)
     checkEvaluation(ArrayRemove(b1, dataToRemove1), Seq[Array[Byte]](Array[Byte](2, 1), null))
     checkEvaluation(ArrayRemove(b2, dataToRemove1), Seq[Array[Byte]](null, Array[Byte](1, 2)))
 
-    val c0 = Literal.create(Seq[Seq[Int]](Seq[Int](1, 2), Seq[Int](3, 4)),
+    val c0 = Literal.create(
+      Seq[Seq[Int]](Seq[Int](1, 2), Seq[Int](3, 4)),
       ArrayType(ArrayType(IntegerType)))
-    val c1 = Literal.create(Seq[Seq[Int]](Seq[Int](5, 6), Seq[Int](2, 1)),
+    val c1 = Literal.create(
+      Seq[Seq[Int]](Seq[Int](5, 6), Seq[Int](2, 1)),
       ArrayType(ArrayType(IntegerType)))
-    val c2 = Literal.create(Seq[Seq[Int]](null, Seq[Int](2, 1)), ArrayType(ArrayType(IntegerType)))
+    val c2 =
+      Literal.create(Seq[Seq[Int]](null, Seq[Int](2, 1)), ArrayType(ArrayType(IntegerType)))
     val dataToRemove2 = Literal.create(Seq[Int](1, 2), ArrayType(IntegerType))
     checkEvaluation(ArrayRemove(c0, dataToRemove2), Seq[Seq[Int]](Seq[Int](3, 4)))
     checkEvaluation(ArrayRemove(c1, dataToRemove2), Seq[Seq[Int]](Seq[Int](5, 6), Seq[Int](2, 1)))
@@ -2275,9 +2376,11 @@ class CollectionExpressionsSuite
     val a3 = Literal.create(Seq("b", null, "a", null, "a", null), ArrayType(StringType))
     val a4 = Literal.create(Seq(null, null, null), ArrayType(NullType))
     val a5 = Literal.create(Seq(true, false, false, true), ArrayType(BooleanType))
-    val a6 = Literal.create(Seq(1.123, 0.1234, 1.121, 1.123, 1.1230, 1.121, 0.1234),
+    val a6 = Literal.create(
+      Seq(1.123, 0.1234, 1.121, 1.123, 1.1230, 1.121, 0.1234),
       ArrayType(DoubleType))
-    val a7 = Literal.create(Seq(1.123f, 0.1234f, 1.121f, 1.123f, 1.1230f, 1.121f, 0.1234f),
+    val a7 = Literal.create(
+      Seq(1.123f, 0.1234f, 1.121f, 1.123f, 1.1230f, 1.121f, 0.1234f),
       ArrayType(FloatType))
     val a8 =
       Literal.create(Seq(2, 1, 2, 3, 4, 4, 5).map(_.toString.getBytes), ArrayType(BinaryType))
@@ -2293,35 +2396,58 @@ class CollectionExpressionsSuite
     checkEvaluation(new ArrayDistinct(a8), Seq(2, 1, 3, 4, 5).map(_.toString.getBytes))
 
     // complex data types
-    val b0 = Literal.create(Seq[Array[Byte]](Array[Byte](5, 6), Array[Byte](1, 2),
-      Array[Byte](1, 2), Array[Byte](5, 6)), ArrayType(BinaryType))
-    val b1 = Literal.create(Seq[Array[Byte]](Array[Byte](2, 1), null),
+    val b0 = Literal.create(
+      Seq[Array[Byte]](
+        Array[Byte](5, 6),
+        Array[Byte](1, 2),
+        Array[Byte](1, 2),
+        Array[Byte](5, 6)),
       ArrayType(BinaryType))
-    val b2 = Literal.create(Seq[Array[Byte]](Array[Byte](5, 6), null, Array[Byte](1, 2),
-      null, Array[Byte](5, 6), null), ArrayType(BinaryType))
+    val b1 = Literal.create(Seq[Array[Byte]](Array[Byte](2, 1), null), ArrayType(BinaryType))
+    val b2 = Literal.create(
+      Seq[Array[Byte]](Array[Byte](5, 6), null, Array[Byte](1, 2), null, Array[Byte](5, 6), null),
+      ArrayType(BinaryType))
 
     checkEvaluation(ArrayDistinct(b0), Seq[Array[Byte]](Array[Byte](5, 6), Array[Byte](1, 2)))
     checkEvaluation(ArrayDistinct(b1), Seq[Array[Byte]](Array[Byte](2, 1), null))
-    checkEvaluation(ArrayDistinct(b2), Seq[Array[Byte]](Array[Byte](5, 6), null,
-      Array[Byte](1, 2)))
+    checkEvaluation(
+      ArrayDistinct(b2),
+      Seq[Array[Byte]](Array[Byte](5, 6), null, Array[Byte](1, 2)))
 
-    val c0 = Literal.create(Seq[Seq[Int]](Seq[Int](1, 2), Seq[Int](3, 4), Seq[Int](1, 2),
-      Seq[Int](3, 4), Seq[Int](1, 2)), ArrayType(ArrayType(IntegerType)))
-    val c1 = Literal.create(Seq[Seq[Int]](Seq[Int](5, 6), Seq[Int](2, 1)),
+    val c0 = Literal.create(
+      Seq[Seq[Int]](
+        Seq[Int](1, 2),
+        Seq[Int](3, 4),
+        Seq[Int](1, 2),
+        Seq[Int](3, 4),
+        Seq[Int](1, 2)),
       ArrayType(ArrayType(IntegerType)))
-    val c2 = Literal.create(Seq[Seq[Int]](null, Seq[Int](2, 1), null, null, Seq[Int](2, 1), null),
+    val c1 = Literal.create(
+      Seq[Seq[Int]](Seq[Int](5, 6), Seq[Int](2, 1)),
       ArrayType(ArrayType(IntegerType)))
-    val c3 = Literal.create(Seq[Seq[Int]](Seq[Int](1, 2), Seq[Int](1, 2), Seq[Int](1, 2),
-      Seq[Int](3, 4), Seq[Int](4, 5)), ArrayType(ArrayType(IntegerType)))
-    val c4 = Literal.create(Seq[Seq[Int]](null, Seq[Int](1, 2), Seq[Int](1, 2),
-      Seq[Int](3, 4), Seq[Int](4, 5), null), ArrayType(ArrayType(IntegerType)))
+    val c2 = Literal.create(
+      Seq[Seq[Int]](null, Seq[Int](2, 1), null, null, Seq[Int](2, 1), null),
+      ArrayType(ArrayType(IntegerType)))
+    val c3 = Literal.create(
+      Seq[Seq[Int]](
+        Seq[Int](1, 2),
+        Seq[Int](1, 2),
+        Seq[Int](1, 2),
+        Seq[Int](3, 4),
+        Seq[Int](4, 5)),
+      ArrayType(ArrayType(IntegerType)))
+    val c4 = Literal.create(
+      Seq[Seq[Int]](null, Seq[Int](1, 2), Seq[Int](1, 2), Seq[Int](3, 4), Seq[Int](4, 5), null),
+      ArrayType(ArrayType(IntegerType)))
     checkEvaluation(ArrayDistinct(c0), Seq[Seq[Int]](Seq[Int](1, 2), Seq[Int](3, 4)))
     checkEvaluation(ArrayDistinct(c1), Seq[Seq[Int]](Seq[Int](5, 6), Seq[Int](2, 1)))
     checkEvaluation(ArrayDistinct(c2), Seq[Seq[Int]](null, Seq[Int](2, 1)))
-    checkEvaluation(ArrayDistinct(c3), Seq[Seq[Int]](Seq[Int](1, 2), Seq[Int](3, 4),
-      Seq[Int](4, 5)))
-    checkEvaluation(ArrayDistinct(c4), Seq[Seq[Int]](null, Seq[Int](1, 2), Seq[Int](3, 4),
-      Seq[Int](4, 5)))
+    checkEvaluation(
+      ArrayDistinct(c3),
+      Seq[Seq[Int]](Seq[Int](1, 2), Seq[Int](3, 4), Seq[Int](4, 5)))
+    checkEvaluation(
+      ArrayDistinct(c4),
+      Seq[Seq[Int]](null, Seq[Int](1, 2), Seq[Int](3, 4), Seq[Int](4, 5)))
   }
 
   test("Array Union") {
@@ -2336,15 +2462,16 @@ class CollectionExpressionsSuite
     val ab1 = Literal.create(Seq[Byte](4, 2, 4), ArrayType(ByteType, false))
     val as0 = Literal.create(Seq[Short](1, 2, 3, 2), ArrayType(ShortType, false))
     val as1 = Literal.create(Seq[Short](4, 2, 4), ArrayType(ShortType, false))
-    val af0 = Literal.create(Seq[Float](1.1F, 2.2F, 3.3F, 2.2F), ArrayType(FloatType, false))
-    val af1 = Literal.create(Seq[Float](4.4F, 2.2F, 4.4F), ArrayType(FloatType, false))
+    val af0 = Literal.create(Seq[Float](1.1f, 2.2f, 3.3f, 2.2f), ArrayType(FloatType, false))
+    val af1 = Literal.create(Seq[Float](4.4f, 2.2f, 4.4f), ArrayType(FloatType, false))
     val ad0 = Literal.create(Seq[Double](1.1, 2.2, 3.3, 2.2), ArrayType(DoubleType, false))
     val ad1 = Literal.create(Seq[Double](4.4, 2.2, 4.4), ArrayType(DoubleType, false))
 
     val a10 = Literal.create(Seq(1L, 2L, 3L), ArrayType(LongType, containsNull = false))
     val a11 = Literal.create(Seq(4L, 2L), ArrayType(LongType, containsNull = false))
     val a12 = Literal.create(Seq(1L, 2L, null, 4L, 5L), ArrayType(LongType, containsNull = true))
-    val a13 = Literal.create(Seq(-5L, 4L, -3L, 2L, -1L), ArrayType(LongType, containsNull = false))
+    val a13 =
+      Literal.create(Seq(-5L, 4L, -3L, 2L, -1L), ArrayType(LongType, containsNull = false))
     val a14 = Literal.create(Seq.empty[Long], ArrayType(LongType, containsNull = false))
 
     val a20 = Literal.create(Seq("b", "a", "c"), ArrayType(StringType, containsNull = false))
@@ -2361,7 +2488,7 @@ class CollectionExpressionsSuite
     checkEvaluation(ArrayUnion(abl0, abl1), Seq[Boolean](true, false))
     checkEvaluation(ArrayUnion(ab0, ab1), Seq[Byte](1, 2, 3, 4))
     checkEvaluation(ArrayUnion(as0, as1), Seq[Short](1, 2, 3, 4))
-    checkEvaluation(ArrayUnion(af0, af1), Seq[Float](1.1F, 2.2F, 3.3F, 4.4F))
+    checkEvaluation(ArrayUnion(af0, af1), Seq[Float](1.1f, 2.2f, 3.3f, 4.4f))
     checkEvaluation(ArrayUnion(ad0, ad1), Seq[Double](1.1, 2.2, 3.3, 4.4))
 
     checkEvaluation(ArrayUnion(a10, a11), Seq(1L, 2L, 3L, 4L))
@@ -2376,36 +2503,46 @@ class CollectionExpressionsSuite
     checkEvaluation(ArrayUnion(a20, a31), null)
     checkEvaluation(ArrayUnion(a31, a20), null)
 
-    val b0 = Literal.create(Seq[Array[Byte]](Array[Byte](5, 6), Array[Byte](1, 2)),
+    val b0 = Literal.create(
+      Seq[Array[Byte]](Array[Byte](5, 6), Array[Byte](1, 2)),
       ArrayType(BinaryType))
-    val b1 = Literal.create(Seq[Array[Byte]](Array[Byte](2, 1), Array[Byte](4, 3)),
+    val b1 = Literal.create(
+      Seq[Array[Byte]](Array[Byte](2, 1), Array[Byte](4, 3)),
       ArrayType(BinaryType))
-    val b2 = Literal.create(Seq[Array[Byte]](Array[Byte](1, 2), Array[Byte](4, 3)),
+    val b2 = Literal.create(
+      Seq[Array[Byte]](Array[Byte](1, 2), Array[Byte](4, 3)),
       ArrayType(BinaryType))
-    val b3 = Literal.create(Seq[Array[Byte]](
-      Array[Byte](1, 2), Array[Byte](4, 3), Array[Byte](1, 2)), ArrayType(BinaryType))
+    val b3 = Literal.create(
+      Seq[Array[Byte]](Array[Byte](1, 2), Array[Byte](4, 3), Array[Byte](1, 2)),
+      ArrayType(BinaryType))
     val b4 = Literal.create(Seq[Array[Byte]](Array[Byte](1, 2), null), ArrayType(BinaryType))
     val b5 = Literal.create(Seq[Array[Byte]](null, Array[Byte](1, 2)), ArrayType(BinaryType))
     val b6 = Literal.create(Seq.empty, ArrayType(BinaryType))
     val arrayWithBinaryNull = Literal.create(Seq(null), ArrayType(BinaryType))
 
-    checkEvaluation(ArrayUnion(b0, b1),
+    checkEvaluation(
+      ArrayUnion(b0, b1),
       Seq(Array[Byte](5, 6), Array[Byte](1, 2), Array[Byte](2, 1), Array[Byte](4, 3)))
-    checkEvaluation(ArrayUnion(b0, b2),
+    checkEvaluation(
+      ArrayUnion(b0, b2),
       Seq(Array[Byte](5, 6), Array[Byte](1, 2), Array[Byte](4, 3)))
     checkEvaluation(ArrayUnion(b2, b4), Seq(Array[Byte](1, 2), Array[Byte](4, 3), null))
-    checkEvaluation(ArrayUnion(b3, b0),
+    checkEvaluation(
+      ArrayUnion(b3, b0),
       Seq(Array[Byte](1, 2), Array[Byte](4, 3), Array[Byte](5, 6)))
     checkEvaluation(ArrayUnion(b4, b0), Seq(Array[Byte](1, 2), null, Array[Byte](5, 6)))
     checkEvaluation(ArrayUnion(b4, b5), Seq(Array[Byte](1, 2), null))
     checkEvaluation(ArrayUnion(b6, b4), Seq(Array[Byte](1, 2), null))
     checkEvaluation(ArrayUnion(b4, arrayWithBinaryNull), Seq(Array[Byte](1, 2), null))
 
-    val aa0 = Literal.create(Seq[Seq[Int]](Seq[Int](1, 2), Seq[Int](3, 4)),
+    val aa0 = Literal.create(
+      Seq[Seq[Int]](Seq[Int](1, 2), Seq[Int](3, 4)),
       ArrayType(ArrayType(IntegerType)))
-    val aa1 = Literal.create(Seq[Seq[Int]](Seq[Int](5, 6), Seq[Int](2, 1)),
+    val aa1 = Literal.create(
+      Seq[Seq[Int]](Seq[Int](5, 6), Seq[Int](2, 1)),
       ArrayType(ArrayType(IntegerType)))
-    checkEvaluation(ArrayUnion(aa0, aa1),
+    checkEvaluation(
+      ArrayUnion(aa0, aa1),
       Seq[Seq[Int]](Seq[Int](1, 2), Seq[Int](3, 4), Seq[Int](5, 6), Seq[Int](2, 1)))
 
     assert(ArrayUnion(a00, a01).dataType.asInstanceOf[ArrayType].containsNull === false)
@@ -2437,8 +2574,10 @@ class CollectionExpressionsSuite
     // Non-primitive-type elements
     val as0 = Literal.create(Seq("a", "b", "c", "d"), ArrayType(StringType, containsNull = false))
     val as1 = Literal.create(Seq("a", "b", "c"), ArrayType(StringType, containsNull = false))
-    val as2 = Literal.create(Seq(null, "a", null, "c"), ArrayType(StringType, containsNull = true))
-    val as3 = Literal.create(Seq("b", null, "d", null), ArrayType(StringType, containsNull = true))
+    val as2 =
+      Literal.create(Seq(null, "a", null, "c"), ArrayType(StringType, containsNull = true))
+    val as3 =
+      Literal.create(Seq("b", null, "d", null), ArrayType(StringType, containsNull = true))
     val as4 = Literal.create(Seq(null, null, null), ArrayType(StringType, containsNull = true))
     val as5 = Literal.create(Seq("a"), ArrayType(StringType, containsNull = false))
     val as6 = Literal.create(Seq.empty, ArrayType(StringType, containsNull = false))
@@ -2459,28 +2598,37 @@ class CollectionExpressionsSuite
 
     val r = new Random(1234)
     val seed1 = Some(r.nextLong())
-    assert(evaluateWithoutCodegen(Shuffle(ai0, seed1)) ===
-      evaluateWithoutCodegen(Shuffle(ai0, seed1)))
-    assert(evaluateWithMutableProjection(Shuffle(ai0, seed1)) ===
-      evaluateWithMutableProjection(Shuffle(ai0, seed1)))
-    assert(evaluateWithUnsafeProjection(Shuffle(ai0, seed1)) ===
-      evaluateWithUnsafeProjection(Shuffle(ai0, seed1)))
+    assert(
+      evaluateWithoutCodegen(Shuffle(ai0, seed1)) ===
+        evaluateWithoutCodegen(Shuffle(ai0, seed1)))
+    assert(
+      evaluateWithMutableProjection(Shuffle(ai0, seed1)) ===
+        evaluateWithMutableProjection(Shuffle(ai0, seed1)))
+    assert(
+      evaluateWithUnsafeProjection(Shuffle(ai0, seed1)) ===
+        evaluateWithUnsafeProjection(Shuffle(ai0, seed1)))
 
     val seed2 = Some(r.nextLong())
-    assert(evaluateWithoutCodegen(Shuffle(ai0, seed1)) !==
-      evaluateWithoutCodegen(Shuffle(ai0, seed2)))
-    assert(evaluateWithMutableProjection(Shuffle(ai0, seed1)) !==
-      evaluateWithMutableProjection(Shuffle(ai0, seed2)))
-    assert(evaluateWithUnsafeProjection(Shuffle(ai0, seed1)) !==
-      evaluateWithUnsafeProjection(Shuffle(ai0, seed2)))
+    assert(
+      evaluateWithoutCodegen(Shuffle(ai0, seed1)) !==
+        evaluateWithoutCodegen(Shuffle(ai0, seed2)))
+    assert(
+      evaluateWithMutableProjection(Shuffle(ai0, seed1)) !==
+        evaluateWithMutableProjection(Shuffle(ai0, seed2)))
+    assert(
+      evaluateWithUnsafeProjection(Shuffle(ai0, seed1)) !==
+        evaluateWithUnsafeProjection(Shuffle(ai0, seed2)))
 
     val seed3 = Literal.create(r.nextInt())
-    assert(evaluateWithoutCodegen(new Shuffle(ai0, seed3)) ===
-      evaluateWithoutCodegen(new Shuffle(ai0, seed3)))
-    assert(evaluateWithMutableProjection(new Shuffle(ai0, seed3)) ===
-      evaluateWithMutableProjection(new Shuffle(ai0, seed3)))
-    assert(evaluateWithUnsafeProjection(new Shuffle(ai0, seed3)) ===
-      evaluateWithUnsafeProjection(new Shuffle(ai0, seed3)))
+    assert(
+      evaluateWithoutCodegen(new Shuffle(ai0, seed3)) ===
+        evaluateWithoutCodegen(new Shuffle(ai0, seed3)))
+    assert(
+      evaluateWithMutableProjection(new Shuffle(ai0, seed3)) ===
+        evaluateWithMutableProjection(new Shuffle(ai0, seed3)))
+    assert(
+      evaluateWithUnsafeProjection(new Shuffle(ai0, seed3)) ===
+        evaluateWithUnsafeProjection(new Shuffle(ai0, seed3)))
   }
 
   test("Array Except") {
@@ -2497,8 +2645,8 @@ class CollectionExpressionsSuite
     val ab1 = Literal.create(Seq[Byte](4, 2, 4), ArrayType(ByteType, false))
     val as0 = Literal.create(Seq[Short](1, 2, 3, 2), ArrayType(ShortType, false))
     val as1 = Literal.create(Seq[Short](4, 2, 4), ArrayType(ShortType, false))
-    val af0 = Literal.create(Seq[Float](1.1F, 2.2F, 3.3F, 2.2F), ArrayType(FloatType, false))
-    val af1 = Literal.create(Seq[Float](4.4F, 2.2F, 4.4F), ArrayType(FloatType, false))
+    val af0 = Literal.create(Seq[Float](1.1f, 2.2f, 3.3f, 2.2f), ArrayType(FloatType, false))
+    val af1 = Literal.create(Seq[Float](4.4f, 2.2f, 4.4f), ArrayType(FloatType, false))
     val ad0 = Literal.create(Seq[Double](1.1, 2.2, 3.3, 2.2), ArrayType(DoubleType, false))
     val ad1 = Literal.create(Seq[Double](4.4, 2.2, 4.4), ArrayType(DoubleType, false))
 
@@ -2532,7 +2680,7 @@ class CollectionExpressionsSuite
     checkEvaluation(ArrayExcept(abl0, abl1), Seq[Boolean](true))
     checkEvaluation(ArrayExcept(ab0, ab1), Seq[Byte](1, 3))
     checkEvaluation(ArrayExcept(as0, as1), Seq[Short](1, 3))
-    checkEvaluation(ArrayExcept(af0, af1), Seq[Float](1.1F, 3.3F))
+    checkEvaluation(ArrayExcept(af0, af1), Seq[Float](1.1f, 3.3f))
     checkEvaluation(ArrayExcept(ad0, ad1), Seq[Double](1.1, 3.3))
 
     checkEvaluation(ArrayExcept(a10, a11), Seq(1L, 3L))
@@ -2558,7 +2706,11 @@ class CollectionExpressionsSuite
     checkEvaluation(ArrayExcept(a31, a20), null)
 
     val b0 = Literal.create(
-      Seq[Array[Byte]](Array[Byte](5, 6), Array[Byte](1, 2), Array[Byte](3, 4), Array[Byte](7, 8)),
+      Seq[Array[Byte]](
+        Array[Byte](5, 6),
+        Array[Byte](1, 2),
+        Array[Byte](3, 4),
+        Array[Byte](7, 8)),
       ArrayType(BinaryType))
     val b1 = Literal.create(
       Seq[Array[Byte]](Array[Byte](2, 1), Array[Byte](3, 4), Array[Byte](5, 6)),
@@ -2566,9 +2718,11 @@ class CollectionExpressionsSuite
     val b2 = Literal.create(
       Seq[Array[Byte]](Array[Byte](1, 2), Array[Byte](3, 4), Array[Byte](1, 2)),
       ArrayType(BinaryType))
-    val b3 = Literal.create(Seq[Array[Byte]](Array[Byte](2, 1), Array[Byte](3, 4), null),
+    val b3 = Literal.create(
+      Seq[Array[Byte]](Array[Byte](2, 1), Array[Byte](3, 4), null),
       ArrayType(BinaryType))
-    val b4 = Literal.create(Seq[Array[Byte]](null, Array[Byte](3, 4), null), ArrayType(BinaryType))
+    val b4 =
+      Literal.create(Seq[Array[Byte]](null, Array[Byte](3, 4), null), ArrayType(BinaryType))
     val b5 = Literal.create(Seq.empty, ArrayType(BinaryType))
     val arrayWithBinaryNull = Literal.create(Seq(null), ArrayType(BinaryType))
 
@@ -2584,9 +2738,11 @@ class CollectionExpressionsSuite
     checkEvaluation(ArrayExcept(b5, b4), Seq.empty)
     checkEvaluation(ArrayExcept(b4, arrayWithBinaryNull), Seq[Array[Byte]](Array[Byte](3, 4)))
 
-    val aa0 = Literal.create(Seq[Seq[Int]](Seq[Int](1, 2), Seq[Int](3, 4), Seq[Int](1, 2)),
+    val aa0 = Literal.create(
+      Seq[Seq[Int]](Seq[Int](1, 2), Seq[Int](3, 4), Seq[Int](1, 2)),
       ArrayType(ArrayType(IntegerType)))
-    val aa1 = Literal.create(Seq[Seq[Int]](Seq[Int](3, 4), Seq[Int](2, 1), Seq[Int](3, 4)),
+    val aa1 = Literal.create(
+      Seq[Seq[Int]](Seq[Int](3, 4), Seq[Int](2, 1), Seq[Int](3, 4)),
       ArrayType(ArrayType(IntegerType)))
     checkEvaluation(ArrayExcept(aa0, aa1), Seq[Seq[Int]](Seq[Int](1, 2)))
     checkEvaluation(ArrayExcept(aa1, aa0), Seq[Seq[Int]](Seq[Int](2, 1)))
@@ -2610,21 +2766,25 @@ class CollectionExpressionsSuite
     checkEvaluation(ArrayExcept(oneNull, empty), Seq(null))
     checkEvaluation(ArrayExcept(twoNulls, empty), Seq(null))
 
-    checkEvaluation(ArrayExcept(
-      Literal.create(Seq(1d, 2d, null), ArrayType(DoubleType)),
-      Literal.create(Seq(1d), ArrayType(DoubleType))),
+    checkEvaluation(
+      ArrayExcept(
+        Literal.create(Seq(1d, 2d, null), ArrayType(DoubleType)),
+        Literal.create(Seq(1d), ArrayType(DoubleType))),
       Seq(2d, null))
-    checkEvaluation(ArrayExcept(
-      Literal.create(Seq(1d, 2d, null), ArrayType(DoubleType)),
-      Literal.create(Seq(1d), ArrayType(DoubleType, false))),
+    checkEvaluation(
+      ArrayExcept(
+        Literal.create(Seq(1d, 2d, null), ArrayType(DoubleType)),
+        Literal.create(Seq(1d), ArrayType(DoubleType, false))),
       Seq(2d, null))
-    checkEvaluation(ArrayExcept(
-      Literal.create(Seq(1d, 2d), ArrayType(DoubleType)),
-      Literal.create(Seq(1d, null), ArrayType(DoubleType))),
+    checkEvaluation(
+      ArrayExcept(
+        Literal.create(Seq(1d, 2d), ArrayType(DoubleType)),
+        Literal.create(Seq(1d, null), ArrayType(DoubleType))),
       Seq(2d))
-    checkEvaluation(ArrayExcept(
-      Literal.create(Seq(1d, 2d), ArrayType(DoubleType, false)),
-      Literal.create(Seq(1d, null), ArrayType(DoubleType))),
+    checkEvaluation(
+      ArrayExcept(
+        Literal.create(Seq(1d, 2d), ArrayType(DoubleType, false)),
+        Literal.create(Seq(1d, null), ArrayType(DoubleType))),
       Seq(2d))
   }
 
@@ -2634,7 +2794,7 @@ class CollectionExpressionsSuite
     val a3 = Literal.create(Seq[Boolean](true, false, true), ArrayType(BooleanType))
     val a4 = Literal.create(Seq[Byte](1, 2, 3, 2), ArrayType(ByteType))
     val a5 = Literal.create(Seq[Short](1, 2, 3, 2), ArrayType(ShortType))
-    val a6 = Literal.create(Seq[Float](1.1F, 2.2F, 3.3F, 2.2F), ArrayType(FloatType))
+    val a6 = Literal.create(Seq[Float](1.1f, 2.2f, 3.3f, 2.2f), ArrayType(FloatType))
     val a7 = Literal.create(Seq[Double](1.1, 2.2, 3.3, 2.2), ArrayType(DoubleType))
     val a8 = Literal.create(Seq(1L, 2L, 4L), ArrayType(LongType))
     val a9 = Literal.create(Seq("b", "a", "c"), ArrayType(StringType, false))
@@ -2645,31 +2805,22 @@ class CollectionExpressionsSuite
     checkEvaluation(new ArrayInsert(a1, Literal(3), Literal(3)), Seq(1, 2, 3, 4))
     checkEvaluation(
       new ArrayInsert(a3, Literal.create(3, IntegerType), Literal(true)),
-      Seq[Boolean](true, false, true, true)
-    )
+      Seq[Boolean](true, false, true, true))
     checkEvaluation(
-      new ArrayInsert(
-        a4,
-        Literal(3),
-        Literal.create(5.asInstanceOf[Byte], ByteType)),
+      new ArrayInsert(a4, Literal(3), Literal.create(5.asInstanceOf[Byte], ByteType)),
       Seq[Byte](1, 2, 5, 3, 2))
 
     checkEvaluation(
-      new ArrayInsert(
-        a5,
-        Literal(3),
-        Literal.create(3.asInstanceOf[Short], ShortType)),
+      new ArrayInsert(a5, Literal(3), Literal.create(3.asInstanceOf[Short], ShortType)),
       Seq[Short](1, 2, 3, 3, 2))
 
     checkEvaluation(
       new ArrayInsert(a7, Literal(4), Literal(4.4)),
-      Seq[Double](1.1, 2.2, 3.3, 4.4, 2.2)
-    )
+      Seq[Double](1.1, 2.2, 3.3, 4.4, 2.2))
 
     checkEvaluation(
-      new ArrayInsert(a6, Literal(4), Literal(4.4F)),
-      Seq(1.1F, 2.2F, 3.3F, 4.4F, 2.2F)
-    )
+      new ArrayInsert(a6, Literal(4), Literal(4.4f)),
+      Seq(1.1f, 2.2f, 3.3f, 4.4f, 2.2f))
     checkEvaluation(new ArrayInsert(a8, Literal(3), Literal(3L)), Seq(1L, 2L, 3L, 4L))
     checkEvaluation(new ArrayInsert(a9, Literal(3), Literal("d")), Seq("b", "a", "d", "c"))
 
@@ -2683,12 +2834,10 @@ class CollectionExpressionsSuite
     checkEvaluation(new ArrayInsert(a1, Literal(-5), Literal(3)), Seq(3, null, 1, 2, 4))
     checkEvaluation(
       new ArrayInsert(a1, Literal(10), Literal(3)),
-      Seq(1, 2, 4, null, null, null, null, null, null, 3)
-    )
+      Seq(1, 2, 4, null, null, null, null, null, null, 3))
     checkEvaluation(
       new ArrayInsert(a1, Literal(-10), Literal(3)),
-      Seq(3, null, null, null, null, null, null, 1, 2, 4)
-    )
+      Seq(3, null, null, null, null, null, null, 1, 2, 4))
 
     // null handling
     checkEvaluation(
@@ -2712,11 +2861,12 @@ class CollectionExpressionsSuite
         Literal.create(null, StringType),
         legacyNegativeIndex = false),
       Seq("", null))
-    checkEvaluation(new ArrayInsert(
-      a1, Literal(3), Literal.create(null, IntegerType)), Seq(1, 2, null, 4)
-    )
+    checkEvaluation(
+      new ArrayInsert(a1, Literal(3), Literal.create(null, IntegerType)),
+      Seq(1, 2, null, 4))
     checkEvaluation(new ArrayInsert(a2, Literal(3), Literal(3)), Seq(1, 2, 3, null, 4, 5, null))
-    checkEvaluation(new ArrayInsert(a10, Literal(3), Literal("d")),
+    checkEvaluation(
+      new ArrayInsert(a10, Literal(3), Literal("d")),
       Seq("b", null, "d", "a", "g", null))
     checkEvaluation(new ArrayInsert(a11, Literal(3), Literal("d")), null)
     checkEvaluation(new ArrayInsert(a10, Literal.create(null, IntegerType), Literal("d")), null)
@@ -2734,8 +2884,7 @@ class CollectionExpressionsSuite
             "functionName" -> "`array_insert`",
             "dataType" -> "\"ARRAY\"",
             "leftType" -> "\"ARRAY<DOUBLE>\"",
-            "rightType" -> "\"INT\""))
-    )
+            "rightType" -> "\"INT\"")))
 
     assert(
       ArrayInsert(
@@ -2749,9 +2898,7 @@ class CollectionExpressionsSuite
           "functionName" -> "`array_insert`",
           "dataType" -> "\"ARRAY\"",
           "leftType" -> "\"STRING\"",
-          "rightType" -> "\"STRING\"")
-      )
-    )
+          "rightType" -> "\"STRING\"")))
   }
 
   test("Array Intersect") {
@@ -2768,8 +2915,8 @@ class CollectionExpressionsSuite
     val ab1 = Literal.create(Seq[Byte](4, 2, 4), ArrayType(ByteType, containsNull = false))
     val as0 = Literal.create(Seq[Short](1, 2, 3, 2), ArrayType(ShortType, containsNull = false))
     val as1 = Literal.create(Seq[Short](4, 2, 4), ArrayType(ShortType, containsNull = false))
-    val af0 = Literal.create(Seq[Float](1.1F, 2.2F, 3.3F, 2.2F), ArrayType(FloatType, false))
-    val af1 = Literal.create(Seq[Float](4.4F, 2.2F, 4.4F), ArrayType(FloatType, false))
+    val af0 = Literal.create(Seq[Float](1.1f, 2.2f, 3.3f, 2.2f), ArrayType(FloatType, false))
+    val af1 = Literal.create(Seq[Float](4.4f, 2.2f, 4.4f), ArrayType(FloatType, false))
     val ad0 = Literal.create(Seq[Double](1.1, 2.2, 3.3, 2.2), ArrayType(DoubleType, false))
     val ad1 = Literal.create(Seq[Double](4.4, 2.2, 4.4), ArrayType(DoubleType, false))
 
@@ -2802,8 +2949,8 @@ class CollectionExpressionsSuite
     checkEvaluation(ArrayIntersect(abl0, abl1), Seq[Boolean](true))
     checkEvaluation(ArrayIntersect(ab0, ab1), Seq[Byte](2))
     checkEvaluation(ArrayIntersect(as0, as1), Seq[Short](2))
-    checkEvaluation(ArrayIntersect(af0, af1), Seq[Float](2.2F))
-    checkEvaluation(ArrayIntersect(ad0, ad1), Seq[Double](2.2D))
+    checkEvaluation(ArrayIntersect(af0, af1), Seq[Float](2.2f))
+    checkEvaluation(ArrayIntersect(ad0, ad1), Seq[Double](2.2d))
 
     checkEvaluation(ArrayIntersect(a10, a11), Seq(2L, 4L))
     checkEvaluation(ArrayIntersect(a11, a10), Seq(4L, 2L))
@@ -2835,26 +2982,42 @@ class CollectionExpressionsSuite
     val b2 = Literal.create(
       Seq[Array[Byte]](Array[Byte](3, 4), Array[Byte](1, 2), Array[Byte](1, 2)),
       ArrayType(BinaryType))
-    val b3 = Literal.create(Seq[Array[Byte]](Array[Byte](1, 2), Array[Byte](3, 4), null),
+    val b3 = Literal.create(
+      Seq[Array[Byte]](Array[Byte](1, 2), Array[Byte](3, 4), null),
       ArrayType(BinaryType))
-    val b4 = Literal.create(Seq[Array[Byte]](null, Array[Byte](3, 4), null), ArrayType(BinaryType))
+    val b4 =
+      Literal.create(Seq[Array[Byte]](null, Array[Byte](3, 4), null), ArrayType(BinaryType))
     val b5 = Literal.create(Seq.empty, ArrayType(BinaryType))
     val arrayWithBinaryNull = Literal.create(Seq(null), ArrayType(BinaryType))
-    checkEvaluation(ArrayIntersect(b0, b1), Seq[Array[Byte]](Array[Byte](5, 6), Array[Byte](3, 4)))
-    checkEvaluation(ArrayIntersect(b1, b0), Seq[Array[Byte]](Array[Byte](3, 4), Array[Byte](5, 6)))
-    checkEvaluation(ArrayIntersect(b0, b2), Seq[Array[Byte]](Array[Byte](1, 2), Array[Byte](3, 4)))
-    checkEvaluation(ArrayIntersect(b2, b0), Seq[Array[Byte]](Array[Byte](3, 4), Array[Byte](1, 2)))
-    checkEvaluation(ArrayIntersect(b2, b3), Seq[Array[Byte]](Array[Byte](3, 4), Array[Byte](1, 2)))
-    checkEvaluation(ArrayIntersect(b3, b2), Seq[Array[Byte]](Array[Byte](1, 2), Array[Byte](3, 4)))
+    checkEvaluation(
+      ArrayIntersect(b0, b1),
+      Seq[Array[Byte]](Array[Byte](5, 6), Array[Byte](3, 4)))
+    checkEvaluation(
+      ArrayIntersect(b1, b0),
+      Seq[Array[Byte]](Array[Byte](3, 4), Array[Byte](5, 6)))
+    checkEvaluation(
+      ArrayIntersect(b0, b2),
+      Seq[Array[Byte]](Array[Byte](1, 2), Array[Byte](3, 4)))
+    checkEvaluation(
+      ArrayIntersect(b2, b0),
+      Seq[Array[Byte]](Array[Byte](3, 4), Array[Byte](1, 2)))
+    checkEvaluation(
+      ArrayIntersect(b2, b3),
+      Seq[Array[Byte]](Array[Byte](3, 4), Array[Byte](1, 2)))
+    checkEvaluation(
+      ArrayIntersect(b3, b2),
+      Seq[Array[Byte]](Array[Byte](1, 2), Array[Byte](3, 4)))
     checkEvaluation(ArrayIntersect(b3, b4), Seq[Array[Byte]](Array[Byte](3, 4), null))
     checkEvaluation(ArrayIntersect(b4, b3), Seq[Array[Byte]](null, Array[Byte](3, 4)))
     checkEvaluation(ArrayIntersect(b4, b5), Seq.empty)
     checkEvaluation(ArrayIntersect(b5, b4), Seq.empty)
     checkEvaluation(ArrayIntersect(b4, arrayWithBinaryNull), Seq[Array[Byte]](null))
 
-    val aa0 = Literal.create(Seq[Seq[Int]](Seq[Int](1, 2), Seq[Int](3, 4), Seq[Int](1, 2)),
+    val aa0 = Literal.create(
+      Seq[Seq[Int]](Seq[Int](1, 2), Seq[Int](3, 4), Seq[Int](1, 2)),
       ArrayType(ArrayType(IntegerType)))
-    val aa1 = Literal.create(Seq[Seq[Int]](Seq[Int](3, 4), Seq[Int](2, 1), Seq[Int](3, 4)),
+    val aa1 = Literal.create(
+      Seq[Seq[Int]](Seq[Int](3, 4), Seq[Int](2, 1), Seq[Int](3, 4)),
       ArrayType(ArrayType(IntegerType)))
     checkEvaluation(ArrayIntersect(aa0, aa1), Seq[Seq[Int]](Seq[Int](3, 4)))
     checkEvaluation(ArrayIntersect(aa1, aa0), Seq[Seq[Int]](Seq[Int](3, 4)))
@@ -2878,57 +3041,67 @@ class CollectionExpressionsSuite
     checkEvaluation(ArrayIntersect(empty, oneNull), Seq.empty)
     checkEvaluation(ArrayIntersect(oneNull, empty), Seq.empty)
 
-    checkEvaluation(ArrayIntersect(
-      Literal.create(Seq(1d, 2d, null), ArrayType(DoubleType)),
-      Literal.create(Seq(1d), ArrayType(DoubleType))),
+    checkEvaluation(
+      ArrayIntersect(
+        Literal.create(Seq(1d, 2d, null), ArrayType(DoubleType)),
+        Literal.create(Seq(1d), ArrayType(DoubleType))),
       Seq(1d))
-    checkEvaluation(ArrayIntersect(
-      Literal.create(Seq(1d, 2d, null), ArrayType(DoubleType)),
-      Literal.create(Seq(1d), ArrayType(DoubleType, false))),
+    checkEvaluation(
+      ArrayIntersect(
+        Literal.create(Seq(1d, 2d, null), ArrayType(DoubleType)),
+        Literal.create(Seq(1d), ArrayType(DoubleType, false))),
       Seq(1d))
-    checkEvaluation(ArrayIntersect(
-      Literal.create(Seq(1d, 2d), ArrayType(DoubleType)),
-      Literal.create(Seq(1d, null), ArrayType(DoubleType))),
+    checkEvaluation(
+      ArrayIntersect(
+        Literal.create(Seq(1d, 2d), ArrayType(DoubleType)),
+        Literal.create(Seq(1d, null), ArrayType(DoubleType))),
       Seq(1d))
-    checkEvaluation(ArrayIntersect(
-      Literal.create(Seq(1d, 2d), ArrayType(DoubleType, false)),
-      Literal.create(Seq(1d, null), ArrayType(DoubleType))),
+    checkEvaluation(
+      ArrayIntersect(
+        Literal.create(Seq(1d, 2d), ArrayType(DoubleType, false)),
+        Literal.create(Seq(1d, null), ArrayType(DoubleType))),
       Seq(1d))
   }
 
   test("SPARK-31980: Start and end equal in month range") {
-    checkEvaluation(new Sequence(
-      Literal(Date.valueOf("2018-01-01")),
-      Literal(Date.valueOf("2018-01-01")),
-      Literal(stringToInterval("interval 1 day"))),
+    checkEvaluation(
+      new Sequence(
+        Literal(Date.valueOf("2018-01-01")),
+        Literal(Date.valueOf("2018-01-01")),
+        Literal(stringToInterval("interval 1 day"))),
       Seq(Date.valueOf("2018-01-01")))
-    checkEvaluation(new Sequence(
-      Literal(Date.valueOf("2018-01-01")),
-      Literal(Date.valueOf("2018-01-01")),
-      Literal(stringToInterval("interval 1 month"))),
+    checkEvaluation(
+      new Sequence(
+        Literal(Date.valueOf("2018-01-01")),
+        Literal(Date.valueOf("2018-01-01")),
+        Literal(stringToInterval("interval 1 month"))),
       Seq(Date.valueOf("2018-01-01")))
-    checkEvaluation(new Sequence(
-      Literal(Date.valueOf("2018-01-01")),
-      Literal(Date.valueOf("2018-01-01")),
-      Literal(stringToInterval("interval 1 year"))),
+    checkEvaluation(
+      new Sequence(
+        Literal(Date.valueOf("2018-01-01")),
+        Literal(Date.valueOf("2018-01-01")),
+        Literal(stringToInterval("interval 1 year"))),
       Seq(Date.valueOf("2018-01-01")))
   }
 
   test("SPARK-36639: Start and end equal in month range with a negative step") {
-    checkEvaluation(new Sequence(
-      Literal(Date.valueOf("2018-01-01")),
-      Literal(Date.valueOf("2018-01-01")),
-      Literal(stringToInterval("interval -1 day"))),
+    checkEvaluation(
+      new Sequence(
+        Literal(Date.valueOf("2018-01-01")),
+        Literal(Date.valueOf("2018-01-01")),
+        Literal(stringToInterval("interval -1 day"))),
       Seq(Date.valueOf("2018-01-01")))
-    checkEvaluation(new Sequence(
-      Literal(Date.valueOf("2018-01-01")),
-      Literal(Date.valueOf("2018-01-01")),
-      Literal(stringToInterval("interval -1 month"))),
+    checkEvaluation(
+      new Sequence(
+        Literal(Date.valueOf("2018-01-01")),
+        Literal(Date.valueOf("2018-01-01")),
+        Literal(stringToInterval("interval -1 month"))),
       Seq(Date.valueOf("2018-01-01")))
-    checkEvaluation(new Sequence(
-      Literal(Date.valueOf("2018-01-01")),
-      Literal(Date.valueOf("2018-01-01")),
-      Literal(stringToInterval("interval -1 year"))),
+    checkEvaluation(
+      new Sequence(
+        Literal(Date.valueOf("2018-01-01")),
+        Literal(Date.valueOf("2018-01-01")),
+        Literal(stringToInterval("interval -1 year"))),
       Seq(Date.valueOf("2018-01-01")))
   }
 
@@ -2966,126 +3139,143 @@ class CollectionExpressionsSuite
   }
 
   test("SPARK-36702: ArrayUnion should handle duplicated Double.NaN and Float.Nan") {
-    checkEvaluation(ArrayUnion(
-      Literal.apply(Array(Double.NaN, Double.NaN)), Literal.apply(Array(1d))),
+    checkEvaluation(
+      ArrayUnion(Literal.apply(Array(Double.NaN, Double.NaN)), Literal.apply(Array(1d))),
       Seq(Double.NaN, 1d))
-    checkEvaluation(ArrayUnion(
-      Literal.create(Seq(Double.NaN, null), ArrayType(DoubleType)),
-      Literal.create(Seq(Double.NaN, null, 1d), ArrayType(DoubleType))),
+    checkEvaluation(
+      ArrayUnion(
+        Literal.create(Seq(Double.NaN, null), ArrayType(DoubleType)),
+        Literal.create(Seq(Double.NaN, null, 1d), ArrayType(DoubleType))),
       Seq(Double.NaN, null, 1d))
-    checkEvaluation(ArrayUnion(
-      Literal.apply(Array(Float.NaN, Float.NaN)), Literal.apply(Array(1f))),
+    checkEvaluation(
+      ArrayUnion(Literal.apply(Array(Float.NaN, Float.NaN)), Literal.apply(Array(1f))),
       Seq(Float.NaN, 1f))
-    checkEvaluation(ArrayUnion(
-      Literal.create(Seq(Float.NaN, null), ArrayType(FloatType)),
-      Literal.create(Seq(Float.NaN, null, 1f), ArrayType(FloatType))),
+    checkEvaluation(
+      ArrayUnion(
+        Literal.create(Seq(Float.NaN, null), ArrayType(FloatType)),
+        Literal.create(Seq(Float.NaN, null, 1f), ArrayType(FloatType))),
       Seq(Float.NaN, null, 1f))
   }
 
   test("SPARK-36753: ArrayExcept should handle duplicated Double.NaN and Float.Nan") {
-    checkEvaluation(ArrayExcept(
-      Literal.apply(Array(Double.NaN, 1d)), Literal.apply(Array(Double.NaN))),
+    checkEvaluation(
+      ArrayExcept(Literal.apply(Array(Double.NaN, 1d)), Literal.apply(Array(Double.NaN))),
       Seq(1d))
-    checkEvaluation(ArrayExcept(
-      Literal.create(Seq(null, Double.NaN, null, 1d), ArrayType(DoubleType)),
-      Literal.create(Seq(Double.NaN, null), ArrayType(DoubleType))),
+    checkEvaluation(
+      ArrayExcept(
+        Literal.create(Seq(null, Double.NaN, null, 1d), ArrayType(DoubleType)),
+        Literal.create(Seq(Double.NaN, null), ArrayType(DoubleType))),
       Seq(1d))
-    checkEvaluation(ArrayExcept(
-      Literal.apply(Array(Float.NaN, 1f)), Literal.apply(Array(Float.NaN))),
+    checkEvaluation(
+      ArrayExcept(Literal.apply(Array(Float.NaN, 1f)), Literal.apply(Array(Float.NaN))),
       Seq(1f))
-    checkEvaluation(ArrayExcept(
-      Literal.create(Seq(null, Float.NaN, null, 1f), ArrayType(FloatType)),
-      Literal.create(Seq(Float.NaN, null), ArrayType(FloatType))),
+    checkEvaluation(
+      ArrayExcept(
+        Literal.create(Seq(null, Float.NaN, null, 1f), ArrayType(FloatType)),
+        Literal.create(Seq(Float.NaN, null), ArrayType(FloatType))),
       Seq(1f))
   }
 
   test("SPARK-36754: ArrayIntersect should handle duplicated Double.NaN and Float.Nan") {
-    checkEvaluation(ArrayIntersect(
-      Literal.apply(Array(Double.NaN, 1d)), Literal.apply(Array(Double.NaN, 1d, 2d))),
+    checkEvaluation(
+      ArrayIntersect(
+        Literal.apply(Array(Double.NaN, 1d)),
+        Literal.apply(Array(Double.NaN, 1d, 2d))),
       Seq(Double.NaN, 1d))
-    checkEvaluation(ArrayIntersect(
-      Literal.create(Seq(null, Double.NaN, null, 1d), ArrayType(DoubleType)),
-      Literal.create(Seq(null, Double.NaN, null), ArrayType(DoubleType))),
+    checkEvaluation(
+      ArrayIntersect(
+        Literal.create(Seq(null, Double.NaN, null, 1d), ArrayType(DoubleType)),
+        Literal.create(Seq(null, Double.NaN, null), ArrayType(DoubleType))),
       Seq(null, Double.NaN))
-    checkEvaluation(ArrayIntersect(
-      Literal.apply(Array(Float.NaN, 1f)), Literal.apply(Array(Float.NaN, 1f, 2f))),
+    checkEvaluation(
+      ArrayIntersect(
+        Literal.apply(Array(Float.NaN, 1f)),
+        Literal.apply(Array(Float.NaN, 1f, 2f))),
       Seq(Float.NaN, 1f))
-    checkEvaluation(ArrayIntersect(
-      Literal.create(Seq(null, Float.NaN, null, 1f), ArrayType(FloatType)),
-      Literal.create(Seq(null, Float.NaN, null), ArrayType(FloatType))),
+    checkEvaluation(
+      ArrayIntersect(
+        Literal.create(Seq(null, Float.NaN, null, 1f), ArrayType(FloatType)),
+        Literal.create(Seq(null, Float.NaN, null), ArrayType(FloatType))),
       Seq(null, Float.NaN))
   }
 
   test("SPARK-36741: ArrayDistinct should handle duplicated Double.NaN and Float.Nan") {
-    checkEvaluation(ArrayDistinct(
-      Literal.create(Seq(Double.NaN, Double.NaN, null, null, 1d, 1d), ArrayType(DoubleType))),
+    checkEvaluation(
+      ArrayDistinct(
+        Literal.create(Seq(Double.NaN, Double.NaN, null, null, 1d, 1d), ArrayType(DoubleType))),
       Seq(Double.NaN, null, 1d))
-    checkEvaluation(ArrayDistinct(
-      Literal.create(Seq(Float.NaN, Float.NaN, null, null, 1f, 1f), ArrayType(FloatType))),
+    checkEvaluation(
+      ArrayDistinct(
+        Literal.create(Seq(Float.NaN, Float.NaN, null, null, 1f, 1f), ArrayType(FloatType))),
       Seq(Float.NaN, null, 1f))
   }
 
   test("SPARK-36755: ArraysOverlap hould handle duplicated Double.NaN and Float.Nan") {
-    checkEvaluation(ArraysOverlap(
-      Literal.apply(Array(Double.NaN, 1d)), Literal.apply(Array(Double.NaN))), true)
-    checkEvaluation(ArraysOverlap(
-      Literal.create(Seq(Double.NaN, null), ArrayType(DoubleType)),
-      Literal.create(Seq(Double.NaN, null, 1d), ArrayType(DoubleType))), true)
-    checkEvaluation(ArraysOverlap(
-      Literal.apply(Array(Float.NaN)), Literal.apply(Array(Float.NaN, 1f))), true)
-    checkEvaluation(ArraysOverlap(
-      Literal.create(Seq(Float.NaN, null), ArrayType(FloatType)),
-      Literal.create(Seq(Float.NaN, null, 1f), ArrayType(FloatType))), true)
+    checkEvaluation(
+      ArraysOverlap(Literal.apply(Array(Double.NaN, 1d)), Literal.apply(Array(Double.NaN))),
+      true)
+    checkEvaluation(
+      ArraysOverlap(
+        Literal.create(Seq(Double.NaN, null), ArrayType(DoubleType)),
+        Literal.create(Seq(Double.NaN, null, 1d), ArrayType(DoubleType))),
+      true)
+    checkEvaluation(
+      ArraysOverlap(Literal.apply(Array(Float.NaN)), Literal.apply(Array(Float.NaN, 1f))),
+      true)
+    checkEvaluation(
+      ArraysOverlap(
+        Literal.create(Seq(Float.NaN, null), ArrayType(FloatType)),
+        Literal.create(Seq(Float.NaN, null, 1f), ArrayType(FloatType))),
+      true)
   }
 
   test("SPARK-36740: ArrayMin/ArrayMax/SortArray should handle NaN greater than non-NaN value") {
     // ArrayMin
-    checkEvaluation(ArrayMin(
-      Literal.create(Seq(Double.NaN, 1d, 2d), ArrayType(DoubleType))), 1d)
-    checkEvaluation(ArrayMin(
-      Literal.create(Seq(Double.NaN, 1d, 2d, null), ArrayType(DoubleType))), 1d)
+    checkEvaluation(ArrayMin(Literal.create(Seq(Double.NaN, 1d, 2d), ArrayType(DoubleType))), 1d)
+    checkEvaluation(
+      ArrayMin(Literal.create(Seq(Double.NaN, 1d, 2d, null), ArrayType(DoubleType))),
+      1d)
     // ArrayMax
-    checkEvaluation(ArrayMax(
-      Literal.create(Seq(Double.NaN, 1d, 2d), ArrayType(DoubleType))), Double.NaN)
-    checkEvaluation(ArrayMax(
-      Literal.create(Seq(Double.NaN, 1d, 2d, null), ArrayType(DoubleType))), Double.NaN)
+    checkEvaluation(
+      ArrayMax(Literal.create(Seq(Double.NaN, 1d, 2d), ArrayType(DoubleType))),
+      Double.NaN)
+    checkEvaluation(
+      ArrayMax(Literal.create(Seq(Double.NaN, 1d, 2d, null), ArrayType(DoubleType))),
+      Double.NaN)
     // SortArray
-    checkEvaluation(new SortArray(
-      Literal.create(Seq(Double.NaN, 1d, 2d, null), ArrayType(DoubleType))),
+    checkEvaluation(
+      new SortArray(Literal.create(Seq(Double.NaN, 1d, 2d, null), ArrayType(DoubleType))),
       Seq(null, 1d, 2d, Double.NaN))
   }
 
   test("SPARK-39184: Avoid ArrayIndexOutOfBoundsException when crossing DST boundary") {
     DateTimeTestUtils.withDefaultTimeZone(LA) {
-      checkEvaluation(new Sequence(
-        Literal(Timestamp.valueOf("2016-03-13 00:00:00")),
-        Literal(Timestamp.valueOf("2016-03-14 00:00:00")),
-        Literal(stringToInterval("interval 1 day"))),
-        Seq(
-          Timestamp.valueOf("2016-03-13 00:00:00"),
-          Timestamp.valueOf("2016-03-14 00:00:00")))
+      checkEvaluation(
+        new Sequence(
+          Literal(Timestamp.valueOf("2016-03-13 00:00:00")),
+          Literal(Timestamp.valueOf("2016-03-14 00:00:00")),
+          Literal(stringToInterval("interval 1 day"))),
+        Seq(Timestamp.valueOf("2016-03-13 00:00:00"), Timestamp.valueOf("2016-03-14 00:00:00")))
 
-      checkEvaluation(new Sequence(
-        Literal(Timestamp.valueOf("2016-03-14 00:00:00")),
-        Literal(Timestamp.valueOf("2016-03-13 00:00:00")),
-        Literal(stringToInterval("interval -1 days"))),
-        Seq(
-          Timestamp.valueOf("2016-03-14 00:00:00"),
-          Timestamp.valueOf("2016-03-13 00:00:00")))
+      checkEvaluation(
+        new Sequence(
+          Literal(Timestamp.valueOf("2016-03-14 00:00:00")),
+          Literal(Timestamp.valueOf("2016-03-13 00:00:00")),
+          Literal(stringToInterval("interval -1 days"))),
+        Seq(Timestamp.valueOf("2016-03-14 00:00:00"), Timestamp.valueOf("2016-03-13 00:00:00")))
 
-      checkEvaluation(new Sequence(
-        Literal(Date.valueOf("2016-03-13")),
-        Literal(Date.valueOf("2016-03-16")),
-        Literal(stringToInterval("interval 1 day 12 hour"))),
-        Seq(
-          Date.valueOf("2016-03-13"),
-          Date.valueOf("2016-03-14"),
-          Date.valueOf("2016-03-16")))
+      checkEvaluation(
+        new Sequence(
+          Literal(Date.valueOf("2016-03-13")),
+          Literal(Date.valueOf("2016-03-16")),
+          Literal(stringToInterval("interval 1 day 12 hour"))),
+        Seq(Date.valueOf("2016-03-13"), Date.valueOf("2016-03-14"), Date.valueOf("2016-03-16")))
 
-      checkEvaluation(new Sequence(
-        Literal(Date.valueOf("2017-04-06")),
-        Literal(Date.valueOf("2017-02-12")),
-        Literal(stringToInterval("interval -13 days -6 hours"))),
+      checkEvaluation(
+        new Sequence(
+          Literal(Date.valueOf("2017-04-06")),
+          Literal(Date.valueOf("2017-02-12")),
+          Literal(stringToInterval("interval -13 days -6 hours"))),
         Seq(
           Date.valueOf("2017-04-06"),
           Date.valueOf("2017-03-23"),
@@ -3107,8 +3297,8 @@ class CollectionExpressionsSuite
 
   test("SPARK-42401: Array insert of null value (implicit)") {
     val a = Literal.create(Seq("b", "a", "c"), ArrayType(StringType, false))
-    checkEvaluation(new ArrayInsert(
-      a, Literal(5), Literal.create("q", StringType)), Seq("b", "a", "c", null, "q")
-    )
+    checkEvaluation(
+      new ArrayInsert(a, Literal(5), Literal.create("q", StringType)),
+      Seq("b", "a", "c", null, "q"))
   }
 }

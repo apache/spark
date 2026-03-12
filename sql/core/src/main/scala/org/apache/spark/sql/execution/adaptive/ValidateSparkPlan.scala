@@ -36,8 +36,8 @@ object ValidateSparkPlan extends Rule[SparkPlan] {
 
   /**
    * Validate that the plan satisfies the following condition:
-   * - BroadcastQueryStage only appears as the immediate child and the build side of a broadcast
-   *   hash join or broadcast nested loop join.
+   *   - BroadcastQueryStage only appears as the immediate child and the build side of a broadcast
+   *     hash join or broadcast nested loop join.
    */
   private def validate(plan: SparkPlan): Unit = plan match {
     case b: BroadcastHashJoinExec =>

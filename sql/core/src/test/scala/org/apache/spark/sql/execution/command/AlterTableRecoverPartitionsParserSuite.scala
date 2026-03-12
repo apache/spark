@@ -35,28 +35,20 @@ class AlterTableRecoverPartitionsParserSuite extends AnalysisTest with SharedSpa
   test("recover partitions of a table") {
     comparePlans(
       parsePlan("ALTER TABLE tbl RECOVER PARTITIONS"),
-      RecoverPartitions(
-        UnresolvedTable(
-          Seq("tbl"),
-          "ALTER TABLE ... RECOVER PARTITIONS")))
+      RecoverPartitions(UnresolvedTable(Seq("tbl"), "ALTER TABLE ... RECOVER PARTITIONS")))
   }
 
   test("recover partitions of a table in a database") {
     comparePlans(
       parsePlan("alter table db.tbl recover partitions"),
-      RecoverPartitions(
-        UnresolvedTable(
-          Seq("db", "tbl"),
-          "ALTER TABLE ... RECOVER PARTITIONS")))
+      RecoverPartitions(UnresolvedTable(Seq("db", "tbl"), "ALTER TABLE ... RECOVER PARTITIONS")))
   }
 
   test("recover partitions of a table spark_catalog") {
     comparePlans(
       parsePlan("alter table spark_catalog.db.TBL recover partitions"),
       RecoverPartitions(
-        UnresolvedTable(
-          Seq("spark_catalog", "db", "TBL"),
-          "ALTER TABLE ... RECOVER PARTITIONS")))
+        UnresolvedTable(Seq("spark_catalog", "db", "TBL"), "ALTER TABLE ... RECOVER PARTITIONS")))
   }
 
   test("recover partitions of a table in nested namespaces") {

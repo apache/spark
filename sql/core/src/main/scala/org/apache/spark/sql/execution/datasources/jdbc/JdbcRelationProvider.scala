@@ -24,8 +24,10 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.jdbc.JdbcDialects
 import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, DataSourceRegister, RelationProvider}
 
-class JdbcRelationProvider extends CreatableRelationProvider
-  with RelationProvider with DataSourceRegister {
+class JdbcRelationProvider
+    extends CreatableRelationProvider
+    with RelationProvider
+    with DataSourceRegister {
 
   override def shortName(): String = "jdbc"
 
@@ -45,8 +47,7 @@ class JdbcRelationProvider extends CreatableRelationProvider
       schema,
       parts,
       jdbcOptions,
-      Map(JDBCRelation.schemaFetchKey -> remoteSchemaFetchMetric)
-    )(sparkSession)
+      Map(JDBCRelation.schemaFetchKey -> remoteSchemaFetchMetric))(sparkSession)
   }
 
   override def createRelation(
@@ -83,9 +84,9 @@ class JdbcRelationProvider extends CreatableRelationProvider
             throw QueryCompilationErrors.tableOrViewAlreadyExistsError(options.table)
 
           case SaveMode.Ignore =>
-            // With `SaveMode.Ignore` mode, if table already exists, the save operation is expected
-            // to not save the contents of the DataFrame and to not change the existing data.
-            // Therefore, it is okay to do nothing here and then just return the relation below.
+          // With `SaveMode.Ignore` mode, if table already exists, the save operation is expected
+          // to not save the contents of the DataFrame and to not change the existing data.
+          // Therefore, it is okay to do nothing here and then just return the relation below.
         }
       } else {
         createTable(conn, options.table, df.schema, isCaseSensitive, options)

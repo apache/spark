@@ -36,10 +36,13 @@ import org.apache.spark.sql.execution.streaming.sinks.{FileStreamSinkLog, SinkFi
  * A [[FileCommitProtocol]] that tracks the list of valid files in a manifest file, used in
  * structured streaming.
  *
- * @param path path to write the final output to.
+ * @param path
+ *   path to write the final output to.
  */
 class ManifestFileCommitProtocol(jobId: String, path: String)
-  extends FileCommitProtocol with Serializable with Logging {
+    extends FileCommitProtocol
+    with Serializable
+    with Logging {
 
   // Track the list of files added by a task, only used on the executors.
   @transient private var addedFiles: ArrayBuffer[String] = _
@@ -50,8 +53,8 @@ class ManifestFileCommitProtocol(jobId: String, path: String)
   @transient private var pendingCommitFiles: ArrayBuffer[Path] = _
 
   /**
-   * Sets up the manifest log output and the batch id for this job.
-   * Must be called before any other function.
+   * Sets up the manifest log output and the batch id for this job. Must be called before any
+   * other function.
    */
   def setupManifestOptions(fileLog: FileStreamSinkLog, batchId: Long): Unit = {
     this.fileLog = fileLog
@@ -97,8 +100,10 @@ class ManifestFileCommitProtocol(jobId: String, path: String)
           }
         } catch {
           case e: IOException =>
-            logWarning(log"Fail to remove temporary file ${MDC(PATH, path)}, " +
-              log"continue removing next.", e)
+            logWarning(
+              log"Fail to remove temporary file ${MDC(PATH, path)}, " +
+                log"continue removing next.",
+              e)
         }
       }
       pendingCommitFiles.clear()
@@ -106,7 +111,8 @@ class ManifestFileCommitProtocol(jobId: String, path: String)
   }
 
   override def onTaskCommit(taskCommit: TaskCommitMessage): Unit = {
-    pendingCommitFiles ++= taskCommit.obj.asInstanceOf[Seq[SinkFileStatus]]
+    pendingCommitFiles ++= taskCommit.obj
+      .asInstanceOf[Seq[SinkFileStatus]]
       .map(_.toFileStatus.getPath)
   }
 
@@ -115,7 +121,9 @@ class ManifestFileCommitProtocol(jobId: String, path: String)
   }
 
   override def newTaskTempFile(
-      taskContext: TaskAttemptContext, dir: Option[String], spec: FileNameSpec): String = {
+      taskContext: TaskAttemptContext,
+      dir: Option[String],
+      spec: FileNameSpec): String = {
     // The file name looks like part-r-00000-2dd664f9-d2c4-4ffe-878f-c6c70c1fb0cb_00003.gz.parquet
     // Note that %05d does not truncate the split number, so if we have more than 100000 tasks,
     // the file name is fine and won't overflow.
@@ -123,18 +131,22 @@ class ManifestFileCommitProtocol(jobId: String, path: String)
     val uuid = UUID.randomUUID.toString
     val filename = f"part-$split%05d-$uuid${spec.suffix}"
 
-    val file = dir.map { d =>
-      new Path(new Path(path, d), filename).toString
-    }.getOrElse {
-      new Path(path, filename).toString
-    }
+    val file = dir
+      .map { d =>
+        new Path(new Path(path, d), filename).toString
+      }
+      .getOrElse {
+        new Path(path, filename).toString
+      }
 
     addedFiles += file
     file
   }
 
   override def newTaskTempFileAbsPath(
-      taskContext: TaskAttemptContext, absoluteDir: String, spec: FileNameSpec): String = {
+      taskContext: TaskAttemptContext,
+      absoluteDir: String,
+      spec: FileNameSpec): String = {
     throw QueryExecutionErrors.addFilesWithAbsolutePathUnsupportedError(this.toString)
   }
 

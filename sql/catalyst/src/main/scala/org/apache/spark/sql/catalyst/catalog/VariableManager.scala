@@ -31,44 +31,53 @@ import org.apache.spark.sql.errors.QueryCompilationErrors.unresolvedVariableErro
 
 /**
  * Trait which provides an interface for variable managers. Methods are case sensitive regarding
- * the variable name/nameParts/identifier, callers are responsible to
- * format them w.r.t. case-sensitive config.
+ * the variable name/nameParts/identifier, callers are responsible to format them w.r.t.
+ * case-sensitive config.
  */
 trait VariableManager {
+
   /**
    * Create a variable.
-   * @param nameParts NameParts of the variable.
-   * @param varDef The VariableDefinition of the variable.
-   * @param overrideIfExists If true, the new variable will replace an existing one
-   *                         with the same identifier, if it exists.
+   * @param nameParts
+   *   NameParts of the variable.
+   * @param varDef
+   *   The VariableDefinition of the variable.
+   * @param overrideIfExists
+   *   If true, the new variable will replace an existing one with the same identifier, if it
+   *   exists.
    */
   def create(nameParts: Seq[String], varDef: VariableDefinition, overrideIfExists: Boolean): Unit
 
   /**
    * Set an existing variable to a new value.
- *
-   * @param nameParts Name parts of the variable.
-   * @param varDef The new VariableDefinition of the variable.
+   *
+   * @param nameParts
+   *   Name parts of the variable.
+   * @param varDef
+   *   The new VariableDefinition of the variable.
    */
   def set(nameParts: Seq[String], varDef: VariableDefinition): Unit
 
-/**
- * Get an existing variable.
- *
- * @param nameParts Name parts of the variable.
- */
+  /**
+   * Get an existing variable.
+   *
+   * @param nameParts
+   *   Name parts of the variable.
+   */
   def get(nameParts: Seq[String]): Option[VariableDefinition]
 
   /**
    * Delete an existing variable.
    *
-   * @param nameParts Name parts of the variable.
+   * @param nameParts
+   *   Name parts of the variable.
    */
   def remove(nameParts: Seq[String]): Boolean
 
   /**
    * Create an identifier for the provided variable name. Could be context dependent.
-   * @param name Name for which an identifier is created.
+   * @param name
+   *   Name for which an identifier is created.
    */
   def qualify(name: String): ResolvedIdentifier
 
@@ -78,23 +87,28 @@ trait VariableManager {
   def clear(): Unit
 
   /**
-   * @return true if at least one variable exists, false otherwise.
+   * @return
+   *   true if at least one variable exists, false otherwise.
    */
   def isEmpty: Boolean
 
   /**
-   *
-   * @param variableName Name of the variable
-   * @return variable name formatting for the error
+   * @param variableName
+   *   Name of the variable
+   * @return
+   *   variable name formatting for the error
    */
   def getVariableNameForError(variableName: String): String
 
 }
 
 /**
- * @param identifier Identifier of the variable.
- * @param defaultValueSQL SQL text of the variable's DEFAULT expression.
- * @param currentValue Current value of the variable.
+ * @param identifier
+ *   Identifier of the variable.
+ * @param defaultValueSQL
+ *   SQL text of the variable's DEFAULT expression.
+ * @param currentValue
+ *   Current value of the variable.
  */
 case class VariableDefinition(
     identifier: Identifier,
@@ -105,8 +119,8 @@ case class VariableDefinition(
  * A thread-safe manager for temporary SQL variables (that live in the schema `SYSTEM.SESSION`),
  * providing atomic operations to manage them, e.g. create, get, remove, etc.
  *
- * Note that, the variable name is always case-sensitive here, callers are responsible to format the
- * variable name w.r.t. case-sensitive config.
+ * Note that, the variable name is always case-sensitive here, callers are responsible to format
+ * the variable name w.r.t. case-sensitive config.
  */
 class TempVariableManager extends VariableManager with DataTypeErrorsBase {
 
@@ -124,8 +138,7 @@ class TempVariableManager extends VariableManager with DataTypeErrorsBase {
     if (!overrideIfExists && variables.contains(name)) {
       throw new AnalysisException(
         errorClass = "VARIABLE_ALREADY_EXISTS",
-        messageParameters = Map(
-          "variableName" -> getVariableNameForError(name)))
+        messageParameters = Map("variableName" -> getVariableNameForError(name)))
     }
     variables.put(name, varDef)
   }
@@ -150,8 +163,7 @@ class TempVariableManager extends VariableManager with DataTypeErrorsBase {
   override def qualify(name: String): ResolvedIdentifier =
     ResolvedIdentifier(
       FakeSystemCatalog,
-      Identifier.of(Array(CatalogManager.SESSION_NAMESPACE), name)
-    )
+      Identifier.of(Array(CatalogManager.SESSION_NAMESPACE), name))
 
   override def clear(): Unit = synchronized {
     variables.clear()

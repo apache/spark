@@ -30,17 +30,18 @@ trait DelegatesResolutionToExtensions {
 
   /**
    * Find the suitable extension for `unresolvedOperator` resolution and resolve it with that
-   * extension. Usually extensions return resolved relation nodes, so we generically update the name
-   * scope without matching for specific relations, for simplicity.
+   * extension. Usually extensions return resolved relation nodes, so we generically update the
+   * name scope without matching for specific relations, for simplicity.
    *
    * We match the extension once to reduce the number of
    * [[ResolverExtension.resolveOperator.isDefinedAt]] calls, because those can be expensive.
    *
-   * @return `Some(resolutionResult)` if the extension was found and `unresolvedOperator` was
-   * resolved, `None` otherwise.
+   * @return
+   *   `Some(resolutionResult)` if the extension was found and `unresolvedOperator` was resolved,
+   *   `None` otherwise.
    *
-   * @throws `AMBIGUOUS_RESOLVER_EXTENSION` if there were several matched extensions for this
-   * operator.
+   * @throws `AMBIGUOUS_RESOLVER_EXTENSION`
+   *   if there were several matched extensions for this operator.
    */
   protected def tryDelegateResolutionToExtension(
       unresolvedOperator: LogicalPlan,
@@ -60,8 +61,7 @@ trait DelegatesResolutionToExtensions {
             throw QueryCompilationErrors
               .ambiguousResolverExtension(
                 unresolvedOperator,
-                Seq(matchedExtension, extension).map(_.getClass.getSimpleName)
-              )
+                Seq(matchedExtension, extension).map(_.getClass.getSimpleName))
               .withPosition(unresolvedOperator.origin)
           }
       }

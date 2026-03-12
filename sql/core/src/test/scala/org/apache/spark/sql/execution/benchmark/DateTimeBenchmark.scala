@@ -28,8 +28,7 @@ import org.apache.spark.sql.execution.HiveResult
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * Synthetic benchmark for date and timestamp functions.
- * To run this benchmark:
+ * Synthetic benchmark for date and timestamp functions. To run this benchmark:
  * {{{
  *   1. without sbt:
  *      bin/spark-submit --class <this class>
@@ -42,7 +41,8 @@ import org.apache.spark.sql.internal.SQLConf
  */
 object DateTimeBenchmark extends SqlBasedBenchmark {
   private def doBenchmark(cardinality: Int, exprs: String*): Unit = {
-    spark.range(cardinality)
+    spark
+      .range(cardinality)
       .selectExpr(exprs: _*)
       .noop()
   }
@@ -67,7 +67,8 @@ object DateTimeBenchmark extends SqlBasedBenchmark {
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     withDefaultTimeZone(LA) {
-      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> LA.getId,
+      withSQLConf(
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> LA.getId,
         SQLConf.LEGACY_INTERVAL_ENABLED.key -> true.toString) {
         val N = 10000000
         runBenchmark("datetime +/- interval") {
@@ -161,8 +162,20 @@ object DateTimeBenchmark extends SqlBasedBenchmark {
         }
         runBenchmark("Truncation") {
           val timestampExpr = "timestamp_seconds(id)"
-          Seq("YEAR", "YYYY", "YY", "MON", "MONTH", "MM", "DAY", "DD", "HOUR", "MINUTE",
-            "SECOND", "WEEK", "QUARTER").foreach { level =>
+          Seq(
+            "YEAR",
+            "YYYY",
+            "YY",
+            "MON",
+            "MONTH",
+            "MM",
+            "DAY",
+            "DD",
+            "HOUR",
+            "MINUTE",
+            "SECOND",
+            "WEEK",
+            "QUARTER").foreach { level =>
             run(N, s"date_trunc $level", s"date_trunc('$level', $timestampExpr)")
           }
           val dateExpr = "cast(timestamp_seconds(id) as date)"
@@ -190,7 +203,10 @@ object DateTimeBenchmark extends SqlBasedBenchmark {
             spark.range(rowsNum).map(millis => new Date(millis)).noop()
           }
           benchmark.addCase("From java.time.LocalDate", numIters) { _ =>
-            spark.range(rowsNum).map(millis => LocalDate.ofEpochDay(millis / MILLIS_PER_DAY)).noop()
+            spark
+              .range(rowsNum)
+              .map(millis => LocalDate.ofEpochDay(millis / MILLIS_PER_DAY))
+              .noop()
           }
           def dates = {
             spark.range(0, rowsNum, 1, 1).map(millis => new Date(millis))
@@ -199,7 +215,8 @@ object DateTimeBenchmark extends SqlBasedBenchmark {
             dates.collect()
           }
           def localDates = {
-            spark.range(0, rowsNum, 1, 1)
+            spark
+              .range(0, rowsNum, 1, 1)
               .map(millis => LocalDate.ofEpochDay(millis / MILLIS_PER_DAY))
           }
           benchmark.addCase("Collect java.time.LocalDate", numIters) { _ =>
@@ -214,7 +231,8 @@ object DateTimeBenchmark extends SqlBasedBenchmark {
             spark.range(rowsNum).map(millis => Instant.ofEpochMilli(millis)).noop()
           }
           benchmark.addCase("Collect longs", numIters) { _ =>
-            spark.range(0, rowsNum, 1, 1)
+            spark
+              .range(0, rowsNum, 1, 1)
               .collect()
           }
           def timestamps = {

@@ -32,30 +32,44 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
-      Batch("AnalysisNodes", Once,
-        EliminateSubqueryAliases) ::
-      Batch("Constant Folding", FixedPoint(50),
-        NullPropagation,
-        ConstantFolding,
-        SimplifyConditionals,
-        BooleanSimplification,
-        PruneFilters) :: Nil
+      Batch("AnalysisNodes", Once, EliminateSubqueryAliases) ::
+        Batch(
+          "Constant Folding",
+          FixedPoint(50),
+          NullPropagation,
+          ConstantFolding,
+          SimplifyConditionals,
+          BooleanSimplification,
+          PruneFilters) :: Nil
   }
 
-  val testRelation = LocalRelation($"a".int, $"b".int, $"c".int, $"d".string,
-    $"e".boolean, $"f".boolean, $"g".boolean, $"h".boolean)
+  val testRelation = LocalRelation(
+    $"a".int,
+    $"b".int,
+    $"c".int,
+    $"d".string,
+    $"e".boolean,
+    $"f".boolean,
+    $"g".boolean,
+    $"h".boolean)
 
   val testRelationWithData = LocalRelation.fromExternalRows(
-    testRelation.output, Seq(Row(1, 2, 3, "abc", true, true, true, true))
-  )
+    testRelation.output,
+    Seq(Row(1, 2, 3, "abc", true, true, true, true)))
 
-  val testNotNullableRelation = LocalRelation($"a".int.notNull, $"b".int.notNull, $"c".int.notNull,
-    $"d".string.notNull, $"e".boolean.notNull, $"f".boolean.notNull, $"g".boolean.notNull,
+  val testNotNullableRelation = LocalRelation(
+    $"a".int.notNull,
+    $"b".int.notNull,
+    $"c".int.notNull,
+    $"d".string.notNull,
+    $"e".boolean.notNull,
+    $"f".boolean.notNull,
+    $"g".boolean.notNull,
     $"h".boolean.notNull)
 
   val testNotNullableRelationWithData = LocalRelation.fromExternalRows(
-    testNotNullableRelation.output, Seq(Row(1, 2, 3, "abc", true, true, true, true))
-  )
+    testNotNullableRelation.output,
+    Seq(Row(1, 2, 3, "abc", true, true, true, true)))
 
   private def checkCondition(input: Expression, expected: LogicalPlan): Unit = {
     val plan = testRelationWithData.where(input).analyze
@@ -71,7 +85,8 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper {
   }
 
   private def checkConditionInNotNullableRelation(
-      input: Expression, expected: Expression): Unit = {
+      input: Expression,
+      expected: Expression): Unit = {
     val plan = testNotNullableRelationWithData.where(input).analyze
     val actual = Optimize.execute(plan)
     val correctAnswer = testNotNullableRelationWithData.where(expected).analyze
@@ -79,7 +94,8 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper {
   }
 
   private def checkConditionInNotNullableRelation(
-      input: Expression, expected: LogicalPlan): Unit = {
+      input: Expression,
+      expected: LogicalPlan): Unit = {
     val plan = testNotNullableRelationWithData.where(input).analyze
     val actual = Optimize.execute(plan)
     comparePlans(actual, expected)
@@ -106,8 +122,8 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper {
       ($"a" === $"b" && $"c" < 1 && $"a" === 5) ||
       ($"a" === $"b" && $"b" < 5 && $"a" > 1)
 
-    val expected = $"a" === $"b" && (
-      ($"b" > 3 && $"c" > 2) || ($"c" < 1 && $"a" === 5) || ($"b" < 5 && $"a" > 1))
+    val expected =
+      $"a" === $"b" && (($"b" > 3 && $"c" > 2) || ($"c" < 1 && $"a" === 5) || ($"b" < 5 && $"a" > 1))
 
     checkCondition(input, expected)
   }
@@ -119,8 +135,10 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper {
 
     checkCondition($"a" < 2 && ($"a" < 2 || $"a" > 3 || $"b" > 5), $"a" < 2)
 
-    checkCondition(($"a" < 2 || $"b" > 3) && ($"a" < 2 || $"c" > 5), $"a" < 2
-      || ($"b" > 3 && $"c" > 5))
+    checkCondition(
+      ($"a" < 2 || $"b" > 3) && ($"a" < 2 || $"c" > 5),
+      $"a" < 2
+        || ($"b" > 3 && $"c" > 5))
 
     checkCondition(
       ($"a" === $"b" || $"b" > 3) && ($"a" === $"b" || $"a" > 3) && ($"a" === $"b" || $"a" < 5),
@@ -128,10 +146,12 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper {
   }
 
   test("SPARK-34222: simplify conjunctive predicates (a && b) && a && (a && c) => a && b && c") {
-    checkCondition(($"a" > 1 && $"b" > 2) && $"a" > 1 && ($"a" > 1 && $"c" > 3),
+    checkCondition(
+      ($"a" > 1 && $"b" > 2) && $"a" > 1 && ($"a" > 1 && $"c" > 3),
       $"a" > 1 && ($"b" > 2 && $"c" > 3))
 
-    checkCondition(($"a" > 1 && $"b" > 2) && ($"a" > 4 && $"b" > 5) && ($"a" > 1 && $"c" > 3),
+    checkCondition(
+      ($"a" > 1 && $"b" > 2) && ($"a" > 4 && $"b" > 5) && ($"a" > 1 && $"c" > 3),
       ($"a" > 1 && $"b" > 2) && ($"c" > 3 && $"a" > 4) && $"b" > 5)
 
     checkCondition(
@@ -143,9 +163,7 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper {
         && (($"a" > 1 || $"b" > 3) && $"c" > 1)),
       ($"a" > 1 || $"b" > 3) && $"d" > 0L && $"c" > 1)
 
-    checkCondition(
-      $"a" > 1 && $"b" > 2 && $"a" > 1 && $"c" > 3,
-      $"a" > 1 && $"b" > 2 && $"c" > 3)
+    checkCondition($"a" > 1 && $"b" > 2 && $"a" > 1 && $"c" > 3, $"a" > 1 && $"b" > 2 && $"c" > 3)
 
     checkCondition(
       ($"a" > 1 && $"b" > 3 && $"a" > 1) || ($"a" > 1 && $"b" > 3 && $"a" > 1 && $"c" > 1),
@@ -153,10 +171,12 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper {
   }
 
   test("SPARK-34222: simplify disjunctive predicates (a || b) || a || (a || c) => a || b || c") {
-    checkCondition(($"a" > 1 || $"b" > 2) || $"a" > 1 || ($"a" > 1 || $"c" > 3),
+    checkCondition(
+      ($"a" > 1 || $"b" > 2) || $"a" > 1 || ($"a" > 1 || $"c" > 3),
       $"a" > 1 || $"b" > 2 || $"c" > 3)
 
-    checkCondition(($"a" > 1 || $"b" > 2) || ($"a" > 4 || $"b" > 5) ||($"a" > 1 || $"c" > 3),
+    checkCondition(
+      ($"a" > 1 || $"b" > 2) || ($"a" > 4 || $"b" > 5) || ($"a" > 1 || $"c" > 3),
       ($"a" > 1 || $"b" > 2) || ($"a" > 4 || $"b" > 5) || $"c" > 3)
 
     checkCondition(
@@ -167,34 +187,33 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper {
       ($"a" > 1 && $"b" > 3) || (($"a" > 1 && $"b" > 3) || (($"a" > 1 && $"b" > 3) || $"c" > 1)),
       ($"a" > 1 && $"b" > 3) || $"c" > 1)
 
-    checkCondition(
-      $"a" > 1 || $"b" > 2 || $"a" > 1 || $"c" > 3,
-      $"a" > 1 || $"b" > 2 || $"c" > 3)
+    checkCondition($"a" > 1 || $"b" > 2 || $"a" > 1 || $"c" > 3, $"a" > 1 || $"b" > 2 || $"c" > 3)
 
     checkCondition(
-      ($"a" > 1 || $"b" > 3 || $"a" > 1) && ($"a" > 1 || $"b" > 3 || $"a" > 1 || $"c" > 1 ),
+      ($"a" > 1 || $"b" > 3 || $"a" > 1) && ($"a" > 1 || $"b" > 3 || $"a" > 1 || $"c" > 1),
       $"a" > 1 || $"b" > 3)
   }
 
   test("e && (!e || f) - not nullable") {
-    checkConditionInNotNullableRelation($"e" && (!$"e" || $"f" ), $"e" && $"f")
+    checkConditionInNotNullableRelation($"e" && (!$"e" || $"f"), $"e" && $"f")
 
-    checkConditionInNotNullableRelation($"e" && ($"f" || !$"e" ), $"e" && $"f")
+    checkConditionInNotNullableRelation($"e" && ($"f" || !$"e"), $"e" && $"f")
 
-    checkConditionInNotNullableRelation((!$"e" || $"f" ) && $"e", $"f" && $"e")
+    checkConditionInNotNullableRelation((!$"e" || $"f") && $"e", $"f" && $"e")
 
-    checkConditionInNotNullableRelation(($"f" || !$"e" ) && $"e", $"f" && $"e")
+    checkConditionInNotNullableRelation(($"f" || !$"e") && $"e", $"f" && $"e")
   }
 
   test("e && (!e || f) - nullable") {
-    Seq ($"e" && (!$"e" || $"f" ),
-        $"e" && ($"f" || !$"e" ),
-        (!$"e" || $"f" ) && $"e",
-        ($"f" || !$"e" ) && $"e",
-        $"e" || (!$"e" && $"f"),
-        $"e" || ($"f" && !$"e"),
-        ($"e" && $"f") || !$"e",
-        ($"f" && $"e") || !$"e").foreach { expr =>
+    Seq(
+      $"e" && (!$"e" || $"f"),
+      $"e" && ($"f" || !$"e"),
+      (!$"e" || $"f") && $"e",
+      ($"f" || !$"e") && $"e",
+      $"e" || (!$"e" && $"f"),
+      $"e" || ($"f" && !$"e"),
+      ($"e" && $"f") || !$"e",
+      ($"f" && $"e") || !$"e").foreach { expr =>
       checkCondition(expr, expr)
     }
   }
@@ -214,10 +233,10 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper {
   }
 
   test("a < 1 && ((a >= 1) || f) - not nullable") {
-    checkConditionInNotNullableRelation($"a" < 1 && ($"a" >= 1 || $"f" ), ($"a" < 1) && $"f")
+    checkConditionInNotNullableRelation($"a" < 1 && ($"a" >= 1 || $"f"), ($"a" < 1) && $"f")
     checkConditionInNotNullableRelation($"a" < 1 && ($"f" || $"a" >= 1), ($"a" < 1) && $"f")
 
-    checkConditionInNotNullableRelation($"a" <= 1 && ($"a" > 1 || $"f" ), ($"a" <= 1) && $"f")
+    checkConditionInNotNullableRelation($"a" <= 1 && ($"a" > 1 || $"f"), ($"a" <= 1) && $"f")
     checkConditionInNotNullableRelation($"a" <= 1 && ($"f" || $"a" > 1), ($"a" <= 1) && $"f")
 
     checkConditionInNotNullableRelation($"a" > 1 && (($"a" <= 1) || $"f"), ($"a" > 1) && $"f")
@@ -241,20 +260,18 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper {
     new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry))
 
   test("(a && b) || (a && c) => a && (b || c) when case insensitive") {
-    val plan = analyzer.execute(
-      testRelation.where(($"a" > 2 && $"b" > 3) || ($"A" > 2 && $"b" < 5)))
+    val plan =
+      analyzer.execute(testRelation.where(($"a" > 2 && $"b" > 3) || ($"A" > 2 && $"b" < 5)))
     val actual = Optimize.execute(plan)
-    val expected = analyzer.execute(
-      testRelation.where($"a" > 2 && ($"b" > 3 || $"b" < 5)))
+    val expected = analyzer.execute(testRelation.where($"a" > 2 && ($"b" > 3 || $"b" < 5)))
     comparePlans(actual, expected)
   }
 
   test("(a || b) && (a || c) => a || (b && c) when case insensitive") {
-    val plan = analyzer.execute(
-      testRelation.where(($"a" > 2 || $"b" > 3) && ($"A" > 2 || $"b" < 5)))
+    val plan =
+      analyzer.execute(testRelation.where(($"a" > 2 || $"b" > 3) && ($"A" > 2 || $"b" < 5)))
     val actual = Optimize.execute(plan)
-    val expected = analyzer.execute(
-      testRelation.where($"a" > 2 || ($"b" > 3 && $"b" < 5)))
+    val expected = analyzer.execute(testRelation.where($"a" > 2 || ($"b" > 3 && $"b" < 5)))
     comparePlans(actual, expected)
   }
 
@@ -267,14 +284,18 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper {
   }
 
   test("Complementation Laws - null handling") {
-    checkCondition($"e" && !$"e",
+    checkCondition(
+      $"e" && !$"e",
       testRelationWithData.where(And(Literal(null, BooleanType), $"e".isNull)).analyze)
-    checkCondition(!$"e" && $"e",
+    checkCondition(
+      !$"e" && $"e",
       testRelationWithData.where(And(Literal(null, BooleanType), $"e".isNull)).analyze)
 
-    checkCondition($"e" || !$"e",
+    checkCondition(
+      $"e" || !$"e",
       testRelationWithData.where(Or($"e".isNotNull, Literal(null, BooleanType))).analyze)
-    checkCondition(!$"e" || $"e",
+    checkCondition(
+      !$"e" || $"e",
       testRelationWithData.where(Or($"e".isNotNull, Literal(null, BooleanType))).analyze)
   }
 
@@ -298,28 +319,17 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper {
       comparePlans(expectedOptPlan, planAfterRuleApp)
     }
     // check simplify Not(A <= B OR A >= B) to (a > b AND a < b) in single pass
-    executeRuleOnce(
-      Not(($"a" <= $"b") || ($"a" >= $"b")),
-      $"a" > $"b" && $"a" < $"b"
-    )
+    executeRuleOnce(Not(($"a" <= $"b") || ($"a" >= $"b")), $"a" > $"b" && $"a" < $"b")
 
     // check simplify Not((expr1 OR expr2) OR (expr3 AND expr4)) in single pass
     executeRuleOnce(
       Not(($"a" <= $"b" || $"c" > $"a" + 4) || ($"a" >= $"b" && $"c" < $"a")),
-      And(
-        And($"a" > $"b", $"c" <= $"a" + 4),
-        Or($"a" < $"b", $"c" >= $"a")
-      )
-    )
+      And(And($"a" > $"b", $"c" <= $"a" + 4), Or($"a" < $"b", $"c" >= $"a")))
 
     // check simplify Not((expr1 OR expr2) AND (expr3 OR expr4)) in single pass
     executeRuleOnce(
       Not(($"a" <= $"b" || $"c" > $"a" + 4) && ($"a" >= $"b" || $"c" < $"a")),
-      Or(
-        And($"a" > $"b", $"c" <= $"a" + 4),
-        And($"a" < $"b", $"c" >= $"a")
-      )
-    )
+      Or(And($"a" > $"b", $"c" <= $"a" + 4), And($"a" < $"b", $"c" >= $"a")))
   }
 
   protected def assertEquivalent(e1: Expression, e2: Expression): Unit = {
@@ -329,10 +339,7 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper {
   }
 
   test("filter reduction - positive cases") {
-    val fields = Seq(
-      $"col1NotNULL".boolean.notNull,
-      $"col2NotNULL".boolean.notNull
-    )
+    val fields = Seq($"col1NotNULL".boolean.notNull, $"col2NotNULL".boolean.notNull)
     val Seq(col1NotNULL, col2NotNULL) = fields.zipWithIndex.map { case (f, i) => f.at(i) }
 
     val exprs = Seq(
@@ -341,12 +348,10 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper {
       (col1NotNULL && (col2NotNULL || !col1NotNULL)) -> (col1NotNULL && col2NotNULL),
       ((!col1NotNULL || col2NotNULL) && col1NotNULL) -> (col2NotNULL && col1NotNULL),
       ((col2NotNULL || !col1NotNULL) && col1NotNULL) -> (col2NotNULL && col1NotNULL),
-
       (col1NotNULL || (!col1NotNULL && col2NotNULL)) -> (col1NotNULL || col2NotNULL),
       (col1NotNULL || (col2NotNULL && !col1NotNULL)) -> (col1NotNULL || col2NotNULL),
       ((!col1NotNULL && col2NotNULL) || col1NotNULL) -> (col2NotNULL || col1NotNULL),
-      ((col2NotNULL && !col1NotNULL) || col1NotNULL) -> (col2NotNULL || col1NotNULL)
-    )
+      ((col2NotNULL && !col1NotNULL) || col1NotNULL) -> (col2NotNULL || col1NotNULL))
 
     // check plans
     for ((originalExpr, expectedExpr) <- exprs) {
@@ -356,8 +361,8 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper {
     // check evaluation
     val binaryBooleanValues = Seq(true, false)
     for (col1NotNULLVal <- binaryBooleanValues;
-        col2NotNULLVal <- binaryBooleanValues;
-        (originalExpr, expectedExpr) <- exprs) {
+      col2NotNULLVal <- binaryBooleanValues;
+      (originalExpr, expectedExpr) <- exprs) {
       val inputRow = create_row(col1NotNULLVal, col2NotNULLVal)
       val optimizedVal = evaluateWithoutCodegen(expectedExpr, inputRow)
       checkEvaluation(originalExpr, optimizedVal, inputRow)

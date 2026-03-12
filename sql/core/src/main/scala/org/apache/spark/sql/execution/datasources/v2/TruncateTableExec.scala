@@ -24,9 +24,8 @@ import org.apache.spark.sql.connector.catalog.TruncatableTable
 /**
  * Physical plan node for table truncation.
  */
-case class TruncateTableExec(
-    table: TruncatableTable,
-    refreshCache: () => Unit) extends LeafV2CommandExec {
+case class TruncateTableExec(table: TruncatableTable, refreshCache: () => Unit)
+    extends LeafV2CommandExec {
 
   override def output: Seq[Attribute] = Seq.empty
 

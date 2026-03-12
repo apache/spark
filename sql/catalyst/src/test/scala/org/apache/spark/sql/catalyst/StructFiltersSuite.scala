@@ -60,11 +60,11 @@ abstract class StructFiltersSuite extends SparkFunSuite {
 
   test("skipping rows") {
     def check(
-      requiredSchema: String = "i INTEGER, d DOUBLE",
-      filters: Seq[Filter],
-      row: InternalRow,
-      pos: Int,
-      skip: Boolean): Unit = {
+        requiredSchema: String = "i INTEGER, d DOUBLE",
+        filters: Seq[Filter],
+        row: InternalRow,
+        pos: Int,
+        skip: Boolean): Unit = {
       val structFilters = createFilters(filters, getSchema(requiredSchema))
       structFilters.reset()
       assert(structFilters.skipRow(row, pos) === skip)
@@ -99,30 +99,17 @@ abstract class StructFiltersSuite extends SparkFunSuite {
         sources.And(
           sources.Not(sources.IsNull("i")),
           sources.Not(
-            sources.And(
-              sources.StringEndsWith("s", "ab"),
-              sources.StringEndsWith("s", "cd")
-            )
-          )
-        )
-      ),
+            sources.And(sources.StringEndsWith("s", "ab"), sources.StringEndsWith("s", "cd"))))),
       sources.GreaterThan("d", 0),
-      sources.LessThan("i", 500)
-    )
+      sources.LessThan("i", 500))
     val filters2 = Seq(
       sources.And(
         sources.StringContains("s", "abc"),
         sources.And(
           sources.Not(sources.IsNull("i")),
-          sources.And(
-            sources.StringEndsWith("s", "ab"),
-            sources.StringEndsWith("s", "bc")
-          )
-        )
-      ),
+          sources.And(sources.StringEndsWith("s", "ab"), sources.StringEndsWith("s", "bc")))),
       sources.GreaterThan("d", 100),
-      sources.LessThan("i", 0)
-    )
+      sources.LessThan("i", 0))
     Seq(filters1 -> false, filters2 -> true).foreach { case (filters, skip) =>
       val schema = "i INTEGER, d DOUBLE, s STRING"
       val row = InternalRow(10, 3.14, UTF8String.fromString("abc"))

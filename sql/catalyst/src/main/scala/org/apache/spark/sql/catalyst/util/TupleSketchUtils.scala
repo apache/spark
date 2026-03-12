@@ -32,9 +32,9 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
- * Sealed trait representing valid summary modes for tuple sketches. This provides type-safe
- * mode handling with compile-time exhaustiveness checking and prevents invalid modes from
- * being created.
+ * Sealed trait representing valid summary modes for tuple sketches. This provides type-safe mode
+ * handling with compile-time exhaustiveness checking and prevents invalid modes from being
+ * created.
  */
 sealed trait TupleSummaryMode {
   def toDoubleSummaryMode: DoubleSummary.Mode
@@ -79,10 +79,14 @@ object TupleSummaryMode {
    * Parses a string into a TupleSummaryMode. This is the single entry point for string-to-mode
    * conversion, ensuring validation happens once.
    *
-   * @param s The mode string to parse
-   * @param functionName The display name of the function/expression for error messages
-   * @return The corresponding TupleSummaryMode
-   * @throws QueryExecutionErrors.tupleInvalidMode if the mode string is invalid
+   * @param s
+   *   The mode string to parse
+   * @param functionName
+   *   The display name of the function/expression for error messages
+   * @return
+   *   The corresponding TupleSummaryMode
+   * @throws QueryExecutionErrors.tupleInvalidMode
+   *   if the mode string is invalid
    */
   def fromString(s: String, functionName: String): TupleSummaryMode = {
     s.toLowerCase(Locale.ROOT) match {
@@ -96,8 +100,8 @@ object TupleSummaryMode {
 }
 
 /**
- * Trait for TupleSketch expressions that use the lgNomEntries parameter. Provides
- * validation and extraction functionality for the log-base-2 of nominal entries.
+ * Trait for TupleSketch expressions that use the lgNomEntries parameter. Provides validation and
+ * extraction functionality for the log-base-2 of nominal entries.
  */
 trait SketchSize extends Expression {
 
@@ -143,8 +147,8 @@ trait SketchSize extends Expression {
 }
 
 /**
- * Trait for TupleSketch expressions that use the mode parameter. Provides validation
- * and extraction functionality for the aggregation mode.
+ * Trait for TupleSketch expressions that use the mode parameter. Provides validation and
+ * extraction functionality for the aggregation mode.
  *
  * Tuple sketches extend Theta sketches by associating summary values with each key. When
  * performing set operations (union, intersection) or building sketches, duplicate keys may appear
@@ -161,10 +165,10 @@ trait SummaryAggregateMode extends Expression {
   protected def prettyName: String
 
   /**
-   * Validates and parses the mode parameter into a TupleSummaryMode. This lazy val ensures
-   * string parsing happens only once and provides compile-time type safety for all subsequent
-   * uses. Validation is performed by TupleSummaryMode.fromString which throws an exception for
-   * invalid modes.
+   * Validates and parses the mode parameter into a TupleSummaryMode. This lazy val ensures string
+   * parsing happens only once and provides compile-time type safety for all subsequent uses.
+   * Validation is performed by TupleSummaryMode.fromString which throws an exception for invalid
+   * modes.
    */
   protected lazy val modeEnum: TupleSummaryMode = {
     val modeStr = mode.eval().asInstanceOf[UTF8String].toString
@@ -200,20 +204,23 @@ trait SummaryAggregateMode extends Expression {
 }
 
 object TupleSketchUtils {
+
   /**
-   * Extracts the Family ID from a DataSketches preamble.
-   * The Family ID is stored at byte offset 2 in all DataSketches preambles.
+   * Extracts the Family ID from a DataSketches preamble. The Family ID is stored at byte offset 2
+   * in all DataSketches preambles.
    *
-   * @param memory The memory containing the sketch preamble
-   * @return The family ID as an unsigned byte value (0-255)
+   * @param memory
+   *   The memory containing the sketch preamble
+   * @return
+   *   The family ID as an unsigned byte value (0-255)
    */
   private def extractFamilyID(memory: Memory): Int = {
-    memory.getByte(2) & 0xFF
+    memory.getByte(2) & 0xff
   }
 
   /**
-   * Deserializes a binary tuple sketch representation into a Sketch with the
-   * appropriate summary type.
+   * Deserializes a binary tuple sketch representation into a Sketch with the appropriate summary
+   * type.
    *
    * @param bytes
    *   The binary sketch data to deserialize
@@ -238,13 +245,14 @@ object TupleSketchUtils {
           throw QueryExecutionErrors.tupleInvalidInputSketchBuffer(prettyName)
       }
 
-    val family = try {
-      val familyId = extractFamilyID(memory)
-      Family.idToFamily(familyId)
-    } catch {
-      case _: Exception =>
-        throw QueryExecutionErrors.tupleInvalidInputSketchBuffer(prettyName)
-    }
+    val family =
+      try {
+        val familyId = extractFamilyID(memory)
+        Family.idToFamily(familyId)
+      } catch {
+        case _: Exception =>
+          throw QueryExecutionErrors.tupleInvalidInputSketchBuffer(prettyName)
+      }
 
     if (family != Family.TUPLE) {
       throw QueryExecutionErrors.tupleInvalidInputSketchBufferFamily(
@@ -285,16 +293,14 @@ object TupleSketchUtils {
    * @return
    *   A deserialized sketch
    */
-  def heapifyIntegerSketch(
-      bytes: Array[Byte],
-      prettyName: String): Sketch[IntegerSummary] = {
+  def heapifyIntegerSketch(bytes: Array[Byte], prettyName: String): Sketch[IntegerSummary] = {
     heapifySketch(bytes, new IntegerSummaryDeserializer(), prettyName)
   }
 
   /**
-   * Aggregates numeric summaries from a tuple sketch iterator based on the specified mode.
-   * This method provides compile-time exhaustiveness checking through pattern matching on
-   * the sealed TupleSummaryMode trait.
+   * Aggregates numeric summaries from a tuple sketch iterator based on the specified mode. This
+   * method provides compile-time exhaustiveness checking through pattern matching on the sealed
+   * TupleSummaryMode trait.
    *
    * @param iterator
    *   The tuple sketch iterator to aggregate

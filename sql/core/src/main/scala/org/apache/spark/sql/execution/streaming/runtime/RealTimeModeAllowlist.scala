@@ -29,8 +29,7 @@ object RealTimeModeAllowlist extends Logging {
     "org.apache.spark.sql.execution.streaming.ConsoleTable$",
     "org.apache.spark.sql.execution.streaming.sources.ContinuousMemorySink",
     "org.apache.spark.sql.execution.streaming.sources.ForeachWriterTable",
-    "org.apache.spark.sql.kafka010.KafkaSourceProvider$KafkaTable"
-  )
+    "org.apache.spark.sql.kafka010.KafkaSourceProvider$KafkaTable")
 
   private val allowedOperators = Set(
     "org.apache.spark.sql.execution.AppendColumnsExec",
@@ -56,15 +55,12 @@ object RealTimeModeAllowlist extends Logging {
     "org.apache.spark.sql.execution.exchange.BroadcastExchangeExec",
     "org.apache.spark.sql.execution.exchange.ReusedExchangeExec",
     "org.apache.spark.sql.execution.joins.BroadcastHashJoinExec",
-    classOf[EventTimeWatermarkExec].getName
-  )
+    classOf[EventTimeWatermarkExec].getName)
 
   private def classNamesString(classNames: Seq[String]): MessageWithContext = {
     val sortedClassNames = classNames.sorted
     var message = log"${MDC(LogKeys.CLASS_NAME, sortedClassNames.head)}"
-    sortedClassNames.tail.foreach(
-      name => message += log", ${MDC(LogKeys.CLASS_NAME, name)}"
-    )
+    sortedClassNames.tail.foreach(name => message += log", ${MDC(LogKeys.CLASS_NAME, name)}")
     if (sortedClassNames.size > 1) {
       message + log" are"
     } else {
@@ -78,11 +74,8 @@ object RealTimeModeAllowlist extends Logging {
     assert(classNames.nonEmpty)
     new SparkIllegalArgumentException(
       errorClass = "STREAMING_REAL_TIME_MODE.OPERATOR_OR_SINK_NOT_IN_ALLOWLIST",
-      messageParameters = Map(
-        "errorType" -> errorType,
-        "message" -> classNamesString(classNames).message
-      )
-    )
+      messageParameters =
+        Map("errorType" -> errorType, "message" -> classNamesString(classNames).message))
   }
 
   def checkAllowedSink(sink: Table, throwException: Boolean): Unit = {
@@ -92,8 +85,7 @@ object RealTimeModeAllowlist extends Logging {
       } else {
         logWarning(
           log"The sink: " + classNamesString(Seq(sink.getClass.getName)) +
-          log" not in the sink allowlist for Real-Time Mode."
-        )
+            log" not in the sink allowlist for Real-Time Mode.")
       }
     }
   }
@@ -123,13 +115,12 @@ object RealTimeModeAllowlist extends Logging {
   def checkAllowedPhysicalOperator(operator: SparkPlan, throwException: Boolean): Unit = {
     val nodesToCheck = collectRealtimeNodes(operator)
     val violations = nodesToCheck
-      .collect {
-        case node =>
-          if (allowedOperators.contains(node.getClass.getName)) {
-            None
-          } else {
-            Some(node.getClass.getName)
-          }
+      .collect { case node =>
+        if (allowedOperators.contains(node.getClass.getName)) {
+          None
+        } else {
+          Some(node.getClass.getName)
+        }
       }
       .flatten
       .distinct
@@ -140,8 +131,7 @@ object RealTimeModeAllowlist extends Logging {
       } else {
         logWarning(
           log"The operator(s): " + classNamesString(violations.toSet.toSeq) +
-          log" not in the operator allowlist for Real-Time Mode."
-        )
+            log" not in the operator allowlist for Real-Time Mode.")
       }
     }
   }

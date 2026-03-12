@@ -38,13 +38,14 @@ class LimitPushdownThroughWindowSuite extends PlanTest {
 
   private object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
-      Batch("Limit pushdown through window", FixedPoint(100),
-        limitPushdownRules: _*) :: Nil
+      Batch("Limit pushdown through window", FixedPoint(100), limitPushdownRules: _*) :: Nil
   }
 
   private object WithoutOptimize extends RuleExecutor[LogicalPlan] {
     val batches =
-      Batch("Without limit pushdown through window", FixedPoint(100),
+      Batch(
+        "Without limit pushdown through window",
+        FixedPoint(100),
         limitPushdownRules
           .filterNot(_.ruleName.equals(LimitPushDownThroughWindow.ruleName)): _*) :: Nil
   }
@@ -60,14 +61,20 @@ class LimitPushdownThroughWindowSuite extends PlanTest {
 
   test("Push down limit through window when partitionSpec is empty") {
     val originalQuery = testRelation
-      .select(a, b, c,
+      .select(
+        a,
+        b,
+        c,
         windowExpr(RowNumber(), windowSpec(Nil, c.desc :: Nil, windowFrame)).as("rn"))
       .limit(2)
     val correctAnswer = testRelation
       .select(a, b, c)
       .orderBy(c.desc)
       .limit(2)
-      .select(a, b, c,
+      .select(
+        a,
+        b,
+        c,
         windowExpr(RowNumber(), windowSpec(Nil, c.desc :: Nil, windowFrame)).as("rn"))
 
     comparePlans(
@@ -77,7 +84,10 @@ class LimitPushdownThroughWindowSuite extends PlanTest {
 
   test("Push down limit through window for multiple window functions") {
     val originalQuery = testRelation
-      .select(a, b, c,
+      .select(
+        a,
+        b,
+        c,
         windowExpr(RowNumber(), windowSpec(Nil, c.desc :: Nil, windowFrame)).as("rn"),
         windowExpr(new Rank(), windowSpec(Nil, c.desc :: Nil, windowFrame)).as("rk"))
       .limit(2)
@@ -85,7 +95,10 @@ class LimitPushdownThroughWindowSuite extends PlanTest {
       .select(a, b, c)
       .orderBy(c.desc)
       .limit(2)
-      .select(a, b, c,
+      .select(
+        a,
+        b,
+        c,
         windowExpr(RowNumber(), windowSpec(Nil, c.desc :: Nil, windowFrame)).as("rn"),
         windowExpr(new Rank(), windowSpec(Nil, c.desc :: Nil, windowFrame)).as("rk"))
 
@@ -98,7 +111,10 @@ class LimitPushdownThroughWindowSuite extends PlanTest {
     Seq(1, 100).foreach { threshold =>
       withSQLConf(SQLConf.TOP_K_SORT_FALLBACK_THRESHOLD.key -> threshold.toString) {
         val originalQuery = testRelation
-          .select(a, b, c,
+          .select(
+            a,
+            b,
+            c,
             windowExpr(RowNumber(), windowSpec(Nil, c.desc :: Nil, windowFrame)).as("rn"))
           .limit(2)
         val correctAnswer = if (threshold == 1) {
@@ -108,7 +124,10 @@ class LimitPushdownThroughWindowSuite extends PlanTest {
             .select(a, b, c)
             .orderBy(c.desc)
             .limit(2)
-            .select(a, b, c,
+            .select(
+              a,
+              b,
+              c,
               windowExpr(RowNumber(), windowSpec(Nil, c.desc :: Nil, windowFrame)).as("rn"))
         }
 
@@ -121,16 +140,26 @@ class LimitPushdownThroughWindowSuite extends PlanTest {
 
   test("Push down to first window if order column is different") {
     val originalQuery = testRelation
-      .select(a, b, c,
+      .select(
+        a,
+        b,
+        c,
         windowExpr(RowNumber(), windowSpec(Nil, b.desc :: Nil, windowFrame)).as("rn"),
         windowExpr(new Rank(), windowSpec(Nil, c.asc :: Nil, windowFrame)).as("rk"))
       .limit(2)
     val correctAnswer = testRelation
-      .select(a, b, c,
+      .select(
+        a,
+        b,
+        c,
         windowExpr(RowNumber(), windowSpec(Nil, b.desc :: Nil, windowFrame)).as("rn"))
       .orderBy(c.asc)
       .limit(2)
-      .select(a, b, c, $"rn".attr,
+      .select(
+        a,
+        b,
+        c,
+        $"rn".attr,
         windowExpr(new Rank(), windowSpec(Nil, c.asc :: Nil, windowFrame)).as("rk"))
 
     comparePlans(
@@ -140,8 +169,7 @@ class LimitPushdownThroughWindowSuite extends PlanTest {
 
   test("Push down if there is a Project between LocalLimit and Window") {
     val originalQuery = testRelation
-      .select(a, b,
-        windowExpr(RowNumber(), windowSpec(Nil, b.desc :: Nil, windowFrame)).as("rn"))
+      .select(a, b, windowExpr(RowNumber(), windowSpec(Nil, b.desc :: Nil, windowFrame)).as("rn"))
       .select(a, $"rn".attr)
       .limit(2)
     val correctAnswer = testRelation
@@ -157,7 +185,10 @@ class LimitPushdownThroughWindowSuite extends PlanTest {
 
   test("Should not push down if partitionSpec is not empty") {
     val originalQuery = testRelation
-      .select(a, b, c,
+      .select(
+        a,
+        b,
+        c,
         windowExpr(RowNumber(), windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn"))
       .limit(2)
 
@@ -168,7 +199,10 @@ class LimitPushdownThroughWindowSuite extends PlanTest {
 
   test("Should not push down when child's maxRows smaller than limit value") {
     val originalQuery = testRelation
-      .select(a, b, c,
+      .select(
+        a,
+        b,
+        c,
         windowExpr(RowNumber(), windowSpec(Nil, c.desc :: Nil, windowFrame)).as("rn"))
       .limit(20)
 
@@ -179,8 +213,7 @@ class LimitPushdownThroughWindowSuite extends PlanTest {
 
   test("Should not push down if it is not RankLike/RowNumberLike window function") {
     val originalQuery = testRelation
-      .select(a, b, c,
-        windowExpr(count(b), windowSpec(Nil, c.desc :: Nil, windowFrame)).as("rn"))
+      .select(a, b, c, windowExpr(count(b), windowSpec(Nil, c.desc :: Nil, windowFrame)).as("rn"))
       .limit(2)
 
     comparePlans(
@@ -190,7 +223,10 @@ class LimitPushdownThroughWindowSuite extends PlanTest {
 
   test("SPARK-38614: Should not push through percent_rank window function") {
     val originalQuery = testRelation
-      .select(a, b, c,
+      .select(
+        a,
+        b,
+        c,
         windowExpr(new PercentRank(), windowSpec(Nil, c.desc :: Nil, windowFrame)).as("rn"))
       .limit(2)
 
@@ -201,7 +237,10 @@ class LimitPushdownThroughWindowSuite extends PlanTest {
 
   test("SPARK-40002: Should not push through ntile window function") {
     val originalQuery = testRelation
-      .select(a, b, c,
+      .select(
+        a,
+        b,
+        c,
         windowExpr(new NTile(), windowSpec(Nil, c.desc :: Nil, windowFrame)).as("nt"))
       .limit(2)
 

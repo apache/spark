@@ -30,25 +30,29 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class ResolveEncodersInUDFSuite extends AnalysisTest {
   test("SPARK-48921: ScalaUDF encoders in subquery should be resolved for MergeInto") {
-    val table = new InMemoryRowLevelOperationTable("table",
-      StructType(StructField("a", IntegerType) ::
-        StructField("b", DoubleType) ::
-        StructField("c", StringType) :: Nil),
+    val table = new InMemoryRowLevelOperationTable(
+      "table",
+      StructType(
+        StructField("a", IntegerType) ::
+          StructField("b", DoubleType) ::
+          StructField("c", StringType) :: Nil),
       Array.empty,
-      new java.util.HashMap[String, String]()
-    )
-    val relation = DataSourceV2Relation(table,
-      Seq(AttributeReference("a", IntegerType)(),
+      new java.util.HashMap[String, String]())
+    val relation = DataSourceV2Relation(
+      table,
+      Seq(
+        AttributeReference("a", IntegerType)(),
         AttributeReference("b", DoubleType)(),
         AttributeReference("c", StringType)()),
       None,
       None,
-      CaseInsensitiveStringMap.empty()
-    )
-
+      CaseInsensitiveStringMap.empty())
 
     val string = relation.output(2)
-    val udf = ScalaUDF((_: String) => "x", StringType, string :: Nil,
+    val udf = ScalaUDF(
+      (_: String) => "x",
+      StringType,
+      string :: Nil,
       Option(ExpressionEncoder[String]()) :: Nil)
 
     val mergeIntoSource =
@@ -63,34 +67,38 @@ class ResolveEncodersInUDFSuite extends AnalysisTest {
       relation,
       mergeIntoSource,
       cond,
-      Seq(UpdateAction(None,
-        Seq(Assignment(relation.output(0), relation.output(0)),
-          Assignment(relation.output(1), relation.output(1)),
-          Assignment(relation.output(2), relation.output(2))))),
+      Seq(
+        UpdateAction(
+          None,
+          Seq(
+            Assignment(relation.output(0), relation.output(0)),
+            Assignment(relation.output(1), relation.output(1)),
+            Assignment(relation.output(2), relation.output(2))))),
       Seq.empty,
       Seq.empty,
       withSchemaEvolution = false)
 
     val replaceData = mergePlan.analyze.asInstanceOf[ReplaceData]
 
-    val existsPlans = replaceData.groupFilterCondition.map(_.collect {
-      case e: Exists =>
-        e.plan.collect {
-          case f: Filter if f.containsPattern(TreePattern.SCALA_UDF) => f
-        }
+    val existsPlans = replaceData.groupFilterCondition.map(_.collect { case e: Exists =>
+      e.plan.collect {
+        case f: Filter if f.containsPattern(TreePattern.SCALA_UDF) => f
+      }
     }.flatten)
 
     assert(existsPlans.isDefined)
 
-    val udfs = existsPlans.get.map(_.expressions.flatMap(e => e.collect {
-      case s: ScalaUDF =>
-        assert(s.inputEncoders.nonEmpty)
-        val encoder = s.inputEncoders.head
-        assert(encoder.isDefined)
-        assert(encoder.get.objDeserializer.resolved)
+    val udfs = existsPlans.get
+      .map(_.expressions.flatMap(e =>
+        e.collect { case s: ScalaUDF =>
+          assert(s.inputEncoders.nonEmpty)
+          val encoder = s.inputEncoders.head
+          assert(encoder.isDefined)
+          assert(encoder.get.objDeserializer.resolved)
 
-        s
-    })).flatten
+          s
+        }))
+      .flatten
     assert(udfs.size == 1)
   }
 }

@@ -40,7 +40,12 @@ class TextDataSourceV2 extends FileDataSourceV2 {
     val paths = getPaths(options)
     val tableName = getTableName(options, paths)
     val optionsWithoutPaths = getOptionsWithoutPaths(options)
-    TextTable(tableName, sparkSession, optionsWithoutPaths, paths, Some(schema), fallbackFileFormat)
+    TextTable(
+      tableName,
+      sparkSession,
+      optionsWithoutPaths,
+      paths,
+      Some(schema),
+      fallbackFileFormat)
   }
 }
-

@@ -26,17 +26,15 @@ case class DeclarativeAggregateEvaluator(function: DeclarativeAggregate, input: 
 
   lazy val initializer = MutableProjection.create(function.initialValues)
 
-  lazy val updater = MutableProjection.create(
-    function.updateExpressions,
-    function.aggBufferAttributes ++ input)
+  lazy val updater =
+    MutableProjection.create(function.updateExpressions, function.aggBufferAttributes ++ input)
 
   lazy val merger = MutableProjection.create(
     function.mergeExpressions,
     function.aggBufferAttributes ++ function.inputAggBufferAttributes)
 
-  lazy val evaluator = MutableProjection.create(
-    function.evaluateExpression :: Nil,
-    function.aggBufferAttributes)
+  lazy val evaluator =
+    MutableProjection.create(function.evaluateExpression :: Nil, function.aggBufferAttributes)
 
   def initialize(): InternalRow = initializer.apply(InternalRow.empty).copy()
 

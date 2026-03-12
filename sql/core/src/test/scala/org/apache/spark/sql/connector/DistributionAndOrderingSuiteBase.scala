@@ -31,7 +31,10 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.test.SharedSparkSession
 
 abstract class DistributionAndOrderingSuiteBase
-    extends QueryTest with SharedSparkSession with BeforeAndAfter with AdaptiveSparkPlanHelper {
+    extends QueryTest
+    with SharedSparkSession
+    with BeforeAndAfter
+    with AdaptiveSparkPlanHelper {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
   override def beforeAll(): Unit = {
@@ -56,7 +59,9 @@ abstract class DistributionAndOrderingSuiteBase
     case PartitioningCollection(partitionings) =>
       PartitioningCollection(partitionings.map(resolvePartitioning(_, plan)))
     case RangePartitioning(ordering, numPartitions) =>
-      RangePartitioning(ordering.map(resolveAttrs(_, plan).asInstanceOf[SortOrder]), numPartitions)
+      RangePartitioning(
+        ordering.map(resolveAttrs(_, plan).asInstanceOf[SortOrder]),
+        numPartitions)
     case p @ SinglePartition =>
       p
     case p: UnknownPartitioning =>

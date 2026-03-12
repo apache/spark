@@ -40,10 +40,12 @@ class MergingSortWithSessionWindowStateIterator(
     store: ReadStateStore,
     groupWithoutSessionExpressions: Seq[Attribute],
     sessionExpression: Attribute,
-    inputSchema: Seq[Attribute]) extends Iterator[InternalRow] with Logging {
+    inputSchema: Seq[Attribute])
+    extends Iterator[InternalRow]
+    with Logging {
 
-  private val keysProjection: UnsafeProjection = GenerateUnsafeProjection.generate(
-    groupWithoutSessionExpressions, inputSchema)
+  private val keysProjection: UnsafeProjection =
+    GenerateUnsafeProjection.generate(groupWithoutSessionExpressions, inputSchema)
   private val sessionProjection: UnsafeProjection =
     GenerateUnsafeProjection.generate(Seq(sessionExpression), inputSchema)
 
@@ -79,7 +81,7 @@ class MergingSortWithSessionWindowStateIterator(
 
   override def hasNext: Boolean = {
     currentRowFromInput != null || currentRowFromState != null ||
-      (sessionIterFromState != null && sessionIterFromState.hasNext) || iter.hasNext
+    (sessionIterFromState != null && sessionIterFromState.hasNext) || iter.hasNext
   }
 
   override def next(): InternalRow = {

@@ -25,7 +25,6 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Literal, Rand}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
-
 class TakeOrderedAndProjectSuite extends SparkPlanTest with SharedSparkSession {
 
   private var rand: Random = _
@@ -52,8 +51,8 @@ class TakeOrderedAndProjectSuite extends SparkPlanTest with SharedSparkSession {
   }
 
   /**
-   * Adds a no-op filter to the child plan in order to prevent executeCollect() from being
-   * called directly on the child plan.
+   * Adds a no-op filter to the child plan in order to prevent executeCollect() from being called
+   * directly on the child plan.
    */
   private def noOpFilter(plan: SparkPlan): SparkPlan = FilterExec(Literal(true), plan)
 
@@ -65,12 +64,9 @@ class TakeOrderedAndProjectSuite extends SparkPlanTest with SharedSparkSession {
       Seq((0, 0), (10000, 1), (10000, 10)).foreach { case (n, m) =>
         checkThatPlansAgree(
           generateRandomInputData(n, m),
+          input => noOpFilter(TakeOrderedAndProjectExec(limit, sortOrder, input.output, input)),
           input =>
-            noOpFilter(TakeOrderedAndProjectExec(limit, sortOrder, input.output, input)),
-          input =>
-            GlobalLimitExec(limit,
-              LocalLimitExec(limit,
-                SortExec(sortOrder, true, input))),
+            GlobalLimitExec(limit, LocalLimitExec(limit, SortExec(sortOrder, true, input))),
           sortAnswers = false)
       }
     }
@@ -85,10 +81,11 @@ class TakeOrderedAndProjectSuite extends SparkPlanTest with SharedSparkSession {
             noOpFilter(
               TakeOrderedAndProjectExec(limit, sortOrder, Seq(input.output.last), input)),
           input =>
-            GlobalLimitExec(limit,
-              LocalLimitExec(limit,
-                ProjectExec(Seq(input.output.last),
-                  SortExec(sortOrder, true, input)))),
+            GlobalLimitExec(
+              limit,
+              LocalLimitExec(
+                limit,
+                ProjectExec(Seq(input.output.last), SortExec(sortOrder, true, input)))),
           sortAnswers = false)
       }
     }
@@ -97,10 +94,11 @@ class TakeOrderedAndProjectSuite extends SparkPlanTest with SharedSparkSession {
   test("TakeOrderedAndProject.doExecute with local sort") {
     withClue(s"seed = $seed") {
       val expected = (input: SparkPlan) => {
-        GlobalLimitExec(limit,
-          LocalLimitExec(limit,
-            ProjectExec(Seq(input.output.last),
-              SortExec(sortOrder, true, input))))
+        GlobalLimitExec(
+          limit,
+          LocalLimitExec(
+            limit,
+            ProjectExec(Seq(input.output.last), SortExec(sortOrder, true, input))))
       }
 
       // test doExecute
@@ -109,7 +107,10 @@ class TakeOrderedAndProjectSuite extends SparkPlanTest with SharedSparkSession {
           generateRandomInputData(n, m),
           input =>
             noOpFilter(
-              TakeOrderedAndProjectExec(limit, sortOrder, Seq(input.output.last),
+              TakeOrderedAndProjectExec(
+                limit,
+                sortOrder,
+                Seq(input.output.last),
                 SortExec(sortOrder, false, input))),
           input => expected(input),
           sortAnswers = false)
@@ -120,7 +121,10 @@ class TakeOrderedAndProjectSuite extends SparkPlanTest with SharedSparkSession {
         checkThatPlansAgree(
           generateRandomInputData(n, m),
           input =>
-            TakeOrderedAndProjectExec(limit, sortOrder, Seq(input.output.last),
+            TakeOrderedAndProjectExec(
+              limit,
+              sortOrder,
+              Seq(input.output.last),
               SortExec(sortOrder, false, input)),
           input => expected(input),
           sortAnswers = false)
@@ -130,15 +134,15 @@ class TakeOrderedAndProjectSuite extends SparkPlanTest with SharedSparkSession {
 
   test("SPARK-47104: Non-deterministic expressions in projection") {
     val expected = (input: SparkPlan) => {
-      GlobalLimitExec(limit,
-        LocalLimitExec(limit,
-          SortExec(sortOrder, true, input)))
+      GlobalLimitExec(limit, LocalLimitExec(limit, SortExec(sortOrder, true, input)))
     }
     val schema = StructType.fromDDL("a int, b int, c double")
     val rdd = sparkContext.parallelize(
-      Seq(Row(1, 2, 0.0953472826424725d),
+      Seq(
+        Row(1, 2, 0.0953472826424725d),
         Row(2, 3, 0.5234194256885571d),
-        Row(3, 4, 0.7604953758285915d)), 1)
+        Row(3, 4, 0.7604953758285915d)),
+      1)
     val df = spark.createDataFrame(rdd, schema)
     val projection = df.queryExecution.sparkPlan.output.take(2) :+
       Alias(Rand(Literal(0, IntegerType)), "_uuid")()
@@ -147,7 +151,10 @@ class TakeOrderedAndProjectSuite extends SparkPlanTest with SharedSparkSession {
     checkThatPlansAgree(
       df,
       input =>
-        TakeOrderedAndProjectExec(limit, sortOrder, projection,
+        TakeOrderedAndProjectExec(
+          limit,
+          sortOrder,
+          projection,
           SortExec(sortOrder, false, input)),
       input => expected(input),
       sortAnswers = false)
@@ -156,8 +163,12 @@ class TakeOrderedAndProjectSuite extends SparkPlanTest with SharedSparkSession {
     checkThatPlansAgree(
       df,
       input =>
-        noOpFilter(TakeOrderedAndProjectExec(limit, sortOrder, projection,
-          SortExec(sortOrder, false, input))),
+        noOpFilter(
+          TakeOrderedAndProjectExec(
+            limit,
+            sortOrder,
+            projection,
+            SortExec(sortOrder, false, input))),
       input => expected(input),
       sortAnswers = false)
   }

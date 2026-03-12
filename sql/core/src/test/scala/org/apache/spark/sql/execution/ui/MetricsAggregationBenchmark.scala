@@ -64,12 +64,8 @@ object MetricsAggregationBenchmark extends BenchmarkBase {
       new SQLMetricInfo(s"metric$i", i.toLong, "average")
     }
 
-    val planInfo = new SparkPlanInfo(
-      getClass().getName(),
-      getClass().getName(),
-      Nil,
-      Map.empty,
-      metrics)
+    val planInfo =
+      new SparkPlanInfo(getClass().getName(), getClass().getName(), Nil, Map.empty, metrics)
 
     val idgen = new AtomicInteger()
     val executionId = idgen.incrementAndGet()
@@ -92,8 +88,14 @@ object MetricsAggregationBenchmark extends BenchmarkBase {
     listener.onOtherEvent(executionStart)
 
     val taskEventsTime = (0 until numStages).map { _ =>
-      val stageInfo = new StageInfo(idgen.incrementAndGet(), 0, getClass().getName(),
-        numTasks, Nil, Nil, getClass().getName(),
+      val stageInfo = new StageInfo(
+        idgen.incrementAndGet(),
+        0,
+        getClass().getName(),
+        numTasks,
+        Nil,
+        Nil,
+        getClass().getName(),
         resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
 
       val jobId = idgen.incrementAndGet()
@@ -129,7 +131,9 @@ object MetricsAggregationBenchmark extends BenchmarkBase {
         info.setAccumulables(accumulables)
 
         val start = SparkListenerTaskStart(stageInfo.stageId, stageInfo.attemptNumber(), info)
-        val end = SparkListenerTaskEnd(stageInfo.stageId, stageInfo.attemptNumber(),
+        val end = SparkListenerTaskEnd(
+          stageInfo.stageId,
+          stageInfo.attemptNumber(),
           taskType = "",
           reason = null,
           info,
@@ -139,10 +143,8 @@ object MetricsAggregationBenchmark extends BenchmarkBase {
         (start, end)
       }
 
-      val jobEnd = SparkListenerJobEnd(
-        jobId = jobId,
-        time = System.currentTimeMillis(),
-        JobSucceeded)
+      val jobEnd =
+        SparkListenerJobEnd(jobId = jobId, time = System.currentTimeMillis(), JobSucceeded)
 
       listener.onJobStart(jobStart)
       listener.onStageSubmitted(stageStart)
@@ -176,8 +178,10 @@ object MetricsAggregationBenchmark extends BenchmarkBase {
     val stageCounts = Seq(1, 2, 3)
 
     val benchmark = new Benchmark(
-      s"metrics aggregation ($metricCount metrics, $taskCount tasks per stage)", 1,
-      warmupTime = 0.seconds, output = output)
+      s"metrics aggregation ($metricCount metrics, $taskCount tasks per stage)",
+      1,
+      warmupTime = 0.seconds,
+      output = output)
 
     // Run this outside the measurement code so that classes are loaded and JIT is triggered,
     // otherwise the first run tends to be much slower than others. Also because this benchmark is a
@@ -219,7 +223,5 @@ object MetricsAggregationBenchmark extends BenchmarkBase {
    * results, but this data helps with seeing where the time is going, since this benchmark is
    * triggering a whole lot of code in the listener class.
    */
-  case class Measurements(
-      taskEventsTimes: Seq[Long],
-      aggregationTime: Long)
+  case class Measurements(taskEventsTimes: Seq[Long], aggregationTime: Long)
 }

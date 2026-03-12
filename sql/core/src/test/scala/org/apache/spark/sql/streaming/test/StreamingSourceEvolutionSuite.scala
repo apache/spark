@@ -31,8 +31,8 @@ import org.apache.spark.sql.streaming.Trigger._
 import org.apache.spark.util.Utils
 
 /**
- * Test suite for streaming source naming and validation.
- * Tests cover the naming API, validation rules, and resolution pipeline.
+ * Test suite for streaming source naming and validation. Tests cover the naming API, validation
+ * rules, and resolution pipeline.
  */
 class StreamingSourceEvolutionSuite extends StreamTest with BeforeAndAfterEach {
 
@@ -46,9 +46,12 @@ class StreamingSourceEvolutionSuite extends StreamTest with BeforeAndAfterEach {
 
   /**
    * Helper to verify that a source was created with the expected metadata path.
-   * @param checkpointLocation the checkpoint location path
-   * @param sourcePath the expected source path (e.g., "source1" or "0")
-   * @param mode mockito verification mode (default: times(1))
+   * @param checkpointLocation
+   *   the checkpoint location path
+   * @param sourcePath
+   *   the expected source path (e.g., "source1" or "0")
+   * @param mode
+   *   mockito verification mode (default: times(1))
    */
   private def verifySourcePath(
       checkpointLocation: Path,
@@ -56,8 +59,8 @@ class StreamingSourceEvolutionSuite extends StreamTest with BeforeAndAfterEach {
       mode: org.mockito.verification.VerificationMode = times(1)): Unit = {
     verify(LastOptions.mockStreamSourceProvider, mode).createSource(
       any(),
-      meq(s"${new Path(makeQualifiedPath(
-        checkpointLocation.toString)).toString}/sources/$sourcePath"),
+      meq(
+        s"${new Path(makeQualifiedPath(checkpointLocation.toString)).toString}/sources/$sourcePath"),
       meq(None),
       meq("org.apache.spark.sql.streaming.test"),
       meq(Map.empty))
@@ -150,12 +153,14 @@ class StreamingSourceEvolutionSuite extends StreamTest with BeforeAndAfterEach {
 
       val df2 = spark.readStream
         .format("org.apache.spark.sql.streaming.test")
-        .name("duplicate_name")  // Same name - should fail
+        .name("duplicate_name") // Same name - should fail
         .load()
 
       checkError(
         exception = intercept[AnalysisException] {
-          df1.union(df2).writeStream
+          df1
+            .union(df2)
+            .writeStream
             .format("org.apache.spark.sql.streaming.test")
             .option("checkpointLocation", checkpointDir.getCanonicalPath)
             .start()
@@ -226,7 +231,9 @@ class StreamingSourceEvolutionSuite extends StreamTest with BeforeAndAfterEach {
       .name("source2")
       .load()
 
-    val q = df1.union(df2).writeStream
+    val q = df1
+      .union(df2)
+      .writeStream
       .format("org.apache.spark.sql.streaming.test")
       .option("checkpointLocation", checkpointLocation.toString)
       .trigger(ProcessingTime(10.seconds))
@@ -252,7 +259,9 @@ class StreamingSourceEvolutionSuite extends StreamTest with BeforeAndAfterEach {
         .format("org.apache.spark.sql.streaming.test")
         .load()
 
-      val q = df1.union(df2).writeStream
+      val q = df1
+        .union(df2)
+        .writeStream
         .format("org.apache.spark.sql.streaming.test")
         .option("checkpointLocation", checkpointLocation.toString)
         .trigger(ProcessingTime(10.seconds))
@@ -286,7 +295,9 @@ class StreamingSourceEvolutionSuite extends StreamTest with BeforeAndAfterEach {
       .name("source2")
       .load()
 
-    val q1 = df1a.union(df2a).writeStream
+    val q1 = df1a
+      .union(df2a)
+      .writeStream
       .format("org.apache.spark.sql.streaming.test")
       .option("checkpointLocation", checkpointLocation.toString)
       .trigger(ProcessingTime(10.seconds))
@@ -307,7 +318,9 @@ class StreamingSourceEvolutionSuite extends StreamTest with BeforeAndAfterEach {
       .name("source2")
       .load()
 
-    val q2 = df2b.union(df1b).writeStream  // Note: reversed order
+    val q2 = df2b
+      .union(df1b)
+      .writeStream // Note: reversed order
       .format("org.apache.spark.sql.streaming.test")
       .option("checkpointLocation", checkpointLocation.toString)
       .trigger(ProcessingTime(10.seconds))
@@ -352,7 +365,9 @@ class StreamingSourceEvolutionSuite extends StreamTest with BeforeAndAfterEach {
       .name("source2")
       .load()
 
-    val q2 = df1b.union(df2).writeStream
+    val q2 = df1b
+      .union(df2)
+      .writeStream
       .format("org.apache.spark.sql.streaming.test")
       .option("checkpointLocation", checkpointLocation.toString)
       .trigger(ProcessingTime(10.seconds))
@@ -380,7 +395,9 @@ class StreamingSourceEvolutionSuite extends StreamTest with BeforeAndAfterEach {
       .name("source2")
       .load()
 
-    val q = df1.union(df2).writeStream
+    val q = df1
+      .union(df2)
+      .writeStream
       .format("org.apache.spark.sql.streaming.test")
       .option("checkpointLocation", checkpointLocation.toString)
       .trigger(ProcessingTime(10.seconds))
@@ -389,11 +406,13 @@ class StreamingSourceEvolutionSuite extends StreamTest with BeforeAndAfterEach {
     q.stop()
 
     import org.apache.spark.sql.execution.streaming.checkpointing.{OffsetMap, OffsetSeqLog}
-    val offsetLog = new OffsetSeqLog(spark,
+    val offsetLog = new OffsetSeqLog(
+      spark,
       makeQualifiedPath(checkpointLocation.toString).toString + "/offsets")
     val offsetSeq = offsetLog.get(0)
     assert(offsetSeq.isDefined, "Offset log should have batch 0")
-    assert(offsetSeq.get.isInstanceOf[OffsetMap],
+    assert(
+      offsetSeq.get.isInstanceOf[OffsetMap],
       s"Expected OffsetMap but got ${offsetSeq.get.getClass.getSimpleName}")
   }
 
@@ -418,7 +437,10 @@ class StreamingSourceEvolutionSuite extends StreamTest with BeforeAndAfterEach {
       .load()
 
     // Complex union: (alpha union beta) union gamma
-    val q = df1.union(df2).union(df3).writeStream
+    val q = df1
+      .union(df2)
+      .union(df3)
+      .writeStream
       .format("org.apache.spark.sql.streaming.test")
       .option("checkpointLocation", checkpointLocation.toString)
       .trigger(ProcessingTime(10.seconds))
@@ -453,16 +475,17 @@ class StreamingSourceEvolutionSuite extends StreamTest with BeforeAndAfterEach {
 
     // Verify config was persisted in offset metadata
     import org.apache.spark.sql.execution.streaming.checkpointing.OffsetSeqLog
-    val offsetLog = new OffsetSeqLog(spark,
+    val offsetLog = new OffsetSeqLog(
+      spark,
       makeQualifiedPath(checkpointLocation.toString).toString + "/offsets")
     val offsetSeq = offsetLog.get(0)
     assert(offsetSeq.isDefined, "Offset log should have batch 0")
     assert(offsetSeq.get.metadataOpt.isDefined, "Offset metadata should be present")
-    assert(offsetSeq.get.metadataOpt.get.conf.contains(
-      SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key),
+    assert(
+      offsetSeq.get.metadataOpt.get.conf.contains(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key),
       "ENABLE_STREAMING_SOURCE_EVOLUTION should be in offset metadata")
-    assert(offsetSeq.get.metadataOpt.get.conf(
-      SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key) == "true",
+    assert(
+      offsetSeq.get.metadataOpt.get.conf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key) == "true",
       "ENABLE_STREAMING_SOURCE_EVOLUTION should be true in offset metadata")
   }
 
@@ -475,28 +498,25 @@ class StreamingSourceEvolutionSuite extends StreamTest with BeforeAndAfterEach {
       batchTimestampMs = 0,
       conf = Map(
         // Old checkpoint has other configs but not ENABLE_STREAMING_SOURCE_EVOLUTION
-        SQLConf.STREAMING_MULTIPLE_WATERMARK_POLICY.key -> "max"
-      )
-    )
+        SQLConf.STREAMING_MULTIPLE_WATERMARK_POLICY.key -> "max"))
 
     // Verify that reading the config returns the default value (false)
-    val value = OffsetSeqMetadata.readValueOpt(
-      oldMetadata, SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION)
-    assert(value.contains("false"),
+    val value =
+      OffsetSeqMetadata.readValueOpt(oldMetadata, SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION)
+    assert(
+      value.contains("false"),
       s"Expected default value 'false' for missing config, but got: $value")
 
     // Also test with V2 metadata
     val oldMetadataV2 = OffsetSeqMetadataV2(
       batchWatermarkMs = 0,
       batchTimestampMs = 0,
-      conf = Map(
-        SQLConf.STREAMING_MULTIPLE_WATERMARK_POLICY.key -> "max"
-      )
-    )
+      conf = Map(SQLConf.STREAMING_MULTIPLE_WATERMARK_POLICY.key -> "max"))
 
-    val valueV2 = OffsetSeqMetadata.readValueOpt(
-      oldMetadataV2, SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION)
-    assert(valueV2.contains("false"),
+    val valueV2 =
+      OffsetSeqMetadata.readValueOpt(oldMetadataV2, SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION)
+    assert(
+      valueV2.contains("false"),
       s"Expected default value 'false' for missing config in V2, but got: $valueV2")
   }
 
@@ -505,8 +525,8 @@ class StreamingSourceEvolutionSuite extends StreamTest with BeforeAndAfterEach {
   // ==============
 
   /**
-   * Helper method to run tests with source evolution enabled.
-   * Sets offset log format to V2 (OffsetMap) since named sources require it.
+   * Helper method to run tests with source evolution enabled. Sets offset log format to V2
+   * (OffsetMap) since named sources require it.
    */
   def testWithSourceEvolution(testName: String, testTags: Tag*)(testBody: => Any): Unit = {
     test(testName, testTags: _*) {

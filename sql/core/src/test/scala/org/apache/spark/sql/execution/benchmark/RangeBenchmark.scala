@@ -20,8 +20,7 @@ package org.apache.spark.sql.execution.benchmark
 import org.apache.spark.benchmark.Benchmark
 
 /**
- * Benchmark to measure performance for range operator.
- * To run this benchmark:
+ * Benchmark to measure performance for range operator. To run this benchmark:
  * {{{
  *   1. without sbt:
  *      bin/spark-submit --class <this class>

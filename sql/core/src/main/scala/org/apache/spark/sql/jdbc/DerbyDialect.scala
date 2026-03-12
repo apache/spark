@@ -24,15 +24,14 @@ import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types._
 
-
 private case class DerbyDialect() extends JdbcDialect with NoLegacyJDBCError {
 
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:derby")
 
   // See https://db.apache.org/derby/docs/10.15/ref/index.html
-  private val supportedAggregateFunctions = Set("MAX", "MIN", "SUM", "COUNT", "AVG",
-    "VAR_POP", "VAR_SAMP", "STDDEV_POP", "STDDEV_SAMP")
+  private val supportedAggregateFunctions =
+    Set("MAX", "MIN", "SUM", "COUNT", "AVG", "VAR_POP", "VAR_SAMP", "STDDEV_POP", "STDDEV_SAMP")
   private val supportedFunctions = supportedAggregateFunctions
 
   override def isSupportedFunction(funcName: String): Boolean =
@@ -40,12 +39,15 @@ private case class DerbyDialect() extends JdbcDialect with NoLegacyJDBCError {
 
   override def isObjectNotFoundException(e: SQLException): Boolean = {
     e.getSQLState.equalsIgnoreCase("42Y07") ||
-      e.getSQLState.equalsIgnoreCase("42X05") ||
-      e.getSQLState.equalsIgnoreCase("X0X05")
+    e.getSQLState.equalsIgnoreCase("42X05") ||
+    e.getSQLState.equalsIgnoreCase("X0X05")
   }
 
   override def getCatalystType(
-      sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
+      sqlType: Int,
+      typeName: String,
+      size: Int,
+      md: MetadataBuilder): Option[DataType] = {
     if (sqlType == Types.REAL) Option(FloatType) else None
   }
 

@@ -25,7 +25,7 @@ import org.apache.spark.sql.execution.streaming.runtime.{SerializedOffset => Act
 
 @deprecated("use org.apache.spark.sql.execution.streaming.checkpointing.HDFSMetadataLog")
 class HDFSMetadataLog[T <: AnyRef: ClassTag](sparkSession: SparkSession, path: String)
-  extends ActualHDFSMetadataLog[T](sparkSession, path)
+    extends ActualHDFSMetadataLog[T](sparkSession, path)
 
 @deprecated("use org.apache.spark.sql.execution.streaming.runtime.SerializedOffset")
 object SerializedOffset {

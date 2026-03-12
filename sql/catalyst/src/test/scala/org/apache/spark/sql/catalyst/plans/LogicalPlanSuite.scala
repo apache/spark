@@ -32,10 +32,9 @@ import org.apache.spark.sql.types.IntegerType
  */
 class LogicalPlanSuite extends SparkFunSuite {
   private var invocationCount = 0
-  private val function: PartialFunction[LogicalPlan, LogicalPlan] = {
-    case p: Project =>
-      invocationCount += 1
-      p
+  private val function: PartialFunction[LogicalPlan, LogicalPlan] = { case p: Project =>
+    invocationCount += 1
+    p
   }
 
   private val testRelation = LocalRelation()
@@ -67,12 +66,14 @@ class LogicalPlanSuite extends SparkFunSuite {
   test("isStreaming") {
     val relation = LocalRelation(AttributeReference("a", IntegerType, nullable = true)())
     val incrementalRelation = LocalRelation(
-      Seq(AttributeReference("a", IntegerType, nullable = true)()), isStreaming = true)
+      Seq(AttributeReference("a", IntegerType, nullable = true)()),
+      isStreaming = true)
 
     case class TestBinaryRelation(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
       override def output: Seq[Attribute] = left.output ++ right.output
       override protected def withNewChildrenInternal(
-          newLeft: LogicalPlan, newRight: LogicalPlan): LogicalPlan =
+          newLeft: LogicalPlan,
+          newRight: LogicalPlan): LogicalPlan =
         copy(left = newLeft, right = newRight)
     }
 
@@ -88,18 +89,16 @@ class LogicalPlanSuite extends SparkFunSuite {
     val id1 = NamedExpression.newExprId
     val id2 = NamedExpression.newExprId
     @nowarn("cat=deprecation")
-    val plan = Project(Stream(
-      Alias(Literal(1), "a")(exprId = id1),
-      Alias(Literal(2), "b")(exprId = id2)),
+    val plan = Project(
+      Stream(Alias(Literal(1), "a")(exprId = id1), Alias(Literal(2), "b")(exprId = id2)),
       OneRowRelation())
     val result = plan.transformExpressions {
       case Literal(v: Int, IntegerType) if v != 1 =>
         Literal(v + 1, IntegerType)
     }
     @nowarn("cat=deprecation")
-    val expected = Project(Stream(
-      Alias(Literal(1), "a")(exprId = id1),
-      Alias(Literal(3), "b")(exprId = id2)),
+    val expected = Project(
+      Stream(Alias(Literal(1), "a")(exprId = id1), Alias(Literal(3), "b")(exprId = id2)),
       OneRowRelation())
     assert(result.sameResult(expected))
   }
@@ -107,17 +106,15 @@ class LogicalPlanSuite extends SparkFunSuite {
   test("SPARK-45685: transformExpressions works with a LazyList") {
     val id1 = NamedExpression.newExprId
     val id2 = NamedExpression.newExprId
-    val plan = Project(LazyList(
-      Alias(Literal(1), "a")(exprId = id1),
-      Alias(Literal(2), "b")(exprId = id2)),
+    val plan = Project(
+      LazyList(Alias(Literal(1), "a")(exprId = id1), Alias(Literal(2), "b")(exprId = id2)),
       OneRowRelation())
     val result = plan.transformExpressions {
       case Literal(v: Int, IntegerType) if v != 1 =>
         Literal(v + 1, IntegerType)
     }
-    val expected = Project(LazyList(
-      Alias(Literal(1), "a")(exprId = id1),
-      Alias(Literal(3), "b")(exprId = id2)),
+    val expected = Project(
+      LazyList(Alias(Literal(1), "a")(exprId = id1), Alias(Literal(3), "b")(exprId = id2)),
       OneRowRelation())
     assert(result.sameResult(expected))
   }

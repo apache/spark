@@ -25,21 +25,11 @@ class ShowFunctionsParserSuite extends AnalysisTest {
   val nsPlan = CurrentNamespace
 
   test("show functions in the scope") {
-    comparePlans(
-      parsePlan("SHOW FUNCTIONS"),
-      ShowFunctions(nsPlan, true, true, None))
-    comparePlans(
-      parsePlan("SHOW USER FUNCTIONS"),
-      ShowFunctions(nsPlan, true, false, None))
-    comparePlans(
-      parsePlan("SHOW user FUNCTIONS"),
-      ShowFunctions(nsPlan, true, false, None))
-    comparePlans(
-      parsePlan("SHOW SYSTEM FUNCTIONS"),
-      ShowFunctions(nsPlan, false, true, None))
-    comparePlans(
-      parsePlan("SHOW ALL FUNCTIONS"),
-      ShowFunctions(nsPlan, true, true, None))
+    comparePlans(parsePlan("SHOW FUNCTIONS"), ShowFunctions(nsPlan, true, true, None))
+    comparePlans(parsePlan("SHOW USER FUNCTIONS"), ShowFunctions(nsPlan, true, false, None))
+    comparePlans(parsePlan("SHOW user FUNCTIONS"), ShowFunctions(nsPlan, true, false, None))
+    comparePlans(parsePlan("SHOW SYSTEM FUNCTIONS"), ShowFunctions(nsPlan, false, true, None))
+    comparePlans(parsePlan("SHOW ALL FUNCTIONS"), ShowFunctions(nsPlan, true, true, None))
   }
 
   test("show functions matched to a pattern") {
@@ -55,12 +45,8 @@ class ShowFunctionsParserSuite extends AnalysisTest {
   }
 
   test("show functions using the legacy syntax") {
-    comparePlans(
-      parsePlan("SHOW FUNCTIONS a"),
-      ShowFunctions(nsPlan, true, true, Some("a")))
-    comparePlans(
-      parsePlan("SHOW FUNCTIONS LIKE a"),
-      ShowFunctions(nsPlan, true, true, Some("a")))
+    comparePlans(parsePlan("SHOW FUNCTIONS a"), ShowFunctions(nsPlan, true, true, Some("a")))
+    comparePlans(parsePlan("SHOW FUNCTIONS LIKE a"), ShowFunctions(nsPlan, true, true, Some("a")))
     comparePlans(
       parsePlan("SHOW FUNCTIONS LIKE a.b.c"),
       ShowFunctions(UnresolvedNamespace(Seq("a", "b")), true, true, Some("c")))

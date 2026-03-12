@@ -34,7 +34,6 @@ class DataFrameShowSuite extends QueryTest with SharedSparkSession {
     testData.select($"*").show(1000)
   }
 
-
   test("showString: truncate = [0, 20]") {
     val longString = Array.fill(21)("1").mkString
     val df = sparkContext.parallelize(Seq("1", longString)).toDF()
@@ -60,14 +59,14 @@ class DataFrameShowSuite extends QueryTest with SharedSparkSession {
     val longString = Array.fill(21)("1").mkString
     val df = sparkContext.parallelize(Seq("1", longString)).toDF()
     val expectedAnswerForFalse = "-RECORD 0----------------------\n" +
-                                 " value | 1                     \n" +
-                                 "-RECORD 1----------------------\n" +
-                                 " value | 111111111111111111111 \n"
+      " value | 1                     \n" +
+      "-RECORD 1----------------------\n" +
+      " value | 111111111111111111111 \n"
     assert(df.showString(10, truncate = 0, vertical = true) === expectedAnswerForFalse)
     val expectedAnswerForTrue = "-RECORD 0---------------------\n" +
-                                " value | 1                    \n" +
-                                "-RECORD 1---------------------\n" +
-                                " value | 11111111111111111... \n"
+      " value | 1                    \n" +
+      "-RECORD 1---------------------\n" +
+      " value | 11111111111111111... \n"
     assert(df.showString(10, truncate = 20, vertical = true) === expectedAnswerForTrue)
   }
 
@@ -96,14 +95,14 @@ class DataFrameShowSuite extends QueryTest with SharedSparkSession {
     val longString = Array.fill(21)("1").mkString
     val df = sparkContext.parallelize(Seq("1", longString)).toDF()
     val expectedAnswerForFalse = "-RECORD 0----\n" +
-                                 " value | 1   \n" +
-                                 "-RECORD 1----\n" +
-                                 " value | 111 \n"
+      " value | 1   \n" +
+      "-RECORD 1----\n" +
+      " value | 111 \n"
     assert(df.showString(10, truncate = 3, vertical = true) === expectedAnswerForFalse)
     val expectedAnswerForTrue = "-RECORD 0------------------\n" +
-                                " value | 1                 \n" +
-                                "-RECORD 1------------------\n" +
-                                " value | 11111111111111... \n"
+      " value | 1                 \n" +
+      "-RECORD 1------------------\n" +
+      " value | 11111111111111... \n"
     assert(df.showString(10, truncate = 17, vertical = true) === expectedAnswerForTrue)
   }
 
@@ -148,10 +147,7 @@ class DataFrameShowSuite extends QueryTest with SharedSparkSession {
   }
 
   test("showString: array") {
-    val df = Seq(
-      (Array(1, 2, 3), Array(1, 2, 3)),
-      (Array(2, 3, 4), Array(2, 3, 4))
-    ).toDF()
+    val df = Seq((Array(1, 2, 3), Array(1, 2, 3)), (Array(2, 3, 4), Array(2, 3, 4))).toDF()
     val expectedAnswer = """+---------+---------+
                            ||       _1|       _2|
                            |+---------+---------+
@@ -163,24 +159,20 @@ class DataFrameShowSuite extends QueryTest with SharedSparkSession {
   }
 
   test("showString: array, vertical = true") {
-    val df = Seq(
-      (Array(1, 2, 3), Array(1, 2, 3)),
-      (Array(2, 3, 4), Array(2, 3, 4))
-    ).toDF()
+    val df = Seq((Array(1, 2, 3), Array(1, 2, 3)), (Array(2, 3, 4), Array(2, 3, 4))).toDF()
     val expectedAnswer = "-RECORD 0--------\n" +
-                         " _1  | [1, 2, 3] \n" +
-                         " _2  | [1, 2, 3] \n" +
-                         "-RECORD 1--------\n" +
-                         " _1  | [2, 3, 4] \n" +
-                         " _2  | [2, 3, 4] \n"
+      " _1  | [1, 2, 3] \n" +
+      " _2  | [1, 2, 3] \n" +
+      "-RECORD 1--------\n" +
+      " _1  | [2, 3, 4] \n" +
+      " _2  | [2, 3, 4] \n"
     assert(df.showString(10, vertical = true) === expectedAnswer)
   }
 
   test("showString: binary") {
     val df = Seq(
       ("12".getBytes(StandardCharsets.UTF_8), "ABC.".getBytes(StandardCharsets.UTF_8)),
-      ("34".getBytes(StandardCharsets.UTF_8), "12346".getBytes(StandardCharsets.UTF_8))
-    ).toDF()
+      ("34".getBytes(StandardCharsets.UTF_8), "12346".getBytes(StandardCharsets.UTF_8))).toDF()
     val expectedAnswer = """+-------+----------------+
                            ||     _1|              _2|
                            |+-------+----------------+
@@ -196,24 +188,20 @@ class DataFrameShowSuite extends QueryTest with SharedSparkSession {
   test("showString: binary, vertical = true") {
     val df = Seq(
       ("12".getBytes(StandardCharsets.UTF_8), "ABC.".getBytes(StandardCharsets.UTF_8)),
-      ("34".getBytes(StandardCharsets.UTF_8), "12346".getBytes(StandardCharsets.UTF_8))
-    ).toDF()
+      ("34".getBytes(StandardCharsets.UTF_8), "12346".getBytes(StandardCharsets.UTF_8))).toDF()
     val expectedAnswer = "-RECORD 0---------------\n" +
-                         " _1  | [31 32]          \n" +
-                         " _2  | [41 42 43 2E]    \n" +
-                         "-RECORD 1---------------\n" +
-                         " _1  | [33 34]          \n" +
-                         " _2  | [31 32 33 34 36] \n"
+      " _1  | [31 32]          \n" +
+      " _2  | [41 42 43 2E]    \n" +
+      "-RECORD 1---------------\n" +
+      " _1  | [33 34]          \n" +
+      " _2  | [31 32 33 34 36] \n"
     withSQLConf(SQLConf.BINARY_OUTPUT_STYLE.key -> "HEX_DISCRETE") {
       assert(df.showString(10, vertical = true) === expectedAnswer)
     }
   }
 
   test("showString: minimum column width") {
-    val df = Seq(
-      (1, 1),
-      (2, 2)
-    ).toDF()
+    val df = Seq((1, 1), (2, 2)).toDF()
     val expectedAnswer = """+---+---+
                            || _1| _2|
                            |+---+---+
@@ -225,23 +213,21 @@ class DataFrameShowSuite extends QueryTest with SharedSparkSession {
   }
 
   test("showString: minimum column width, vertical = true") {
-    val df = Seq(
-      (1, 1),
-      (2, 2)
-    ).toDF()
+    val df = Seq((1, 1), (2, 2)).toDF()
     val expectedAnswer = "-RECORD 0--\n" +
-                         " _1  | 1   \n" +
-                         " _2  | 1   \n" +
-                         "-RECORD 1--\n" +
-                         " _1  | 2   \n" +
-                         " _2  | 2   \n"
+      " _1  | 1   \n" +
+      " _2  | 1   \n" +
+      "-RECORD 1--\n" +
+      " _1  | 2   \n" +
+      " _2  | 2   \n"
     assert(df.showString(10, vertical = true) === expectedAnswer)
   }
 
   test("SPARK-33690: showString: escape meta-characters") {
     val df1 = spark.sql("SELECT 'aaa\nbbb\tccc\rddd\feee\bfff\u000Bggg\u0007hhh'")
-    assert(df1.showString(1, truncate = 0) ===
-      """+--------------------------------------+
+    assert(
+      df1.showString(1, truncate = 0) ===
+        """+--------------------------------------+
         ||aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh|
         |+--------------------------------------+
         ||aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh|
@@ -249,8 +235,9 @@ class DataFrameShowSuite extends QueryTest with SharedSparkSession {
         |""".stripMargin)
 
     val df2 = spark.sql("SELECT array('aaa\nbbb\tccc\rddd\feee\bfff\u000Bggg\u0007hhh')")
-    assert(df2.showString(1, truncate = 0) ===
-      """+---------------------------------------------+
+    assert(
+      df2.showString(1, truncate = 0) ===
+        """+---------------------------------------------+
         ||array(aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh)|
         |+---------------------------------------------+
         ||[aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh]     |
@@ -259,8 +246,9 @@ class DataFrameShowSuite extends QueryTest with SharedSparkSession {
 
     val df3 =
       spark.sql("SELECT map('aaa\nbbb\tccc', 'aaa\nbbb\tccc\rddd\feee\bfff\u000Bggg\u0007hhh')")
-    assert(df3.showString(1, truncate = 0) ===
-      """+----------------------------------------------------------+
+    assert(
+      df3.showString(1, truncate = 0) ===
+        """+----------------------------------------------------------+
         ||map(aaa\nbbb\tccc, aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh)|
         |+----------------------------------------------------------+
         ||{aaa\nbbb\tccc -> aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh} |
@@ -269,8 +257,9 @@ class DataFrameShowSuite extends QueryTest with SharedSparkSession {
 
     val df4 =
       spark.sql("SELECT named_struct('v', 'aaa\nbbb\tccc\rddd\feee\bfff\u000Bggg\u0007hhh')")
-    assert(df4.showString(1, truncate = 0) ===
-      """+-------------------------------------------------------+
+    assert(
+      df4.showString(1, truncate = 0) ===
+        """+-------------------------------------------------------+
         ||named_struct(v, aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh)|
         |+-------------------------------------------------------+
         ||{aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh}               |
@@ -290,32 +279,35 @@ class DataFrameShowSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-7319 showString, vertical = true") {
     val expectedAnswer = "-RECORD 0----\n" +
-                         " key   | 1   \n" +
-                         " value | 1   \n" +
-                         "only showing top 1 row"
+      " key   | 1   \n" +
+      " value | 1   \n" +
+      "only showing top 1 row"
     assert(testData.select($"*").showString(1, vertical = true) === expectedAnswer)
   }
 
   test("SPARK-23023 Cast rows to strings in showString") {
     val df1 = Seq(Seq(1, 2, 3, 4)).toDF("a")
-    assert(df1.showString(10) ===
-      s"""+------------+
+    assert(
+      df1.showString(10) ===
+        s"""+------------+
          ||           a|
          |+------------+
          ||[1, 2, 3, 4]|
          |+------------+
          |""".stripMargin)
     val df2 = Seq(Map(1 -> "a", 2 -> "b")).toDF("a")
-    assert(df2.showString(10) ===
-      s"""+----------------+
+    assert(
+      df2.showString(10) ===
+        s"""+----------------+
          ||               a|
          |+----------------+
          ||{1 -> a, 2 -> b}|
          |+----------------+
          |""".stripMargin)
     val df3 = Seq(((1, "a"), 0), ((2, "b"), 0)).toDF("a", "b")
-    assert(df3.showString(10) ===
-      s"""+------+---+
+    assert(
+      df3.showString(10) ===
+        s"""+------+---+
          ||     a|  b|
          |+------+---+
          ||{1, a}|  0|
@@ -366,20 +358,21 @@ class DataFrameShowSuite extends QueryTest with SharedSparkSession {
     val ts = Timestamp.valueOf("2016-12-01 00:00:00")
     val df = Seq((d, ts)).toDF("d", "ts")
     val expectedAnswer = "-RECORD 0------------------\n" +
-                         " d   | 2016-12-01          \n" +
-                         " ts  | 2016-12-01 00:00:00 \n"
+      " d   | 2016-12-01          \n" +
+      " ts  | 2016-12-01 00:00:00 \n"
     assert(df.showString(1, truncate = 0, vertical = true) === expectedAnswer)
 
     withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
 
       val expectedAnswer = "-RECORD 0------------------\n" +
-                           " d   | 2016-12-01          \n" +
-                           " ts  | 2016-12-01 08:00:00 \n"
+        " d   | 2016-12-01          \n" +
+        " ts  | 2016-12-01 08:00:00 \n"
       assert(df.showString(1, truncate = 0, vertical = true) === expectedAnswer)
     }
   }
 
-  test("SPARK-8608: call `show` on local DataFrame with random columns should return same value") {
+  test(
+    "SPARK-8608: call `show` on local DataFrame with random columns should return same value") {
     val df = testData.select(rand(33))
     assert(df.showString(5) == df.showString(5))
 
@@ -428,8 +421,8 @@ class DataFrameShowSuite extends QueryTest with SharedSparkSession {
     assert(
       df9.toString ===
         "[c1: bigint, c2: struct<_1: bigint," +
-          " _2: struct<_1: bigint," +
-          " _2: bigint ... 2 more fields> ... 2 more fields> ... 2 more fields]")
+        " _2: struct<_1: bigint," +
+        " _2: bigint ... 2 more fields> ... 2 more fields> ... 2 more fields]")
 
   }
 
@@ -440,8 +433,9 @@ class DataFrameShowSuite extends QueryTest with SharedSparkSession {
     Console.withOut(captured) {
       df1.printSchema()
     }
-    assert(captured.toString ===
-      """root
+    assert(
+      captured.toString ===
+        """root
         | |-- aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh: string (nullable = false)
         |
         |""".stripMargin)
@@ -451,8 +445,9 @@ class DataFrameShowSuite extends QueryTest with SharedSparkSession {
     Console.withOut(captured) {
       df2.printSchema()
     }
-    assert(captured.toString ===
-      """root
+    assert(
+      captured.toString ===
+        """root
         | |-- array(aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh): array (nullable = false)
         | |    |-- element: string (containsNull = false)
         |
@@ -464,8 +459,9 @@ class DataFrameShowSuite extends QueryTest with SharedSparkSession {
     Console.withOut(captured) {
       df3.printSchema()
     }
-    assert(captured.toString ===
-      """root
+    assert(
+      captured.toString ===
+        """root
         | |-- map(aaa\nbbb\tccc, aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh): map (nullable = false)
         | |    |-- key: string
         | |    |-- value: string (valueContainsNull = false)
@@ -478,8 +474,9 @@ class DataFrameShowSuite extends QueryTest with SharedSparkSession {
     Console.withOut(captured) {
       df4.printSchema()
     }
-    assert(captured.toString ===
-      """root
+    assert(
+      captured.toString ===
+        """root
         | |-- named_struct(v, aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh): struct (nullable = false)
         | |    |-- v: string (nullable = false)
         |

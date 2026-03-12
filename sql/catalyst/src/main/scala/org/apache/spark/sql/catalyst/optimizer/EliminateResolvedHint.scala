@@ -47,10 +47,9 @@ object EliminateResolvedHint extends Rule[LogicalPlan] {
     } else {
       joinsWithHints
     }
-    joinsAndSubqueriesWithHints.transformUp {
-      case h: ResolvedHint =>
-        hintErrorHandler.joinNotFoundForJoinHint(h.hints)
-        h.child
+    joinsAndSubqueriesWithHints.transformUp { case h: ResolvedHint =>
+      hintErrorHandler.joinNotFoundForJoinHint(h.hints)
+      h.child
     }
   }
 
@@ -72,9 +71,9 @@ object EliminateResolvedHint extends Rule[LogicalPlan] {
 
   /**
    * Extract all hints from the plan, returning a list of extracted hints and the transformed plan
-   * with [[ResolvedHint]] nodes removed. The returned hint list comes in top-down order.
-   * Note that hints can only be extracted from under certain nodes. Those that cannot be extracted
-   * in this method will be cleaned up later by this rule, and may emit warnings depending on the
+   * with [[ResolvedHint]] nodes removed. The returned hint list comes in top-down order. Note
+   * that hints can only be extracted from under certain nodes. Those that cannot be extracted in
+   * this method will be cleaned up later by this rule, and may emit warnings depending on the
    * configurations.
    */
   private[sql] def extractHintsFromPlan(plan: LogicalPlan): (LogicalPlan, Seq[HintInfo]) = {

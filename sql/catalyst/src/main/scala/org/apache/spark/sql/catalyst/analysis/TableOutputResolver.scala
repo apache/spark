@@ -40,11 +40,10 @@ import org.apache.spark.sql.types.{ArrayType, DataType, DecimalType, IntegralTyp
 object TableOutputResolver extends SQLConfHelper with Logging {
 
   /**
-   * Modes for filling in default or null values for missing columns.
-   * If FILL, fill missing top-level columns with their default values.
-   * If RECURSE, fill missing top-level columns and also recurse into nested struct
-   * fields to fill null.
-   * If NONE, do not fill any missing columns.
+   * Modes for filling in default or null values for missing columns. If FILL, fill missing
+   * top-level columns with their default values. If RECURSE, fill missing top-level columns and
+   * also recurse into nested struct fields to fill null. If NONE, do not fill any missing
+   * columns.
    */
   object DefaultValueFillMode extends Enumeration {
     val FILL, RECURSE, NONE = Value
@@ -58,9 +57,8 @@ object TableOutputResolver extends SQLConfHelper with Logging {
     if (expected.size != query.output.size) {
       throw new AnalysisException(
         errorClass = "ASSIGNMENT_ARITY_MISMATCH",
-        messageParameters = Map(
-          "numTarget" -> expected.size.toString,
-          "numExpr" -> query.output.size.toString))
+        messageParameters =
+          Map("numTarget" -> expected.size.toString, "numExpr" -> query.output.size.toString))
     }
 
     val resolved: Seq[NamedExpression] = {
@@ -96,7 +94,9 @@ object TableOutputResolver extends SQLConfHelper with Logging {
 
     if (expected.size < query.output.size) {
       throw QueryCompilationErrors.cannotWriteTooManyColumnsToTableError(
-        tableName, expected.map(_.name), query.output)
+        tableName,
+        expected.map(_.name),
+        query.output)
     }
 
     val errors = new mutable.ArrayBuffer[String]()
@@ -116,14 +116,17 @@ object TableOutputResolver extends SQLConfHelper with Logging {
     } else {
       if (expected.size > query.output.size) {
         throw QueryCompilationErrors.cannotWriteNotEnoughColumnsToTableError(
-          tableName, expected.map(_.name), query.output)
+          tableName,
+          expected.map(_.name),
+          query.output)
       }
       resolveColumnsByPosition(tableName, query.output, expected, conf, errors += _)
     }
 
     if (errors.nonEmpty) {
       throw QueryCompilationErrors.incompatibleDataToTableCannotFindDataError(
-        tableName, expected.map(_.name).map(toSQLId).mkString(", "))
+        tableName,
+        expected.map(_.name).map(toSQLId).mkString(", "))
     }
 
     if (resolved == query.output) {
@@ -145,9 +148,10 @@ object TableOutputResolver extends SQLConfHelper with Logging {
     val fillChildDefaultValue = defaultValueFillMode == RECURSE
     (value.dataType, col.dataType) match {
       // no need to reorder inner fields or cast if types are already compatible
-      case (valueType, colType) if DataType.equalsIgnoreCompatibleNullability(valueType, colType) =>
-        val canWriteExpr = canWrite(
-          tableName, valueType, colType, byName = true, conf, addError, colPath)
+      case (valueType, colType)
+          if DataType.equalsIgnoreCompatibleNullability(valueType, colType) =>
+        val canWriteExpr =
+          canWrite(tableName, valueType, colType, byName = true, conf, addError, colPath)
         if (canWriteExpr) {
           val nullsHandled = checkNullability(value, col, conf, colPath)
           applyColumnMetadata(nullsHandled, col)
@@ -156,18 +160,42 @@ object TableOutputResolver extends SQLConfHelper with Logging {
         }
       case (valueType: StructType, colType: StructType) =>
         val resolvedValue = resolveStructType(
-          tableName, value, valueType, col, colType,
-          byName = true, conf, addError, colPath, fillChildDefaultValue)
+          tableName,
+          value,
+          valueType,
+          col,
+          colType,
+          byName = true,
+          conf,
+          addError,
+          colPath,
+          fillChildDefaultValue)
         resolvedValue.getOrElse(value)
       case (valueType: ArrayType, colType: ArrayType) =>
         val resolvedValue = resolveArrayType(
-          tableName, value, valueType, col, colType,
-          byName = true, conf, addError, colPath, fillChildDefaultValue)
+          tableName,
+          value,
+          valueType,
+          col,
+          colType,
+          byName = true,
+          conf,
+          addError,
+          colPath,
+          fillChildDefaultValue)
         resolvedValue.getOrElse(value)
       case (valueType: MapType, colType: MapType) =>
         val resolvedValue = resolveMapType(
-          tableName, value, valueType, col, colType,
-          byName = true, conf, addError, colPath, fillChildDefaultValue)
+          tableName,
+          value,
+          valueType,
+          col,
+          colType,
+          byName = true,
+          conf,
+          addError,
+          colPath,
+          fillChildDefaultValue)
         resolvedValue.getOrElse(value)
       case _ =>
         checkUpdate(tableName, value, col, conf, addError, colPath)
@@ -190,8 +218,13 @@ object TableOutputResolver extends SQLConfHelper with Logging {
     }
 
     val canWriteValue = canWrite(
-      tableName, value.dataType, attrTypeWithoutCharVarchar,
-      byName = true, conf, addError, colPath)
+      tableName,
+      value.dataType,
+      attrTypeWithoutCharVarchar,
+      byName = true,
+      conf,
+      addError,
+      colPath)
 
     if (canWriteValue) {
       val nullCheckedValue = checkNullability(value, attr, conf, colPath)
@@ -207,30 +240,26 @@ object TableOutputResolver extends SQLConfHelper with Logging {
     }
   }
 
-
   /**
    * Add an [[Alias]] with the name and metadata from the given target table attribute.
    *
-   * The metadata may be used by writers to get certain table properties.
-   * For example [[org.apache.spark.sql.catalyst.json.JacksonGenerator]]
-   * looks for default value metadata to control some behavior.
-   * This is not the best design, but it is the way at this time.
-   * We should change all the writers to pick up table configuration
-   * from the table directly. However, there are many third-party
-   * connectors that may rely on this behavior.
+   * The metadata may be used by writers to get certain table properties. For example
+   * [[org.apache.spark.sql.catalyst.json.JacksonGenerator]] looks for default value metadata to
+   * control some behavior. This is not the best design, but it is the way at this time. We should
+   * change all the writers to pick up table configuration from the table directly. However, there
+   * are many third-party connectors that may rely on this behavior.
    *
-   * We also must remove any [[CharVarcharUtils.CHAR_VARCHAR_TYPE_STRING_METADATA_KEY]]
-   * metadata from flowing out the top of the query.
-   * If we don't do this, the write operation will remain unresolved, or worse
-   * it may flip from resolved to unresolved.  We assume that the read-side
+   * We also must remove any [[CharVarcharUtils.CHAR_VARCHAR_TYPE_STRING_METADATA_KEY]] metadata
+   * from flowing out the top of the query. If we don't do this, the write operation will remain
+   * unresolved, or worse it may flip from resolved to unresolved. We assume that the read-side
    * handling is performed lower in the query.
    *
-   * Moreover, we cannot propagate other source metadata, like source table
-   * default value definitions without confusing writers with reader metadata.
-   * So we need to be sure we block the source metadata from propagating.
+   * Moreover, we cannot propagate other source metadata, like source table default value
+   * definitions without confusing writers with reader metadata. So we need to be sure we block
+   * the source metadata from propagating.
    *
-   * See SPARK-52772 for a discussion on rewrites that caused trouble with
-   * going from resolved to unresolved.
+   * See SPARK-52772 for a discussion on rewrites that caused trouble with going from resolved to
+   * unresolved.
    */
   private def applyColumnMetadata(expr: Expression, column: Attribute): NamedExpression = {
     // We have dealt with the required write-side char/varchar processing.
@@ -278,7 +307,6 @@ object TableOutputResolver extends SQLConfHelper with Logging {
     }
   }
 
-
   private def canWrite(
       tableName: String,
       valueType: DataType,
@@ -290,8 +318,14 @@ object TableOutputResolver extends SQLConfHelper with Logging {
     conf.storeAssignmentPolicy match {
       case StoreAssignmentPolicy.STRICT | StoreAssignmentPolicy.ANSI =>
         DataTypeUtils.canWrite(
-          tableName, valueType, expectedType, byName, conf.resolver, colPath.quoted,
-          conf.storeAssignmentPolicy, addError)
+          tableName,
+          valueType,
+          expectedType,
+          byName,
+          conf.resolver,
+          colPath.quoted,
+          conf.storeAssignmentPolicy,
+          addError)
       case _ =>
         true
     }
@@ -317,14 +351,14 @@ object TableOutputResolver extends SQLConfHelper with Logging {
         }
         if (defaultExpr.isEmpty) {
           throw QueryCompilationErrors.incompatibleDataToTableCannotFindDataError(
-            tableName, newColPath.quoted
-          )
+            tableName,
+            newColPath.quoted)
         }
         Some(applyColumnMetadata(defaultExpr.get, expectedCol))
       } else if (matched.length > 1) {
         throw QueryCompilationErrors.incompatibleDataToTableAmbiguousColumnNameError(
-          tableName, newColPath.quoted
-        )
+          tableName,
+          newColPath.quoted)
       } else {
         matchedCols += matched.head.name
         val matchedCol = matched.head
@@ -335,33 +369,68 @@ object TableOutputResolver extends SQLConfHelper with Logging {
         (matchedCol.dataType, actualExpectedCol.dataType) match {
           case (matchedType: StructType, expectedType: StructType) =>
             resolveStructType(
-              tableName, matchedCol, matchedType, actualExpectedCol, expectedType,
-              byName = true, conf, addError, newColPath, childFillDefaultValue)
+              tableName,
+              matchedCol,
+              matchedType,
+              actualExpectedCol,
+              expectedType,
+              byName = true,
+              conf,
+              addError,
+              newColPath,
+              childFillDefaultValue)
           case (matchedType: ArrayType, expectedType: ArrayType) =>
             resolveArrayType(
-              tableName, matchedCol, matchedType, actualExpectedCol, expectedType,
-              byName = true, conf, addError, newColPath, childFillDefaultValue)
+              tableName,
+              matchedCol,
+              matchedType,
+              actualExpectedCol,
+              expectedType,
+              byName = true,
+              conf,
+              addError,
+              newColPath,
+              childFillDefaultValue)
           case (matchedType: MapType, expectedType: MapType) =>
             resolveMapType(
-              tableName, matchedCol, matchedType, actualExpectedCol, expectedType,
-              byName = true, conf, addError, newColPath, childFillDefaultValue)
+              tableName,
+              matchedCol,
+              matchedType,
+              actualExpectedCol,
+              expectedType,
+              byName = true,
+              conf,
+              addError,
+              newColPath,
+              childFillDefaultValue)
           case _ =>
             checkField(
-              tableName, actualExpectedCol, matchedCol, byName = true, conf, addError, newColPath)
+              tableName,
+              actualExpectedCol,
+              matchedCol,
+              byName = true,
+              conf,
+              addError,
+              newColPath)
         }
       }
     }
 
     if (reordered.length == expectedCols.length) {
       if (matchedCols.size < inputCols.length) {
-        val extraCols = inputCols.filterNot(col => matchedCols.contains(col.name))
-          .map(col => s"${toSQLId(col.name)}").mkString(", ")
+        val extraCols = inputCols
+          .filterNot(col => matchedCols.contains(col.name))
+          .map(col => s"${toSQLId(col.name)}")
+          .mkString(", ")
         if (colPath.isEmpty) {
-          throw QueryCompilationErrors.incompatibleDataToTableExtraColumnsError(tableName,
+          throw QueryCompilationErrors.incompatibleDataToTableExtraColumnsError(
+            tableName,
             extraCols)
         } else {
           throw QueryCompilationErrors.incompatibleDataToTableExtraStructFieldsError(
-            tableName, colPath.quoted, extraCols)
+            tableName,
+            colPath.quoted,
+            extraCols)
         }
       } else {
         reordered
@@ -382,28 +451,36 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       attr.withDataType { CharVarcharUtils.getRawType(attr.metadata).getOrElse(attr.dataType) }
     }
     if (inputCols.size > actualExpectedCols.size) {
-      val extraColsStr = inputCols.takeRight(inputCols.size - actualExpectedCols.size)
+      val extraColsStr = inputCols
+        .takeRight(inputCols.size - actualExpectedCols.size)
         .map(col => toSQLId(col.name))
         .mkString(", ")
       if (colPath.isEmpty) {
-        throw QueryCompilationErrors.cannotWriteTooManyColumnsToTableError(tableName,
-          actualExpectedCols.map(_.name), inputCols.map(_.toAttribute))
+        throw QueryCompilationErrors.cannotWriteTooManyColumnsToTableError(
+          tableName,
+          actualExpectedCols.map(_.name),
+          inputCols.map(_.toAttribute))
       } else {
         throw QueryCompilationErrors.incompatibleDataToTableExtraStructFieldsError(
-          tableName, colPath.quoted, extraColsStr
-        )
+          tableName,
+          colPath.quoted,
+          extraColsStr)
       }
     } else if (inputCols.size < actualExpectedCols.size) {
-      val missingColsStr = actualExpectedCols.takeRight(actualExpectedCols.size - inputCols.size)
+      val missingColsStr = actualExpectedCols
+        .takeRight(actualExpectedCols.size - inputCols.size)
         .map(col => toSQLId(col.name))
         .mkString(", ")
       if (colPath.isEmpty) {
-        throw QueryCompilationErrors.cannotWriteNotEnoughColumnsToTableError(tableName,
-          actualExpectedCols.map(_.name), inputCols.map(_.toAttribute))
+        throw QueryCompilationErrors.cannotWriteNotEnoughColumnsToTableError(
+          tableName,
+          actualExpectedCols.map(_.name),
+          inputCols.map(_.toAttribute))
       } else {
         throw QueryCompilationErrors.incompatibleDataToTableStructMissingFieldsError(
-          tableName, colPath.quoted, missingColsStr
-        )
+          tableName,
+          colPath.quoted,
+          missingColsStr)
       }
     }
 
@@ -412,16 +489,40 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       (inputCol.dataType, expectedCol.dataType) match {
         case (inputType: StructType, expectedType: StructType) =>
           resolveStructType(
-            tableName, inputCol, inputType, expectedCol, expectedType,
-            byName = false, conf, addError, newColPath, fillDefaultValue = false)
+            tableName,
+            inputCol,
+            inputType,
+            expectedCol,
+            expectedType,
+            byName = false,
+            conf,
+            addError,
+            newColPath,
+            fillDefaultValue = false)
         case (inputType: ArrayType, expectedType: ArrayType) =>
           resolveArrayType(
-            tableName, inputCol, inputType, expectedCol, expectedType,
-            byName = false, conf, addError, newColPath, fillDefaultValue = false)
+            tableName,
+            inputCol,
+            inputType,
+            expectedCol,
+            expectedType,
+            byName = false,
+            conf,
+            addError,
+            newColPath,
+            fillDefaultValue = false)
         case (inputType: MapType, expectedType: MapType) =>
           resolveMapType(
-            tableName, inputCol, inputType, expectedCol, expectedType,
-            byName = false, conf, addError, newColPath, fillDefaultValue = false)
+            tableName,
+            inputCol,
+            inputType,
+            expectedCol,
+            expectedType,
+            byName = false,
+            conf,
+            addError,
+            newColPath,
+            fillDefaultValue = false)
         case _ =>
           checkField(tableName, expectedCol, inputCol, byName = false, conf, addError, newColPath)
       }
@@ -440,10 +541,7 @@ object TableOutputResolver extends SQLConfHelper with Logging {
     }
   }
 
-  private def requiresNullChecks(
-      input: Expression,
-      attr: Attribute,
-      conf: SQLConf): Boolean = {
+  private def requiresNullChecks(input: Expression, attr: Attribute, conf: SQLConf): Boolean = {
     input.nullable && !attr.nullable && conf.storeAssignmentPolicy != StoreAssignmentPolicy.LEGACY
   }
 
@@ -464,11 +562,22 @@ object TableOutputResolver extends SQLConfHelper with Logging {
     }
     val defaultValueMode = if (fillDefaultValue) RECURSE else NONE
     val resolved = if (byName) {
-      reorderColumnsByName(tableName, fields, toAttributes(expectedType), conf, addError, colPath,
+      reorderColumnsByName(
+        tableName,
+        fields,
+        toAttributes(expectedType),
+        conf,
+        addError,
+        colPath,
         defaultValueMode)
     } else {
       resolveColumnsByPosition(
-        tableName, fields, toAttributes(expectedType), conf, addError, colPath)
+        tableName,
+        fields,
+        toAttributes(expectedType),
+        conf,
+        addError,
+        colPath)
     }
     if (resolved.length == expectedType.length) {
       val struct = CreateStruct(resolved)
@@ -500,7 +609,13 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       AttributeReference("element", expectedType.elementType, expectedType.containsNull)()
     val res = if (byName) {
       val defaultValueMode = if (fillDefaultValue) RECURSE else NONE
-      reorderColumnsByName(tableName, Seq(param), Seq(fakeAttr), conf, addError, colPath,
+      reorderColumnsByName(
+        tableName,
+        Seq(param),
+        Seq(fakeAttr),
+        conf,
+        addError,
+        colPath,
         defaultValueMode)
     } else {
       resolveColumnsByPosition(tableName, Seq(param), Seq(fakeAttr), conf, addError, colPath)
@@ -537,10 +652,22 @@ object TableOutputResolver extends SQLConfHelper with Logging {
     val fakeKeyAttr = AttributeReference("key", expectedType.keyType, nullable = false)()
     val defaultValueFillMode = if (fillDefaultValue) RECURSE else NONE
     val resKey = if (byName) {
-      reorderColumnsByName(tableName, Seq(keyParam), Seq(fakeKeyAttr), conf, addError, colPath,
+      reorderColumnsByName(
+        tableName,
+        Seq(keyParam),
+        Seq(fakeKeyAttr),
+        conf,
+        addError,
+        colPath,
         defaultValueFillMode)
     } else {
-      resolveColumnsByPosition(tableName, Seq(keyParam), Seq(fakeKeyAttr), conf, addError, colPath)
+      resolveColumnsByPosition(
+        tableName,
+        Seq(keyParam),
+        Seq(fakeKeyAttr),
+        conf,
+        addError,
+        colPath)
     }
 
     val valueParam =
@@ -548,11 +675,22 @@ object TableOutputResolver extends SQLConfHelper with Logging {
     val fakeValueAttr =
       AttributeReference("value", expectedType.valueType, expectedType.valueContainsNull)()
     val resValue = if (byName) {
-      reorderColumnsByName(tableName, Seq(valueParam), Seq(fakeValueAttr), conf, addError, colPath,
+      reorderColumnsByName(
+        tableName,
+        Seq(valueParam),
+        Seq(fakeValueAttr),
+        conf,
+        addError,
+        colPath,
         defaultValueFillMode)
     } else {
       resolveColumnsByPosition(
-        tableName, Seq(valueParam), Seq(fakeValueAttr), conf, addError, colPath)
+        tableName,
+        Seq(valueParam),
+        Seq(fakeValueAttr),
+        conf,
+        addError,
+        colPath)
     }
 
     if (resKey.length == 1 && resValue.length == 1) {
@@ -618,7 +756,7 @@ object TableOutputResolver extends SQLConfHelper with Logging {
 
   private def canCauseCastOverflow(cast: Cast): Boolean = {
     containsIntegralOrDecimalType(cast.dataType) &&
-      !Cast.canUpCast(cast.child.dataType, cast.dataType)
+    !Cast.canUpCast(cast.child.dataType, cast.dataType)
   }
 
   private def checkField(
@@ -638,8 +776,13 @@ object TableOutputResolver extends SQLConfHelper with Logging {
     }
 
     val canWriteExpr = canWrite(
-      tableName, queryExpr.dataType, attrTypeWithoutCharVarchar,
-      byName, conf, addError, colPath)
+      tableName,
+      queryExpr.dataType,
+      attrTypeWithoutCharVarchar,
+      byName,
+      conf,
+      addError,
+      colPath)
 
     if (canWriteExpr) {
       val prepared =
@@ -683,8 +826,8 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       val newFieldExprs = st.indices.map { i =>
         unwrapUDT(GetStructField(expr, i))
       }
-      val struct = CreateNamedStruct(st.zip(newFieldExprs).flatMap {
-        case (field, newExpr) => Seq(Literal(field.name), newExpr)
+      val struct = CreateNamedStruct(st.zip(newFieldExprs).flatMap { case (field, newExpr) =>
+        Seq(Literal(field.name), newExpr)
       })
       if (expr.nullable) {
         If(IsNull(expr), Literal(null, struct.dataType), struct)

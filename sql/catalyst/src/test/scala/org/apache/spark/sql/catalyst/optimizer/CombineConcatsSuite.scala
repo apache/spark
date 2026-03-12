@@ -23,7 +23,6 @@ import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 
-
 class CombineConcatsSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
@@ -31,10 +30,10 @@ class CombineConcatsSuite extends PlanTest {
   }
 
   protected def assertEquivalent(e1: Expression, e2: Expression): Unit = {
-    val correctAnswer = Limit(Literal(1), Project(Alias(e2, "out")() :: Nil, OneRowRelation()))
-      .analyze
-    val actual = Optimize.execute(Limit(Literal(1), Project(Alias(e1, "out")() :: Nil,
-      OneRowRelation())).analyze)
+    val correctAnswer =
+      Limit(Literal(1), Project(Alias(e2, "out")() :: Nil, OneRowRelation())).analyze
+    val actual = Optimize.execute(
+      Limit(Literal(1), Project(Alias(e1, "out")() :: Nil, OneRowRelation())).analyze)
     comparePlans(actual, correctAnswer)
   }
 
@@ -45,34 +44,33 @@ class CombineConcatsSuite extends PlanTest {
     assertEquivalent(
       Concat(
         Concat(str("a") :: str("b") :: Nil) ::
-        str("c") ::
-        str("d") ::
-        Nil),
+          str("c") ::
+          str("d") ::
+          Nil),
       Concat(str("a") :: str("b") :: str("c") :: str("d") :: Nil))
     assertEquivalent(
       Concat(
         str("a") ::
-        Concat(str("b") :: str("c") :: Nil) ::
-        str("d") ::
-        Nil),
+          Concat(str("b") :: str("c") :: Nil) ::
+          str("d") ::
+          Nil),
       Concat(str("a") :: str("b") :: str("c") :: str("d") :: Nil))
     assertEquivalent(
       Concat(
         str("a") ::
-        str("b") ::
-        Concat(str("c") :: str("d") :: Nil) ::
-        Nil),
+          str("b") ::
+          Concat(str("c") :: str("d") :: Nil) ::
+          Nil),
       Concat(str("a") :: str("b") :: str("c") :: str("d") :: Nil))
     assertEquivalent(
       Concat(
         Concat(
           str("a") ::
-          Concat(
-            str("b") ::
-            Concat(str("c") :: str("d") :: Nil) ::
+            Concat(str("b") ::
+              Concat(str("c") :: str("d") :: Nil) ::
+              Nil) ::
             Nil) ::
-          Nil) ::
-        Nil),
+          Nil),
       Concat(str("a") :: str("b") :: str("c") :: str("d") :: Nil))
   }
 
@@ -80,8 +78,8 @@ class CombineConcatsSuite extends PlanTest {
     assertEquivalent(
       Concat(
         Concat(str("a") :: str("b") :: Nil) ::
-        Concat(binary("c") :: binary("d") :: Nil) ::
-        Nil),
+          Concat(binary("c") :: binary("d") :: Nil) ::
+          Nil),
       Concat(str("a") :: str("b") :: binary("c") :: binary("d") :: Nil))
   }
 }

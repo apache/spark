@@ -18,8 +18,8 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.sql.connector.read.PartitionReader
 
-class PartitionReaderFromIterator[InternalRow](
-    iter: Iterator[InternalRow]) extends PartitionReader[InternalRow] {
+class PartitionReaderFromIterator[InternalRow](iter: Iterator[InternalRow])
+    extends PartitionReader[InternalRow] {
   private var currentValue: InternalRow = _
 
   override def next(): Boolean = {

@@ -23,8 +23,8 @@ import org.apache.spark.sql.types.DataType
 import org.apache.spark.unsafe.Platform
 
 /**
- * Helper for MaxMinByK aggregate providing heap operations.
- * Heap operates on indices to avoid copying large values.
+ * Helper for MaxMinByK aggregate providing heap operations. Heap operates on indices to avoid
+ * copying large values.
  *
  * Binary heap layout: [size (4 bytes), idx0 (4 bytes), idx1 (4 bytes), ..., idx(k-1) (4 bytes)]
  * Total size: (k + 1) * 4 bytes
@@ -130,8 +130,8 @@ private[catalyst] object MaxMinByKHeap {
   }
 
   /**
-   * Get mutable array from buffer for in-place updates.
-   * Converts UnsafeArrayData (after spill) to GenericArrayData.
+   * Get mutable array from buffer for in-place updates. Converts UnsafeArrayData (after spill) to
+   * GenericArrayData.
    */
   def getMutableArray(buffer: InternalRow, offset: Int, elementType: DataType): Array[Any] = {
     buffer.getArray(offset) match {

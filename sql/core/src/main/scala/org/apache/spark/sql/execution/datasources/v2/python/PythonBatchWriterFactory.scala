@@ -33,7 +33,8 @@ case class PythonBatchWriterFactory(
     pickledWriteFunc: Array[Byte],
     inputSchema: StructType,
     jobArtifactUUID: Option[String],
-    sessionUUID: Option[String]) extends DataWriterFactory {
+    sessionUUID: Option[String])
+    extends DataWriterFactory {
   override def createWriter(partitionId: Int, taskId: Long): DataWriter[InternalRow] = {
     new DataWriter[InternalRow] {
 

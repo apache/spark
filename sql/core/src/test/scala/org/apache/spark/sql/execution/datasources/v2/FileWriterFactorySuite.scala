@@ -42,7 +42,8 @@ class FileWriterFactorySuite extends SparkFunSuite with PrivateMethodTester {
       writerFactory.invokePrivate(createTaskAttemptContext(0, 1))
     val attemptContext1 =
       writerFactory.invokePrivate(createTaskAttemptContext(0, 2))
-    assert(attemptContext.getTaskAttemptID.getTaskID == attemptContext1.getTaskAttemptID.getTaskID)
+    assert(
+      attemptContext.getTaskAttemptID.getTaskID == attemptContext1.getTaskAttemptID.getTaskID)
     assert(attemptContext.getTaskAttemptID.getId != attemptContext1.getTaskAttemptID.getId)
   }
 }

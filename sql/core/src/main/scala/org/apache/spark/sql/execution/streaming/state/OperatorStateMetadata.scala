@@ -49,14 +49,15 @@ trait StateStoreMetadata {
 }
 
 case class StateStoreMetadataV1(storeName: String, numColsPrefixKey: Int, numPartitions: Int)
-  extends StateStoreMetadata
+    extends StateStoreMetadata
 
 case class StateStoreMetadataV2(
     storeName: String,
     numColsPrefixKey: Int,
     numPartitions: Int,
     stateSchemaFilePaths: List[String])
-  extends StateStoreMetadata with Serializable
+    extends StateStoreMetadata
+    with Serializable
 
 object StateStoreMetadataV2 {
   private implicit val formats: Formats = Serialization.formats(NoTypeHints)
@@ -87,7 +88,8 @@ trait OperatorStateMetadata {
 
 case class OperatorStateMetadataV1(
     operatorInfo: OperatorInfoV1,
-    stateStoreInfo: Array[StateStoreMetadataV1]) extends OperatorStateMetadata {
+    stateStoreInfo: Array[StateStoreMetadataV1])
+    extends OperatorStateMetadata {
   override def version: Int = 1
 
   override def stateStoresMetadata: Seq[StateStoreMetadata] =
@@ -97,7 +99,8 @@ case class OperatorStateMetadataV1(
 case class OperatorStateMetadataV2(
     operatorInfo: OperatorInfoV1,
     stateStoreInfo: Array[StateStoreMetadataV2],
-    operatorPropertiesJson: String) extends OperatorStateMetadata {
+    operatorPropertiesJson: String)
+    extends OperatorStateMetadata {
   override def version: Int = 2
 
   override def stateStoresMetadata: Seq[StateStoreMetadata] =
@@ -128,7 +131,8 @@ object OperatorStateMetadataUtils extends Logging {
       val versionStr = inputReader.readLine()
       val version = MetadataVersionUtil.validateVersion(versionStr, 2)
       if (version != expectedVersion) {
-        throw new IllegalArgumentException(s"Expected version $expectedVersion, but found $version")
+        throw new IllegalArgumentException(
+          s"Expected version $expectedVersion, but found $version")
       }
       Some(deserialize(version, inputReader))
     } finally {
@@ -147,15 +151,14 @@ object OperatorStateMetadataUtils extends Logging {
     } catch {
       case e: Throwable =>
         logError(
-          log"Fail to write state metadata file to ${MDC(LogKeys.META_FILE, metadataFilePath)}", e)
+          log"Fail to write state metadata file to ${MDC(LogKeys.META_FILE, metadataFilePath)}",
+          e)
         outputStream.cancel()
         throw e
     }
   }
 
-  def deserialize(
-      version: Int,
-      in: BufferedReader): OperatorStateMetadata = {
+  def deserialize(version: Int, in: BufferedReader): OperatorStateMetadata = {
     version match {
       case 1 =>
         Serialization.read[OperatorStateMetadataV1](in)
@@ -163,29 +166,31 @@ object OperatorStateMetadataUtils extends Logging {
         Serialization.read[OperatorStateMetadataV2](in)
 
       case _ =>
-        throw new IllegalArgumentException(s"Failed to deserialize operator metadata with " +
-          s"version=$version")
+        throw new IllegalArgumentException(
+          s"Failed to deserialize operator metadata with " +
+            s"version=$version")
     }
   }
 
-  def serialize(
-      out: FSDataOutputStream,
-      operatorStateMetadata: OperatorStateMetadata): Unit = {
+  def serialize(out: FSDataOutputStream, operatorStateMetadata: OperatorStateMetadata): Unit = {
     operatorStateMetadata.version match {
       case 1 =>
         Serialization.write(operatorStateMetadata.asInstanceOf[OperatorStateMetadataV1], out)
       case 2 =>
         Serialization.write(operatorStateMetadata.asInstanceOf[OperatorStateMetadataV2], out)
       case _ =>
-        throw new IllegalArgumentException(s"Failed to serialize operator metadata with " +
-          s"version=${operatorStateMetadata.version}")
+        throw new IllegalArgumentException(
+          s"Failed to serialize operator metadata with " +
+            s"version=${operatorStateMetadata.version}")
     }
   }
 
   def getLastOffsetBatch(session: SparkSession, checkpointLocation: String): Long = {
     val offsetLog = new StreamingQueryCheckpointMetadata(session, checkpointLocation).offsetLog
-    offsetLog.getLatest().map(_._1).getOrElse(throw
-      StateDataSourceErrors.offsetLogUnavailable(0, checkpointLocation))
+    offsetLog
+      .getLatest()
+      .map(_._1)
+      .getOrElse(throw StateDataSourceErrors.offsetLogUnavailable(0, checkpointLocation))
   }
 
   def getLastCommittedBatch(session: SparkSession, checkpointLocation: String): Option[Long] = {
@@ -205,11 +210,15 @@ object OperatorStateMetadataReader {
       case 1 =>
         new OperatorStateMetadataV1Reader(stateCheckpointPath, hadoopConf)
       case 2 =>
-        new OperatorStateMetadataV2Reader(stateCheckpointPath, hadoopConf, batchId,
+        new OperatorStateMetadataV2Reader(
+          stateCheckpointPath,
+          hadoopConf,
+          batchId,
           createMetadataDir)
       case _ =>
-        throw new IllegalArgumentException(s"Failed to create reader for operator metadata " +
-          s"with version=$version")
+        throw new IllegalArgumentException(
+          s"Failed to create reader for operator metadata " +
+            s"with version=$version")
     }
   }
 }
@@ -229,8 +238,9 @@ object OperatorStateMetadataWriter {
         }
         new OperatorStateMetadataV2Writer(stateCheckpointPath, hadoopConf, currentBatchId.get)
       case _ =>
-          throw new IllegalArgumentException(s"Failed to create writer for operator metadata " +
-          s"with version=$version")
+        throw new IllegalArgumentException(
+          s"Failed to create writer for operator metadata " +
+            s"with version=$version")
     }
   }
 }
@@ -245,7 +255,8 @@ object OperatorStateMetadataV2 {
 
   @scala.annotation.nowarn
   private implicit val manifest = Manifest
-    .classType[OperatorStateMetadataV2](implicitly[ClassTag[OperatorStateMetadataV2]].runtimeClass)
+    .classType[OperatorStateMetadataV2](
+      implicitly[ClassTag[OperatorStateMetadataV2]].runtimeClass)
 
   def metadataDirPath(stateCheckpointPath: Path): Path =
     new Path(new Path(stateCheckpointPath, "_metadata"), "v2")
@@ -257,10 +268,9 @@ object OperatorStateMetadataV2 {
 /**
  * Write OperatorStateMetadata into the state checkpoint directory.
  */
-class OperatorStateMetadataV1Writer(
-    stateCheckpointPath: Path,
-    hadoopConf: Configuration)
-  extends OperatorStateMetadataWriter with Logging {
+class OperatorStateMetadataV1Writer(stateCheckpointPath: Path, hadoopConf: Configuration)
+    extends OperatorStateMetadataWriter
+    with Logging {
 
   private val metadataFilePath = OperatorStateMetadataV1.metadataFilePath(stateCheckpointPath)
 
@@ -278,13 +288,12 @@ class OperatorStateMetadataV1Writer(
 }
 
 /**
- * Read OperatorStateMetadata from the state checkpoint directory. This class will only be
- * used to read OperatorStateMetadataV1.
- * OperatorStateMetadataV2 will be read by the OperatorStateMetadataLog.
+ * Read OperatorStateMetadata from the state checkpoint directory. This class will only be used to
+ * read OperatorStateMetadataV1. OperatorStateMetadataV2 will be read by the
+ * OperatorStateMetadataLog.
  */
-class OperatorStateMetadataV1Reader(
-    stateCheckpointPath: Path,
-    hadoopConf: Configuration) extends OperatorStateMetadataReader {
+class OperatorStateMetadataV1Reader(stateCheckpointPath: Path, hadoopConf: Configuration)
+    extends OperatorStateMetadataReader {
   override def version: Int = 1
 
   private val metadataFilePath = OperatorStateMetadataV1.metadataFilePath(stateCheckpointPath)
@@ -300,10 +309,11 @@ class OperatorStateMetadataV1Reader(
 class OperatorStateMetadataV2Writer(
     stateCheckpointPath: Path,
     hadoopConf: Configuration,
-    currentBatchId: Long) extends OperatorStateMetadataWriter {
+    currentBatchId: Long)
+    extends OperatorStateMetadataWriter {
 
-  private val metadataFilePath = OperatorStateMetadataV2.metadataFilePath(
-    stateCheckpointPath, currentBatchId)
+  private val metadataFilePath =
+    OperatorStateMetadataV2.metadataFilePath(stateCheckpointPath, currentBatchId)
 
   private lazy val fm = CheckpointFileManager.create(stateCheckpointPath, hadoopConf)
 
@@ -322,7 +332,9 @@ class OperatorStateMetadataV2Reader(
     stateCheckpointPath: Path,
     hadoopConf: Configuration,
     batchId: Long,
-    createMetadataDir: Boolean = true) extends OperatorStateMetadataReader with Logging {
+    createMetadataDir: Boolean = true)
+    extends OperatorStateMetadataReader
+    with Logging {
 
   // Check that the requested batchId is available in the checkpoint directory
   val baseCheckpointDir = stateCheckpointPath.getParent.getParent
@@ -337,8 +349,9 @@ class OperatorStateMetadataV2Reader(
   if (createMetadataDir && !fm.exists(metadataDirPath.getParent)) {
     fm.mkdirs(metadataDirPath.getParent)
   } else if (!createMetadataDir) {
-    logInfo(log"Skipping metadata directory creation (createMetadataDir=false) " +
-      log"at ${MDC(LogKeys.CHECKPOINT_LOCATION, baseCheckpointDir.toString)}")
+    logInfo(
+      log"Skipping metadata directory creation (createMetadataDir=false) " +
+        log"at ${MDC(LogKeys.CHECKPOINT_LOCATION, baseCheckpointDir.toString)}")
   }
 
   override def version: Int = 2
@@ -375,11 +388,12 @@ class OperatorStateMetadataV2Reader(
     val batches = listOperatorMetadataBatches()
     val lastBatchId = batches.filter(_ <= batchId).lastOption
     if (lastBatchId.isEmpty) {
-      throw StateDataSourceErrors.failedToReadOperatorMetadata(stateCheckpointPath.toString,
+      throw StateDataSourceErrors.failedToReadOperatorMetadata(
+        stateCheckpointPath.toString,
         batchId)
     } else {
-      val metadataFilePath = OperatorStateMetadataV2.metadataFilePath(
-        stateCheckpointPath, lastBatchId.get)
+      val metadataFilePath =
+        OperatorStateMetadataV2.metadataFilePath(stateCheckpointPath, lastBatchId.get)
       val inputStream = fm.open(metadataFilePath)
       OperatorStateMetadataUtils.readMetadata(inputStream, version)
     }
@@ -387,23 +401,26 @@ class OperatorStateMetadataV2Reader(
 }
 
 /**
- * A helper class to manage the metadata files for the operator state checkpoint.
- * This class is used to manage the metadata files for OperatorStateMetadataV2, and
- * provides utils to purge the oldest files such that we only keep the metadata files
- * for which a commit log is present
- * @param checkpointLocation The root path of the checkpoint directory
- * @param sparkSession The sparkSession that is used to access the hadoopConf
- * @param stateStoreWriter The operator that this fileManager is being created for
+ * A helper class to manage the metadata files for the operator state checkpoint. This class is
+ * used to manage the metadata files for OperatorStateMetadataV2, and provides utils to purge the
+ * oldest files such that we only keep the metadata files for which a commit log is present
+ * @param checkpointLocation
+ *   The root path of the checkpoint directory
+ * @param sparkSession
+ *   The sparkSession that is used to access the hadoopConf
+ * @param stateStoreWriter
+ *   The operator that this fileManager is being created for
  */
 class OperatorStateMetadataV2FileManager(
     checkpointLocation: Path,
     sparkSession: SparkSession,
-    stateStoreWriter: StateStoreWriter) extends Logging {
+    stateStoreWriter: StateStoreWriter)
+    extends Logging {
 
   private val hadoopConf = sparkSession.sessionState.newHadoopConf()
   private val stateCheckpointPath = new Path(checkpointLocation, "state")
-  private val stateOpIdPath = new Path(
-    stateCheckpointPath, stateStoreWriter.getStateInfo.operatorId.toString)
+  private val stateOpIdPath =
+    new Path(stateCheckpointPath, stateStoreWriter.getStateInfo.operatorId.toString)
   private val commitLog =
     new CommitLog(sparkSession, new Path(checkpointLocation, "commits").toString)
   private val stateSchemaPath = stateStoreWriter.stateSchemaDirPath()
@@ -456,7 +473,8 @@ class OperatorStateMetadataV2FileManager(
     // so we want to filter for files that do not have this format
     val schemaFiles = fm.list(stateSchemaPath).sorted.map(_.getPath)
     val filesBeforeThreshold = schemaFiles.filter { path =>
-      scala.util.Try(path.getName.split("_").head.toLong)
+      scala.util
+        .Try(path.getName.split("_").head.toLong)
         .toOption
         .exists(_ <= thresholdBatchId)
     }
@@ -503,9 +521,9 @@ class OperatorStateMetadataV2FileManager(
 }
 
 /**
- * Case class used to store additional properties for join operation.
- * This is only used for unit tests, which verify that the properties in
- * the corresponding OperatorStateMetadataV2 result are non-empty.
+ * Case class used to store additional properties for join operation. This is only used for unit
+ * tests, which verify that the properties in the corresponding OperatorStateMetadataV2 result are
+ * non-empty.
  */
 case class StreamingJoinOperatorProperties(useVirtualColumnFamilies: Boolean) {
   def json: String = {

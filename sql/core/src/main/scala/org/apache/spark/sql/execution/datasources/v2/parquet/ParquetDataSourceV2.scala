@@ -41,7 +41,11 @@ class ParquetDataSourceV2 extends FileDataSourceV2 {
     val tableName = getTableName(options, paths)
     val optionsWithoutPaths = getOptionsWithoutPaths(options)
     ParquetTable(
-      tableName, sparkSession, optionsWithoutPaths, paths, Some(schema), fallbackFileFormat)
+      tableName,
+      sparkSession,
+      optionsWithoutPaths,
+      paths,
+      Some(schema),
+      fallbackFileFormat)
   }
 }
-

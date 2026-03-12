@@ -23,46 +23,49 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.DataType
 
 /**
- * This is the parsed representation of a relation argument for a TableValuedFunction call.
- * The syntax supports passing such relations one of two ways:
+ * This is the parsed representation of a relation argument for a TableValuedFunction call. The
+ * syntax supports passing such relations one of two ways:
  *
- * 1. SELECT ... FROM tvf_call(TABLE t)
- * 2. SELECT ... FROM tvf_call(TABLE (<query>))
+ *   1. SELECT ... FROM tvf_call(TABLE t)
+ *   2. SELECT ... FROM tvf_call(TABLE (<query>))
  *
- * In the former case, the relation argument directly refers to the name of a
- * table in the catalog. In the latter case, the relation argument comprises
- * a table subquery that may itself refer to one or more tables in its own
- * FROM clause.
+ * In the former case, the relation argument directly refers to the name of a table in the
+ * catalog. In the latter case, the relation argument comprises a table subquery that may itself
+ * refer to one or more tables in its own FROM clause.
  *
- * Each TABLE argument may also optionally include a PARTITION BY clause. If present, these indicate
- * how to logically split up the input relation such that the table-valued function evaluates
- * exactly once for each partition, and returns the union of all results. If no partitioning list is
- * present, this splitting of the input relation is undefined. Furthermore, if the PARTITION BY
- * clause includes a following ORDER BY clause, Catalyst will sort the rows in each partition such
- * that the table-valued function receives them one-by-one in the requested order. Otherwise, if no
- * such ordering is specified, the ordering of rows within each partition is undefined.
+ * Each TABLE argument may also optionally include a PARTITION BY clause. If present, these
+ * indicate how to logically split up the input relation such that the table-valued function
+ * evaluates exactly once for each partition, and returns the union of all results. If no
+ * partitioning list is present, this splitting of the input relation is undefined. Furthermore,
+ * if the PARTITION BY clause includes a following ORDER BY clause, Catalyst will sort the rows in
+ * each partition such that the table-valued function receives them one-by-one in the requested
+ * order. Otherwise, if no such ordering is specified, the ordering of rows within each partition
+ * is undefined.
  *
- * @param plan the logical plan provided as input for the table argument as either a logical
- *             relation or as a more complex logical plan in the event of a table subquery.
- * @param outerAttrs outer references of this subquery plan, generally empty since these table
- *                   arguments do not allow correlated references currently
- * @param exprId expression ID of this subquery expression, generally generated afresh each time
- * @param partitionByExpressions if non-empty, the TABLE argument included the PARTITION BY clause
- *                               to indicate that the input relation should be repartitioned by the
- *                               hash of the provided expressions, such that all the rows with each
- *                               unique combination of values of the partitioning expressions will
- *                               be consumed by exactly one instance of the table function class.
- * @param withSinglePartition if true, the TABLE argument included the WITH SINGLE PARTITION clause
- *                            to indicate that the entire input relation should be repartitioned to
- *                            one worker for consumption by exactly one instance of the table
- *                            function class.
- * @param orderByExpressions if non-empty, the TABLE argument included the ORDER BY clause to
- *                           indicate that the rows within each partition of the table function are
- *                           to arrive in the provided order.
- * @param selectedInputExpressions If non-empty, this is a sequence of expressions that the UDTF is
- *                                 specifying for Catalyst to evaluate against the columns in the
- *                                 input TABLE argument. The UDTF then receives one input attribute
- *                                 for each name in the list, in the order they are listed.
+ * @param plan
+ *   the logical plan provided as input for the table argument as either a logical relation or as
+ *   a more complex logical plan in the event of a table subquery.
+ * @param outerAttrs
+ *   outer references of this subquery plan, generally empty since these table arguments do not
+ *   allow correlated references currently
+ * @param exprId
+ *   expression ID of this subquery expression, generally generated afresh each time
+ * @param partitionByExpressions
+ *   if non-empty, the TABLE argument included the PARTITION BY clause to indicate that the input
+ *   relation should be repartitioned by the hash of the provided expressions, such that all the
+ *   rows with each unique combination of values of the partitioning expressions will be consumed
+ *   by exactly one instance of the table function class.
+ * @param withSinglePartition
+ *   if true, the TABLE argument included the WITH SINGLE PARTITION clause to indicate that the
+ *   entire input relation should be repartitioned to one worker for consumption by exactly one
+ *   instance of the table function class.
+ * @param orderByExpressions
+ *   if non-empty, the TABLE argument included the ORDER BY clause to indicate that the rows
+ *   within each partition of the table function are to arrive in the provided order.
+ * @param selectedInputExpressions
+ *   If non-empty, this is a sequence of expressions that the UDTF is specifying for Catalyst to
+ *   evaluate against the columns in the input TABLE argument. The UDTF then receives one input
+ *   attribute for each name in the list, in the order they are listed.
  */
 case class FunctionTableSubqueryArgumentExpression(
     plan: LogicalPlan,
@@ -72,17 +75,20 @@ case class FunctionTableSubqueryArgumentExpression(
     withSinglePartition: Boolean = false,
     orderByExpressions: Seq[SortOrder] = Seq.empty,
     selectedInputExpressions: Seq[PythonUDTFSelectedExpression] = Seq.empty)
-  extends SubqueryExpression(plan, outerAttrs, exprId, Seq.empty, None) with Unevaluable {
+    extends SubqueryExpression(plan, outerAttrs, exprId, Seq.empty, None)
+    with Unevaluable {
 
-  assert(!(withSinglePartition && partitionByExpressions.nonEmpty),
+  assert(
+    !(withSinglePartition && partitionByExpressions.nonEmpty),
     "WITH SINGLE PARTITION is mutually exclusive with PARTITION BY")
 
   override def dataType: DataType = plan.schema
   override def nullable: Boolean = false
   override def withNewPlan(plan: LogicalPlan): FunctionTableSubqueryArgumentExpression =
     copy(plan = plan)
-  override def withNewOuterAttrs(outerAttrs: Seq[Expression])
-  : FunctionTableSubqueryArgumentExpression = copy(outerAttrs = outerAttrs)
+  override def withNewOuterAttrs(
+      outerAttrs: Seq[Expression]): FunctionTableSubqueryArgumentExpression =
+    copy(outerAttrs = outerAttrs)
   override def hint: Option[HintInfo] = None
   override def withNewHint(hint: Option[HintInfo]): FunctionTableSubqueryArgumentExpression =
     copy()
@@ -131,15 +137,9 @@ case class FunctionTableSubqueryArgumentExpression(
           child = subquery))
     }
     if (withSinglePartition) {
-      subquery = Repartition(
-        numPartitions = 1,
-        shuffle = true,
-        child = subquery)
+      subquery = Repartition(numPartitions = 1, shuffle = true, child = subquery)
       if (orderByExpressions.nonEmpty) {
-        subquery = Sort(
-          order = orderByExpressions,
-          global = false,
-          child = subquery)
+        subquery = Sort(order = orderByExpressions, global = false, child = subquery)
       }
     }
     // If instructed, add a projection to compute the specified input expressions.
@@ -173,14 +173,17 @@ case class FunctionTableSubqueryArgumentExpression(
   }
 
   lazy val extraProjectedPartitioningExpressions: Seq[Alias] = {
-    partitionByExpressions.filter { e =>
-      !subqueryOutputs.contains(e) ||
+    partitionByExpressions
+      .filter { e =>
+        !subqueryOutputs.contains(e) ||
         // Skip deduplicating the 'partitionBy' expression(s) against the attributes of the input
         // table if the UDTF also specified 'select' expression(s).
         selectedInputExpressions.nonEmpty
-    }.zipWithIndex.map { case (expr, index) =>
-      Alias(expr, s"partition_by_$index")()
-    }
+      }
+      .zipWithIndex
+      .map { case (expr, index) =>
+        Alias(expr, s"partition_by_$index")()
+      }
   }
 
   private lazy val subqueryOutputs: Map[Expression, Int] = plan.output.zipWithIndex.toMap

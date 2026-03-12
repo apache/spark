@@ -33,9 +33,8 @@ import org.apache.spark.util.ArrayImplicits.SparkArrayOps
 class V2TableUtilSuite extends SparkFunSuite {
 
   test("validateCapturedColumns - no changes") {
-    val cols = Array(
-      col("id", LongType, nullable = false),
-      col("name", StringType, nullable = true))
+    val cols =
+      Array(col("id", LongType, nullable = false), col("name", StringType, nullable = true))
     val table = TestTableWithMetadataSupport("test", cols)
 
     val errors = validateCapturedColumns(table, cols)
@@ -88,8 +87,7 @@ class V2TableUtilSuite extends SparkFunSuite {
     val originCols = Array(
       col("id", LongType, nullable = true), // originally present
       col("name", StringType, nullable = true))
-    val currentCols = Array(
-      col("name", StringType, nullable = true))
+    val currentCols = Array(col("name", StringType, nullable = true))
     val table = TestTableWithMetadataSupport("test", currentCols)
 
     val errors = validateCapturedColumns(table, originCols)
@@ -98,13 +96,13 @@ class V2TableUtilSuite extends SparkFunSuite {
   }
 
   test("validateCapturedColumns - column added") {
-    val originCols = Array(
-      col("id", LongType, nullable = true),
-      col("name", StringType, nullable = true))
+    val originCols =
+      Array(col("id", LongType, nullable = true), col("name", StringType, nullable = true))
     val currentCols = Array(
       col("id", LongType, nullable = true),
       col("name", StringType, nullable = true),
-      col("age", IntegerType, nullable = true)) // new column
+      col("age", IntegerType, nullable = true)
+    ) // new column
     val table = TestTableWithMetadataSupport("test", currentCols)
 
     val errors = validateCapturedColumns(table, originCols)
@@ -115,12 +113,14 @@ class V2TableUtilSuite extends SparkFunSuite {
   test("validateCapturedColumns - multiple columns removed and added") {
     val originCols = Array(
       col("id", LongType, nullable = true),
-      col("name", StringType, nullable = true),    // originally present
-      col("address", StringType, nullable = true))  // originally present
+      col("name", StringType, nullable = true), // originally present
+      col("address", StringType, nullable = true)
+    ) // originally present
     val currentCols = Array(
       col("id", LongType, nullable = true),
       col("email", StringType, nullable = true), // new column
-      col("age", IntegerType, nullable = true))   // new column
+      col("age", IntegerType, nullable = true)
+    ) // new column
     val table = TestTableWithMetadataSupport("test", currentCols)
 
     val errors = validateCapturedColumns(table, originCols)
@@ -143,9 +143,8 @@ class V2TableUtilSuite extends SparkFunSuite {
   }
 
   test("validateCapturedColumns - duplicate columns with different case") {
-    val originCols = Array(
-      col("id", LongType, nullable = true),
-      col("name", StringType, nullable = true))
+    val originCols =
+      Array(col("id", LongType, nullable = true), col("name", StringType, nullable = true))
     val currentCols = Array(
       col("id", LongType, nullable = true),
       col("ID", StringType, nullable = true), // duplicate with different case
@@ -157,15 +156,12 @@ class V2TableUtilSuite extends SparkFunSuite {
   }
 
   test("validateCapturedColumns - complex types") {
-    val structType = StructType(Seq(
-      StructField("street", StringType),
-      StructField("city", StringType)))
-    val originCols = Array(
-      col("id", LongType, nullable = true),
-      col("address", structType, nullable = true))
-    val currentCols = Array(
-      col("id", LongType, nullable = true),
-      col("address", structType, nullable = true))
+    val structType =
+      StructType(Seq(StructField("street", StringType), StructField("city", StringType)))
+    val originCols =
+      Array(col("id", LongType, nullable = true), col("address", structType, nullable = true))
+    val currentCols =
+      Array(col("id", LongType, nullable = true), col("address", structType, nullable = true))
     val table = TestTableWithMetadataSupport("test", currentCols)
 
     val errors = validateCapturedColumns(table, originCols)
@@ -173,15 +169,15 @@ class V2TableUtilSuite extends SparkFunSuite {
   }
 
   test("validateCapturedColumns - complex type changed") {
-    val originStructType = StructType(Seq(
-      StructField("street", StringType),
-      StructField("city", StringType))) // originally StringType
+    val originStructType = StructType(
+      Seq(StructField("street", StringType), StructField("city", StringType))
+    ) // originally StringType
     val originCols = Array(
       col("id", LongType, nullable = true),
       col("address", originStructType, nullable = true))
-    val currentStructType = StructType(Seq(
-      StructField("street", StringType),
-      StructField("city", IntegerType))) // changed type
+    val currentStructType = StructType(
+      Seq(StructField("street", StringType), StructField("city", IntegerType))
+    ) // changed type
     val currentCols = Array(
       col("id", LongType, nullable = true),
       col("address", currentStructType, nullable = true))
@@ -206,10 +202,10 @@ class V2TableUtilSuite extends SparkFunSuite {
   }
 
   test("validateCapturedMetadataColumns - type changed") {
-    val originMetaCols = Seq(
-      metaCol("index", IntegerType, nullable = false)) // originally IntegerType
-    val currentMetaCols = Array(
-      metaCol("index", StringType, nullable = false)) // changed to StringType
+    val originMetaCols =
+      Seq(metaCol("index", IntegerType, nullable = false)) // originally IntegerType
+    val currentMetaCols =
+      Array(metaCol("index", StringType, nullable = false)) // changed to StringType
     val table = TestTableWithMetadataSupport("test", Array.empty, currentMetaCols)
 
     val errors = V2TableUtil.validateCapturedMetadataColumns(table, originMetaCols)
@@ -218,10 +214,9 @@ class V2TableUtilSuite extends SparkFunSuite {
   }
 
   test("validateCapturedMetadataColumns - nullability changed to nullable") {
-    val originMetaCols = Seq(
-      metaCol("index", IntegerType, nullable = false)) // originally NOT NULL
-    val currentMetaCols = Array(
-      metaCol("index", IntegerType, nullable = true)) // now nullable
+    val originMetaCols =
+      Seq(metaCol("index", IntegerType, nullable = false)) // originally NOT NULL
+    val currentMetaCols = Array(metaCol("index", IntegerType, nullable = true)) // now nullable
     val table = TestTableWithMetadataSupport("test", Array.empty, currentMetaCols)
 
     val errors = V2TableUtil.validateCapturedMetadataColumns(table, originMetaCols)
@@ -230,7 +225,8 @@ class V2TableUtilSuite extends SparkFunSuite {
   }
 
   test("validateCapturedMetadataColumns - nullability changed to not null") {
-    val originMetaCols = Seq(metaCol("index", IntegerType, nullable = true)) // originally nullable
+    val originMetaCols =
+      Seq(metaCol("index", IntegerType, nullable = true)) // originally nullable
     val currentMetaCols = Array(metaCol("index", IntegerType, nullable = false)) // now NOT NULL
     val table = TestTableWithMetadataSupport("test", Array.empty, currentMetaCols)
 
@@ -262,9 +258,10 @@ class V2TableUtilSuite extends SparkFunSuite {
   test("validateCapturedMetadataColumns - multiple errors") {
     val originMetaCols = Seq(
       metaCol("_partition", StringType, nullable = false),
-      metaCol("index", IntegerType, nullable = false)) // originally present
-    val currentMetaCols = Array(
-      metaCol("_partition", IntegerType, nullable = false)) // type changed from StringType
+      metaCol("index", IntegerType, nullable = false)
+    ) // originally present
+    val currentMetaCols =
+      Array(metaCol("_partition", IntegerType, nullable = false)) // type changed from StringType
     val table = TestTableWithMetadataSupport("test", Array.empty, currentMetaCols)
 
     val errors = V2TableUtil.validateCapturedMetadataColumns(table, originMetaCols)
@@ -289,7 +286,8 @@ class V2TableUtilSuite extends SparkFunSuite {
     val currentMetaCols = Array(
       metaCol("_partition", StringType, nullable = false),
       metaCol("index", IntegerType, nullable = false),
-      metaCol("INDEX", StringType, nullable = false)) // duplicate with different case
+      metaCol("INDEX", StringType, nullable = false)
+    ) // duplicate with different case
     val table = TestTableWithMetadataSupport("test", Array.empty, currentMetaCols)
 
     val e = intercept[AnalysisException] {
@@ -308,9 +306,8 @@ class V2TableUtilSuite extends SparkFunSuite {
   }
 
   test("validateCapturedMetadataColumns - complex metadata type") {
-    val structType = StructType(Seq(
-      StructField("bucket", IntegerType),
-      StructField("partition", IntegerType)))
+    val structType =
+      StructType(Seq(StructField("bucket", IntegerType), StructField("partition", IntegerType)))
     val originMetaCols = Seq(metaCol("_partition", structType, nullable = false))
     val currentMetaCols = Array(metaCol("_partition", structType, nullable = false))
     val table = TestTableWithMetadataSupport("test", Array.empty, currentMetaCols)
@@ -320,13 +317,15 @@ class V2TableUtilSuite extends SparkFunSuite {
   }
 
   test("validateCapturedMetadataColumns - complex metadata type changed") {
-    val originStructType = StructType(Seq(
-      StructField("bucket", IntegerType), // originally IntegerType
-      StructField("partition", IntegerType)))
+    val originStructType = StructType(
+      Seq(
+        StructField("bucket", IntegerType), // originally IntegerType
+        StructField("partition", IntegerType)))
     val originMetaCols = Seq(metaCol("_partition", originStructType, nullable = false))
-    val currentStructType = StructType(Seq(
-      StructField("bucket", StringType), // changed type
-      StructField("partition", IntegerType)))
+    val currentStructType = StructType(
+      Seq(
+        StructField("bucket", StringType), // changed type
+        StructField("partition", IntegerType)))
     val currentMetaCols = Array(metaCol("_partition", currentStructType, nullable = false))
     val table = TestTableWithMetadataSupport("test", Array.empty, currentMetaCols)
 
@@ -336,16 +335,16 @@ class V2TableUtilSuite extends SparkFunSuite {
   }
 
   test("validateCapturedMetadataColumns - with DataSourceV2Relation") {
-    val dataCols = Array(
-      col("id", LongType, nullable = true),
-      col("name", StringType, nullable = true))
+    val dataCols =
+      Array(col("id", LongType, nullable = true), col("name", StringType, nullable = true))
     val originMetaCols = Array(
       metaCol("_partition", StringType, nullable = false),
       metaCol("index", IntegerType, nullable = false))
     val originTable = TestTableWithMetadataSupport("test", dataCols, originMetaCols)
 
     val dataAttrs = dataCols.map(c => AttributeReference(c.name, c.dataType, c.nullable)())
-    val metadataAttrs = originMetaCols.map(c => MetadataAttribute(c.name, c.dataType, c.isNullable))
+    val metadataAttrs =
+      originMetaCols.map(c => MetadataAttribute(c.name, c.dataType, c.isNullable))
     val attrs = dataAttrs ++ metadataAttrs
 
     val relation = DataSourceV2Relation(
@@ -360,18 +359,15 @@ class V2TableUtilSuite extends SparkFunSuite {
       metaCol("index", IntegerType, nullable = false))
     val currentTable = TestTableWithMetadataSupport("test", dataCols, currentMetaCols)
 
-    val errors = V2TableUtil.validateCapturedMetadataColumns(
-      currentTable,
-      relation,
-      mode = PROHIBIT_CHANGES)
+    val errors =
+      V2TableUtil.validateCapturedMetadataColumns(currentTable, relation, mode = PROHIBIT_CHANGES)
     assert(errors.size == 1)
     assert(errors.head.contains("`_partition` type has changed"))
   }
 
   test("validateCapturedMetadataColumns - with DataSourceV2Relation no metadata attrs") {
-    val dataCols = Array(
-      col("id", LongType, nullable = true),
-      col("name", StringType, nullable = true))
+    val dataCols =
+      Array(col("id", LongType, nullable = true), col("name", StringType, nullable = true))
     val originTable = TestTable("test", dataCols)
 
     val dataAttrs = dataCols.map(c => AttributeReference(c.name, c.dataType, c.nullable)())
@@ -385,17 +381,14 @@ class V2TableUtilSuite extends SparkFunSuite {
 
     val currentTable = TestTable("test", dataCols)
 
-    val errors = V2TableUtil.validateCapturedMetadataColumns(
-      currentTable,
-      relation,
-      mode = PROHIBIT_CHANGES)
+    val errors =
+      V2TableUtil.validateCapturedMetadataColumns(currentTable, relation, mode = PROHIBIT_CHANGES)
     assert(errors.isEmpty)
   }
 
   test("extractMetadataColumns - doesn't access table metadata unless needed") {
-    val dataCols = Array(
-      col("id", LongType, nullable = true),
-      col("name", StringType, nullable = true))
+    val dataCols =
+      Array(col("id", LongType, nullable = true), col("name", StringType, nullable = true))
 
     val throwingTable = TestTableThatThrowsOnMetadataAccess("test", dataCols)
 
@@ -510,15 +503,17 @@ class V2TableUtilSuite extends SparkFunSuite {
   }
 
   test("validateCapturedColumns - nested array in struct element type changed") {
-    val originStructType = StructType(Seq(
-      StructField("name", StringType),
-      StructField("scores", ArrayType(IntegerType, containsNull = true))))
+    val originStructType = StructType(
+      Seq(
+        StructField("name", StringType),
+        StructField("scores", ArrayType(IntegerType, containsNull = true))))
     val originCols = Array(
       col("id", LongType, nullable = true),
       col("person", originStructType, nullable = true))
-    val currentStructType = StructType(Seq(
-      StructField("name", StringType),
-      StructField("scores", ArrayType(LongType, containsNull = true))))
+    val currentStructType = StructType(
+      Seq(
+        StructField("name", StringType),
+        StructField("scores", ArrayType(LongType, containsNull = true))))
     val currentCols = Array(
       col("id", LongType, nullable = true),
       col("person", currentStructType, nullable = true))
@@ -530,15 +525,17 @@ class V2TableUtilSuite extends SparkFunSuite {
   }
 
   test("validateCapturedColumns - nested map in struct value type changed") {
-    val originStructType = StructType(Seq(
-      StructField("name", StringType),
-      StructField("attrs", MapType(StringType, IntegerType, valueContainsNull = true))))
+    val originStructType = StructType(
+      Seq(
+        StructField("name", StringType),
+        StructField("attrs", MapType(StringType, IntegerType, valueContainsNull = true))))
     val originCols = Array(
       col("id", LongType, nullable = true),
       col("person", originStructType, nullable = true))
-    val currentStructType = StructType(Seq(
-      StructField("name", StringType),
-      StructField("attrs", MapType(StringType, LongType, valueContainsNull = true))))
+    val currentStructType = StructType(
+      Seq(
+        StructField("name", StringType),
+        StructField("attrs", MapType(StringType, LongType, valueContainsNull = true))))
     val currentCols = Array(
       col("id", LongType, nullable = true),
       col("person", currentStructType, nullable = true))
@@ -550,9 +547,8 @@ class V2TableUtilSuite extends SparkFunSuite {
   }
 
   test("validateCapturedColumns - ALLOW_NEW_TOP_LEVEL_FIELDS allows top-level additions") {
-    val originCols = Array(
-      col("id", LongType, nullable = false),
-      col("name", StringType, nullable = true))
+    val originCols =
+      Array(col("id", LongType, nullable = false), col("name", StringType, nullable = true))
     val currentCols = Array(
       col("id", LongType, nullable = false),
       col("name", StringType, nullable = true),
@@ -564,16 +560,15 @@ class V2TableUtilSuite extends SparkFunSuite {
   }
 
   test("validateCapturedColumns - ALLOW_NEW_TOP_LEVEL_FIELDS prohibits nested additions") {
-    val originAddress = StructType(Seq(
-      StructField("street", StringType),
-      StructField("city", StringType)))
-    val originCols = Array(
-      col("id", LongType, nullable = false),
-      col("address", originAddress, nullable = true))
-    val currentAddress = StructType(Seq(
-      StructField("street", StringType),
-      StructField("city", StringType),
-      StructField("zipCode", StringType)))
+    val originAddress =
+      StructType(Seq(StructField("street", StringType), StructField("city", StringType)))
+    val originCols =
+      Array(col("id", LongType, nullable = false), col("address", originAddress, nullable = true))
+    val currentAddress = StructType(
+      Seq(
+        StructField("street", StringType),
+        StructField("city", StringType),
+        StructField("zipCode", StringType)))
     val currentCols = Array(
       col("id", LongType, nullable = false),
       col("address", currentAddress, nullable = true))
@@ -585,16 +580,16 @@ class V2TableUtilSuite extends SparkFunSuite {
   }
 
   test("validateCapturedColumns - ALLOW_NEW_TOP_LEVEL_FIELDS fails new nested fields in array") {
-    val originItem = StructType(Seq(
-      StructField("itemId", LongType),
-      StructField("itemName", StringType)))
+    val originItem =
+      StructType(Seq(StructField("itemId", LongType), StructField("itemName", StringType)))
     val originCols = Array(
       col("id", LongType, nullable = false),
       col("items", ArrayType(originItem), nullable = true))
-    val currentItem = StructType(Seq(
-      StructField("itemId", LongType),
-      StructField("itemName", StringType),
-      StructField("price", IntegerType)))
+    val currentItem = StructType(
+      Seq(
+        StructField("itemId", LongType),
+        StructField("itemName", StringType),
+        StructField("price", IntegerType)))
     val currentCols = Array(
       col("id", LongType, nullable = false),
       col("items", ArrayType(currentItem), nullable = true))
@@ -609,16 +604,16 @@ class V2TableUtilSuite extends SparkFunSuite {
   }
 
   test("validateCapturedColumns - ALLOW_NEW_TOP_LEVEL_FIELDS prohibits nested map additions") {
-    val originValue = StructType(Seq(
-      StructField("count", IntegerType),
-      StructField("status", StringType)))
+    val originValue =
+      StructType(Seq(StructField("count", IntegerType), StructField("status", StringType)))
     val originCols = Array(
       col("id", LongType, nullable = false),
       col("metadata", MapType(StringType, originValue), nullable = true))
-    val currentValue = StructType(Seq(
-      StructField("count", IntegerType),
-      StructField("status", StringType),
-      StructField("timestamp", LongType)))
+    val currentValue = StructType(
+      Seq(
+        StructField("count", IntegerType),
+        StructField("status", StringType),
+        StructField("timestamp", LongType)))
     val currentCols = Array(
       col("id", LongType, nullable = false),
       col("metadata", MapType(StringType, currentValue), nullable = true))
@@ -630,9 +625,7 @@ class V2TableUtilSuite extends SparkFunSuite {
   }
 
   // simple table without metadata column support
-  private case class TestTable(
-      override val name: String,
-      override val columns: Array[Column])
+  private case class TestTable(override val name: String, override val columns: Array[Column])
       extends Table {
     override def capabilities: util.Set[TableCapability] = util.Set.of(BATCH_READ)
   }
@@ -642,7 +635,8 @@ class V2TableUtilSuite extends SparkFunSuite {
       override val name: String,
       override val columns: Array[Column],
       override val metadataColumns: Array[MetadataColumn] = Array.empty)
-      extends Table with SupportsMetadataColumns {
+      extends Table
+      with SupportsMetadataColumns {
     override def capabilities: util.Set[TableCapability] = util.Set.of(BATCH_READ)
   }
 
@@ -650,7 +644,8 @@ class V2TableUtilSuite extends SparkFunSuite {
   private case class TestTableThatThrowsOnMetadataAccess(
       override val name: String,
       override val columns: Array[Column])
-      extends Table with SupportsMetadataColumns {
+      extends Table
+      with SupportsMetadataColumns {
     override def capabilities: util.Set[TableCapability] = util.Set.of(BATCH_READ)
     override lazy val metadataColumns: Array[MetadataColumn] = {
       throw new RuntimeException("metadataColumns should not be accessed")
@@ -677,10 +672,7 @@ class V2TableUtilSuite extends SparkFunSuite {
     Column.create(name, dataType, nullable)
   }
 
-  private def metaCol(
-      name: String,
-      dataType: DataType,
-      nullable: Boolean): MetadataColumn = {
+  private def metaCol(name: String, dataType: DataType, nullable: Boolean): MetadataColumn = {
     TestMetadataColumn(name, dataType, nullable)
   }
 }

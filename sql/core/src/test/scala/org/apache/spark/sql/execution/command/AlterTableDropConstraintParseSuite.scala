@@ -28,9 +28,7 @@ class AlterTableDropConstraintParseSuite extends AnalysisTest with SharedSparkSe
     val sql = "ALTER TABLE a.b.c DROP CONSTRAINT c1"
     val parsed = parsePlan(sql)
     val expected = DropConstraint(
-      UnresolvedTable(
-        Seq("a", "b", "c"),
-        "ALTER TABLE ... DROP CONSTRAINT"),
+      UnresolvedTable(Seq("a", "b", "c"), "ALTER TABLE ... DROP CONSTRAINT"),
       "c1",
       ifExists = false,
       cascade = false)
@@ -41,9 +39,7 @@ class AlterTableDropConstraintParseSuite extends AnalysisTest with SharedSparkSe
     val sql = "ALTER TABLE a.b.c DROP CONSTRAINT IF EXISTS c1"
     val parsed = parsePlan(sql)
     val expected = DropConstraint(
-      UnresolvedTable(
-        Seq("a", "b", "c"),
-        "ALTER TABLE ... DROP CONSTRAINT"),
+      UnresolvedTable(Seq("a", "b", "c"), "ALTER TABLE ... DROP CONSTRAINT"),
       "c1",
       ifExists = true,
       cascade = false)
@@ -54,9 +50,7 @@ class AlterTableDropConstraintParseSuite extends AnalysisTest with SharedSparkSe
     val sql = "ALTER TABLE a.b.c DROP CONSTRAINT c1 CASCADE"
     val parsed = parsePlan(sql)
     val expected = DropConstraint(
-      UnresolvedTable(
-        Seq("a", "b", "c"),
-        "ALTER TABLE ... DROP CONSTRAINT"),
+      UnresolvedTable(Seq("a", "b", "c"), "ALTER TABLE ... DROP CONSTRAINT"),
       "c1",
       ifExists = false,
       cascade = true)
@@ -67,9 +61,7 @@ class AlterTableDropConstraintParseSuite extends AnalysisTest with SharedSparkSe
     val sql = "ALTER TABLE a.b.c DROP CONSTRAINT c1 RESTRICT"
     val parsed = parsePlan(sql)
     val expected = DropConstraint(
-      UnresolvedTable(
-        Seq("a", "b", "c"),
-        "ALTER TABLE ... DROP CONSTRAINT"),
+      UnresolvedTable(Seq("a", "b", "c"), "ALTER TABLE ... DROP CONSTRAINT"),
       "c1",
       ifExists = false,
       cascade = false)

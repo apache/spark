@@ -27,8 +27,7 @@ class OptimizeJoinConditionSuite extends PlanTest {
 
   private object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
-      Batch("Optimize join condition", FixedPoint(1),
-        OptimizeJoinCondition) :: Nil
+      Batch("Optimize join condition", FixedPoint(1), OptimizeJoinCondition) :: Nil
   }
 
   val testRelation = LocalRelation($"a".int, $"b".int)

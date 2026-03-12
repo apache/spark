@@ -24,10 +24,10 @@ import org.apache.spark.sql.types._
 
 /**
  * Interface defines the following methods for a data source:
- *  - register a new option name
- *  - retrieve all registered option names
- *  - valid a given option name
- *  - get alternative option name if any
+ *   - register a new option name
+ *   - retrieve all registered option names
+ *   - valid a given option name
+ *   - get alternative option name if any
  */
 trait DataSourceOptions {
   // Option -> Alternative Option if any
@@ -43,8 +43,10 @@ trait DataSourceOptions {
 
   /**
    * Register a new Option with an alternative name.
-   * @param name Option name
-   * @param alternative Alternative option name
+   * @param name
+   *   Option name
+   * @param alternative
+   *   Alternative option name
    */
   protected def newOption(name: String, alternative: String): Unit = {
     // Register both of the options
@@ -53,19 +55,24 @@ trait DataSourceOptions {
   }
 
   /**
-   * @return All data source options and their alternatives if any
+   * @return
+   *   All data source options and their alternatives if any
    */
   def getAllOptions: scala.collection.Set[String] = validOptions.keySet
 
   /**
-   * @param name Option name to be validated
-   * @return if the given Option name is valid
+   * @param name
+   *   Option name to be validated
+   * @return
+   *   if the given Option name is valid
    */
   def isValidOption(name: String): Boolean = validOptions.contains(name)
 
   /**
-   * @param name Option name
-   * @return Alternative option name if any
+   * @param name
+   *   Option name
+   * @return
+   *   Alternative option name if any
    */
   def getAlternativeOption(name: String): Option[String] = validOptions.get(name).flatten
 }
@@ -98,10 +105,12 @@ object DataSourceOptions {
           case 1 =>
           case 2 =>
             val corruptRecordColumnName = options.getOrElse(
-              COLUMN_NAME_OF_CORRUPT_RECORD, SQLConf.get.columnNameOfCorruptRecord)
+              COLUMN_NAME_OF_CORRUPT_RECORD,
+              SQLConf.get.columnNameOfCorruptRecord)
             valid = valid && corruptRecordColumnName != variantColumnName
             valid = valid && schema.fields.exists { f =>
-              f.dataType.isInstanceOf[StringType] && f.name == corruptRecordColumnName && f.nullable
+              f.dataType
+                .isInstanceOf[StringType] && f.name == corruptRecordColumnName && f.nullable
             }
           case _ => valid = false
         }

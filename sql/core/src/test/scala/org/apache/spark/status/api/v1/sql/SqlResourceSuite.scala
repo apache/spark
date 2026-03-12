@@ -36,23 +36,33 @@ object SqlResourceSuite {
   val METADATA_TIME = "metadata time"
   val NUMBER_OF_FILES_READ = "number of files read"
   val SIZE_OF_FILES_READ = "size of files read"
-  val PLAN_DESCRIPTION = "== Physical Plan ==\nCollectLimit (3)\n+- * Filter (2)\n +- Scan text..."
+  val PLAN_DESCRIPTION =
+    "== Physical Plan ==\nCollectLimit (3)\n+- * Filter (2)\n +- Scan text..."
   val DESCRIPTION = "csv at MyDataFrames.scala:57"
 
   val nodeIdAndWSCGIdMap: Map[Long, Option[Long]] = Map(1L -> Some(1L))
 
-  val filterNode = new SparkPlanGraphNode(1, FILTER, "",
+  val filterNode = new SparkPlanGraphNode(
+    1,
+    FILTER,
+    "",
     metrics = Seq(SQLPlanMetric(NUMBER_OF_OUTPUT_ROWS, 1, "")))
   val nodes: Seq[SparkPlanGraphNode] = Seq(
-    new SparkPlanGraphCluster(0, WHOLE_STAGE_CODEGEN_1, "",
+    new SparkPlanGraphCluster(
+      0,
+      WHOLE_STAGE_CODEGEN_1,
+      "",
       nodes = ArrayBuffer(filterNode),
       metrics = Seq(SQLPlanMetric(DURATION, 0, ""))),
-    new SparkPlanGraphNode(2, SCAN_TEXT, "",
+    new SparkPlanGraphNode(
+      2,
+      SCAN_TEXT,
+      "",
       metrics = Seq(
-      SQLPlanMetric(METADATA_TIME, 2, ""),
-      SQLPlanMetric(NUMBER_OF_FILES_READ, 3, ""),
-      SQLPlanMetric(NUMBER_OF_OUTPUT_ROWS, 4, ""),
-      SQLPlanMetric(SIZE_OF_FILES_READ, 5, ""))))
+        SQLPlanMetric(METADATA_TIME, 2, ""),
+        SQLPlanMetric(NUMBER_OF_FILES_READ, 3, ""),
+        SQLPlanMetric(NUMBER_OF_OUTPUT_ROWS, 4, ""),
+        SQLPlanMetric(SIZE_OF_FILES_READ, 5, ""))))
 
   val edges: Seq[SparkPlanGraphEdge] = Seq(SparkPlanGraphEdge(3, 2))
 
@@ -60,7 +70,8 @@ object SqlResourceSuite {
     SparkPlanGraph(nodes, edges).allNodes.filterNot(_.name == WHOLE_STAGE_CODEGEN_1)
 
   val metrics: Seq[SQLPlanMetric] = {
-    Seq(SQLPlanMetric(DURATION, 0, ""),
+    Seq(
+      SQLPlanMetric(DURATION, 0, ""),
       SQLPlanMetric(NUMBER_OF_OUTPUT_ROWS, 1, ""),
       SQLPlanMetric(METADATA_TIME, 2, ""),
       SQLPlanMetric(NUMBER_OF_FILES_READ, 3, ""),
@@ -95,17 +106,26 @@ object SqlResourceSuite {
       stages = Set[Int](),
       metricValues = getMetricValues(),
       errorMessage = None,
-      queryId = java.util.UUID.fromString("efe98ba7-1532-491e-9b4f-4be621cef37c")
-    )
+      queryId = java.util.UUID.fromString("efe98ba7-1532-491e-9b4f-4be621cef37c"))
   }
 
   private def getNodes(): Seq[Node] = {
-    val node = Node(0, WHOLE_STAGE_CODEGEN_1,
-      wholeStageCodegenId = None, metrics = Seq(Metric(DURATION, "0 ms")))
-    val node2 = Node(1, FILTER,
-      wholeStageCodegenId = Some(1), metrics = Seq(Metric(NUMBER_OF_OUTPUT_ROWS, "1")))
-    val node3 = Node(2, SCAN_TEXT, wholeStageCodegenId = None,
-      metrics = Seq(Metric(METADATA_TIME, "2 ms"),
+    val node = Node(
+      0,
+      WHOLE_STAGE_CODEGEN_1,
+      wholeStageCodegenId = None,
+      metrics = Seq(Metric(DURATION, "0 ms")))
+    val node2 = Node(
+      1,
+      FILTER,
+      wholeStageCodegenId = Some(1),
+      metrics = Seq(Metric(NUMBER_OF_OUTPUT_ROWS, "1")))
+    val node3 = Node(
+      2,
+      SCAN_TEXT,
+      wholeStageCodegenId = None,
+      metrics = Seq(
+        Metric(METADATA_TIME, "2 ms"),
         Metric(NUMBER_OF_FILES_READ, "1"),
         Metric(NUMBER_OF_OUTPUT_ROWS, "1"),
         Metric(SIZE_OF_FILES_READ, "330.0 B")))
@@ -116,8 +136,11 @@ object SqlResourceSuite {
 
   private def getExpectedNodesWhenWholeStageCodegenIsOff(): Seq[Node] = {
     val node = Node(1, FILTER, metrics = Seq(Metric(NUMBER_OF_OUTPUT_ROWS, "1")))
-    val node2 = Node(2, SCAN_TEXT,
-      metrics = Seq(Metric(METADATA_TIME, "2 ms"),
+    val node2 = Node(
+      2,
+      SCAN_TEXT,
+      metrics = Seq(
+        Metric(METADATA_TIME, "2 ms"),
         Metric(NUMBER_OF_FILES_READ, "1"),
         Metric(NUMBER_OF_OUTPUT_ROWS, "1"),
         Metric(SIZE_OF_FILES_READ, "330.0 B")))
@@ -126,10 +149,11 @@ object SqlResourceSuite {
     Seq(node2, node)
   }
 
-  private def verifyExpectedExecutionData(executionData: ExecutionData,
-    nodes: Seq[Node],
-    edges: Seq[SparkPlanGraphEdge],
-    planDescription: String): Unit = {
+  private def verifyExpectedExecutionData(
+      executionData: ExecutionData,
+      nodes: Seq[Node],
+      edges: Seq[SparkPlanGraphEdge],
+      planDescription: String): Unit = {
 
     assert(executionData.id == 0)
     assert(executionData.status == "COMPLETED")
@@ -162,26 +186,34 @@ class SqlResourceSuite extends SparkFunSuite with PrivateMethodTester {
   test("Prepare ExecutionData when details = false and planDescription = false") {
     val executionData =
       sqlResource invokePrivate prepareExecutionData(
-        sqlExecutionUIData, SparkPlanGraph(Seq.empty, Seq.empty), false, false)
-    verifyExpectedExecutionData(executionData, edges = Seq.empty,
-      nodes = Seq.empty, planDescription = "")
+        sqlExecutionUIData,
+        SparkPlanGraph(Seq.empty, Seq.empty),
+        false,
+        false)
+    verifyExpectedExecutionData(
+      executionData,
+      edges = Seq.empty,
+      nodes = Seq.empty,
+      planDescription = "")
   }
 
   test("Prepare ExecutionData when details = true and planDescription = false") {
     val executionData =
       sqlResource invokePrivate prepareExecutionData(
-        sqlExecutionUIData, SparkPlanGraph(nodes, edges), true, false)
-    verifyExpectedExecutionData(
-      executionData,
-      nodes = getNodes(),
-      edges,
-      planDescription = "")
+        sqlExecutionUIData,
+        SparkPlanGraph(nodes, edges),
+        true,
+        false)
+    verifyExpectedExecutionData(executionData, nodes = getNodes(), edges, planDescription = "")
   }
 
   test("Prepare ExecutionData when details = true and planDescription = true") {
     val executionData =
       sqlResource invokePrivate prepareExecutionData(
-        sqlExecutionUIData, SparkPlanGraph(nodes, edges), true, true)
+        sqlExecutionUIData,
+        SparkPlanGraph(nodes, edges),
+        true,
+        true)
     verifyExpectedExecutionData(
       executionData,
       nodes = getNodes(),
@@ -192,7 +224,10 @@ class SqlResourceSuite extends SparkFunSuite with PrivateMethodTester {
   test("Prepare ExecutionData when details = true and planDescription = false and WSCG = off") {
     val executionData =
       sqlResource invokePrivate prepareExecutionData(
-        sqlExecutionUIData, SparkPlanGraph(nodesWhenCodegenIsOff, edges), true, false)
+        sqlExecutionUIData,
+        SparkPlanGraph(nodesWhenCodegenIsOff, edges),
+        true,
+        false)
     verifyExpectedExecutionData(
       executionData,
       nodes = getExpectedNodesWhenWholeStageCodegenIsOff(),
@@ -223,9 +258,7 @@ class SqlResourceSuite extends SparkFunSuite with PrivateMethodTester {
       metricValues = getMetricValues(),
       errorMessage = Some("now you see me, now you don't"))
     val executionData =
-      sqlResource invokePrivate prepareExecutionData(
-        d,
-        SparkPlanGraph(nodes, edges), true, true)
+      sqlResource invokePrivate prepareExecutionData(d, SparkPlanGraph(nodes, edges), true, true)
     assert(executionData.status == "FAILED")
     assert(executionData.errorMessage == "now you see me, now you don't")
     assert(executionData.rootExecutionId == 1)
@@ -234,15 +267,26 @@ class SqlResourceSuite extends SparkFunSuite with PrivateMethodTester {
   test("SPARK-55881: queryId, errorMessage, rootExecutionId in ExecutionData") {
     // Test with null queryId (backward compat with old event logs)
     val d = new SQLExecutionUIData(
-      0, -1, DESCRIPTION, details = "", PLAN_DESCRIPTION, Map.empty,
-      metrics = metrics, submissionTime = 1586768888233L,
+      0,
+      -1,
+      DESCRIPTION,
+      details = "",
+      PLAN_DESCRIPTION,
+      Map.empty,
+      metrics = metrics,
+      submissionTime = 1586768888233L,
       completionTime = Some(new Date(1586768888999L)),
       jobs = Map(0 -> JobExecutionStatus.SUCCEEDED),
-      stages = Set[Int](), metricValues = getMetricValues(),
-      errorMessage = None, queryId = null)
+      stages = Set[Int](),
+      metricValues = getMetricValues(),
+      errorMessage = None,
+      queryId = null)
     val executionData =
       sqlResource invokePrivate prepareExecutionData(
-        d, SparkPlanGraph(Seq.empty, Seq.empty), false, false)
+        d,
+        SparkPlanGraph(Seq.empty, Seq.empty),
+        false,
+        false)
     assert(executionData.queryId == null)
     assert(executionData.errorMessage == null)
     assert(executionData.rootExecutionId == -1)

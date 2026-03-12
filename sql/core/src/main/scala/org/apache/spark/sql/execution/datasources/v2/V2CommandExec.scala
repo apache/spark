@@ -43,8 +43,8 @@ abstract class V2CommandExec extends SparkPlan {
   private lazy val result: Seq[InternalRow] = run()
 
   /**
-   * The `execute()` method of all the physical command classes should reference `result`
-   * so that the command can be executed eagerly right after the command query is created.
+   * The `execute()` method of all the physical command classes should reference `result` so that
+   * the command can be executed eagerly right after the command query is created.
    */
   override def executeCollect(): Array[InternalRow] = result.toArray
 

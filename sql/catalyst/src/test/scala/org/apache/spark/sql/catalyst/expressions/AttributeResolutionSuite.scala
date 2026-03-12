@@ -31,11 +31,12 @@ class AttributeResolutionSuite extends SparkFunSuite {
       AttributeReference("a", IntegerType)(qualifier = Seq("ns1", "ns2", "ns3", "t2")))
 
     // Try to match attribute reference with name "a" with qualifier "ns1.ns2.t1".
-    Seq(Seq("t1", "a"), Seq("ns2", "t1", "a"), Seq("ns1", "ns2", "t1", "a")).foreach { nameParts =>
-      attrs.resolve(nameParts, resolver) match {
-        case Some(attr) => assert(attr.semanticEquals(attrs(0)))
-        case _ => fail()
-      }
+    Seq(Seq("t1", "a"), Seq("ns2", "t1", "a"), Seq("ns1", "ns2", "t1", "a")).foreach {
+      nameParts =>
+        attrs.resolve(nameParts, resolver) match {
+          case Some(attr) => assert(attr.semanticEquals(attrs(0)))
+          case _ => fail()
+        }
     }
 
     // Non-matching cases
@@ -47,13 +48,12 @@ class AttributeResolutionSuite extends SparkFunSuite {
   test("attribute resolution where table and attribute names are the same") {
     val attrs = Seq(AttributeReference("t", IntegerType)(qualifier = Seq("ns1", "ns2", "t")))
     // Matching cases
-    Seq(
-      Seq("t"), Seq("t", "t"), Seq("ns2", "t", "t"), Seq("ns1", "ns2", "t", "t")
-    ).foreach { nameParts =>
-      attrs.resolve(nameParts, resolver) match {
-        case Some(attr) => assert(attr.semanticEquals(attrs(0)))
-        case _ => fail()
-      }
+    Seq(Seq("t"), Seq("t", "t"), Seq("ns2", "t", "t"), Seq("ns1", "ns2", "t", "t")).foreach {
+      nameParts =>
+        attrs.resolve(nameParts, resolver) match {
+          case Some(attr) => assert(attr.semanticEquals(attrs(0)))
+          case _ => fail()
+        }
     }
 
     // Non-matching case
@@ -70,11 +70,8 @@ class AttributeResolutionSuite extends SparkFunSuite {
         attrs.resolve(Seq("a"), resolver)
       },
       condition = "AMBIGUOUS_REFERENCE",
-      parameters = Map(
-        "name" -> "`a`",
-        "referenceNames" -> "[`ns1`.`ns2`.`t2`.`a`, `ns1`.`t1`.`a`]"
-      )
-    )
+      parameters =
+        Map("name" -> "`a`", "referenceNames" -> "[`ns1`.`ns2`.`t2`.`a`, `ns1`.`t1`.`a`]"))
   }
 
   test("attribute resolution ambiguity at the qualifier level") {
@@ -89,9 +86,7 @@ class AttributeResolutionSuite extends SparkFunSuite {
       condition = "AMBIGUOUS_REFERENCE",
       parameters = Map(
         "name" -> "`ns1`.`t`.`a`",
-        "referenceNames" -> "[`ns1`.`t`.`a`, `ns2`.`ns1`.`t`.`a`]"
-      )
-    )
+        "referenceNames" -> "[`ns1`.`t`.`a`, `ns2`.`ns1`.`t`.`a`]"))
   }
 
   test("attribute resolution with nested fields") {

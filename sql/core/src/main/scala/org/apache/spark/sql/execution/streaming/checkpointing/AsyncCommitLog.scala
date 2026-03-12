@@ -29,8 +29,11 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 /**
  * Implementation of CommitLog to perform asynchronous writes to storage
  */
-class AsyncCommitLog(sparkSession: SparkSession, path: String, executorService: ThreadPoolExecutor)
-  extends CommitLog(sparkSession, path) {
+class AsyncCommitLog(
+    sparkSession: SparkSession,
+    path: String,
+    executorService: ThreadPoolExecutor)
+    extends CommitLog(sparkSession, path) {
 
   // the cache needs to be enabled because we may not be persisting every entry to durable storage
   // entries not persisted to durable storage will just be stored in memory for faster lookups
@@ -42,11 +45,14 @@ class AsyncCommitLog(sparkSession: SparkSession, path: String, executorService: 
 
   /**
    * Writes a new batch to the commit log asynchronously
-   * @param batchId id of batch to write
-   * @param metadata metadata of batch to write
-   * @return a CompeletableFuture that contains the batch id.  The future is completed when
-   *         the async write of the batch is completed.  Future may also be completed exceptionally
-   *         to indicate some write error.
+   * @param batchId
+   *   id of batch to write
+   * @param metadata
+   *   metadata of batch to write
+   * @return
+   *   a CompeletableFuture that contains the batch id. The future is completed when the async
+   *   write of the batch is completed. Future may also be completed exceptionally to indicate
+   *   some write error.
    */
   def addAsync(batchId: Long, metadata: CommitMetadata): CompletableFuture[Long] = {
     require(metadata != null, "'null' metadata cannot be written to a metadata log")
@@ -66,11 +72,14 @@ class AsyncCommitLog(sparkSession: SparkSession, path: String, executorService: 
 
   /**
    * Adds batch to commit log only in memory and not persisted to durable storage. This method is
-   * used when we don't want to persist the commit log entry for every micro batch
-   * to durable storage
-   * @param batchId id of batch to write
-   * @param metadata metadata of batch to write
-   * @return true if operation is successful otherwise false.
+   * used when we don't want to persist the commit log entry for every micro batch to durable
+   * storage
+   * @param batchId
+   *   id of batch to write
+   * @param metadata
+   *   metadata of batch to write
+   * @return
+   *   true if operation is successful otherwise false.
    */
   def addInMemory(batchId: Long, metadata: CommitMetadata): Boolean = {
     if (batchCache.containsKey(batchId)) {
@@ -91,14 +100,16 @@ class AsyncCommitLog(sparkSession: SparkSession, path: String, executorService: 
 
   /**
    * Adds new batch asynchronously
-   * @param batchId id of batch to write
-   * @param fn serialization function
-   * @return CompletableFuture that contains a boolean do
-   *         indicate whether the write was successfully or not.
-   *         Future can also be completed exceptionally to indicate write errors.
+   * @param batchId
+   *   id of batch to write
+   * @param fn
+   *   serialization function
+   * @return
+   *   CompletableFuture that contains a boolean do indicate whether the write was successfully or
+   *   not. Future can also be completed exceptionally to indicate write errors.
    */
   private def addNewBatchByStreamAsync(batchId: Long)(
-    fn: OutputStream => Unit): CompletableFuture[Boolean] = {
+      fn: OutputStream => Unit): CompletableFuture[Boolean] = {
     val future = new CompletableFuture[Boolean]()
     val batchMetadataFile = batchIdToPath(batchId)
 
@@ -113,21 +124,19 @@ class AsyncCommitLog(sparkSession: SparkSession, path: String, executorService: 
               future.complete(false)
             } else {
               val start = System.currentTimeMillis()
-              write(
-                batchMetadataFile,
-                fn
-              )
+              write(batchMetadataFile, fn)
               logDebug(
                 s"Completion commit for batch ${batchId} took" +
-                  s" ${System.currentTimeMillis() - start} ms to be persisted to durable storage"
-              )
+                  s" ${System.currentTimeMillis() - start} ms to be persisted to durable storage")
               writtenToDurableStorage.add(batchId)
               future.complete(true)
             }
           } catch {
             case e: Throwable =>
-              logError(log"Encountered error while writing batch " +
-                log"${MDC(LogKeys.BATCH_ID, batchId)} to commit log", e)
+              logError(
+                log"Encountered error while writing batch " +
+                  log"${MDC(LogKeys.BATCH_ID, batchId)} to commit log",
+                e)
               future.completeExceptionally(e)
           }
         }

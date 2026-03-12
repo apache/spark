@@ -22,8 +22,8 @@ import org.apache.spark.sql.execution.{DeserializeToObjectExec, SparkPlan}
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
 
 /**
- * This rule is used to adjust the shuffle exchange with special SparkPlan who
- * does not allow a shuffle on top of it.
+ * This rule is used to adjust the shuffle exchange with special SparkPlan who does not allow a
+ * shuffle on top of it.
  */
 object AdjustShuffleExchangePosition extends Rule[SparkPlan] {
   private def shouldAdjust(plan: SparkPlan): Boolean = plan match {

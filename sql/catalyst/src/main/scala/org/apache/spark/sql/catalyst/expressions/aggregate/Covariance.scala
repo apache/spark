@@ -25,11 +25,16 @@ import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
 
 /**
- * Compute the covariance between two expressions.
- * When applied on empty data (i.e., count is zero), it returns NULL.
+ * Compute the covariance between two expressions. When applied on empty data (i.e., count is
+ * zero), it returns NULL.
  */
-abstract class Covariance(val left: Expression, val right: Expression, nullOnDivideByZero: Boolean)
-  extends DeclarativeAggregate with ImplicitCastInputTypes with BinaryLike[Expression] {
+abstract class Covariance(
+    val left: Expression,
+    val right: Expression,
+    nullOnDivideByZero: Boolean)
+    extends DeclarativeAggregate
+    with ImplicitCastInputTypes
+    with BinaryLike[Expression] {
 
   override def nullable: Boolean = true
   override def dataType: DataType = DoubleType
@@ -83,8 +88,7 @@ abstract class Covariance(val left: Expression, val right: Expression, nullOnDiv
       If(isNull, n, newN),
       If(isNull, xAvg, newXAvg),
       If(isNull, yAvg, newYAvg),
-      If(isNull, ck, newCk)
-    )
+      If(isNull, ck, newCk))
   }
 }
 
@@ -101,7 +105,7 @@ case class CovPopulation(
     override val left: Expression,
     override val right: Expression,
     nullOnDivideByZero: Boolean = !SQLConf.get.legacyStatisticalAggregate)
-  extends Covariance(left, right, nullOnDivideByZero) {
+    extends Covariance(left, right, nullOnDivideByZero) {
 
   def this(left: Expression, right: Expression) =
     this(left, right, !SQLConf.get.legacyStatisticalAggregate)
@@ -112,10 +116,10 @@ case class CovPopulation(
   override def prettyName: String = "covar_pop"
 
   override protected def withNewChildrenInternal(
-      newLeft: Expression, newRight: Expression): CovPopulation =
+      newLeft: Expression,
+      newRight: Expression): CovPopulation =
     copy(left = newLeft, right = newRight)
 }
-
 
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2) - Returns the sample covariance of a set of number pairs.",
@@ -130,36 +134,38 @@ case class CovSample(
     override val left: Expression,
     override val right: Expression,
     nullOnDivideByZero: Boolean = !SQLConf.get.legacyStatisticalAggregate)
-  extends Covariance(left, right, nullOnDivideByZero) {
+    extends Covariance(left, right, nullOnDivideByZero) {
 
   def this(left: Expression, right: Expression) =
     this(left, right, !SQLConf.get.legacyStatisticalAggregate)
 
   override val evaluateExpression: Expression = {
-    If(n === 0.0, Literal.create(null, DoubleType),
+    If(
+      n === 0.0,
+      Literal.create(null, DoubleType),
       If(n === 1.0, divideByZeroEvalResult, ck / (n - 1.0)))
   }
   override def prettyName: String = "covar_samp"
 
   override protected def withNewChildrenInternal(
-      newLeft: Expression, newRight: Expression): CovSample = copy(left = newLeft, right = newRight)
+      newLeft: Expression,
+      newRight: Expression): CovSample = copy(left = newLeft, right = newRight)
 }
 
 /**
- * Covariance in Pandas' fashion. This expression is dedicated only for Pandas API on Spark.
- * Refer to numpy.cov.
+ * Covariance in Pandas' fashion. This expression is dedicated only for Pandas API on Spark. Refer
+ * to numpy.cov.
  */
-case class PandasCovar(
-    override val left: Expression,
-    override val right: Expression,
-    ddof: Int)
-  extends Covariance(left, right, true) {
+case class PandasCovar(override val left: Expression, override val right: Expression, ddof: Int)
+    extends Covariance(left, right, true) {
 
   def this(left: Expression, right: Expression, ddof: Expression) =
     this(left, right, PandasAggregate.expressionToDDOF(ddof, "pandas_covar"))
 
   override val evaluateExpression: Expression = {
-    If(n === 0.0, Literal.create(null, DoubleType),
+    If(
+      n === 0.0,
+      Literal.create(null, DoubleType),
       If(n === ddof.toDouble, divideByZeroEvalResult, ck / (n - ddof.toDouble)))
   }
   override def prettyName: String = "pandas_covar"

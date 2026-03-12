@@ -27,7 +27,8 @@ abstract class DeltaBasedMergeIntoTableSuiteBase extends MergeIntoTableSuiteBase
 
   test("merge into schema pruning with WHEN MATCHED clause (update)") {
     withTempView("source") {
-      createAndInitTable("pk INT NOT NULL, salary INT, country STRING, dep STRING",
+      createAndInitTable(
+        "pk INT NOT NULL, salary INT, country STRING, dep STRING",
         """{ "pk": 1, "salary": 100, "country": "uk", "dep": "hr" }
           |{ "pk": 2, "salary": 200, "country": "us", "dep": "corrupted" }
           |""".stripMargin)
@@ -54,13 +55,16 @@ abstract class DeltaBasedMergeIntoTableSuiteBase extends MergeIntoTableSuiteBase
         sql(s"SELECT * FROM $tableNameAsString"),
         Seq(
           Row(1, 100, "uk", "hr"), // unchanged
-          Row(2, 200, "india", "finance"))) // update
+          Row(2, 200, "india", "finance")
+        )
+      ) // update
     }
   }
 
   test("merge into schema pruning with WHEN MATCHED clause (delete)") {
     withTempView("source") {
-      createAndInitTable("pk INT NOT NULL, salary INT, country STRING, dep STRING",
+      createAndInitTable(
+        "pk INT NOT NULL, salary INT, country STRING, dep STRING",
         """{ "pk": 1, "salary": 100, "country": "uk", "dep": "hr" }
           |{ "pk": 2, "salary": 200, "country": "us", "dep": "corrupted" }
           |""".stripMargin)
@@ -81,13 +85,15 @@ abstract class DeltaBasedMergeIntoTableSuiteBase extends MergeIntoTableSuiteBase
 
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
-        Seq(Row(1, 100, "uk", "hr"))) // unchanged
+        Seq(Row(1, 100, "uk", "hr"))
+      ) // unchanged
     }
   }
 
   test("merge into schema pruning with WHEN NOT MATCHED clause") {
     withTempView("source") {
-      createAndInitTable("pk INT NOT NULL, salary INT, country STRING, dep STRING",
+      createAndInitTable(
+        "pk INT NOT NULL, salary INT, country STRING, dep STRING",
         """{ "pk": 1, "salary": 100, "country": "uk", "dep": "hr" }
           |{ "pk": 2, "salary": 200, "country": "us", "dep": "software" }
           |""".stripMargin)
@@ -113,20 +119,21 @@ abstract class DeltaBasedMergeIntoTableSuiteBase extends MergeIntoTableSuiteBase
         Seq(
           Row(1, 100, "uk", "hr"), // unchanged
           Row(2, 200, "us", "software"), // unchanged
-          Row(3, 300, "china", "software"))) // insert
+          Row(3, 300, "china", "software")
+        )
+      ) // insert
     }
   }
 
   test("merge into schema pruning with WHEN NOT MATCHED BY SOURCE clause (update)") {
     withTempView("source") {
-      createAndInitTable("pk INT NOT NULL, salary INT, country STRING, dep STRING",
+      createAndInitTable(
+        "pk INT NOT NULL, salary INT, country STRING, dep STRING",
         """{ "pk": 1, "salary": 100, "country": "uk", "dep": "hr" }
           |{ "pk": 2, "salary": 200, "country": "us", "dep": "software" }
           |""".stripMargin)
 
-      val sourceRows = Seq(
-        (2, 200, "india", "finance"),
-        (3, 300, "china", "software"))
+      val sourceRows = Seq((2, 200, "india", "finance"), (3, 300, "china", "software"))
       sourceRows.toDF("pk", "salary", "country", "dep").createOrReplaceTempView("source")
 
       executeAndCheckScan(
@@ -145,20 +152,21 @@ abstract class DeltaBasedMergeIntoTableSuiteBase extends MergeIntoTableSuiteBase
         sql(s"SELECT * FROM $tableNameAsString"),
         Seq(
           Row(1, 100, "invalid", "invalid"), // update
-          Row(2, 200, "us", "software"))) // unchanged
+          Row(2, 200, "us", "software")
+        )
+      ) // unchanged
     }
   }
 
   test("merge into schema pruning with WHEN NOT MATCHED BY SOURCE clause (delete)") {
     withTempView("source") {
-      createAndInitTable("pk INT NOT NULL, salary INT, country STRING, dep STRING",
+      createAndInitTable(
+        "pk INT NOT NULL, salary INT, country STRING, dep STRING",
         """{ "pk": 1, "salary": 100, "country": "uk", "dep": "hr" }
           |{ "pk": 2, "salary": 200, "country": "us", "dep": "software" }
           |""".stripMargin)
 
-      val sourceRows = Seq(
-        (2, 200, "india", "finance"),
-        (3, 300, "china", "software"))
+      val sourceRows = Seq((2, 200, "india", "finance"), (3, 300, "china", "software"))
       sourceRows.toDF("pk", "salary", "country", "dep").createOrReplaceTempView("source")
 
       executeAndCheckScan(
@@ -175,20 +183,20 @@ abstract class DeltaBasedMergeIntoTableSuiteBase extends MergeIntoTableSuiteBase
 
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
-        Seq(Row(2, 200, "us", "software"))) // unchanged
+        Seq(Row(2, 200, "us", "software"))
+      ) // unchanged
     }
   }
 
   test("merge into schema pruning with clauses") {
     withTempView("source") {
-      createAndInitTable("pk INT NOT NULL, salary INT, country STRING, dep STRING",
+      createAndInitTable(
+        "pk INT NOT NULL, salary INT, country STRING, dep STRING",
         """{ "pk": 1, "salary": 100, "country": "uk", "dep": "hr" }
           |{ "pk": 2, "salary": 200, "country": "us", "dep": "software" }
           |""".stripMargin)
 
-      val sourceRows = Seq(
-        (2, 200, "india", "finance"),
-        (3, 300, "china", "software"))
+      val sourceRows = Seq((2, 200, "india", "finance"), (3, 300, "china", "software"))
       sourceRows.toDF("pk", "salary", "country", "dep").createOrReplaceTempView("source")
 
       executeAndCheckScan(
@@ -211,7 +219,9 @@ abstract class DeltaBasedMergeIntoTableSuiteBase extends MergeIntoTableSuiteBase
         sql(s"SELECT * FROM $tableNameAsString"),
         Seq(
           Row(2, 200, "india", "finance"), // update
-          Row(3, 300, "china", "software"))) // insert
+          Row(3, 300, "china", "software")
+        )
+      ) // insert
     }
   }
 
@@ -220,8 +230,9 @@ abstract class DeltaBasedMergeIntoTableSuiteBase extends MergeIntoTableSuiteBase
     withTable(sourceTableName) {
       createTable("pk INT NOT NULL, salary INT, dep STRING")
       sql(s"CREATE TABLE $sourceTableName (PK INT NOT NULL, SALARY INT, DEP VARCHAR(10))")
-      sql(s"INSERT INTO $sourceTableName values " +
-        s"(1, 100, 'hr1'), (2, 200, 'hr2'), (3, 300, 'hr3')")
+      sql(
+        s"INSERT INTO $sourceTableName values " +
+          s"(1, 100, 'hr1'), (2, 200, 'hr2'), (3, 300, 'hr3')")
       sql(s"""MERGE INTO $tableNameAsString t
              |USING $sourceTableName s
              |ON t.pk = s.pk

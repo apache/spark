@@ -38,14 +38,18 @@ class AlterTableUnsetTblPropertiesParserSuite extends AnalysisTest with SharedSp
     comparePlans(
       parsePlan(sql1),
       UnsetTableProperties(
-        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... UNSET TBLPROPERTIES",
+        UnresolvedTable(
+          Seq("table_name"),
+          "ALTER TABLE ... UNSET TBLPROPERTIES",
           suggestAlternative = true),
         Seq("comment", "test"),
         ifExists = false))
     comparePlans(
       parsePlan(sql2),
       UnsetTableProperties(
-        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... UNSET TBLPROPERTIES",
+        UnresolvedTable(
+          Seq("table_name"),
+          "ALTER TABLE ... UNSET TBLPROPERTIES",
           suggestAlternative = true),
         Seq("comment", "test"),
         ifExists = true))
@@ -56,10 +60,8 @@ class AlterTableUnsetTblPropertiesParserSuite extends AnalysisTest with SharedSp
     checkError(
       exception = parseException(sql),
       condition = "_LEGACY_ERROR_TEMP_0035",
-      parameters = Map("message" -> "Values should not be specified for key(s): [key_with_value]"),
-      context = ExpectedContext(
-        fragment = sql,
-        start = 0,
-        stop = 80))
+      parameters =
+        Map("message" -> "Values should not be specified for key(s): [key_with_value]"),
+      context = ExpectedContext(fragment = sql, start = 0, stop = 80))
   }
 }

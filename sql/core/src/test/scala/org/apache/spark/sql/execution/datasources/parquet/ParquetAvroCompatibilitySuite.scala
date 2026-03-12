@@ -35,17 +35,16 @@ import org.apache.spark.sql.execution.datasources.parquet.test.avro._
 import org.apache.spark.sql.test.SharedSparkSession
 
 class ParquetAvroCompatibilitySuite extends ParquetCompatibilityTest with SharedSparkSession {
-  private def withWriter[T <: IndexedRecord]
-      (path: String, schema: Schema)
-      (f: ParquetWriter[T] => Unit): Unit = {
-    logInfo(
-      s"""Writing Avro records with the following Avro schema into Parquet file:
+  private def withWriter[T <: IndexedRecord](path: String, schema: Schema)(
+      f: ParquetWriter[T] => Unit): Unit = {
+    logInfo(s"""Writing Avro records with the following Avro schema into Parquet file:
          |
          |${SchemaFormatter.format(AvroUtils.JSON_PRETTY_FORMAT, schema)}
        """.stripMargin)
 
     val writer = AvroParquetWriter.builder[T](new Path(path)).withSchema(schema).build()
-    try f(writer) finally writer.close()
+    try f(writer)
+    finally writer.close()
   }
 
   test("required primitives") {
@@ -55,7 +54,8 @@ class ParquetAvroCompatibilitySuite extends ParquetCompatibilityTest with Shared
       withWriter[AvroPrimitives](path, AvroPrimitives.getClassSchema) { writer =>
         (0 until 10).foreach { i =>
           writer.write(
-            AvroPrimitives.newBuilder()
+            AvroPrimitives
+              .newBuilder()
               .setBoolColumn(i % 2 == 0)
               .setIntColumn(i)
               .setLongColumn(i.toLong * 10)
@@ -69,16 +69,18 @@ class ParquetAvroCompatibilitySuite extends ParquetCompatibilityTest with Shared
 
       logParquetSchema(path)
 
-      checkAnswer(spark.read.parquet(path), (0 until 10).map { i =>
-        Row(
-          i % 2 == 0,
-          i,
-          i.toLong * 10,
-          i.toFloat + 0.1f,
-          i.toDouble + 0.2d,
-          s"val_$i".getBytes(StandardCharsets.UTF_8),
-          s"val_$i")
-      })
+      checkAnswer(
+        spark.read.parquet(path),
+        (0 until 10).map { i =>
+          Row(
+            i % 2 == 0,
+            i,
+            i.toLong * 10,
+            i.toFloat + 0.1f,
+            i.toDouble + 0.2d,
+            s"val_$i".getBytes(StandardCharsets.UTF_8),
+            s"val_$i")
+        })
     }
   }
 
@@ -89,7 +91,8 @@ class ParquetAvroCompatibilitySuite extends ParquetCompatibilityTest with Shared
       withWriter[AvroOptionalPrimitives](path, AvroOptionalPrimitives.getClassSchema) { writer =>
         (0 until 10).foreach { i =>
           val record = if (i % 3 == 0) {
-            AvroOptionalPrimitives.newBuilder()
+            AvroOptionalPrimitives
+              .newBuilder()
               .setMaybeBoolColumn(null)
               .setMaybeIntColumn(null)
               .setMaybeLongColumn(null)
@@ -99,7 +102,8 @@ class ParquetAvroCompatibilitySuite extends ParquetCompatibilityTest with Shared
               .setMaybeStringColumn(null)
               .build()
           } else {
-            AvroOptionalPrimitives.newBuilder()
+            AvroOptionalPrimitives
+              .newBuilder()
               .setMaybeBoolColumn(i % 2 == 0)
               .setMaybeIntColumn(i)
               .setMaybeLongColumn(i.toLong * 10)
@@ -116,20 +120,22 @@ class ParquetAvroCompatibilitySuite extends ParquetCompatibilityTest with Shared
 
       logParquetSchema(path)
 
-      checkAnswer(spark.read.parquet(path), (0 until 10).map { i =>
-        if (i % 3 == 0) {
-          Row.apply(Seq.fill(7)(null): _*)
-        } else {
-          Row(
-            i % 2 == 0,
-            i,
-            i.toLong * 10,
-            i.toFloat + 0.1f,
-            i.toDouble + 0.2d,
-            s"val_$i".getBytes(StandardCharsets.UTF_8),
-            s"val_$i")
-        }
-      })
+      checkAnswer(
+        spark.read.parquet(path),
+        (0 until 10).map { i =>
+          if (i % 3 == 0) {
+            Row.apply(Seq.fill(7)(null): _*)
+          } else {
+            Row(
+              i % 2 == 0,
+              i,
+              i.toLong * 10,
+              i.toFloat + 0.1f,
+              i.toDouble + 0.2d,
+              s"val_$i".getBytes(StandardCharsets.UTF_8),
+              s"val_$i")
+          }
+        })
     }
   }
 
@@ -141,7 +147,8 @@ class ParquetAvroCompatibilitySuite extends ParquetCompatibilityTest with Shared
         (0 until 10).foreach { i =>
           val record = {
             val builder =
-              AvroNonNullableArrays.newBuilder()
+              AvroNonNullableArrays
+                .newBuilder()
                 .setStringsColumn(Seq.tabulate(3)(i => s"val_$i").asJava)
 
             if (i % 3 == 0) {
@@ -157,11 +164,13 @@ class ParquetAvroCompatibilitySuite extends ParquetCompatibilityTest with Shared
 
       logParquetSchema(path)
 
-      checkAnswer(spark.read.parquet(path), (0 until 10).map { i =>
-        Row(
-          Seq.tabulate(3)(i => s"val_$i"),
-          if (i % 3 == 0) null else Seq.tabulate(3)(identity))
-      })
+      checkAnswer(
+        spark.read.parquet(path),
+        (0 until 10).map { i =>
+          Row(
+            Seq.tabulate(3)(i => s"val_$i"),
+            if (i % 3 == 0) null else Seq.tabulate(3)(identity))
+        })
     }
   }
 
@@ -175,18 +184,22 @@ class ParquetAvroCompatibilitySuite extends ParquetCompatibilityTest with Shared
 
       withWriter[AvroArrayOfArray](path, AvroArrayOfArray.getClassSchema) { writer =>
         (0 until 10).foreach { i =>
-          writer.write(AvroArrayOfArray.newBuilder()
-            .setIntArraysColumn(
-              Seq.tabulate(3, 3)((i, j) => i * 3 + j: Integer).map(_.asJava).asJava)
-            .build())
+          writer.write(
+            AvroArrayOfArray
+              .newBuilder()
+              .setIntArraysColumn(
+                Seq.tabulate(3, 3)((i, j) => i * 3 + j: Integer).map(_.asJava).asJava)
+              .build())
         }
       }
 
       logParquetSchema(path)
 
-      checkAnswer(spark.read.parquet(path), (0 until 10).map { i =>
-        Row(Seq.tabulate(3, 3)((i, j) => i * 3 + j))
-      })
+      checkAnswer(
+        spark.read.parquet(path),
+        (0 until 10).map { i =>
+          Row(Seq.tabulate(3, 3)((i, j) => i * 3 + j))
+        })
     }
   }
 
@@ -196,20 +209,27 @@ class ParquetAvroCompatibilitySuite extends ParquetCompatibilityTest with Shared
 
       withWriter[AvroMapOfArray](path, AvroMapOfArray.getClassSchema) { writer =>
         (0 until 10).foreach { i =>
-          writer.write(AvroMapOfArray.newBuilder()
-            .setStringToIntsColumn(
-              Seq.tabulate(3) { i =>
-                i.toString -> Seq.tabulate(3)(j => i + j: Integer).asJava
-              }.toMap.asJava)
-            .build())
+          writer.write(
+            AvroMapOfArray
+              .newBuilder()
+              .setStringToIntsColumn(
+                Seq
+                  .tabulate(3) { i =>
+                    i.toString -> Seq.tabulate(3)(j => i + j: Integer).asJava
+                  }
+                  .toMap
+                  .asJava)
+              .build())
         }
       }
 
       logParquetSchema(path)
 
-      checkAnswer(spark.read.parquet(path), (0 until 10).map { i =>
-        Row(Seq.tabulate(3)(i => i.toString -> Seq.tabulate(3)(j => i + j)).toMap)
-      })
+      checkAnswer(
+        spark.read.parquet(path),
+        (0 until 10).map { i =>
+          Row(Seq.tabulate(3)(i => i.toString -> Seq.tabulate(3)(j => i + j)).toMap)
+        })
     }
   }
 
@@ -223,30 +243,39 @@ class ParquetAvroCompatibilitySuite extends ParquetCompatibilityTest with Shared
 
       logParquetSchema(path)
 
-      checkAnswer(spark.read.parquet(path), (0 until 10).map { i =>
-        Row(
-          Seq.tabulate(3)(n => s"arr_${i + n}"),
-          Seq.tabulate(3)(n => n.toString -> (i + n: Integer)).toMap,
-          Seq.tabulate(3) { n =>
-            (i + n).toString -> Seq.tabulate(3) { m =>
-              Row(Seq.tabulate(3)(j => i + j + m), s"val_${i + m}")
-            }
-          }.toMap)
-      })
+      checkAnswer(
+        spark.read.parquet(path),
+        (0 until 10).map { i =>
+          Row(
+            Seq.tabulate(3)(n => s"arr_${i + n}"),
+            Seq.tabulate(3)(n => n.toString -> (i + n: Integer)).toMap,
+            Seq
+              .tabulate(3) { n =>
+                (i + n).toString -> Seq.tabulate(3) { m =>
+                  Row(Seq.tabulate(3)(j => i + j + m), s"val_${i + m}")
+                }
+              }
+              .toMap)
+        })
     }
   }
 
   def makeParquetAvroCompat(i: Int): ParquetAvroCompat = {
     def makeComplexColumn(i: Int): JMap[String, JList[Nested]] = {
-      Seq.tabulate(3) { n =>
-        (i + n).toString -> Seq.tabulate(3) { m =>
-          Nested
-            .newBuilder()
-            .setNestedIntsColumn(Seq.tabulate(3)(j => i + j + m: Integer).asJava)
-            .setNestedStringColumn(s"val_${i + m}")
-            .build()
-        }.asJava
-      }.toMap.asJava
+      Seq
+        .tabulate(3) { n =>
+          (i + n).toString -> Seq
+            .tabulate(3) { m =>
+              Nested
+                .newBuilder()
+                .setNestedIntsColumn(Seq.tabulate(3)(j => i + j + m: Integer).asJava)
+                .setNestedStringColumn(s"val_${i + m}")
+                .build()
+            }
+            .asJava
+        }
+        .toMap
+        .asJava
     }
 
     ParquetAvroCompat

@@ -41,18 +41,23 @@ private[avro] class AvroOutputWriter(
     context: TaskAttemptContext,
     schema: StructType,
     positionalFieldMatching: Boolean,
-    avroSchema: Schema) extends OutputWriter {
+    avroSchema: Schema)
+    extends OutputWriter {
 
   // Whether to rebase datetimes from Gregorian to Julian calendar in write
   private val datetimeRebaseMode = SQLConf.get.getConf(SQLConf.AVRO_REBASE_MODE_IN_WRITE)
 
   // The input rows will never be null.
   private lazy val serializer = new AvroSerializer(
-    schema, avroSchema, nullable = false, positionalFieldMatching, datetimeRebaseMode)
+    schema,
+    avroSchema,
+    nullable = false,
+    positionalFieldMatching,
+    datetimeRebaseMode)
 
   /**
-   * Overrides the couple of methods responsible for generating the output streams / files so
-   * that the data can be correctly partitioned
+   * Overrides the couple of methods responsible for generating the output streams / files so that
+   * the data can be correctly partitioned
    */
   private val recordWriter: RecordWriter[AvroKey[GenericRecord], NullWritable] = {
     val fileMeta = Map(SPARK_VERSION_METADATA_KEY -> SPARK_VERSION_SHORT) ++ {

@@ -42,34 +42,58 @@ import org.apache.spark.storage.ShuffleIndexBlockId
 import org.apache.spark.util.Utils
 
 case class QueryExecutionTestRecord(
-    c0: Int, c1: Int, c2: Int, c3: Int, c4: Int,
-    c5: Int, c6: Int, c7: Int, c8: Int, c9: Int,
-    c10: Int, c11: Int, c12: Int, c13: Int, c14: Int,
-    c15: Int, c16: Int, c17: Int, c18: Int, c19: Int,
-    c20: Int, c21: Int, c22: Int, c23: Int, c24: Int,
-    c25: Int, c26: Int)
+    c0: Int,
+    c1: Int,
+    c2: Int,
+    c3: Int,
+    c4: Int,
+    c5: Int,
+    c6: Int,
+    c7: Int,
+    c8: Int,
+    c9: Int,
+    c10: Int,
+    c11: Int,
+    c12: Int,
+    c13: Int,
+    c14: Int,
+    c15: Int,
+    c16: Int,
+    c17: Int,
+    c18: Int,
+    c19: Int,
+    c20: Int,
+    c21: Int,
+    c22: Int,
+    c23: Int,
+    c24: Int,
+    c25: Int,
+    c26: Int)
 
 class QueryExecutionSuite extends SharedSparkSession {
   import testImplicits._
 
-  def checkDumpedPlans(path: String, expected: Int): Unit = Utils.tryWithResource(
-    Source.fromFile(path)) { source =>
-    assert(source.getLines().toList
-      .takeWhile(_ != "== Whole Stage Codegen ==") == List(
-      "== Parsed Logical Plan ==",
-      s"Range (0, $expected, step=1, splits=Some(2))",
-      "",
-      "== Analyzed Logical Plan ==",
-      "id: bigint",
-      s"Range (0, $expected, step=1, splits=Some(2))",
-      "",
-      "== Optimized Logical Plan ==",
-      s"Range (0, $expected, step=1, splits=Some(2))",
-      "",
-      "== Physical Plan ==",
-      s"*(1) Range (0, $expected, step=1, splits=2)",
-      ""))
-  }
+  def checkDumpedPlans(path: String, expected: Int): Unit =
+    Utils.tryWithResource(Source.fromFile(path)) { source =>
+      assert(
+        source
+          .getLines()
+          .toList
+          .takeWhile(_ != "== Whole Stage Codegen ==") == List(
+          "== Parsed Logical Plan ==",
+          s"Range (0, $expected, step=1, splits=Some(2))",
+          "",
+          "== Analyzed Logical Plan ==",
+          "id: bigint",
+          s"Range (0, $expected, step=1, splits=Some(2))",
+          "",
+          "== Optimized Logical Plan ==",
+          s"Range (0, $expected, step=1, splits=Some(2))",
+          "",
+          "== Physical Plan ==",
+          s"*(1) Range (0, $expected, step=1, splits=2)",
+          ""))
+    }
 
   test("dumping query execution info to a file") {
     withTempDir { dir =>
@@ -117,25 +141,27 @@ class QueryExecutionSuite extends SharedSparkSession {
       val df = spark.range(0, 10)
       df.queryExecution.debug.toFile(path, explainMode = Option("formatted"))
       val lines = Utils.tryWithResource(Source.fromFile(path))(_.getLines().toList)
-      assert(lines
-        .takeWhile(_ != "== Whole Stage Codegen ==").map(_.replaceAll("#\\d+", "#x")) == List(
-        "== Physical Plan ==",
-        s"* Range (1)",
-        "",
-        "",
-        s"(1) Range [codegen id : 1]",
-        "Output [1]: [id#xL]",
-        s"Arguments: Range (0, 10, step=1, splits=Some(2))",
-        "",
-        ""))
+      assert(
+        lines
+          .takeWhile(_ != "== Whole Stage Codegen ==")
+          .map(_.replaceAll("#\\d+", "#x")) == List(
+          "== Physical Plan ==",
+          s"* Range (1)",
+          "",
+          "",
+          s"(1) Range [codegen id : 1]",
+          "Output [1]: [id#xL]",
+          s"Arguments: Range (0, 10, step=1, splits=Some(2))",
+          "",
+          ""))
     }
   }
 
   test("limit number of fields by sql config") {
     def relationPlans: String = {
-      val ds = spark.createDataset(Seq(QueryExecutionTestRecord(
-        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
-        16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26)))
+      val ds = spark.createDataset(
+        Seq(QueryExecutionTestRecord(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17,
+          18, 19, 20, 21, 22, 23, 24, 25, 26)))
       ds.queryExecution.toString
     }
     withSQLConf(SQLConf.MAX_TO_STRING_FIELDS.key -> "26") {
@@ -149,9 +175,9 @@ class QueryExecutionSuite extends SharedSparkSession {
   test("check maximum fields restriction") {
     withTempDir { dir =>
       val path = dir.getCanonicalPath + "/plans.txt"
-      val ds = spark.createDataset(Seq(QueryExecutionTestRecord(
-        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
-        16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26)))
+      val ds = spark.createDataset(
+        Seq(QueryExecutionTestRecord(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17,
+          18, 19, 20, 21, 22, 23, 24, 25, 26)))
       ds.queryExecution.debug.toFile(path)
       Utils.tryWithResource(Source.fromFile(path)) { source =>
         val localRelations = source.getLines().filter(_.contains("LocalRelation"))
@@ -169,15 +195,15 @@ class QueryExecutionSuite extends SharedSparkSession {
     assert(qe.toString.contains("OneRowRelation"))
 
     // Throw an AnalysisException - this should be captured.
-    spark.experimental.extraStrategies = Seq[SparkStrategy](
-      (_: LogicalPlan) => throw new AnalysisException(
+    spark.experimental.extraStrategies = Seq[SparkStrategy]((_: LogicalPlan) =>
+      throw new AnalysisException(
         "UNSUPPORTED_DATASOURCE_FOR_DIRECT_QUERY",
         messageParameters = Map("dataSourceType" -> "XXX")))
     assert(qe.toString.contains("org.apache.spark.sql.AnalysisException"))
 
     // Throw an Error - this should not be captured.
-    spark.experimental.extraStrategies = Seq[SparkStrategy](
-      (_: LogicalPlan) => throw new Error("error"))
+    spark.experimental.extraStrategies =
+      Seq[SparkStrategy]((_: LogicalPlan) => throw new Error("error"))
     val error = intercept[Error](qe.toString)
     assert(error.getMessage.contains("error"))
 
@@ -240,11 +266,12 @@ class QueryExecutionSuite extends SharedSparkSession {
         spark.range(1).groupBy("id").count().queryExecution.executedPlan
       }
     }
-    Seq("=== Applying Rule org.apache.spark.sql.execution",
-        "=== Result of Batch Preparations ===",
-        "Output Information:").foreach { expectedMsg =>
-      assert(testAppender.loggingEvents.exists(
-        _.getMessage.getFormattedMessage.contains(expectedMsg)))
+    Seq(
+      "=== Applying Rule org.apache.spark.sql.execution",
+      "=== Result of Batch Preparations ===",
+      "Output Information:").foreach { expectedMsg =>
+      assert(
+        testAppender.loggingEvents.exists(_.getMessage.getFormattedMessage.contains(expectedMsg)))
     }
   }
 
@@ -252,8 +279,9 @@ class QueryExecutionSuite extends SharedSparkSession {
     withTable("spark_34129") {
       spark.sql("CREATE TABLE spark_34129(id INT) using parquet")
       val df = spark.table("spark_34129")
-      assert(df.queryExecution.optimizedPlan.toString.startsWith(
-        s"Relation $SESSION_CATALOG_NAME.default.spark_34129["))
+      assert(
+        df.queryExecution.optimizedPlan.toString
+          .startsWith(s"Relation $SESSION_CATALOG_NAME.default.spark_34129["))
     }
   }
 
@@ -331,16 +359,18 @@ class QueryExecutionSuite extends SharedSparkSession {
   }
 
   test("SPARK-53413: Cleanup shuffle dependencies for commands") {
-    Seq(true, false).foreach { adaptiveEnabled => {
-      withSQLConf((SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, adaptiveEnabled.toString),
-        (SQLConf.CLASSIC_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED.key, true.toString)) {
-        val plan = spark.range(100).repartition(10).logicalPlan
-        val df = Dataset.ofRows(spark, plan)
-        df.write.format("noop").mode(SaveMode.Overwrite).save()
+    Seq(true, false).foreach { adaptiveEnabled =>
+      {
+        withSQLConf(
+          (SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, adaptiveEnabled.toString),
+          (SQLConf.CLASSIC_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED.key, true.toString)) {
+          val plan = spark.range(100).repartition(10).logicalPlan
+          val df = Dataset.ofRows(spark, plan)
+          df.write.format("noop").mode(SaveMode.Overwrite).save()
 
-        val blockManager = spark.sparkContext.env.blockManager
-        assert(blockManager.migratableResolver.getStoredShuffles().isEmpty)
-        assert(blockManager.diskBlockManager.getAllBlocks().isEmpty)
+          val blockManager = spark.sparkContext.env.blockManager
+          assert(blockManager.migratableResolver.getStoredShuffles().isEmpty)
+          assert(blockManager.diskBlockManager.getAllBlocks().isEmpty)
         }
       }
     }
@@ -348,17 +378,19 @@ class QueryExecutionSuite extends SharedSparkSession {
 
   test("SPARK-53413: Cleanup shuffle dependencies for DataWritingCommandExec") {
     withTempDir { dir =>
-      Seq(true, false).foreach { adaptiveEnabled => {
-        withSQLConf((SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, adaptiveEnabled.toString),
-          (SQLConf.CLASSIC_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED.key, true.toString)) {
-          val plan = spark.range(100).repartition(10).logicalPlan
-          val df = Dataset.ofRows(spark, plan)
-          // V1 API write
-          df.write.format("csv").mode(SaveMode.Overwrite).save(dir.getCanonicalPath)
+      Seq(true, false).foreach { adaptiveEnabled =>
+        {
+          withSQLConf(
+            (SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, adaptiveEnabled.toString),
+            (SQLConf.CLASSIC_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED.key, true.toString)) {
+            val plan = spark.range(100).repartition(10).logicalPlan
+            val df = Dataset.ofRows(spark, plan)
+            // V1 API write
+            df.write.format("csv").mode(SaveMode.Overwrite).save(dir.getCanonicalPath)
 
-          val blockManager = spark.sparkContext.env.blockManager
-          assert(blockManager.migratableResolver.getStoredShuffles().isEmpty)
-          assert(blockManager.diskBlockManager.getAllBlocks().isEmpty)
+            val blockManager = spark.sparkContext.env.blockManager
+            assert(blockManager.migratableResolver.getStoredShuffles().isEmpty)
+            assert(blockManager.diskBlockManager.getAllBlocks().isEmpty)
           }
         }
       }
@@ -366,48 +398,51 @@ class QueryExecutionSuite extends SharedSparkSession {
   }
 
   test("SPARK-47764: Cleanup shuffle dependencies - DoNotCleanup mode") {
-    Seq(true, false).foreach { adaptiveEnabled => {
-      withSQLConf((SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, adaptiveEnabled.toString)) {
-        val plan = spark.range(100).repartition(10).logicalPlan
-        val df = Dataset.ofRows(spark, plan, DoNotCleanup)
-        df.collect()
+    Seq(true, false).foreach { adaptiveEnabled =>
+      {
+        withSQLConf((SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, adaptiveEnabled.toString)) {
+          val plan = spark.range(100).repartition(10).logicalPlan
+          val df = Dataset.ofRows(spark, plan, DoNotCleanup)
+          df.collect()
 
-        val blockManager = spark.sparkContext.env.blockManager
-        assert(blockManager.migratableResolver.getStoredShuffles().nonEmpty)
-        assert(blockManager.diskBlockManager.getAllBlocks().nonEmpty)
-        cleanupShuffles()
+          val blockManager = spark.sparkContext.env.blockManager
+          assert(blockManager.migratableResolver.getStoredShuffles().nonEmpty)
+          assert(blockManager.diskBlockManager.getAllBlocks().nonEmpty)
+          cleanupShuffles()
         }
       }
     }
   }
 
   test("SPARK-47764: Cleanup shuffle dependencies - SkipMigration mode") {
-    Seq(true, false).foreach { adaptiveEnabled => {
-      withSQLConf((SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, adaptiveEnabled.toString)) {
-        val plan = spark.range(100).repartition(10).logicalPlan
-        val df = Dataset.ofRows(spark, plan, SkipMigration)
-        df.collect()
+    Seq(true, false).foreach { adaptiveEnabled =>
+      {
+        withSQLConf((SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, adaptiveEnabled.toString)) {
+          val plan = spark.range(100).repartition(10).logicalPlan
+          val df = Dataset.ofRows(spark, plan, SkipMigration)
+          df.collect()
 
-        val blockManager = spark.sparkContext.env.blockManager
-        assert(blockManager.migratableResolver.getStoredShuffles().isEmpty)
-        assert(blockManager.diskBlockManager.getAllBlocks().nonEmpty)
-        cleanupShuffles()
+          val blockManager = spark.sparkContext.env.blockManager
+          assert(blockManager.migratableResolver.getStoredShuffles().isEmpty)
+          assert(blockManager.diskBlockManager.getAllBlocks().nonEmpty)
+          cleanupShuffles()
         }
       }
     }
   }
 
   test("SPARK-47764: Cleanup shuffle dependencies - RemoveShuffleFiles mode") {
-    Seq(true, false).foreach { adaptiveEnabled => {
-      withSQLConf((SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, adaptiveEnabled.toString)) {
-        val plan = spark.range(100).repartition(10).logicalPlan
-        val df = Dataset.ofRows(spark, plan, RemoveShuffleFiles)
-        df.collect()
+    Seq(true, false).foreach { adaptiveEnabled =>
+      {
+        withSQLConf((SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, adaptiveEnabled.toString)) {
+          val plan = spark.range(100).repartition(10).logicalPlan
+          val df = Dataset.ofRows(spark, plan, RemoveShuffleFiles)
+          df.collect()
 
-        val blockManager = spark.sparkContext.env.blockManager
-        assert(blockManager.migratableResolver.getStoredShuffles().isEmpty)
-        assert(blockManager.diskBlockManager.getAllBlocks().isEmpty)
-        cleanupShuffles()
+          val blockManager = spark.sparkContext.env.blockManager
+          assert(blockManager.migratableResolver.getStoredShuffles().isEmpty)
+          assert(blockManager.diskBlockManager.getAllBlocks().isEmpty)
+          cleanupShuffles()
         }
       }
     }
@@ -417,8 +452,7 @@ class QueryExecutionSuite extends SharedSparkSession {
     val sourceDF = spark.range(100).repartition(10)
     sourceDF.createOrReplaceTempView("source")
 
-    val createTablePlan = spark.sessionState.sqlParser.parsePlan(
-      """
+    val createTablePlan = spark.sessionState.sqlParser.parsePlan("""
         CREATE TABLE child_exec_test
         USING parquet
         AS SELECT * FROM source WHERE id < 50
@@ -451,7 +485,8 @@ class QueryExecutionSuite extends SharedSparkSession {
         ds.queryExecution.debug.toFile(path, explainMode = Some(modeName), maxFields = maxFields)
         Utils.tryWithResource(Source.fromFile(path)) { source =>
           val tableScan = source.getLines().filter(_.contains("LocalTableScan"))
-          assert(tableScan.exists(_.contains("more fields")),
+          assert(
+            tableScan.exists(_.contains("more fields")),
             s"Specify maxFields = $maxFields doesn't take effect when explainMode is $modeName")
         }
       }
@@ -460,7 +495,8 @@ class QueryExecutionSuite extends SharedSparkSession {
 
   test("SPARK-47289: extended explain info") {
     val concat = new PlanStringConcat()
-    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
       SQLConf.EXTENDED_EXPLAIN_PROVIDERS.key -> "org.apache.spark.sql.execution.ExtendedInfo") {
       val left = Seq((1, 10L), (2, 100L), (3, 1000L)).toDF("l1", "l2")
@@ -507,8 +543,7 @@ class QueryExecutionSuite extends SharedSparkSession {
         assert(
           ex.getMessage.contains("Queries with streaming sources must be executed with " +
             "writeStream.start(), or from a streaming table or flow definition within a Spark " +
-            "Declarative Pipeline.")
-        )
+            "Declarative Pipeline."))
       }
     }
   }
@@ -546,16 +581,19 @@ class QueryExecutionSuite extends SharedSparkSession {
 
     try {
       withTable("t1", "t2") {
-        spark.range(10).selectExpr("id as A", "id as D")
-          .write.partitionBy("A").mode("overwrite").saveAsTable("t1")
-        spark.range(2).selectExpr("id as B", "id as C")
-          .write.mode("overwrite").saveAsTable("t2")
+        spark
+          .range(10)
+          .selectExpr("id as A", "id as D")
+          .write
+          .partitionBy("A")
+          .mode("overwrite")
+          .saveAsTable("t1")
+        spark.range(2).selectExpr("id as B", "id as C").write.mode("overwrite").saveAsTable("t2")
 
         Seq(true, false).foreach { adaptiveEnabled =>
           withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> adaptiveEnabled.toString) {
             sqlExecutionEndVerified = false
-            val df = sql(
-              """
+            val df = sql("""
                 |SELECT avg(A) FROM t1
                 |WHERE A = (
                 |  SELECT B from t2 where C = 1
@@ -681,9 +719,9 @@ class ExtendedInfo extends ExtendedExplainGenerator {
 
   def getActualPlan(plan: SparkPlan): SparkPlan = {
     plan match {
-      case p : AdaptiveSparkPlanExec => getActualPlan(p.executedPlan)
-      case p : QueryStageExec => p.plan
-      case p : WholeStageCodegenExec => p.child
+      case p: AdaptiveSparkPlanExec => getActualPlan(p.executedPlan)
+      case p: QueryStageExec => p.plan
+      case p: WholeStageCodegenExec => p.child
       case p => p
     }
   }
@@ -702,9 +740,9 @@ class ExtendedInfo extends ExtendedExplainGenerator {
       })
     }
     actualPlan match {
-      case p : LocalTableScanExec => info += s"Scan Info: ${p.nodeName}"
-      case p : SortMergeJoinExec => info += s"SMJ Info: ${p.nodeName}"
-      case p : ProjectExec => info += s"Project Info: ${p.nodeName}"
+      case p: LocalTableScanExec => info += s"Scan Info: ${p.nodeName}"
+      case p: SortMergeJoinExec => info += s"SMJ Info: ${p.nodeName}"
+      case p: ProjectExec => info += s"Project Info: ${p.nodeName}"
       case _ =>
     }
     ()

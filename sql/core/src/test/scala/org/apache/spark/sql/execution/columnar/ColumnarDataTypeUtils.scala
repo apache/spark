@@ -38,8 +38,9 @@ object ColumnarDataTypeUtils {
     case PhysicalStructType(fields) => StructType(fields)
     case PhysicalMapType(keyType, valueType, valueContainsNull) =>
       MapType(keyType, valueType, valueContainsNull)
-    case unsupportedType => throw new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_3162",
-      messageParameters = Map("type" -> unsupportedType.toString))
+    case unsupportedType =>
+      throw new SparkUnsupportedOperationException(
+        errorClass = "_LEGACY_ERROR_TEMP_3162",
+        messageParameters = Map("type" -> unsupportedType.toString))
   }
 }

@@ -41,8 +41,10 @@ abstract class MetadataCacheSuite extends QueryTest with SharedSparkSession {
   test("SPARK-16336,SPARK-27961 Suggest fixing FileNotFoundException") {
     withTempPath { (location: File) =>
       // Create an ORC directory
-      spark.range(start = 0, end = 100, step = 1, numPartitions = 3)
-        .write.orc(location.getAbsolutePath)
+      spark
+        .range(start = 0, end = 100, step = 1, numPartitions = 3)
+        .write
+        .orc(location.getAbsolutePath)
 
       // Read the directory in
       val df = spark.read.orc(location.getAbsolutePath)
@@ -57,45 +59,46 @@ abstract class MetadataCacheSuite extends QueryTest with SharedSparkSession {
           df.count()
         },
         condition = "FAILED_READ_FILE.FILE_NOT_EXIST",
-        parameters = Map("path" -> ".*")
-      )
+        parameters = Map("path" -> ".*"))
     }
   }
 }
 
 class MetadataCacheV1Suite extends MetadataCacheSuite {
   override protected def sparkConf: SparkConf =
-    super
-      .sparkConf
+    super.sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, "orc")
 
   test("SPARK-16337 temporary view refresh") {
-    withTempView("view_refresh") { withTempPath { (location: File) =>
-      // Create an ORC directory
-      spark.range(start = 0, end = 100, step = 1, numPartitions = 3)
-        .write.orc(location.getAbsolutePath)
+    withTempView("view_refresh") {
+      withTempPath { (location: File) =>
+        // Create an ORC directory
+        spark
+          .range(start = 0, end = 100, step = 1, numPartitions = 3)
+          .write
+          .orc(location.getAbsolutePath)
 
-      // Read the directory in
-      spark.read.orc(location.getAbsolutePath).createOrReplaceTempView("view_refresh")
-      assert(sql("select count(*) from view_refresh").first().getLong(0) == 100)
+        // Read the directory in
+        spark.read.orc(location.getAbsolutePath).createOrReplaceTempView("view_refresh")
+        assert(sql("select count(*) from view_refresh").first().getLong(0) == 100)
 
-      // Delete a file
-      deleteOneFileInDirectory(location)
+        // Delete a file
+        deleteOneFileInDirectory(location)
 
-      // Read it again and now we should see a FileNotFoundException
-      checkErrorMatchPVals(
-        exception = intercept[SparkException] {
-          sql("select count(*) from view_refresh").first()
-        },
-        condition = "FAILED_READ_FILE.FILE_NOT_EXIST",
-        parameters = Map("path" -> ".*")
-      )
+        // Read it again and now we should see a FileNotFoundException
+        checkErrorMatchPVals(
+          exception = intercept[SparkException] {
+            sql("select count(*) from view_refresh").first()
+          },
+          condition = "FAILED_READ_FILE.FILE_NOT_EXIST",
+          parameters = Map("path" -> ".*"))
 
-      // Refresh and we should be able to read it again.
-      spark.catalog.refreshTable("view_refresh")
-      val newCount = sql("select count(*) from view_refresh").first().getLong(0)
-      assert(newCount > 0 && newCount < 100)
-    }}
+        // Refresh and we should be able to read it again.
+        spark.catalog.refreshTable("view_refresh")
+        val newCount = sql("select count(*) from view_refresh").first().getLong(0)
+        assert(newCount > 0 && newCount < 100)
+      }
+    }
   }
 
   test("case sensitivity support in temporary view refresh") {
@@ -103,8 +106,10 @@ class MetadataCacheV1Suite extends MetadataCacheSuite {
       withTempView("view_refresh") {
         withTempPath { (location: File) =>
           // Create a Parquet directory
-          spark.range(start = 0, end = 100, step = 1, numPartitions = 3)
-            .write.orc(location.getAbsolutePath)
+          spark
+            .range(start = 0, end = 100, step = 1, numPartitions = 3)
+            .write
+            .orc(location.getAbsolutePath)
 
           // Read the directory in
           spark.read.orc(location.getAbsolutePath).createOrReplaceTempView("view_refresh")
@@ -116,8 +121,7 @@ class MetadataCacheV1Suite extends MetadataCacheSuite {
               sql("select count(*) from view_refresh").first()
             },
             condition = "FAILED_READ_FILE.FILE_NOT_EXIST",
-            parameters = Map("path" -> ".*")
-          )
+            parameters = Map("path" -> ".*"))
 
           // Refresh and we should be able to read it again.
           spark.catalog.refreshTable("vIeW_reFrEsH")
@@ -131,7 +135,6 @@ class MetadataCacheV1Suite extends MetadataCacheSuite {
 
 class MetadataCacheV2Suite extends MetadataCacheSuite {
   override protected def sparkConf: SparkConf =
-    super
-      .sparkConf
+    super.sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, "")
 }

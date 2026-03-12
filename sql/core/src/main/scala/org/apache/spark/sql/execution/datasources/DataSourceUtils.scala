@@ -40,16 +40,16 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.Utils
 
-
 object DataSourceUtils extends PredicateHelper {
+
   /**
    * The key to use for storing partitionBy columns as options.
    */
   val PARTITIONING_COLUMNS_KEY = "__partition_columns"
 
   /**
-   * The key to use for specifying partition overwrite mode when
-   * INSERT OVERWRITE a partitioned data source table.
+   * The key to use for specifying partition overwrite mode when INSERT OVERWRITE a partitioned
+   * data source table.
    */
   val PARTITION_OVERWRITE_MODE = "partitionOverwriteMode"
 
@@ -72,14 +72,15 @@ object DataSourceUtils extends PredicateHelper {
   }
 
   /**
-   * Verify if the field name is supported in datasource. This verification should be done
-   * in a driver side.
+   * Verify if the field name is supported in datasource. This verification should be done in a
+   * driver side.
    */
   def checkFieldNames(format: FileFormat, schema: StructType): Unit = {
     schema.foreach { field =>
       if (!format.supportFieldName(field.name)) {
         throw QueryCompilationErrors.invalidColumnNameAsPathError(
-          format.getClass.getSimpleName, field.name)
+          format.getClass.getSimpleName,
+          field.name)
       }
       field.dataType match {
         case s: StructType => checkFieldNames(format, s)
@@ -89,8 +90,8 @@ object DataSourceUtils extends PredicateHelper {
   }
 
   /**
-   * Verify if the schema is supported in datasource. This verification should be done
-   * in a driver side.
+   * Verify if the schema is supported in datasource. This verification should be done in a driver
+   * side.
    */
   def verifySchema(format: FileFormat, schema: StructType, readOnly: Boolean = false): Unit = {
     TypeUtils.failUnsupportedDataType(schema, SQLConf.get)
@@ -121,8 +122,10 @@ object DataSourceUtils extends PredicateHelper {
     relation match {
       case hs: HadoopFsRelation =>
         val supportedDatasources =
-          Utils.stringToSeq(SQLConf.get.getConf(SQLConf.NESTED_PREDICATE_PUSHDOWN_FILE_SOURCE_LIST)
-            .toLowerCase(Locale.ROOT))
+          Utils.stringToSeq(
+            SQLConf.get
+              .getConf(SQLConf.NESTED_PREDICATE_PUSHDOWN_FILE_SOURCE_LIST)
+              .toLowerCase(Locale.ROOT))
         supportedDatasources.contains(hs.toString)
       case _ => false
     }
@@ -132,48 +135,41 @@ object DataSourceUtils extends PredicateHelper {
       modeByConfig: String,
       minVersion: String,
       metadataKey: String): RebaseSpec = {
-    val policy = if (Utils.isTesting &&
-      SQLConf.get.getConfString("spark.test.forceNoRebase", "") == "true") {
-      LegacyBehaviorPolicy.CORRECTED
-    } else {
-      // If there is no version, we return the mode specified by the config.
-      Option(lookupFileMeta(SPARK_VERSION_METADATA_KEY)).map { version =>
-        // Files written by Spark 2.4 and earlier follow the legacy hybrid calendar and we need to
-        // rebase the datetime values.
-        // Files written by `minVersion` and latter may also need the rebase if they were written
-        // with the "LEGACY" rebase mode.
-        if (version < minVersion || lookupFileMeta(metadataKey) != null) {
-          LegacyBehaviorPolicy.LEGACY
-        } else {
-          LegacyBehaviorPolicy.CORRECTED
-        }
-      }.getOrElse(LegacyBehaviorPolicy.withName(modeByConfig))
-    }
+    val policy =
+      if (Utils.isTesting &&
+        SQLConf.get.getConfString("spark.test.forceNoRebase", "") == "true") {
+        LegacyBehaviorPolicy.CORRECTED
+      } else {
+        // If there is no version, we return the mode specified by the config.
+        Option(lookupFileMeta(SPARK_VERSION_METADATA_KEY))
+          .map { version =>
+            // Files written by Spark 2.4 and earlier follow the legacy hybrid calendar and we need to
+            // rebase the datetime values.
+            // Files written by `minVersion` and latter may also need the rebase if they were written
+            // with the "LEGACY" rebase mode.
+            if (version < minVersion || lookupFileMeta(metadataKey) != null) {
+              LegacyBehaviorPolicy.LEGACY
+            } else {
+              LegacyBehaviorPolicy.CORRECTED
+            }
+          }
+          .getOrElse(LegacyBehaviorPolicy.withName(modeByConfig))
+      }
     policy match {
       case LegacyBehaviorPolicy.LEGACY =>
-        RebaseSpec(LegacyBehaviorPolicy.LEGACY, Option(lookupFileMeta(SPARK_TIMEZONE_METADATA_KEY)))
+        RebaseSpec(
+          LegacyBehaviorPolicy.LEGACY,
+          Option(lookupFileMeta(SPARK_TIMEZONE_METADATA_KEY)))
       case _ => RebaseSpec(policy)
     }
   }
 
-  def datetimeRebaseSpec(
-      lookupFileMeta: String => String,
-      modeByConfig: String): RebaseSpec = {
-    getRebaseSpec(
-      lookupFileMeta,
-      modeByConfig,
-      "3.0.0",
-      SPARK_LEGACY_DATETIME_METADATA_KEY)
+  def datetimeRebaseSpec(lookupFileMeta: String => String, modeByConfig: String): RebaseSpec = {
+    getRebaseSpec(lookupFileMeta, modeByConfig, "3.0.0", SPARK_LEGACY_DATETIME_METADATA_KEY)
   }
 
-  def int96RebaseSpec(
-      lookupFileMeta: String => String,
-      modeByConfig: String): RebaseSpec = {
-    getRebaseSpec(
-      lookupFileMeta,
-      modeByConfig,
-      "3.1.0",
-      SPARK_LEGACY_INT96_METADATA_KEY)
+  def int96RebaseSpec(lookupFileMeta: String => String, modeByConfig: String): RebaseSpec = {
+    getRebaseSpec(lookupFileMeta, modeByConfig, "3.1.0", SPARK_LEGACY_INT96_METADATA_KEY)
   }
 
   def newRebaseExceptionInRead(format: String): SparkUpgradeException = {
@@ -207,11 +203,12 @@ object DataSourceUtils extends PredicateHelper {
   def createDateRebaseFuncInRead(
       rebaseMode: LegacyBehaviorPolicy.Value,
       format: String): Int => Int = rebaseMode match {
-    case LegacyBehaviorPolicy.EXCEPTION => days: Int =>
-      if (days < RebaseDateTime.lastSwitchJulianDay) {
-        throw DataSourceUtils.newRebaseExceptionInRead(format)
-      }
-      days
+    case LegacyBehaviorPolicy.EXCEPTION =>
+      days: Int =>
+        if (days < RebaseDateTime.lastSwitchJulianDay) {
+          throw DataSourceUtils.newRebaseExceptionInRead(format)
+        }
+        days
     case LegacyBehaviorPolicy.LEGACY => RebaseDateTime.rebaseJulianToGregorianDays
     case LegacyBehaviorPolicy.CORRECTED => identity[Int]
   }
@@ -219,36 +216,38 @@ object DataSourceUtils extends PredicateHelper {
   def createDateRebaseFuncInWrite(
       rebaseMode: LegacyBehaviorPolicy.Value,
       format: String): Int => Int = rebaseMode match {
-    case LegacyBehaviorPolicy.EXCEPTION => days: Int =>
-      if (days < RebaseDateTime.lastSwitchGregorianDay) {
-        throw DataSourceUtils.newRebaseExceptionInWrite(format)
-      }
-      days
+    case LegacyBehaviorPolicy.EXCEPTION =>
+      days: Int =>
+        if (days < RebaseDateTime.lastSwitchGregorianDay) {
+          throw DataSourceUtils.newRebaseExceptionInWrite(format)
+        }
+        days
     case LegacyBehaviorPolicy.LEGACY => RebaseDateTime.rebaseGregorianToJulianDays
     case LegacyBehaviorPolicy.CORRECTED => identity[Int]
   }
 
-  def createTimestampRebaseFuncInRead(
-      rebaseSpec: RebaseSpec,
-      format: String): Long => Long = rebaseSpec.mode match {
-    case LegacyBehaviorPolicy.EXCEPTION => micros: Long =>
-      if (micros < RebaseDateTime.lastSwitchJulianTs) {
-        throw DataSourceUtils.newRebaseExceptionInRead(format)
-      }
-      micros
-    case LegacyBehaviorPolicy.LEGACY =>
-      RebaseDateTime.rebaseJulianToGregorianMicros(rebaseSpec.timeZone, _)
-    case LegacyBehaviorPolicy.CORRECTED => identity[Long]
-  }
+  def createTimestampRebaseFuncInRead(rebaseSpec: RebaseSpec, format: String): Long => Long =
+    rebaseSpec.mode match {
+      case LegacyBehaviorPolicy.EXCEPTION =>
+        micros: Long =>
+          if (micros < RebaseDateTime.lastSwitchJulianTs) {
+            throw DataSourceUtils.newRebaseExceptionInRead(format)
+          }
+          micros
+      case LegacyBehaviorPolicy.LEGACY =>
+        RebaseDateTime.rebaseJulianToGregorianMicros(rebaseSpec.timeZone, _)
+      case LegacyBehaviorPolicy.CORRECTED => identity[Long]
+    }
 
   def createTimestampRebaseFuncInWrite(
       rebaseMode: LegacyBehaviorPolicy.Value,
       format: String): Long => Long = rebaseMode match {
-    case LegacyBehaviorPolicy.EXCEPTION => micros: Long =>
-      if (micros < RebaseDateTime.lastSwitchGregorianTs) {
-        throw DataSourceUtils.newRebaseExceptionInWrite(format)
-      }
-      micros
+    case LegacyBehaviorPolicy.EXCEPTION =>
+      micros: Long =>
+        if (micros < RebaseDateTime.lastSwitchGregorianTs) {
+          throw DataSourceUtils.newRebaseExceptionInWrite(format)
+        }
+        micros
     case LegacyBehaviorPolicy.LEGACY =>
       val timeZone = SQLConf.get.sessionLocalTimeZone
       RebaseDateTime.rebaseGregorianToJulianMicros(timeZone, _)
@@ -256,7 +255,8 @@ object DataSourceUtils extends PredicateHelper {
   }
 
   def generateDatasourceOptions(
-      extraOptions: CaseInsensitiveStringMap, table: CatalogTable): Map[String, String] = {
+      extraOptions: CaseInsensitiveStringMap,
+      table: CatalogTable): Map[String, String] = {
     val pathOption = table.storage.locationUri.map("path" -> CatalogUtils.URIToString(_))
     val options = table.storage.properties ++ pathOption
     if (!SQLConf.get.getConf(SQLConf.LEGACY_EXTRA_OPTIONS_BEHAVIOR)) {
@@ -269,11 +269,16 @@ object DataSourceUtils extends PredicateHelper {
       // To keep the original key from table properties, here we filter all case insensitive
       // duplicate keys out from extra options.
       val lowerCasedDuplicatedKeys =
-        table.storage.properties.keySet.map(_.toLowerCase(Locale.ROOT))
+        table.storage.properties.keySet
+          .map(_.toLowerCase(Locale.ROOT))
           .intersect(extraOptions.keySet.asScala)
-      extraOptions.asCaseSensitiveMap().asScala.filterNot {
-        case (k, _) => lowerCasedDuplicatedKeys.contains(k.toLowerCase(Locale.ROOT))
-      }.toMap ++ options
+      extraOptions
+        .asCaseSensitiveMap()
+        .asScala
+        .filterNot { case (k, _) =>
+          lowerCasedDuplicatedKeys.contains(k.toLowerCase(Locale.ROOT))
+        }
+        .toMap ++ options
     } else {
       options
     }
@@ -290,8 +295,7 @@ object DataSourceUtils extends PredicateHelper {
     }
     val partitionSet = AttributeSet(partitionColumns)
     val (partitionFilters, dataFilters) = normalizedFilters.partition(f =>
-      f.references.nonEmpty && f.references.subsetOf(partitionSet)
-    )
+      f.references.nonEmpty && f.references.subsetOf(partitionSet))
     val extraPartitionFilter =
       dataFilters.flatMap(extractPredicatesWithinOutputSet(_, partitionSet))
     (ExpressionSet(partitionFilters ++ extraPartitionFilter).toSeq, dataFilters)

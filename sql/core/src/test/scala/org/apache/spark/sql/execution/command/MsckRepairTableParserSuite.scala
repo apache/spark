@@ -44,9 +44,7 @@ class MsckRepairTableParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan("msck repair table ns.tbl add partitions"),
       RepairTable(
-        UnresolvedTable(
-          Seq("ns", "tbl"),
-          "MSCK REPAIR TABLE ... ADD PARTITIONS"),
+        UnresolvedTable(Seq("ns", "tbl"), "MSCK REPAIR TABLE ... ADD PARTITIONS"),
         enableAddPartitions = true,
         enableDropPartitions = false))
   }
@@ -55,9 +53,7 @@ class MsckRepairTableParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan("MSCK repair table TBL Drop Partitions"),
       RepairTable(
-        UnresolvedTable(
-          Seq("TBL"),
-          "MSCK REPAIR TABLE ... DROP PARTITIONS"),
+        UnresolvedTable(Seq("TBL"), "MSCK REPAIR TABLE ... DROP PARTITIONS"),
         enableAddPartitions = false,
         enableDropPartitions = true))
   }

@@ -31,7 +31,9 @@ class XmlOutputWriter(
     val path: String,
     dataSchema: StructType,
     context: TaskAttemptContext,
-    options: XmlOptions) extends OutputWriter with Logging {
+    options: XmlOptions)
+    extends OutputWriter
+    with Logging {
 
   private val charset = Charset.forName(options.charset)
 

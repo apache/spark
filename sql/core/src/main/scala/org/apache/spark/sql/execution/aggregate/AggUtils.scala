@@ -76,7 +76,8 @@ object AggUtils {
       resultExpressions: Seq[NamedExpression] = Nil,
       child: SparkPlan): SparkPlan = {
     val useHash = Aggregate.supportsHashAggregate(
-      aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes), groupingExpressions)
+      aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes),
+      groupingExpressions)
 
     val forceObjHashAggregate = forceApplyObjectHashAggregate(child.conf)
     val forceSortAggregate = forceApplySortAggregate(child.conf)
@@ -94,8 +95,8 @@ object AggUtils {
         child = child)
     } else {
       val objectHashEnabled = child.conf.useObjectHashAggregation
-      val useObjectHash = Aggregate.supportsObjectHashAggregate(
-        aggregateExpressions, groupingExpressions)
+      val useObjectHash =
+        Aggregate.supportsObjectHashAggregate(aggregateExpressions, groupingExpressions)
 
       if (forceObjHashAggregate || (objectHashEnabled && useObjectHash && !forceSortAggregate)) {
         ObjectHashAggregateExec(
@@ -141,18 +142,18 @@ object AggUtils {
         partialAggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes)
 
     val partialAggregate = createAggregate(
-        requiredChildDistributionExpressions = None,
-        groupingExpressions = groupingExpressions,
-        aggregateExpressions = partialAggregateExpressions,
-        aggregateAttributes = partialAggregateAttributes,
-        initialInputBufferOffset = 0,
-        resultExpressions = partialResultExpressions,
-        child = child)
+      requiredChildDistributionExpressions = None,
+      groupingExpressions = groupingExpressions,
+      aggregateExpressions = partialAggregateExpressions,
+      aggregateAttributes = partialAggregateAttributes,
+      initialInputBufferOffset = 0,
+      resultExpressions = partialResultExpressions,
+      child = child)
 
     // If we have session window expression in aggregation, we add MergingSessionExec to
     // merge sessions with calculating aggregation values.
-    val interExec: SparkPlan = mayAppendMergingSessionExec(groupingExpressions,
-      aggregateExpressions, partialAggregate)
+    val interExec: SparkPlan =
+      mayAppendMergingSessionExec(groupingExpressions, aggregateExpressions, partialAggregate)
 
     // 2. Create an Aggregate Operator for final aggregations.
     val finalAggregateExpressions = aggregateExpressions.map(_.copy(mode = Final))
@@ -161,13 +162,13 @@ object AggUtils {
     val finalAggregateAttributes = finalAggregateExpressions.map(_.resultAttribute)
 
     val finalAggregate = createAggregate(
-        requiredChildDistributionExpressions = Some(groupingAttributes),
-        groupingExpressions = groupingAttributes,
-        aggregateExpressions = finalAggregateExpressions,
-        aggregateAttributes = finalAggregateAttributes,
-        initialInputBufferOffset = groupingExpressions.length,
-        resultExpressions = resultExpressions,
-        child = interExec)
+      requiredChildDistributionExpressions = Some(groupingAttributes),
+      groupingExpressions = groupingAttributes,
+      aggregateExpressions = finalAggregateExpressions,
+      aggregateAttributes = finalAggregateAttributes,
+      initialInputBufferOffset = groupingExpressions.length,
+      resultExpressions = resultExpressions,
+      child = interExec)
 
     finalAggregate :: Nil
   }
@@ -210,8 +211,7 @@ object AggUtils {
       val aggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = PartialMerge))
       val aggregateAttributes = aggregateExpressions.map(_.resultAttribute)
       createAggregate(
-        requiredChildDistributionExpressions =
-          Some(groupingAttributes ++ distinctAttributes),
+        requiredChildDistributionExpressions = Some(groupingAttributes ++ distinctAttributes),
         groupingExpressions = groupingAttributes ++ distinctAttributes,
         aggregateExpressions = aggregateExpressions,
         aggregateAttributes = aggregateAttributes,
@@ -222,21 +222,23 @@ object AggUtils {
     }
 
     // 3. Create an Aggregate operator for partial aggregation (for distinct)
-    val distinctColumnAttributeLookup = CUtils.toMap(distinctExpressions.map(_.canonicalized),
-      distinctAttributes)
+    val distinctColumnAttributeLookup =
+      CUtils.toMap(distinctExpressions.map(_.canonicalized), distinctAttributes)
     val rewrittenDistinctFunctions = functionsWithDistinct.map {
       // Children of an AggregateFunction with DISTINCT keyword has already
       // been evaluated. At here, we need to replace original children
       // to AttributeReferences.
       case agg @ AggregateExpression(aggregateFunction, mode, true, _, _) =>
-        aggregateFunction.transformDown {
-          case e: Expression if distinctColumnAttributeLookup.contains(e.canonicalized) =>
-            distinctColumnAttributeLookup(e.canonicalized)
-        }.asInstanceOf[AggregateFunction]
+        aggregateFunction
+          .transformDown {
+            case e: Expression if distinctColumnAttributeLookup.contains(e.canonicalized) =>
+              distinctColumnAttributeLookup(e.canonicalized)
+          }
+          .asInstanceOf[AggregateFunction]
       case agg =>
         throw new IllegalArgumentException(
           "Non-distinct aggregate is found in functionsWithDistinct " +
-          s"at planAggregateWithOneDistinct: $agg")
+            s"at planAggregateWithOneDistinct: $agg")
     }
 
     val partialDistinctAggregate: SparkPlan = {
@@ -255,11 +257,11 @@ object AggUtils {
           // aggregateFunctionToAttribute
           val attr = functionsWithDistinct(i).resultAttribute
           (expr, attr)
-      }.unzip
+        }.unzip
 
       val partialAggregateResult = groupingAttributes ++
-          mergeAggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes) ++
-          distinctAggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes)
+        mergeAggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes) ++
+        distinctAggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes)
       createAggregate(
         groupingExpressions = groupingAttributes,
         aggregateExpressions = mergeAggregateExpressions ++ distinctAggregateExpressions,
@@ -287,7 +289,7 @@ object AggUtils {
           // aggregateFunctionToAttribute
           val attr = functionsWithDistinct(i).resultAttribute
           (expr, attr)
-      }.unzip
+        }.unzip
 
       createAggregate(
         requiredChildDistributionExpressions = Some(groupingAttributes),
@@ -304,13 +306,14 @@ object AggUtils {
 
   /**
    * Plans a streaming aggregation using the following progression:
-   *  - Partial Aggregation
-   *  - Shuffle
-   *  - Partial Merge (now there is at most 1 tuple per group)
-   *  - StateStoreRestore (now there is 1 tuple from this batch + optionally one from the previous)
-   *  - PartialMerge (now there is at most 1 tuple per group)
-   *  - StateStoreSave (saves the tuple for the next batch)
-   *  - Complete (output the current result of the aggregation)
+   *   - Partial Aggregation
+   *   - Shuffle
+   *   - Partial Merge (now there is at most 1 tuple per group)
+   *   - StateStoreRestore (now there is 1 tuple from this batch + optionally one from the
+   *     previous)
+   *   - PartialMerge (now there is at most 1 tuple per group)
+   *   - StateStoreSave (saves the tuple for the next batch)
+   *   - Complete (output the current result of the aggregation)
    */
   def planStreamingAggregation(
       groupingExpressions: Seq[NamedExpression],
@@ -329,7 +332,7 @@ object AggUtils {
         aggregateExpressions = aggregateExpressions,
         aggregateAttributes = aggregateAttributes,
         resultExpressions = groupingAttributes ++
-            aggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes),
+          aggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes),
         child = child)
     }
 
@@ -337,32 +340,30 @@ object AggUtils {
       val aggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = PartialMerge))
       val aggregateAttributes = aggregateExpressions.map(_.resultAttribute)
       createStreamingAggregate(
-        requiredChildDistributionExpressions =
-            Some(groupingAttributes),
+        requiredChildDistributionExpressions = Some(groupingAttributes),
         groupingExpressions = groupingAttributes,
         aggregateExpressions = aggregateExpressions,
         aggregateAttributes = aggregateAttributes,
         initialInputBufferOffset = groupingAttributes.length,
         resultExpressions = groupingAttributes ++
-            aggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes),
+          aggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes),
         child = partialAggregate)
     }
 
-    val restored = StateStoreRestoreExec(groupingAttributes, None, stateFormatVersion,
-      partialMerged1)
+    val restored =
+      StateStoreRestoreExec(groupingAttributes, None, stateFormatVersion, partialMerged1)
 
     val partialMerged2: SparkPlan = {
       val aggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = PartialMerge))
       val aggregateAttributes = aggregateExpressions.map(_.resultAttribute)
       createStreamingAggregate(
-        requiredChildDistributionExpressions =
-            Some(groupingAttributes),
+        requiredChildDistributionExpressions = Some(groupingAttributes),
         groupingExpressions = groupingAttributes,
         aggregateExpressions = aggregateExpressions,
         aggregateAttributes = aggregateAttributes,
         initialInputBufferOffset = groupingAttributes.length,
         resultExpressions = groupingAttributes ++
-            aggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes),
+          aggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes),
         child = restored)
     }
     // Note: stateId and returnAllStates are filled in later with preparation rules
@@ -399,22 +400,22 @@ object AggUtils {
   /**
    * Plans a streaming session aggregation using the following progression:
    *
-   *  - Partial Aggregation
-   *    - all tuples will have aggregated columns with initial value
-   *  - (If "spark.sql.streaming.sessionWindow.merge.sessions.in.local.partition" is enabled)
-   *    - Sort within partition (sort: all keys)
-   *    - MergingSessionExec
-   *      - calculate session among tuples, and aggregate tuples in session with partial merge
-   *  - Shuffle & Sort (distribution: keys "without" session, sort: all keys)
-   *  - SessionWindowStateStoreRestore (group: keys "without" session)
-   *    - merge input tuples with stored tuples (sessions) respecting sort order
-   *  - MergingSessionExec
-   *    - calculate session among tuples, and aggregate tuples in session with partial merge
-   *    - NOTE: it leverages the fact that the output of SessionWindowStateStoreRestore is sorted
-   *    - now there is at most 1 tuple per group, key with session
-   *  - SessionWindowStateStoreSave (group: keys "without" session)
-   *    - saves tuple(s) for the next batch (multiple sessions could co-exist at the same time)
-   *  - Complete (output the current result of the aggregation)
+   *   - Partial Aggregation
+   *     - all tuples will have aggregated columns with initial value
+   *   - (If "spark.sql.streaming.sessionWindow.merge.sessions.in.local.partition" is enabled)
+   *     - Sort within partition (sort: all keys)
+   *     - MergingSessionExec
+   *       - calculate session among tuples, and aggregate tuples in session with partial merge
+   *   - Shuffle & Sort (distribution: keys "without" session, sort: all keys)
+   *   - SessionWindowStateStoreRestore (group: keys "without" session)
+   *     - merge input tuples with stored tuples (sessions) respecting sort order
+   *   - MergingSessionExec
+   *     - calculate session among tuples, and aggregate tuples in session with partial merge
+   *     - NOTE: it leverages the fact that the output of SessionWindowStateStoreRestore is sorted
+   *     - now there is at most 1 tuple per group, key with session
+   *   - SessionWindowStateStoreSave (group: keys "without" session)
+   *     - saves tuple(s) for the next batch (multiple sessions could co-exist at the same time)
+   *   - Complete (output the current result of the aggregation)
    */
   def planStreamingAggregationForSession(
       groupingExpressions: Seq[NamedExpression],
@@ -469,17 +470,20 @@ object AggUtils {
         initialInputBufferOffset = groupingAttributes.length,
         resultExpressions = groupingAttributes ++
           aggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes),
-        child = partialAggregate
-      )
+        child = partialAggregate)
     } else {
       partialAggregate
     }
 
     // shuffle & sort happens here: most of details are also handled in this physical plan
-    val restored = SessionWindowStateStoreRestoreExec(groupingWithoutSessionAttributes,
-      sessionExpression.toAttribute, stateInfo = None,
-      eventTimeWatermarkForLateEvents = None, eventTimeWatermarkForEviction = None,
-      stateFormatVersion, partialMerged1)
+    val restored = SessionWindowStateStoreRestoreExec(
+      groupingWithoutSessionAttributes,
+      sessionExpression.toAttribute,
+      stateInfo = None,
+      eventTimeWatermarkForLateEvents = None,
+      eventTimeWatermarkForEviction = None,
+      stateFormatVersion,
+      partialMerged1)
 
     val mergedSessions = {
       val aggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = PartialMerge))
@@ -496,8 +500,7 @@ object AggUtils {
         initialInputBufferOffset = groupingAttributes.length,
         resultExpressions = groupingAttributes ++
           aggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes),
-        child = restored
-      )
+        child = restored)
     }
 
     // Note: stateId and returnAllStates are filled in later with preparation rules
@@ -509,7 +512,8 @@ object AggUtils {
       outputMode = None,
       eventTimeWatermarkForLateEvents = None,
       eventTimeWatermarkForEviction = None,
-      stateFormatVersion, mergedSessions)
+      stateFormatVersion,
+      mergedSessions)
 
     val finalAndCompleteAggregate: SparkPlan = {
       val finalAggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = Final))
@@ -577,28 +581,27 @@ object AggUtils {
           initialInputBufferOffset = groupingAttributes.length,
           resultExpressions = groupingAttributes ++
             aggExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes),
-          child = partialAggregate
-        )
+          child = partialAggregate)
 
       case None => partialAggregate
     }
   }
 
   /**
-   * Returns whether a sort aggregate should be force applied.
-   * The config key is hard-coded because it's testing only and should not be exposed.
+   * Returns whether a sort aggregate should be force applied. The config key is hard-coded
+   * because it's testing only and should not be exposed.
    */
   private def forceApplySortAggregate(conf: SQLConf): Boolean = {
     Utils.isTesting &&
-      conf.getConfString("spark.sql.test.forceApplySortAggregate", "false") == "true"
+    conf.getConfString("spark.sql.test.forceApplySortAggregate", "false") == "true"
   }
 
   /**
-   * Returns whether a object hash aggregate should be force applied.
-   * The config key is hard-coded because it's testing only and should not be exposed.
+   * Returns whether a object hash aggregate should be force applied. The config key is hard-coded
+   * because it's testing only and should not be exposed.
    */
   private def forceApplyObjectHashAggregate(conf: SQLConf): Boolean = {
     Utils.isTesting &&
-      conf.getConfString("spark.sql.test.forceApplyObjectHashAggregate", "false") == "true"
+    conf.getConfString("spark.sql.test.forceApplyObjectHashAggregate", "false") == "true"
   }
 }

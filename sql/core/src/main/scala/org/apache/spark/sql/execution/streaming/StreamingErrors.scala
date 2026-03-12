@@ -22,41 +22,36 @@ import org.apache.spark.{SparkException, SparkRuntimeException}
  * Object for grouping error messages from streaming query exceptions
  */
 object StreamingErrors {
-  def cannotLoadCheckpointFileManagerClass(path: String, className: String, err: Throwable):
-  Throwable = {
+  def cannotLoadCheckpointFileManagerClass(
+      path: String,
+      className: String,
+      err: Throwable): Throwable = {
     new SparkException(
       errorClass = "CANNOT_LOAD_CHECKPOINT_FILE_MANAGER.ERROR_LOADING_CLASS",
       messageParameters = Map("path" -> path, "className" -> className, "msg" -> err.toString),
-      cause = err
-    )
+      cause = err)
   }
 
-  def cannotLoadCheckpointFileManager(path: String, err: Throwable):
-  Throwable = {
+  def cannotLoadCheckpointFileManager(path: String, err: Throwable): Throwable = {
     new SparkException(
       errorClass = "CANNOT_LOAD_CHECKPOINT_FILE_MANAGER.UNCATEGORIZED",
       messageParameters = Map("path" -> path),
-      cause = err
-    )
+      cause = err)
   }
 
-  def statefulOperatorMissingStateDirectory(
-      opsInCurBatch: Map[Long, String]): Throwable = {
+  def statefulOperatorMissingStateDirectory(opsInCurBatch: Map[Long, String]): Throwable = {
     def formatPairString(pair: (Long, String)): String =
       s"(OperatorId: ${pair._1} -> OperatorName: ${pair._2})"
 
     new SparkRuntimeException(
       errorClass = "STREAMING_STATEFUL_OPERATOR_MISSING_STATE_DIRECTORY",
       messageParameters = Map(
-        "OpsInCurBatchSeq" -> opsInCurBatch.map(formatPairString).mkString(", ")
-      )
-    )
+        "OpsInCurBatchSeq" -> opsInCurBatch.map(formatPairString).mkString(", ")))
   }
 
   def missingMetadataFile(checkpointLocation: String): Throwable = {
     new SparkRuntimeException(
       errorClass = "STREAMING_CHECKPOINT_MISSING_METADATA_FILE",
-      messageParameters = Map("checkpointLocation" -> checkpointLocation)
-    )
+      messageParameters = Map("checkpointLocation" -> checkpointLocation))
   }
 }

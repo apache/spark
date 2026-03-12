@@ -29,13 +29,13 @@ class UnsafeRowChecksumSuite extends SparkFunSuite {
   private val toUnsafeRow = ExpressionEncoder(schema).createSerializer()
 
   private val schemaComplex = new StructType()
-      .add("stringCol", StringType)
-      .add("doubleCol", DoubleType)
-      .add("longCol", LongType)
-      .add("int32Col", IntegerType)
-      .add("int16Col", ShortType)
-      .add("int8Col", ByteType)
-      .add("boolCol", BooleanType)
+    .add("stringCol", StringType)
+    .add("doubleCol", DoubleType)
+    .add("longCol", LongType)
+    .add("int32Col", IntegerType)
+    .add("int16Col", ShortType)
+    .add("int8Col", ByteType)
+    .add("boolCol", BooleanType)
   private val toUnsafeRowComplex = ExpressionEncoder(schemaComplex).createSerializer()
 
   private def setUnsafeRowValue(
@@ -131,16 +131,22 @@ class UnsafeRowChecksumSuite extends SparkFunSuite {
     assert(rowBasedChecksum1.getValue == 0)
     assert(rowBasedChecksum2.getValue == 0)
 
-    rowBasedChecksum1.update(1, toUnsafeRowComplex(Row(
-      "Some string", 0.99, 10000L, 1000, 100.toShort, 10.toByte, true)))
-    rowBasedChecksum2.update(1, toUnsafeRowComplex(Row(
-      "Some other string", 10.88, 20000L, 2000, 200.toShort, 20.toByte, false)))
+    rowBasedChecksum1.update(
+      1,
+      toUnsafeRowComplex(Row("Some string", 0.99, 10000L, 1000, 100.toShort, 10.toByte, true)))
+    rowBasedChecksum2.update(
+      1,
+      toUnsafeRowComplex(
+        Row("Some other string", 10.88, 20000L, 2000, 200.toShort, 20.toByte, false)))
     assert(rowBasedChecksum1.getValue != rowBasedChecksum2.getValue)
 
-    rowBasedChecksum1.update(2, toUnsafeRowComplex(Row(
-      "Some other string", 10.88, 20000L, 2000, 200.toShort, 20.toByte, false)))
-    rowBasedChecksum2.update(2, toUnsafeRowComplex(Row(
-      "Some string", 0.99, 10000L, 1000, 100.toShort, 10.toByte, true)))
+    rowBasedChecksum1.update(
+      2,
+      toUnsafeRowComplex(
+        Row("Some other string", 10.88, 20000L, 2000, 200.toShort, 20.toByte, false)))
+    rowBasedChecksum2.update(
+      2,
+      toUnsafeRowComplex(Row("Some string", 0.99, 10000L, 1000, 100.toShort, 10.toByte, true)))
     assert(rowBasedChecksum1.getValue == rowBasedChecksum2.getValue)
 
     assert(rowBasedChecksum1.getValue != 0)

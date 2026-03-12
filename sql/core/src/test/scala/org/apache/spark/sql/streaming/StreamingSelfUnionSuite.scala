@@ -47,8 +47,10 @@ class StreamingSelfUnionSuite extends StreamTest with BeforeAndAfter {
       val dataLocation = dir.getAbsolutePath
       spark.range(1, 4).write.format("parquet").save(dataLocation)
 
-      val streamDf = spark.readStream.format("parquet")
-        .schema(StructType(Seq(StructField("id", LongType)))).load(dataLocation)
+      val streamDf = spark.readStream
+        .format("parquet")
+        .schema(StructType(Seq(StructField("id", LongType))))
+        .load(dataLocation)
       val unionedDf = streamDf.union(streamDf)
 
       testStream(unionedDf)(
@@ -61,8 +63,7 @@ class StreamingSelfUnionSuite extends StreamTest with BeforeAndAfter {
           assert(lastProgress.get.sources.length == 1)
           assert(lastProgress.get.sources(0).numInputRows == 6)
           true
-        }
-      )
+        })
     }
   }
 
@@ -77,8 +78,13 @@ class StreamingSelfUnionSuite extends StreamTest with BeforeAndAfter {
       testStream(unionedDf)(
         StartStream(triggerClock = clock, trigger = Trigger.ProcessingTime(100)),
         Execute { _ =>
-          spark.range(1, 4).selectExpr("id AS key")
-            .write.format("parquet").mode(SaveMode.Append).saveAsTable("parquet_streaming_tbl")
+          spark
+            .range(1, 4)
+            .selectExpr("id AS key")
+            .write
+            .format("parquet")
+            .mode(SaveMode.Append)
+            .saveAsTable("parquet_streaming_tbl")
         },
         AdvanceManualClock(150),
         waitUntilBatchProcessed(clock),
@@ -90,8 +96,7 @@ class StreamingSelfUnionSuite extends StreamTest with BeforeAndAfter {
           assert(lastProgress.get.sources.length == 1)
           assert(lastProgress.get.sources(0).numInputRows == 6)
           true
-        }
-      )
+        })
     }
   }
 
@@ -111,8 +116,7 @@ class StreamingSelfUnionSuite extends StreamTest with BeforeAndAfter {
         assert(lastProgress.get.sources.length == 1)
         assert(lastProgress.get.sources(0).numInputRows == 6)
         true
-      }
-    )
+      })
   }
 
   test("self-union, DSv2, read via table API") {
@@ -127,7 +131,7 @@ class StreamingSelfUnionSuite extends StreamTest with BeforeAndAfter {
       val streamDf = spark.readStream.table(tblName)
       val unionedDf = streamDf.union(streamDf)
 
-      testStream(unionedDf) (
+      testStream(unionedDf)(
         AddData(stream, 1, 2, 3),
         CheckLastBatch(1, 2, 3, 1, 2, 3),
         AssertOnQuery { q =>
@@ -137,8 +141,7 @@ class StreamingSelfUnionSuite extends StreamTest with BeforeAndAfter {
           assert(lastProgress.get.sources.length == 1)
           assert(lastProgress.get.sources(0).numInputRows == 6)
           true
-        }
-      )
+        })
     }
   }
 

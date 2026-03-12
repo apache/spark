@@ -28,8 +28,8 @@ import org.apache.spark.sql.execution.{FileSourceScanExec, FilterExec, ProjectEx
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
 
 /**
- * This rule coalesces one side of the `SortMergeJoin` and `ShuffledHashJoin`
- * if the following conditions are met:
+ * This rule coalesces one side of the `SortMergeJoin` and `ShuffledHashJoin` if the following
+ * conditions are met:
  *   - Two bucketed tables are joined.
  *   - Join keys match with output partition expressions on their respective sides.
  *   - The larger bucket number is divisible by the smaller bucket number.
@@ -86,16 +86,17 @@ object CoalesceBucketsInJoin extends Rule[SparkPlan] {
 
     plan transform {
       case ExtractJoinWithBuckets(join, numLeftBuckets, numRightBuckets)
-        if math.max(numLeftBuckets, numRightBuckets) / math.min(numLeftBuckets, numRightBuckets) <=
-          conf.coalesceBucketsInJoinMaxBucketRatio =>
+          if math
+            .max(numLeftBuckets, numRightBuckets) / math.min(numLeftBuckets, numRightBuckets) <=
+            conf.coalesceBucketsInJoinMaxBucketRatio =>
         val numCoalescedBuckets = math.min(numLeftBuckets, numRightBuckets)
         join match {
           case j: SortMergeJoinExec =>
             updateNumCoalescedBuckets(j, numLeftBuckets, numCoalescedBuckets)
           case j: ShuffledHashJoinExec
-            // Only coalesce the buckets for shuffled hash join stream side,
-            // to avoid OOM for build side.
-            if isCoalesceSHJStreamSide(j, numLeftBuckets, numCoalescedBuckets) =>
+              // Only coalesce the buckets for shuffled hash join stream side,
+              // to avoid OOM for build side.
+              if isCoalesceSHJStreamSide(j, numLeftBuckets, numCoalescedBuckets) =>
             updateNumCoalescedBuckets(j, numLeftBuckets, numCoalescedBuckets)
           case other => other
         }
@@ -105,10 +106,9 @@ object CoalesceBucketsInJoin extends Rule[SparkPlan] {
 }
 
 /**
- * An extractor that extracts `SortMergeJoinExec` and `ShuffledHashJoin`,
- * where both sides of the join have the bucketed tables,
- * are consisted of only the scan operation,
- * and numbers of buckets are not equal but divisible.
+ * An extractor that extracts `SortMergeJoinExec` and `ShuffledHashJoin`, where both sides of the
+ * join have the bucketed tables, are consisted of only the scan operation, and numbers of buckets
+ * are not equal but divisible.
  */
 object ExtractJoinWithBuckets {
   @tailrec
@@ -125,15 +125,16 @@ object ExtractJoinWithBuckets {
 
   private def getBucketSpec(plan: SparkPlan): Option[BucketSpec] = {
     plan.collectFirst {
-      case f: FileSourceScanExec if f.relation.bucketSpec.nonEmpty &&
-          f.optionalNumCoalescedBuckets.isEmpty =>
+      case f: FileSourceScanExec
+          if f.relation.bucketSpec.nonEmpty &&
+            f.optionalNumCoalescedBuckets.isEmpty =>
         f.relation.bucketSpec.get
     }
   }
 
   /**
-   * The join keys should match with expressions for output partitioning. Note that
-   * the ordering does not matter because it will be handled in `EnsureRequirements`.
+   * The join keys should match with expressions for output partitioning. Note that the ordering
+   * does not matter because it will be handled in `EnsureRequirements`.
    */
   private def satisfiesOutputPartitioning(
       keys: Seq[Expression],
@@ -149,9 +150,9 @@ object ExtractJoinWithBuckets {
 
   private def isApplicable(j: ShuffledJoin): Boolean = {
     hasScanOperation(j.left) &&
-      hasScanOperation(j.right) &&
-      satisfiesOutputPartitioning(j.leftKeys, j.left.outputPartitioning) &&
-      satisfiesOutputPartitioning(j.rightKeys, j.right.outputPartitioning)
+    hasScanOperation(j.right) &&
+    satisfiesOutputPartitioning(j.leftKeys, j.left.outputPartitioning) &&
+    satisfiesOutputPartitioning(j.rightKeys, j.right.outputPartitioning)
   }
 
   private def isDivisible(numBuckets1: Int, numBuckets2: Int): Boolean = {
@@ -167,7 +168,7 @@ object ExtractJoinWithBuckets {
         val leftBucket = getBucketSpec(j.left)
         val rightBucket = getBucketSpec(j.right)
         if (leftBucket.isDefined && rightBucket.isDefined &&
-            isDivisible(leftBucket.get.numBuckets, rightBucket.get.numBuckets)) {
+          isDivisible(leftBucket.get.numBuckets, rightBucket.get.numBuckets)) {
           Some(j, leftBucket.get.numBuckets, rightBucket.get.numBuckets)
         } else {
           None

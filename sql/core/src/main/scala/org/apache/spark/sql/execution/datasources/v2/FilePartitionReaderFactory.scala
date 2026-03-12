@@ -46,9 +46,8 @@ abstract class FilePartitionReaderFactory extends PartitionReaderFactory {
 }
 
 // A compound class for combining file and its corresponding reader.
-private[v2] case class PartitionedFileReader[T](
-    file: PartitionedFile,
-    reader: PartitionReader[T]) extends PartitionReader[T] {
+private[v2] case class PartitionedFileReader[T](file: PartitionedFile, reader: PartitionReader[T])
+    extends PartitionReader[T] {
   override def next(): Boolean = reader.next()
 
   override def get(): T = reader.get()

@@ -48,17 +48,12 @@ case class Max(child: Expression) extends DeclarativeAggregate with UnaryLike[Ex
   override lazy val aggBufferAttributes: Seq[AttributeReference] = max :: Nil
 
   override lazy val initialValues: Seq[Literal] = Seq(
-    /* max = */ Literal.create(null, child.dataType)
-  )
+    /* max = */ Literal.create(null, child.dataType))
 
-  override lazy val updateExpressions: Seq[Expression] = Seq(
-    /* max = */ greatest(max, child)
-  )
+  override lazy val updateExpressions: Seq[Expression] = Seq( /* max = */ greatest(max, child))
 
   override lazy val mergeExpressions: Seq[Expression] = {
-    Seq(
-      /* max = */ greatest(max.left, max.right)
-    )
+    Seq( /* max = */ greatest(max.left, max.right))
   }
 
   override lazy val evaluateExpression: AttributeReference = max

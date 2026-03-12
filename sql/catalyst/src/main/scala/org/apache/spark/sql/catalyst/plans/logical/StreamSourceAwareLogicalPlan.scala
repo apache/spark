@@ -23,10 +23,10 @@ import org.apache.spark.sql.connector.read.streaming.SparkDataStream
  * logical nodes which can be used in the leaf node of Source.getBatch().
  */
 trait StreamSourceAwareLogicalPlan extends LogicalPlan {
+
   /**
-   * Set the stream associated with this node.
-   * Spark will use this method to set the stream, and the implementation should copy the node with
-   * setting up the stream.
+   * Set the stream associated with this node. Spark will use this method to set the stream, and
+   * the implementation should copy the node with setting up the stream.
    */
   def withStream(stream: SparkDataStream): LogicalPlan
 

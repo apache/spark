@@ -27,7 +27,8 @@ import org.apache.spark.sql.catalyst.rules.RuleExecutor
 
 class PushProjectionThroughLimitAndOffsetSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
-    val batches = Batch("Optimizer Batch",
+    val batches = Batch(
+      "Optimizer Batch",
       FixedPoint(100),
       PushProjectionThroughLimitAndOffset,
       EliminateLimits,
@@ -42,23 +43,27 @@ class PushProjectionThroughLimitAndOffsetSuite extends PlanTest {
     val query1 = testRelation
       .limit(10)
       .select(Symbol("a"), Symbol("b"), 'c')
-      .limit(15).analyze
+      .limit(15)
+      .analyze
     val optimized1 = Optimize.execute(query1)
     val expected1 = testRelation
       .select(Symbol("a"), Symbol("b"), 'c')
-      .limit(10).analyze
+      .limit(10)
+      .analyze
     comparePlans(optimized1, expected1)
 
     val query2 = testRelation
       .sortBy($"a".asc)
       .limit(10)
       .select(Symbol("a"), Symbol("b"), 'c')
-      .limit(15).analyze
+      .limit(15)
+      .analyze
     val optimized2 = Optimize.execute(query2)
     val expected2 = testRelation
       .sortBy($"a".asc)
       .select(Symbol("a"), Symbol("b"), 'c')
-      .limit(10).analyze
+      .limit(10)
+      .analyze
     comparePlans(optimized2, expected2)
 
     val query3 = testRelation
@@ -66,12 +71,14 @@ class PushProjectionThroughLimitAndOffsetSuite extends PlanTest {
       .select(Symbol("a"), Symbol("b"), 'c')
       .limit(20)
       .select(Symbol("a"))
-      .limit(15).analyze
+      .limit(15)
+      .analyze
     val optimized3 = Optimize.execute(query3)
     val expected3 = testRelation
       .select(Symbol("a"), Symbol("b"), 'c')
       .select(Symbol("a"))
-      .limit(10).analyze
+      .limit(10)
+      .analyze
     comparePlans(optimized3, expected3)
 
     val query4 = testRelation
@@ -80,13 +87,15 @@ class PushProjectionThroughLimitAndOffsetSuite extends PlanTest {
       .select(Symbol("a"), Symbol("b"), 'c')
       .limit(20)
       .select(Symbol("a"))
-      .limit(15).analyze
+      .limit(15)
+      .analyze
     val optimized4 = Optimize.execute(query4)
     val expected4 = testRelation
       .sortBy($"a".asc)
       .select(Symbol("a"), Symbol("b"), 'c')
       .select(Symbol("a"))
-      .limit(10).analyze
+      .limit(10)
+      .analyze
     comparePlans(optimized4, expected4)
   }
 
@@ -102,60 +111,79 @@ class PushProjectionThroughLimitAndOffsetSuite extends PlanTest {
     val optimized1 = Optimize.execute(query1)
     val expected1 = testRelation
       .select($"a", $"b", $"c")
-      .offset(5).analyze
+      .offset(5)
+      .analyze
     comparePlans(optimized1, expected1)
 
     val query2 = testRelation
-      .limit(15).offset(5)
+      .limit(15)
+      .offset(5)
       .select($"a", $"b", $"c")
       .analyze
     val optimized2 = Optimize.execute(query2)
     val expected2 = testRelation
       .select($"a", $"b", $"c")
-      .limit(15).offset(5).analyze
+      .limit(15)
+      .offset(5)
+      .analyze
     comparePlans(optimized2, expected2)
 
     val query3 = testRelation
-      .offset(5).limit(15)
+      .offset(5)
+      .limit(15)
       .select($"a", $"b", $"c")
       .analyze
     val optimized3 = Optimize.execute(query3)
     val expected3 = testRelation
       .select($"a", $"b", $"c")
-      .localLimit(Add(15, 5)).offset(5).globalLimit(15)
+      .localLimit(Add(15, 5))
+      .offset(5)
+      .globalLimit(15)
       .analyze
     comparePlans(optimized3, expected3)
 
     val query4 = testRelation
-      .offset(5).limit(15)
+      .offset(5)
+      .limit(15)
       .select($"a", $"b", $"c")
-      .limit(10).analyze
+      .limit(10)
+      .analyze
     val optimized4 = Optimize.execute(query4)
     val expected4 = testRelation
       .select($"a", $"b", $"c")
-      .localLimit(Add(10, 5)).offset(5).globalLimit(10)
+      .localLimit(Add(10, 5))
+      .offset(5)
+      .globalLimit(10)
       .analyze
     comparePlans(optimized4, expected4)
 
     val query5 = testRelation
       .localLimit(10)
       .select($"a", $"b", $"c")
-      .offset(5).limit(10).analyze
+      .offset(5)
+      .limit(10)
+      .analyze
     val optimized5 = Optimize.execute(query5)
     val expected5 = testRelation
       .select($"a", $"b", $"c")
-      .localLimit(10).offset(5).globalLimit(10)
+      .localLimit(10)
+      .offset(5)
+      .globalLimit(10)
       .analyze
     comparePlans(optimized5, expected5)
 
     val query6 = testRelation
       .localLimit(20)
       .select($"a", $"b", $"c")
-      .offset(5).limit(10).analyze
+      .offset(5)
+      .limit(10)
+      .analyze
     val optimized6 = Optimize.execute(query6)
     val expected6 = testRelation
       .select($"a", $"b", $"c")
-      .localLimit(15).offset(5).globalLimit(10)
+      .localLimit(15)
+      .offset(5)
+      .globalLimit(10)
       .analyze
     comparePlans(optimized6, expected6)
   }

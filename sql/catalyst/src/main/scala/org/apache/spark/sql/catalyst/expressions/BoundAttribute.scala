@@ -25,12 +25,12 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.types._
 
 /**
- * A bound reference points to a specific slot in the input tuple, allowing the actual value
- * to be retrieved more efficiently.  However, since operations like column pruning can change
- * the layout of intermediate tuples, BindReferences should be run after all such transformations.
+ * A bound reference points to a specific slot in the input tuple, allowing the actual value to be
+ * retrieved more efficiently. However, since operations like column pruning can change the layout
+ * of intermediate tuples, BindReferences should be run after all such transformations.
  */
 case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
-  extends LeafExpression {
+    extends LeafExpression {
 
   override def toString: String = s"input[$ordinal, ${dataType.simpleString}, $nullable]"
 
@@ -52,8 +52,7 @@ case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
       val javaType = JavaCode.javaType(dataType)
       val value = CodeGenerator.getValue(ctx.INPUT_ROW, dataType, ordinal.toString)
       if (nullable) {
-        ev.copy(code =
-          code"""
+        ev.copy(code = code"""
              |boolean ${ev.isNull} = ${ctx.INPUT_ROW}.isNullAt($ordinal);
              |$javaType ${ev.value} = ${ev.isNull} ?
              |  ${CodeGenerator.defaultValue(dataType)} : ($value);
@@ -71,32 +70,31 @@ object BindReferences extends Logging {
       expression: A,
       input: AttributeSeq,
       allowFailures: Boolean = false): A = {
-    expression.transform { case a: AttributeReference =>
-      val ordinal = input.indexOf(a.exprId)
-      if (ordinal == -1) {
-        if (allowFailures) {
-          a
+    expression
+      .transform { case a: AttributeReference =>
+        val ordinal = input.indexOf(a.exprId)
+        if (ordinal == -1) {
+          if (allowFailures) {
+            a
+          } else {
+            throw attributeNotFoundException(a, input.attrs)
+          }
         } else {
-          throw attributeNotFoundException(a, input.attrs)
+          BoundReference(ordinal, a.dataType, input(ordinal).nullable)
         }
-      } else {
-        BoundReference(ordinal, a.dataType, input(ordinal).nullable)
       }
-    }.asInstanceOf[A] // Kind of a hack, but safe.  TODO: Tighten return type when possible.
+      .asInstanceOf[A] // Kind of a hack, but safe.  TODO: Tighten return type when possible.
   }
 
   /**
    * A helper function to bind given expressions to an input schema.
    */
-  def bindReferences[A <: Expression](
-      expressions: Seq[A],
-      input: AttributeSeq): Seq[A] = {
+  def bindReferences[A <: Expression](expressions: Seq[A], input: AttributeSeq): Seq[A] = {
     expressions.map(BindReferences.bindReference(_, input))
   }
 
   /**
-   * A helper function to produce an exception when binding a reference fails.
-   * Public for testing.
+   * A helper function to produce an exception when binding a reference fails. Public for testing.
    */
   def attributeNotFoundException(
       missingAttr: AttributeReference,

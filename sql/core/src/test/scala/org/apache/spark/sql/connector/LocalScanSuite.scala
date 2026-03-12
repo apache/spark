@@ -45,8 +45,8 @@ class LocalScanSuite extends QueryTest with SharedSparkSession {
     val df = spark.table("testcat.tbl")
     assert(df.schema == TestLocalScanTable.schema)
 
-    val localScan = df.queryExecution.executedPlan.collect {
-      case s: LocalTableScanExec => s
+    val localScan = df.queryExecution.executedPlan.collect { case s: LocalTableScanExec =>
+      s
     }
     assert(localScan.length == 1)
     checkAnswer(df, TestLocalScanTable.data.map(Row(_)))

@@ -21,12 +21,9 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.command
 
 /**
- * The class contains tests for the `MSCK REPAIR TABLE` command
- * to check V2 table catalogs.
+ * The class contains tests for the `MSCK REPAIR TABLE` command to check V2 table catalogs.
  */
-class MsckRepairTableSuite
-  extends command.MsckRepairTableSuiteBase
-  with CommandSuiteBase {
+class MsckRepairTableSuite extends command.MsckRepairTableSuiteBase with CommandSuiteBase {
 
   // TODO(SPARK-34397): Support v2 `MSCK REPAIR TABLE`
   test("repairing of v2 tables is not supported") {
@@ -37,8 +34,7 @@ class MsckRepairTableSuite
           sql(s"MSCK REPAIR TABLE $t")
         },
         condition = "NOT_SUPPORTED_COMMAND_FOR_V2_TABLE",
-        parameters = Map("cmd" -> "MSCK REPAIR TABLE")
-      )
+        parameters = Map("cmd" -> "MSCK REPAIR TABLE"))
     }
   }
 }

@@ -24,8 +24,7 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.UnsafeArrayData
 
 /**
- * Benchmark [[UnsafeArrayDataBenchmark]] for UnsafeArrayData
- * To run this benchmark:
+ * Benchmark [[UnsafeArrayDataBenchmark]] for UnsafeArrayData To run this benchmark:
  * {{{
  *   1. without sbt:
  *      bin/spark-submit --class <this class> --jars <spark core test jar> <spark sql test jar>
@@ -36,7 +35,7 @@ import org.apache.spark.sql.catalyst.expressions.UnsafeArrayData
  */
 object UnsafeArrayDataBenchmark extends BenchmarkBase {
 
-  def calculateHeaderPortionInBytes(count: Int) : Int = {
+  def calculateHeaderPortionInBytes(count: Int): Int = {
     /* 4 + 4 * count // Use this expression for SPARK-15962 */
     UnsafeArrayData.calculateHeaderPortionInBytes(count)
   }

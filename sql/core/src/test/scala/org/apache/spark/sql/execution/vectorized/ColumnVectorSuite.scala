@@ -30,24 +30,18 @@ import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 import org.apache.spark.util.ArrayImplicits._
 
 class ColumnVectorSuite extends SparkFunSuite with SQLHelper {
-  private def withVector(
-      vector: WritableColumnVector)(
+  private def withVector(vector: WritableColumnVector)(
       block: WritableColumnVector => Unit): Unit = {
-    try block(vector) finally vector.close()
+    try block(vector)
+    finally vector.close()
   }
 
-  private def withVectors(
-      size: Int,
-      dt: DataType)(
-      block: WritableColumnVector => Unit): Unit = {
+  private def withVectors(size: Int, dt: DataType)(block: WritableColumnVector => Unit): Unit = {
     withVector(new OnHeapColumnVector(size, dt))(block)
     withVector(new OffHeapColumnVector(size, dt))(block)
   }
 
-  private def testVectors(
-      name: String,
-      size: Int,
-      dt: DataType)(
+  private def testVectors(name: String, size: Int, dt: DataType)(
       block: WritableColumnVector => Unit): Unit = {
     test(name) {
       withVectors(size, dt)(block)
@@ -262,42 +256,36 @@ class ColumnVectorSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
-  DataTypeTestUtils.yearMonthIntervalTypes.foreach {
-    dt =>
-      testVectors(dt.typeName,
-        10,
-        dt) { testVector =>
-        (0 until 10).foreach { i =>
-          testVector.appendInt(i)
-        }
-
-        val array = new ColumnarArray(testVector, 0, 10)
-        val arrayCopy = array.copy()
-
-        (0 until 10).foreach { i =>
-          assert(array.get(i, dt) === i)
-          assert(arrayCopy.get(i, dt) === i)
-        }
+  DataTypeTestUtils.yearMonthIntervalTypes.foreach { dt =>
+    testVectors(dt.typeName, 10, dt) { testVector =>
+      (0 until 10).foreach { i =>
+        testVector.appendInt(i)
       }
+
+      val array = new ColumnarArray(testVector, 0, 10)
+      val arrayCopy = array.copy()
+
+      (0 until 10).foreach { i =>
+        assert(array.get(i, dt) === i)
+        assert(arrayCopy.get(i, dt) === i)
+      }
+    }
   }
 
-  DataTypeTestUtils.dayTimeIntervalTypes.foreach {
-    dt =>
-      testVectors(dt.typeName,
-        10,
-        dt) { testVector =>
-        (0 until 10).foreach { i =>
-          testVector.appendLong(i)
-        }
-
-        val array = new ColumnarArray(testVector, 0, 10)
-        val arrayCopy = array.copy()
-
-        (0 until 10).foreach { i =>
-          assert(array.get(i, dt) === i)
-          assert(arrayCopy.get(i, dt) === i)
-        }
+  DataTypeTestUtils.dayTimeIntervalTypes.foreach { dt =>
+    testVectors(dt.typeName, 10, dt) { testVector =>
+      (0 until 10).foreach { i =>
+        testVector.appendLong(i)
       }
+
+      val array = new ColumnarArray(testVector, 0, 10)
+      val arrayCopy = array.copy()
+
+      (0 until 10).foreach { i =>
+        assert(array.get(i, dt) === i)
+        assert(arrayCopy.get(i, dt) === i)
+      }
+    }
   }
 
   testVectors("mutable ColumnarRow", 10, IntegerType) { testVector =>
@@ -327,7 +315,6 @@ class ColumnVectorSuite extends SparkFunSuite with SQLHelper {
 
   val arrayType: ArrayType = ArrayType(IntegerType, containsNull = true)
   testVectors("array", 10, arrayType) { testVector =>
-
     val data = testVector.arrayData()
     var i = 0
     while (i < 6) {
@@ -385,17 +372,21 @@ class ColumnVectorSuite extends SparkFunSuite with SQLHelper {
     testVector.putArray(3, 3, 3)
 
     assert(testVector.getMap(0).keyArray().toIntArray === Array(0))
-    assert(testVector.getMap(0).valueArray().toArray[UTF8String](StringType) ===
-      Array(UTF8String.fromString(s"str0")))
+    assert(
+      testVector.getMap(0).valueArray().toArray[UTF8String](StringType) ===
+        Array(UTF8String.fromString(s"str0")))
     assert(testVector.getMap(1).keyArray().toIntArray === Array(1, 2))
-    assert(testVector.getMap(1).valueArray().toArray[UTF8String](StringType) ===
-      (1 to 2).map(i => UTF8String.fromString(s"str$i")).toArray)
+    assert(
+      testVector.getMap(1).valueArray().toArray[UTF8String](StringType) ===
+        (1 to 2).map(i => UTF8String.fromString(s"str$i")).toArray)
     assert(testVector.getMap(2).keyArray().toIntArray === Array.empty[Int])
-    assert(testVector.getMap(2).valueArray().toArray[UTF8String](StringType) ===
-      Array.empty[UTF8String])
+    assert(
+      testVector.getMap(2).valueArray().toArray[UTF8String](StringType) ===
+        Array.empty[UTF8String])
     assert(testVector.getMap(3).keyArray().toIntArray === Array(3, 4, 5))
-    assert(testVector.getMap(3).valueArray().toArray[UTF8String](StringType) ===
-      (3 to 5).map(i => UTF8String.fromString(s"str$i")).toArray)
+    assert(
+      testVector.getMap(3).valueArray().toArray[UTF8String](StringType) ===
+        (3 to 5).map(i => UTF8String.fromString(s"str$i")).toArray)
   }
 
   testVectors("SPARK-35898: map append", 1, mapType) { testVector =>
@@ -421,20 +412,26 @@ class ColumnVectorSuite extends SparkFunSuite with SQLHelper {
     appendPair(5)
 
     assert(testVector.getMap(0).keyArray().toIntArray === Array(0))
-    assert(testVector.getMap(0).valueArray().toArray[UTF8String](StringType) ===
-      Array(UTF8String.fromString(s"str0")))
+    assert(
+      testVector.getMap(0).valueArray().toArray[UTF8String](StringType) ===
+        Array(UTF8String.fromString(s"str0")))
     assert(testVector.getMap(1).keyArray().toIntArray === Array(1, 2))
-    assert(testVector.getMap(1).valueArray().toArray[UTF8String](StringType) ===
-      (1 to 2).map(i => UTF8String.fromString(s"str$i")).toArray)
+    assert(
+      testVector.getMap(1).valueArray().toArray[UTF8String](StringType) ===
+        (1 to 2).map(i => UTF8String.fromString(s"str$i")).toArray)
     assert(testVector.getMap(2).keyArray().toIntArray === Array.empty[Int])
-    assert(testVector.getMap(2).valueArray().toArray[UTF8String](StringType) ===
-      Array.empty[UTF8String])
+    assert(
+      testVector.getMap(2).valueArray().toArray[UTF8String](StringType) ===
+        Array.empty[UTF8String])
     assert(testVector.getMap(3).keyArray().toIntArray === Array(3, 4, 5))
-    assert(testVector.getMap(3).valueArray().toArray[UTF8String](StringType) ===
-      (3 to 5).map(i => UTF8String.fromString(s"str$i")).toArray)
+    assert(
+      testVector.getMap(3).valueArray().toArray[UTF8String](StringType) ===
+        (3 to 5).map(i => UTF8String.fromString(s"str$i")).toArray)
   }
 
-  val structType: StructType = new StructType().add("int", IntegerType).add("double", DoubleType)
+  val structType: StructType = new StructType()
+    .add("int", IntegerType)
+    .add("double", DoubleType)
     .add("ts", TimestampNTZType)
   testVectors("struct", 10, structType) { testVector =>
     val c1 = testVector.getChild(0)
@@ -731,7 +728,8 @@ class ColumnVectorSuite extends SparkFunSuite with SQLHelper {
 
   test("[SPARK-22092] off-heap column vector reallocation corrupts struct nullability") {
     withVector(new OffHeapColumnVector(8, structType)) { testVector =>
-      (0 until 8).foreach(i => if (i % 2 == 0) testVector.putNull(i) else testVector.putNotNull(i))
+      (0 until 8).foreach(i =>
+        if (i % 2 == 0) testVector.putNull(i) else testVector.putNotNull(i))
       testVector.reserve(16)
       (0 until 8).foreach(i => assert(testVector.isNullAt(i) == (i % 2 == 0)))
     }
@@ -912,24 +910,24 @@ class ColumnVectorSuite extends SparkFunSuite with SQLHelper {
       SQLConf.VECTORIZED_HUGE_VECTOR_RESERVE_RATIO.key -> "1.2") {
       val dataType = ByteType
 
-      Array(new OnHeapColumnVector(80, dataType),
-        new OffHeapColumnVector(80, dataType)).foreach { vector =>
-        try {
-          // The new capacity of small vector = request capacity * 2 and will not be reset
-          vector.appendBytes(100, 0)
-          assert(vector.capacity == 200)
-          vector.reset()
-          assert(vector.capacity == 200)
+      Array(new OnHeapColumnVector(80, dataType), new OffHeapColumnVector(80, dataType)).foreach {
+        vector =>
+          try {
+            // The new capacity of small vector = request capacity * 2 and will not be reset
+            vector.appendBytes(100, 0)
+            assert(vector.capacity == 200)
+            vector.reset()
+            assert(vector.capacity == 200)
 
-          // The new capacity of huge vector = (request capacity - HUGE_VECTOR_THRESHOLD) * 1.2 +
-          // HUGE_VECTOR_THRESHOLD * 2 = 300 * 1.2 and will be reset.
-          vector.appendBytes(300, 0)
-          assert(vector.capacity == 360)
-          vector.reset()
-          assert(vector.capacity == 80)
-        } finally {
-          vector.close()
-        }
+            // The new capacity of huge vector = (request capacity - HUGE_VECTOR_THRESHOLD) * 1.2 +
+            // HUGE_VECTOR_THRESHOLD * 2 = 300 * 1.2 and will be reset.
+            vector.appendBytes(300, 0)
+            assert(vector.capacity == 360)
+            vector.reset()
+            assert(vector.capacity == 80)
+          } finally {
+            vector.close()
+          }
       }
     }
   }
@@ -973,18 +971,19 @@ class ColumnVectorSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
-  testVectors("user defined type in map type",
-    10, MapType(IntegerType, yearUDT)) { testVector =>
+  testVectors("user defined type in map type", 10, MapType(IntegerType, yearUDT)) { testVector =>
     assert(testVector.dataType() === MapType(IntegerType, IntegerType))
   }
 
-  testVectors("user defined type in array type",
-    10, ArrayType(yearUDT, containsNull = true)) { testVector =>
-    assert(testVector.dataType() === ArrayType(IntegerType, containsNull = true))
+  testVectors("user defined type in array type", 10, ArrayType(yearUDT, containsNull = true)) {
+    testVector =>
+      assert(testVector.dataType() === ArrayType(IntegerType, containsNull = true))
   }
 
-  testVectors("user defined type in struct type",
-    10, StructType(Seq(StructField("year", yearUDT)))) { testVector =>
+  testVectors(
+    "user defined type in struct type",
+    10,
+    StructType(Seq(StructField("year", yearUDT)))) { testVector =>
     assert(testVector.dataType() === StructType(Seq(StructField("year", IntegerType))))
   }
 

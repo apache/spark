@@ -42,8 +42,8 @@ object RuleIdCollection {
   // tree traversals in the transform function family. Note that those rules should not depend on
   // a changing, external state. Rules here are in alphabetical order.
   private var rulesNeedingIds: Seq[String] = {
-      // Catalyst Analyzer rules
-      "org.apache.spark.sql.catalyst.analysis.Analyzer$AddMetadataColumns" ::
+    // Catalyst Analyzer rules
+    "org.apache.spark.sql.catalyst.analysis.Analyzer$AddMetadataColumns" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ExtractGenerator" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ExtractWindowExpressions" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$GlobalAggregates" ::
@@ -152,7 +152,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.optimizer.OptimizeOneRowPlan" ::
       "org.apache.spark.sql.catalyst.optimizer.OptimizeRand" ::
       "org.apache.spark.sql.catalyst.optimizer.OptimizeRepartition" ::
-      "org.apache.spark.sql.catalyst.optimizer.OptimizeUpdateFields"::
+      "org.apache.spark.sql.catalyst.optimizer.OptimizeUpdateFields" ::
       "org.apache.spark.sql.catalyst.optimizer.OptimizeWindowFunctions" ::
       "org.apache.spark.sql.catalyst.optimizer.Optimizer$OptimizeSubqueries" ::
       "org.apache.spark.sql.catalyst.optimizer.PropagateEmptyRelation" ::
@@ -183,7 +183,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.optimizer.SimplifyDateTimeConversions" ::
       "org.apache.spark.sql.catalyst.optimizer.SimplifyExtractValueOps" ::
       "org.apache.spark.sql.catalyst.optimizer.TransposeWindow" ::
-      "org.apache.spark.sql.catalyst.optimizer.UnwrapCastInBinaryComparison" ::  Nil
+      "org.apache.spark.sql.catalyst.optimizer.UnwrapCastInBinaryComparison" :: Nil
   }
 
   if (Utils.isTesting) {
@@ -191,25 +191,25 @@ object RuleIdCollection {
       // In the production code path, the following rules are run in CombinedTypeCoercionRule, and
       // hence we only need to add them for unit testing.
       "org.apache.spark.sql.catalyst.analysis.AnsiTypeCoercion$DateTimeOperations" ::
-      "org.apache.spark.sql.catalyst.analysis.AnsiTypeCoercion$GetDateFieldOperations" ::
-      "org.apache.spark.sql.catalyst.analysis.AnsiTypeCoercion$PromoteStringLiterals" ::
-      "org.apache.spark.sql.catalyst.analysis.DecimalPrecision" ::
-      "org.apache.spark.sql.catalyst.analysis.TypeCoercion$BooleanEquality" ::
-      "org.apache.spark.sql.catalyst.analysis.TypeCoercion$DateTimeOperations" ::
-      "org.apache.spark.sql.catalyst.analysis.TypeCoercion$PromoteStrings" ::
-      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$CaseWhenCoercion" ::
-      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$ConcatCoercion" ::
-      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$Division" ::
-      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$EltCoercion" ::
-      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$FunctionArgumentConversion" ::
-      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$IfCoercion" ::
-      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$ImplicitTypeCasts" ::
-      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$InConversion" ::
-      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$IntegralDivision" ::
-      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$MapZipWithCoercion" ::
-      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$StackCoercion" ::
-      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$StringLiteralCoercion" ::
-      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$WindowFrameCoercion" :: Nil
+        "org.apache.spark.sql.catalyst.analysis.AnsiTypeCoercion$GetDateFieldOperations" ::
+        "org.apache.spark.sql.catalyst.analysis.AnsiTypeCoercion$PromoteStringLiterals" ::
+        "org.apache.spark.sql.catalyst.analysis.DecimalPrecision" ::
+        "org.apache.spark.sql.catalyst.analysis.TypeCoercion$BooleanEquality" ::
+        "org.apache.spark.sql.catalyst.analysis.TypeCoercion$DateTimeOperations" ::
+        "org.apache.spark.sql.catalyst.analysis.TypeCoercion$PromoteStrings" ::
+        "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$CaseWhenCoercion" ::
+        "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$ConcatCoercion" ::
+        "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$Division" ::
+        "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$EltCoercion" ::
+        "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$FunctionArgumentConversion" ::
+        "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$IfCoercion" ::
+        "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$ImplicitTypeCasts" ::
+        "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$InConversion" ::
+        "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$IntegralDivision" ::
+        "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$MapZipWithCoercion" ::
+        "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$StackCoercion" ::
+        "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$StringLiteralCoercion" ::
+        "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$WindowFrameCoercion" :: Nil
     }
   }
 

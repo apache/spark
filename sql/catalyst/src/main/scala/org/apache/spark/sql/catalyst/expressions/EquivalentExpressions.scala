@@ -28,9 +28,9 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
 /**
- * This class is used to compute equality of (sub)expression trees. Expressions can be added
- * to this class and they subsequently query for expression equality. Expression trees are
- * considered equal if for the same input(s), the same result is produced.
+ * This class is used to compute equality of (sub)expression trees. Expressions can be added to
+ * this class and they subsequently query for expression equality. Expression trees are considered
+ * equal if for the same input(s), the same result is produced.
  */
 class EquivalentExpressions(
     skipForShortcutEnable: Boolean = SQLConf.get.subexpressionEliminationSkipForShotcutExpr) {
@@ -40,8 +40,7 @@ class EquivalentExpressions(
 
   /**
    * Adds each expression to this data structure, grouping them with existing equivalent
-   * expressions. Non-recursive.
-   * Returns true if there was already a matching expression.
+   * expressions. Non-recursive. Returns true if there was already a matching expression.
    */
   def addExpr(expr: Expression): Boolean = {
     if (supportedExpression(expr)) {
@@ -52,11 +51,10 @@ class EquivalentExpressions(
   }
 
   /**
-   * Adds or removes an expression to/from the map and updates `useCount`.
-   * Returns true
-   * - if there was a matching expression in the map before add or
-   * - if there remained a matching expression in the map after remove (`useCount` remained > 0)
-   * to indicate there is no need to recurse in `updateExprTree`.
+   * Adds or removes an expression to/from the map and updates `useCount`. Returns true
+   *   - if there was a matching expression in the map before add or
+   *   - if there remained a matching expression in the map after remove (`useCount` remained > 0)
+   *     to indicate there is no need to recurse in `updateExprTree`.
    */
   private def updateExprInMap(
       expr: Expression,
@@ -89,16 +87,14 @@ class EquivalentExpressions(
   }
 
   /**
-   * Adds or removes only expressions which are common in each of given expressions, in a recursive
-   * way.
-   * For example, given two expressions `(a + (b + (c + 1)))` and `(d + (e + (c + 1)))`, the common
-   * expression `(c + 1)` will be added into `equivalenceMap`.
+   * Adds or removes only expressions which are common in each of given expressions, in a
+   * recursive way. For example, given two expressions `(a + (b + (c + 1)))` and
+   * `(d + (e + (c + 1)))`, the common expression `(c + 1)` will be added into `equivalenceMap`.
    *
-   * Note that as we don't know in advance if any child node of an expression will be common across
-   * all given expressions, we compute local equivalence maps for all given expressions and filter
-   * only the common nodes.
-   * Those common nodes are then removed from the local map and added to the final map of
-   * expressions.
+   * Note that as we don't know in advance if any child node of an expression will be common
+   * across all given expressions, we compute local equivalence maps for all given expressions and
+   * filter only the common nodes. Those common nodes are then removed from the local map and
+   * added to the final map of expressions.
    */
   private def updateCommonExprs(
       exprs: Seq[Expression],
@@ -170,8 +166,8 @@ class EquivalentExpressions(
   }
 
   /**
-   * Adds the expression to this data structure recursively. Stops if a matching expression
-   * is found. That is, if `expr` has already been added, its children are not added.
+   * Adds the expression to this data structure recursively. Stops if a matching expression is
+   * found. That is, if `expr` has already been added, its children are not added.
    */
   def addExprTree(
       expr: Expression,
@@ -195,8 +191,8 @@ class EquivalentExpressions(
   }
 
   /**
-   * Returns the state of the given expression in the `equivalenceMap`. Returns None if there is no
-   * equivalent expressions.
+   * Returns the state of the given expression in the `equivalenceMap`. Returns None if there is
+   * no equivalent expressions.
    */
   def getExprState(e: Expression): Option[ExpressionStats] = {
     if (supportedExpression(e)) {

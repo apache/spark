@@ -41,7 +41,8 @@ class RateStreamMicroBatchStream(
     numPartitions: Int = 1,
     options: CaseInsensitiveStringMap,
     checkpointLocation: String)
-  extends MicroBatchStream with Logging {
+    extends MicroBatchStream
+    with Logging {
   import RateStreamProvider._
 
   private[sources] val clock = {
@@ -52,8 +53,7 @@ class RateStreamMicroBatchStream(
   private val maxSeconds = Long.MaxValue / rowsPerSecond
 
   if (rampUpTimeSeconds > maxSeconds) {
-    throw QueryExecutionErrors.incorrectRampUpRate(
-      rowsPerSecond, maxSeconds, rampUpTimeSeconds)
+    throw QueryExecutionErrors.incorrectRampUpRate(rowsPerSecond, maxSeconds, rampUpTimeSeconds)
   }
 
   private[sources] val creationTimeMs = {
@@ -89,12 +89,15 @@ class RateStreamMicroBatchStream(
         }
       }
 
-    metadataLog.get(0).getOrElse {
-      val offset = LongOffset(clock.getTimeMillis())
-      metadataLog.add(0, offset)
-      logInfo(log"Start time: ${MDC(TIME_UNITS, offset)}")
-      offset
-    }.offset
+    metadataLog
+      .get(0)
+      .getOrElse {
+        val offset = LongOffset(clock.getTimeMillis())
+        metadataLog.add(0, offset)
+        logInfo(log"Start time: ${MDC(TIME_UNITS, offset)}")
+        offset
+      }
+      .offset
   }
 
   @volatile private var lastTimeMs: Long = creationTimeMs
@@ -113,7 +116,6 @@ class RateStreamMicroBatchStream(
     LongOffset(json.toLong)
   }
 
-
   override def planInputPartitions(start: Offset, end: Offset): Array[InputPartition] = {
     val startSeconds = start.asInstanceOf[LongOffset].offset
     val endSeconds = end.asInstanceOf[LongOffset].offset
@@ -127,8 +129,9 @@ class RateStreamMicroBatchStream(
     }
     val rangeStart = valueAtSecond(startSeconds, rowsPerSecond, rampUpTimeSeconds)
     val rangeEnd = valueAtSecond(endSeconds, rowsPerSecond, rampUpTimeSeconds)
-    logDebug(s"startSeconds: $startSeconds, endSeconds: $endSeconds, " +
-      s"rangeStart: $rangeStart, rangeEnd: $rangeEnd")
+    logDebug(
+      s"startSeconds: $startSeconds, endSeconds: $endSeconds, " +
+        s"rangeStart: $rangeStart, rangeEnd: $rangeEnd")
 
     if (rangeStart == rangeEnd) {
       return Array.empty
@@ -140,7 +143,12 @@ class RateStreamMicroBatchStream(
 
     (0 until numPartitions).map { p =>
       RateStreamMicroBatchInputPartition(
-        p, numPartitions, rangeStart, rangeEnd, localStartTimeMs, relativeMsPerValue)
+        p,
+        numPartitions,
+        rangeStart,
+        rangeEnd,
+        localStartTimeMs,
+        relativeMsPerValue)
     }.toArray
   }
 
@@ -163,13 +171,19 @@ case class RateStreamMicroBatchInputPartition(
     rangeStart: Long,
     rangeEnd: Long,
     localStartTimeMs: Long,
-    relativeMsPerValue: Double) extends InputPartition
+    relativeMsPerValue: Double)
+    extends InputPartition
 
 object RateStreamMicroBatchReaderFactory extends PartitionReaderFactory {
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
     val p = partition.asInstanceOf[RateStreamMicroBatchInputPartition]
-    new RateStreamMicroBatchPartitionReader(p.partitionId, p.numPartitions, p.rangeStart,
-      p.rangeEnd, p.localStartTimeMs, p.relativeMsPerValue)
+    new RateStreamMicroBatchPartitionReader(
+      p.partitionId,
+      p.numPartitions,
+      p.rangeStart,
+      p.rangeEnd,
+      p.localStartTimeMs,
+      p.relativeMsPerValue)
   }
 }
 
@@ -179,7 +193,8 @@ class RateStreamMicroBatchPartitionReader(
     rangeStart: Long,
     rangeEnd: Long,
     localStartTimeMs: Long,
-    relativeMsPerValue: Double) extends PartitionReader[InternalRow] {
+    relativeMsPerValue: Double)
+    extends PartitionReader[InternalRow] {
   private var count: Long = 0
 
   override def next(): Boolean = {

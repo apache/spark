@@ -26,9 +26,7 @@ import org.apache.spark.sql.catalyst.rules.RuleExecutor
 class CollapseWindowSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
-      Batch("CollapseWindow", FixedPoint(10),
-        CollapseWindow,
-        CollapseProject) :: Nil
+      Batch("CollapseWindow", FixedPoint(10), CollapseWindow, CollapseProject) :: Nil
   }
 
   val testRelation = LocalRelation($"a".double, $"b".double, $"c".string)
@@ -51,11 +49,10 @@ class CollapseWindowSuite extends PlanTest {
     val optimized = Optimize.execute(analyzed)
     assert(analyzed.output === optimized.output)
 
-    val correctAnswer = testRelation.window(Seq(
-      min(a).as("min_a"),
-      max(a).as("max_a"),
-      sum(b).as("sum_b"),
-      avg(b).as("avg_b")), partitionSpec1, orderSpec1)
+    val correctAnswer = testRelation.window(
+      Seq(min(a).as("min_a"), max(a).as("max_a"), sum(b).as("sum_b"), avg(b).as("avg_b")),
+      partitionSpec1,
+      orderSpec1)
 
     comparePlans(optimized, correctAnswer)
   }
@@ -102,8 +99,9 @@ class CollapseWindowSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("SPARK-34565: collapse two windows with the same partition/order " +
-    "and a Project between them") {
+  test(
+    "SPARK-34565: collapse two windows with the same partition/order " +
+      "and a Project between them") {
 
     val query = testRelation
       .window(Seq(min(a).as("_we0")), partitionSpec1, orderSpec1)
@@ -120,22 +118,26 @@ class CollapseWindowSuite extends PlanTest {
     assert(query.output === optimized.output)
 
     val correctAnswer = testRelation
-      .window(Seq(
-        min(a).as("_we0"),
-        max(a).as("_we1"),
-        sum(b).as("_we2"),
-        avg(b).as("_we3")
-      ), partitionSpec1, orderSpec1)
+      .window(
+        Seq(min(a).as("_we0"), max(a).as("_we1"), sum(b).as("_we2"), avg(b).as("_we3")),
+        partitionSpec1,
+        orderSpec1)
       .select(
-        a, b, c,
-        $"_we0" as "min_a", $"_we1" as "max_a", $"_we2" as "sum_b", $"_we3" as "avg_b")
+        a,
+        b,
+        c,
+        $"_we0" as "min_a",
+        $"_we1" as "max_a",
+        $"_we2" as "sum_b",
+        $"_we3" as "avg_b")
       .analyze
 
     comparePlans(optimized, correctAnswer)
   }
 
-  test("SPARK-34565: do not collapse two windows if project between them " +
-    "generates an input column") {
+  test(
+    "SPARK-34565: do not collapse two windows if project between them " +
+      "generates an input column") {
 
     val query = testRelation
       .window(Seq(min(a).as("min_a")), partitionSpec1, orderSpec1)
@@ -149,8 +151,9 @@ class CollapseWindowSuite extends PlanTest {
     comparePlans(optimized, query)
   }
 
-  test("SPARK-42525: collapse two adjacent windows with the same partition/order " +
-    "but qualifiers are different ") {
+  test(
+    "SPARK-42525: collapse two adjacent windows with the same partition/order " +
+      "but qualifiers are different ") {
 
     val query = testRelation
       .window(Seq(min(a).as("_we0")), Seq(c.withQualifier(Seq("0"))), Seq(c.asc))

@@ -35,8 +35,7 @@ class FileResolverSuite extends QueryTest with SharedSparkSession {
       checkResolveOperator(
         sqlText = s"select id from json.`${f.getCanonicalPath}`",
         expectedTablePath = s"file:${f.getCanonicalPath}",
-        expectedTableSchema = tableSchema
-      )
+        expectedTableSchema = tableSchema)
     })
   }
 
@@ -47,8 +46,7 @@ class FileResolverSuite extends QueryTest with SharedSparkSession {
       checkResolveOperator(
         sqlText = s"select id from parquet.`${f.getCanonicalPath}`",
         expectedTablePath = s"file:${f.getCanonicalPath}",
-        expectedTableSchema = tableSchema
-      )
+        expectedTableSchema = tableSchema)
     })
   }
 
@@ -59,8 +57,7 @@ class FileResolverSuite extends QueryTest with SharedSparkSession {
       checkResolveOperator(
         sqlText = s"select id from ORC.`${f.getCanonicalPath}`",
         expectedTablePath = s"file:${f.getCanonicalPath}",
-        expectedTableSchema = tableSchema
-      )
+        expectedTableSchema = tableSchema)
     })
   }
 
@@ -71,8 +68,7 @@ class FileResolverSuite extends QueryTest with SharedSparkSession {
       checkResolveOperator(
         sqlText = s"select _c0 from csv.`${f.getCanonicalPath}`",
         expectedTablePath = s"file:${f.getCanonicalPath}",
-        expectedTableSchema = csvTableSchema
-      )
+        expectedTableSchema = csvTableSchema)
     })
   }
 
@@ -87,15 +83,13 @@ class FileResolverSuite extends QueryTest with SharedSparkSession {
     val result = fileResolver
       .resolveOperator(
         unresolvedPlan.asInstanceOf[Project].child.asInstanceOf[UnresolvedRelation],
-        new ProhibitedResolver
-      )
+        new ProhibitedResolver)
       .get
 
     val logicalRelation = result.asInstanceOf[LogicalRelation]
     assert(
       logicalRelation.relation.asInstanceOf[HadoopFsRelation].location.rootPaths.mkString(",") ==
-      expectedTablePath
-    )
+        expectedTablePath)
     assert(logicalRelation.relation.schema == expectedTableSchema)
   }
 }

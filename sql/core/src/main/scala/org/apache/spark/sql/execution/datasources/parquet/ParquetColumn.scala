@@ -45,14 +45,27 @@ case class ParquetColumn(
 
 object ParquetColumn {
   def apply(sparkType: DataType, io: PrimitiveColumnIO): ParquetColumn = {
-    this(sparkType, Some(io.getColumnDescriptor), io.getRepetitionLevel,
-      io.getDefinitionLevel, io.getType.isRepetition(Repetition.REQUIRED),
-      io.getFieldPath.toImmutableArraySeq, Seq.empty)
+    this(
+      sparkType,
+      Some(io.getColumnDescriptor),
+      io.getRepetitionLevel,
+      io.getDefinitionLevel,
+      io.getType.isRepetition(Repetition.REQUIRED),
+      io.getFieldPath.toImmutableArraySeq,
+      Seq.empty)
   }
 
-  def apply(sparkType: DataType, io: GroupColumnIO, children: Seq[ParquetColumn]): ParquetColumn = {
-    this(sparkType, None, io.getRepetitionLevel,
-      io.getDefinitionLevel, io.getType.isRepetition(Repetition.REQUIRED),
-      io.getFieldPath.toImmutableArraySeq, children)
+  def apply(
+      sparkType: DataType,
+      io: GroupColumnIO,
+      children: Seq[ParquetColumn]): ParquetColumn = {
+    this(
+      sparkType,
+      None,
+      io.getRepetitionLevel,
+      io.getDefinitionLevel,
+      io.getType.isRepetition(Repetition.REQUIRED),
+      io.getFieldPath.toImmutableArraySeq,
+      children)
   }
 }

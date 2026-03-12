@@ -71,7 +71,7 @@ class DataSourceAnalysisSuite extends SparkFunSuite with SQLHelper {
     val rule = DataSourceAnalysis
     testRule(
       "convertStaticPartitions only handle INSERT having at least static partitions",
-        caseSensitive) {
+      caseSensitive) {
       intercept[AssertionError] {
         rule.convertStaticPartitions(
           sourceAttributes = Seq($"e".int, $"f".int),

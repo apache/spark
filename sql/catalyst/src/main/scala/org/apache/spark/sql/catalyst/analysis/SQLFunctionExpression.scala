@@ -29,14 +29,16 @@ case class SQLFunctionExpression(
     name: String,
     function: SQLFunction,
     inputs: Seq[Expression],
-    returnType: Option[DataType]) extends Expression with Unevaluable {
+    returnType: Option[DataType])
+    extends Expression
+    with Unevaluable {
   override def children: Seq[Expression] = inputs
   override def dataType: DataType = returnType.get
   override def nullable: Boolean = true
   override def prettyName: String = name
   override def toString: String = s"$name(${children.mkString(", ")})"
   override protected def withNewChildrenInternal(
-    newChildren: IndexedSeq[Expression]): SQLFunctionExpression = copy(inputs = newChildren)
+      newChildren: IndexedSeq[Expression]): SQLFunctionExpression = copy(inputs = newChildren)
   final override val nodePatterns: Seq[TreePattern] = Seq(SQL_FUNCTION_EXPRESSION)
 }
 
@@ -44,7 +46,8 @@ case class SQLFunctionExpression(
  * A wrapper node for a SQL scalar function expression.
  */
 case class SQLScalarFunction(function: SQLFunction, inputs: Seq[Expression], child: Expression)
-    extends UnaryExpression with Unevaluable {
+    extends UnaryExpression
+    with Unevaluable {
   override def dataType: DataType = child.dataType
   override def toString: String = s"${function.name}(${inputs.mkString(", ")})"
   override def sql: String = s"${function.name}(${inputs.map(_.sql).mkString(", ")})"
@@ -62,9 +65,9 @@ case class SQLScalarFunction(function: SQLFunction, inputs: Seq[Expression], chi
 /**
  * Provide a way to keep state during analysis for resolving nested SQL functions.
  *
- * @param nestedSQLFunctionDepth The nested depth in the SQL function resolution. A SQL function
- *                               expression should only be expanded as a [[SQLScalarFunction]] if
- *                               the nested depth is 0.
+ * @param nestedSQLFunctionDepth
+ *   The nested depth in the SQL function resolution. A SQL function expression should only be
+ *   expanded as a [[SQLScalarFunction]] if the nested depth is 0.
  */
 case class SQLFunctionContext(nestedSQLFunctionDepth: Int = 0)
 
@@ -82,16 +85,18 @@ object SQLFunctionContext {
 
   def withSQLFunction[A](f: => A): A = {
     val originContext = value.get()
-    val context = originContext.copy(
-      nestedSQLFunctionDepth = originContext.nestedSQLFunctionDepth + 1)
+    val context =
+      originContext.copy(nestedSQLFunctionDepth = originContext.nestedSQLFunctionDepth + 1)
     set(context)
-    try f finally { set(originContext) }
+    try f
+    finally { set(originContext) }
   }
 
   def withNewContext[A](f: => A): A = {
     val originContext = value.get()
     val context = SQLFunctionContext()
     set(context)
-    try f finally { set(originContext) }
+    try f
+    finally { set(originContext) }
   }
 }

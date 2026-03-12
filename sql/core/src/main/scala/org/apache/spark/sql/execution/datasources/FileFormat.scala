@@ -33,14 +33,14 @@ import org.apache.spark.sql.internal.{SessionStateHelper, SQLConf}
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types._
 
-
 /**
  * Used to read and write data stored in files to/from the [[InternalRow]] format.
  */
 trait FileFormat {
+
   /**
-   * When possible, this method should return the schema of the given `files`.  When the format
-   * does not support inference, or no valid files are given should return None.  In these cases
+   * When possible, this method should return the schema of the given `files`. When the format
+   * does not support inference, or no valid files are given should return None. In these cases
    * Spark will require that user specify the schema manually.
    */
   def inferSchema(
@@ -49,9 +49,9 @@ trait FileFormat {
       files: Seq[FileStatus]): Option[StructType]
 
   /**
-   * Prepares a write job and returns an [[OutputWriterFactory]].  Client side job preparation can
-   * be put here.  For example, user defined output committer can be configured here
-   * by setting the output committer class in the conf of spark.sql.sources.outputCommitterClass.
+   * Prepares a write job and returns an [[OutputWriterFactory]]. Client side job preparation can
+   * be put here. For example, user defined output committer can be configured here by setting the
+   * output committer class in the conf of spark.sql.sources.outputCommitterClass.
    */
   def prepareWrite(
       sparkSession: SparkSession,
@@ -60,12 +60,11 @@ trait FileFormat {
       dataSchema: StructType): OutputWriterFactory
 
   /**
-   * Returns whether this format supports returning columnar batch or not.
-   * If columnar batch output is requested, users shall supply
-   * FileFormat.OPTION_RETURNING_BATCH -> true
-   * in relation options when calling buildReaderWithPartitionValues.
-   * This should only be passed as true if it can actually be supported.
-   * For ParquetFileFormat and OrcFileFormat, passing this option is required.
+   * Returns whether this format supports returning columnar batch or not. If columnar batch
+   * output is requested, users shall supply FileFormat.OPTION_RETURNING_BATCH -> true in relation
+   * options when calling buildReaderWithPartitionValues. This should only be passed as true if it
+   * can actually be supported. For ParquetFileFormat and OrcFileFormat, passing this option is
+   * required.
    *
    * TODO: we should just have different traits for the different formats.
    */
@@ -74,8 +73,8 @@ trait FileFormat {
   }
 
   /**
-   * Returns concrete column vector class names for each column to be used in a columnar batch
-   * if this format supports returning columnar batch.
+   * Returns concrete column vector class names for each column to be used in a columnar batch if
+   * this format supports returning columnar batch.
    */
   def vectorTypes(
       requiredSchema: StructType,
@@ -97,17 +96,20 @@ trait FileFormat {
   /**
    * Returns a function that can be used to read a single file in as an Iterator of InternalRow.
    *
-   * @param dataSchema The global data schema. It can be either specified by the user, or
-   *                   reconciled/merged from all underlying data files. If any partition columns
-   *                   are contained in the files, they are preserved in this schema.
-   * @param partitionSchema The schema of the partition column row that will be present in each
-   *                        PartitionedFile. These columns should be appended to the rows that
-   *                        are produced by the iterator.
-   * @param requiredSchema The schema of the data that should be output for each row.  This may be a
-   *                       subset of the columns that are present in the file if column pruning has
-   *                       occurred.
-   * @param filters A set of filters than can optionally be used to reduce the number of rows output
-   * @param options A set of string -> string configuration options.
+   * @param dataSchema
+   *   The global data schema. It can be either specified by the user, or reconciled/merged from
+   *   all underlying data files. If any partition columns are contained in the files, they are
+   *   preserved in this schema.
+   * @param partitionSchema
+   *   The schema of the partition column row that will be present in each PartitionedFile. These
+   *   columns should be appended to the rows that are produced by the iterator.
+   * @param requiredSchema
+   *   The schema of the data that should be output for each row. This may be a subset of the
+   *   columns that are present in the file if column pruning has occurred.
+   * @param filters
+   *   A set of filters than can optionally be used to reduce the number of rows output
+   * @param options
+   *   A set of string -> string configuration options.
    * @return
    */
   protected def buildReader(
@@ -135,7 +137,13 @@ trait FileFormat {
       options: Map[String, String],
       hadoopConf: Configuration): PartitionedFile => Iterator[InternalRow] = {
     val dataReader = buildReader(
-      sparkSession, dataSchema, partitionSchema, requiredSchema, filters, options, hadoopConf)
+      sparkSession,
+      dataSchema,
+      partitionSchema,
+      requiredSchema,
+      filters,
+      options,
+      hadoopConf)
 
     new (PartitionedFile => Iterator[InternalRow]) with Serializable {
       private val fullSchema = toAttributes(requiredSchema) ++ toAttributes(partitionSchema)
@@ -177,21 +185,21 @@ trait FileFormat {
   }
 
   /**
-   * Returns whether this format supports the given [[DataType]] in read/write path.
-   * By default all data types are supported.
+   * Returns whether this format supports the given [[DataType]] in read/write path. By default
+   * all data types are supported.
    */
   def supportDataType(dataType: DataType): Boolean = true
 
   /**
-   * Returns whether this format supports the given [[DataType]] in the read-only path.
-   * By default, it is the same as `supportDataType`. In certain file formats, it can allow more
-   * data types than `supportDataType`. At this point, only `CSVFileFormat` overrides it.
+   * Returns whether this format supports the given [[DataType]] in the read-only path. By
+   * default, it is the same as `supportDataType`. In certain file formats, it can allow more data
+   * types than `supportDataType`. At this point, only `CSVFileFormat` overrides it.
    */
   def supportReadDataType(dataType: DataType): Boolean = supportDataType(dataType)
 
   /**
-   * Returns whether this format supports the given filed name in read/write path.
-   * By default all field name is supported.
+   * Returns whether this format supports the given filed name in read/write path. By default all
+   * field name is supported.
    */
   def supportFieldName(name: String): Boolean = true
 
@@ -203,21 +211,22 @@ trait FileFormat {
   /**
    * All fields the file format's _metadata struct defines.
    *
-   * Each metadata struct field is either "constant" or "generated" (respectively defined/matched by
-   * [[FileSourceConstantMetadataStructField]] or [[FileSourceGeneratedMetadataAttribute]]).
+   * Each metadata struct field is either "constant" or "generated" (respectively defined/matched
+   * by [[FileSourceConstantMetadataStructField]] or [[FileSourceGeneratedMetadataAttribute]]).
    *
    * Constant metadata columns are derived from the [[PartitionedFile]] instances a scan's
    * [[FileIndex]] provides. Thus, a custom [[FileFormat]] that defines constant metadata columns
    * will generally pair with a a custom [[FileIndex]] that populates [[PartitionedFile]] with
    * appropriate metadata values. By default, constant attribute values are obtained by a simple
-   * name-based lookup in [[PartitionedFile.extraConstantMetadataColumnValues]], but implementations
-   * can override [[fileConstantMetadataExtractors]] to define custom extractors that have access to
-   * the entire [[PartitionedFile]] when deriving the column's value.
+   * name-based lookup in [[PartitionedFile.extraConstantMetadataColumnValues]], but
+   * implementations can override [[fileConstantMetadataExtractors]] to define custom extractors
+   * that have access to the entire [[PartitionedFile]] when deriving the column's value.
    *
-   * Generated metadata columns map to a hidden/internal column the underlying reader provides, and
-   * so will often pair with a custom reader that can populate those columns. For example,
+   * Generated metadata columns map to a hidden/internal column the underlying reader provides,
+   * and so will often pair with a custom reader that can populate those columns. For example,
    * [[ParquetFileFormat]] defines a "_metadata.row_index" column that relies on
-   * [[VectorizedParquetRecordReader]] to extract the actual row index values from the parquet scan.
+   * [[VectorizedParquetRecordReader]] to extract the actual row index values from the parquet
+   * scan.
    */
   def metadataSchemaFields: Seq[StructField] = FileFormat.BASE_METADATA_FIELDS
 
@@ -225,11 +234,13 @@ trait FileFormat {
    * The extractors to use when deriving file-constant metadata columns for this file format.
    *
    * Implementations that define custom constant metadata columns can override this method to
-   * associate a custom extractor with a given metadata column name, when a simple name-based lookup
-   * in [[PartitionedFile.extraConstantMetadataColumnValues]] is not expressive enough; extractors
-   * have access to the entire [[PartitionedFile]] and can perform arbitrary computations.
+   * associate a custom extractor with a given metadata column name, when a simple name-based
+   * lookup in [[PartitionedFile.extraConstantMetadataColumnValues]] is not expressive enough;
+   * extractors have access to the entire [[PartitionedFile]] and can perform arbitrary
+   * computations.
    *
-   * NOTE: Extractors are lazy, invoked only if the query actually selects their column at runtime.
+   * NOTE: Extractors are lazy, invoked only if the query actually selects their column at
+   * runtime.
    *
    * See also [[FileFormat.getFileConstantMetadataColumnValue]].
    */
@@ -254,16 +265,15 @@ object FileFormat {
   val METADATA_NAME = "_metadata"
 
   /**
-   * Option to pass to buildReaderWithPartitionValues to return columnar batch output or not.
-   * For ParquetFileFormat and OrcFileFormat, passing this option is required.
-   * This should only be passed as true if it can actually be supported, which can be checked
-   * by calling supportBatch.
+   * Option to pass to buildReaderWithPartitionValues to return columnar batch output or not. For
+   * ParquetFileFormat and OrcFileFormat, passing this option is required. This should only be
+   * passed as true if it can actually be supported, which can be checked by calling supportBatch.
    */
   val OPTION_RETURNING_BATCH = "returning_batch"
 
   /**
-   * Schema of metadata struct that can be produced by every file format,
-   * metadata fields for every file format must be *not* nullable.
+   * Schema of metadata struct that can be produced by every file format, metadata fields for
+   * every file format must be *not* nullable.
    */
   val BASE_METADATA_FIELDS: Seq[StructField] = Seq(
     FileSourceConstantMetadataStructField(FILE_PATH, StringType, nullable = false),
@@ -271,7 +281,10 @@ object FileFormat {
     FileSourceConstantMetadataStructField(FILE_SIZE, LongType, nullable = false),
     FileSourceConstantMetadataStructField(FILE_BLOCK_START, LongType, nullable = false),
     FileSourceConstantMetadataStructField(FILE_BLOCK_LENGTH, LongType, nullable = false),
-    FileSourceConstantMetadataStructField(FILE_MODIFICATION_TIME, TimestampType, nullable = false))
+    FileSourceConstantMetadataStructField(
+      FILE_MODIFICATION_TIME,
+      TimestampType,
+      nullable = false))
 
   /**
    * All [[BASE_METADATA_FIELDS]] require custom extractors because they are derived directly from
@@ -290,8 +303,7 @@ object FileFormat {
     FILE_BLOCK_LENGTH -> { pf: PartitionedFile => pf.length },
     // The modificationTime from the file has millisecond granularity, but the TimestampType for
     // `file_modification_time` has microsecond granularity.
-    FILE_MODIFICATION_TIME -> { pf: PartitionedFile => pf.modificationTime * 1000 }
-  )
+    FILE_MODIFICATION_TIME -> { pf: PartitionedFile => pf.modificationTime * 1000 })
 
   /**
    * Extracts the [[Literal]] value of a file-constant metadata column from a [[PartitionedFile]].
@@ -305,9 +317,9 @@ object FileFormat {
       name: String,
       file: PartitionedFile,
       metadataExtractors: Map[String, PartitionedFile => Any]): Literal = {
-    val extractor = metadataExtractors.getOrElse(name,
-      { pf: PartitionedFile => pf.otherConstantMetadataColumnValues.get(name).orNull }
-    )
+    val extractor = metadataExtractors.getOrElse(
+      name,
+      { pf: PartitionedFile => pf.otherConstantMetadataColumnValues.get(name).orNull })
     Literal(extractor.apply(file))
   }
 
@@ -334,7 +346,11 @@ object FileFormat {
       modificationTime = fileModificationTime,
       fileSize = fileSize,
       otherConstantMetadataColumnValues = Map.empty)
-    updateMetadataInternalRow(new GenericInternalRow(fieldNames.length), fieldNames, pf, extractors)
+    updateMetadataInternalRow(
+      new GenericInternalRow(fieldNames.length),
+      fieldNames,
+      pf,
+      extractors)
   }
 
   // update an internal row given required metadata fields and file information

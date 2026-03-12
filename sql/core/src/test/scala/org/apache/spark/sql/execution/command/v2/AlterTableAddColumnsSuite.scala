@@ -20,9 +20,9 @@ package org.apache.spark.sql.execution.command.v2
 import org.apache.spark.sql.execution.command
 
 /**
- * The class contains tests for the `ALTER TABLE .. ADD COLUMNS` command
- * to check V2 table catalogs.
+ * The class contains tests for the `ALTER TABLE .. ADD COLUMNS` command to check V2 table
+ * catalogs.
  */
 class AlterTableAddColumnsSuite
-  extends command.AlterTableAddColumnsSuiteBase
-  with CommandSuiteBase
+    extends command.AlterTableAddColumnsSuiteBase
+    with CommandSuiteBase

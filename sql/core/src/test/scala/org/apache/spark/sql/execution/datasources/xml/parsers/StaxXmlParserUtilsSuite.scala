@@ -90,15 +90,13 @@ final class StaxXmlParserUtilsSuite extends SparkFunSuite {
       StaxXmlParserUtils.getName(parser2.peek().asStartElement().getName, xmlOptions)
     assert(
       StaxXmlParserUtils
-        .getName(parser2.peek().asStartElement().getName, xmlOptions) == elementName2
-    )
+        .getName(parser2.peek().asStartElement().getName, xmlOptions) == elementName2)
     // skip <amount>
     parser2.nextEvent()
     StaxXmlParserUtils.skipChildren(parser2, elementName2, xmlOptions)
     assert(parser2.peek().getEventType === XMLStreamConstants.END_ELEMENT)
     assert(
-      StaxXmlParserUtils.getName(parser2.peek().asEndElement().getName, xmlOptions) == "info"
-    )
+      StaxXmlParserUtils.getName(parser2.peek().asEndElement().getName, xmlOptions) == "info")
   }
 
   test("XML Input Factory disables DTD parsing") {

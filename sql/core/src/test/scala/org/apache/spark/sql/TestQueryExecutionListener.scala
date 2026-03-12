@@ -22,13 +22,12 @@ import java.util.concurrent.atomic.AtomicBoolean
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.util.QueryExecutionListener
 
-
 class TestQueryExecutionListener extends QueryExecutionListener {
   override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
     OnSuccessCall.isOnSuccessCalled.set(true)
   }
 
-  override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = { }
+  override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
 }
 
 /**

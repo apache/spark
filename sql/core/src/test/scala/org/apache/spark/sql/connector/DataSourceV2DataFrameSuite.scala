@@ -45,7 +45,7 @@ import org.apache.spark.sql.util.QueryExecutionListener
 import org.apache.spark.unsafe.types.UTF8String
 
 class DataSourceV2DataFrameSuite
-  extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLOnlyTests = false) {
+    extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLOnlyTests = false) {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
   import testImplicits._
 
@@ -163,7 +163,10 @@ class DataSourceV2DataFrameSuite
       override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
         plan = qe.analyzed
       }
-      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
+      override def onFailure(
+          funcName: String,
+          qe: QueryExecution,
+          exception: Exception): Unit = {}
     }
 
     try {
@@ -181,8 +184,9 @@ class DataSourceV2DataFrameSuite
         case p: AppendData =>
           assert(p.writeOptions == Map("other" -> "20"))
         case other =>
-          fail(s"Expected to parse ${classOf[AppendData].getName} from query," +
-            s"got ${other.getClass.getName}: $plan")
+          fail(
+            s"Expected to parse ${classOf[AppendData].getName} from query," +
+              s"got ${other.getClass.getName}: $plan")
       }
 
       checkAnswer(spark.table(t1), df)
@@ -198,24 +202,22 @@ class DataSourceV2DataFrameSuite
         testCatalog.createTable(
           Identifier.of(Array(), "table_name"),
           Array(Column.create("i", CalendarIntervalType)),
-          Array.empty[Transform], Collections.emptyMap[String, String])
+          Array.empty[Transform],
+          Collections.emptyMap[String, String])
         val df = sql(s"select interval 1 millisecond as i")
         val v2Writer = df.writeTo("testcat.table_name")
         checkError(
           exception = intercept[AnalysisException](v2Writer.append()),
           condition = "_LEGACY_ERROR_TEMP_1183",
-          parameters = Map.empty
-        )
+          parameters = Map.empty)
         checkError(
           exception = intercept[AnalysisException](v2Writer.overwrite(df("i"))),
           condition = "_LEGACY_ERROR_TEMP_1183",
-          parameters = Map.empty
-        )
+          parameters = Map.empty)
         checkError(
           exception = intercept[AnalysisException](v2Writer.overwritePartitions()),
           condition = "_LEGACY_ERROR_TEMP_1183",
-          parameters = Map.empty
-        )
+          parameters = Map.empty)
       }
     }
   }
@@ -230,8 +232,8 @@ class DataSourceV2DataFrameSuite
       val df2 = spark.read
         .option(optionName, false)
         .table(t1)
-      val options = df2.queryExecution.analyzed.collectFirst {
-        case d: DataSourceV2Relation => d.options
+      val options = df2.queryExecution.analyzed.collectFirst { case d: DataSourceV2Relation =>
+        d.options
       }.get
       assert(options.get(optionName) === "false")
     }
@@ -244,7 +246,10 @@ class DataSourceV2DataFrameSuite
       override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
         plan = qe.analyzed
       }
-      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
+      override def onFailure(
+          funcName: String,
+          qe: QueryExecution,
+          exception: Exception): Unit = {}
     }
 
     try {
@@ -260,8 +265,9 @@ class DataSourceV2DataFrameSuite
         case o: CreateTableAsSelect =>
           assert(o.writeOptions == Map("option1" -> "20"))
         case other =>
-          fail(s"Expected to parse ${classOf[CreateTableAsSelect].getName} from query," +
-            s"got ${other.getClass.getName}: $plan")
+          fail(
+            s"Expected to parse ${classOf[CreateTableAsSelect].getName} from query," +
+              s"got ${other.getClass.getName}: $plan")
       }
       checkAnswer(spark.table(t1), df1)
 
@@ -273,8 +279,9 @@ class DataSourceV2DataFrameSuite
         case o: ReplaceTableAsSelect =>
           assert(o.writeOptions == Map("option2" -> "30"))
         case other =>
-          fail(s"Expected to parse ${classOf[ReplaceTableAsSelect].getName} from query," +
-            s"got ${other.getClass.getName}: $plan")
+          fail(
+            s"Expected to parse ${classOf[ReplaceTableAsSelect].getName} from query," +
+              s"got ${other.getClass.getName}: $plan")
       }
 
       checkAnswer(spark.table(t1), df2)
@@ -289,7 +296,10 @@ class DataSourceV2DataFrameSuite
       override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
         plan = qe.analyzed
       }
-      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
+      override def onFailure(
+          funcName: String,
+          qe: QueryExecution,
+          exception: Exception): Unit = {}
     }
     try {
       spark.listenerManager.register(listener)
@@ -302,8 +312,10 @@ class DataSourceV2DataFrameSuite
       sparkContext.listenerBus.waitUntilEmpty()
       plan match {
         case o: ReplaceTableAsSelect =>
-          assert(o.writeOptions.get(SupportsV1OverwriteWithSaveAsTable.OPTION_NAME)
-            .contains("true"))
+          assert(
+            o.writeOptions
+              .get(SupportsV1OverwriteWithSaveAsTable.OPTION_NAME)
+              .contains("true"))
         case other =>
           fail(s"Expected ReplaceTableAsSelect, got ${other.getClass.getName}: $plan")
       }
@@ -318,7 +330,10 @@ class DataSourceV2DataFrameSuite
       override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
         plan = qe.analyzed
       }
-      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
+      override def onFailure(
+          funcName: String,
+          qe: QueryExecution,
+          exception: Exception): Unit = {}
     }
     try {
       spark.listenerManager.register(listener)
@@ -346,7 +361,10 @@ class DataSourceV2DataFrameSuite
       override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
         plan = qe.analyzed
       }
-      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
+      override def onFailure(
+          funcName: String,
+          qe: QueryExecution,
+          exception: Exception): Unit = {}
     }
     try {
       spark.listenerManager.register(listener)
@@ -425,22 +443,14 @@ class DataSourceV2DataFrameSuite
 
       checkAnswer(
         sql(s"SELECT * FROM $tableName"),
-        Seq(
-          Row(1, "hr"),
-          Row(2, "hr"),
-          Row(3, "it"),
-          Row(4, "it")))
+        Seq(Row(1, "hr"), Row(2, "hr"), Row(3, "it"), Row(4, "it")))
 
       sql(s"REPLACE TABLE $tableName (id INT, dep STRING DEFAULT 'unknown') USING foo")
 
       val df3 = Seq(1, 2).toDF("id")
       df3.writeTo(tableName).append()
 
-      checkAnswer(
-        sql(s"SELECT * FROM $tableName"),
-        Seq(
-          Row(1, "unknown"),
-          Row(2, "unknown")))
+      checkAnswer(sql(s"SELECT * FROM $tableName"), Seq(Row(1, "unknown"), Row(2, "unknown")))
     }
   }
 
@@ -448,8 +458,7 @@ class DataSourceV2DataFrameSuite
     val tableName = "testcat.ns1.ns2.tbl"
     withTable(tableName) {
       val createExec = executeAndKeepPhysicalPlan[CreateTableExec] {
-        sql(
-          s"""
+        sql(s"""
               |CREATE TABLE $tableName (
               |  id INT,
               |  salary INT DEFAULT (100 + 23),
@@ -486,13 +495,10 @@ class DataSourceV2DataFrameSuite
 
       checkAnswer(
         sql(s"SELECT * FROM $tableName"),
-        Seq(
-          Row(1, 123, "hr", true),
-          Row(2, 123, "it", true)))
+        Seq(Row(1, 123, "hr", true), Row(2, 123, "it", true)))
 
       val replaceExec = executeAndKeepPhysicalPlan[ReplaceTableExec] {
-        sql(
-          s"""
+        sql(s"""
               |REPLACE TABLE $tableName (
               |  id INT,
               |  salary INT DEFAULT (50 * 2),
@@ -522,28 +528,25 @@ class DataSourceV2DataFrameSuite
       val df3 = Seq(1).toDF("id")
       df3.writeTo(tableName).append()
 
-      checkAnswer(
-        sql(s"SELECT * FROM $tableName"),
-        Seq(Row(1, 100, "unknown", false)))
+      checkAnswer(sql(s"SELECT * FROM $tableName"), Seq(Row(1, 100, "unknown", false)))
     }
   }
-
 
   test("alter table add column with complex foldable default values") {
     val tableName = "testcat.ns1.ns2.tbl"
     withTable(tableName) {
-      sql(
-        s"""
+      sql(s"""
             |CREATE TABLE $tableName (
             |  dummy INT
             |) USING foo
             |""".stripMargin)
 
       val alterExec = executeAndKeepPhysicalPlan[AlterTableExec] {
-        sql(s"ALTER TABLE $tableName ADD COLUMNS (" +
-          s"salary INT DEFAULT (100 + 23), " +
-          s"dep STRING DEFAULT ('h' || 'r'), " +
-          s"active BOOLEAN DEFAULT CAST(1 AS BOOLEAN))")
+        sql(
+          s"ALTER TABLE $tableName ADD COLUMNS (" +
+            s"salary INT DEFAULT (100 + 23), " +
+            s"dep STRING DEFAULT ('h' || 'r'), " +
+            s"active BOOLEAN DEFAULT CAST(1 AS BOOLEAN))")
       }
 
       checkDefaultValues(
@@ -567,8 +570,7 @@ class DataSourceV2DataFrameSuite
   test("alter table alter column with complex foldable default values") {
     val tableName = "testcat.ns1.ns2.tbl"
     withTable(tableName) {
-      sql(
-        s"""
+      sql(s"""
             |CREATE TABLE $tableName (
             |  salary INT DEFAULT (100 + 23),
             |  dep STRING DEFAULT ('h' || 'r'),
@@ -577,8 +579,7 @@ class DataSourceV2DataFrameSuite
             |""".stripMargin)
 
       val alterExecCol1 = executeAndKeepPhysicalPlan[AlterTableExec] {
-         sql(
-           s"""
+        sql(s"""
               |ALTER TABLE $tableName ALTER COLUMN
               |  salary SET DEFAULT (123 + 56),
               |  dep SET DEFAULT ('r' || 'l'),
@@ -588,23 +589,16 @@ class DataSourceV2DataFrameSuite
       checkDefaultValues(
         alterExecCol1.changes.map(_.asInstanceOf[UpdateColumnDefaultValue]).toArray,
         Array(
-          new DefaultValue(
-            "(123 + 56)",
-            LiteralValue(179, IntegerType)),
-          new DefaultValue(
-            "('r' || 'l')",
-            LiteralValue(UTF8String.fromString("rl"), StringType)),
-          new DefaultValue(
-            "CAST(0 AS BOOLEAN)",
-            new AlwaysFalse)))
+          new DefaultValue("(123 + 56)", LiteralValue(179, IntegerType)),
+          new DefaultValue("('r' || 'l')", LiteralValue(UTF8String.fromString("rl"), StringType)),
+          new DefaultValue("CAST(0 AS BOOLEAN)", new AlwaysFalse)))
     }
   }
 
   test("alter table alter column drop default") {
     val tableName = "testcat.ns1.ns2.tbl"
     withTable(tableName) {
-      sql(
-        s"""
+      sql(s"""
            |CREATE TABLE $tableName (
            |  salary INT DEFAULT (100 + 23)
            |) USING foo
@@ -613,8 +607,8 @@ class DataSourceV2DataFrameSuite
       val alterExecCol = executeAndKeepPhysicalPlan[AlterTableExec] {
         sql(s"ALTER TABLE $tableName ALTER COLUMN salary DROP DEFAULT")
       }
-      checkDropDefaultValue(alterExecCol.changes.collect {
-          case u: UpdateColumnDefaultValue => u
+      checkDropDefaultValue(alterExecCol.changes.collect { case u: UpdateColumnDefaultValue =>
+        u
       }.head)
     }
   }
@@ -622,8 +616,7 @@ class DataSourceV2DataFrameSuite
   test("alter table alter column should not produce default value if unchanged") {
     val tableName = "testcat.ns1.ns2.tbl"
     withTable(tableName) {
-      sql(
-        s"""
+      sql(s"""
            |CREATE TABLE $tableName (
            |  salary INT DEFAULT (100 + 23)
            |) USING foo
@@ -655,9 +648,7 @@ class DataSourceV2DataFrameSuite
       val df1 = Seq(1).toDF("id")
       df1.writeTo(tableName).append()
 
-      checkAnswer(
-        sql(s"SELECT * FROM $tableName"),
-        Seq(Row(1, "spark_catalog")))
+      checkAnswer(sql(s"SELECT * FROM $tableName"), Seq(Row(1, "spark_catalog")))
 
       val replaceExec = executeAndKeepPhysicalPlan[ReplaceTableExec] {
         sql(s"REPLACE TABLE $tableName (id INT, cat STRING DEFAULT current_schema()) USING foo")
@@ -675,17 +666,14 @@ class DataSourceV2DataFrameSuite
       val df2 = Seq(1).toDF("id")
       df2.writeTo(tableName).append()
 
-      checkAnswer(
-        sql(s"SELECT * FROM $tableName"),
-        Seq(Row(1, "default")))
+      checkAnswer(sql(s"SELECT * FROM $tableName"), Seq(Row(1, "default")))
     }
   }
 
   test("alter table add columns with current like default values") {
     val tableName = "testcat.ns1.ns2.tbl"
     withTable(tableName) {
-      sql(
-        s"""
+      sql(s"""
            |CREATE TABLE $tableName (
            |  dummy INT
            |) USING foo
@@ -706,17 +694,14 @@ class DataSourceV2DataFrameSuite
       val df1 = Seq(1).toDF("dummy")
       df1.writeTo(tableName).append()
 
-      checkAnswer(
-        sql(s"SELECT * FROM $tableName"),
-        Seq(Row(1, "spark_catalog")))
+      checkAnswer(sql(s"SELECT * FROM $tableName"), Seq(Row(1, "spark_catalog")))
     }
   }
 
   test("alter table alter column with current like default values") {
     val tableName = "testcat.ns1.ns2.tbl"
     withTable(tableName) {
-      sql(
-        s"""
+      sql(s"""
            |CREATE TABLE $tableName (
            |  dummy INT,
            |  cat STRING
@@ -729,14 +714,12 @@ class DataSourceV2DataFrameSuite
 
       checkDefaultValues(
         alterExec.changes.map(_.asInstanceOf[UpdateColumnDefaultValue]).toArray,
-        Array(new DefaultValue("current_catalog()", null /* No V2 Expression */)))
+        Array(new DefaultValue("current_catalog()", null /* No V2 Expression */ )))
 
       val df1 = Seq(1).toDF("dummy")
       df1.writeTo(tableName).append()
 
-      checkAnswer(
-        sql(s"SELECT * FROM $tableName"),
-        Seq(Row(1, "spark_catalog")))
+      checkAnswer(sql(s"SELECT * FROM $tableName"), Seq(Row(1, "spark_catalog")))
     }
   }
 
@@ -744,8 +727,7 @@ class DataSourceV2DataFrameSuite
     val tableName = "testcat.ns1.ns2.tbl"
     withTable(tableName) {
       val createExec = executeAndKeepPhysicalPlan[CreateTableExec] {
-        sql(
-          s"""
+        sql(s"""
              |CREATE TABLE $tableName (
              |  col1 int,
              |  col2 timestamp DEFAULT '2018-11-17 13:33:33',
@@ -766,8 +748,7 @@ class DataSourceV2DataFrameSuite
             LiteralValue(1.0, DoubleType))))
 
       val replaceExec = executeAndKeepPhysicalPlan[ReplaceTableExec] {
-        sql(
-          s"""
+        sql(s"""
              |REPLACE TABLE $tableName (
              |  col1 int,
              |  col2 timestamp DEFAULT '2022-02-23 05:55:55',
@@ -789,49 +770,45 @@ class DataSourceV2DataFrameSuite
     }
   }
 
-
   test("alter table default value expression should have a cast") {
     val tableName = "testcat.ns1.ns2.tbl"
-      withTable(tableName) {
-        sql(s"CREATE TABLE $tableName (col1 int) using foo")
-        val alterExec = executeAndKeepPhysicalPlan[AlterTableExec] {
-          sql(
-            s"""
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName (col1 int) using foo")
+      val alterExec = executeAndKeepPhysicalPlan[AlterTableExec] {
+        sql(s"""
                |ALTER TABLE $tableName ADD COLUMNS (
                |  col2 timestamp DEFAULT '2018-11-17 13:33:33',
                |  col3 double DEFAULT 1)
                |""".stripMargin)
-        }
+      }
 
-        checkDefaultValues(
-          alterExec.changes.map(_.asInstanceOf[AddColumn]).toArray,
-          Array(
-            new ColumnDefaultValue(
-              "'2018-11-17 13:33:33'",
-              LiteralValue(1542490413000000L, TimestampType),
-              LiteralValue(1542490413000000L, TimestampType)),
-            new ColumnDefaultValue(
-              "1",
-              LiteralValue(1.0, DoubleType),
-              LiteralValue(1.0, DoubleType))))
+      checkDefaultValues(
+        alterExec.changes.map(_.asInstanceOf[AddColumn]).toArray,
+        Array(
+          new ColumnDefaultValue(
+            "'2018-11-17 13:33:33'",
+            LiteralValue(1542490413000000L, TimestampType),
+            LiteralValue(1542490413000000L, TimestampType)),
+          new ColumnDefaultValue(
+            "1",
+            LiteralValue(1.0, DoubleType),
+            LiteralValue(1.0, DoubleType))))
 
-        val alterCol1 = executeAndKeepPhysicalPlan[AlterTableExec] {
-          sql(
-            s"""
+      val alterCol1 = executeAndKeepPhysicalPlan[AlterTableExec] {
+        sql(s"""
                |ALTER TABLE $tableName ALTER COLUMN
                |  col2 SET DEFAULT '2022-02-23 05:55:55',
                |  col3 SET DEFAULT (1 + 1)
                |""".stripMargin)
-        }
-        checkDefaultValues(
-          alterCol1.changes.map(_.asInstanceOf[UpdateColumnDefaultValue]).toArray,
-          Array(
-            new DefaultValue("'2022-02-23 05:55:55'",
-              LiteralValue(1645624555000000L, TimestampType)),
-            new DefaultValue(
-              "(1 + 1)",
-              LiteralValue(2.0, DoubleType))))
       }
+      checkDefaultValues(
+        alterCol1.changes.map(_.asInstanceOf[UpdateColumnDefaultValue]).toArray,
+        Array(
+          new DefaultValue(
+            "'2022-02-23 05:55:55'",
+            LiteralValue(1645624555000000L, TimestampType)),
+          new DefaultValue("(1 + 1)", LiteralValue(2.0, DoubleType))))
+    }
   }
 
   test("write with supported expression-based default values") {
@@ -854,9 +831,7 @@ class DataSourceV2DataFrameSuite
       catalog("testcat").createTable(Identifier.of(Array("ns1", "ns2"), "tbl"), tableInfo)
       val df = Seq(1, 2, 3).toDF("c1")
       df.writeTo(tableName).append()
-      checkAnswer(
-        spark.table(tableName),
-        Seq(Row(1, 123), Row(2, 123), Row(3, 123)))
+      checkAnswer(spark.table(tableName), Seq(Row(1, 123), Row(2, 123), Row(3, 123)))
     }
   }
 
@@ -916,11 +891,9 @@ class DataSourceV2DataFrameSuite
     Seq(true, false).foreach { caseSensitive =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         withTable(tableName) {
-          val tableInfo = new TableInfo.Builder().
-            withColumns(
-              Array(Column.create("c1", IntegerType)))
-            .withProperties(
-              Map("accept-any-schema" -> "true").asJava)
+          val tableInfo = new TableInfo.Builder()
+            .withColumns(Array(Column.create("c1", IntegerType)))
+            .withProperties(Map("accept-any-schema" -> "true").asJava)
             .build()
           catalog("testcat").createTable(ident, tableInfo)
 
@@ -935,13 +908,9 @@ class DataSourceV2DataFrameSuite
 
           val cols = catalog("testcat").loadTable(ident).columns()
           val expectedCols = if (caseSensitive) {
-            Array(
-              Column.create("c1", IntegerType),
-              Column.create("C1", StringType))
+            Array(Column.create("c1", IntegerType), Column.create("C1", StringType))
           } else {
-            Array(
-              Column.create("c1", IntegerType),
-              Column.create("c2", StringType))
+            Array(Column.create("c1", IntegerType), Column.create("c2", StringType))
           }
           assert(cols === expectedCols)
         }
@@ -994,8 +963,7 @@ class DataSourceV2DataFrameSuite
       sql(s"""CREATE table $t (
          c1 STRING)""")
       val replaceExec = executeAndKeepPhysicalPlan[ReplaceTableExec] {
-        sql(
-          s"""REPLACE table $t (
+        sql(s"""REPLACE table $t (
            c1 STRING,
            current_date DATE DEFAULT CURRENT_DATE,
            current_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -1034,8 +1002,7 @@ class DataSourceV2DataFrameSuite
     val tableName = "testcat.ns1.ns2.tbl"
     withTable(tableName) {
       val createExec = executeAndKeepPhysicalPlan[CreateTableExec] {
-        sql(
-          s"""
+        sql(s"""
              |CREATE TABLE $tableName (
              |  c1 STRING,
              |  current_date DATE DEFAULT DATE_ADD(current_date, 7)
@@ -1075,9 +1042,7 @@ class DataSourceV2DataFrameSuite
         parameters = Map(
           "statement" -> "CREATE TABLE",
           "colName" -> "`current_timestamp`",
-          "defaultValue" -> "c1"
-        )
-      )
+          "defaultValue" -> "c1"))
     }
   }
 
@@ -1094,11 +1059,11 @@ class DataSourceV2DataFrameSuite
       compareValue: Boolean = true): Unit = {
     assert(columns.length == expectedDefaultValues.length)
 
-    columns.zip(expectedDefaultValues).foreach {
-      case (column, expectedDefault) =>
-        assert(compareColumnDefaultValue(column.defaultValue(), expectedDefault, compareValue),
-          s"Default value mismatch for column '${column.toString}': " +
-            s"expected $expectedDefault but found ${column.defaultValue}")
+    columns.zip(expectedDefaultValues).foreach { case (column, expectedDefault) =>
+      assert(
+        compareColumnDefaultValue(column.defaultValue(), expectedDefault, compareValue),
+        s"Default value mismatch for column '${column.toString}': " +
+          s"expected $expectedDefault but found ${column.defaultValue}")
     }
   }
 
@@ -1107,11 +1072,10 @@ class DataSourceV2DataFrameSuite
       expectedDefaultValues: Array[ColumnDefaultValue]): Unit = {
     assert(columns.length == expectedDefaultValues.length)
 
-    columns.zip(expectedDefaultValues).foreach {
-      case (column, expectedDefault) =>
-        assert(
-          column.defaultValue == expectedDefault,
-          s"Default value mismatch for column '${column.toString}': " +
+    columns.zip(expectedDefaultValues).foreach { case (column, expectedDefault) =>
+      assert(
+        column.defaultValue == expectedDefault,
+        s"Default value mismatch for column '${column.toString}': " +
           s"expected $expectedDefault but found ${column.defaultValue}")
     }
   }
@@ -1121,17 +1085,15 @@ class DataSourceV2DataFrameSuite
       expectedDefaultValues: Array[DefaultValue]): Unit = {
     assert(columns.length == expectedDefaultValues.length)
 
-    columns.zip(expectedDefaultValues).foreach {
-      case (column, expectedDefault) =>
-        assert(
-          column.newCurrentDefault() == expectedDefault,
-          s"Default value mismatch for column '${column.toString}': " +
-            s"expected $expectedDefault but found ${column.newCurrentDefault}")
+    columns.zip(expectedDefaultValues).foreach { case (column, expectedDefault) =>
+      assert(
+        column.newCurrentDefault() == expectedDefault,
+        s"Default value mismatch for column '${column.toString}': " +
+          s"expected $expectedDefault but found ${column.newCurrentDefault}")
     }
   }
 
-  private def checkDropDefaultValue(
-      column: UpdateColumnDefaultValue): Unit = {
+  private def checkDropDefaultValue(column: UpdateColumnDefaultValue): Unit = {
     assert(
       column.newCurrentDefault() == null,
       s"Default value mismatch for column '${column.toString}': " +
@@ -1145,7 +1107,8 @@ class DataSourceV2DataFrameSuite
     (left, right) match {
       case (null, null) => true
       case (null, _) | (_, null) => false
-      case _ => left.getSql == right.getSql &&
+      case _ =>
+        left.getSql == right.getSql &&
         left.getExpression == right.getExpression &&
         (!compareValue || left.getValue == right.getValue)
     }
@@ -1232,7 +1195,8 @@ class DataSourceV2DataFrameSuite
   test("SPARK-54157: detect multiple change types after DataFrame analysis") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
-      sql(s"CREATE TABLE $t (col1 INT, col2 STRING, col3 BOOLEAN NOT NULL, col4 STRING) USING foo")
+      sql(
+        s"CREATE TABLE $t (col1 INT, col2 STRING, col3 BOOLEAN NOT NULL, col4 STRING) USING foo")
       sql(s"INSERT INTO $t VALUES (1, 'a', true, 'x')")
 
       // create DataFrame and trigger analysis
@@ -1326,29 +1290,35 @@ class DataSourceV2DataFrameSuite
 
       // create third DataFrame with new data and schema
       val df3 = spark.table(t)
-      checkAnswer(df3, Seq(
-        Row(1, "a", 10, null),
-        Row(2, "b", 20, null),
-        Row(3, "c", 30, null),
-        Row(4, "d", 40, "x")))
+      checkAnswer(
+        df3,
+        Seq(
+          Row(1, "a", 10, null),
+          Row(2, "b", 20, null),
+          Row(3, "c", 30, null),
+          Row(4, "d", 40, "x")))
 
       // join between df1 and df3 is allowed as schema changes are compatible with df1
       // Spark will refresh versions in joined DataFrame before execution
-      checkAnswer(df1.join(df3, df1("id") === df3("id")), Seq(
-        Row(1, "a", 10, 1, "a", 10, null),
-        Row(2, "b", 20, 2, "b", 20, null),
-        Row(3, "c", 30, 3, "c", 30, null),
-        Row(4, "d", 40, 4, "d", 40, "x")))
+      checkAnswer(
+        df1.join(df3, df1("id") === df3("id")),
+        Seq(
+          Row(1, "a", 10, 1, "a", 10, null),
+          Row(2, "b", 20, 2, "b", 20, null),
+          Row(3, "c", 30, 3, "c", 30, null),
+          Row(4, "d", 40, 4, "d", 40, "x")))
 
       // DataFrame execution before joins must have pinned used versions
       // subsequent version refreshes must not be visible in original DataFrames
       checkAnswer(df1, Seq(Row(1, "a", 10), Row(2, "b", 20)))
       checkAnswer(df2, Seq(Row(1, "a", 10), Row(2, "b", 20), Row(3, "c", 30)))
-      checkAnswer(df3, Seq(
-        Row(1, "a", 10, null),
-        Row(2, "b", 20, null),
-        Row(3, "c", 30, null),
-        Row(4, "d", 40, "x")))
+      checkAnswer(
+        df3,
+        Seq(
+          Row(1, "a", 10, null),
+          Row(2, "b", 20, null),
+          Row(3, "c", 30, null),
+          Row(4, "d", 40, "x")))
     }
   }
 
@@ -1382,11 +1352,7 @@ class DataSourceV2DataFrameSuite
 
       // create third DataFrame with new data and schema
       val df3 = spark.table(t)
-      checkAnswer(df3, Seq(
-        Row(1, "a"),
-        Row(2, "b"),
-        Row(3, "c"),
-        Row(4, "d")))
+      checkAnswer(df3, Seq(Row(1, "a"), Row(2, "b"), Row(3, "c"), Row(4, "d")))
 
       // join between df1 and df3 should fail due to incompatible schema changes
       checkError(
@@ -1402,11 +1368,7 @@ class DataSourceV2DataFrameSuite
       // subsequent version refreshes must not be visible in original DataFrames
       checkAnswer(df1, Seq(Row(1, "a", 10), Row(2, "b", 20)))
       checkAnswer(df2, Seq(Row(1, "a", 10), Row(2, "b", 20), Row(3, "c", 30)))
-      checkAnswer(df3, Seq(
-        Row(1, "a"),
-        Row(2, "b"),
-        Row(3, "c"),
-        Row(4, "d")))
+      checkAnswer(df3, Seq(Row(1, "a"), Row(2, "b"), Row(3, "c"), Row(4, "d")))
     }
   }
 
@@ -1477,9 +1439,7 @@ class DataSourceV2DataFrameSuite
       df.writeTo(t).replace()
 
       // verify table was replaced with only selected columns
-      checkAnswer(
-        spark.table(t),
-        Seq(Row(1, "a"), Row(2, "b"), Row(3, "c")))
+      checkAnswer(spark.table(t), Seq(Row(1, "a"), Row(2, "b"), Row(3, "c")))
     }
   }
 
@@ -1489,20 +1449,17 @@ class DataSourceV2DataFrameSuite
       sql(s"CREATE TABLE $t (id INT, value INT, category STRING) USING foo")
       sql(s"INSERT INTO $t VALUES (1, 10, 'A'), (2, 20, 'B'), (3, 30, 'A')")
 
-      checkAnswer(
-        spark.table(t),
-        Seq(Row(1, 10, "A"), Row(2, 20, "B"), Row(3, 30, "A")))
+      checkAnswer(spark.table(t), Seq(Row(1, 10, "A"), Row(2, 20, "B"), Row(3, 30, "A")))
 
       // overwrite with transformed data from same table using DataFrame API
-      val df = spark.table(t)
+      val df = spark
+        .table(t)
         .filter($"category" === "A")
         .select($"id", ($"value" * 2).as("value"), $"category")
       df.writeTo(t).overwrite(lit(true))
 
       // verify table was overwritten with transformed data
-      checkAnswer(
-        spark.table(t),
-        Seq(Row(1, 20, "A"), Row(3, 60, "A")))
+      checkAnswer(spark.table(t), Seq(Row(1, 20, "A"), Row(3, 60, "A")))
     }
   }
 
@@ -1658,7 +1615,6 @@ class DataSourceV2DataFrameSuite
     }
   }
 
-
   test("SPARK-53924: temp view on DSv2 table with read options") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
@@ -1669,9 +1625,14 @@ class DataSourceV2DataFrameSuite
       df.createOrReplaceTempView("v")
 
       // verify options are preserved in the view
-      val options = spark.table("v").queryExecution.analyzed.collectFirst {
-        case d: DataSourceV2Relation => d.options
-      }.get
+      val options = spark
+        .table("v")
+        .queryExecution
+        .analyzed
+        .collectFirst { case d: DataSourceV2Relation =>
+          d.options
+        }
+        .get
       assert(options.get("fakeOption") == "testValue")
 
       // add top-level column to underlying table
@@ -1683,7 +1644,8 @@ class DataSourceV2DataFrameSuite
     }
   }
 
-  test("SPARK-53924: temp view on DSv2 table created using SQL with plan and top-level additions") {
+  test(
+    "SPARK-53924: temp view on DSv2 table created using SQL with plan and top-level additions") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
       withSQLConf(SQLConf.STORE_ANALYZED_PLAN_FOR_VIEW.key -> "true") {
@@ -1854,8 +1816,7 @@ class DataSourceV2DataFrameSuite
       sql(s"INSERT INTO $t VALUES (1, 10), (2, 20)")
 
       // create DataFrame with self-subquery without executing
-      val df = spark.sql(
-        s"""
+      val df = spark.sql(s"""
            |SELECT t1.id, t1.value, t2.value as other_value
            |FROM $t t1
            |JOIN (
@@ -1868,10 +1829,7 @@ class DataSourceV2DataFrameSuite
       sql(s"INSERT INTO $t VALUES (3, 30)")
 
       // all three table references should be refreshed to see new data
-      checkAnswer(df, Seq(
-        Row(1, 10, 10),
-        Row(2, 20, 20),
-        Row(3, 30, 30)))
+      checkAnswer(df, Seq(Row(1, 10, 10), Row(2, 20, 20), Row(3, 30, 30)))
     }
   }
 
@@ -1914,9 +1872,7 @@ class DataSourceV2DataFrameSuite
 
       // verify caching works as expected
       assertCached(spark.table(t))
-      checkAnswer(
-        spark.table(t),
-        Seq(Row(1, 10, "A"), Row(2, 20, "B"), Row(3, 30, "A")))
+      checkAnswer(spark.table(t), Seq(Row(1, 10, "A"), Row(2, 20, "B"), Row(3, 30, "A")))
 
       // evolve table directly to mimic external changes
       // these external changes make cached plan invalid (column is no longer there)
@@ -1947,9 +1903,7 @@ class DataSourceV2DataFrameSuite
 
       // verify caching works as expected
       assertCached(spark.table(t))
-      checkAnswer(
-        spark.table(t),
-        Seq(Row(1, 10), Row(2, 20), Row(3, 30)))
+      checkAnswer(spark.table(t), Seq(Row(1, 10), Row(2, 20), Row(3, 30)))
 
       // evolve table directly to mimic external changes
       // these external changes make cached plan invalid (table state has changed)
@@ -1981,9 +1935,7 @@ class DataSourceV2DataFrameSuite
 
       // verify caching works as expected
       assertCached(spark.table(t).filter("id < 100"))
-      checkAnswer(
-        spark.table(t).filter("id < 100"),
-        Seq(Row(1, 10), Row(2, 20), Row(3, 30)))
+      checkAnswer(spark.table(t).filter("id < 100"), Seq(Row(1, 10), Row(2, 20), Row(3, 30)))
 
       // evolve table directly to mimic external changes
       // adding columns should be OK
@@ -2027,9 +1979,7 @@ class DataSourceV2DataFrameSuite
 
       // verify caching works as expected
       assertCached(spark.table(t).filter("id < 100"))
-      checkAnswer(
-        spark.table(t).filter("id < 100"),
-        Seq(Row(1, 10), Row(2, 20), Row(3, 30)))
+      checkAnswer(spark.table(t).filter("id < 100"), Seq(Row(1, 10), Row(2, 20), Row(3, 30)))
 
       // evolve table directly to mimic external changes
       // removing columns should be make cached plan invalid
@@ -2064,7 +2014,8 @@ class DataSourceV2DataFrameSuite
     }
   }
 
-  test("SPARK-54812: caching dataframe created from ALTER TABLE shouldn't re-execute the command") {
+  test(
+    "SPARK-54812: caching dataframe created from ALTER TABLE shouldn't re-execute the command") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
       sql(s"CREATE TABLE $t (c1 int) USING foo")
@@ -2088,7 +2039,8 @@ class DataSourceV2DataFrameSuite
     }
   }
 
-  test("SPARK-54812: caching dataframe created from DROP TABLE shouldn't re-execute the command") {
+  test(
+    "SPARK-54812: caching dataframe created from DROP TABLE shouldn't re-execute the command") {
     val t = "testcat.ns1.ns2.tbl"
     sql(s"CREATE TABLE $t (c1 int, c2 string) USING foo")
     sql(s"INSERT INTO $t VALUES (1, 'a'), (2, 'b')")
@@ -2124,7 +2076,9 @@ class DataSourceV2DataFrameSuite
       val cachedColumns = describeDf.select("col_name").collect().map(_.getString(0)).toSet
       assert(cachedColumns.contains("c1"))
       assert(cachedColumns.contains("c2"))
-      assert(!cachedColumns.contains("c3"), "Cached DESCRIBE should reflect c3 added before cache")
+      assert(
+        !cachedColumns.contains("c3"),
+        "Cached DESCRIBE should reflect c3 added before cache")
 
       // A fresh DESCRIBE TABLE call should show the latest schema (with c3)
       val freshDescribeDf = sql(s"DESCRIBE TABLE $t")
@@ -2151,7 +2105,10 @@ class DataSourceV2DataFrameSuite
       override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
         executionCount += 1
       }
-      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
+      override def onFailure(
+          funcName: String,
+          qe: QueryExecution,
+          exception: Exception): Unit = {}
     }
 
     try {
@@ -2164,15 +2121,13 @@ class DataSourceV2DataFrameSuite
         executionCount = 0
         sql(s"CREATE TABLE $t USING foo AS SELECT 1 as id, 'a' as data")
         sparkContext.listenerBus.waitUntilEmpty()
-        assert(executionCount == 2,
-          s"CTAS should trigger 2 executions, got $executionCount")
+        assert(executionCount == 2, s"CTAS should trigger 2 executions, got $executionCount")
 
         // Test RTAS (ReplaceTableAsSelect)
         executionCount = 0
         sql(s"CREATE OR REPLACE TABLE $t USING foo AS SELECT 2 as id, 'b' as data")
         sparkContext.listenerBus.waitUntilEmpty()
-        assert(executionCount == 2,
-          s"RTAS should trigger 2 executions, got $executionCount")
+        assert(executionCount == 2, s"RTAS should trigger 2 executions, got $executionCount")
       }
     } finally {
       spark.listenerManager.unregister(listener)

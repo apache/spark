@@ -48,10 +48,8 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
         "Asia/Hong_Kong" -> 1543716672001234L,
         "Europe/Brussels" -> 1543741872001234L)
       outstandingTimezonesIds.foreach { zoneId =>
-        val formatter = TimestampFormatter(
-          "yyyy-MM-dd'T'HH:mm:ss.SSSSSS",
-          getZoneId(zoneId),
-          isParsing = true)
+        val formatter =
+          TimestampFormatter("yyyy-MM-dd'T'HH:mm:ss.SSSSSS", getZoneId(zoneId), isParsing = true)
         val microsSinceEpoch = formatter.parse(localDate)
         assert(microsSinceEpoch === expectedMicros(zoneId))
       }
@@ -89,22 +87,14 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
 
   test("roundtrip micros -> timestamp -> micros using timezones") {
     Seq("yyyy-MM-dd'T'HH:mm:ss.SSSSSS", "yyyy-MM-dd'T'HH:mm:ss.SSSSSSXXXXX").foreach { pattern =>
-      Seq(
-        -58710115316212000L,
-        -18926315945345679L,
-        -9463427405253013L,
-        -244000001L,
-        0L,
-        99628200102030L,
-        1543749753123456L,
-        2177456523456789L,
-        11858049903010203L).foreach { micros =>
-        outstandingZoneIds.foreach { zoneId =>
-          val timestamp = TimestampFormatter(pattern, zoneId, isParsing = false).format(micros)
-          val parsed = TimestampFormatter(
-            pattern, zoneId, isParsing = true).parse(timestamp)
-          assert(micros === parsed)
-        }
+      Seq(-58710115316212000L, -18926315945345679L, -9463427405253013L, -244000001L, 0L,
+        99628200102030L, 1543749753123456L, 2177456523456789L, 11858049903010203L).foreach {
+        micros =>
+          outstandingZoneIds.foreach { zoneId =>
+            val timestamp = TimestampFormatter(pattern, zoneId, isParsing = false).format(micros)
+            val parsed = TimestampFormatter(pattern, zoneId, isParsing = true).parse(timestamp)
+            assert(micros === parsed)
+          }
       }
     }
   }
@@ -122,8 +112,7 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
       "2345-10-07T22:45:03.010203").foreach { timestamp =>
       outstandingZoneIds.foreach { zoneId =>
         val pattern = "yyyy-MM-dd'T'HH:mm:ss.SSSSSS"
-        val micros = TimestampFormatter(
-          pattern, zoneId, isParsing = true).parse(timestamp)
+        val micros = TimestampFormatter(pattern, zoneId, isParsing = true).parse(timestamp)
         val formatted = TimestampFormatter(pattern, zoneId, isParsing = false).format(micros)
         assert(timestamp === formatted)
       }
@@ -161,8 +150,9 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
     assert(TimestampFormatter(UTC).format(micros) === "-0099-01-01 00:00:00")
     assert(TimestampFormatter(UTC).format(instant) === "-0099-01-01 00:00:00")
     withDefaultTimeZone(UTC) { // toJavaTimestamp depends on the default time zone
-      assert(TimestampFormatter("yyyy-MM-dd HH:mm:SS G", UTC, isParsing = false)
-        .format(toJavaTimestamp(micros)) === "0100-01-01 00:00:00 BC")
+      assert(
+        TimestampFormatter("yyyy-MM-dd HH:mm:SS G", UTC, isParsing = false)
+          .format(toJavaTimestamp(micros)) === "0100-01-01 00:00:00 BC")
     }
   }
 
@@ -175,22 +165,27 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
         assert(actual === expected)
       }
 
-      check("yyyy-MM-dd'T'HH:mm:ss.SSSSSSSXXX",
-        "2019-10-14T09:39:07.3220000Z", "2019-10-14T09:39:07.322Z")
-      check("yyyy-MM-dd'T'HH:mm:ss.SSSSSS",
-        "2019-10-14T09:39:07.322000", "2019-10-14T09:39:07.322")
-      check("yyyy-MM-dd'T'HH:mm:ss.SSSSSSX",
-        "2019-10-14T09:39:07.123456Z", "2019-10-14T09:39:07.123456Z")
-      check("yyyy-MM-dd'T'HH:mm:ss.SSSSSSX",
-        "2019-10-14T09:39:07.000010Z", "2019-10-14T09:39:07.00001Z")
+      check(
+        "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSXXX",
+        "2019-10-14T09:39:07.3220000Z",
+        "2019-10-14T09:39:07.322Z")
+      check(
+        "yyyy-MM-dd'T'HH:mm:ss.SSSSSS",
+        "2019-10-14T09:39:07.322000",
+        "2019-10-14T09:39:07.322")
+      check(
+        "yyyy-MM-dd'T'HH:mm:ss.SSSSSSX",
+        "2019-10-14T09:39:07.123456Z",
+        "2019-10-14T09:39:07.123456Z")
+      check(
+        "yyyy-MM-dd'T'HH:mm:ss.SSSSSSX",
+        "2019-10-14T09:39:07.000010Z",
+        "2019-10-14T09:39:07.00001Z")
       check("yyyy HH:mm:ss.SSSSS", "1970 01:02:03.00004", "1970-01-01 01:02:03.00004")
       check("yyyy HH:mm:ss.SSSS", "2019 00:00:07.0100", "2019-01-01 00:00:07.0100")
-      check("yyyy-MM-dd'T'HH:mm:ss.SSSX",
-        "2019-10-14T09:39:07.322Z", "2019-10-14T09:39:07.322Z")
-      check("yyyy-MM-dd'T'HH:mm:ss.SS",
-        "2019-10-14T09:39:07.10", "2019-10-14T09:39:07.1")
-      check("yyyy-MM-dd'T'HH:mm:ss.S",
-        "2019-10-14T09:39:07.1", "2019-10-14T09:39:07.1")
+      check("yyyy-MM-dd'T'HH:mm:ss.SSSX", "2019-10-14T09:39:07.322Z", "2019-10-14T09:39:07.322Z")
+      check("yyyy-MM-dd'T'HH:mm:ss.SS", "2019-10-14T09:39:07.10", "2019-10-14T09:39:07.1")
+      check("yyyy-MM-dd'T'HH:mm:ss.S", "2019-10-14T09:39:07.1", "2019-10-14T09:39:07.1")
 
       try {
         TimestampFormatter("yyyy/MM/dd HH_mm_ss.SSSSSS", zoneId, isParsing = true)
@@ -213,32 +208,20 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
       }
 
       check(
-        "yyyy-MM-dd HH:mm:ss.SSSSSSS", "2019-10-14T09:39:07.123456",
+        "yyyy-MM-dd HH:mm:ss.SSSSSSS",
+        "2019-10-14T09:39:07.123456",
         "2019-10-14 09:39:07.1234560")
       check(
-        "yyyy-MM-dd HH:mm:ss.SSSSSS", "1960-01-01T09:39:07.123456",
+        "yyyy-MM-dd HH:mm:ss.SSSSSS",
+        "1960-01-01T09:39:07.123456",
         "1960-01-01 09:39:07.123456")
-      check(
-        "yyyy-MM-dd HH:mm:ss.SSSSS", "0001-10-14T09:39:07.1",
-        "0001-10-14 09:39:07.10000")
-      check(
-        "yyyy-MM-dd HH:mm:ss.SSSS", "9999-12-31T23:59:59.999",
-        "9999-12-31 23:59:59.9990")
-      check(
-        "yyyy-MM-dd HH:mm:ss.SSS", "1970-01-01T00:00:00.0101",
-        "1970-01-01 00:00:00.010")
-      check(
-        "yyyy-MM-dd HH:mm:ss.SS", "2019-10-14T09:39:07.09",
-        "2019-10-14 09:39:07.09")
-      check(
-        "yyyy-MM-dd HH:mm:ss.S", "2019-10-14T09:39:07.2",
-        "2019-10-14 09:39:07.2")
-      check(
-        "yyyy-MM-dd HH:mm:ss.S", "2019-10-14T09:39:07",
-        "2019-10-14 09:39:07.0")
-      check(
-        "yyyy-MM-dd HH:mm:ss", "2019-10-14T09:39:07.123456",
-        "2019-10-14 09:39:07")
+      check("yyyy-MM-dd HH:mm:ss.SSSSS", "0001-10-14T09:39:07.1", "0001-10-14 09:39:07.10000")
+      check("yyyy-MM-dd HH:mm:ss.SSSS", "9999-12-31T23:59:59.999", "9999-12-31 23:59:59.9990")
+      check("yyyy-MM-dd HH:mm:ss.SSS", "1970-01-01T00:00:00.0101", "1970-01-01 00:00:00.010")
+      check("yyyy-MM-dd HH:mm:ss.SS", "2019-10-14T09:39:07.09", "2019-10-14 09:39:07.09")
+      check("yyyy-MM-dd HH:mm:ss.S", "2019-10-14T09:39:07.2", "2019-10-14 09:39:07.2")
+      check("yyyy-MM-dd HH:mm:ss.S", "2019-10-14T09:39:07", "2019-10-14 09:39:07.0")
+      check("yyyy-MM-dd HH:mm:ss", "2019-10-14T09:39:07.123456", "2019-10-14 09:39:07")
     }
   }
 
@@ -279,16 +262,21 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
                   isParsing = false)
               } :+ TimestampFormatter.getFractionFormatter(zoneId)
               formatters.foreach { formatter =>
-                assert(microsToInstant(formatter.parse("1000-01-01 01:02:03"))
-                  .atZone(zoneId)
-                  .toLocalDateTime === LocalDateTime.of(1000, 1, 1, 1, 2, 3))
+                assert(
+                  microsToInstant(formatter.parse("1000-01-01 01:02:03"))
+                    .atZone(zoneId)
+                    .toLocalDateTime === LocalDateTime.of(1000, 1, 1, 1, 2, 3))
 
-                assert(formatter.format(
-                  LocalDateTime.of(1000, 1, 1, 1, 2, 3).atZone(zoneId).toInstant) ===
-                  "1000-01-01 01:02:03")
-                assert(formatter.format(instantToMicros(
-                  LocalDateTime.of(1000, 1, 1, 1, 2, 3)
-                    .atZone(zoneId).toInstant)) === "1000-01-01 01:02:03")
+                assert(
+                  formatter.format(
+                    LocalDateTime.of(1000, 1, 1, 1, 2, 3).atZone(zoneId).toInstant) ===
+                    "1000-01-01 01:02:03")
+                assert(
+                  formatter.format(
+                    instantToMicros(LocalDateTime
+                      .of(1000, 1, 1, 1, 2, 3)
+                      .atZone(zoneId)
+                      .toInstant)) === "1000-01-01 01:02:03")
                 assert(formatter.format(java.sql.Timestamp.valueOf("1000-01-01 01:02:03")) ===
                   "1000-01-01 01:02:03")
               }
@@ -315,16 +303,21 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
                   isParsing = false)
               } :+ TimestampFormatter.getFractionFormatter(zoneId)
               formatters.foreach { formatter =>
-                assert(microsToInstant(formatter.parse("1000-01-01 01:02:03"))
-                  .atZone(zoneId)
-                  .toLocalDateTime === LocalDateTime.of(1000, 1, 1, 1, 2, 3))
+                assert(
+                  microsToInstant(formatter.parse("1000-01-01 01:02:03"))
+                    .atZone(zoneId)
+                    .toLocalDateTime === LocalDateTime.of(1000, 1, 1, 1, 2, 3))
 
-                assert(formatter.format(
-                  LocalDateTime.of(1000, 1, 1, 1, 2, 3).atZone(zoneId).toInstant) ===
-                  "1000-01-01 01:02:03")
-                assert(formatter.format(instantToMicros(
-                  LocalDateTime.of(1000, 1, 1, 1, 2, 3)
-                    .atZone(zoneId).toInstant)) === "1000-01-01 01:02:03")
+                assert(
+                  formatter.format(
+                    LocalDateTime.of(1000, 1, 1, 1, 2, 3).atZone(zoneId).toInstant) ===
+                    "1000-01-01 01:02:03")
+                assert(
+                  formatter.format(
+                    instantToMicros(LocalDateTime
+                      .of(1000, 1, 1, 1, 2, 3)
+                      .atZone(zoneId)
+                      .toInstant)) === "1000-01-01 01:02:03")
               }
             }
           }
@@ -466,16 +459,18 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
         "1582-10-4" -> LocalDateTime.of(1582, 10, 4, 0, 0, 0),
         "1583-1-1 " -> LocalDateTime.of(1583, 1, 1, 0, 0, 0),
         "1970-01-1 01:02:3" -> LocalDateTime.of(1970, 1, 1, 1, 2, 3),
-        "2021-8-12T18:31:50" -> LocalDateTime.of(2021, 8, 12, 18, 31, 50)
-      ).foreach { case (inputStr, ldt) =>
-        assert(formatter.parse(inputStr) === DateTimeTestUtils.localDateTimeToMicros(ldt, zoneId))
+        "2021-8-12T18:31:50" -> LocalDateTime.of(2021, 8, 12, 18, 31, 50)).foreach {
+        case (inputStr, ldt) =>
+          assert(
+            formatter.parse(inputStr) === DateTimeTestUtils.localDateTimeToMicros(ldt, zoneId))
       }
 
       val errMsg = intercept[DateTimeException] {
         formatter.parse("x123")
       }.getMessage
-      assert(errMsg.contains(
-        """The value 'x123' of the type "STRING" cannot be cast to "TIMESTAMP""""))
+      assert(
+        errMsg.contains(
+          """The value 'x123' of the type "STRING" cannot be cast to "TIMESTAMP""""))
     }
   }
 
@@ -487,11 +482,11 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
       isParsing = true)
     assert(formatter.parseOptional("2021-01-01T00:00:00").contains(1609488000000000L))
     assert(
-      formatter.parseWithoutTimeZoneOptional("2021-01-01T00:00:00", false)
+      formatter
+        .parseWithoutTimeZoneOptional("2021-01-01T00:00:00", false)
         .contains(1609459200000000L))
     assert(formatter.parseOptional("abc").isEmpty)
-    assert(
-      formatter.parseWithoutTimeZoneOptional("abc", false).isEmpty)
+    assert(formatter.parseWithoutTimeZoneOptional("abc", false).isEmpty)
   }
 
   test("SPARK-39280: support returning optional parse results in the iso8601 formatter") {
@@ -499,16 +494,18 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
       "yyyy-MM-dd HH:mm:ss.SSSS",
       locale = DateFormatter.defaultLocale,
       legacyFormat = LegacyDateFormats.SIMPLE_DATE_FORMAT,
-      isParsing = true, zoneId = DateTimeTestUtils.LA)
+      isParsing = true,
+      zoneId = DateTimeTestUtils.LA)
     assert(formatter.parseOptional("9999-12-31 23:59:59.9990").contains(253402329599999000L))
-    assert(formatter.parseWithoutTimeZoneOptional("9999-12-31 23:59:59.9990", false)
-      .contains(253402300799999000L))
+    assert(
+      formatter
+        .parseWithoutTimeZoneOptional("9999-12-31 23:59:59.9990", false)
+        .contains(253402300799999000L))
     assert(formatter.parseOptional("abc").isEmpty)
     assert(formatter.parseWithoutTimeZoneOptional("abc", false).isEmpty)
 
     assert(formatter.parseOptional("2012-00-65 23:59:59.9990").isEmpty)
-    assert(formatter.parseWithoutTimeZoneOptional("2012-00-65 23:59:59.9990", false)
-      .isEmpty)
+    assert(formatter.parseWithoutTimeZoneOptional("2012-00-65 23:59:59.9990", false).isEmpty)
   }
 
   test("SPARK-39281: support returning optional parse results in the legacy formatter") {
@@ -536,7 +533,8 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
       "yyyy-MM-dd HH:mm:ss",
       locale = DateFormatter.defaultLocale,
       legacyFormat = LegacyDateFormats.SIMPLE_DATE_FORMAT,
-      isParsing = true, zoneId = DateTimeTestUtils.LA)
+      isParsing = true,
+      zoneId = DateTimeTestUtils.LA)
     assert(formatter.parseOptional("9999-12-31 23:59:59.999").isEmpty)
     assert(formatter.parseWithoutTimeZoneOptional("9999-12-31 23:59:59.999", true).isEmpty)
   }
@@ -544,8 +542,8 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
   test("fail to parse string as TimestampNTZ with invalid format") {
     val zoneId = ZoneId.systemDefault()
     val locale = Locale.getDefault()
-    val formatter = new DefaultTimestampFormatter(
-      zoneId, locale, LENIENT_SIMPLE_DATE_FORMAT, isParsing = true)
+    val formatter =
+      new DefaultTimestampFormatter(zoneId, locale, LENIENT_SIMPLE_DATE_FORMAT, isParsing = true)
 
     val invalidTimestampStr = "2021-13-01T25:61:61"
 
@@ -556,7 +554,6 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
       condition = "INTERNAL_ERROR",
       parameters = Map(
         "message" -> ("Cannot parse field value '2021-13-01T25:61:61' for pattern " +
-          "'yyyy-MM-dd HH:mm:ss' as the target spark data type \"TIMESTAMP_NTZ\"."))
-    )
+          "'yyyy-MM-dd HH:mm:ss' as the target spark data type \"TIMESTAMP_NTZ\".")))
   }
 }

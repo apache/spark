@@ -26,10 +26,11 @@ import org.apache.spark.sql.connector.read.InputPartition
 import org.apache.spark.sql.connector.read.streaming.{ContinuousPartitionReader, ContinuousPartitionReaderFactory, ContinuousStream, Offset, PartitionOffset}
 import org.apache.spark.sql.execution.streaming.runtime.{RateStreamOffset, ValueRunTimeMsPair}
 
-case class RateStreamPartitionOffset(
-   partition: Int, currentValue: Long, currentTimeMs: Long) extends PartitionOffset
+case class RateStreamPartitionOffset(partition: Int, currentValue: Long, currentTimeMs: Long)
+    extends PartitionOffset
 
-class RateStreamContinuousStream(rowsPerSecond: Long, numPartitions: Int) extends ContinuousStream {
+class RateStreamContinuousStream(rowsPerSecond: Long, numPartitions: Int)
+    extends ContinuousStream {
   implicit val defaultFormats: DefaultFormats = DefaultFormats
 
   val creationTime = System.currentTimeMillis()
@@ -38,9 +39,8 @@ class RateStreamContinuousStream(rowsPerSecond: Long, numPartitions: Int) extend
 
   override def mergeOffsets(offsets: Array[PartitionOffset]): Offset = {
     assert(offsets.length == numPartitions)
-    val tuples = offsets.map {
-      case RateStreamPartitionOffset(i, currVal, nextRead) =>
-        (i, ValueRunTimeMsPair(currVal, nextRead))
+    val tuples = offsets.map { case RateStreamPartitionOffset(i, currVal, nextRead) =>
+      (i, ValueRunTimeMsPair(currVal, nextRead))
     }
     import org.apache.spark.util.ArrayImplicits._
     RateStreamOffset(Map(tuples.toImmutableArraySeq: _*))
@@ -62,8 +62,8 @@ class RateStreamContinuousStream(rowsPerSecond: Long, numPartitions: Int) extend
     if (partitionStartMap.keySet.size != numPartitions) {
       throw new IllegalArgumentException(
         s"The previous run contained ${partitionStartMap.keySet.size} partitions, but" +
-        s" $numPartitions partitions are currently configured. The numPartitions option" +
-        " cannot be changed.")
+          s" $numPartitions partitions are currently configured. The numPartitions option" +
+          " cannot be changed.")
     }
 
     Range(0, numPartitions).map { i =>
@@ -87,16 +87,12 @@ class RateStreamContinuousStream(rowsPerSecond: Long, numPartitions: Int) extend
   override def stop(): Unit = {}
 
   private def createInitialOffset(numPartitions: Int, creationTimeMs: Long) = {
-    RateStreamOffset(
-      Range(0, numPartitions).map { i =>
-        // Note that the starting offset is exclusive, so we have to decrement the starting value
-        // by the increment that will later be applied. The first row output in each
-        // partition will have a value equal to the partition index.
-        (i,
-          ValueRunTimeMsPair(
-            (i - numPartitions).toLong,
-            creationTimeMs))
-      }.toMap)
+    RateStreamOffset(Range(0, numPartitions).map { i =>
+      // Note that the starting offset is exclusive, so we have to decrement the starting value
+      // by the increment that will later be applied. The first row output in each
+      // partition will have a value equal to the partition index.
+      (i, ValueRunTimeMsPair((i - numPartitions).toLong, creationTimeMs))
+    }.toMap)
   }
 
 }
@@ -107,13 +103,17 @@ case class RateStreamContinuousInputPartition(
     partitionIndex: Int,
     increment: Long,
     rowsPerSecond: Double)
-  extends InputPartition
+    extends InputPartition
 
 object RateStreamContinuousReaderFactory extends ContinuousPartitionReaderFactory {
   override def createReader(partition: InputPartition): ContinuousPartitionReader[InternalRow] = {
     val p = partition.asInstanceOf[RateStreamContinuousInputPartition]
     new RateStreamContinuousPartitionReader(
-      p.startValue, p.startTimeMs, p.partitionIndex, p.increment, p.rowsPerSecond)
+      p.startValue,
+      p.startTimeMs,
+      p.partitionIndex,
+      p.increment,
+      p.rowsPerSecond)
   }
 }
 
@@ -123,7 +123,7 @@ class RateStreamContinuousPartitionReader(
     partitionIndex: Int,
     increment: Long,
     rowsPerSecond: Double)
-  extends ContinuousPartitionReader[InternalRow] {
+    extends ContinuousPartitionReader[InternalRow] {
   private var nextReadTime: Long = startTimeMs
   private val readTimeIncrement: Long = (1000 / rowsPerSecond).toLong
 
@@ -146,9 +146,7 @@ class RateStreamContinuousPartitionReader(
         return false
     }
 
-    currentRow = InternalRow(
-      DateTimeUtils.millisToMicros(nextReadTime),
-      currentValue)
+    currentRow = InternalRow(DateTimeUtils.millisToMicros(nextReadTime), currentValue)
 
     true
   }

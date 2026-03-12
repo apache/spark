@@ -42,14 +42,18 @@ class ValueStateImpl[S](
     keyExprEnc: ExpressionEncoder[Any],
     valEncoder: ExpressionEncoder[Any],
     metrics: Map[String, SQLMetric] = Map.empty)
-  extends ValueState[S] with Logging {
+    extends ValueState[S]
+    with Logging {
 
   private val stateTypesEncoder = StateTypesEncoder(keyExprEnc, valEncoder, stateName)
 
   initialize()
 
   private def initialize(): Unit = {
-    store.createColFamilyIfAbsent(stateName, keyExprEnc.schema, valEncoder.schema,
+    store.createColFamilyIfAbsent(
+      stateName,
+      keyExprEnc.schema,
+      valEncoder.schema,
       NoPrefixKeyStateEncoderSpec(keyExprEnc.schema))
   }
 
@@ -73,8 +77,7 @@ class ValueStateImpl[S](
   /** Function to update and overwrite state associated with given key */
   override def update(newState: S): Unit = {
     val encodedValue = stateTypesEncoder.encodeValue(newState)
-    store.put(stateTypesEncoder.encodeGroupingKey(),
-      encodedValue, stateName)
+    store.put(stateTypesEncoder.encodeGroupingKey(), encodedValue, stateName)
     TWSMetricsUtils.incrementMetric(metrics, "numUpdatedStateRows")
   }
 

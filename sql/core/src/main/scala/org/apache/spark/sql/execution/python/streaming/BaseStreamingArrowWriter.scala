@@ -24,9 +24,8 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.arrow.ArrowWriter
 
 /**
- * Base class to handle writing data to Arrow stream to Python workers. When the rows
- * for a group exceed the maximum number of records per batch, we chunk the data into multiple
- * batches.
+ * Base class to handle writing data to Arrow stream to Python workers. When the rows for a group
+ * exceed the maximum number of records per batch, we chunk the data into multiple batches.
  */
 class BaseStreamingArrowWriter(
     root: VectorSchemaRoot,
@@ -49,7 +48,8 @@ class BaseStreamingArrowWriter(
   /**
    * Indicates writer to write a row for current batch.
    *
-   * @param dataRow The row to write for current batch.
+   * @param dataRow
+   *   The row to write for current batch.
    */
   def writeRow(dataRow: InternalRow): Boolean = {
     // If it exceeds the condition of batch (number of records) and there is more data for the
@@ -79,8 +79,8 @@ class BaseStreamingArrowWriter(
   }
 
   /**
-   * Finalizes the current chunk. We only reset the number of rows for the current chunk here since
-   * not all the writers need this step.
+   * Finalizes the current chunk. We only reset the number of rows for the current chunk here
+   * since not all the writers need this step.
    */
   protected def finalizeCurrentChunk(isLastChunkForGroup: Boolean): Unit = {
     numRowsForCurrentChunk = 0
@@ -89,10 +89,10 @@ class BaseStreamingArrowWriter(
   protected def isBatchSizeLimitReached: Boolean = {
     // If we have either reached the records or bytes limit
     (arrowMaxRecordsPerBatch > 0 && totalNumRowsForBatch >= arrowMaxRecordsPerBatch) ||
-      // Short circuit batch size calculation if the batch size is unlimited as computing batch
-      // size is computationally expensive.
-      ((arrowMaxBytesPerBatch != Int.MaxValue)
-        && (arrowWriterForData.sizeInBytes() >= arrowMaxBytesPerBatch))
+    // Short circuit batch size calculation if the batch size is unlimited as computing batch
+    // size is computationally expensive.
+    ((arrowMaxBytesPerBatch != Int.MaxValue)
+      && (arrowWriterForData.sizeInBytes() >= arrowMaxBytesPerBatch))
   }
 
   def getTotalNumRowsForBatch: Int = {

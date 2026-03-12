@@ -64,8 +64,10 @@ object FileStreamSink extends Logging {
         } catch {
           case e: SparkException => throw e
           case NonFatal(e) =>
-            logWarning(log"Assume no metadata directory. Error while looking for " +
-              log"metadata directory in the path: ${MDC(PATH, singlePath)}.", e)
+            logWarning(
+              log"Assume no metadata directory. Error while looking for " +
+                log"metadata directory in the path: ${MDC(PATH, singlePath)}.",
+              e)
             false
         }
       case _ => false
@@ -80,7 +82,7 @@ object FileStreamSink extends Logging {
 
   def checkEscapedMetadataPath(fs: FileSystem, metadataPath: Path, sqlConf: SQLConf): Unit = {
     if (sqlConf.getConf(SQLConf.STREAMING_CHECKPOINT_ESCAPED_PATH_CHECK_ENABLED)
-        && StreamExecution.containsSpecialCharsInPath(metadataPath)) {
+      && StreamExecution.containsSpecialCharsInPath(metadataPath)) {
       val legacyMetadataPath = new Path(metadataPath.toUri.toString)
       val legacyMetadataPathExists =
         try {
@@ -98,11 +100,10 @@ object FileStreamSink extends Logging {
   }
 
   /**
-   * Returns true if the path is the metadata dir or its ancestor is the metadata dir.
-   * E.g.:
-   *  - ancestorIsMetadataDirectory(/.../_spark_metadata) => true
-   *  - ancestorIsMetadataDirectory(/.../_spark_metadata/0) => true
-   *  - ancestorIsMetadataDirectory(/a/b/c) => false
+   * Returns true if the path is the metadata dir or its ancestor is the metadata dir. E.g.:
+   *   - ancestorIsMetadataDirectory(/.../_spark_metadata) => true
+   *   - ancestorIsMetadataDirectory(/.../_spark_metadata/0) => true
+   *   - ancestorIsMetadataDirectory(/a/b/c) => false
    */
   def ancestorIsMetadataDirectory(path: Path, hadoopConf: Configuration): Boolean = {
     val fs = path.getFileSystem(hadoopConf)
@@ -119,18 +120,20 @@ object FileStreamSink extends Logging {
 }
 
 /**
- * A sink that writes out results to parquet files.  Each batch is written out to a unique
- * directory. After all of the files in a batch have been successfully written, the list of
- * file paths is appended to the log atomically. In the case of partial failures, some duplicate
- * data may be present in the target directory, but only one copy of each file will be present
- * in the log.
+ * A sink that writes out results to parquet files. Each batch is written out to a unique
+ * directory. After all of the files in a batch have been successfully written, the list of file
+ * paths is appended to the log atomically. In the case of partial failures, some duplicate data
+ * may be present in the target directory, but only one copy of each file will be present in the
+ * log.
  */
 class FileStreamSink(
     sparkSession: SparkSession,
     path: String,
     fileFormat: FileFormat,
     partitionColumnNames: Seq[String],
-    options: Map[String, String]) extends Sink with Logging {
+    options: Map[String, String])
+    extends Sink
+    with Logging {
 
   import FileStreamSink._
 
@@ -139,11 +142,13 @@ class FileStreamSink(
   if (!basePath.isAbsolute) {
     throw QueryExecutionErrors.notAbsolutePathError(basePath)
   }
-  private val logPath = getMetadataLogPath(basePath.getFileSystem(hadoopConf), basePath,
+  private val logPath = getMetadataLogPath(
+    basePath.getFileSystem(hadoopConf),
+    basePath,
     sparkSession.sessionState.conf)
   private val retention = options.get("retention").map(Utils.timeStringAsMs)
-  private val fileLog = new FileStreamSinkLog(FileStreamSinkLog.VERSION, sparkSession,
-    logPath.toString, retention)
+  private val fileLog =
+    new FileStreamSinkLog(FileStreamSinkLog.VERSION, sparkSession, logPath.toString, retention)
 
   private def basicWriteJobStatsTracker: BasicWriteJobStatsTracker = {
     val serializableHadoopConf = new SerializableConfiguration(hadoopConf)
@@ -162,7 +167,7 @@ class FileStreamSink(
       committer match {
         case manifestCommitter: ManifestFileCommitProtocol =>
           manifestCommitter.setupManifestOptions(fileLog, batchId)
-        case _ =>  // Do nothing
+        case _ => // Do nothing
       }
 
       // Get the actual partition columns as attributes after matching them by name with

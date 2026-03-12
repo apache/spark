@@ -35,17 +35,20 @@ class SQLContextSuite extends SparkFunSuite with SharedSparkContext {
   test("getOrCreate instantiates SQLContext") {
     val sqlContext = SQLContext.getOrCreate(sc)
     assert(sqlContext != null, "SQLContext.getOrCreate returned null")
-    assert(SQLContext.getOrCreate(sc).eq(sqlContext),
+    assert(
+      SQLContext.getOrCreate(sc).eq(sqlContext),
       "SQLContext created by SQLContext.getOrCreate not returned by SQLContext.getOrCreate")
   }
 
   test("getOrCreate return the original SQLContext") {
     val sqlContext = SQLContext.getOrCreate(sc)
     val newSession = sqlContext.newSession()
-    assert(SQLContext.getOrCreate(sc).eq(sqlContext),
+    assert(
+      SQLContext.getOrCreate(sc).eq(sqlContext),
       "SQLContext.getOrCreate after explicitly created SQLContext did not return the context")
     SparkSession.setActiveSession(newSession.sparkSession)
-    assert(SQLContext.getOrCreate(sc).eq(newSession),
+    assert(
+      SQLContext.getOrCreate(sc).eq(newSession),
       "SQLContext.getOrCreate after explicitly setActive() did not return the active context")
   }
 
@@ -89,14 +92,20 @@ class SQLContextSuite extends SparkFunSuite with SharedSparkContext {
     df.createOrReplaceTempView("listtablessuitetable")
     assert(
       sqlContext.tables().filter("tableName = 'listtablessuitetable'").collect().toSeq ==
-      Row("", "listtablessuitetable", true) :: Nil)
+        Row("", "listtablessuitetable", true) :: Nil)
 
     assert(
-      sqlContext.sql("SHOW tables").filter("tableName = 'listtablessuitetable'").collect().toSeq ==
-      Row("", "listtablessuitetable", true) :: Nil)
+      sqlContext
+        .sql("SHOW tables")
+        .filter("tableName = 'listtablessuitetable'")
+        .collect()
+        .toSeq ==
+        Row("", "listtablessuitetable", true) :: Nil)
 
     sqlContext.sessionState.catalog.dropTable(
-      TableIdentifier("listtablessuitetable"), ignoreIfNotExists = true, purge = false)
+      TableIdentifier("listtablessuitetable"),
+      ignoreIfNotExists = true,
+      purge = false)
     assert(sqlContext.tables().filter("tableName = 'listtablessuitetable'").count() === 0)
   }
 
@@ -110,13 +119,15 @@ class SQLContextSuite extends SparkFunSuite with SharedSparkContext {
 
       assert(sqlContext.tableNames("temp_db_1").sameElements(Array("temp_table_1")))
 
-      assert(sqlContext.tables("temp_db_1").collect().toSeq ==
-        Row("temp_db_1", "temp_table_1", false) :: Nil)
+      assert(
+        sqlContext.tables("temp_db_1").collect().toSeq ==
+          Row("temp_db_1", "temp_table_1", false) :: Nil)
 
       assert(sqlContext.tables().collect().toSeq == Nil)
       sqlContext.sql("USE temp_db_1")
       assert(sqlContext.tableNames().sameElements(Array("temp_table_1")))
-      assert(sqlContext.tables().collect().toSeq == Row("temp_db_1", "temp_table_1", false) :: Nil)
+      assert(
+        sqlContext.tables().collect().toSeq == Row("temp_db_1", "temp_table_1", false) :: Nil)
     } finally {
       sqlContext.sql("USE default")
       sqlContext.sql("DROP DATABASE IF EXISTS temp_db_1 CASCADE")
@@ -129,14 +140,19 @@ class SQLContextSuite extends SparkFunSuite with SharedSparkContext {
     df.createOrReplaceTempView("listtablessuitetable")
     assert(
       sqlContext.tables("default").filter("tableName = 'listtablessuitetable'").collect().toSeq ==
-      Row("", "listtablessuitetable", true) :: Nil)
+        Row("", "listtablessuitetable", true) :: Nil)
 
     assert(
-      sqlContext.sql("show TABLES in default").filter("tableName = 'listtablessuitetable'")
-        .collect().toSeq == Row("", "listtablessuitetable", true) :: Nil)
+      sqlContext
+        .sql("show TABLES in default")
+        .filter("tableName = 'listtablessuitetable'")
+        .collect()
+        .toSeq == Row("", "listtablessuitetable", true) :: Nil)
 
     sqlContext.sessionState.catalog.dropTable(
-      TableIdentifier("listtablessuitetable"), ignoreIfNotExists = true, purge = false)
+      TableIdentifier("listtablessuitetable"),
+      ignoreIfNotExists = true,
+      purge = false)
     assert(sqlContext.tables().filter("tableName = 'listtablessuitetable'").count() === 0)
   }
 
@@ -150,19 +166,24 @@ class SQLContextSuite extends SparkFunSuite with SharedSparkContext {
         StructField("tableName", StringType, false) ::
         StructField("isTemporary", BooleanType, false) :: Nil)
 
-    Seq(sqlContext.tables(), sqlContext.sql("SHOW TABLes")).foreach {
-      case tableDF =>
-        assert(expectedSchema === tableDF.schema)
+    Seq(sqlContext.tables(), sqlContext.sql("SHOW TABLes")).foreach { case tableDF =>
+      assert(expectedSchema === tableDF.schema)
 
-        tableDF.createOrReplaceTempView("tables")
-        assert(
-          sqlContext.sql(
+      tableDF.createOrReplaceTempView("tables")
+      assert(
+        sqlContext
+          .sql(
             "SELECT isTemporary, tableName from tables WHERE tableName = 'listtablessuitetable'")
-            .collect().toSeq == Row(true, "listtablessuitetable") :: Nil)
-        assert(
-          sqlContext.tables().filter("tableName = 'tables'").select("tableName", "isTemporary")
-            .collect().toSeq == Row("tables", true) :: Nil)
-        sqlContext.dropTempTable("tables")
+          .collect()
+          .toSeq == Row(true, "listtablessuitetable") :: Nil)
+      assert(
+        sqlContext
+          .tables()
+          .filter("tableName = 'tables'")
+          .select("tableName", "isTemporary")
+          .collect()
+          .toSeq == Row("tables", true) :: Nil)
+      sqlContext.dropTempTable("tables")
     }
   }
 

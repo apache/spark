@@ -28,19 +28,21 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.util.CompletionIterator
 
 /**
- * An optimized CartesianRDD for UnsafeRow, which will cache the rows from second child RDD,
- * will be much faster than building the right partition for every row in left RDD, it also
- * materialize the right RDD (in case of the right RDD is nondeterministic).
+ * An optimized CartesianRDD for UnsafeRow, which will cache the rows from second child RDD, will
+ * be much faster than building the right partition for every row in left RDD, it also materialize
+ * the right RDD (in case of the right RDD is nondeterministic).
  */
 class UnsafeCartesianRDD(
-    left : RDD[UnsafeRow],
-    right : RDD[UnsafeRow],
+    left: RDD[UnsafeRow],
+    right: RDD[UnsafeRow],
     inMemoryBufferThreshold: Int,
     spillThreshold: Int,
     sizeInBytesSpillThreshold: Long)
-  extends CartesianRDD[UnsafeRow, UnsafeRow](left.sparkContext, left, right) {
+    extends CartesianRDD[UnsafeRow, UnsafeRow](left.sparkContext, left, right) {
 
-  override def compute(split: Partition, context: TaskContext): Iterator[(UnsafeRow, UnsafeRow)] = {
+  override def compute(
+      split: Partition,
+      context: TaskContext): Iterator[(UnsafeRow, UnsafeRow)] = {
     val rowArray = new ExternalAppendOnlyUnsafeRowArray(
       inMemoryBufferThreshold,
       // TODO: shall we have a new config to specify the max in-memory buffer size
@@ -57,17 +59,15 @@ class UnsafeCartesianRDD(
 
     val resultIter =
       for (x <- rdd1.iterator(partition.s1, context);
-           y <- createIter()) yield (x, y)
+        y <- createIter()) yield (x, y)
     CompletionIterator[(UnsafeRow, UnsafeRow), Iterator[(UnsafeRow, UnsafeRow)]](
-      resultIter, rowArray.clear())
+      resultIter,
+      rowArray.clear())
   }
 }
 
-
-case class CartesianProductExec(
-    left: SparkPlan,
-    right: SparkPlan,
-    condition: Option[Expression]) extends BaseJoinExec {
+case class CartesianProductExec(left: SparkPlan, right: SparkPlan, condition: Option[Expression])
+    extends BaseJoinExec {
 
   override def joinType: JoinType = Inner
   override def leftKeys: Seq[Expression] = Nil
@@ -111,6 +111,7 @@ case class CartesianProductExec(
   }
 
   override protected def withNewChildrenInternal(
-      newLeft: SparkPlan, newRight: SparkPlan): CartesianProductExec =
+      newLeft: SparkPlan,
+      newRight: SparkPlan): CartesianProductExec =
     copy(left = newLeft, right = newRight)
 }

@@ -105,10 +105,12 @@ class DeclareVariableParserSuite extends AnalysisTest with SharedSparkSession {
       CreateVariable(
         Seq(UnresolvedIdentifier(Seq("var1"))),
         DefaultValueExpression(
-          Cast(ScalarSubquery(
-            Project(UnresolvedAttribute("c1") :: Nil,
-              SubqueryAlias(Seq("T"),
-                subqueryAliasChild))), IntegerType),
+          Cast(
+            ScalarSubquery(
+              Project(
+                UnresolvedAttribute("c1") :: Nil,
+                SubqueryAlias(Seq("T"), subqueryAliasChild))),
+            IntegerType),
           "(SELECT c1 FROM VALUES(1) AS T(c1))"),
         replace = false))
   }
@@ -126,7 +128,8 @@ class DeclareVariableParserSuite extends AnalysisTest with SharedSparkSession {
         Seq(UnresolvedIdentifier(Seq("var1"))),
         DefaultValueExpression(
           Cast(
-            Add(Literal(1, IntegerType),
+            Add(
+              Literal(1, IntegerType),
               UnresolvedFunction("RAND", Seq(Literal(5, IntegerType)), isDistinct = false)),
             DoubleType),
           "1 + RAND(5)"),
@@ -144,17 +147,22 @@ class DeclareVariableParserSuite extends AnalysisTest with SharedSparkSession {
         DefaultValueExpression(Literal(Decimal("5.0"), DecimalType(2, 1)), "5.0"),
         replace = true))
     comparePlans(
-      parsePlan("DECLARE OR REPLACE VARIABLE var1 MAP<string, double> " +
-        "DEFAULT MAP('Hello', 5.1, 'World', -7.1E10)"),
+      parsePlan(
+        "DECLARE OR REPLACE VARIABLE var1 MAP<string, double> " +
+          "DEFAULT MAP('Hello', 5.1, 'World', -7.1E10)"),
       CreateVariable(
         Seq(UnresolvedIdentifier(Seq("var1"))),
-        DefaultValueExpression(Cast(
-          UnresolvedFunction("MAP", Seq(
-            Literal(UTF8String.fromString("Hello"), StringType),
-            Literal(Decimal("5.1"), DecimalType(2, 1)),
-            Literal(UTF8String.fromString("World"), StringType),
-            Literal(-7.1E10, DoubleType)), isDistinct = false),
-          MapType(StringType, DoubleType)),
+        DefaultValueExpression(
+          Cast(
+            UnresolvedFunction(
+              "MAP",
+              Seq(
+                Literal(UTF8String.fromString("Hello"), StringType),
+                Literal(Decimal("5.1"), DecimalType(2, 1)),
+                Literal(UTF8String.fromString("World"), StringType),
+                Literal(-7.1e10, DoubleType)),
+              isDistinct = false),
+            MapType(StringType, DoubleType)),
           "MAP('Hello', 5.1, 'World', -7.1E10)"),
         replace = true))
     comparePlans(
@@ -167,8 +175,8 @@ class DeclareVariableParserSuite extends AnalysisTest with SharedSparkSession {
       parsePlan("DECLARE OR REPLACE VARIABLE var1 INT DEFAULT 1 / 0"),
       CreateVariable(
         Seq(UnresolvedIdentifier(Seq("var1"))),
-        DefaultValueExpression(Cast(
-          Divide(Literal(1, IntegerType), Literal(0, IntegerType)), IntegerType),
+        DefaultValueExpression(
+          Cast(Divide(Literal(1, IntegerType), Literal(0, IntegerType)), IntegerType),
           "1 / 0"),
         replace = true))
   }
@@ -180,8 +188,7 @@ class DeclareVariableParserSuite extends AnalysisTest with SharedSparkSession {
         parsePlan("DECLARE VARIABLE IF NOT EXISTS var1 INT")
       },
       condition = "PARSE_SYNTAX_ERROR",
-      parameters = Map("error" -> "'EXISTS'", "hint" -> "")
-    )
+      parameters = Map("error" -> "'EXISTS'", "hint" -> ""))
 
     // The datatype or default value of a variable must be specified
     val sqlText = "DECLARE VARIABLE var1"
@@ -191,7 +198,6 @@ class DeclareVariableParserSuite extends AnalysisTest with SharedSparkSession {
       },
       condition = "INVALID_SQL_SYNTAX.VARIABLE_TYPE_OR_DEFAULT_REQUIRED",
       parameters = Map.empty,
-      context = ExpectedContext(fragment = sqlText, start = 0, stop = 20)
-    )
+      context = ExpectedContext(fragment = sqlText, start = 0, stop = 20))
   }
 }

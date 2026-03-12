@@ -18,14 +18,7 @@ package org.apache.spark.sql.catalyst.xml
 
 import java.io.StringReader
 import javax.xml.namespace.QName
-import javax.xml.stream.{
-  EventFilter,
-  StreamFilter,
-  XMLEventReader,
-  XMLInputFactory,
-  XMLStreamConstants,
-  XMLStreamReader
-}
+import javax.xml.stream.{EventFilter, StreamFilter, XMLEventReader, XMLInputFactory, XMLStreamConstants, XMLStreamReader}
 import javax.xml.stream.events._
 
 import scala.annotation.tailrec
@@ -46,13 +39,11 @@ object StaxXmlParserUtils {
 
   private[sql] val eventTypeFilter: Int => Boolean = {
     // Ignore comments and processing instructions
-    case XMLStreamConstants.COMMENT |
-         XMLStreamConstants.PROCESSING_INSTRUCTION => false
+    case XMLStreamConstants.COMMENT | XMLStreamConstants.PROCESSING_INSTRUCTION => false
     // unsupported events
-    case XMLStreamConstants.DTD |
-         XMLStreamConstants.ENTITY_DECLARATION |
-         XMLStreamConstants.ENTITY_REFERENCE |
-         XMLStreamConstants.NOTATION_DECLARATION => false
+    case XMLStreamConstants.DTD | XMLStreamConstants.ENTITY_DECLARATION |
+        XMLStreamConstants.ENTITY_REFERENCE | XMLStreamConstants.NOTATION_DECLARATION =>
+      false
     case _ => true
   }
 
@@ -93,7 +84,9 @@ object StaxXmlParserUtils {
     val bomInputStreamBuilder = new BOMInputStream.Builder
     bomInputStreamBuilder.setInputStream(inputStream)
     val streamReader =
-      StaxXmlParserUtils.factory.createXMLStreamReader(bomInputStreamBuilder.get(), options.charset)
+      StaxXmlParserUtils.factory.createXMLStreamReader(
+        bomInputStreamBuilder.get(),
+        options.charset)
     StaxXmlParserUtils.factory.createFilteredReader(streamReader, filter)
   }
 
@@ -190,8 +183,8 @@ object StaxXmlParserUtils {
   }
 
   /**
-   * Convert the element with the target element name to an XML string. The next event of the parser
-   * is expected to be the start tag of the target element.
+   * Convert the element with the target element name to an XML string. The next event of the
+   * parser is expected to be the start tag of the target element.
    */
   def currentElementAsString(
       parser: XMLEventReader,
@@ -199,8 +192,7 @@ object StaxXmlParserUtils {
       options: XmlOptions): String = {
     assert(
       getName(parser.peek().asStartElement().getName, options) == startElementName,
-      s"Expected StartElement <$startElementName>, but found ${parser.peek()}"
-    )
+      s"Expected StartElement <$startElementName>, but found ${parser.peek()}")
     val xmlString = new StringBuilder()
     var indent = 0
     do {
@@ -236,10 +228,10 @@ object StaxXmlParserUtils {
   }
 
   /**
-   * Skip the children of the current XML element.
-   * Before this function is called, the 'startElement' of the object has already been consumed.
-   * Upon completion, this function consumes the 'endElement' of the object,
-   * which effectively skipping the entire object enclosed within these elements.
+   * Skip the children of the current XML element. Before this function is called, the
+   * 'startElement' of the object has already been consumed. Upon completion, this function
+   * consumes the 'endElement' of the object, which effectively skipping the entire object
+   * enclosed within these elements.
    */
   def skipChildren(
       parser: XMLEventReader,
@@ -249,14 +241,14 @@ object StaxXmlParserUtils {
     while (!shouldStop) {
       parser.nextEvent match {
         case startElement: StartElement =>
-          val childField = StaxXmlParserUtils.getName(startElement.asStartElement.getName, options)
+          val childField =
+            StaxXmlParserUtils.getName(startElement.asStartElement.getName, options)
           skipChildren(parser, childField, options)
         case endElement: EndElement =>
           val endElementName = getName(endElement.getName, options)
           assert(
             endElementName == expectedNextEndElementName,
-            s"Expected EndElement </$expectedNextEndElementName>, but found </$endElementName>"
-          )
+            s"Expected EndElement </$expectedNextEndElementName>, but found </$endElementName>")
           shouldStop = true
         case _: XMLEvent => // do nothing
       }
@@ -276,8 +268,8 @@ object StaxXmlParserUtils {
         assert(
           endElementName == expectedNextEndElementName,
           s"Expected EndElement </$expectedNextEndElementName>, but found </$endElementName>")
-      case _ => throw new IllegalStateException(
-        s"Expected EndElement </$expectedNextEndElementName>")
+      case _ =>
+        throw new IllegalStateException(s"Expected EndElement </$expectedNextEndElementName>")
     }
   }
 }

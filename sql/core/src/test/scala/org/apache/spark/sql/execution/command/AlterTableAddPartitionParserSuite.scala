@@ -30,9 +30,7 @@ class AlterTableAddPartitionParserSuite extends AnalysisTest with SharedSparkSes
       |(dt='2009-09-09', country='uk')""".stripMargin
     val parsed = parsePlan(sql)
     val expected = AddPartitions(
-      UnresolvedTable(
-        Seq("a", "b", "c"),
-        "ALTER TABLE ... ADD PARTITION ..."),
+      UnresolvedTable(Seq("a", "b", "c"), "ALTER TABLE ... ADD PARTITION ..."),
       Seq(
         UnresolvedPartitionSpec(Map("dt" -> "2008-08-08", "country" -> "us"), Some("location1")),
         UnresolvedPartitionSpec(Map("dt" -> "2009-09-09", "country" -> "uk"), None)),
@@ -44,9 +42,7 @@ class AlterTableAddPartitionParserSuite extends AnalysisTest with SharedSparkSes
     val sql = "ALTER TABLE a.b.c ADD PARTITION (dt='2008-08-08') LOCATION 'loc'"
     val parsed = parsePlan(sql)
     val expected = AddPartitions(
-      UnresolvedTable(
-        Seq("a", "b", "c"),
-        "ALTER TABLE ... ADD PARTITION ..."),
+      UnresolvedTable(Seq("a", "b", "c"), "ALTER TABLE ... ADD PARTITION ..."),
       Seq(UnresolvedPartitionSpec(Map("dt" -> "2008-08-08"), Some("loc"))),
       ifNotExists = false)
 

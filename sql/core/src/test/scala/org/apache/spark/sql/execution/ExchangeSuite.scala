@@ -55,8 +55,7 @@ class ExchangeSuite extends SparkPlanTest with SharedSparkSession {
     checkAnswer(
       input.toDF(),
       plan => ShuffleExchangeExec(SinglePartition, plan),
-      input.map(Row.fromTuple)
-    )
+      input.map(Row.fromTuple))
   }
 
   test("BroadcastMode.canonicalized") {
@@ -138,9 +137,11 @@ class ExchangeSuite extends SparkPlanTest with SharedSparkSession {
     def assertConsistency(ds: Dataset[java.lang.Long]): Unit = {
       ds.persist()
 
-      val exchange = ds.mapPartitions { iter =>
-        Random.shuffle(iter)
-      }.repartition(111)
+      val exchange = ds
+        .mapPartitions { iter =>
+          Random.shuffle(iter)
+        }
+        .repartition(111)
       val exchange2 = ds.repartition(111)
 
       assert(exchange.rdd.collectPartitions() === exchange2.rdd.collectPartitions())
@@ -164,8 +165,7 @@ class ExchangeSuite extends SparkPlanTest with SharedSparkSession {
 
   test("Exchange reuse across the whole plan") {
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
-      val df = sql(
-        """
+      val df = sql("""
           |SELECT
           |  (SELECT max(a.key) FROM testData AS a JOIN testData AS b ON b.key = a.key),
           |  a.key
@@ -176,17 +176,17 @@ class ExchangeSuite extends SparkPlanTest with SharedSparkSession {
       val plan = df.queryExecution.executedPlan
 
       val exchangeIds = plan.collectWithSubqueries { case e: Exchange => e.id }
-      val reusedExchangeIds = plan.collectWithSubqueries {
-        case re: ReusedExchangeExec => re.child.id
+      val reusedExchangeIds = plan.collectWithSubqueries { case re: ReusedExchangeExec =>
+        re.child.id
       }
 
       assert(exchangeIds.size == 2, "Whole plan exchange reusing not working correctly")
       assert(reusedExchangeIds.size == 3, "Whole plan exchange reusing not working correctly")
-      assert(reusedExchangeIds.forall(exchangeIds.contains(_)),
+      assert(
+        reusedExchangeIds.forall(exchangeIds.contains(_)),
         "ReusedExchangeExec should reuse an existing exchange")
 
-      val df2 = sql(
-        """
+      val df2 = sql("""
           |SELECT
           |  (SELECT min(a.key) FROM testData AS a JOIN testData AS b ON b.key = a.key),
           |  (SELECT max(a.key) FROM testData AS a JOIN testData2 AS b ON b.a = a.key)
@@ -195,13 +195,14 @@ class ExchangeSuite extends SparkPlanTest with SharedSparkSession {
       val plan2 = df2.queryExecution.executedPlan
 
       val exchangeIds2 = plan2.collectWithSubqueries { case e: Exchange => e.id }
-      val reusedExchangeIds2 = plan2.collectWithSubqueries {
-        case re: ReusedExchangeExec => re.child.id
+      val reusedExchangeIds2 = plan2.collectWithSubqueries { case re: ReusedExchangeExec =>
+        re.child.id
       }
 
       assert(exchangeIds2.size == 4, "Whole plan exchange reusing not working correctly")
       assert(reusedExchangeIds2.size == 2, "Whole plan exchange reusing not working correctly")
-      assert(reusedExchangeIds2.forall(exchangeIds2.contains(_)),
+      assert(
+        reusedExchangeIds2.forall(exchangeIds2.contains(_)),
         "ReusedExchangeExec should reuse an existing exchange")
     }
   }

@@ -41,7 +41,8 @@ class TupleSketchUtilsSuite extends SparkFunSuite with SQLHelper {
     assert(TupleSummaryMode.fromString("SUM", "test_function") == TupleSummaryMode.Sum)
     assert(TupleSummaryMode.fromString("Min", "test_function") == TupleSummaryMode.Min)
     assert(TupleSummaryMode.fromString("MAX", "test_function") == TupleSummaryMode.Max)
-    assert(TupleSummaryMode.fromString("AlwaysOne", "test_function") == TupleSummaryMode.AlwaysOne)
+    assert(
+      TupleSummaryMode.fromString("AlwaysOne", "test_function") == TupleSummaryMode.AlwaysOne)
   }
 
   test("TupleSummaryMode.fromString: throws exception for invalid modes") {
@@ -385,17 +386,29 @@ class TupleSketchUtilsSuite extends SparkFunSuite with SQLHelper {
 
     val compactSketch = updateSketch.compact()
 
-    assert(TupleSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
-      compactSketch.iterator(), TupleSummaryMode.Sum, it => it.getSummary.getValue) == 42.0)
+    assert(
+      TupleSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
+        compactSketch.iterator(),
+        TupleSummaryMode.Sum,
+        it => it.getSummary.getValue) == 42.0)
 
-    assert(TupleSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
-      compactSketch.iterator(), TupleSummaryMode.Min, it => it.getSummary.getValue) == 42.0)
+    assert(
+      TupleSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
+        compactSketch.iterator(),
+        TupleSummaryMode.Min,
+        it => it.getSummary.getValue) == 42.0)
 
-    assert(TupleSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
-      compactSketch.iterator(), TupleSummaryMode.Max, it => it.getSummary.getValue) == 42.0)
+    assert(
+      TupleSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
+        compactSketch.iterator(),
+        TupleSummaryMode.Max,
+        it => it.getSummary.getValue) == 42.0)
 
-    assert(TupleSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
-      compactSketch.iterator(), TupleSummaryMode.AlwaysOne, it => it.getSummary.getValue) == 1.0)
+    assert(
+      TupleSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
+        compactSketch.iterator(),
+        TupleSummaryMode.AlwaysOne,
+        it => it.getSummary.getValue) == 1.0)
   }
 
   test("aggregateNumericSummaries: negative values for sum mode") {
@@ -464,14 +477,23 @@ class TupleSketchUtilsSuite extends SparkFunSuite with SQLHelper {
 
     val compactSketch = updateSketch.compact()
 
-    assert(TupleSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
-      compactSketch.iterator(), TupleSummaryMode.Sum, it => it.getSummary.getValue) == 9.0)
+    assert(
+      TupleSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
+        compactSketch.iterator(),
+        TupleSummaryMode.Sum,
+        it => it.getSummary.getValue) == 9.0)
 
-    assert(TupleSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
-      compactSketch.iterator(), TupleSummaryMode.Min, it => it.getSummary.getValue) == -5.0)
+    assert(
+      TupleSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
+        compactSketch.iterator(),
+        TupleSummaryMode.Min,
+        it => it.getSummary.getValue) == -5.0)
 
-    assert(TupleSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
-      compactSketch.iterator(), TupleSummaryMode.Max, it => it.getSummary.getValue) == 10.0)
+    assert(
+      TupleSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
+        compactSketch.iterator(),
+        TupleSummaryMode.Max,
+        it => it.getSummary.getValue) == 10.0)
   }
 
   test("aggregateNumericSummaries: zero values") {
@@ -485,17 +507,29 @@ class TupleSketchUtilsSuite extends SparkFunSuite with SQLHelper {
 
     val compactSketch = updateSketch.compact()
 
-    assert(TupleSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
-      compactSketch.iterator(), TupleSummaryMode.Sum, it => it.getSummary.getValue) == 0.0)
+    assert(
+      TupleSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
+        compactSketch.iterator(),
+        TupleSummaryMode.Sum,
+        it => it.getSummary.getValue) == 0.0)
 
-    assert(TupleSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
-      compactSketch.iterator(), TupleSummaryMode.Min, it => it.getSummary.getValue) == 0.0)
+    assert(
+      TupleSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
+        compactSketch.iterator(),
+        TupleSummaryMode.Min,
+        it => it.getSummary.getValue) == 0.0)
 
-    assert(TupleSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
-      compactSketch.iterator(), TupleSummaryMode.Max, it => it.getSummary.getValue) == 0.0)
+    assert(
+      TupleSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
+        compactSketch.iterator(),
+        TupleSummaryMode.Max,
+        it => it.getSummary.getValue) == 0.0)
 
-    assert(TupleSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
-      compactSketch.iterator(), TupleSummaryMode.AlwaysOne, it => it.getSummary.getValue) == 3.0)
+    assert(
+      TupleSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
+        compactSketch.iterator(),
+        TupleSummaryMode.AlwaysOne,
+        it => it.getSummary.getValue) == 3.0)
   }
 
   test("aggregateNumericSummaries: special Double values - Infinity") {
@@ -509,18 +543,23 @@ class TupleSketchUtilsSuite extends SparkFunSuite with SQLHelper {
 
     val compactSketch = updateSketch.compact()
 
-    assert(TupleSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
-      compactSketch.iterator(),
-      TupleSummaryMode.Sum, it => it.getSummary.getValue) == Double.PositiveInfinity
-    )
+    assert(
+      TupleSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
+        compactSketch.iterator(),
+        TupleSummaryMode.Sum,
+        it => it.getSummary.getValue) == Double.PositiveInfinity)
 
-    assert(TupleSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
-      compactSketch.iterator(),
-      TupleSummaryMode.Max, it => it.getSummary.getValue) == Double.PositiveInfinity
-    )
+    assert(
+      TupleSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
+        compactSketch.iterator(),
+        TupleSummaryMode.Max,
+        it => it.getSummary.getValue) == Double.PositiveInfinity)
 
-    assert(TupleSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
-      compactSketch.iterator(), TupleSummaryMode.Min, it => it.getSummary.getValue) == 5.0)
+    assert(
+      TupleSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
+        compactSketch.iterator(),
+        TupleSummaryMode.Min,
+        it => it.getSummary.getValue) == 5.0)
   }
 
   test("aggregateNumericSummaries: special Double values - NegativeInfinity") {
@@ -534,17 +573,22 @@ class TupleSketchUtilsSuite extends SparkFunSuite with SQLHelper {
 
     val compactSketch = updateSketch.compact()
 
-    assert(TupleSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
-      compactSketch.iterator(),
-      TupleSummaryMode.Sum, it => it.getSummary.getValue) == Double.NegativeInfinity
-    )
+    assert(
+      TupleSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
+        compactSketch.iterator(),
+        TupleSummaryMode.Sum,
+        it => it.getSummary.getValue) == Double.NegativeInfinity)
 
-    assert(TupleSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
-      compactSketch.iterator(),
-      TupleSummaryMode.Min, it => it.getSummary.getValue) == Double.NegativeInfinity
-    )
+    assert(
+      TupleSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
+        compactSketch.iterator(),
+        TupleSummaryMode.Min,
+        it => it.getSummary.getValue) == Double.NegativeInfinity)
 
-    assert(TupleSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
-      compactSketch.iterator(), TupleSummaryMode.Max, it => it.getSummary.getValue) == 10.0)
+    assert(
+      TupleSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
+        compactSketch.iterator(),
+        TupleSummaryMode.Max,
+        it => it.getSummary.getValue) == 10.0)
   }
 }

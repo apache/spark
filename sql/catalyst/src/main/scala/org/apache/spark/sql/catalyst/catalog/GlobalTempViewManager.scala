@@ -25,7 +25,6 @@ import org.apache.spark.sql.catalyst.analysis.TempTableAlreadyExistsException
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
 
-
 /**
  * A thread-safe manager for global temporary views, providing atomic operations to manage them,
  * e.g. create, update, remove, etc.
@@ -33,7 +32,8 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
  * Note that, the view name is always case-sensitive here, callers are responsible to format the
  * view name w.r.t. case-sensitive config.
  *
- * @param database The system preserved virtual database that keeps all the global temporary views.
+ * @param database
+ *   The system preserved virtual database that keeps all the global temporary views.
  */
 class GlobalTempViewManager(database: String) {
 
@@ -65,9 +65,7 @@ class GlobalTempViewManager(database: String) {
   /**
    * Updates the global temp view if it exists, returns true if updated, false otherwise.
    */
-  def update(
-      name: String,
-      viewDefinition: TemporaryViewRelation): Boolean = synchronized {
+  def update(name: String, viewDefinition: TemporaryViewRelation): Boolean = synchronized {
     if (viewDefinitions.contains(name)) {
       viewDefinitions.put(name, viewDefinition)
       true
@@ -84,9 +82,9 @@ class GlobalTempViewManager(database: String) {
   }
 
   /**
-   * Renames the global temp view if the source view exists and the destination view not exists, or
-   * issue an exception if the source view exists but the destination view already exists. Returns
-   * true if renamed, false otherwise.
+   * Renames the global temp view if the source view exists and the destination view not exists,
+   * or issue an exception if the source view exists but the destination view already exists.
+   * Returns true if renamed, false otherwise.
    */
   def rename(oldName: String, newName: String): Boolean = synchronized {
     if (viewDefinitions.contains(oldName)) {

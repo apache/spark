@@ -44,14 +44,21 @@ class UnsafeRowUtilsSuite extends SparkFunSuite {
 
   test("UnsafeRow format invalidation") {
     // Pass the checking
-    assert(UnsafeRowUtils.validateStructuralIntegrityWithReason(testRow, testOutputSchema).isEmpty)
+    assert(
+      UnsafeRowUtils.validateStructuralIntegrityWithReason(testRow, testOutputSchema).isEmpty)
     // Fail for fields number not match
-    assert(UnsafeRowUtils.validateStructuralIntegrityWithReason(
-      testRow, StructType(testKeys.map(createIntegerField))).isDefined)
+    assert(
+      UnsafeRowUtils
+        .validateStructuralIntegrityWithReason(
+          testRow,
+          StructType(testKeys.map(createIntegerField)))
+        .isDefined)
     // Fail for invalid schema
-    val invalidSchema = StructType(testKeys.map(createIntegerField) ++
-      Seq(StructField("struct", StructType(Seq(StructField("value1", StringType, true))), true),
-        StructField("value2", IntegerType, false)))
+    val invalidSchema = StructType(
+      testKeys.map(createIntegerField) ++
+        Seq(
+          StructField("struct", StructType(Seq(StructField("value1", StringType, true))), true),
+          StructField("value2", IntegerType, false)))
     assert(UnsafeRowUtils.validateStructuralIntegrityWithReason(testRow, invalidSchema).isDefined)
   }
 
@@ -65,13 +72,15 @@ class UnsafeRowUtilsSuite extends SparkFunSuite {
     assert(UnsafeRowUtils.validateStructuralIntegrityWithReason(row, schema).isEmpty)
 
     // set Decimal field to precision-overflowed value
-    val bigDecimalVal = Decimal(new JavaBigDecimal("12345678901234567890")) // precision=20, scale=0
+    val bigDecimalVal =
+      Decimal(new JavaBigDecimal("12345678901234567890")) // precision=20, scale=0
     row.setDecimal(0, bigDecimalVal, 19) // should overflow and become null
     assert(row.isNullAt(0) && UnsafeRowUtils.getOffsetAndSize(row, 0) == (16, 0))
     assert(UnsafeRowUtils.validateStructuralIntegrityWithReason(row, schema).isEmpty)
 
     // set Decimal field to valid non-null value
-    val bigDecimalVal2 = Decimal(new JavaBigDecimal("1234567890123456789")) // precision=19, scale=0
+    val bigDecimalVal2 =
+      Decimal(new JavaBigDecimal("1234567890123456789")) // precision=19, scale=0
     row.setDecimal(0, bigDecimalVal2, 19) // should succeed
     assert(!row.isNullAt(0) && UnsafeRowUtils.getOffsetAndSize(row, 0) == (16, 8))
     assert(UnsafeRowUtils.validateStructuralIntegrityWithReason(row, schema).isEmpty)
@@ -83,7 +92,8 @@ class UnsafeRowUtilsSuite extends SparkFunSuite {
   }
 
   test("Better schema status message") {
-    assert(UnsafeRowUtils.getStructuralIntegrityStatus(testRow, testOutputSchema)
+    assert(UnsafeRowUtils
+      .getStructuralIntegrityStatus(testRow, testOutputSchema)
       .contains("[UnsafeRowStatus] expectedSchema: StructType(" +
         "StructField(key1,IntegerType,false),StructField(key2,IntegerType,false)," +
         "StructField(sum(key1),IntegerType,false),StructField(sum(key2),IntegerType,false)), " +
@@ -113,48 +123,61 @@ class UnsafeRowUtilsSuite extends SparkFunSuite {
 
     assert(UnsafeRowUtils.isBinaryStable(StructType(StructField("field", IntegerType) :: Nil)))
     assert(UnsafeRowUtils.isBinaryStable(StructType(StructField("field", StringType) :: Nil)))
-    assert(!UnsafeRowUtils.isBinaryStable(
-      StructType(StructField("field", nonBinaryStringType) :: Nil)))
+    assert(
+      !UnsafeRowUtils.isBinaryStable(
+        StructType(StructField("field", nonBinaryStringType) :: Nil)))
 
     // nested complex types
     assert(UnsafeRowUtils.isBinaryStable(ArrayType(ArrayType(StringType))))
     assert(UnsafeRowUtils.isBinaryStable(ArrayType(MapType(StringType, IntegerType))))
-    assert(UnsafeRowUtils.isBinaryStable(
-      ArrayType(StructType(StructField("field", StringType) :: Nil))))
+    assert(
+      UnsafeRowUtils.isBinaryStable(
+        ArrayType(StructType(StructField("field", StringType) :: Nil))))
     assert(!UnsafeRowUtils.isBinaryStable(ArrayType(ArrayType(nonBinaryStringType))))
     assert(!UnsafeRowUtils.isBinaryStable(ArrayType(MapType(IntegerType, nonBinaryStringType))))
-    assert(!UnsafeRowUtils.isBinaryStable(
-      ArrayType(MapType(IntegerType, ArrayType(nonBinaryStringType)))))
-    assert(!UnsafeRowUtils.isBinaryStable(
-      ArrayType(StructType(StructField("field", nonBinaryStringType) :: Nil))))
-    assert(!UnsafeRowUtils.isBinaryStable(ArrayType(StructType(
-      Seq(StructField("second", IntegerType), StructField("second", nonBinaryStringType))))))
+    assert(
+      !UnsafeRowUtils.isBinaryStable(
+        ArrayType(MapType(IntegerType, ArrayType(nonBinaryStringType)))))
+    assert(
+      !UnsafeRowUtils.isBinaryStable(
+        ArrayType(StructType(StructField("field", nonBinaryStringType) :: Nil))))
+    assert(
+      !UnsafeRowUtils.isBinaryStable(ArrayType(StructType(
+        Seq(StructField("second", IntegerType), StructField("second", nonBinaryStringType))))))
 
     assert(UnsafeRowUtils.isBinaryStable(MapType(ArrayType(StringType), ArrayType(IntegerType))))
     assert(UnsafeRowUtils.isBinaryStable(MapType(MapType(StringType, StringType), IntegerType)))
-    assert(UnsafeRowUtils.isBinaryStable(
-      MapType(StructType(StructField("field", StringType) :: Nil), IntegerType)))
-    assert(!UnsafeRowUtils.isBinaryStable(
-      MapType(ArrayType(nonBinaryStringType), ArrayType(IntegerType))))
-    assert(!UnsafeRowUtils.isBinaryStable(
-      MapType(IntegerType, ArrayType(nonBinaryStringType))))
-    assert(!UnsafeRowUtils.isBinaryStable(
-      MapType(MapType(IntegerType, nonBinaryStringType), IntegerType)))
-    assert(!UnsafeRowUtils.isBinaryStable(
-      MapType(StructType(StructField("field", nonBinaryStringType) :: Nil), IntegerType)))
+    assert(
+      UnsafeRowUtils.isBinaryStable(
+        MapType(StructType(StructField("field", StringType) :: Nil), IntegerType)))
+    assert(
+      !UnsafeRowUtils.isBinaryStable(
+        MapType(ArrayType(nonBinaryStringType), ArrayType(IntegerType))))
+    assert(!UnsafeRowUtils.isBinaryStable(MapType(IntegerType, ArrayType(nonBinaryStringType))))
+    assert(
+      !UnsafeRowUtils.isBinaryStable(
+        MapType(MapType(IntegerType, nonBinaryStringType), IntegerType)))
+    assert(
+      !UnsafeRowUtils.isBinaryStable(
+        MapType(StructType(StructField("field", nonBinaryStringType) :: Nil), IntegerType)))
 
-    assert(UnsafeRowUtils.isBinaryStable(
-      StructType(StructField("field", ArrayType(IntegerType)) :: Nil)))
-    assert(UnsafeRowUtils.isBinaryStable(
-      StructType(StructField("field", MapType(StringType, IntegerType)) :: Nil)))
-    assert(UnsafeRowUtils.isBinaryStable(
-      StructType(StructField("field", StructType(StructField("sub", IntegerType) :: Nil)) :: Nil)))
-    assert(!UnsafeRowUtils.isBinaryStable(
-      StructType(StructField("field", ArrayType(nonBinaryStringType)) :: Nil)))
-    assert(!UnsafeRowUtils.isBinaryStable(
-      StructType(StructField("field", MapType(nonBinaryStringType, IntegerType)) :: Nil)))
-    assert(!UnsafeRowUtils.isBinaryStable(
-      StructType(StructField("field",
-        StructType(StructField("sub", nonBinaryStringType) :: Nil)) :: Nil)))
+    assert(
+      UnsafeRowUtils.isBinaryStable(
+        StructType(StructField("field", ArrayType(IntegerType)) :: Nil)))
+    assert(
+      UnsafeRowUtils.isBinaryStable(
+        StructType(StructField("field", MapType(StringType, IntegerType)) :: Nil)))
+    assert(
+      UnsafeRowUtils.isBinaryStable(StructType(
+        StructField("field", StructType(StructField("sub", IntegerType) :: Nil)) :: Nil)))
+    assert(
+      !UnsafeRowUtils.isBinaryStable(
+        StructType(StructField("field", ArrayType(nonBinaryStringType)) :: Nil)))
+    assert(
+      !UnsafeRowUtils.isBinaryStable(
+        StructType(StructField("field", MapType(nonBinaryStringType, IntegerType)) :: Nil)))
+    assert(
+      !UnsafeRowUtils.isBinaryStable(StructType(
+        StructField("field", StructType(StructField("sub", nonBinaryStringType) :: Nil)) :: Nil)))
   }
 }

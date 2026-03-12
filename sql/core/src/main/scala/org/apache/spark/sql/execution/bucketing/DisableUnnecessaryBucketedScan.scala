@@ -79,9 +79,12 @@ object DisableUnnecessaryBucketedScan extends Rule[SparkPlan] {
   /**
    * Disable bucketed table scan with pre-order traversal of plan.
    *
-   * @param withInterestingPartition The traversed plan has operator with interesting partition.
-   * @param withExchange The traversed plan has [[Exchange]] operator.
-   * @param withAllowedNode The traversed plan has only [[isAllowedUnaryExecNode]] operators.
+   * @param withInterestingPartition
+   *   The traversed plan has operator with interesting partition.
+   * @param withExchange
+   *   The traversed plan has [[Exchange]] operator.
+   * @param withAllowedNode
+   *   The traversed plan has only [[isAllowedUnaryExecNode]] operators.
    */
   private def disableBucketWithInterestingPartition(
       plan: SparkPlan,
@@ -95,8 +98,12 @@ object DisableUnnecessaryBucketedScan extends Rule[SparkPlan] {
         p.mapChildren(disableBucketWithInterestingPartition(_, true, false, true))
       case exchange: Exchange =>
         // Exchange operator propagates `withExchange` as true to its child.
-        exchange.mapChildren(disableBucketWithInterestingPartition(
-          _, withInterestingPartition, true, withAllowedNode))
+        exchange.mapChildren(
+          disableBucketWithInterestingPartition(
+            _,
+            withInterestingPartition,
+            true,
+            withAllowedNode))
       case scan: FileSourceScanExec =>
         if (scan.bucketedScan) {
           if (!withInterestingPartition || (withExchange && withAllowedNode)) {
@@ -110,11 +117,12 @@ object DisableUnnecessaryBucketedScan extends Rule[SparkPlan] {
           scan
         }
       case o =>
-        o.mapChildren(disableBucketWithInterestingPartition(
-          _,
-          withInterestingPartition,
-          withExchange,
-          withAllowedNode && isAllowedUnaryExecNode(o)))
+        o.mapChildren(
+          disableBucketWithInterestingPartition(
+            _,
+            withInterestingPartition,
+            withExchange,
+            withAllowedNode && isAllowedUnaryExecNode(o)))
     }
   }
 
@@ -126,10 +134,9 @@ object DisableUnnecessaryBucketedScan extends Rule[SparkPlan] {
   }
 
   /**
-   * Check if the operator is allowed single-child operator.
-   * We may revisit this method later as we probably can
-   * remove this restriction to allow arbitrary operator between
-   * bucketed table scan and operator with interesting partition.
+   * Check if the operator is allowed single-child operator. We may revisit this method later as
+   * we probably can remove this restriction to allow arbitrary operator between bucketed table
+   * scan and operator with interesting partition.
    */
   private def isAllowedUnaryExecNode(plan: SparkPlan): Boolean = {
     plan match {

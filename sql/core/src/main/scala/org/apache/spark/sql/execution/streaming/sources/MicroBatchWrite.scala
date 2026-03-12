@@ -22,8 +22,8 @@ import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterF
 import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
 
 /**
- * A [[BatchWrite]] used to hook V2 stream writers into a microbatch plan. It implements
- * the non-streaming interface, forwarding the epoch ID determined at construction to a wrapped
+ * A [[BatchWrite]] used to hook V2 stream writers into a microbatch plan. It implements the
+ * non-streaming interface, forwarding the epoch ID determined at construction to a wrapped
  * streaming write support.
  */
 class MicroBatchWrite(epochId: Long, val writeSupport: StreamingWrite) extends BatchWrite {
@@ -49,7 +49,7 @@ class MicroBatchWrite(epochId: Long, val writeSupport: StreamingWrite) extends B
 }
 
 class MicroBatchWriterFactory(epochId: Long, streamingWriterFactory: StreamingDataWriterFactory)
-  extends DataWriterFactory {
+    extends DataWriterFactory {
 
   override def createWriter(partitionId: Int, taskId: Long): DataWriter[InternalRow] = {
     streamingWriterFactory.createWriter(partitionId, taskId, epochId)

@@ -89,8 +89,8 @@ class PhysicalOperationSuite extends SparkFunSuite {
   }
 
   test("Non-deterministic Filter with deterministic Project") {
-    val filter2 = Filter(EqualTo(MonotonicallyIncreasingID(), Literal(1)),
-      Project(Seq(colA, colB), relation))
+    val filter2 =
+      Filter(EqualTo(MonotonicallyIncreasingID(), Literal(1)), Project(Seq(colA, colB), relation))
     filter2 match {
       case PhysicalOperation(projects, filters, _: LocalRelation) =>
         assert(projects.size === 2)
@@ -100,7 +100,6 @@ class PhysicalOperationSuite extends SparkFunSuite {
       case _ => assert(false)
     }
   }
-
 
   test("Deterministic filter which has a non-deterministic child Filter") {
     val filter3 = Filter(EqualTo(colA, Literal(1)), Filter(EqualTo(aliasR, Literal(1)), relation))

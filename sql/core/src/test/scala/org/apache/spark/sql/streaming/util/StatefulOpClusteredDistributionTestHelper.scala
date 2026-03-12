@@ -29,8 +29,9 @@ trait StatefulOpClusteredDistributionTestHelper extends SparkFunSuite {
     assert(plan.requiredChildDistribution.length === desiredClusterColumns.length)
     plan.requiredChildDistribution.zip(desiredClusterColumns).forall {
       case (d: ClusteredDistribution, clusterColumns: Seq[String])
-        if partitionExpressionsColumns(d.clustering) == clusterColumns &&
-          d.requiredNumPartitions == desiredNumPartitions => true
+          if partitionExpressionsColumns(d.clustering) == clusterColumns &&
+            d.requiredNumPartitions == desiredNumPartitions =>
+        true
 
       case _ => false
     }
@@ -43,8 +44,9 @@ trait StatefulOpClusteredDistributionTestHelper extends SparkFunSuite {
     assert(plan.requiredChildDistribution.length === desiredClusterColumns.length)
     plan.requiredChildDistribution.zip(desiredClusterColumns).forall {
       case (d: StatefulOpClusteredDistribution, clusterColumns: Seq[String])
-        if partitionExpressionsColumns(d.expressions) == clusterColumns &&
-          d._requiredNumPartitions == desiredNumPartitions => true
+          if partitionExpressionsColumns(d.expressions) == clusterColumns &&
+            d._requiredNumPartitions == desiredNumPartitions =>
+        true
 
       case _ => false
     }
@@ -56,8 +58,9 @@ trait StatefulOpClusteredDistributionTestHelper extends SparkFunSuite {
       desiredNumPartitions: Int): Boolean = {
     plan.outputPartitioning match {
       case HashPartitioning(expressions, numPartitions)
-        if partitionExpressionsColumns(expressions) == desiredClusterColumns &&
-          numPartitions == desiredNumPartitions => true
+          if partitionExpressionsColumns(expressions) == desiredClusterColumns &&
+            numPartitions == desiredNumPartitions =>
+        true
 
       case _ => false
     }
@@ -82,8 +85,8 @@ trait StatefulOpClusteredDistributionTestHelper extends SparkFunSuite {
   }
 
   private def partitionExpressionsColumns(expressions: Seq[Expression]): Seq[String] = {
-    expressions.flatMap {
-      case ref: AttributeReference => Some(ref.name)
+    expressions.flatMap { case ref: AttributeReference =>
+      Some(ref.name)
     }
   }
 }

@@ -36,8 +36,7 @@ trait CodegenFallback extends Expression {
         // This might add the current expression twice, but it won't hurt.
         ctx.references += n
         childIndex += 1
-        ctx.addPartitionInitializationStatement(
-          s"""
+        ctx.addPartitionInitializationStatement(s"""
              |((Nondeterministic) references[$childIndex])
              |  .initialize(partitionIndex);
           """.stripMargin)
@@ -56,11 +55,13 @@ trait CodegenFallback extends Expression {
           ${ev.value} = (${CodeGenerator.boxedType(this.dataType)}) $objectTerm;
         }""")
     } else {
-      ev.copy(code = code"""
+      ev.copy(
+        code = code"""
         $placeHolder
         Object $objectTerm = ((Expression) references[$idx]).eval($input);
         $javaType ${ev.value} = (${CodeGenerator.boxedType(this.dataType)}) $objectTerm;
-        """, isNull = FalseLiteral)
+        """,
+        isNull = FalseLiteral)
     }
   }
 }

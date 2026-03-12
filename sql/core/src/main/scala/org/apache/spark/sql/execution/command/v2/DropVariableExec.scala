@@ -29,8 +29,9 @@ import org.apache.spark.sql.execution.datasources.v2.LeafV2CommandExec
 /**
  * Physical plan node for dropping a variable.
  */
-case class DropVariableExec(name: String, ifExists: Boolean) extends LeafV2CommandExec
-  with DataTypeErrorsBase {
+case class DropVariableExec(name: String, ifExists: Boolean)
+    extends LeafV2CommandExec
+    with DataTypeErrorsBase {
 
   override protected def run(): Seq[InternalRow] = {
     val variableManager = session.sessionState.catalogManager.tempVariableManager
@@ -44,8 +45,9 @@ case class DropVariableExec(name: String, ifExists: Boolean) extends LeafV2Comma
       if (!ifExists) {
         throw new AnalysisException(
           errorClass = "VARIABLE_NOT_FOUND",
-          Map("variableName" -> toSQLId(
-            Seq(CatalogManager.SYSTEM_CATALOG_NAME, CatalogManager.SESSION_NAMESPACE, name))))
+          Map(
+            "variableName" -> toSQLId(
+              Seq(CatalogManager.SYSTEM_CATALOG_NAME, CatalogManager.SESSION_NAMESPACE, name))))
       }
     }
     Nil

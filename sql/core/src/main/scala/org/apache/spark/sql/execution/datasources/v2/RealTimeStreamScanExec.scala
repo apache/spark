@@ -51,9 +51,9 @@ object LowLatencyClock {
 }
 
 /**
- * A wrap reader that turns a Partition Reader extending SupportsRealTimeRead to a
- * normal PartitionReader and follow the task termination time `lowLatencyEndTime`, and
- * report end offsets in the end to `endOffsets`.
+ * A wrap reader that turns a Partition Reader extending SupportsRealTimeRead to a normal
+ * PartitionReader and follow the task termination time `lowLatencyEndTime`, and report end
+ * offsets in the end to `endOffsets`.
  */
 case class LowLatencyReaderWrap(
     reader: SupportsRealTimeRead[InternalRow],
@@ -73,8 +73,7 @@ case class LowLatencyReaderWrap(
       // The way of using TaskContext.get().partitionId() to map to a partition
       // may be fragile as it relies on thread locals.
       endOffsets.add(
-        new PartitionOffsetWithIndex(TaskContext.get().partitionId(), reader.getOffset)
-      )
+        new PartitionOffsetWithIndex(TaskContext.get().partitionId(), reader.getOffset))
     }
     ret.hasRecord
   }
@@ -102,13 +101,11 @@ case class LowLatencyReaderFactoryWrap(
     assert(rowReader.isInstanceOf[SupportsRealTimeRead[InternalRow]])
     logInfo(
       log"Creating low latency PartitionReader, stopping at " +
-      log"${MDC(LogKeys.TO_TIME, lowLatencyEndTime)}"
-    )
+        log"${MDC(LogKeys.TO_TIME, lowLatencyEndTime)}")
     LowLatencyReaderWrap(
       rowReader.asInstanceOf[SupportsRealTimeRead[InternalRow]],
       lowLatencyEndTime,
-      endOffsets
-    )
+      endOffsets)
   }
 }
 
@@ -161,11 +158,9 @@ case class RealTimeStreamScanExec(
       LowLatencyReaderFactoryWrap(
         readerFactory,
         LowLatencyClock.getTimeMillis() + batchDurationMs,
-        endOffsetsAccumulator
-      ),
+        endOffsetsAccumulator),
       supportsColumnar,
-      customMetrics
-    )
+      customMetrics)
     postDriverMetrics()
     inputRDD
   }

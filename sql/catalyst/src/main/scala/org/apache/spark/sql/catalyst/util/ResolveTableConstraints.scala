@@ -30,7 +30,9 @@ object ResolveTableConstraints {
     if (constraints.nonEmpty &&
       !catalog.capabilities().contains(TableCatalogCapability.SUPPORT_TABLE_CONSTRAINT)) {
       throw QueryCompilationErrors.unsupportedTableOperationError(
-        catalog, ident, "table constraint")
+        catalog,
+        ident,
+        "table constraint")
     }
   }
 
@@ -49,7 +51,9 @@ object ResolveTableConstraints {
     if (hasTableConstraint &&
       !catalog.capabilities().contains(TableCatalogCapability.SUPPORT_TABLE_CONSTRAINT)) {
       throw QueryCompilationErrors.unsupportedTableOperationError(
-        catalog, ident, "table constraint")
+        catalog,
+        ident,
+        "table constraint")
     }
   }
 }

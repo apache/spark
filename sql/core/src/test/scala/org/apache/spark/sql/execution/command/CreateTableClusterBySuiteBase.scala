@@ -24,12 +24,14 @@ import org.apache.spark.sql.{AnalysisException, QueryTest}
  * that check V1 and V2 table catalogs. The tests that cannot run for all supported catalogs are
  * located in more specific test suites:
  *
- *   - V2 table catalog tests: `org.apache.spark.sql.execution.command.v2.CreateTableClusterBySuite`
+ *   - V2 table catalog tests:
+ *     `org.apache.spark.sql.execution.command.v2.CreateTableClusterBySuite`
  *   - V1 table catalog tests:
  *     `org.apache.spark.sql.execution.command.v1.CreateTableClusterBySuiteBase`
- *     - V1 In-Memory catalog: `org.apache.spark.sql.execution.command.v1.CreateTableClusterBySuite`
+ *     - V1 In-Memory catalog:
+ *       `org.apache.spark.sql.execution.command.v1.CreateTableClusterBySuite`
  *     - V1 Hive External catalog:
- *        `org.apache.spark.sql.hive.execution.command.CreateTableClusterBySuite`
+ *       `org.apache.spark.sql.hive.execution.command.CreateTableClusterBySuite`
  */
 trait CreateTableClusterBySuiteBase extends QueryTest with DDLCommandTestUtils {
   override val command = "CREATE/REPLACE TABLE CLUSTER BY"
@@ -50,17 +52,19 @@ trait CreateTableClusterBySuiteBase extends QueryTest with DDLCommandTestUtils {
 
   test("test clustering columns with comma") {
     withNamespaceAndTable("ns", "table") { tbl =>
-      spark.sql(s"CREATE TABLE $tbl (`i,d` INT, data STRING) $defaultUsing " +
-        "CLUSTER BY (`i,d`, data)")
+      spark.sql(
+        s"CREATE TABLE $tbl (`i,d` INT, data STRING) $defaultUsing " +
+          "CLUSTER BY (`i,d`, data)")
       validateClusterBy(tbl, Seq("`i,d`", "data"))
     }
   }
 
   test("test nested clustering columns") {
     withNamespaceAndTable("ns", "table") { tbl =>
-      spark.sql(s"CREATE TABLE $tbl " +
-        s"($nestedColumnSchema) " +
-        s"$defaultUsing CLUSTER BY (${nestedClusteringColumns.mkString(",")})")
+      spark.sql(
+        s"CREATE TABLE $tbl " +
+          s"($nestedColumnSchema) " +
+          s"$defaultUsing CLUSTER BY (${nestedClusteringColumns.mkString(",")})")
       validateClusterBy(tbl, nestedClusteringColumns)
     }
   }

@@ -20,31 +20,8 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.annotation.tailrec
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{
-  Alias,
-  CaseWhen,
-  Cast,
-  Concat,
-  Elt,
-  Expression,
-  MapZipWith,
-  Stack,
-  WindowSpecDefinition
-}
-import org.apache.spark.sql.catalyst.plans.logical.{
-  AddColumns,
-  AlterColumns,
-  Call,
-  CreateTable,
-  Except,
-  Intersect,
-  LogicalPlan,
-  Project,
-  ReplaceTable,
-  Union,
-  UnionLoop,
-  Unpivot
-}
+import org.apache.spark.sql.catalyst.expressions.{Alias, CaseWhen, Cast, Concat, Elt, Expression, MapZipWith, Stack, WindowSpecDefinition}
+import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumns, Call, CreateTable, Except, Intersect, LogicalPlan, Project, ReplaceTable, Union, UnionLoop, Unpivot}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
@@ -56,15 +33,15 @@ import org.apache.spark.sql.types.DataType
 abstract class TypeCoercionBase extends TypeCoercionHelper {
 
   /**
-   * Type coercion rule that combines multiple type coercion rules and applies them in a single tree
-   * traversal.
+   * Type coercion rule that combines multiple type coercion rules and applies them in a single
+   * tree traversal.
    */
   class CombinedTypeCoercionRule(rules: Seq[TypeCoercionRule]) extends TypeCoercionRule {
     override def transform: PartialFunction[Expression, Expression] = {
       val transforms = rules.map(_.transform)
       Function.unlift { e: Expression =>
-        val result = transforms.foldLeft(e) {
-          case (current, transform) => transform.applyOrElse(current, identity[Expression])
+        val result = transforms.foldLeft(e) { case (current, transform) =>
+          transform.applyOrElse(current, identity[Expression])
         }
         if (result ne e) {
           Some(result)
@@ -82,47 +59,42 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
     override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case c @ Call(ResolvedProcedure(_, _, procedure: BoundProcedure), args, _) if c.resolved =>
         val expectedDataTypes = procedure.parameters.map(_.dataType)
-        val coercedArgs = args.zip(expectedDataTypes).map {
-          case (arg, expectedType) => implicitCast(arg, expectedType).getOrElse(arg)
+        val coercedArgs = args.zip(expectedDataTypes).map { case (arg, expectedType) =>
+          implicitCast(arg, expectedType).getOrElse(arg)
         }
         c.copy(args = coercedArgs)
     }
   }
 
   /**
-   * A type coercion rule that implicitly casts default value expression in DDL statements
-   * to expected types.
+   * A type coercion rule that implicitly casts default value expression in DDL statements to
+   * expected types.
    */
   object DefaultValueExpressionCoercion extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case createTable @ CreateTable(_, cols, _, _, _) if createTable.resolved &&
-        cols.exists(_.defaultValue.isDefined) =>
+      case createTable @ CreateTable(_, cols, _, _, _)
+          if createTable.resolved &&
+            cols.exists(_.defaultValue.isDefined) =>
         val newCols = cols.map { c =>
           c.copy(defaultValue = c.defaultValue.map(d =>
-            d.copy(child = ResolveDefaultColumns.coerceDefaultValue(
-              d.child,
-              c.dataType,
-              "CREATE TABLE",
-              c.name,
-              d.originalSQL))))
+            d.copy(child = ResolveDefaultColumns
+              .coerceDefaultValue(d.child, c.dataType, "CREATE TABLE", c.name, d.originalSQL))))
         }
         createTable.copy(columns = newCols)
 
-      case replaceTable @ ReplaceTable(_, cols, _, _, _) if replaceTable.resolved &&
-        cols.exists(_.defaultValue.isDefined) =>
+      case replaceTable @ ReplaceTable(_, cols, _, _, _)
+          if replaceTable.resolved &&
+            cols.exists(_.defaultValue.isDefined) =>
         val newCols = cols.map { c =>
           c.copy(defaultValue = c.defaultValue.map(d =>
-            d.copy(child = ResolveDefaultColumns.coerceDefaultValue(
-              d.child,
-              c.dataType,
-              "REPLACE TABLE",
-              c.name,
-              d.originalSQL))))
+            d.copy(child = ResolveDefaultColumns
+              .coerceDefaultValue(d.child, c.dataType, "REPLACE TABLE", c.name, d.originalSQL))))
         }
         replaceTable.copy(columns = newCols)
 
-      case addColumns @ AddColumns(_, cols) if addColumns.resolved &&
-        cols.exists(_.default.isDefined) =>
+      case addColumns @ AddColumns(_, cols)
+          if addColumns.resolved &&
+            cols.exists(_.default.isDefined) =>
         val newCols = cols.map { c =>
           c.copy(default = c.default.map(d =>
             d.copy(child = ResolveDefaultColumns.coerceDefaultValue(
@@ -134,8 +106,9 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
         }
         addColumns.copy(columnsToAdd = newCols)
 
-      case alterColumns @ AlterColumns(_, specs) if alterColumns.resolved &&
-        specs.exists(_.newDefaultExpression.isDefined) =>
+      case alterColumns @ AlterColumns(_, specs)
+          if alterColumns.resolved &&
+            specs.exists(_.newDefaultExpression.isDefined) =>
         val newSpecs = specs.map { c =>
           val dataType = c.column.asInstanceOf[ResolvedFieldName].field.dataType
           c.copy(newDefaultExpression = c.newDefaultExpression.map(d =>
@@ -155,37 +128,38 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
    */
   object UnpivotCoercion extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case up: Unpivot if up.canBeCoercioned && !up.valuesTypeCoercioned => UnpivotTypeCoercion(up)
+      case up: Unpivot if up.canBeCoercioned && !up.valuesTypeCoercioned =>
+        UnpivotTypeCoercion(up)
     }
   }
 
   /**
    * Widens the data types of the children of Union/Except/Intersect.
-   * 1. When ANSI mode is off:
-   *  Loosely based on rules from "Hadoop: The Definitive Guide" 2nd edition, by Tom White
+   *   1. When ANSI mode is off: Loosely based on rules from "Hadoop: The Definitive Guide" 2nd
+   *      edition, by Tom White
    *
-   *  The implicit conversion rules can be summarized as follows:
-   *     - Any integral numeric type can be implicitly converted to a wider type.
-   *     - All the integral numeric types, FLOAT, and (perhaps surprisingly) STRING can be
-   *       implicitly converted to DOUBLE.
-   *     - TINYINT, SMALLINT, and INT can all be converted to FLOAT.
-   *     - BOOLEAN types cannot be converted to any other type.
-   *     - Any integral numeric type can be implicitly converted to decimal type.
-   *     - two different decimal types will be converted into a wider decimal type for both of them.
-   *     - decimal type will be converted into double if there float or double together with it.
+   * The implicit conversion rules can be summarized as follows:
+   *   - Any integral numeric type can be implicitly converted to a wider type.
+   *   - All the integral numeric types, FLOAT, and (perhaps surprisingly) STRING can be
+   *     implicitly converted to DOUBLE.
+   *   - TINYINT, SMALLINT, and INT can all be converted to FLOAT.
+   *   - BOOLEAN types cannot be converted to any other type.
+   *   - Any integral numeric type can be implicitly converted to decimal type.
+   *   - two different decimal types will be converted into a wider decimal type for both of them.
+   *   - decimal type will be converted into double if there float or double together with it.
    *
-   *  All types when UNION-ed with strings will be promoted to
-   *  strings. Other string conversions are handled by PromoteStrings.
+   * All types when UNION-ed with strings will be promoted to strings. Other string conversions
+   * are handled by PromoteStrings.
    *
-   *  Widening types might result in loss of precision in the following cases:
+   * Widening types might result in loss of precision in the following cases:
    *   - IntegerType to FloatType
    *   - LongType to FloatType
    *   - LongType to DoubleType
    *   - DecimalType to Double
    *
-   * 2. When ANSI mode is on:
-   *  The implicit conversion is determined by the closest common data type from the precedent
-   *  lists from left and right child. See the comments of Object `AnsiTypeCoercion` for details.
+   *   2. When ANSI mode is on: The implicit conversion is determined by the closest common data
+   *      type from the precedent lists from left and right child. See the comments of Object
+   *      `AnsiTypeCoercion` for details.
    */
   object WidenSetOperationTypes extends Rule[LogicalPlan] {
 
@@ -193,7 +167,7 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
       plan resolveOperatorsUpWithNewOutput {
         case s @ Except(left, right, isAll)
             if s.childrenResolved &&
-            left.output.length == right.output.length && !s.resolved =>
+              left.output.length == right.output.length && !s.resolved =>
           val newChildren: Seq[LogicalPlan] = withOrigin(s.origin) {
             buildNewChildrenWithWiderTypes(left :: right :: Nil)
           }
@@ -207,7 +181,7 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
 
         case s @ Intersect(left, right, isAll)
             if s.childrenResolved &&
-            left.output.length == right.output.length && !s.resolved =>
+              left.output.length == right.output.length && !s.resolved =>
           val newChildren: Seq[LogicalPlan] = withOrigin(s.origin) {
             buildNewChildrenWithWiderTypes(left :: right :: Nil)
           }
@@ -221,7 +195,8 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
 
         case s: Union
             if s.childrenResolved && !s.byName &&
-            s.children.forall(_.output.length == s.children.head.output.length) && !s.resolved =>
+              s.children.forall(
+                _.output.length == s.children.head.output.length) && !s.resolved =>
           val newChildren: Seq[LogicalPlan] = withOrigin(s.origin) {
             buildNewChildrenWithWiderTypes(s.children)
           }
@@ -240,8 +215,8 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
           // On the other hand, we cannot cast the anchor type into a wider recursion type, as at
           // this point the UnionLoopRefs inside the recursion are already resolved with the
           // narrower anchor type.
-          val projectList = s.recursion.output.zip(s.anchor.output.map(_.dataType)).map {
-            case (attr, dt) =>
+          val projectList =
+            s.recursion.output.zip(s.anchor.output.map(_.dataType)).map { case (attr, dt) =>
               val widerType = findWiderTypeForTwo(attr.dataType, dt)
               if (widerType.isDefined && widerType.get == dt) {
                 if (attr.dataType != dt) {
@@ -252,7 +227,7 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
               } else {
                 throw cannotMergeIncompatibleDataTypesError(dt, attr.dataType)
               }
-          }
+            }
           s.copy(recursion = Project(projectList, s.recursion)) -> Nil
       }
     }
@@ -306,18 +281,16 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
   }
 
   /**
-   * Handles type coercion for both IN expression with subquery and IN
-   * expressions without subquery.
-   * 1. In the first case, find the common type by comparing the left hand side (LHS)
-   *    expression types against corresponding right hand side (RHS) expression derived
-   *    from the subquery expression's plan output. Inject appropriate casts in the
-   *    LHS and RHS side of IN expression.
-   *
-   * 2. In the second case, convert the value and in list expressions to the
-   *    common operator type by looking at all the argument types and finding
-   *    the closest one that all the arguments can be cast to. When no common
-   *    operator type is found the original expression will be returned and an
-   *    Analysis Exception will be raised at the type checking phase.
+   * Handles type coercion for both IN expression with subquery and IN expressions without
+   * subquery.
+   *   1. In the first case, find the common type by comparing the left hand side (LHS) expression
+   *      types against corresponding right hand side (RHS) expression derived from the subquery
+   *      expression's plan output. Inject appropriate casts in the LHS and RHS side of IN
+   *      expression.
+   *   2. In the second case, convert the value and in list expressions to the common operator
+   *      type by looking at all the argument types and finding the closest one that all the
+   *      arguments can be cast to. When no common operator type is found the original expression
+   *      will be returned and an Analysis Exception will be raised at the type checking phase.
    */
   object InConversion extends TypeCoercionRule {
     override val transform: PartialFunction[Expression, Expression] = {
@@ -353,8 +326,8 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
   }
 
   /**
-   * The DIV operator always returns long-type value.
-   * This rule cast the integral inputs to long type, to avoid overflow during calculation.
+   * The DIV operator always returns long-type value. This rule cast the integral inputs to long
+   * type, to avoid overflow during calculation.
    */
   object IntegralDivision extends TypeCoercionRule {
     override val transform: PartialFunction[Expression, Expression] = {
@@ -396,8 +369,8 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
   /**
    * Coerces the types of [[Concat]] children to expected ones.
    *
-   * If `spark.sql.function.concatBinaryAsString` is false and all children types are binary,
-   * the expected types are binary. Otherwise, the expected ones are strings.
+   * If `spark.sql.function.concatBinaryAsString` is false and all children types are binary, the
+   * expected types are binary. Otherwise, the expected ones are strings.
    */
   object ConcatCoercion extends TypeCoercionRule {
 
@@ -408,8 +381,8 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
   }
 
   /**
-   * Coerces key types of two different [[MapType]] arguments of the [[MapZipWith]] expression
-   * to a common type.
+   * Coerces key types of two different [[MapType]] arguments of the [[MapZipWith]] expression to
+   * a common type.
    */
   object MapZipWithCoercion extends TypeCoercionRule {
     override val transform: PartialFunction[Expression, Expression] = {
@@ -421,8 +394,8 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
   /**
    * Coerces the types of [[Elt]] children to expected ones.
    *
-   * If `spark.sql.function.eltOutputAsString` is false and all children types are binary,
-   * the expected types are binary. Otherwise, the expected ones are strings.
+   * If `spark.sql.function.eltOutputAsString` is false and all children types are binary, the
+   * expected types are binary. Otherwise, the expected ones are strings.
    */
   object EltCoercion extends TypeCoercionRule {
 
@@ -455,9 +428,9 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
   }
 
   /**
-   * A special rule to support string literal as the second argument of date_add/date_sub functions,
-   * to keep backward compatibility as a temporary workaround.
-   * TODO(SPARK-28589): implement ANSI type type coercion and handle string literals.
+   * A special rule to support string literal as the second argument of date_add/date_sub
+   * functions, to keep backward compatibility as a temporary workaround. TODO(SPARK-28589):
+   * implement ANSI type type coercion and handle string literals.
    */
   object StringLiteralCoercion extends TypeCoercionRule {
     override val transform: PartialFunction[Expression, Expression] = {

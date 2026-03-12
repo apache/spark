@@ -24,18 +24,7 @@ import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.analysis.{
-  withPosition,
-  FunctionResolution,
-  GetViewColumnByNameAndOrdinal,
-  TypeCoercionValidation,
-  UnresolvedAlias,
-  UnresolvedAttribute,
-  UnresolvedFunction,
-  UnresolvedOrdinal,
-  UnresolvedStar,
-  UpCastResolution
-}
+import org.apache.spark.sql.catalyst.analysis.{withPosition, FunctionResolution, GetViewColumnByNameAndOrdinal, TypeCoercionValidation, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedOrdinal, UnresolvedStar, UpCastResolution}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LogicalPlan, Sort}
@@ -47,20 +36,23 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
  * The [[ExpressionResolver]] is used by the [[Resolver]] during the analysis to resolve
  * expressions.
  *
- * The functions here generally traverse unresolved [[Expression]] nodes recursively,
- * constructing and returning the resolved [[Expression]] nodes bottom-up.
- * This is the primary entry point for implementing expression analysis,
- * wherein the [[resolve]] method accepts a fully unresolved [[Expression]] and returns
- * a fully resolved [[Expression]] in response with all data types and attribute
- * reference ID assigned for valid requests. This resolver also takes responsibility
- * to detect any errors in the initial SQL query or DataFrame and return appropriate
- * error messages including precise parse locations wherever possible.
+ * The functions here generally traverse unresolved [[Expression]] nodes recursively, constructing
+ * and returning the resolved [[Expression]] nodes bottom-up. This is the primary entry point for
+ * implementing expression analysis, wherein the [[resolve]] method accepts a fully unresolved
+ * [[Expression]] and returns a fully resolved [[Expression]] in response with all data types and
+ * attribute reference ID assigned for valid requests. This resolver also takes responsibility to
+ * detect any errors in the initial SQL query or DataFrame and return appropriate error messages
+ * including precise parse locations wherever possible.
  *
- * @param resolver [[Resolver]] is passed from the parent to resolve other
- *   operators which are nested in expressions.
- * @param scopes [[NameScopeStack]] to resolve the expression tree in the correct scope.
- * @param functionResolution [[FunctionResolution]] to resolve function expressions.
- * @param planLogger [[PlanLogger]] to log expression tree resolution events.
+ * @param resolver
+ *   [[Resolver]] is passed from the parent to resolve other operators which are nested in
+ *   expressions.
+ * @param scopes
+ *   [[NameScopeStack]] to resolve the expression tree in the correct scope.
+ * @param functionResolution
+ *   [[FunctionResolution]] to resolve function expressions.
+ * @param planLogger
+ *   [[PlanLogger]] to log expression tree resolution events.
  */
 class ExpressionResolver(
     resolver: Resolver,
@@ -72,8 +64,8 @@ class ExpressionResolver(
     with CoercesExpressionTypes {
 
   /**
-   * This field stores referenced attributes from the most recently resolved expression tree. It is
-   * populated in [[resolveExpressionTreeInOperatorImpl]] when [[ExpressionTreeTraversal]] is
+   * This field stores referenced attributes from the most recently resolved expression tree. It
+   * is populated in [[resolveExpressionTreeInOperatorImpl]] when [[ExpressionTreeTraversal]] is
    * popped from the stack. It is the responsibility of the parent operator resolver to collect
    * referenced attributes, before this field is overwritten.
    */
@@ -88,8 +80,8 @@ class ExpressionResolver(
   private var lastInvalidExpressionsInTheContextOfOperator: Option[Seq[Expression]] = None
 
   /**
-   * This is a flag indicating that we are re-analyzing a resolved [[OuterReference]] subtree. It's
-   * managed by [[handleResolvedOuterReference]].
+   * This is a flag indicating that we are re-analyzing a resolved [[OuterReference]] subtree.
+   * It's managed by [[handleResolvedOuterReference]].
    */
   private var inOuterReferenceSubtree: Boolean = false
 
@@ -101,16 +93,12 @@ class ExpressionResolver(
    * for each expression tree in the operator tree -> expression tree -> operator tree ->
    * expression tree -> ... chain. Consider this example:
    *
-   * {{{ SELECT (SELECT col1 FROM values(1) LIMIT 1) FROM VALUES(1); }}}
+   * {{{SELECT (SELECT col1 FROM values(1) LIMIT 1) FROM VALUES(1);}}}
    *
    * Would have the following analyzed tree:
    *
-   * Project [...]
-   * :  +- GlobalLimit 1
-   * :     +- LocalLimit 1
-   * :        +- Project [col1]
-   * :           +- LocalRelation [col1]
-   * +- LocalRelation [col1]
+   * Project [...] : +- GlobalLimit 1 : +- LocalLimit 1 : +- Project [col1] : +- LocalRelation
+   * [col1] +- LocalRelation [col1]
    *
    * The stack would contain the following operators during the resolution of the nested
    * operator/expression trees:
@@ -132,8 +120,7 @@ class ExpressionResolver(
     this,
     functionResolution,
     aggregateExpressionResolver,
-    binaryArithmeticResolver
-  )
+    binaryArithmeticResolver)
   private val subqueryExpressionResolver = new SubqueryExpressionResolver(this, resolver)
   private val ordinalResolver = new OrdinalResolver(this)
   private val lcaResolver = new LateralColumnAliasResolver(this)
@@ -200,10 +187,9 @@ class ExpressionResolver(
    * [[ProducesUnresolvedSubtree]]). If not already resolved, method takes an unresolved
    * [[Expression]] and chooses the right `resolve*` method using pattern matching on the
    * `unresolvedExpression` type. This pattern matching enumerates all the expression node types
-   * that are supported by the single-pass analysis.
-   * When developers introduce a new [[Expression]] type to the Catalyst, they should implement
-   * a corresponding `resolve*` method in the [[ExpressionResolver]] and add it to this pattern
-   * match list.
+   * that are supported by the single-pass analysis. When developers introduce a new
+   * [[Expression]] type to the Catalyst, they should implement a corresponding `resolve*` method
+   * in the [[ExpressionResolver]] and add it to this pattern match list.
    *
    * [[resolve]] will be called recursively during the expression tree traversal eventually
    * producing a fully resolved expression subtree or a descriptive error message.
@@ -211,13 +197,13 @@ class ExpressionResolver(
    * [[resolve]] can recursively call `resolver` to resolve nested operators (e.g. scalar
    * subqueries):
    *
-   * {{{ SELECT * FROM VALUES (1), (2) WHERE col1 IN (SELECT 1); }}}
+   * {{{SELECT * FROM VALUES (1), (2) WHERE col1 IN (SELECT 1);}}}
    *
-   * In this case `IN` is an expression and `SELECT 1` is a nested operator tree for which
-   * the [[ExpressionResolver]] would invoke the [[Resolver]].
+   * In this case `IN` is an expression and `SELECT 1` is a nested operator tree for which the
+   * [[ExpressionResolver]] would invoke the [[Resolver]].
    *
-   * This function avoids wrappers like [[CurrentOrigin.withOrigin]] to avoid deep recursion stacks,
-   * because expression trees may be quite deep.
+   * This function avoids wrappers like [[CurrentOrigin.withOrigin]] to avoid deep recursion
+   * stacks, because expression trees may be quite deep.
    */
   override def resolve(unresolvedExpression: Expression): Expression = {
     val previousOrigin = CurrentOrigin.get
@@ -226,8 +212,7 @@ class ExpressionResolver(
     try {
       planLogger.logExpressionTreeResolutionEvent(
         unresolvedExpression,
-        "Unresolved expression tree"
-      )
+        "Unresolved expression tree")
 
       if (tryPopSinglePassSubtreeBoundary(unresolvedExpression)) {
         unresolvedExpression
@@ -311,39 +296,36 @@ class ExpressionResolver(
   def resolveLimitLikeExpression(
       unresolvedLimitLikeExpr: Expression,
       partiallyResolvedLimitLike: LogicalPlan): Expression = {
-    val resolvedLimitLikeExpr = resolveExpressionTreeInOperator(
-      unresolvedLimitLikeExpr,
-      partiallyResolvedLimitLike
-    )
+    val resolvedLimitLikeExpr =
+      resolveExpressionTreeInOperator(unresolvedLimitLikeExpr, partiallyResolvedLimitLike)
     limitLikeExpressionValidator.validateLimitLikeExpr(
       resolvedLimitLikeExpr,
-      partiallyResolvedLimitLike
-    )
+      partiallyResolvedLimitLike)
   }
 
   /**
-   * The [[Project]] list can contain different unresolved expressions before the resolution, which
-   * will be resolved using generic [[resolve]]. However, [[UnresolvedStar]] is a special case,
-   * because it is expanded into a sequence of [[NamedExpression]]s. Because of that this method
-   * returns a sequence and doesn't conform to generic [[resolve]] interface - it's called directly
-   * from the [[Resolver]] during [[Project]] resolution.
+   * The [[Project]] list can contain different unresolved expressions before the resolution,
+   * which will be resolved using generic [[resolve]]. However, [[UnresolvedStar]] is a special
+   * case, because it is expanded into a sequence of [[NamedExpression]]s. Because of that this
+   * method returns a sequence and doesn't conform to generic [[resolve]] interface - it's called
+   * directly from the [[Resolver]] during [[Project]] resolution.
    *
-   * The output sequence can be larger than the input sequence due to [[UnresolvedStar]] expansion.
+   * The output sequence can be larger than the input sequence due to [[UnresolvedStar]]
+   * expansion.
    *
-   * @return The list of resolved expressions along with flags indicating whether the resolved
-   * project list contains aggregate expressions or attributes (encapsulated in
-   * [[ResolvedProjectList]]) which are used during the further resolution of the tree.
+   * @return
+   *   The list of resolved expressions along with flags indicating whether the resolved project
+   *   list contains aggregate expressions or attributes (encapsulated in [[ResolvedProjectList]])
+   *   which are used during the further resolution of the tree.
    *
    * The following query:
    *
-   * {{{ SELECT COUNT(col1), 2 FROM VALUES(1); }}}
+   * {{{SELECT COUNT(col1), 2 FROM VALUES(1);}}}
    *
-   * would have a project list with two expressions: `COUNT(col1)` and `2`. After the resolution it
-   * would return the following result:
-   * ResolvedProjectList(
-   *   expressions = [count(col1) as count(col1), 2 AS 2],
-   *   hasAggregateExpressions = true, // because it contains `count(col1)` in the project list
-   *   hasLateralColumnAlias = false // because there are no lateral column aliases
+   * would have a project list with two expressions: `COUNT(col1)` and `2`. After the resolution
+   * it would return the following result: ResolvedProjectList( expressions = [count(col1) as
+   * count(col1), 2 AS 2], hasAggregateExpressions = true, // because it contains `count(col1)` in
+   * the project list hasLateralColumnAlias = false // because there are no lateral column aliases
    * )
    */
   def resolveProjectList(
@@ -362,11 +344,7 @@ class ExpressionResolver(
 
     val resolvedProjectList = unresolvedProjectListWithStarsExpanded.flatMap { expression =>
       val (resolvedElement, resolvedElementContext) = {
-        resolveExpressionTreeInOperatorImpl(
-          expression,
-          operator,
-          inProjectList = true
-        )
+        resolveExpressionTreeInOperatorImpl(expression, operator, inProjectList = true)
       }
 
       hasAggregateExpressions |= resolvedElementContext.hasAggregateExpressions
@@ -379,8 +357,7 @@ class ExpressionResolver(
       expressions = resolvedProjectList,
       hasAggregateExpressions = hasAggregateExpressions,
       hasLateralColumnAlias = hasLateralColumnAlias,
-      aggregateListAliases = Seq.empty
-    )
+      aggregateListAliases = Seq.empty)
   }
 
   /**
@@ -394,41 +371,36 @@ class ExpressionResolver(
    *
    * Besides resolution, we do the following:
    *   - If there is a [[UnresolvedStar]] in the list we set `hasStar` to true in order to throw
-   *     if there are any ordinals in grouping expressions.
-   *     Example of an invalid query:
-   *     {{{ SELECT * FROM VALUES(1) GROUP BY 1; }}}
-   *
+   *     if there are any ordinals in grouping expressions. Example of an invalid query:
+   *     {{{SELECT * FROM VALUES(1) GROUP BY 1;}}}
    *   - If there is an expression which has aggregate function in its subtree, we add it to the
    *     `expressionsWithAggregateFunctions` list in order to throw if there is any ordinal in
-   *     grouping expressions which references that aggregate expression.
-   *     Example of an invalid query:
-   *     {{{ SELECT count(col1) FROM VALUES(1) GROUP BY 1; }}}
-   *
+   *     grouping expressions which references that aggregate expression. Example of an invalid
+   *     query: {{{SELECT count(col1) FROM VALUES(1) GROUP BY 1;}}}
    *   - If the resolved expression is an [[Alias]], add it to
    *     `scopes.current.topAggregateExpressionsByAliasName` so it can be used for grouping
-   *     expressions resolution, if needed.
-   *     Example of a query with an [[Alias]]:
-   *       1. Implicit alias:
-   *          {{{ SELECT col1 + col2 FROM VALUES(1, 2) GROUP BY `(col1 + col2)`; }}}
-   *       2. Explicit alias:
-   *          {{{ SELECT 1 AS column GROUP BY column; }}}
+   *     expressions resolution, if needed. Example of a query with an [[Alias]]:
+   *     1. Implicit alias: {{{SELECT col1 + col2 FROM VALUES(1, 2) GROUP BY `(col1 + col2)`;}}}
+   *     2. Explicit alias: {{{SELECT 1 AS column GROUP BY column;}}}
    *
    * While resolving the list, we have to keep track of all the expressions that don't have
-   * [[AggregateExpression]]s in their subtrees (`expressionsWithoutAggregates`) and whether any of
-   * aggregate expressions (that are not `expressionsWithoutAggregates`) has attributes in the
+   * [[AggregateExpression]]s in their subtrees (`expressionsWithoutAggregates`) and whether any
+   * of aggregate expressions (that are not `expressionsWithoutAggregates`) has attributes in the
    * subtree outside of [[AggregateExpressions]]s (`hasAttributeOutsideOfAggregateExpressions`).
    * This is used when resolving `GROUP BY ALL` in the [[AggregateResolver.resolveGroupByAll]].
    *
-   * @returns List of resolved expressions, list of expressions that don't have
-   *          [[AggregateExpression]] in their subtrees, if any of resolved expressions have
-   *          attributes in the subtree that are not under an [[AggregateExpression]], if any of
-   *          expressions is a star (`*`) and list of indices of expressions that have aggregate
-   *          functions in the subtree encapsulated in [[ResolvedAggregateExpressions]].
+   * @returns
+   *   List of resolved expressions, list of expressions that don't have [[AggregateExpression]]
+   *   in their subtrees, if any of resolved expressions have attributes in the subtree that are
+   *   not under an [[AggregateExpression]], if any of expressions is a star (`*`) and list of
+   *   indices of expressions that have aggregate functions in the subtree encapsulated in
+   *   [[ResolvedAggregateExpressions]].
    */
   def resolveAggregateExpressions(
       sourceUnresolvedAggregateExpressions: Seq[NamedExpression],
       unresolvedAggregate: Aggregate): ResolvedAggregateExpressions = {
-    val unresolvedAggregateExpressions = tryDrainLazySequences(sourceUnresolvedAggregateExpressions)
+    val unresolvedAggregateExpressions = tryDrainLazySequences(
+      sourceUnresolvedAggregateExpressions)
 
     val expressionsWithoutAggregates = new mutable.ArrayBuffer[NamedExpression]
     val expressionIndexesWithAggregateFunctions = new HashSet[Int]
@@ -449,8 +421,7 @@ class ExpressionResolver(
           val (resolvedElement, resolvedElementContext) = resolveExpressionTreeInOperatorImpl(
             expression,
             unresolvedAggregate,
-            inProjectList = true
-          )
+            inProjectList = true)
 
           hasLateralColumnAlias |= resolvedElementContext.hasLateralColumnAlias
 
@@ -463,7 +434,7 @@ class ExpressionResolver(
           if (resolvedElementContext.hasAggregateExpressions) {
             expressionIndexesWithAggregateFunctions.add(index)
             hasAttributeOutsideOfAggregateExpressions |=
-            resolvedElementContext.hasAttributeOutsideOfAggregateExpressions
+              resolvedElementContext.hasAttributeOutsideOfAggregateExpressions
           } else {
             expressionsWithoutAggregates += resolvedElement.asInstanceOf[NamedExpression]
           }
@@ -477,27 +448,22 @@ class ExpressionResolver(
       hasAttributeOutsideOfAggregateExpressions = hasAttributeOutsideOfAggregateExpressions,
       hasStar = hasStar,
       expressionIndexesWithAggregateFunctions = expressionIndexesWithAggregateFunctions,
-      hasLateralColumnAlias = hasLateralColumnAlias
-    )
+      hasLateralColumnAlias = hasLateralColumnAlias)
   }
 
   /**
    * Resolve grouping expressions in [[Aggregate]] operator.
    *
-   * It's done for every expression using the `resolveExpressionTreeInOperatorImpl`. For cases where
-   * grouping is done based on aliases the resolution is following:
-   *  - If the expression can be resolved using the child's output (`scopes.current.output`),
-   *    resolve it that way.
-   *    Example:
-   *    {{{ SELECT col1 FROM VALUES(1) GROUP BY `col1`; }}}
-   *
-   *  - If not, try to resolve it as a top level [[Alias]] (which was populated during the
-   *    resolution of the aggregate expressions).
-   *    Example:
-   *    1. Group by implicit alias
-   *    {{{ SELECT concat_ws(' ', 'a', 'b') GROUP BY `concat_ws( , a, b)`; }}}
-   *    2. Group by explicit alias
-   *    {{{ SELECT col1 AS column_1 FROM VALUES(1) GROUP BY column_1; }}}
+   * It's done for every expression using the `resolveExpressionTreeInOperatorImpl`. For cases
+   * where grouping is done based on aliases the resolution is following:
+   *   - If the expression can be resolved using the child's output (`scopes.current.output`),
+   *     resolve it that way. Example: {{{SELECT col1 FROM VALUES(1) GROUP BY `col1`;}}}
+   *   - If not, try to resolve it as a top level [[Alias]] (which was populated during the
+   *     resolution of the aggregate expressions). Example:
+   *     1. Group by implicit alias
+   *        {{{SELECT concat_ws(' ', 'a', 'b') GROUP BY `concat_ws( , a, b)`;}}}
+   *     2. Group by explicit alias
+   *        {{{SELECT col1 AS column_1 FROM VALUES(1) GROUP BY column_1;}}}
    *
    * After resolving the expression, remove the top level [[Alias]] if it exists.
    */
@@ -510,8 +476,7 @@ class ExpressionResolver(
       val (resolvedExpression, _) = resolveExpressionTreeInOperatorImpl(
         expression,
         unresolvedAggregate,
-        resolvingGroupingExpressions = true
-      )
+        resolvingGroupingExpressions = true)
 
       resolvedExpression match {
         case alias: Alias =>
@@ -522,21 +487,21 @@ class ExpressionResolver(
   }
 
   /**
-   * Validate if `expression` is under supported operator or not. In case it's not, add `expression`
-   * to the [[ExpressionTreeTraversal.invalidExpressionsInTheContextOfOperator]] list to throw
-   * error later, when [[getLastInvalidExpressionsInTheContextOfOperator]] is called by the
-   * [[Resolver]]. Here, we avoid adding [[AggregateExpressions]] when they are under a [[Sort]] or
-   * [[Filter]] on top of [[Aggregate]] as they are not transformed to attributes at the moment.
-   * Please see [[UnsupportedExpressionInOperatorValidation.isExpressionInUnsupportedOperator]] for
-   * more info.
+   * Validate if `expression` is under supported operator or not. In case it's not, add
+   * `expression` to the [[ExpressionTreeTraversal.invalidExpressionsInTheContextOfOperator]] list
+   * to throw error later, when [[getLastInvalidExpressionsInTheContextOfOperator]] is called by
+   * the [[Resolver]]. Here, we avoid adding [[AggregateExpressions]] when they are under a
+   * [[Sort]] or [[Filter]] on top of [[Aggregate]] as they are not transformed to attributes at
+   * the moment. Please see
+   * [[UnsupportedExpressionInOperatorValidation.isExpressionInUnsupportedOperator]] for more
+   * info.
    */
   def validateExpressionUnderSupportedOperator(expression: Expression): Unit = {
     if (UnsupportedExpressionInOperatorValidation.isExpressionInUnsupportedOperator(
         expression = expression,
         operator = traversals.current.parentOperator,
         isFilterOnTopOfAggregate = traversals.current.isFilterOnTopOfAggregate,
-        isSortOnTopOfAggregate = traversals.current.isSortOnTopOfAggregate
-      )) {
+        isSortOnTopOfAggregate = traversals.current.isSortOnTopOfAggregate)) {
       traversals.current.invalidExpressionsInTheContextOfOperator.add(expression)
     }
   }
@@ -545,21 +510,18 @@ class ExpressionResolver(
       unresolvedExpression: Expression,
       parentOperator: LogicalPlan,
       inProjectList: Boolean = false,
-      resolvingGroupingExpressions: Boolean = false
-  ): (Expression, ExpressionResolutionContext) = {
+      resolvingGroupingExpressions: Boolean = false)
+      : (Expression, ExpressionResolutionContext) = {
     traversals.withNewTraversal(
       parentOperator = parentOperator,
       defaultCollation = resolver.getViewResolver.getDefaultCollation,
       isFilterOnTopOfAggregate = isFilterOnTopOfAggregate(parentOperator),
-      isSortOnTopOfAggregate = isSortOnTopOfAggregate(parentOperator)
-    ) {
+      isSortOnTopOfAggregate = isSortOnTopOfAggregate(parentOperator)) {
       expressionResolutionContextStack.push(
         new ExpressionResolutionContext(
           isRoot = true,
           isTopOfProjectList = inProjectList,
-          resolvingGroupingExpressions = resolvingGroupingExpressions
-        )
-      )
+          resolvingGroupingExpressions = resolvingGroupingExpressions))
 
       try {
         val resolvedExpression = resolve(unresolvedExpression)
@@ -594,10 +556,10 @@ class ExpressionResolver(
     }
 
   /**
-   * [[UnresolvedStar]] resolution relies on the [[NameScope]]'s ability to get the attributes by a
-   * multipart name ([[UnresolvedStar]]'s `target` field):
+   * [[UnresolvedStar]] resolution relies on the [[NameScope]]'s ability to get the attributes by
+   * a multipart name ([[UnresolvedStar]]'s `target` field):
    *
-   * - Star target is defined:
+   *   - Star target is defined:
    *
    * {{{
    * SELECT t.* FROM VALUES (1) AS t;
@@ -605,8 +567,7 @@ class ExpressionResolver(
    * Project [col1#19]
    * }}}
    *
-   *
-   * - Star target is not defined:
+   *   - Star target is not defined:
    *
    * {{{
    * SELECT * FROM (SELECT 1 as col1), (SELECT 2 as col2);
@@ -621,17 +582,15 @@ class ExpressionResolver(
 
   /**
    * [[UnresolvedAttribute]] resolution relies on [[NameScope]] to lookup the attribute by its
-   * multipart name. The resolution can result in three different outcomes which are handled in the
-   * [[NameTarget.pickCandidate]]:
+   * multipart name. The resolution can result in three different outcomes which are handled in
+   * the [[NameTarget.pickCandidate]]:
    *
-   * - No results from the [[NameScope]] mean that the attribute lookup failed as in:
-   *   {{{ SELECT col1 FROM (SELECT 1 as col2); }}}
-   *
-   * - Several results from the [[NameScope]] mean that the reference is ambiguous as in:
-   *   {{{ SELECT col1 FROM (SELECT 1 as col1), (SELECT 2 as col1); }}}
-   *
-   * - Single result from the [[NameScope]] means that the attribute was found as in:
-   *   {{{ SELECT col1 FROM VALUES (1); }}}
+   *   - No results from the [[NameScope]] mean that the attribute lookup failed as in:
+   *     {{{SELECT col1 FROM (SELECT 1 as col2);}}}
+   *   - Several results from the [[NameScope]] mean that the reference is ambiguous as in:
+   *     {{{SELECT col1 FROM (SELECT 1 as col1), (SELECT 2 as col1);}}}
+   *   - Single result from the [[NameScope]] means that the attribute was found as in:
+   *     {{{SELECT col1 FROM VALUES (1);}}}
    *
    * If [[NameTarget.lateralAttributeReference]] is defined, it means that we are resolving an
    * attribute that is a lateral column alias reference. In that case we mark the referenced
@@ -659,17 +618,16 @@ class ExpressionResolver(
         multipartName = unresolvedAttribute.nameParts,
         canLaterallyReferenceColumn = canLaterallyReferenceColumn,
         canReferenceAggregateExpressionAliases = (
-            expressionResolutionContextStack
-              .peek()
-              .resolvingGroupingExpressions && traversals.current.groupByAliases
+          expressionResolutionContextStack
+            .peek()
+            .resolvingGroupingExpressions && traversals.current.groupByAliases
         ),
         canResolveNameByHiddenOutput = canResolveNameByHiddenOutput,
         shouldPreferHiddenOutput = traversals.current.isFilterOnTopOfAggregate,
         canResolveNameByHiddenOutputInSubquery =
           subqueryRegistry.currentScope.aggregateExpressionsExtractor.isDefined,
         canReferenceAggregatedAccessOnlyAttributes =
-          expressionResolutionContextStack.peek().resolvingTreeUnderAggregateExpression
-      )
+          expressionResolutionContextStack.peek().resolvingTreeUnderAggregateExpression)
 
       val candidate = nameTarget.pickCandidate(unresolvedAttribute)
 
@@ -739,8 +697,8 @@ class ExpressionResolver(
    * This is needed to stay compatible with the fixed-point implementation.
    */
   private def coerceRecursiveDataTypes(extractValue: ExtractValue): Expression = {
-    extractValue.transformUp {
-      case field => coerceExpressionTypes(field, traversals.current)
+    extractValue.transformUp { case field =>
+      coerceExpressionTypes(field, traversals.current)
     }
   }
 
@@ -785,8 +743,8 @@ class ExpressionResolver(
    * retain nullability of [[AttributeReference]], if it was true.
    *
    * Without this, a nullable column's nullable field can be actually set as non-nullable, which
-   * can cause illegal optimization (e.g., NULL propagation) and wrong answers. See SPARK-13484 and
-   * SPARK-13801 for the concrete queries of this case.
+   * can cause illegal optimization (e.g., NULL propagation) and wrong answers. See SPARK-13484
+   * and SPARK-13801 for the concrete queries of this case.
    */
   private def handleResolvedAttributeReference(attributeReference: AttributeReference) = {
     val expressionResolutionContext = expressionResolutionContextStack.peek()
@@ -818,8 +776,8 @@ class ExpressionResolver(
 
   /**
    * While handling the resolved [[OuterReference]] we need to set [[inOuterReferenceSubtree]] to
-   * `true` to correctly remap [[AttributeReference]] expression IDs using [[ExpressionIdAssigner]]
-   * using outer expression ID mapping.
+   * `true` to correctly remap [[AttributeReference]] expression IDs using
+   * [[ExpressionIdAssigner]] using outer expression ID mapping.
    */
   private def handleResolvedOuterReference(outerReference: OuterReference): Expression = {
     inOuterReferenceSubtree = true
@@ -831,9 +789,9 @@ class ExpressionResolver(
   }
 
   /**
-   * [[Literal]]s inside a View's body with an explicitly set default collation
-   * should be resolved by modifying their [[Literal.dataType]], replacing all occurrences of
-   * the companion object [[StringType]] with a [[StringType]] with default collation.
+   * [[Literal]]s inside a View's body with an explicitly set default collation should be resolved
+   * by modifying their [[Literal.dataType]], replacing all occurrences of the companion object
+   * [[StringType]] with a [[StringType]] with default collation.
    *
    * In other cases, no specific resolution logic is required.
    */
@@ -929,8 +887,7 @@ class ExpressionResolver(
         getViewColumnByNameAndOrdinal.colName,
         getViewColumnByNameAndOrdinal.expectedNumCandidates,
         candidates,
-        getViewColumnByNameAndOrdinal.viewDDL
-      )
+        getViewColumnByNameAndOrdinal.viewDDL)
     }
 
     candidates(getViewColumnByNameAndOrdinal.ordinal)
@@ -940,7 +897,8 @@ class ExpressionResolver(
    * Resolves [[UpCast]] by reusing [[UpCastResolution.resolve]].
    */
   private def resolveUpCast(unresolvedUpCast: UpCast): Expression = {
-    val upCastWithResolvedChildren = unresolvedUpCast.copy(child = resolve(unresolvedUpCast.child))
+    val upCastWithResolvedChildren =
+      unresolvedUpCast.copy(child = resolve(unresolvedUpCast.child))
 
     UpCastResolution.resolve(upCastWithResolvedChildren) match {
       case timezoneAwareExpression: TimeZoneAwareExpression =>
@@ -955,8 +913,7 @@ class ExpressionResolver(
    */
   private def resolveCollation(unresolvedCollation: UnresolvedCollation): Expression = {
     ResolvedCollation(
-      CollationFactory.resolveFullyQualifiedName(unresolvedCollation.collationName.toArray)
-    )
+      CollationFactory.resolveFullyQualifiedName(unresolvedCollation.collationName.toArray))
   }
 
   private def pushResolutionContext(): Unit = {
@@ -1024,22 +981,20 @@ class ExpressionResolver(
     val expressionWithResolvedChildren = withResolvedChildren(expression, resolve _)
     coerceExpressionTypes(
       expression = expressionWithResolvedChildren,
-      expressionTreeTraversal = traversals.current
-    )
+      expressionTreeTraversal = traversals.current)
   }
 
   /**
    * Resolves [[Expression]] by calling [[timezoneAwareExpressionResolver]] to resolve
-   * expression's children and apply timezone if needed. Applies generic type coercion
-   * rules to the result.
+   * expression's children and apply timezone if needed. Applies generic type coercion rules to
+   * the result.
    */
   private def resolveExpressionGenericallyWithTimezoneWithTypeCoercion(
       timezoneAwareExpression: TimeZoneAwareExpression): Expression = {
     val expressionWithTimezone = timezoneAwareExpressionResolver.resolve(timezoneAwareExpression)
     coerceExpressionTypes(
       expression = expressionWithTimezone,
-      expressionTreeTraversal = traversals.current
-    )
+      expressionTreeTraversal = traversals.current)
   }
 
   private def validateResolvedExpressionGenerically(resolvedExpression: Expression): Unit = {
@@ -1062,9 +1017,8 @@ class ExpressionResolver(
    * Transform list to a non-lazy one. This is needed in order to enforce determinism in
    * single-pass resolver. Example:
    *
-   *   val groupByColumns = LazyList(col("key"))
-   *   val df = Seq((1, 2)).toDF("key", "value")
-   *   df.groupBy(groupByCols: _*)
+   * val groupByColumns = LazyList(col("key")) val df = Seq((1, 2)).toDF("key", "value")
+   * df.groupBy(groupByCols: _*)
    *
    * For this case, it is necessary to transform `LazyList` (lazy object) to `List` (non-lazy).
    * Other object which has to be transformed is `Stream`.
@@ -1079,23 +1033,21 @@ class ExpressionResolver(
     result
   }
 
-  private def throwUnsupportedSinglePassAnalyzerFeature(unresolvedExpression: Expression): Nothing =
+  private def throwUnsupportedSinglePassAnalyzerFeature(
+      unresolvedExpression: Expression): Nothing =
     throw QueryCompilationErrors.unsupportedSinglePassAnalyzerFeature(
-      s"${unresolvedExpression.getClass} expression resolution"
-    )
+      s"${unresolvedExpression.getClass} expression resolution")
 
   private def throwSinglePassFailedToResolveExpression(expression: Expression): Nothing =
     throw SparkException.internalError(
       msg = s"Failed to resolve expression in single-pass: ${toSQLExpr(expression)}",
       context = expression.origin.getQueryContext,
-      summary = expression.origin.context.summary()
-    )
+      summary = expression.origin.context.summary())
 
   private def throwFailedToResolveRuntimeReplaceableExpression(
       runtimeReplaceable: RuntimeReplaceable) = {
     throw SparkException.internalError(
       s"Cannot resolve the runtime replaceable expression ${toSQLExpr(runtimeReplaceable)}. " +
-      s"The replacement is unresolved: ${toSQLExpr(runtimeReplaceable.replacement)}."
-    )
+        s"The replacement is unresolved: ${toSQLExpr(runtimeReplaceable.replacement)}.")
   }
 }

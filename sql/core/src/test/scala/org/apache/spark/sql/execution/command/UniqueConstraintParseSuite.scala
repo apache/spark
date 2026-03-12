@@ -29,8 +29,7 @@ class UniqueConstraintParseSuite extends ConstraintParseSuiteBase {
   test("Create table with unnamed unique constraint") {
     Seq(
       "CREATE TABLE t (a INT, b STRING, UNIQUE (a)) USING parquet",
-      "CREATE TABLE t (a INT UNIQUE, b STRING) USING parquet"
-    ).foreach { sql =>
+      "CREATE TABLE t (a INT UNIQUE, b STRING) USING parquet").foreach { sql =>
       val constraint = UniqueConstraint(columns = Seq("a"), tableName = "t")
       val constraints = Seq(constraint)
       verifyConstraints(sql, constraints)
@@ -40,38 +39,32 @@ class UniqueConstraintParseSuite extends ConstraintParseSuiteBase {
   test("Create table with composite unique constraint - table level") {
     Seq(
       ("CREATE TABLE t (a INT, b STRING, UNIQUE (a, b)) USING parquet", Seq("a", "b")),
-      ("CREATE TABLE t (a INT, b STRING, UNIQUE (b, a)) USING parquet", Seq("b", "a"))
-    ).foreach { case (sql, columns) =>
-      val constraint = UniqueConstraint(columns = columns, tableName = "t")
-      val constraints = Seq(constraint)
-      verifyConstraints(sql, constraints)
+      ("CREATE TABLE t (a INT, b STRING, UNIQUE (b, a)) USING parquet", Seq("b", "a"))).foreach {
+      case (sql, columns) =>
+        val constraint = UniqueConstraint(columns = columns, tableName = "t")
+        val constraints = Seq(constraint)
+        verifyConstraints(sql, constraints)
     }
   }
 
   test("Create table with multiple unique constraints") {
     Seq(
       "CREATE TABLE t (a INT UNIQUE, b STRING, UNIQUE (b)) USING parquet",
-      "CREATE TABLE t (a INT, UNIQUE (a), b STRING UNIQUE) USING parquet"
-    ).foreach { sql =>
+      "CREATE TABLE t (a INT, UNIQUE (a), b STRING UNIQUE) USING parquet").foreach { sql =>
       val constraints = Seq(
         UniqueConstraint(columns = Seq("a"), tableName = "t"),
-        UniqueConstraint(columns = Seq("b"), tableName = "t")
-      )
+        UniqueConstraint(columns = Seq("b"), tableName = "t"))
       verifyConstraints(sql, constraints)
     }
   }
 
   test("Create table with named unique constraint - table level") {
     val sql = "CREATE TABLE t (a INT, b STRING, CONSTRAINT uk1 UNIQUE (a)) USING parquet"
-    val constraint = UniqueConstraint(
-      columns = Seq("a"),
-      userProvidedName = "uk1",
-      tableName = "t"
-    )
+    val constraint =
+      UniqueConstraint(columns = Seq("a"), userProvidedName = "uk1", tableName = "t")
     val constraints = Seq(constraint)
     verifyConstraints(sql, constraints)
   }
-
 
   test("Add unnamed unique constraint") {
     val sql =
@@ -94,8 +87,7 @@ class UniqueConstraintParseSuite extends ConstraintParseSuiteBase {
   test("Replace table with unnamed unique constraint") {
     Seq(
       "REPLACE TABLE t (a INT, b STRING, UNIQUE (a)) USING parquet",
-      "REPLACE TABLE t (a INT UNIQUE, b STRING) USING parquet"
-    ).foreach { sql =>
+      "REPLACE TABLE t (a INT UNIQUE, b STRING) USING parquet").foreach { sql =>
       val constraints = Seq(UniqueConstraint(columns = Seq("a"), tableName = "t"))
       verifyConstraints(sql, constraints, isCreateTable = false)
     }
@@ -104,18 +96,17 @@ class UniqueConstraintParseSuite extends ConstraintParseSuiteBase {
   test("Replace table with composite unique constraint - table level") {
     Seq(
       ("REPLACE TABLE t (a INT, b STRING, UNIQUE (a, b)) USING parquet", Seq("a", "b")),
-      ("REPLACE TABLE t (a INT, b STRING, UNIQUE (b, a)) USING parquet", Seq("b", "a"))
-    ).foreach { case (sql, columns) =>
-      val constraints = Seq(UniqueConstraint(columns = columns, tableName = "t"))
-      verifyConstraints(sql, constraints, isCreateTable = false)
+      ("REPLACE TABLE t (a INT, b STRING, UNIQUE (b, a)) USING parquet", Seq("b", "a"))).foreach {
+      case (sql, columns) =>
+        val constraints = Seq(UniqueConstraint(columns = columns, tableName = "t"))
+        verifyConstraints(sql, constraints, isCreateTable = false)
     }
   }
 
   test("Replace table with multiple unique constraints") {
     Seq(
       "REPLACE TABLE t (a INT UNIQUE, b STRING, UNIQUE (b)) USING parquet",
-      "REPLACE TABLE t (a INT, UNIQUE (a), b STRING UNIQUE) USING parquet"
-    ).foreach { sql =>
+      "REPLACE TABLE t (a INT, UNIQUE (a), b STRING UNIQUE) USING parquet").foreach { sql =>
       val constraints = Seq(
         UniqueConstraint(columns = Seq("a"), tableName = "t"),
         UniqueConstraint(columns = Seq("b"), tableName = "t"))
@@ -125,32 +116,23 @@ class UniqueConstraintParseSuite extends ConstraintParseSuiteBase {
 
   test("Replace table with named unique constraint - column level") {
     val sql = "REPLACE TABLE t (a INT, b STRING, CONSTRAINT uk1 UNIQUE (a)) USING parquet"
-    val constraint = UniqueConstraint(
-      columns = Seq("a"),
-      userProvidedName = "uk1",
-      tableName = "t"
-    )
+    val constraint =
+      UniqueConstraint(columns = Seq("a"), userProvidedName = "uk1", tableName = "t")
     val constraints = Seq(constraint)
     verifyConstraints(sql, constraints, isCreateTable = false)
   }
 
   test("Create table with unique constraint - column level") {
     val sql = "CREATE TABLE t (a INT UNIQUE, b STRING) USING parquet"
-    val constraint = UniqueConstraint(
-      columns = Seq("a"),
-      tableName = "t"
-    )
+    val constraint = UniqueConstraint(columns = Seq("a"), tableName = "t")
     val constraints = Seq(constraint)
     verifyConstraints(sql, constraints)
   }
 
   test("Create table with named unique constraint - column level") {
     val sql = "CREATE TABLE t (a INT CONSTRAINT uk1 UNIQUE, b STRING) USING parquet"
-    val constraint = UniqueConstraint(
-      columns = Seq("a"),
-      userProvidedName = "uk1",
-      tableName = "t"
-    )
+    val constraint =
+      UniqueConstraint(columns = Seq("a"), userProvidedName = "uk1", tableName = "t")
     val constraints = Seq(constraint)
     verifyConstraints(sql, constraints)
   }
@@ -163,14 +145,11 @@ class UniqueConstraintParseSuite extends ConstraintParseSuiteBase {
            |""".stripMargin
       val parsed = parsePlan(sql)
       val expected = AddConstraint(
-        UnresolvedTable(
-          Seq("a", "b", "c"),
-          "ALTER TABLE ... ADD CONSTRAINT"),
+        UnresolvedTable(Seq("a", "b", "c"), "ALTER TABLE ... ADD CONSTRAINT"),
         UniqueConstraint(
           userProvidedName = expectedName,
           tableName = "c",
-          columns = Seq("email", "username")
-        ))
+          columns = Seq("email", "username")))
       comparePlans(parsed, expected)
     }
   }
@@ -205,15 +184,12 @@ class UniqueConstraintParseSuite extends ConstraintParseSuiteBase {
            |""".stripMargin
       val parsed = parsePlan(sql)
       val expected = AddConstraint(
-        UnresolvedTable(
-          Seq("a", "b", "c"),
-          "ALTER TABLE ... ADD CONSTRAINT"),
+        UnresolvedTable(Seq("a", "b", "c"), "ALTER TABLE ... ADD CONSTRAINT"),
         UniqueConstraint(
           userProvidedName = "uk1",
           columns = Seq("email"),
           tableName = "c",
-          userProvidedCharacteristic = characteristic
-        ))
+          userProvidedCharacteristic = characteristic))
       comparePlans(parsed, expected)
     }
   }
@@ -229,8 +205,7 @@ class UniqueConstraintParseSuite extends ConstraintParseSuiteBase {
       val expectedContext = ExpectedContext(
         fragment = s"CONSTRAINT uk1 UNIQUE (email) $characteristic1 $characteristic2",
         start = 22,
-        stop = 52 + characteristic1.length + characteristic2.length
-      )
+        stop = 52 + characteristic1.length + characteristic2.length)
       checkError(
         exception = e,
         condition = "INVALID_CONSTRAINT_CHARACTERISTICS",
@@ -254,8 +229,7 @@ class UniqueConstraintParseSuite extends ConstraintParseSuiteBase {
       val expectedContext = ExpectedContext(
         fragment = s"UNIQUE $characteristic",
         start = 23,
-        stop = 29 + characteristic.length
-      )
+        stop = 29 + characteristic.length)
       checkError(
         exception = error,
         condition = "UNSUPPORTED_CONSTRAINT_CHARACTERISTIC",
@@ -279,8 +253,7 @@ class UniqueConstraintParseSuite extends ConstraintParseSuiteBase {
       val expectedContext = ExpectedContext(
         fragment = s"CONSTRAINT uk1 UNIQUE $characteristic",
         start = 23,
-        stop = 44 + characteristic.length
-      )
+        stop = 44 + characteristic.length)
       checkError(
         exception = error,
         condition = "UNSUPPORTED_CONSTRAINT_CHARACTERISTIC",
@@ -304,8 +277,7 @@ class UniqueConstraintParseSuite extends ConstraintParseSuiteBase {
       val expectedContext = ExpectedContext(
         fragment = s"CONSTRAINT uni UNIQUE (id) $characteristic",
         start = 22,
-        stop = 48 + characteristic.length
-      )
+        stop = 48 + characteristic.length)
       checkError(
         exception = error,
         condition = "UNSUPPORTED_CONSTRAINT_CHARACTERISTIC",

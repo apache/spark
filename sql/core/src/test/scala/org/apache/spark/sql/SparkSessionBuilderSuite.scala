@@ -48,15 +48,13 @@ class SparkSessionBuilderSuite extends SparkFunSuite with Eventually {
   }
 
   test("SPARK-34087: Fix memory leak of ExecutionListenerBus") {
-    val spark = SparkSession.builder()
+    val spark = SparkSession
+      .builder()
       .master("local")
       .getOrCreate()
 
     @inline def listenersNum(): Int = {
-      spark.sparkContext
-        .listenerBus
-        .listeners
-        .asScala
+      spark.sparkContext.listenerBus.listeners.asScala
         .count(_.isInstanceOf[ExecutionListenerBus])
     }
 
@@ -76,7 +74,8 @@ class SparkSessionBuilderSuite extends SparkFunSuite with Eventually {
   }
 
   test("create with config options and propagate them to SparkContext and SparkSession") {
-    val session = SparkSession.builder()
+    val session = SparkSession
+      .builder()
       .master("local")
       .config(UI_ENABLED.key, value = false)
       .config("some-config", "v2")
@@ -109,7 +108,8 @@ class SparkSessionBuilderSuite extends SparkFunSuite with Eventually {
   }
 
   test("config options are propagated to existing SparkSession") {
-    val session1 = SparkSession.builder().master("local").config("spark-config1", "a").getOrCreate()
+    val session1 =
+      SparkSession.builder().master("local").config("spark-config1", "a").getOrCreate()
     assert(session1.conf.get("spark-config1") == "a")
     val session2 = SparkSession.builder().config("spark-config1", "b").getOrCreate()
     assert(session1 == session2)
@@ -163,7 +163,8 @@ class SparkSessionBuilderSuite extends SparkFunSuite with Eventually {
   test("create SparkContext first then pass context to SparkSession") {
     val conf = new SparkConf().setAppName("test").setMaster("local").set("key1", "value1")
     val newSC = new SparkContext(conf)
-    val session = SparkSession.builder().sparkContext(newSC).config("key2", "value2").getOrCreate()
+    val session =
+      SparkSession.builder().sparkContext(newSC).config("key2", "value2").getOrCreate()
     assert(session.conf.get("key1") == "value1")
     assert(session.conf.get("key2") == "value2")
     assert(session.sparkContext == newSC)
@@ -192,9 +193,11 @@ class SparkSessionBuilderSuite extends SparkFunSuite with Eventually {
     }
   }
 
-  test("SPARK-31234: RESET command will not change static sql configs and " +
-    "spark context conf values in SessionState") {
-    val session = SparkSession.builder()
+  test(
+    "SPARK-31234: RESET command will not change static sql configs and " +
+      "spark context conf values in SessionState") {
+    val session = SparkSession
+      .builder()
       .master("local")
       .config(GLOBAL_TEMP_DATABASE.key, value = "globalTempDB-SPARK-31234")
       .config("spark.app.name", "test-app-SPARK-31234")
@@ -232,9 +235,11 @@ class SparkSessionBuilderSuite extends SparkFunSuite with Eventually {
     assert(postFirstCreation == postSecondCreation)
   }
 
-  test("SPARK-31532: should not propagate static sql configs to the existing" +
-    " active/default SparkSession") {
-    val session = SparkSession.builder()
+  test(
+    "SPARK-31532: should not propagate static sql configs to the existing" +
+      " active/default SparkSession") {
+    val session = SparkSession
+      .builder()
       .master("local")
       .config(GLOBAL_TEMP_DATABASE.key, value = "globalTempDB-SPARK-31532")
       .config("spark.app.name", "test-app-SPARK-31532")
@@ -313,8 +318,12 @@ class SparkSessionBuilderSuite extends SparkFunSuite with Eventually {
     val session = SparkSession.builder().master("local-cluster[3, 1, 1024]").getOrCreate()
 
     session.range(1).foreach { v =>
-      SparkSession.builder().master("local")
-        .config(EXECUTOR_ALLOW_SPARK_CONTEXT.key, true).getOrCreate().stop()
+      SparkSession
+        .builder()
+        .master("local")
+        .config(EXECUTOR_ALLOW_SPARK_CONTEXT.key, true)
+        .getOrCreate()
+        .stop()
       ()
     }
   }
@@ -332,7 +341,8 @@ class SparkSessionBuilderSuite extends SparkFunSuite with Eventually {
 
     // This creates an active SparkContext, which will be picked up by the session below.
     new SparkContext(conf)
-    val spark = SparkSession.builder()
+    val spark = SparkSession
+      .builder()
       .config(wh, "./data2")
       .config(td, "alice")
       .config(custom, "kyao")
@@ -342,31 +352,41 @@ class SparkSessionBuilderSuite extends SparkFunSuite with Eventually {
     // newly specified values
     val sharedWH = spark.sharedState.conf.get(wh)
     val sharedTD = spark.sharedState.conf.get(td)
-    assert(sharedWH contains "data2",
+    assert(
+      sharedWH contains "data2",
       "The warehouse dir in shared state should be determined by the 1st created spark session")
-    assert(sharedTD === "alice",
+    assert(
+      sharedTD === "alice",
       "Static sql configs in shared state should be determined by the 1st created spark session")
-    assert(spark.sharedState.conf.getOption(custom).isEmpty,
+    assert(
+      spark.sharedState.conf.getOption(custom).isEmpty,
       "Dynamic sql configs is session specific")
 
-    assert(spark.conf.get(wh) contains sharedWH,
+    assert(
+      spark.conf.get(wh) contains sharedWH,
       "The warehouse dir in session conf and shared state conf should be consistent")
-    assert(spark.conf.get(td) === sharedTD,
+    assert(
+      spark.conf.get(td) === sharedTD,
       "Static sql configs in session conf and shared state conf should be consistent")
     assert(spark.conf.get(custom) === "kyao", "Dynamic sql configs is session specific")
 
     spark.sql("RESET")
 
-    assert(spark.conf.get(wh) contains sharedWH,
+    assert(
+      spark.conf.get(wh) contains sharedWH,
       "The warehouse dir in shared state should be respect after RESET")
-    assert(spark.conf.get(td) === sharedTD,
+    assert(
+      spark.conf.get(td) === sharedTD,
       "Static sql configs in shared state should be respect after RESET")
-    assert(spark.conf.get(custom) === "kyao",
+    assert(
+      spark.conf.get(custom) === "kyao",
       "Dynamic sql configs in session initial map should be respect after RESET")
 
-    val spark2 = SparkSession.builder()
+    val spark2 = SparkSession
+      .builder()
       .config(wh, "./data3")
-      .config(custom, "kyaoo").getOrCreate()
+      .config(custom, "kyaoo")
+      .getOrCreate()
     assert(spark2.conf.get(wh) contains sharedWH)
     assert(spark2.conf.get(td) === sharedTD)
     assert(spark2.conf.get(custom) === "kyaoo")
@@ -377,7 +397,8 @@ class SparkSessionBuilderSuite extends SparkFunSuite with Eventually {
     val td = "spark.sql.globalTempDatabase"
     val custom = "spark.sql.custom"
     val spark = ThreadUtils.runInNewThread("new session 0", false) {
-      SparkSession.builder()
+      SparkSession
+        .builder()
         .master("local")
         .config(wh, "./data0")
         .config(td, "bob")
@@ -388,11 +409,14 @@ class SparkSessionBuilderSuite extends SparkFunSuite with Eventually {
     spark.sql(s"SET $custom=c1")
     assert(spark.conf.get(custom) === "c1")
     spark.sql("RESET")
-    assert(spark.conf.get(wh) contains "data0",
+    assert(
+      spark.conf.get(wh) contains "data0",
       "The warehouse dir in shared state should be respect after RESET")
-    assert(spark.conf.get(td) === "bob",
+    assert(
+      spark.conf.get(td) === "bob",
       "Static sql configs in shared state should be respect after RESET")
-    assert(spark.conf.get(custom) === "c0",
+    assert(
+      spark.conf.get(custom) === "c0",
       "Dynamic sql configs in shared state should be respect after RESET")
 
     val spark1 = ThreadUtils.runInNewThread("new session 1", false) {
@@ -405,7 +429,8 @@ class SparkSessionBuilderSuite extends SparkFunSuite with Eventually {
     // the new static will take effect.
     SparkSession.clearDefaultSession()
     val spark2 = ThreadUtils.runInNewThread("new session 2", false) {
-      SparkSession.builder()
+      SparkSession
+        .builder()
         .master("local")
         .config(wh, "./data1")
         .config(td, "alice")
@@ -427,7 +452,8 @@ class SparkSessionBuilderSuite extends SparkFunSuite with Eventually {
     val msg = "Not allowing to set hive.metastore.warehouse.dir in SparkSession's options"
     val logAppender = new LogAppender(msg)
     withLogAppender(logAppender) {
-      SparkSession.builder()
+      SparkSession
+        .builder()
         .master("local")
         .config("hive.metastore.warehouse.dir", "any")
         .getOrCreate()
@@ -440,7 +466,8 @@ class SparkSessionBuilderSuite extends SparkFunSuite with Eventually {
     val msg = "Not allowing to set hive.metastore.warehouse.dir in SparkSession's options"
     val logAppender = new LogAppender(msg)
     withLogAppender(logAppender) {
-      SparkSession.builder()
+      SparkSession
+        .builder()
         .master("local")
         .config("spark.sql.warehouse.dir", "any")
         .getOrCreate()
@@ -453,7 +480,8 @@ class SparkSessionBuilderSuite extends SparkFunSuite with Eventually {
     test(s"SPARK-34558: warehouse path ($pathStr) should be qualified for spark/hadoop conf") {
       val path = new Path(pathStr)
       val conf = new SparkConf().set(WAREHOUSE_PATH, pathStr)
-      val session = SparkSession.builder()
+      val session = SparkSession
+        .builder()
         .master("local")
         .config(conf)
         .getOrCreate()
@@ -470,8 +498,9 @@ class SparkSessionBuilderSuite extends SparkFunSuite with Eventually {
 
       // spark context configs
       assert(session.sparkContext.conf.get(WAREHOUSE_PATH) === expected)
-      assert(session.sparkContext.hadoopConfiguration.get("hive.metastore.warehouse.dir") ===
-        expected)
+      assert(
+        session.sparkContext.hadoopConfiguration.get("hive.metastore.warehouse.dir") ===
+          expected)
     }
   }
 
@@ -480,7 +509,8 @@ class SparkSessionBuilderSuite extends SparkFunSuite with Eventually {
     val logAppender = new LogAppender(msg)
     withLogAppender(logAppender) {
       val session =
-        SparkSession.builder()
+        SparkSession
+          .builder()
           .master("local")
           .config(WAREHOUSE_PATH.key, "unknown:///mydir")
           .getOrCreate()
@@ -496,7 +526,8 @@ class SparkSessionBuilderSuite extends SparkFunSuite with Eventually {
     val logAppender = new LogAppender
     logAppender.setThreshold(Level.DEBUG)
     withLogAppender(logAppender, level = Some(Level.DEBUG)) {
-      SparkSession.builder()
+      SparkSession
+        .builder()
         .config("spark.sql.warehouse.dir", "2")
         .config("spark.abc", "abcb")
         .config("spark.abcd", "abcb4")
@@ -505,11 +536,11 @@ class SparkSessionBuilderSuite extends SparkFunSuite with Eventually {
 
     val logs = logAppender.loggingEvents.map(_.getMessage.getFormattedMessage)
     Seq(
-        "Ignored static SQL configurations",
-        "spark.sql.warehouse.dir=2",
-        "Configurations that might not take effect",
-        "spark.abcd=abcb4",
-        "spark.abc=abcb").foreach { msg =>
+      "Ignored static SQL configurations",
+      "spark.sql.warehouse.dir=2",
+      "Configurations that might not take effect",
+      "spark.abcd=abcb4",
+      "spark.abc=abcb").foreach { msg =>
       assert(logs.exists(_.contains(msg)), s"$msg did not exist in:\n${logs.mkString("\n")}")
     }
   }
@@ -560,12 +591,10 @@ class SparkSessionBuilderSuite extends SparkFunSuite with Eventually {
     }
 
     val logs = logAppender.loggingEvents.map(_.getMessage.getFormattedMessage)
-    Seq(
-      "spark.buffer.size=1234",
-      "spark.sql.source.abc=abc",
-      "spark.sql.warehouse.dir=xyz").foreach { msg =>
-      assert(logs.exists(_.contains(msg)), s"$msg did not exist in:\n${logs.mkString("\n")}")
-    }
+    Seq("spark.buffer.size=1234", "spark.sql.source.abc=abc", "spark.sql.warehouse.dir=xyz")
+      .foreach { msg =>
+        assert(logs.exists(_.contains(msg)), s"$msg did not exist in:\n${logs.mkString("\n")}")
+      }
 
     assert(
       !logs.exists(_.contains("spark.sql.ansi.enabled\"")),
@@ -573,14 +602,11 @@ class SparkSessionBuilderSuite extends SparkFunSuite with Eventually {
   }
 
   test("SPARK-40163: SparkSession.config(Map)") {
-    val map: Map[String, Any] = Map(
-      "string" -> "",
-      "boolean" -> true,
-      "double" -> 0.0,
-      "long" -> 0L
-    )
+    val map: Map[String, Any] =
+      Map("string" -> "", "boolean" -> true, "double" -> 0.0, "long" -> 0L)
 
-    val session = SparkSession.builder()
+    val session = SparkSession
+      .builder()
       .master("local")
       .config(map)
       .getOrCreate()
@@ -591,7 +617,8 @@ class SparkSessionBuilderSuite extends SparkFunSuite with Eventually {
   }
 
   test("SPARK-50222: Support spark.submit.appName") {
-    val session = SparkSession.builder()
+    val session = SparkSession
+      .builder()
       .master("local")
       .appName("appName")
       .config("spark.submit.appName", "newAppName")

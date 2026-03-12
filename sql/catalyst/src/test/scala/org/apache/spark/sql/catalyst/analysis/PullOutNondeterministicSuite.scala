@@ -34,23 +34,18 @@ class PullOutNondeterministicSuite extends AnalysisTest {
   private lazy val rndref = rnd.toAttribute
 
   test("no-op on filter") {
-    checkAnalysis(
-      r.where(Rand(10) > Literal(1.0)),
-      r.where(Rand(10) > Literal(1.0))
-    )
+    checkAnalysis(r.where(Rand(10) > Literal(1.0)), r.where(Rand(10) > Literal(1.0)))
   }
 
   test("sort") {
     checkAnalysis(
       r.sortBy(SortOrder(Rand(10), Ascending)),
-      r.select(a, b, rnd).sortBy(SortOrder(rndref, Ascending)).select(a, b)
-    )
+      r.select(a, b, rnd).sortBy(SortOrder(rndref, Ascending)).select(a, b))
   }
 
   test("aggregate") {
     checkAnalysis(
       r.groupBy(Rand(10))(Rand(10).as("rnd")),
-      r.select(a, b, rnd).groupBy(rndref)(rndref.as("rnd"))
-    )
+      r.select(a, b, rnd).groupBy(rndref)(rndref.as("rnd")))
   }
 }

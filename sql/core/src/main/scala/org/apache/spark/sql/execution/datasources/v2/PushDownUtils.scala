@@ -34,10 +34,12 @@ import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.collection.Utils
 
 object PushDownUtils {
+
   /**
    * Pushes down filters to the data source reader
    *
-   * @return pushed filter and post-scan filters.
+   * @return
+   *   pushed filter and post-scan filters.
    */
   def pushFilters(scanBuilder: ScanBuilder, filters: Seq[Expression])
       : (Either[Seq[sources.Filter], Seq[Predicate]], Seq[Expression]) = {
@@ -54,7 +56,9 @@ object PushDownUtils {
 
         for (filterExpr <- filters) {
           val translated =
-            DataSourceStrategy.translateFilterWithMapping(filterExpr, Some(translatedFilterToExpr),
+            DataSourceStrategy.translateFilterWithMapping(
+              filterExpr,
+              Some(translatedFilterToExpr),
               nestedPredicatePushdownEnabled = true)
           if (translated.isEmpty) {
             untranslatableExprs += filterExpr
@@ -72,7 +76,8 @@ object PushDownUtils {
         // Normally translated filters (postScanFilters) are simple filters that can be evaluated
         // faster, while the untranslated filters are complicated filters that take more time to
         // evaluate, so we want to evaluate the postScanFilters filters first.
-        (Left(r.pushedFilters().toImmutableArraySeq),
+        (
+          Left(r.pushedFilters().toImmutableArraySeq),
           (postScanFilters ++ untranslatableExprs).toImmutableArraySeq)
 
       case r: SupportsPushDownV2Filters =>
@@ -88,7 +93,8 @@ object PushDownUtils {
         for (filterExpr <- filters) {
           val translated =
             DataSourceV2Strategy.translateFilterV2WithMapping(
-              filterExpr, Some(translatedFilterToExpr))
+              filterExpr,
+              Some(translatedFilterToExpr))
           if (translated.isEmpty) {
             untranslatableExprs += filterExpr
           } else {
@@ -105,7 +111,8 @@ object PushDownUtils {
         // Normally translated filters (postScanFilters) are simple filters that can be evaluated
         // faster, while the untranslated filters are complicated filters that take more time to
         // evaluate, so we want to evaluate the postScanFilters filters first.
-        (Right(r.pushedPredicates.toImmutableArraySeq),
+        (
+          Right(r.pushedPredicates.toImmutableArraySeq),
           (postScanFilters ++ untranslatableExprs).toImmutableArraySeq)
 
       case r: SupportsPushDownCatalystFilters =>
@@ -122,7 +129,10 @@ object PushDownUtils {
     scanBuilder match {
       case s: SupportsPushDownTableSample =>
         s.pushTableSample(
-          sample.lowerBound, sample.upperBound, sample.withReplacement, sample.seed)
+          sample.lowerBound,
+          sample.upperBound,
+          sample.withReplacement,
+          sample.seed)
       case _ => false
     }
   }
@@ -130,9 +140,10 @@ object PushDownUtils {
   /**
    * Pushes down LIMIT to the data source Scan.
    *
-   * @return the tuple of Boolean. The first Boolean value represents whether to push down, and
-   *         the second Boolean value represents whether to push down partially, which means
-   *         Spark will keep the Limit and do it again.
+   * @return
+   *   the tuple of Boolean. The first Boolean value represents whether to push down, and the
+   *   second Boolean value represents whether to push down partially, which means Spark will keep
+   *   the Limit and do it again.
    */
   def pushLimit(scanBuilder: ScanBuilder, limit: Int): (Boolean, Boolean) = {
     scanBuilder match {
@@ -145,7 +156,8 @@ object PushDownUtils {
   /**
    * Pushes down OFFSET to the data source Scan.
    *
-   * @return the Boolean value represents whether to push down.
+   * @return
+   *   the Boolean value represents whether to push down.
    */
   def pushOffset(scanBuilder: ScanBuilder, offset: Int): Boolean = {
     scanBuilder match {
@@ -158,9 +170,10 @@ object PushDownUtils {
   /**
    * Pushes down top N to the data source Scan.
    *
-   * @return the tuple of Boolean. The first Boolean value represents whether to push down, and
-   *         the second Boolean value represents whether to push down partially, which means
-   *         Spark will keep the Sort and Limit and do it again.
+   * @return
+   *   the tuple of Boolean. The first Boolean value represents whether to push down, and the
+   *   second Boolean value represents whether to push down partially, which means Spark will keep
+   *   the Sort and Limit and do it again.
    */
   def pushTopN(
       scanBuilder: ScanBuilder,
@@ -176,8 +189,9 @@ object PushDownUtils {
   /**
    * Applies column pruning to the data source, w.r.t. the references of the given expressions.
    *
-   * @return the `Scan` instance (since column pruning is the last step of operator pushdown),
-   *         and new output attributes after column pruning.
+   * @return
+   *   the `Scan` instance (since column pruning is the last step of operator pushdown), and new
+   *   output attributes after column pruning.
    */
   def pruneColumns(
       scanBuilder: ScanBuilder,

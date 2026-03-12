@@ -38,18 +38,18 @@ import org.apache.spark.util.Utils
 
 /**
  * A factory for constructing encoders that convert objects and primitives to and from the
- * internal row format using catalyst expressions and code generation.  By default, the
- * expressions used to retrieve values from an input row when producing an object will be created as
- * follows:
- *  - Classes will have their sub fields extracted by name using [[UnresolvedAttribute]] expressions
- *    and [[UnresolvedExtractValue]] expressions.
- *  - Tuples will have their subfields extracted by position using [[BoundReference]] expressions.
- *  - Primitives will have their values extracted from the first ordinal with a schema that defaults
- *    to the name `value`.
+ * internal row format using catalyst expressions and code generation. By default, the expressions
+ * used to retrieve values from an input row when producing an object will be created as follows:
+ *   - Classes will have their sub fields extracted by name using [[UnresolvedAttribute]]
+ *     expressions and [[UnresolvedExtractValue]] expressions.
+ *   - Tuples will have their subfields extracted by position using [[BoundReference]]
+ *     expressions.
+ *   - Primitives will have their values extracted from the first ordinal with a schema that
+ *     defaults to the name `value`.
  */
 object ExpressionEncoder {
 
-  def apply[T : TypeTag](): ExpressionEncoder[T] = {
+  def apply[T: TypeTag](): ExpressionEncoder[T] = {
     apply(ScalaReflection.encoderFor[T])
   }
 
@@ -68,7 +68,7 @@ object ExpressionEncoder {
 
   // TODO: improve error message for java bean encoder.
   def javaBean[T](beanClass: Class[T]): ExpressionEncoder[T] = {
-     apply(JavaTypeInference.encoderFor(beanClass))
+    apply(JavaTypeInference.encoderFor(beanClass))
   }
 
   private val anyObjectType = ObjectType(classOf[Any])
@@ -78,7 +78,8 @@ object ExpressionEncoder {
    * thread-safe.
    */
   class Deserializer[T](val expressions: Seq[Expression])
-    extends (InternalRow => T) with Serializable {
+      extends (InternalRow => T)
+      with Serializable {
     @transient
     private[this] var constructProjection: Projection = _
 
@@ -88,8 +89,9 @@ object ExpressionEncoder {
       }
       constructProjection(row).get(0, anyObjectType).asInstanceOf[T]
     } catch {
-      case e: SparkRuntimeException if e.getCondition == "NOT_NULL_ASSERT_VIOLATION" ||
-        e.getCondition == "EXCEED_LIMIT_LENGTH" =>
+      case e: SparkRuntimeException
+          if e.getCondition == "NOT_NULL_ASSERT_VIOLATION" ||
+            e.getCondition == "EXCEED_LIMIT_LENGTH" =>
         throw e
       case e: Exception =>
         throw QueryExecutionErrors.expressionDecodingError(e, expressions)
@@ -99,10 +101,11 @@ object ExpressionEncoder {
   /**
    * Function that serializes an object of type `T` to an [[InternalRow]]. This class is not
    * thread-safe. Note that multiple calls to `apply(..)` return the same actual [[InternalRow]]
-   * object.  Thus, the caller should copy the result before making another call if required.
+   * object. Thus, the caller should copy the result before making another call if required.
    */
   class Serializer[T](private val expressions: Seq[Expression])
-    extends (T => InternalRow) with Serializable {
+      extends (T => InternalRow)
+      with Serializable {
     @transient
     private[this] var inputRow: GenericInternalRow = _
 
@@ -117,8 +120,9 @@ object ExpressionEncoder {
       inputRow(0) = t
       extractProjection(inputRow)
     } catch {
-      case e: SparkRuntimeException if e.getCondition == "NOT_NULL_ASSERT_VIOLATION" ||
-        e.getCondition == "EXCEED_LIMIT_LENGTH" =>
+      case e: SparkRuntimeException
+          if e.getCondition == "NOT_NULL_ASSERT_VIOLATION" ||
+            e.getCondition == "EXCEED_LIMIT_LENGTH" =>
         throw e
       case e: Exception =>
         throw QueryExecutionErrors.expressionEncodingError(e, expressions)
@@ -127,44 +131,44 @@ object ExpressionEncoder {
 }
 
 /**
- * A generic encoder for JVM objects that uses Catalyst Expressions for a `serializer`
- * and a `deserializer`.
+ * A generic encoder for JVM objects that uses Catalyst Expressions for a `serializer` and a
+ * `deserializer`.
  *
- * @param encoder the `AgnosticEncoder` for type `T`.
- * @param objSerializer An expression that can be used to encode a raw object to corresponding
- *                   Spark SQL representation that can be a primitive column, array, map or a
- *                   struct. This represents how Spark SQL generally serializes an object of
- *                   type `T`.
- * @param objDeserializer An expression that will construct an object given a Spark SQL
- *                        representation. This represents how Spark SQL generally deserializes
- *                        a serialized value in Spark SQL representation back to an object of
- *                        type `T`.
+ * @param encoder
+ *   the `AgnosticEncoder` for type `T`.
+ * @param objSerializer
+ *   An expression that can be used to encode a raw object to corresponding Spark SQL
+ *   representation that can be a primitive column, array, map or a struct. This represents how
+ *   Spark SQL generally serializes an object of type `T`.
+ * @param objDeserializer
+ *   An expression that will construct an object given a Spark SQL representation. This represents
+ *   how Spark SQL generally deserializes a serialized value in Spark SQL representation back to
+ *   an object of type `T`.
  */
 case class ExpressionEncoder[T](
     encoder: AgnosticEncoder[T],
     objSerializer: Expression,
     objDeserializer: Expression)
-  extends Encoder[T]
-  with ToAgnosticEncoder[T] {
+    extends Encoder[T]
+    with ToAgnosticEncoder[T] {
 
   override def clsTag: ClassTag[T] = encoder.clsTag
 
   /**
-   * A sequence of expressions, one for each top-level field that can be used to
-   * extract the values from a raw object into an [[InternalRow]]:
-   * 1. If `serializer` encodes a raw object to a struct, strip the outer If-IsNull and get
-   *    the `CreateNamedStruct`.
-   * 2. For other cases, wrap the single serializer with `CreateNamedStruct`.
+   * A sequence of expressions, one for each top-level field that can be used to extract the
+   * values from a raw object into an [[InternalRow]]:
+   *   1. If `serializer` encodes a raw object to a struct, strip the outer If-IsNull and get the
+   *      `CreateNamedStruct`.
+   *   2. For other cases, wrap the single serializer with `CreateNamedStruct`.
    */
   val serializer: Seq[NamedExpression] = {
     val clsName = Utils.getSimpleName(clsTag.runtimeClass)
 
     if (isSerializedAsStructForTopLevel) {
-      val nullSafeSerializer = objSerializer.transformUp {
-        case r: BoundReference =>
-          // For input object of Product type, we can't encode it to row if it's null, as Spark SQL
-          // doesn't allow top-level row to be null, only its columns can be null.
-          AssertNotNull(r, Seq("top level Product or row object"))
+      val nullSafeSerializer = objSerializer.transformUp { case r: BoundReference =>
+        // For input object of Product type, we can't encode it to row if it's null, as Spark SQL
+        // doesn't allow top-level row to be null, only its columns can be null.
+        AssertNotNull(r, Seq("top level Product or row object"))
       }
       nullSafeSerializer match {
         case If(_: IsNull, _, s: CreateNamedStruct) => s
@@ -184,8 +188,8 @@ case class ExpressionEncoder[T](
 
   /**
    * Returns an expression that can be used to deserialize an input row to an object of type `T`
-   * with a compatible schema. Fields of the row will be extracted using `UnresolvedAttribute`.
-   * of the same name as the constructor arguments.
+   * with a compatible schema. Fields of the row will be extracted using `UnresolvedAttribute`. of
+   * the same name as the constructor arguments.
    *
    * For complex objects that are encoded to structs, Fields of the struct will be extracted using
    * `GetColumnByOrdinal` with corresponding ordinal.
@@ -196,8 +200,9 @@ case class ExpressionEncoder[T](
       // is a `GetColumnByOrdinal(0)` expression to extract first column of a row. We need to
       // transform attributes accessors.
       objDeserializer.transform {
-        case UnresolvedExtractValue(GetColumnByOrdinal(0, _),
-            Literal(part: UTF8String, StringType)) =>
+        case UnresolvedExtractValue(
+              GetColumnByOrdinal(0, _),
+              Literal(part: UTF8String, StringType)) =>
           UnresolvedAttribute.quoted(part.toString)
         case GetStructField(GetColumnByOrdinal(0, dt), ordinal, _) =>
           GetColumnByOrdinal(ordinal, dt)
@@ -238,7 +243,7 @@ case class ExpressionEncoder[T](
    */
   def isSerializedAsStructForTopLevel: Boolean = {
     isSerializedAsStruct && !classOf[Option[_]].isAssignableFrom(clsTag.runtimeClass) &&
-      !transformerOfOption(encoder)
+    !transformerOfOption(encoder)
   }
 
   // serializer expressions are used to encode an object to a row, while the object is usually an
@@ -247,15 +252,20 @@ case class ExpressionEncoder[T](
   // (intermediate value is not an attribute). We assume that all serializer expressions use the
   // same `BoundReference` to refer to the object, and throw exception if they don't.
   assert(serializer.forall(_.references.isEmpty), "serializer cannot reference any attributes.")
-  assert(serializer.flatMap { ser =>
-    val boundRefs = ser.collect { case b: BoundReference => b }
-    assert(boundRefs.nonEmpty || isEmptyStruct(ser),
-      "each serializer expression should contain at least one `BoundReference` or it " +
-      "should be an empty struct. This is required to ensure that there is a reference point " +
-      "for the serialized object or that the serialized object is intentionally left empty."
-    )
-    boundRefs
-  }.distinct.length <= 1, "all serializer expressions must use the same BoundReference.")
+  assert(
+    serializer
+      .flatMap { ser =>
+        val boundRefs = ser.collect { case b: BoundReference => b }
+        assert(
+          boundRefs.nonEmpty || isEmptyStruct(ser),
+          "each serializer expression should contain at least one `BoundReference` or it " +
+            "should be an empty struct. This is required to ensure that there is a reference point " +
+            "for the serialized object or that the serialized object is intentionally left empty.")
+        boundRefs
+      }
+      .distinct
+      .length <= 1,
+    "all serializer expressions must use the same BoundReference.")
 
   private def isEmptyStruct(expr: NamedExpression): Boolean = expr.dataType match {
     case struct: StructType => struct.isEmpty
@@ -267,8 +277,8 @@ case class ExpressionEncoder[T](
    * given schema.
    *
    * Note that, ideally encoder is used as a container of serde expressions, the resolution and
-   * binding stuff should happen inside query framework.  However, in some cases we need to
-   * use encoder as a function to do serialization directly(e.g. Dataset.collect), then we can use
+   * binding stuff should happen inside query framework. However, in some cases we need to use
+   * encoder as a function to do serialization directly(e.g. Dataset.collect), then we can use
    * this method to do resolution and binding outside of query framework.
    */
   def resolveAndBind(
@@ -313,8 +323,8 @@ case class ExpressionEncoder[T](
    * Create a serializer that can convert an object of type `T` to a Spark SQL Row.
    *
    * Note that the returned [[Serializer]] is not thread safe. Multiple calls to
-   * `serializer.apply(..)` are allowed to return the same actual [[InternalRow]] object.  Thus,
-   *  the caller should copy the result before making another call if required.
+   * `serializer.apply(..)` are allowed to return the same actual [[InternalRow]] object. Thus,
+   * the caller should copy the result before making another call if required.
    */
   def createSerializer(): Serializer[T] = new Serializer[T](optimizedSerializer)
 
@@ -328,7 +338,7 @@ case class ExpressionEncoder[T](
 
   /**
    * The process of resolution to a given schema throws away information about where a given field
-   * is being bound by ordinal instead of by name.  This method checks to make sure this process
+   * is being bound by ordinal instead of by name. This method checks to make sure this process
    * has not been done already in places where we plan to do later composition of encoders.
    */
   def assertUnresolved(): Unit = {
@@ -348,7 +358,8 @@ case class ExpressionEncoder[T](
   protected val schemaString =
     schema
       .zip(attrs)
-      .map { case(f, a) => s"${f.name}$a: ${f.dataType.simpleString}"}.mkString(", ")
+      .map { case (f, a) => s"${f.name}$a: ${f.dataType.simpleString}" }
+      .mkString(", ")
 
   override def toString: String = s"class[$schemaString]"
 }

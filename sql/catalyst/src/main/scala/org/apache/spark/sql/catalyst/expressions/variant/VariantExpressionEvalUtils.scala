@@ -47,11 +47,12 @@ object VariantExpressionEvalUtils {
       new VariantVal(v.getValue, v.getMetadata)
     } catch {
       case _: VariantSizeLimitException =>
-        parseJsonFailure(QueryExecutionErrors
-          .variantSizeLimitError(VariantUtil.SIZE_LIMIT, "parse_json"))
+        parseJsonFailure(
+          QueryExecutionErrors
+            .variantSizeLimitError(VariantUtil.SIZE_LIMIT, "parse_json"))
       case NonFatal(e) =>
-        parseJsonFailure(QueryExecutionErrors.malformedRecordsDetectedInRecordParsingError(
-          input.toString, e))
+        parseJsonFailure(
+          QueryExecutionErrors.malformedRecordsDetectedInRecordParsingError(input.toString, e))
     }
   }
 

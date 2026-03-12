@@ -25,12 +25,13 @@ import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.types._
 
 class TestNullableColumnBuilder[JvmType](columnType: ColumnType[JvmType])
-  extends BasicColumnBuilder[JvmType](new NoopColumnStats, columnType)
-  with NullableColumnBuilder
+    extends BasicColumnBuilder[JvmType](new NoopColumnStats, columnType)
+    with NullableColumnBuilder
 
 object TestNullableColumnBuilder {
-  def apply[JvmType](columnType: ColumnType[JvmType], initialSize: Int = 0)
-    : TestNullableColumnBuilder[JvmType] = {
+  def apply[JvmType](
+      columnType: ColumnType[JvmType],
+      initialSize: Int = 0): TestNullableColumnBuilder[JvmType] = {
     val builder = new TestNullableColumnBuilder(columnType)
     builder.initialize(initialSize)
     builder
@@ -46,8 +47,16 @@ class NullableColumnBuilderSuite extends SparkFunSuite {
     STRING(StringType("UNICODE")),
     STRING(StringType("UNICODE_CI")))
   val otherTypes = Seq(
-    BOOLEAN, BYTE, SHORT, INT, LONG, FLOAT, DOUBLE,
-    BINARY, COMPACT_DECIMAL(15, 10), LARGE_DECIMAL(20, 10),
+    BOOLEAN,
+    BYTE,
+    SHORT,
+    INT,
+    LONG,
+    FLOAT,
+    DOUBLE,
+    BINARY,
+    COMPACT_DECIMAL(15, 10),
+    LARGE_DECIMAL(20, 10),
     STRUCT(PhysicalStructType(Array(StructField("a", StringType)))),
     ARRAY(PhysicalArrayType(IntegerType, true)),
     MAP(PhysicalMapType(IntegerType, StringType, true)),
@@ -68,8 +77,8 @@ class NullableColumnBuilderSuite extends SparkFunSuite {
 
     val typeName = testTypeName.getOrElse(columnType.getClass.getSimpleName.stripSuffix("$"))
     val dataType = columnType.dataType
-    val proj = UnsafeProjection.create(Array[DataType](
-      ColumnarDataTypeUtils.toLogicalDataType(dataType)))
+    val proj =
+      UnsafeProjection.create(Array[DataType](ColumnarDataTypeUtils.toLogicalDataType(dataType)))
     val converter = CatalystTypeConverters.createToScalaConverter(
       ColumnarDataTypeUtils.toLogicalDataType(dataType))
 
@@ -115,9 +124,9 @@ class NullableColumnBuilderSuite extends SparkFunSuite {
       val actual = new GenericInternalRow(new Array[Any](1))
       (0 until 4).foreach { _ =>
         columnType.extract(buffer, actual, 0)
-        assert(converter(actual.get(0,
-          ColumnarDataTypeUtils.toLogicalDataType(dataType))) ===
-          converter(randomRow.get(0, ColumnarDataTypeUtils.toLogicalDataType(dataType))),
+        assert(
+          converter(actual.get(0, ColumnarDataTypeUtils.toLogicalDataType(dataType))) ===
+            converter(randomRow.get(0, ColumnarDataTypeUtils.toLogicalDataType(dataType))),
           "Extracted value didn't equal to the original one")
       }
 

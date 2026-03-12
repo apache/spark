@@ -77,7 +77,7 @@ class JDBCMetricsSuite extends QueryTest with SharedSparkSession {
   private def hasMetricKeyValue(metrics: Map[String, SQLMetric], metricKey: String): Unit = {
     val optionMetric = metrics.get(metricKey)
     assert(optionMetric.isDefined)
-    if(optionMetric.isDefined) {
+    if (optionMetric.isDefined) {
       val metric = optionMetric.get
       assert(metric.value >= 0)
     }

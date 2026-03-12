@@ -23,9 +23,9 @@ import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAg
 import org.apache.spark.sql.test.SharedSparkSession
 
 class CollationAggregationSuite
-  extends QueryTest
-  with SharedSparkSession
-  with AdaptiveSparkPlanHelper {
+    extends QueryTest
+    with SharedSparkSession
+    with AdaptiveSparkPlanHelper {
 
   test("group by collated column doesn't work with obj hash aggregate") {
     val tblName = "grp_by_tbl"
@@ -34,9 +34,7 @@ class CollationAggregationSuite
       sql(s"INSERT INTO $tblName VALUES ('hello', 1), ('HELLO', 2), ('HeLlO', 3)")
 
       // Result is correct without forcing object hash aggregate.
-      checkAnswer(
-        sql(s"SELECT COUNT(*) FROM $tblName GROUP BY c1"),
-        Seq(Row(3)))
+      checkAnswer(sql(s"SELECT COUNT(*) FROM $tblName GROUP BY c1"), Seq(Row(3)))
 
       withSQLConf("spark.sql.test.forceApplyObjectHashAggregate" -> true.toString) {
         checkAnswer(
@@ -55,8 +53,7 @@ class CollationAggregationSuite
     Seq(true, false).foreach { useObjHashAgg =>
       withTable(tblName) {
         withSQLConf("spark.sql.execution.useObjectHashAggregateExec" -> useObjHashAgg.toString) {
-          sql(
-            s"""
+          sql(s"""
                |CREATE TABLE $tblName (
                |  c1 STRING COLLATE UTF8_LCASE,
                |  c2 INT
@@ -74,15 +71,14 @@ class CollationAggregationSuite
           }
 
           // Plan should have a [[SortAggregateExec]] node.
-          assert(collectFirst(executedPlan) {
-            case _: SortAggregateExec => true
+          assert(collectFirst(executedPlan) { case _: SortAggregateExec =>
+            true
           }.nonEmpty)
 
           checkAnswer(
             // Sort the values to get deterministic output.
             df.selectExpr("array_sort(list)"),
-            Seq(Row(Seq(1, 2, 3)))
-          )
+            Seq(Row(Seq(1, 2, 3))))
         }
       }
     }

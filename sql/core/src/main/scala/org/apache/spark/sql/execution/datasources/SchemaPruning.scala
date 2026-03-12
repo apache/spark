@@ -28,10 +28,10 @@ import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructType}
 import org.apache.spark.sql.util.SchemaUtils._
 
 /**
- * Prunes unnecessary physical columns given a [[ScanOperation]] over a data source relation.
- * By "physical column", we mean a column as defined in the data source format like Parquet format
- * or ORC format. For example, in Spark SQL, a root-level Parquet column corresponds to a SQL
- * column, and a nested Parquet column corresponds to a [[StructField]].
+ * Prunes unnecessary physical columns given a [[ScanOperation]] over a data source relation. By
+ * "physical column", we mean a column as defined in the data source format like Parquet format or
+ * ORC format. For example, in Spark SQL, a root-level Parquet column corresponds to a SQL column,
+ * and a nested Parquet column corresponds to a [[StructField]].
  *
  * Also prunes the unnecessary metadata columns if any for all file formats.
  */
@@ -40,10 +40,17 @@ object SchemaPruning extends Rule[LogicalPlan] {
 
   override def apply(plan: LogicalPlan): LogicalPlan =
     plan transformDown {
-      case op @ ScanOperation(projects, filtersStayUp, filtersPushDown,
-        l @ LogicalRelationWithTable(hadoopFsRelation: HadoopFsRelation, _)) =>
+      case op @ ScanOperation(
+            projects,
+            filtersStayUp,
+            filtersPushDown,
+            l @ LogicalRelationWithTable(hadoopFsRelation: HadoopFsRelation, _)) =>
         val allFilters = filtersPushDown.reduceOption(And).toSeq ++ filtersStayUp
-        prunePhysicalColumns(l, projects, allFilters, hadoopFsRelation,
+        prunePhysicalColumns(
+          l,
+          projects,
+          allFilters,
+          hadoopFsRelation,
           (prunedDataSchema, prunedMetadataSchema) => {
             val prunedHadoopRelation =
               hadoopFsRelation.copy(dataSchema = prunedDataSchema)(hadoopFsRelation.sparkSession)
@@ -52,8 +59,8 @@ object SchemaPruning extends Rule[LogicalPlan] {
     }
 
   /**
-   * This method returns optional logical plan. `None` is returned if no nested field is required or
-   * all nested fields are required.
+   * This method returns optional logical plan. `None` is returned if no nested field is required
+   * or all nested fields are required.
    *
    * This method will prune both the data schema and the metadata schema
    */
@@ -95,9 +102,15 @@ object SchemaPruning extends Rule[LogicalPlan] {
         countLeaves(metadataSchema) > countLeaves(prunedMetadataSchema)) {
         val prunedRelation = leafNodeBuilder(prunedDataSchema, prunedMetadataSchema)
         val projectionOverSchema = ProjectionOverSchema(
-          prunedDataSchema.merge(prunedMetadataSchema), AttributeSet(relation.output))
-        Some(buildNewProjection(projects, normalizedProjects, normalizedFilters,
-          prunedRelation, projectionOverSchema))
+          prunedDataSchema.merge(prunedMetadataSchema),
+          AttributeSet(relation.output))
+        Some(
+          buildNewProjection(
+            projects,
+            normalizedProjects,
+            normalizedFilters,
+            prunedRelation,
+            projectionOverSchema))
       } else {
         None
       }
@@ -110,14 +123,13 @@ object SchemaPruning extends Rule[LogicalPlan] {
    * Checks to see if the given relation can be pruned. Currently we support Parquet and ORC v1.
    */
   private def canPruneDataSchema(fsRelation: HadoopFsRelation): Boolean =
-    conf.nestedSchemaPruningEnabled && (
-      fsRelation.fileFormat.isInstanceOf[ParquetFileFormat] ||
-        fsRelation.fileFormat.isInstanceOf[OrcFileFormat])
+    conf.nestedSchemaPruningEnabled && (fsRelation.fileFormat.isInstanceOf[ParquetFileFormat] ||
+      fsRelation.fileFormat.isInstanceOf[OrcFileFormat])
 
   /**
-   * Normalizes the names of the attribute references in the given expressions to reflect
-   * the names in the given logical relation. This makes it possible to compare attributes and
-   * fields by name. Returns a tuple with the normalized projects and filters, respectively.
+   * Normalizes the names of the attribute references in the given expressions to reflect the
+   * names in the given logical relation. This makes it possible to compare attributes and fields
+   * by name. Returns a tuple with the normalized projects and filters, respectively.
    */
   private def normalizeAttributeRefNames(
       attrNameMap: Map[ExprId, String],
@@ -141,8 +153,8 @@ object SchemaPruning extends Rule[LogicalPlan] {
     // including the original filters where available
     val projectionChild =
       if (filters.nonEmpty) {
-        val projectedFilters = filters.map(_.transformDown {
-          case projectionOverSchema(expr) => expr
+        val projectedFilters = filters.map(_.transformDown { case projectionOverSchema(expr) =>
+          expr
         })
         // bottom-most filters are put in the left of the list.
         projectedFilters.foldLeft[LogicalPlan](leafNode)((plan, cond) => Filter(cond, plan))
@@ -152,9 +164,11 @@ object SchemaPruning extends Rule[LogicalPlan] {
 
     // Construct the new projections of our Project by
     // rewriting the original projections
-    val newProjects = normalizedProjects.map(_.transformDown {
-      case projectionOverSchema(expr) => expr
-    }).map { case expr: NamedExpression => expr }
+    val newProjects = normalizedProjects
+      .map(_.transformDown { case projectionOverSchema(expr) =>
+        expr
+      })
+      .map { case expr: NamedExpression => expr }
 
     if (log.isDebugEnabled) {
       logDebug(s"New projects:\n${newProjects.map(_.treeString).mkString("\n")}")
@@ -194,9 +208,8 @@ object SchemaPruning extends Rule[LogicalPlan] {
   }
 
   /**
-   * Counts the "leaf" fields of the given dataType. Informally, this is the
-   * number of fields of non-complex data type in the tree representation of
-   * [[DataType]].
+   * Counts the "leaf" fields of the given dataType. Informally, this is the number of fields of
+   * non-complex data type in the tree representation of [[DataType]].
    */
   private def countLeaves(dataType: DataType): Int = {
     dataType match {

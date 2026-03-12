@@ -36,7 +36,8 @@ class UDFXPathUtilSuite extends SparkFunSuite {
   test("illegal arguments") {
     // null args
     assert(util.eval(null, "a/text()", STRING) == null)
-    assert(util.eval("<a><b>b1</b><b>b2</b><b>b3</b><c>c1</c><c>c2</c></a>", null, STRING) == null)
+    assert(
+      util.eval("<a><b>b1</b><b>b2</b><b>b3</b><c>c1</c><c>c2</c></a>", null, STRING) == null)
     assert(
       util.eval("<a><b>b1</b><b>b2</b><b>b3</b><c>c1</c><c>c2</c></a>", "a/text()", null) == null)
 
@@ -58,7 +59,9 @@ class UDFXPathUtilSuite extends SparkFunSuite {
 
   test("boolean eval") {
     var ret =
-      util.evalBoolean("<a><b>true</b><b>false</b><b>b3</b><c>c1</c><c>c2</c></a>", "a/b[1]/text()")
+      util.evalBoolean(
+        "<a><b>true</b><b>false</b><b>b3</b><c>c1</c><c>c2</c></a>",
+        "a/b[1]/text()")
     assert(ret)
 
     ret = util.evalBoolean("<a><b>true</b><b>false</b><b>b3</b><c>c1</c><c>c2</c></a>", "a/b[4]")
@@ -67,15 +70,19 @@ class UDFXPathUtilSuite extends SparkFunSuite {
 
   test("string eval") {
     var ret =
-      util.evalString("<a><b>true</b><b>false</b><b>b3</b><c>c1</c><c>c2</c></a>", "a/b[3]/text()")
+      util.evalString(
+        "<a><b>true</b><b>false</b><b>b3</b><c>c1</c><c>c2</c></a>",
+        "a/b[3]/text()")
     assert(ret == "b3")
 
-    ret =
-      util.evalString("<a><b>true</b><b>false</b><b>b3</b><c>c1</c><c>c2</c></a>", "a/b[4]/text()")
+    ret = util.evalString(
+      "<a><b>true</b><b>false</b><b>b3</b><c>c1</c><c>c2</c></a>",
+      "a/b[4]/text()")
     assert(ret == "")
 
     ret = util.evalString(
-      "<a><b>true</b><b k=\"foo\">FALSE</b><b>b3</b><c>c1</c><c>c2</c></a>", "a/b[2]/@k")
+      "<a><b>true</b><b k=\"foo\">FALSE</b><b>b3</b><c>c1</c><c>c2</c></a>",
+      "a/b[2]/@k")
     assert(ret == "foo")
   }
 
@@ -105,17 +112,20 @@ class UDFXPathUtilSuite extends SparkFunSuite {
     assert(ret == -77.0d)
 
     ret = util.evalNumber(
-      "<a><b>true</b><b k=\"foo\">FALSE</b><b>b3</b><c>c1</c><c>c2</c></a>", "a/b[2]/@k")
+      "<a><b>true</b><b k=\"foo\">FALSE</b><b>b3</b><c>c1</c><c>c2</c></a>",
+      "a/b[2]/@k")
     assert(ret.isNaN)
   }
 
   test("node eval") {
-    val ret = util.evalNode("<a><b>true</b><b>false</b><b>b3</b><c>c1</c><c>-77</c></a>", "a/c[2]")
+    val ret =
+      util.evalNode("<a><b>true</b><b>false</b><b>b3</b><c>c1</c><c>-77</c></a>", "a/c[2]")
     assert(ret != null && ret.isInstanceOf[Node])
   }
 
   test("node list eval") {
-    val ret = util.evalNodeList("<a><b>true</b><b>false</b><b>b3</b><c>c1</c><c>-77</c></a>", "a/*")
+    val ret =
+      util.evalNodeList("<a><b>true</b><b>false</b><b>b3</b><c>c1</c><c>-77</c></a>", "a/*")
     assert(ret != null && ret.isInstanceOf[NodeList])
     assert(ret.getLength == 5)
   }

@@ -46,16 +46,17 @@ import org.apache.spark.util.ArrayImplicits._
  * The main method is the `agg` function, which has multiple variants. This class also contains
  * some first-order statistics such as `mean`, `sum` for convenience.
  *
- * @note This class was named `GroupedData` in Spark 1.x.
+ * @note
+ *   This class was named `GroupedData` in Spark 1.x.
  *
  * @since 2.0.0
  */
 @Stable
-class RelationalGroupedDataset protected[sql](
+class RelationalGroupedDataset protected[sql] (
     protected[sql] val df: DataFrame,
     private[sql] val groupingExprs: Seq[Expression],
     groupType: RelationalGroupedDataset.GroupType)
-  extends sql.RelationalGroupedDataset {
+    extends sql.RelationalGroupedDataset {
 
   import RelationalGroupedDataset._
   import df.sparkSession.toRichColumn
@@ -90,21 +91,21 @@ class RelationalGroupedDataset protected[sql](
         Dataset.ofRows(df.sparkSession, Aggregate(groupingExprs, aliasedAgg, df.logicalPlan))
       case RelationalGroupedDataset.RollupType =>
         Dataset.ofRows(
-          df.sparkSession, Aggregate(Seq(Rollup(groupingExprs.map(Seq(_)))),
-            aliasedAgg, df.logicalPlan))
+          df.sparkSession,
+          Aggregate(Seq(Rollup(groupingExprs.map(Seq(_)))), aliasedAgg, df.logicalPlan))
       case RelationalGroupedDataset.CubeType =>
         Dataset.ofRows(
-          df.sparkSession, Aggregate(Seq(Cube(groupingExprs.map(Seq(_)))),
-            aliasedAgg, df.logicalPlan))
+          df.sparkSession,
+          Aggregate(Seq(Cube(groupingExprs.map(Seq(_)))), aliasedAgg, df.logicalPlan))
       case RelationalGroupedDataset.GroupingSetsType(groupingSets) =>
         Dataset.ofRows(
           df.sparkSession,
-          Aggregate(Seq(GroupingSets(groupingSets, groupingExprs)),
-            aliasedAgg, df.logicalPlan))
+          Aggregate(Seq(GroupingSets(groupingSets, groupingExprs)), aliasedAgg, df.logicalPlan))
       case RelationalGroupedDataset.PivotType(pivotCol, values) =>
         val aliasedGrps = groupingExprs.map(alias)
         Dataset.ofRows(
-          df.sparkSession, Pivot(Some(aliasedGrps), pivotCol, values, aggExprs, df.logicalPlan))
+          df.sparkSession,
+          Pivot(Some(aliasedGrps), pivotCol, values, aggExprs, df.logicalPlan))
     }
   }
 
@@ -187,7 +188,9 @@ class RelationalGroupedDataset protected[sql](
     super.pivot(pivotColumn, values)
 
   /** @inheritdoc */
-  override def pivot(pivotColumn: Column, values: java.util.List[Any]): RelationalGroupedDataset = {
+  override def pivot(
+      pivotColumn: Column,
+      values: java.util.List[Any]): RelationalGroupedDataset = {
     super.pivot(pivotColumn, values)
   }
 
@@ -215,8 +218,8 @@ class RelationalGroupedDataset protected[sql](
           RelationalGroupedDataset.PivotType(pivotColumn.expr, valueExprs))
       case _: RelationalGroupedDataset.PivotType =>
         throw QueryExecutionErrors.repeatedPivotsUnsupportedError(
-          clause = "PIVOT", operation = "SUBQUERY"
-        )
+          clause = "PIVOT",
+          operation = "SUBQUERY")
       case _ =>
         throw QueryExecutionErrors.pivotNotAfterGroupByUnsupportedError()
     }
@@ -224,9 +227,9 @@ class RelationalGroupedDataset protected[sql](
 
   /**
    * Applies the given serialized R function `func` to each group of data. For each unique group,
-   * the function will be passed the group key and an iterator that contains all of the elements in
-   * the group. The function can return an iterator containing elements of an arbitrary type which
-   * will be returned as a new `DataFrame`.
+   * the function will be passed the group key and an iterator that contains all of the elements
+   * in the group. The function can return an iterator containing elements of an arbitrary type
+   * which will be returned as a new `DataFrame`.
    *
    * This function does not support partial aggregation, and as a result requires shuffling all
    * the data in the [[Dataset]]. If an application intends to perform an aggregation over each
@@ -234,9 +237,9 @@ class RelationalGroupedDataset protected[sql](
    * `org.apache.spark.sql.expressions#Aggregator`.
    *
    * Internally, the implementation will spill to disk if any given group is too large to fit into
-   * memory.  However, users must take care to avoid materializing the whole iterator for a group
-   * (for example, by calling `toList`) unless they are sure that this is possible given the memory
-   * constraints of their cluster.
+   * memory. However, users must take care to avoid materializing the whole iterator for a group
+   * (for example, by calling `toList`) unless they are sure that this is possible given the
+   * memory constraints of their cluster.
    *
    * @since 2.0.0
    */
@@ -245,30 +248,30 @@ class RelationalGroupedDataset protected[sql](
       packageNames: Array[Byte],
       broadcastVars: Array[Broadcast[Object]],
       outputSchema: StructType): DataFrame = {
-      val groupingNamedExpressions = groupingExprs.map(alias)
-      val groupingCols = groupingNamedExpressions.map(Column(_))
-      val groupingDataFrame = df.select(groupingCols : _*)
-      val groupingAttributes = groupingNamedExpressions.map(_.toAttribute)
-      Dataset.ofRows(
-        df.sparkSession,
-        FlatMapGroupsInR(
-          f,
-          packageNames,
-          broadcastVars,
-          outputSchema,
-          groupingDataFrame.exprEnc.deserializer,
-          df.exprEnc.deserializer,
-          df.exprEnc.schema,
-          groupingAttributes,
-          df.logicalPlan.output,
-          df.logicalPlan))
+    val groupingNamedExpressions = groupingExprs.map(alias)
+    val groupingCols = groupingNamedExpressions.map(Column(_))
+    val groupingDataFrame = df.select(groupingCols: _*)
+    val groupingAttributes = groupingNamedExpressions.map(_.toAttribute)
+    Dataset.ofRows(
+      df.sparkSession,
+      FlatMapGroupsInR(
+        f,
+        packageNames,
+        broadcastVars,
+        outputSchema,
+        groupingDataFrame.exprEnc.deserializer,
+        df.exprEnc.deserializer,
+        df.exprEnc.schema,
+        groupingAttributes,
+        df.logicalPlan.output,
+        df.logicalPlan))
   }
 
   /**
-   * Applies a grouped vectorized python user-defined function to each group of data.
-   * The user-defined function defines a transformation: `pandas.DataFrame` -> `pandas.DataFrame`.
-   * For each group, all elements in the group are passed as a `pandas.DataFrame` and the results
-   * for all groups are combined into a new [[DataFrame]].
+   * Applies a grouped vectorized python user-defined function to each group of data. The
+   * user-defined function defines a transformation: `pandas.DataFrame` -> `pandas.DataFrame`. For
+   * each group, all elements in the group are passed as a `pandas.DataFrame` and the results for
+   * all groups are combined into a new [[DataFrame]].
    *
    * This function does not support partial aggregation, and requires shuffling all the data in
    * the [[DataFrame]].
@@ -278,10 +281,12 @@ class RelationalGroupedDataset protected[sql](
    */
   private[sql] def flatMapGroupsInPandas(column: Column): DataFrame = {
     val expr = column.expr.asInstanceOf[PythonUDF]
-    require(expr.evalType == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF ||
-      expr.evalType == PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF,
+    require(
+      expr.evalType == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF ||
+        expr.evalType == PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF,
       "Must pass a grouped map pandas udf")
-    require(expr.dataType.isInstanceOf[StructType],
+    require(
+      expr.dataType.isInstanceOf[StructType],
       s"The returnType of the udf must be a ${StructType.simpleString}")
 
     val groupingNamedExpressions = groupingExprs.map {
@@ -289,8 +294,9 @@ class RelationalGroupedDataset protected[sql](
       case other => Alias(other, other.toString)()
     }
     val child = df.logicalPlan
-    val project = df.sparkSession.sessionState.executePlan(
-      Project(groupingNamedExpressions ++ child.output, child)).analyzed
+    val project = df.sparkSession.sessionState
+      .executePlan(Project(groupingNamedExpressions ++ child.output, child))
+      .analyzed
     val groupingAttributes = project.output.take(groupingNamedExpressions.length)
     val output = toAttributes(expr.dataType.asInstanceOf[StructType])
     val plan = FlatMapGroupsInPandas(groupingAttributes, expr, output, project)
@@ -299,10 +305,10 @@ class RelationalGroupedDataset protected[sql](
   }
 
   /**
-   * Applies a grouped vectorized python user-defined function to each group of data.
-   * The user-defined function defines a transformation: `pandas.DataFrame` -> `pandas.DataFrame`.
-   * For each group, all elements in the group are passed as a `pandas.DataFrame` and the results
-   * for all groups are combined into a new [[DataFrame]].
+   * Applies a grouped vectorized python user-defined function to each group of data. The
+   * user-defined function defines a transformation: `pandas.DataFrame` -> `pandas.DataFrame`. For
+   * each group, all elements in the group are passed as a `pandas.DataFrame` and the results for
+   * all groups are combined into a new [[DataFrame]].
    *
    * This function does not support partial aggregation, and requires shuffling all the data in
    * the [[DataFrame]].
@@ -312,10 +318,12 @@ class RelationalGroupedDataset protected[sql](
    */
   private[sql] def flatMapGroupsInArrow(column: Column): DataFrame = {
     val expr = column.expr.asInstanceOf[PythonUDF]
-    require(expr.evalType == PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF ||
-      expr.evalType == PythonEvalType.SQL_GROUPED_MAP_ARROW_ITER_UDF,
+    require(
+      expr.evalType == PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF ||
+        expr.evalType == PythonEvalType.SQL_GROUPED_MAP_ARROW_ITER_UDF,
       "Must pass a grouped map arrow udf")
-    require(expr.dataType.isInstanceOf[StructType],
+    require(
+      expr.dataType.isInstanceOf[StructType],
       s"The returnType of the udf must be a ${StructType.simpleString}")
 
     val groupingNamedExpressions = groupingExprs.map {
@@ -323,8 +331,9 @@ class RelationalGroupedDataset protected[sql](
       case other => Alias(other, other.toString)()
     }
     val child = df.logicalPlan
-    val project = df.sparkSession.sessionState.executePlan(
-      Project(groupingNamedExpressions ++ child.output, child)).analyzed
+    val project = df.sparkSession.sessionState
+      .executePlan(Project(groupingNamedExpressions ++ child.output, child))
+      .analyzed
     val groupingAttributes = project.output.take(groupingNamedExpressions.length)
     val output = toAttributes(expr.dataType.asInstanceOf[StructType])
     val plan = FlatMapGroupsInArrow(groupingAttributes, expr, output, project)
@@ -333,11 +342,11 @@ class RelationalGroupedDataset protected[sql](
   }
 
   /**
-   * Applies a vectorized python user-defined function to each cogrouped data.
-   * The user-defined function defines a transformation:
-   * `pandas.DataFrame`, `pandas.DataFrame` -> `pandas.DataFrame`.
-   *  For each group in the cogrouped data, all elements in the group are passed as a
-   * `pandas.DataFrame` and the results for all cogroups are combined into a new [[DataFrame]].
+   * Applies a vectorized python user-defined function to each cogrouped data. The user-defined
+   * function defines a transformation: `pandas.DataFrame`, `pandas.DataFrame` ->
+   * `pandas.DataFrame`. For each group in the cogrouped data, all elements in the group are
+   * passed as a `pandas.DataFrame` and the results for all cogroups are combined into a new
+   * [[DataFrame]].
    *
    * This function uses Apache Arrow as serialization format between Java executors and Python
    * workers.
@@ -346,12 +355,15 @@ class RelationalGroupedDataset protected[sql](
       r: RelationalGroupedDataset,
       column: Column): DataFrame = {
     val expr = column.expr.asInstanceOf[PythonUDF]
-    require(expr.evalType == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
+    require(
+      expr.evalType == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
       "Must pass a cogrouped map pandas udf")
-    require(this.groupingExprs.length == r.groupingExprs.length,
+    require(
+      this.groupingExprs.length == r.groupingExprs.length,
       "Cogroup keys must have same size: " +
         s"${this.groupingExprs.length} != ${r.groupingExprs.length}")
-    require(expr.dataType.isInstanceOf[StructType],
+    require(
+      expr.dataType.isInstanceOf[StructType],
       s"The returnType of the udf must be a ${StructType.simpleString}")
 
     val leftGroupingNamedExpressions = groupingExprs.map {
@@ -367,24 +379,30 @@ class RelationalGroupedDataset protected[sql](
     val leftChild = df.logicalPlan
     val rightChild = r.df.logicalPlan
 
-    val left = df.sparkSession.sessionState.executePlan(
-      Project(leftGroupingNamedExpressions ++ leftChild.output, leftChild)).analyzed
-    val right = r.df.sparkSession.sessionState.executePlan(
-      Project(rightGroupingNamedExpressions ++ rightChild.output, rightChild)).analyzed
+    val left = df.sparkSession.sessionState
+      .executePlan(Project(leftGroupingNamedExpressions ++ leftChild.output, leftChild))
+      .analyzed
+    val right = r.df.sparkSession.sessionState
+      .executePlan(Project(rightGroupingNamedExpressions ++ rightChild.output, rightChild))
+      .analyzed
 
     val output = toAttributes(expr.dataType.asInstanceOf[StructType])
     val plan = FlatMapCoGroupsInPandas(
-      leftGroupingNamedExpressions.length, rightGroupingNamedExpressions.length,
-      expr, output, left, right)
+      leftGroupingNamedExpressions.length,
+      rightGroupingNamedExpressions.length,
+      expr,
+      output,
+      left,
+      right)
     Dataset.ofRows(df.sparkSession, plan)
   }
 
   /**
-   * Applies a vectorized python user-defined function to each cogrouped data.
-   * The user-defined function defines a transformation:
-   * `pandas.DataFrame`, `pandas.DataFrame` -> `pandas.DataFrame`.
-   *  For each group in the cogrouped data, all elements in the group are passed as a
-   * `pandas.DataFrame` and the results for all cogroups are combined into a new [[DataFrame]].
+   * Applies a vectorized python user-defined function to each cogrouped data. The user-defined
+   * function defines a transformation: `pandas.DataFrame`, `pandas.DataFrame` ->
+   * `pandas.DataFrame`. For each group in the cogrouped data, all elements in the group are
+   * passed as a `pandas.DataFrame` and the results for all cogroups are combined into a new
+   * [[DataFrame]].
    *
    * This function uses Apache Arrow as serialization format between Java executors and Python
    * workers.
@@ -393,12 +411,15 @@ class RelationalGroupedDataset protected[sql](
       r: RelationalGroupedDataset,
       column: Column): DataFrame = {
     val expr = column.expr.asInstanceOf[PythonUDF]
-    require(expr.evalType == PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF,
+    require(
+      expr.evalType == PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF,
       "Must pass a cogrouped map arrow udf")
-    require(this.groupingExprs.length == r.groupingExprs.length,
+    require(
+      this.groupingExprs.length == r.groupingExprs.length,
       "Cogroup keys must have same size: " +
         s"${this.groupingExprs.length} != ${r.groupingExprs.length}")
-    require(expr.dataType.isInstanceOf[StructType],
+    require(
+      expr.dataType.isInstanceOf[StructType],
       s"The returnType of the udf must be a ${StructType.simpleString}")
 
     val leftGroupingNamedExpressions = groupingExprs.map {
@@ -414,25 +435,30 @@ class RelationalGroupedDataset protected[sql](
     val leftChild = df.logicalPlan
     val rightChild = r.df.logicalPlan
 
-    val left = df.sparkSession.sessionState.executePlan(
-      Project(leftGroupingNamedExpressions ++ leftChild.output, leftChild)).analyzed
-    val right = r.df.sparkSession.sessionState.executePlan(
-      Project(rightGroupingNamedExpressions ++ rightChild.output, rightChild)).analyzed
+    val left = df.sparkSession.sessionState
+      .executePlan(Project(leftGroupingNamedExpressions ++ leftChild.output, leftChild))
+      .analyzed
+    val right = r.df.sparkSession.sessionState
+      .executePlan(Project(rightGroupingNamedExpressions ++ rightChild.output, rightChild))
+      .analyzed
 
     val output = toAttributes(expr.dataType.asInstanceOf[StructType])
     val plan = FlatMapCoGroupsInArrow(
-      leftGroupingNamedExpressions.length, rightGroupingNamedExpressions.length,
-      expr, output, left, right)
+      leftGroupingNamedExpressions.length,
+      rightGroupingNamedExpressions.length,
+      expr,
+      output,
+      left,
+      right)
     Dataset.ofRows(df.sparkSession, plan)
   }
 
   /**
-   * Applies a grouped vectorized python user-defined function to each group of data.
-   * The user-defined function defines a transformation: iterator of `pandas.DataFrame` ->
-   * iterator of `pandas.DataFrame`.
-   * For each group, all elements in the group are passed as an iterator of `pandas.DataFrame`
-   * along with corresponding state, and the results for all groups are combined into a new
-   * [[DataFrame]].
+   * Applies a grouped vectorized python user-defined function to each group of data. The
+   * user-defined function defines a transformation: iterator of `pandas.DataFrame` -> iterator of
+   * `pandas.DataFrame`. For each group, all elements in the group are passed as an iterator of
+   * `pandas.DataFrame` along with corresponding state, and the results for all groups are
+   * combined into a new [[DataFrame]].
    *
    * This function does not support partial aggregation, and requires shuffling all the data in
    * the [[DataFrame]].
@@ -446,8 +472,9 @@ class RelationalGroupedDataset protected[sql](
       stateStructType: StructType,
       outputModeStr: String,
       timeoutConfStr: String): DataFrame = {
-    val timeoutConf = org.apache.spark.sql.execution.streaming.operators.stateful.
-      flatmapgroupswithstate.GroupStateImpl.groupStateTimeoutFromString(timeoutConfStr)
+    val timeoutConf =
+      org.apache.spark.sql.execution.streaming.operators.stateful.flatmapgroupswithstate.GroupStateImpl
+        .groupStateTimeoutFromString(timeoutConfStr)
     val outputMode = InternalOutputModes(outputModeStr)
     if (outputMode != OutputMode.Append && outputMode != OutputMode.Update) {
       throw new IllegalArgumentException("The output mode of function should be append or update")
@@ -470,10 +497,10 @@ class RelationalGroupedDataset protected[sql](
   }
 
   /**
-   * Applies a grouped python user-defined function to each group of data.
-   * The user-defined function defines a transformation: iterator of `Row` -> iterator of `Row`.
-   * For each group, all elements in the group are passed as an iterator of `Row` along with
-   * corresponding state, and the results for all groups are combined into a new [[DataFrame]].
+   * Applies a grouped python user-defined function to each group of data. The user-defined
+   * function defines a transformation: iterator of `Row` -> iterator of `Row`. For each group,
+   * all elements in the group are passed as an iterator of `Row` along with corresponding state,
+   * and the results for all groups are combined into a new [[DataFrame]].
    *
    * This function uses Apache Arrow as serialization format between Java executors and Python
    * workers.
@@ -496,12 +523,11 @@ class RelationalGroupedDataset protected[sql](
   }
 
   /**
-   * Applies a grouped vectorized python user-defined function to each group of data.
-   * The user-defined function defines a transformation: iterator of `pandas.DataFrame` ->
-   * iterator of `pandas.DataFrame`.
-   * For each group, all elements in the group are passed as an iterator of `pandas.DataFrame`
-   * along with corresponding state, and the results for all groups are combined into a new
-   * [[DataFrame]].
+   * Applies a grouped vectorized python user-defined function to each group of data. The
+   * user-defined function defines a transformation: iterator of `pandas.DataFrame` -> iterator of
+   * `pandas.DataFrame`. For each group, all elements in the group are passed as an iterator of
+   * `pandas.DataFrame` along with corresponding state, and the results for all groups are
+   * combined into a new [[DataFrame]].
    *
    * This function uses Apache Arrow as serialization format between Java executors and Python
    * workers.
@@ -532,10 +558,12 @@ class RelationalGroupedDataset protected[sql](
       eventTimeColumnName: String,
       userFacingDataType: TransformWithStateInPySpark.UserFacingDataType.Value): DataFrame = {
     def exprToAttr(expr: Seq[Expression]): Seq[Attribute] = {
-      expr.map {
-        case ne: NamedExpression => ne
-        case other => Alias(other, other.toString)()
-      }.map(_.toAttribute)
+      expr
+        .map {
+          case ne: NamedExpression => ne
+          case other => Alias(other, other.toString)()
+        }
+        .map(_.toAttribute)
     }
 
     val groupingAttrs = exprToAttr(groupingExprs)
@@ -546,8 +574,9 @@ class RelationalGroupedDataset protected[sql](
     // refer to them correctly in the following planning phase;
     // will perform dedup in the physical operator
     val leftChild = df.logicalPlan
-    val left = df.sparkSession.sessionState.executePlan(
-      Project(groupingAttrs ++ leftChild.output, leftChild)).analyzed
+    val left = df.sparkSession.sessionState
+      .executePlan(Project(groupingAttrs ++ leftChild.output, leftChild))
+      .analyzed
 
     val plan: LogicalPlan = if (initialState == null) {
       TransformWithStateInPySpark(
@@ -562,15 +591,15 @@ class RelationalGroupedDataset protected[sql](
         /* The followings are dummy variables because hasInitialState is false */
         initialState = LocalRelation(Seq.empty[Attribute]),
         initGroupingAttrsLen = 0,
-        initialStateSchema = new StructType()
-      )
+        initialStateSchema = new StructType())
     } else {
       val initGroupingAttrs = exprToAttr(initialState.groupingExprs)
 
       val rightChild = initialState.df.logicalPlan
 
-      val right = initialState.df.sparkSession.sessionState.executePlan(
-        Project(initGroupingAttrs ++ rightChild.output, rightChild)).analyzed
+      val right = initialState.df.sparkSession.sessionState
+        .executePlan(Project(initGroupingAttrs ++ rightChild.output, rightChild))
+        .analyzed
 
       TransformWithStateInPySpark(
         func.expr,
@@ -583,8 +612,7 @@ class RelationalGroupedDataset protected[sql](
         hasInitialState = true,
         initialState = right,
         initGroupingAttrsLen = initGroupingAttrs.length,
-        initialStateSchema = initialState.df.schema
-      )
+        initialStateSchema = initialState.df.schema)
     }
     if (eventTimeColumnName.isEmpty) {
       Dataset.ofRows(df.sparkSession, plan)
@@ -594,18 +622,15 @@ class RelationalGroupedDataset protected[sql](
   }
 
   /**
-   * Creates a new dataset with updated eventTimeColumn after the transformWithState
-   * logical node.
+   * Creates a new dataset with updated eventTimeColumn after the transformWithState logical node.
    */
   private def updateEventTimeColumnAfterTransformWithState(
       transformWithStateInPandas: LogicalPlan,
       eventTimeColumnName: String): DataFrame = {
-    val transformWithStateDataset = Dataset.ofRows(
-      df.sparkSession,
-      transformWithStateInPandas
-    )
+    val transformWithStateDataset = Dataset.ofRows(df.sparkSession, transformWithStateInPandas)
 
-    Dataset.ofRows(df.sparkSession,
+    Dataset.ofRows(
+      df.sparkSession,
       UpdateEventTimeWatermarkColumn(
         UnresolvedAttribute(eventTimeColumnName),
         None,
@@ -644,7 +669,8 @@ private[sql] object RelationalGroupedDataset {
       groupingExprs: Seq[Expression]): (QueryExecution, Seq[Attribute]) = {
     // Resolves grouping expressions.
     val dummyPlan = Project(groupingExprs.map(alias), LocalRelation(logicalPlan.output))
-    val analyzedPlan = sparkSession.sessionState.analyzer.execute(dummyPlan)
+    val analyzedPlan = sparkSession.sessionState.analyzer
+      .execute(dummyPlan)
       .asInstanceOf[Project]
     sparkSession.sessionState.analyzer.checkAnalysis(analyzedPlan)
     val aliasedGroupings = analyzedPlan.projectList
@@ -673,7 +699,8 @@ private[sql] object RelationalGroupedDataset {
     // This is to prevent unintended OOM errors when the number of distinct values is large
     val maxValues = df.sparkSession.sessionState.conf.dataFramePivotMaxValues
     // Get the distinct values of the column and sort them so its consistent
-    val values = df.select(pivotColumn)
+    val values = df
+      .select(pivotColumn)
       .distinct()
       .limit(maxValues + 1)
       .sort(pivotColumn) // ensure that the output columns are in a consistent logical order
@@ -683,7 +710,8 @@ private[sql] object RelationalGroupedDataset {
 
     if (values.length > maxValues) {
       throw QueryCompilationErrors.aggregationFunctionAppliedOnNonNumericColumnError(
-        pivotColumn.toString, maxValues)
+        pivotColumn.toString,
+        maxValues)
     }
     values
   }
@@ -718,5 +746,6 @@ private[sql] object RelationalGroupedDataset {
   /**
    * To indicate it's the PIVOT
    */
-  private[sql] case class PivotType(pivotCol: Expression, values: Seq[Expression]) extends GroupType
+  private[sql] case class PivotType(pivotCol: Expression, values: Seq[Expression])
+      extends GroupType
 }

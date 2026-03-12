@@ -39,13 +39,13 @@ class InMemoryRowLevelOperationTable(
     partitioning: Array[Transform],
     properties: util.Map[String, String],
     constraints: Array[Constraint] = Array.empty)
-  extends InMemoryTable(
-    name,
-    CatalogV2Util.structTypeToV2Columns(schema),
-    partitioning,
-    properties,
-    constraints)
-  with SupportsRowLevelOperations {
+    extends InMemoryTable(
+      name,
+      CatalogV2Util.structTypeToV2Columns(schema),
+      partitioning,
+      properties,
+      constraints)
+    with SupportsRowLevelOperations {
 
   private final val PARTITION_COLUMN_REF = FieldReference(PartitionKeyColumn.name)
   private final val INDEX_COLUMN_REF = FieldReference(IndexColumn.name)
@@ -62,10 +62,10 @@ class InMemoryRowLevelOperationTable(
 
   override def newRowLevelOperationBuilder(
       info: RowLevelOperationInfo): RowLevelOperationBuilder = {
-    if (properties.getOrDefault(SUPPORTS_DELTAS, "false") == "true") {
-      () => DeltaBasedOperation(info.command)
-    } else {
-      () => PartitionBasedOperation(info.command)
+    if (properties.getOrDefault(SUPPORTS_DELTAS, "false") == "true") { () =>
+      DeltaBasedOperation(info.command)
+    } else { () =>
+      PartitionBasedOperation(info.command)
     }
   }
 
@@ -121,7 +121,7 @@ class InMemoryRowLevelOperationTable(
   }
 
   private case class PartitionBasedReplaceData(scan: InMemoryBatchScan)
-    extends RowLevelOperationBatchWrite {
+      extends RowLevelOperationBatchWrite {
 
     override def commit(messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
       val newData = messages.map(_.asInstanceOf[BufferedRows])
@@ -161,8 +161,7 @@ class InMemoryRowLevelOperationTable(
               LogicalExpressions.sort(
                 PARTITION_COLUMN_REF,
                 SortDirection.ASCENDING,
-                SortDirection.ASCENDING.defaultNullOrdering())
-            )
+                SortDirection.ASCENDING.defaultNullOrdering()))
           }
 
           override def toBatch: DeltaBatchWrite = TestDeltaBatchWrite
@@ -175,7 +174,7 @@ class InMemoryRowLevelOperationTable(
     }
   }
 
-  private object TestDeltaBatchWrite extends RowLevelOperationBatchWrite with DeltaBatchWrite{
+  private object TestDeltaBatchWrite extends RowLevelOperationBatchWrite with DeltaBatchWrite {
     override def createBatchWriterFactory(info: PhysicalWriteInfo): DeltaWriterFactory = {
       new DeltaBufferedRowsWriterFactory(CatalogV2Util.v2ColumnsToStructType(columns()))
     }
@@ -197,8 +196,9 @@ private class DeltaBufferedRowsWriterFactory(schema: StructType) extends DeltaWr
   }
 }
 
-private class DeltaBufferWriter(schema: StructType) extends BufferWriter(schema)
-  with DeltaWriter[InternalRow] {
+private class DeltaBufferWriter(schema: StructType)
+    extends BufferWriter(schema)
+    with DeltaWriter[InternalRow] {
 
   private final val DELETE = UTF8String.fromString(Delete.toString)
   private final val UPDATE = UTF8String.fromString(Update.toString)

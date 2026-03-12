@@ -28,7 +28,7 @@ class TransposeWindowSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
       Batch("CollapseProject", FixedPoint(100), CollapseProject, RemoveNoopOperators) ::
-      Batch("FlipWindow", Once, CollapseWindow, TransposeWindow) :: Nil
+        Batch("FlipWindow", Once, CollapseWindow, TransposeWindow) :: Nil
   }
 
   val testRelation = LocalRelation($"a".string, $"b".string, $"c".int, $"d".string)
@@ -91,8 +91,10 @@ class TransposeWindowSuite extends PlanTest {
 
   test("don't transpose two adjacent windows with intersection of partition and output set") {
     val query = testRelation
-      .window(Seq(Concat(Seq($"a", $"b")).as("e"),
-        sum(c).as("sum_a_2")), partitionSpec3, Seq.empty)
+      .window(
+        Seq(Concat(Seq($"a", $"b")).as("e"), sum(c).as("sum_a_2")),
+        partitionSpec3,
+        Seq.empty)
       .window(Seq(sum(c).as("sum_a_1")), Seq(a, $"e"), Seq.empty)
 
     val analyzed = query.analyze
@@ -112,8 +114,9 @@ class TransposeWindowSuite extends PlanTest {
     comparePlans(optimized, analyzed)
   }
 
-  test("SPARK-34807: transpose two windows with compatible partitions " +
-    "and a Project between them") {
+  test(
+    "SPARK-34807: transpose two windows with compatible partitions " +
+      "and a Project between them") {
     val query = testRelation
       .window(Seq(sum(c).as("_we0")), partitionSpec2, orderSpec2)
       .select(a, b, c, d, $"_we0" as "sum_a_2")
@@ -130,8 +133,9 @@ class TransposeWindowSuite extends PlanTest {
     comparePlans(optimized, correctAnswer.analyze)
   }
 
-  test("SPARK-34807: don't transpose two windows if project between them " +
-    "generates an input column") {
+  test(
+    "SPARK-34807: don't transpose two windows if project between them " +
+      "generates an input column") {
     val query = testRelation
       .window(Seq(sum(c).as("sum_a_2")), partitionSpec2, orderSpec2)
       .select(a, b, c, d, $"sum_a_2", c + d as "e")
@@ -143,8 +147,9 @@ class TransposeWindowSuite extends PlanTest {
     comparePlans(optimized, analyzed)
   }
 
-  test("SPARK-38034: transpose two adjacent windows with compatible partitions " +
-    "which is not a prefix") {
+  test(
+    "SPARK-38034: transpose two adjacent windows with compatible partitions " +
+      "which is not a prefix") {
     val query = testRelation
       .window(Seq(sum(c).as("sum_a_2")), partitionSpec4, orderSpec2)
       .window(Seq(sum(c).as("sum_a_1")), partitionSpec3, orderSpec1)
@@ -155,8 +160,13 @@ class TransposeWindowSuite extends PlanTest {
     val correctAnswer = testRelation
       .window(Seq(sum(c).as("sum_a_1")), partitionSpec3, orderSpec1)
       .window(Seq(sum(c).as("sum_a_2")), partitionSpec4, orderSpec2)
-      .select(Symbol("a"), Symbol("b"), Symbol("c"), Symbol("d"),
-        Symbol("sum_a_2"), Symbol("sum_a_1"))
+      .select(
+        Symbol("a"),
+        Symbol("b"),
+        Symbol("c"),
+        Symbol("d"),
+        Symbol("sum_a_2"),
+        Symbol("sum_a_1"))
 
     comparePlans(optimized, correctAnswer.analyze)
   }

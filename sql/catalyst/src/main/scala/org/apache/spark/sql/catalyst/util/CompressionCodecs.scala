@@ -26,13 +26,16 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.util.Utils
 
 object CompressionCodecs {
-  private val shortCompressionCodecNames = HadoopCompressionCodec.values().map { codec =>
-    codec.lowerCaseName() -> Option(codec.getCompressionCodec).map(_.getClass.getName).orNull
-  }.toMap
+  private val shortCompressionCodecNames = HadoopCompressionCodec
+    .values()
+    .map { codec =>
+      codec.lowerCaseName() -> Option(codec.getCompressionCodec).map(_.getClass.getName).orNull
+    }
+    .toMap
 
   /**
-   * Return the full version of the given codec class.
-   * If it is already a class name, just return it.
+   * Return the full version of the given codec class. If it is already a class name, just return
+   * it.
    */
   def getCodecClassName(name: String): String = {
     val codecName = shortCompressionCodecNames.getOrElse(name.toLowerCase(Locale.ROOT), name)
@@ -45,13 +48,13 @@ object CompressionCodecs {
     } catch {
       case _: ClassNotFoundException =>
         throw QueryExecutionErrors.codecNotAvailableError(
-          codecName, shortCompressionCodecNames.keys.mkString(", "))
+          codecName,
+          shortCompressionCodecNames.keys.mkString(", "))
     }
   }
 
   /**
-   * Set compression configurations to Hadoop `Configuration`.
-   * `codec` should be a full class path
+   * Set compression configurations to Hadoop `Configuration`. `codec` should be a full class path
    */
   def setCodecConfiguration(conf: Configuration, codec: String): Unit = {
     if (codec != null) {

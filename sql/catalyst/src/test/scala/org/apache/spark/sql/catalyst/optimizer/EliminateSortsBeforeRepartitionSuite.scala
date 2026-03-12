@@ -34,19 +34,14 @@ class EliminateSortsBeforeRepartitionSuite extends PlanTest {
   val testRelation = LocalRelation.fromExternalRows(
     Seq($"a".int, $"b".int, $"c".int),
     Seq(Row(1, 2, 3), Row(4, 5, 6)))
-  val anotherTestRelation = LocalRelation.fromExternalRows(
-    Seq($"d".int, $"e".int),
-    Seq(Row(1, 2), Row(3, 4)))
+  val anotherTestRelation =
+    LocalRelation.fromExternalRows(Seq($"d".int, $"e".int), Seq(Row(1, 2), Row(3, 4)))
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
-      Batch("Default", FixedPoint(10),
-        FoldablePropagation,
-        LimitPushDown) ::
-      Batch("Eliminate Sorts", Once,
-        EliminateSorts) ::
-      Batch("Collapse Project", Once,
-        CollapseProject) :: Nil
+      Batch("Default", FixedPoint(10), FoldablePropagation, LimitPushDown) ::
+        Batch("Eliminate Sorts", Once, EliminateSorts) ::
+        Batch("Collapse Project", Once, CollapseProject) :: Nil
   }
 
   def repartition(plan: LogicalPlan): LogicalPlan = plan.repartition(10)
@@ -164,7 +159,8 @@ class EliminateSortsBeforeRepartitionSuite extends PlanTest {
     // can remove sortBy before repartition with orderBy
     val planWithRepartitionAndOrderBy = planWithRepartition.orderBy($"a".asc)
     val optimizedPlanWithRepartitionAndOrderBy = optimize(planWithRepartitionAndOrderBy)
-    val correctPlanWithRepartitionAndOrderBy = analyze(repartition(optimizedPlan).orderBy($"a".asc))
+    val correctPlanWithRepartitionAndOrderBy = analyze(
+      repartition(optimizedPlan).orderBy($"a".asc))
     comparePlans(optimizedPlanWithRepartitionAndOrderBy, correctPlanWithRepartitionAndOrderBy)
   }
 

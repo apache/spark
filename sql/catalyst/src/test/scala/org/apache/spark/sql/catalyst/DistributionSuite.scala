@@ -31,8 +31,7 @@ class DistributionSuite extends SparkFunSuite {
       requiredDistribution: Distribution,
       satisfied: Boolean): Unit = {
     if (inputPartitioning.satisfies(requiredDistribution) != satisfied) {
-      fail(
-        s"""
+      fail(s"""
         |== Input Partitioning ==
         |$inputPartitioning
         |== Required Distribution ==
@@ -45,105 +44,48 @@ class DistributionSuite extends SparkFunSuite {
 
   test("UnspecifiedDistribution and AllTuples") {
     // all partitioning can satisfy UnspecifiedDistribution
-    checkSatisfied(
-      UnknownPartitioning(-1),
-      UnspecifiedDistribution,
-      true)
+    checkSatisfied(UnknownPartitioning(-1), UnspecifiedDistribution, true)
 
-    checkSatisfied(
-      RoundRobinPartitioning(10),
-      UnspecifiedDistribution,
-      true)
+    checkSatisfied(RoundRobinPartitioning(10), UnspecifiedDistribution, true)
 
-    checkSatisfied(
-      SinglePartition,
-      UnspecifiedDistribution,
-      true)
+    checkSatisfied(SinglePartition, UnspecifiedDistribution, true)
 
-    checkSatisfied(
-      HashPartitioning(Seq($"a"), 10),
-      UnspecifiedDistribution,
-      true)
+    checkSatisfied(HashPartitioning(Seq($"a"), 10), UnspecifiedDistribution, true)
 
-    checkSatisfied(
-      RangePartitioning(Seq($"a".asc), 10),
-      UnspecifiedDistribution,
-      true)
+    checkSatisfied(RangePartitioning(Seq($"a".asc), 10), UnspecifiedDistribution, true)
 
-    checkSatisfied(
-      BroadcastPartitioning(IdentityBroadcastMode),
-      UnspecifiedDistribution,
-      true)
+    checkSatisfied(BroadcastPartitioning(IdentityBroadcastMode), UnspecifiedDistribution, true)
 
     // except `BroadcastPartitioning`, all other partitioning can satisfy AllTuples if they have
     // only one partition.
-    checkSatisfied(
-      UnknownPartitioning(1),
-      AllTuples,
-      true)
+    checkSatisfied(UnknownPartitioning(1), AllTuples, true)
 
-    checkSatisfied(
-      UnknownPartitioning(10),
-      AllTuples,
-      false)
+    checkSatisfied(UnknownPartitioning(10), AllTuples, false)
 
-    checkSatisfied(
-      RoundRobinPartitioning(1),
-      AllTuples,
-      true)
+    checkSatisfied(RoundRobinPartitioning(1), AllTuples, true)
 
-    checkSatisfied(
-      RoundRobinPartitioning(10),
-      AllTuples,
-      false)
+    checkSatisfied(RoundRobinPartitioning(10), AllTuples, false)
 
-    checkSatisfied(
-      SinglePartition,
-      AllTuples,
-      true)
+    checkSatisfied(SinglePartition, AllTuples, true)
 
-    checkSatisfied(
-      HashPartitioning(Seq($"a"), 1),
-      AllTuples,
-      true)
+    checkSatisfied(HashPartitioning(Seq($"a"), 1), AllTuples, true)
 
-    checkSatisfied(
-      HashPartitioning(Seq($"a"), 10),
-      AllTuples,
-      false)
+    checkSatisfied(HashPartitioning(Seq($"a"), 10), AllTuples, false)
 
-    checkSatisfied(
-      RangePartitioning(Seq($"a".asc), 1),
-      AllTuples,
-      true)
+    checkSatisfied(RangePartitioning(Seq($"a".asc), 1), AllTuples, true)
 
-    checkSatisfied(
-      RangePartitioning(Seq($"a".asc), 10),
-      AllTuples,
-      false)
+    checkSatisfied(RangePartitioning(Seq($"a".asc), 10), AllTuples, false)
 
-    checkSatisfied(
-      BroadcastPartitioning(IdentityBroadcastMode),
-      AllTuples,
-      false)
+    checkSatisfied(BroadcastPartitioning(IdentityBroadcastMode), AllTuples, false)
   }
 
   test("SinglePartition is the output partitioning") {
     // SinglePartition can satisfy all the distributions except `BroadcastDistribution`
-    checkSatisfied(
-      SinglePartition,
-      ClusteredDistribution(Seq($"a", $"b", $"c")),
-      true)
+    checkSatisfied(SinglePartition, ClusteredDistribution(Seq($"a", $"b", $"c")), true)
 
-    checkSatisfied(
-      SinglePartition,
-      OrderedDistribution(Seq($"a".asc, $"b".asc, $"c".asc)),
-      true)
+    checkSatisfied(SinglePartition, OrderedDistribution(Seq($"a".asc, $"b".asc, $"c".asc)), true)
 
-    checkSatisfied(
-      SinglePartition,
-      BroadcastDistribution(IdentityBroadcastMode),
-      false)
+    checkSatisfied(SinglePartition, BroadcastDistribution(IdentityBroadcastMode), false)
   }
 
   private def testHashPartitioningLike(
@@ -200,7 +142,8 @@ class DistributionSuite extends SparkFunSuite {
       checkSatisfied(
         create(Seq($"a", $"b", $"c"), 1),
         OrderedDistribution(Seq($"a".asc, $"b".asc, $"c".asc)),
-        false) // TODO: this can be relaxed.
+        false
+      ) // TODO: this can be relaxed.
 
       checkSatisfied(
         create(Seq($"b", $"c"), 10),
@@ -209,12 +152,16 @@ class DistributionSuite extends SparkFunSuite {
     }
   }
 
-  testHashPartitioningLike("HashPartitioning",
+  testHashPartitioningLike(
+    "HashPartitioning",
     (expressions, numPartitions) => HashPartitioning(expressions, numPartitions))
 
-  testHashPartitioningLike("CoalescedHashPartitioning", (expressions, numPartitions) =>
+  testHashPartitioningLike(
+    "CoalescedHashPartitioning",
+    (expressions, numPartitions) =>
       CoalescedHashPartitioning(
-        HashPartitioning(expressions, numPartitions), Seq(CoalescedBoundary(0, numPartitions))))
+        HashPartitioning(expressions, numPartitions),
+        Seq(CoalescedBoundary(0, numPartitions))))
 
   test("RangePartitioning is the output partitioning") {
     // RangePartitioning can satisfy OrderedDistribution iff its ordering is a prefix
@@ -323,8 +270,8 @@ class DistributionSuite extends SparkFunSuite {
     val hashPartitioning = HashPartitioning(expressions, 10)
     hashPartitioning.partitionIdExpression match {
       case Pmod(CollationAwareMurmur3Hash(es, 42), Literal(10, IntegerType), _) =>
-        assert(es.length == expressions.length && es.zip(expressions).forall {
-          case (l, r) => l.semanticEquals(r)
+        assert(es.length == expressions.length && es.zip(expressions).forall { case (l, r) =>
+          l.semanticEquals(r)
         })
       case x => fail(s"Unexpected partitionIdExpression $x for $hashPartitioning")
     }
@@ -338,9 +285,10 @@ class DistributionSuite extends SparkFunSuite {
       true)
 
     checkSatisfied(
-      PartitioningCollection(Seq(
-        HashPartitioning(Seq($"a", $"b", $"c"), 10),
-        RangePartitioning(Seq($"a".asc, $"b".asc, $"c".asc), 10))),
+      PartitioningCollection(
+        Seq(
+          HashPartitioning(Seq($"a", $"b", $"c"), 10),
+          RangePartitioning(Seq($"a".asc, $"b".asc, $"c".asc), 10))),
       StatefulOpClusteredDistribution(Seq($"a", $"b", $"c"), 10),
       true)
 
@@ -350,9 +298,7 @@ class DistributionSuite extends SparkFunSuite {
       true)
 
     checkSatisfied(
-      PartitioningCollection(Seq(
-        HashPartitioning(Seq($"a", $"b"), 1),
-        SinglePartition)),
+      PartitioningCollection(Seq(HashPartitioning(Seq($"a", $"b"), 1), SinglePartition)),
       StatefulOpClusteredDistribution(Seq($"a", $"b", $"c"), 1),
       true)
 

@@ -37,7 +37,8 @@ object RewriteCollationJoin extends Rule[LogicalPlan] {
     case j @ Join(_, _, _, Some(condition), _) =>
       val newCondition = condition transform {
         case e @ Equality(l: AttributeReference, r: AttributeReference) =>
-          e.withNewChildren(Seq(processExpression(l, l.dataType), processExpression(r, r.dataType)))
+          e.withNewChildren(
+            Seq(processExpression(l, l.dataType), processExpression(r, r.dataType)))
       }
       if (!newCondition.fastEquals(condition)) {
         j.copy(condition = Some(newCondition))
@@ -59,7 +60,7 @@ object RewriteCollationJoin extends Rule[LogicalPlan] {
 
       // Inject CollationKey for non-binary collated strings.
       case _: StringType =>
-          CollationKey(expr)
+        CollationKey(expr)
 
       // Recursively process struct fields for non-binary structs.
       case StructType(fields) =>

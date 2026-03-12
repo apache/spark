@@ -69,12 +69,12 @@ trait AlterTableDropPartitionSuiteBase extends command.AlterTableDropPartitionSu
 }
 
 /**
- * The class contains tests for the `ALTER TABLE .. DROP PARTITION` command to check
- * V1 In-Memory table catalog.
+ * The class contains tests for the `ALTER TABLE .. DROP PARTITION` command to check V1 In-Memory
+ * table catalog.
  */
 class AlterTableDropPartitionSuite
-  extends AlterTableDropPartitionSuiteBase
-  with CommandSuiteBase {
+    extends AlterTableDropPartitionSuiteBase
+    with CommandSuiteBase {
 
   test("empty string as partition value") {
     withNamespaceAndTable("ns", "tbl") { t =>
@@ -84,8 +84,8 @@ class AlterTableDropPartitionSuite
           sql(s"ALTER TABLE $t DROP PARTITION (p1 = '')")
         },
         condition = "_LEGACY_ERROR_TEMP_1076",
-        parameters = Map("details" -> "The spec ([p1=]) contains an empty partition column value")
-      )
+        parameters =
+          Map("details" -> "The spec ([p1=]) contains an empty partition column value"))
     }
   }
 }

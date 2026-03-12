@@ -20,16 +20,18 @@ package org.apache.spark.sql.execution.command
 import org.apache.spark.sql.{AnalysisException, QueryTest}
 
 /**
- * This base suite contains unified tests for the `ALTER TABLE ... CLUSTER BY` command
- * that check V1 and V2 table catalogs. The tests that cannot run for all supported catalogs are
- * located in more specific test suites:
+ * This base suite contains unified tests for the `ALTER TABLE ... CLUSTER BY` command that check
+ * V1 and V2 table catalogs. The tests that cannot run for all supported catalogs are located in
+ * more specific test suites:
  *
- *   - V2 table catalog tests: `org.apache.spark.sql.execution.command.v2.AlterTableClusterBySuite`
+ *   - V2 table catalog tests:
+ *     `org.apache.spark.sql.execution.command.v2.AlterTableClusterBySuite`
  *   - V1 table catalog tests:
  *     `org.apache.spark.sql.execution.command.v1.AlterTableClusterBySuiteBase`
- *     - V1 In-Memory catalog: `org.apache.spark.sql.execution.command.v1.AlterTableClusterBySuite`
+ *     - V1 In-Memory catalog:
+ *       `org.apache.spark.sql.execution.command.v1.AlterTableClusterBySuite`
  *     - V1 Hive External catalog:
- *        `org.apache.spark.sql.hive.execution.command.AlterTableClusterBySuite`
+ *       `org.apache.spark.sql.hive.execution.command.AlterTableClusterBySuite`
  */
 trait AlterTableClusterBySuiteBase extends QueryTest with DDLCommandTestUtils {
   override val command = "ALTER TABLE CLUSTER BY"
@@ -67,9 +69,10 @@ trait AlterTableClusterBySuiteBase extends QueryTest with DDLCommandTestUtils {
 
   test("test nested clustering columns") {
     withNamespaceAndTable("ns", "table") { tbl =>
-      sql(s"CREATE TABLE $tbl " +
-        s"($nestedColumnSchema) " +
-        s"$defaultUsing CLUSTER BY (${nestedClusteringColumns.mkString(",")})")
+      sql(
+        s"CREATE TABLE $tbl " +
+          s"($nestedColumnSchema) " +
+          s"$defaultUsing CLUSTER BY (${nestedClusteringColumns.mkString(",")})")
       validateClusterBy(tbl, nestedClusteringColumns)
       sql(s"ALTER TABLE $tbl CLUSTER BY (${nestedClusteringColumnsNew.mkString(",")})")
       validateClusterBy(tbl, nestedClusteringColumnsNew)
@@ -84,13 +87,13 @@ trait AlterTableClusterBySuiteBase extends QueryTest with DDLCommandTestUtils {
           sql(s"ALTER TABLE $tbl CLUSTER BY (unknown)")
         },
         condition = "_LEGACY_ERROR_TEMP_3060",
-        parameters = Map("i" -> "unknown",
+        parameters = Map(
+          "i" -> "unknown",
           "schema" ->
             """root
               | |-- id: long (nullable = true)
               | |-- data: string (nullable = true)
-              |""".stripMargin)
-      )
+              |""".stripMargin))
     }
   }
 

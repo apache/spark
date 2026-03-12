@@ -36,7 +36,8 @@ case class ReplaceTableExec(
     partitioning: Seq[Transform],
     tableSpec: TableSpec,
     orCreate: Boolean,
-    invalidateCache: (TableCatalog, Identifier) => Unit) extends LeafV2CommandExec {
+    invalidateCache: (TableCatalog, Identifier) => Unit)
+    extends LeafV2CommandExec {
 
   val tableProperties = CatalogV2Util.convertTableProperties(tableSpec)
 
@@ -67,7 +68,8 @@ case class AtomicReplaceTableExec(
     partitioning: Seq[Transform],
     tableSpec: TableSpec,
     orCreate: Boolean,
-    invalidateCache: (TableCatalog, Identifier) => Unit) extends LeafV2CommandExec {
+    invalidateCache: (TableCatalog, Identifier) => Unit)
+    extends LeafV2CommandExec {
 
   val tableProperties = CatalogV2Util.convertTableProperties(tableSpec)
 

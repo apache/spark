@@ -56,8 +56,8 @@ case class AddArchivesCommand(paths: Seq[String]) extends LeafRunnableCommand {
 }
 
 /**
- * Returns a list of file paths that are added to resources.
- * If file paths are provided, return the ones that are added to resources.
+ * Returns a list of file paths that are added to resources. If file paths are provided, return
+ * the ones that are added to resources.
  */
 case class ListFilesCommand(files: Seq[String] = Seq.empty[String]) extends LeafRunnableCommand {
   override val output: Seq[Attribute] = {
@@ -66,15 +66,18 @@ case class ListFilesCommand(files: Seq[String] = Seq.empty[String]) extends Leaf
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val fileList = sparkSession.sparkContext.listFiles()
     if (files.size > 0) {
-      files.map { f =>
-        val uri = Utils.resolveURI(f)
-        uri.getScheme match {
-          case null | "local" | "file" => new File(uri).getCanonicalFile.toURI.toString
-          case _ => f
+      files
+        .map { f =>
+          val uri = Utils.resolveURI(f)
+          uri.getScheme match {
+            case null | "local" | "file" => new File(uri).getCanonicalFile.toURI.toString
+            case _ => f
+          }
         }
-      }.collect {
-        case f if fileList.contains(f) => f
-      }.map(Row(_))
+        .collect {
+          case f if fileList.contains(f) => f
+        }
+        .map(Row(_))
     } else {
       fileList.map(Row(_))
     }
@@ -82,8 +85,8 @@ case class ListFilesCommand(files: Seq[String] = Seq.empty[String]) extends Leaf
 }
 
 /**
- * Returns a list of jar files that are added to resources.
- * If jar files are provided, return the ones that are added to resources.
+ * Returns a list of jar files that are added to resources. If jar files are provided, return the
+ * ones that are added to resources.
  */
 case class ListJarsCommand(jars: Seq[String] = Seq.empty[String]) extends LeafRunnableCommand {
   override val output: Seq[Attribute] = {
@@ -103,11 +106,11 @@ case class ListJarsCommand(jars: Seq[String] = Seq.empty[String]) extends LeafRu
 }
 
 /**
- * Returns a list of archive paths that are added to resources.
- * If archive paths are provided, return the ones that are added to resources.
+ * Returns a list of archive paths that are added to resources. If archive paths are provided,
+ * return the ones that are added to resources.
  */
 case class ListArchivesCommand(archives: Seq[String] = Seq.empty[String])
-  extends LeafRunnableCommand {
+    extends LeafRunnableCommand {
   override val output: Seq[Attribute] = {
     AttributeReference("Results", StringType, nullable = false)() :: Nil
   }

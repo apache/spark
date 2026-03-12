@@ -24,8 +24,8 @@ import org.apache.spark.unsafe.types.UTF8String
 
 class ConstantColumnVectorSuite extends SparkFunSuite {
 
-  private def testVector(name: String, size: Int, dt: DataType)
-    (f: ConstantColumnVector => Unit): Unit = {
+  private def testVector(name: String, size: Int, dt: DataType)(
+      f: ConstantColumnVector => Unit): Unit = {
     test(name) {
       val vector = new ConstantColumnVector(size, dt)
       f(vector)
@@ -131,8 +131,9 @@ class ConstantColumnVectorSuite extends SparkFunSuite {
     (0 until 10).foreach { i =>
       assert(vector.getMap(i) == columnarMap)
       assert(vector.getMap(i).keyArray().toIntArray === Array(0, 1, 2, 3, 4))
-      assert(vector.getMap(i).valueArray().toBooleanArray ===
-        Array(true, false, true, false, true))
+      assert(
+        vector.getMap(i).valueArray().toBooleanArray ===
+          Array(true, false, true, false, true))
     }
   }
 
@@ -158,11 +159,12 @@ class ConstantColumnVectorSuite extends SparkFunSuite {
     }
   }
 
-  testVector("struct", 10,
+  testVector(
+    "struct",
+    10,
     new StructType()
       .add(StructField("name", StringType))
       .add(StructField("age", IntegerType))) { vector =>
-
     val nameVector = new ConstantColumnVector(10, StringType)
     nameVector.setUtf8String(UTF8String.fromString("jack"))
     vector.setChild(0, nameVector)
@@ -170,7 +172,6 @@ class ConstantColumnVectorSuite extends SparkFunSuite {
     val ageVector = new ConstantColumnVector(10, IntegerType)
     ageVector.setInt(27)
     vector.setChild(1, ageVector)
-
 
     assert(vector.getChild(0) == nameVector)
     assert(vector.getChild(1) == ageVector)

@@ -51,7 +51,8 @@ case class WriteFiles(
     partitionColumns: Seq[Attribute],
     bucketSpec: Option[BucketSpec],
     options: Map[String, String],
-    staticPartitions: TablePartitionSpec) extends UnaryNode {
+    staticPartitions: TablePartitionSpec)
+    extends UnaryNode {
   override def output: Seq[Attribute] = child.output
   override protected def stringArgs: Iterator[Any] = Iterator(child)
   override protected def withNewChildInternal(newChild: LogicalPlan): WriteFiles =
@@ -75,7 +76,8 @@ case class WriteFilesExec(
     partitionColumns: Seq[Attribute],
     bucketSpec: Option[BucketSpec],
     options: Map[String, String],
-    staticPartitions: TablePartitionSpec) extends WriteFilesExecBase {
+    staticPartitions: TablePartitionSpec)
+    extends WriteFilesExecBase {
   override protected def doExecuteWrite(
       writeFilesSpec: WriteFilesSpec): RDD[WriterCommitMessage] = {
     val rdd = child.execute()
@@ -104,8 +106,7 @@ case class WriteFilesExec(
         sparkAttemptNumber,
         committer,
         iterator,
-        concurrentOutputWriterSpec
-      )
+        concurrentOutputWriterSpec)
 
       Iterator(ret)
     }

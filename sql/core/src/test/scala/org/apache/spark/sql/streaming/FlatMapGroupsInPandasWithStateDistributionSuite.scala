@@ -26,19 +26,21 @@ import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructFiel
 import org.apache.spark.tags.SlowSQLTest
 
 @SlowSQLTest
-class FlatMapGroupsInPandasWithStateDistributionSuite extends StreamTest
-  with StatefulOpClusteredDistributionTestHelper {
+class FlatMapGroupsInPandasWithStateDistributionSuite
+    extends StreamTest
+    with StatefulOpClusteredDistributionTestHelper {
 
   import testImplicits._
 
-  test("applyInPandasWithState should require StatefulOpClusteredDistribution " +
-    "from children - without initial state") {
+  test(
+    "applyInPandasWithState should require StatefulOpClusteredDistribution " +
+      "from children - without initial state") {
     assume(shouldTestPandasUDFs)
 
     // Function to maintain running count up to 2, and then remove the count
     // Returns the data and the count if state is defined, otherwise does not return anything
     val pythonScript =
-    """
+      """
       |import pandas as pd
       |from pyspark.sql.types import StructType, StructField, StringType, IntegerType
       |
@@ -65,7 +67,8 @@ class FlatMapGroupsInPandasWithStateDistributionSuite extends StreamTest
       |        yield pd.DataFrame({'key1': [key[0]], 'key2': [key[1]], 'count': [count]})
       |""".stripMargin
     val pythonFunc = TestGroupedMapPandasUDFWithState(
-      name = "pandas_grouped_map_with_state", pythonScript = pythonScript)
+      name = "pandas_grouped_map_with_state",
+      pythonScript = pythonScript)
 
     val inputData = MemoryStream[(String, String, Long)]
     val outputStructType = StructType(
@@ -74,7 +77,9 @@ class FlatMapGroupsInPandasWithStateDistributionSuite extends StreamTest
         StructField("key2", StringType),
         StructField("count", IntegerType)))
     val stateStructType = StructType(Seq(StructField("count", LongType)))
-    val inputDataDS = inputData.toDS().toDF("key1", "key2", "time")
+    val inputDataDS = inputData
+      .toDS()
+      .toDF("key1", "key2", "time")
       .selectExpr("key1", "key2", "timestamp_seconds(time) as timestamp")
     val result =
       inputDataDS
@@ -103,11 +108,16 @@ class FlatMapGroupsInPandasWithStateDistributionSuite extends StreamTest
         }
 
         assert(flatMapGroupsInPandasWithStateExecs.length === 1)
-        assert(requireStatefulOpClusteredDistribution(
-          flatMapGroupsInPandasWithStateExecs.head, Seq(Seq("key1", "key2")), numPartitions))
-        assert(hasDesiredHashPartitioningInChildren(
-          flatMapGroupsInPandasWithStateExecs.head, Seq(Seq("key1", "key2")), numPartitions))
-      }
-    )
+        assert(
+          requireStatefulOpClusteredDistribution(
+            flatMapGroupsInPandasWithStateExecs.head,
+            Seq(Seq("key1", "key2")),
+            numPartitions))
+        assert(
+          hasDesiredHashPartitioningInChildren(
+            flatMapGroupsInPandasWithStateExecs.head,
+            Seq(Seq("key1", "key2")),
+            numPartitions))
+      })
   }
 }

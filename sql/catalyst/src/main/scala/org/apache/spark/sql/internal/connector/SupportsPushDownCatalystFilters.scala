@@ -21,8 +21,8 @@ import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read.ScanBuilder
 
 /**
- * A mix-in interface for {@link ScanBuilder}. Data sources can implement this interface to
- * push down filters to the data source. The pushed down filters will be separated into partition
+ * A mix-in interface for {@link ScanBuilder}. Data sources can implement this interface to push
+ * down filters to the data source. The pushed down filters will be separated into partition
  * filters and data filters. Partition filters are used for partition pruning and data filters are
  * used to reduce the size of the data to be read.
  */

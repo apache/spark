@@ -43,8 +43,7 @@ class StreamingQueryStatusListenerSuite extends StreamTest {
 
   private val sourceProgresses = Array(
     new SourceProgress("s1", "", "", "", 10, 4.0, 5.0),
-    new SourceProgress("s2", "", "", "", 10, 6.0, 7.0)
-  )
+    new SourceProgress("s2", "", "", "", 10, 6.0, 7.0))
 
   test("onQueryStarted, onQueryProgress, onQueryTerminated") {
     val kvStore = new ElementTrackingStore(createStore(), sparkConf)
@@ -54,14 +53,17 @@ class StreamingQueryStatusListenerSuite extends StreamTest {
     // handle query started event
     val id = UUID.randomUUID()
     val runId = UUID.randomUUID()
-    val startEvent = new StreamingQueryListener.QueryStartedEvent(
-      id, runId, "test", "2016-12-05T20:54:20.827Z")
+    val startEvent =
+      new StreamingQueryListener.QueryStartedEvent(id, runId, "test", "2016-12-05T20:54:20.827Z")
     listener.onQueryStarted(startEvent)
 
     // result checking
     assert(queryStore.allQueryUIData.count(_.summary.isActive) == 1)
-    assert(queryStore.allQueryUIData.filter(_.summary.isActive).exists(uiData =>
-      uiData.summary.runId == runId.toString && uiData.summary.name.equals("test")))
+    assert(
+      queryStore.allQueryUIData
+        .filter(_.summary.isActive)
+        .exists(uiData =>
+          uiData.summary.runId == runId.toString && uiData.summary.name.equals("test")))
 
     // handle query progress event
     val progress = mock(classOf[StreamingQueryProgress], RETURNS_SMART_NULLS)
@@ -109,7 +111,11 @@ class StreamingQueryStatusListenerSuite extends StreamTest {
 
     assert(!queryStore.allQueryUIData.filterNot(_.summary.isActive).head.summary.isActive)
     assert(
-      queryStore.allQueryUIData.filterNot(_.summary.isActive).head.summary.runId == runId.toString)
+      queryStore.allQueryUIData
+        .filterNot(_.summary.isActive)
+        .head
+        .summary
+        .runId == runId.toString)
     assert(queryStore.allQueryUIData.filterNot(_.summary.isActive).head.summary.id == id)
   }
 
@@ -121,8 +127,8 @@ class StreamingQueryStatusListenerSuite extends StreamTest {
     // handle first time start
     val id = UUID.randomUUID()
     val runId0 = UUID.randomUUID()
-    val startEvent0 = new StreamingQueryListener.QueryStartedEvent(
-      id, runId0, "test", "2016-12-05T20:54:20.827Z")
+    val startEvent0 =
+      new StreamingQueryListener.QueryStartedEvent(id, runId0, "test", "2016-12-05T20:54:20.827Z")
     listener.onQueryStarted(startEvent0)
 
     // handle terminate event
@@ -131,19 +137,27 @@ class StreamingQueryStatusListenerSuite extends StreamTest {
 
     // handle second time start
     val runId1 = UUID.randomUUID()
-    val startEvent1 = new StreamingQueryListener.QueryStartedEvent(
-      id, runId1, "test", "2016-12-05T20:54:20.827Z")
+    val startEvent1 =
+      new StreamingQueryListener.QueryStartedEvent(id, runId1, "test", "2016-12-05T20:54:20.827Z")
     listener.onQueryStarted(startEvent1)
 
     // result checking
     assert(queryStore.allQueryUIData.count(_.summary.isActive) == 1)
     assert(queryStore.allQueryUIData.filterNot(_.summary.isActive).length == 1)
-    assert(queryStore.allQueryUIData.filter(_.summary.isActive).exists(
-      _.summary.runId == runId1.toString))
-    assert(queryStore.allQueryUIData.filter(_.summary.isActive).exists(uiData =>
-      uiData.summary.runId == runId1.toString && uiData.summary.id == id))
     assert(
-      queryStore.allQueryUIData.filterNot(_.summary.isActive).head.summary.runId == runId0.toString)
+      queryStore.allQueryUIData
+        .filter(_.summary.isActive)
+        .exists(_.summary.runId == runId1.toString))
+    assert(
+      queryStore.allQueryUIData
+        .filter(_.summary.isActive)
+        .exists(uiData => uiData.summary.runId == runId1.toString && uiData.summary.id == id))
+    assert(
+      queryStore.allQueryUIData
+        .filterNot(_.summary.isActive)
+        .head
+        .summary
+        .runId == runId0.toString)
     assert(queryStore.allQueryUIData.filterNot(_.summary.isActive).head.summary.id == id)
   }
 
@@ -160,7 +174,10 @@ class StreamingQueryStatusListenerSuite extends StreamTest {
       val id = UUID.randomUUID()
       val runId = UUID.randomUUID()
       val startEvent = new StreamingQueryListener.QueryStartedEvent(
-        id, runId, "test1", format.format(new Date(System.currentTimeMillis())))
+        id,
+        runId,
+        "test1",
+        format.format(new Date(System.currentTimeMillis())))
       listener.onQueryStarted(startEvent)
       (id, runId)
     }
@@ -204,8 +221,8 @@ class StreamingQueryStatusListenerSuite extends StreamTest {
 
     val id = UUID.randomUUID()
     val runId = UUID.randomUUID()
-    val startEvent = new StreamingQueryListener.QueryStartedEvent(
-      id, runId, "test", "2016-12-05T20:54:20.827Z")
+    val startEvent =
+      new StreamingQueryListener.QueryStartedEvent(id, runId, "test", "2016-12-05T20:54:20.827Z")
     listener.onQueryStarted(startEvent)
 
     var batchId: Int = 0
@@ -254,15 +271,8 @@ class StreamingQueryStatusListenerSuite extends StreamTest {
 
   protected def testStreamingQueryData(kvStore: KVStore): Unit = {
     val id = UUID.randomUUID()
-    val testData = new StreamingQueryData(
-      "some-query",
-      id,
-      id.toString,
-      isActive = false,
-      None,
-      1L,
-      None
-    )
+    val testData =
+      new StreamingQueryData("some-query", id, id.toString, isActive = false, None, 1L, None)
     val store = new ElementTrackingStore(kvStore, sparkConf)
     store.write(testData)
     store.close(closeParent = false)
@@ -277,7 +287,10 @@ class StreamingQueryStatusListenerSuite extends StreamTest {
     val id1 = UUID.randomUUID()
     val runId1 = UUID.randomUUID()
     val startEvent1 = new StreamingQueryListener.QueryStartedEvent(
-      id1, runId1, "test1", "2023-01-01T20:50:00.800Z")
+      id1,
+      runId1,
+      "test1",
+      "2023-01-01T20:50:00.800Z")
     listener.onQueryStarted(startEvent1)
     val terminateEvent1 = new StreamingQueryListener.QueryTerminatedEvent(id1, runId1, None, None)
     listener.onQueryTerminated(terminateEvent1)
@@ -286,10 +299,16 @@ class StreamingQueryStatusListenerSuite extends StreamTest {
     val id2 = UUID.randomUUID()
     val runId2 = UUID.randomUUID()
     val startEvent2 = new StreamingQueryListener.QueryStartedEvent(
-      id2, runId2, "test2", "2023-01-02T20:54:20.827Z")
+      id2,
+      runId2,
+      "test2",
+      "2023-01-02T20:54:20.827Z")
     listener.onQueryStarted(startEvent2)
     val terminateEvent2 = new StreamingQueryListener.QueryTerminatedEvent(
-      id2, runId2, Option("ExampleException"), Option("EXAMPLE_ERROR_CLASS"))
+      id2,
+      runId2,
+      Option("ExampleException"),
+      Option("EXAMPLE_ERROR_CLASS"))
     listener.onQueryTerminated(terminateEvent2)
 
     // check results

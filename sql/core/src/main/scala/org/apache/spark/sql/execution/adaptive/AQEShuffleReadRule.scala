@@ -22,10 +22,12 @@ import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.exchange.{ShuffleExchangeLike, ShuffleOrigin}
 
 /**
- * A rule that may create [[AQEShuffleReadExec]] on top of [[ShuffleQueryStageExec]] and change the
- * plan output partitioning. The AQE framework will skip the rule if it leads to extra shuffles.
+ * A rule that may create [[AQEShuffleReadExec]] on top of [[ShuffleQueryStageExec]] and change
+ * the plan output partitioning. The AQE framework will skip the rule if it leads to extra
+ * shuffles.
  */
 trait AQEShuffleReadRule extends Rule[SparkPlan] {
+
   /**
    * Returns the list of [[ShuffleOrigin]]s supported by this rule.
    */

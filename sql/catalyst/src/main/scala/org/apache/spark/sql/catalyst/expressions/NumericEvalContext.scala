@@ -19,39 +19,34 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * Encapsulates the evaluation context for expressions, capturing SQL configuration
- * state at expression construction time.
+ * Encapsulates the evaluation context for expressions, capturing SQL configuration state at
+ * expression construction time.
  *
  * This context must be stored as part of the expression's state to ensure deterministic
- * evaluation. Without it, copying an expression or evaluating it in a different context
- * (e.g., inside a view) could produce different results due to changed SQL configuration
- * values.
+ * evaluation. Without it, copying an expression or evaluating it in a different context (e.g.,
+ * inside a view) could produce different results due to changed SQL configuration values.
  *
- * @param evalMode                  The error handling mode (LEGACY, ANSI, or TRY) that determines
- *                                  overflow behavior and exception handling for operations like
- *                                  arithmetic and casts.
- * @param allowDecimalPrecisionLoss Whether decimal operations are allowed to lose precision
- *                                  when the result type cannot represent the full precision.
- *                                  Corresponds to
- *                                  spark.sql.decimalOperations.allowPrecisionLoss.
+ * @param evalMode
+ *   The error handling mode (LEGACY, ANSI, or TRY) that determines overflow behavior and
+ *   exception handling for operations like arithmetic and casts.
+ * @param allowDecimalPrecisionLoss
+ *   Whether decimal operations are allowed to lose precision when the result type cannot
+ *   represent the full precision. Corresponds to spark.sql.decimalOperations.allowPrecisionLoss.
  */
-case class NumericEvalContext private(
+case class NumericEvalContext private (
     evalMode: EvalMode.Value,
-    allowDecimalPrecisionLoss: Boolean
-)
+    allowDecimalPrecisionLoss: Boolean)
 
 case object NumericEvalContext {
 
   def apply(
       evalMode: EvalMode.Value,
-      allowDecimalPrecisionLoss: Boolean = SQLConf.get.decimalOperationsAllowPrecisionLoss
-  ): NumericEvalContext = {
+      allowDecimalPrecisionLoss: Boolean = SQLConf.get.decimalOperationsAllowPrecisionLoss)
+      : NumericEvalContext = {
     new NumericEvalContext(evalMode, allowDecimalPrecisionLoss)
   }
 
   def fromSQLConf(conf: SQLConf): NumericEvalContext = {
-    NumericEvalContext(
-      EvalMode.fromSQLConf(conf),
-      conf.decimalOperationsAllowPrecisionLoss)
+    NumericEvalContext(EvalMode.fromSQLConf(conf), conf.decimalOperationsAllowPrecisionLoss)
   }
 }

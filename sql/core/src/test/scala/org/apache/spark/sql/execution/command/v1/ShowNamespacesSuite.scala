@@ -48,7 +48,8 @@ trait ShowNamespacesSuiteBase extends command.ShowNamespacesSuiteBase {
     val e = intercept[AnalysisException] {
       sql("SHOW NAMESPACES in dummy")
     }
-    checkError(e,
+    checkError(
+      e,
       condition = "SCHEMA_NOT_FOUND",
       parameters = Map("schemaName" -> s"`$catalog`.`dummy`"))
   }

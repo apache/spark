@@ -28,11 +28,14 @@ import org.apache.spark.unsafe.types.UTF8String
 /**
  * Represents the extraction of data from a field that contains semi-structured data. The
  * semi-structured column can only be a Variant type for now.
- * @param child The semi-structured column
- * @param field The field to extract
+ * @param child
+ *   The semi-structured column
+ * @param field
+ *   The field to extract
  */
-case class SemiStructuredExtract(
-    child: Expression, field: String) extends UnaryExpression with Unevaluable {
+case class SemiStructuredExtract(child: Expression, field: String)
+    extends UnaryExpression
+    with Unevaluable {
   override lazy val resolved = false
   override def dataType: DataType = StringType
 
@@ -47,14 +50,19 @@ case class SemiStructuredExtract(
  * semi-structured column (only VariantType is supported for now).
  */
 case object ExtractSemiStructuredFields extends Rule[LogicalPlan] {
-  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveExpressionsWithPruning(
-    _.containsPattern(SEMI_STRUCTURED_EXTRACT), ruleId) {
-    case SemiStructuredExtract(column, field) if column.resolved =>
-      if (column.dataType.isInstanceOf[VariantType]) {
-        VariantGet(column, Literal(UTF8String.fromString(field)), VariantType, failOnError = true)
-      } else {
-        throw new AnalysisException(
-          errorClass = "COLUMN_IS_NOT_VARIANT_TYPE", messageParameters = Map.empty)
-      }
-  }
+  override def apply(plan: LogicalPlan): LogicalPlan =
+    plan.resolveExpressionsWithPruning(_.containsPattern(SEMI_STRUCTURED_EXTRACT), ruleId) {
+      case SemiStructuredExtract(column, field) if column.resolved =>
+        if (column.dataType.isInstanceOf[VariantType]) {
+          VariantGet(
+            column,
+            Literal(UTF8String.fromString(field)),
+            VariantType,
+            failOnError = true)
+        } else {
+          throw new AnalysisException(
+            errorClass = "COLUMN_IS_NOT_VARIANT_TYPE",
+            messageParameters = Map.empty)
+        }
+    }
 }

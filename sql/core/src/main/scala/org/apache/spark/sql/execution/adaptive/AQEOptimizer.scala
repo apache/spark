@@ -29,7 +29,7 @@ import org.apache.spark.util.Utils
  * The optimizer for re-optimizing the logical plan used by AdaptiveSparkPlanExec.
  */
 class AQEOptimizer(conf: SQLConf, extendedRuntimeOptimizerRules: Seq[Rule[LogicalPlan]])
-  extends RuleExecutor[LogicalPlan] {
+    extends RuleExecutor[LogicalPlan] {
 
   private def fixedPoint =
     FixedPoint(
@@ -37,7 +37,9 @@ class AQEOptimizer(conf: SQLConf, extendedRuntimeOptimizerRules: Seq[Rule[Logica
       maxIterationsSetting = SQLConf.OPTIMIZER_MAX_ITERATIONS.key)
 
   private val defaultBatches = Seq(
-    Batch("Propagate Empty Relations", fixedPoint,
+    Batch(
+      "Propagate Empty Relations",
+      fixedPoint,
       AQEPropagateEmptyRelation,
       ConvertToLocalRelation,
       UpdateAttributeNullability),
@@ -47,14 +49,15 @@ class AQEOptimizer(conf: SQLConf, extendedRuntimeOptimizerRules: Seq[Rule[Logica
     Batch("User Provided Runtime Optimizers", fixedPoint, extendedRuntimeOptimizerRules: _*)
 
   final override protected def batches: Seq[Batch] = {
-    val excludedRules = conf.getConf(SQLConf.ADAPTIVE_OPTIMIZER_EXCLUDED_RULES)
-      .toSeq.flatMap(Utils.stringToSeq)
+    val excludedRules =
+      conf.getConf(SQLConf.ADAPTIVE_OPTIMIZER_EXCLUDED_RULES).toSeq.flatMap(Utils.stringToSeq)
     defaultBatches.flatMap { batch =>
       val filteredRules = batch.rules.filter { rule =>
         val exclude = excludedRules.contains(rule.ruleName)
         if (exclude) {
-          logInfo(log"Optimization rule '${MDC(RULE_NAME, rule.ruleName)}' is excluded from " +
-            log"the optimizer.")
+          logInfo(
+            log"Optimization rule '${MDC(RULE_NAME, rule.ruleName)}' is excluded from " +
+              log"the optimizer.")
         }
         !exclude
       }
@@ -63,8 +66,9 @@ class AQEOptimizer(conf: SQLConf, extendedRuntimeOptimizerRules: Seq[Rule[Logica
       } else if (filteredRules.nonEmpty) {
         Some(Batch(batch.name, batch.strategy, filteredRules: _*))
       } else {
-        logInfo(log"Optimization batch '${MDC(BATCH_NAME, batch.name)}' is excluded from " +
-          log"the optimizer as all enclosed rules have been excluded.")
+        logInfo(
+          log"Optimization batch '${MDC(BATCH_NAME, batch.name)}' is excluded from " +
+            log"the optimizer as all enclosed rules have been excluded.")
         None
       }
     }

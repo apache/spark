@@ -45,8 +45,7 @@ class RowDataSourceStrategySuite extends SharedSparkSession with BeforeAndAfter 
     conn.prepareStatement("create table test.inttypes (a INT, b INT, c INT)").executeUpdate()
     conn.prepareStatement("insert into test.inttypes values (1, 2, 3)").executeUpdate()
     conn.commit()
-    sql(
-      s"""
+    sql(s"""
         |CREATE OR REPLACE TEMPORARY VIEW inttypes
         |USING org.apache.spark.sql.jdbc
         |OPTIONS (url '$url', dbtable 'TEST.INTTYPES', user 'testUser', password 'testPass')
@@ -62,6 +61,6 @@ class RowDataSourceStrategySuite extends SharedSparkSession with BeforeAndAfter 
     val df1 = df.groupBy("a").agg("b" -> "min")
     val df2 = df.groupBy("a").agg("c" -> "min")
     val res = df1.union(df2)
-    assert(res.distinct().count() == 2)  // would be 1 if the exchange was incorrectly reused
+    assert(res.distinct().count() == 2) // would be 1 if the exchange was incorrectly reused
   }
 }

@@ -28,7 +28,9 @@ import org.apache.spark.sql.execution.streaming.Source
  * its [[latestOffset]] method to always return the latest offset at the beginning of the query.
  */
 class AvailableNowDataStreamWrapper(val delegate: SparkDataStream)
-  extends SparkDataStream with SupportsTriggerAvailableNow with Logging {
+    extends SparkDataStream
+    with SupportsTriggerAvailableNow
+    with Logging {
 
   // See SPARK-45178 for more details.
   logWarning(log"Activating the wrapper implementation of Trigger.AvailableNow for source " +
@@ -40,7 +42,8 @@ class AvailableNowDataStreamWrapper(val delegate: SparkDataStream)
 
   override def initialOffset(): streaming.Offset = delegate.initialOffset()
 
-  override def deserializeOffset(json: String): streaming.Offset = delegate.deserializeOffset(json)
+  override def deserializeOffset(json: String): streaming.Offset =
+    delegate.deserializeOffset(json)
 
   override def commit(end: streaming.Offset): Unit = delegate.commit(end)
 

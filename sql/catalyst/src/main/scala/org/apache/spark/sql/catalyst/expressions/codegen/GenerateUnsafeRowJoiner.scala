@@ -24,17 +24,16 @@ abstract class UnsafeRowJoiner {
   def join(row1: UnsafeRow, row2: UnsafeRow): UnsafeRow
 }
 
-
 /**
  * A code generator for concatenating two [[UnsafeRow]]s into a single [[UnsafeRow]].
  *
  * The high level algorithm is:
  *
- * 1. Concatenate the two bitsets together into a single one, taking padding into account.
- * 2. Move fixed-length data.
- * 3. Move variable-length data.
- * 4. Update the offset position (i.e. the upper 32 bits in the fixed length part) for all
- *    variable-length data.
+ *   1. Concatenate the two bitsets together into a single one, taking padding into account.
+ *   2. Move fixed-length data.
+ *   3. Move variable-length data.
+ *   4. Update the offset position (i.e. the upper 32 bits in the fixed length part) for all
+ *      variable-length data.
  */
 object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), UnsafeRowJoiner] {
 
@@ -44,8 +43,9 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
 
   override protected def canonicalize(in: (StructType, StructType)): (StructType, StructType) = in
 
-  override protected def bind(in: (StructType, StructType), inputSchema: Seq[Attribute])
-    : (StructType, StructType) = {
+  override protected def bind(
+      in: (StructType, StructType),
+      inputSchema: Seq[Attribute]): (StructType, StructType) = {
     in
   }
 
@@ -95,7 +95,7 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
       expressions = copyBitset,
       funcName = "copyBitsetFunc",
       arguments = ("java.lang.Object", "obj1") :: ("long", "offset1") ::
-                  ("java.lang.Object", "obj2") :: ("long", "offset2") :: Nil)
+        ("java.lang.Object", "obj2") :: ("long", "offset2") :: Nil)
 
     // --------------------- copy fixed length portion from row 1 ----------------------- //
     var cursor = outputBitsetWords * 8

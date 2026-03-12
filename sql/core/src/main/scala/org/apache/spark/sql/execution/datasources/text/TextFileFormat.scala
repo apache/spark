@@ -66,7 +66,8 @@ case class TextFileFormat() extends TextBasedFileFormat with DataSourceRegister 
   override def inferSchema(
       sparkSession: SparkSession,
       options: Map[String, String],
-      files: Seq[FileStatus]): Option[StructType] = Some(new StructType().add("value", StringType))
+      files: Seq[FileStatus]): Option[StructType] = Some(
+    new StructType().add("value", StringType))
 
   override def prepareWrite(
       sparkSession: SparkSession,
@@ -116,33 +117,33 @@ case class TextFileFormat() extends TextBasedFileFormat with DataSourceRegister 
       requiredSchema: StructType,
       textOptions: TextOptions): (PartitionedFile) => Iterator[UnsafeRow] = {
 
-    (file: PartitionedFile) => {
-      val confValue = conf.value.value
-      val reader = Utils.createResourceUninterruptiblyIfInTaskThread {
-        if (!textOptions.wholeText) {
-          new HadoopFileLinesReader(file, textOptions.lineSeparatorInRead, confValue)
+    (file: PartitionedFile) =>
+      {
+        val confValue = conf.value.value
+        val reader = Utils.createResourceUninterruptiblyIfInTaskThread {
+          if (!textOptions.wholeText) {
+            new HadoopFileLinesReader(file, textOptions.lineSeparatorInRead, confValue)
+          } else {
+            new HadoopFileWholeTextReader(file, confValue)
+          }
+        }
+        Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ => reader.close()))
+        if (requiredSchema.isEmpty) {
+          val emptyUnsafeRow = new UnsafeRow(0)
+          reader.map(_ => emptyUnsafeRow)
         } else {
-          new HadoopFileWholeTextReader(file, confValue)
-        }
-      }
-      Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ => reader.close()))
-      if (requiredSchema.isEmpty) {
-        val emptyUnsafeRow = new UnsafeRow(0)
-        reader.map(_ => emptyUnsafeRow)
-      } else {
-        val unsafeRowWriter = new UnsafeRowWriter(1)
+          val unsafeRowWriter = new UnsafeRowWriter(1)
 
-        reader.map { line =>
-          // Writes to an UnsafeRow directly
-          unsafeRowWriter.reset()
-          unsafeRowWriter.write(0, line.getBytes, 0, line.getLength)
-          unsafeRowWriter.getRow()
+          reader.map { line =>
+            // Writes to an UnsafeRow directly
+            unsafeRowWriter.reset()
+            unsafeRowWriter.write(0, line.getBytes, 0, line.getLength)
+            unsafeRowWriter.getRow()
+          }
         }
       }
-    }
   }
 
   override def supportDataType(dataType: DataType): Boolean =
     dataType.isInstanceOf[StringType]
 }
-

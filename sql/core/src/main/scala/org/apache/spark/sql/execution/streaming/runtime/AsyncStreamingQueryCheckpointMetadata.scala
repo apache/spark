@@ -25,11 +25,16 @@ import org.apache.spark.util.Clock
 /**
  * A version of [[StreamingQueryCheckpointMetadata]] that supports async state checkpointing.
  *
- * @param sparkSession Spark session
- * @param resolvedCheckpointRoot The resolved checkpoint root path
- * @param asyncWritesExecutorService The executor service for async writes
- * @param asyncProgressTrackingCheckpointingIntervalMs The interval for async progress
- * @param triggerClock The clock to use for trigger time
+ * @param sparkSession
+ *   Spark session
+ * @param resolvedCheckpointRoot
+ *   The resolved checkpoint root path
+ * @param asyncWritesExecutorService
+ *   The executor service for async writes
+ * @param asyncProgressTrackingCheckpointingIntervalMs
+ *   The interval for async progress
+ * @param triggerClock
+ *   The clock to use for trigger time
  */
 class AsyncStreamingQueryCheckpointMetadata(
     sparkSession: SparkSession,
@@ -37,20 +42,18 @@ class AsyncStreamingQueryCheckpointMetadata(
     asyncWritesExecutorService: ThreadPoolExecutor,
     asyncProgressTrackingCheckpointingIntervalMs: Long,
     triggerClock: Clock)
-  extends StreamingQueryCheckpointMetadata(sparkSession, resolvedCheckpointRoot) {
+    extends StreamingQueryCheckpointMetadata(sparkSession, resolvedCheckpointRoot) {
 
   override lazy val offsetLog = new AsyncOffsetSeqLog(
     sparkSession,
     checkpointFile(StreamingCheckpointConstants.DIR_NAME_OFFSETS),
     asyncWritesExecutorService,
     asyncProgressTrackingCheckpointingIntervalMs,
-    clock = triggerClock
-  )
+    clock = triggerClock)
 
   override lazy val commitLog = new AsyncCommitLog(
     sparkSession,
     checkpointFile(StreamingCheckpointConstants.DIR_NAME_COMMITS),
-    asyncWritesExecutorService
-  )
+    asyncWritesExecutorService)
 
 }

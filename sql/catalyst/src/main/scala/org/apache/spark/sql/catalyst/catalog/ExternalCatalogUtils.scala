@@ -45,15 +45,14 @@ object ExternalCatalogUtils {
     val bitSet = new java.util.BitSet(128)
 
     /**
-     * ASCII 01-1F are HTTP control characters that need to be escaped.
-     * \u000A and \u000D are \n and \r, respectively.
+     * ASCII 01-1F are HTTP control characters that need to be escaped. \u000A and \u000D are \n
+     * and \r, respectively.
      */
-    val clist = Array(
-      '\u0001', '\u0002', '\u0003', '\u0004', '\u0005', '\u0006', '\u0007', '\u0008', '\u0009',
-      '\n', '\u000B', '\u000C', '\r', '\u000E', '\u000F', '\u0010', '\u0011', '\u0012', '\u0013',
-      '\u0014', '\u0015', '\u0016', '\u0017', '\u0018', '\u0019', '\u001A', '\u001B', '\u001C',
-      '\u001D', '\u001E', '\u001F', '"', '#', '%', '\'', '*', '/', ':', '=', '?', '\\', '\u007F',
-      '{', '[', ']', '^')
+    val clist = Array('\u0001', '\u0002', '\u0003', '\u0004', '\u0005', '\u0006', '\u0007',
+      '\u0008', '\u0009', '\n', '\u000B', '\u000C', '\r', '\u000E', '\u000F', '\u0010', '\u0011',
+      '\u0012', '\u0013', '\u0014', '\u0015', '\u0016', '\u0017', '\u0018', '\u0019', '\u001A',
+      '\u001B', '\u001C', '\u001D', '\u001E', '\u001F', '"', '#', '%', '\'', '*', '/', ':', '=',
+      '?', '\\', '\u007F', '{', '[', ']', '^')
 
     clist.foreach(bitSet.set(_))
 
@@ -87,7 +86,7 @@ object ExternalCatalogUtils {
       while (firstIndex < length) {
         val c = path.charAt(firstIndex)
         if (needsEscaping(c)) {
-          sb.append('%').append(HEX_CHARS((c & 0xF0) >> 4)).append(HEX_CHARS(c & 0x0F))
+          sb.append('%').append(HEX_CHARS((c & 0xf0) >> 4)).append(HEX_CHARS(c & 0x0f))
         } else {
           sb.append(c)
         }
@@ -110,7 +109,8 @@ object ExternalCatalogUtils {
       val sb = new java.lang.StringBuilder(length)
       var plaintextStartIdx = 0
       while (plaintextEndIdx != -1 && plaintextEndIdx + 2 < length) {
-        if (plaintextEndIdx > plaintextStartIdx) sb.append(path, plaintextStartIdx, plaintextEndIdx)
+        if (plaintextEndIdx > plaintextStartIdx)
+          sb.append(path, plaintextStartIdx, plaintextEndIdx)
         val high = path.charAt(plaintextEndIdx + 1)
         if ((high >>> 8) == 0 && unhexDigits(high) != -1) {
           val low = path.charAt(plaintextEndIdx + 2)
@@ -167,8 +167,11 @@ object ExternalCatalogUtils {
     if (conf.metastorePartitionPruning) {
       catalog.listPartitionsByFilter(table.identifier, partitionFilters)
     } else {
-      ExternalCatalogUtils.prunePartitionsByFilter(table, catalog.listPartitions(table.identifier),
-        partitionFilters, conf.sessionLocalTimeZone)
+      ExternalCatalogUtils.prunePartitionsByFilter(
+        table,
+        catalog.listPartitions(table.identifier),
+        partitionFilters,
+        conf.sessionLocalTimeZone)
     }
   }
 
@@ -180,10 +183,10 @@ object ExternalCatalogUtils {
     if (predicates.isEmpty) {
       inputPartitions
     } else {
-      val partitionSchema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(
-        catalogTable.partitionSchema)
-      val boundPredicate = generatePartitionPredicateByFilter(catalogTable,
-        partitionSchema, predicates)
+      val partitionSchema =
+        CharVarcharUtils.replaceCharVarcharWithStringInSchema(catalogTable.partitionSchema)
+      val boundPredicate =
+        generatePartitionPredicateByFilter(catalogTable, partitionSchema, predicates)
 
       inputPartitions.filter { p =>
         boundPredicate.eval(p.toRow(partitionSchema, defaultTimeZoneId))
@@ -205,10 +208,9 @@ object ExternalCatalogUtils {
         nonPartitionPruningPredicates)
     }
 
-    Predicate.createInterpreted(predicates.reduce(And).transform {
-      case att: AttributeReference =>
-        val index = partitionSchema.indexWhere(_.name == att.name)
-        BoundReference(index, partitionSchema(index).dataType, nullable = true)
+    Predicate.createInterpreted(predicates.reduce(And).transform { case att: AttributeReference =>
+      val index = partitionSchema.indexWhere(_.name == att.name)
+      BoundReference(index, partitionSchema(index).dataType, nullable = true)
     })
   }
 
@@ -220,9 +222,7 @@ object ExternalCatalogUtils {
    * Returns true if `spec1` is a partial partition spec w.r.t. `spec2`, e.g. PARTITION (a=1) is a
    * partial partition spec w.r.t. PARTITION (a=1,b=2).
    */
-  def isPartialPartitionSpec(
-      spec1: TablePartitionSpec,
-      spec2: TablePartitionSpec): Boolean = {
+  def isPartialPartitionSpec(spec1: TablePartitionSpec, spec2: TablePartitionSpec): Boolean = {
     spec1.forall {
       case (partitionColumn, value) if isNullPartitionValue(value) =>
         isNullPartitionValue(spec2(partitionColumn))
@@ -260,24 +260,25 @@ object CatalogUtils {
   }
 
   /**
-   * Convert URI to String.
-   * Since URI.toString does not decode the uri, e.g. change '%25' to '%'.
-   * Here we create a hadoop Path with the given URI, and rely on Path.toString
-   * to decode the uri
-   * @param uri the URI of the path
-   * @return the String of the path
+   * Convert URI to String. Since URI.toString does not decode the uri, e.g. change '%25' to '%'.
+   * Here we create a hadoop Path with the given URI, and rely on Path.toString to decode the uri
+   * @param uri
+   *   the URI of the path
+   * @return
+   *   the String of the path
    */
   def URIToString(uri: URI): String = {
     new Path(uri).toString
   }
 
   /**
-   * Convert String to URI.
-   * Since new URI(string) does not encode string, e.g. change '%' to '%25'.
-   * Here we create a hadoop Path with the given String, and rely on Path.toUri
-   * to encode the string
-   * @param str the String of the path
-   * @return the URI of the path
+   * Convert String to URI. Since new URI(string) does not encode string, e.g. change '%' to
+   * '%25'. Here we create a hadoop Path with the given String, and rely on Path.toUri to encode
+   * the string
+   * @param str
+   *   the String of the path
+   * @return
+   *   the URI of the path
    */
   def stringToURI(str: String): URI = {
     new Path(str).toUri
@@ -317,7 +318,10 @@ object CatalogUtils {
       resolver: Resolver): String = {
     tableCols.find(resolver(_, colName)).getOrElse {
       throw QueryCompilationErrors.columnNotDefinedInTableError(
-        colType, colName, tableName, tableCols)
+        colType,
+        colName,
+        tableName,
+        tableCols)
     }
   }
 }

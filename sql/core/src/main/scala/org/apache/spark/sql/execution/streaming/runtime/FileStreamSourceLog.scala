@@ -28,11 +28,8 @@ import org.apache.spark.sql.execution.streaming.runtime.FileStreamSource.FileEnt
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.ArrayImplicits._
 
-class FileStreamSourceLog(
-    metadataLogVersion: Int,
-    sparkSession: SparkSession,
-    path: String)
-  extends CompactibleFileStreamLog[FileEntry](metadataLogVersion, sparkSession, path) {
+class FileStreamSourceLog(metadataLogVersion: Int, sparkSession: SparkSession, path: String)
+    extends CompactibleFileStreamLog[FileEntry](metadataLogVersion, sparkSession, path) {
 
   import CompactibleFileStreamLog._
   import FileStreamSourceLog._
@@ -41,14 +38,16 @@ class FileStreamSourceLog(
   protected override val defaultCompactInterval: Int =
     sparkSession.sessionState.conf.fileSourceLogCompactInterval
 
-  require(defaultCompactInterval > 0,
+  require(
+    defaultCompactInterval > 0,
     s"Please set ${SQLConf.FILE_SOURCE_LOG_COMPACT_INTERVAL.key} " +
       s"(was $defaultCompactInterval) to a positive value.")
 
   protected override val fileCleanupDelayMs =
     sparkSession.sessionState.conf.fileSourceLogCleanupDelay
 
-  protected override val isDeletingExpiredLog = sparkSession.sessionState.conf.fileSourceLogDeletion
+  protected override val isDeletingExpiredLog =
+    sparkSession.sessionState.conf.fileSourceLogDeletion
 
   // A fixed size log entry cache to cache the file entries belong to the compaction batch. It is
   // used to avoid scanning the compacted log file to retrieve it's own batch data.
@@ -70,18 +69,22 @@ class FileStreamSourceLog(
     }
   }
 
-  override def get(startId: Option[Long], endId: Option[Long]): Array[(Long, Array[FileEntry])] = {
+  override def get(
+      startId: Option[Long],
+      endId: Option[Long]): Array[(Long, Array[FileEntry])] = {
     val startBatchId = startId.getOrElse(0L)
     val endBatchId = endId.orElse(getLatest().map(_._1)).getOrElse(0L)
 
-    val (existedBatches, removedBatches) = (startBatchId to endBatchId).map { id =>
-      if (isCompactionBatch(id, compactInterval) && fileEntryCache.containsKey(id)) {
-        (id, Some(fileEntryCache.get(id)))
-      } else {
-        val logs = filterInBatch(id)(_.batchId == id)
-        (id, logs)
+    val (existedBatches, removedBatches) = (startBatchId to endBatchId)
+      .map { id =>
+        if (isCompactionBatch(id, compactInterval) && fileEntryCache.containsKey(id)) {
+          (id, Some(fileEntryCache.get(id)))
+        } else {
+          val logs = filterInBatch(id)(_.batchId == id)
+          (id, logs)
+        }
       }
-    }.partition(_._2.isDefined)
+      .partition(_._2.isDefined)
 
     // The below code may only be happened when original metadata log file has been removed, so we
     // have to get the batch from latest compacted log file. This is quite time-consuming and may
@@ -89,7 +92,8 @@ class FileStreamSourceLog(
     // latest metadata log file.
     val searchKeys = removedBatches.map(_._1)
     val retrievedBatches = if (searchKeys.nonEmpty) {
-      logWarning(s"Get batches from removed files, this is unexpected in the current code path!!!")
+      logWarning(
+        s"Get batches from removed files, this is unexpected in the current code path!!!")
       val latestBatchId = getLatestBatchId().getOrElse(-1L)
       if (latestBatchId < 0) {
         Map.empty[Long, Option[Array[FileEntry]]]

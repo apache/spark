@@ -33,16 +33,20 @@ class OptimizerLoggingSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
-      Batch("Optimizer Batch", FixedPoint(100),
-        PushPredicateThroughNonJoin, ColumnPruning, CollapseProject) ::
-      Batch("Batch Has No Effect", Once,
-        ColumnPruning) :: Nil
+      Batch(
+        "Optimizer Batch",
+        FixedPoint(100),
+        PushPredicateThroughNonJoin,
+        ColumnPruning,
+        CollapseProject) ::
+        Batch("Batch Has No Effect", Once, ColumnPruning) :: Nil
   }
 
   private def verifyLog(expectedLevel: Level, expectedRulesOrBatches: Seq[String]): Unit = {
     val logAppender = new LogAppender("optimizer rules")
     logAppender.setThreshold(expectedLevel)
-    withLogAppender(logAppender,
+    withLogAppender(
+      logAppender,
       loggerNames = Seq("org.apache.spark.sql.catalyst.rules.PlanChangeLogger"),
       level = Some(Level.TRACE)) {
       val input = LocalRelation($"a".int, $"b".string, $"c".double)
@@ -50,16 +54,13 @@ class OptimizerLoggingSuite extends PlanTest {
       val expected = input.where($"a" > 1).select($"a").analyze
       comparePlans(Optimize.execute(query), expected)
     }
-    val events = logAppender.loggingEvents.filter {
-      case event => Seq(
-        "Applying Rule",
-        "Result of Batch",
-        "has no effect",
-        "Metrics of Executed Rules").exists(event.getMessage().getFormattedMessage.contains)
+    val events = logAppender.loggingEvents.filter { case event =>
+      Seq("Applying Rule", "Result of Batch", "has no effect", "Metrics of Executed Rules")
+        .exists(event.getMessage().getFormattedMessage.contains)
     }
     val logMessages = events.map(_.getMessage.getFormattedMessage)
-    assert(expectedRulesOrBatches.forall
-    (ruleOrBatch => logMessages.exists(_.contains(ruleOrBatch))))
+    assert(
+      expectedRulesOrBatches.forall(ruleOrBatch => logMessages.exists(_.contains(ruleOrBatch))))
     assert(events.forall(_.getLevel == expectedLevel))
     val expectedMetrics = Seq(
       "Total number of runs: 7",
@@ -96,10 +97,7 @@ class OptimizerLoggingSuite extends PlanTest {
   }
 
   test("test invalid log level conf") {
-    val levels = Seq(
-      "",
-      "*d_",
-      "infoo")
+    val levels = Seq("", "*d_", "infoo")
 
     levels.foreach { level =>
       checkError(
@@ -116,24 +114,20 @@ class OptimizerLoggingSuite extends PlanTest {
 
   test("test log rules") {
     val rulesSeq = Seq(
-      Seq(PushPredicateThroughNonJoin.ruleName,
-        ColumnPruning.ruleName,
-        CollapseProject.ruleName).reduce(_ + "," + _) ->
-        Seq(PushPredicateThroughNonJoin.ruleName,
+      Seq(PushPredicateThroughNonJoin.ruleName, ColumnPruning.ruleName, CollapseProject.ruleName)
+        .reduce(_ + "," + _) ->
+        Seq(
+          PushPredicateThroughNonJoin.ruleName,
           ColumnPruning.ruleName,
           CollapseProject.ruleName),
-      Seq(PushPredicateThroughNonJoin.ruleName,
-        ColumnPruning.ruleName).reduce(_ + "," + _) ->
-        Seq(PushPredicateThroughNonJoin.ruleName,
-          ColumnPruning.ruleName),
+      Seq(PushPredicateThroughNonJoin.ruleName, ColumnPruning.ruleName).reduce(_ + "," + _) ->
+        Seq(PushPredicateThroughNonJoin.ruleName, ColumnPruning.ruleName),
       CollapseProject.ruleName ->
         Seq(CollapseProject.ruleName),
-      Seq(ColumnPruning.ruleName,
-        "DummyRule").reduce(_ + "," + _) ->
+      Seq(ColumnPruning.ruleName, "DummyRule").reduce(_ + "," + _) ->
         Seq(ColumnPruning.ruleName),
       "DummyRule" -> Seq(),
-      "" -> Seq()
-    )
+      "" -> Seq())
 
     rulesSeq.foreach { case (rulesConf, expectedRules) =>
       withSQLConf(

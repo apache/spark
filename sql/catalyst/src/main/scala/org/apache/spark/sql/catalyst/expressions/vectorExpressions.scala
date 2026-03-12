@@ -26,15 +26,7 @@ import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.errors.{QueryErrorsBase, QueryExecutionErrors}
-import org.apache.spark.sql.types.{
-  ArrayType,
-  BinaryType,
-  DataType,
-  FloatType,
-  LongType,
-  StringType,
-  StructType
-}
+import org.apache.spark.sql.types.{ArrayType, BinaryType, DataType, FloatType, LongType, StringType, StructType}
 import org.apache.spark.unsafe.Platform
 
 // scalastyle:off line.size.limit
@@ -49,11 +41,11 @@ import org.apache.spark.unsafe.Platform
        0.9746319
   """,
   since = "4.2.0",
-  group = "vector_funcs"
-)
+  group = "vector_funcs")
 // scalastyle:on line.size.limit
 case class VectorCosineSimilarity(left: Expression, right: Expression)
-    extends RuntimeReplaceable with QueryErrorsBase {
+    extends RuntimeReplaceable
+    with QueryErrorsBase {
 
   override def checkInputDataTypes(): TypeCheckResult = {
     (left.dataType, right.dataType) match {
@@ -107,11 +99,11 @@ case class VectorCosineSimilarity(left: Expression, right: Expression)
        32.0
   """,
   since = "4.2.0",
-  group = "vector_funcs"
-)
+  group = "vector_funcs")
 // scalastyle:on line.size.limit
 case class VectorInnerProduct(left: Expression, right: Expression)
-    extends RuntimeReplaceable with QueryErrorsBase {
+    extends RuntimeReplaceable
+    with QueryErrorsBase {
 
   override def checkInputDataTypes(): TypeCheckResult = {
     (left.dataType, right.dataType) match {
@@ -165,11 +157,11 @@ case class VectorInnerProduct(left: Expression, right: Expression)
        5.196152
   """,
   since = "4.2.0",
-  group = "vector_funcs"
-)
+  group = "vector_funcs")
 // scalastyle:on line.size.limit
 case class VectorL2Distance(left: Expression, right: Expression)
-    extends RuntimeReplaceable with QueryErrorsBase {
+    extends RuntimeReplaceable
+    with QueryErrorsBase {
 
   override def checkInputDataTypes(): TypeCheckResult = {
     (left.dataType, right.dataType) match {
@@ -228,11 +220,11 @@ case class VectorL2Distance(left: Expression, right: Expression)
        4.0
   """,
   since = "4.2.0",
-  group = "vector_funcs"
-)
+  group = "vector_funcs")
 // scalastyle:on line.size.limit
 case class VectorNorm(vector: Expression, degree: Expression)
-    extends RuntimeReplaceable with QueryErrorsBase {
+    extends RuntimeReplaceable
+    with QueryErrorsBase {
 
   def this(vector: Expression) = this(vector, Literal(2.0f))
 
@@ -264,8 +256,7 @@ case class VectorNorm(vector: Expression, degree: Expression)
     FloatType,
     "vectorNorm",
     Seq(vector, degree, Literal(prettyName)),
-    Seq(ArrayType(FloatType), FloatType, StringType)
-  )
+    Seq(ArrayType(FloatType), FloatType, StringType))
 
   override def prettyName: String = "vector_norm"
 
@@ -294,11 +285,11 @@ case class VectorNorm(vector: Expression, degree: Expression)
        [0.75,1.0]
   """,
   since = "4.2.0",
-  group = "vector_funcs"
-)
+  group = "vector_funcs")
 // scalastyle:on line.size.limit
 case class VectorNormalize(vector: Expression, degree: Expression)
-    extends RuntimeReplaceable with QueryErrorsBase {
+    extends RuntimeReplaceable
+    with QueryErrorsBase {
 
   def this(vector: Expression) = this(vector, Literal(2.0f))
 
@@ -330,8 +321,7 @@ case class VectorNormalize(vector: Expression, degree: Expression)
     ArrayType(FloatType),
     "vectorNormalize",
     Seq(vector, degree, Literal(prettyName)),
-    Seq(ArrayType(FloatType), FloatType, StringType)
-  )
+    Seq(ArrayType(FloatType), FloatType, StringType))
 
   override def prettyName: String = "vector_normalize"
 
@@ -349,7 +339,8 @@ case class VectorNormalize(vector: Expression, degree: Expression)
 // - count: number of valid vectors seen so far
 // - dimension is inferred from acc.length / 4 (4 bytes per float)
 // Subclasses only need to implement the element-wise update and merge logic.
-trait VectorAggregateBase extends ImperativeAggregate
+trait VectorAggregateBase
+    extends ImperativeAggregate
     with UnaryLike[Expression]
     with QueryErrorsBase {
 
@@ -368,18 +359,12 @@ trait VectorAggregateBase extends ImperativeAggregate
             "paramIndex" -> ordinalNumber(0),
             "requiredType" -> toSQLType(ArrayType(FloatType)),
             "inputSql" -> toSQLExpr(child),
-            "inputType" -> toSQLType(child.dataType)
-          )
-        )
+            "inputType" -> toSQLType(child.dataType)))
     }
   }
 
   // Aggregate buffer schema: (acc: BINARY, count: LONG)
-  private lazy val accAttr = AttributeReference(
-    "acc",
-    BinaryType,
-    nullable = true
-  )()
+  private lazy val accAttr = AttributeReference("acc", BinaryType, nullable = true)()
   private lazy val countAttr =
     AttributeReference("count", LongType, nullable = false)()
 
@@ -456,7 +441,10 @@ trait VectorAggregateBase extends ImperativeAggregate
       val bytes = new Array[Byte](inputLen * 4)
       var i = 0
       while (i < inputLen) {
-        Platform.putFloat(bytes, Platform.BYTE_ARRAY_OFFSET + i.toLong * 4, inputArray.getFloat(i))
+        Platform.putFloat(
+          bytes,
+          Platform.BYTE_ARRAY_OFFSET + i.toLong * 4,
+          inputArray.getFloat(i))
         i += 1
       }
       buffer.update(accOffset, bytes)
@@ -473,11 +461,7 @@ trait VectorAggregateBase extends ImperativeAggregate
 
       // Dimension mismatch check
       if (accDim != inputLen) {
-        throw QueryExecutionErrors.vectorDimensionMismatchError(
-          prettyName,
-          accDim,
-          inputLen
-        )
+        throw QueryExecutionErrors.vectorDimensionMismatchError(prettyName, accDim, inputLen)
       }
 
       val newCount = currentCount + 1L
@@ -517,16 +501,11 @@ trait VectorAggregateBase extends ImperativeAggregate
 
       // Dimension mismatch check
       if (accDim != inputDim) {
-        throw QueryExecutionErrors.vectorDimensionMismatchError(
-          prettyName,
-          accDim,
-          inputDim
-        )
+        throw QueryExecutionErrors.vectorDimensionMismatchError(prettyName, accDim, inputDim)
       }
 
       val newCount = currentCount + inputCount
-      mergeElements(accBytes, inputAccBytes, accDim,
-        currentCount, inputCount, newCount)
+      mergeElements(accBytes, inputAccBytes, accDim, currentCount, inputCount, newCount)
       buffer.setLong(countOffset, newCount)
     }
   }
@@ -561,8 +540,7 @@ trait VectorAggregateBase extends ImperativeAggregate
        [2.0,3.0]
   """,
   since = "4.2.0",
-  group = "vector_funcs"
-)
+  group = "vector_funcs")
 // scalastyle:on line.size.limit
 // Note: This implementation uses single-precision floating-point arithmetic (Float).
 // Precision loss is expected for very large aggregates due to:
@@ -571,21 +549,18 @@ trait VectorAggregateBase extends ImperativeAggregate
 case class VectorAvg(
     child: Expression,
     mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0
-) extends VectorAggregateBase {
+    inputAggBufferOffset: Int = 0)
+    extends VectorAggregateBase {
 
   def this(child: Expression) = this(child, 0, 0)
 
   override def prettyName: String = "vector_avg"
 
   override def withNewMutableAggBufferOffset(
-      newMutableAggBufferOffset: Int
-  ): ImperativeAggregate =
+      newMutableAggBufferOffset: Int): ImperativeAggregate =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
 
-  override def withNewInputAggBufferOffset(
-      newInputAggBufferOffset: Int
-  ): ImperativeAggregate =
+  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
   override protected def updateElements(
@@ -641,8 +616,7 @@ case class VectorAvg(
        [4.0,6.0]
   """,
   since = "4.2.0",
-  group = "vector_funcs"
-)
+  group = "vector_funcs")
 // scalastyle:on line.size.limit
 // Note: This implementation uses single-precision floating-point arithmetic (Float).
 // Precision loss is expected for very large aggregates due to:
@@ -651,21 +625,18 @@ case class VectorAvg(
 case class VectorSum(
     child: Expression,
     mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0
-) extends VectorAggregateBase {
+    inputAggBufferOffset: Int = 0)
+    extends VectorAggregateBase {
 
   def this(child: Expression) = this(child, 0, 0)
 
   override def prettyName: String = "vector_sum"
 
   override def withNewMutableAggBufferOffset(
-      newMutableAggBufferOffset: Int
-  ): ImperativeAggregate =
+      newMutableAggBufferOffset: Int): ImperativeAggregate =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
 
-  override def withNewInputAggBufferOffset(
-      newInputAggBufferOffset: Int
-  ): ImperativeAggregate =
+  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
   override protected def updateElements(
@@ -693,7 +664,9 @@ case class VectorSum(
     var i = 0
     while (i < dim) {
       val off = Platform.BYTE_ARRAY_OFFSET + i.toLong * 4
-      Platform.putFloat(accBytes, off,
+      Platform.putFloat(
+        accBytes,
+        off,
         Platform.getFloat(accBytes, off) + Platform.getFloat(inputBytes, off))
       i += 1
     }

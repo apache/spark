@@ -45,10 +45,11 @@ import org.apache.spark.util.Utils
 /**
  * This object contains fields to help process DEFAULT columns.
  */
-object ResolveDefaultColumns extends QueryErrorsBase
-  with ResolveDefaultColumnsUtils
-  with SQLConfHelper
-  with Logging {
+object ResolveDefaultColumns
+    extends QueryErrorsBase
+    with ResolveDefaultColumnsUtils
+    with SQLConfHelper
+    with Logging {
   // Name of attributes representing explicit references to the value stored in the above
   // CURRENT_DEFAULT_COLUMN_METADATA.
   val CURRENT_DEFAULT_COLUMN_NAME = "DEFAULT"
@@ -61,7 +62,9 @@ object ResolveDefaultColumns extends QueryErrorsBase
     if (SQLConf.get.enableDefaultColumns && columns.exists(_.defaultValue.isDefined) &&
       !catalog.capabilities().contains(TableCatalogCapability.SUPPORT_COLUMN_DEFAULT_VALUE)) {
       throw QueryCompilationErrors.unsupportedTableOperationError(
-        catalog, ident, "column default value")
+        catalog,
+        ident,
+        "column default value")
     }
   }
 
@@ -73,8 +76,11 @@ object ResolveDefaultColumns extends QueryErrorsBase
       addNewColumnToExistingTable: Boolean): Unit = {
     if (SQLConf.get.enableDefaultColumns &&
       schema.exists(_.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY))) {
-      val keywords: Array[String] = SQLConf.get.getConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS)
-        .toLowerCase().split(",").map(_.trim)
+      val keywords: Array[String] = SQLConf.get
+        .getConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS)
+        .toLowerCase()
+        .split(",")
+        .map(_.trim)
       val allowedTableProviders: Array[String] = if (Utils.isTesting) {
         "in-memory" +: keywords.map(_.stripSuffix("*"))
       } else {
@@ -86,13 +92,15 @@ object ResolveDefaultColumns extends QueryErrorsBase
       // Make sure that the target table has a provider that supports default column values.
       if (!allowedTableProviders.contains(givenTableProvider)) {
         throw QueryCompilationErrors.defaultReferencesNotAllowedInDataSource(
-          statementType, givenTableProvider)
+          statementType,
+          givenTableProvider)
       }
       if (addNewColumnToExistingTable &&
         givenTableProvider.nonEmpty &&
         addColumnExistingTableBannedProviders.contains(givenTableProvider)) {
         throw QueryCompilationErrors.addNewDefaultColumnToExistingTableNotAllowed(
-          statementType, givenTableProvider)
+          statementType,
+          givenTableProvider)
       }
     }
   }
@@ -117,13 +125,13 @@ object ResolveDefaultColumns extends QueryErrorsBase
   /**
    * Resolves the column "DEFAULT" in UPDATE/MERGE assignment value expression if the following
    * conditions are met:
-   * 1. The assignment value expression is a single `UnresolvedAttribute` with name "DEFAULT". This
-   *    means `key = DEFAULT` is allowed but `key = DEFAULT + 1` is not.
-   * 2. The assignment key expression is a top-level column. This means `col = DEFAULT` is allowed
-   *    but `col.field = DEFAULT` is not.
+   *   1. The assignment value expression is a single `UnresolvedAttribute` with name "DEFAULT".
+   *      This means `key = DEFAULT` is allowed but `key = DEFAULT + 1` is not.
+   *   2. The assignment key expression is a top-level column. This means `col = DEFAULT` is
+   *      allowed but `col.field = DEFAULT` is not.
    *
-   * The column "DEFAULT" will be resolved to the default value expression defined for the column of
-   * the assignment key.
+   * The column "DEFAULT" will be resolved to the default value expression defined for the column
+   * of the assignment key.
    */
   def resolveColumnDefaultInAssignmentValue(
       key: Expression,
@@ -152,8 +160,8 @@ object ResolveDefaultColumns extends QueryErrorsBase
 
   /**
    * Generates the expression of the default value for the given field. If there is no
-   * user-specified default value for this field and the field is nullable, returns null
-   * literal, otherwise an exception is thrown.
+   * user-specified default value for this field and the field is nullable, returns null literal,
+   * otherwise an exception is thrown.
    */
   def getDefaultValueExprOrNullLit(field: StructField): Expression = {
     val defaultValue = getDefaultValueExprOrNullLit(field, useNullAsDefault = true)
@@ -181,23 +189,27 @@ object ResolveDefaultColumns extends QueryErrorsBase
    * true and the field is nullable.
    */
   def getDefaultValueExprOrNullLit(
-      field: StructField, useNullAsDefault: Boolean): Option[NamedExpression] = {
-    getDefaultValueExprOpt(field).orElse {
-      if (useNullAsDefault && field.nullable) {
-        Some(Literal(null, field.dataType))
-      } else {
-        None
+      field: StructField,
+      useNullAsDefault: Boolean): Option[NamedExpression] = {
+    getDefaultValueExprOpt(field)
+      .orElse {
+        if (useNullAsDefault && field.nullable) {
+          Some(Literal(null, field.dataType))
+        } else {
+          None
+        }
       }
-    }.map(expr => Alias(expr, field.name)())
+      .map(expr => Alias(expr, field.name)())
   }
 
   /**
    * Generates the expression of the default value for the given attribute. If there is no
-   * user-specified default value for this attribute, returns null literal if `useNullAsDefault` is
-   * true and the attribute is nullable.
+   * user-specified default value for this attribute, returns null literal if `useNullAsDefault`
+   * is true and the attribute is nullable.
    */
   def getDefaultValueExprOrNullLit(
-      attr: Attribute, useNullAsDefault: Boolean): Option[NamedExpression] = {
+      attr: Attribute,
+      useNullAsDefault: Boolean): Option[NamedExpression] = {
     val field = StructField(attr.name, attr.dataType, attr.nullable, attr.metadata)
     getDefaultValueExprOrNullLit(field, useNullAsDefault)
   }
@@ -205,12 +217,15 @@ object ResolveDefaultColumns extends QueryErrorsBase
   /**
    * Parses and analyzes the DEFAULT column text in `field`, returning an error upon failure.
    *
-   * @param field         represents the DEFAULT column value whose "default" metadata to parse
-   *                      and analyze.
-   * @param statementType which type of statement we are running, such as INSERT; useful for errors.
-   * @param metadataKey   which key to look up from the column metadata; generally either
-   *                      CURRENT_DEFAULT_COLUMN_METADATA_KEY or EXISTS_DEFAULT_COLUMN_METADATA_KEY.
-   * @return Result of the analysis and constant-folding operation.
+   * @param field
+   *   represents the DEFAULT column value whose "default" metadata to parse and analyze.
+   * @param statementType
+   *   which type of statement we are running, such as INSERT; useful for errors.
+   * @param metadataKey
+   *   which key to look up from the column metadata; generally either
+   *   CURRENT_DEFAULT_COLUMN_METADATA_KEY or EXISTS_DEFAULT_COLUMN_METADATA_KEY.
+   * @return
+   *   Result of the analysis and constant-folding operation.
    */
   def analyze(
       field: StructField,
@@ -227,7 +242,8 @@ object ResolveDefaultColumns extends QueryErrorsBase
   /**
    * Parses and analyzes the DEFAULT column SQL string, returning an error upon failure.
    *
-   * @return Result of the analysis and constant-folding operation.
+   * @return
+   *   Result of the analysis and constant-folding operation.
    */
   def analyze(
       colName: String,
@@ -236,13 +252,17 @@ object ResolveDefaultColumns extends QueryErrorsBase
       statementType: String): Expression = {
     // Parse the expression.
     lazy val parser = new CatalystSqlParser()
-    val parsed: Expression = try {
-      parser.parseExpression(defaultSQL)
-    } catch {
-      case ex: ParseException =>
-        throw QueryCompilationErrors.defaultValuesUnresolvedExprError(
-          statementType, colName, defaultSQL, ex)
-    }
+    val parsed: Expression =
+      try {
+        parser.parseExpression(defaultSQL)
+      } catch {
+        case ex: ParseException =>
+          throw QueryCompilationErrors.defaultValuesUnresolvedExprError(
+            statementType,
+            colName,
+            defaultSQL,
+            ex)
+      }
     analyze(colName, dataType, parsed, defaultSQL, statementType)
   }
 
@@ -253,7 +273,8 @@ object ResolveDefaultColumns extends QueryErrorsBase
    * to a Catalyst expression. If conversion fails but a SQL string is provided, the SQL is parsed
    * instead. If only a SQL string is present, it is parsed directly.
    *
-   * @return the result of the analysis and constant-folding operation
+   * @return
+   *   the result of the analysis and constant-folding operation
    */
   def analyze(
       colName: String,
@@ -286,28 +307,38 @@ object ResolveDefaultColumns extends QueryErrorsBase
     // Check invariants before moving on to analysis.
     if (defaultExpr.containsPattern(PLAN_EXPRESSION)) {
       throw QueryCompilationErrors.defaultValuesMayNotContainSubQueryExpressions(
-        statementType, colName, defaultSQL)
+        statementType,
+        colName,
+        defaultSQL)
     }
 
     // Analyze the parse result.
-    val plan = try {
-      val analyzer: Analyzer = DefaultColumnAnalyzer
-      val analyzed = analyzer.execute(Project(Seq(Alias(defaultExpr, colName)()), OneRowRelation()))
-      analyzer.checkAnalysis(analyzed)
-      // Eagerly execute finish-analysis and constant-folding rules before checking whether the
-      // expression is foldable and resolved.
-      ConstantFolding(DefaultColumnOptimizer.FinishAnalysis(analyzed))
-    } catch {
-      case ex: AnalysisException =>
-        throw QueryCompilationErrors.defaultValuesUnresolvedExprError(
-          statementType, colName, defaultSQL, ex)
-    }
+    val plan =
+      try {
+        val analyzer: Analyzer = DefaultColumnAnalyzer
+        val analyzed =
+          analyzer.execute(Project(Seq(Alias(defaultExpr, colName)()), OneRowRelation()))
+        analyzer.checkAnalysis(analyzed)
+        // Eagerly execute finish-analysis and constant-folding rules before checking whether the
+        // expression is foldable and resolved.
+        ConstantFolding(DefaultColumnOptimizer.FinishAnalysis(analyzed))
+      } catch {
+        case ex: AnalysisException =>
+          throw QueryCompilationErrors.defaultValuesUnresolvedExprError(
+            statementType,
+            colName,
+            defaultSQL,
+            ex)
+      }
     val analyzed: Expression = plan.collectFirst {
       case Project(Seq(a: Alias), OneRowRelation()) => a.child
     }.get
 
     if (!analyzed.foldable) {
-      throw QueryCompilationErrors.defaultValueNotConstantError(statementType, colName, defaultSQL)
+      throw QueryCompilationErrors.defaultValueNotConstantError(
+        statementType,
+        colName,
+        defaultSQL)
     }
 
     // Another extra check, expressions should already be resolved if AnalysisException is not
@@ -325,8 +356,8 @@ object ResolveDefaultColumns extends QueryErrorsBase
   }
 
   /**
-   * Analyze EXISTS_DEFAULT value.  EXISTS_DEFAULT value was created from CURRENT_DEFAQULT
-   * via [[analyze]] and thus this can skip most of those steps.
+   * Analyze EXISTS_DEFAULT value. EXISTS_DEFAULT value was created from CURRENT_DEFAQULT via
+   * [[analyze]] and thus this can skip most of those steps.
    */
   private def analyzeExistenceDefaultValue(field: StructField): Expression = {
     val defaultSQL = field.metadata.getString(EXISTS_DEFAULT_COLUMN_METADATA_KEY)
@@ -345,7 +376,9 @@ object ResolveDefaultColumns extends QueryErrorsBase
         // Check invariants
         if (expr.containsPattern(PLAN_EXPRESSION)) {
           throw QueryCompilationErrors.defaultValuesMayNotContainSubQueryExpressions(
-            "", field.name, defaultSQL)
+            "",
+            field.name,
+            defaultSQL)
         }
 
         expr match {
@@ -366,31 +399,35 @@ object ResolveDefaultColumns extends QueryErrorsBase
   // and constant-folded literal sql, but because they are fetched from external catalog,
   // it is possible that this assumption does not hold, so we fallback to full analysis
   // if we encounter an unresolved existsDefault
-  private def fallbackResolveExistenceDefaultValue(
-      field: StructField): Expression = {
-    field.getExistenceDefaultValue().map { defaultSQL: String =>
+  private def fallbackResolveExistenceDefaultValue(field: StructField): Expression = {
+    field
+      .getExistenceDefaultValue()
+      .map { defaultSQL: String =>
+        logWarning(
+          log"Encountered unresolved exists default value: " +
+            log"'${MDC(COLUMN_DEFAULT_VALUE, defaultSQL)}' " +
+            log"for column ${MDC(COLUMN_NAME, field.name)} " +
+            log"with ${MDC(COLUMN_DATA_TYPE_SOURCE, field.dataType)}, " +
+            log"falling back to full analysis.")
 
-      logWarning(log"Encountered unresolved exists default value: " +
-        log"'${MDC(COLUMN_DEFAULT_VALUE, defaultSQL)}' " +
-        log"for column ${MDC(COLUMN_NAME, field.name)} " +
-        log"with ${MDC(COLUMN_DATA_TYPE_SOURCE, field.dataType)}, " +
-        log"falling back to full analysis.")
-
-      val expr = analyze(field, "", EXISTS_DEFAULT_COLUMN_METADATA_KEY)
-      val literal = expr match {
-        case _: ExprLiteral | _: Cast => expr
-        case _ => throw SparkException.internalError(s"parse existence default as literal err," +
-          s" field name: ${field.name}, value: $defaultSQL")
+        val expr = analyze(field, "", EXISTS_DEFAULT_COLUMN_METADATA_KEY)
+        val literal = expr match {
+          case _: ExprLiteral | _: Cast => expr
+          case _ =>
+            throw SparkException.internalError(
+              s"parse existence default as literal err," +
+                s" field name: ${field.name}, value: $defaultSQL")
+        }
+        literal
       }
-      literal
-    }.orNull
+      .orNull
   }
 
   /**
-   * If the provided default value is a literal of a wider type than the target column,
-   * but the literal value fits within the narrower type, just coerce it for convenience.
-   * Exclude boolean/array/struct/map types from consideration for this type coercion to
-   * avoid surprising behavior like interpreting "false" as integer zero.
+   * If the provided default value is a literal of a wider type than the target column, but the
+   * literal value fits within the narrower type, just coerce it for convenience. Exclude
+   * boolean/array/struct/map types from consideration for this type coercion to avoid surprising
+   * behavior like interpreting "false" as integer zero.
    */
   private def defaultValueFromWiderTypeLiteral(
       expr: Expression,
@@ -398,19 +435,21 @@ object ResolveDefaultColumns extends QueryErrorsBase
       colName: String): Option[Expression] = {
     expr match {
       case e if e.foldable && !Seq(targetType, e.dataType).exists(_ match {
-        case _: BooleanType | _: ArrayType | _: StructType | _: MapType => true
-        case _ => false
-      }) =>
+            case _: BooleanType | _: ArrayType | _: StructType | _: MapType => true
+            case _ => false
+          }) =>
         val casted = Cast(e, targetType, Some(conf.sessionLocalTimeZone), evalMode = EvalMode.TRY)
         try {
           Option(casted.eval(EmptyRow)).map(Literal(_, targetType))
         } catch {
           case NonFatal(ex) =>
-            logWarning(log"Failed to cast default value '${MDC(COLUMN_DEFAULT_VALUE, e)}' " +
-              log"for column ${MDC(COLUMN_NAME, colName)} " +
-              log"from ${MDC(COLUMN_DATA_TYPE_SOURCE, e.dataType)} " +
-              log"to ${MDC(COLUMN_DATA_TYPE_TARGET, targetType)} " +
-              log"due to ${MDC(ERROR, ex.getMessage)}", ex)
+            logWarning(
+              log"Failed to cast default value '${MDC(COLUMN_DEFAULT_VALUE, e)}' " +
+                log"for column ${MDC(COLUMN_NAME, colName)} " +
+                log"from ${MDC(COLUMN_DATA_TYPE_SOURCE, e.dataType)} " +
+                log"to ${MDC(COLUMN_DATA_TYPE_TARGET, targetType)} " +
+                log"due to ${MDC(ERROR, ex.getMessage)}",
+              ex)
             None
         }
       case _ => None
@@ -437,7 +476,11 @@ object ResolveDefaultColumns extends QueryErrorsBase
       case other =>
         defaultValueFromWiderTypeLiteral(other, supplanted, colName).getOrElse(
           throw QueryCompilationErrors.defaultValuesDataTypeError(
-            statementType, colName, defaultSQL, dataType, other.dataType))
+            statementType,
+            colName,
+            defaultSQL,
+            dataType,
+            other.dataType))
     }
     if (!conf.charVarcharAsString && CharVarcharUtils.hasCharVarchar(dataType)) {
       CharVarcharUtils.stringLengthCheck(ret, dataType).eval(EmptyRow)
@@ -448,8 +491,10 @@ object ResolveDefaultColumns extends QueryErrorsBase
   /**
    * Normalizes a schema field name suitable for use in looking up into maps keyed by schema field
    * names.
-   * @param str the field name to normalize
-   * @return the normalized result
+   * @param str
+   *   the field name to normalize
+   * @return
+   *   the normalized result
    */
   def normalizeFieldName(str: String): String = {
     if (SQLConf.get.caseSensitiveAnalysis) {
@@ -460,13 +505,14 @@ object ResolveDefaultColumns extends QueryErrorsBase
   }
 
   /**
-   * Parses the text representing constant-folded default column literal values. These are known as
-   * "existence" default values because each one is the constant-folded result of the original
-   * default value first assigned to the column at table/column creation time. When scanning a field
-   * from any data source, if the corresponding value is not present in storage, the output row
-   * returns this "existence" default value instead of NULL.
-   * @return a sequence of either (1) NULL, if the column had no default value, or (2) an object of
-   *         Any type suitable for assigning into a row using the InternalRow.update method.
+   * Parses the text representing constant-folded default column literal values. These are known
+   * as "existence" default values because each one is the constant-folded result of the original
+   * default value first assigned to the column at table/column creation time. When scanning a
+   * field from any data source, if the corresponding value is not present in storage, the output
+   * row returns this "existence" default value instead of NULL.
+   * @return
+   *   a sequence of either (1) NULL, if the column had no default value, or (2) an object of Any
+   *   type suitable for assigning into a row using the InternalRow.update method.
    */
   def getExistenceDefaultValues(schema: StructType): Array[Any] = {
     schema.fields.map(getExistenceDefaultValue)
@@ -484,16 +530,17 @@ object ResolveDefaultColumns extends QueryErrorsBase
   }
 
   /**
-   * Returns an array of boolean values equal in size to the result of [[getExistenceDefaultValues]]
-   * above, for convenience.
+   * Returns an array of boolean values equal in size to the result of
+   * [[getExistenceDefaultValues]] above, for convenience.
    */
   def getExistenceDefaultsBitmask(schema: StructType): Array[Boolean] = {
     Array.fill[Boolean](existenceDefaultValues(schema).length)(true)
   }
 
   /**
-   * Resets the elements of the array initially returned from [[getExistenceDefaultsBitmask]] above.
-   * Afterwards, set element(s) to false before calling [[applyExistenceDefaultValuesToRow]] below.
+   * Resets the elements of the array initially returned from [[getExistenceDefaultsBitmask]]
+   * above. Afterwards, set element(s) to false before calling
+   * [[applyExistenceDefaultValuesToRow]] below.
    */
   def resetExistenceDefaultsBitmask(schema: StructType, bitmask: Array[Boolean]): Unit = {
     val defaultValues = existenceDefaultValues(schema)
@@ -505,7 +552,9 @@ object ResolveDefaultColumns extends QueryErrorsBase
   /**
    * Updates a subset of columns in the row with default values from the metadata in the schema.
    */
-  def applyExistenceDefaultValuesToRow(schema: StructType, row: InternalRow,
+  def applyExistenceDefaultValuesToRow(
+      schema: StructType,
+      row: InternalRow,
       bitmask: Array[Boolean]): Unit = {
     val existingValues = existenceDefaultValues(schema)
     if (hasExistenceDefaultValues(schema)) {
@@ -534,15 +583,18 @@ object ResolveDefaultColumns extends QueryErrorsBase
 
   /** If any fields in a schema have default values, appends them to the result. */
   def getDescribeMetadata(cols: Array[Column]): Seq[(String, String, String)] = {
-    cols.filter(_.defaultValue() != null).flatMap { col =>
-      ("", "", "") :: ("# Column Default Values", "", "") ::
-        (col.name, col.dataType.simpleString, col.defaultValue().getSql) :: Nil
-    }.toSeq
+    cols
+      .filter(_.defaultValue() != null)
+      .flatMap { col =>
+        ("", "", "") :: ("# Column Default Values", "", "") ::
+          (col.name, col.dataType.simpleString, col.defaultValue().getSql) :: Nil
+      }
+      .toSeq
   }
 
   /**
-   * These define existence default values for the struct fields for efficiency purposes.
-   * The caller should avoid using such methods in a loop for efficiency.
+   * These define existence default values for the struct fields for efficiency purposes. The
+   * caller should avoid using such methods in a loop for efficiency.
    */
   def existenceDefaultValues(schema: StructType): Array[Any] =
     getExistenceDefaultValues(schema)
@@ -559,7 +611,9 @@ object ResolveDefaultColumns extends QueryErrorsBase
       targetTypeOption: Option[DataType]): Unit = {
     if (default.containsPattern(PLAN_EXPRESSION)) {
       throw QueryCompilationErrors.defaultValuesMayNotContainSubQueryExpressions(
-        statement, colName, default.originalSQL)
+        statement,
+        colName,
+        default.originalSQL)
     }
 
     if (default.references.nonEmpty || default.exists(_.isInstanceOf[VariableReference])) {
@@ -568,7 +622,9 @@ object ResolveDefaultColumns extends QueryErrorsBase
       // expression references columns, which means it's not a constant for sure.
       // Note that, session variable should be considered as non-constant as well.
       throw QueryCompilationErrors.defaultValueNotConstantError(
-        statement, colName, default.originalSQL)
+        statement,
+        colName,
+        default.originalSQL)
     }
 
     if (default.resolved) {
@@ -576,12 +632,19 @@ object ResolveDefaultColumns extends QueryErrorsBase
         // Type coercion should have already run before this check, so types should match.
         if (!ColumnDefinition.isDefaultValueTypeMatched(default.child.dataType, targetType)) {
           throw QueryCompilationErrors.defaultValuesDataTypeError(
-            statement, colName, default.originalSQL, targetType, default.child.dataType)
+            statement,
+            colName,
+            default.originalSQL,
+            targetType,
+            default.child.dataType)
         }
       }
     } else {
       throw QueryCompilationErrors.defaultValuesUnresolvedExprError(
-        statement, colName, default.originalSQL, null)
+        statement,
+        colName,
+        default.originalSQL,
+        null)
     }
 
     // Our analysis check passes here. We do not further inspect whether the
@@ -589,16 +652,18 @@ object ResolveDefaultColumns extends QueryErrorsBase
 
     if (!default.deterministic) {
       throw QueryCompilationErrors.defaultValueNonDeterministicError(
-        statement, colName, default.originalSQL)
+        statement,
+        colName,
+        default.originalSQL)
     }
   }
 
   /**
    * This is an Analyzer for processing default column values using built-in functions only.
    */
-  object DefaultColumnAnalyzer extends Analyzer(
-    new CatalogManager(BuiltInFunctionCatalog, BuiltInFunctionCatalog.v1Catalog)) {
-  }
+  object DefaultColumnAnalyzer
+      extends Analyzer(
+        new CatalogManager(BuiltInFunctionCatalog, BuiltInFunctionCatalog.v1Catalog)) {}
 
   /**
    * This is an Optimizer for convert default column expressions to foldable literals.
@@ -606,14 +671,17 @@ object ResolveDefaultColumns extends QueryErrorsBase
   object DefaultColumnOptimizer extends Optimizer(DefaultColumnAnalyzer.catalogManager)
 
   /**
-   * This is a FunctionCatalog for performing analysis using built-in functions only. It is a helper
-   * for the DefaultColumnAnalyzer above.
+   * This is a FunctionCatalog for performing analysis using built-in functions only. It is a
+   * helper for the DefaultColumnAnalyzer above.
    */
   object BuiltInFunctionCatalog extends FunctionCatalog {
     val v1Catalog = new SessionCatalog(
-      new InMemoryCatalog, FunctionRegistry.builtin, TableFunctionRegistry.builtin) {
+      new InMemoryCatalog,
+      FunctionRegistry.builtin,
+      TableFunctionRegistry.builtin) {
       override def createDatabase(
-          dbDefinition: CatalogDatabase, ignoreIfExists: Boolean): Unit = {}
+          dbDefinition: CatalogDatabase,
+          ignoreIfExists: Boolean): Unit = {}
     }
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
     override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {}

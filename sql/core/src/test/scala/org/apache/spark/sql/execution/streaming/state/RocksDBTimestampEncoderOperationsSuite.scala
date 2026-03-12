@@ -40,14 +40,16 @@ import org.apache.spark.util.Utils
  * [[TimestampAsPrefixKeyStateEncoder]] and [[TimestampAsPostfixKeyStateEncoder]].
  */
 @ExtendedSQLTest
-class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
-  with BeforeAndAfterEach with Matchers {
+class RocksDBTimestampEncoderOperationsSuite
+    extends SharedSparkSession
+    with BeforeAndAfterEach
+    with Matchers {
 
   // Test schemas
-  private val keySchema = StructType(Seq(
-    StructField("key", StringType, nullable = true),
-    StructField("partitionId", IntegerType, nullable = true)
-  ))
+  private val keySchema = StructType(
+    Seq(
+      StructField("key", StringType, nullable = true),
+      StructField("partitionId", IntegerType, nullable = true)))
   private val valueSchema = StructType(Seq(StructField("value", IntegerType, nullable = true)))
 
   // Column family names for testing
@@ -75,7 +77,8 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
       test(s"Event time as $encoderType: basic put and get operations (encoding = $encoding)") {
         tryWithProviderResource(
           newStoreProviderWithTimestampEncoder(
-            encoderType = encoderType, dataEncoding = encoding)) { provider =>
+            encoderType = encoderType,
+            dataEncoding = encoding)) { provider =>
           val store = provider.getStore(0)
 
           try {
@@ -105,7 +108,8 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
       test(s"Event time as $encoderType: remove operations (encoding = $encoding)") {
         tryWithProviderResource(
           newStoreProviderWithTimestampEncoder(
-            encoderType = encoderType, dataEncoding = encoding)) { provider =>
+            encoderType = encoderType,
+            dataEncoding = encoding)) { provider =>
           val store = provider.getStore(0)
 
           try {
@@ -133,8 +137,7 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
           newStoreProviderWithTimestampEncoder(
             encoderType = encoderType,
             useMultipleValuesPerKey = true,
-            dataEncoding = encoding)
-        ) { provider =>
+            dataEncoding = encoding)) { provider =>
           val store = provider.getStore(0)
 
           try {
@@ -148,13 +151,7 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
             val retrievedValues =
               store.valuesIterator(keyWithTimestamp1).map(_.copy()).toList
             assert(retrievedValues.length === 3)
-            assert(
-              retrievedValues.map(_.getInt(0)).sorted === Array(
-                100,
-                200,
-                300
-              ).sorted
-            )
+            assert(retrievedValues.map(_.getInt(0)).sorted === Array(100, 200, 300).sorted)
 
             // Test with different event time should return empty iterator
             val keyWithTimestamp2 = keyAndTimestampToRow("key1", 1, 2000L)
@@ -171,8 +168,7 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
           newStoreProviderWithTimestampEncoder(
             encoderType = encoderType,
             useMultipleValuesPerKey = true,
-            dataEncoding = encoding)
-        ) { provider =>
+            dataEncoding = encoding)) { provider =>
           val store = provider.getStore(0)
 
           try {
@@ -205,7 +201,8 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
       test(s"Event time as $encoderType: null value validation (encoding = $encoding)") {
         tryWithProviderResource(
           newStoreProviderWithTimestampEncoder(
-            encoderType = encoderType, dataEncoding = encoding)) { provider =>
+            encoderType = encoderType,
+            dataEncoding = encoding)) { provider =>
           val store = provider.getStore(0)
 
           try {
@@ -228,57 +225,54 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
   Seq("unsaferow").foreach { encoding =>
     test(s"Event time as prefix: iterator operations (encoding = $encoding)") {
       tryWithProviderResource(
-        newStoreProviderWithTimestampEncoder(
-          encoderType = "prefix", dataEncoding = encoding)) { provider =>
-        val store = provider.getStore(0)
+        newStoreProviderWithTimestampEncoder(encoderType = "prefix", dataEncoding = encoding)) {
+        provider =>
+          val store = provider.getStore(0)
 
-        try {
-          val entries = Map(
-            keyAndTimestampToRow("key1", 1, 2000L) -> valueToRow(100),
-            keyAndTimestampToRow("key2", 1, 1000L) -> valueToRow(200),
-            keyAndTimestampToRow("key1", 2, -3000L) -> valueToRow(300)
-          )
+          try {
+            val entries = Map(
+              keyAndTimestampToRow("key1", 1, 2000L) -> valueToRow(100),
+              keyAndTimestampToRow("key2", 1, 1000L) -> valueToRow(200),
+              keyAndTimestampToRow("key1", 2, -3000L) -> valueToRow(300))
 
-          // Put all entries (in non-sorted order)
-          entries.foreach { case (keyAndTimestampRow, value) =>
-            store.put(keyAndTimestampRow, value)
-          }
+            // Put all entries (in non-sorted order)
+            entries.foreach { case (keyAndTimestampRow, value) =>
+              store.put(keyAndTimestampRow, value)
+            }
 
-          // Test iterator - should return all entries ordered by event time
-          val iterator = store.iterator()
-          val results = iterator.map { pair =>
-            assert(pair.key.numFields() === 3) // key fields + timestamp
+            // Test iterator - should return all entries ordered by event time
+            val iterator = store.iterator()
+            val results = iterator.map { pair =>
+              assert(pair.key.numFields() === 3) // key fields + timestamp
 
-            val keyString = pair.key.getString(0)
-            val partitionId = pair.key.getInt(1)
-            // The timestamp will be placed at the end of the key row.
-            val timestamp = pair.key.getLong(2)
-            val value = pair.value.getInt(0)
-            (keyString, partitionId, timestamp, value)
-          }.toList
+              val keyString = pair.key.getString(0)
+              val partitionId = pair.key.getInt(1)
+              // The timestamp will be placed at the end of the key row.
+              val timestamp = pair.key.getLong(2)
+              val value = pair.value.getInt(0)
+              (keyString, partitionId, timestamp, value)
+            }.toList
 
-          iterator.close()
+            iterator.close()
 
-          assert(results.length === 3)
+            assert(results.length === 3)
 
-          // Verify results are ordered by event time (ascending)
-          val eventTimes = results.map(_._3)
-          assert(
-            eventTimes === Seq(-3000L, 1000L, 2000L),
-            "Results should be ordered by event time"
-          )
+            // Verify results are ordered by event time (ascending)
+            val eventTimes = results.map(_._3)
+            assert(
+              eventTimes === Seq(-3000L, 1000L, 2000L),
+              "Results should be ordered by event time")
 
-          // Verify all expected entries are present
-          val retrievedEntries = results.map {
-            case (key, partId, time, value) =>
+            // Verify all expected entries are present
+            val retrievedEntries = results.map { case (key, partId, time, value) =>
               ((key, partId, time), value)
-          }.toMap
-          assert(retrievedEntries(("key1", 2, -3000L)) === 300)
-          assert(retrievedEntries(("key2", 1, 1000L)) === 200)
-          assert(retrievedEntries(("key1", 1, 2000L)) === 100)
-        } finally {
-          store.abort()
-        }
+            }.toMap
+            assert(retrievedEntries(("key1", 2, -3000L)) === 300)
+            assert(retrievedEntries(("key2", 1, 1000L)) === 200)
+            assert(retrievedEntries(("key1", 1, 2000L)) === 100)
+          } finally {
+            store.abort()
+          }
       }
     }
 
@@ -287,8 +281,7 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
         newStoreProviderWithTimestampEncoder(
           encoderType = "prefix",
           useMultipleValuesPerKey = true,
-          dataEncoding = encoding)
-      ) { provider =>
+          dataEncoding = encoding)) { provider =>
         val store = provider.getStore(0)
 
         try {
@@ -326,8 +319,7 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
           val distinctEventTimes = eventTimes.distinct
           assert(
             distinctEventTimes === Seq(-3000L, 1000L, 2000L),
-            "Results should be ordered by event time"
-          )
+            "Results should be ordered by event time")
 
           // Verify the first 2 results are from time -3000L
           assert(results.take(2).forall(_._3 === -3000L))
@@ -348,57 +340,56 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
 
     test(s"Event time as postfix: prefix scan operations (encoding = $encoding)") {
       tryWithProviderResource(
-        newStoreProviderWithTimestampEncoder(encoderType = "postfix", dataEncoding = encoding)
-      ) { provider =>
-        val store = provider.getStore(0)
+        newStoreProviderWithTimestampEncoder(encoderType = "postfix", dataEncoding = encoding)) {
+        provider =>
+          val store = provider.getStore(0)
 
-        try {
-          // Put entries with the same complete key but different event times
-          // Prefix scan should find all entries with the same key across different event times
+          try {
+            // Put entries with the same complete key but different event times
+            // Prefix scan should find all entries with the same key across different event times
 
-          // Insert in non-sorted order to verify that prefix scan returns them sorted by time
-          store.put(keyAndTimestampToRow("key1", 1, 2000L), valueToRow(102))
-          store.put(keyAndTimestampToRow("key1", 1, -3000L), valueToRow(100))
-          store.put(keyAndTimestampToRow("key1", 1, 1000L), valueToRow(101))
+            // Insert in non-sorted order to verify that prefix scan returns them sorted by time
+            store.put(keyAndTimestampToRow("key1", 1, 2000L), valueToRow(102))
+            store.put(keyAndTimestampToRow("key1", 1, -3000L), valueToRow(100))
+            store.put(keyAndTimestampToRow("key1", 1, 1000L), valueToRow(101))
 
-          // Different key (key2, 1) - should not be returned
-          store.put(keyAndTimestampToRow("key2", 1, 1500L), valueToRow(200))
+            // Different key (key2, 1) - should not be returned
+            store.put(keyAndTimestampToRow("key2", 1, 1500L), valueToRow(200))
 
-          // Test prefixScan - pass the complete key to find all event times for that key
-          val iterator = store.prefixScan(keyToRow("key1", 1))
+            // Test prefixScan - pass the complete key to find all event times for that key
+            val iterator = store.prefixScan(keyToRow("key1", 1))
 
-          val results = iterator.map { pair =>
-            assert(pair.key.numFields() === 3) // key fields + timestamp
+            val results = iterator.map { pair =>
+              assert(pair.key.numFields() === 3) // key fields + timestamp
 
-            val keyStr = pair.key.getString(0)
-            val partitionId = pair.key.getInt(1)
-            // The timestamp will be placed at the end of the key row.
-            val timestamp = pair.key.getLong(2)
-            val value = pair.value.getInt(0)
-            (keyStr, partitionId, timestamp, value)
-          }.toList
-          iterator.close()
+              val keyStr = pair.key.getString(0)
+              val partitionId = pair.key.getInt(1)
+              // The timestamp will be placed at the end of the key row.
+              val timestamp = pair.key.getLong(2)
+              val value = pair.value.getInt(0)
+              (keyStr, partitionId, timestamp, value)
+            }.toList
+            iterator.close()
 
-          // Should return all entries with the same complete key but different event times
-          assert(results.length === 3)
+            // Should return all entries with the same complete key but different event times
+            assert(results.length === 3)
 
-          // Verify results are ordered by event time (ascending)
-          val eventTimes = results.map(_._3)
-          assert(
-            eventTimes === Seq(-3000L, 1000L, 2000L),
-            "Results should be ordered by event time"
-          )
+            // Verify results are ordered by event time (ascending)
+            val eventTimes = results.map(_._3)
+            assert(
+              eventTimes === Seq(-3000L, 1000L, 2000L),
+              "Results should be ordered by event time")
 
-          // Verify all expected entries are present
-          assert(results(0) === (("key1", 1, -3000L, 100)))
-          assert(results(1) === (("key1", 1, 1000L, 101)))
-          assert(results(2) === (("key1", 1, 2000L, 102)))
+            // Verify all expected entries are present
+            assert(results(0) === (("key1", 1, -3000L, 100)))
+            assert(results(1) === (("key1", 1, 1000L, 101)))
+            assert(results(2) === (("key1", 1, 2000L, 102)))
 
-          // Should not contain key2
-          assert(!results.exists(_._1 == "key2"))
-        } finally {
-          store.abort()
-        }
+            // Should not contain key2
+            assert(!results.exists(_._1 == "key2"))
+          } finally {
+            store.abort()
+          }
       }
     }
 
@@ -407,9 +398,7 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
         newStoreProviderWithTimestampEncoder(
           encoderType = "postfix",
           useMultipleValuesPerKey = true,
-          dataEncoding = encoding
-        )
-      ) { provider =>
+          dataEncoding = encoding)) { provider =>
         val store = provider.getStore(0)
 
         try {
@@ -454,8 +443,7 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
           val distinctEventTimes = eventTimes.distinct
           assert(
             distinctEventTimes === Seq(-3000L, 1000L, 2000L),
-            "Results should be ordered by event time"
-          )
+            "Results should be ordered by event time")
 
           // Verify the first 2 results are from time -3000L
           assert(results.take(2).forall(_._3 === -3000L))
@@ -482,17 +470,20 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
   // reusing the same values from range scan encoder tests in RocksDBStateStoreSuite,
   // including large negatives, small negatives, zero, small positives, large positives,
   // and powers of 2.
-  private val diverseTimestamps = Seq(931L, 8000L, 452300L, 4200L, -1L, 90L, 1L, 2L, 8L,
-    -230L, -14569L, -92L, -7434253L, 35L, 6L, 9L, -323L, 5L,
-    -32L, -64L, -256L, 64L, 32L, 1024L, 4096L, 0L)
+  private val diverseTimestamps =
+    Seq(931L, 8000L, 452300L, 4200L, -1L, 90L, 1L, 2L, 8L, -230L, -14569L, -92L, -7434253L, 35L,
+      6L, 9L, -323L, 5L, -32L, -64L, -256L, 64L, 32L, 1024L, 4096L, 0L)
 
   /**
-   * Tests that the given encoder type correctly orders entries by event time when using
-   * diverse timestamp values that exercise binary lexicographic encoding edge cases.
+   * Tests that the given encoder type correctly orders entries by event time when using diverse
+   * timestamp values that exercise binary lexicographic encoding edge cases.
    *
-   * @param encoderType "prefix" or "postfix"
-   * @param useMultipleValuesPerKey whether to store multiple values per (key, timestamp)
-   * @param encoding data encoding format (e.g. "unsaferow")
+   * @param encoderType
+   *   "prefix" or "postfix"
+   * @param useMultipleValuesPerKey
+   *   whether to store multiple values per (key, timestamp)
+   * @param encoding
+   *   data encoding format (e.g. "unsaferow")
    */
   private def testDiverseTimestampOrdering(
       encoderType: String,
@@ -504,8 +495,7 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
       newStoreProviderWithTimestampEncoder(
         encoderType = encoderType,
         useMultipleValuesPerKey = useMultipleValuesPerKey,
-        dataEncoding = encoding)
-    ) { provider =>
+        dataEncoding = encoding)) { provider =>
       val store = provider.getStore(0)
 
       try {
@@ -550,7 +540,8 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
 
         // Verify event times are in ascending order
         val distinctEventTimes = results.distinct
-        assert(distinctEventTimes === diverseTimestamps.sorted,
+        assert(
+          distinctEventTimes === diverseTimestamps.sorted,
           "Results should be ordered by event time")
       } finally {
         store.abort()
@@ -564,8 +555,9 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
     Seq("prefix", "postfix").foreach { encoderType =>
       Seq(false, true).foreach { useMultipleValuesPerKey =>
         val multiValueSuffix = if (useMultipleValuesPerKey) " and multiple values" else ""
-        test(s"Event time as $encoderType: ordering with diverse timestamps" +
-          s"$multiValueSuffix (encoding = $encoding)") {
+        test(
+          s"Event time as $encoderType: ordering with diverse timestamps" +
+            s"$multiValueSuffix (encoding = $encoding)") {
           testDiverseTimestampOrdering(encoderType, useMultipleValuesPerKey, encoding)
         }
       }
@@ -574,17 +566,17 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
 
   // Helper methods to create test data
   private val keyProjection = UnsafeProjection.create(keySchema)
-  private val keyAndTimestampProjection = UnsafeProjection.create(
-    TimestampKeyStateEncoder.keySchemaWithTimestamp(keySchema)
-  )
+  private val keyAndTimestampProjection =
+    UnsafeProjection.create(TimestampKeyStateEncoder.keySchemaWithTimestamp(keySchema))
 
   private def keyToRow(key: String, partitionId: Int): UnsafeRow = {
     keyProjection.apply(InternalRow(UTF8String.fromString(key), partitionId)).copy()
   }
 
   private def keyAndTimestampToRow(key: String, partitionId: Int, timestamp: Long): UnsafeRow = {
-    keyAndTimestampProjection.apply(
-      InternalRow(UTF8String.fromString(key), partitionId, timestamp)).copy()
+    keyAndTimestampProjection
+      .apply(InternalRow(UTF8String.fromString(key), partitionId, timestamp))
+      .copy()
   }
 
   private def valueToRow(value: Int): UnsafeRow = {
@@ -599,18 +591,18 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
       dataEncoding: String = "unsaferow"): RocksDBStateStoreProvider = {
 
     val keyStateEncoderSpec = encoderType match {
-      case "prefix" => TimestampAsPrefixKeyStateEncoderSpec(
-        TimestampKeyStateEncoder.keySchemaWithTimestamp(keySchema))
-      case "postfix" => TimestampAsPostfixKeyStateEncoderSpec(
-        TimestampKeyStateEncoder.keySchemaWithTimestamp(keySchema))
+      case "prefix" =>
+        TimestampAsPrefixKeyStateEncoderSpec(
+          TimestampKeyStateEncoder.keySchemaWithTimestamp(keySchema))
+      case "postfix" =>
+        TimestampAsPostfixKeyStateEncoderSpec(
+          TimestampKeyStateEncoder.keySchemaWithTimestamp(keySchema))
       case _ => throw new IllegalArgumentException(s"Unknown encoder type: $encoderType")
     }
 
     // Create a copy of SQLConf and set data encoding format on it
     val sqlConf = SQLConf.get.clone()
-    sqlConf.setConfString(
-      "spark.sql.streaming.stateStore.encodingFormat",
-      dataEncoding)
+    sqlConf.setConfString("spark.sql.streaming.stateStore.encodingFormat", dataEncoding)
 
     val provider = new RocksDBStateStoreProvider()
     val stateStoreId = StateStoreId(newDir(), Random.nextInt(), 0)
@@ -618,11 +610,7 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
     conf.set(StreamExecution.RUN_ID_KEY, UUID.randomUUID().toString)
 
     val testProvider = new TestStateSchemaProvider()
-    testProvider.captureSchema(
-      testColFamily,
-      keySchema,
-      valueSchema
-    )
+    testProvider.captureSchema(testColFamily, keySchema, valueSchema)
 
     val storeConf = new StateStoreConf(sqlConf)
     provider.init(
@@ -634,14 +622,14 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
       storeConf,
       conf,
       useMultipleValuesPerKey,
-    Some(testProvider))
+      Some(testProvider))
 
     provider
   }
 
   // Helper method for resource management
-  private def tryWithProviderResource[T](provider: RocksDBStateStoreProvider)
-      (f: RocksDBStateStoreProvider => T): T = {
+  private def tryWithProviderResource[T](provider: RocksDBStateStoreProvider)(
+      f: RocksDBStateStoreProvider => T): T = {
     try {
       f(provider)
     } finally {

@@ -27,7 +27,8 @@ import org.apache.spark.sql.types.DataType
  * once even if it's referenced more than once. This is similar to CTE but is expression-level.
  */
 case class With(child: Expression, defs: Seq[CommonExpressionDef])
-  extends Expression with Unevaluable {
+    extends Expression
+    with Unevaluable {
   // We do not allow creating a With expression with an AggregateExpression that contains a
   // reference to a common expression defined in that scope (note that it can contain another With
   // expression with a common expression ref of the inner With). This is to prevent the creation of
@@ -44,17 +45,20 @@ case class With(child: Expression, defs: Seq[CommonExpressionDef])
     // If any `CommonExpressionDef` has been updated (data type or nullability), also update its
     // `CommonExpressionRef` in the `child`.
     val newChild = newDefs.filter(_.resolved).foldLeft(newChildren.head) { (result, newDef) =>
-      defs.find(_.id == newDef.id).map { oldDef =>
-        if (newDef.dataType != oldDef.dataType || newDef.nullable != oldDef.nullable) {
-          val newRef = new CommonExpressionRef(newDef)
-          result.transform {
-            case oldRef: CommonExpressionRef if oldRef.id == newRef.id =>
-              newRef
+      defs
+        .find(_.id == newDef.id)
+        .map { oldDef =>
+          if (newDef.dataType != oldDef.dataType || newDef.nullable != oldDef.nullable) {
+            val newRef = new CommonExpressionRef(newDef)
+            result.transform {
+              case oldRef: CommonExpressionRef if oldRef.id == newRef.id =>
+                newRef
+            }
+          } else {
+            result
           }
-        } else {
-          result
         }
-      }.getOrElse(result)
+        .getOrElse(result)
     }
     copy(child = newChild, defs = newDefs)
   }
@@ -78,33 +82,38 @@ case class With(child: Expression, defs: Seq[CommonExpressionDef])
   /**
    * Canonicalize by re-assigning all ids in CommonExpressionRef's and CommonExpressionDef's
    * starting from 0. This uses [[canonicalizationIdMap]], which contains all mappings for
-   * CommonExpressionDef's defined in this scope.
-   * Note that this takes into account nested With expressions by sharing a numbering scope (see
-   * [[canonicalizationIdMap]].
+   * CommonExpressionDef's defined in this scope. Note that this takes into account nested With
+   * expressions by sharing a numbering scope (see [[canonicalizationIdMap]].
    */
   override lazy val canonicalized: Expression = copy(
-    child = child.transformWithPruning(_.containsPattern(COMMON_EXPR_REF)) {
-      case r: CommonExpressionRef if !r.id.canonicalized =>
-        r.copy(id = r.id.canonicalize(canonicalizationIdMap))
-    }.canonicalized,
+    child = child
+      .transformWithPruning(_.containsPattern(COMMON_EXPR_REF)) {
+        case r: CommonExpressionRef if !r.id.canonicalized =>
+          r.copy(id = r.id.canonicalize(canonicalizationIdMap))
+      }
+      .canonicalized,
     defs = defs.map {
       case d: CommonExpressionDef if !d.id.canonicalized =>
-        d.copy(id = d.id.canonicalize(canonicalizationIdMap)).canonicalized
+        d.copy(id = d.id.canonicalize(canonicalizationIdMap))
+          .canonicalized
           .asInstanceOf[CommonExpressionDef]
       case d => d.canonicalized.asInstanceOf[CommonExpressionDef]
-    }
-  )
+    })
 }
 
 object With {
+
   /**
-   * Helper function to create a [[With]] statement with an arbitrary number of common expressions.
-   * Note that the number of arguments in `commonExprs` should be the same as the number of
-   * arguments taken by `replaced`.
+   * Helper function to create a [[With]] statement with an arbitrary number of common
+   * expressions. Note that the number of arguments in `commonExprs` should be the same as the
+   * number of arguments taken by `replaced`.
    *
-   * @param commonExprs list of common expressions
-   * @param replaced    closure that defines the common expressions in the main expression
-   * @return the expression returned by replaced with its arguments replaced by commonExprs in order
+   * @param commonExprs
+   *   list of common expressions
+   * @param replaced
+   *   closure that defines the common expressions in the main expression
+   * @return
+   *   the expression returned by replaced with its arguments replaced by commonExprs in order
    */
   def apply(commonExprs: Expression*)(replaced: Seq[Expression] => Expression): With = {
     val commonExprDefs = commonExprs.map(CommonExpressionDef(_))
@@ -128,10 +137,13 @@ object With {
   }
 }
 
-case class CommonExpressionId(id: Long = CommonExpressionId.newId, canonicalized: Boolean = false) {
+case class CommonExpressionId(
+    id: Long = CommonExpressionId.newId,
+    canonicalized: Boolean = false) {
+
   /**
-   * Re-assign to a canonicalized id based on idMap. If it is not found in idMap, the id is defined
-   * in an outer scope and will be replaced later.
+   * Re-assign to a canonicalized id based on idMap. If it is not found in idMap, the id is
+   * defined in an outer scope and will be replaced later.
    */
   def canonicalize(idMap: Map[Long, Long]): CommonExpressionId = {
     if (idMap.contains(id)) {
@@ -150,8 +162,11 @@ object CommonExpressionId {
 /**
  * A wrapper of common expression to carry the id.
  */
-case class CommonExpressionDef(child: Expression, id: CommonExpressionId = new CommonExpressionId())
-  extends UnaryExpression with Unevaluable {
+case class CommonExpressionDef(
+    child: Expression,
+    id: CommonExpressionId = new CommonExpressionId())
+    extends UnaryExpression
+    with Unevaluable {
   override def dataType: DataType = child.dataType
   override protected def withNewChildInternal(newChild: Expression): Expression =
     copy(child = newChild)
@@ -162,7 +177,8 @@ case class CommonExpressionDef(child: Expression, id: CommonExpressionId = new C
  * referenced, so that we can determine the data type and nullable of the reference node.
  */
 case class CommonExpressionRef(id: CommonExpressionId, dataType: DataType, nullable: Boolean)
-  extends LeafExpression with Unevaluable {
+    extends LeafExpression
+    with Unevaluable {
   def this(exprDef: CommonExpressionDef) = this(exprDef.id, exprDef.dataType, exprDef.nullable)
   override val nodePatterns: Seq[TreePattern] = Seq(COMMON_EXPR_REF)
 }

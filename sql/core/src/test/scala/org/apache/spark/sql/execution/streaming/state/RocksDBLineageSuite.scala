@@ -137,9 +137,7 @@ class RocksDBLineageSuite extends SharedSparkSession {
           condition = "CANNOT_LOAD_STATE_STORE.INVALID_CHECKPOINT_LINEAGE",
           parameters = Map(
             "lineage" -> "3:i3 5:i5",
-            "message" -> "Lineage versions are not increasing by one."
-          )
-        )
+            "message" -> "Lineage versions are not increasing by one."))
       } finally {
         db.close()
       }
@@ -159,9 +157,7 @@ class RocksDBLineageSuite extends SharedSparkSession {
           condition = "CANNOT_LOAD_STATE_STORE.INVALID_CHECKPOINT_LINEAGE",
           parameters = Map(
             "lineage" -> "5:i5",
-            "message" -> "Cannot find version smaller than 5 in lineage."
-          )
-        )
+            "message" -> "Cannot find version smaller than 5 in lineage."))
       } finally {
         db.close()
       }

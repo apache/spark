@@ -27,8 +27,8 @@ import org.apache.spark.sql.metricview.logical.ResolvedMetricView
 
 /**
  * This rule removes [[View]] operators from the plan. The operator is respected till the end of
- * analysis stage because we want to see which part of an analyzed logical plan is generated from a
- * view.
+ * analysis stage because we want to see which part of an analyzed logical plan is generated from
+ * a view.
  */
 object EliminateView extends Rule[LogicalPlan] with CastSupport {
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
@@ -44,42 +44,42 @@ object EliminateView extends Rule[LogicalPlan] with CastSupport {
 sealed trait ViewSchemaMode
 
 /**
- * SchemaBinding means the view only tolerates minimal changes to the underlying schema.
- * It can tolerate extra columns in SELECT * and upcast to more generic types.
+ * SchemaBinding means the view only tolerates minimal changes to the underlying schema. It can
+ * tolerate extra columns in SELECT * and upcast to more generic types.
  */
 object SchemaBinding extends ViewSchemaMode {
   override val toString: String = "BINDING"
 }
 
 /**
- * SchemaCompensation means the view only tolerates moderate changes to the underlying schema.
- * It can tolerate extra columns in SELECT * and explicit casts between view body and view columns.
+ * SchemaCompensation means the view only tolerates moderate changes to the underlying schema. It
+ * can tolerate extra columns in SELECT * and explicit casts between view body and view columns.
  */
 object SchemaCompensation extends ViewSchemaMode {
   override val toString: String = "COMPENSATION"
 }
 
 /**
- * SchemaTypeEvolution means the view will adopt changed column types.
- * In this mode the view will refresh its metastore data on reference to keep it up to day.
+ * SchemaTypeEvolution means the view will adopt changed column types. In this mode the view will
+ * refresh its metastore data on reference to keep it up to day.
  */
 object SchemaTypeEvolution extends ViewSchemaMode {
   override val toString: String = "TYPE EVOLUTION"
 }
 
 /**
- * SchemaUnsupported means the feature is not enabled.
- * This mode is only transient and not persisted
+ * SchemaUnsupported means the feature is not enabled. This mode is only transient and not
+ * persisted
  */
 object SchemaUnsupported extends ViewSchemaMode {
   override val toString: String = "UNSUPPORTED"
 }
 
 /**
- * SchemaEvolution means the view will adopt changed column types and number of columns.
- * This is a result of not having a column list and WITH EVOLUTION.
- * Without an explicit column list the will also adopt changes to column names.
- * In this mode the view will refresh its metastore data on reference to keep it up to day.
+ * SchemaEvolution means the view will adopt changed column types and number of columns. This is a
+ * result of not having a column list and WITH EVOLUTION. Without an explicit column list the will
+ * also adopt changes to column names. In this mode the view will refresh its metastore data on
+ * reference to keep it up to day.
  */
 object SchemaEvolution extends ViewSchemaMode {
   override val toString: String = "EVOLUTION"
@@ -95,16 +95,17 @@ sealed trait ViewType {
 
 /**
  * LocalTempView means session-scoped local temporary views. Its lifetime is the lifetime of the
- * session that created it, i.e. it will be automatically dropped when the session terminates. It's
- * not tied to any databases, i.e. we can't use `db1.view1` to reference a local temporary view.
+ * session that created it, i.e. it will be automatically dropped when the session terminates.
+ * It's not tied to any databases, i.e. we can't use `db1.view1` to reference a local temporary
+ * view.
  */
 object LocalTempView extends ViewType
 
 /**
  * GlobalTempView means cross-session global temporary views. Its lifetime is the lifetime of the
  * Spark application, i.e. it will be automatically dropped when the application terminates. It's
- * tied to a system preserved database `global_temp`, and we must use the qualified name to refer a
- * global temp view, e.g. SELECT * FROM global_temp.view1.
+ * tied to a system preserved database `global_temp`, and we must use the qualified name to refer
+ * a global temp view, e.g. SELECT * FROM global_temp.view1.
  */
 object GlobalTempView extends ViewType
 

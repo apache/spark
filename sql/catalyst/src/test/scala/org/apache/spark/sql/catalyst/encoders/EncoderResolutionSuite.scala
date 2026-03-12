@@ -71,9 +71,8 @@ class EncoderResolutionSuite extends PlanTest {
   }
 
   test("real type doesn't match encoder schema but they are compatible: tupled encoder") {
-    val encoder = encoderFor(Encoders.tuple(
-      Encoders.product[StringLongClass],
-      Encoders.scalaLong))
+    val encoder =
+      encoderFor(Encoders.tuple(Encoders.product[StringLongClass], Encoders.scalaLong))
     val attrs = Seq($"a".struct($"a".string, $"b".byte), $"b".int)
     testFromRow(encoder, attrs, InternalRow(InternalRow(str, 1.toByte), 2))
   }
@@ -91,10 +90,11 @@ class EncoderResolutionSuite extends PlanTest {
     checkError(
       exception = intercept[AnalysisException](encoder.resolveAndBind(attrs)),
       condition = "CANNOT_UP_CAST_DATATYPE",
-      parameters = Map("expression" -> "array element",
-        "sourceType" -> "\"STRING\"", "targetType" -> "\"BIGINT\"",
-        "details" -> (
-          s"""
+      parameters = Map(
+        "expression" -> "array element",
+        "sourceType" -> "\"STRING\"",
+        "targetType" -> "\"BIGINT\"",
+        "details" -> (s"""
           |The type path of the target object is:
           |- array element class: "long"
           |- field (class: "[J", name: "arr")
@@ -105,15 +105,16 @@ class EncoderResolutionSuite extends PlanTest {
 
   test("real type doesn't match encoder schema but they are compatible: array") {
     val encoder = ExpressionEncoder[ArrayClass]()
-    val attrs = Seq($"arr".array(new StructType().add("a", "int").add("b", "int").add("c", "int")))
+    val attrs =
+      Seq($"arr".array(new StructType().add("a", "int").add("b", "int").add("c", "int")))
     val array = new GenericArrayData(Array(InternalRow(1, 2, 3)))
     testFromRow(encoder, attrs, InternalRow(array))
   }
 
   test("real type doesn't match encoder schema but they are compatible: nested array") {
     val encoder = ExpressionEncoder[NestedArrayClass]()
-    val et = new StructType().add("arr", ArrayType(
-      new StructType().add("a", "int").add("b", "int").add("c", "int")))
+    val et = new StructType()
+      .add("arr", ArrayType(new StructType().add("a", "int").add("b", "int").add("c", "int")))
     val attrs = Seq($"nestedArr".array(et))
     val innerArr = new GenericArrayData(Array(InternalRow(1, 2, 3)))
     val outerArr = new GenericArrayData(Array(InternalRow(innerArr)))
@@ -150,8 +151,9 @@ class EncoderResolutionSuite extends PlanTest {
     }
 
     withClue("nested array element type is not compatible") {
-      val attrs = Seq($"nestedArr".array(new StructType()
-        .add("arr", ArrayType(new StructType().add("c", "int")))))
+      val attrs = Seq(
+        $"nestedArr".array(new StructType()
+          .add("arr", ArrayType(new StructType().add("c", "int")))))
       checkError(
         exception = intercept[AnalysisException](encoder.resolveAndBind(attrs)),
         condition = "FIELD_NOT_FOUND",
@@ -184,8 +186,8 @@ class EncoderResolutionSuite extends PlanTest {
       checkError(
         exception = intercept[AnalysisException](encoder.resolveAndBind(attrs)),
         condition = "UNSUPPORTED_DESERIALIZER.FIELD_NUMBER_MISMATCH",
-        parameters = Map("schema" -> "\"STRUCT<a: STRING, b: BIGINT, c: INT>\"",
-          "ordinal" -> "2"))
+        parameters =
+          Map("schema" -> "\"STRUCT<a: STRING, b: BIGINT, c: INT>\"", "ordinal" -> "2"))
     }
 
     {
@@ -193,8 +195,7 @@ class EncoderResolutionSuite extends PlanTest {
       checkError(
         exception = intercept[AnalysisException](encoder.resolveAndBind(attrs)),
         condition = "UNSUPPORTED_DESERIALIZER.FIELD_NUMBER_MISMATCH",
-        parameters = Map("schema" -> "\"STRUCT<a: STRING>\"",
-          "ordinal" -> "2"))
+        parameters = Map("schema" -> "\"STRUCT<a: STRING>\"", "ordinal" -> "2"))
     }
   }
 
@@ -206,8 +207,8 @@ class EncoderResolutionSuite extends PlanTest {
       checkError(
         exception = intercept[AnalysisException](encoder.resolveAndBind(attrs)),
         condition = "UNSUPPORTED_DESERIALIZER.FIELD_NUMBER_MISMATCH",
-        parameters = Map("schema" -> "\"STRUCT<x: BIGINT, y: STRING, z: INT>\"",
-          "ordinal" -> "2"))
+        parameters =
+          Map("schema" -> "\"STRUCT<x: BIGINT, y: STRING, z: INT>\"", "ordinal" -> "2"))
     }
 
     {
@@ -215,8 +216,7 @@ class EncoderResolutionSuite extends PlanTest {
       checkError(
         exception = intercept[AnalysisException](encoder.resolveAndBind(attrs)),
         condition = "UNSUPPORTED_DESERIALIZER.FIELD_NUMBER_MISMATCH",
-        parameters = Map("schema" -> "\"STRUCT<x: BIGINT>\"",
-          "ordinal" -> "2"))
+        parameters = Map("schema" -> "\"STRUCT<x: BIGINT>\"", "ordinal" -> "2"))
     }
   }
 
@@ -232,29 +232,33 @@ class EncoderResolutionSuite extends PlanTest {
     Seq($"a".struct($"x".long), $"a".array(StringType), Symbol("a").map(StringType, StringType))
       .foreach { attr =>
         val attrs = Seq(attr)
-        checkError(exception = intercept[AnalysisException](encoder.resolveAndBind(attrs)),
+        checkError(
+          exception = intercept[AnalysisException](encoder.resolveAndBind(attrs)),
           condition = "CANNOT_UP_CAST_DATATYPE",
-          parameters = Map("expression" -> "a",
-            "sourceType" -> ("\"" + attr.dataType.sql + "\""), "targetType" -> "\"STRING\"",
-            "details" -> (
-          s"""
+          parameters = Map(
+            "expression" -> "a",
+            "sourceType" -> ("\"" + attr.dataType.sql + "\""),
+            "targetType" -> "\"STRING\"",
+            "details" -> (s"""
           |The type path of the target object is:
           |- root class: "java.lang.String"
           |You can either add an explicit cast to the input data or choose a higher precision type
           """.stripMargin.trim + " of the field in the target object")))
-    }
+      }
   }
 
   test("throw exception if real type is not compatible with encoder schema") {
     val e1 = intercept[AnalysisException] {
       ExpressionEncoder[StringIntClass]().resolveAndBind(Seq($"a".string, $"b".long))
     }
-    checkError(exception = e1,
+    checkError(
+      exception = e1,
       condition = "CANNOT_UP_CAST_DATATYPE",
-      parameters = Map("expression" -> "b",
-        "sourceType" -> ("\"BIGINT\""), "targetType" -> "\"INT\"",
-        "details" -> (
-          s"""
+      parameters = Map(
+        "expression" -> "b",
+        "sourceType" -> ("\"BIGINT\""),
+        "targetType" -> "\"INT\"",
+        "details" -> (s"""
           |The type path of the target object is:
           |- field (class: "int", name: "b")
           |- root class: "org.apache.spark.sql.catalyst.encoders.StringIntClass"
@@ -266,12 +270,14 @@ class EncoderResolutionSuite extends PlanTest {
       ExpressionEncoder[ComplexClass]().resolveAndBind(Seq($"a".long, $"b".struct(structType)))
     }
 
-    checkError(exception = e2,
+    checkError(
+      exception = e2,
       condition = "CANNOT_UP_CAST_DATATYPE",
-      parameters = Map("expression" -> "b.`b`",
-        "sourceType" -> ("\"DECIMAL(38,18)\""), "targetType" -> "\"BIGINT\"",
-        "details" -> (
-          s"""
+      parameters = Map(
+        "expression" -> "b.`b`",
+        "sourceType" -> ("\"DECIMAL(38,18)\""),
+        "targetType" -> "\"BIGINT\"",
+        "details" -> (s"""
           |The type path of the target object is:
           |- field (class: "long", name: "b")
           |- field (class: "org.apache.spark.sql.catalyst.encoders.StringLongClass", name: "b")
@@ -300,7 +306,6 @@ class EncoderResolutionSuite extends PlanTest {
   castFail[Double, java.math.BigDecimal]
   castFail[java.math.BigDecimal, Int]
   castFail[String, Long]
-
 
   private def castSuccess[T: TypeTag, U: TypeTag]: Unit = {
     val from = ExpressionEncoder[T]()

@@ -27,24 +27,47 @@ class UrlFunctionsSuite extends QueryTest with SharedSparkSession {
   test("url parse_url function") {
 
     def testUrl(url: String, expected: Row): Unit = {
-      checkAnswer(Seq[String]((url)).toDF("url").selectExpr(
-        "parse_url(url, 'HOST')", "parse_url(url, 'PATH')",
-        "parse_url(url, 'QUERY')", "parse_url(url, 'REF')",
-        "parse_url(url, 'PROTOCOL')", "parse_url(url, 'FILE')",
-        "parse_url(url, 'AUTHORITY')", "parse_url(url, 'USERINFO')",
-        "parse_url(url, 'QUERY', 'query')"), expected)
+      checkAnswer(
+        Seq[String]((url))
+          .toDF("url")
+          .selectExpr(
+            "parse_url(url, 'HOST')",
+            "parse_url(url, 'PATH')",
+            "parse_url(url, 'QUERY')",
+            "parse_url(url, 'REF')",
+            "parse_url(url, 'PROTOCOL')",
+            "parse_url(url, 'FILE')",
+            "parse_url(url, 'AUTHORITY')",
+            "parse_url(url, 'USERINFO')",
+            "parse_url(url, 'QUERY', 'query')"),
+        expected)
     }
 
     testUrl(
       "http://userinfo@spark.apache.org/path?query=1#Ref",
-      Row("spark.apache.org", "/path", "query=1", "Ref",
-        "http", "/path?query=1", "userinfo@spark.apache.org", "userinfo", "1"))
+      Row(
+        "spark.apache.org",
+        "/path",
+        "query=1",
+        "Ref",
+        "http",
+        "/path?query=1",
+        "userinfo@spark.apache.org",
+        "userinfo",
+        "1"))
 
     testUrl(
       "https://use%20r:pas%20s@example.com/dir%20/pa%20th.HTML?query=x%20y&q2=2#Ref%20two",
-      Row("example.com", "/dir%20/pa%20th.HTML", "query=x%20y&q2=2", "Ref%20two",
-        "https", "/dir%20/pa%20th.HTML?query=x%20y&q2=2", "use%20r:pas%20s@example.com",
-        "use%20r:pas%20s", "x%20y"))
+      Row(
+        "example.com",
+        "/dir%20/pa%20th.HTML",
+        "query=x%20y&q2=2",
+        "Ref%20two",
+        "https",
+        "/dir%20/pa%20th.HTML?query=x%20y&q2=2",
+        "use%20r:pas%20s@example.com",
+        "use%20r:pas%20s",
+        "x%20y"))
 
     testUrl(
       "http://user:pass@host",
@@ -60,8 +83,16 @@ class UrlFunctionsSuite extends QueryTest with SharedSparkSession {
 
     testUrl(
       "http://user:pass@host/file;param?query;p2",
-      Row("host", "/file;param", "query;p2", null, "http", "/file;param?query;p2",
-        "user:pass@host", "user:pass", null))
+      Row(
+        "host",
+        "/file;param",
+        "query;p2",
+        null,
+        "http",
+        "/file;param?query;p2",
+        "user:pass@host",
+        "user:pass",
+        null))
 
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
       testUrl(
@@ -83,24 +114,47 @@ class UrlFunctionsSuite extends QueryTest with SharedSparkSession {
   test("url try_parse_url function") {
 
     def testUrl(url: String, expected: Row): Unit = {
-      checkAnswer(Seq[String]((url)).toDF("url").selectExpr(
-        "try_parse_url(url, 'HOST')", "try_parse_url(url, 'PATH')",
-        "try_parse_url(url, 'QUERY')", "try_parse_url(url, 'REF')",
-        "try_parse_url(url, 'PROTOCOL')", "try_parse_url(url, 'FILE')",
-        "try_parse_url(url, 'AUTHORITY')", "try_parse_url(url, 'USERINFO')",
-        "try_parse_url(url, 'QUERY', 'query')"), expected)
+      checkAnswer(
+        Seq[String]((url))
+          .toDF("url")
+          .selectExpr(
+            "try_parse_url(url, 'HOST')",
+            "try_parse_url(url, 'PATH')",
+            "try_parse_url(url, 'QUERY')",
+            "try_parse_url(url, 'REF')",
+            "try_parse_url(url, 'PROTOCOL')",
+            "try_parse_url(url, 'FILE')",
+            "try_parse_url(url, 'AUTHORITY')",
+            "try_parse_url(url, 'USERINFO')",
+            "try_parse_url(url, 'QUERY', 'query')"),
+        expected)
     }
 
     testUrl(
       "http://userinfo@spark.apache.org/path?query=1#Ref",
-      Row("spark.apache.org", "/path", "query=1", "Ref",
-        "http", "/path?query=1", "userinfo@spark.apache.org", "userinfo", "1"))
+      Row(
+        "spark.apache.org",
+        "/path",
+        "query=1",
+        "Ref",
+        "http",
+        "/path?query=1",
+        "userinfo@spark.apache.org",
+        "userinfo",
+        "1"))
 
     testUrl(
       "https://use%20r:pas%20s@example.com/dir%20/pa%20th.HTML?query=x%20y&q2=2#Ref%20two",
-      Row("example.com", "/dir%20/pa%20th.HTML", "query=x%20y&q2=2", "Ref%20two",
-        "https", "/dir%20/pa%20th.HTML?query=x%20y&q2=2", "use%20r:pas%20s@example.com",
-        "use%20r:pas%20s", "x%20y"))
+      Row(
+        "example.com",
+        "/dir%20/pa%20th.HTML",
+        "query=x%20y&q2=2",
+        "Ref%20two",
+        "https",
+        "/dir%20/pa%20th.HTML?query=x%20y&q2=2",
+        "use%20r:pas%20s@example.com",
+        "use%20r:pas%20s",
+        "x%20y"))
 
     testUrl(
       "http://user:pass@host",
@@ -116,8 +170,16 @@ class UrlFunctionsSuite extends QueryTest with SharedSparkSession {
 
     testUrl(
       "http://user:pass@host/file;param?query;p2",
-      Row("host", "/file;param", "query;p2", null, "http", "/file;param?query;p2",
-        "user:pass@host", "user:pass", null))
+      Row(
+        "host",
+        "/file;param",
+        "query;p2",
+        null,
+        "http",
+        "/file;param?query;p2",
+        "user:pass@host",
+        "user:pass",
+        null))
 
     testUrl(
       "inva lid://user:pass@host/file;param?query;p2",
@@ -126,8 +188,11 @@ class UrlFunctionsSuite extends QueryTest with SharedSparkSession {
 
   test("url encode/decode function") {
     def testUrl(url: String, fn: String, expected: Row): Unit = {
-      checkAnswer(Seq[String]((url)).toDF("url")
-        .selectExpr(s"$fn(url)"), expected)
+      checkAnswer(
+        Seq[String]((url))
+          .toDF("url")
+          .selectExpr(s"$fn(url)"),
+        expected)
     }
 
     testUrl("https://spark.apache.org", "url_encode", Row("https%3A%2F%2Fspark.apache.org"))

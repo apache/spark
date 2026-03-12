@@ -29,8 +29,8 @@ import org.apache.spark.unsafe.Platform
 import org.apache.spark.util.collection.BitSet
 
 /**
- * Benchmark to low level memory access using different ways to manage buffers.
- * To run this benchmark:
+ * Benchmark to low level memory access using different ways to manage buffers. To run this
+ * benchmark:
  * {{{
  *   1. without sbt:
  *      bin/spark-submit --class <this class>
@@ -165,23 +165,25 @@ object ColumnarBatchBenchmark extends BenchmarkBase {
     }
 
     // Access through the column API with off heap memory
-    def columnOffHeap = { i: Int => {
-      val col = new OffHeapColumnVector(count, IntegerType)
-      var sum = 0L
-      for (n <- 0L until iters) {
-        var i = 0
-        while (i < count) {
-          col.putInt(i, i)
-          i += 1
+    def columnOffHeap = { i: Int =>
+      {
+        val col = new OffHeapColumnVector(count, IntegerType)
+        var sum = 0L
+        for (n <- 0L until iters) {
+          var i = 0
+          while (i < count) {
+            col.putInt(i, i)
+            i += 1
+          }
+          i = 0
+          while (i < count) {
+            sum += col.getInt(i)
+            i += 1
+          }
         }
-        i = 0
-        while (i < count) {
-          sum += col.getInt(i)
-          i += 1
-        }
+        col.close
       }
-      col.close
-    }}
+    }
 
     // Access by directly getting the buffer backing the column.
     val columnOffheapDirect = { i: Int =>
@@ -287,39 +289,43 @@ object ColumnarBatchBenchmark extends BenchmarkBase {
   def booleanAccess(iters: Int): Unit = {
     val count = 8 * 1024
     val benchmark = new Benchmark("Boolean Read/Write", iters * count.toLong, output = output)
-    benchmark.addCase("Bitset") { i: Int => {
-      val b = new BitSet(count)
-      var sum = 0L
-      for (n <- 0L until iters) {
-        var i = 0
-        while (i < count) {
-          if (i % 2 == 0) b.set(i)
-          i += 1
-        }
-        i = 0
-        while (i < count) {
-          if (b.get(i)) sum += 1
-          i += 1
+    benchmark.addCase("Bitset") { i: Int =>
+      {
+        val b = new BitSet(count)
+        var sum = 0L
+        for (n <- 0L until iters) {
+          var i = 0
+          while (i < count) {
+            if (i % 2 == 0) b.set(i)
+            i += 1
+          }
+          i = 0
+          while (i < count) {
+            if (b.get(i)) sum += 1
+            i += 1
+          }
         }
       }
-    }}
+    }
 
-    benchmark.addCase("Byte Array") { i: Int => {
-      val b = new Array[Byte](count)
-      var sum = 0L
-      for (n <- 0L until iters) {
-        var i = 0
-        while (i < count) {
-          if (i % 2 == 0) b(i) = 1
-          i += 1
-        }
-        i = 0
-        while (i < count) {
-          if (b(i) == 1) sum += 1
-          i += 1
+    benchmark.addCase("Byte Array") { i: Int =>
+      {
+        val b = new Array[Byte](count)
+        var sum = 0L
+        for (n <- 0L until iters) {
+          var i = 0
+          while (i < count) {
+            if (i % 2 == 0) b(i) = 1
+            i += 1
+          }
+          i = 0
+          while (i < count) {
+            if (b(i) == 1) sum += 1
+            i += 1
+          }
         }
       }
-    }}
+    }
     benchmark.run()
   }
 
@@ -342,8 +348,10 @@ object ColumnarBatchBenchmark extends BenchmarkBase {
     val maxString = 32
     val count = 4 * 1000
 
-    val data = Seq.fill(count)(randomString(minString, maxString))
-      .map(_.getBytes(StandardCharsets.UTF_8)).toArray
+    val data = Seq
+      .fill(count)(randomString(minString, maxString))
+      .map(_.getBytes(StandardCharsets.UTF_8))
+      .toArray
 
     def column(memoryMode: MemoryMode) = { i: Int =>
       val column = if (memoryMode == MemoryMode.OFF_HEAP) {

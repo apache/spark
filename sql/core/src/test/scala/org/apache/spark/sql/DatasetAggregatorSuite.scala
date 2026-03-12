@@ -36,7 +36,6 @@ object ComplexResultAgg extends Aggregator[(String, Int), (Long, Long), (Long, L
   override def outputEncoder: Encoder[(Long, Long)] = Encoders.product[(Long, Long)]
 }
 
-
 case class AggData(a: Int, b: String)
 
 object ClassInputAgg extends Aggregator[AggData, Int, Int] {
@@ -48,7 +47,6 @@ object ClassInputAgg extends Aggregator[AggData, Int, Int] {
   override def outputEncoder: Encoder[Int] = Encoders.scalaInt
 }
 
-
 object ClassBufferAggregator extends Aggregator[AggData, AggData, Int] {
   override def zero: AggData = AggData(0, "")
   override def reduce(b: AggData, a: AggData): AggData = AggData(b.a + a.a, "")
@@ -57,7 +55,6 @@ object ClassBufferAggregator extends Aggregator[AggData, AggData, Int] {
   override def bufferEncoder: Encoder[AggData] = Encoders.product[AggData]
   override def outputEncoder: Encoder[Int] = Encoders.scalaInt
 }
-
 
 object ComplexBufferAgg extends Aggregator[AggData, (Int, AggData), Int] {
   override def zero: (Int, AggData) = 0 -> AggData(0, "0")
@@ -69,7 +66,6 @@ object ComplexBufferAgg extends Aggregator[AggData, (Int, AggData), Int] {
   override def outputEncoder: Encoder[Int] = Encoders.scalaInt
 }
 
-
 object MapTypeBufferAgg extends Aggregator[Int, Map[Int, Int], Int] {
   override def zero: Map[Int, Int] = Map.empty
   override def reduce(b: Map[Int, Int], a: Int): Map[Int, Int] = b
@@ -78,7 +74,6 @@ object MapTypeBufferAgg extends Aggregator[Int, Map[Int, Int], Int] {
   override def bufferEncoder: Encoder[Map[Int, Int]] = ExpressionEncoder()
   override def outputEncoder: Encoder[Int] = ExpressionEncoder()
 }
-
 
 object NameAgg extends Aggregator[AggData, String, String] {
   def zero: String = ""
@@ -89,7 +84,6 @@ object NameAgg extends Aggregator[AggData, String, String] {
   override def outputEncoder: Encoder[String] = Encoders.STRING
 }
 
-
 object SeqAgg extends Aggregator[AggData, Seq[Int], Seq[(Int, Int)]] {
   def zero: Seq[Int] = Nil
   def reduce(b: Seq[Int], a: AggData): Seq[Int] = a.a +: b
@@ -99,9 +93,8 @@ object SeqAgg extends Aggregator[AggData, Seq[Int], Seq[(Int, Int)]] {
   override def outputEncoder: Encoder[Seq[(Int, Int)]] = ExpressionEncoder()
 }
 
-
-class ParameterizedTypeSum[IN, OUT : Numeric : Encoder](f: IN => OUT)
-  extends Aggregator[IN, OUT, OUT] {
+class ParameterizedTypeSum[IN, OUT: Numeric: Encoder](f: IN => OUT)
+    extends Aggregator[IN, OUT, OUT] {
 
   private val numeric = implicitly[Numeric[OUT]]
   override def zero: OUT = numeric.zero
@@ -144,7 +137,6 @@ object VeryComplexResultAgg extends Aggregator[Row, String, ComplexAggData] {
   override def bufferEncoder: Encoder[String] = Encoders.STRING
   override def outputEncoder: Encoder[ComplexAggData] = Encoders.product[ComplexAggData]
 }
-
 
 case class OptionBooleanData(name: String, isGood: Option[Boolean])
 case class OptionBooleanIntData(name: String, isGood: Option[(Boolean, Int)])
@@ -237,59 +229,44 @@ class DatasetAggregatorSuite extends QueryTest with SharedSparkSession {
     val ds = Seq("a" -> 1, "a" -> 3, "b" -> 3).toDS()
 
     checkDataset(
-      ds.groupByKey(_._1).agg(
-        expr("avg(_2)").as[Double],
-        ComplexResultAgg.toColumn),
-      ("a", 2.0, (2L, 4L)), ("b", 3.0, (1L, 3L)))
+      ds.groupByKey(_._1).agg(expr("avg(_2)").as[Double], ComplexResultAgg.toColumn),
+      ("a", 2.0, (2L, 4L)),
+      ("b", 3.0, (1L, 3L)))
   }
 
   test("typed aggregation: class input") {
     val ds = Seq(AggData(1, "one"), AggData(2, "two")).toDS()
 
-    checkDataset(
-      ds.select(ClassInputAgg.toColumn),
-      3)
+    checkDataset(ds.select(ClassInputAgg.toColumn), 3)
   }
 
   test("typed aggregation: class input with reordering") {
     val ds = sql("SELECT 'one' AS b, 1 as a").as[AggData]
 
-    checkDataset(
-      ds.select(ClassInputAgg.toColumn),
-      1)
+    checkDataset(ds.select(ClassInputAgg.toColumn), 1)
 
-    checkDataset(
-      ds.select(expr("avg(a)").as[Double], ClassInputAgg.toColumn),
-      (1.0, 1))
+    checkDataset(ds.select(expr("avg(a)").as[Double], ClassInputAgg.toColumn), (1.0, 1))
 
-    checkDataset(
-      ds.groupByKey(_.b).agg(ClassInputAgg.toColumn),
-      ("one", 1))
+    checkDataset(ds.groupByKey(_.b).agg(ClassInputAgg.toColumn), ("one", 1))
   }
 
   test("Typed aggregation using aggregator") {
     // based on Dataset complex Aggregator test of DatasetBenchmark
     val ds = Seq(AggData(1, "x"), AggData(2, "y"), AggData(3, "z")).toDS()
-    checkDataset(
-      ds.select(ClassBufferAggregator.toColumn),
-      6)
+    checkDataset(ds.select(ClassBufferAggregator.toColumn), 6)
   }
 
   test("typed aggregation: complex input") {
     val ds = Seq(AggData(1, "one"), AggData(2, "two")).toDS()
 
-    checkDataset(
-      ds.select(ComplexBufferAgg.toColumn),
-      2
-    )
+    checkDataset(ds.select(ComplexBufferAgg.toColumn), 2)
 
-    checkDataset(
-      ds.select(expr("avg(a)").as[Double], ComplexBufferAgg.toColumn),
-      (1.5, 2))
+    checkDataset(ds.select(expr("avg(a)").as[Double], ComplexBufferAgg.toColumn), (1.5, 2))
 
     checkDatasetUnorderly(
       ds.groupByKey(_.b).agg(ComplexBufferAgg.toColumn),
-      ("one", 1), ("two", 1))
+      ("one", 1),
+      ("two", 1))
   }
 
   test("generic typed sum") {
@@ -297,20 +274,20 @@ class DatasetAggregatorSuite extends QueryTest with SharedSparkSession {
     checkDataset(
       ds.groupByKey(_._1)
         .agg(new ParameterizedTypeSum[(String, Int), Double](_._2.toDouble).toColumn),
-      ("a", 4.0), ("b", 3.0))
+      ("a", 4.0),
+      ("b", 3.0))
 
     checkDataset(
       ds.groupByKey(_._1)
         .agg(new ParameterizedTypeSum((x: (String, Int)) => x._2.toInt).toColumn),
-      ("a", 4), ("b", 3))
+      ("a", 4),
+      ("b", 3))
   }
 
   test("SPARK-12555 - result should not be corrupted after input columns are reordered") {
     val ds = sql("SELECT 'Some String' AS b, 1279869254 AS a").as[AggData]
 
-    checkDataset(
-      ds.groupByKey(_.a).agg(NameAgg.toColumn),
-        (1279869254, "Some String"))
+    checkDataset(ds.groupByKey(_.a).agg(NameAgg.toColumn), (1279869254, "Some String"))
   }
 
   test("aggregator in DataFrame/Dataset[Row]") {
@@ -321,10 +298,7 @@ class DatasetAggregatorSuite extends QueryTest with SharedSparkSession {
   test("SPARK-14675: ClassFormatError when use Seq as Aggregator buffer type") {
     val ds = Seq(AggData(1, "a"), AggData(2, "a")).toDS()
 
-    checkDataset(
-      ds.groupByKey(_.b).agg(SeqAgg.toColumn),
-      "a" -> Seq(1 -> 1, 2 -> 2)
-    )
+    checkDataset(ds.groupByKey(_.b).agg(SeqAgg.toColumn), "a" -> Seq(1 -> 1, 2 -> 2))
   }
 
   test("spark-15051 alias of aggregator in DataFrame/Dataset[Row]") {
@@ -339,7 +313,8 @@ class DatasetAggregatorSuite extends QueryTest with SharedSparkSession {
     val ds = Seq(AggData(1, "one"), AggData(2, "two")).toDS()
     checkDatasetUnorderly(
       ds.groupByKey(_.a).agg(NullResultAgg.toColumn),
-      1 -> AggData(1, "one"), 2 -> null)
+      1 -> AggData(1, "one"),
+      2 -> null)
   }
 
   test("SPARK-16100: use Map as the buffer type of Aggregator") {
@@ -373,8 +348,10 @@ class DatasetAggregatorSuite extends QueryTest with SharedSparkSession {
       OptionBooleanData("bob", Some(true)),
       OptionBooleanData("bob", Some(false)),
       OptionBooleanData("bob", None)).toDF()
-    val grouped = df.groupByKey((r: Row) => r.getString(0))
-      .agg(OptionBooleanAggregator("isGood").toColumn).toDF("name", "isGood")
+    val grouped = df
+      .groupByKey((r: Row) => r.getString(0))
+      .agg(OptionBooleanAggregator("isGood").toColumn)
+      .toDF("name", "isGood")
 
     assert(grouped.schema == df.schema)
     checkDataset(grouped.as[OptionBooleanData], OptionBooleanData("bob", Some(true)))
@@ -392,7 +369,8 @@ class DatasetAggregatorSuite extends QueryTest with SharedSparkSession {
 
     val expectedSchema = new StructType()
       .add("name", StringType, nullable = true)
-      .add("isGood",
+      .add(
+        "isGood",
         new StructType()
           .add("_1", BooleanType, nullable = false)
           .add("_2", IntegerType, nullable = false),
@@ -415,19 +393,22 @@ class DatasetAggregatorSuite extends QueryTest with SharedSparkSession {
     val err = intercept[AnalysisException] {
       df.select(fooAgg(1), fooAgg(2), fooAgg(3), fooAgg(4), fooAgg(5), fooAgg(6))
     }.getMessage
-    assert(err.contains("cannot be passed in untyped `select` API. " +
-      "Use the typed `Dataset.select` API instead."))
+    assert(
+      err.contains("cannot be passed in untyped `select` API. " +
+        "Use the typed `Dataset.select` API instead."))
   }
 
   test("SPARK-40906: Mode should copy keys before inserting into Map") {
-    val df = spark.sparkContext.parallelize(Seq.empty[Int], 4)
+    val df = spark.sparkContext
+      .parallelize(Seq.empty[Int], 4)
       .mapPartitionsWithIndex { (idx, iter) =>
         if (idx == 3) {
           Iterator("3", "3", "3", "3", "4")
         } else {
           Iterator("0", "1", "2", "3", "4")
         }
-      }.toDF("a")
+      }
+      .toDF("a")
 
     val agg = df.select(mode(col("a"))).as[String]
     checkDataset(agg, "3")

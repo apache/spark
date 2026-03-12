@@ -50,7 +50,7 @@ class CaseInsensitiveStringMapSuite extends SparkFunSuite {
     assert(options.getInt("numFOO", 10) == 1)
     assert(options.getInt("numFOO2", 10) == 10)
 
-    intercept[NumberFormatException]{
+    intercept[NumberFormatException] {
       options.getInt("foo", 1)
     }
   }
@@ -72,23 +72,22 @@ class CaseInsensitiveStringMapSuite extends SparkFunSuite {
   }
 
   test("getLong") {
-    val options = new CaseInsensitiveStringMap(Map("numFoo" -> "9223372036854775807",
-      "foo" -> "bar").asJava)
+    val options =
+      new CaseInsensitiveStringMap(Map("numFoo" -> "9223372036854775807", "foo" -> "bar").asJava)
     assert(options.getLong("numFOO", 0L) == 9223372036854775807L)
     assert(options.getLong("numFoo2", -1L) == -1L)
 
-    intercept[NumberFormatException]{
+    intercept[NumberFormatException] {
       options.getLong("foo", 0L)
     }
   }
 
   test("getDouble") {
-    val options = new CaseInsensitiveStringMap(Map("numFoo" -> "922337.1",
-      "foo" -> "bar").asJava)
+    val options = new CaseInsensitiveStringMap(Map("numFoo" -> "922337.1", "foo" -> "bar").asJava)
     assert(options.getDouble("numFOO", 0d) == 922337.1d)
     assert(options.getDouble("numFoo2", -1.02d) == -1.02d)
 
-    intercept[NumberFormatException]{
+    intercept[NumberFormatException] {
       options.getDouble("foo", 0.1d)
     }
   }

@@ -56,26 +56,26 @@ object PivotFirst {
  * PivotFirst is an aggregate function used in the second phase of a two phase pivot to do the
  * required rearrangement of values into pivoted form.
  *
- * For example on an input of
- * A | B
- * --+--
- * x | 1
- * y | 2
- * z | 3
+ * For example on an input of A | B --+-- x | 1 y | 2 z | 3
  *
  * with pivotColumn=A, valueColumn=B, and pivotColumnValues=[z,y] the output is [3,2].
  *
- * @param pivotColumn column that determines which output position to put valueColumn in.
- * @param valueColumn the column that is being rearranged.
- * @param pivotColumnValues the list of pivotColumn values in the order of desired output. Values
- *                          not listed here will be ignored.
+ * @param pivotColumn
+ *   column that determines which output position to put valueColumn in.
+ * @param valueColumn
+ *   the column that is being rearranged.
+ * @param pivotColumnValues
+ *   the list of pivotColumn values in the order of desired output. Values not listed here will be
+ *   ignored.
  */
 case class PivotFirst(
-  pivotColumn: Expression,
-  valueColumn: Expression,
-  pivotColumnValues: Seq[Any],
-  mutableAggBufferOffset: Int = 0,
-  inputAggBufferOffset: Int = 0) extends ImperativeAggregate with BinaryLike[Expression] {
+    pivotColumn: Expression,
+    valueColumn: Expression,
+    pivotColumnValues: Seq[Any],
+    mutableAggBufferOffset: Int = 0,
+    inputAggBufferOffset: Int = 0)
+    extends ImperativeAggregate
+    with BinaryLike[Expression] {
 
   override val left: Expression = pivotColumn
   override val right: Expression = valueColumn
@@ -105,7 +105,8 @@ case class PivotFirst(
 
   val indexSize = pivotIndex.size
 
-  private val updateRow: (InternalRow, Int, Any) => Unit = PivotFirst.updateFunction(valueDataType)
+  private val updateRow: (InternalRow, Int, Any) => Unit =
+    PivotFirst.updateFunction(valueDataType)
 
   override def update(mutableAggBuffer: InternalRow, inputRow: InternalRow): Unit = {
     val pivotColValue = pivotColumn.eval(inputRow)
@@ -151,9 +152,9 @@ case class PivotFirst(
   override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
-  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
+  override def withNewMutableAggBufferOffset(
+      newMutableAggBufferOffset: Int): ImperativeAggregate =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
-
 
   override val aggBufferAttributes: Seq[AttributeReference] =
     pivotIndex.toList.sortBy(_._2).map { kv =>
@@ -166,7 +167,7 @@ case class PivotFirst(
     aggBufferAttributes.map(_.newInstance())
 
   override protected def withNewChildrenInternal(
-      newLeft: Expression, newRight: Expression): PivotFirst =
+      newLeft: Expression,
+      newRight: Expression): PivotFirst =
     copy(pivotColumn = newLeft, valueColumn = newRight)
 }
-

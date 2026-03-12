@@ -30,8 +30,8 @@ import org.apache.spark.sql.types._
  * HyperLogLog++ (HLL++) is a state of the art cardinality estimation algorithm. This class
  * implements the dense version of the HLL++ algorithm as an Aggregate Function.
  *
- * This implementation has been based on the following papers:
- * HyperLogLog: the analysis of a near-optimal cardinality estimation algorithm
+ * This implementation has been based on the following papers: HyperLogLog: the analysis of a
+ * near-optimal cardinality estimation algorithm
  * http://algo.inria.fr/flajolet/Publications/FlFuGaMe07.pdf
  *
  * HyperLogLog in Practice: Algorithmic Engineering of a State of The Art Cardinality Estimation
@@ -42,8 +42,10 @@ import org.apache.spark.sql.types._
  * Estimation Algorithm
  * https://docs.google.com/document/d/1gyjfMHy43U9OWBXxfaeG-3MjGzejW1dlpyMwEYAAWEI/view?fullscreen#
  *
- * @param child to estimate the cardinality of.
- * @param relativeSD the maximum relative standard deviation allowed.
+ * @param child
+ *   to estimate the cardinality of.
+ * @param relativeSD
+ *   the maximum relative standard deviation allowed.
  */
 // scalastyle:on
 @ExpressionDescription(
@@ -62,7 +64,8 @@ case class HyperLogLogPlusPlus(
     relativeSD: Double = 0.05,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0)
-  extends ImperativeAggregate with UnaryLike[Expression] {
+    extends ImperativeAggregate
+    with UnaryLike[Expression] {
 
   def this(child: Expression) = {
     this(child = child, relativeSD = 0.05, mutableAggBufferOffset = 0, inputAggBufferOffset = 0)
@@ -78,7 +81,8 @@ case class HyperLogLogPlusPlus(
 
   override def prettyName: String = "approx_count_distinct"
 
-  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
+  override def withNewMutableAggBufferOffset(
+      newMutableAggBufferOffset: Int): ImperativeAggregate =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
 
   override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
@@ -129,8 +133,11 @@ case class HyperLogLogPlusPlus(
    * Merge the HLL++ buffers.
    */
   override def merge(buffer1: InternalRow, buffer2: InternalRow): Unit = {
-    hllppHelper.merge(buffer1 = buffer1, buffer2 = buffer2,
-      offset1 = mutableAggBufferOffset, offset2 = inputAggBufferOffset)
+    hllppHelper.merge(
+      buffer1 = buffer1,
+      buffer2 = buffer2,
+      offset1 = mutableAggBufferOffset,
+      offset2 = inputAggBufferOffset)
   }
 
   /**

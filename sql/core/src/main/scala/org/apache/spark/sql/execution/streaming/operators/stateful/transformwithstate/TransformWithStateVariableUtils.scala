@@ -29,9 +29,9 @@ import org.apache.spark.sql.execution.streaming.state.{OperatorInfoV1, OperatorS
 import org.apache.spark.sql.streaming.{OutputMode, TimeMode}
 
 /**
- * This file contains utility classes and functions for managing state variables in
- * the operatorProperties field of the OperatorStateMetadata for TransformWithState.
- * We use these utils to read and write state variable information for validation purposes.
+ * This file contains utility classes and functions for managing state variables in the
+ * operatorProperties field of the OperatorStateMetadata for TransformWithState. We use these
+ * utils to read and write state variable information for validation purposes.
  */
 object TransformWithStateVariableUtils {
   def getValueState(stateName: String, ttlEnabled: Boolean): TransformWithStateVariableInfo = {
@@ -101,8 +101,8 @@ object TransformWithStateVariableInfo {
 
   def fromMap(map: Map[String, Any]): TransformWithStateVariableInfo = {
     val stateName = map("stateName").asInstanceOf[String]
-    val stateVariableType = StateVariableType.withName(
-      map("stateVariableType").asInstanceOf[String])
+    val stateVariableType =
+      StateVariableType.withName(map("stateVariableType").asInstanceOf[String])
     val ttlEnabled = map("ttlEnabled").asInstanceOf[Boolean]
     TransformWithStateVariableInfo(stateName, stateVariableType, ttlEnabled)
   }
@@ -132,8 +132,7 @@ object TransformWithStateOperatorProperties extends Logging {
       jsonMap("outputMode").asInstanceOf[String],
       jsonMap("stateVariables").asInstanceOf[List[Map[String, Any]]].map { stateVarMap =>
         TransformWithStateVariableInfo.fromMap(stateVarMap)
-      }
-    )
+      })
   }
 
   // This function is to confirm that the operator properties and state variables have
@@ -144,12 +143,16 @@ object TransformWithStateOperatorProperties extends Logging {
       newOperatorProperties: TransformWithStateOperatorProperties): Unit = {
     if (oldOperatorProperties.timeMode != newOperatorProperties.timeMode) {
       throw StateStoreErrors.invalidConfigChangedAfterRestart(
-        "timeMode", oldOperatorProperties.timeMode, newOperatorProperties.timeMode)
+        "timeMode",
+        oldOperatorProperties.timeMode,
+        newOperatorProperties.timeMode)
     }
 
     if (oldOperatorProperties.outputMode != newOperatorProperties.outputMode) {
       throw StateStoreErrors.invalidConfigChangedAfterRestart(
-        "outputMode", oldOperatorProperties.outputMode, newOperatorProperties.outputMode)
+        "outputMode",
+        oldOperatorProperties.outputMode,
+        newOperatorProperties.outputMode)
     }
 
     val oldStateVariableInfos = oldOperatorProperties.stateVariables
@@ -164,8 +167,7 @@ object TransformWithStateOperatorProperties extends Logging {
             throw StateStoreErrors.invalidVariableTypeChange(
               stateVarInfo.stateName,
               oldInfo.stateVariableType.toString,
-              stateVarInfo.stateVariableType.toString
-            )
+              stateVarInfo.stateVariableType.toString)
           }
         case None =>
       }
@@ -174,10 +176,10 @@ object TransformWithStateOperatorProperties extends Logging {
 }
 
 /**
- * This trait contains utils functions related to TransformWithState metadata.
- * This is used both in Scala and Python side of TransformWithState metadata support when calling
- * `init()` with DriverStatefulProcessorHandleImpl, and get the state schema and state metadata
- * on driver during physical planning phase.
+ * This trait contains utils functions related to TransformWithState metadata. This is used both
+ * in Scala and Python side of TransformWithState metadata support when calling `init()` with
+ * DriverStatefulProcessorHandleImpl, and get the state schema and state metadata on driver during
+ * physical planning phase.
  */
 trait TransformWithStateMetadataUtils extends SchemaValidationUtils with Logging {
 
@@ -195,14 +197,17 @@ trait TransformWithStateMetadataUtils extends SchemaValidationUtils with Logging
     val operatorInfo = OperatorInfoV1(info.operatorId, shortName)
     // stateSchemaFilePath should be populated at this point
     val stateStoreInfo =
-      Array(StateStoreMetadataV2(
-        StateStoreId.DEFAULT_STORE_NAME, 0, info.numPartitions, stateSchemaPaths.head))
+      Array(
+        StateStoreMetadataV2(
+          StateStoreId.DEFAULT_STORE_NAME,
+          0,
+          info.numPartitions,
+          stateSchemaPaths.head))
 
     val operatorProperties = TransformWithStateOperatorProperties(
       timeMode.toString,
       outputMode.toString,
-      getStateVariableInfos().values.toList
-    )
+      getStateVariableInfos().values.toList)
     OperatorStateMetadataV2(operatorInfo, stateStoreInfo, operatorProperties.json)
   }
 
@@ -210,15 +215,14 @@ trait TransformWithStateMetadataUtils extends SchemaValidationUtils with Logging
       oldOperatorMetadata: OperatorStateMetadata,
       newOperatorMetadata: OperatorStateMetadata): Unit = {
     (oldOperatorMetadata, newOperatorMetadata) match {
-      case (
-        oldMetadataV2: OperatorStateMetadataV2,
-        newMetadataV2: OperatorStateMetadataV2) =>
-        val oldOperatorProps = TransformWithStateOperatorProperties.fromJson(
-          oldMetadataV2.operatorPropertiesJson)
-        val newOperatorProps = TransformWithStateOperatorProperties.fromJson(
-          newMetadataV2.operatorPropertiesJson)
+      case (oldMetadataV2: OperatorStateMetadataV2, newMetadataV2: OperatorStateMetadataV2) =>
+        val oldOperatorProps =
+          TransformWithStateOperatorProperties.fromJson(oldMetadataV2.operatorPropertiesJson)
+        val newOperatorProps =
+          TransformWithStateOperatorProperties.fromJson(newMetadataV2.operatorPropertiesJson)
         TransformWithStateOperatorProperties.validateOperatorProperties(
-          oldOperatorProps, newOperatorProps)
+          oldOperatorProps,
+          newOperatorProps)
       case (_, _) =>
     }
   }

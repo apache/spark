@@ -61,16 +61,13 @@ class STFunctionsSuite extends QueryTest with SharedSparkSession {
         df_invalid.select(st_geogfromwkb($"wkb")).collect()
       },
       condition = "WKB_PARSE_ERROR",
-      parameters = Map("parseError" -> "Unexpected end of WKB buffer", "pos" -> "0")
-    )
+      parameters = Map("parseError" -> "Unexpected end of WKB buffer", "pos" -> "0"))
   }
 
   test("st_geomfromwkb") {
     // Test data: Well-Known Binary (WKB) representations.
-    val df = Seq[(String, Int)](
-      (
-        "0101000000000000000000f03f0000000000000040", 4326
-      )).toDF("wkb", "srid")
+    val df =
+      Seq[(String, Int)](("0101000000000000000000f03f0000000000000040", 4326)).toDF("wkb", "srid")
     // ST_GeomFromWKB.
     checkAnswer(
       df.select(
@@ -87,8 +84,7 @@ class STFunctionsSuite extends QueryTest with SharedSparkSession {
         df.select(st_geomfromwkb(unhex($"wkb"), lit(-1))).collect()
       },
       condition = "ST_INVALID_SRID_VALUE",
-      parameters = Map("srid" -> "-1")
-    )
+      parameters = Map("srid" -> "-1"))
     // ST_GeomFromWKB with invalid WKB.
     val df_invalid = Seq(Array[Byte](111)).toDF("wkb")
     checkError(
@@ -96,8 +92,7 @@ class STFunctionsSuite extends QueryTest with SharedSparkSession {
         df_invalid.select(st_geomfromwkb($"wkb")).collect()
       },
       condition = "WKB_PARSE_ERROR",
-      parameters = Map("parseError" -> "Unexpected end of WKB buffer", "pos" -> "0")
-    )
+      parameters = Map("parseError" -> "Unexpected end of WKB buffer", "pos" -> "0"))
   }
 
   /** ST accessor expressions. */
@@ -121,10 +116,8 @@ class STFunctionsSuite extends QueryTest with SharedSparkSession {
 
   test("st_setsrid") {
     // Test data: Well-Known Binary (WKB) representations.
-    val df = Seq[(String, Int)](
-      (
-        "0101000000000000000000f03f0000000000000040", 4326
-      )).toDF("wkb", "srid")
+    val df =
+      Seq[(String, Int)](("0101000000000000000000f03f0000000000000040", 4326)).toDF("wkb", "srid")
     // ST_GeogFromWKB/ST_GeomFromWKB and ST_Srid.
     checkAnswer(
       df.select(
@@ -145,14 +138,12 @@ class STFunctionsSuite extends QueryTest with SharedSparkSession {
         st_geogfromwkb(lit(null)).as("res"),
         st_geomfromwkb(lit(null)).as("res"),
         st_srid(lit(null)).as("res"),
-        st_setsrid(lit(null), lit(null)).as("res")
-      ).foreach { func =>
+        st_setsrid(lit(null), lit(null)).as("res")).foreach { func =>
         checkError(
           exception = intercept[AnalysisException] {
             df.select(func).collect()
           },
-          condition = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED"
-        )
+          condition = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED")
       }
     }
   }

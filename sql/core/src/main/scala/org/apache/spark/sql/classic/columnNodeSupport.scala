@@ -70,7 +70,9 @@ private[sql] trait ColumnNodeToExpressionConverter extends (ColumnNode => Expres
           analysis.UnresolvedRegex(columnNameRegex, None, conf.caseSensitiveAnalysis)
 
         case UnresolvedRegex(
-        ParserUtils.qualifiedEscapedIdentifier(nameParts, columnNameRegex), _, _) =>
+              ParserUtils.qualifiedEscapedIdentifier(nameParts, columnNameRegex),
+              _,
+              _) =>
           analysis.UnresolvedRegex(columnNameRegex, Some(nameParts), conf.caseSensitiveAnalysis)
 
         case UnresolvedRegex(unparsedIdentifier, planId, _) =>
@@ -89,8 +91,8 @@ private[sql] trait ColumnNodeToExpressionConverter extends (ColumnNode => Expres
             isInternal = isInternal)
 
         case Alias(child, Seq(name), None, _) =>
-          expressions.Alias(apply(child), name)(
-            nonInheritableMetadataKeys = Seq(Dataset.DATASET_ID_KEY, Dataset.COL_POS_KEY))
+          expressions.Alias(apply(child), name)(nonInheritableMetadataKeys =
+            Seq(Dataset.DATASET_ID_KEY, Dataset.COL_POS_KEY))
 
         case Alias(child, Seq(name), metadata, _) =>
           expressions.Alias(apply(child), name)(explicitMetadata = metadata)
@@ -165,25 +167,33 @@ private[sql] trait ColumnNodeToExpressionConverter extends (ColumnNode => Expres
             elseValue = otherwise.map(apply))
 
         case InvokeInlineUserDefinedFunction(
-        a: Aggregator[Any @unchecked, Any @unchecked, Any @unchecked], Nil, isDistinct, _) =>
+              a: Aggregator[Any @unchecked, Any @unchecked, Any @unchecked],
+              Nil,
+              isDistinct,
+              _) =>
           TypedAggregateExpression(a)(a.bufferEncoder, a.outputEncoder)
             .toAggregateExpression(isDistinct)
 
         case InvokeInlineUserDefinedFunction(
-        a: UserDefinedAggregator[Any @unchecked, Any @unchecked, Any @unchecked],
-        arguments, isDistinct, _) =>
+              a: UserDefinedAggregator[Any @unchecked, Any @unchecked, Any @unchecked],
+              arguments,
+              isDistinct,
+              _) =>
           ScalaAggregator(a, arguments.map(apply)).toAggregateExpression(isDistinct)
 
         case InvokeInlineUserDefinedFunction(
-        a: UserDefinedAggregateFunction, arguments, isDistinct, _) =>
+              a: UserDefinedAggregateFunction,
+              arguments,
+              isDistinct,
+              _) =>
           ScalaUDAF(udaf = a, children = arguments.map(apply)).toAggregateExpression(isDistinct)
 
         case InvokeInlineUserDefinedFunction(udf: SparkUserDefinedFunction, arguments, _, _) =>
           toScalaUDF(udf, arguments.map(apply))
 
         case ExpressionColumnNode(expression, _) =>
-          val transformed = expression.transformDown {
-            case ColumnNodeExpression(node) => apply(node)
+          val transformed = expression.transformDown { case ColumnNodeExpression(node) =>
+            apply(node)
           }
           transformed match {
             case f: AggregateFunction => f.toAggregateExpression()
@@ -201,7 +211,8 @@ private[sql] trait ColumnNodeToExpressionConverter extends (ColumnNode => Expres
               expressions.Exists(ds.logicalPlan)
             case SubqueryType.IN(values) =>
               expressions.InSubquery(
-                values.map(value => apply(value)), expressions.ListQuery(ds.logicalPlan))
+                values.map(value => apply(value)),
+                expressions.ListQuery(ds.logicalPlan))
           }
 
         case node =>
@@ -274,13 +285,13 @@ private[sql] object ColumnNodeToExpressionConverter extends ColumnNodeToExpressi
 /**
  * [[ColumnNode]] wrapper for an [[Expression]].
  */
-private[sql] case class ExpressionColumnNode private(
+private[sql] case class ExpressionColumnNode private (
     expression: Expression,
-    override val origin: Origin = CurrentOrigin.get) extends ColumnNode {
+    override val origin: Origin = CurrentOrigin.get)
+    extends ColumnNode {
   override def normalize(): ExpressionColumnNode = {
-    val updated = expression.transform {
-      case a: AttributeReference =>
-        DetectAmbiguousSelfJoin.stripColumnReferenceMetadata(a)
+    val updated = expression.transform { case a: AttributeReference =>
+      DetectAmbiguousSelfJoin.stripColumnReferenceMetadata(a)
     }
     copy(updated, ColumnNode.NO_ORIGIN)
   }
@@ -297,7 +308,7 @@ private[sql] object ExpressionColumnNode {
   }
 }
 
-private[classic] case class ColumnNodeExpression private(node: ColumnNode) extends Unevaluable {
+private[classic] case class ColumnNodeExpression private (node: ColumnNode) extends Unevaluable {
   override def nullable: Boolean = true
   override def dataType: DataType = NullType
   override def children: Seq[Expression] = Nil
@@ -312,6 +323,7 @@ private[sql] object ColumnNodeExpression {
 }
 
 private[spark] object ExpressionUtils {
+
   /**
    * Create an Expression backed Column.
    */
@@ -337,8 +349,8 @@ private[spark] object ExpressionUtils {
     // If we have a top level Cast, there is a chance to give it a better alias, if there is a
     // NamedExpression under this Cast.
     case c: expressions.Cast =>
-      c.transformUp {
-        case c @ expressions.Cast(_: NamedExpression, _, _, _) => UnresolvedAlias(c)
+      c.transformUp { case c @ expressions.Cast(_: NamedExpression, _, _, _) =>
+        UnresolvedAlias(c)
       } match {
         case ne: NamedExpression => ne
         case _ => UnresolvedAlias(expr, Some(generateAlias))

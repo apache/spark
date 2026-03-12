@@ -30,30 +30,32 @@ import org.apache.spark.unsafe.Platform
 import org.apache.spark.util.Utils
 
 /**
- * Serializer for serializing [[UnsafeRow]]s during shuffle. Since UnsafeRows are already stored as
- * bytes, this serializer simply copies those bytes to the underlying output stream. When
- * deserializing a stream of rows, instances of this serializer mutate and return a single UnsafeRow
- * instance that is backed by an on-heap byte array.
+ * Serializer for serializing [[UnsafeRow]]s during shuffle. Since UnsafeRows are already stored
+ * as bytes, this serializer simply copies those bytes to the underlying output stream. When
+ * deserializing a stream of rows, instances of this serializer mutate and return a single
+ * UnsafeRow instance that is backed by an on-heap byte array.
  *
  * Note that this serializer implements only the [[Serializer]] methods that are used during
- * shuffle, so certain [[SerializerInstance]] methods will throw SparkUnsupportedOperationException.
+ * shuffle, so certain [[SerializerInstance]] methods will throw
+ * SparkUnsupportedOperationException.
  *
- * @param numFields the number of fields in the row being serialized.
+ * @param numFields
+ *   the number of fields in the row being serialized.
  */
-class UnsafeRowSerializer(
-    numFields: Int,
-    dataSize: SQLMetric = null) extends Serializer with Serializable {
+class UnsafeRowSerializer(numFields: Int, dataSize: SQLMetric = null)
+    extends Serializer
+    with Serializable {
   override def newInstance(): SerializerInstance =
     new UnsafeRowSerializerInstance(numFields, dataSize)
   override def supportsRelocationOfSerializedObjects: Boolean = true
 }
 
-private class UnsafeRowSerializerInstance(
-    numFields: Int,
-    dataSize: SQLMetric) extends SerializerInstance {
+private class UnsafeRowSerializerInstance(numFields: Int, dataSize: SQLMetric)
+    extends SerializerInstance {
+
   /**
-   * Serializes a stream of UnsafeRows. Within the stream, each record consists of a record
-   * length (stored as a 4-byte integer, written high byte first), followed by the record's bytes.
+   * Serializes a stream of UnsafeRows. Within the stream, each record consists of a record length
+   * (stored as a 4-byte integer, written high byte first), followed by the record's bytes.
    */
   override def serializeStream(out: OutputStream): SerializationStream = new SerializationStream {
     private[this] var writeBuffer: Array[Byte] = new Array[Byte](4096)
@@ -176,7 +178,8 @@ private class UnsafeRowSerializerInstance(
   }
 
   // These methods are never called by shuffle code.
-  override def serialize[T: ClassTag](t: T): ByteBuffer = throw SparkUnsupportedOperationException()
+  override def serialize[T: ClassTag](t: T): ByteBuffer =
+    throw SparkUnsupportedOperationException()
   override def deserialize[T: ClassTag](bytes: ByteBuffer): T =
     throw SparkUnsupportedOperationException()
   override def deserialize[T: ClassTag](bytes: ByteBuffer, loader: ClassLoader): T =

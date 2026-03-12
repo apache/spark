@@ -25,8 +25,7 @@ import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
- * Benchmark for hex
- * To run this benchmark:
+ * Benchmark for hex To run this benchmark:
  * {{{
  *   1. without sbt:
  *      bin/spark-submit --class <this class> --jars <spark core test jar> <spark catalyst test jar>
@@ -83,7 +82,7 @@ object HexBenchmark extends BenchmarkBase {
     Hex.unhex(value)
   }
 
-  def javaUnhex(value: String) : Array[Byte] = {
+  def javaUnhex(value: String): Array[Byte] = {
     val padding = if ((value.length & 0x1) != 0) "0" else ""
     java.util.HexFormat.of().parseHex(padding + value)
   }

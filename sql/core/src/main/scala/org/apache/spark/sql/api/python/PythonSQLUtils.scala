@@ -47,7 +47,8 @@ private[sql] object PythonSQLUtils extends Logging {
   private def withInternalRowPickler(f: Pickler => Array[Byte]): Array[Byte] = {
     EvaluatePython.registerPicklers()
     val pickler = new Pickler(true, false)
-    val ret = try {
+    val ret =
+      try {
         f(pickler)
       } finally {
         pickler.close()
@@ -58,7 +59,8 @@ private[sql] object PythonSQLUtils extends Logging {
   private def withInternalRowUnpickler(f: Unpickler => Any): Any = {
     EvaluatePython.registerPicklers()
     val unpickler = new Unpickler
-    val ret = try {
+    val ret =
+      try {
         f(unpickler)
       } finally {
         unpickler.close()
@@ -71,9 +73,9 @@ private[sql] object PythonSQLUtils extends Logging {
   // This is needed when generating SQL documentation for built-in functions.
   def listBuiltinFunctionInfos(): Array[ExpressionInfo] = {
     (FunctionRegistry.functionSet.flatMap(f => FunctionRegistry.builtin.lookupFunction(f)) ++
-      TableFunctionRegistry.functionSet.flatMap(
-        f => TableFunctionRegistry.builtin.lookupFunction(f))).
-      groupBy(_.getName).map(v => v._2.head).toArray
+      TableFunctionRegistry.functionSet.flatMap(f =>
+        TableFunctionRegistry.builtin
+          .lookupFunction(f))).groupBy(_.getName).map(v => v._2.head).toArray
   }
 
   private def listAllSQLConfigs(): Seq[(String, String, String, String)] = {
@@ -94,8 +96,8 @@ private[sql] object PythonSQLUtils extends Logging {
     SQLConf.get.timestampType == org.apache.spark.sql.types.TimestampNTZType
 
   /**
-   * Python callable function to read a file in Arrow stream format and create an iterator
-   * of serialized ArrowRecordBatches.
+   * Python callable function to read a file in Arrow stream format and create an iterator of
+   * serialized ArrowRecordBatches.
    */
   def readArrowStreamFromFile(filename: String): Iterator[Array[Byte]] = {
     ArrowConverters.readArrowStreamFromFile(filename).iterator
@@ -118,8 +120,12 @@ private[sql] object PythonSQLUtils extends Logging {
 
   def toPyRow(row: Row): Array[Byte] = {
     assert(row.isInstanceOf[GenericRowWithSchema])
-    withInternalRowPickler(_.dumps(EvaluatePython.toJava(
-      CatalystTypeConverters.convertToCatalyst(row), row.schema, SQLConf.get.pysparkBinaryAsBytes)))
+    withInternalRowPickler(
+      _.dumps(
+        EvaluatePython.toJava(
+          CatalystTypeConverters.convertToCatalyst(row),
+          row.schema,
+          SQLConf.get.pysparkBinaryAsBytes)))
   }
 
   def toJVMRow(
@@ -128,20 +134,21 @@ private[sql] object PythonSQLUtils extends Logging {
       deserializer: ExpressionEncoder.Deserializer[Row]): Row = {
     val fromJava = EvaluatePython.makeFromJava(returnType)
     val internalRow =
-        fromJava(withInternalRowUnpickler(_.loads(arr))).asInstanceOf[InternalRow]
+      fromJava(withInternalRowUnpickler(_.loads(arr))).asInstanceOf[InternalRow]
     deserializer(internalRow)
   }
 
   /**
-   * Internal-only helper for Spark Connect's local mode. This is only used for
-   * local development, not for production. This method should not be used in
-   * production code path.
+   * Internal-only helper for Spark Connect's local mode. This is only used for local development,
+   * not for production. This method should not be used in production code path.
    */
   def addJarToCurrentClassLoader(path: String): Unit = {
     Utils.getContextOrSparkClassLoader match {
       case cl: MutableURLClassLoader => cl.addURL(Utils.resolveURI(path).toURL)
-      case cl => logWarning(log"Unsupported class loader ${MDC(CLASS_LOADER, cl)} will not " +
-        log"update jars in the thread class loader.")
+      case cl =>
+        logWarning(
+          log"Unsupported class loader ${MDC(CLASS_LOADER, cl)} will not " +
+            log"update jars in the thread class loader.")
     }
   }
 
@@ -150,25 +157,26 @@ private[sql] object PythonSQLUtils extends Logging {
   }
 
   def ddlToJson(ddl: String): String = {
-    val dataType = try {
-      // DDL format, "fieldname datatype, fieldname datatype".
-      StructType.fromDDL(ddl)
-    } catch {
-      case e: Throwable =>
-        try {
-          // For backwards compatibility, "integer", "struct<fieldname: datatype>" and etc.
-          parseDataType(ddl)
-        } catch {
-          case _: Throwable =>
-            try {
-              // For backwards compatibility, "fieldname: datatype, fieldname: datatype" case.
-              parseDataType(s"struct<${ddl.trim}>")
-            } catch {
-              case _: Throwable =>
-                throw e
-            }
-        }
-    }
+    val dataType =
+      try {
+        // DDL format, "fieldname datatype, fieldname datatype".
+        StructType.fromDDL(ddl)
+      } catch {
+        case e: Throwable =>
+          try {
+            // For backwards compatibility, "integer", "struct<fieldname: datatype>" and etc.
+            parseDataType(ddl)
+          } catch {
+            case _: Throwable =>
+              try {
+                // For backwards compatibility, "fieldname: datatype, fieldname: datatype" case.
+                parseDataType(s"struct<${ddl.trim}>")
+              } catch {
+                case _: Throwable =>
+                  throw e
+              }
+          }
+      }
     dataType.json
   }
 
@@ -197,9 +205,11 @@ private[sql] object PythonSQLUtils extends Logging {
     if (!sparkContext.isStopped) {
       try {
         val blockManager = sparkContext.env.blockManager.master
-        blockManager.getMatchingBlockIds(
-            id => id.isInstanceOf[PythonWorkerLogBlockId] &&
-              id.asInstanceOf[PythonWorkerLogBlockId].sessionId == sessionUUID,
+        blockManager
+          .getMatchingBlockIds(
+            id =>
+              id.isInstanceOf[PythonWorkerLogBlockId] &&
+                id.asInstanceOf[PythonWorkerLogBlockId].sessionId == sessionUUID,
             askStorageEndpoints = true)
           .distinct
           .foreach(blockManager.removeBlock)
@@ -215,7 +225,7 @@ private[sql] object PythonSQLUtils extends Logging {
  * used when encryption is enabled, and we don't want to write data to a file.
  */
 private[spark] class ArrowIteratorServer
-  extends SocketAuthServer[Iterator[Array[Byte]]]("pyspark-arrow-batches-server") {
+    extends SocketAuthServer[Iterator[Array[Byte]]]("pyspark-arrow-batches-server") {
 
   def handleConnection(sock: SocketChannel): Iterator[Array[Byte]] = {
     val in = Channels.newInputStream(sock)

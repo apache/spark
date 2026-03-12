@@ -31,13 +31,14 @@ import org.apache.spark.unsafe.types.UTF8String
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /**
- * A filter predicate for data sources. Mapping between Spark SQL types and filter value
- * types follow the convention for return type of [[org.apache.spark.sql.Row#get(int)]].
+ * A filter predicate for data sources. Mapping between Spark SQL types and filter value types
+ * follow the convention for return type of [[org.apache.spark.sql.Row#get(int)]].
  *
  * @since 1.3.0
  */
 @Stable
 sealed abstract class Filter {
+
   /**
    * List of columns that are referenced by this filter.
    *
@@ -57,7 +58,8 @@ sealed abstract class Filter {
   /**
    * List of columns that are referenced by this filter.
    *
-   * @return each element is a column name as an array of string multi-identifier
+   * @return
+   *   each element is a column name as an array of string multi-identifier
    * @since 3.0.0
    */
   def v2references: Array[Array[String]] = {
@@ -86,12 +88,11 @@ sealed abstract class Filter {
 }
 
 /**
- * A filter that evaluates to `true` iff the column evaluates to a value
- * equal to `value`.
+ * A filter that evaluates to `true` iff the column evaluates to a value equal to `value`.
  *
- * @param attribute of the column to be evaluated; `dots` are used as separators
- *                  for nested columns. If any part of the names contains `dots`,
- *                  it is quoted to avoid confusion.
+ * @param attribute
+ *   of the column to be evaluated; `dots` are used as separators for nested columns. If any part
+ *   of the names contains `dots`, it is quoted to avoid confusion.
  * @since 1.3.0
  */
 @Stable
@@ -99,19 +100,20 @@ case class EqualTo(attribute: String, value: Any) extends Filter {
   override def references: Array[String] = Array(attribute) ++ findReferences(value)
   override def toV2: Predicate = {
     val literal = Literal(value)
-    new Predicate("=",
+    new Predicate(
+      "=",
       Array(toV2Column(attribute), LiteralValue(literal.value, literal.dataType)))
   }
 }
 
 /**
- * Performs equality comparison, similar to [[EqualTo]]. However, this differs from [[EqualTo]]
- * in that it returns `true` (rather than NULL) if both inputs are NULL, and `false`
- * (rather than NULL) if one of the input is NULL and the other is not NULL.
+ * Performs equality comparison, similar to [[EqualTo]]. However, this differs from [[EqualTo]] in
+ * that it returns `true` (rather than NULL) if both inputs are NULL, and `false` (rather than
+ * NULL) if one of the input is NULL and the other is not NULL.
  *
- * @param attribute of the column to be evaluated; `dots` are used as separators
- *                  for nested columns. If any part of the names contains `dots`,
- *                  it is quoted to avoid confusion.
+ * @param attribute
+ *   of the column to be evaluated; `dots` are used as separators for nested columns. If any part
+ *   of the names contains `dots`, it is quoted to avoid confusion.
  * @since 1.5.0
  */
 @Stable
@@ -119,18 +121,18 @@ case class EqualNullSafe(attribute: String, value: Any) extends Filter {
   override def references: Array[String] = Array(attribute) ++ findReferences(value)
   override def toV2: Predicate = {
     val literal = Literal(value)
-    new Predicate("<=>",
+    new Predicate(
+      "<=>",
       Array(toV2Column(attribute), LiteralValue(literal.value, literal.dataType)))
   }
 }
 
 /**
- * A filter that evaluates to `true` iff the attribute evaluates to a value
- * greater than `value`.
+ * A filter that evaluates to `true` iff the attribute evaluates to a value greater than `value`.
  *
- * @param attribute of the column to be evaluated; `dots` are used as separators
- *                  for nested columns. If any part of the names contains `dots`,
- *                  it is quoted to avoid confusion.
+ * @param attribute
+ *   of the column to be evaluated; `dots` are used as separators for nested columns. If any part
+ *   of the names contains `dots`, it is quoted to avoid confusion.
  * @since 1.3.0
  */
 @Stable
@@ -138,18 +140,19 @@ case class GreaterThan(attribute: String, value: Any) extends Filter {
   override def references: Array[String] = Array(attribute) ++ findReferences(value)
   override def toV2: Predicate = {
     val literal = Literal(value)
-    new Predicate(">",
+    new Predicate(
+      ">",
       Array(toV2Column(attribute), LiteralValue(literal.value, literal.dataType)))
   }
 }
 
 /**
- * A filter that evaluates to `true` iff the attribute evaluates to a value
- * greater than or equal to `value`.
+ * A filter that evaluates to `true` iff the attribute evaluates to a value greater than or equal
+ * to `value`.
  *
- * @param attribute of the column to be evaluated; `dots` are used as separators
- *                  for nested columns. If any part of the names contains `dots`,
- *                  it is quoted to avoid confusion.
+ * @param attribute
+ *   of the column to be evaluated; `dots` are used as separators for nested columns. If any part
+ *   of the names contains `dots`, it is quoted to avoid confusion.
  * @since 1.3.0
  */
 @Stable
@@ -157,18 +160,18 @@ case class GreaterThanOrEqual(attribute: String, value: Any) extends Filter {
   override def references: Array[String] = Array(attribute) ++ findReferences(value)
   override def toV2: Predicate = {
     val literal = Literal(value)
-    new Predicate(">=",
+    new Predicate(
+      ">=",
       Array(toV2Column(attribute), LiteralValue(literal.value, literal.dataType)))
   }
 }
 
 /**
- * A filter that evaluates to `true` iff the attribute evaluates to a value
- * less than `value`.
+ * A filter that evaluates to `true` iff the attribute evaluates to a value less than `value`.
  *
- * @param attribute of the column to be evaluated; `dots` are used as separators
- *                  for nested columns. If any part of the names contains `dots`,
- *                  it is quoted to avoid confusion.
+ * @param attribute
+ *   of the column to be evaluated; `dots` are used as separators for nested columns. If any part
+ *   of the names contains `dots`, it is quoted to avoid confusion.
  * @since 1.3.0
  */
 @Stable
@@ -176,18 +179,19 @@ case class LessThan(attribute: String, value: Any) extends Filter {
   override def references: Array[String] = Array(attribute) ++ findReferences(value)
   override def toV2: Predicate = {
     val literal = Literal(value)
-    new Predicate("<",
+    new Predicate(
+      "<",
       Array(toV2Column(attribute), LiteralValue(literal.value, literal.dataType)))
   }
 }
 
 /**
- * A filter that evaluates to `true` iff the attribute evaluates to a value
- * less than or equal to `value`.
+ * A filter that evaluates to `true` iff the attribute evaluates to a value less than or equal to
+ * `value`.
  *
- * @param attribute of the column to be evaluated; `dots` are used as separators
- *                  for nested columns. If any part of the names contains `dots`,
- *                  it is quoted to avoid confusion.
+ * @param attribute
+ *   of the column to be evaluated; `dots` are used as separators for nested columns. If any part
+ *   of the names contains `dots`, it is quoted to avoid confusion.
  * @since 1.3.0
  */
 @Stable
@@ -195,17 +199,19 @@ case class LessThanOrEqual(attribute: String, value: Any) extends Filter {
   override def references: Array[String] = Array(attribute) ++ findReferences(value)
   override def toV2: Predicate = {
     val literal = Literal(value)
-    new Predicate("<=",
+    new Predicate(
+      "<=",
       Array(toV2Column(attribute), LiteralValue(literal.value, literal.dataType)))
   }
 }
 
 /**
- * A filter that evaluates to `true` iff the attribute evaluates to one of the values in the array.
+ * A filter that evaluates to `true` iff the attribute evaluates to one of the values in the
+ * array.
  *
- * @param attribute of the column to be evaluated; `dots` are used as separators
- *                  for nested columns. If any part of the names contains `dots`,
- *                  it is quoted to avoid confusion.
+ * @param attribute
+ *   of the column to be evaluated; `dots` are used as separators for nested columns. If any part
+ *   of the names contains `dots`, it is quoted to avoid confusion.
  * @since 1.3.0
  */
 @Stable
@@ -246,9 +252,9 @@ case class In(attribute: String, values: Array[Any]) extends Filter {
 /**
  * A filter that evaluates to `true` iff the attribute evaluates to null.
  *
- * @param attribute of the column to be evaluated; `dots` are used as separators
- *                  for nested columns. If any part of the names contains `dots`,
- *                  it is quoted to avoid confusion.
+ * @param attribute
+ *   of the column to be evaluated; `dots` are used as separators for nested columns. If any part
+ *   of the names contains `dots`, it is quoted to avoid confusion.
  * @since 1.3.0
  */
 @Stable
@@ -260,9 +266,9 @@ case class IsNull(attribute: String) extends Filter {
 /**
  * A filter that evaluates to `true` iff the attribute evaluates to a non-null value.
  *
- * @param attribute of the column to be evaluated; `dots` are used as separators
- *                  for nested columns. If any part of the names contains `dots`,
- *                  it is quoted to avoid confusion.
+ * @param attribute
+ *   of the column to be evaluated; `dots` are used as separators for nested columns. If any part
+ *   of the names contains `dots`, it is quoted to avoid confusion.
  * @since 1.3.0
  */
 @Stable
@@ -305,50 +311,53 @@ case class Not(child: Filter) extends Filter {
 }
 
 /**
- * A filter that evaluates to `true` iff the attribute evaluates to
- * a string that starts with `value`.
+ * A filter that evaluates to `true` iff the attribute evaluates to a string that starts with
+ * `value`.
  *
- * @param attribute of the column to be evaluated; `dots` are used as separators
- *                  for nested columns. If any part of the names contains `dots`,
- *                  it is quoted to avoid confusion.
+ * @param attribute
+ *   of the column to be evaluated; `dots` are used as separators for nested columns. If any part
+ *   of the names contains `dots`, it is quoted to avoid confusion.
  * @since 1.3.1
  */
 @Stable
 case class StringStartsWith(attribute: String, value: String) extends Filter {
   override def references: Array[String] = Array(attribute)
-  override def toV2: Predicate = new Predicate("STARTS_WITH",
+  override def toV2: Predicate = new Predicate(
+    "STARTS_WITH",
     Array(toV2Column(attribute), LiteralValue(UTF8String.fromString(value), StringType)))
 }
 
 /**
- * A filter that evaluates to `true` iff the attribute evaluates to
- * a string that ends with `value`.
+ * A filter that evaluates to `true` iff the attribute evaluates to a string that ends with
+ * `value`.
  *
- * @param attribute of the column to be evaluated; `dots` are used as separators
- *                  for nested columns. If any part of the names contains `dots`,
- *                  it is quoted to avoid confusion.
+ * @param attribute
+ *   of the column to be evaluated; `dots` are used as separators for nested columns. If any part
+ *   of the names contains `dots`, it is quoted to avoid confusion.
  * @since 1.3.1
  */
 @Stable
 case class StringEndsWith(attribute: String, value: String) extends Filter {
   override def references: Array[String] = Array(attribute)
-  override def toV2: Predicate = new Predicate("ENDS_WITH",
+  override def toV2: Predicate = new Predicate(
+    "ENDS_WITH",
     Array(toV2Column(attribute), LiteralValue(UTF8String.fromString(value), StringType)))
 }
 
 /**
- * A filter that evaluates to `true` iff the attribute evaluates to
- * a string that contains the string `value`.
+ * A filter that evaluates to `true` iff the attribute evaluates to a string that contains the
+ * string `value`.
  *
- * @param attribute of the column to be evaluated; `dots` are used as separators
- *                  for nested columns. If any part of the names contains `dots`,
- *                  it is quoted to avoid confusion.
+ * @param attribute
+ *   of the column to be evaluated; `dots` are used as separators for nested columns. If any part
+ *   of the names contains `dots`, it is quoted to avoid confusion.
  * @since 1.3.1
  */
 @Stable
 case class StringContains(attribute: String, value: String) extends Filter {
   override def references: Array[String] = Array(attribute)
-  override def toV2: Predicate = new Predicate("CONTAINS",
+  override def toV2: Predicate = new Predicate(
+    "CONTAINS",
     Array(toV2Column(attribute), LiteralValue(UTF8String.fromString(value), StringType)))
 }
 
@@ -364,8 +373,7 @@ case class AlwaysTrue() extends Filter {
 }
 
 @Evolving
-object AlwaysTrue extends AlwaysTrue {
-}
+object AlwaysTrue extends AlwaysTrue {}
 
 /**
  * A filter that always evaluates to `false`.
@@ -379,8 +387,7 @@ case class AlwaysFalse() extends Filter {
 }
 
 @Evolving
-object AlwaysFalse extends AlwaysFalse {
-}
+object AlwaysFalse extends AlwaysFalse {}
 
 /**
  * Base class for collation aware string filters.
@@ -399,69 +406,69 @@ abstract class CollatedFilter() extends Filter {
 /** Collation aware equivalent of [[EqualTo]]. */
 @Evolving
 case class CollatedEqualTo(attribute: String, value: Any, dataType: DataType)
-  extends CollatedFilter {
+    extends CollatedFilter {
   override def correspondingFilter: Filter = EqualTo(attribute, value)
 }
 
 /** Collation aware equivalent of [[EqualNullSafe]]. */
 @Evolving
 case class CollatedEqualNullSafe(attribute: String, value: Any, dataType: DataType)
-  extends CollatedFilter {
+    extends CollatedFilter {
   override def correspondingFilter: Filter = EqualNullSafe(attribute, value)
 }
 
 /** Collation aware equivalent of [[GreaterThan]]. */
 @Evolving
 case class CollatedGreaterThan(attribute: String, value: Any, dataType: DataType)
-  extends CollatedFilter {
+    extends CollatedFilter {
   override def correspondingFilter: Filter = GreaterThan(attribute, value)
 }
 
 /** Collation aware equivalent of [[GreaterThanOrEqual]]. */
 @Evolving
 case class CollatedGreaterThanOrEqual(attribute: String, value: Any, dataType: DataType)
-  extends CollatedFilter {
+    extends CollatedFilter {
   override def correspondingFilter: Filter = GreaterThanOrEqual(attribute, value)
 }
 
 /** Collation aware equivalent of [[LessThan]]. */
 @Evolving
 case class CollatedLessThan(attribute: String, value: Any, dataType: DataType)
-  extends CollatedFilter {
+    extends CollatedFilter {
   override def correspondingFilter: Filter = LessThan(attribute, value)
 }
 
 /** Collation aware equivalent of [[LessThanOrEqual]]. */
 @Evolving
 case class CollatedLessThanOrEqual(attribute: String, value: Any, dataType: DataType)
-  extends CollatedFilter {
+    extends CollatedFilter {
   override def correspondingFilter: Filter = LessThanOrEqual(attribute, value)
 }
 
 /** Collation aware equivalent of [[In]]. */
 @Evolving
 case class CollatedIn(attribute: String, values: Array[Any], dataType: DataType)
-  extends CollatedFilter {
+    extends CollatedFilter {
   override def correspondingFilter: Filter = In(attribute, values)
 }
 
 /** Collation aware equivalent of [[StringStartsWith]]. */
 @Evolving
 case class CollatedStringStartsWith(attribute: String, value: String, dataType: DataType)
-  extends CollatedFilter {
+    extends CollatedFilter {
   override def correspondingFilter: Filter = StringStartsWith(attribute, value)
 }
 
 /** Collation aware equivalent of [[StringEndsWith]]. */
 @Evolving
 case class CollatedStringEndsWith(attribute: String, value: String, dataType: DataType)
-  extends CollatedFilter {
+    extends CollatedFilter {
   override def correspondingFilter: Filter = StringEndsWith(attribute, value)
 }
 
 /** Collation aware equivalent of [[StringContains]]. */
 @Evolving
 case class CollatedStringContains(attribute: String, value: String, dataType: DataType)
-  extends CollatedFilter {
+    extends CollatedFilter {
   override def correspondingFilter: Filter = StringContains(attribute, value)
 }

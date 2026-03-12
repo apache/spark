@@ -28,18 +28,13 @@ private[sql] object MetricViewFactory {
         case "0.1" =>
           MetricViewYAMLDeserializerV01.parseYaml(yamlContent).toCanonical
         case _ =>
-          throw MetricViewValidationException(
-            s"Invalid YAML version: ${yamlVersion.version}"
-          )
+          throw MetricViewValidationException(s"Invalid YAML version: ${yamlVersion.version}")
       }
     } catch {
       case e: MetricViewSerdeException =>
         throw e
       case NonFatal(e) =>
-        throw MetricViewYAMLParsingException(
-          s"Failed to parse YAML: ${e.getMessage}",
-          Some(e)
-        )
+        throw MetricViewYAMLParsingException(s"Failed to parse YAML: ${e.getMessage}", Some(e))
     }
   }
 
@@ -48,13 +43,9 @@ private[sql] object MetricViewFactory {
       val versionSpecific = MetricViewBase.fromCanonical(metricView)
       versionSpecific.version match {
         case "0.1" =>
-          MetricViewYAMLSerializerV01.toYaml(
-            versionSpecific.asInstanceOf[MetricViewV01]
-          )
+          MetricViewYAMLSerializerV01.toYaml(versionSpecific.asInstanceOf[MetricViewV01])
         case _ =>
-          throw MetricViewValidationException(
-            s"Invalid YAML version: ${metricView.version}"
-          )
+          throw MetricViewValidationException(s"Invalid YAML version: ${metricView.version}")
       }
     } catch {
       case e: MetricViewSerdeException =>
@@ -62,8 +53,7 @@ private[sql] object MetricViewFactory {
       case NonFatal(e) =>
         throw MetricViewYAMLParsingException(
           s"Failed to serialize to YAML: ${e.getMessage}",
-          Some(e)
-        )
+          Some(e))
     }
   }
 }

@@ -34,13 +34,14 @@ class ParquetFileMetadataStructRowIndexSuite extends QueryTest with SharedSparkS
   val NUM_ROWS = 100
 
   def withReadDataFrame(
-         format: String,
-         partitionCol: String = null,
-         extraCol: String = "ec",
-         extraSchemaFields: Seq[StructField] = Seq.empty)
-      (f: DataFrame => Unit): Unit = {
+      format: String,
+      partitionCol: String = null,
+      extraCol: String = "ec",
+      extraSchemaFields: Seq[StructField] = Seq.empty)(f: DataFrame => Unit): Unit = {
     withTempPath { path =>
-      val baseDf = spark.range(0, NUM_ROWS, 1, 1).toDF("id")
+      val baseDf = spark
+        .range(0, NUM_ROWS, 1, 1)
+        .toDF("id")
         .withColumn(extraCol, $"id" + lit(1000 * 1000))
         .withColumn(EXPECTED_EXTRA_COL, col(extraCol))
       val writeSchema: StructType = if (partitionCol != null) {
@@ -67,38 +68,41 @@ class ParquetFileMetadataStructRowIndexSuite extends QueryTest with SharedSparkS
     FileFormat.FILE_NAME,
     FileFormat.FILE_SIZE,
     FileFormat.FILE_MODIFICATION_TIME,
-    ParquetFileFormat.ROW_INDEX
-  )
+    ParquetFileFormat.ROW_INDEX)
 
   /** Identifies the names of all the metadata columns present in the schema. */
   private def collectMetadataCols(struct: StructType): Seq[String] = {
-    struct.fields.flatMap { field => field.dataType match {
-      case s: StructType => collectMetadataCols(s)
-      case _ if allMetadataCols.contains(field.name) => Some(field.name)
-      case _ => None
-    }}.toImmutableArraySeq
+    struct.fields.flatMap { field =>
+      field.dataType match {
+        case s: StructType => collectMetadataCols(s)
+        case _ if allMetadataCols.contains(field.name) => Some(field.name)
+        case _ => None
+      }
+    }.toImmutableArraySeq
   }
 
   for (useVectorizedReader <- Seq(false, true))
-  for (useOffHeapMemory <- Seq(useVectorizedReader, false).distinct)
-  for (partitioned <- Seq(false, true)) {
-    val label = Seq(
-        { if (useVectorizedReader) "vectorized" else "parquet-mr"},
-        { if (useOffHeapMemory) "off-heap" else "" },
-        { if (partitioned) "partitioned" else "" }
-      ).filter(_.nonEmpty).mkString(", ")
-    test(s"parquet ($label) - read _metadata.row_index") {
-      withSQLConf(
-          SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> useVectorizedReader.toString,
-          SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> useOffHeapMemory.toString) {
-        withReadDataFrame("parquet", partitionCol = "pb") { df =>
-          val res = df.select("*", s"${FileFormat.METADATA_NAME}.${ROW_INDEX}")
-            .where(s"$EXPECTED_ROW_ID_COL != ${ROW_INDEX}")
-          assert(res.count() == 0)
+    for (useOffHeapMemory <- Seq(useVectorizedReader, false).distinct)
+      for (partitioned <- Seq(false, true)) {
+        val label = Seq(
+          { if (useVectorizedReader) "vectorized" else "parquet-mr" }, {
+            if (useOffHeapMemory) "off-heap" else ""
+          }, {
+            if (partitioned) "partitioned" else ""
+          }).filter(_.nonEmpty).mkString(", ")
+        test(s"parquet ($label) - read _metadata.row_index") {
+          withSQLConf(
+            SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> useVectorizedReader.toString,
+            SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> useOffHeapMemory.toString) {
+            withReadDataFrame("parquet", partitionCol = "pb") { df =>
+              val res = df
+                .select("*", s"${FileFormat.METADATA_NAME}.${ROW_INDEX}")
+                .where(s"$EXPECTED_ROW_ID_COL != ${ROW_INDEX}")
+              assert(res.count() == 0)
+            }
+          }
         }
       }
-    }
-  }
 
   test("supported file format - read _metadata struct") {
     withReadDataFrame("parquet") { df =>
@@ -142,15 +146,15 @@ class ParquetFileMetadataStructRowIndexSuite extends QueryTest with SharedSparkS
   for (useVectorizedReader <- Seq(true, false)) {
     val label = if (useVectorizedReader) "vectorized" else "parquet-mr"
     test(s"parquet ($label) - use mixed case for column name") {
-      withSQLConf(
-          SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> useVectorizedReader.toString) {
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> useVectorizedReader.toString) {
         withReadDataFrame("parquet") { df =>
           val mixedCaseRowIndex = "RoW_InDeX"
           assert(mixedCaseRowIndex.toLowerCase() == ROW_INDEX)
 
-          assert(df.select("*", s"${FileFormat.METADATA_NAME}.$mixedCaseRowIndex")
-            .where(s"$EXPECTED_ROW_ID_COL != $mixedCaseRowIndex")
-            .count() == 0)
+          assert(
+            df.select("*", s"${FileFormat.METADATA_NAME}.$mixedCaseRowIndex")
+              .where(s"$EXPECTED_ROW_ID_COL != $mixedCaseRowIndex")
+              .count() == 0)
         }
       }
     }
@@ -158,17 +162,21 @@ class ParquetFileMetadataStructRowIndexSuite extends QueryTest with SharedSparkS
 
   test(s"reading ${ROW_INDEX_TEMPORARY_COLUMN_NAME} - not present in a table") {
     // File format supporting row index generation populates the column with row indexes.
-    withReadDataFrame("parquet", extraSchemaFields =
-        Seq(StructField(ROW_INDEX_TEMPORARY_COLUMN_NAME, LongType))) { df =>
-      assert(df
+    withReadDataFrame(
+      "parquet",
+      extraSchemaFields = Seq(StructField(ROW_INDEX_TEMPORARY_COLUMN_NAME, LongType))) { df =>
+      assert(
+        df
           .where(col(EXPECTED_ROW_ID_COL) === col(ROW_INDEX_TEMPORARY_COLUMN_NAME))
           .count() == NUM_ROWS)
     }
 
     // File format not supporting row index generation populates missing column with nulls.
-    withReadDataFrame("json", extraSchemaFields =
-        Seq(StructField(ROW_INDEX_TEMPORARY_COLUMN_NAME, LongType)))  { df =>
-      assert(df
+    withReadDataFrame(
+      "json",
+      extraSchemaFields = Seq(StructField(ROW_INDEX_TEMPORARY_COLUMN_NAME, LongType))) { df =>
+      assert(
+        df
           .where(col(ROW_INDEX_TEMPORARY_COLUMN_NAME).isNull)
           .count() == NUM_ROWS)
     }
@@ -180,28 +188,34 @@ class ParquetFileMetadataStructRowIndexSuite extends QueryTest with SharedSparkS
       // generated row indexes, rather than read from the file.
       // TODO(SPARK-40059): Allow users to include columns named
       //                    ROW_INDEX_TEMPORARY_COLUMN_NAME in their schemas.
-      assert(df
-        .where(col(EXPECTED_ROW_ID_COL) === col(ROW_INDEX_TEMPORARY_COLUMN_NAME))
-        .count() == NUM_ROWS)
+      assert(
+        df
+          .where(col(EXPECTED_ROW_ID_COL) === col(ROW_INDEX_TEMPORARY_COLUMN_NAME))
+          .count() == NUM_ROWS)
 
       // Column cannot be read in combination with _metadata.row_index.
       intercept[AnalysisException](df.select("*", FileFormat.METADATA_NAME).collect())
-      intercept[AnalysisException](df
-        .select("*", s"${FileFormat.METADATA_NAME}.${ROW_INDEX}").collect())
+      intercept[AnalysisException](
+        df
+          .select("*", s"${FileFormat.METADATA_NAME}.${ROW_INDEX}")
+          .collect())
     }
   }
 
   test(s"reading ${ROW_INDEX_TEMPORARY_COLUMN_NAME} - as partition col") {
     withReadDataFrame("parquet", partitionCol = ROW_INDEX_TEMPORARY_COLUMN_NAME) { df =>
       // Column values are set for each partition, rather than populated with generated row indexes.
-      assert(df
-        .where(col(EXPECTED_PARTITION_COL) === col(ROW_INDEX_TEMPORARY_COLUMN_NAME))
-        .count() == NUM_ROWS)
+      assert(
+        df
+          .where(col(EXPECTED_PARTITION_COL) === col(ROW_INDEX_TEMPORARY_COLUMN_NAME))
+          .count() == NUM_ROWS)
 
       // Column cannot be read in combination with _metadata.row_index.
       intercept[AnalysisException](df.select("*", FileFormat.METADATA_NAME).collect())
-      intercept[AnalysisException](df
-        .select("*", s"${FileFormat.METADATA_NAME}.${ROW_INDEX}").collect())
+      intercept[AnalysisException](
+        df
+          .select("*", s"${FileFormat.METADATA_NAME}.${ROW_INDEX}")
+          .collect())
     }
   }
 
@@ -211,7 +225,8 @@ class ParquetFileMetadataStructRowIndexSuite extends QueryTest with SharedSparkS
 
       withTempPath { dstPath =>
         intercept[AnalysisException] {
-          spark.read.parquet(srcPath.getAbsolutePath)
+          spark.read
+            .parquet(srcPath.getAbsolutePath)
             .select("*", FileFormat.METADATA_NAME)
             .write
             .partitionBy(s"${FileFormat.METADATA_NAME}.${ROW_INDEX}")
@@ -228,17 +243,21 @@ class ParquetFileMetadataStructRowIndexSuite extends QueryTest with SharedSparkS
         // will be { 10 x 0, 10 x 1, ..., 10 x 9 }. We store all these values in a single file.
         df.select("id", s"${FileFormat.METADATA_NAME}")
           .coalesce(1)
-          .write.parquet(dir.getAbsolutePath)
+          .write
+          .parquet(dir.getAbsolutePath)
 
-        assert(spark
-          .read.parquet(dir.getAbsolutePath)
-          .count() == NUM_ROWS)
+        assert(
+          spark.read
+            .parquet(dir.getAbsolutePath)
+            .count() == NUM_ROWS)
 
         // The _metadata.row_index is returning data from the file, not generated metadata.
-        assert(spark
-          .read.parquet(dir.getAbsolutePath)
-          .select(s"${FileFormat.METADATA_NAME}.${ROW_INDEX}")
-          .distinct().count() == NUM_ROWS / 10)
+        assert(
+          spark.read
+            .parquet(dir.getAbsolutePath)
+            .select(s"${FileFormat.METADATA_NAME}.${ROW_INDEX}")
+            .distinct()
+            .count() == NUM_ROWS / 10)
       }
     }
   }

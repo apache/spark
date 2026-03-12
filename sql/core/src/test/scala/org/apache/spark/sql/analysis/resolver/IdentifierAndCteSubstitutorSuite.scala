@@ -19,10 +19,7 @@ package org.apache.spark.sql.analysis.resolver
 
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
-import org.apache.spark.sql.catalyst.analysis.resolver.{
-  IdentifierAndCteSubstitutor,
-  UnresolvedCteRelationRef
-}
+import org.apache.spark.sql.catalyst.analysis.resolver.{IdentifierAndCteSubstitutor, UnresolvedCteRelationRef}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.test.SharedSparkSession
@@ -40,8 +37,7 @@ class IdentifierAndCteSubstitutorSuite extends QueryTest with SharedSparkSession
       assert(
         planAfterSubstitution
           .children(0)
-          .isInstanceOf[UnresolvedRelation]
-      )
+          .isInstanceOf[UnresolvedRelation])
     }
   }
 
@@ -66,8 +62,7 @@ class IdentifierAndCteSubstitutorSuite extends QueryTest with SharedSparkSession
         planAfterSubstitution
           .children(0)
           .children(0)
-          .isInstanceOf[UnresolvedRelation]
-      )
+          .isInstanceOf[UnresolvedRelation])
       assert(
         planAfterSubstitution
           .asInstanceOf[UnresolvedWith]
@@ -76,8 +71,7 @@ class IdentifierAndCteSubstitutorSuite extends QueryTest with SharedSparkSession
           .children(0)
           .children(0)
           .children(0)
-          .isInstanceOf[UnresolvedCteRelationRef]
-      )
+          .isInstanceOf[UnresolvedCteRelationRef])
     }
   }
 
@@ -106,8 +100,7 @@ class IdentifierAndCteSubstitutorSuite extends QueryTest with SharedSparkSession
           .children(0)
           .children(0)
           .children(0)
-          .isInstanceOf[UnresolvedRelation]
-      )
+          .isInstanceOf[UnresolvedRelation])
       assert(
         planAfterSubstitution
           .children(0)
@@ -118,8 +111,7 @@ class IdentifierAndCteSubstitutorSuite extends QueryTest with SharedSparkSession
           .children(0)
           .children(0)
           .children(0)
-          .isInstanceOf[UnresolvedCteRelationRef]
-      )
+          .isInstanceOf[UnresolvedCteRelationRef])
     }
   }
 
@@ -151,8 +143,7 @@ class IdentifierAndCteSubstitutorSuite extends QueryTest with SharedSparkSession
           ._2
           .children(0)
           .children(0)
-          .isInstanceOf[UnresolvedRelation]
-      )
+          .isInstanceOf[UnresolvedRelation])
       assert(
         planAfterSubstitution
           .children(0)
@@ -162,8 +153,7 @@ class IdentifierAndCteSubstitutorSuite extends QueryTest with SharedSparkSession
           ._2
           .children(0)
           .children(0)
-          .isInstanceOf[UnresolvedCteRelationRef]
-      )
+          .isInstanceOf[UnresolvedCteRelationRef])
     }
   }
 
@@ -199,8 +189,7 @@ class IdentifierAndCteSubstitutorSuite extends QueryTest with SharedSparkSession
           .plan
           .children(0)
           .children(0)
-          .isInstanceOf[UnresolvedCteRelationRef]
-      )
+          .isInstanceOf[UnresolvedCteRelationRef])
       assert(
         planAfterSubstitution
           .expressions(0)
@@ -210,13 +199,11 @@ class IdentifierAndCteSubstitutorSuite extends QueryTest with SharedSparkSession
           .plan
           .children(0)
           .children(0)
-          .isInstanceOf[UnresolvedCteRelationRef]
-      )
+          .isInstanceOf[UnresolvedCteRelationRef])
       assert(
         planAfterSubstitution
           .children(0)
-          .isInstanceOf[UnresolvedRelation]
-      )
+          .isInstanceOf[UnresolvedRelation])
     }
   }
 
@@ -248,14 +235,12 @@ class IdentifierAndCteSubstitutorSuite extends QueryTest with SharedSparkSession
           .plan
           .children(0)
           .children(0)
-          .isInstanceOf[UnresolvedCteRelationRef]
-      )
+          .isInstanceOf[UnresolvedCteRelationRef])
       assert(
         planAfterSubstitution
           .children(0)
           .children(0)
-          .isInstanceOf[UnresolvedRelation]
-      )
+          .isInstanceOf[UnresolvedRelation])
     }
   }
 
@@ -288,14 +273,12 @@ class IdentifierAndCteSubstitutorSuite extends QueryTest with SharedSparkSession
           .plan
           .children(0)
           .children(0)
-          .isInstanceOf[UnresolvedCteRelationRef]
-      )
+          .isInstanceOf[UnresolvedCteRelationRef])
       assert(
         planAfterSubstitution
           .children(0)
           .children(0)
-          .isInstanceOf[UnresolvedRelation]
-      )
+          .isInstanceOf[UnresolvedRelation])
     }
   }
 
@@ -328,14 +311,12 @@ class IdentifierAndCteSubstitutorSuite extends QueryTest with SharedSparkSession
           .children(0)
           .children(0)
           .children(0)
-          .isInstanceOf[UnresolvedCteRelationRef]
-      )
+          .isInstanceOf[UnresolvedCteRelationRef])
       assert(
         planAfterSubstitution
           .children(0)
           .children(0)
-          .isInstanceOf[UnresolvedRelation]
-      )
+          .isInstanceOf[UnresolvedRelation])
     }
   }
 }

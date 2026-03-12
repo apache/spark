@@ -53,7 +53,6 @@ private[sql] object ByteExactNumeric extends ByteIsIntegral with Ordering.ByteOr
   }
 }
 
-
 private[sql] object ShortExactNumeric extends ShortIsIntegral with Ordering.ShortOrdering {
   private def checkOverflow(
       res: Int,
@@ -89,7 +88,6 @@ private[sql] object ShortExactNumeric extends ShortIsIntegral with Ordering.Shor
   }
 }
 
-
 private[sql] object IntegerExactNumeric extends IntIsIntegral with Ordering.IntOrdering {
   override def plus(x: Int, y: Int): Int = MathUtils.addExact(x, y)
 
@@ -113,8 +111,7 @@ private[sql] object LongExactNumeric extends LongIsIntegral with Ordering.LongOr
     if (x == x.toInt) {
       x.toInt
     } else {
-      throw QueryExecutionErrors.castingCauseOverflowError(
-        x, LongType, IntegerType)
+      throw QueryExecutionErrors.castingCauseOverflowError(x, LongType, IntegerType)
     }
 }
 
@@ -134,8 +131,7 @@ private[sql] object FloatExactNumeric extends FloatIsFractional {
     if (Math.floor(x) <= intUpperBound && Math.ceil(x) >= intLowerBound) {
       x.toInt
     } else {
-      throw QueryExecutionErrors.castingCauseOverflowError(
-        x, FloatType, IntegerType)
+      throw QueryExecutionErrors.castingCauseOverflowError(x, FloatType, IntegerType)
     }
   }
 
@@ -143,8 +139,7 @@ private[sql] object FloatExactNumeric extends FloatIsFractional {
     if (Math.floor(x) <= longUpperBound && Math.ceil(x) >= longLowerBound) {
       x.toLong
     } else {
-      throw QueryExecutionErrors.castingCauseOverflowError(
-        x, FloatType, LongType)
+      throw QueryExecutionErrors.castingCauseOverflowError(x, FloatType, LongType)
     }
   }
 

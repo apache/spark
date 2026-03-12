@@ -24,16 +24,17 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.RELATION_TIME_TRAVEL
 import org.apache.spark.sql.classic.SparkSession
 
 class EvalSubqueriesForTimeTravel extends Rule[LogicalPlan] {
-  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
-    _.containsPattern(RELATION_TIME_TRAVEL)) {
-    case r @ RelationTimeTravel(_, Some(ts), _)
-        if ts.resolved && SubqueryExpression.hasSubquery(ts) =>
-      val subqueryEvaluated = ts.transform {
-        case s: ScalarSubquery =>
+  override def apply(plan: LogicalPlan): LogicalPlan =
+    plan.resolveOperatorsWithPruning(_.containsPattern(RELATION_TIME_TRAVEL)) {
+      case r @ RelationTimeTravel(_, Some(ts), _)
+          if ts.resolved && SubqueryExpression.hasSubquery(ts) =>
+        val subqueryEvaluated = ts.transform { case s: ScalarSubquery =>
           // `RelationTimeTravel` is a leaf node. Subqueries in it cannot resolve any
           // outer references and should not be correlated.
-          assert(!s.isCorrelated, "Correlated subquery should not appear in " +
-            classOf[EvalSubqueriesForTimeTravel].getSimpleName)
+          assert(
+            !s.isCorrelated,
+            "Correlated subquery should not appear in " +
+              classOf[EvalSubqueriesForTimeTravel].getSimpleName)
           // Wrap the scalar subquery in a Project over OneRowRelation to execute it
           // through the normal query execution path. This properly handles table
           // references in the subquery (e.g., V2 tables).
@@ -42,7 +43,7 @@ class EvalSubqueriesForTimeTravel extends Rule[LogicalPlan] {
           val qe = spark.sessionState.executePlan(wrappedPlan)
           val result = qe.executedPlan.executeCollect().head.get(0, s.dataType)
           Literal(result, s.dataType)
-      }
-      r.copy(timestamp = Some(subqueryEvaluated))
-  }
+        }
+        r.copy(timestamp = Some(subqueryEvaluated))
+    }
 }

@@ -31,7 +31,7 @@ import org.apache.spark.util.ResetSystemProperties
 // A test for growing the buffer holder to nearly 2GB. Due to the heap size limitation of the Spark
 // unit tests JVM, the actually test code is running as a submit job.
 class BufferHolderSparkSubmitSuite
-  extends SparkSubmitTestUtils
+    extends SparkSubmitTestUtils
     with Matchers
     with ResetSystemProperties {
 
@@ -39,13 +39,20 @@ class BufferHolderSparkSubmitSuite
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
 
     val argsForSparkSubmit = Seq(
-      "--class", BufferHolderSparkSubmitSuite.getClass.getName.stripSuffix("$"),
-      "--name", "SPARK-22222",
-      "--master", "local-cluster[1,1,4096]",
-      "--driver-memory", "4g",
-      "--conf", "spark.ui.enabled=false",
-      "--conf", "spark.master.rest.enabled=false",
-      "--conf", "spark.driver.extraJavaOptions=-ea",
+      "--class",
+      BufferHolderSparkSubmitSuite.getClass.getName.stripSuffix("$"),
+      "--name",
+      "SPARK-22222",
+      "--master",
+      "local-cluster[1,1,4096]",
+      "--driver-memory",
+      "4g",
+      "--conf",
+      "spark.ui.enabled=false",
+      "--conf",
+      "spark.master.rest.enabled=false",
+      "--conf",
+      "spark.driver.extraJavaOptions=-ea",
       unusedJar.toString)
     // Given that the default timeout of runSparkSubmit is 60 seconds, try 3 times in total.
     eventually(timeout(210.seconds), interval(70.seconds)) {

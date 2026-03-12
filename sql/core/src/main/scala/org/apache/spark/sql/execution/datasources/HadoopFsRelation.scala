@@ -24,19 +24,24 @@ import org.apache.spark.sql.internal.SessionStateHelper
 import org.apache.spark.sql.sources.{BaseRelation, DataSourceRegister}
 import org.apache.spark.sql.types.{StructField, StructType}
 
-
 /**
  * Acts as a container for all of the metadata required to read from a datasource. All discovery,
  * resolution and merging logic for schemas and partitions has been removed.
  *
- * @param location A [[FileIndex]] that can enumerate the locations of all the files that
- *                 comprise this relation.
- * @param partitionSchema The schema of the columns (if any) that are used to partition the relation
- * @param dataSchema The schema of any remaining columns.  Note that if any partition columns are
- *                   present in the actual data files as well, they are preserved.
- * @param bucketSpec Describes the bucketing (hash-partitioning of the files by some column values).
- * @param fileFormat A file format that can be used to read and write the data in files.
- * @param options Configuration used when reading / writing data.
+ * @param location
+ *   A [[FileIndex]] that can enumerate the locations of all the files that comprise this
+ *   relation.
+ * @param partitionSchema
+ *   The schema of the columns (if any) that are used to partition the relation
+ * @param dataSchema
+ *   The schema of any remaining columns. Note that if any partition columns are present in the
+ *   actual data files as well, they are preserved.
+ * @param bucketSpec
+ *   Describes the bucketing (hash-partitioning of the files by some column values).
+ * @param fileFormat
+ *   A file format that can be used to read and write the data in files.
+ * @param options
+ *   Configuration used when reading / writing data.
  */
 case class HadoopFsRelation(
     location: FileIndex,
@@ -47,7 +52,9 @@ case class HadoopFsRelation(
     bucketSpec: Option[BucketSpec],
     fileFormat: FileFormat,
     options: Map[String, String])(val sparkSession: SparkSession)
-  extends BaseRelation with FileRelation with SessionStateHelper{
+    extends BaseRelation
+    with FileRelation
+    with SessionStateHelper {
 
   override def sqlContext: SQLContext = sparkSession.sqlContext
 
@@ -55,8 +62,10 @@ case class HadoopFsRelation(
   // schema respects the order of the data schema for the overlapping columns, and it
   // respects the data types of the partition schema.
   val (schema: StructType, overlappedPartCols: Map[String, StructField]) =
-    PartitioningUtils.mergeDataAndPartitionSchema(dataSchema,
-      partitionSchema, getSqlConf(sparkSession).caseSensitiveAnalysis)
+    PartitioningUtils.mergeDataAndPartitionSchema(
+      dataSchema,
+      partitionSchema,
+      getSqlConf(sparkSession).caseSensitiveAnalysis)
 
   override def toString: String = {
     fileFormat match {
@@ -69,7 +78,6 @@ case class HadoopFsRelation(
     val compressionFactor = getSqlConf(sparkSession).fileCompressionFactor
     (location.sizeInBytes * compressionFactor).toLong
   }
-
 
   override def inputFiles: Array[String] = location.inputFiles
 }

@@ -23,9 +23,8 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.classic.Strategy
 
 /**
- * :: Experimental ::
- * Holder for experimental methods for the bravest. We make NO guarantee about the stability
- * regarding binary compatibility and source compatibility of methods here.
+ * :: Experimental :: Holder for experimental methods for the bravest. We make NO guarantee about
+ * the stability regarding binary compatibility and source compatibility of methods here.
  *
  * {{{
  *   spark.experimental.extraStrategies += ...
@@ -35,10 +34,10 @@ import org.apache.spark.sql.classic.Strategy
  */
 @Experimental
 @Unstable
-class ExperimentalMethods private[sql]() {
+class ExperimentalMethods private[sql] () {
 
   /**
-   * Allows extra strategies to be injected into the query planner at runtime.  Note this API
+   * Allows extra strategies to be injected into the query planner at runtime. Note this API
    * should be considered experimental and is not intended to be stable across releases.
    *
    * @since 1.3.0

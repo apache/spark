@@ -19,25 +19,16 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
-import org.apache.spark.sql.catalyst.plans.logical.{
-  CTERelationDef,
-  LogicalPlan,
-  SubqueryAlias,
-  UnresolvedWith
-}
+import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, LogicalPlan, SubqueryAlias, UnresolvedWith}
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
-import org.apache.spark.sql.catalyst.trees.TreePattern.{
-  PLAN_EXPRESSION,
-  UNRESOLVED_RELATION,
-  UNRESOLVED_WITH
-}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{PLAN_EXPRESSION, UNRESOLVED_RELATION, UNRESOLVED_WITH}
 
 /**
  * The [[IdentifierAndCteSubstitutor]] is responsible for substituting the IDENTIFIERs (not yet
  * implemented) and CTE references in the unresolved logical plan before the actual resolution
  * starts (specifically before metadata resolution). This is important for SQL features like WITH
- * (that could confuse [[MetadataResolver]] with extra [[UnresolvedRelation]]s)
- * or IDENTIFIER (that "hides" the actual [[UnresolvedRelation]]s).
+ * (that could confuse [[MetadataResolver]] with extra [[UnresolvedRelation]]s) or IDENTIFIER
+ * (that "hides" the actual [[UnresolvedRelation]]s).
  *
  * We only recurse into the plan if [[IdentifierAndCteSubstitutor.NODES_OF_INTEREST]] are present.
  * This is done so that [[IdentifierAndCteSubstitutor]] is fast and not invasive.
@@ -98,11 +89,12 @@ class IdentifierAndCteSubstitutor {
 
       cteRegistry.pushScope()
 
-      val ctePlanAfter = try {
-        substitute(ctePlan).asInstanceOf[SubqueryAlias]
-      } finally {
-        cteRegistry.popScope()
-      }
+      val ctePlanAfter =
+        try {
+          substitute(ctePlan).asInstanceOf[SubqueryAlias]
+        } finally {
+          cteRegistry.popScope()
+        }
 
       cteRegistry.currentScope.registerCte(cteName, CTERelationDef(ctePlanAfter))
 
@@ -111,25 +103,25 @@ class IdentifierAndCteSubstitutor {
 
     cteRegistry.pushScope()
 
-    val childAfterSubstitution = try {
-      substitute(unresolvedWith.child)
-    } finally {
-      cteRegistry.popScope()
-    }
+    val childAfterSubstitution =
+      try {
+        substitute(unresolvedWith.child)
+      } finally {
+        cteRegistry.popScope()
+      }
 
     val result = withOrigin(unresolvedWith.origin) {
       unresolvedWith.copy(
         child = childAfterSubstitution,
-        cteRelations = cteRelationsAfterSubstitution
-      )
+        cteRelations = cteRelationsAfterSubstitution)
     }
     result.copyTagsFrom(unresolvedWith)
     result
   }
 
   /**
-   * Handle [[UnresolvedRelation]] operator, which could be a CTE reference. If that's the case, we
-   * replace it with [[UnresolvedCteRelationRef]].
+   * Handle [[UnresolvedRelation]] operator, which could be a CTE reference. If that's the case,
+   * we replace it with [[UnresolvedCteRelationRef]].
    */
   private def handleUnresolvedRelation(unresolvedRelation: UnresolvedRelation): LogicalPlan = {
     if (unresolvedRelation.multipartIdentifier.size == 1) {
@@ -179,22 +171,21 @@ class IdentifierAndCteSubstitutor {
     }
 
     operatorAfterSubstitution.transformExpressionsWithPruning(
-      _.containsPattern(PLAN_EXPRESSION)
-    ) {
-      case subqueryExpression: SubqueryExpression =>
-        cteRegistry.pushScope(isRoot = true)
+      _.containsPattern(PLAN_EXPRESSION)) { case subqueryExpression: SubqueryExpression =>
+      cteRegistry.pushScope(isRoot = true)
 
-        val newPlan = try {
+      val newPlan =
+        try {
           substitute(subqueryExpression.plan)
         } finally {
           cteRegistry.popScope()
         }
 
-        val result = withOrigin(subqueryExpression.origin) {
-          subqueryExpression.withNewPlan(newPlan)
-        }
-        result.copyTagsFrom(subqueryExpression)
-        result
+      val result = withOrigin(subqueryExpression.origin) {
+        subqueryExpression.withNewPlan(newPlan)
+      }
+      result.copyTagsFrom(subqueryExpression)
+      result
     }
   }
 }

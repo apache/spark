@@ -25,11 +25,13 @@ import org.apache.spark.sql.connector.write.streaming.StreamingWrite
 /**
  * The logical plan for writing data in a continuous stream.
  */
-case class WriteToContinuousDataSource(write: StreamingWrite, query: LogicalPlan,
+case class WriteToContinuousDataSource(
+    write: StreamingWrite,
+    query: LogicalPlan,
     customMetrics: Seq[CustomMetric])
-  extends UnaryNode {
+    extends UnaryNode {
   override def child: LogicalPlan = query
   override def output: Seq[Attribute] = Nil
   override protected def withNewChildInternal(
-    newChild: LogicalPlan): WriteToContinuousDataSource = copy(query = newChild)
+      newChild: LogicalPlan): WriteToContinuousDataSource = copy(query = newChild)
 }

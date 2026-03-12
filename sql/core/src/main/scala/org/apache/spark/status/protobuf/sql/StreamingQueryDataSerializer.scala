@@ -55,7 +55,6 @@ private[protobuf] class StreamingQueryDataSerializer extends ProtobufSerDe[Strea
       isActive = data.getIsActive,
       exception = exception,
       startTimestamp = data.getStartTimestamp,
-      endTimestamp = endTimestamp
-    )
+      endTimestamp = endTimestamp)
   }
 }

@@ -30,8 +30,11 @@ class AllMethodsTestProcessor extends StatefulProcessor[String, String, (String,
   override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
     valueState = getHandle.getValueState[Int]("value", Encoders.scalaInt, TTLConfig.NONE)
     listState = getHandle.getListState[String]("list", Encoders.STRING, TTLConfig.NONE)
-    mapState =
-      getHandle.getMapState[String, Int]("map", Encoders.STRING, Encoders.scalaInt, TTLConfig.NONE)
+    mapState = getHandle.getMapState[String, Int](
+      "map",
+      Encoders.STRING,
+      Encoders.scalaInt,
+      TTLConfig.NONE)
   }
 
   override def handleInputRows(
@@ -169,10 +172,10 @@ class SessionTimeoutProcessor extends StatefulProcessor[String, String, (String,
 }
 
 /**
- * Processor that registers an event time timer based on watermark.
- * Input format: (eventTimeMs: Long, value: String)
- * Registers a timer at eventTime + 5000ms. Timer fires when watermark passes that time.
- * Assumes that there are no out of order events and events are always in order based on timestamp.
+ * Processor that registers an event time timer based on watermark. Input format: (eventTimeMs:
+ * Long, value: String) Registers a timer at eventTime + 5000ms. Timer fires when watermark passes
+ * that time. Assumes that there are no out of order events and events are always in order based
+ * on timestamp.
  */
 class EventTimeSessionProcessor
     extends StatefulProcessor[String, (Long, String), (String, String)] {
@@ -191,18 +194,17 @@ class EventTimeSessionProcessor
     val results = scala.collection.mutable.ArrayBuffer[(String, String)]()
 
     // Clear any existing timer if we have previous state
-   if (lastEventTimeState.exists()) {
+    if (lastEventTimeState.exists()) {
       val oldTimerTime = lastEventTimeState.get() + 5000
       getHandle.deleteTimer(oldTimerTime)
     }
 
-    inputRows.foreach {
-      case (eventTimeMs, value) =>
-        // Update last event time and register new timer
-        lastEventTimeState.update(eventTimeMs)
-        getHandle.registerTimer(eventTimeMs + 5000) // 5 second timeout from event time
+    inputRows.foreach { case (eventTimeMs, value) =>
+      // Update last event time and register new timer
+      lastEventTimeState.update(eventTimeMs)
+      getHandle.registerTimer(eventTimeMs + 5000) // 5 second timeout from event time
 
-        results += ((key, s"received:$value@$eventTimeMs"))
+      results += ((key, s"received:$value@$eventTimeMs"))
     }
 
     results.iterator
@@ -214,17 +216,14 @@ class EventTimeSessionProcessor
       expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
     val watermark = timerValues.getCurrentWatermarkInMs()
     lastEventTimeState.clear()
-    Iterator.single(
-      (key, s"session-expired@${expiredTimerInfo.getExpiryTimeInMs()}")
-    )
+    Iterator.single((key, s"session-expired@${expiredTimerInfo.getExpiryTimeInMs()}"))
   }
 }
 
 /**
- * Processor that counts events in EventTime mode.
- * Input format: (eventTimeMs: Long, value: String)
- * Output: (key, count) for current count after processing input
- * Used to test late event filtering - late events should not increment the count.
+ * Processor that counts events in EventTime mode. Input format: (eventTimeMs: Long, value:
+ * String) Output: (key, count) for current count after processing input Used to test late event
+ * filtering - late events should not increment the count.
  */
 class EventTimeCountProcessor extends StatefulProcessor[String, (Long, String), (String, Long)] {
 
@@ -266,9 +265,8 @@ class TopKProcessor(k: Int, ttl: TTLConfig = TTLConfig.NONE)
     topKState.get().foreach(current += _)
 
     // Add new values and recompute top-K.
-    inputRows.foreach {
-      case (_, score) =>
-        current += score
+    inputRows.foreach { case (_, score) =>
+      current += score
     }
     val updatedTopK = current.sorted(Ordering[Double].reverse).take(k)
 
@@ -298,16 +296,15 @@ class WordFrequencyProcessor(ttl: TTLConfig = TTLConfig.NONE)
       timerValues: TimerValues): Iterator[(String, String, Long)] = {
     val results = ArrayBuffer[(String, String, Long)]()
 
-    inputRows.foreach {
-      case (_, word) =>
-        val currentCount = if (freqState.containsKey(word)) {
-          freqState.getValue(word)
-        } else {
-          0L
-        }
-        val updatedCount = currentCount + 1
-        freqState.updateValue(word, updatedCount)
-        results += ((key, word, updatedCount))
+    inputRows.foreach { case (_, word) =>
+      val currentCount = if (freqState.containsKey(word)) {
+        freqState.getValue(word)
+      } else {
+        0L
+      }
+      val updatedCount = currentCount + 1
+      freqState.updateValue(word, updatedCount)
+      results += ((key, word, updatedCount))
     }
 
     results.iterator
@@ -320,35 +317,32 @@ case class UserProfile(totalAmount: Double, eventCount: Long, lastEventTime: Lon
 case class UserSummary(key: String, profile: UserProfile)
 
 /**
- * Processor that uses complex case classes for input, state, and output.
- * Tracks user activity by aggregating events into a profile.
+ * Processor that uses complex case classes for input, state, and output. Tracks user activity by
+ * aggregating events into a profile.
  */
 class UserProfileProcessor extends StatefulProcessor[String, UserEvent, UserSummary] {
 
   @transient private var profileState: ValueState[UserProfile] = _
 
   override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
-    profileState = getHandle.getValueState[UserProfile](
-      "profile",
-      Encoders.product[UserProfile],
-      TTLConfig.NONE
-    )
+    profileState = getHandle
+      .getValueState[UserProfile]("profile", Encoders.product[UserProfile], TTLConfig.NONE)
   }
 
   override def handleInputRows(
       key: String,
       inputRows: Iterator[UserEvent],
       timerValues: TimerValues): Iterator[UserSummary] = {
-    val current = if (profileState.exists()) profileState.get()
-                  else UserProfile(0.0, 0L, 0L)
+    val current =
+      if (profileState.exists()) profileState.get()
+      else UserProfile(0.0, 0L, 0L)
 
     var updated = current
     inputRows.foreach { event =>
       updated = UserProfile(
         updated.totalAmount + event.amount,
         updated.eventCount + 1,
-        math.max(updated.lastEventTime, event.timestamp)
-      )
+        math.max(updated.lastEventTime, event.timestamp))
     }
 
     profileState.update(updated)

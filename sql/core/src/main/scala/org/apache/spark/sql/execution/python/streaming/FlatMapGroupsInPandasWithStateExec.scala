@@ -41,19 +41,32 @@ import org.apache.spark.util.CompletionIterator
  * Physical operator for executing
  * [[org.apache.spark.sql.catalyst.plans.logical.FlatMapGroupsInPandasWithState]]
  *
- * @param functionExpr function called on each group
- * @param groupingAttributes used to group the data
- * @param outAttributes used to define the output rows
- * @param stateType used to serialize/deserialize state before calling `functionExpr`
- * @param stateInfo `StatefulOperatorStateInfo` to identify the state store for a given operator.
- * @param stateFormatVersion the version of state format.
- * @param outputMode the output mode of `functionExpr`
- * @param timeoutConf used to timeout groups that have not received data in a while
- * @param batchTimestampMs processing timestamp of the current batch.
- * @param eventTimeWatermarkForLateEvents event time watermark for filtering late events
- * @param eventTimeWatermarkForEviction event time watermark for state eviction
- * @param skipEmittingInitialStateKeys whether to skip emitting initial state df keys
- * @param child logical plan of the underlying data
+ * @param functionExpr
+ *   function called on each group
+ * @param groupingAttributes
+ *   used to group the data
+ * @param outAttributes
+ *   used to define the output rows
+ * @param stateType
+ *   used to serialize/deserialize state before calling `functionExpr`
+ * @param stateInfo
+ *   `StatefulOperatorStateInfo` to identify the state store for a given operator.
+ * @param stateFormatVersion
+ *   the version of state format.
+ * @param outputMode
+ *   the output mode of `functionExpr`
+ * @param timeoutConf
+ *   used to timeout groups that have not received data in a while
+ * @param batchTimestampMs
+ *   processing timestamp of the current batch.
+ * @param eventTimeWatermarkForLateEvents
+ *   event time watermark for filtering late events
+ * @param eventTimeWatermarkForEviction
+ *   event time watermark for state eviction
+ * @param skipEmittingInitialStateKeys
+ *   whether to skip emitting initial state df keys
+ * @param child
+ *   logical plan of the underlying data
  */
 case class FlatMapGroupsInPandasWithStateExec(
     functionExpr: Expression,
@@ -68,7 +81,9 @@ case class FlatMapGroupsInPandasWithStateExec(
     eventTimeWatermarkForLateEvents: Option[Long],
     eventTimeWatermarkForEviction: Option[Long],
     skipEmittingInitialStateKeys: Boolean,
-    child: SparkPlan) extends UnaryExecNode with FlatMapGroupsWithStateExecBase {
+    child: SparkPlan)
+    extends UnaryExecNode
+    with FlatMapGroupsWithStateExecBase {
 
   // TODO(SPARK-40444): Add the support of initial state.
   override protected val initialStateDeserializer: Expression = null
@@ -90,8 +105,8 @@ case class FlatMapGroupsInPandasWithStateExec(
   private val pythonFunction = pythonUDF.func
   private val chainedFunc =
     Seq((ChainedPythonFunctions(Seq(pythonFunction)), pythonUDF.resultId.id))
-  private lazy val (dedupAttributes, argOffsets) = resolveArgOffsets(
-    groupingAttributes ++ child.output, groupingAttributes)
+  private lazy val (dedupAttributes, argOffsets) =
+    resolveArgOffsets(groupingAttributes ++ child.output, groupingAttributes)
 
   // See processTimedOutState: we create a row which contains the actual values for grouping key,
   // but all nulls for value side by intention. This technically changes the schema of input to
@@ -100,9 +115,10 @@ case class FlatMapGroupsInPandasWithStateExec(
   // it doesn't hurt much even if we apply the same for grouping key as well.
   private lazy val dedupAttributesWithNull =
     dedupAttributes.map(_.withNullability(newNullability = true))
-  private lazy val childOutputWithNull = child.output.map(_.withNullability(newNullability = true))
-  private lazy val unsafeProj = UnsafeProjection.create(dedupAttributesWithNull,
-    childOutputWithNull)
+  private lazy val childOutputWithNull =
+    child.output.map(_.withNullability(newNullability = true))
+  private lazy val unsafeProj =
+    UnsafeProjection.create(dedupAttributesWithNull, childOutputWithNull)
 
   // See processTimedOutState: we create a row which contains the actual values for grouping key,
   // but all nulls for value side by intention. The schema for this row is different from
@@ -110,12 +126,15 @@ case class FlatMapGroupsInPandasWithStateExec(
   private lazy val valueAttributesWithNull = childOutputWithNull.filterNot { attr =>
     groupingAttributes.exists(_.withNullability(newNullability = true) == attr)
   }
-  private lazy val unsafeProjForTimedOut = UnsafeProjection.create(dedupAttributesWithNull,
+  private lazy val unsafeProjForTimedOut = UnsafeProjection.create(
+    dedupAttributesWithNull,
     groupingAttributes ++ valueAttributesWithNull)
 
   override def requiredChildDistribution: Seq[Distribution] =
     StatefulOperatorPartitioning.getCompatibleDistribution(
-      groupingAttributes, getStateInfo, conf) :: Nil
+      groupingAttributes,
+      getStateInfo,
+      conf) :: Nil
 
   override def requiredChildOrdering: Seq[Seq[SortOrder]] = Seq(
     groupingAttributes.map(SortOrder(_, Ascending)))
@@ -126,8 +145,8 @@ case class FlatMapGroupsInPandasWithStateExec(
   override protected def withNewChildInternal(
       newChild: SparkPlan): FlatMapGroupsInPandasWithStateExec = copy(child = newChild)
 
-  override def createInputProcessor(
-      store: StateStore): InputProcessor = new InputProcessor(store: StateStore) {
+  override def createInputProcessor(store: StateStore): InputProcessor = new InputProcessor(
+    store: StateStore) {
 
     override def processNewData(dataIter: Iterator[InternalRow]): Iterator[InternalRow] = {
       val groupedIter = GroupedIterator(dataIter, groupingAttributes, child.output)
@@ -153,8 +172,7 @@ case class FlatMapGroupsInPandasWithStateExec(
           case ProcessingTimeTimeout => batchTimestampMs.get
           case EventTimeTimeout => eventTimeWatermarkForEviction.get
           case _ =>
-            throw SparkException.internalError(
-              s"Cannot filter timed out keys for $timeoutConf")
+            throw SparkException.internalError(s"Cannot filter timed out keys for $timeoutConf")
         }
         val timingOutPairs = stateManager.getAllState(store).filter { state =>
           state.timeoutTimestamp != NO_TIMESTAMP && state.timeoutTimestamp < timeoutThreshold
@@ -191,13 +209,15 @@ case class FlatMapGroupsInPandasWithStateExec(
       val context = TaskContext.get()
 
       val processIter = iter.map { case (keyRow, stateData, valueIter) =>
-        val groupedState = GroupStateImpl.createForStreaming(
-          Option(stateData.stateObj).map { r => assert(r.isInstanceOf[Row]); r },
-          batchTimestampMs.getOrElse(NO_TIMESTAMP),
-          eventTimeWatermarkForEviction.getOrElse(NO_TIMESTAMP),
-          timeoutConf,
-          hasTimedOut = hasTimedOut,
-          watermarkPresent).asInstanceOf[GroupStateImpl[Row]]
+        val groupedState = GroupStateImpl
+          .createForStreaming(
+            Option(stateData.stateObj).map { r => assert(r.isInstanceOf[Row]); r },
+            batchTimestampMs.getOrElse(NO_TIMESTAMP),
+            eventTimeWatermarkForEviction.getOrElse(NO_TIMESTAMP),
+            timeoutConf,
+            hasTimedOut = hasTimedOut,
+            watermarkPresent)
+          .asInstanceOf[GroupStateImpl[Row]]
         (keyRow, groupedState, valueIter)
       }
       runner.compute(processIter, context.partitionId(), context).flatMap {
@@ -218,19 +238,18 @@ case class FlatMapGroupsInPandasWithStateExec(
 
                 if (shouldWriteState) {
                   val updatedStateObj = if (newGroupState.exists) newGroupState.get else null
-                  stateManager.putState(store, keyRow, updatedStateObj,
-                    currentTimeoutTimestamp)
+                  stateManager.putState(store, keyRow, updatedStateObj, currentTimeoutTimestamp)
                   numUpdatedStateRows += 1
                 }
               }
             }
           }
 
-          CompletionIterator[InternalRow, Iterator[InternalRow]](
-            outputIter, onIteratorCompletion).map { row =>
-            numOutputRows += 1
-            row
-          }
+          CompletionIterator[InternalRow, Iterator[InternalRow]](outputIter, onIteratorCompletion)
+            .map { row =>
+              numOutputRows += 1
+              row
+            }
       }
     }
 

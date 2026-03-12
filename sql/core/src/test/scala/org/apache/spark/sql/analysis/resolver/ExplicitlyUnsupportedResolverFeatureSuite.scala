@@ -18,10 +18,7 @@
 package org.apache.spark.sql.analysis.resolver
 
 import org.apache.spark.sql.QueryTest
-import org.apache.spark.sql.catalyst.analysis.resolver.{
-  ExplicitlyUnsupportedResolverFeature,
-  Resolver
-}
+import org.apache.spark.sql.catalyst.analysis.resolver.{ExplicitlyUnsupportedResolverFeature, Resolver}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -62,8 +59,8 @@ class ExplicitlyUnsupportedResolverFeatureSuite extends QueryTest with SharedSpa
     val resolver = new Resolver(
       spark.sessionState.catalogManager,
       extensions = spark.sessionState.analyzer.singlePassResolverExtensions,
-      metadataResolverExtensions = spark.sessionState.analyzer.singlePassMetadataResolverExtensions
-    )
+      metadataResolverExtensions =
+        spark.sessionState.analyzer.singlePassMetadataResolverExtensions)
     wrapper {
       resolver.lookupMetadataAndResolve(plan)
     }

@@ -36,42 +36,24 @@ class StreamRelationParserSuite extends AnalysisTest {
         Project(
           projectList = Seq(UnresolvedStar(None)),
           child = NamedStreamingRelation(
-            child = UnresolvedRelation(
-              multipartIdentifier = Seq("t"),
-              isStreaming = true
-            ),
-            sourceIdentifyingName = Unassigned
-          )
-        )
-      )
+            child = UnresolvedRelation(multipartIdentifier = Seq("t"), isStreaming = true),
+            sourceIdentifyingName = Unassigned)))
     }
   }
 
   test("STREAM with alias is parsed correctly") {
-    Seq(
-      "SELECT * FROM STREAM(t) AS `a.b.c`",
-      "SELECT * FROM STREAM t AS `a.b.c`"
-    ).foreach { query =>
-      val plan = parsePlan(query)
-      comparePlans(
-        plan,
-        Project(
-          projectList = Seq(UnresolvedStar(None)),
-          child = SubqueryAlias(
-            identifier = AliasIdentifier(
-              name = "a.b.c",
-              qualifier = Seq.empty
-            ),
-            child = NamedStreamingRelation(
-              child = UnresolvedRelation(
-                multipartIdentifier = Seq("t"),
-                isStreaming = true
-              ),
-              sourceIdentifyingName = Unassigned
-            )
-          )
-        )
-      )
+    Seq("SELECT * FROM STREAM(t) AS `a.b.c`", "SELECT * FROM STREAM t AS `a.b.c`").foreach {
+      query =>
+        val plan = parsePlan(query)
+        comparePlans(
+          plan,
+          Project(
+            projectList = Seq(UnresolvedStar(None)),
+            child = SubqueryAlias(
+              identifier = AliasIdentifier(name = "a.b.c", qualifier = Seq.empty),
+              child = NamedStreamingRelation(
+                child = UnresolvedRelation(multipartIdentifier = Seq("t"), isStreaming = true),
+                sourceIdentifyingName = Unassigned))))
     }
   }
 
@@ -80,8 +62,7 @@ class StreamRelationParserSuite extends AnalysisTest {
     interceptParseException(parsePlan)("SELECT * FROM STREAM ( SELECT * FROM t3 )")(None)
     // Temporal Clause within STREAM keyword
     interceptParseException(parsePlan)(
-      "SELECT * FROM STREAM ( t1 TIMESTAMP AS OF current_date() )"
-    )(None)
+      "SELECT * FROM STREAM ( t1 TIMESTAMP AS OF current_date() )")(None)
   }
 
   test("STREAM parses WITH options") {
@@ -93,12 +74,8 @@ class StreamRelationParserSuite extends AnalysisTest {
           child = UnresolvedRelation(
             multipartIdentifier = Seq("table"),
             options = new CaseInsensitiveStringMap(Map("key" -> "value").asJava),
-            isStreaming = true
-          ),
-          sourceIdentifyingName = Unassigned
-        )
-      )
-    )
+            isStreaming = true),
+          sourceIdentifyingName = Unassigned)))
   }
 
   test("STREAM with options and alias wraps NamedStreamingRelation below SubqueryAlias") {
@@ -107,26 +84,19 @@ class StreamRelationParserSuite extends AnalysisTest {
       Project(
         projectList = Seq(UnresolvedStar(None)),
         child = SubqueryAlias(
-          identifier = AliasIdentifier(
-            name = "src",
-            qualifier = Seq.empty
-          ),
+          identifier = AliasIdentifier(name = "src", qualifier = Seq.empty),
           child = NamedStreamingRelation(
             child = UnresolvedRelation(
               multipartIdentifier = Seq("table"),
               options = new CaseInsensitiveStringMap(Map("key" -> "value").asJava),
-              isStreaming = true
-            ),
-            sourceIdentifyingName = Unassigned
-          )
-        )
-      )
-    )
+              isStreaming = true),
+            sourceIdentifyingName = Unassigned))))
   }
 
   test("STREAM with multiple key/value pairs in WITH options") {
     comparePlans(
-      parsePlan("SELECT * FROM STREAM t WITH ('key1'='value1', 'key2'='value2', 'key3'='value3')"),
+      parsePlan(
+        "SELECT * FROM STREAM t WITH ('key1'='value1', 'key2'='value2', 'key3'='value3')"),
       Project(
         projectList = Seq(UnresolvedStar(None)),
         child = NamedStreamingRelation(
@@ -134,22 +104,19 @@ class StreamRelationParserSuite extends AnalysisTest {
             multipartIdentifier = Seq("t"),
             options = new CaseInsensitiveStringMap(
               Map("key1" -> "value1", "key2" -> "value2", "key3" -> "value3").asJava),
-            isStreaming = true
-          ),
-          sourceIdentifyingName = Unassigned
-        )
-      )
-    )
+            isStreaming = true),
+          sourceIdentifyingName = Unassigned)))
   }
 
   test("inner join of two streaming tables") {
     val plan = parsePlan("SELECT * FROM STREAM t1 JOIN STREAM t2 ON t1.id = t2.id")
 
     // Verify both streaming sources are wrapped in NamedStreamingRelation
-    val namedStreamingRelations = plan.collect {
-      case n: NamedStreamingRelation => n
+    val namedStreamingRelations = plan.collect { case n: NamedStreamingRelation =>
+      n
     }
-    assert(namedStreamingRelations.size == 2,
+    assert(
+      namedStreamingRelations.size == 2,
       "Expected 2 NamedStreamingRelation nodes for join of two streaming tables")
 
     // Verify both have Unassigned names
@@ -167,8 +134,7 @@ class StreamRelationParserSuite extends AnalysisTest {
   }
 
   test("streaming table in CTE (WITH clause)") {
-    val plan = parsePlan(
-      """
+    val plan = parsePlan("""
         |WITH streaming_cte AS (SELECT * FROM STREAM source_table)
         |SELECT * FROM streaming_cte
       """.stripMargin)
@@ -183,23 +149,25 @@ class StreamRelationParserSuite extends AnalysisTest {
 
     // The CTE definition is wrapped in SubqueryAlias
     val cteDefinition = cteRelations.head._2
-    val namedStreamingRelations = cteDefinition.collect {
-      case n: NamedStreamingRelation => n
+    val namedStreamingRelations = cteDefinition.collect { case n: NamedStreamingRelation =>
+      n
     }
-    assert(namedStreamingRelations.size == 1,
+    assert(
+      namedStreamingRelations.size == 1,
       "Expected 1 NamedStreamingRelation node in CTE definition")
     assert(namedStreamingRelations.head.sourceIdentifyingName == Unassigned)
   }
 
   test("lateral join with streaming table") {
-    val plan = parsePlan(
-      "SELECT * FROM STREAM t1 JOIN LATERAL (SELECT * FROM t2 WHERE t2.id = t1.id) sub")
+    val plan =
+      parsePlan("SELECT * FROM STREAM t1 JOIN LATERAL (SELECT * FROM t2 WHERE t2.id = t1.id) sub")
 
     // Verify the streaming source is wrapped in NamedStreamingRelation
-    val namedStreamingRelations = plan.collect {
-      case n: NamedStreamingRelation => n
+    val namedStreamingRelations = plan.collect { case n: NamedStreamingRelation =>
+      n
     }
-    assert(namedStreamingRelations.size == 1,
+    assert(
+      namedStreamingRelations.size == 1,
       "Expected 1 NamedStreamingRelation node for streaming table in lateral join")
     assert(namedStreamingRelations.head.sourceIdentifyingName == Unassigned)
 
@@ -215,33 +183,23 @@ class StreamRelationParserSuite extends AnalysisTest {
   // ===================================
 
   test("Parse Exception: WITH option key without value") {
-    interceptParseException(parsePlan)(
-      "SELECT * FROM STREAM t WITH ('key')"
-    )(None)
+    interceptParseException(parsePlan)("SELECT * FROM STREAM t WITH ('key')")(None)
   }
 
   test("Parse Exception: WITH option using => instead of =") {
-    interceptParseException(parsePlan)(
-      "SELECT * FROM STREAM t WITH ('key'=>'value')"
-    )(None)
+    interceptParseException(parsePlan)("SELECT * FROM STREAM t WITH ('key'=>'value')")(None)
   }
 
   test("Parse Exception: WITH option key with no value") {
-    interceptParseException(parsePlan)(
-      "SELECT * FROM STREAM t WITH ('key'=)"
-    )(None)
+    interceptParseException(parsePlan)("SELECT * FROM STREAM t WITH ('key'=)")(None)
   }
 
   test("Parse Exception: WITH option missing quotes around value") {
-    interceptParseException(parsePlan)(
-      "SELECT * FROM STREAM t WITH ('key'=value)"
-    )(None)
+    interceptParseException(parsePlan)("SELECT * FROM STREAM t WITH ('key'=value)")(None)
   }
 
   test("Parse Exception: WITH option empty parentheses") {
-    interceptParseException(parsePlan)(
-      "SELECT * FROM STREAM t WITH ()"
-    )(None)
+    interceptParseException(parsePlan)("SELECT * FROM STREAM t WITH ()")(None)
   }
 
   // ===================================
@@ -251,11 +209,10 @@ class StreamRelationParserSuite extends AnalysisTest {
   test("STREAM with IDENTIFIED BY parses correctly") {
     Seq(
       "SELECT * FROM STREAM(t1) IDENTIFIED BY my_source",
-      "SELECT * FROM STREAM t1 IDENTIFIED BY my_source"
-    ).foreach { query =>
+      "SELECT * FROM STREAM t1 IDENTIFIED BY my_source").foreach { query =>
       val plan = parsePlan(query)
-      val namedStreamingRelations = plan.collect {
-        case n: NamedStreamingRelation => n
+      val namedStreamingRelations = plan.collect { case n: NamedStreamingRelation =>
+        n
       }
       assert(namedStreamingRelations.size == 1)
       assert(namedStreamingRelations.head.sourceIdentifyingName == UserProvided("my_source"))
@@ -264,18 +221,17 @@ class StreamRelationParserSuite extends AnalysisTest {
 
   test("STREAM with IDENTIFIED BY and alias") {
     val plan = parsePlan("SELECT * FROM STREAM t1 IDENTIFIED BY my_source AS src")
-    val namedStreamingRelations = plan.collect {
-      case n: NamedStreamingRelation => n
+    val namedStreamingRelations = plan.collect { case n: NamedStreamingRelation =>
+      n
     }
     assert(namedStreamingRelations.size == 1)
     assert(namedStreamingRelations.head.sourceIdentifyingName == UserProvided("my_source"))
   }
 
   test("STREAM with WITH options and IDENTIFIED BY") {
-    val plan = parsePlan(
-      "SELECT * FROM STREAM t1 WITH ('key' = 'value') IDENTIFIED BY my_source")
-    val namedStreamingRelations = plan.collect {
-      case n: NamedStreamingRelation => n
+    val plan = parsePlan("SELECT * FROM STREAM t1 WITH ('key' = 'value') IDENTIFIED BY my_source")
+    val namedStreamingRelations = plan.collect { case n: NamedStreamingRelation =>
+      n
     }
     assert(namedStreamingRelations.size == 1)
     assert(namedStreamingRelations.head.sourceIdentifyingName == UserProvided("my_source"))
@@ -289,26 +245,26 @@ class StreamRelationParserSuite extends AnalysisTest {
   }
 
   test("STREAM with WITH options, IDENTIFIED BY, and alias") {
-    val plan = parsePlan(
-      "SELECT * FROM STREAM t1 WITH ('key' = 'value') IDENTIFIED BY my_source AS src")
-    val namedStreamingRelations = plan.collect {
-      case n: NamedStreamingRelation => n
+    val plan =
+      parsePlan("SELECT * FROM STREAM t1 WITH ('key' = 'value') IDENTIFIED BY my_source AS src")
+    val namedStreamingRelations = plan.collect { case n: NamedStreamingRelation =>
+      n
     }
     assert(namedStreamingRelations.size == 1)
     assert(namedStreamingRelations.head.sourceIdentifyingName == UserProvided("my_source"))
   }
 
   test("join of two streaming sources with IDENTIFIED BY") {
-    val plan = parsePlan(
-      """SELECT *
+    val plan = parsePlan("""SELECT *
         |FROM STREAM t1 IDENTIFIED BY source_one
         |JOIN STREAM t2 IDENTIFIED BY source_two
         |ON t1.a = t2.a""".stripMargin)
 
-    val namedStreamingRelations = plan.collect {
-      case n: NamedStreamingRelation => n
+    val namedStreamingRelations = plan.collect { case n: NamedStreamingRelation =>
+      n
     }
-    assert(namedStreamingRelations.size == 2,
+    assert(
+      namedStreamingRelations.size == 2,
       "Expected 2 NamedStreamingRelation nodes for join of two streaming tables")
 
     val names = namedStreamingRelations.map(_.sourceIdentifyingName).toSet
@@ -317,8 +273,8 @@ class StreamRelationParserSuite extends AnalysisTest {
 
   test("IDENTIFIED BY with backtick-quoted identifier") {
     val plan = parsePlan("SELECT * FROM STREAM t1 IDENTIFIED BY `my-source-name`")
-    val namedStreamingRelations = plan.collect {
-      case n: NamedStreamingRelation => n
+    val namedStreamingRelations = plan.collect { case n: NamedStreamingRelation =>
+      n
     }
     assert(namedStreamingRelations.size == 1)
     assert(namedStreamingRelations.head.sourceIdentifyingName == UserProvided("my-source-name"))
@@ -339,18 +295,19 @@ class StreamRelationParserSuite extends AnalysisTest {
       (s"SELECT * FROM STREAM t $wm", Unassigned),
       (s"SELECT * FROM STREAM t $wm AS tbl", Unassigned),
       (s"SELECT * FROM STREAM t IDENTIFIED BY src1 $wm", UserProvided("src1")),
-      (s"SELECT * FROM STREAM t IDENTIFIED BY src1 $wm AS tbl", UserProvided("src1"))
-    )
+      (s"SELECT * FROM STREAM t IDENTIFIED BY src1 $wm AS tbl", UserProvided("src1")))
 
     testCases.foreach { case (query, expectedSourceName) =>
       val plan = parsePlan(query)
       assert(plan.isStreaming, s"Expected streaming plan for: $query")
-      val namedStreamingRelations = plan.collect {
-        case n: NamedStreamingRelation => n
+      val namedStreamingRelations = plan.collect { case n: NamedStreamingRelation =>
+        n
       }
-      assert(namedStreamingRelations.size == 1,
+      assert(
+        namedStreamingRelations.size == 1,
         s"Expected 1 NamedStreamingRelation node in: $query")
-      assert(namedStreamingRelations.head.sourceIdentifyingName == expectedSourceName,
+      assert(
+        namedStreamingRelations.head.sourceIdentifyingName == expectedSourceName,
         s"Expected source name $expectedSourceName in: $query")
     }
   }
@@ -366,18 +323,19 @@ class StreamRelationParserSuite extends AnalysisTest {
       (s"SELECT * FROM STREAM(t) $wm", Unassigned),
       (s"SELECT * FROM STREAM(t) $wm AS tbl", Unassigned),
       (s"SELECT * FROM STREAM(t) IDENTIFIED BY src1 $wm", UserProvided("src1")),
-      (s"SELECT * FROM STREAM(t) IDENTIFIED BY src1 $wm AS tbl", UserProvided("src1"))
-    )
+      (s"SELECT * FROM STREAM(t) IDENTIFIED BY src1 $wm AS tbl", UserProvided("src1")))
 
     testCases.foreach { case (query, expectedSourceName) =>
       val plan = parsePlan(query)
       assert(plan.isStreaming, s"Expected streaming plan for: $query")
-      val namedStreamingRelations = plan.collect {
-        case n: NamedStreamingRelation => n
+      val namedStreamingRelations = plan.collect { case n: NamedStreamingRelation =>
+        n
       }
-      assert(namedStreamingRelations.size == 1,
+      assert(
+        namedStreamingRelations.size == 1,
         s"Expected 1 NamedStreamingRelation node in: $query")
-      assert(namedStreamingRelations.head.sourceIdentifyingName == expectedSourceName,
+      assert(
+        namedStreamingRelations.head.sourceIdentifyingName == expectedSourceName,
         s"Expected source name $expectedSourceName in: $query")
     }
   }
@@ -389,20 +347,10 @@ class StreamRelationParserSuite extends AnalysisTest {
       Project(
         projectList = Seq(UnresolvedStar(None)),
         child = SubqueryAlias(
-          identifier = AliasIdentifier(
-            name = "src",
-            qualifier = Seq.empty
-          ),
+          identifier = AliasIdentifier(name = "src", qualifier = Seq.empty),
           child = NamedStreamingRelation(
-            child = UnresolvedRelation(
-              multipartIdentifier = Seq("t"),
-              isStreaming = true
-            ),
-            sourceIdentifyingName = UserProvided("my_source")
-          )
-        )
-      )
-    )
+            child = UnresolvedRelation(multipartIdentifier = Seq("t"), isStreaming = true),
+            sourceIdentifyingName = UserProvided("my_source")))))
   }
 
   test("STREAM table with options, IDENTIFIED BY, and alias verifies plan structure") {
@@ -412,21 +360,13 @@ class StreamRelationParserSuite extends AnalysisTest {
       Project(
         projectList = Seq(UnresolvedStar(None)),
         child = SubqueryAlias(
-          identifier = AliasIdentifier(
-            name = "src",
-            qualifier = Seq.empty
-          ),
+          identifier = AliasIdentifier(name = "src", qualifier = Seq.empty),
           child = NamedStreamingRelation(
             child = UnresolvedRelation(
               multipartIdentifier = Seq("t"),
               options = new CaseInsensitiveStringMap(Map("key" -> "value").asJava),
-              isStreaming = true
-            ),
-            sourceIdentifyingName = UserProvided("my_source")
-          )
-        )
-      )
-    )
+              isStreaming = true),
+            sourceIdentifyingName = UserProvided("my_source")))))
   }
 
   // ===================================
@@ -444,17 +384,18 @@ class StreamRelationParserSuite extends AnalysisTest {
       (s"SELECT * FROM STREAM range(10) $wm", Unassigned),
       (s"SELECT * FROM STREAM range(10) $wm AS t", Unassigned),
       (s"SELECT * FROM STREAM range(10) IDENTIFIED BY src1 $wm", UserProvided("src1")),
-      (s"SELECT * FROM STREAM range(10) IDENTIFIED BY src1 $wm AS t", UserProvided("src1"))
-    )
+      (s"SELECT * FROM STREAM range(10) IDENTIFIED BY src1 $wm AS t", UserProvided("src1")))
 
     testCases.foreach { case (query, expectedSourceName) =>
       val plan = parsePlan(query)
-      val namedStreamingRelations = plan.collect {
-        case n: NamedStreamingRelation => n
+      val namedStreamingRelations = plan.collect { case n: NamedStreamingRelation =>
+        n
       }
-      assert(namedStreamingRelations.size == 1,
+      assert(
+        namedStreamingRelations.size == 1,
         s"Expected 1 NamedStreamingRelation node in: $query")
-      assert(namedStreamingRelations.head.sourceIdentifyingName == expectedSourceName,
+      assert(
+        namedStreamingRelations.head.sourceIdentifyingName == expectedSourceName,
         s"Expected source name $expectedSourceName in: $query")
     }
 
@@ -479,17 +420,18 @@ class StreamRelationParserSuite extends AnalysisTest {
       (s"SELECT * FROM STREAM(range(10)) $wm", Unassigned),
       (s"SELECT * FROM STREAM(range(10)) $wm AS t", Unassigned),
       (s"SELECT * FROM STREAM(range(10)) IDENTIFIED BY src1 $wm", UserProvided("src1")),
-      (s"SELECT * FROM STREAM(range(10)) IDENTIFIED BY src1 $wm AS t", UserProvided("src1"))
-    )
+      (s"SELECT * FROM STREAM(range(10)) IDENTIFIED BY src1 $wm AS t", UserProvided("src1")))
 
     testCases.foreach { case (query, expectedSourceName) =>
       val plan = parsePlan(query)
-      val namedStreamingRelations = plan.collect {
-        case n: NamedStreamingRelation => n
+      val namedStreamingRelations = plan.collect { case n: NamedStreamingRelation =>
+        n
       }
-      assert(namedStreamingRelations.size == 1,
+      assert(
+        namedStreamingRelations.size == 1,
         s"Expected 1 NamedStreamingRelation node in: $query")
-      assert(namedStreamingRelations.head.sourceIdentifyingName == expectedSourceName,
+      assert(
+        namedStreamingRelations.head.sourceIdentifyingName == expectedSourceName,
         s"Expected source name $expectedSourceName in: $query")
     }
   }
@@ -502,7 +444,8 @@ class StreamRelationParserSuite extends AnalysisTest {
     plan match {
       case Project(_, SubqueryAlias(aliasId, namedStream: NamedStreamingRelation)) =>
         assert(aliasId.name == "src", "Expected alias name 'src'")
-        assert(namedStream.sourceIdentifyingName == UserProvided("my_source"),
+        assert(
+          namedStream.sourceIdentifyingName == UserProvided("my_source"),
           "Expected source name 'my_source'")
         namedStream.child match {
           case tvf: UnresolvedTableValuedFunction =>
@@ -510,7 +453,8 @@ class StreamRelationParserSuite extends AnalysisTest {
             assert(tvf.name == Seq("range"), "Expected 'range' TVF")
           case other => fail(s"Expected UnresolvedTableValuedFunction but got: $other")
         }
-      case other => fail(s"Expected Project(SubqueryAlias(NamedStreamingRelation)) but got: $other")
+      case other =>
+        fail(s"Expected Project(SubqueryAlias(NamedStreamingRelation)) but got: $other")
     }
   }
 
@@ -525,12 +469,12 @@ class StreamRelationParserSuite extends AnalysisTest {
     val plan = parsePlan(query)
 
     // Verify the complete structure including watermark
-    val namedStreamingRelations = plan.collect {
-      case n: NamedStreamingRelation => n
+    val namedStreamingRelations = plan.collect { case n: NamedStreamingRelation =>
+      n
     }
-    assert(namedStreamingRelations.size == 1,
-      "Expected 1 NamedStreamingRelation node")
-    assert(namedStreamingRelations.head.sourceIdentifyingName == UserProvided("my_source"),
+    assert(namedStreamingRelations.size == 1, "Expected 1 NamedStreamingRelation node")
+    assert(
+      namedStreamingRelations.head.sourceIdentifyingName == UserProvided("my_source"),
       "Expected source name 'my_source'")
 
     // Verify SubqueryAlias is present
@@ -548,14 +492,16 @@ class StreamRelationParserSuite extends AnalysisTest {
     plan match {
       case Project(_, SubqueryAlias(aliasId, namedStream: NamedStreamingRelation)) =>
         assert(aliasId.name == "src", "Expected alias name 'src'")
-        assert(namedStream.sourceIdentifyingName == UserProvided("my_source"),
+        assert(
+          namedStream.sourceIdentifyingName == UserProvided("my_source"),
           "Expected source name 'my_source'")
         namedStream.child match {
           case tvf: UnresolvedTableValuedFunction =>
             assert(tvf.isStreaming, "TVF should be marked as streaming")
           case other => fail(s"Expected UnresolvedTableValuedFunction but got: $other")
         }
-      case other => fail(s"Expected Project(SubqueryAlias(NamedStreamingRelation)) but got: $other")
+      case other =>
+        fail(s"Expected Project(SubqueryAlias(NamedStreamingRelation)) but got: $other")
     }
   }
 
@@ -572,64 +518,54 @@ class StreamRelationParserSuite extends AnalysisTest {
   // ==========================================
 
   test("Parse Exception: IDENTIFIED BY without source name") {
-    interceptParseException(parsePlan)(
-      "SELECT * FROM STREAM t IDENTIFIED BY"
-    )(None)
+    interceptParseException(parsePlan)("SELECT * FROM STREAM t IDENTIFIED BY")(None)
   }
 
   test("Parse Exception: Multiple IDENTIFIED BY clauses") {
     // The grammar should prevent multiple IDENTIFIED BY clauses
     interceptParseException(parsePlan)(
-      "SELECT * FROM STREAM t IDENTIFIED BY src1 IDENTIFIED BY src2"
-    )(None)
+      "SELECT * FROM STREAM t IDENTIFIED BY src1 IDENTIFIED BY src2")(None)
   }
 
   test("Parse Exception: IDENTIFIED BY on non-streaming table") {
     // Regular (non-streaming) tables should not allow IDENTIFIED BY
-    interceptParseException(parsePlan)(
-      "SELECT * FROM t IDENTIFIED BY my_source"
-    )(None)
+    interceptParseException(parsePlan)("SELECT * FROM t IDENTIFIED BY my_source")(None)
   }
 
   test("Parse Exception: IDENTIFIED BY on subquery") {
     // Subqueries should not allow IDENTIFIED BY
-    interceptParseException(parsePlan)(
-      "SELECT * FROM (SELECT * FROM t) IDENTIFIED BY my_source"
-    )(None)
+    interceptParseException(parsePlan)("SELECT * FROM (SELECT * FROM t) IDENTIFIED BY my_source")(
+      None)
   }
 
   test("Parse Exception: IDENTIFIED BY before WITH options") {
     // IDENTIFIED BY should come after WITH options
     interceptParseException(parsePlan)(
-      "SELECT * FROM STREAM t IDENTIFIED BY src WITH ('key' = 'value')"
-    )(None)
+      "SELECT * FROM STREAM t IDENTIFIED BY src WITH ('key' = 'value')")(None)
   }
 
   test("Parse Exception: IDENTIFIED BY after alias") {
     // IDENTIFIED BY should come before alias
-    interceptParseException(parsePlan)(
-      "SELECT * FROM STREAM t AS src IDENTIFIED BY my_source"
-    )(None)
+    interceptParseException(parsePlan)("SELECT * FROM STREAM t AS src IDENTIFIED BY my_source")(
+      None)
   }
 
   test("Parse Exception: IDENTIFIED BY after WATERMARK") {
     // IDENTIFIED BY should come before WATERMARK
     interceptParseException(parsePlan)(
-      "SELECT * FROM STREAM t WATERMARK col DELAY OF INTERVAL 1 MINUTE IDENTIFIED BY src"
-    )(None)
+      "SELECT * FROM STREAM t WATERMARK col DELAY OF INTERVAL 1 MINUTE IDENTIFIED BY src")(None)
   }
 
   test("Parse Exception: TVF IDENTIFIED BY after alias") {
     // IDENTIFIED BY should come before alias for TVFs too
-    interceptParseException(parsePlan)(
-      "SELECT * FROM STREAM range(10) AS t IDENTIFIED BY src"
-    )(None)
+    interceptParseException(parsePlan)("SELECT * FROM STREAM range(10) AS t IDENTIFIED BY src")(
+      None)
   }
 
   test("Parse Exception: TVF IDENTIFIED BY after WATERMARK") {
     // IDENTIFIED BY should come before WATERMARK for TVFs too
     interceptParseException(parsePlan)(
-      "SELECT * FROM STREAM range(10) WATERMARK col DELAY OF INTERVAL 1 MINUTE IDENTIFIED BY src"
-    )(None)
+      "SELECT * FROM STREAM range(10) WATERMARK col DELAY OF INTERVAL 1 MINUTE IDENTIFIED BY src")(
+      None)
   }
 }

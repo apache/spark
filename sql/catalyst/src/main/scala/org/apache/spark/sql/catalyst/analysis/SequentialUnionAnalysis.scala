@@ -23,31 +23,31 @@ import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 
 /**
- * Flattens directly nested SequentialStreamingUnion nodes into a single level.
- * This allows chaining: df1.followedBy(df2).followedBy(df3)
+ * Flattens directly nested SequentialStreamingUnion nodes into a single level. This allows
+ * chaining: df1.followedBy(df2).followedBy(df3)
  *
  * Note: This only handles direct nesting where a SequentialStreamingUnion is an immediate child.
- * Nesting wrapped in other operators (e.g., Project(SequentialStreamingUnion(...))) is handled
- * by the optimizer's CombineUnions rule.
+ * Nesting wrapped in other operators (e.g., Project(SequentialStreamingUnion(...))) is handled by
+ * the optimizer's CombineUnions rule.
  */
 object FlattenSequentialStreamingUnion extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
-    _.containsPattern(SEQUENTIAL_STREAMING_UNION)) {
-    case SequentialStreamingUnion(children, byName, allowMissingCol) =>
-      val flattened = SequentialStreamingUnion.flatten(children)
-      SequentialStreamingUnion(flattened, byName, allowMissingCol)
-  }
+  def apply(plan: LogicalPlan): LogicalPlan =
+    plan.resolveOperatorsUpWithPruning(_.containsPattern(SEQUENTIAL_STREAMING_UNION)) {
+      case SequentialStreamingUnion(children, byName, allowMissingCol) =>
+        val flattened = SequentialStreamingUnion.flatten(children)
+        SequentialStreamingUnion(flattened, byName, allowMissingCol)
+    }
 }
 
 /**
  * Validates SequentialStreamingUnion constraints during analysis:
- * - All children must be streaming relations
- * - No stateful operations in any child subtrees
+ *   - All children must be streaming relations
+ *   - No stateful operations in any child subtrees
  *
- * Note: Minimum 2 children is enforced by the resolved property, not explicit validation.
- * Note: Nested SequentialStreamingUnions are flattened by analysis (FlattenSequentialStreamingUnion
- *       for direct nesting) and optimizer (CombineUnions for wrapped nesting). Tests verify this
- *       flattening behavior.
+ * Note: Minimum 2 children is enforced by the resolved property, not explicit validation. Note:
+ * Nested SequentialStreamingUnions are flattened by analysis (FlattenSequentialStreamingUnion for
+ * direct nesting) and optimizer (CombineUnions for wrapped nesting). Tests verify this flattening
+ * behavior.
  */
 object ValidateSequentialStreamingUnion extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {

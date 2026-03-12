@@ -70,9 +70,10 @@ object ReplaceHashWithSortAgg extends Rule[SparkPlan] {
         val sortAgg = hashAgg.toSortAggregate
         hashAgg.child match {
           case partialAgg: BaseAggregateExec
-            if isHashBasedAggWithKeys(partialAgg) && isPartialAgg(partialAgg, hashAgg) =>
+              if isHashBasedAggWithKeys(partialAgg) && isPartialAgg(partialAgg, hashAgg) =>
             if (SortOrder.orderingSatisfies(
-                partialAgg.child.outputOrdering, sortAgg.requiredChildOrdering.head)) {
+                partialAgg.child.outputOrdering,
+                sortAgg.requiredChildOrdering.head)) {
               sortAgg.copy(
                 aggregateExpressions = sortAgg.aggregateExpressions.map(_.copy(mode = Complete)),
                 child = partialAgg.child)
@@ -81,7 +82,8 @@ object ReplaceHashWithSortAgg extends Rule[SparkPlan] {
             }
           case other =>
             if (SortOrder.orderingSatisfies(
-                other.outputOrdering, sortAgg.requiredChildOrdering.head)) {
+                other.outputOrdering,
+                sortAgg.requiredChildOrdering.head)) {
               sortAgg
             } else {
               hashAgg
@@ -94,9 +96,11 @@ object ReplaceHashWithSortAgg extends Rule[SparkPlan] {
   /**
    * Check if `partialAgg` to be partial aggregate of `finalAgg`.
    */
-  private def isPartialAgg(partialAgg: BaseAggregateExec, finalAgg: BaseAggregateExec): Boolean = {
+  private def isPartialAgg(
+      partialAgg: BaseAggregateExec,
+      finalAgg: BaseAggregateExec): Boolean = {
     if (partialAgg.aggregateExpressions.forall(_.mode == Partial) &&
-        finalAgg.aggregateExpressions.forall(_.mode == Final)) {
+      finalAgg.aggregateExpressions.forall(_.mode == Final)) {
       (finalAgg.logicalLink, partialAgg.logicalLink) match {
         case (Some(agg1), Some(agg2)) => agg1.sameResult(agg2)
         case _ => false
@@ -107,8 +111,8 @@ object ReplaceHashWithSortAgg extends Rule[SparkPlan] {
   }
 
   /**
-   * Check if `agg` is [[HashAggregateExec]] or [[ObjectHashAggregateExec]],
-   * and has grouping keys.
+   * Check if `agg` is [[HashAggregateExec]] or [[ObjectHashAggregateExec]], and has grouping
+   * keys.
    */
   private def isHashBasedAggWithKeys(agg: BaseAggregateExec): Boolean = {
     val isHashBasedAgg = agg match {

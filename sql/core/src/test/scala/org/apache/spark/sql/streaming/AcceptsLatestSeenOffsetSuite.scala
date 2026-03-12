@@ -57,8 +57,9 @@ class AcceptsLatestSeenOffsetSuite extends StreamTest with BeforeAndAfter {
     val exc = intercept[StreamingQueryException] {
       query.processAllAvailable()
     }
-    assert(exc.getMessage.contains(
-      "AcceptsLatestSeenOffset is not supported with DSv1 streaming source"))
+    assert(
+      exc.getMessage.contains(
+        "AcceptsLatestSeenOffset is not supported with DSv1 streaming source"))
   }
 
   test("DataSource V2 source with micro-batch") {
@@ -82,7 +83,6 @@ class AcceptsLatestSeenOffsetSuite extends StreamTest with BeforeAndAfter {
         assert(inputData.latestSeenOffset === null)
       },
       StopStream,
-
       StartStream(),
       addData((11L to 20L).toArray),
       ProcessAllAvailable(),
@@ -90,7 +90,6 @@ class AcceptsLatestSeenOffsetSuite extends StreamTest with BeforeAndAfter {
         assert(inputData.latestSeenOffset === LongOffset(0))
       },
       StopStream,
-
       Execute("mark last batch as incomplete") { q =>
         // Delete the last committed batch from the commit log to signify that the last batch
         // (a no-data batch) did not complete and has to be re-executed on restart.
@@ -102,8 +101,7 @@ class AcceptsLatestSeenOffsetSuite extends StreamTest with BeforeAndAfter {
       ProcessAllAvailable(),
       Execute("latest seen offset should be 1") { _ =>
         assert(inputData.latestSeenOffset === LongOffset(1))
-      }
-    )
+      })
   }
 
   test("DataSource V2 source with micro-batch - rollback of microbatch 0") {
@@ -116,7 +114,7 @@ class AcceptsLatestSeenOffsetSuite extends StreamTest with BeforeAndAfter {
     /** Add data to this test source by incrementing its available offset */
     def addData(values: Array[Long]): StreamAction = new AddData {
       override def addData(
-        query: Option[StreamExecution]): (SparkDataStream, streaming.Offset) = {
+          query: Option[StreamExecution]): (SparkDataStream, streaming.Offset) = {
         (inputData, inputData.addData(values))
       }
     }
@@ -130,14 +128,12 @@ class AcceptsLatestSeenOffsetSuite extends StreamTest with BeforeAndAfter {
         assert(inputData.latestSeenOffset === null)
       },
       StopStream,
-
       Execute("mark last batch as incomplete") { q =>
         // Delete the last committed batch from the commit log to signify that the last batch
         // (a no-data batch) did not complete and has to be re-executed on restart.
         val commit = q.commitLog.getLatest().map(_._1).getOrElse(-1L)
         q.commitLog.purgeAfter(commit - 1)
       },
-
       Execute("reset flag initial offset called flag") { q =>
         inputData.assertInitialOffsetIsCalledAfterLatestOffsetSeen = true
       },
@@ -147,8 +143,7 @@ class AcceptsLatestSeenOffsetSuite extends StreamTest with BeforeAndAfter {
       Execute("latest seen offset should be 0") { _ =>
         assert(inputData.latestSeenOffset === LongOffset(0))
       },
-      StopStream
-    )
+      StopStream)
   }
 
   test("DataSource V2 source with continuous mode") {
@@ -172,7 +167,6 @@ class AcceptsLatestSeenOffsetSuite extends StreamTest with BeforeAndAfter {
       },
       IncrementEpoch(),
       StopStream,
-
       StartStream(trigger = Trigger.Continuous("1 hour")),
       addData((11L to 20L).toArray),
       AwaitEpoch(2),
@@ -181,14 +175,12 @@ class AcceptsLatestSeenOffsetSuite extends StreamTest with BeforeAndAfter {
       },
       IncrementEpoch(),
       StopStream,
-
       StartStream(trigger = Trigger.Continuous("1 hour")),
       addData((21L to 30L).toArray),
       AwaitEpoch(3),
       Execute { _ =>
         assert(inputData.latestSeenOffset === ContinuousMemoryStreamOffset(Map(0 -> 20)))
-      }
-    )
+      })
   }
 
   class TestSource(spark: SparkSession) extends Source with AcceptsLatestSeenOffset {
@@ -202,7 +194,10 @@ class AcceptsLatestSeenOffsetSuite extends StreamTest with BeforeAndAfter {
     override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
       if (currentOffset == 0) currentOffset = getOffsetValue(end)
       val plan = Range(
-        start.map(getOffsetValue).getOrElse(0L) + 1L, getOffsetValue(end) + 1L, 1, None,
+        start.map(getOffsetValue).getOrElse(0L) + 1L,
+        getOffsetValue(end) + 1L,
+        1,
+        None,
         isStreaming = true)
       Dataset.ofRows(spark, plan)
     }
@@ -231,12 +226,12 @@ class AcceptsLatestSeenOffsetSuite extends StreamTest with BeforeAndAfter {
     }
   }
 
-  class TestMemoryStream[A : Encoder](
+  class TestMemoryStream[A: Encoder](
       _id: Int,
       _sparkSession: SparkSession,
       _numPartitions: Option[Int] = None)
-    extends MemoryStream[A](_id, _sparkSession, _numPartitions)
-    with AcceptsLatestSeenOffset {
+      extends MemoryStream[A](_id, _sparkSession, _numPartitions)
+      with AcceptsLatestSeenOffset {
 
     @volatile var latestSeenOffset: streaming.Offset = null
 
@@ -258,12 +253,12 @@ class AcceptsLatestSeenOffsetSuite extends StreamTest with BeforeAndAfter {
     }
   }
 
-  class TestContinuousMemoryStream[A : Encoder](
+  class TestContinuousMemoryStream[A: Encoder](
       _id: Int,
       _sparkSession: SparkSession,
       _numPartitions: Int = 2)
-    extends ContinuousMemoryStream[A](_id, _sparkSession, _numPartitions)
-    with AcceptsLatestSeenOffset {
+      extends ContinuousMemoryStream[A](_id, _sparkSession, _numPartitions)
+      with AcceptsLatestSeenOffset {
 
     @volatile var latestSeenOffset: streaming.Offset = _
 

@@ -19,11 +19,7 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 
 import java.util.HashSet
 
-import org.apache.spark.sql.catalyst.analysis.{
-  GetViewColumnByNameAndOrdinal,
-  MultiInstanceRelation,
-  ResolvedInlineTable
-}
+import org.apache.spark.sql.catalyst.analysis.{GetViewColumnByNameAndOrdinal, MultiInstanceRelation, ResolvedInlineTable}
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -31,10 +27,11 @@ import org.apache.spark.sql.types.BooleanType
 
 /**
  * The [[ResolutionValidator]] performs the validation work after the logical plan tree is
- * resolved by the [[Resolver]]. Each `resolve*` method in the [[Resolver]] must
- * have its `validate*` counterpart in the [[ResolutionValidator]]. The validation code asserts the
- * conditions that must never be false no matter which SQL query or DataFrame program was provided.
- * The validation approach is single-pass, post-order, complementary to the resolution process.
+ * resolved by the [[Resolver]]. Each `resolve*` method in the [[Resolver]] must have its
+ * `validate*` counterpart in the [[ResolutionValidator]]. The validation code asserts the
+ * conditions that must never be false no matter which SQL query or DataFrame program was
+ * provided. The validation approach is single-pass, post-order, complementary to the resolution
+ * process.
  */
 class ResolutionValidator {
   private val attributeScopeStack = new AttributeScopeStack
@@ -44,10 +41,9 @@ class ResolutionValidator {
   def getAttributeScopeStack: AttributeScopeStack = attributeScopeStack
 
   /**
-   * Validate the resolved logical `plan` - assert invariants that should never be false no
-   * matter which SQL query or DataFrame program was provided. New operators must be added here as
-   * soon as [[Resolver]] supports them. We check this by throwing an exception for
-   * unknown operators.
+   * Validate the resolved logical `plan` - assert invariants that should never be false no matter
+   * which SQL query or DataFrame program was provided. New operators must be added here as soon
+   * as [[Resolver]] supports them. We check this by throwing an exception for unknown operators.
    */
   def validatePlan(plan: LogicalPlan): Unit = wrapErrors(plan) {
     validate(plan)
@@ -116,8 +112,7 @@ class ResolutionValidator {
       case withCte: WithCTE =>
       case _ =>
         ExpressionIdAssigner.assertOutputsHaveNoConflictingExpressionIds(
-          operator.children.map(_.output)
-        )
+          operator.children.map(_.output))
     }
   }
 
@@ -125,10 +120,7 @@ class ResolutionValidator {
     val knownCteDefIds = new HashSet[Long](withCte.cteDefs.length)
 
     for (cteDef <- withCte.cteDefs) {
-      assert(
-        !knownCteDefIds.contains(cteDef.id),
-        s"Duplicate CTE definition id: ${cteDef.id}"
-      )
+      assert(!knownCteDefIds.contains(cteDef.id), s"Duplicate CTE definition id: ${cteDef.id}")
 
       validate(cteDef)
 
@@ -176,8 +168,7 @@ class ResolutionValidator {
 
     assert(
       filter.condition.dataType == BooleanType,
-      s"Output type of a filter must be a boolean, but got: ${filter.condition.dataType.typeName}"
-    )
+      s"Output type of a filter must be a boolean, but got: ${filter.condition.dataType.typeName}")
     expressionResolutionValidator.validate(filter.condition)
   }
 
@@ -195,8 +186,7 @@ class ResolutionValidator {
         assert(
           !project.projectList
             .exists(expression => expression.isInstanceOf[GetViewColumnByNameAndOrdinal]),
-          "Resolved Project operator under a view cannot contain GetViewColumnByNameAndOrdinal"
-        )
+          "Resolved Project operator under a view cannot contain GetViewColumnByNameAndOrdinal")
       case _ =>
     }
 
@@ -244,17 +234,13 @@ class ResolutionValidator {
   private def validateSetOperationLike(plan: LogicalPlan): Unit = {
     plan.children.foreach(validate)
 
-    assert(
-      plan.children.length > 1,
-      s"${plan.nodeName} operator has to have at least 2 children"
-    )
+    assert(plan.children.length > 1, s"${plan.nodeName} operator has to have at least 2 children")
     val firstChildOutput = plan.children.head.output
     for (child <- plan.children.tail) {
       val childOutput = child.output
       assert(
         childOutput.length == firstChildOutput.length,
-        s"Unexpected output length for ${plan.nodeName} child $child"
-      )
+        s"Unexpected output length for ${plan.nodeName} child $child")
     }
 
     handleOperatorOutput(plan)
@@ -309,8 +295,7 @@ class ResolutionValidator {
       assert(
         attribute.isInstanceOf[AttributeReference],
         s"Output of an operator must be a reference to an attribute, but got: " +
-        s"${attribute.getClass.getSimpleName}"
-      )
+          s"${attribute.getClass.getSimpleName}")
       expressionResolutionValidator.validate(attribute)
     })
   }

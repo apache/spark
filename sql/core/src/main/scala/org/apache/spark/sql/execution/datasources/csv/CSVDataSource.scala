@@ -96,9 +96,9 @@ object CSVDataSource extends Logging {
 
   /**
    * Returns a function that sets the header column names used in singleVariantColumn mode. The
-   * returned function takes an optional input, which is the header column names potentially read by
-   * `CSVHeaderChecker`. The function only needs to read the file when the input is empty (e.g.,
-   * `CSVHeaderChecker` won't read anything when the partition is not at the file start).
+   * returned function takes an optional input, which is the header column names potentially read
+   * by `CSVHeaderChecker`. The function only needs to read the file when the input is empty
+   * (e.g., `CSVHeaderChecker` won't read anything when the partition is not at the file start).
    *
    * We need to return a function here instead of letting `CSVHeaderChecker` call this function
    * directly, because this package (also the `CSVUtils` class) depends on `CSVHeaderChecker`.
@@ -131,9 +131,9 @@ object TextInputCSVDataSource extends CSVDataSource {
       requiredSchema: StructType): Iterator[InternalRow] = {
     val lines = {
       val linesReader = Utils.createResourceUninterruptiblyIfInTaskThread(
-        new HadoopFileLinesReader(file, parser.options.lineSeparatorInRead, conf)
-      )
-      Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ => linesReader.close()))
+        new HadoopFileLinesReader(file, parser.options.lineSeparatorInRead, conf))
+      Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ =>
+        linesReader.close()))
       linesReader.map { line =>
         new String(line.getBytes, 0, line.getLength, parser.options.charset)
       }
@@ -188,14 +188,17 @@ object TextInputCSVDataSource extends CSVDataSource {
       inputPaths: Seq[FileStatus],
       options: CSVOptions): Dataset[String] = {
     val paths = inputPaths.map(_.getPath.toString)
-    val df = sparkSession.baseRelationToDataFrame(
-      DataSource.apply(
-        sparkSession,
-        paths = paths,
-        className = classOf[TextFileFormat].getName,
-        options = options.parameters ++ Map(DataSource.GLOB_PATHS_KEY -> "false")
-      ).resolveRelation(checkFilesExist = false))
-      .select("value").as[String](Encoders.STRING)
+    val df = sparkSession
+      .baseRelationToDataFrame(
+        DataSource
+          .apply(
+            sparkSession,
+            paths = paths,
+            className = classOf[TextFileFormat].getName,
+            options = options.parameters ++ Map(DataSource.GLOB_PATHS_KEY -> "false"))
+          .resolveRelation(checkFilesExist = false))
+      .select("value")
+      .as[String](Encoders.STRING)
 
     if (Charset.forName(options.charset) == StandardCharsets.UTF_8) {
       df
@@ -234,28 +237,33 @@ object MultiLineCSVDataSource extends CSVDataSource with Logging {
     val csv = createBaseRdd(sparkSession, inputPaths, parsedOptions)
     val ignoreCorruptFiles = parsedOptions.ignoreCorruptFiles
     val ignoreMissingFiles = parsedOptions.ignoreMissingFiles
-    csv.flatMap { lines =>
-      try {
-        val path = new Path(lines.getPath())
-        UnivocityParser.tokenizeStream(
-          CodecStreams.createInputStreamWithCloseResource(lines.getConfiguration, path),
-          shouldDropHeader = false,
-          new CsvParser(parsedOptions.asParserSettings),
-          encoding = parsedOptions.charset)
-      } catch {
-        case e: FileNotFoundException if ignoreMissingFiles =>
-          logWarning(log"Skipped missing file: ${MDC(PATH, lines.getPath())}", e)
-          Array.empty[Array[String]]
-        case e: FileNotFoundException if !ignoreMissingFiles => throw e
-        case e @ (_: RuntimeException | _: IOException) if ignoreCorruptFiles =>
-          logWarning(log"Skipped the rest of the content in the corrupted file: " +
-            log"${MDC(PATH, lines.getPath())}", e)
-          Array.empty[Array[String]]
-        case NonFatal(e) =>
-          val path = SparkPath.fromPathString(lines.getPath())
-          throw QueryExecutionErrors.cannotReadFilesError(e, path.urlEncoded)
+    csv
+      .flatMap { lines =>
+        try {
+          val path = new Path(lines.getPath())
+          UnivocityParser.tokenizeStream(
+            CodecStreams.createInputStreamWithCloseResource(lines.getConfiguration, path),
+            shouldDropHeader = false,
+            new CsvParser(parsedOptions.asParserSettings),
+            encoding = parsedOptions.charset)
+        } catch {
+          case e: FileNotFoundException if ignoreMissingFiles =>
+            logWarning(log"Skipped missing file: ${MDC(PATH, lines.getPath())}", e)
+            Array.empty[Array[String]]
+          case e: FileNotFoundException if !ignoreMissingFiles => throw e
+          case e @ (_: RuntimeException | _: IOException) if ignoreCorruptFiles =>
+            logWarning(
+              log"Skipped the rest of the content in the corrupted file: " +
+                log"${MDC(PATH, lines.getPath())}",
+              e)
+            Array.empty[Array[String]]
+          case NonFatal(e) =>
+            val path = SparkPath.fromPathString(lines.getPath())
+            throw QueryExecutionErrors.cannotReadFilesError(e, path.urlEncoded)
+        }
       }
-    }.take(1).headOption match {
+      .take(1)
+      .headOption match {
       case Some(firstRow) =>
         val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
         val header = CSVUtils.makeSafeHeader(firstRow, caseSensitive, parsedOptions)
@@ -284,8 +292,8 @@ object MultiLineCSVDataSource extends CSVDataSource with Logging {
       options: CSVOptions): RDD[PortableDataStream] = {
     val paths = inputPaths.map(_.getPath)
     val name = paths.mkString(",")
-    val job = Job.getInstance(sparkSession.sessionState.newHadoopConfWithOptions(
-      options.parameters))
+    val job =
+      Job.getInstance(sparkSession.sessionState.newHadoopConfWithOptions(options.parameters))
     FileInputFormat.setInputPaths(job, paths: _*)
     val conf = job.getConfiguration
 

@@ -44,10 +44,10 @@ import org.apache.spark.sql.types._
 case class Sum(
     child: Expression,
     evalContext: NumericEvalContext = NumericEvalContext.fromSQLConf(SQLConf.get))
-  extends DeclarativeAggregate
-  with ImplicitCastInputTypes
-  with UnaryLike[Expression]
-  with SupportQueryContext {
+    extends DeclarativeAggregate
+    with ImplicitCastInputTypes
+    with UnaryLike[Expression]
+    with SupportQueryContext {
 
   def this(child: Expression) = this(child, NumericEvalContext.fromSQLConf(SQLConf.get))
 
@@ -110,8 +110,7 @@ case class Sum(
     // unchanged if the input is null, as SUM function ignores null input. The `sum` can only be
     // null if overflow happens under non-ansi mode.
     val sumExpr = if (child.nullable) {
-      If(child.isNull, sum,
-        add(sum, KnownNotNull(child).cast(resultType)))
+      If(child.isNull, sum, add(sum, KnownNotNull(child).cast(resultType)))
     } else {
       add(sum, child.cast(resultType))
     }
@@ -128,24 +127,22 @@ case class Sum(
     // in case the input is nullable. The `sum` can only be null if there is no value, as
     // non-decimal type can produce overflowed value under non-ansi mode.
     if (child.nullable) {
-      Seq(coalesce(add(coalesce(sum, zero), child.cast(resultType)),
-        sum))
+      Seq(coalesce(add(coalesce(sum, zero), child.cast(resultType)), sum))
     } else {
       Seq(add(coalesce(sum, zero), child.cast(resultType)))
     }
   }
 
   /**
-   * When shouldTrackIsEmpty is true:
-   * If isEmpty is false and if sum is null, then it means we have had an overflow.
+   * When shouldTrackIsEmpty is true: If isEmpty is false and if sum is null, then it means we
+   * have had an overflow.
    *
-   * update of the sum is as follows:
-   * Check if either portion of the left.sum or right.sum has overflowed
-   * If it has, then the sum value will remain null.
-   * If it did not have overflow, then add the sum.left and sum.right
+   * update of the sum is as follows: Check if either portion of the left.sum or right.sum has
+   * overflowed If it has, then the sum value will remain null. If it did not have overflow, then
+   * add the sum.left and sum.right
    *
-   * isEmpty:  Set to false if either one of the left or right is set to false. This
-   * means we have seen at least a value that was not null.
+   * isEmpty: Set to false if either one of the left or right is set to false. This means we have
+   * seen at least a value that was not null.
    */
   override lazy val mergeExpressions: Seq[Expression] = if (shouldTrackIsEmpty) {
     val bufferOverflow = !isEmpty.left && sum.left.isNull
@@ -160,17 +157,14 @@ case class Sum(
         add(KnownNotNull(sum.left), KnownNotNull(sum.right))),
       isEmpty.left && isEmpty.right)
   } else {
-    Seq(coalesce(
-      add(coalesce(sum.left, zero), sum.right),
-      sum.left))
+    Seq(coalesce(add(coalesce(sum.left, zero), sum.right), sum.left))
   }
 
   /**
    * If the isEmpty is true, then it means there were no values to begin with or all the values
-   * were null, so the result will be null.
-   * If the isEmpty is false, then if sum is null that means an overflow has happened.
-   * So now, if ansi is enabled, then throw exception, if not then return null.
-   * If sum is not null, then return the sum.
+   * were null, so the result will be null. If the isEmpty is false, then if sum is null that
+   * means an overflow has happened. So now, if ansi is enabled, then throw exception, if not then
+   * return null. If sum is not null, then return the sum.
    */
   override lazy val evaluateExpression: Expression = {
     resultType match {
@@ -200,7 +194,8 @@ case class Sum(
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the sum calculated from values of a group and the result is null on overflow.",
+  usage =
+    "_FUNC_(expr) - Returns the sum calculated from values of a group and the result is null on overflow.",
   examples = """
     Examples:
       > SELECT _FUNC_(col) FROM VALUES (5), (10), (15) AS tab(col);

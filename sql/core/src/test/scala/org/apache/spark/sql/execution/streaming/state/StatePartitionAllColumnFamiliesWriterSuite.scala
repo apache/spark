@@ -34,51 +34,52 @@ import org.apache.spark.sql.streaming.util.{EventTimeTimerProcessor, MultiStateV
 import org.apache.spark.sql.types.StructType
 
 /**
- * Test suite for StatePartitionAllColumnFamiliesWriter.
- * Tests the writer's ability to correctly write raw bytes read from
- * StatePartitionAllColumnFamiliesReader to a state store without loading previous versions.
+ * Test suite for StatePartitionAllColumnFamiliesWriter. Tests the writer's ability to correctly
+ * write raw bytes read from StatePartitionAllColumnFamiliesReader to a state store without
+ * loading previous versions.
  */
 class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase {
   import testImplicits._
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    spark.conf.set(SQLConf.STATE_STORE_PROVIDER_CLASS.key,
+    spark.conf.set(
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key,
       classOf[RocksDBStateStoreProvider].getName)
     spark.conf.set(SQLConf.SHUFFLE_PARTITIONS.key, "2")
   }
 
   /**
-   * Common helper method to perform round-trip test: read state bytes from source,
-   * write to target, and verify target matches source.
+   * Common helper method to perform round-trip test: read state bytes from source, write to
+   * target, and verify target matches source.
    *
-   * @param sourceDir Source checkpoint directory
-   * @param targetDir Target checkpoint directory
-   * @param storeToColumnFamilies Optional store name to its column families
-   * @param storeToColumnFamilyToSelectExprs Map store name to per column family custom selectExprs
-   * @param storeToColumnFamilyToStateSourceOptions Map store name to per column family
-   *                                                state source options
+   * @param sourceDir
+   *   Source checkpoint directory
+   * @param targetDir
+   *   Target checkpoint directory
+   * @param storeToColumnFamilies
+   *   Optional store name to its column families
+   * @param storeToColumnFamilyToSelectExprs
+   *   Map store name to per column family custom selectExprs
+   * @param storeToColumnFamilyToStateSourceOptions
+   *   Map store name to per column family state source options
    */
   private def performRoundTripTest(
       sourceDir: String,
       targetDir: String,
-      storeToColumnFamilies: Map[String, List[String]] =
-        Map(StateStoreId.DEFAULT_STORE_NAME -> List(StateStore.DEFAULT_COL_FAMILY_NAME)),
+      storeToColumnFamilies: Map[String, List[String]] = Map(
+        StateStoreId.DEFAULT_STORE_NAME -> List(StateStore.DEFAULT_COL_FAMILY_NAME)),
       storeToColumnFamilyToSelectExprs: Map[String, Map[String, Seq[String]]] = Map.empty,
       storeToColumnFamilyToStateSourceOptions: Map[String, Map[String, Map[String, String]]] =
         Map.empty,
       operatorName: String): Unit = {
     val hadoopConf = spark.sessionState.newHadoopConf()
-    val sourceCpLocation = StreamingUtils.resolvedCheckpointLocation(
-      hadoopConf, sourceDir)
-    val sourceCheckpointMetadata = new StreamingQueryCheckpointMetadata(
-      spark, sourceCpLocation)
+    val sourceCpLocation = StreamingUtils.resolvedCheckpointLocation(hadoopConf, sourceDir)
+    val sourceCheckpointMetadata = new StreamingQueryCheckpointMetadata(spark, sourceCpLocation)
     val readBatchId = sourceCheckpointMetadata.commitLog.getLatestBatchId().get
 
-    val targetCpLocation = StreamingUtils.resolvedCheckpointLocation(
-      hadoopConf, targetDir)
-    val targetCheckpointMetadata = new StreamingQueryCheckpointMetadata(
-      spark, targetCpLocation)
+    val targetCpLocation = StreamingUtils.resolvedCheckpointLocation(hadoopConf, targetDir)
+    val targetCheckpointMetadata = new StreamingQueryCheckpointMetadata(spark, targetCpLocation)
     // increase offsetCheckpoint
     val lastBatch = targetCheckpointMetadata.commitLog.getLatestBatchId().get
     val targetOffsetSeq = targetCheckpointMetadata.offsetLog.get(lastBatch).get
@@ -93,8 +94,7 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
       hadoopConf,
       readResolvedCheckpointLocation = Some(sourceCpLocation),
       transformFunc = None,
-      writeCheckpointMetadata = Some(targetCheckpointMetadata)
-    )
+      writeCheckpointMetadata = Some(targetCheckpointMetadata))
     val checkpointInfos = rewriter.run()
 
     // Commit to commitLog with checkpoint IDs
@@ -109,8 +109,8 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
       } else {
         s"state/0/0/$storeName"
       }
-      assert(!checkpointFileExists(new File(targetDir, storeNamePath),
-        versionToCheck, ".changelog"))
+      assert(
+        !checkpointFileExists(new File(targetDir, storeNamePath), versionToCheck, ".changelog"))
       assert(checkpointFileExists(new File(targetDir, storeNamePath), versionToCheck, ".zip"))
 
       // Validate by reading from both source and target using normal reader"
@@ -118,32 +118,37 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
       val defaultSelectExprs = Seq("key", "value", "partition_id")
 
       columnFamilies
-      // filtering out "default" for TWS operator because it doesn't contain any data
-      .filter(cfName => !(cfName == StateStore.DEFAULT_COL_FAMILY_NAME &&
-        StatefulOperatorsUtils.TRANSFORM_WITH_STATE_OP_NAMES.contains(operatorName)
-      ))
-      .foreach { cfName =>
-        val selectExprs = storeToColumnFamilyToSelectExprs.getOrElse(storeName, Map.empty)
-          .getOrElse(cfName, defaultSelectExprs)
-        val readerOptions = storeToColumnFamilyToStateSourceOptions.getOrElse(storeName, Map.empty)
-          .getOrElse(cfName, Map.empty)
+        // filtering out "default" for TWS operator because it doesn't contain any data
+        .filter(cfName =>
+          !(
+            cfName == StateStore.DEFAULT_COL_FAMILY_NAME &&
+              StatefulOperatorsUtils.TRANSFORM_WITH_STATE_OP_NAMES.contains(operatorName)
+          ))
+        .foreach { cfName =>
+          val selectExprs = storeToColumnFamilyToSelectExprs
+            .getOrElse(storeName, Map.empty)
+            .getOrElse(cfName, defaultSelectExprs)
+          val readerOptions = storeToColumnFamilyToStateSourceOptions
+            .getOrElse(storeName, Map.empty)
+            .getOrElse(cfName, Map.empty)
 
-        def readNormalData(dir: String): Array[Row] = {
-          var reader = spark.read
-            .format("statestore")
-            .option(StateSourceOptions.PATH, dir)
-            .option(StateSourceOptions.STORE_NAME, storeName)
-          readerOptions.foreach { case (k, v) => reader = reader.option(k, v) }
-          reader.load()
-            .selectExpr(selectExprs: _*)
-            .collect()
+          def readNormalData(dir: String): Array[Row] = {
+            var reader = spark.read
+              .format("statestore")
+              .option(StateSourceOptions.PATH, dir)
+              .option(StateSourceOptions.STORE_NAME, storeName)
+            readerOptions.foreach { case (k, v) => reader = reader.option(k, v) }
+            reader
+              .load()
+              .selectExpr(selectExprs: _*)
+              .collect()
+          }
+
+          val sourceNormalData = readNormalData(sourceDir)
+          val targetNormalData = readNormalData(targetDir)
+
+          validateDataMatches(sourceNormalData, targetNormalData)
         }
-
-        val sourceNormalData = readNormalData(sourceDir)
-        val targetNormalData = readNormalData(targetDir)
-
-        validateDataMatches(sourceNormalData, targetNormalData)
-      }
     }
   }
 
@@ -153,7 +158,8 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
   private def validateDataMatches(
       sourceNormalData: Array[Row],
       targetNormalData: Array[Row]): Unit = {
-    assert(sourceNormalData.length == targetNormalData.length,
+    assert(
+      sourceNormalData.length == targetNormalData.length,
       s"Row count mismatch: source=${sourceNormalData.length}, " +
         s"target=${targetNormalData.length}")
 
@@ -161,49 +167,53 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
     val sourceSorted = sourceNormalData.sortBy(_.toString)
     val targetSorted = targetNormalData.sortBy(_.toString)
 
-    sourceSorted.zip(targetSorted).zipWithIndex.foreach {
-      case ((sourceRow, targetRow), idx) =>
-        assert(sourceRow == targetRow,
-          s"Row mismatch at index $idx:\n" +
-            s"  Source: $sourceRow\n" +
-            s"  Target: $targetRow")
+    sourceSorted.zip(targetSorted).zipWithIndex.foreach { case ((sourceRow, targetRow), idx) =>
+      assert(
+        sourceRow == targetRow,
+        s"Row mismatch at index $idx:\n" +
+          s"  Source: $sourceRow\n" +
+          s"  Target: $targetRow")
     }
   }
 
-    /**
-     * Checks if a changelog file for the specified version exists in the given directory.
-     * A changelog file has the suffix ".changelog".
-     *
-     * @param dir Directory to search for changelog files
-     * @param version The version to check for existence
-     * @param suffix Either 'zip' or 'changelog'
-     * @return true if a changelog file with the given version exists, false otherwise
-     */
-    private def checkpointFileExists(dir: File, version: Long, suffix: String): Boolean = {
-      Option(dir.listFiles)
-        .getOrElse(Array.empty)
-        .map { file =>
-          file
+  /**
+   * Checks if a changelog file for the specified version exists in the given directory. A
+   * changelog file has the suffix ".changelog".
+   *
+   * @param dir
+   *   Directory to search for changelog files
+   * @param version
+   *   The version to check for existence
+   * @param suffix
+   *   Either 'zip' or 'changelog'
+   * @return
+   *   true if a changelog file with the given version exists, false otherwise
+   */
+  private def checkpointFileExists(dir: File, version: Long, suffix: String): Boolean = {
+    Option(dir.listFiles)
+      .getOrElse(Array.empty)
+      .map { file =>
+        file
+      }
+      .filter { file =>
+        file.getName.endsWith(suffix) && !file.getName.startsWith(".")
+      }
+      .exists { file =>
+        val nameWithoutSuffix = file.getName.stripSuffix(suffix)
+        val parts = nameWithoutSuffix.split("_")
+        parts.headOption match {
+          case Some(ver) if ver.forall(_.isDigit) => ver.toLong == version
+          case _ => false
         }
-        .filter { file =>
-          file.getName.endsWith(suffix) && !file.getName.startsWith(".")
-        }
-        .exists { file =>
-          val nameWithoutSuffix = file.getName.stripSuffix(suffix)
-          val parts = nameWithoutSuffix.split("_")
-          parts.headOption match {
-            case Some(ver) if ver.forall(_.isDigit) => ver.toLong == version
-            case _ => false
-          }
-        }
-    }
+      }
+  }
 
   private def createColFamilyInfo(
-       keySchema: StructType,
-       valueSchema: StructType,
-       keyStateEncoderSpec: KeyStateEncoderSpec,
-       colFamilyName: String,
-       useMultipleValuePerKey: Boolean = false): StatePartitionWriterColumnFamilyInfo = {
+      keySchema: StructType,
+      valueSchema: StructType,
+      keyStateEncoderSpec: KeyStateEncoderSpec,
+      colFamilyName: String,
+      useMultipleValuePerKey: Boolean = false): StatePartitionWriterColumnFamilyInfo = {
     StatePartitionWriterColumnFamilyInfo(
       schema = StateStoreColFamilySchema(
         colFamilyName,
@@ -211,15 +221,15 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
         keySchema,
         valueSchemaId = 0,
         valueSchema,
-        keyStateEncoderSpec = Some(keyStateEncoderSpec)
-      ),
+        keyStateEncoderSpec = Some(keyStateEncoderSpec)),
       useMultipleValuePerKey)
   }
 
   /**
-   * Helper method to test SPARK-54420 read and write with different state format versions
-   * for simple aggregation (single grouping key).
-   * @param stateVersion The state format version (1 or 2)
+   * Helper method to test SPARK-54420 read and write with different state format versions for
+   * simple aggregation (single grouping key).
+   * @param stateVersion
+   *   The state format version (1 or 2)
    */
   private def testRoundTripForAggrStateVersion(stateVersion: Int): Unit = {
     withSQLConf(SQLConf.STREAMING_AGGREGATION_STATE_FORMAT_VERSION.key -> stateVersion.toString) {
@@ -244,24 +254,23 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
             CheckLastBatch(
               (0, 2, 0, 0, 0), // 0
               (1, 2, 2, 1, 1) // 1
-            )
-          )
+            ))
 
           // Perform round-trip test using common helper
           performRoundTripTest(
             sourceDir.getAbsolutePath,
             targetDir.getAbsolutePath,
-            operatorName = StatefulOperatorsUtils.STATE_STORE_SAVE_EXEC_OP_NAME
-          )
+            operatorName = StatefulOperatorsUtils.STATE_STORE_SAVE_EXEC_OP_NAME)
         }
       }
     }
   }
 
   /**
-   * Helper method to test SPARK-54420 read and write with different state format versions
-   * for composite key aggregation (multiple grouping keys).
-   * @param stateVersion The state format version (1 or 2)
+   * Helper method to test SPARK-54420 read and write with different state format versions for
+   * composite key aggregation (multiple grouping keys).
+   * @param stateVersion
+   *   The state format version (1 or 2)
    */
   private def testCompositeKeyRoundTripForStateVersion(stateVersion: Int): Unit = {
     withSQLConf(SQLConf.STREAMING_AGGREGATION_STATE_FORMAT_VERSION.key -> stateVersion.toString) {
@@ -277,18 +286,13 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
             StartStream(checkpointLocation = targetDir.getAbsolutePath),
             // batch 0
             AddData(inputData, 0, 1),
-            CheckLastBatch(
-              (0, "Apple", 1, 0, 0, 0),
-              (1, "Banana", 1, 1, 1, 1)
-            )
-          )
+            CheckLastBatch((0, "Apple", 1, 0, 0, 0), (1, "Banana", 1, 1, 1, 1)))
 
           // Perform round-trip test using common helper
           performRoundTripTest(
             sourceDir.getAbsolutePath,
             targetDir.getAbsolutePath,
-            operatorName = StatefulOperatorsUtils.STATE_STORE_SAVE_EXEC_OP_NAME
-          )
+            operatorName = StatefulOperatorsUtils.STATE_STORE_SAVE_EXEC_OP_NAME)
         }
       }
     }
@@ -310,19 +314,18 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
           testStream(query)(
             StartStream(checkpointLocation = targetDir.getAbsolutePath),
             AddData(inputData, (1, 1L)),
-            CheckNewAnswer()
-          )
+            CheckNewAnswer())
 
           // Step 2: Test all 4 state stores created by stream-stream join
           val storeToColumnFamilies = StreamStreamJoinTestUtils.allStoreNames
-            .map(s => s -> List(StateStore.DEFAULT_COL_FAMILY_NAME)).toMap
+            .map(s => s -> List(StateStore.DEFAULT_COL_FAMILY_NAME))
+            .toMap
           // Perform round-trip test using common helper
           performRoundTripTest(
             sourceDir.getAbsolutePath,
             targetDir.getAbsolutePath,
             storeToColumnFamilies,
-            operatorName = StatefulOperatorsUtils.SYMMETRIC_HASH_JOIN_EXEC_OP_NAME
-          )
+            operatorName = StatefulOperatorsUtils.SYMMETRIC_HASH_JOIN_EXEC_OP_NAME)
         }
       }
     }
@@ -337,7 +340,8 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
       assume(java.nio.ByteOrder.nativeOrder().equals(java.nio.ByteOrder.LITTLE_ENDIAN))
     }
 
-    withSQLConf(SQLConf.FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION.key -> stateVersion.toString) {
+    withSQLConf(
+      SQLConf.FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION.key -> stateVersion.toString) {
       withTempDir { sourceDir =>
         withTempDir { targetDir =>
           // Step 1: Create state by running flatMapGroupsWithState
@@ -348,19 +352,19 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
           val inputData: MemoryStream[(String, Long)] = MemoryStream[(String, Long)]
           val query = getFlatMapGroupsWithStateQuery(inputData)
           testStream(query, OutputMode.Update)(
-            StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock,
+            StartStream(
+              Trigger.ProcessingTime("1 second"),
+              triggerClock = clock,
               checkpointLocation = targetDir.getAbsolutePath),
             AddData(inputData, ("a", 1L)),
             AdvanceManualClock(1 * 1000),
-            CheckLastBatch(("a", 1, 0, false))
-          )
+            CheckLastBatch(("a", 1, 0, false)))
 
           // Perform round-trip test using common helper
           performRoundTripTest(
             sourceDir.getAbsolutePath,
             targetDir.getAbsolutePath,
-            operatorName = StatefulOperatorsUtils.FLAT_MAP_GROUPS_WITH_STATE_EXEC_OP_NAME
-          )
+            operatorName = StatefulOperatorsUtils.FLAT_MAP_GROUPS_WITH_STATE_EXEC_OP_NAME)
         }
       }
     }
@@ -370,11 +374,13 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
    * Helper method to build timer column family schemas and options for
    * RunningCountStatefulProcessorWithProcTimeTimer and EventTimeTimerProcessor
    *
-   * @param timeMode Either TimeMode.EventTime() or TimeMode.ProcessingTime()
-   * @return A tuple of three elements:
-   *         - columnFamilyToSchemaMap: Maps column family names to their schema info
-   *         - columnFamilyToSelectExprs: Maps column family names to custom select expressions
-   *         - columnFamilyToStateSourceOptions: Maps column family names to state source options
+   * @param timeMode
+   *   Either TimeMode.EventTime() or TimeMode.ProcessingTime()
+   * @return
+   *   A tuple of three elements:
+   *   - columnFamilyToSchemaMap: Maps column family names to their schema info
+   *   - columnFamilyToSelectExprs: Maps column family names to custom select expressions
+   *   - columnFamilyToStateSourceOptions: Maps column family names to state source options
    */
   private def getTimerStateConfigsForCountState(timeMode: TimeMode): (
       Map[String, StatePartitionWriterColumnFamilyInfo],
@@ -397,16 +403,15 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
     val columnFamilyToSelectExprs = TimerTestUtils.getTimerColumnFamilyToSelectExprs(timeMode)
 
     val columnFamilyToStateSourceOptions = schemas.keys.map { cfName =>
-        if (cfName == keyToTimestampCF || cfName == timestampToKeyCF) {
-          cfName -> Map(StateSourceOptions.READ_REGISTERED_TIMERS -> "true")
-        } else {
-          cfName -> Map(StateSourceOptions.STATE_VAR_NAME -> cfName)
-        }
+      if (cfName == keyToTimestampCF || cfName == timestampToKeyCF) {
+        cfName -> Map(StateSourceOptions.READ_REGISTERED_TIMERS -> "true")
+      } else {
+        cfName -> Map(StateSourceOptions.STATE_VAR_NAME -> cfName)
+      }
     }.toMap
 
     (columnFamilyToSchemaMap, columnFamilyToSelectExprs, columnFamilyToStateSourceOptions)
   }
-
 
   // Run all tests with both changelog checkpointing enabled and disabled
   Seq(true, false).foreach { changelogCheckpointingEnabled =>
@@ -448,10 +453,8 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
       // Run transformWithState tests with different encoding formats
       Seq("unsaferow", "avro").foreach { encodingFormat =>
         def testWithChangelogAndEncodingConfig(testName: String)(testFun: => Unit): Unit = {
-          testWithChangelogAndCheckpointId(
-            s"$testName (encoding = $encodingFormat)") {
-            withSQLConf(
-              SQLConf.STREAMING_STATE_STORE_ENCODING_FORMAT.key -> encodingFormat) {
+          testWithChangelogAndCheckpointId(s"$testName (encoding = $encodingFormat)") {
+            withSQLConf(SQLConf.STREAMING_STATE_STORE_ENCODING_FORMAT.key -> encodingFormat) {
               testFun
             }
           }
@@ -462,23 +465,21 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
           withTempDir { sourceDir =>
             withTempDir { targetDir =>
               val inputData = MemoryStream[String]
-              val query = inputData.toDS()
+              val query = inputData
+                .toDS()
                 .groupByKey(x => x)
-                .transformWithState(new MultiStateVarProcessor(),
+                .transformWithState(
+                  new MultiStateVarProcessor(),
                   TimeMode.None(),
                   OutputMode.Update())
               def runQuery(checkpointLocation: String, roundsOfData: Int): Unit = {
                 val dataActions = (1 to roundsOfData).flatMap { _ =>
-                  Seq(
-                    AddData(inputData, "a", "b", "a"),
-                    ProcessAllAvailable()
-                  )
+                  Seq(AddData(inputData, "a", "b", "a"), ProcessAllAvailable())
                 }
                 testStream(query)(
                   Seq(StartStream(checkpointLocation = checkpointLocation)) ++
                     dataActions ++
-                    Seq(StopStream): _*
-                )
+                    Seq(StopStream): _*)
               }
 
               runQuery(sourceDir.getAbsolutePath, 2)
@@ -489,9 +490,7 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
                 .getColumnFamilyToSelectExprs()
 
               val columnFamilyToStateSourceOptions = schemas.keys.map { cfName =>
-                val base = Map(
-                  StateSourceOptions.STATE_VAR_NAME -> cfName
-                )
+                val base = Map(StateSourceOptions.STATE_VAR_NAME -> cfName)
 
                 val withFlatten =
                   if (cfName == MultiStateVarProcessorTestUtils.ITEMS_LIST) {
@@ -506,13 +505,13 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
               performRoundTripTest(
                 sourceDir.getAbsolutePath,
                 targetDir.getAbsolutePath,
-                storeToColumnFamilies = Map(StateStoreId.DEFAULT_STORE_NAME -> schemas.keys.toList),
+                storeToColumnFamilies =
+                  Map(StateStoreId.DEFAULT_STORE_NAME -> schemas.keys.toList),
                 storeToColumnFamilyToSelectExprs =
                   Map(StateStoreId.DEFAULT_STORE_NAME -> columnFamilyToSelectExprs),
                 storeToColumnFamilyToStateSourceOptions =
                   Map(StateStoreId.DEFAULT_STORE_NAME -> columnFamilyToStateSourceOptions),
-                operatorName = StatefulOperatorsUtils.TRANSFORM_WITH_STATE_EXEC_OP_NAME
-              )
+                operatorName = StatefulOperatorsUtils.TRANSFORM_WITH_STATE_EXEC_OP_NAME)
             }
           }
         }
@@ -522,7 +521,8 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
           withTempDir { sourceDir =>
             withTempDir { targetDir =>
               val inputData = MemoryStream[(String, Long)]
-              val result = inputData.toDS()
+              val result = inputData
+                .toDS()
                 .select(col("_1").as("key"), timestamp_seconds(col("_2")).as("eventTime"))
                 .withWatermark("eventTime", "10 seconds")
                 .as[(String, Timestamp)]
@@ -536,15 +536,13 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
                 StartStream(checkpointLocation = sourceDir.getAbsolutePath),
                 AddData(inputData, ("a", 1L), ("b", 2L), ("c", 3L)),
                 ProcessAllAvailable(),
-                StopStream
-              )
+                StopStream)
 
               testStream(result, OutputMode.Update())(
                 StartStream(checkpointLocation = targetDir.getAbsolutePath),
                 AddData(inputData, ("x", 1L)),
                 ProcessAllAvailable(),
-                StopStream
-              )
+                StopStream)
 
               val (schemaMap, selectExprs, stateSourceOptions) =
                 getTimerStateConfigsForCountState(TimeMode.EventTime())
@@ -558,8 +556,7 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
                   Map(StateStoreId.DEFAULT_STORE_NAME -> selectExprs),
                 storeToColumnFamilyToStateSourceOptions =
                   Map(StateStoreId.DEFAULT_STORE_NAME -> stateSourceOptions),
-                operatorName = StatefulOperatorsUtils.TRANSFORM_WITH_STATE_EXEC_OP_NAME
-              )
+                operatorName = StatefulOperatorsUtils.TRANSFORM_WITH_STATE_EXEC_OP_NAME)
             }
           }
         }
@@ -570,32 +567,34 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
             withTempDir { targetDir =>
               val clock = new StreamManualClock
               val inputData = MemoryStream[String]
-              val result = inputData.toDS()
+              val result = inputData
+                .toDS()
                 .groupByKey(x => x)
-                .transformWithState(new RunningCountStatefulProcessorWithProcTimeTimer(),
+                .transformWithState(
+                  new RunningCountStatefulProcessorWithProcTimeTimer(),
                   TimeMode.ProcessingTime(),
                   OutputMode.Update())
 
               testStream(result, OutputMode.Update())(
-                StartStream(checkpointLocation = sourceDir.getAbsolutePath,
+                StartStream(
+                  checkpointLocation = sourceDir.getAbsolutePath,
                   trigger = Trigger.ProcessingTime("1 second"),
                   triggerClock = clock),
                 AddData(inputData, "a"),
                 AdvanceManualClock(1 * 1000),
                 CheckNewAnswer(("a", "1")),
-                StopStream
-              )
+                StopStream)
 
               val clock2 = new StreamManualClock
               testStream(result, OutputMode.Update())(
-                StartStream(checkpointLocation = targetDir.getAbsolutePath,
+                StartStream(
+                  checkpointLocation = targetDir.getAbsolutePath,
                   trigger = Trigger.ProcessingTime("1 second"),
                   triggerClock = clock2),
                 AddData(inputData, "x"),
                 AdvanceManualClock(1 * 1000),
                 CheckNewAnswer(("a", "1"), ("x", "1")),
-                StopStream
-              )
+                StopStream)
 
               val (schemaMap, selectExprs, sourceOptions) =
                 getTimerStateConfigsForCountState(TimeMode.ProcessingTime())
@@ -609,8 +608,7 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
                   Map(StateStoreId.DEFAULT_STORE_NAME -> selectExprs),
                 storeToColumnFamilyToStateSourceOptions =
                   Map(StateStoreId.DEFAULT_STORE_NAME -> sourceOptions),
-                operatorName = StatefulOperatorsUtils.TRANSFORM_WITH_STATE_EXEC_OP_NAME
-              )
+                operatorName = StatefulOperatorsUtils.TRANSFORM_WITH_STATE_EXEC_OP_NAME)
             }
           }
         }
@@ -621,39 +619,40 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
               val clock = new StreamManualClock
               val inputData = MemoryStream[InputEvent]
               val ttlConfig = TTLConfig(ttlDuration = Duration.ofMinutes(1))
-              val result = inputData.toDS()
+              val result = inputData
+                .toDS()
                 .groupByKey(x => x.key)
-                .transformWithState(new ListStateTTLProcessor(ttlConfig),
+                .transformWithState(
+                  new ListStateTTLProcessor(ttlConfig),
                   TimeMode.ProcessingTime(),
                   OutputMode.Update())
 
               testStream(result, OutputMode.Update())(
-                StartStream(checkpointLocation = sourceDir.getAbsolutePath,
+                StartStream(
+                  checkpointLocation = sourceDir.getAbsolutePath,
                   trigger = Trigger.ProcessingTime("1 second"),
                   triggerClock = clock),
                 AddData(inputData, InputEvent("k1", "put", 1)),
                 AdvanceManualClock(1 * 1000),
                 CheckNewAnswer(),
-                StopStream
-              )
+                StopStream)
 
               val clock2 = new StreamManualClock
               testStream(result, OutputMode.Update())(
-                StartStream(checkpointLocation = targetDir.getAbsolutePath,
+                StartStream(
+                  checkpointLocation = targetDir.getAbsolutePath,
                   trigger = Trigger.ProcessingTime("1 second"),
                   triggerClock = clock2),
                 AddData(inputData, InputEvent("k1", "append", 1)),
                 AdvanceManualClock(1 * 1000),
                 CheckNewAnswer(),
-                StopStream
-              )
+                StopStream)
 
               val schemas = TTLProcessorUtils.getListStateTTLSchemasWithMetadata()
 
               val columnFamilyToSelectExprs = Map(
                 TTLProcessorUtils.LIST_STATE -> TTLProcessorUtils.getTTLSelectExpressions(
-                  TTLProcessorUtils.LIST_STATE
-                ))
+                  TTLProcessorUtils.LIST_STATE))
 
               val columnFamilyToStateSourceOptions = schemas.keys.map { cfName =>
                 val base = Map(StateSourceOptions.STATE_VAR_NAME -> cfName)
@@ -677,8 +676,7 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
                   Map(StateStoreId.DEFAULT_STORE_NAME -> columnFamilyToSelectExprs),
                 storeToColumnFamilyToStateSourceOptions =
                   Map(StateStoreId.DEFAULT_STORE_NAME -> columnFamilyToStateSourceOptions),
-                operatorName = StatefulOperatorsUtils.TRANSFORM_WITH_STATE_EXEC_OP_NAME
-              )
+                operatorName = StatefulOperatorsUtils.TRANSFORM_WITH_STATE_EXEC_OP_NAME)
             }
           }
         }
@@ -689,39 +687,40 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
               val clock = new StreamManualClock
               val inputData = MemoryStream[MapInputEvent]
               val ttlConfig = TTLConfig(ttlDuration = Duration.ofMinutes(1))
-              val result = inputData.toDS()
+              val result = inputData
+                .toDS()
                 .groupByKey(x => x.key)
-                .transformWithState(new MapStateTTLProcessor(ttlConfig),
+                .transformWithState(
+                  new MapStateTTLProcessor(ttlConfig),
                   TimeMode.ProcessingTime(),
                   OutputMode.Update())
 
               testStream(result)(
-                StartStream(checkpointLocation = sourceDir.getAbsolutePath,
+                StartStream(
+                  checkpointLocation = sourceDir.getAbsolutePath,
                   trigger = Trigger.ProcessingTime("1 second"),
                   triggerClock = clock),
                 AddData(inputData, MapInputEvent("a", "key1", "put", 1)),
                 AdvanceManualClock(1 * 1000),
                 CheckNewAnswer(),
-                StopStream
-              )
+                StopStream)
 
               val clock2 = new StreamManualClock
               testStream(result)(
-                StartStream(checkpointLocation = targetDir.getAbsolutePath,
+                StartStream(
+                  checkpointLocation = targetDir.getAbsolutePath,
                   trigger = Trigger.ProcessingTime("1 second"),
                   triggerClock = clock2),
                 AddData(inputData, MapInputEvent("x", "key1", "put", 1)),
                 AdvanceManualClock(1 * 1000),
                 CheckNewAnswer(),
-                StopStream
-              )
+                StopStream)
 
               val schemas = TTLProcessorUtils.getMapStateTTLSchemasWithMetadata()
 
               val columnFamilyToSelectExprs = Map(
                 TTLProcessorUtils.MAP_STATE -> TTLProcessorUtils.getTTLSelectExpressions(
-                  TTLProcessorUtils.MAP_STATE
-                ))
+                  TTLProcessorUtils.MAP_STATE))
 
               val columnFamilyToStateSourceOptions = schemas.keys.map { cfName =>
                 cfName -> Map(StateSourceOptions.STATE_VAR_NAME -> cfName)
@@ -736,8 +735,7 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
                   Map(StateStoreId.DEFAULT_STORE_NAME -> columnFamilyToSelectExprs),
                 storeToColumnFamilyToStateSourceOptions =
                   Map(StateStoreId.DEFAULT_STORE_NAME -> columnFamilyToStateSourceOptions),
-                operatorName = StatefulOperatorsUtils.TRANSFORM_WITH_STATE_EXEC_OP_NAME
-              )
+                operatorName = StatefulOperatorsUtils.TRANSFORM_WITH_STATE_EXEC_OP_NAME)
             }
           }
         }
@@ -748,33 +746,35 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
               val clock = new StreamManualClock
               val inputData = MemoryStream[InputEvent]
               val ttlConfig = TTLConfig(ttlDuration = Duration.ofMinutes(1))
-              val result = inputData.toDS()
+              val result = inputData
+                .toDS()
                 .groupByKey(x => x.key)
-                .transformWithState(new ValueStateTTLProcessor(ttlConfig),
+                .transformWithState(
+                  new ValueStateTTLProcessor(ttlConfig),
                   TimeMode.ProcessingTime(),
                   OutputMode.Update())
 
               testStream(result)(
-                StartStream(checkpointLocation = sourceDir.getAbsolutePath,
+                StartStream(
+                  checkpointLocation = sourceDir.getAbsolutePath,
                   trigger = Trigger.ProcessingTime("1 second"),
                   triggerClock = clock),
                 AddData(inputData, InputEvent("k1", "put", 1)),
                 AddData(inputData, InputEvent("k2", "put", 2)),
                 AdvanceManualClock(1 * 1000),
                 CheckNewAnswer(),
-                StopStream
-              )
+                StopStream)
 
               val clock2 = new StreamManualClock
               testStream(result)(
-                StartStream(checkpointLocation = targetDir.getAbsolutePath,
+                StartStream(
+                  checkpointLocation = targetDir.getAbsolutePath,
                   trigger = Trigger.ProcessingTime("1 second"),
                   triggerClock = clock2),
                 AddData(inputData, InputEvent("x", "put", 1)),
                 AdvanceManualClock(1 * 1000),
                 CheckNewAnswer(),
-                StopStream
-              )
+                StopStream)
 
               val schemas = TTLProcessorUtils.getValueStateTTLSchemasWithMetadata()
 
@@ -789,8 +789,7 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
                   Map(StateStoreId.DEFAULT_STORE_NAME -> schemas.keys.toList),
                 storeToColumnFamilyToStateSourceOptions =
                   Map(StateStoreId.DEFAULT_STORE_NAME -> columnFamilyToStateSourceOptions),
-                operatorName = StatefulOperatorsUtils.TRANSFORM_WITH_STATE_EXEC_OP_NAME
-              )
+                operatorName = StatefulOperatorsUtils.TRANSFORM_WITH_STATE_EXEC_OP_NAME)
             }
           }
         }
@@ -819,15 +818,13 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
           testStream(deduped, OutputMode.Append)(
             StartStream(checkpointLocation = targetDir.getAbsolutePath),
             AddData(inputData, ("a", 1)),
-            CheckAnswer(("a", 1))
-          )
+            CheckAnswer(("a", 1)))
 
           // Perform round-trip test using common helper
           performRoundTripTest(
             sourceDir.getAbsolutePath,
             targetDir.getAbsolutePath,
-            operatorName = StatefulOperatorsUtils.DEDUPLICATE_WITHIN_WATERMARK_EXEC_OP_NAME
-          )
+            operatorName = StatefulOperatorsUtils.DEDUPLICATE_WITHIN_WATERMARK_EXEC_OP_NAME)
         }
       }
     }
@@ -844,15 +841,13 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
           testStream(deduped, OutputMode.Append)(
             StartStream(checkpointLocation = targetDir.getAbsolutePath),
             AddData(inputData, ("a", 1)),
-            CheckAnswer(("a", 1))
-          )
+            CheckAnswer(("a", 1)))
 
           // Perform round-trip test using common helper
           performRoundTripTest(
             sourceDir.getAbsolutePath,
             targetDir.getAbsolutePath,
-            operatorName = StatefulOperatorsUtils.DEDUPLICATE_EXEC_OP_NAME
-          )
+            operatorName = StatefulOperatorsUtils.DEDUPLICATE_EXEC_OP_NAME)
         }
       }
     }
@@ -869,18 +864,14 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
           testStream(aggregated, OutputMode.Complete())(
             StartStream(checkpointLocation = targetDir.getAbsolutePath),
             AddData(inputData, ("a", 40L)),
-            CheckNewAnswer(
-              ("a", 40, 50, 10, 1)
-            ),
-            StopStream
-          )
+            CheckNewAnswer(("a", 40, 50, 10, 1)),
+            StopStream)
 
           // Perform round-trip test using common helper
           performRoundTripTest(
             sourceDir.getAbsolutePath,
             targetDir.getAbsolutePath,
-            operatorName = StatefulOperatorsUtils.SESSION_WINDOW_STATE_STORE_SAVE_EXEC_OP_NAME
-          )
+            operatorName = StatefulOperatorsUtils.SESSION_WINDOW_STATE_STORE_SAVE_EXEC_OP_NAME)
         }
       }
     }
@@ -888,7 +879,6 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
     testWithChangelogConfig("SPARK-54420: dropDuplicates") {
       withTempDir { sourceDir =>
         withTempDir { targetDir =>
-
           // Step 1: Create state by running a streaming aggregation
           runDropDuplicatesQuery(sourceDir.getAbsolutePath)
           val inputData: MemoryStream[Int] = MemoryStream[Int]
@@ -897,15 +887,13 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
             StartStream(checkpointLocation = targetDir.getAbsolutePath),
             AddData(inputData, (1 to 5).flatMap(_ => (10 to 15)): _*),
             CheckAnswer(10 to 15: _*),
-            assertNumStateRows(total = 6, updated = 6)
-          )
+            assertNumStateRows(total = 6, updated = 6))
 
           // Perform round-trip test using common helper
           performRoundTripTest(
             sourceDir.getAbsolutePath,
             targetDir.getAbsolutePath,
-            operatorName = StatefulOperatorsUtils.DEDUPLICATE_EXEC_OP_NAME
-          )
+            operatorName = StatefulOperatorsUtils.DEDUPLICATE_EXEC_OP_NAME)
         }
       }
     }
@@ -917,9 +905,7 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
     }
 
     testWithChangelogConfig("SPARK-54411: stream-stream join state ver 3") {
-      withSQLConf(
-        SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key -> "3"
-      ) {
+      withSQLConf(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key -> "3") {
         withTempDir { sourceDir =>
           withTempDir { targetDir =>
             val inputData = MemoryStream[(Int, Long)]
@@ -929,14 +915,12 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
               val dataActions = (1 to roundsOfData).flatMap { _ =>
                 Seq(
                   AddData(inputData, (1, 1L), (2, 2L), (3, 3L), (4, 4L), (5, 5L)),
-                  ProcessAllAvailable()
-                )
+                  ProcessAllAvailable())
               }
               testStream(query)(
                 (Seq(StartStream(checkpointLocation = checkpointLocation)) ++
                   dataActions ++
-                  Seq(StopStream)): _*
-              )
+                  Seq(StopStream)): _*)
             }
 
             runQuery(sourceDir.getAbsolutePath, roundsOfData = 2)
@@ -948,11 +932,10 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
               targetDir.getAbsolutePath,
               storeToColumnFamilies = Map(StateStoreId.DEFAULT_STORE_NAME -> allColFamilyNames),
               storeToColumnFamilyToStateSourceOptions =
-                Map(StateStoreId.DEFAULT_STORE_NAME -> allColFamilyNames.map {
-                  cfName => cfName -> Map(StateSourceOptions.STORE_NAME -> cfName)
+                Map(StateStoreId.DEFAULT_STORE_NAME -> allColFamilyNames.map { cfName =>
+                  cfName -> Map(StateSourceOptions.STORE_NAME -> cfName)
                 }.toMap),
-              operatorName = StatefulOperatorsUtils.SYMMETRIC_HASH_JOIN_EXEC_OP_NAME
-            )
+              operatorName = StatefulOperatorsUtils.SYMMETRIC_HASH_JOIN_EXEC_OP_NAME)
           }
         }
       }
@@ -964,8 +947,8 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
       withTempDir { sourceDir =>
         // Step 1: Create state by running a streaming aggregation
         runDropDuplicatesQuery(sourceDir.getAbsolutePath)
-        val sourceCheckpointMetadata = new StreamingQueryCheckpointMetadata(
-          spark, sourceDir.getAbsolutePath)
+        val sourceCheckpointMetadata =
+          new StreamingQueryCheckpointMetadata(spark, sourceDir.getAbsolutePath)
         val readBatchId = sourceCheckpointMetadata.commitLog.getLatestBatchId().get
         // Forced set STATE_STORE_CHECKPOINT_FORMAT_VERSION to 1 to mimic when user forgot to
         // update checkpoint version to 2 in sqlConfig when running stateRewriter
@@ -977,8 +960,7 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
             readBatchId,
             readBatchId + 1,
             sourceDir.getAbsolutePath,
-            spark.sessionState.newHadoopConf()
-          )
+            spark.sessionState.newHadoopConf())
           rewriter.run()
         }
 
@@ -990,8 +972,7 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
             "checkpointLocation" -> sourceDir.getAbsolutePath,
             "expectedVersion" -> "2",
             "actualVersion" -> "1",
-            "sqlConfKey" -> SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key)
-        )
+            "sqlConfKey" -> SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key))
       }
     }
   }

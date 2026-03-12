@@ -79,7 +79,6 @@ abstract class HashedRelationSuite extends SharedSparkSession {
     val toUnsafe = UnsafeProjection.create(schema)
     val unsafeData = data.map(toUnsafe(_).copy())
 
-
     val buildKey = Seq(BoundReference(0, IntegerType, false))
     val hashed = UnsafeHashedRelation(unsafeData.iterator, buildKey, 1, mm)
     assert(hashed.isInstanceOf[UnsafeHashedRelation])
@@ -205,7 +204,6 @@ abstract class HashedRelationSuite extends SharedSparkSession {
       map.free()
     }
 
-
     {
       // SPARK-16802
       val keys = Seq(Long.MaxValue, Long.MaxValue - 10)
@@ -319,8 +317,8 @@ abstract class HashedRelationSuite extends SharedSparkSession {
   }
 
   test("Spark-14521") {
-    val ser = new KryoSerializer(
-      (new SparkConf).set(KRYO_REFERENCE_TRACKING, false)).newInstance()
+    val ser =
+      new KryoSerializer((new SparkConf).set(KRYO_REFERENCE_TRACKING, false)).newInstance()
     val key = Seq(BoundReference(0, LongType, false))
 
     // Testing Kryo serialization of HashedRelation
@@ -397,8 +395,7 @@ abstract class HashedRelationSuite extends SharedSparkSession {
   // This test require 4G heap to run, should run it manually
   ignore("build HashedRelation that is larger than 1G") {
     val unsafeProj = UnsafeProjection.create(
-      Seq(BoundReference(0, IntegerType, false),
-        BoundReference(1, StringType, true)))
+      Seq(BoundReference(0, IntegerType, false), BoundReference(1, StringType, true)))
     val unsafeRow = unsafeProj(InternalRow(0, UTF8String.fromString(" ".repeat(100))))
     val key = Seq(BoundReference(0, IntegerType, false))
     val rows = (0 until (1 << 24)).iterator.map { i =>
@@ -424,8 +421,7 @@ abstract class HashedRelationSuite extends SharedSparkSession {
   // This test require 4G heap to run, should run it manually
   ignore("build HashedRelation with more than 100 millions rows") {
     val unsafeProj = UnsafeProjection.create(
-      Seq(BoundReference(0, IntegerType, false),
-        BoundReference(1, StringType, true)))
+      Seq(BoundReference(0, IntegerType, false), BoundReference(1, StringType, true)))
     val unsafeRow = unsafeProj(InternalRow(0, UTF8String.fromString(" ".repeat(100))))
     val key = Seq(BoundReference(0, IntegerType, false))
     val rows = (0 until (1 << 10)).iterator.map { i =>
@@ -460,8 +456,8 @@ abstract class HashedRelationSuite extends SharedSparkSession {
 
   test("LongToUnsafeRowMap: key set iterator on a contiguous array of keys") {
     val rowMap = new LongToUnsafeRowMap(mm, 1)
-    contiguousArray.toArray.lazyZip(contiguousRows).map {
-      (i, row) => rowMap.append(i, row)
+    contiguousArray.toArray.lazyZip(contiguousRows).map { (i, row) =>
+      rowMap.append(i, row)
     }
     var keyIterator = rowMap.keys()
     // in sparse mode the keys are unsorted
@@ -475,8 +471,8 @@ abstract class HashedRelationSuite extends SharedSparkSession {
 
   test("LongToUnsafeRowMap: key set iterator on a sparse array with equidistant keys") {
     val rowMap = new LongToUnsafeRowMap(mm, 1)
-    sparseArray.toArray.lazyZip(sparseRows).map {
-      (i, row) => rowMap.append(i, row)
+    sparseArray.toArray.lazyZip(sparseRows).map { (i, row) =>
+      rowMap.append(i, row)
     }
     var keyIterator = rowMap.keys()
     assert(keyIterator.map(_.getLong(0)).toArray.sortWith(_ < _) === sparseArray)
@@ -502,8 +498,8 @@ abstract class HashedRelationSuite extends SharedSparkSession {
 
   test("LongToUnsafeRowMap: multiple hasNext calls before calling next() on the key iterator") {
     val rowMap = new LongToUnsafeRowMap(mm, 1)
-    randomArray.toArray.lazyZip(randomRows).map {
-      (i, row) => rowMap.append(i, row)
+    randomArray.toArray.lazyZip(randomRows).map { (i, row) =>
+      rowMap.append(i, row)
     }
     val buffer = new ArrayBuffer[Long]()
     // hasNext should not change the cursor unless the key was read by a next() call
@@ -529,8 +525,8 @@ abstract class HashedRelationSuite extends SharedSparkSession {
 
   test("LongToUnsafeRowMap: no explicit hasNext calls on the key iterator") {
     val rowMap = new LongToUnsafeRowMap(mm, 1)
-    randomArray.toArray.lazyZip(randomRows).map {
-      (i, row) => rowMap.append(i, row)
+    randomArray.toArray.lazyZip(randomRows).map { (i, row) =>
+      rowMap.append(i, row)
     }
     val buffer = new ArrayBuffer[Long]()
     // call next() until the buffer is filled with all keys
@@ -544,8 +540,7 @@ abstract class HashedRelationSuite extends SharedSparkSession {
         keyIterator.next()
       },
       condition = "INTERNAL_ERROR",
-      parameters = Map("message" -> "End of the iterator.")
-    )
+      parameters = Map("message" -> "End of the iterator."))
     assert(buffer.sortWith(_ < _) === randomArray)
     buffer.clear()
 
@@ -560,8 +555,8 @@ abstract class HashedRelationSuite extends SharedSparkSession {
 
   test("LongToUnsafeRowMap: call hasNext at the end of the iterator") {
     val rowMap = new LongToUnsafeRowMap(mm, 1)
-    sparseArray.toArray.lazyZip(sparseRows).map {
-      (i, row) => rowMap.append(i, row)
+    sparseArray.toArray.lazyZip(sparseRows).map { (i, row) =>
+      rowMap.append(i, row)
     }
     var keyIterator = rowMap.keys()
     assert(keyIterator.map(key => key.getLong(0)).toArray.sortWith(_ < _) === sparseArray)
@@ -578,8 +573,8 @@ abstract class HashedRelationSuite extends SharedSparkSession {
 
   test("LongToUnsafeRowMap: random sequence of hasNext and next() calls on the key iterator") {
     val rowMap = new LongToUnsafeRowMap(mm, 1)
-    randomArray.toArray.lazyZip(randomRows).map {
-      (i, row) => rowMap.append(i, row)
+    randomArray.toArray.lazyZip(randomRows).map { (i, row) =>
+      rowMap.append(i, row)
     }
     val buffer = new ArrayBuffer[Long]()
     // call hasNext or next() at random
@@ -609,7 +604,8 @@ abstract class HashedRelationSuite extends SharedSparkSession {
 
   test("HashJoin: packing and unpacking with the same key type in a LongType") {
     val row = InternalRow(0.toShort, 1.toShort, 2.toShort, 3.toShort)
-    val keys = Seq(BoundReference(0, ShortType, false),
+    val keys = Seq(
+      BoundReference(0, ShortType, false),
       BoundReference(1, ShortType, false),
       BoundReference(2, ShortType, false),
       BoundReference(3, ShortType, false))
@@ -626,7 +622,8 @@ abstract class HashedRelationSuite extends SharedSparkSession {
 
   test("HashJoin: packing and unpacking with various key types in a LongType") {
     val row = InternalRow((-1).toByte, (-2).toInt, (-3).toShort)
-    val keys = Seq(BoundReference(0, ByteType, false),
+    val keys = Seq(
+      BoundReference(0, ByteType, false),
       BoundReference(1, IntegerType, false),
       BoundReference(2, ShortType, false))
     // Rewrite and exacting key expressions should not cause exception when ANSI mode is on.
@@ -680,8 +677,10 @@ abstract class HashedRelationSuite extends SharedSparkSession {
     // test getWithKeyIndex()
     (0 until 10).foreach(i => {
       val key = if (i == 0) InternalRow(null) else InternalRow(i)
-      val valuesWithKeyIndex = unsafeRelation.getWithKeyIndex(toUnsafe(key)).map(
-        v => (v.getKeyIndex, v.getValue.getInt(1))).toArray
+      val valuesWithKeyIndex = unsafeRelation
+        .getWithKeyIndex(toUnsafe(key))
+        .map(v => (v.getKeyIndex, v.getValue.getInt(1)))
+        .toArray
       val keyIndex = valuesWithKeyIndex.head._1
       val actualValues = valuesWithKeyIndex.map(_._2)
       val expectedValues = (0 until 10).map(j => j * 10 + i)
@@ -697,11 +696,14 @@ abstract class HashedRelationSuite extends SharedSparkSession {
       assert(actualValues.sortWith(_ < _) === expectedValues)
     })
     // key index is unique per key
-    val numUniqueKeyIndex = (0 until 10).flatMap(i => {
-      val key = if (i == 0) InternalRow(null) else InternalRow(i)
-      val keyIndex = unsafeRelation.getWithKeyIndex(toUnsafe(key)).map(_.getKeyIndex).toSeq
-      keyIndex
-    }).distinct.size
+    val numUniqueKeyIndex = (0 until 10)
+      .flatMap(i => {
+        val key = if (i == 0) InternalRow(null) else InternalRow(i)
+        val keyIndex = unsafeRelation.getWithKeyIndex(toUnsafe(key)).map(_.getKeyIndex).toSeq
+        keyIndex
+      })
+      .distinct
+      .size
     assert(numUniqueKeyIndex == 10)
     // NULL for non-existing key
     assert(unsafeRelation.getWithKeyIndex(toUnsafe(InternalRow(100))) == null)
@@ -719,24 +721,26 @@ abstract class HashedRelationSuite extends SharedSparkSession {
     assert(unsafeRelation.getValueWithKeyIndex(toUnsafe(InternalRow(100))) == null)
 
     // test valuesWithKeyIndex()
-    val keyIndexToRowMap = unsafeRelation.valuesWithKeyIndex().map(
-      v => (v.getKeyIndex, v.getValue.copy())).toSeq.groupBy(_._1)
+    val keyIndexToRowMap = unsafeRelation
+      .valuesWithKeyIndex()
+      .map(v => (v.getKeyIndex, v.getValue.copy()))
+      .toSeq
+      .groupBy(_._1)
     assert(keyIndexToRowMap.size == 11)
-    keyIndexToRowMap.foreach {
-      case (keyIndex, row) =>
-        val expectedKey = keyIndexToKeyMap(keyIndex)
-        val expectedValues = keyIndexToValueMap(keyIndex)
-        // key index returned from valuesWithKeyIndex()
-        // should be the same as returned from getWithKeyIndex()
-        if (expectedKey == "null") {
-          assert(row.head._2.isNullAt(0))
-        } else {
-          assert(row.head._2.getInt(0).toString == expectedKey)
-        }
-        // values returned from valuesWithKeyIndex()
-        // should have same value and order as returned from getWithKeyIndex()
-        val actualValues = row.map(_._2.getInt(1))
-        assert(actualValues === expectedValues)
+    keyIndexToRowMap.foreach { case (keyIndex, row) =>
+      val expectedKey = keyIndexToKeyMap(keyIndex)
+      val expectedValues = keyIndexToValueMap(keyIndex)
+      // key index returned from valuesWithKeyIndex()
+      // should be the same as returned from getWithKeyIndex()
+      if (expectedKey == "null") {
+        assert(row.head._2.isNullAt(0))
+      } else {
+        assert(row.head._2.getInt(0).toString == expectedKey)
+      }
+      // values returned from valuesWithKeyIndex()
+      // should have same value and order as returned from getWithKeyIndex()
+      val actualValues = row.map(_._2.getInt(1))
+      assert(actualValues === expectedValues)
     }
     unsafeRelation.close()
   }

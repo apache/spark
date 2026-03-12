@@ -23,12 +23,11 @@ import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.types._
 
 /**
- * Returns the first value of `child` for a group of rows. If the first value of `child`
- * is `null`, it returns `null` (respecting nulls). Even if [[AnyValue]] is used on an already
- * sorted column, if we do partial aggregation and final aggregation (when mergeExpression
- * is used) its result will not be deterministic (unless the input table is sorted and has
- * a single partition, and we use a single reducer to do the aggregation.).
- * Interchangeable with [[First]].
+ * Returns the first value of `child` for a group of rows. If the first value of `child` is
+ * `null`, it returns `null` (respecting nulls). Even if [[AnyValue]] is used on an already sorted
+ * column, if we do partial aggregation and final aggregation (when mergeExpression is used) its
+ * result will not be deterministic (unless the input table is sorted and has a single partition,
+ * and we use a single reducer to do the aggregation.). Interchangeable with [[First]].
  */
 @ExpressionDescription(
   usage = """
@@ -49,7 +48,9 @@ import org.apache.spark.sql.types._
   group = "agg_funcs",
   since = "3.4.0")
 case class AnyValue(child: Expression, ignoreNulls: Boolean)
-  extends AggregateFunction with ExpectsInputTypes with RuntimeReplaceableAggregate
+    extends AggregateFunction
+    with ExpectsInputTypes
+    with RuntimeReplaceableAggregate
     with UnaryLike[Expression] {
   override lazy val replacement: Expression = First(child, ignoreNulls)
 

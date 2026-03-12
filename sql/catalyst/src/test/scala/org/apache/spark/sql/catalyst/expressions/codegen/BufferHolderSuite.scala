@@ -39,7 +39,6 @@ class BufferHolderSuite extends SparkFunSuite {
         holder.grow(Integer.MAX_VALUE)
       },
       condition = "_LEGACY_ERROR_TEMP_3199",
-      parameters = Map("neededSize" -> "2147483647", "arrayMax" -> "2147483632")
-    )
+      parameters = Map("neededSize" -> "2147483647", "arrayMax" -> "2147483632"))
   }
 }

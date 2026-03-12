@@ -38,7 +38,8 @@ class JSONOptions(
     @transient val parameters: CaseInsensitiveMap[String],
     private val defaultTimeZoneId: String,
     private val defaultColumnNameOfCorruptRecord: String)
-  extends FileSourceOptions(parameters) with Logging  {
+    extends FileSourceOptions(parameters)
+    with Logging {
 
   import JSONOptions._
 
@@ -58,13 +59,10 @@ class JSONOptions(
     .getOrElse(StreamReadConstraints.DEFAULT_MAX_STRING_LEN)
 
   def this(
-    parameters: Map[String, String],
-    defaultTimeZoneId: String,
-    defaultColumnNameOfCorruptRecord: String = "") = {
-      this(
-        CaseInsensitiveMap(parameters),
-        defaultTimeZoneId,
-        defaultColumnNameOfCorruptRecord)
+      parameters: Map[String, String],
+      defaultTimeZoneId: String,
+      defaultColumnNameOfCorruptRecord: String = "") = {
+    this(CaseInsensitiveMap(parameters), defaultTimeZoneId, defaultColumnNameOfCorruptRecord)
   }
 
   val samplingRatio =
@@ -94,10 +92,13 @@ class JSONOptions(
     parameters.getOrElse(COLUMN_NAME_OF_CORRUPT_RECORD, defaultColumnNameOfCorruptRecord)
 
   // Whether to ignore column of all null values or empty array/struct during schema inference
-  val dropFieldIfAllNull = parameters.get(DROP_FIELD_IF_ALL_NULL).map(_.toBoolean).getOrElse(false)
+  val dropFieldIfAllNull =
+    parameters.get(DROP_FIELD_IF_ALL_NULL).map(_.toBoolean).getOrElse(false)
 
   // Whether to ignore null fields during json generating
-  val ignoreNullFields = parameters.get(IGNORE_NULL_FIELDS).map(_.toBoolean)
+  val ignoreNullFields = parameters
+    .get(IGNORE_NULL_FIELDS)
+    .map(_.toBoolean)
     .getOrElse(SQLConf.get.jsonGeneratorIgnoreNullFields)
 
   // If this is true, when writing NULL values to columns of JSON tables with explicit DEFAULT
@@ -117,8 +118,9 @@ class JSONOptions(
 
   val timestampFormatInRead: Option[String] =
     if (SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {
-      Some(parameters.getOrElse(TIMESTAMP_FORMAT,
-        s"${DateFormatter.defaultPattern}'T'HH:mm:ss.SSSXXX"))
+      Some(
+        parameters
+          .getOrElse(TIMESTAMP_FORMAT, s"${DateFormatter.defaultPattern}'T'HH:mm:ss.SSSXXX"))
     } else {
       parameters.get(TIMESTAMP_FORMAT)
     }
@@ -127,7 +129,9 @@ class JSONOptions(
 
   val timestampNTZFormatInRead: Option[String] = parameters.get(TIMESTAMP_NTZ_FORMAT)
   val timestampNTZFormatInWrite: String =
-    parameters.getOrElse(TIMESTAMP_NTZ_FORMAT, s"${DateFormatter.defaultPattern}'T'HH:mm:ss[.SSS]")
+    parameters.getOrElse(
+      TIMESTAMP_NTZ_FORMAT,
+      s"${DateFormatter.defaultPattern}'T'HH:mm:ss[.SSS]")
 
   val timeFormatInRead: Option[String] = parameters.get(TIME_FORMAT)
   val timeFormatInWrite: String = parameters.getOrElse(TIME_FORMAT, TimeFormatter.defaultPattern)
@@ -159,7 +163,7 @@ class JSONOptions(
   override def equals(obj: Any): Boolean = obj match {
     case other: JSONOptions =>
       (parameters == null && other.parameters == null ||
-      parameters != null && parameters == other.parameters) &&
+        parameters != null && parameters == other.parameters) &&
       defaultTimeZoneId == other.defaultTimeZoneId &&
       defaultColumnNameOfCorruptRecord == other.defaultColumnNameOfCorruptRecord
     case _ => false
@@ -173,13 +177,14 @@ class JSONOptions(
   }
 
   /**
-   * Standard encoding (charset) name. For example UTF-8, UTF-16LE and UTF-32BE.
-   * If the encoding is not specified (None) in read, it will be detected automatically
-   * when the multiLine option is set to `true`. If encoding is not specified in write,
-   * UTF-8 is used by default.
+   * Standard encoding (charset) name. For example UTF-8, UTF-16LE and UTF-32BE. If the encoding
+   * is not specified (None) in read, it will be detected automatically when the multiLine option
+   * is set to `true`. If encoding is not specified in write, UTF-8 is used by default.
    */
-  val encoding: Option[String] = parameters.get(ENCODING)
-    .orElse(parameters.get(CHARSET)).map(checkedEncoding)
+  val encoding: Option[String] = parameters
+    .get(ENCODING)
+    .orElse(parameters.get(CHARSET))
+    .map(checkedEncoding)
 
   val lineSeparatorInRead: Option[Array[Byte]] = lineSeparator.map { lineSep =>
     lineSep.getBytes(encoding.getOrElse(StandardCharsets.UTF_8.name()))
@@ -209,8 +214,10 @@ class JSONOptions(
   // E.g. spark.read.format("json").option("singleVariantColumn", "colName")
   val singleVariantColumn: Option[String] = parameters.get(SINGLE_VARIANT_COLUMN)
 
-  val useUnsafeRow: Boolean = parameters.get(USE_UNSAFE_ROW).map(_.toBoolean).getOrElse(
-    SQLConf.get.getConf(SQLConf.JSON_USE_UNSAFE_ROW))
+  val useUnsafeRow: Boolean = parameters
+    .get(USE_UNSAFE_ROW)
+    .map(_.toBoolean)
+    .getOrElse(SQLConf.get.getConf(SQLConf.JSON_USE_UNSAFE_ROW))
 
   /** Build a Jackson [[JsonFactory]] using JSON options. */
   def buildJsonFactory(): JsonFactory = {
@@ -240,26 +247,25 @@ class JSONOptionsInRead(
     @transient override val parameters: CaseInsensitiveMap[String],
     defaultTimeZoneId: String,
     defaultColumnNameOfCorruptRecord: String)
-  extends JSONOptions(parameters, defaultTimeZoneId, defaultColumnNameOfCorruptRecord) {
+    extends JSONOptions(parameters, defaultTimeZoneId, defaultColumnNameOfCorruptRecord) {
 
   def this(
-    parameters: Map[String, String],
-    defaultTimeZoneId: String,
-    defaultColumnNameOfCorruptRecord: String = "") = {
-    this(
-      CaseInsensitiveMap(parameters),
-      defaultTimeZoneId,
-      defaultColumnNameOfCorruptRecord)
+      parameters: Map[String, String],
+      defaultTimeZoneId: String,
+      defaultColumnNameOfCorruptRecord: String = "") = {
+    this(CaseInsensitiveMap(parameters), defaultTimeZoneId, defaultColumnNameOfCorruptRecord)
   }
 
   protected override def checkedEncoding(enc: String): String = {
     val charset = CharsetProvider.forName(enc, caller = "JSONOptionsInRead")
     val isDenied = JSONOptionsInRead.denyList.contains(charset)
-    require(multiLine || !isDenied,
+    require(
+      multiLine || !isDenied,
       s"""The $enc encoding must not be included in the denyList when multiLine is disabled:
          |denylist: ${JSONOptionsInRead.denyList.mkString(", ")}""".stripMargin)
 
-    val isLineSepRequired = multiLine || charset == StandardCharsets.UTF_8 || lineSeparator.nonEmpty
+    val isLineSepRequired =
+      multiLine || charset == StandardCharsets.UTF_8 || lineSeparator.nonEmpty
     require(isLineSepRequired, s"The lineSep option must be specified for the $enc encoding")
 
     charset.name()
@@ -273,10 +279,7 @@ object JSONOptionsInRead {
   // only the first lines will have the BOM which leads to impossibility for reading
   // the rest lines. Besides of that, the lineSep option must have the BOM in such
   // encodings which can never present between lines.
-  val denyList = Seq(
-    Charset.forName("UTF-16"),
-    Charset.forName("UTF-32")
-  )
+  val denyList = Seq(Charset.forName("UTF-16"), Charset.forName("UTF-32"))
 }
 
 object JSONOptions extends DataSourceOptions {

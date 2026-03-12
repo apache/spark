@@ -34,7 +34,7 @@ import org.apache.spark.sql.internal.SQLConf
  * @since 2.0.0
  */
 @Stable
-class RuntimeConfig private[sql](val sqlConf: SQLConf = new SQLConf) extends sql.RuntimeConfig {
+class RuntimeConfig private[sql] (val sqlConf: SQLConf = new SQLConf) extends sql.RuntimeConfig {
 
   /** @inheritdoc */
   def set(key: String, value: String): Unit = {
@@ -82,7 +82,8 @@ class RuntimeConfig private[sql](val sqlConf: SQLConf = new SQLConf) extends sql
 
   /** @inheritdoc */
   def getOption(key: String): Option[String] = {
-    try Option(get(key)) catch {
+    try Option(get(key))
+    catch {
       case _: NoSuchElementException => None
     }
   }
@@ -117,7 +118,7 @@ class RuntimeConfig private[sql](val sqlConf: SQLConf = new SQLConf) extends sql
       throw QueryCompilationErrors.cannotModifyValueOfStaticConfigError(key)
     }
     if (sqlConf.setCommandRejectsSparkCoreConfs &&
-        ConfigEntry.findEntry(key) != null && !SQLConf.containsConfigKey(key)) {
+      ConfigEntry.findEntry(key) != null && !SQLConf.containsConfigKey(key)) {
       throw QueryCompilationErrors.cannotModifyValueOfSparkConfigError(key, SPARK_DOC_ROOT)
     }
   }

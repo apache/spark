@@ -32,8 +32,8 @@ trait TestsV1AndV2Commands extends DDLCommandTestUtils {
 
   // Tests using V1 catalogs will run with `spark.sql.legacy.useV1Command` on and off
   // to test both V1 and V2 commands.
-  override def test(testName: String, testTags: Tag*)(testFun: => Any)
-    (implicit pos: Position): Unit = {
+  override def test(testName: String, testTags: Tag*)(testFun: => Any)(implicit
+      pos: Position): Unit = {
     Seq(true, false).foreach { useV1Command =>
       def setCommandVersion(): Unit = {
         _version = if (useV1Command) V1_COMMAND_VERSION else V2_COMMAND_VERSION

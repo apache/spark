@@ -27,8 +27,8 @@ import org.apache.spark.unsafe.types.UTF8String
 object UnboundYearsFunction extends UnboundFunction {
   override def bind(inputType: StructType): BoundFunction = {
     if (inputType.size == 1 && isValidType(inputType.head.dataType)) YearsFunction
-    else throw new UnsupportedOperationException(
-      "'years' only take date or timestamp as input type")
+    else
+      throw new UnsupportedOperationException("'years' only take date or timestamp as input type")
   }
 
   private def isValidType(dt: DataType): Boolean = dt match {
@@ -65,8 +65,8 @@ object DaysFunction extends BoundFunction {
 object UnboundDaysFunction extends UnboundFunction {
   override def bind(inputType: StructType): BoundFunction = {
     if (inputType.size == 1 && isValidType(inputType.head.dataType)) DaysFunction
-    else throw new UnsupportedOperationException(
-      "'days' only take date or timestamp as input type")
+    else
+      throw new UnsupportedOperationException("'days' only take date or timestamp as input type")
   }
 
   private def isValidType(dt: DataType): Boolean = dt match {

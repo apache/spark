@@ -30,7 +30,9 @@ abstract class RemoveRedundantWindowGroupLimitsSuiteBase
 
   private def checkNumWindowGroupLimits(df: DataFrame, count: Int): Unit = {
     val plan = df.queryExecution.executedPlan
-    assert(collectWithSubqueries(plan) { case exec: WindowGroupLimitExec => exec }.length == count)
+    assert(collectWithSubqueries(plan) { case exec: WindowGroupLimitExec =>
+      exec
+    }.length == count)
   }
 
   private def checkWindowGroupLimits(query: String, count: Int): Unit = {
@@ -72,8 +74,10 @@ abstract class RemoveRedundantWindowGroupLimitsSuiteBase
   }
 }
 
-class RemoveRedundantWindowGroupLimitsSuite extends RemoveRedundantWindowGroupLimitsSuiteBase
-  with DisableAdaptiveExecutionSuite
+class RemoveRedundantWindowGroupLimitsSuite
+    extends RemoveRedundantWindowGroupLimitsSuiteBase
+    with DisableAdaptiveExecutionSuite
 
-class RemoveRedundantWindowGroupLimitsSuiteAE extends RemoveRedundantWindowGroupLimitsSuiteBase
-  with EnableAdaptiveExecutionSuite
+class RemoveRedundantWindowGroupLimitsSuiteAE
+    extends RemoveRedundantWindowGroupLimitsSuiteBase
+    with EnableAdaptiveExecutionSuite

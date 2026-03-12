@@ -34,19 +34,32 @@ import org.apache.spark.sql.types.{DataType, ExplicitUTF8BinaryStringType, Struc
 /**
  * Represent a SQL function.
  *
- * @param name qualified name of the SQL function
- * @param inputParam function input parameters
- * @param returnType function return type
- * @param exprText function body as an expression
- * @param queryText function body as a query
- * @param comment function comment
- * @param collation function default collation
- * @param deterministic whether the function is deterministic
- * @param containsSQL whether the function has data access routine to be CONTAINS SQL
- * @param isTableFunc whether the function is a table function
- * @param properties additional properties to be serialized for the SQL function
- * @param owner owner of the function
- * @param createTimeMs function creation time in milliseconds
+ * @param name
+ *   qualified name of the SQL function
+ * @param inputParam
+ *   function input parameters
+ * @param returnType
+ *   function return type
+ * @param exprText
+ *   function body as an expression
+ * @param queryText
+ *   function body as a query
+ * @param comment
+ *   function comment
+ * @param collation
+ *   function default collation
+ * @param deterministic
+ *   whether the function is deterministic
+ * @param containsSQL
+ *   whether the function has data access routine to be CONTAINS SQL
+ * @param isTableFunc
+ *   whether the function is a table function
+ * @param properties
+ *   additional properties to be serialized for the SQL function
+ * @param owner
+ *   owner of the function
+ * @param createTimeMs
+ *   function creation time in milliseconds
  */
 case class SQLFunction(
     name: FunctionIdentifier,
@@ -61,17 +74,20 @@ case class SQLFunction(
     isTableFunc: Boolean,
     properties: Map[String, String],
     owner: Option[String] = None,
-    createTimeMs: Long = System.currentTimeMillis) extends UserDefinedFunction {
+    createTimeMs: Long = System.currentTimeMillis)
+    extends UserDefinedFunction {
 
-  assert(exprText.nonEmpty || queryText.nonEmpty,
+  assert(
+    exprText.nonEmpty || queryText.nonEmpty,
     "SQL function '" + name + "' is missing function body. " +
-    "Either exprText or queryText must be defined. " +
-    "Found: exprText=" + exprText + ", queryText=" + queryText + ".")
-  assert((isTableFunc && returnType.isRight) || (!isTableFunc && returnType.isLeft),
+      "Either exprText or queryText must be defined. " +
+      "Found: exprText=" + exprText + ", queryText=" + queryText + ".")
+  assert(
+    (isTableFunc && returnType.isRight) || (!isTableFunc && returnType.isLeft),
     "SQL function '" + name + "' has mismatched function type and return type. " +
-    "isTableFunc=" + isTableFunc + ", returnType.isRight=" + returnType.isRight + ", " +
-    "returnType.isLeft=" + returnType.isLeft + ". " +
-    "Table functions require Right[StructType] and scalar functions require Left[DataType].")
+      "isTableFunc=" + isTableFunc + ", returnType.isRight=" + returnType.isRight + ", " +
+      "returnType.isLeft=" + returnType.isLeft + ". " +
+      "Table functions require Right[StructType] and scalar functions require Left[DataType].")
 
   import SQLFunction._
 
@@ -91,11 +107,10 @@ case class SQLFunction(
     val parsedExpression = exprText.map(parser.parseExpression)
     val parsedQuery = queryText.map(parser.parsePlan)
     (parsedExpression, parsedQuery) match {
-      case (None, Some(Project(expr :: Nil, _: OneRowRelation)))
-        if !isTableFunc =>
+      case (None, Some(Project(expr :: Nil, _: OneRowRelation))) if !isTableFunc =>
         (Some(expr), None)
       case (Some(ScalarSubquery(Project(expr :: Nil, _: OneRowRelation), _, _, _, _, _, _)), None)
-        if !isTableFunc =>
+          if !isTableFunc =>
         (Some(expr), None)
       case (_, _) =>
         (parsedExpression, parsedQuery)
@@ -154,8 +169,13 @@ case class SQLFunction(
    */
   private def sqlFunctionToProps: Map[String, String] = {
     val props = new mutable.HashMap[String, String]
-    val inputParamText = inputParam.map(ExplicitUTF8BinaryStringType.transform(_)
-      .asInstanceOf[StructType].fields.map(_.toDDL).mkString(", "))
+    val inputParamText = inputParam.map(
+      ExplicitUTF8BinaryStringType
+        .transform(_)
+        .asInstanceOf[StructType]
+        .fields
+        .map(_.toDDL)
+        .mkString(", "))
     inputParamText.foreach(props.put(INPUT_PARAM, _))
     val returnTypeText = returnType match {
       case Left(dataType) => ExplicitUTF8BinaryStringType.transform(dataType).sql
@@ -237,8 +257,8 @@ object SQLFunction {
           errorClass = "CORRUPTED_CATALOG_FUNCTION",
           messageParameters = Map(
             "identifier" -> s"${function.identifier}",
-            "className" -> s"${function.className}"), cause = Some(e)
-        )
+            "className" -> s"${function.className}"),
+          cause = Some(e))
     }
   }
 
@@ -248,10 +268,10 @@ object SQLFunction {
 
   /**
    * This method returns an optional DataType indicating, when present, either the return type for
-   * scalar user-defined functions, or a StructType indicating the names and types of the columns in
-   * the output schema for table functions. If the optional value is empty, this indicates that the
-   * CREATE FUNCTION statement did not have any RETURNS clause at all (for scalar functions), or
-   * that it included a RETURNS TABLE clause but without any specified output schema (for table
+   * scalar user-defined functions, or a StructType indicating the names and types of the columns
+   * in the output schema for table functions. If the optional value is empty, this indicates that
+   * the CREATE FUNCTION statement did not have any RETURNS clause at all (for scalar functions),
+   * or that it included a RETURNS TABLE clause but without any specified output schema (for table
    * functions), prompting the analyzer to infer these metadata instead.
    */
   def parseReturnTypeText(

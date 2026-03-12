@@ -49,9 +49,10 @@ case class CollationKey(expr: Expression) extends UnaryExpression with ExpectsIn
 }
 
 object CollationKey {
+
   /**
-   * Recursively process the expression in order to recursively replace non-binary collated strings
-   * with their associated collation key.
+   * Recursively process the expression in order to recursively replace non-binary collated
+   * strings with their associated collation key.
    */
   def injectCollationKey(expr: Expression): Expression = {
     injectCollationKey(expr, expr.dataType)
@@ -78,10 +79,9 @@ object CollationKey {
         if (!anyChanged) {
           expr
         } else {
-          val struct = CreateNamedStruct(
-            transformed.flatMap { case (f, injected, _) =>
-              Seq(Literal(f.name), injected)
-            }.toImmutableArraySeq)
+          val struct = CreateNamedStruct(transformed.flatMap { case (f, injected, _) =>
+            Seq(Literal(f.name), injected)
+          }.toImmutableArraySeq)
           if (expr.nullable) {
             If(IsNull(expr), Literal(null, struct.dataType), struct)
           } else {

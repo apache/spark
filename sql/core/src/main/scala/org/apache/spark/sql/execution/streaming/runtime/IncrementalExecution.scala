@@ -51,15 +51,15 @@ import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 
 /**
- * A variant of [[QueryExecution]] that allows the execution of the given [[LogicalPlan]]
- * plan incrementally. Possibly preserving state in between each execution.
- * @param currentStateStoreCkptId checkpoint ID for the latest committed version. It is
- *                                  operatorID -> array of checkpointIDs. Array index n
- *                                  represents checkpoint ID for the nth shuffle partition.
- * @param stateSchemaMetadatas map that keeps track of the StateSchemaBroadcasts per operator.
- *                             It is passed in by reference from MicrobatchExecution, so it is
- *                             populated during planning in the first batch, and passed in to the
- *                             StatefulOperatorStateInfo on every subsequent batch
+ * A variant of [[QueryExecution]] that allows the execution of the given [[LogicalPlan]] plan
+ * incrementally. Possibly preserving state in between each execution.
+ * @param currentStateStoreCkptId
+ *   checkpoint ID for the latest committed version. It is operatorID -> array of checkpointIDs.
+ *   Array index n represents checkpoint ID for the nth shuffle partition.
+ * @param stateSchemaMetadatas
+ *   map that keeps track of the StateSchemaBroadcasts per operator. It is passed in by reference
+ *   from MicrobatchExecution, so it is populated during planning in the first batch, and passed
+ *   in to the StatefulOperatorStateInfo on every subsequent batch
  */
 class IncrementalExecution(
     sparkSession: SparkSession,
@@ -76,71 +76,73 @@ class IncrementalExecution(
     val offsetSeqMetadata: OffsetSeqMetadataBase,
     val watermarkPropagator: WatermarkPropagator,
     val isFirstBatch: Boolean,
-    val currentStateStoreCkptId:
-      MutableMap[Long, Array[Array[String]]] = MutableMap[Long, Array[Array[String]]](),
+    val currentStateStoreCkptId: MutableMap[Long, Array[Array[String]]] =
+      MutableMap[Long, Array[Array[String]]](),
     val stateSchemaMetadatas: MutableMap[Long, StateSchemaBroadcast] =
       MutableMap[Long, StateSchemaBroadcast](),
     mode: CommandExecutionMode.Value = CommandExecutionMode.ALL,
     val isTerminatingTrigger: Boolean = false)
-  extends QueryExecution(sparkSession, logicalPlan, mode = mode,
-    shuffleCleanupModeOpt =
-      Some(QueryExecution.determineShuffleCleanupMode(sparkSession.sessionState.conf)),
-    queryId = queryId) with Logging {
+    extends QueryExecution(
+      sparkSession,
+      logicalPlan,
+      mode = mode,
+      shuffleCleanupModeOpt = Some(
+        QueryExecution.determineShuffleCleanupMode(sparkSession.sessionState.conf)),
+      queryId = queryId)
+    with Logging {
 
   // Modified planner with stateful operations.
-  override val planner: SparkPlanner = new SparkPlanner(
-      sparkSession,
-      sparkSession.sessionState.experimentalMethods) {
-    override def strategies: Seq[Strategy] =
-      extraPlanningStrategies ++
-      sparkSession.sessionState.planner.strategies
+  override val planner: SparkPlanner =
+    new SparkPlanner(sparkSession, sparkSession.sessionState.experimentalMethods) {
+      override def strategies: Seq[Strategy] =
+        extraPlanningStrategies ++
+          sparkSession.sessionState.planner.strategies
 
-    override def extraPlanningStrategies: Seq[Strategy] =
-      StreamingJoinStrategy ::
-      StatefulAggregationStrategy ::
-      FlatMapGroupsWithStateStrategy ::
-      FlatMapGroupsInPandasWithStateStrategy ::
-      StreamingRelationStrategy ::
-      StreamingDeduplicationStrategy ::
-      StreamingGlobalLimitStrategy(outputMode) ::
-      StreamingTransformWithStateStrategy ::
-      TransformWithStateInPySparkStrategy :: Nil
-  }
+      override def extraPlanningStrategies: Seq[Strategy] =
+        StreamingJoinStrategy ::
+          StatefulAggregationStrategy ::
+          FlatMapGroupsWithStateStrategy ::
+          FlatMapGroupsInPandasWithStateStrategy ::
+          StreamingRelationStrategy ::
+          StreamingDeduplicationStrategy ::
+          StreamingGlobalLimitStrategy(outputMode) ::
+          StreamingTransformWithStateStrategy ::
+          TransformWithStateInPySparkStrategy :: Nil
+    }
 
   private lazy val hadoopConf = sparkSession.sessionState.newHadoopConf()
 
-  private[sql] val numStateStores = OffsetSeqMetadata.readValueOpt(offsetSeqMetadata,
-      SQLConf.STATEFUL_SHUFFLE_PARTITIONS_INTERNAL)
+  private[sql] val numStateStores = OffsetSeqMetadata
+    .readValueOpt(offsetSeqMetadata, SQLConf.STATEFUL_SHUFFLE_PARTITIONS_INTERNAL)
     .map(SQLConf.SHUFFLE_PARTITIONS.valueConverter)
     .getOrElse(sparkSession.sessionState.conf.numShufflePartitions)
 
   /**
-   * This value dictates which schema format version the state schema should be written in
-   * for all operators other than TransformWithState.
+   * This value dictates which schema format version the state schema should be written in for all
+   * operators other than TransformWithState.
    */
   private val STATE_SCHEMA_DEFAULT_VERSION: Int = 2
 
   /**
-   * See [SPARK-18339]
-   * Walk the optimized logical plan and replace CurrentBatchTimestamp
-   * with the desired literal
+   * See [SPARK-18339] Walk the optimized logical plan and replace CurrentBatchTimestamp with the
+   * desired literal
    */
-  override
-  lazy val optimizedPlan: LogicalPlan = executePhase(QueryPlanningTracker.OPTIMIZATION) {
+  override lazy val optimizedPlan: LogicalPlan = executePhase(QueryPlanningTracker.OPTIMIZATION) {
     // Performing streaming specific pre-optimization.
     val preOptimized = withCachedData.transform {
       // We eliminate the "marker" node for writer on DSv1 as it's only used as representation
       // of sink information.
       case w: WriteToMicroBatchDataSourceV1 => w.child
     }
-    sparkSession.sessionState.optimizer.executeAndTrack(preOptimized,
-      tracker).transformAllExpressionsWithPruning(
-      _.containsAnyPattern(CURRENT_LIKE, EXPRESSION_WITH_RANDOM_SEED)) {
-      case ts @ CurrentBatchTimestamp(timestamp, _, _) =>
-        logInfo(log"Current batch timestamp = ${MDC(BATCH_TIMESTAMP, timestamp)}")
-        ts.toLiteral
-      case e: ExpressionWithRandomSeed => e.withNewSeed(Utils.random.nextLong())
-    }
+    sparkSession.sessionState.optimizer
+      .executeAndTrack(preOptimized, tracker)
+      .transformAllExpressionsWithPruning(
+        _.containsAnyPattern(CURRENT_LIKE, EXPRESSION_WITH_RANDOM_SEED)) {
+        case ts @ CurrentBatchTimestamp(timestamp, _, _) =>
+          logInfo(log"Current batch timestamp = ${MDC(BATCH_TIMESTAMP, timestamp)}")
+          ts.toLiteral
+        case e: ExpressionWithRandomSeed => e.withNewSeed(Utils.random.nextLong())
+      }
   }
 
   private val allowMultipleStatefulOperators: Boolean =
@@ -193,10 +195,11 @@ class IncrementalExecution(
   }
 
   object ConvertLocalLimitRule extends SparkPlanPartialRule {
+
     /**
      * Ensures that this plan DOES NOT have any stateful operation in it whose pipelined execution
-     * depends on this plan. In other words, this function returns true if this plan does
-     * have a narrow dependency on a stateful subplan.
+     * depends on this plan. In other words, this function returns true if this plan does have a
+     * narrow dependency on a stateful subplan.
      */
     private def hasNoStatefulOp(plan: SparkPlan): Boolean = {
       var statefulOpFound = false
@@ -207,8 +210,8 @@ class IncrementalExecution(
             statefulOpFound = true
 
           case e: ShuffleExchangeLike =>
-            // Don't search recursively any further as any child stateful operator as we
-            // are only looking for stateful subplans that this plan has narrow dependencies on.
+          // Don't search recursively any further as any child stateful operator as we
+          // are only looking for stateful subplans that this plan has narrow dependencies on.
 
           case p: SparkPlan =>
             p.children.foreach(findStatefulOp)
@@ -237,15 +240,16 @@ class IncrementalExecution(
       case statefulOp: StatefulOperator if isFirstBatch =>
         val stateSchemaVersion = statefulOp match {
           case _: TransformWithStateExec | _: TransformWithStateInPySparkExec =>
-            sparkSession.sessionState.conf.
-              getConf(SQLConf.STREAMING_TRANSFORM_WITH_STATE_OP_STATE_SCHEMA_VERSION)
+            sparkSession.sessionState.conf.getConf(
+              SQLConf.STREAMING_TRANSFORM_WITH_STATE_OP_STATE_SCHEMA_VERSION)
           case _: StreamingSymmetricHashJoinExec =>
-            sparkSession.sessionState.conf.
-              getConf(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION)
+            sparkSession.sessionState.conf.getConf(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION)
           case _ => STATE_SCHEMA_DEFAULT_VERSION
         }
-        val schemaValidationResult = statefulOp.
-          validateAndMaybeEvolveStateSchema(hadoopConf, currentBatchId, stateSchemaVersion)
+        val schemaValidationResult = statefulOp.validateAndMaybeEvolveStateSchema(
+          hadoopConf,
+          currentBatchId,
+          stateSchemaVersion)
         statefulOp match {
           case ssw: StateStoreWriter =>
             // validate metadata
@@ -254,21 +258,25 @@ class IncrementalExecution(
               // there may be a mismatch between the stateful operators in the
               // physical plan and the metadata.
               try {
-                OperatorStateMetadataReader.createReader(
-                  new Path(checkpointLocation, ssw.getStateInfo.operatorId.toString),
-                  hadoopConf, ssw.operatorStateMetadataVersion, currentBatchId - 1).read()
+                OperatorStateMetadataReader
+                  .createReader(
+                    new Path(checkpointLocation, ssw.getStateInfo.operatorId.toString),
+                    hadoopConf,
+                    ssw.operatorStateMetadataVersion,
+                    currentBatchId - 1)
+                  .read()
               } catch {
                 case e: Exception =>
-                  logWarning(log"Error reading metadata path for stateful operator. This " +
-                    log"may due to no prior committed batch, or previously run on lower " +
-                    log"versions: ${MDC(ERROR, e.getMessage)}")
-                None
+                  logWarning(
+                    log"Error reading metadata path for stateful operator. This " +
+                      log"may due to no prior committed batch, or previously run on lower " +
+                      log"versions: ${MDC(ERROR, e.getMessage)}")
+                  None
               }
             } else {
               None
             }
-            val stateSchemaList = ssw.stateSchemaList(schemaValidationResult,
-              oldMetadata)
+            val stateSchemaList = ssw.stateSchemaList(schemaValidationResult, oldMetadata)
             val metadata = ssw.operatorStateMetadata(stateSchemaList)
             oldMetadata match {
               case Some(oldMetadata) =>
@@ -293,11 +301,11 @@ class IncrementalExecution(
               // Create new instance with copied fields but updated stateInfo
               ssw match {
                 case exec: TransformWithStateExec =>
-                  exec.copy(stateInfo = Some(exec.getStateInfo.copy(
-                    stateSchemaMetadata = Some(stateSchemaBroadcast))))
+                  exec.copy(stateInfo = Some(
+                    exec.getStateInfo.copy(stateSchemaMetadata = Some(stateSchemaBroadcast))))
                 case exec: TransformWithStateInPySparkExec =>
-                  exec.copy(stateInfo = Some(exec.getStateInfo.copy(
-                    stateSchemaMetadata = Some(stateSchemaBroadcast))))
+                  exec.copy(stateInfo = Some(
+                    exec.getStateInfo.copy(stateSchemaMetadata = Some(stateSchemaBroadcast))))
                 // Add other cases if needed for different StateStoreWriter implementations
                 case _ => ssw
               }
@@ -311,9 +319,14 @@ class IncrementalExecution(
 
   object StateOpIdRule extends SparkPlanPartialRule {
     override val rule: PartialFunction[SparkPlan, SparkPlan] = {
-      case StateStoreSaveExec(keys, None, None, None, None, stateFormatVersion,
-      UnaryExecNode(agg,
-      StateStoreRestoreExec(_, None, _, child))) =>
+      case StateStoreSaveExec(
+            keys,
+            None,
+            None,
+            None,
+            None,
+            stateFormatVersion,
+            UnaryExecNode(agg, StateStoreRestoreExec(_, None, _, child))) =>
         val aggStateInfo = nextStatefulOperationStateInfo()
         StateStoreSaveExec(
           keys,
@@ -323,16 +336,19 @@ class IncrementalExecution(
           eventTimeWatermarkForEviction = None,
           stateFormatVersion,
           agg.withNewChildren(
-            StateStoreRestoreExec(
-              keys,
-              Some(aggStateInfo),
-              stateFormatVersion,
-              child) :: Nil))
+            StateStoreRestoreExec(keys, Some(aggStateInfo), stateFormatVersion, child) :: Nil))
 
-      case SessionWindowStateStoreSaveExec(keys, session, None, None, None, None,
-      stateFormatVersion,
-      UnaryExecNode(agg,
-      SessionWindowStateStoreRestoreExec(_, _, None, None, None, _, child))) =>
+      case SessionWindowStateStoreSaveExec(
+            keys,
+            session,
+            None,
+            None,
+            None,
+            None,
+            stateFormatVersion,
+            UnaryExecNode(
+              agg,
+              SessionWindowStateStoreRestoreExec(_, _, None, None, None, _, child))) =>
         val aggStateInfo = nextStatefulOperationStateInfo()
         SessionWindowStateStoreSaveExec(
           keys,
@@ -376,8 +392,7 @@ class IncrementalExecution(
           batchTimestampMs = Some(offsetSeqMetadata.batchTimestampMs),
           eventTimeWatermarkForLateEvents = None,
           eventTimeWatermarkForEviction = None,
-          hasInitialState = hasInitialState
-        )
+          hasInitialState = hasInitialState)
 
       case t: TransformWithStateExec =>
         val hasInitialState = (currentBatchId == 0L && t.hasInitialState)
@@ -386,8 +401,7 @@ class IncrementalExecution(
           batchTimestampMs = Some(offsetSeqMetadata.batchTimestampMs),
           eventTimeWatermarkForLateEvents = None,
           eventTimeWatermarkForEviction = None,
-          hasInitialState = hasInitialState
-        )
+          hasInitialState = hasInitialState)
 
       case t: TransformWithStateInPySparkExec =>
         val hasInitialState = (currentBatchId == 0L && t.hasInitialState)
@@ -396,35 +410,31 @@ class IncrementalExecution(
           batchTimestampMs = Some(offsetSeqMetadata.batchTimestampMs),
           eventTimeWatermarkForLateEvents = None,
           eventTimeWatermarkForEviction = None,
-          hasInitialState = hasInitialState
-        )
+          hasInitialState = hasInitialState)
 
       case m: FlatMapGroupsInPandasWithStateExec =>
         m.copy(
           stateInfo = Some(nextStatefulOperationStateInfo()),
           batchTimestampMs = Some(offsetSeqMetadata.batchTimestampMs),
           eventTimeWatermarkForLateEvents = None,
-          eventTimeWatermarkForEviction = None
-        )
+          eventTimeWatermarkForEviction = None)
 
       case j: StreamingSymmetricHashJoinExec =>
         j.copy(
           stateInfo = Some(nextStatefulOperationStateInfo()),
           eventTimeWatermarkForLateEvents = None,
-          eventTimeWatermarkForEviction = None
-        )
+          eventTimeWatermarkForEviction = None)
 
       case l: StreamingGlobalLimitExec =>
-        l.copy(
-          stateInfo = Some(nextStatefulOperationStateInfo()),
-          outputMode = Some(outputMode))
+        l.copy(stateInfo = Some(nextStatefulOperationStateInfo()), outputMode = Some(outputMode))
     }
   }
 
   object WatermarkPropagationRule extends SparkPlanPartialRule {
-    private def inputWatermarkForLateEvents(stateInfo: StatefulOperatorStateInfo): Option[Long] = {
-      Some(watermarkPropagator.getInputWatermarkForLateEvents(currentBatchId,
-        stateInfo.operatorId))
+    private def inputWatermarkForLateEvents(
+        stateInfo: StatefulOperatorStateInfo): Option[Long] = {
+      Some(
+        watermarkPropagator.getInputWatermarkForLateEvents(currentBatchId, stateInfo.operatorId))
     }
 
     private def inputWatermarkForEviction(stateInfo: StatefulOperatorStateInfo): Option[Long] = {
@@ -435,38 +445,32 @@ class IncrementalExecution(
       case s: StateStoreSaveExec if s.stateInfo.isDefined =>
         s.copy(
           eventTimeWatermarkForLateEvents = inputWatermarkForLateEvents(s.stateInfo.get),
-          eventTimeWatermarkForEviction = inputWatermarkForEviction(s.stateInfo.get)
-        )
+          eventTimeWatermarkForEviction = inputWatermarkForEviction(s.stateInfo.get))
 
       case s: SessionWindowStateStoreSaveExec if s.stateInfo.isDefined =>
         s.copy(
           eventTimeWatermarkForLateEvents = inputWatermarkForLateEvents(s.stateInfo.get),
-          eventTimeWatermarkForEviction = inputWatermarkForEviction(s.stateInfo.get)
-        )
+          eventTimeWatermarkForEviction = inputWatermarkForEviction(s.stateInfo.get))
 
       case s: SessionWindowStateStoreRestoreExec if s.stateInfo.isDefined =>
         s.copy(
           eventTimeWatermarkForLateEvents = inputWatermarkForLateEvents(s.stateInfo.get),
-          eventTimeWatermarkForEviction = inputWatermarkForEviction(s.stateInfo.get)
-        )
+          eventTimeWatermarkForEviction = inputWatermarkForEviction(s.stateInfo.get))
 
       case s: StreamingDeduplicateExec if s.stateInfo.isDefined =>
         s.copy(
           eventTimeWatermarkForLateEvents = inputWatermarkForLateEvents(s.stateInfo.get),
-          eventTimeWatermarkForEviction = inputWatermarkForEviction(s.stateInfo.get)
-        )
+          eventTimeWatermarkForEviction = inputWatermarkForEviction(s.stateInfo.get))
 
       case s: StreamingDeduplicateWithinWatermarkExec if s.stateInfo.isDefined =>
         s.copy(
           eventTimeWatermarkForLateEvents = inputWatermarkForLateEvents(s.stateInfo.get),
-          eventTimeWatermarkForEviction = inputWatermarkForEviction(s.stateInfo.get)
-        )
+          eventTimeWatermarkForEviction = inputWatermarkForEviction(s.stateInfo.get))
 
       case m: FlatMapGroupsWithStateExec if m.stateInfo.isDefined =>
         m.copy(
           eventTimeWatermarkForLateEvents = inputWatermarkForLateEvents(m.stateInfo.get),
-          eventTimeWatermarkForEviction = inputWatermarkForEviction(m.stateInfo.get)
-        )
+          eventTimeWatermarkForEviction = inputWatermarkForEviction(m.stateInfo.get))
 
       // UpdateEventTimeColumnExec is used to tag the eventTime column, and validate
       // emitted rows adhere to watermark in the output of transformWithState.
@@ -474,20 +478,26 @@ class IncrementalExecution(
       // However, given that UpdateEventTimeColumnExec does not store any state, it
       // does not have any StateInfo. We simply use the StateInfo of transformWithStateExec
       // to propagate watermark to both UpdateEventTimeColumnExec and transformWithStateExec.
-      case UpdateEventTimeColumnExec(eventTime, delay, None,
-        SerializeFromObjectExec(serializer,
-        t: TransformWithStateExec)) if t.stateInfo.isDefined =>
+      case UpdateEventTimeColumnExec(
+            eventTime,
+            delay,
+            None,
+            SerializeFromObjectExec(serializer, t: TransformWithStateExec))
+          if t.stateInfo.isDefined =>
 
         val stateInfo = t.stateInfo.get
         val iwLateEvents = inputWatermarkForLateEvents(stateInfo)
         val iwEviction = inputWatermarkForEviction(stateInfo)
 
-        UpdateEventTimeColumnExec(eventTime, delay, iwLateEvents,
-          SerializeFromObjectExec(serializer,
+        UpdateEventTimeColumnExec(
+          eventTime,
+          delay,
+          iwLateEvents,
+          SerializeFromObjectExec(
+            serializer,
             t.copy(
               eventTimeWatermarkForLateEvents = iwLateEvents,
-              eventTimeWatermarkForEviction = iwEviction)
-          ))
+              eventTimeWatermarkForEviction = iwEviction)))
 
       // UpdateEventTimeColumnExec is used to tag the eventTime column, and validate
       // emitted rows adhere to watermark in the output of transformWithStateInp.
@@ -496,34 +506,33 @@ class IncrementalExecution(
       // The only difference is TransformWithStateInPySparkExec is analysed slightly different
       // with no SerializeFromObjectExec wrapper.
       case UpdateEventTimeColumnExec(eventTime, delay, None, t: TransformWithStateInPySparkExec)
-        if t.stateInfo.isDefined =>
+          if t.stateInfo.isDefined =>
         val stateInfo = t.stateInfo.get
         val iwLateEvents = inputWatermarkForLateEvents(stateInfo)
         val iwEviction = inputWatermarkForEviction(stateInfo)
 
-        UpdateEventTimeColumnExec(eventTime, delay, iwLateEvents,
+        UpdateEventTimeColumnExec(
+          eventTime,
+          delay,
+          iwLateEvents,
           t.copy(
             eventTimeWatermarkForLateEvents = iwLateEvents,
-            eventTimeWatermarkForEviction = iwEviction)
-        )
+            eventTimeWatermarkForEviction = iwEviction))
 
       case t: TransformWithStateExec if t.stateInfo.isDefined =>
         t.copy(
           eventTimeWatermarkForLateEvents = inputWatermarkForLateEvents(t.stateInfo.get),
-          eventTimeWatermarkForEviction = inputWatermarkForEviction(t.stateInfo.get)
-        )
+          eventTimeWatermarkForEviction = inputWatermarkForEviction(t.stateInfo.get))
 
       case t: TransformWithStateInPySparkExec if t.stateInfo.isDefined =>
         t.copy(
           eventTimeWatermarkForLateEvents = inputWatermarkForLateEvents(t.stateInfo.get),
-          eventTimeWatermarkForEviction = inputWatermarkForEviction(t.stateInfo.get)
-        )
+          eventTimeWatermarkForEviction = inputWatermarkForEviction(t.stateInfo.get))
 
       case m: FlatMapGroupsInPandasWithStateExec if m.stateInfo.isDefined =>
         m.copy(
           eventTimeWatermarkForLateEvents = inputWatermarkForLateEvents(m.stateInfo.get),
-          eventTimeWatermarkForEviction = inputWatermarkForEviction(m.stateInfo.get)
-        )
+          eventTimeWatermarkForEviction = inputWatermarkForEviction(m.stateInfo.get))
 
       case j: StreamingSymmetricHashJoinExec =>
         val iwLateEvents = inputWatermarkForLateEvents(j.stateInfo.get)
@@ -531,11 +540,14 @@ class IncrementalExecution(
         j.copy(
           eventTimeWatermarkForLateEvents = iwLateEvents,
           eventTimeWatermarkForEviction = iwEviction,
-          stateWatermarkPredicates =
-            StreamingSymmetricHashJoinHelper.getStateWatermarkPredicates(
-              j.left.output, j.right.output, j.leftKeys, j.rightKeys, j.condition.full,
-              iwEviction, !allowMultipleStatefulOperators)
-        )
+          stateWatermarkPredicates = StreamingSymmetricHashJoinHelper.getStateWatermarkPredicates(
+            j.left.output,
+            j.right.output,
+            j.leftKeys,
+            j.rightKeys,
+            j.condition.full,
+            iwEviction,
+            !allowMultipleStatefulOperators))
     }
   }
 
@@ -584,12 +596,14 @@ class IncrementalExecution(
         var ret = Map.empty[Long, String]
         val stateCheckpointLocation = new Path(checkpointLocation)
 
-        if (CheckpointFileManager.create(
-          stateCheckpointLocation, hadoopConf).exists(stateCheckpointLocation)) {
+        if (CheckpointFileManager
+            .create(stateCheckpointLocation, hadoopConf)
+            .exists(stateCheckpointLocation)) {
           try {
             val reader = new StateMetadataPartitionReader(
               new Path(checkpointLocation).getParent.toString,
-              new SerializableConfiguration(hadoopConf), batchId)
+              new SerializableConfiguration(hadoopConf),
+              batchId)
             val opMetadataList = reader.allOperatorStateMetadata
             ret = opMetadataList.map {
               case OperatorStateMetadataV1(operatorInfo, _) =>
@@ -600,9 +614,10 @@ class IncrementalExecution(
           } catch {
             case e: Exception =>
               // no need to throw fatal error, returns empty map
-              logWarning(log"Error reading metadata path for stateful operator. This may due to " +
-                log"no prior committed batch, or previously run on lower versions: " +
-                log"${MDC(ERROR, e.getMessage)}")
+              logWarning(
+                log"Error reading metadata path for stateful operator. This may due to " +
+                  log"no prior committed batch, or previously run on lower versions: " +
+                  log"${MDC(ERROR, e.getMessage)}")
           }
         }
         ret
@@ -643,7 +658,7 @@ class IncrementalExecution(
   override def assertAnalyzed(): Unit = analyzed
 
   /** No need assert supported, as this check has already been done */
-  override def assertSupported(): Unit = { }
+  override def assertSupported(): Unit = {}
 
   /**
    * Should the MicroBatchExecution run another batch based on this execution and the current
@@ -657,10 +672,11 @@ class IncrementalExecution(
     val tentativeBatchId = currentBatchId + 1
     watermarkPropagator.propagate(tentativeBatchId, executedPlan, newMetadata.batchWatermarkMs)
     StreamingQueryPlanTraverseHelper
-      .collectFromUnfoldedPlan(executedPlan) {
-        case p: StateStoreWriter => p.shouldRunAnotherBatch(
-          watermarkPropagator.getInputWatermarkForEviction(tentativeBatchId,
-            p.stateInfo.get.operatorId))
-      }.exists(_ == true)
+      .collectFromUnfoldedPlan(executedPlan) { case p: StateStoreWriter =>
+        p.shouldRunAnotherBatch(
+          watermarkPropagator
+            .getInputWatermarkForEviction(tentativeBatchId, p.stateInfo.get.operatorId))
+      }
+      .exists(_ == true)
   }
 }

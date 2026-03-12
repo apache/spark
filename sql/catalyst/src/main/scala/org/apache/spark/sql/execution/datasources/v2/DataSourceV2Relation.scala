@@ -41,13 +41,18 @@ import org.apache.spark.util.Utils
 /**
  * A logical plan representing a data source v2 table.
  *
- * @param table  The table that this relation represents.
- * @param output The output attributes of this relation.
- * @param catalog catalogPlugin for the table. None if no catalog is specified.
- * @param identifier The identifier for the table. None if no identifier is defined.
- * @param options The options for this table operation. It's used to create fresh
- *                [[org.apache.spark.sql.connector.read.ScanBuilder]] and
- *                [[org.apache.spark.sql.connector.write.WriteBuilder]].
+ * @param table
+ *   The table that this relation represents.
+ * @param output
+ *   The output attributes of this relation.
+ * @param catalog
+ *   catalogPlugin for the table. None if no catalog is specified.
+ * @param identifier
+ *   The identifier for the table. None if no identifier is defined.
+ * @param options
+ *   The options for this table operation. It's used to create fresh
+ *   [[org.apache.spark.sql.connector.read.ScanBuilder]] and
+ *   [[org.apache.spark.sql.connector.write.WriteBuilder]].
  */
 abstract class DataSourceV2RelationBase(
     table: Table,
@@ -56,12 +61,14 @@ abstract class DataSourceV2RelationBase(
     identifier: Option[Identifier],
     options: CaseInsensitiveStringMap,
     timeTravelSpec: Option[TimeTravelSpec] = None)
-  extends LeafNode with MultiInstanceRelation with NamedRelation {
+    extends LeafNode
+    with MultiInstanceRelation
+    with NamedRelation {
 
   import DataSourceV2Implicits._
 
-  lazy val funCatalog: Option[FunctionCatalog] = catalog.collect {
-    case c: FunctionCatalog => c
+  lazy val funCatalog: Option[FunctionCatalog] = catalog.collect { case c: FunctionCatalog =>
+    c
   }
 
   override def name: String = {
@@ -112,8 +119,8 @@ case class DataSourceV2Relation(
     identifier: Option[Identifier],
     options: CaseInsensitiveStringMap,
     timeTravelSpec: Option[TimeTravelSpec] = None)
-  extends DataSourceV2RelationBase(table, output, catalog, identifier, options, timeTravelSpec)
-  with ExposesMetadataColumns {
+    extends DataSourceV2RelationBase(table, output, catalog, identifier, options, timeTravelSpec)
+    with ExposesMetadataColumns {
 
   import DataSourceV2Implicits._
 
@@ -124,7 +131,8 @@ case class DataSourceV2Relation(
   override lazy val metadataOutput: Seq[AttributeReference] = table match {
     case hasMeta: SupportsMetadataColumns =>
       metadataOutputWithOutConflicts(
-        hasMeta.metadataColumns.toAttributes, hasMeta.canRenameConflictingMetadataColumns)
+        hasMeta.metadataColumns.toAttributes,
+        hasMeta.canRenameConflictingMetadataColumns)
     case _ =>
       Nil
   }
@@ -151,19 +159,26 @@ case class DataSourceV2Relation(
  * plan. This ensures that the stats that are used by the optimizer account for the filters and
  * projection that will be pushed down.
  *
- * @param relation a [[DataSourceV2Relation]]
- * @param scan a DSv2 [[Scan]]
- * @param output the output attributes of this relation
- * @param keyGroupedPartitioning if set, the partitioning expressions that are used to split the
- *                               rows in the scan across different partitions
- * @param ordering if set, the ordering provided by the scan
+ * @param relation
+ *   a [[DataSourceV2Relation]]
+ * @param scan
+ *   a DSv2 [[Scan]]
+ * @param output
+ *   the output attributes of this relation
+ * @param keyGroupedPartitioning
+ *   if set, the partitioning expressions that are used to split the rows in the scan across
+ *   different partitions
+ * @param ordering
+ *   if set, the ordering provided by the scan
  */
 case class DataSourceV2ScanRelation(
     relation: DataSourceV2Relation,
     scan: Scan,
     output: Seq[AttributeReference],
     keyGroupedPartitioning: Option[Seq[Expression]] = None,
-    ordering: Option[Seq[SortOrder]] = None) extends LeafNode with NamedRelation {
+    ordering: Option[Seq[SortOrder]] = None)
+    extends LeafNode
+    with NamedRelation {
 
   override def name: String = relation.name
 
@@ -188,23 +203,19 @@ case class DataSourceV2ScanRelation(
 
   override def doCanonicalize(): DataSourceV2ScanRelation = {
     this.copy(
-      relation = this.relation.copy(
-        output = this.relation.output.map(QueryPlan.normalizeExpressions(_, this.relation.output))
-      ),
+      relation = this.relation.copy(output =
+        this.relation.output.map(QueryPlan.normalizeExpressions(_, this.relation.output))),
       output = this.output.map(QueryPlan.normalizeExpressions(_, this.output)),
-      keyGroupedPartitioning = keyGroupedPartitioning.map(
-        _.map(QueryPlan.normalizeExpressions(_, output))
-      ),
-      ordering = ordering.map(
-        _.map(o => o.copy(child = QueryPlan.normalizeExpressions(o.child, output)))
-      )
-    )
+      keyGroupedPartitioning =
+        keyGroupedPartitioning.map(_.map(QueryPlan.normalizeExpressions(_, output))),
+      ordering =
+        ordering.map(_.map(o => o.copy(child = QueryPlan.normalizeExpressions(o.child, output)))))
   }
 }
 
 /**
- * A specialization of [[DataSourceV2RelationBase]] that supports streaming scan.
- * It will be transformed to [[StreamingDataSourceV2ScanRelation]] during the planning phase of
+ * A specialization of [[DataSourceV2RelationBase]] that supports streaming scan. It will be
+ * transformed to [[StreamingDataSourceV2ScanRelation]] during the planning phase of
  * [[MicrobatchExecution]].
  */
 case class StreamingDataSourceV2Relation(
@@ -216,7 +227,7 @@ case class StreamingDataSourceV2Relation(
     metadataPath: String,
     realTimeModeDuration: Option[Long] = None,
     sourceIdentifyingName: StreamingSourceIdentifyingName = Unassigned)
-  extends DataSourceV2RelationBase(table, output, catalog, identifier, options) {
+    extends DataSourceV2RelationBase(table, output, catalog, identifier, options) {
 
   override def isStreaming: Boolean = true
 
@@ -224,9 +235,10 @@ case class StreamingDataSourceV2Relation(
     copy(output = output.map(_.newInstance()))
   }
 }
+
 /**
- * A specialization of [[DataSourceV2ScanRelation]] with the streaming bit set to true, as well
- * as start and end offsets for Microbatch processing.
+ * A specialization of [[DataSourceV2ScanRelation]] with the streaming bit set to true, as well as
+ * start and end offsets for Microbatch processing.
  */
 case class StreamingDataSourceV2ScanRelation(
     relation: StreamingDataSourceV2Relation,
@@ -235,7 +247,9 @@ case class StreamingDataSourceV2ScanRelation(
     stream: SparkDataStream,
     startOffset: Option[Offset] = None,
     endOffset: Option[Offset] = None)
-  extends LeafNode with MultiInstanceRelation with NamedRelation  {
+    extends LeafNode
+    with MultiInstanceRelation
+    with NamedRelation {
 
   val (catalog, identifier) = (relation.catalog, relation.identifier)
 
@@ -296,7 +310,13 @@ object DataSourceV2Relation {
     // The v2 source may return schema containing char/varchar type. We replace char/varchar
     // with "annotated" string type here as the query engine doesn't support char/varchar yet.
     val schema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(table.columns.asSchema)
-    DataSourceV2Relation(table, toAttributes(schema), catalog, identifier, options, timeTravelSpec)
+    DataSourceV2Relation(
+      table,
+      toAttributes(schema),
+      catalog,
+      identifier,
+      options,
+      timeTravelSpec)
   }
 
   def create(
@@ -308,9 +328,7 @@ object DataSourceV2Relation {
   /**
    * This is used to transform catalog statistics to data source v2 statistics.
    */
-  def v1StatsToV2Stats(
-      v1Statistics: CatalogStatistics,
-      schema: StructType): V2Statistics = {
+  def v1StatsToV2Stats(v1Statistics: CatalogStatistics, schema: StructType): V2Statistics = {
     val typeMap = schema.fields.map(f => f.name -> f.dataType).toMap
     val colStatsMap: Map[NamedReference, ColumnStatistics] =
       v1Statistics.colStats.flatMap { case (name, stat) =>
@@ -321,7 +339,8 @@ object DataSourceV2Relation {
 
     val v2SizeInBytes = OptionalLong.of(v1Statistics.sizeInBytes.longValue)
     val v2NumRows = v1Statistics.rowCount
-      .map(v => OptionalLong.of(v.longValue)).getOrElse(OptionalLong.empty())
+      .map(v => OptionalLong.of(v.longValue))
+      .getOrElse(OptionalLong.empty())
     val v2ColStats = new java.util.HashMap[NamedReference, ColumnStatistics]()
     colStatsMap.foreach { case (k, v) => v2ColStats.put(k, v) }
 
@@ -336,10 +355,10 @@ object DataSourceV2Relation {
       stat: CatalogColumnStat,
       colName: String,
       dataType: DataType): ColumnStatistics = {
-    val parsedMin = stat.min.map(
-      CatalogColumnStat.fromExternalString(_, colName, dataType, stat.version))
-    val parsedMax = stat.max.map(
-      CatalogColumnStat.fromExternalString(_, colName, dataType, stat.version))
+    val parsedMin =
+      stat.min.map(CatalogColumnStat.fromExternalString(_, colName, dataType, stat.version))
+    val parsedMax =
+      stat.max.map(CatalogColumnStat.fromExternalString(_, colName, dataType, stat.version))
     val v2DistinctCount =
       stat.distinctCount.map(v => OptionalLong.of(v.longValue)).getOrElse(OptionalLong.empty())
     val v2NullCount =
@@ -363,10 +382,10 @@ object DataSourceV2Relation {
     }
     new ColumnStatistics {
       override def distinctCount(): OptionalLong = v2DistinctCount
-      override def min(): Optional[Object] = Optional.ofNullable(
-        parsedMin.map(_.asInstanceOf[Object]).orNull)
-      override def max(): Optional[Object] = Optional.ofNullable(
-        parsedMax.map(_.asInstanceOf[Object]).orNull)
+      override def min(): Optional[Object] =
+        Optional.ofNullable(parsedMin.map(_.asInstanceOf[Object]).orNull)
+      override def max(): Optional[Object] =
+        Optional.ofNullable(parsedMax.map(_.asInstanceOf[Object]).orNull)
       override def nullCount(): OptionalLong = v2NullCount
       override def avgLen(): OptionalLong = v2AvgLen
       override def maxLen(): OptionalLong = v2MaxLen
@@ -408,8 +427,10 @@ object DataSourceV2Relation {
         val histogram = if (colStat.histogram().isPresent) {
           val v2Histogram = colStat.histogram().get()
           val bins = v2Histogram.bins()
-          Some(Histogram(v2Histogram.height(),
-            bins.map(bin => HistogramBin(bin.lo, bin.hi, bin.ndv))))
+          Some(
+            Histogram(
+              v2Histogram.height(),
+              bins.map(bin => HistogramBin(bin.lo, bin.hi, bin.ndv))))
         } else {
           None
         }

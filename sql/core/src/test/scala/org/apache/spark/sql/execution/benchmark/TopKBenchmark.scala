@@ -21,8 +21,7 @@ import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.internal.SQLConf.WINDOW_GROUP_LIMIT_THRESHOLD
 
 /**
- * Benchmark to measure performance for top-k computation.
- * To run this benchmark:
+ * Benchmark to measure performance for top-k computation. To run this benchmark:
  * {{{
  *   1. without sbt: bin/spark-submit --class <this class>
  *      --jars <spark core test jar>,<spark catalyst test jar> <spark sql test jar>
@@ -39,13 +38,16 @@ object TopKBenchmark extends SqlBasedBenchmark {
       withTempPath { dir =>
         val path = dir.getCanonicalPath + "/topk_benchmark_table"
         val N = 1024 * 1024 * 20
-        spark.range(0, N, 1, 11)
+        spark
+          .range(0, N, 1, 11)
           .selectExpr("id as a", "id % 1024 as b")
-          .write.mode("overwrite")
+          .write
+          .mode("overwrite")
           .parquet(path)
 
         def f(rankLikeFunc: String, partition: String): Unit = {
-          spark.read.parquet(path)
+          spark.read
+            .parquet(path)
             .selectExpr(s"$rankLikeFunc() OVER($partition ORDER BY a) AS rn", "a", "b")
             .where("rn > 100 and rn <= 200")
             .noop()
@@ -55,15 +57,14 @@ object TopKBenchmark extends SqlBasedBenchmark {
 
         Seq("ROW_NUMBER", "RANK", "DENSE_RANK").foreach { function =>
           Seq("", "PARTITION BY b").foreach { partition =>
-            benchmark.addCase(
-              s"$function (PARTITION: $partition, WindowGroupLimit: false)") { _ =>
-              withSQLConf(WINDOW_GROUP_LIMIT_THRESHOLD.key -> "-1") {
-                f(function, partition)
-              }
+            benchmark.addCase(s"$function (PARTITION: $partition, WindowGroupLimit: false)") {
+              _ =>
+                withSQLConf(WINDOW_GROUP_LIMIT_THRESHOLD.key -> "-1") {
+                  f(function, partition)
+                }
             }
 
-            benchmark.addCase(
-              s"$function (PARTITION: $partition, WindowGroupLimit: true)") { _ =>
+            benchmark.addCase(s"$function (PARTITION: $partition, WindowGroupLimit: true)") { _ =>
               f(function, partition)
             }
           }

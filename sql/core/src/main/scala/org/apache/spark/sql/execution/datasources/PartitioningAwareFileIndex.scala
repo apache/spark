@@ -35,18 +35,22 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.ArrayImplicits._
 
 /**
- * An abstract class that represents [[FileIndex]]s that are aware of partitioned tables.
- * It provides the necessary methods to parse partition data based on a set of files.
+ * An abstract class that represents [[FileIndex]]s that are aware of partitioned tables. It
+ * provides the necessary methods to parse partition data based on a set of files.
  *
- * @param parameters as set of options to control partition discovery
- * @param userSpecifiedSchema an optional user specified schema that will be use to provide
- *                            types for the discovered partitions
+ * @param parameters
+ *   as set of options to control partition discovery
+ * @param userSpecifiedSchema
+ *   an optional user specified schema that will be use to provide types for the discovered
+ *   partitions
  */
 abstract class PartitioningAwareFileIndex(
     sparkSession: SparkSession,
     parameters: Map[String, String],
     userSpecifiedSchema: Option[StructType],
-    fileStatusCache: FileStatusCache = NoopCache) extends FileIndex with Logging {
+    fileStatusCache: FileStatusCache = NoopCache)
+    extends FileIndex
+    with Logging {
 
   /** Returns the specification of the partitions inferred from the data. */
   def partitionSpec(): PartitionSpec
@@ -78,7 +82,8 @@ abstract class PartitioningAwareFileIndex(
   }
 
   override def listFiles(
-      partitionFilters: Seq[Expression], dataFilters: Seq[Expression]): Seq[PartitionDirectory] = {
+      partitionFilters: Seq[Expression],
+      dataFilters: Seq[Expression]): Seq[PartitionDirectory] = {
     def isNonEmptyFile(f: FileStatus): Boolean = {
       isDataPath(f.getPath) && f.getLen > 0
     }
@@ -92,18 +97,17 @@ abstract class PartitioningAwareFileIndex(
         throw new IllegalArgumentException(
           "Datasource with partition do not allow recursive file loading.")
       }
-      prunePartitions(partitionFilters, partitionSpec()).map {
-        case PartitionPath(values, path) =>
-          val files: Seq[FileStatus] = leafDirToChildrenFiles.get(path) match {
-            case Some(existingDir) =>
-              // Directory has children files in it, return them
-              existingDir.filter(f => matchPathPattern(f) && isNonEmptyFile(f)).toImmutableArraySeq
+      prunePartitions(partitionFilters, partitionSpec()).map { case PartitionPath(values, path) =>
+        val files: Seq[FileStatus] = leafDirToChildrenFiles.get(path) match {
+          case Some(existingDir) =>
+            // Directory has children files in it, return them
+            existingDir.filter(f => matchPathPattern(f) && isNonEmptyFile(f)).toImmutableArraySeq
 
-            case None =>
-              // Directory does not exist, or has no children files
-              Nil
-          }
-          filePruningRunner.prune(PartitionDirectory(values, files.toArray))
+          case None =>
+            // Directory does not exist, or has no children files
+            Nil
+        }
+        filePruningRunner.prune(PartitionDirectory(values, files.toArray))
       }
     }
     logTrace("Selected files after partition pruning:\n\t" + selectedPartitions.mkString("\n\t"))
@@ -139,7 +143,8 @@ abstract class PartitioningAwareFileIndex(
         // 2. The path is a file, then it will be present in leafFiles. Include this path.
         // 3. The path is a directory, but has no children files. Do not include this path.
 
-        leafDirToChildrenFiles.get(qualifiedPath)
+        leafDirToChildrenFiles
+          .get(qualifiedPath)
           .orElse { leafFiles.get(qualifiedPath).map(Array(_)) }
           .getOrElse(Array.empty)
       }
@@ -154,12 +159,16 @@ abstract class PartitioningAwareFileIndex(
       PartitionSpec.emptySpec
     } else {
       // We use leaf dirs containing data files to discover the schema.
-      val leafDirs = leafDirToChildrenFiles.filter { case (_, files) =>
-        files.exists(f => isDataPath(f.getPath))
-      }.keys.toSeq
+      val leafDirs = leafDirToChildrenFiles
+        .filter { case (_, files) =>
+          files.exists(f => isDataPath(f.getPath))
+        }
+        .keys
+        .toSeq
 
       val caseInsensitiveOptions = CaseInsensitiveMap(parameters)
-      val timeZoneId = caseInsensitiveOptions.get(FileIndexOptions.TIME_ZONE)
+      val timeZoneId = caseInsensitiveOptions
+        .get(FileIndexOptions.TIME_ZONE)
         .getOrElse(sparkSession.sessionState.conf.sessionLocalTimeZone)
 
       PartitioningUtils.parsePartitions(
@@ -186,14 +195,14 @@ abstract class PartitioningAwareFileIndex(
     if (partitionPruningPredicates.nonEmpty) {
       val predicate = partitionPruningPredicates.reduce(expressions.And)
 
-      val boundPredicate = Predicate.createInterpreted(predicate.transform {
-        case a: AttributeReference =>
+      val boundPredicate =
+        Predicate.createInterpreted(predicate.transform { case a: AttributeReference =>
           val index = partitionColumns.indexWhere(a.name == _.name)
           BoundReference(index, partitionColumns(index).dataType, nullable = true)
-      })
+        })
 
-      val selected = partitions.filter {
-        case PartitionPath(values, _) => boundPredicate.eval(values)
+      val selected = partitions.filter { case PartitionPath(values, _) =>
+        boundPredicate.eval(values)
       }
       logInfo {
         val total = partitions.length
@@ -210,24 +219,21 @@ abstract class PartitioningAwareFileIndex(
   }
 
   /**
-   * Contains a set of paths that are considered as the base dirs of the input datasets.
-   * The partitioning discovery logic will make sure it will stop when it reaches any
-   * base path.
+   * Contains a set of paths that are considered as the base dirs of the input datasets. The
+   * partitioning discovery logic will make sure it will stop when it reaches any base path.
    *
-   * By default, the paths of the dataset provided by users will be base paths.
-   * Below are three typical examples,
-   * Case 1) `spark.read.parquet("/path/something=true/")`: the base path will be
-   * `/path/something=true/`, and the returned DataFrame will not contain a column of `something`.
-   * Case 2) `spark.read.parquet("/path/something=true/a.parquet")`: the base path will be
-   * still `/path/something=true/`, and the returned DataFrame will also not contain a column of
-   * `something`.
-   * Case 3) `spark.read.parquet("/path/")`: the base path will be `/path/`, and the returned
+   * By default, the paths of the dataset provided by users will be base paths. Below are three
+   * typical examples, Case 1) `spark.read.parquet("/path/something=true/")`: the base path will
+   * be `/path/something=true/`, and the returned DataFrame will not contain a column of
+   * `something`. Case 2) `spark.read.parquet("/path/something=true/a.parquet")`: the base path
+   * will be still `/path/something=true/`, and the returned DataFrame will also not contain a
+   * column of `something`. Case 3) `spark.read.parquet("/path/")`: the base path will be
+   * `/path/`, and the returned DataFrame will have the column of `something`.
+   *
+   * Users also can override the basePath by setting `basePath` in the options to pass the new
+   * base path to the data source. For example,
+   * `spark.read.option("basePath", "/path/").parquet("/path/something=true/")`, and the returned
    * DataFrame will have the column of `something`.
-   *
-   * Users also can override the basePath by setting `basePath` in the options to pass the new base
-   * path to the data source.
-   * For example, `spark.read.option("basePath", "/path/").parquet("/path/something=true/")`,
-   * and the returned DataFrame will have the column of `something`.
    */
   private def basePaths: Set[Path] = {
     caseInsensitiveMap.get(FileIndexOptions.BASE_PATH_PARAM).map(new Path(_)) match {
@@ -235,13 +241,15 @@ abstract class PartitioningAwareFileIndex(
         val fs = userDefinedBasePath.getFileSystem(hadoopConf)
         try {
           if (!fs.getFileStatus(userDefinedBasePath).isDirectory) {
-            throw new IllegalArgumentException(s"Option '${FileIndexOptions.BASE_PATH_PARAM}' " +
-              s"must be a directory")
+            throw new IllegalArgumentException(
+              s"Option '${FileIndexOptions.BASE_PATH_PARAM}' " +
+                s"must be a directory")
           }
         } catch {
           case _: FileNotFoundException =>
-            throw new IllegalArgumentException(s"Option '${FileIndexOptions.BASE_PATH_PARAM}' " +
-             s"not found")
+            throw new IllegalArgumentException(
+              s"Option '${FileIndexOptions.BASE_PATH_PARAM}' " +
+                s"not found")
         }
         val qualifiedBasePath = fs.makeQualified(userDefinedBasePath)
         val qualifiedBasePathStr = qualifiedBasePath.toString
@@ -257,7 +265,8 @@ abstract class PartitioningAwareFileIndex(
         rootPaths.map { path =>
           // Make the path qualified (consistent with listLeafFiles and bulkListLeafFiles).
           val qualifiedPath = path.getFileSystem(hadoopConf).makeQualified(path)
-          if (leafFiles.contains(qualifiedPath)) qualifiedPath.getParent else qualifiedPath }.toSet
+          if (leafFiles.contains(qualifiedPath)) qualifiedPath.getParent else qualifiedPath
+        }.toSet
     }
   }
 

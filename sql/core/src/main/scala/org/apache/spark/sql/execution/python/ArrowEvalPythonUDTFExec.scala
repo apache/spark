@@ -30,15 +30,20 @@ import org.apache.spark.sql.types.DataType.equalsIgnoreCompatibleCollation
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch}
 
 /**
- * A physical plan that evaluates a [[PythonUDTF]] using Apache Arrow.
- * This is similar to [[ArrowEvalPythonExec]].
+ * A physical plan that evaluates a [[PythonUDTF]] using Apache Arrow. This is similar to
+ * [[ArrowEvalPythonExec]].
  *
- * @param udtf the user-defined Python function.
- * @param requiredChildOutput the required output of the child plan. It's used for omitting data
- *                            generation that will be discarded next by a projection.
- * @param resultAttrs the output schema of the Python UDTF.
- * @param child the child plan.
- * @param evalType the Python eval type.
+ * @param udtf
+ *   the user-defined Python function.
+ * @param requiredChildOutput
+ *   the required output of the child plan. It's used for omitting data generation that will be
+ *   discarded next by a projection.
+ * @param resultAttrs
+ *   the output schema of the Python UDTF.
+ * @param child
+ *   the child plan.
+ * @param evalType
+ *   the Python eval type.
  */
 case class ArrowEvalPythonUDTFExec(
     udtf: PythonUDTF,
@@ -46,7 +51,8 @@ case class ArrowEvalPythonUDTFExec(
     resultAttrs: Seq[Attribute],
     child: SparkPlan,
     evalType: Int)
-  extends EvalPythonUDTFExec with PythonSQLMetrics {
+    extends EvalPythonUDTFExec
+    with PythonSQLMetrics {
 
   private val batchSize = conf.arrowMaxRecordsPerBatch
   private val sessionLocalTimeZone = conf.sessionLocalTimeZone
@@ -90,11 +96,13 @@ case class ArrowEvalPythonUDTFExec(
       val outputVectors = resultAttrs.indices.map(columnVector.getChild)
       val flattenedBatch = new ColumnarBatch(outputVectors.toArray)
 
-      val actualDataTypes = (0 until flattenedBatch.numCols()).map(
-        i => flattenedBatch.column(i).dataType())
+      val actualDataTypes =
+        (0 until flattenedBatch.numCols()).map(i => flattenedBatch.column(i).dataType())
       if (!equalsIgnoreCompatibleCollation(outputTypes, actualDataTypes)) {
         throw QueryExecutionErrors.arrowDataTypeMismatchError(
-          "Python UDTF", outputTypes, actualDataTypes)
+          "Python UDTF",
+          outputTypes,
+          actualDataTypes)
       }
 
       flattenedBatch.setNumRows(batch.numRows())

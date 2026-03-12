@@ -30,11 +30,12 @@ import org.apache.spark.sql.execution.ScanFileListing
 import org.apache.spark.sql.internal.{SessionStateHelper, SQLConf}
 
 /**
- * A collection of file blocks that should be read as a single task
- * (possibly from multiple partitioned directories).
+ * A collection of file blocks that should be read as a single task (possibly from multiple
+ * partitioned directories).
  */
 case class FilePartition(index: Int, files: Array[PartitionedFile])
-  extends Partition with InputPartition {
+    extends Partition
+    with InputPartition {
   override def preferredLocations(): Array[String] = {
     // Computes total number of bytes can be retrieved from each host.
     val hostToNumBytes = mutable.HashMap.empty[String, Long]
@@ -45,11 +46,16 @@ case class FilePartition(index: Int, files: Array[PartitionedFile])
     }
 
     // Takes the first 3 hosts with the most data to be retrieved
-    hostToNumBytes.toSeq.sortBy {
-      case (host, numBytes) => numBytes
-    }.reverse.take(3).map {
-      case (host, numBytes) => host
-    }.toArray
+    hostToNumBytes.toSeq
+      .sortBy { case (host, numBytes) =>
+        numBytes
+      }
+      .reverse
+      .take(3)
+      .map { case (host, numBytes) =>
+        host
+      }
+      .toArray
   }
 }
 
@@ -100,12 +106,14 @@ object FilePartition extends SessionStateHelper with Logging {
         partitionedFiles.map(_.length + openCostBytes).map(BigDecimal(_)).sum[BigDecimal]
       val desiredSplitBytes =
         (totalSizeInBytes / BigDecimal(maxPartNum.get)).setScale(0, RoundingMode.UP).longValue
-      val desiredPartitions = getFilePartitions(partitionedFiles, desiredSplitBytes, openCostBytes)
-      logWarning(log"The number of partitions is ${MDC(NUM_PARTITIONS, partitions.size)}, " +
-        log"which exceeds the maximum number configured: " +
-        log"${MDC(MAX_NUM_PARTITIONS, maxPartNum.get)}. Spark rescales it to " +
-        log"${MDC(DESIRED_NUM_PARTITIONS, desiredPartitions.size)} by ignoring the " +
-        log"configuration of ${MDC(CONFIG, SQLConf.FILES_MAX_PARTITION_BYTES.key)}.")
+      val desiredPartitions =
+        getFilePartitions(partitionedFiles, desiredSplitBytes, openCostBytes)
+      logWarning(
+        log"The number of partitions is ${MDC(NUM_PARTITIONS, partitions.size)}, " +
+          log"which exceeds the maximum number configured: " +
+          log"${MDC(MAX_NUM_PARTITIONS, maxPartNum.get)}. Spark rescales it to " +
+          log"${MDC(DESIRED_NUM_PARTITIONS, desiredPartitions.size)} by ignoring the " +
+          log"configuration of ${MDC(CONFIG, SQLConf.FILES_MAX_PARTITION_BYTES.key)}.")
       desiredPartitions
     } else {
       partitions
@@ -142,7 +150,8 @@ object FilePartition extends SessionStateHelper with Logging {
    * [[PartitionDirectory]]s.
    */
   def maxSplitBytes(
-      sparkSession: SparkSession, selectedPartitions: Seq[PartitionDirectory]): Long = {
+      sparkSession: SparkSession,
+      selectedPartitions: Seq[PartitionDirectory]): Long = {
     val openCostInBytes = getSqlConf(sparkSession).filesOpenCostInBytes
     val byteNum = selectedPartitions.flatMap(_.files.map(_.getLen + openCostInBytes)).sum
     maxSplitBytes(sparkSession, byteNum)

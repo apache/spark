@@ -29,23 +29,26 @@ import org.apache.spark.sql.types.{BooleanType, MetadataBuilder, StringType, Str
  * specific test suites:
  *
  *   - V2 table catalog tests: `org.apache.spark.sql.execution.command.v2.DescribeTableSuite`
- *   - V1 table catalog tests:
- *     `org.apache.spark.sql.execution.command.v1.DescribeTableSuiteBase`
+ *   - V1 table catalog tests: `org.apache.spark.sql.execution.command.v1.DescribeTableSuiteBase`
  *     - V1 In-Memory catalog: `org.apache.spark.sql.execution.command.v1.DescribeTableSuite`
  *     - V1 Hive External catalog:
- *        `org.apache.spark.sql.hive.execution.command.DescribeTableSuite`
+ *       `org.apache.spark.sql.hive.execution.command.DescribeTableSuite`
  */
 trait DescribeTableSuiteBase extends QueryTest with DDLCommandTestUtils {
   override val command = "DESCRIBE TABLE"
 
   test("DESCRIBE TABLE in a catalog when table does not exist") {
     withNamespaceAndTable("ns", "table") { tbl =>
-      val parsed = CatalystSqlParser.parseMultipartIdentifier(s"${tbl}_non_existence")
-        .map(part => quoteIdentifier(part)).mkString(".")
+      val parsed = CatalystSqlParser
+        .parseMultipartIdentifier(s"${tbl}_non_existence")
+        .map(part => quoteIdentifier(part))
+        .mkString(".")
       val e = intercept[AnalysisException] {
         sql(s"DESCRIBE TABLE ${tbl}_non_existence")
       }
-      checkErrorTableNotFound(e, parsed,
+      checkErrorTableNotFound(
+        e,
+        parsed,
         ExpectedContext(s"${tbl}_non_existence", 15, 14 + s"${tbl}_non_existence".length))
     }
   }
@@ -54,16 +57,12 @@ trait DescribeTableSuiteBase extends QueryTest with DDLCommandTestUtils {
     withNamespaceAndTable("ns", "table") { tbl =>
       spark.sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing")
       val descriptionDf = spark.sql(s"DESCRIBE TABLE $tbl")
-      assert(descriptionDf.schema.map(field => (field.name, field.dataType)) ===
-        Seq(
-          ("col_name", StringType),
-          ("data_type", StringType),
-          ("comment", StringType)))
+      assert(
+        descriptionDf.schema.map(field => (field.name, field.dataType)) ===
+          Seq(("col_name", StringType), ("data_type", StringType), ("comment", StringType)))
       QueryTest.checkAnswer(
         descriptionDf,
-        Seq(
-          Row("data", "string", null),
-          Row("id", "bigint", null)))
+        Seq(Row("data", "string", null), Row("id", "bigint", null)))
     }
   }
 
@@ -71,10 +70,11 @@ trait DescribeTableSuiteBase extends QueryTest with DDLCommandTestUtils {
     withNamespaceAndTable("ns", "table") { tbl =>
       spark.sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
       val descriptionDf = spark.sql(s"DESCRIBE TABLE $tbl")
-      assert(descriptionDf.schema.map(field => (field.name, field.dataType)) === Seq(
-        ("col_name", StringType),
-        ("data_type", StringType),
-        ("comment", StringType)))
+      assert(
+        descriptionDf.schema.map(field => (field.name, field.dataType)) === Seq(
+          ("col_name", StringType),
+          ("data_type", StringType),
+          ("comment", StringType)))
       QueryTest.checkAnswer(
         descriptionDf.filter("col_name != 'Created Time'"),
         Seq(
@@ -101,7 +101,8 @@ trait DescribeTableSuiteBase extends QueryTest with DDLCommandTestUtils {
           name = "data_type",
           dataType = StringType,
           nullable = false,
-          metadata = new MetadataBuilder().putString("comment", "data type of the column").build())
+          metadata =
+            new MetadataBuilder().putString("comment", "data type of the column").build())
       assert(noCommentDataset.schema === expectedSchema)
       val isNullDataset = noCommentDataset
         .withColumn("is_null", noCommentDataset("col_name").isNull)
@@ -119,7 +120,8 @@ trait DescribeTableSuiteBase extends QueryTest with DDLCommandTestUtils {
           name = "info_name",
           dataType = StringType,
           nullable = false,
-          metadata = new MetadataBuilder().putString("comment", "name of the column info").build())
+          metadata =
+            new MetadataBuilder().putString("comment", "name of the column info").build())
       assert(noCommentDataset.schema === expectedSchema)
       val isNullDataset = noCommentDataset
         .withColumn("is_null", noCommentDataset("info_name").isNull)
@@ -134,15 +136,13 @@ trait DescribeTableSuiteBase extends QueryTest with DDLCommandTestUtils {
         |(key int COMMENT 'column_comment', col struct<x:int, y:string>)
         |$defaultUsing""".stripMargin)
       val descriptionDf = sql(s"DESC $tbl key")
-      assert(descriptionDf.schema.map(field => (field.name, field.dataType)) === Seq(
-        ("info_name", StringType),
-        ("info_value", StringType)))
+      assert(
+        descriptionDf.schema.map(field => (field.name, field.dataType)) === Seq(
+          ("info_name", StringType),
+          ("info_value", StringType)))
       QueryTest.checkAnswer(
         descriptionDf,
-        Seq(
-          Row("col_name", "key"),
-          Row("data_type", "int"),
-          Row("comment", "column_comment")))
+        Seq(Row("col_name", "key"), Row("data_type", "int"), Row("comment", "column_comment")))
     }
   }
 
@@ -182,14 +182,16 @@ trait DescribeTableSuiteBase extends QueryTest with DDLCommandTestUtils {
 
   test("describe a clustered table") {
     withNamespaceAndTable("ns", "tbl") { tbl =>
-      sql(s"CREATE TABLE $tbl (col1 STRING, col2 struct<x:int, y:int>) " +
-        s"$defaultUsing CLUSTER BY (col1, col2.x)")
+      sql(
+        s"CREATE TABLE $tbl (col1 STRING, col2 struct<x:int, y:int>) " +
+          s"$defaultUsing CLUSTER BY (col1, col2.x)")
       sql(s"ALTER TABLE $tbl ALTER COLUMN col1 COMMENT 'this is comment';")
       val descriptionDf = sql(s"DESC $tbl")
-      assert(descriptionDf.schema.map(field => (field.name, field.dataType)) === Seq(
-        ("col_name", StringType),
-        ("data_type", StringType),
-        ("comment", StringType)))
+      assert(
+        descriptionDf.schema.map(field => (field.name, field.dataType)) === Seq(
+          ("col_name", StringType),
+          ("data_type", StringType),
+          ("comment", StringType)))
       QueryTest.checkAnswer(
         descriptionDf,
         Seq(
@@ -204,14 +206,16 @@ trait DescribeTableSuiteBase extends QueryTest with DDLCommandTestUtils {
 
   test("describe a clustered table - alter table cluster by") {
     withNamespaceAndTable("ns", "tbl") { tbl =>
-      sql(s"CREATE TABLE $tbl (col1 STRING COMMENT 'this is comment', col2 struct<x:int, y:int>) " +
-        s"$defaultUsing CLUSTER BY (col1, col2.x)")
+      sql(
+        s"CREATE TABLE $tbl (col1 STRING COMMENT 'this is comment', col2 struct<x:int, y:int>) " +
+          s"$defaultUsing CLUSTER BY (col1, col2.x)")
       sql(s"ALTER TABLE $tbl CLUSTER BY (col2.y, col1)")
       val descriptionDf = sql(s"DESC $tbl")
-      assert(descriptionDf.schema.map(field => (field.name, field.dataType)) === Seq(
-        ("col_name", StringType),
-        ("data_type", StringType),
-        ("comment", StringType)))
+      assert(
+        descriptionDf.schema.map(field => (field.name, field.dataType)) === Seq(
+          ("col_name", StringType),
+          ("data_type", StringType),
+          ("comment", StringType)))
       QueryTest.checkAnswer(
         descriptionDf,
         Seq(
@@ -226,14 +230,16 @@ trait DescribeTableSuiteBase extends QueryTest with DDLCommandTestUtils {
 
   test("describe a clustered table - alter table cluster by none") {
     withNamespaceAndTable("ns", "tbl") { tbl =>
-      sql(s"CREATE TABLE $tbl (col1 STRING COMMENT 'this is comment', col2 struct<x:int, y:int>) " +
-        s"$defaultUsing CLUSTER BY (col1, col2.x)")
+      sql(
+        s"CREATE TABLE $tbl (col1 STRING COMMENT 'this is comment', col2 struct<x:int, y:int>) " +
+          s"$defaultUsing CLUSTER BY (col1, col2.x)")
       sql(s"ALTER TABLE $tbl CLUSTER BY NONE")
       val descriptionDf = sql(s"DESC $tbl")
-      assert(descriptionDf.schema.map(field => (field.name, field.dataType)) === Seq(
-        ("col_name", StringType),
-        ("data_type", StringType),
-        ("comment", StringType)))
+      assert(
+        descriptionDf.schema.map(field => (field.name, field.dataType)) === Seq(
+          ("col_name", StringType),
+          ("data_type", StringType),
+          ("comment", StringType)))
       QueryTest.checkAnswer(
         descriptionDf,
         Seq(
@@ -246,16 +252,19 @@ trait DescribeTableSuiteBase extends QueryTest with DDLCommandTestUtils {
 
   test("describe a clustered table - dataframe writer v1") {
     withNamespaceAndTable("ns", "tbl") { tbl =>
-      val df = spark.range(10).select(
-        col("id").cast("string").as("col1"),
-        struct(col("id").cast("int").as("x"), col("id").cast("int").as("y")).as("col2"))
+      val df = spark
+        .range(10)
+        .select(
+          col("id").cast("string").as("col1"),
+          struct(col("id").cast("int").as("x"), col("id").cast("int").as("y")).as("col2"))
       df.write.mode("append").clusterBy("col1", "col2.x").saveAsTable(tbl)
       val descriptionDf = sql(s"DESC $tbl")
 
-      assert(descriptionDf.schema.map(field => (field.name, field.dataType)) === Seq(
-        ("col_name", StringType),
-        ("data_type", StringType),
-        ("comment", StringType)))
+      assert(
+        descriptionDf.schema.map(field => (field.name, field.dataType)) === Seq(
+          ("col_name", StringType),
+          ("data_type", StringType),
+          ("comment", StringType)))
       QueryTest.checkAnswer(
         descriptionDf,
         Seq(
@@ -270,16 +279,19 @@ trait DescribeTableSuiteBase extends QueryTest with DDLCommandTestUtils {
 
   test("describe a clustered table - dataframe writer v2") {
     withNamespaceAndTable("ns", "tbl") { tbl =>
-      val df = spark.range(10).select(
-        col("id").cast("string").as("col1"),
-        struct(col("id").cast("int").as("x"), col("id").cast("int").as("y")).as("col2"))
+      val df = spark
+        .range(10)
+        .select(
+          col("id").cast("string").as("col1"),
+          struct(col("id").cast("int").as("x"), col("id").cast("int").as("y")).as("col2"))
       df.writeTo(tbl).clusterBy("col1", "col2.x").create()
       val descriptionDf = sql(s"DESC $tbl")
 
-      assert(descriptionDf.schema.map(field => (field.name, field.dataType)) === Seq(
-        ("col_name", StringType),
-        ("data_type", StringType),
-        ("comment", StringType)))
+      assert(
+        descriptionDf.schema.map(field => (field.name, field.dataType)) === Seq(
+          ("col_name", StringType),
+          ("data_type", StringType),
+          ("comment", StringType)))
       QueryTest.checkAnswer(
         descriptionDf,
         Seq(
@@ -296,8 +308,9 @@ trait DescribeTableSuiteBase extends QueryTest with DDLCommandTestUtils {
     test(s"DESCRIBE TABLE EXTENDED with collation specified = $hasCollations") {
 
       withNamespaceAndTable("ns", "tbl") { tbl =>
-        val getCollationDescription = () => sql(s"DESCRIBE TABLE EXTENDED $tbl")
-          .where("col_name = 'Collation'")
+        val getCollationDescription = () =>
+          sql(s"DESCRIBE TABLE EXTENDED $tbl")
+            .where("col_name = 'Collation'")
 
         val defaultCollation = if (hasCollations) "DEFAULT COLLATION uNiCoDe" else ""
 
@@ -348,8 +361,7 @@ case class DescribeTableJson(
     view_schema_mode: Option[String] = None,
     view_catalog_and_namespace: Option[String] = None,
     view_query_output_columns: Option[List[String]] = None,
-    view_creation_spark_configuration: Option[Map[String, String]] = None
-)
+    view_creation_spark_configuration: Option[Map[String, String]] = None)
 
 /** Used for columns field of DescribeTableJson */
 case class TableColumn(
@@ -357,8 +369,7 @@ case class TableColumn(
     `type`: Type,
     element_nullable: Boolean = true,
     comment: Option[String] = None,
-    default: Option[String] = None
-)
+    default: Option[String] = None)
 
 case class Type(
     name: String,
@@ -372,13 +383,11 @@ case class Type(
     default: Option[String] = None,
     element_nullable: Option[Boolean] = Some(true),
     value_nullable: Option[Boolean] = Some(true),
-    nullable: Option[Boolean] = Some(true)
-)
+    nullable: Option[Boolean] = Some(true))
 
 case class Field(
     name: String,
     `type`: Type,
     element_nullable: Boolean = true,
     comment: Option[String] = None,
-    default: Option[String] = None
-)
+    default: Option[String] = None)

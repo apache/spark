@@ -42,7 +42,9 @@ import org.apache.spark.unsafe.array.ByteArrayMethods
  * A placeholder of lambda variables to prevent unexpected resolution of [[LambdaFunction]].
  */
 case class UnresolvedNamedLambdaVariable(nameParts: Seq[String])
-  extends LeafExpression with NamedExpression with Unevaluable {
+    extends LeafExpression
+    with NamedExpression
+    with Unevaluable {
 
   override def name: String =
     nameParts.map(n => if (n.contains(".")) s"`$n`" else n).mkString(".")
@@ -80,9 +82,9 @@ case class NamedLambdaVariable(
     nullable: Boolean,
     exprId: ExprId = NamedExpression.newExprId,
     value: AtomicReference[Any] = new AtomicReference())
-  extends LeafExpression
-  with NamedExpression
-  with CodegenFallback {
+    extends LeafExpression
+    with NamedExpression
+    with CodegenFallback {
 
   override def qualifier: Seq[String] = Seq.empty
 
@@ -114,7 +116,8 @@ case class LambdaFunction(
     function: Expression,
     arguments: Seq[NamedExpression],
     hidden: Boolean = false)
-  extends Expression with CodegenFallback {
+    extends Expression
+    with CodegenFallback {
 
   override def children: Seq[Expression] = function +: arguments
   override def dataType: DataType = function.dataType
@@ -170,9 +173,9 @@ trait HigherOrderFunction extends Expression with ExpectsInputTypes {
   lazy val argumentsResolved: Boolean = arguments.forall(_.resolved)
 
   /**
-   * Checks the argument data types, returns `TypeCheckResult.success` if it's valid,
-   * or returns a `TypeCheckResult` with an error message if invalid.
-   * Note: it's not valid to call this method until `argumentsResolved == true`.
+   * Checks the argument data types, returns `TypeCheckResult.success` if it's valid, or returns a
+   * `TypeCheckResult` with an error message if invalid. Note: it's not valid to call this method
+   * until `argumentsResolved == true`.
    */
   def checkArgumentDataTypes(): TypeCheckResult = {
     ExpectsInputTypes.checkInputDataTypes(arguments, argumentTypes)
@@ -225,11 +228,12 @@ trait HigherOrderFunction extends Expression with ExpectsInputTypes {
 
   override lazy val canonicalized: Expression = {
     var currExprId = -1
-    val argumentMap = functions.flatMap(_.collect {
-      case l: NamedLambdaVariable =>
+    val argumentMap = functions
+      .flatMap(_.collect { case l: NamedLambdaVariable =>
         currExprId += 1
         l.exprId -> currExprId
-    }).toMap
+      })
+      .toMap
 
     val cleaned = this.transformUp {
       case l: NamedLambdaVariable if argumentMap.contains(l.exprId) =>
@@ -272,8 +276,10 @@ trait SimpleHigherOrderFunction extends HigherOrderFunction with BinaryLike[Expr
    * in order to save null-check code.
    */
   protected def nullSafeEval(inputRow: InternalRow, argumentValue: Any): Any =
-    throw QueryExecutionErrors.notOverrideExpectedMethodsError(this.getClass.getName,
-      "eval", "nullSafeEval")
+    throw QueryExecutionErrors.notOverrideExpectedMethodsError(
+      this.getClass.getName,
+      "eval",
+      "nullSafeEval")
 
   override def eval(inputRow: InternalRow): Any = {
     val value = argument.eval(inputRow)
@@ -295,8 +301,8 @@ trait MapBasedSimpleHigherOrderFunction extends SimpleHigherOrderFunction {
 }
 
 /**
- * Transform elements in an array using the transform function. This is similar to
- * a `map` in functional programming.
+ * Transform elements in an array using the transform function. This is similar to a `map` in
+ * functional programming.
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr, func) - Transforms elements in an array using the function.",
@@ -309,10 +315,9 @@ trait MapBasedSimpleHigherOrderFunction extends SimpleHigherOrderFunction {
   """,
   since = "2.4.0",
   group = "lambda_funcs")
-case class ArrayTransform(
-    argument: Expression,
-    function: Expression)
-  extends ArrayBasedSimpleHigherOrderFunction with CodegenFallback {
+case class ArrayTransform(argument: Expression, function: Expression)
+    extends ArrayBasedSimpleHigherOrderFunction
+    with CodegenFallback {
 
   override def dataType: ArrayType = ArrayType(function.dataType, function.nullable)
 
@@ -357,7 +362,8 @@ case class ArrayTransform(
   override def nodeName: String = "transform"
 
   override protected def withNewChildrenInternal(
-      newLeft: Expression, newRight: Expression): ArrayTransform =
+      newLeft: Expression,
+      newRight: Expression): ArrayTransform =
     copy(argument = newLeft, function = newRight)
 }
 
@@ -393,7 +399,8 @@ case class ArraySort(
     argument: Expression,
     function: Expression,
     allowNullComparisonResult: Boolean)
-  extends ArrayBasedSimpleHigherOrderFunction with CodegenFallback {
+    extends ArrayBasedSimpleHigherOrderFunction
+    with CodegenFallback {
 
   def this(argument: Expression, function: Expression) = {
     this(
@@ -421,9 +428,7 @@ case class ArraySort(
                 messageParameters = Map(
                   "functionName" -> toSQLId(function.prettyName),
                   "expectedType" -> toSQLType(IntegerType),
-                  "actualType" -> toSQLType(function.dataType)
-                )
-              )
+                  "actualType" -> toSQLType(function.dataType)))
             }
           case _ =>
             DataTypeMismatch(
@@ -432,9 +437,7 @@ case class ArraySort(
                 "paramIndex" -> ordinalNumber(0),
                 "requiredType" -> toSQLType(ArrayType),
                 "inputSql" -> toSQLExpr(argument),
-                "inputType" -> toSQLType(argument.dataType)
-              )
-            )
+                "inputType" -> toSQLType(argument.dataType)))
         }
       case failure => failure
     }
@@ -443,12 +446,14 @@ case class ArraySort(
   override protected def bindInternal(
       f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): ArraySort = {
     val ArrayType(elementType, containsNull) = argument.dataType
-        copy(function =
-          f(function, (elementType, containsNull) :: (elementType, containsNull) :: Nil))
+    copy(function =
+      f(function, (elementType, containsNull) :: (elementType, containsNull) :: Nil))
   }
 
-  @transient lazy val LambdaFunction(_,
-    Seq(firstElemVar: NamedLambdaVariable, secondElemVar: NamedLambdaVariable), _) = function
+  @transient lazy val LambdaFunction(
+    _,
+    Seq(firstElemVar: NamedLambdaVariable, secondElemVar: NamedLambdaVariable),
+    _) = function
 
   def comparator(inputRow: InternalRow): Comparator[Any] = {
     val f = functionForEval
@@ -474,7 +479,8 @@ case class ArraySort(
   override def nodeName: String = "array_sort"
 
   override protected def withNewChildrenInternal(
-      newLeft: Expression, newRight: Expression): ArraySort =
+      newLeft: Expression,
+      newRight: Expression): ArraySort =
     copy(argument = newLeft, function = newRight)
 }
 
@@ -489,9 +495,16 @@ object ArraySort {
     val lit1 = Literal(1)
     val litm1 = Literal(-1)
 
-    If(And(IsNull(left), IsNull(right)), lit0,
-      If(IsNull(left), lit1, If(IsNull(right), litm1,
-        If(LessThan(left, right), litm1, If(GreaterThan(left, right), lit1, lit0)))))
+    If(
+      And(IsNull(left), IsNull(right)),
+      lit0,
+      If(
+        IsNull(left),
+        lit1,
+        If(
+          IsNull(right),
+          litm1,
+          If(LessThan(left, right), litm1, If(GreaterThan(left, right), lit1, lit0)))))
   }
 
   // Default Comparator only works for orderable types.
@@ -515,14 +528,15 @@ object ArraySort {
   """,
   since = "3.0.0",
   group = "lambda_funcs")
-case class MapFilter(
-    argument: Expression,
-    function: Expression)
-  extends MapBasedSimpleHigherOrderFunction with CodegenFallback {
+case class MapFilter(argument: Expression, function: Expression)
+    extends MapBasedSimpleHigherOrderFunction
+    with CodegenFallback {
 
   @transient lazy val (keyVar, valueVar) = {
     val args = function.asInstanceOf[LambdaFunction].arguments
-    (args.head.asInstanceOf[NamedLambdaVariable], args.tail.head.asInstanceOf[NamedLambdaVariable])
+    (
+      args.head.asInstanceOf[NamedLambdaVariable],
+      args.tail.head.asInstanceOf[NamedLambdaVariable])
   }
 
   @transient lazy val MapType(keyType, valueType, valueContainsNull) = argument.dataType
@@ -537,14 +551,17 @@ case class MapFilter(
     val f = functionForEval
     val retKeys = new mutable.ListBuffer[Any]
     val retValues = new mutable.ListBuffer[Any]
-    m.foreach(keyType, valueType, (k, v) => {
-      keyVar.value.set(k)
-      valueVar.value.set(v)
-      if (f.eval(inputRow).asInstanceOf[Boolean]) {
-        retKeys += k
-        retValues += v
-      }
-    })
+    m.foreach(
+      keyType,
+      valueType,
+      (k, v) => {
+        keyVar.value.set(k)
+        valueVar.value.set(v)
+        if (f.eval(inputRow).asInstanceOf[Boolean]) {
+          retKeys += k
+          retValues += v
+        }
+      })
     ArrayBasedMapData(retKeys.toArray, retValues.toArray)
   }
 
@@ -555,7 +572,8 @@ case class MapFilter(
   override def nodeName: String = "map_filter"
 
   override protected def withNewChildrenInternal(
-      newLeft: Expression, newRight: Expression): MapFilter =
+      newLeft: Expression,
+      newRight: Expression): MapFilter =
     copy(argument = newLeft, function = newRight)
 }
 
@@ -578,10 +596,9 @@ case class MapFilter(
   note = """
     The inner function may use the index argument since 3.0.0.
   """)
-case class ArrayFilter(
-    argument: Expression,
-    function: Expression)
-  extends ArrayBasedSimpleHigherOrderFunction with CodegenFallback {
+case class ArrayFilter(argument: Expression, function: Expression)
+    extends ArrayBasedSimpleHigherOrderFunction
+    with CodegenFallback {
 
   override def dataType: DataType = argument.dataType
 
@@ -625,15 +642,17 @@ case class ArrayFilter(
   override def nodeName: String = "filter"
 
   override protected def withNewChildrenInternal(
-      newLeft: Expression, newRight: Expression): ArrayFilter =
+      newLeft: Expression,
+      newRight: Expression): ArrayFilter =
     copy(argument = newLeft, function = newRight)
 }
 
 /**
  * Tests whether a predicate holds for one or more elements in the array.
  */
-@ExpressionDescription(usage =
-  "_FUNC_(expr, pred) - Tests whether a predicate holds for one or more elements in the array.",
+@ExpressionDescription(
+  usage =
+    "_FUNC_(expr, pred) - Tests whether a predicate holds for one or more elements in the array.",
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3), x -> x % 2 == 0);
@@ -653,7 +672,9 @@ case class ArrayExists(
     argument: Expression,
     function: Expression,
     followThreeValuedLogic: Boolean)
-  extends ArrayBasedSimpleHigherOrderFunction with CodegenFallback with Predicate {
+    extends ArrayBasedSimpleHigherOrderFunction
+    with CodegenFallback
+    with Predicate {
 
   def this(argument: Expression, function: Expression) = {
     this(
@@ -709,7 +730,8 @@ case class ArrayExists(
   override def nodeName: String = "exists"
 
   override protected def withNewChildrenInternal(
-      newLeft: Expression, newRight: Expression): ArrayExists =
+      newLeft: Expression,
+      newRight: Expression): ArrayExists =
     copy(argument = newLeft, function = newRight)
 }
 
@@ -722,8 +744,8 @@ object ArrayExists {
 /**
  * Tests whether a predicate holds for all elements in the array.
  */
-@ExpressionDescription(usage =
-  "_FUNC_(expr, pred) - Tests whether a predicate holds for all elements in the array.",
+@ExpressionDescription(
+  usage = "_FUNC_(expr, pred) - Tests whether a predicate holds for all elements in the array.",
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3), x -> x % 2 == 0);
@@ -737,13 +759,13 @@ object ArrayExists {
   """,
   since = "3.0.0",
   group = "lambda_funcs")
-case class ArrayForAll(
-    argument: Expression,
-    function: Expression)
-  extends ArrayBasedSimpleHigherOrderFunction with CodegenFallback with Predicate {
+case class ArrayForAll(argument: Expression, function: Expression)
+    extends ArrayBasedSimpleHigherOrderFunction
+    with CodegenFallback
+    with Predicate {
 
   override def nullable: Boolean =
-      super.nullable || function.nullable
+    super.nullable || function.nullable
 
   override def functionType: AbstractDataType = BooleanType
 
@@ -788,7 +810,8 @@ case class ArrayForAll(
   override def nodeName: String = "forall"
 
   override protected def withNewChildrenInternal(
-      newLeft: Expression, newRight: Expression): ArrayForAll =
+      newLeft: Expression,
+      newRight: Expression): ArrayForAll =
     copy(argument = newLeft, function = newRight)
 }
 
@@ -796,8 +819,7 @@ case class ArrayForAll(
  * Applies a binary operator to a start value and all elements in the array.
  */
 @ExpressionDescription(
-  usage =
-    """
+  usage = """
       _FUNC_(expr, start, merge, finish) - Applies a binary operator to an initial state and all
       elements in the array, and reduces this to a single state. The final state is converted
       into the final result by applying a finish function.
@@ -816,7 +838,9 @@ case class ArrayAggregate(
     zero: Expression,
     merge: Expression,
     finish: Expression)
-  extends HigherOrderFunction with CodegenFallback with QuaternaryLike[Expression] {
+    extends HigherOrderFunction
+    with CodegenFallback
+    with QuaternaryLike[Expression] {
 
   def this(argument: Expression, zero: Expression, merge: Expression) = {
     this(argument, zero, merge, LambdaFunction.identity)
@@ -838,7 +862,9 @@ case class ArrayAggregate(
     checkArgumentDataTypes() match {
       case TypeCheckResult.TypeCheckSuccess =>
         if (!DataType.equalsStructurally(
-            zero.dataType, merge.dataType, ignoreNullability = true)) {
+            zero.dataType,
+            merge.dataType,
+            ignoreNullability = true)) {
           DataTypeMismatch(
             errorSubClass = "UNEXPECTED_INPUT_TYPE",
             messageParameters = Map(
@@ -864,8 +890,10 @@ case class ArrayAggregate(
     copy(merge = newMerge, finish = newFinish)
   }
 
-  @transient lazy val LambdaFunction(_,
-    Seq(accForMergeVar: NamedLambdaVariable, elementVar: NamedLambdaVariable), _) = merge
+  @transient lazy val LambdaFunction(
+    _,
+    Seq(accForMergeVar: NamedLambdaVariable, elementVar: NamedLambdaVariable),
+    _) = merge
   @transient lazy val LambdaFunction(_, Seq(accForFinishVar: NamedLambdaVariable), _) = finish
 
   override def eval(input: InternalRow): Any = {
@@ -893,14 +921,17 @@ case class ArrayAggregate(
   override def third: Expression = merge
   override def fourth: Expression = finish
 
-  override protected def withNewChildrenInternal(first: Expression, second: Expression,
-      third: Expression, fourth: Expression): ArrayAggregate =
+  override protected def withNewChildrenInternal(
+      first: Expression,
+      second: Expression,
+      third: Expression,
+      fourth: Expression): ArrayAggregate =
     copy(argument = first, zero = second, merge = third, finish = fourth)
 }
 
 /**
- * Transform Keys for every entry of the map by applying the transform_keys function.
- * Returns map with transformed key entries
+ * Transform Keys for every entry of the map by applying the transform_keys function. Returns map
+ * with transformed key entries
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr, func) - Transforms elements in a map using the function.",
@@ -913,10 +944,9 @@ case class ArrayAggregate(
   """,
   since = "3.0.0",
   group = "lambda_funcs")
-case class TransformKeys(
-    argument: Expression,
-    function: Expression)
-  extends MapBasedSimpleHigherOrderFunction with CodegenFallback {
+case class TransformKeys(argument: Expression, function: Expression)
+    extends MapBasedSimpleHigherOrderFunction
+    with CodegenFallback {
 
   @transient lazy val MapType(keyType, valueType, valueContainsNull) = argument.dataType
 
@@ -934,7 +964,9 @@ case class TransformKeys(
   }
 
   @transient lazy val LambdaFunction(
-    _, Seq(keyVar: NamedLambdaVariable, valueVar: NamedLambdaVariable), _) = function
+    _,
+    Seq(keyVar: NamedLambdaVariable, valueVar: NamedLambdaVariable),
+    _) = function
 
   private lazy val mapBuilder = new ArrayBasedMapBuilder(dataType.keyType, dataType.valueType)
 
@@ -955,7 +987,8 @@ case class TransformKeys(
   override def nodeName: String = "transform_keys"
 
   override protected def withNewChildrenInternal(
-      newLeft: Expression, newRight: Expression): TransformKeys =
+      newLeft: Expression,
+      newRight: Expression): TransformKeys =
     copy(argument = newLeft, function = newRight)
 }
 
@@ -973,10 +1006,9 @@ case class TransformKeys(
   """,
   since = "3.0.0",
   group = "lambda_funcs")
-case class TransformValues(
-    argument: Expression,
-    function: Expression)
-  extends MapBasedSimpleHigherOrderFunction with CodegenFallback {
+case class TransformValues(argument: Expression, function: Expression)
+    extends MapBasedSimpleHigherOrderFunction
+    with CodegenFallback {
 
   @transient lazy val MapType(keyType, valueType, valueContainsNull) = argument.dataType
 
@@ -988,7 +1020,9 @@ case class TransformValues(
   }
 
   @transient lazy val LambdaFunction(
-    _, Seq(keyVar: NamedLambdaVariable, valueVar: NamedLambdaVariable), _) = function
+    _,
+    Seq(keyVar: NamedLambdaVariable, valueVar: NamedLambdaVariable),
+    _) = function
 
   override def nullSafeEval(inputRow: InternalRow, argumentValue: Any): Any = {
     val map = argumentValue.asInstanceOf[MapData]
@@ -1007,18 +1041,18 @@ case class TransformValues(
   override def nodeName: String = "transform_values"
 
   override protected def withNewChildrenInternal(
-      newLeft: Expression, newRight: Expression): TransformValues =
+      newLeft: Expression,
+      newRight: Expression): TransformValues =
     copy(argument = newLeft, function = newRight)
 }
 
 /**
- * Merges two given maps into a single map by applying function to the pair of values with
- * the same key.
+ * Merges two given maps into a single map by applying function to the pair of values with the
+ * same key.
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage =
-    """
+  usage = """
       _FUNC_(map1, map2, function) - Merges two given maps into a single map by applying
       function to the pair of values with the same key. For keys only presented in one map,
       NULL will be passed as the value for the missing key. If an input map contains duplicated
@@ -1034,13 +1068,16 @@ case class TransformValues(
   since = "3.0.0",
   group = "lambda_funcs")
 case class MapZipWith(left: Expression, right: Expression, function: Expression)
-  extends HigherOrderFunction with CodegenFallback with TernaryLike[Expression] {
+    extends HigherOrderFunction
+    with CodegenFallback
+    with TernaryLike[Expression] {
 
   def functionForEval: Expression = functionsForEval.head
 
   @transient lazy val MapType(leftKeyType, leftValueType, leftValueContainsNull) = left.dataType
 
-  @transient lazy val MapType(rightKeyType, rightValueType, rightValueContainsNull) = right.dataType
+  @transient lazy val MapType(rightKeyType, rightValueType, rightValueContainsNull) =
+    right.dataType
 
   @transient lazy val keyType =
     TypeCoercion.findCommonTypeDifferentOnlyInNullFlags(leftKeyType, rightKeyType).get
@@ -1074,9 +1111,7 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
             messageParameters = Map(
               "functionName" -> toSQLId(prettyName),
               "leftType" -> toSQLType(leftKeyType),
-              "rightType" -> toSQLType(rightKeyType)
-            )
-          )
+              "rightType" -> toSQLType(rightKeyType)))
         }
       case failure => failure
     }
@@ -1098,19 +1133,21 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
     }
   }
 
-  @transient lazy val LambdaFunction(_, Seq(
-    keyVar: NamedLambdaVariable,
-    value1Var: NamedLambdaVariable,
-    value2Var: NamedLambdaVariable),
+  @transient lazy val LambdaFunction(
+    _,
+    Seq(
+      keyVar: NamedLambdaVariable,
+      value1Var: NamedLambdaVariable,
+      value2Var: NamedLambdaVariable),
     _) = function
 
   /**
-   * The function accepts two key arrays and returns a collection of keys with indexes
-   * to value arrays. Indexes are represented as an array of two items. This is a small
-   * optimization leveraging mutability of arrays.
+   * The function accepts two key arrays and returns a collection of keys with indexes to value
+   * arrays. Indexes are represented as an array of two items. This is a small optimization
+   * leveraging mutability of arrays.
    */
-  @transient private lazy val getKeysWithValueIndexes:
-      (ArrayData, ArrayData) => mutable.Iterable[(Any, Array[Option[Int]])] = {
+  @transient private lazy val getKeysWithValueIndexes
+      : (ArrayData, ArrayData) => mutable.Iterable[(Any, Array[Option[Int]])] = {
     if (TypeUtils.typeWithProperEquals(keyType) && SQLConf.get.mapZipWithUsesJavaCollections) {
       getKeysWithIndexesFastAsJava
     } else if (TypeUtils.typeWithProperEquals(keyType)) {
@@ -1156,8 +1193,7 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
 
   private def getKeysWithIndexesFastAsJava(
       keys1: ArrayData,
-      keys2: ArrayData
-  ): scala.collection.mutable.LinkedHashMap[Any, Array[Option[Int]]] = {
+      keys2: ArrayData): scala.collection.mutable.LinkedHashMap[Any, Array[Option[Int]]] = {
     val hashMap = new java.util.LinkedHashMap[Any, Array[Option[Int]]]
     for ((z, array) <- Array((0, keys1), (1, keys2))) {
       var i = 0
@@ -1240,16 +1276,16 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
   override def third: Expression = function
 
   override protected def withNewChildrenInternal(
-      newFirst: Expression, newSecond: Expression, newThird: Expression): MapZipWith =
-    copy(
-      left = newFirst,
-      right = newSecond,
-      function = newThird)
+      newFirst: Expression,
+      newSecond: Expression,
+      newThird: Expression): MapZipWith =
+    copy(left = newFirst, right = newSecond, function = newThird)
 }
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(left, right, func) - Merges the two given arrays, element-wise, into a single array using function. If one array is shorter, nulls are appended at the end to match the length of the longer array, before applying function.",
+  usage =
+    "_FUNC_(left, right, func) - Merges the two given arrays, element-wise, into a single array using function. If one array is shorter, nulls are appended at the end to match the length of the longer array, before applying function.",
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3), array('a', 'b', 'c'), (x, y) -> (y, x));
@@ -1263,7 +1299,9 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
   group = "lambda_funcs")
 // scalastyle:on line.size.limit
 case class ZipWith(left: Expression, right: Expression, function: Expression)
-  extends HigherOrderFunction with CodegenFallback with TernaryLike[Expression] {
+    extends HigherOrderFunction
+    with CodegenFallback
+    with TernaryLike[Expression] {
 
   def functionForEval: Expression = functionsForEval.head
 
@@ -1281,12 +1319,13 @@ case class ZipWith(left: Expression, right: Expression, function: Expression)
       f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): ZipWith = {
     val ArrayType(leftElementType, _) = left.dataType
     val ArrayType(rightElementType, _) = right.dataType
-    copy(function = f(function,
-      (leftElementType, true) :: (rightElementType, true) :: Nil))
+    copy(function = f(function, (leftElementType, true) :: (rightElementType, true) :: Nil))
   }
 
-  @transient lazy val LambdaFunction(_,
-    Seq(leftElemVar: NamedLambdaVariable, rightElemVar: NamedLambdaVariable), _) = function
+  @transient lazy val LambdaFunction(
+    _,
+    Seq(leftElemVar: NamedLambdaVariable, rightElemVar: NamedLambdaVariable),
+    _) = function
 
   override def eval(input: InternalRow): Any = {
     val leftArr = left.eval(input).asInstanceOf[ArrayData]
@@ -1328,6 +1367,8 @@ case class ZipWith(left: Expression, right: Expression, function: Expression)
   override def third: Expression = function
 
   override protected def withNewChildrenInternal(
-      newFirst: Expression, newSecond: Expression, newThird: Expression): ZipWith =
+      newFirst: Expression,
+      newSecond: Expression,
+      newThird: Expression): ZipWith =
     copy(left = newFirst, right = newSecond, function = newThird)
 }

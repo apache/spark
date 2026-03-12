@@ -26,18 +26,17 @@ import org.apache.spark.sql.execution.datasources.v2.python.UserDefinedPythonDat
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * Functions for registering user-defined data sources.
- * Use `SparkSession.dataSource` to access this.
+ * Functions for registering user-defined data sources. Use `SparkSession.dataSource` to access
+ * this.
  */
 @Evolving
 private[sql] class DataSourceRegistration private[sql] (dataSourceManager: DataSourceManager)
-  extends Logging {
+    extends Logging {
 
   protected[sql] def registerPython(
       name: String,
       dataSource: UserDefinedPythonDataSource): Unit = {
-    log.debug(
-      s"""
+    log.debug(s"""
          | Registering new Python data source:
          | name: $name
          | command: ${dataSource.dataSourceCls.command}
@@ -54,10 +53,10 @@ private[sql] class DataSourceRegistration private[sql] (dataSourceManager: DataS
   /**
    * Checks if the specified data source exists.
    *
-   * This method allows for user-defined data sources to be registered even if they
-   * have the same name as an existing data source in the registry. However, if the
-   * data source can be successfully loaded and is not a user-defined one, an error
-   * is thrown to prevent lookup errors with built-in or Scala/Java data sources.
+   * This method allows for user-defined data sources to be registered even if they have the same
+   * name as an existing data source in the registry. However, if the data source can be
+   * successfully loaded and is not a user-defined one, an error is thrown to prevent lookup
+   * errors with built-in or Scala/Java data sources.
    */
   private def checkDataSourceExists(name: String): Unit = {
     // Allow re-registration of user-defined data sources.

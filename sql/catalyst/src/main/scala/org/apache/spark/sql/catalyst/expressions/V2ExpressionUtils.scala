@@ -73,8 +73,10 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
       query: LogicalPlan,
       funCatalogOpt: Option[FunctionCatalog] = None): Expression =
     toCatalystOpt(expr, query, funCatalogOpt)
-        .getOrElse(throw new AnalysisException(
-          errorClass = "_LEGACY_ERROR_TEMP_3054", messageParameters = Map("expr" -> expr.toString)))
+      .getOrElse(
+        throw new AnalysisException(
+          errorClass = "_LEGACY_ERROR_TEMP_3054",
+          messageParameters = Map("expr" -> expr.toString)))
 
   def toCatalystOpt(
       expr: V2Expression,
@@ -128,8 +130,8 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
       catalog: FunctionCatalog,
       name: String,
       args: Seq[Expression]): Option[BoundFunction] = {
-    val inputType = StructType(args.zipWithIndex.map {
-      case (exp, pos) => StructField(s"_$pos", exp.dataType, exp.nullable)
+    val inputType = StructType(args.zipWithIndex.map { case (exp, pos) =>
+      StructField(s"_$pos", exp.dataType, exp.nullable)
     })
     try {
       val unbound = catalog.loadFunction(Identifier.of(Array.empty, name))
@@ -164,14 +166,25 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
     val argClasses = declaredInputTypes.map(EncoderUtils.dataTypeJavaClass)
     findMethod(scalarFunc, MAGIC_METHOD_NAME, argClasses) match {
       case Some(m) if Modifier.isStatic(m.getModifiers) =>
-        StaticInvoke(scalarFunc.getClass, scalarFunc.resultType(),
-          MAGIC_METHOD_NAME, arguments, inputTypes = declaredInputTypes,
-          propagateNull = false, returnNullable = scalarFunc.isResultNullable,
-          isDeterministic = scalarFunc.isDeterministic, scalarFunction = Some(scalarFunc))
+        StaticInvoke(
+          scalarFunc.getClass,
+          scalarFunc.resultType(),
+          MAGIC_METHOD_NAME,
+          arguments,
+          inputTypes = declaredInputTypes,
+          propagateNull = false,
+          returnNullable = scalarFunc.isResultNullable,
+          isDeterministic = scalarFunc.isDeterministic,
+          scalarFunction = Some(scalarFunc))
       case Some(_) =>
         val caller = Literal.create(scalarFunc, ObjectType(scalarFunc.getClass))
-        Invoke(caller, MAGIC_METHOD_NAME, scalarFunc.resultType(),
-          arguments, methodInputTypes = declaredInputTypes, propagateNull = false,
+        Invoke(
+          caller,
+          MAGIC_METHOD_NAME,
+          scalarFunc.resultType(),
+          arguments,
+          methodInputTypes = declaredInputTypes,
+          propagateNull = false,
           returnNullable = scalarFunc.isResultNullable,
           isDeterministic = scalarFunc.isDeterministic)
       case _ =>
@@ -191,8 +204,8 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
   }
 
   /**
-   * Check if the input `fn` implements the given `methodName` with parameter types specified
-   * via `argClasses`.
+   * Check if the input `fn` implements the given `methodName` with parameter types specified via
+   * `argClasses`.
    */
   private def findMethod(
       fn: BoundFunction,
@@ -251,15 +264,17 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
   private def convertConditionalFunc(expr: GeneralScalarExpression): Option[Expression] = {
     expr.name match {
       case "CASE_WHEN" =>
-        convertExpr(expr, children =>
-          if (children.length % 2 == 0) {
-            val branches = children.grouped(2).map { case Seq(c, v) => (c, v) }.toSeq
-            CaseWhen(branches, None)
-          } else {
-            val (pairs, last) = children.splitAt(children.length - 1)
-            val branches = pairs.grouped(2).map { case Seq(c, v) => (c, v) }.toSeq
-            CaseWhen(branches, Some(last.head))
-          })
+        convertExpr(
+          expr,
+          children =>
+            if (children.length % 2 == 0) {
+              val branches = children.grouped(2).map { case Seq(c, v) => (c, v) }.toSeq
+              CaseWhen(branches, None)
+            } else {
+              val (pairs, last) = children.splitAt(children.length - 1)
+              val branches = pairs.grouped(2).map { case Seq(c, v) => (c, v) }.toSeq
+              CaseWhen(branches, Some(last.head))
+            })
       case _ => None
     }
   }
@@ -352,8 +367,8 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
   }
 
   private def convertBinaryExpr(
-     expr: GeneralScalarExpression,
-     catalystExprBuilder: (Expression, Expression) => Expression): Option[Expression] = {
+      expr: GeneralScalarExpression,
+      catalystExprBuilder: (Expression, Expression) => Expression): Option[Expression] = {
     expr.children match {
       case Array(left, right) =>
         for {

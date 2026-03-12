@@ -23,17 +23,18 @@ import org.apache.spark.sql.connector.catalog.functions.ScalarFunction
 import org.apache.spark.sql.types.{AbstractDataType, DataType}
 import org.apache.spark.util.ArrayImplicits._
 
-case class ApplyFunctionExpression(
-    function: ScalarFunction[_],
-    children: Seq[Expression])
-  extends Expression with UserDefinedExpression with CodegenFallback with ImplicitCastInputTypes {
+case class ApplyFunctionExpression(function: ScalarFunction[_], children: Seq[Expression])
+    extends Expression
+    with UserDefinedExpression
+    with CodegenFallback
+    with ImplicitCastInputTypes {
 
   override def nullable: Boolean = function.isResultNullable
   override def name: String = function.name()
   override def dataType: DataType = function.resultType()
   override def inputTypes: Seq[AbstractDataType] = function.inputTypes().toImmutableArraySeq
   override lazy val deterministic: Boolean = function.isDeterministic &&
-      children.forall(_.deterministic)
+    children.forall(_.deterministic)
   override def foldable: Boolean = deterministic && children.forall(_.foldable)
 
   private lazy val reusedRow = new SpecificInternalRow(function.inputTypes().toImmutableArraySeq)
@@ -50,6 +51,7 @@ case class ApplyFunctionExpression(
     function.produceResult(reusedRow)
   }
 
-  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): Expression =
     copy(children = newChildren)
 }

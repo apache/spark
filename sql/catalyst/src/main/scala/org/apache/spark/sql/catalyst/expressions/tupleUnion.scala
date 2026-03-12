@@ -386,12 +386,12 @@ abstract class TupleUnionBase[S <: Summary]
   since = "4.2.0")
 // scalastyle:on line.size.limit
 object TupleUnionDoubleExpressionBuilder extends ExpressionBuilder {
-  final val defaultFunctionSignature = FunctionSignature(Seq(
-    InputParameter("first"),
-    InputParameter("second"),
-    InputParameter("lgNomEntries", Some(Literal(ThetaSketchUtils.DEFAULT_LG_NOM_LONGS))),
-    InputParameter("mode", Some(Literal(TupleSummaryMode.Sum.toString)))
-  ))
+  final val defaultFunctionSignature = FunctionSignature(
+    Seq(
+      InputParameter("first"),
+      InputParameter("second"),
+      InputParameter("lgNomEntries", Some(Literal(ThetaSketchUtils.DEFAULT_LG_NOM_LONGS))),
+      InputParameter("mode", Some(Literal(TupleSummaryMode.Sum.toString)))))
   override def functionSignature: Option[FunctionSignature] = Some(defaultFunctionSignature)
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
     // The rearrange method ensures expressions.size == 4 with defaults filled in
@@ -416,12 +416,12 @@ object TupleUnionDoubleExpressionBuilder extends ExpressionBuilder {
   since = "4.2.0")
 // scalastyle:on line.size.limit
 object TupleUnionIntegerExpressionBuilder extends ExpressionBuilder {
-  final val defaultFunctionSignature = FunctionSignature(Seq(
-    InputParameter("first"),
-    InputParameter("second"),
-    InputParameter("lgNomEntries", Some(Literal(ThetaSketchUtils.DEFAULT_LG_NOM_LONGS))),
-    InputParameter("mode", Some(Literal(TupleSummaryMode.Sum.toString)))
-  ))
+  final val defaultFunctionSignature = FunctionSignature(
+    Seq(
+      InputParameter("first"),
+      InputParameter("second"),
+      InputParameter("lgNomEntries", Some(Literal(ThetaSketchUtils.DEFAULT_LG_NOM_LONGS))),
+      InputParameter("mode", Some(Literal(TupleSummaryMode.Sum.toString)))))
   override def functionSignature: Option[FunctionSignature] = Some(defaultFunctionSignature)
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
     // The rearrange method ensures expressions.size == 4 with defaults filled in
@@ -449,12 +449,12 @@ object TupleUnionIntegerExpressionBuilder extends ExpressionBuilder {
   since = "4.2.0")
 // scalastyle:on line.size.limit
 object TupleUnionThetaDoubleExpressionBuilder extends ExpressionBuilder {
-  final val defaultFunctionSignature = FunctionSignature(Seq(
-    InputParameter("first"),
-    InputParameter("second"),
-    InputParameter("lgNomEntries", Some(Literal(ThetaSketchUtils.DEFAULT_LG_NOM_LONGS))),
-    InputParameter("mode", Some(Literal(TupleSummaryMode.Sum.toString)))
-  ))
+  final val defaultFunctionSignature = FunctionSignature(
+    Seq(
+      InputParameter("first"),
+      InputParameter("second"),
+      InputParameter("lgNomEntries", Some(Literal(ThetaSketchUtils.DEFAULT_LG_NOM_LONGS))),
+      InputParameter("mode", Some(Literal(TupleSummaryMode.Sum.toString)))))
   override def functionSignature: Option[FunctionSignature] = Some(defaultFunctionSignature)
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
     // The rearrange method ensures expressions.size == 4 with defaults filled in
@@ -482,12 +482,12 @@ object TupleUnionThetaDoubleExpressionBuilder extends ExpressionBuilder {
   since = "4.2.0")
 // scalastyle:on line.size.limit
 object TupleUnionThetaIntegerExpressionBuilder extends ExpressionBuilder {
-  final val defaultFunctionSignature = FunctionSignature(Seq(
-    InputParameter("first"),
-    InputParameter("second"),
-    InputParameter("lgNomEntries", Some(Literal(ThetaSketchUtils.DEFAULT_LG_NOM_LONGS))),
-    InputParameter("mode", Some(Literal(TupleSummaryMode.Sum.toString)))
-  ))
+  final val defaultFunctionSignature = FunctionSignature(
+    Seq(
+      InputParameter("first"),
+      InputParameter("second"),
+      InputParameter("lgNomEntries", Some(Literal(ThetaSketchUtils.DEFAULT_LG_NOM_LONGS))),
+      InputParameter("mode", Some(Literal(TupleSummaryMode.Sum.toString)))))
   override def functionSignature: Option[FunctionSignature] = Some(defaultFunctionSignature)
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
     // The rearrange method ensures expressions.size == 4 with defaults filled in

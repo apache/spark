@@ -40,7 +40,8 @@ import org.apache.spark.sql.types._
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr1, expr2, ...) - Returns the first non-null argument if exists. Otherwise, null.",
+  usage =
+    "_FUNC_(expr1, expr2, ...) - Returns the first non-null argument if exists. Otherwise, null.",
   examples = """
     Examples:
       > SELECT _FUNC_(NULL, 1, NULL);
@@ -50,7 +51,8 @@ import org.apache.spark.sql.types._
   group = "conditional_funcs")
 // scalastyle:on line.size.limit
 case class Coalesce(children: Seq[Expression])
-  extends ComplexTypeMergingExpression with ConditionalExpression {
+    extends ComplexTypeMergingExpression
+    with ConditionalExpression {
 
   /** Coalesce is nullable if all of its children are nullable, or if it has no children. */
   override def nullable: Boolean = children.forall(_.nullable)
@@ -60,7 +62,9 @@ case class Coalesce(children: Seq[Expression])
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.length < 1) {
       throw QueryCompilationErrors.wrongNumArgsError(
-        toSQLId(prettyName), Seq("> 0"), children.length)
+        toSQLId(prettyName),
+        Seq("> 0"),
+        children.length)
     } else {
       TypeUtils.checkForSameTypeInputExpr(children.map(_.dataType), prettyName)
     }
@@ -113,8 +117,7 @@ case class Coalesce(children: Seq[Expression])
       expressions = evals,
       funcName = "coalesce",
       returnType = resultType,
-      makeSplitFunction = func =>
-        s"""
+      makeSplitFunction = func => s"""
            |$resultType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
            |do {
            |  $func
@@ -130,9 +133,7 @@ case class Coalesce(children: Seq[Expression])
          """.stripMargin
       }.mkString)
 
-
-    ev.copy(code =
-      code"""
+    ev.copy(code = code"""
          |${ev.isNull} = true;
          |$resultType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
          |do {
@@ -145,9 +146,9 @@ case class Coalesce(children: Seq[Expression])
     copy(children = newChildren)
 }
 
-
 @ExpressionDescription(
-  usage = "_FUNC_(expr1, expr2) - Returns null if `expr1` equals to `expr2`, or `expr1` otherwise.",
+  usage =
+    "_FUNC_(expr1, expr2) - Returns null if `expr1` equals to `expr2`, or `expr1` otherwise.",
   examples = """
     Examples:
       > SELECT _FUNC_(2, 2);
@@ -156,18 +157,20 @@ case class Coalesce(children: Seq[Expression])
   since = "2.0.0",
   group = "conditional_funcs")
 case class NullIf(left: Expression, right: Expression, replacement: Expression)
-  extends RuntimeReplaceable with InheritAnalysisRules {
+    extends RuntimeReplaceable
+    with InheritAnalysisRules {
 
   def this(left: Expression, right: Expression) = {
-    this(left, right,
+    this(
+      left,
+      right,
       if (!SQLConf.get.getConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR)) {
         With(left) { case Seq(ref) =>
           If(EqualTo(ref, right), Literal.create(null, left.dataType), ref)
         }
       } else {
         If(EqualTo(left, right), Literal.create(null, left.dataType), left)
-      }
-    )
+      })
   }
 
   override def parameters: Seq[Expression] = Seq(left, right)
@@ -189,7 +192,8 @@ case class NullIf(left: Expression, right: Expression, replacement: Expression)
   since = "4.0.0",
   group = "conditional_funcs")
 case class NullIfZero(input: Expression, replacement: Expression)
-  extends RuntimeReplaceable with InheritAnalysisRules {
+    extends RuntimeReplaceable
+    with InheritAnalysisRules {
   def this(input: Expression) = this(input, If(EqualTo(input, Literal(0)), Literal(null), input))
 
   override def parameters: Seq[Expression] = Seq(input)
@@ -210,7 +214,8 @@ case class NullIfZero(input: Expression, replacement: Expression)
   since = "4.0.0",
   group = "conditional_funcs")
 case class ZeroIfNull(input: Expression, replacement: Expression)
-  extends RuntimeReplaceable with InheritAnalysisRules {
+    extends RuntimeReplaceable
+    with InheritAnalysisRules {
   def this(input: Expression) = this(input, new Nvl(input, Literal(0)))
 
   override def parameters: Seq[Expression] = Seq(input)
@@ -229,7 +234,8 @@ case class ZeroIfNull(input: Expression, replacement: Expression)
   since = "2.0.0",
   group = "conditional_funcs")
 case class Nvl(left: Expression, right: Expression, replacement: Expression)
-  extends RuntimeReplaceable with InheritAnalysisRules {
+    extends RuntimeReplaceable
+    with InheritAnalysisRules {
 
   def this(left: Expression, right: Expression) = {
     this(left, right, Coalesce(Seq(left, right)))
@@ -241,10 +247,10 @@ case class Nvl(left: Expression, right: Expression, replacement: Expression)
     copy(replacement = newChild)
 }
 
-
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr1, expr2, expr3) - Returns `expr2` if `expr1` is not null, or `expr3` otherwise.",
+  usage =
+    "_FUNC_(expr1, expr2, expr3) - Returns `expr2` if `expr1` is not null, or `expr3` otherwise.",
   examples = """
     Examples:
       > SELECT _FUNC_(NULL, 2, 1);
@@ -254,7 +260,8 @@ case class Nvl(left: Expression, right: Expression, replacement: Expression)
   group = "conditional_funcs")
 // scalastyle:on line.size.limit
 case class Nvl2(expr1: Expression, expr2: Expression, expr3: Expression, replacement: Expression)
-  extends RuntimeReplaceable with InheritAnalysisRules {
+    extends RuntimeReplaceable
+    with InheritAnalysisRules {
 
   def this(expr1: Expression, expr2: Expression, expr3: Expression) = {
     this(expr1, expr2, expr3, If(IsNotNull(expr1), expr2, expr3))
@@ -266,7 +273,6 @@ case class Nvl2(expr1: Expression, expr2: Expression, expr3: Expression, replace
     copy(replacement = newChild)
   }
 }
-
 
 /**
  * Evaluates to `true` iff it's NaN.
@@ -280,8 +286,10 @@ case class Nvl2(expr1: Expression, expr2: Expression, expr3: Expression, replace
   """,
   since = "1.5.0",
   group = "predicate_funcs")
-case class IsNaN(child: Expression) extends UnaryExpression
-  with Predicate with ImplicitCastInputTypes {
+case class IsNaN(child: Expression)
+    extends UnaryExpression
+    with Predicate
+    with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(DoubleType, FloatType))
 
@@ -305,19 +313,23 @@ case class IsNaN(child: Expression) extends UnaryExpression
     val eval = child.genCode(ctx)
     child.dataType match {
       case DoubleType | FloatType =>
-        ev.copy(code = code"""
+        ev.copy(
+          code = code"""
           ${eval.code}
-          ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-          ${ev.value} = !${eval.isNull} && Double.isNaN(${eval.value});""", isNull = FalseLiteral)
+          ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(
+              dataType)};
+          ${ev.value} = !${eval.isNull} && Double.isNaN(${eval.value});""",
+          isNull = FalseLiteral)
     }
   }
 
-  override protected def withNewChildInternal(newChild: Expression): IsNaN = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): IsNaN =
+    copy(child = newChild)
 }
 
 /**
- * An Expression evaluates to `left` iff it's not NaN, or evaluates to `right` otherwise.
- * This Expression is useful for mapping NaN values to null.
+ * An Expression evaluates to `left` iff it's not NaN, or evaluates to `right` otherwise. This
+ * Expression is useful for mapping NaN values to null.
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2) - Returns `expr1` if it's not NaN, or `expr2` otherwise.",
@@ -329,7 +341,9 @@ case class IsNaN(child: Expression) extends UnaryExpression
   since = "1.5.0",
   group = "conditional_funcs")
 case class NaNvl(left: Expression, right: Expression)
-    extends BinaryExpression with ConditionalExpression with ImplicitCastInputTypes {
+    extends BinaryExpression
+    with ConditionalExpression
+    with ImplicitCastInputTypes {
 
   override def dataType: DataType = left.dataType
 
@@ -339,8 +353,8 @@ case class NaNvl(left: Expression, right: Expression)
   override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
 
   /**
-   * We can only guarantee the left child can be always accessed. If we hit the left child,
-   * the right child will not be accessed.
+   * We can only guarantee the left child can be always accessed. If we hit the left child, the
+   * right child will not be accessed.
    */
   override def alwaysEvaluatedInputs: Seq[Expression] = left :: Nil
 
@@ -372,7 +386,8 @@ case class NaNvl(left: Expression, right: Expression)
         ev.copy(code = code"""
           ${leftGen.code}
           boolean ${ev.isNull} = false;
-          ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+          ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(
+            dataType)};
           if (${leftGen.isNull}) {
             ${ev.isNull} = true;
           } else {
@@ -390,10 +405,11 @@ case class NaNvl(left: Expression, right: Expression)
     }
   }
 
-  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): NaNvl =
+  override protected def withNewChildrenInternal(
+      newLeft: Expression,
+      newRight: Expression): NaNvl =
     copy(left = newLeft, right = newRight)
 }
-
 
 /**
  * An expression that is evaluated to true if the input is null.
@@ -425,9 +441,9 @@ case class IsNull(child: Expression) extends UnaryExpression with Predicate {
 
   override def sql: String = s"(${child.sql} IS NULL)"
 
-  override protected def withNewChildInternal(newChild: Expression): IsNull = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): IsNull =
+    copy(child = newChild)
 }
-
 
 /**
  * An expression that is evaluated to true if the input is not null.
@@ -469,7 +485,6 @@ case class IsNotNull(child: Expression) extends UnaryExpression with Predicate {
   override protected def withNewChildInternal(newChild: Expression): IsNotNull =
     copy(child = newChild)
 }
-
 
 /**
  * A predicate that is evaluated to be true if there are at least `n` non-null and non-NaN values.
@@ -535,8 +550,7 @@ case class AtLeastNNonNulls(n: Int, children: Seq[Expression]) extends Predicate
       funcName = "atLeastNNonNulls",
       extraArguments = (CodeGenerator.JAVA_INT, nonnull) :: Nil,
       returnType = CodeGenerator.JAVA_INT,
-      makeSplitFunction = body =>
-        s"""
+      makeSplitFunction = body => s"""
            |do {
            |  $body
            |} while (false);
@@ -551,16 +565,17 @@ case class AtLeastNNonNulls(n: Int, children: Seq[Expression]) extends Predicate
          """.stripMargin
       }.mkString)
 
-    ev.copy(code =
-      code"""
+    ev.copy(
+      code = code"""
          |${CodeGenerator.JAVA_INT} $nonnull = 0;
          |do {
          |  $codes
          |} while (false);
          |${CodeGenerator.JAVA_BOOLEAN} ${ev.value} = $nonnull >= $n;
-       """.stripMargin, isNull = FalseLiteral)
+       """.stripMargin,
+      isNull = FalseLiteral)
   }
 
   override protected def withNewChildrenInternal(
-    newChildren: IndexedSeq[Expression]): AtLeastNNonNulls = copy(children = newChildren)
+      newChildren: IndexedSeq[Expression]): AtLeastNNonNulls = copy(children = newChildren)
 }

@@ -40,15 +40,18 @@ class ArrayBasedMapData(val keyArray: ArrayData, val valueArray: ArrayData) exte
 }
 
 object ArrayBasedMapData {
+
   /**
-   * Creates a [[ArrayBasedMapData]] by applying the given converters over
-   * each (key -> value) pair of the input [[java.util.Map]]
+   * Creates a [[ArrayBasedMapData]] by applying the given converters over each (key -> value)
+   * pair of the input [[java.util.Map]]
    *
-   * @param javaMap Input map
-   * @param keyConverter This function is applied over all the keys of the input map to
-   *                     obtain the output map's keys
-   * @param valueConverter This function is applied over all the values of the input map to
-   *                       obtain the output map's values
+   * @param javaMap
+   *   Input map
+   * @param keyConverter
+   *   This function is applied over all the keys of the input map to obtain the output map's keys
+   * @param valueConverter
+   *   This function is applied over all the values of the input map to obtain the output map's
+   *   values
    */
   def apply[K, V](
       javaMap: JavaMap[K, V],
@@ -70,14 +73,16 @@ object ArrayBasedMapData {
   }
 
   /**
-   * Creates a [[ArrayBasedMapData]] by applying the given converters over
-   * each (key -> value) pair of the input map
+   * Creates a [[ArrayBasedMapData]] by applying the given converters over each (key -> value)
+   * pair of the input map
    *
-   * @param map Input map
-   * @param keyConverter This function is applied over all the keys of the input map to
-   *                     obtain the output map's keys
-   * @param valueConverter This function is applied over all the values of the input map to
-   *                       obtain the output map's values
+   * @param map
+   *   Input map
+   * @param keyConverter
+   *   This function is applied over all the keys of the input map to obtain the output map's keys
+   * @param valueConverter
+   *   This function is applied over all the values of the input map to obtain the output map's
+   *   values
    */
   def apply(
       map: scala.collection.Map[_, _],
@@ -87,18 +92,22 @@ object ArrayBasedMapData {
   }
 
   /**
-   * Creates a [[ArrayBasedMapData]] by applying the given converters over
-   * each (key -> value) pair from the given iterator
+   * Creates a [[ArrayBasedMapData]] by applying the given converters over each (key -> value)
+   * pair from the given iterator
    *
    * Note that, user is responsible to guarantee that the key array does not have duplicated
    * elements, otherwise the behavior is undefined.
    *
-   * @param iterator Input iterator
-   * @param size Number of elements
-   * @param keyConverter This function is applied over all the keys extracted from the
-   *                     given iterator to obtain the output map's keys
-   * @param valueConverter This function is applied over all the values extracted from the
-   *                       given iterator to obtain the output map's values
+   * @param iterator
+   *   Input iterator
+   * @param size
+   *   Number of elements
+   * @param keyConverter
+   *   This function is applied over all the keys extracted from the given iterator to obtain the
+   *   output map's keys
+   * @param valueConverter
+   *   This function is applied over all the values extracted from the given iterator to obtain
+   *   the output map's values
    */
   def apply(
       iterator: Iterator[(_, _)],
@@ -138,7 +147,8 @@ object ArrayBasedMapData {
     Utils.toMap(keys, values)
   }
 
-  def toScalaMap(keys: scala.collection.Seq[Any],
+  def toScalaMap(
+      keys: scala.collection.Seq[Any],
       values: scala.collection.Seq[Any]): Map[Any, Any] = {
     Utils.toMap(keys, values)
   }

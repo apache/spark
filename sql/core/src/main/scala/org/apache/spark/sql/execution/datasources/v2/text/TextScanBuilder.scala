@@ -29,10 +29,17 @@ case class TextScanBuilder(
     schema: StructType,
     dataSchema: StructType,
     options: CaseInsensitiveStringMap)
-  extends FileScanBuilder(sparkSession, fileIndex, dataSchema) {
+    extends FileScanBuilder(sparkSession, fileIndex, dataSchema) {
 
   override def build(): TextScan = {
-    TextScan(sparkSession, fileIndex, dataSchema, readDataSchema(), readPartitionSchema(), options,
-      partitionFilters, dataFilters)
+    TextScan(
+      sparkSession,
+      fileIndex,
+      dataSchema,
+      readDataSchema(),
+      readPartitionSchema(),
+      options,
+      partitionFilters,
+      dataFilters)
   }
 }

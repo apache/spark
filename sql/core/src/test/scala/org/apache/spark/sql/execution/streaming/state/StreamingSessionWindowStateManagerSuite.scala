@@ -32,7 +32,9 @@ import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType
 import org.apache.spark.unsafe.types.UTF8String
 
 class StreamingSessionWindowStateManagerSuite extends StreamTest with BeforeAndAfter {
-  private val rowSchema = new StructType().add("key1", StringType).add("key2", IntegerType)
+  private val rowSchema = new StructType()
+    .add("key1", StringType)
+    .add("key2", IntegerType)
     .add("session", new StructType().add("start", LongType).add("end", LongType))
     .add("value", LongType)
   private val rowAttributes = toAttributes(rowSchema)
@@ -44,8 +46,8 @@ class StreamingSessionWindowStateManagerSuite extends StreamTest with BeforeAndA
   private val sessionAttribute = rowAttributes.filter(_.name == "session").head
 
   private val inputValueGen = UnsafeProjection.create(rowAttributes.map(_.dataType).toArray)
-  private val inputKeyGen = UnsafeProjection.create(
-    keysWithoutSessionAttributes.map(_.dataType).toArray)
+  private val inputKeyGen =
+    UnsafeProjection.create(keysWithoutSessionAttributes.map(_.dataType).toArray)
 
   before {
     SparkSession.setActiveSession(spark)
@@ -58,25 +60,27 @@ class StreamingSessionWindowStateManagerSuite extends StreamTest with BeforeAndA
     (SQLConf.STATE_STORE_PROVIDER_CLASS.key, value.stripSuffix("$"))
   }
 
-  private val availableOptions = for (
-    opt1 <- providerOptions;
-    opt2 <- StreamingSessionWindowStateManager.supportedVersions
-  ) yield (opt1, opt2)
+  private val availableOptions =
+    for (opt1 <- providerOptions;
+      opt2 <- StreamingSessionWindowStateManager.supportedVersions) yield (opt1, opt2)
 
   availableOptions.foreach { case (providerOpt, version) =>
     withSQLConf(providerOpt) {
-      test(s"StreamingSessionWindowStateManager " +
-        s"provider ${providerOpt._2} state version v${version} - extract field operations") {
+      test(
+        s"StreamingSessionWindowStateManager " +
+          s"provider ${providerOpt._2} state version v${version} - extract field operations") {
         testExtractFieldOperations(version)
       }
 
-      test(s"StreamingSessionWindowStateManager " +
-        s"provider ${providerOpt._2} state version v${version} - CRUD operations") {
+      test(
+        s"StreamingSessionWindowStateManager " +
+          s"provider ${providerOpt._2} state version v${version} - CRUD operations") {
         testAllOperations(version)
       }
 
-      test("Partition key extraction - StreamingSessionWindowStateManager - " +
-        s"provider ${providerOpt._2} state version v$version") {
+      test(
+        "Partition key extraction - StreamingSessionWindowStateManager - " +
+          s"provider ${providerOpt._2} state version v$version") {
         testPartitionKeyExtraction(version)
       }
     }
@@ -131,9 +135,7 @@ class StreamingSessionWindowStateManagerSuite extends StreamTest with BeforeAndA
       updateAndVerify(key1Row, key1Values)
 
       val key2Row = createKeyRow("a", 2)
-      val key2Values = Seq(
-        createRow("a", 2, 70, 80, 1),
-        createRow("a", 2, 100, 110, 2))
+      val key2Values = Seq(createRow("a", 2, 70, 80, 1), createRow("a", 2, 100, 110, 2))
       updateAndVerify(key2Row, key2Values)
 
       val key2NewValues = Seq(
@@ -144,9 +146,7 @@ class StreamingSessionWindowStateManagerSuite extends StreamTest with BeforeAndA
       updateAndVerify(key2Row, key2NewValues)
 
       val key3Row = createKeyRow("a", 3)
-      val key3Values = Seq(
-        createRow("a", 3, 100, 110, 1),
-        createRow("a", 3, 120, 130, 2))
+      val key3Values = Seq(createRow("a", 3, 100, 110, 1), createRow("a", 3, 120, 130, 2))
       updateAndVerify(key3Row, key3Values)
 
       val valuesOnComparison = Seq(
@@ -163,8 +163,8 @@ class StreamingSessionWindowStateManagerSuite extends StreamTest with BeforeAndA
 
       val existingRows = stateManager.iterator(store).map(_.copy()).toSet
 
-      val removedRows = stateManager.removeByValueCondition(store,
-        _.getLong(3) <= 1).map(_.copy()).toSet
+      val removedRows =
+        stateManager.removeByValueCondition(store, _.getLong(3) <= 1).map(_.copy()).toSet
       val expectedRemovedRows = Set(key1Values(0), key3Values(0))
       assert(removedRows == expectedRemovedRows)
 
@@ -185,11 +185,11 @@ class StreamingSessionWindowStateManagerSuite extends StreamTest with BeforeAndA
       // Create extractor for session window operation
       val extractor = StatePartitionKeyExtractorFactory.create(
         StatefulOperatorsUtils.SESSION_WINDOW_STATE_STORE_SAVE_EXEC_OP_NAME,
-        stateManager.getStateKeySchema
-      )
+        stateManager.getStateKeySchema)
 
       // Verify partition key schema excludes sessionStartTime
-      assert(extractor.partitionKeySchema === keysWithoutSessionAttributes.toStructType,
+      assert(
+        extractor.partitionKeySchema === keysWithoutSessionAttributes.toStructType,
         "Partition key schema should exclude sessionStartTime")
 
       // Update sessions and verify partition key extraction
@@ -201,20 +201,21 @@ class StreamingSessionWindowStateManagerSuite extends StreamTest with BeforeAndA
       assert(stateKeys.length === 3, "Should have 3 state keys stored")
 
       val partitionKeys = stateKeys.map(extractor.partitionKey(_).copy())
-      assert(partitionKeys.count(_ === expectedKeyRow1) === 2,
+      assert(
+        partitionKeys.count(_ === expectedKeyRow1) === 2,
         "Should have 2 partition keys matching (a, 1)")
-      assert(partitionKeys.count(_ === expectedKeyRow2) === 1,
+      assert(
+        partitionKeys.count(_ === expectedKeyRow2) === 1,
         "Should have 1 partition key matching (b, 2)")
     }
   }
 
-  private def withStateManager(
-      stateFormatVersion: Int)(
+  private def withStateManager(stateFormatVersion: Int)(
       f: (StreamingSessionWindowStateManager, StateStore) => Unit): Unit = {
     withTempDir { file =>
       val storeConf = new StateStoreConf()
-      val stateInfo = StatefulOperatorStateInfo(
-        file.getAbsolutePath, UUID.randomUUID, 0, 0, 5, None)
+      val stateInfo =
+        StatefulOperatorStateInfo(file.getAbsolutePath, UUID.randomUUID, 0, 0, 5, None)
 
       val manager = StreamingSessionWindowStateManager.createStateManager(
         keysWithoutSessionAttributes,
@@ -224,9 +225,16 @@ class StreamingSessionWindowStateManagerSuite extends StreamTest with BeforeAndA
 
       val storeProviderId = StateStoreProviderId(stateInfo, 0, StateStoreId.DEFAULT_STORE_NAME)
       val store = StateStore.get(
-        storeProviderId, manager.getStateKeySchema, manager.getStateValueSchema,
+        storeProviderId,
+        manager.getStateKeySchema,
+        manager.getStateValueSchema,
         PrefixKeyScanStateEncoderSpec(manager.getStateKeySchema, manager.getNumColsForPrefixKey),
-        stateInfo.storeVersion, None, None, useColumnFamilies = false, storeConf, new Configuration)
+        stateInfo.storeVersion,
+        None,
+        None,
+        useColumnFamilies = false,
+        storeConf,
+        new Configuration)
 
       try {
         f(manager, store)

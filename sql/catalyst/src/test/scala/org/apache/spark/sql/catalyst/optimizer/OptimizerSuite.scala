@@ -48,68 +48,71 @@ class OptimizerSuite extends PlanTest {
     withSQLConf(SQLConf.OPTIMIZER_MAX_ITERATIONS.key -> maxIterationsNotEnough.toString) {
       val optimizer = new SimpleTestOptimizer() {
         override def defaultBatches: Seq[Batch] =
-          Batch("test", fixedPoint,
-            DecrementLiterals) :: Nil
+          Batch("test", fixedPoint, DecrementLiterals) :: Nil
       }
 
       val message1 = intercept[RuntimeException] {
         optimizer.execute(analyzed)
       }.getMessage
-      assert(message1.startsWith(s"Max iterations ($maxIterationsNotEnough) reached for batch " +
-        s"test, please set '${SQLConf.OPTIMIZER_MAX_ITERATIONS.key}' to a larger value."))
+      assert(
+        message1.startsWith(s"Max iterations ($maxIterationsNotEnough) reached for batch " +
+          s"test, please set '${SQLConf.OPTIMIZER_MAX_ITERATIONS.key}' to a larger value."))
 
       withSQLConf(SQLConf.OPTIMIZER_MAX_ITERATIONS.key -> maxIterationsEnough.toString) {
         try {
           optimizer.execute(analyzed)
         } catch {
           case ex: AnalysisException
-            if ex.getMessage.contains(SQLConf.OPTIMIZER_MAX_ITERATIONS.key) =>
-              fail("optimizer.execute should not reach max iterations.")
+              if ex.getMessage.contains(SQLConf.OPTIMIZER_MAX_ITERATIONS.key) =>
+            fail("optimizer.execute should not reach max iterations.")
         }
       }
 
       val message2 = intercept[RuntimeException] {
         optimizer.execute(analyzed)
       }.getMessage
-      assert(message2.startsWith(s"Max iterations ($maxIterationsNotEnough) reached for batch " +
-        s"test, please set '${SQLConf.OPTIMIZER_MAX_ITERATIONS.key}' to a larger value."))
+      assert(
+        message2.startsWith(s"Max iterations ($maxIterationsNotEnough) reached for batch " +
+          s"test, please set '${SQLConf.OPTIMIZER_MAX_ITERATIONS.key}' to a larger value."))
     }
   }
 
   test("Optimizer per rule validation catches dangling references") {
-    val analyzed = Project(Alias(Literal(10), "attr")() :: Nil,
-      OneRowRelation()).analyze
+    val analyzed = Project(Alias(Literal(10), "attr")() :: Nil, OneRowRelation()).analyze
 
     /**
      * A dummy optimizer rule for testing that dangling references are not allowed.
      */
     object DanglingReference extends Rule[LogicalPlan] {
       def apply(plan: LogicalPlan): LogicalPlan = {
-          Project(Alias(
-            Add(AttributeReference("debug1", IntegerType, nullable = false)(),
-            AttributeReference("debug2", IntegerType, nullable = false)()), "attr")() :: Nil,
-            plan)
+        Project(
+          Alias(
+            Add(
+              AttributeReference("debug1", IntegerType, nullable = false)(),
+              AttributeReference("debug2", IntegerType, nullable = false)()),
+            "attr")() :: Nil,
+          plan)
       }
     }
 
     val optimizer = new SimpleTestOptimizer() {
-        override def defaultBatches: Seq[Batch] =
-          Batch("test", FixedPoint(1),
-            DanglingReference) :: Nil
+      override def defaultBatches: Seq[Batch] =
+        Batch("test", FixedPoint(1), DanglingReference) :: Nil
     }
     val message1 = intercept[SparkException] {
-        optimizer.execute(analyzed)
+      optimizer.execute(analyzed)
     }.getMessage
     assert(message1.contains("are dangling"))
   }
 
   test("Optimizer per rule validation catches invalid aggregation expressions") {
     val analyzed = LocalRelation(Symbol("a").long, Symbol("b").long)
-      .select(Symbol("a"), Symbol("b")).analyze
+      .select(Symbol("a"), Symbol("b"))
+      .analyze
 
     /**
-     * A dummy optimizer rule for testing that a non grouping key reference
-     * should be aggregated (under an AggregateFunction).
+     * A dummy optimizer rule for testing that a non grouping key reference should be aggregated
+     * (under an AggregateFunction).
      */
     object InvalidAggregationReference extends Rule[LogicalPlan] {
       def apply(plan: LogicalPlan): LogicalPlan = {
@@ -122,8 +125,8 @@ class OptimizerSuite extends PlanTest {
     }
 
     /**
-     * A dummy optimizer rule for testing that a non grouping key reference
-     * should be aggregated (under an AggregateFunction).
+     * A dummy optimizer rule for testing that a non grouping key reference should be aggregated
+     * (under an AggregateFunction).
      */
     object InvalidAggregationReference2 extends Rule[LogicalPlan] {
       def apply(plan: LogicalPlan): LogicalPlan = {
@@ -136,8 +139,8 @@ class OptimizerSuite extends PlanTest {
     }
 
     /**
-     * A dummy optimizer rule for testing that a non grouping key expression
-     * should be aggregated (under an AggregateFunction).
+     * A dummy optimizer rule for testing that a non grouping key expression should be aggregated
+     * (under an AggregateFunction).
      */
     object InvalidAggregationExpression extends Rule[LogicalPlan] {
       def apply(plan: LogicalPlan): LogicalPlan = {
@@ -151,8 +154,8 @@ class OptimizerSuite extends PlanTest {
     }
 
     /**
-     * A dummy optimizer rule for testing that a non grouping key expression
-     * should be aggregated (under an AggregateFunction).
+     * A dummy optimizer rule for testing that a non grouping key expression should be aggregated
+     * (under an AggregateFunction).
      */
     object InvalidAggregationExpression2 extends Rule[LogicalPlan] {
       def apply(plan: LogicalPlan): LogicalPlan = {
@@ -166,25 +169,26 @@ class OptimizerSuite extends PlanTest {
     }
 
     /**
-     * A dummy optimizer rule for testing that a non grouping key expression
-     * should be aggregated (under an AggregateFunction).
+     * A dummy optimizer rule for testing that a non grouping key expression should be aggregated
+     * (under an AggregateFunction).
      */
     object InvalidAggregationExpression3 extends Rule[LogicalPlan] {
       def apply(plan: LogicalPlan): LogicalPlan = {
         val outputExpressions = plan.output
         val groupingExpressions = outputExpressions.head :: Nil
         val aggregateExpressions = Alias(Literal(1L), "a")() ::
-          Alias(Multiply(outputExpressions.head,
-            Sum(outputExpressions.head).toAggregateExpression()), "b")() :: Nil
+          Alias(
+            Multiply(outputExpressions.head, Sum(outputExpressions.head).toAggregateExpression()),
+            "b")() :: Nil
         // I.e VALID: select 1 as a, a*sum(a) as b from T group by a
         // analyze() should not fail.
         val goodAggregate =
-          Aggregate(groupingExpressions, aggregateExpressions, plan)
-            .analyze.asInstanceOf[Aggregate]
+          Aggregate(groupingExpressions, aggregateExpressions, plan).analyze
+            .asInstanceOf[Aggregate]
         assert(goodAggregate.analyzed)
         // I.e INVALID: select 1 as a, a*sum(a) as b from T group by b
         // Rule-validation should catch this.
-       Aggregate(outputExpressions.last :: Nil, goodAggregate.aggregateExpressions, plan)
+        Aggregate(outputExpressions.last :: Nil, goodAggregate.aggregateExpressions, plan)
       }
     }
 
@@ -195,7 +199,7 @@ class OptimizerSuite extends PlanTest {
       def apply(plan: LogicalPlan): LogicalPlan = {
         val outputExpressions = plan.output
         val groupingExpressions = outputExpressions.head :: Nil
-        val aggregateExpressions : Seq[NamedExpression] = outputExpressions.head ::
+        val aggregateExpressions: Seq[NamedExpression] = outputExpressions.head ::
           Alias(Add(outputExpressions.head, Literal(1L)), "b")() :: Nil
         // I.e VALID: select a, a + 1 as b from T group by a
         Aggregate(groupingExpressions, aggregateExpressions, plan)
@@ -209,7 +213,7 @@ class OptimizerSuite extends PlanTest {
       def apply(plan: LogicalPlan): LogicalPlan = {
         val outputExpressions = plan.output
         val groupingExpressions = Add(outputExpressions.head, Literal(1L)) :: Nil
-        val aggregateExpressions : Seq[NamedExpression] = Alias(Literal(1L), "a")() ::
+        val aggregateExpressions: Seq[NamedExpression] = Alias(Literal(1L), "a")() ::
           Alias(Add(outputExpressions.head, Literal(1L)), "b")() :: Nil
         // I.e VALID: select 1 as a, a + 1 as b from T group by a + 1
         Aggregate(groupingExpressions, aggregateExpressions, plan)
@@ -223,7 +227,7 @@ class OptimizerSuite extends PlanTest {
       def apply(plan: LogicalPlan): LogicalPlan = {
         val outputExpressions = plan.output
         val groupingExpressions = Add(outputExpressions.head, Literal(1L)) :: Nil
-        val aggregateExpressions : Seq[NamedExpression] = Alias(Literal(1L), "a")() ::
+        val aggregateExpressions: Seq[NamedExpression] = Alias(Literal(1L), "a")() ::
           Alias(Add(Add(outputExpressions.head, Literal(1L)), Literal(1L)), "b")() :: Nil
         // I.e VALID: select 1 as a, a + 1 + 1 as b from T group by a + 1
         Aggregate(groupingExpressions, aggregateExpressions, plan)
@@ -237,7 +241,7 @@ class OptimizerSuite extends PlanTest {
       def apply(plan: LogicalPlan): LogicalPlan = {
         val outputExpressions = plan.output
         val groupingExpressions = Add(outputExpressions.head, Literal(1L)) :: Nil
-        val aggregateExpressions : Seq[NamedExpression] = Alias(Literal(1L), "a")() ::
+        val aggregateExpressions: Seq[NamedExpression] = Alias(Literal(1L), "a")() ::
           Alias(Sum(outputExpressions.last).toAggregateExpression(), "b")() :: Nil
         // I.e VALID: select 1 as a, sum(b) as b from T group by a + 1
         Aggregate(groupingExpressions, aggregateExpressions, plan)
@@ -251,7 +255,7 @@ class OptimizerSuite extends PlanTest {
       def apply(plan: LogicalPlan): LogicalPlan = {
         val outputExpressions = plan.output
         val groupingExpressions = outputExpressions.head :: Nil
-        val aggregateExpressions : Seq[NamedExpression] = Alias(Literal(1L), "a")() ::
+        val aggregateExpressions: Seq[NamedExpression] = Alias(Literal(1L), "a")() ::
           Alias(Sum(outputExpressions.head).toAggregateExpression(), "b")() :: Nil
         // I.e VALID: select 1 as a, sum(a) as b from T group by a
         Aggregate(groupingExpressions, aggregateExpressions, plan)
@@ -265,7 +269,7 @@ class OptimizerSuite extends PlanTest {
       def apply(plan: LogicalPlan): LogicalPlan = {
         val outputExpressions = plan.output
         val groupingExpressions = Remainder(outputExpressions.head, Literal(2L)) :: Nil
-        val aggregateExpressions : Seq[NamedExpression] = Alias(Literal(1L), "a")() ::
+        val aggregateExpressions: Seq[NamedExpression] = Alias(Literal(1L), "a")() ::
           Alias(Sum(outputExpressions.head).toAggregateExpression(), "b")() :: Nil
         // I.e VALID: select 1 as a, sum(a) as b from T group by a % 2
         Aggregate(groupingExpressions, aggregateExpressions, plan)
@@ -279,18 +283,23 @@ class OptimizerSuite extends PlanTest {
       def apply(plan: LogicalPlan): LogicalPlan = {
         val outputExpressions = plan.output
         val groupingExpressions = Remainder(outputExpressions.head, Literal(2L)) :: Nil
-        val aggregateExpressions : Seq[NamedExpression] = Alias(Literal(1L), "a")() ::
-          Alias(Add(Sum(outputExpressions.head).toAggregateExpression(),
-            groupingExpressions.head), "b")() :: Nil
+        val aggregateExpressions: Seq[NamedExpression] = Alias(Literal(1L), "a")() ::
+          Alias(
+            Add(Sum(outputExpressions.head).toAggregateExpression(), groupingExpressions.head),
+            "b")() :: Nil
         // I.e VALID: 1 as a, select sum(a)*(a % 2) as b from T group by a % 2
         Aggregate(groupingExpressions, aggregateExpressions, plan).analyze
       }
     }
 
     // Valid rules do not trigger exceptions.
-    Seq(ValidAggregationExpression, ValidAggregationExpression2,
-      ValidAggregationExpression3, ValidAggregationExpression4,
-      ValidAggregationExpression5, ValidAggregationExpression6,
+    Seq(
+      ValidAggregationExpression,
+      ValidAggregationExpression2,
+      ValidAggregationExpression3,
+      ValidAggregationExpression4,
+      ValidAggregationExpression5,
+      ValidAggregationExpression6,
       ValidAggregationExpression7).map { r =>
       val optimizer = new SimpleTestOptimizer() {
         override def defaultBatches: Seq[Batch] =
@@ -300,8 +309,11 @@ class OptimizerSuite extends PlanTest {
     }
 
     // Invalid rules trigger exceptions.
-    Seq(InvalidAggregationReference, InvalidAggregationReference2,
-      InvalidAggregationExpression, InvalidAggregationExpression2,
+    Seq(
+      InvalidAggregationReference,
+      InvalidAggregationReference2,
+      InvalidAggregationExpression,
+      InvalidAggregationExpression2,
       InvalidAggregationExpression3).map { r =>
       val optimizer = new SimpleTestOptimizer() {
         override def defaultBatches: Seq[Batch] =
@@ -317,21 +329,22 @@ class OptimizerSuite extends PlanTest {
   test("SPARK-49924: Keep containsNull after ArrayCompact replacement") {
     val optimizer = new SimpleTestOptimizer() {
       override def defaultBatches: Seq[Batch] =
-        Batch("test", fixedPoint,
-          ReplaceExpressions) :: Nil
+        Batch("test", fixedPoint, ReplaceExpressions) :: Nil
     }
 
     val array1 = ArrayCompact(CreateArray(Literal(1) :: Literal.apply(null) :: Nil, false))
     val plan1 = Project(Alias(array1, "arr")() :: Nil, OneRowRelation()).analyze
     val optimized1 = optimizer.execute(plan1)
-     assert(optimized1.schema ===
-       StructType(StructField("arr", ArrayType(IntegerType, false), false) :: Nil))
+    assert(
+      optimized1.schema ===
+        StructType(StructField("arr", ArrayType(IntegerType, false), false) :: Nil))
 
     val struct = CreateStruct(Literal(1) :: Literal(2) :: Nil)
     val array2 = ArrayCompact(CreateArray(struct :: Literal.apply(null) :: Nil, false))
     val plan2 = Project(Alias(MapFromEntries(array2), "map")() :: Nil, OneRowRelation()).analyze
     val optimized2 = optimizer.execute(plan2)
-    assert(optimized2.schema ===
-      StructType(StructField("map", MapType(IntegerType, IntegerType, false), false) :: Nil))
+    assert(
+      optimized2.schema ===
+        StructType(StructField("map", MapType(IntegerType, IntegerType, false), false) :: Nil))
   }
 }

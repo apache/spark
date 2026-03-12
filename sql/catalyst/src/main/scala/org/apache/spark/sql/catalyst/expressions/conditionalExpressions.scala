@@ -32,7 +32,8 @@ import org.apache.spark.util.ArrayImplicits._
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr1, expr2, expr3) - If `expr1` evaluates to true, then returns `expr2`; otherwise returns `expr3`.",
+  usage =
+    "_FUNC_(expr1, expr2, expr3) - If `expr1` evaluates to true, then returns `expr2`; otherwise returns `expr3`.",
   examples = """
     Examples:
       > SELECT _FUNC_(1 < 2, 'a', 'b');
@@ -42,7 +43,9 @@ import org.apache.spark.util.ArrayImplicits._
   group = "conditional_funcs")
 // scalastyle:on line.size.limit
 case class If(predicate: Expression, trueValue: Expression, falseValue: Expression)
-  extends ComplexTypeMergingExpression with ConditionalExpression with TernaryLike[Expression] {
+    extends ComplexTypeMergingExpression
+    with ConditionalExpression
+    with TernaryLike[Expression] {
 
   @transient
   override lazy val inputTypesForMerging: Seq[DataType] = {
@@ -65,7 +68,7 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
 
   override def branchGroups: Seq[Seq[Expression]] = Seq(Seq(trueValue, falseValue))
 
-  final override val nodePatterns : Seq[TreePattern] = Seq(IF)
+  final override val nodePatterns: Seq[TreePattern] = Seq(IF)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (predicate.dataType != BooleanType) {
@@ -75,18 +78,15 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
           "paramIndex" -> ordinalNumber(0),
           "requiredType" -> toSQLType(BooleanType),
           "inputSql" -> toSQLExpr(predicate),
-          "inputType" -> toSQLType(predicate.dataType)
-        )
-      )
+          "inputType" -> toSQLType(predicate.dataType)))
     } else if (!TypeCoercion.haveSameType(inputTypesForMerging)) {
       DataTypeMismatch(
         errorSubClass = "DATA_DIFF_TYPES",
         messageParameters = Map(
           "functionName" -> toSQLId(prettyName),
-          "dataType" -> Seq(trueValue.dataType,
-            falseValue.dataType).map(toSQLType).mkString("[", ", ", "]")
-        )
-      )
+          "dataType" -> Seq(trueValue.dataType, falseValue.dataType)
+            .map(toSQLType)
+            .mkString("[", ", ", "]")))
     } else {
       TypeCheckResult.TypeCheckSuccess
     }
@@ -109,7 +109,8 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
       code"""
          |${condEval.code}
          |boolean ${ev.isNull} = false;
-         |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+         |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(
+             dataType)};
          |if (!${condEval.isNull} && ${condEval.value}) {
          |  ${trueEval.code}
          |  ${ev.isNull} = ${trueEval.isNull};
@@ -128,23 +129,25 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
   override def sql: String = s"(IF(${predicate.sql}, ${trueValue.sql}, ${falseValue.sql}))"
 
   override protected def withNewChildrenInternal(
-      newFirst: Expression, newSecond: Expression, newThird: Expression): Expression = copy(
-    predicate = newFirst,
-    trueValue = newSecond,
-    falseValue = newThird
-  )
+      newFirst: Expression,
+      newSecond: Expression,
+      newThird: Expression): Expression =
+    copy(predicate = newFirst, trueValue = newSecond, falseValue = newThird)
 }
 
 /**
- * Case statements of the form "CASE WHEN a THEN b [WHEN c THEN d]* [ELSE e] END".
- * When a = true, returns b; when c = true, returns d; else returns e.
+ * Case statements of the form "CASE WHEN a THEN b [WHEN c THEN d]* [ELSE e] END". When a = true,
+ * returns b; when c = true, returns d; else returns e.
  *
- * @param branches seq of (branch condition, branch value)
- * @param elseValue optional value for the else branch
+ * @param branches
+ *   seq of (branch condition, branch value)
+ * @param elseValue
+ *   optional value for the else branch
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "CASE WHEN expr1 THEN expr2 [WHEN expr3 THEN expr4]* [ELSE expr5] END - When `expr1` = true, returns `expr2`; else when `expr3` = true, returns `expr4`; else returns `expr5`.",
+  usage =
+    "CASE WHEN expr1 THEN expr2 [WHEN expr3 THEN expr4]* [ELSE expr5] END - When `expr1` = true, returns `expr2`; else when `expr3` = true, returns `expr4`; else returns `expr5`.",
   arguments = """
     Arguments:
       * expr1, expr3 - the branch condition expressions should all be boolean type.
@@ -163,16 +166,16 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
   since = "1.0.1",
   group = "conditional_funcs")
 // scalastyle:on line.size.limit
-case class CaseWhen(
-    branches: Seq[(Expression, Expression)],
-    elseValue: Option[Expression] = None)
-  extends ComplexTypeMergingExpression with ConditionalExpression {
+case class CaseWhen(branches: Seq[(Expression, Expression)], elseValue: Option[Expression] = None)
+    extends ComplexTypeMergingExpression
+    with ConditionalExpression {
 
   override def children: Seq[Expression] = branches.flatMap(b => b._1 :: b._2 :: Nil) ++ elseValue
 
-  final override val nodePatterns : Seq[TreePattern] = Seq(CASE_WHEN)
+  final override val nodePatterns: Seq[TreePattern] = Seq(CASE_WHEN)
 
-  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): CaseWhen = {
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): CaseWhen = {
     if (newChildren.length % 2 == 0) {
       copy(branches = newChildren.grouped(2).map { case Seq(a, b) => (a, b) }.toSeq)
     } else {
@@ -215,24 +218,20 @@ case class CaseWhen(
             "paramIndex" -> ordinalNumber(index),
             "requiredType" -> toSQLType(BooleanType),
             "inputSql" -> toSQLExpr(branches(index)._1),
-            "inputType" -> toSQLType(branches(index)._1.dataType)
-          )
-        )
+            "inputType" -> toSQLType(branches(index)._1.dataType)))
       }
     } else {
       DataTypeMismatch(
         errorSubClass = "DATA_DIFF_TYPES",
         messageParameters = Map(
           "functionName" -> toSQLId(prettyName),
-          "dataType" -> inputTypesForMerging.map(toSQLType).mkString("[", ", ", "]")
-        )
-      )
+          "dataType" -> inputTypesForMerging.map(toSQLType).mkString("[", ", ", "]")))
     }
   }
 
   /**
-   * Like `If`, the children of `CaseWhen` only get accessed in a certain condition.
-   * We should only return the first condition expression as it will always get accessed.
+   * Like `If`, the children of `CaseWhen` only get accessed in a certain condition. We should
+   * only return the first condition expression as it will always get accessed.
    */
   override def alwaysEvaluatedInputs: Seq[Expression] = children.head :: Nil
 
@@ -303,9 +302,8 @@ case class CaseWhen(
     // It is initialized to `NOT_MATCHED`, and if it's set to `HAS_NULL` or `HAS_NONNULL`,
     // We won't go on anymore on the computation.
     val resultState = ctx.freshName("caseWhenResultState")
-    ev.value = JavaCode.global(
-      ctx.addMutableState(CodeGenerator.javaType(dataType), ev.value),
-      dataType)
+    ev.value =
+      JavaCode.global(ctx.addMutableState(CodeGenerator.javaType(dataType), ev.value), dataType)
 
     // these blocks are meant to be inside a
     // do {
@@ -359,8 +357,7 @@ case class CaseWhen(
       expressions = allConditions,
       funcName = "caseWhen",
       returnType = CodeGenerator.JAVA_BYTE,
-      makeSplitFunction = func =>
-        s"""
+      makeSplitFunction = func => s"""
            |${CodeGenerator.JAVA_BYTE} $resultState = $NOT_MATCHED;
            |do {
            |  $func
@@ -376,8 +373,7 @@ case class CaseWhen(
          """.stripMargin
       }.mkString)
 
-    ev.copy(code =
-      code"""
+    ev.copy(code = code"""
          |${CodeGenerator.JAVA_BYTE} $resultState = $NOT_MATCHED;
          |do {
          |  $codes
@@ -410,13 +406,17 @@ object CaseWhen {
   /**
    * A factory method to facilitate the creation of this expression when used in parsers.
    *
-   * @param branches Expressions at even position are the branch conditions, and expressions at odd
-   *                 position are branch values.
+   * @param branches
+   *   Expressions at even position are the branch conditions, and expressions at odd position are
+   *   branch values.
    */
   def createFromParser(branches: Seq[Expression]): CaseWhen = {
-    val cases = branches.grouped(2).flatMap { g =>
-      if (g.size == 2) Some((g.head, g.last)) else None
-    }.toSeq  // force materialization to make the seq serializable
+    val cases = branches
+      .grouped(2)
+      .flatMap { g =>
+        if (g.size == 2) Some((g.head, g.last)) else None
+      }
+      .toSeq // force materialization to make the seq serializable
     val elseValue = if (branches.size % 2 != 0) Some(branches.last) else None
     CaseWhen(cases, elseValue)
   }
@@ -427,15 +427,19 @@ object CaseWhen {
 }
 
 /**
- * Case statements of the form "CASE a WHEN b THEN c [WHEN d THEN e]* [ELSE f] END".
- * When a = b, returns c; when a = d, returns e; else returns f.
+ * Case statements of the form "CASE a WHEN b THEN c [WHEN d THEN e]* [ELSE f] END". When a = b,
+ * returns c; when a = d, returns e; else returns f.
  */
 object CaseKeyWhen {
   def apply(key: Expression, branches: Seq[Expression]): CaseWhen = {
-    val cases = branches.grouped(2).flatMap {
-      case Seq(cond, value) => Some((EqualTo(key, cond), value))
-      case Seq(value) => None
-    }.toArray.toImmutableArraySeq  // force materialization to make the seq serializable
+    val cases = branches
+      .grouped(2)
+      .flatMap {
+        case Seq(cond, value) => Some((EqualTo(key, cond), value))
+        case Seq(value) => None
+      }
+      .toArray
+      .toImmutableArraySeq // force materialization to make the seq serializable
     val elseValue = if (branches.size % 2 != 0) Some(branches.last) else None
     CaseWhen(cases, elseValue)
   }

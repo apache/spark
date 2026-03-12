@@ -119,24 +119,19 @@ case class CSVFileFormat() extends TextBasedFileFormat with DataSourceRegister {
         dataSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
       val actualRequiredSchema = StructType(
         requiredSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
-      val parser = new UnivocityParser(
-        actualDataSchema,
-        actualRequiredSchema,
-        parsedOptions,
-        actualFilters)
+      val parser =
+        new UnivocityParser(actualDataSchema, actualRequiredSchema, parsedOptions, actualFilters)
       // Use column pruning when specified by Catalyst, except when one or more columns have
       // existence default value(s), since in that case we instruct the CSV parser to disable column
       // pruning and instead read each entire row in order to correctly assign the default value(s).
       val schema = if (isColumnPruningEnabled) actualRequiredSchema else actualDataSchema
       val isStartOfFile = file.start == 0
       val headerChecker = new CSVHeaderChecker(
-        schema, parsedOptions, source = s"CSV file: ${file.urlEncodedPath}", isStartOfFile)
-      CSVDataSource(parsedOptions).readFile(
-        conf,
-        file,
-        parser,
-        headerChecker,
-        requiredSchema)
+        schema,
+        parsedOptions,
+        source = s"CSV file: ${file.urlEncodedPath}",
+        isStartOfFile)
+      CSVDataSource(parsedOptions).readFile(conf, file, parser, headerChecker, requiredSchema)
     }
   }
 
@@ -152,17 +147,18 @@ case class CSVFileFormat() extends TextBasedFileFormat with DataSourceRegister {
   override def supportReadDataType(dataType: DataType): Boolean =
     supportDataType(dataType, allowVariant = true)
 
-  private def supportDataType(dataType: DataType, allowVariant: Boolean): Boolean = dataType match {
-    case _: VariantType => allowVariant
+  private def supportDataType(dataType: DataType, allowVariant: Boolean): Boolean =
+    dataType match {
+      case _: VariantType => allowVariant
 
-    case _: GeometryType | _: GeographyType => false
+      case _: GeometryType | _: GeographyType => false
 
-    case _: AtomicType => true
+      case _: AtomicType => true
 
-    case udt: UserDefinedType[_] => supportDataType(udt.sqlType)
+      case udt: UserDefinedType[_] => supportDataType(udt.sqlType)
 
-    case _ => false
-  }
+      case _ => false
+    }
 
   override def allowDuplicatedColumnNames: Boolean = true
 

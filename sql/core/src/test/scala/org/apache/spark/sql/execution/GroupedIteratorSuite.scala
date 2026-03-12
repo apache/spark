@@ -32,18 +32,18 @@ class GroupedIteratorSuite extends SparkFunSuite {
     val toRow = encoder.createSerializer()
     val fromRow = encoder.createDeserializer()
     val input = Seq(Row(1, "a"), Row(1, "b"), Row(2, "c"))
-    val grouped = GroupedIterator(input.iterator.map(toRow),
-      Seq($"i".int.at(0)), toAttributes(schema))
+    val grouped =
+      GroupedIterator(input.iterator.map(toRow), Seq($"i".int.at(0)), toAttributes(schema))
 
-    val result = grouped.map {
-      case (key, data) =>
-        assert(key.numFields == 1)
-        key.getInt(0) -> data.map(fromRow).toSeq
+    val result = grouped.map { case (key, data) =>
+      assert(key.numFields == 1)
+      key.getInt(0) -> data.map(fromRow).toSeq
     }.toSeq
 
-    assert(result ==
-      1 -> Seq(input(0), input(1)) ::
-      2 -> Seq(input(2)) :: Nil)
+    assert(
+      result ==
+        1 -> Seq(input(0), input(1)) ::
+        2 -> Seq(input(2)) :: Nil)
   }
 
   test("group by 2 columns") {
@@ -52,27 +52,25 @@ class GroupedIteratorSuite extends SparkFunSuite {
     val toRow = encoder.createSerializer()
     val fromRow = encoder.createDeserializer()
 
-    val input = Seq(
-      Row(1, 2L, "a"),
-      Row(1, 2L, "b"),
-      Row(1, 3L, "c"),
-      Row(2, 1L, "d"),
-      Row(3, 2L, "e"))
+    val input =
+      Seq(Row(1, 2L, "a"), Row(1, 2L, "b"), Row(1, 3L, "c"), Row(2, 1L, "d"), Row(3, 2L, "e"))
 
-    val grouped = GroupedIterator(input.iterator.map(toRow),
-      Seq($"i".int.at(0), $"l".long.at(1)), toAttributes(schema))
+    val grouped = GroupedIterator(
+      input.iterator.map(toRow),
+      Seq($"i".int.at(0), $"l".long.at(1)),
+      toAttributes(schema))
 
-    val result = grouped.map {
-      case (key, data) =>
-        assert(key.numFields == 2)
-        (key.getInt(0), key.getLong(1), data.map(fromRow).toSeq)
+    val result = grouped.map { case (key, data) =>
+      assert(key.numFields == 2)
+      (key.getInt(0), key.getLong(1), data.map(fromRow).toSeq)
     }.toSeq
 
-    assert(result ==
-      (1, 2L, Seq(input(0), input(1))) ::
-      (1, 3L, Seq(input(2))) ::
-      (2, 1L, Seq(input(3))) ::
-      (3, 2L, Seq(input(4))) :: Nil)
+    assert(
+      result ==
+        (1, 2L, Seq(input(0), input(1))) ::
+        (1, 3L, Seq(input(2))) ::
+        (2, 1L, Seq(input(3))) ::
+        (3, 2L, Seq(input(4))) :: Nil)
   }
 
   test("do nothing to the value iterator") {
@@ -80,8 +78,8 @@ class GroupedIteratorSuite extends SparkFunSuite {
     val encoder = ExpressionEncoder(schema).resolveAndBind()
     val toRow = encoder.createSerializer()
     val input = Seq(Row(1, "a"), Row(1, "b"), Row(2, "c"))
-    val grouped = GroupedIterator(input.iterator.map(toRow),
-      Seq($"i".int.at(0)), toAttributes(schema))
+    val grouped =
+      GroupedIterator(input.iterator.map(toRow), Seq($"i".int.at(0)), toAttributes(schema))
 
     assert(grouped.length == 2)
   }

@@ -33,10 +33,9 @@ import org.apache.spark.sql.types.DayTimeIntervalType.{DAY, HOUR, MINUTE, SECOND
 import org.apache.spark.sql.types.YearMonthIntervalType.{MONTH, YEAR}
 import org.apache.spark.unsafe.types.CalendarInterval
 
-abstract class ExtractIntervalPart[T](
-    val dataType: DataType,
-    func: T => Any,
-    funcName: String) extends UnaryExpression with Serializable {
+abstract class ExtractIntervalPart[T](val dataType: DataType, func: T => Any, funcName: String)
+    extends UnaryExpression
+    with Serializable {
   override def nullIntolerant: Boolean = true
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -50,37 +49,37 @@ abstract class ExtractIntervalPart[T](
 }
 
 case class ExtractIntervalYears(child: Expression)
-  extends ExtractIntervalPart[CalendarInterval](IntegerType, getYears, "getYears") {
+    extends ExtractIntervalPart[CalendarInterval](IntegerType, getYears, "getYears") {
   override protected def withNewChildInternal(newChild: Expression): ExtractIntervalYears =
     copy(child = newChild)
 }
 
 case class ExtractIntervalMonths(child: Expression)
-  extends ExtractIntervalPart[CalendarInterval](ByteType, getMonths, "getMonths") {
+    extends ExtractIntervalPart[CalendarInterval](ByteType, getMonths, "getMonths") {
   override protected def withNewChildInternal(newChild: Expression): ExtractIntervalMonths =
     copy(child = newChild)
 }
 
 case class ExtractIntervalDays(child: Expression)
-  extends ExtractIntervalPart[CalendarInterval](IntegerType, getDays, "getDays") {
+    extends ExtractIntervalPart[CalendarInterval](IntegerType, getDays, "getDays") {
   override protected def withNewChildInternal(newChild: Expression): ExtractIntervalDays =
     copy(child = newChild)
 }
 
 case class ExtractIntervalHours(child: Expression)
-  extends ExtractIntervalPart[CalendarInterval](ByteType, getHours, "getHours") {
+    extends ExtractIntervalPart[CalendarInterval](ByteType, getHours, "getHours") {
   override protected def withNewChildInternal(newChild: Expression): ExtractIntervalHours =
     copy(child = newChild)
 }
 
 case class ExtractIntervalMinutes(child: Expression)
-  extends ExtractIntervalPart[CalendarInterval](ByteType, getMinutes, "getMinutes") {
+    extends ExtractIntervalPart[CalendarInterval](ByteType, getMinutes, "getMinutes") {
   override protected def withNewChildInternal(newChild: Expression): ExtractIntervalMinutes =
     copy(child = newChild)
 }
 
 case class ExtractIntervalSeconds(child: Expression)
-  extends ExtractIntervalPart[CalendarInterval](DecimalType(8, 6), getSeconds, "getSeconds") {
+    extends ExtractIntervalPart[CalendarInterval](DecimalType(8, 6), getSeconds, "getSeconds") {
   override protected def withNewChildInternal(newChild: Expression): ExtractIntervalSeconds =
     copy(child = newChild)
 }
@@ -127,37 +126,39 @@ object ExtractIntervalPart {
   def parseExtractField(extractField: String, source: Expression): Expression = {
     (extractField.toUpperCase(Locale.ROOT), source.dataType) match {
       case ("YEAR" | "Y" | "YEARS" | "YR" | "YRS", YearMonthIntervalType(start, end))
-        if isUnitInIntervalRange(YEAR, start, end) =>
+          if isUnitInIntervalRange(YEAR, start, end) =>
         ExtractANSIIntervalYears(source)
       case ("YEAR" | "Y" | "YEARS" | "YR" | "YRS", CalendarIntervalType) =>
         ExtractIntervalYears(source)
       case ("MONTH" | "MON" | "MONS" | "MONTHS", YearMonthIntervalType(start, end))
-        if isUnitInIntervalRange(MONTH, start, end) =>
+          if isUnitInIntervalRange(MONTH, start, end) =>
         ExtractANSIIntervalMonths(source)
       case ("MONTH" | "MON" | "MONS" | "MONTHS", CalendarIntervalType) =>
         ExtractIntervalMonths(source)
       case ("DAY" | "D" | "DAYS", DayTimeIntervalType(start, end))
-        if isUnitInIntervalRange(DAY, start, end) =>
+          if isUnitInIntervalRange(DAY, start, end) =>
         ExtractANSIIntervalDays(source)
       case ("DAY" | "D" | "DAYS", CalendarIntervalType) =>
         ExtractIntervalDays(source)
       case ("HOUR" | "H" | "HOURS" | "HR" | "HRS", DayTimeIntervalType(start, end))
-        if isUnitInIntervalRange(HOUR, start, end) =>
+          if isUnitInIntervalRange(HOUR, start, end) =>
         ExtractANSIIntervalHours(source)
       case ("HOUR" | "H" | "HOURS" | "HR" | "HRS", CalendarIntervalType) =>
         ExtractIntervalHours(source)
       case ("MINUTE" | "M" | "MIN" | "MINS" | "MINUTES", DayTimeIntervalType(start, end))
-        if isUnitInIntervalRange(MINUTE, start, end) =>
+          if isUnitInIntervalRange(MINUTE, start, end) =>
         ExtractANSIIntervalMinutes(source)
       case ("MINUTE" | "M" | "MIN" | "MINS" | "MINUTES", CalendarIntervalType) =>
         ExtractIntervalMinutes(source)
       case ("SECOND" | "S" | "SEC" | "SECONDS" | "SECS", DayTimeIntervalType(start, end))
-        if isUnitInIntervalRange(SECOND, start, end) =>
+          if isUnitInIntervalRange(SECOND, start, end) =>
         ExtractANSIIntervalSeconds(source)
       case ("SECOND" | "S" | "SEC" | "SECONDS" | "SECS", CalendarIntervalType) =>
         ExtractIntervalSeconds(source)
       case _ =>
-        throw QueryCompilationErrors.literalTypeUnsupportedForSourceTypeError(extractField, source)
+        throw QueryCompilationErrors.literalTypeUnsupportedForSourceTypeError(
+          extractField,
+          source)
     }
   }
 
@@ -166,10 +167,10 @@ object ExtractIntervalPart {
   }
 }
 
-abstract class IntervalNumOperation(
-    interval: Expression,
-    num: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with Serializable {
+abstract class IntervalNumOperation(interval: Expression, num: Expression)
+    extends BinaryExpression
+    with ImplicitCastInputTypes
+    with Serializable {
   override def nullIntolerant: Boolean = true
 
   override def left: Expression = interval
@@ -199,7 +200,7 @@ case class MultiplyInterval(
     interval: Expression,
     num: Expression,
     failOnError: Boolean = SQLConf.get.ansiEnabled)
-  extends IntervalNumOperation(interval, num) {
+    extends IntervalNumOperation(interval, num) {
 
   override protected val operation: (CalendarInterval, Double) => CalendarInterval =
     if (failOnError) multiplyExact else multiply
@@ -207,7 +208,8 @@ case class MultiplyInterval(
   override protected def operationName: String = if (failOnError) "multiplyExact" else "multiply"
 
   override protected def withNewChildrenInternal(
-      newLeft: Expression, newRight: Expression): MultiplyInterval =
+      newLeft: Expression,
+      newRight: Expression): MultiplyInterval =
     copy(interval = newLeft, num = newRight)
 }
 
@@ -215,7 +217,7 @@ case class DivideInterval(
     interval: Expression,
     num: Expression,
     failOnError: Boolean = SQLConf.get.ansiEnabled)
-  extends IntervalNumOperation(interval, num) {
+    extends IntervalNumOperation(interval, num) {
 
   override protected val operation: (CalendarInterval, Double) => CalendarInterval =
     if (failOnError) divideExact else divide
@@ -223,13 +225,15 @@ case class DivideInterval(
   override protected def operationName: String = if (failOnError) "divideExact" else "divide"
 
   override protected def withNewChildrenInternal(
-      newLeft: Expression, newRight: Expression): DivideInterval =
+      newLeft: Expression,
+      newRight: Expression): DivideInterval =
     copy(interval = newLeft, num = newRight)
 }
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_([years[, months[, weeks[, days[, hours[, mins[, secs]]]]]]]) - This is a special version of `make_interval` that performs the same operation, but returns NULL when an overflow occurs.",
+  usage =
+    "_FUNC_([years[, months[, weeks[, days[, hours[, mins[, secs]]]]]]]) - This is a special version of `make_interval` that performs the same operation, but returns NULL when an overflow occurs.",
   arguments = """
     Arguments:
       * years - the number of years, positive or negative
@@ -263,7 +267,8 @@ case class TryMakeInterval(
     mins: Expression,
     secs: Expression,
     replacement: Expression)
-  extends RuntimeReplaceable with InheritAnalysisRules {
+    extends RuntimeReplaceable
+    with InheritAnalysisRules {
 
   def this(
       years: Expression,
@@ -273,7 +278,14 @@ case class TryMakeInterval(
       hours: Expression,
       mins: Expression,
       secs: Expression) =
-    this(years, months, weeks, days, hours, mins, secs,
+    this(
+      years,
+      months,
+      weeks,
+      days,
+      hours,
+      mins,
+      secs,
       MakeInterval(years, months, weeks, days, hours, mins, secs, failOnError = false))
 
   def this(
@@ -312,7 +324,8 @@ case class TryMakeInterval(
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_([years[, months[, weeks[, days[, hours[, mins[, secs]]]]]]]) - Make interval from years, months, weeks, days, hours, mins and secs.",
+  usage =
+    "_FUNC_([years[, months[, weeks[, days[, hours[, mins[, secs]]]]]]]) - Make interval from years, months, weeks, days, hours, mins and secs.",
   arguments = """
     Arguments:
       * years - the number of years, positive or negative
@@ -344,7 +357,8 @@ case class MakeInterval(
     mins: Expression,
     secs: Expression,
     failOnError: Boolean = SQLConf.get.ansiEnabled)
-  extends SeptenaryExpression with ImplicitCastInputTypes {
+    extends SeptenaryExpression
+    with ImplicitCastInputTypes {
   override def nullIntolerant: Boolean = true
 
   def this(
@@ -364,7 +378,14 @@ case class MakeInterval(
       days: Expression,
       hours: Expression,
       mins: Expression) = {
-    this(years, months, weeks, days, hours, mins, Literal(Decimal(0, Decimal.MAX_LONG_DIGITS, 6)),
+    this(
+      years,
+      months,
+      weeks,
+      days,
+      hours,
+      mins,
+      Literal(Decimal(0, Decimal.MAX_LONG_DIGITS, 6)),
       SQLConf.get.ansiEnabled)
   }
   def this(
@@ -386,8 +407,14 @@ case class MakeInterval(
   override def children: Seq[Expression] = Seq(years, months, weeks, days, hours, mins, secs)
   // Accept `secs` as DecimalType to avoid loosing precision of microseconds while converting
   // them to the fractional part of `secs`.
-  override def inputTypes: Seq[AbstractDataType] = Seq(IntegerType, IntegerType, IntegerType,
-    IntegerType, IntegerType, IntegerType, DecimalType(Decimal.MAX_LONG_DIGITS, 6))
+  override def inputTypes: Seq[AbstractDataType] = Seq(
+    IntegerType,
+    IntegerType,
+    IntegerType,
+    IntegerType,
+    IntegerType,
+    IntegerType,
+    DecimalType(Decimal.MAX_LONG_DIGITS, 6))
   override def dataType: DataType = CalendarIntervalType
   override def nullable: Boolean = if (failOnError) children.exists(_.nullable) else true
 
@@ -419,22 +446,25 @@ case class MakeInterval(
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, (year, month, week, day, hour, min, sec) => {
-      val iu = IntervalUtils.getClass.getName.stripSuffix("$")
-      val secFrac = sec.getOrElse("0")
-      val failOnErrorBranch = if (failOnError) {
-        """throw QueryExecutionErrors.arithmeticOverflowError(e.getMessage(), "", null);"""
-      } else {
-        s"${ev.isNull} = true;"
-      }
-      s"""
+    nullSafeCodeGen(
+      ctx,
+      ev,
+      (year, month, week, day, hour, min, sec) => {
+        val iu = IntervalUtils.getClass.getName.stripSuffix("$")
+        val secFrac = sec.getOrElse("0")
+        val failOnErrorBranch = if (failOnError) {
+          """throw QueryExecutionErrors.arithmeticOverflowError(e.getMessage(), "", null);"""
+        } else {
+          s"${ev.isNull} = true;"
+        }
+        s"""
         try {
           ${ev.value} = $iu.makeInterval($year, $month, $week, $day, $hour, $min, $secFrac);
         } catch (java.lang.ArithmeticException e) {
           $failOnErrorBranch
         }
       """
-    })
+      })
   }
 
   override def prettyName: String = "make_interval"
@@ -449,13 +479,13 @@ case class MakeInterval(
       days = newChildren(3),
       hours = newChildren(4),
       mins = newChildren(5),
-      secs = newChildren(6)
-    )
+      secs = newChildren(6))
 }
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_([days[, hours[, mins[, secs]]]]) - Make DayTimeIntervalType duration from days, hours, mins and secs.",
+  usage =
+    "_FUNC_([days[, hours[, mins[, secs]]]]) - Make DayTimeIntervalType duration from days, hours, mins and secs.",
   arguments = """
     Arguments:
       * days - the number of days, positive or negative
@@ -475,18 +505,13 @@ case class MakeInterval(
   since = "3.2.0",
   group = "datetime_funcs")
 // scalastyle:on line.size.limit
-case class MakeDTInterval(
-    days: Expression,
-    hours: Expression,
-    mins: Expression,
-    secs: Expression)
-  extends QuaternaryExpression with ImplicitCastInputTypes with SupportQueryContext {
+case class MakeDTInterval(days: Expression, hours: Expression, mins: Expression, secs: Expression)
+    extends QuaternaryExpression
+    with ImplicitCastInputTypes
+    with SupportQueryContext {
   override def nullIntolerant: Boolean = true
 
-  def this(
-      days: Expression,
-      hours: Expression,
-      mins: Expression) = {
+  def this(days: Expression, hours: Expression, mins: Expression) = {
     this(days, hours, mins, Literal(Decimal(0, Decimal.MAX_LONG_DIGITS, 6)))
   }
   def this(days: Expression, hours: Expression) = this(days, hours, Literal(0))
@@ -500,15 +525,11 @@ case class MakeDTInterval(
 
   // Accept `secs` as DecimalType to avoid loosing precision of microseconds when converting
   // them to the fractional part of `secs`.
-  override def inputTypes: Seq[AbstractDataType] = Seq(
-    IntegerType, IntegerType, IntegerType, DecimalType(Decimal.MAX_LONG_DIGITS, 6))
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(IntegerType, IntegerType, IntegerType, DecimalType(Decimal.MAX_LONG_DIGITS, 6))
   override def dataType: DataType = DayTimeIntervalType()
 
-  override def nullSafeEval(
-      day: Any,
-      hour: Any,
-      min: Any,
-      sec: Any): Any = {
+  override def nullSafeEval(day: Any, hour: Any, min: Any, sec: Any): Any = {
     IntervalUtils.makeDayTimeInterval(
       day.asInstanceOf[Int],
       hour.asInstanceOf[Int],
@@ -518,11 +539,14 @@ case class MakeDTInterval(
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (day, hour, min, sec) => {
-      val errorContext = getContextOrNullCode(ctx)
-      val iu = IntervalUtils.getClass.getName.stripSuffix("$")
-      s"$iu.makeDayTimeInterval($day, $hour, $min, $sec, $errorContext)"
-    })
+    defineCodeGen(
+      ctx,
+      ev,
+      (day, hour, min, sec) => {
+        val errorContext = getContextOrNullCode(ctx)
+        val iu = IntervalUtils.getClass.getName.stripSuffix("$")
+        s"$iu.makeDayTimeInterval($day, $hour, $min, $sec, $errorContext)"
+      })
   }
 
   override def prettyName: String = "make_dt_interval"
@@ -559,7 +583,10 @@ case class MakeDTInterval(
   group = "datetime_funcs")
 // scalastyle:on line.size.limit
 case class MakeYMInterval(years: Expression, months: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with Serializable with SupportQueryContext {
+    extends BinaryExpression
+    with ImplicitCastInputTypes
+    with Serializable
+    with SupportQueryContext {
   override def nullIntolerant: Boolean = true
 
   def this(years: Expression) = this(years, Literal(0))
@@ -575,17 +602,21 @@ case class MakeYMInterval(years: Expression, months: Expression)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (years, months) => {
-      val errorContext = getContextOrNullCode(ctx)
-      val iu = IntervalUtils.getClass.getName.stripSuffix("$")
-      s"$iu.makeYearMonthInterval($years, $months, $errorContext)"
-    })
+    defineCodeGen(
+      ctx,
+      ev,
+      (years, months) => {
+        val errorContext = getContextOrNullCode(ctx)
+        val iu = IntervalUtils.getClass.getName.stripSuffix("$")
+        s"$iu.makeYearMonthInterval($years, $months, $errorContext)"
+      })
   }
 
   override def prettyName: String = "make_ym_interval"
 
   override protected def withNewChildrenInternal(
-      newLeft: Expression, newRight: Expression): Expression =
+      newLeft: Expression,
+      newRight: Expression): Expression =
     copy(years = newLeft, months = newRight)
 
   override def initQueryContext(): Option[QueryContext] = {
@@ -594,10 +625,10 @@ case class MakeYMInterval(years: Expression, months: Expression)
 }
 
 // Multiply an year-month interval by a numeric
-case class MultiplyYMInterval(
-    interval: Expression,
-    num: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with Serializable {
+case class MultiplyYMInterval(interval: Expression, num: Expression)
+    extends BinaryExpression
+    with ImplicitCastInputTypes
+    with Serializable {
   override def nullIntolerant: Boolean = true
   override def left: Expression = interval
   override def right: Expression = num
@@ -607,15 +638,19 @@ case class MultiplyYMInterval(
 
   @transient
   private lazy val evalFunc: (Int, Any) => Any = right.dataType match {
-    case ByteType | ShortType | IntegerType => (months: Int, num) =>
-      Math.multiplyExact(months, num.asInstanceOf[Number].intValue())
-    case LongType => (months: Int, num) =>
-      Math.toIntExact(Math.multiplyExact(months, num.asInstanceOf[Long]))
-    case FloatType | DoubleType => (months: Int, num) =>
-      DoubleMath.roundToInt(months * num.asInstanceOf[Number].doubleValue(), RoundingMode.HALF_UP)
-    case _: DecimalType => (months: Int, num) =>
-      val decimalRes = ((new Decimal).set(months) * num.asInstanceOf[Decimal]).toJavaBigDecimal
-      decimalRes.setScale(0, java.math.RoundingMode.HALF_UP).intValueExact()
+    case ByteType | ShortType | IntegerType =>
+      (months: Int, num) => Math.multiplyExact(months, num.asInstanceOf[Number].intValue())
+    case LongType =>
+      (months: Int, num) => Math.toIntExact(Math.multiplyExact(months, num.asInstanceOf[Long]))
+    case FloatType | DoubleType =>
+      (months: Int, num) =>
+        DoubleMath.roundToInt(
+          months * num.asInstanceOf[Number].doubleValue(),
+          RoundingMode.HALF_UP)
+    case _: DecimalType =>
+      (months: Int, num) =>
+        val decimalRes = ((new Decimal).set(months) * num.asInstanceOf[Decimal]).toJavaBigDecimal
+        decimalRes.setScale(0, java.math.RoundingMode.HALF_UP).intValueExact()
   }
 
   override def nullSafeEval(interval: Any, num: Any): Any = {
@@ -630,27 +665,33 @@ case class MultiplyYMInterval(
       defineCodeGen(ctx, ev, (m, n) => s"$jlm.toIntExact($jlm.multiplyExact($m, $n))")
     case FloatType | DoubleType =>
       val dm = classOf[DoubleMath].getName
-      defineCodeGen(ctx, ev, (m, n) =>
-        s"$dm.roundToInt($m * (double)$n, java.math.RoundingMode.HALF_UP)")
+      defineCodeGen(
+        ctx,
+        ev,
+        (m, n) => s"$dm.roundToInt($m * (double)$n, java.math.RoundingMode.HALF_UP)")
     case _: DecimalType =>
-      defineCodeGen(ctx, ev, (m, n) =>
-        s"((new Decimal()).set($m).$$times($n)).toJavaBigDecimal()" +
-        ".setScale(0, java.math.RoundingMode.HALF_UP).intValueExact()")
+      defineCodeGen(
+        ctx,
+        ev,
+        (m, n) =>
+          s"((new Decimal()).set($m).$$times($n)).toJavaBigDecimal()" +
+            ".setScale(0, java.math.RoundingMode.HALF_UP).intValueExact()")
   }
 
   override def toString: String = s"($left * $right)"
   override def sql: String = s"(${left.sql} * ${right.sql})"
 
   override protected def withNewChildrenInternal(
-      newLeft: Expression, newRight: Expression): MultiplyYMInterval =
+      newLeft: Expression,
+      newRight: Expression): MultiplyYMInterval =
     copy(interval = newLeft, num = newRight)
 }
 
 // Multiply a day-time interval by a numeric
-case class MultiplyDTInterval(
-    interval: Expression,
-    num: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with Serializable {
+case class MultiplyDTInterval(interval: Expression, num: Expression)
+    extends BinaryExpression
+    with ImplicitCastInputTypes
+    with Serializable {
   override def nullIntolerant: Boolean = true
   override def left: Expression = interval
   override def right: Expression = num
@@ -660,13 +701,17 @@ case class MultiplyDTInterval(
 
   @transient
   private lazy val evalFunc: (Long, Any) => Any = right.dataType match {
-    case _: IntegralType => (micros: Long, num) =>
-      Math.multiplyExact(micros, num.asInstanceOf[Number].longValue())
-    case _: DecimalType => (micros: Long, num) =>
-      val decimalRes = ((new Decimal).set(micros) * num.asInstanceOf[Decimal]).toJavaBigDecimal
-      decimalRes.setScale(0, RoundingMode.HALF_UP).longValueExact()
-    case _: FractionalType => (micros: Long, num) =>
-      DoubleMath.roundToLong(micros * num.asInstanceOf[Number].doubleValue(), RoundingMode.HALF_UP)
+    case _: IntegralType =>
+      (micros: Long, num) => Math.multiplyExact(micros, num.asInstanceOf[Number].longValue())
+    case _: DecimalType =>
+      (micros: Long, num) =>
+        val decimalRes = ((new Decimal).set(micros) * num.asInstanceOf[Decimal]).toJavaBigDecimal
+        decimalRes.setScale(0, RoundingMode.HALF_UP).longValueExact()
+    case _: FractionalType =>
+      (micros: Long, num) =>
+        DoubleMath.roundToLong(
+          micros * num.asInstanceOf[Number].doubleValue(),
+          RoundingMode.HALF_UP)
   }
 
   override def nullSafeEval(interval: Any, num: Any): Any = {
@@ -677,20 +722,26 @@ case class MultiplyDTInterval(
     case _: IntegralType =>
       defineCodeGen(ctx, ev, (m, n) => s"java.lang.Math.multiplyExact($m, $n)")
     case _: DecimalType =>
-      defineCodeGen(ctx, ev, (m, n) =>
-        s"((new Decimal()).set($m).$$times($n)).toJavaBigDecimal()" +
-        ".setScale(0, java.math.RoundingMode.HALF_UP).longValueExact()")
+      defineCodeGen(
+        ctx,
+        ev,
+        (m, n) =>
+          s"((new Decimal()).set($m).$$times($n)).toJavaBigDecimal()" +
+            ".setScale(0, java.math.RoundingMode.HALF_UP).longValueExact()")
     case _: FractionalType =>
       val dm = classOf[DoubleMath].getName
-      defineCodeGen(ctx, ev, (m, n) =>
-        s"$dm.roundToLong($m * (double)$n, java.math.RoundingMode.HALF_UP)")
+      defineCodeGen(
+        ctx,
+        ev,
+        (m, n) => s"$dm.roundToLong($m * (double)$n, java.math.RoundingMode.HALF_UP)")
   }
 
   override def toString: String = s"($left * $right)"
   override def sql: String = s"(${left.sql} * ${right.sql})"
 
   override protected def withNewChildrenInternal(
-      newLeft: Expression, newRight: Expression): MultiplyDTInterval =
+      newLeft: Expression,
+      newRight: Expression): MultiplyDTInterval =
     copy(interval = newLeft, num = newRight)
 }
 
@@ -704,21 +755,20 @@ trait IntervalDivide {
     if (value == minValue && num.dataType.isInstanceOf[IntegralType]) {
       if (numValue.asInstanceOf[Number].longValue() == -1) {
         throw QueryExecutionErrors.withSuggestionIntervalArithmeticOverflowError(
-          "try_divide", context)
+          "try_divide",
+          context)
       }
     }
   }
 
-  def divideByZeroCheck(
-      dataType: DataType,
-      num: Any,
-      context: QueryContext): Unit = dataType match {
-    case _: DecimalType =>
-      if (num.asInstanceOf[Decimal].isZero) {
-        throw QueryExecutionErrors.intervalDividedByZeroError(context)
-      }
-    case _ => if (num == 0) throw QueryExecutionErrors.intervalDividedByZeroError(context)
-  }
+  def divideByZeroCheck(dataType: DataType, num: Any, context: QueryContext): Unit =
+    dataType match {
+      case _: DecimalType =>
+        if (num.asInstanceOf[Decimal].isZero) {
+          throw QueryExecutionErrors.intervalDividedByZeroError(context)
+        }
+      case _ => if (num == 0) throw QueryExecutionErrors.intervalDividedByZeroError(context)
+    }
 
   def divideByZeroCheckCodegen(
       dataType: DataType,
@@ -734,10 +784,11 @@ trait IntervalDivide {
 }
 
 // Divide an year-month interval by a numeric
-case class DivideYMInterval(
-    interval: Expression,
-    num: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with IntervalDivide with Serializable {
+case class DivideYMInterval(interval: Expression, num: Expression)
+    extends BinaryExpression
+    with ImplicitCastInputTypes
+    with IntervalDivide
+    with Serializable {
   override def nullIntolerant: Boolean = true
   override def left: Expression = interval
   override def right: Expression = num
@@ -747,22 +798,27 @@ case class DivideYMInterval(
 
   @transient
   private lazy val evalFunc: (Int, Any) => Any = right.dataType match {
-    case LongType => (months: Int, num) =>
-      // Year-month interval has `Int` as the internal type. The result of the divide operation
-      // of `Int` by `Long` must fit to `Int`. So, the casting to `Int` cannot cause overflow.
-      LongMath.divide(months, num.asInstanceOf[Long], RoundingMode.HALF_UP).toInt
-    case _: IntegralType => (months: Int, num) =>
-      IntMath.divide(months, num.asInstanceOf[Number].intValue(), RoundingMode.HALF_UP)
-    case _: DecimalType => (months: Int, num) =>
-      val decimalRes = ((new Decimal).set(months) / num.asInstanceOf[Decimal]).toJavaBigDecimal
-      decimalRes.setScale(0, java.math.RoundingMode.HALF_UP).intValueExact()
-    case _: FractionalType => (months: Int, num) =>
-      DoubleMath.roundToInt(months / num.asInstanceOf[Number].doubleValue(), RoundingMode.HALF_UP)
+    case LongType =>
+      (months: Int, num) =>
+        // Year-month interval has `Int` as the internal type. The result of the divide operation
+        // of `Int` by `Long` must fit to `Int`. So, the casting to `Int` cannot cause overflow.
+        LongMath.divide(months, num.asInstanceOf[Long], RoundingMode.HALF_UP).toInt
+    case _: IntegralType =>
+      (months: Int, num) =>
+        IntMath.divide(months, num.asInstanceOf[Number].intValue(), RoundingMode.HALF_UP)
+    case _: DecimalType =>
+      (months: Int, num) =>
+        val decimalRes = ((new Decimal).set(months) / num.asInstanceOf[Decimal]).toJavaBigDecimal
+        decimalRes.setScale(0, java.math.RoundingMode.HALF_UP).intValueExact()
+    case _: FractionalType =>
+      (months: Int, num) =>
+        DoubleMath.roundToInt(
+          months / num.asInstanceOf[Number].doubleValue(),
+          RoundingMode.HALF_UP)
   }
 
   override def nullSafeEval(interval: Any, num: Any): Any = {
-    checkDivideOverflow(
-      interval.asInstanceOf[Int], Int.MinValue, right, num, origin.context)
+    checkDivideOverflow(interval.asInstanceOf[Int], Int.MinValue, right, num, origin.context)
     divideByZeroCheck(right.dataType, num, origin.context)
     evalFunc(interval.asInstanceOf[Int], num)
   }
@@ -776,31 +832,38 @@ case class DivideYMInterval(
           case _ => classOf[IntMath].getName
         }
         val javaType = CodeGenerator.javaType(dataType)
-        nullSafeCodeGen(ctx, ev, (m, n) => {
-          val checkIntegralDivideOverflow =
-            s"""
+        nullSafeCodeGen(
+          ctx,
+          ev,
+          (m, n) => {
+            val checkIntegralDivideOverflow =
+              s"""
                |if ($m == ${Int.MinValue} && $n == -1)
                |  throw QueryExecutionErrors.overflowInIntegralDivideError($errorContext);
                |""".stripMargin
-          // Similarly to non-codegen code. The result of `divide(Int, Long, ...)` must fit
-          // to `Int`. Casting to `Int` is safe here.
-          s"""
+            // Similarly to non-codegen code. The result of `divide(Int, Long, ...)` must fit
+            // to `Int`. Casting to `Int` is safe here.
+            s"""
              |${divideByZeroCheckCodegen(right.dataType, n, errorContext)}
              |$checkIntegralDivideOverflow
              |${ev.value} = ($javaType)$math.divide($m, $n, java.math.RoundingMode.HALF_UP);
           """.stripMargin
-        })
+          })
       case _: DecimalType =>
-        nullSafeCodeGen(ctx, ev, (m, n) =>
-          s"""
+        nullSafeCodeGen(
+          ctx,
+          ev,
+          (m, n) => s"""
              |${divideByZeroCheckCodegen(right.dataType, n, errorContext)}
              |${ev.value} = ((new Decimal()).set($m).$$div($n)).toJavaBigDecimal()
              |  .setScale(0, java.math.RoundingMode.HALF_UP).intValueExact();
           """.stripMargin)
       case _: FractionalType =>
         val math = classOf[DoubleMath].getName
-        nullSafeCodeGen(ctx, ev, (m, n) =>
-          s"""
+        nullSafeCodeGen(
+          ctx,
+          ev,
+          (m, n) => s"""
              |${divideByZeroCheckCodegen(right.dataType, n, errorContext)}
              |${ev.value} = $math.roundToInt($m / (double)$n, java.math.RoundingMode.HALF_UP);
           """.stripMargin)
@@ -811,15 +874,17 @@ case class DivideYMInterval(
   override def sql: String = s"(${left.sql} / ${right.sql})"
 
   override protected def withNewChildrenInternal(
-      newLeft: Expression, newRight: Expression): DivideYMInterval =
+      newLeft: Expression,
+      newRight: Expression): DivideYMInterval =
     copy(interval = newLeft, num = newRight)
 }
 
 // Divide a day-time interval by a numeric
-case class DivideDTInterval(
-    interval: Expression,
-    num: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with IntervalDivide with Serializable {
+case class DivideDTInterval(interval: Expression, num: Expression)
+    extends BinaryExpression
+    with ImplicitCastInputTypes
+    with IntervalDivide
+    with Serializable {
   override def nullIntolerant: Boolean = true
 
   override def left: Expression = interval
@@ -830,18 +895,22 @@ case class DivideDTInterval(
 
   @transient
   private lazy val evalFunc: (Long, Any) => Any = right.dataType match {
-    case _: IntegralType => (micros: Long, num) =>
-      LongMath.divide(micros, num.asInstanceOf[Number].longValue(), RoundingMode.HALF_UP)
-    case _: DecimalType => (micros: Long, num) =>
-      val decimalRes = ((new Decimal).set(micros) / num.asInstanceOf[Decimal]).toJavaBigDecimal
-      decimalRes.setScale(0, java.math.RoundingMode.HALF_UP).longValueExact()
-    case _: FractionalType => (micros: Long, num) =>
-      DoubleMath.roundToLong(micros / num.asInstanceOf[Number].doubleValue(), RoundingMode.HALF_UP)
+    case _: IntegralType =>
+      (micros: Long, num) =>
+        LongMath.divide(micros, num.asInstanceOf[Number].longValue(), RoundingMode.HALF_UP)
+    case _: DecimalType =>
+      (micros: Long, num) =>
+        val decimalRes = ((new Decimal).set(micros) / num.asInstanceOf[Decimal]).toJavaBigDecimal
+        decimalRes.setScale(0, java.math.RoundingMode.HALF_UP).longValueExact()
+    case _: FractionalType =>
+      (micros: Long, num) =>
+        DoubleMath.roundToLong(
+          micros / num.asInstanceOf[Number].doubleValue(),
+          RoundingMode.HALF_UP)
   }
 
   override def nullSafeEval(interval: Any, num: Any): Any = {
-    checkDivideOverflow(
-      interval.asInstanceOf[Long], Long.MinValue, right, num, origin.context)
+    checkDivideOverflow(interval.asInstanceOf[Long], Long.MinValue, right, num, origin.context)
     divideByZeroCheck(right.dataType, num, origin.context)
     evalFunc(interval.asInstanceOf[Long], num)
   }
@@ -851,29 +920,36 @@ case class DivideDTInterval(
     right.dataType match {
       case _: IntegralType =>
         val math = classOf[LongMath].getName
-        nullSafeCodeGen(ctx, ev, (m, n) => {
-          val checkIntegralDivideOverflow =
-            s"""
+        nullSafeCodeGen(
+          ctx,
+          ev,
+          (m, n) => {
+            val checkIntegralDivideOverflow =
+              s"""
                |if ($m == ${Long.MinValue}L && $n == -1L)
                |  throw QueryExecutionErrors.overflowInIntegralDivideError($errorContext);
                |""".stripMargin
-          s"""
+            s"""
              |${divideByZeroCheckCodegen(right.dataType, n, errorContext)}
              |$checkIntegralDivideOverflow
              |${ev.value} = $math.divide($m, $n, java.math.RoundingMode.HALF_UP);
           """.stripMargin
-        })
+          })
       case _: DecimalType =>
-        nullSafeCodeGen(ctx, ev, (m, n) =>
-          s"""
+        nullSafeCodeGen(
+          ctx,
+          ev,
+          (m, n) => s"""
              |${divideByZeroCheckCodegen(right.dataType, n, errorContext)}
              |${ev.value} = ((new Decimal()).set($m).$$div($n)).toJavaBigDecimal()
              |  .setScale(0, java.math.RoundingMode.HALF_UP).longValueExact();
           """.stripMargin)
       case _: FractionalType =>
         val math = classOf[DoubleMath].getName
-        nullSafeCodeGen(ctx, ev, (m, n) =>
-          s"""
+        nullSafeCodeGen(
+          ctx,
+          ev,
+          (m, n) => s"""
              |${divideByZeroCheckCodegen(right.dataType, n, errorContext)}
              |${ev.value} = $math.roundToLong($m / (double)$n, java.math.RoundingMode.HALF_UP);
           """.stripMargin)
@@ -884,6 +960,7 @@ case class DivideDTInterval(
   override def sql: String = s"(${left.sql} / ${right.sql})"
 
   override protected def withNewChildrenInternal(
-      newLeft: Expression, newRight: Expression): DivideDTInterval =
+      newLeft: Expression,
+      newRight: Expression): DivideDTInterval =
     copy(interval = newLeft, num = newRight)
 }

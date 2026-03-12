@@ -18,7 +18,7 @@
 package org.apache.spark.sql
 
 /**
- * All classes in this package are considered an internal API to Spark and
- * are subject to change between minor releases.
+ * All classes in this package are considered an internal API to Spark and are subject to change
+ * between minor releases.
  */
 package object internal

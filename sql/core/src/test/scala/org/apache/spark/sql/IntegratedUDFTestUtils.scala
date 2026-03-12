@@ -41,13 +41,12 @@ import org.apache.spark.sql.types.{DataType, IntegerType, NullType, StringType, 
 import org.apache.spark.util.ArrayImplicits._
 
 /**
- * This object targets to integrate various UDF test cases so that Scalar UDF, Python UDF,
- * Scalar Pandas UDF and Grouped Aggregate Pandas UDF can be tested in SBT & Maven tests.
+ * This object targets to integrate various UDF test cases so that Scalar UDF, Python UDF, Scalar
+ * Pandas UDF and Grouped Aggregate Pandas UDF can be tested in SBT & Maven tests.
  *
- * The available UDFs are special. For Scalar UDF, Python UDF and Scalar Pandas UDF,
- * it defines an UDF wrapped by cast. So, the input column is casted into string,
- * UDF returns strings as are, and then output column is casted back to the input column.
- * In this way, UDF is virtually no-op.
+ * The available UDFs are special. For Scalar UDF, Python UDF and Scalar Pandas UDF, it defines an
+ * UDF wrapped by cast. So, the input column is casted into string, UDF returns strings as are,
+ * and then output column is casted back to the input column. In this way, UDF is virtually no-op.
  *
  * Note that, due to this implementation limitation, complex types such as map, array and struct
  * types do not work with this UDFs because they cannot be same after the cast roundtrip.
@@ -78,8 +77,8 @@ import org.apache.spark.util.ArrayImplicits._
  *   df.select(pandasTestUDF(df("id")))
  * }}}
  *
- * For Grouped Aggregate Pandas UDF, it defines an UDF that calculates the count using pandas.
- * The UDF returns the count of the given column. In this way, UDF is virtually not no-op.
+ * For Grouped Aggregate Pandas UDF, it defines an UDF that calculates the count using pandas. The
+ * UDF returns the count of the given column. In this way, UDF is virtually not no-op.
  *
  * To register Grouped Aggregate Pandas UDF in SQL:
  * {{{
@@ -108,8 +107,8 @@ object IntegratedUDFTestUtils extends SQLHelper {
   // Note that we will directly refer pyspark's source, not the zip from a regular build.
   // It is possible the test is being ran without the build.
   private lazy val sourcePath = Paths.get(sparkHome, "python").toAbsolutePath
-  private lazy val py4jPath = Paths.get(
-    sparkHome, "python", "lib", PythonUtils.PY4J_ZIP_NAME).toAbsolutePath
+  private lazy val py4jPath =
+    Paths.get(sparkHome, "python", "lib", PythonUtils.PY4J_ZIP_NAME).toAbsolutePath
   private[spark] lazy val pysparkPythonPath = s"$py4jPath:$sourcePath"
 
   private[spark] lazy val isPythonAvailable: Boolean = TestUtils.testCommandAvailable(pythonExec)
@@ -134,7 +133,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
     true
   }.getOrElse(false)
 
-  private lazy val isPyArrowAvailable: Boolean = isPythonAvailable && isPySparkAvailable  && Try {
+  private lazy val isPyArrowAvailable: Boolean = isPythonAvailable && isPySparkAvailable && Try {
     Process(
       Seq(
         pythonExec,
@@ -199,7 +198,8 @@ object IntegratedUDFTestUtils extends SQLHelper {
 
   private def createPythonUDTF(funcName: String, pythonScript: String): Array[Byte] = {
     if (!shouldTestPythonUDFs) {
-      throw new RuntimeException(s"Python executable [$pythonExec] and/or pyspark are unavailable.")
+      throw new RuntimeException(
+        s"Python executable [$pythonExec] and/or pyspark are unavailable.")
     }
     var binaryPythonUDTF: Array[Byte] = null
     withTempPath { codePath =>
@@ -223,9 +223,12 @@ object IntegratedUDFTestUtils extends SQLHelper {
     binaryPythonUDTF
   }
 
-  private def createPythonDataSource(dataSourceName: String, pythonScript: String): Array[Byte] = {
+  private def createPythonDataSource(
+      dataSourceName: String,
+      pythonScript: String): Array[Byte] = {
     if (!shouldTestPythonUDFs) {
-      throw new RuntimeException(s"Python executable [$pythonExec] and/or pyspark are unavailable.")
+      throw new RuntimeException(
+        s"Python executable [$pythonExec] and/or pyspark are unavailable.")
     }
     var binaryPythonDataSource: Array[Byte] = null
     withTempPath { codePath =>
@@ -326,7 +329,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
           pythonExec,
           "-c",
           "from pyspark.sql.types import VariantType; " +
-          "from pyspark.sql.types import VariantVal;" +
+            "from pyspark.sql.types import VariantVal;" +
             "from pyspark.serializers import CloudPickleSerializer; " +
             s"f = open('$path', 'wb');" +
             "f.write(CloudPickleSerializer().dumps((" +
@@ -352,13 +355,13 @@ object IntegratedUDFTestUtils extends SQLHelper {
             pythonExec,
             "-c",
             "from pyspark.sql.types import *;" +
-            "from pyspark.sql import Row;" +
-            "from pyspark.serializers import CloudPickleSerializer; " +
-            s"f = open('$path', 'wb');" +
-            "f.write(CloudPickleSerializer().dumps((" +
-            s"lambda x: Row(v = $variantValStr), " +
-            """StructType([StructField("a", StructType(""" +
-            """[StructField("v", VariantType(), True)]), True)]))))"""),
+              "from pyspark.sql import Row;" +
+              "from pyspark.serializers import CloudPickleSerializer; " +
+              s"f = open('$path', 'wb');" +
+              "f.write(CloudPickleSerializer().dumps((" +
+              s"lambda x: Row(v = $variantValStr), " +
+              """StructType([StructField("a", StructType(""" +
+              """[StructField("v", VariantType(), True)]), True)]))))"""),
           None,
           "PYTHONPATH" -> s"$pysparkPythonPath:$pythonPath").!!
         binaryPandasFunc = Files.readAllBytes(path.toPath)
@@ -366,7 +369,8 @@ object IntegratedUDFTestUtils extends SQLHelper {
       assert(binaryPandasFunc != null)
       binaryPandasFunc
     } else {
-      throw new RuntimeException(s"Python executable [$pythonExec] and/or pyspark are unavailable.")
+      throw new RuntimeException(
+        s"Python executable [$pythonExec] and/or pyspark are unavailable.")
     }
 
   private def createPandasGroupedMapFuncWithState(pythonScript: String): Array[Byte] = {
@@ -392,7 +396,8 @@ object IntegratedUDFTestUtils extends SQLHelper {
       assert(binaryPandasFunc != null)
       binaryPandasFunc
     } else {
-      throw new RuntimeException(s"Python executable [$pythonExec] and/or pyspark are unavailable.")
+      throw new RuntimeException(
+        s"Python executable [$pythonExec] and/or pyspark are unavailable.")
     }
   }
 
@@ -401,8 +406,8 @@ object IntegratedUDFTestUtils extends SQLHelper {
   workerEnv.put("PYTHONPATH", s"$pysparkPythonPath:$pythonPath")
 
   lazy val pythonExec: String = {
-    val pythonExec = sys.env.getOrElse(
-      "PYSPARK_DRIVER_PYTHON", sys.env.getOrElse("PYSPARK_PYTHON", "python3"))
+    val pythonExec =
+      sys.env.getOrElse("PYSPARK_DRIVER_PYTHON", sys.env.getOrElse("PYSPARK_PYTHON", "python3"))
     if (TestUtils.testCommandAvailable(pythonExec)) {
       pythonExec
     } else {
@@ -444,11 +449,17 @@ object IntegratedUDFTestUtils extends SQLHelper {
       evalType: Int,
       udfDeterministic: Boolean,
       resultId: ExprId)
-    extends PythonUDF(name, func, dataType, children, evalType, udfDeterministic, resultId) {
+      extends PythonUDF(name, func, dataType, children, evalType, udfDeterministic, resultId) {
 
     def this(pudf: PythonUDF) = {
-      this(pudf.name, pudf.func, pudf.dataType, pudf.children,
-        pudf.evalType, pudf.udfDeterministic, pudf.resultId)
+      this(
+        pudf.name,
+        pudf.func,
+        pudf.dataType,
+        pudf.children,
+        pudf.evalType,
+        pudf.udfDeterministic,
+        pudf.resultId)
     }
 
     override def toString: String = s"$name(${children.mkString(", ")})"
@@ -474,9 +485,12 @@ object IntegratedUDFTestUtils extends SQLHelper {
    *   casted_col.cast(df.schema["col"].dataType)
    * }}}
    */
-  case class TestPythonUDF(name: String, returnType: Option[DataType] = None,
+  case class TestPythonUDF(
+      name: String,
+      returnType: Option[DataType] = None,
       pythonEvalType: Int = PythonEvalType.SQL_BATCHED_UDF,
-      deterministic: Boolean = true) extends TestUDF {
+      deterministic: Boolean = true)
+      extends TestUDF {
     private[IntegratedUDFTestUtils] lazy val udf = new UserDefinedPythonFunction(
       name = name,
       func = SimplePythonFunction(
@@ -495,7 +509,9 @@ object IntegratedUDFTestUtils extends SQLHelper {
         assert(e.length == 1, "Defined UDF only has one column")
         val expr = e.head
         val rt = returnType.getOrElse {
-          assert(expr.resolved, "column should be resolved to use the same type " +
+          assert(
+            expr.resolved,
+            "column should be resolved to use the same type " +
               "as input. Try df(name) or df.col(name)")
           expr.dataType
         }
@@ -513,8 +529,8 @@ object IntegratedUDFTestUtils extends SQLHelper {
   def createUserDefinedPythonDataSource(
       name: String,
       pythonScript: String): UserDefinedPythonDataSource = {
-    UserDefinedPythonDataSource(
-      dataSourceCls = SimplePythonFunction(
+    UserDefinedPythonDataSource(dataSourceCls =
+      SimplePythonFunction(
         command = createPythonDataSource(name, pythonScript).toImmutableArraySeq,
         envVars = workerEnv.clone().asInstanceOf[java.util.Map[String, String]],
         pythonIncludes = List.empty[String].asJava,
@@ -562,8 +578,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
     override lazy val udtf: UserDefinedPythonTableFunction = createUserDefinedPythonTableFunction(
       name = "TestUDTF",
       pythonScript = pythonScript,
-      returnType = Some(StructType.fromDDL("x int, y int"))
-    )
+      returnType = Some(StructType.fromDDL("x int, y int")))
   }
 
   object UDTFCountSumLast extends TestUDTF {
@@ -668,7 +683,8 @@ object IntegratedUDFTestUtils extends SQLHelper {
   abstract class TestPythonUDTFPartitionByOrderByBase(
       partitionBy: String,
       orderBy: String,
-      select: String) extends TestUDTF {
+      select: String)
+      extends TestUDTF {
     val pythonScript: String =
       s"""
         |from pyspark.sql.functions import AnalyzeResult, OrderingColumn, PartitioningColumn
@@ -711,35 +727,35 @@ object IntegratedUDFTestUtils extends SQLHelper {
   }
 
   object UDTFPartitionByOrderBy
-    extends TestPythonUDTFPartitionByOrderByBase(
-      partitionBy = "PartitioningColumn(\"partition_col\")",
-      orderBy = "OrderingColumn(\"input\")",
-      select = "")
+      extends TestPythonUDTFPartitionByOrderByBase(
+        partitionBy = "PartitioningColumn(\"partition_col\")",
+        orderBy = "OrderingColumn(\"input\")",
+        select = "")
 
   object UDTFPartitionByOrderByComplexExpr
-    extends TestPythonUDTFPartitionByOrderByBase(
-      partitionBy = "PartitioningColumn(\"partition_col + 1\")",
-      orderBy = "OrderingColumn(\"RANDOM(42)\")",
-      select = "")
+      extends TestPythonUDTFPartitionByOrderByBase(
+        partitionBy = "PartitioningColumn(\"partition_col + 1\")",
+        orderBy = "OrderingColumn(\"RANDOM(42)\")",
+        select = "")
 
   object UDTFPartitionByOrderBySelectExpr
-    extends TestPythonUDTFPartitionByOrderByBase(
-      partitionBy = "PartitioningColumn(\"partition_col\")",
-      orderBy = "OrderingColumn(\"input\")",
-      select = "SelectedColumn(\"partition_col\"), SelectedColumn(\"input\")")
+      extends TestPythonUDTFPartitionByOrderByBase(
+        partitionBy = "PartitioningColumn(\"partition_col\")",
+        orderBy = "OrderingColumn(\"input\")",
+        select = "SelectedColumn(\"partition_col\"), SelectedColumn(\"input\")")
 
   object UDTFPartitionByOrderBySelectComplexExpr
-    extends TestPythonUDTFPartitionByOrderByBase(
-      partitionBy = "PartitioningColumn(\"partition_col + 1\")",
-      orderBy = "OrderingColumn(\"RANDOM(42)\")",
-      select = "SelectedColumn(\"partition_col\"), " +
-        "SelectedColumn(name=\"input + 1\", alias=\"input\")")
+      extends TestPythonUDTFPartitionByOrderByBase(
+        partitionBy = "PartitioningColumn(\"partition_col + 1\")",
+        orderBy = "OrderingColumn(\"RANDOM(42)\")",
+        select = "SelectedColumn(\"partition_col\"), " +
+          "SelectedColumn(name=\"input + 1\", alias=\"input\")")
 
   object UDTFPartitionByOrderBySelectExprOnlyPartitionColumn
-    extends TestPythonUDTFPartitionByOrderByBase(
-      partitionBy = "PartitioningColumn(\"partition_col\")",
-      orderBy = "OrderingColumn(\"input\")",
-      select = "SelectedColumn(\"partition_col\")")
+      extends TestPythonUDTFPartitionByOrderByBase(
+        partitionBy = "PartitioningColumn(\"partition_col\")",
+        orderBy = "OrderingColumn(\"input\")",
+        select = "SelectedColumn(\"partition_col\")")
 
   object UDTFPartitionByIndexingBug extends TestUDTF {
     val pythonScript: String =
@@ -785,40 +801,40 @@ object IntegratedUDFTestUtils extends SQLHelper {
   }
 
   object UDTFInvalidPartitionByOrderByParseError
-    extends TestPythonUDTFPartitionByOrderByBase(
-      partitionBy = "PartitioningColumn(\"unparsable\")",
-      orderBy = "OrderingColumn(\"input\")",
-      select = "")
+      extends TestPythonUDTFPartitionByOrderByBase(
+        partitionBy = "PartitioningColumn(\"unparsable\")",
+        orderBy = "OrderingColumn(\"input\")",
+        select = "")
 
   object UDTFInvalidOrderByAscKeyword
-    extends TestPythonUDTFPartitionByOrderByBase(
-      partitionBy = "PartitioningColumn(\"partition_col\")",
-      orderBy = "OrderingColumn(\"partition_col ASC\")",
-      select = "")
+      extends TestPythonUDTFPartitionByOrderByBase(
+        partitionBy = "PartitioningColumn(\"partition_col\")",
+        orderBy = "OrderingColumn(\"partition_col ASC\")",
+        select = "")
 
   object UDTFInvalidSelectExprParseError
-    extends TestPythonUDTFPartitionByOrderByBase(
-      partitionBy = "PartitioningColumn(\"partition_col\")",
-      orderBy = "OrderingColumn(\"input\")",
-      select = "SelectedColumn(\"unparsable\")")
+      extends TestPythonUDTFPartitionByOrderByBase(
+        partitionBy = "PartitioningColumn(\"partition_col\")",
+        orderBy = "OrderingColumn(\"input\")",
+        select = "SelectedColumn(\"unparsable\")")
 
   object UDTFInvalidSelectExprStringValue
-    extends TestPythonUDTFPartitionByOrderByBase(
-      partitionBy = "PartitioningColumn(\"partition_col\")",
-      orderBy = "OrderingColumn(\"input\")",
-      select = "\"partition_cll\"")
+      extends TestPythonUDTFPartitionByOrderByBase(
+        partitionBy = "PartitioningColumn(\"partition_col\")",
+        orderBy = "OrderingColumn(\"input\")",
+        select = "\"partition_cll\"")
 
   object UDTFInvalidComplexSelectExprMissingAlias
-    extends TestPythonUDTFPartitionByOrderByBase(
-      partitionBy = "PartitioningColumn(\"partition_col + 1\")",
-      orderBy = "OrderingColumn(\"RANDOM(42)\")",
-      select = "SelectedColumn(name=\"input + 1\")")
+      extends TestPythonUDTFPartitionByOrderByBase(
+        partitionBy = "PartitioningColumn(\"partition_col + 1\")",
+        orderBy = "OrderingColumn(\"RANDOM(42)\")",
+        select = "SelectedColumn(name=\"input + 1\")")
 
   object UDTFInvalidOrderByStringList
-    extends TestPythonUDTFPartitionByOrderByBase(
-      partitionBy = "PartitioningColumn(\"partition_col\")",
-      orderBy = "\"partition_col\"",
-      select = "")
+      extends TestPythonUDTFPartitionByOrderByBase(
+        partitionBy = "PartitioningColumn(\"partition_col\")",
+        orderBy = "\"partition_col\"",
+        select = "")
 
   object UDTFInvalidPartitionByAndWithSinglePartition extends TestUDTF {
     val pythonScript: String =
@@ -1081,8 +1097,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
     override lazy val udtf: UserDefinedPythonTableFunction = createUserDefinedPythonTableFunction(
       name = name,
       pythonScript = pythonScript,
-      returnType = Some(StructType.fromDDL("result string"))
-    )
+      returnType = Some(StructType.fromDDL("result string")))
   }
 
   object InvalidEvalReturnsNoneToNonNullableColumnScalarType extends TestUDTF {
@@ -1356,12 +1371,11 @@ object IntegratedUDFTestUtils extends SQLHelper {
     InvalidTerminateReturnsNoneToNonNullableColumnArrayType,
     InvalidTerminateReturnsNoneToNonNullableColumnArrayElementType,
     InvalidTerminateReturnsNoneToNonNullableColumnStructType,
-    InvalidTerminateReturnsNoneToNonNullableColumnMapType
-  )
+    InvalidTerminateReturnsNoneToNonNullableColumnMapType)
 
   /**
-   * A Scalar Pandas UDF that takes one column, casts into string, executes the
-   * Python native function, and casts back to the type of input column.
+   * A Scalar Pandas UDF that takes one column, casts into string, executes the Python native
+   * function, and casts back to the type of input column.
    *
    * Virtually equivalent to:
    *
@@ -1374,9 +1388,8 @@ object IntegratedUDFTestUtils extends SQLHelper {
    *   casted_col.cast(df.schema["col"].dataType)
    * }}}
    */
-  case class TestScalarPandasUDF(
-      name: String,
-      returnType: Option[DataType] = None) extends TestUDF {
+  case class TestScalarPandasUDF(name: String, returnType: Option[DataType] = None)
+      extends TestUDF {
     private[IntegratedUDFTestUtils] lazy val udf = new UserDefinedPythonFunction(
       name = name,
       func = SimplePythonFunction(
@@ -1395,8 +1408,10 @@ object IntegratedUDFTestUtils extends SQLHelper {
         assert(e.length == 1, "Defined UDF only has one column")
         val expr = e.head
         val rt = returnType.getOrElse {
-          assert(expr.resolved, "column should be resolved to use the same type " +
-            "as input. Try df(name) or df.col(name)")
+          assert(
+            expr.resolved,
+            "column should be resolved to use the same type " +
+              "as input. Try df(name) or df.col(name)")
           expr.dataType
         }
         val pythonUDF = new PythonUDFWithoutId(
@@ -1411,8 +1426,8 @@ object IntegratedUDFTestUtils extends SQLHelper {
   }
 
   /**
-   * A Grouped Aggregate Pandas UDF that takes one column, executes the
-   * Python native function calculating the count of the column using pandas.
+   * A Grouped Aggregate Pandas UDF that takes one column, executes the Python native function
+   * calculating the count of the column using pandas.
    *
    * Virtually equivalent to:
    *
@@ -1524,8 +1539,8 @@ object IntegratedUDFTestUtils extends SQLHelper {
 
   /**
    * Arbitrary stateful processing in Python is used for
-   * `DataFrame.groupBy.applyInPandasWithState`. It requires `pythonScript` to
-   * define `func` (Python function) and `tpe` (`StructType` for state key).
+   * `DataFrame.groupBy.applyInPandasWithState`. It requires `pythonScript` to define `func`
+   * (Python function) and `tpe` (`StructType` for state key).
    *
    * Virtually equivalent to:
    *
@@ -1537,7 +1552,8 @@ object IntegratedUDFTestUtils extends SQLHelper {
    *   df.groupBy(...).applyInPandasWithState(func, ..., tpe, ..., ...)
    * }}}
    */
-  case class TestGroupedMapPandasUDFWithState(name: String, pythonScript: String) extends TestUDF {
+  case class TestGroupedMapPandasUDFWithState(name: String, pythonScript: String)
+      extends TestUDF {
     private[IntegratedUDFTestUtils] lazy val udf = new UserDefinedPythonFunction(
       name = name,
       func = SimplePythonFunction(
@@ -1548,7 +1564,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
         pythonVer = pythonVer,
         broadcastVars = List.empty[Broadcast[PythonBroadcast]].asJava,
         accumulator = null),
-      dataType = NullType,  // This is not respected.
+      dataType = NullType, // This is not respected.
       pythonEvalType = PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE,
       udfDeterministic = true)
 
@@ -1558,8 +1574,8 @@ object IntegratedUDFTestUtils extends SQLHelper {
   }
 
   /**
-   * A Scala UDF that takes one column, casts into string, executes the
-   * Scala native function, and casts back to the type of input column.
+   * A Scala UDF that takes one column, casts into string, executes the Scala native function, and
+   * casts back to the type of input column.
    *
    * Virtually equivalent to:
    *
@@ -1588,8 +1604,10 @@ object IntegratedUDFTestUtils extends SQLHelper {
       assert(exprs.length == 1, "Defined UDF only has one column")
       val expr = exprs.head
       val rt = returnType.getOrElse {
-        assert(expr.resolved, "column should be resolved to use the same type " +
-          "as input. Try df(name) or df.col(name)")
+        assert(
+          expr.resolved,
+          "column should be resolved to use the same type " +
+            "as input. Try df(name) or df.col(name)")
         expr.dataType
       }
       Cast(toScalaUDF(udf, Cast(expr, StringType) :: Nil), rt)

@@ -21,17 +21,17 @@ import org.apache.spark.sql.catalyst.expressions._
 
 // scalastyle:off
 /**
- * Calculates and propagates precision for fixed-precision decimals. Hive has a number of
- * rules for this based on the SQL standard and MS SQL:
+ * Calculates and propagates precision for fixed-precision decimals. Hive has a number of rules
+ * for this based on the SQL standard and MS SQL:
  * https://cwiki.apache.org/confluence/download/attachments/27362075/Hive_Decimal_Precision_Scale_Support.pdf
  * https://msdn.microsoft.com/en-us/library/ms190476.aspx
  *
  * In particular, if we have expressions e1 and e2 with precision/scale p1/s2 and p2/s2
  * respectively, then the following operations have the following precision / scale:
  *
- *   Operation    Result Precision                        Result Scale
- *   ------------------------------------------------------------------------
- *   e1 union e2  max(s1, s2) + max(p1-s1, p2-s2)         max(s1, s2)
+ * Operation Result Precision Result Scale
+ * ------------------------------------------------------------------------ e1 union e2 max(s1,
+ * s2) + max(p1-s1, p2-s2) max(s1, s2)
  *
  * To implement the rules for fixed-precision types, we introduce casts to turn them to unlimited
  * precision, do the math on unlimited-precision numbers, then introduce casts back to the
@@ -39,12 +39,13 @@ import org.apache.spark.sql.catalyst.expressions._
  * cast-to-fixed-precision operator.
  *
  * In addition, when mixing non-decimal types with decimals, we use the following rules:
- * - BYTE gets turned into DECIMAL(3, 0)
- * - SHORT gets turned into DECIMAL(5, 0)
- * - INT gets turned into DECIMAL(10, 0)
- * - LONG gets turned into DECIMAL(20, 0)
- * - FLOAT and DOUBLE cause fixed-length decimals to turn into DOUBLE
- * - Literals INT and LONG get turned into DECIMAL with the precision strictly needed by the value
+ *   - BYTE gets turned into DECIMAL(3, 0)
+ *   - SHORT gets turned into DECIMAL(5, 0)
+ *   - INT gets turned into DECIMAL(10, 0)
+ *   - LONG gets turned into DECIMAL(20, 0)
+ *   - FLOAT and DOUBLE cause fixed-length decimals to turn into DOUBLE
+ *   - Literals INT and LONG get turned into DECIMAL with the precision strictly needed by the
+ *     value
  */
 // scalastyle:on
 object DecimalPrecision extends TypeCoercionRule {

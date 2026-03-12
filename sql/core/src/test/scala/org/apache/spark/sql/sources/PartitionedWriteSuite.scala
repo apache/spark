@@ -39,11 +39,14 @@ import org.apache.spark.sql.types.YearMonthIntervalType.{MONTH, YEAR}
 import org.apache.spark.util.Utils
 
 private class OnlyDetectCustomPathFileCommitProtocol(jobId: String, path: String)
-  extends SQLHadoopMapReduceCommitProtocol(jobId, path)
-    with Serializable with Logging {
+    extends SQLHadoopMapReduceCommitProtocol(jobId, path)
+    with Serializable
+    with Logging {
 
   override def newTaskTempFileAbsPath(
-      taskContext: TaskAttemptContext, absoluteDir: String, spec: FileNameSpec): String = {
+      taskContext: TaskAttemptContext,
+      absoluteDir: String,
+      spec: FileNameSpec): String = {
     throw new Exception("there should be no custom partition path")
   }
 }
@@ -58,9 +61,7 @@ class PartitionedWriteSuite extends QueryTest with SharedSparkSession {
     val df = spark.range(100).select($"id", lit(1).as("data"))
     df.write.partitionBy("id").save(path.getCanonicalPath)
 
-    checkAnswer(
-      spark.read.load(path.getCanonicalPath),
-      (0 to 99).map(Row(1, _)).toSeq)
+    checkAnswer(spark.read.load(path.getCanonicalPath), (0 to 99).map(Row(1, _)).toSeq)
 
     Utils.deleteRecursively(path)
   }
@@ -90,23 +91,37 @@ class PartitionedWriteSuite extends QueryTest with SharedSparkSession {
 
   test("maxRecordsPerFile setting in non-partitioned write path") {
     withTempDir { f =>
-      spark.range(start = 0, end = 4, step = 1, numPartitions = 1)
-        .write.option("maxRecordsPerFile", 1).mode("overwrite").parquet(f.getAbsolutePath)
+      spark
+        .range(start = 0, end = 4, step = 1, numPartitions = 1)
+        .write
+        .option("maxRecordsPerFile", 1)
+        .mode("overwrite")
+        .parquet(f.getAbsolutePath)
       assert(TestUtils.recursiveList(f).count(_.getAbsolutePath.endsWith("parquet")) == 4)
 
-      spark.range(start = 0, end = 4, step = 1, numPartitions = 1)
-        .write.option("maxRecordsPerFile", 2).mode("overwrite").parquet(f.getAbsolutePath)
+      spark
+        .range(start = 0, end = 4, step = 1, numPartitions = 1)
+        .write
+        .option("maxRecordsPerFile", 2)
+        .mode("overwrite")
+        .parquet(f.getAbsolutePath)
       assert(TestUtils.recursiveList(f).count(_.getAbsolutePath.endsWith("parquet")) == 2)
 
-      spark.range(start = 0, end = 4, step = 1, numPartitions = 1)
-        .write.option("maxRecordsPerFile", -1).mode("overwrite").parquet(f.getAbsolutePath)
+      spark
+        .range(start = 0, end = 4, step = 1, numPartitions = 1)
+        .write
+        .option("maxRecordsPerFile", -1)
+        .mode("overwrite")
+        .parquet(f.getAbsolutePath)
       assert(TestUtils.recursiveList(f).count(_.getAbsolutePath.endsWith("parquet")) == 1)
     }
   }
 
   test("maxRecordsPerFile setting in dynamic partition writes") {
     withTempDir { f =>
-      spark.range(start = 0, end = 4, step = 1, numPartitions = 1).selectExpr("id", "id id1")
+      spark
+        .range(start = 0, end = 4, step = 1, numPartitions = 1)
+        .selectExpr("id", "id id1")
         .write
         .partitionBy("id")
         .option("maxRecordsPerFile", 1)
@@ -118,8 +133,9 @@ class PartitionedWriteSuite extends QueryTest with SharedSparkSession {
 
   test("append data to an existing partitioned table without custom partition path") {
     withTable("t") {
-      withSQLConf(SQLConf.FILE_COMMIT_PROTOCOL_CLASS.key ->
-        classOf[OnlyDetectCustomPathFileCommitProtocol].getName) {
+      withSQLConf(
+        SQLConf.FILE_COMMIT_PROTOCOL_CLASS.key ->
+          classOf[OnlyDetectCustomPathFileCommitProtocol].getName) {
         Seq((1, 2)).toDF("a", "b").write.partitionBy("b").saveAsTable("t")
         // if custom partition path is detected by the task, it will throw an Exception
         // from OnlyDetectCustomPathFileCommitProtocol above.
@@ -130,8 +146,8 @@ class PartitionedWriteSuite extends QueryTest with SharedSparkSession {
 
   private def checkPartitionValues(file: File, expected: String): Unit = {
     val dir = file.getParentFile()
-    val value = ExternalCatalogUtils.unescapePathName(
-      dir.getName.substring(dir.getName.indexOf("=") + 1))
+    val value =
+      ExternalCatalogUtils.unescapePathName(dir.getName.substring(dir.getName.indexOf("=") + 1))
     assert(value == expected)
   }
 
@@ -145,8 +161,10 @@ class PartitionedWriteSuite extends QueryTest with SharedSparkSession {
       checkPartitionValues(files.head, "2016-12-01 00:00:00")
     }
     withTempPath { f =>
-      df.write.option(DateTimeUtils.TIMEZONE_OPTION, "UTC")
-        .partitionBy("ts").parquet(f.getAbsolutePath)
+      df.write
+        .option(DateTimeUtils.TIMEZONE_OPTION, "UTC")
+        .partitionBy("ts")
+        .parquet(f.getAbsolutePath)
       val files = TestUtils.recursiveList(f).filter(_.getAbsolutePath.endsWith("parquet"))
       assert(files.length == 1)
       // use timeZone option utcTz.getId to format partition value.
@@ -175,14 +193,14 @@ class PartitionedWriteSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-27194 SPARK-29302: Fix commit collision in dynamic partition overwrite mode") {
-    withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key ->
-      SQLConf.PartitionOverwriteMode.DYNAMIC.toString,
+    withSQLConf(
+      SQLConf.PARTITION_OVERWRITE_MODE.key ->
+        SQLConf.PartitionOverwriteMode.DYNAMIC.toString,
       SQLConf.FILE_COMMIT_PROTOCOL_CLASS.key ->
         classOf[PartitionFileExistCommitProtocol].getName) {
       withTempDir { d =>
         withTable("t") {
-          sql(
-            s"""
+          sql(s"""
                | create table t(c1 int, p1 int) using parquet partitioned by (p1)
                | location '${d.getAbsolutePath}'
             """.stripMargin)
@@ -204,23 +222,23 @@ class PartitionedWriteSuite extends QueryTest with SharedSparkSession {
         "INTERVAL '100' YEAR" -> YearMonthIntervalType(YEAR),
         "INTERVAL '-1-1' YEAR TO MONTH" -> YearMonthIntervalType(YEAR, MONTH),
         "INTERVAL '1000 02:03:04.123' DAY TO SECOND" -> DayTimeIntervalType(DAY, SECOND),
-        "INTERVAL '-10' MINUTE" -> DayTimeIntervalType(MINUTE)
-      ).foreach { case (intervalStr, intervalType) =>
-        withTempPath { f =>
-          val df = sql(s"select 0 AS id, $intervalStr AS diff")
-          assert(df.schema("diff").dataType === intervalType)
-          df.write
-            .partitionBy("diff")
-            .format(format)
-            .save(f.getAbsolutePath)
-          val files = TestUtils.recursiveList(f).filter(_.getAbsolutePath.endsWith(format))
-          assert(files.length == 1)
-          checkPartitionValues(files.head, intervalStr)
-          val schema = new StructType()
-            .add("id", IntegerType)
-            .add("diff", intervalType)
-          checkAnswer(spark.read.schema(schema).format(format).load(f.getAbsolutePath), df)
-        }
+        "INTERVAL '-10' MINUTE" -> DayTimeIntervalType(MINUTE)).foreach {
+        case (intervalStr, intervalType) =>
+          withTempPath { f =>
+            val df = sql(s"select 0 AS id, $intervalStr AS diff")
+            assert(df.schema("diff").dataType === intervalType)
+            df.write
+              .partitionBy("diff")
+              .format(format)
+              .save(f.getAbsolutePath)
+            val files = TestUtils.recursiveList(f).filter(_.getAbsolutePath.endsWith(format))
+            assert(files.length == 1)
+            checkPartitionValues(files.head, intervalStr)
+            val schema = new StructType()
+              .add("id", IntegerType)
+              .add("diff", intervalType)
+            checkAnswer(spark.read.schema(schema).format(format).load(f.getAbsolutePath), df)
+          }
       }
     }
   }
@@ -232,8 +250,7 @@ class PartitionedWriteSuite extends QueryTest with SharedSparkSession {
       "00:01:02.999999" -> TimeType(6),
       "12:00:00" -> TimeType(1),
       "23:59:59.000001" -> TimeType(),
-      "23:59:59.999999" -> TimeType(6)
-    ).foreach { case (timeStr, timeType) =>
+      "23:59:59.999999" -> TimeType(6)).foreach { case (timeStr, timeType) =>
       withTempPath { f =>
         val df = sql(s"select 0 AS id, cast('$timeStr' as ${timeType.sql}) AS tt")
         assert(df.schema("tt").dataType === timeType)
@@ -254,14 +271,14 @@ class PartitionedWriteSuite extends QueryTest with SharedSparkSession {
 }
 
 /**
- * A file commit protocol with pre-created partition file. when try to overwrite partition dir
- * in dynamic partition mode, FileAlreadyExist exception would raise without SPARK-27194
+ * A file commit protocol with pre-created partition file. when try to overwrite partition dir in
+ * dynamic partition mode, FileAlreadyExist exception would raise without SPARK-27194
  */
 private class PartitionFileExistCommitProtocol(
     jobId: String,
     path: String,
     dynamicPartitionOverwrite: Boolean)
-  extends SQLHadoopMapReduceCommitProtocol(jobId, path, dynamicPartitionOverwrite) {
+    extends SQLHadoopMapReduceCommitProtocol(jobId, path, dynamicPartitionOverwrite) {
   override def setupJob(jobContext: JobContext): Unit = {
     super.setupJob(jobContext)
     val stagingDir = new File(new Path(path).toUri.getPath, s".spark-staging-$jobId")

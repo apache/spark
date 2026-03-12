@@ -68,8 +68,10 @@ class JsonInferSchema(private val options: JSONOptions) extends Serializable wit
 
   override def hashCode(): Int = options.hashCode()
 
-  private def handleJsonErrorsByParseMode(parseMode: ParseMode,
-      columnNameOfCorruptRecord: String, e: Throwable): Option[StructType] = {
+  private def handleJsonErrorsByParseMode(
+      parseMode: ParseMode,
+      columnNameOfCorruptRecord: String,
+      e: Throwable): Option[StructType] = {
     parseMode match {
       case PermissiveMode =>
         Some(StructType(Array(StructField(columnNameOfCorruptRecord, StringType))))
@@ -77,7 +79,8 @@ class JsonInferSchema(private val options: JSONOptions) extends Serializable wit
         None
       case FailFastMode =>
         throw QueryExecutionErrors.malformedRecordsDetectedInSchemaInferenceError(
-          e, columnNameOfCorruptRecord)
+          e,
+          columnNameOfCorruptRecord)
     }
   }
 
@@ -98,35 +101,41 @@ class JsonInferSchema(private val options: JSONOptions) extends Serializable wit
     val typeMerger = JsonInferSchema.compatibleRootType(columnNameOfCorruptRecord, parseMode)
     val mergedTypesFromPartitions = json.mapPartitions { iter =>
       val factory = options.buildJsonFactory()
-      iter.flatMap { row =>
-        try {
-          Utils.tryWithResource(createParser(factory, row)) { parser =>
-            parser.nextToken()
-            Some(inferField(parser))
-          }
-        } catch {
-          // If we are not reading from files but hit `RuntimeException`, it means corrupted record.
-          case e: RuntimeException if !isReadFile =>
-            handleJsonErrorsByParseMode(parseMode, columnNameOfCorruptRecord, e)
-          case e @ (_: JsonProcessingException | _: MalformedInputException) =>
-            handleJsonErrorsByParseMode(parseMode, columnNameOfCorruptRecord, e)
-          case e: CharConversionException if options.encoding.isEmpty =>
-            val msg =
-              """JSON parser cannot handle a character in its input.
+      iter
+        .flatMap { row =>
+          try {
+            Utils.tryWithResource(createParser(factory, row)) { parser =>
+              parser.nextToken()
+              Some(inferField(parser))
+            }
+          } catch {
+            // If we are not reading from files but hit `RuntimeException`, it means corrupted record.
+            case e: RuntimeException if !isReadFile =>
+              handleJsonErrorsByParseMode(parseMode, columnNameOfCorruptRecord, e)
+            case e @ (_: JsonProcessingException | _: MalformedInputException) =>
+              handleJsonErrorsByParseMode(parseMode, columnNameOfCorruptRecord, e)
+            case e: CharConversionException if options.encoding.isEmpty =>
+              val msg =
+                """JSON parser cannot handle a character in its input.
                 |Specifying encoding as an input option explicitly might help to resolve the issue.
                 |""".stripMargin + e.getMessage
-            val wrappedCharException = new CharConversionException(msg)
-            wrappedCharException.initCause(e)
-            handleJsonErrorsByParseMode(parseMode, columnNameOfCorruptRecord, wrappedCharException)
-          case e: FileNotFoundException if ignoreMissingFiles =>
-            logWarning("Skipped missing file", e)
-            Some(StructType(Nil))
-          case e: FileNotFoundException if !ignoreMissingFiles => throw e
-          case e @ (_: IOException | _: RuntimeException) if ignoreCorruptFiles =>
-            logWarning("Skipped the rest of the content in the corrupted file", e)
-            Some(StructType(Nil))
+              val wrappedCharException = new CharConversionException(msg)
+              wrappedCharException.initCause(e)
+              handleJsonErrorsByParseMode(
+                parseMode,
+                columnNameOfCorruptRecord,
+                wrappedCharException)
+            case e: FileNotFoundException if ignoreMissingFiles =>
+              logWarning("Skipped missing file", e)
+              Some(StructType(Nil))
+            case e: FileNotFoundException if !ignoreMissingFiles => throw e
+            case e @ (_: IOException | _: RuntimeException) if ignoreCorruptFiles =>
+              logWarning("Skipped the rest of the content in the corrupted file", e)
+              Some(StructType(Nil))
+          }
         }
-      }.reduceOption(typeMerger).iterator
+        .reduceOption(typeMerger)
+        .iterator
     }
 
     // Here we manually submit a fold-like Spark job, so that we can set the SQLConf when running
@@ -144,7 +153,8 @@ class JsonInferSchema(private val options: JSONOptions) extends Serializable wit
     canonicalizeType(rootType, options)
       .find(_.isInstanceOf[StructType])
       // canonicalizeType erases all empty structs, including the only one we want to keep
-      .getOrElse(StructType(Nil)).asInstanceOf[StructType]
+      .getOrElse(StructType(Nil))
+      .asInstanceOf[StructType]
   }
 
   /**
@@ -172,7 +182,7 @@ class JsonInferSchema(private val options: JSONOptions) extends Serializable wit
         val field = parser.getText
         lazy val decimalTry = allCatch opt {
           val bigDecimal = decimalParser(field)
-            DecimalType(bigDecimal.precision, bigDecimal.scale)
+          DecimalType(bigDecimal.precision, bigDecimal.scale)
         }
         if (options.prefersDecimal && decimalTry.isDefined) {
           decimalTry.get
@@ -205,10 +215,7 @@ class JsonInferSchema(private val options: JSONOptions) extends Serializable wit
       case START_OBJECT =>
         val builder = Array.newBuilder[StructField]
         while (nextUntil(parser, END_OBJECT)) {
-          builder += StructField(
-            parser.currentName,
-            inferField(parser),
-            nullable = true)
+          builder += StructField(parser.currentName, inferField(parser), nullable = true)
         }
         val fields: Array[StructField] = builder.result()
         // Note: other code relies on this sorting for correctness, so don't remove it!
@@ -221,8 +228,7 @@ class JsonInferSchema(private val options: JSONOptions) extends Serializable wit
         // the type as we pass through all JSON objects.
         var elementType: DataType = NullType
         while (nextUntil(parser, END_ARRAY)) {
-          elementType = JsonInferSchema.compatibleType(
-            elementType, inferField(parser))
+          elementType = JsonInferSchema.compatibleType(elementType, inferField(parser))
         }
 
         ArrayType(elementType)
@@ -264,36 +270,36 @@ class JsonInferSchema(private val options: JSONOptions) extends Serializable wit
   }
 
   /**
-   * Recursively canonicalizes inferred types, e.g., removes StructTypes with no fields,
-   * drops NullTypes or converts them to StringType based on provided options.
+   * Recursively canonicalizes inferred types, e.g., removes StructTypes with no fields, drops
+   * NullTypes or converts them to StringType based on provided options.
    */
-  private[catalyst] def canonicalizeType(
-      tpe: DataType, options: JSONOptions): Option[DataType] = tpe match {
-    case at: ArrayType =>
-      canonicalizeType(at.elementType, options)
-        .map(t => at.copy(elementType = t))
+  private[catalyst] def canonicalizeType(tpe: DataType, options: JSONOptions): Option[DataType] =
+    tpe match {
+      case at: ArrayType =>
+        canonicalizeType(at.elementType, options)
+          .map(t => at.copy(elementType = t))
 
-    case StructType(fields) =>
-      val canonicalFields = fields.filter(_.name.nonEmpty).flatMap { f =>
-        canonicalizeType(f.dataType, options)
-          .map(t => f.copy(dataType = t))
-      }
-      // SPARK-8093: empty structs should be deleted
-      if (canonicalFields.isEmpty) {
-        None
-      } else {
-        Some(StructType(canonicalFields))
-      }
+      case StructType(fields) =>
+        val canonicalFields = fields.filter(_.name.nonEmpty).flatMap { f =>
+          canonicalizeType(f.dataType, options)
+            .map(t => f.copy(dataType = t))
+        }
+        // SPARK-8093: empty structs should be deleted
+        if (canonicalFields.isEmpty) {
+          None
+        } else {
+          Some(StructType(canonicalFields))
+        }
 
-    case NullType =>
-      if (options.dropFieldIfAllNull) {
-        None
-      } else {
-        Some(StringType)
-      }
+      case NullType =>
+        if (options.dropFieldIfAllNull) {
+          None
+        } else {
+          Some(StringType)
+        }
 
-    case other => Some(other)
-  }
+      case other => Some(other)
+    }
 }
 
 object JsonInferSchema {
@@ -326,7 +332,7 @@ object JsonInferSchema {
         // If this given struct does not have a column used for corrupt records,
         // add this field.
         val newFields: Array[StructField] =
-        StructField(columnNameOfCorruptRecords, StringType, nullable = true) +: struct.fields
+          StructField(columnNameOfCorruptRecords, StringType, nullable = true) +: struct.fields
         // Note: other code relies on this sorting for correctness, so don't remove it!
         java.util.Arrays.sort(newFields, structFieldComparator)
         StructType(newFields)
@@ -371,11 +377,13 @@ object JsonInferSchema {
   private[this] val emptyStructFieldArray = Array.empty[StructField]
 
   /**
-   * Returns the most general data type for two given data types.
-   * When the two types are incompatible, return `defaultDataType` as a fallback result.
+   * Returns the most general data type for two given data types. When the two types are
+   * incompatible, return `defaultDataType` as a fallback result.
    */
   def compatibleType(
-      t1: DataType, t2: DataType, defaultDataType: DataType = StringType): DataType = {
+      t1: DataType,
+      t2: DataType,
+      defaultDataType: DataType = StringType): DataType = {
     TypeCoercion.findTightestCommonType(t1, t2).getOrElse {
       // t1 or t2 is a StructType, ArrayType, or an unexpected type.
       (t1, t2) match {
@@ -403,9 +411,11 @@ object JsonInferSchema {
           // Both fields1 and fields2 should be sorted by name, since inferField performs sorting.
           // Therefore, we can take advantage of the fact that we're merging sorted lists and skip
           // building a hash map or performing additional sorting.
-          assert(isSorted(fields1),
+          assert(
+            isSorted(fields1),
             s"${StructType.simpleString}'s fields were not sorted: ${fields1.toImmutableArraySeq}")
-          assert(isSorted(fields2),
+          assert(
+            isSorted(fields2),
             s"${StructType.simpleString}'s fields were not sorted: ${fields2.toImmutableArraySeq}")
 
           val newFields = new java.util.ArrayList[StructField]()
@@ -418,8 +428,8 @@ object JsonInferSchema {
             val f2Name = fields2(f2Idx).name
             val comp = f1Name.compareTo(f2Name)
             if (comp == 0) {
-              val dataType = compatibleType(
-                fields1(f1Idx).dataType, fields2(f2Idx).dataType, defaultDataType)
+              val dataType =
+                compatibleType(fields1(f1Idx).dataType, fields2(f2Idx).dataType, defaultDataType)
               newFields.add(StructField(f1Name, dataType, nullable = true))
               f1Idx += 1
               f2Idx += 1

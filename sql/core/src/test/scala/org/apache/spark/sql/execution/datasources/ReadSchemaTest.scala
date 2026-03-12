@@ -25,28 +25,27 @@ import org.apache.spark.sql.test.SharedSparkSession
 
 /**
  * The reader schema is said to be evolved (or projected) when it changed after the data is
- * written by writers. The followings are supported in file-based data sources.
- * Note that partition columns are not maintained in files. Here, `column` means non-partition
- * column.
+ * written by writers. The followings are supported in file-based data sources. Note that
+ * partition columns are not maintained in files. Here, `column` means non-partition column.
  *
  *   1. Add a column
  *   2. Hide a column
  *   3. Change a column position
  *   4. Change a column type (Upcast)
  *
- * Here, we consider safe changes without data loss. For example, data type changes should be
- * from small types to larger types like `int`-to-`long`, not vice versa.
+ * Here, we consider safe changes without data loss. For example, data type changes should be from
+ * small types to larger types like `int`-to-`long`, not vice versa.
  *
  * So far, file-based data sources have the following coverages.
  *
- *   | File Format  | Coverage     | Note                                                   |
- *   | ------------ | ------------ | ------------------------------------------------------ |
- *   | TEXT         | N/A          | Schema consists of a single string column.             |
- *   | CSV          | 1, 2, 4      |                                                        |
- *   | JSON         | 1, 2, 3, 4   |                                                        |
- *   | ORC          | 1, 2, 3, 4   | Native vectorized ORC reader has the widest coverage.  |
- *   | PARQUET      | 1, 2, 3      |                                                        |
- *   | AVRO         | 1, 2, 3      |                                                        |
+ * | File Format | Coverage   | Note                                                  |
+ * |:------------|:-----------|:------------------------------------------------------|
+ * | TEXT        | N/A        | Schema consists of a single string column.            |
+ * | CSV         | 1, 2, 4    |                                                       |
+ * | JSON        | 1, 2, 3, 4 |                                                       |
+ * | ORC         | 1, 2, 3, 4 | Native vectorized ORC reader has the widest coverage. |
+ * | PARQUET     | 1, 2, 3    |                                                       |
+ * | AVRO        | 1, 2, 3    |                                                       |
  *
  * This aims to provide an explicit test coverage for reader schema change on file-based data
  * sources. Since a file format has its own coverage, we need a test suite for each file-based
@@ -54,17 +53,9 @@ import org.apache.spark.sql.test.SharedSparkSession
  *
  * The following is a hierarchy of test traits.
  *
- *   ReadSchemaTest
- *     -> AddColumnTest
- *     -> AddColumnIntoTheMiddleTest
- *     -> HideColumnAtTheEndTest
- *     -> HideColumnInTheMiddleTest
- *     -> ChangePositionTest
- *     -> BooleanTypeTest
- *     -> ToStringTypeTest
- *     -> IntegralTypeTest
- *     -> ToDoubleTypeTest
- *     -> ToDecimalTypeTest
+ * ReadSchemaTest -> AddColumnTest -> AddColumnIntoTheMiddleTest -> HideColumnAtTheEndTest ->
+ * HideColumnInTheMiddleTest -> ChangePositionTest -> BooleanTypeTest -> ToStringTypeTest ->
+ * IntegralTypeTest -> ToDoubleTypeTest -> ToDecimalTypeTest
  */
 
 trait ReadSchemaTest extends QueryTest with SharedSparkSession {
@@ -73,8 +64,7 @@ trait ReadSchemaTest extends QueryTest with SharedSparkSession {
 }
 
 /**
- * Add column (Case 1-1).
- * This test suite assumes that the missing column should be `null`.
+ * Add column (Case 1-1). This test suite assumes that the missing column should be `null`.
  */
 trait AddColumnTest extends ReadSchemaTest {
   import testImplicits._
@@ -101,13 +91,15 @@ trait AddColumnTest extends ReadSchemaTest {
         .options(options)
         .load(path)
 
-      checkAnswer(df, Seq(
-        Row("a", null, null, "one"),
-        Row("b", null, null, "one"),
-        Row("a", "x", null, "two"),
-        Row("b", "x", null, "two"),
-        Row("a", "x", "y", "three"),
-        Row("b", "x", "y", "three")))
+      checkAnswer(
+        df,
+        Seq(
+          Row("a", null, null, "one"),
+          Row("b", null, null, "one"),
+          Row("a", "x", null, "two"),
+          Row("b", "x", null, "two"),
+          Row("a", "x", "y", "three"),
+          Row("b", "x", "y", "three")))
     }
   }
 }
@@ -138,13 +130,15 @@ trait AddColumnIntoTheMiddleTest extends ReadSchemaTest {
         .options(options)
         .load(path)
 
-      checkAnswer(df, Seq(
-        Row(1, null, 2, "abc", "one"),
-        Row(4, null, 5, "def", "one"),
-        Row(8, null, 9, null, "one"),
-        Row(10, null, 20, null, "two"),
-        Row(40, "uvw", 50, "xyz", "two"),
-        Row(80, null, 90, null, "two")))
+      checkAnswer(
+        df,
+        Seq(
+          Row(1, null, 2, "abc", "one"),
+          Row(4, null, 5, "def", "one"),
+          Row(8, null, 9, null, "one"),
+          Row(10, null, 20, null, "two"),
+          Row(40, "uvw", 50, "xyz", "two"),
+          Row(80, null, 90, null, "two")))
     }
   }
 }
@@ -174,11 +168,13 @@ trait HideColumnAtTheEndTest extends ReadSchemaTest {
         .options(options)
         .load(path)
 
-      checkAnswer(df, Seq(
-        Row("1", "a", "two"),
-        Row("2", "b", "two"),
-        Row("1", "a", "three"),
-        Row("2", "b", "three")))
+      checkAnswer(
+        df,
+        Seq(
+          Row("1", "a", "two"),
+          Row("2", "b", "two"),
+          Row("1", "a", "three"),
+          Row("2", "b", "three")))
 
       val df3 = spark.read
         .schema("col1 string")
@@ -186,11 +182,9 @@ trait HideColumnAtTheEndTest extends ReadSchemaTest {
         .options(options)
         .load(path)
 
-      checkAnswer(df3, Seq(
-        Row("1", "two"),
-        Row("2", "two"),
-        Row("1", "three"),
-        Row("2", "three")))
+      checkAnswer(
+        df3,
+        Seq(Row("1", "two"), Row("2", "two"), Row("1", "three"), Row("2", "three")))
     }
   }
 }
@@ -220,18 +214,14 @@ trait HideColumnInTheMiddleTest extends ReadSchemaTest {
         .options(options)
         .load(path)
 
-      checkAnswer(df, Seq(
-        Row("a", "two"),
-        Row("b", "two"),
-        Row("a", "three"),
-        Row("b", "three")))
+      checkAnswer(df, Seq(Row("a", "two"), Row("b", "two"), Row("a", "three"), Row("b", "three")))
     }
   }
 }
 
 /**
- * Change column positions (Case 3).
- * This suite assumes that all data set have the same number of columns.
+ * Change column positions (Case 3). This suite assumes that all data set have the same number of
+ * columns.
  */
 trait ChangePositionTest extends ReadSchemaTest {
   import testImplicits._
@@ -263,8 +253,8 @@ trait ChangePositionTest extends ReadSchemaTest {
 }
 
 /**
- * Change a column type (Case 4).
- * This suite assumes that a user gives a wider schema intentionally.
+ * Change a column type (Case 4). This suite assumes that a user gives a wider schema
+ * intentionally.
  */
 trait BooleanTypeTest extends ReadSchemaTest {
   import testImplicits._
@@ -287,15 +277,17 @@ trait BooleanTypeTest extends ReadSchemaTest {
         ("col1 short", shortDF),
         ("col1 int", intDF),
         ("col1 long", longDF)).foreach { case (schema, answerDF) =>
-        checkAnswer(spark.read.schema(schema).format(format).options(options).load(path), answerDF)
+        checkAnswer(
+          spark.read.schema(schema).format(format).options(options).load(path),
+          answerDF)
       }
     }
   }
 }
 
 /**
- * Change a column type (Case 4).
- * This suite assumes that a user gives a wider schema intentionally.
+ * Change a column type (Case 4). This suite assumes that a user gives a wider schema
+ * intentionally.
  */
 trait ToStringTypeTest extends ReadSchemaTest {
   import testImplicits._
@@ -308,7 +300,10 @@ trait ToStringTypeTest extends ReadSchemaTest {
       val shortDF = (Short.MaxValue - 2 to Short.MaxValue).map(_.toShort).toDF("col1")
       val intDF = (Int.MaxValue - 2 to Int.MaxValue).toDF("col1")
       val longDF = (Long.MaxValue - 2 to Long.MaxValue).toDF("col1")
-      val unionDF = byteDF.union(shortDF).union(intDF).union(longDF)
+      val unionDF = byteDF
+        .union(shortDF)
+        .union(intDF)
+        .union(longDF)
         .selectExpr("cast(col1 AS STRING) col1")
 
       val byteDir = s"$path${File.separator}part=byte"
@@ -334,8 +329,8 @@ trait ToStringTypeTest extends ReadSchemaTest {
 }
 
 /**
- * Change a column type (Case 4).
- * This suite assumes that a user gives a wider schema intentionally.
+ * Change a column type (Case 4). This suite assumes that a user gives a wider schema
+ * intentionally.
  */
 trait IntegralTypeTest extends ReadSchemaTest {
 
@@ -353,11 +348,11 @@ trait IntegralTypeTest extends ReadSchemaTest {
 
       byteDF.write.format(format).options(options).save(path)
 
-      Seq(
-        ("col1 short", shortDF),
-        ("col1 int", intDF),
-        ("col1 long", longDF)).foreach { case (schema, answerDF) =>
-        checkAnswer(spark.read.schema(schema).format(format).options(options).load(path), answerDF)
+      Seq(("col1 short", shortDF), ("col1 int", intDF), ("col1 long", longDF)).foreach {
+        case (schema, answerDF) =>
+          checkAnswer(
+            spark.read.schema(schema).format(format).options(options).load(path),
+            answerDF)
       }
     }
   }
@@ -369,7 +364,9 @@ trait IntegralTypeTest extends ReadSchemaTest {
       shortDF.write.format(format).options(options).save(path)
 
       Seq(("col1 int", intDF), ("col1 long", longDF)).foreach { case (schema, answerDF) =>
-        checkAnswer(spark.read.schema(schema).format(format).options(options).load(path), answerDF)
+        checkAnswer(
+          spark.read.schema(schema).format(format).options(options).load(path),
+          answerDF)
       }
     }
   }
@@ -381,7 +378,9 @@ trait IntegralTypeTest extends ReadSchemaTest {
       intDF.write.format(format).options(options).save(path)
 
       Seq(("col1 long", longDF)).foreach { case (schema, answerDF) =>
-        checkAnswer(spark.read.schema(schema).format(format).options(options).load(path), answerDF)
+        checkAnswer(
+          spark.read.schema(schema).format(format).options(options).load(path),
+          answerDF)
       }
     }
   }
@@ -419,8 +418,8 @@ trait IntegralTypeTest extends ReadSchemaTest {
 }
 
 /**
- * Change a column type (Case 4).
- * This suite assumes that a user gives a wider schema intentionally.
+ * Change a column type (Case 4). This suite assumes that a user gives a wider schema
+ * intentionally.
  */
 trait ToDoubleTypeTest extends ReadSchemaTest {
   import testImplicits._
@@ -465,8 +464,8 @@ trait ToDoubleTypeTest extends ReadSchemaTest {
 }
 
 /**
- * Change a column type (Case 4).
- * This suite assumes that a user gives a wider schema intentionally.
+ * Change a column type (Case 4). This suite assumes that a user gives a wider schema
+ * intentionally.
  */
 trait ToDecimalTypeTest extends ReadSchemaTest {
   import testImplicits._

@@ -26,9 +26,10 @@ import org.apache.spark.sql.streaming.OutputMode
 /**
  * The logical plan for writing data to a micro-batch stream.
  *
- * Note that this logical plan does not have a corresponding physical plan, as it will be converted
- * to [[org.apache.spark.sql.execution.datasources.v2.WriteToDataSourceV2 WriteToDataSourceV2]]
- * with [[MicroBatchWrite]] before execution.
+ * Note that this logical plan does not have a corresponding physical plan, as it will be
+ * converted to
+ * [[org.apache.spark.sql.execution.datasources.v2.WriteToDataSourceV2 WriteToDataSourceV2]] with
+ * [[MicroBatchWrite]] before execution.
  */
 case class WriteToMicroBatchDataSource(
     relation: Option[DataSourceV2Relation],
@@ -38,7 +39,7 @@ case class WriteToMicroBatchDataSource(
     writeOptions: Map[String, String],
     outputMode: OutputMode,
     batchId: Option[Long] = None)
-  extends UnaryNode {
+    extends UnaryNode {
   override def child: LogicalPlan = query
   override def output: Seq[Attribute] = Nil
 
@@ -46,6 +47,7 @@ case class WriteToMicroBatchDataSource(
     copy(batchId = Some(batchId))
   }
 
-  override protected def withNewChildInternal(newChild: LogicalPlan): WriteToMicroBatchDataSource =
+  override protected def withNewChildInternal(
+      newChild: LogicalPlan): WriteToMicroBatchDataSource =
     copy(query = newChild)
 }

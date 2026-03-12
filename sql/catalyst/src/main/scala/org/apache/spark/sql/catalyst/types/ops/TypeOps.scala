@@ -28,9 +28,9 @@ import org.apache.spark.sql.types.{DataType, TimeType}
 /**
  * Server-side (catalyst) type operations for the Types Framework.
  *
- * This trait consolidates all server-side operations that a data type must implement to function in
- * the Spark SQL engine. All methods are mandatory because without any of them the type would fail
- * at runtime - physical type mapping is needed for storage, literals for the optimizer, and
+ * This trait consolidates all server-side operations that a data type must implement to function
+ * in the Spark SQL engine. All methods are mandatory because without any of them the type would
+ * fail at runtime - physical type mapping is needed for storage, literals for the optimizer, and
  * external type conversion for user-facing operations like collect() and UDFs.
  *
  * This single-interface design was chosen over separate PhyTypeOps/LiteralTypeOps/ExternalTypeOps

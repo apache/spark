@@ -54,22 +54,21 @@ object RewriteAsOfJoin extends Rule[LogicalPlan] {
         condition.map(And(_, asOfCondition)).getOrElse(asOfCondition).transformUp {
           case a: AttributeReference if left.outputSet.contains(a) =>
             OuterReference(a)
-      }
+        }
       val filtered = Filter(conditionWithOuterReference, right)
 
       val orderExpressionWithOuterReference = orderExpression.transformUp {
-          case a: AttributeReference if left.outputSet.contains(a) =>
-            OuterReference(a)
-        }
+        case a: AttributeReference if left.outputSet.contains(a) =>
+          OuterReference(a)
+      }
       val rightStruct = CreateStruct(right.output)
       val nearestRight = MinBy(rightStruct, orderExpressionWithOuterReference)
         .toAggregateExpression()
       val aggExpr = Alias(nearestRight, "__nearest_right__")()
       val aggregate = Aggregate(Seq.empty, Seq(aggExpr), filtered)
 
-      val projectWithScalarSubquery = Project(
-        left.output :+ Alias(ScalarSubquery(aggregate, left.output), "__right__")(),
-        left)
+      val projectWithScalarSubquery =
+        Project(left.output :+ Alias(ScalarSubquery(aggregate, left.output), "__right__")(), left)
 
       val filterRight = joinType match {
         case LeftOuter => projectWithScalarSubquery
@@ -78,9 +77,8 @@ object RewriteAsOfJoin extends Rule[LogicalPlan] {
       }
 
       val project = Project(
-        left.output ++ right.output.zipWithIndex.map {
-          case (out, idx) =>
-            Alias(GetStructField(filterRight.output.last, idx), out.name)()
+        left.output ++ right.output.zipWithIndex.map { case (out, idx) =>
+          Alias(GetStructField(filterRight.output.last, idx), out.name)()
         },
         filterRight)
       val attrMapping = j.output.zip(project.output)

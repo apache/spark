@@ -81,25 +81,24 @@ object ParquetNestedPredicatePushDownBenchmark extends SqlBasedBenchmark {
   }
 
   /**
-   * Benchmark for sorted data with a filter which allows to filter out all the row groups
-   * when nested fields predicate push down enabled
+   * Benchmark for sorted data with a filter which allows to filter out all the row groups when
+   * nested fields predicate push down enabled
    */
   def runLoadNoRowGroupWhenPredicatePushedDown(): Unit = {
     createAndRunBenchmark("Can skip all row groups", _.filter("nested.x < 0"))
   }
 
   /**
-   * Benchmark with a filter which allows to load only some row groups
-   * when nested fields predicate push down enabled
+   * Benchmark with a filter which allows to load only some row groups when nested fields
+   * predicate push down enabled
    */
   def runLoadSomeRowGroupWhenPredicatePushedDown(): Unit = {
     createAndRunBenchmark("Can skip some row groups", _.filter("nested.x = 100"))
   }
 
   /**
-   * Benchmark with a filter which still requires to
-   * load all the row groups on sorted data to see if we introduce too much
-   * overhead or not if enable nested predicate push down.
+   * Benchmark with a filter which still requires to load all the row groups on sorted data to see
+   * if we introduce too much overhead or not if enable nested predicate push down.
    */
   def runLoadAllRowGroupsWhenPredicatePushedDown(): Unit = {
     createAndRunBenchmark("Can skip no row groups", _.filter(s"nested.x >= 0 and nested.x <= $N"))

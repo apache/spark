@@ -36,15 +36,15 @@ class CTEHintSuite extends QueryTest with SharedSparkSession {
     val optimized = df.queryExecution.optimizedPlan
     checkContainsRepartition(analyzed)
     checkContainsRepartition(optimized)
-    optimized collect {
-      case _: ResolvedHint => fail("ResolvedHint should not appear after optimize.")
+    optimized collect { case _: ResolvedHint =>
+      fail("ResolvedHint should not appear after optimize.")
     }
   }
 
   def verifyJoinHint(df: DataFrame, expectedHints: Seq[JoinHint]): Unit = {
     val analyzed = df.queryExecution.analyzed
-    val resolvedHints = analyzed collect {
-      case r: ResolvedHint => r
+    val resolvedHints = analyzed collect { case r: ResolvedHint =>
+      r
     }
     assert(resolvedHints.nonEmpty)
     val optimized = df.queryExecution.optimizedPlan
@@ -110,50 +110,37 @@ class CTEHintSuite extends QueryTest with SharedSparkSession {
       sql("CREATE TABLE b USING PARQUET AS SELECT 1 AS b1")
       sql("CREATE TABLE c USING PARQUET AS SELECT 1 AS c1")
       verifyJoinHint(
-        sql(
-          """
+        sql("""
             |WITH cte AS (
             |  SELECT /*+ BROADCAST(a) */ * FROM a JOIN b ON a.a1 = b.b1
             |)
             |SELECT * FROM cte
             |""".stripMargin),
-        JoinHint(
-          Some(HintInfo(strategy = Some(BROADCAST))),
-          None) :: Nil
-      )
+        JoinHint(Some(HintInfo(strategy = Some(BROADCAST))), None) :: Nil)
       verifyJoinHint(
-        sql(
-          """
+        sql("""
             |WITH cte AS (
             |  SELECT /*+ SHUFFLE_HASH(a) */ * FROM a JOIN b ON a.a1 = b.b1
             |)
             |SELECT * FROM cte
             |""".stripMargin),
-        JoinHint(
-          Some(HintInfo(strategy = Some(SHUFFLE_HASH))),
-          None) :: Nil
-      )
+        JoinHint(Some(HintInfo(strategy = Some(SHUFFLE_HASH))), None) :: Nil)
       verifyJoinHintWithWarnings(
-        sql(
-          """
+        sql("""
             |WITH cte AS (
             |  SELECT /*+ SHUFFLE_HASH MERGE(a, c) BROADCAST(a, b)*/ * FROM a, b, c
             |  WHERE a.a1 = b.b1 AND b.b1 = c.c1
             |)
             |SELECT * FROM cte
             |""".stripMargin),
-        JoinHint(
-          None,
-          Some(HintInfo(strategy = Some(SHUFFLE_MERGE)))) ::
+        JoinHint(None, Some(HintInfo(strategy = Some(SHUFFLE_MERGE)))) ::
           JoinHint(
             Some(HintInfo(strategy = Some(SHUFFLE_MERGE))),
             Some(HintInfo(strategy = Some(BROADCAST)))) :: Nil,
-          msgNoJoinForJoinHint("shuffle_hash") ::
-            msgJoinHintOverridden("broadcast") :: Nil
-      )
+        msgNoJoinForJoinHint("shuffle_hash") ::
+          msgJoinHintOverridden("broadcast") :: Nil)
       verifyJoinHint(
-        sql(
-          """
+        sql("""
             |WITH cte AS (
             |  SELECT /*+ SHUFFLE_REPLICATE_NL(a) SHUFFLE_HASH(b) */ * FROM a JOIN b ON a.a1 = b.b1
             |)
@@ -161,8 +148,7 @@ class CTEHintSuite extends QueryTest with SharedSparkSession {
             |""".stripMargin),
         JoinHint(
           Some(HintInfo(strategy = Some(SHUFFLE_REPLICATE_NL))),
-          Some(HintInfo(strategy = Some(SHUFFLE_HASH)))) :: Nil
-      )
+          Some(HintInfo(strategy = Some(SHUFFLE_HASH)))) :: Nil)
     }
   }
 }

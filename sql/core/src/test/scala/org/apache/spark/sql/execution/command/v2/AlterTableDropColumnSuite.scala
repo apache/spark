@@ -25,11 +25,12 @@ import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.types.{ArrayType, DoubleType, IntegerType, LongType, MapType, StringType, StructField, StructType}
 
 /**
- * The class contains tests for the `ALTER TABLE .. DROP (COLUMN | COLUMNS)` command to
- * check V2 table catalogs.
+ * The class contains tests for the `ALTER TABLE .. DROP (COLUMN | COLUMNS)` command to check V2
+ * table catalogs.
  */
 class AlterTableDropColumnSuite
-  extends command.AlterTableDropColumnSuiteBase with CommandSuiteBase {
+    extends command.AlterTableDropColumnSuiteBase
+    with CommandSuiteBase {
 
   private def getTableMetadata(tableIndent: TableIdentifier): Table = {
     val nameParts = tableIndent.nameParts
@@ -47,8 +48,7 @@ class AlterTableDropColumnSuite
         },
         condition = "TABLE_OR_VIEW_NOT_FOUND",
         parameters = Map("relationName" -> "`does_not_exist`"),
-        context = ExpectedContext(fragment = "does_not_exist", start = 12, stop = 25)
-      )
+        context = ExpectedContext(fragment = "does_not_exist", start = 12, stop = 25))
     }
   }
 
@@ -65,22 +65,26 @@ class AlterTableDropColumnSuite
 
   test("drop nested column") {
     withNamespaceAndTable("ns", "tbl") { t =>
-      sql(s"CREATE TABLE $t (id int, point struct<x: double, y: double, z: double>) $defaultUsing")
+      sql(
+        s"CREATE TABLE $t (id int, point struct<x: double, y: double, z: double>) $defaultUsing")
       sql(s"ALTER TABLE $t DROP COLUMN point.z")
 
       val table = getTableMetadata(TableIdentifier("tbl", Some("ns"), Some(catalog)))
       assert(table.name === t)
-      assert(table.columns() === Array(
-        Column.create("id", IntegerType),
-        Column.create("point",
-          StructType(Seq(StructField("x", DoubleType), StructField("y", DoubleType))))))
+      assert(
+        table.columns() === Array(
+          Column.create("id", IntegerType),
+          Column.create(
+            "point",
+            StructType(Seq(StructField("x", DoubleType), StructField("y", DoubleType))))))
     }
   }
 
   test("drop nested column in map key") {
     withNamespaceAndTable("ns", "tbl") { t =>
-      sql(s"CREATE TABLE $t (id int, point map<struct<x: double, y: double>, bigint>) " +
-        s"$defaultUsing")
+      sql(
+        s"CREATE TABLE $t (id int, point map<struct<x: double, y: double>, bigint>) " +
+          s"$defaultUsing")
       sql(s"ALTER TABLE $t DROP COLUMN point.key.y")
 
       val table = getTableMetadata(TableIdentifier("tbl", Some("ns"), Some(catalog)))
@@ -93,15 +97,18 @@ class AlterTableDropColumnSuite
 
   test("drop nested column in map value") {
     withNamespaceAndTable("ns", "tbl") { t =>
-      sql(s"CREATE TABLE $t (id int, point map<string, struct<x: double, y: double>>) " +
-        s"$defaultUsing")
+      sql(
+        s"CREATE TABLE $t (id int, point map<string, struct<x: double, y: double>>) " +
+          s"$defaultUsing")
       sql(s"ALTER TABLE $t DROP COLUMN point.value.y")
 
       val table = getTableMetadata(TableIdentifier("tbl", Some("ns"), Some(catalog)))
       assert(table.name === t)
-      assert(table.columns() === Array(
-        Column.create("id", IntegerType),
-        Column.create("point", MapType(StringType, StructType(Seq(StructField("x", DoubleType)))))))
+      assert(
+        table.columns() === Array(
+          Column.create("id", IntegerType),
+          Column
+            .create("point", MapType(StringType, StructType(Seq(StructField("x", DoubleType)))))))
     }
   }
 
@@ -112,9 +119,10 @@ class AlterTableDropColumnSuite
 
       val table = getTableMetadata(TableIdentifier("tbl", Some("ns"), Some(catalog)))
       assert(table.name === t)
-      assert(table.columns() === Array(
-        Column.create("id", IntegerType),
-        Column.create("points", ArrayType(StructType(Seq(StructField("x", DoubleType)))))))
+      assert(
+        table.columns() === Array(
+          Column.create("id", IntegerType),
+          Column.create("points", ArrayType(StructType(Seq(StructField("x", DoubleType)))))))
     }
   }
 
@@ -129,9 +137,7 @@ class AlterTableDropColumnSuite
         },
         condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         sqlState = "42703",
-        parameters = Map(
-          "objectName" -> "`does_not_exist`",
-          "proposal" -> "`id`"),
+        parameters = Map("objectName" -> "`does_not_exist`", "proposal" -> "`id`"),
         context = ExpectedContext(fragment = sqlText, start = 0, stop = 57))
     }
   }
@@ -147,9 +153,7 @@ class AlterTableDropColumnSuite
         },
         condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         sqlState = "42703",
-        parameters = Map(
-          "objectName" -> "`point`.`does_not_exist`",
-          "proposal" -> "`id`"),
+        parameters = Map("objectName" -> "`point`.`does_not_exist`", "proposal" -> "`id`"),
         context = ExpectedContext(fragment = sqlText, start = 0, stop = 63))
 
       // with if exists it should pass
@@ -162,15 +166,18 @@ class AlterTableDropColumnSuite
 
   test("drop mixed existing/non-existing columns using IF EXISTS") {
     withNamespaceAndTable("ns", "tbl") { t =>
-      sql(s"CREATE TABLE $t (id int, name string, points array<struct<x: double, y: double>>) " +
-        s"$defaultUsing")
+      sql(
+        s"CREATE TABLE $t (id int, name string, points array<struct<x: double, y: double>>) " +
+          s"$defaultUsing")
       // with if exists it should pass
-      sql(s"ALTER TABLE $t DROP COLUMNS IF EXISTS " +
-        s"names, name, points.element.z, id, points.element.x")
+      sql(
+        s"ALTER TABLE $t DROP COLUMNS IF EXISTS " +
+          s"names, name, points.element.z, id, points.element.x")
       val table = getTableMetadata(TableIdentifier("tbl", Some("ns"), Some(catalog)))
       assert(table.name === t)
-      assert(table.columns() === Array(Column.create("points",
-        ArrayType(StructType(Seq(StructField("y", DoubleType)))))))
+      assert(
+        table.columns() === Array(
+          Column.create("points", ArrayType(StructType(Seq(StructField("y", DoubleType)))))))
     }
   }
 }

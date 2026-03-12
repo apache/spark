@@ -42,14 +42,17 @@ class MetadataColumnSuite extends DatasourceV2SQLBase {
       val dfQuery = spark.table(tbl).select("id", "data", "index", "_partition")
 
       Seq(sqlQuery, dfQuery).foreach { query =>
-        checkAnswer(query, Seq(Row(1, "a", 0, "1/1"), Row(2, "b", 0, "2/2"), Row(3, "c", 0, "3/3")))
+        checkAnswer(
+          query,
+          Seq(Row(1, "a", 0, "1/1"), Row(2, "b", 0, "2/2"), Row(3, "c", 0, "3/3")))
       }
     }
   }
 
   test("SPARK-31255: Projects data column when metadata column has the same name") {
     withTable(tbl) {
-      sql(s"CREATE TABLE $tbl (index bigint, data string) PARTITIONED BY (bucket(4, index), index)")
+      sql(
+        s"CREATE TABLE $tbl (index bigint, data string) PARTITIONED BY (bucket(4, index), index)")
       sql(s"INSERT INTO $tbl VALUES (3, 'c'), (2, 'b'), (1, 'a')")
 
       val sqlQuery = sql(s"SELECT index, data, _partition FROM $tbl")
@@ -89,24 +92,23 @@ class MetadataColumnSuite extends DatasourceV2SQLBase {
     withTable(tbl) {
       prepareTable()
       withTempView("v") {
-        sql(s"CREATE TEMPORARY VIEW v AS SELECT * FROM " +
-          s"VALUES (1, -1), (2, -2), (3, -3) AS v(id, index)")
+        sql(
+          s"CREATE TEMPORARY VIEW v AS SELECT * FROM " +
+            s"VALUES (1, -1), (2, -2), (3, -3) AS v(id, index)")
 
-        val sqlQuery = sql(s"SELECT $tbl.id, v.id, data, index, $tbl.index, v.index " +
-          s"FROM $tbl JOIN v WHERE $tbl.id = v.id")
+        val sqlQuery = sql(
+          s"SELECT $tbl.id, v.id, data, index, $tbl.index, v.index " +
+            s"FROM $tbl JOIN v WHERE $tbl.id = v.id")
         val tableDf = spark.table(tbl)
         val viewDf = spark.table("v")
-        val dfQuery = tableDf.join(viewDf, tableDf.col("id") === viewDf.col("id"))
+        val dfQuery = tableDf
+          .join(viewDf, tableDf.col("id") === viewDf.col("id"))
           .select(s"$tbl.id", "v.id", "data", "index", s"$tbl.index", "v.index")
 
         Seq(sqlQuery, dfQuery).foreach { query =>
-          checkAnswer(query,
-            Seq(
-              Row(1, 1, "a", -1, 0, -1),
-              Row(2, 2, "b", -2, 0, -2),
-              Row(3, 3, "c", -3, 0, -3)
-            )
-          )
+          checkAnswer(
+            query,
+            Seq(Row(1, 1, "a", -1, 0, -1), Row(2, 2, "b", -2, 0, -2), Row(3, 3, "c", -3, 0, -3)))
         }
       }
     }
@@ -120,13 +122,11 @@ class MetadataColumnSuite extends DatasourceV2SQLBase {
         table.col("id"),
         table.col("data"),
         table.col("index"),
-        table.col("_partition")
-      )
+        table.col("_partition"))
 
       checkAnswer(
         dfQuery,
-        Seq(Row(1, "a", 0, "1/1"), Row(2, "b", 0, "2/2"), Row(3, "c", 0, "3/3"))
-      )
+        Seq(Row(1, "a", 0, "1/1"), Row(2, "b", 0, "2/2"), Row(3, "c", 0, "3/3")))
     }
   }
 
@@ -135,8 +135,7 @@ class MetadataColumnSuite extends DatasourceV2SQLBase {
       prepareTable()
       checkAnswer(
         spark.table(tbl).select("id", "data").select("index", "_partition"),
-        Seq(Row(0, "1/1"), Row(0, "2/2"), Row(0, "3/3"))
-      )
+        Seq(Row(0, "1/1"), Row(0, "2/2"), Row(0, "3/3")))
     }
   }
 
@@ -172,7 +171,9 @@ class MetadataColumnSuite extends DatasourceV2SQLBase {
       val dfQuery = spark.table(tbl).orderBy("id").select("id", "data", "index", "_partition")
 
       Seq(sqlQuery, dfQuery).foreach { query =>
-        checkAnswer(query, Seq(Row(1, "a", 0, "1/1"), Row(2, "b", 0, "2/2"), Row(3, "c", 0, "3/3")))
+        checkAnswer(
+          query,
+          Seq(Row(1, "a", 0, "1/1"), Row(2, "b", 0, "2/2"), Row(3, "c", 0, "3/3")))
       }
     }
   }
@@ -180,13 +181,17 @@ class MetadataColumnSuite extends DatasourceV2SQLBase {
   test("SPARK-34923: propagate metadata columns through RepartitionBy") {
     withTable(tbl) {
       prepareTable()
-      val sqlQuery = sql(
-        s"SELECT /*+ REPARTITION_BY_RANGE(3, id) */ id, data, index, _partition FROM $tbl")
-      val dfQuery = spark.table(tbl).repartitionByRange(3, $"id")
+      val sqlQuery =
+        sql(s"SELECT /*+ REPARTITION_BY_RANGE(3, id) */ id, data, index, _partition FROM $tbl")
+      val dfQuery = spark
+        .table(tbl)
+        .repartitionByRange(3, $"id")
         .select("id", "data", "index", "_partition")
 
       Seq(sqlQuery, dfQuery).foreach { query =>
-        checkAnswer(query, Seq(Row(1, "a", 0, "1/1"), Row(2, "b", 0, "2/2"), Row(3, "c", 0, "3/3")))
+        checkAnswer(
+          query,
+          Seq(Row(1, "a", 0, "1/1"), Row(2, "b", 0, "2/2"), Row(3, "c", 0, "3/3")))
       }
     }
   }
@@ -195,24 +200,25 @@ class MetadataColumnSuite extends DatasourceV2SQLBase {
     val sbq = "sbq"
     withTable(tbl) {
       prepareTable()
-      val sqlQuery = sql(
-        s"SELECT $sbq.id, $sbq.data, $sbq.index, $sbq._partition FROM $tbl $sbq")
-      val dfQuery = spark.table(tbl).as(sbq).select(
-        s"$sbq.id", s"$sbq.data", s"$sbq.index", s"$sbq._partition")
+      val sqlQuery = sql(s"SELECT $sbq.id, $sbq.data, $sbq.index, $sbq._partition FROM $tbl $sbq")
+      val dfQuery = spark
+        .table(tbl)
+        .as(sbq)
+        .select(s"$sbq.id", s"$sbq.data", s"$sbq.index", s"$sbq._partition")
 
       Seq(sqlQuery, dfQuery).foreach { query =>
-        checkAnswer(query, Seq(Row(1, "a", 0, "1/1"), Row(2, "b", 0, "2/2"), Row(3, "c", 0, "3/3")))
+        checkAnswer(
+          query,
+          Seq(Row(1, "a", 0, "1/1"), Row(2, "b", 0, "2/2"), Row(3, "c", 0, "3/3")))
       }
 
       // Metadata columns are propagated through SubqueryAlias even if child is not a leaf node.
       checkAnswer(
         sql(s"SELECT $sbq.index FROM (SELECT id FROM $tbl) $sbq"),
-        Seq(Row(0), Row(0), Row(0))
-      )
+        Seq(Row(0), Row(0), Row(0)))
       checkAnswer(
         spark.table(tbl).select($"id").as(sbq).select(s"$sbq.index"),
-        Seq(Row(0), Row(0), Row(0))
-      )
+        Seq(Row(0), Row(0), Row(0)))
     }
   }
 
@@ -233,39 +239,37 @@ class MetadataColumnSuite extends DatasourceV2SQLBase {
       // Accessing with the original table qualifier works without alias.
       checkAnswer(
         sql(s"SELECT t.index, t2.index FROM $tbl AS t JOIN $tbl2 AS t2 ON t.id = t2.id2"),
-        Seq(Row(0, 0), Row(0, 0), Row(0, 0))
-      )
+        Seq(Row(0, 0), Row(0, 0), Row(0, 0)))
 
       // Accessing non-ambiguous columns through SubqueryAlias works fine
       checkAnswer(
         sql(s"SELECT j.data, j.value FROM ($tbl JOIN $tbl2 ON $tbl.id = $tbl2.id2) AS j"),
-        Seq(Row("a", "x"), Row("b", "y"), Row("c", "z"))
-      )
+        Seq(Row("a", "x"), Row("b", "y"), Row("c", "z")))
     }
   }
 
   test("SPARK-40149: select outer join metadata columns with DataFrame API") {
     val df1 = Seq(1 -> "a").toDF("k", "v").as("left")
     val df2 = Seq(1 -> "b").toDF("k", "v").as("right")
-    val dfQuery = df1.join(df2, "k", "outer")
+    val dfQuery = df1
+      .join(df2, "k", "outer")
       .withColumn("left_all", struct($"left.*"))
       .withColumn("right_all", struct($"right.*"))
     checkAnswer(dfQuery, Row(1, "a", "b", Row(1, "a"), Row(1, "b")))
   }
 
-  test("SPARK-40429: Only set KeyGroupedPartitioning when the referenced column is in the output") {
+  test(
+    "SPARK-40429: Only set KeyGroupedPartitioning when the referenced column is in the output") {
     withTable(tbl) {
       sql(s"CREATE TABLE $tbl (id bigint, data string) PARTITIONED BY (id)")
       sql(s"INSERT INTO $tbl VALUES (1, 'a'), (2, 'b'), (3, 'c')")
       checkAnswer(
         spark.table(tbl).select("index", "_partition"),
-        Seq(Row(0, "3"), Row(0, "2"), Row(0, "1"))
-      )
+        Seq(Row(0, "3"), Row(0, "2"), Row(0, "1")))
 
       checkAnswer(
         spark.table(tbl).select("id", "index", "_partition"),
-        Seq(Row(3, 0, "3"), Row(2, 0, "2"), Row(1, 0, "1"))
-      )
+        Seq(Row(3, 0, "3"), Row(2, 0, "2"), Row(1, 0, "1")))
     }
   }
 
@@ -273,8 +277,8 @@ class MetadataColumnSuite extends DatasourceV2SQLBase {
     withTable(tbl) {
       prepareTable()
       val df = sql(s"SELECT t2.id FROM $tbl t1 JOIN $tbl t2 USING (id)")
-      val scans = df.logicalPlan.collect {
-        case d: DataSourceV2Relation => d
+      val scans = df.logicalPlan.collect { case d: DataSourceV2Relation =>
+        d
       }
       assert(scans.length == 2)
       scans.foreach { scan =>
@@ -287,13 +291,12 @@ class MetadataColumnSuite extends DatasourceV2SQLBase {
 
   test("SPARK-42683: Project a metadata column by its logical name - table schema conflict") {
     withTable(tbl) {
-      sql(s"CREATE TABLE $tbl (index bigint, data string) PARTITIONED BY (bucket(4, index), index)")
+      sql(
+        s"CREATE TABLE $tbl (index bigint, data string) PARTITIONED BY (bucket(4, index), index)")
       sql(s"INSERT INTO $tbl VALUES (1, 'a'), (2, 'b'), (3, 'c')")
 
       val df = sql(s"select * from $tbl")
-      checkAnswer(
-        df.select(df.metadataColumn("index")),
-        Seq(Row(0), Row(0), Row(0)))
+      checkAnswer(df.select(df.metadataColumn("index")), Seq(Row(0), Row(0), Row(0)))
     }
   }
 
@@ -302,9 +305,7 @@ class MetadataColumnSuite extends DatasourceV2SQLBase {
       prepareTable()
 
       val df = sql(s"select * from $tbl")
-      checkAnswer(
-        df.select(df.metadataColumn("index")),
-        Seq(Row(0), Row(0), Row(0)))
+      checkAnswer(df.select(df.metadataColumn("index")), Seq(Row(0), Row(0), Row(0)))
     }
   }
 
@@ -315,14 +316,10 @@ class MetadataColumnSuite extends DatasourceV2SQLBase {
 
       // If the user renames a metadata column
       var df = baseDf.select(col("index").as("renamed"))
-      checkAnswer(
-        df.select(df.metadataColumn("index")),
-        Seq(Row(0), Row(0), Row(0)))
+      checkAnswer(df.select(df.metadataColumn("index")), Seq(Row(0), Row(0), Row(0)))
 
       df = baseDf.withColumnRenamed("index", "renamed")
-      checkAnswer(
-        df.select(df.metadataColumn("index")),
-        Seq(Row(0), Row(0), Row(0)))
+      checkAnswer(df.select(df.metadataColumn("index")), Seq(Row(0), Row(0), Row(0)))
     }
   }
   test("SPARK-42683: Project a metadata column by its logical name - column not found") {
@@ -365,11 +362,10 @@ class MetadataColumnSuite extends DatasourceV2SQLBase {
     withTable(tbl) {
       prepareTable()
       val df = spark.table(tbl)
-      val unioned = df.filter($"id" > 2).select("id", "index").union(
-        df.select("id", "index"))
+      val unioned = df.filter($"id" > 2).select("id", "index").union(df.select("id", "index"))
       checkAnswer(unioned, Seq(Row(3, 0), Row(1, 0), Row(2, 0), Row(3, 0)))
-      val relations = unioned.logicalPlan.collect {
-        case r: DataSourceV2Relation => r
+      val relations = unioned.logicalPlan.collect { case r: DataSourceV2Relation =>
+        r
       }
       assert(relations.length == 2)
       assert(relations(0).output != relations(1).output)
@@ -380,8 +376,9 @@ class MetadataColumnSuite extends DatasourceV2SQLBase {
     withTable(tbl, "testcat.target") {
       prepareTable()
       sql(s"CREATE TABLE testcat.target AS SELECT index FROM $tbl")
-      val cols = catalog("testcat").asTableCatalog.loadTable(
-        Identifier.of(Array.empty, "target")).columns()
+      val cols = catalog("testcat").asTableCatalog
+        .loadTable(Identifier.of(Array.empty, "target"))
+        .columns()
       assert(cols.length == 1)
       assert(cols.head.name() == "index")
       assert(cols.head.dataType() == IntegerType)
@@ -406,9 +403,7 @@ class MetadataColumnSuite extends DatasourceV2SQLBase {
           expected)
 
         // Qualified column access with table alias
-        checkAnswer(
-          sql(s"SELECT t.id, t.data, t.index, t._partition FROM $tbl AS t"),
-          expected)
+        checkAnswer(sql(s"SELECT t.id, t.data, t.index, t._partition FROM $tbl AS t"), expected)
         checkAnswer(
           spark.table(tbl).as("t").select("t.id", "t.data", "t.index", "t._partition"),
           expected)

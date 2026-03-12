@@ -25,7 +25,6 @@ import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.execution.command.LeafRunnableCommand
 import org.apache.spark.sql.sources.InsertableRelation
 
-
 /**
  * Inserts the results of `query` in to a relation that extends [[InsertableRelation]].
  */
@@ -33,7 +32,8 @@ case class InsertIntoDataSourceCommand(
     logicalRelation: LogicalRelation,
     query: LogicalPlan,
     overwrite: Boolean)
-  extends LeafRunnableCommand with CTEInChildren {
+    extends LeafRunnableCommand
+    with CTEInChildren {
 
   override def innerChildren: Seq[QueryPlan[_]] = Seq(query)
 

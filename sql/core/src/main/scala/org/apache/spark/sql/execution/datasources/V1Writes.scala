@@ -30,6 +30,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StringType
 
 trait V1WriteCommand extends DataWritingCommand {
+
   /**
    * Specify the [[FileFormat]] of the provider of V1 write command.
    */
@@ -56,8 +57,8 @@ trait V1WriteCommand extends DataWritingCommand {
   def options: Map[String, String]
 
   /**
-   * Specify the required ordering for the V1 write command. `FileFormatWriter` will
-   * add SortExec if necessary when the requiredOrdering is empty.
+   * Specify the required ordering for the V1 write command. `FileFormatWriter` will add SortExec
+   * if necessary when the requiredOrdering is empty.
    */
   def requiredOrdering: Seq[SortOrder]
 }
@@ -75,8 +76,13 @@ object V1Writes extends Rule[LogicalPlan] {
         case write: V1WriteCommand if !write.child.isInstanceOf[WriteFiles] =>
           val newQuery = prepareQuery(write, write.query)
           val attrMap = AttributeMap(write.query.output.zip(newQuery.output))
-          val writeFiles = WriteFiles(newQuery, write.fileFormat, write.partitionColumns,
-            write.bucketSpec, write.options, write.staticPartitions)
+          val writeFiles = WriteFiles(
+            newQuery,
+            write.fileFormat,
+            write.partitionColumns,
+            write.bucketSpec,
+            write.options,
+            write.staticPartitions)
           val newChild = writeFiles.transformExpressions {
             case a: Attribute if attrMap.contains(a) =>
               a.withExprId(attrMap(a).exprId)
@@ -101,8 +107,8 @@ object V1Writes extends Rule[LogicalPlan] {
     // Rewrite the attribute references in the required ordering to use the new output,
     // then eliminate foldable ordering.
     val requiredOrdering = {
-      val ordering = write.requiredOrdering.map(_.transform {
-        case a: Attribute => attrMap.getOrElse(a, a)
+      val ordering = write.requiredOrdering.map(_.transform { case a: Attribute =>
+        attrMap.getOrElse(a, a)
       }.asInstanceOf[SortOrder])
       eliminateFoldableOrdering(ordering, empty2NullPlan).outputOrdering
     }
@@ -123,7 +129,7 @@ object V1WritesUtils {
       val bucketColumns = spec.bucketColumnNames.map(c => dataColumns.find(_.name == c).get)
 
       if (options.getOrElse(BucketingUtils.optionForHiveCompatibleBucketWrite, "false") ==
-        "true") {
+          "true") {
         // Hive bucketed table: use `HiveHash` and bitwise-and as bucket id expression.
         // Without the extra bitwise-and operation, we can get wrong bucket id when hash value of
         // columns is negative. See Hive implementation in
@@ -143,8 +149,8 @@ object V1WritesUtils {
         // expression, so that we can guarantee the data distribution is same between shuffle and
         // bucketed data source, which enables us to only shuffle one side when join a bucketed
         // table and a normal one.
-        val bucketIdExpression = HashPartitioning(bucketColumns, spec.numBuckets)
-          .partitionIdExpression
+        val bucketIdExpression =
+          HashPartitioning(bucketColumns, spec.numBuckets).partitionIdExpression
         WriterBucketSpec(bucketIdExpression, (_: Int) => "")
       }
     }
@@ -153,8 +159,8 @@ object V1WritesUtils {
   def getBucketSortColumns(
       bucketSpec: Option[BucketSpec],
       dataColumns: Seq[Attribute]): Seq[Attribute] = {
-    bucketSpec.toSeq.flatMap {
-      spec => spec.sortColumnNames.map(c => dataColumns.find(_.name == c).get)
+    bucketSpec.toSeq.flatMap { spec =>
+      spec.sortColumnNames.map(c => dataColumns.find(_.name == c).get)
     }
   }
 
@@ -217,16 +223,15 @@ object V1WritesUtils {
     if (requiredOrdering.length > outputOrdering.length) {
       false
     } else {
-      requiredOrdering.zip(outputOrdering).forall {
-        case (requiredOrder, outputOrder) =>
-          outputOrder.satisfies(outputOrder.copy(child = requiredOrder))
+      requiredOrdering.zip(outputOrdering).forall { case (requiredOrder, outputOrder) =>
+        outputOrder.satisfies(outputOrder.copy(child = requiredOrder))
       }
     }
   }
 
   def getWriteFilesOpt(child: SparkPlan): Option[WriteFilesExecBase] = {
-    child.collectFirst {
-      case w: WriteFilesExecBase => w
+    child.collectFirst { case w: WriteFilesExecBase =>
+      w
     }
   }
 }

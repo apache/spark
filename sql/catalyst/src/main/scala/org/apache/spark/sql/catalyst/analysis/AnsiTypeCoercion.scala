@@ -26,84 +26,60 @@ import org.apache.spark.sql.types.UpCastRule.numericPrecedence
 
 /**
  * In Spark ANSI mode, the type coercion rules are based on the type precedence lists of the input
- * data types.
- * As per the section "Type precedence list determination" of "ISO/IEC 9075-2:2011
- * Information technology - Database languages - SQL - Part 2: Foundation (SQL/Foundation)",
- * the type precedence lists of primitive data types are as following:
- *   * Byte: Byte, Short, Int, Long, Decimal, Float, Double
- *   * Short: Short, Int, Long, Decimal, Float, Double
- *   * Int: Int, Long, Decimal, Float, Double
- *   * Long: Long, Decimal, Float, Double
- *   * Decimal: Float, Double, or any wider Numeric type
- *   * Float: Float, Double
- *   * Double: Double
- *   * String: String
- *   * Date: Date, Timestamp
- *   * Timestamp: Timestamp
- *   * Binary: Binary
- *   * Boolean: Boolean
- *   * Interval: Interval
- * As for complex data types, Spark will determine the precedent list recursively based on their
+ * data types. As per the section "Type precedence list determination" of "ISO/IEC 9075-2:2011
+ * Information technology - Database languages - SQL - Part 2: Foundation (SQL/Foundation)", the
+ * type precedence lists of primitive data types are as following: * Byte: Byte, Short, Int, Long,
+ * Decimal, Float, Double * Short: Short, Int, Long, Decimal, Float, Double * Int: Int, Long,
+ * Decimal, Float, Double * Long: Long, Decimal, Float, Double * Decimal: Float, Double, or any
+ * wider Numeric type * Float: Float, Double * Double: Double * String: String * Date: Date,
+ * Timestamp * Timestamp: Timestamp * Binary: Binary * Boolean: Boolean * Interval: Interval As
+ * for complex data types, Spark will determine the precedent list recursively based on their
  * sub-types and nullability.
  *
- * With the definition of type precedent list, the general type coercion rules are as following:
- *   * Data type S is allowed to be implicitly cast as type T iff T is in the precedence list of S
- *   * Comparison is allowed iff the data type precedence list of both sides has at least one common
- *     element. When evaluating the comparison, Spark casts both sides as the tightest common data
- *     type of their precedent lists.
- *   * There should be at least one common data type among all the children's precedence lists for
- *     the following operators. The data type of the operator is the tightest common precedent
- *     data type.
- *       * In
- *       * Except
- *       * Intersect
- *       * Greatest
- *       * Least
- *       * Union
- *       * If
- *       * CaseWhen
- *       * CreateArray
- *       * Array Concat
- *       * Sequence
- *       * MapConcat
- *       * CreateMap
- *   * For complex types (struct, array, map), Spark recursively looks into the element type and
- *     applies the rules above.
- *  Note: this new type coercion system will allow implicit converting String type as other
- *  primitive types, in case of breaking too many existing Spark SQL queries. This is a special
- *  rule and it is not from the ANSI SQL standard.
+ * With the definition of type precedent list, the general type coercion rules are as following: *
+ * Data type S is allowed to be implicitly cast as type T iff T is in the precedence list of S *
+ * Comparison is allowed iff the data type precedence list of both sides has at least one common
+ * element. When evaluating the comparison, Spark casts both sides as the tightest common data
+ * type of their precedent lists. * There should be at least one common data type among all the
+ * children's precedence lists for the following operators. The data type of the operator is the
+ * tightest common precedent data type. * In * Except * Intersect * Greatest * Least * Union * If
+ * * CaseWhen * CreateArray * Array Concat * Sequence * MapConcat * CreateMap * For complex types
+ * (struct, array, map), Spark recursively looks into the element type and applies the rules
+ * above. Note: this new type coercion system will allow implicit converting String type as other
+ * primitive types, in case of breaking too many existing Spark SQL queries. This is a special
+ * rule and it is not from the ANSI SQL standard.
  */
 object AnsiTypeCoercion extends TypeCoercionBase {
   override def typeCoercionRules: List[Rule[LogicalPlan]] =
     UnpivotCoercion ::
-    WidenSetOperationTypes ::
-    ProcedureArgumentCoercion ::
-    DefaultValueExpressionCoercion ::
-    new AnsiCombinedTypeCoercionRule(
-      CollationTypeCasts ::
-      InConversion ::
-      PromoteStrings ::
-      DecimalPrecision ::
-      FunctionArgumentConversion ::
-      ConcatCoercion ::
-      MapZipWithCoercion ::
-      EltCoercion ::
-      CaseWhenCoercion ::
-      IfCoercion ::
-      StackCoercion ::
-      Division ::
-      IntegralDivision ::
-      ImplicitTypeCasts ::
-      DateTimeOperations ::
-      WindowFrameCoercion ::
-      GetDateFieldOperations :: Nil) :: Nil
+      WidenSetOperationTypes ::
+      ProcedureArgumentCoercion ::
+      DefaultValueExpressionCoercion ::
+      new AnsiCombinedTypeCoercionRule(
+        CollationTypeCasts ::
+          InConversion ::
+          PromoteStrings ::
+          DecimalPrecision ::
+          FunctionArgumentConversion ::
+          ConcatCoercion ::
+          MapZipWithCoercion ::
+          EltCoercion ::
+          CaseWhenCoercion ::
+          IfCoercion ::
+          StackCoercion ::
+          Division ::
+          IntegralDivision ::
+          ImplicitTypeCasts ::
+          DateTimeOperations ::
+          WindowFrameCoercion ::
+          GetDateFieldOperations :: Nil) :: Nil
 
   val findTightestCommonType: (DataType, DataType) => Option[DataType] = {
     case (t1, t2) if t1 == t2 => Some(t1)
     case (NullType, t1) => Some(t1)
     case (t1, NullType) => Some(t1)
 
-    case(s1: StringType, s2: StringType) => StringHelper.tightestCommonString(s1, s2)
+    case (s1: StringType, s2: StringType) => StringHelper.tightestCommonString(s1, s2)
 
     case (t1: IntegralType, t2: DecimalType) if t2.isWiderThan(t1) =>
       Some(t2)
@@ -165,9 +141,7 @@ object AnsiTypeCoercion extends TypeCoercionBase {
    * In Ansi mode, the implicit cast is only allow when `expectedType` is in the type precedent
    * list of `inType`.
    */
-  private def implicitCast(
-      inType: DataType,
-      expectedType: AbstractDataType): Option[DataType] = {
+  private def implicitCast(inType: DataType, expectedType: AbstractDataType): Option[DataType] = {
     (inType, expectedType) match {
       // If the expected type equals the input type, no need to cast.
       case _ if expectedType.acceptsType(inType) => Some(inType)
@@ -233,8 +207,8 @@ object AnsiTypeCoercion extends TypeCoercionBase {
    *
    * This is Spark's hack to make the implementation simple. In the default type coercion rules,
    * the implicit cast rule does the work. However, The ANSI implicit cast rule doesn't allow
-   * converting Timestamp type as Date type, so we need to have this additional rule
-   * to make sure the date field extraction from Timestamp columns works.
+   * converting Timestamp type as Date type, so we need to have this additional rule to make sure
+   * the date field extraction from Timestamp columns works.
    */
   object GetDateFieldOperations extends TypeCoercionRule {
     override def transform: PartialFunction[Expression, Expression] = {
@@ -254,6 +228,6 @@ object AnsiTypeCoercion extends TypeCoercionBase {
 
   // This is for generating a new rule id, so that we can run both default and Ansi
   // type coercion rules against one logical plan.
-  class AnsiCombinedTypeCoercionRule(rules: Seq[TypeCoercionRule]) extends
-    CombinedTypeCoercionRule(rules)
+  class AnsiCombinedTypeCoercionRule(rules: Seq[TypeCoercionRule])
+      extends CombinedTypeCoercionRule(rules)
 }

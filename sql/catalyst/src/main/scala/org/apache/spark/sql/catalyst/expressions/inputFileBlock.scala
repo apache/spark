@@ -36,9 +36,9 @@ import org.apache.spark.unsafe.types.UTF8String
   group = "misc_funcs")
 // scalastyle:on whitespace.end.of.line
 case class InputFileName()
-  extends LeafExpression
-  with Nondeterministic
-  with DefaultStringProducingExpression {
+    extends LeafExpression
+    with Nondeterministic
+    with DefaultStringProducingExpression {
 
   override def nullable: Boolean = false
 
@@ -53,11 +53,11 @@ case class InputFileName()
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val className = InputFileBlockHolder.getClass.getName.stripSuffix("$")
     val typeDef = s"final ${CodeGenerator.javaType(dataType)}"
-    ev.copy(code = code"$typeDef ${ev.value} = $className.getInputFilePath();",
+    ev.copy(
+      code = code"$typeDef ${ev.value} = $className.getInputFilePath();",
       isNull = FalseLiteral)
   }
 }
-
 
 @ExpressionDescription(
   usage = "_FUNC_() - Returns the start offset of the block being read, or -1 if not available.",
@@ -84,10 +84,11 @@ case class InputFileBlockStart() extends LeafExpression with Nondeterministic {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val className = InputFileBlockHolder.getClass.getName.stripSuffix("$")
     val typeDef = s"final ${CodeGenerator.javaType(dataType)}"
-    ev.copy(code = code"$typeDef ${ev.value} = $className.getStartOffset();", isNull = FalseLiteral)
+    ev.copy(
+      code = code"$typeDef ${ev.value} = $className.getStartOffset();",
+      isNull = FalseLiteral)
   }
 }
-
 
 @ExpressionDescription(
   usage = "_FUNC_() - Returns the length of the block being read, or -1 if not available.",

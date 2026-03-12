@@ -48,7 +48,9 @@ object ParserUtils extends SparkParserUtils {
   }
 
   def checkDuplicateClauses[T](
-      nodes: util.List[T], clauseName: String, ctx: ParserRuleContext): Unit = {
+      nodes: util.List[T],
+      clauseName: String,
+      ctx: ParserRuleContext): Unit = {
     if (nodes.size() > 1) {
       throw QueryParsingErrors.duplicateClausesError(clauseName, ctx)
     }
@@ -72,10 +74,9 @@ object ParserUtils extends SparkParserUtils {
   }
 
   /**
-   * Get all the text which between the given start and end tokens.
-   * When we need to extract everything between two tokens including all spaces we should use
-   * this method instead of defined a named Antlr4 rule for .*?,
-   * which somehow parse "a b" -> "ab" in some cases
+   * Get all the text which between the given start and end tokens. When we need to extract
+   * everything between two tokens including all spaces we should use this method instead of
+   * defined a named Antlr4 rule for .*?, which somehow parse "a b" -> "ab" in some cases
    */
   def interval(start: Token, end: Token): String = {
     val interval = Interval.of(start.getStopIndex + 1, end.getStartIndex - 1)
@@ -89,10 +90,10 @@ object ParserUtils extends SparkParserUtils {
   }
 
   /**
-   * Obtain the string literal provided as a dollar quoted string.
-   * A dollar quoted string is defined as {{{$[tag]$<string literal>$[tag]$}}},
-   * where the string literal is parsed as a list of body sections.
-   * This helper method concatenates all body sections and restores the string literal back.
+   * Obtain the string literal provided as a dollar quoted string. A dollar quoted string is
+   * defined as {{{$[tag]$<string literal>$[tag]$}}}, where the string literal is parsed as a list
+   * of body sections. This helper method concatenates all body sections and restores the string
+   * literal back.
    */
   def dollarQuotedString(sections: util.List[TerminalNode]): String = {
     val sb = new StringBuilder()
@@ -122,9 +123,9 @@ object ParserUtils extends SparkParserUtils {
   val qualifiedEscapedIdentifier = ("((?s).+)" + """.""" + "`((?s).+)`").r
 
   /**
-   * Normalizes the expression parser tree to a SQL string which will be used to generate
-   * the expression alias. In particular, it concatenates terminal nodes of the tree and
-   * upper casts keywords and numeric literals.
+   * Normalizes the expression parser tree to a SQL string which will be used to generate the
+   * expression alias. In particular, it concatenates terminal nodes of the tree and upper casts
+   * keywords and numeric literals.
    */
   def toExprAlias(ctx: ParseTree): String = {
     val sb = new StringBuilder()
@@ -134,12 +135,13 @@ object ParserUtils extends SparkParserUtils {
           case term: TerminalNodeImpl =>
             val termText = term.getText
             val tt = term.getSymbol.getType
-            val current = if ((SqlBaseParser.ADD <= tt && tt <= SqlBaseParser.ZONE) ||
-              (SqlBaseParser.BIGINT_LITERAL <= tt && tt <= SqlBaseParser.BIGDECIMAL_LITERAL)) {
-              termText.toUpperCase(Locale.ROOT)
-            } else {
-              termText
-            }
+            val current =
+              if ((SqlBaseParser.ADD <= tt && tt <= SqlBaseParser.ZONE) ||
+                (SqlBaseParser.BIGINT_LITERAL <= tt && tt <= SqlBaseParser.BIGDECIMAL_LITERAL)) {
+                termText.toUpperCase(Locale.ROOT)
+              } else {
+                termText
+              }
             sb.append(current)
           case child => concatTerms(child)
         }
@@ -173,8 +175,8 @@ class CompoundBodyParsingContext {
   def condition(errorCondition: ErrorCondition, allowConditionDeclare: Boolean): Unit = {
     if (!allowConditionDeclare) {
       throw SqlScriptingErrors.conditionDeclarationNotAtStartOfCompound(
-        errorCondition.origin, errorCondition.conditionName
-      )
+        errorCondition.origin,
+        errorCondition.conditionName)
     }
     transitionTo(State.CONDITION, None, errorCondition = Some(errorCondition))
   }
@@ -195,17 +197,15 @@ class CompoundBodyParsingContext {
   }
 
   /**
-   * Helper method to transition to a new state.
-   * Possible states are:
-   * 1a. VARIABLE (1)
-   * 1b. CONDITION (1)
-   * 2. CURSOR (2)
-   * 3. HANDLERS (3)
-   * 4. STATEMENTS (4)
-   * Transition is allowed from state with number n to state with number m,
-   * where m >= n.
+   * Helper method to transition to a new state. Possible states are: 1a. VARIABLE (1) 1b.
+   * CONDITION (1)
+   *   2. CURSOR (2)
+   *   3. HANDLERS (3)
+   *   4. STATEMENTS (4) Transition is allowed from state with number n to state with number m,
+   *      where m >= n.
    *
-   * @param newState The new state to transition to.
+   * @param newState
+   *   The new state to transition to.
    */
   private def transitionTo(
       newState: State.State,
@@ -217,8 +217,7 @@ class CompoundBodyParsingContext {
       case (State.INIT, _) => currentState = newState
 
       // Transitions from VARIABLE to other states.
-      case (State.VARIABLE, State.VARIABLE) =>  // do nothing
-
+      case (State.VARIABLE, State.VARIABLE) => // do nothing
       case (State.VARIABLE, State.CONDITION) => currentState = State.CONDITION
 
       case (State.VARIABLE, State.CURSOR) => currentState = State.CURSOR
@@ -229,7 +228,6 @@ class CompoundBodyParsingContext {
 
       // Transition from CONDITION to other states.
       case (State.CONDITION, State.CONDITION) => // do nothing
-
       case (State.CONDITION, State.VARIABLE) => currentState = State.VARIABLE
 
       case (State.CONDITION, State.CURSOR) => currentState = State.CURSOR
@@ -240,19 +238,16 @@ class CompoundBodyParsingContext {
 
       // Transition from CURSOR to other states.
       case (State.CURSOR, State.CURSOR) => // do nothing
-
       case (State.CURSOR, State.HANDLER) => currentState = State.HANDLER
 
       case (State.CURSOR, State.STATEMENT) => currentState = State.STATEMENT
 
       // Transition from HANDLER to other states.
       case (State.HANDLER, State.HANDLER) => // do nothing
-
       case (State.HANDLER, State.STATEMENT) => currentState = State.STATEMENT
 
       // Transition from STATEMENT to other states.
       case (State.STATEMENT, State.STATEMENT) => // do nothing
-
       // INVALID TRANSITIONS
 
       // Invalid transitions to VARIABLE state.
@@ -312,18 +307,21 @@ class SqlScriptingParsingContext {
 }
 
 class SqlScriptingLabelContext {
+
   /** Set to keep track of labels seen so far */
   private val seenLabels = mutable.Set[String]()
 
   /**
-   * Check if the beginLabelCtx and endLabelCtx match.
-   * If the labels are defined, they must follow rules:
-   *  - If both labels exist, they must match.
-   *  - If label is qualified, it is invalid.
-   *  - Begin label must exist if end label exists.
+   * Check if the beginLabelCtx and endLabelCtx match. If the labels are defined, they must follow
+   * rules:
+   *   - If both labels exist, they must match.
+   *   - If label is qualified, it is invalid.
+   *   - Begin label must exist if end label exists.
    *
-   * @param beginLabelCtx Begin label context.
-   * @param endLabelCtx The end label context.
+   * @param beginLabelCtx
+   *   Begin label context.
+   * @param endLabelCtx
+   *   The end label context.
    */
   /**
    * Get label text from label context, handling IDENTIFIER() syntax.
@@ -338,8 +336,8 @@ class SqlScriptingLabelContext {
     if (parts.size > 1) {
       throw new ParseException(
         errorClass = "IDENTIFIER_TOO_MANY_NAME_PARTS",
-        messageParameters = Map("identifier" -> parts.map(part => s"`$part`").mkString("."),
-          "limit" -> "1"),
+        messageParameters =
+          Map("identifier" -> parts.map(part => s"`$part`").mkString("."), "limit" -> "1"),
         ctx)
     }
     parts.head
@@ -379,8 +377,8 @@ class SqlScriptingLabelContext {
   }
 
   /**
-   * Assert the identifier is not contained within seenLabels.
-   * If the identifier is contained within seenLabels, raise an exception.
+   * Assert the identifier is not contained within seenLabels. If the identifier is contained
+   * within seenLabels, raise an exception.
    */
   private def assertIdentifierNotInSeenLabels(
       identifierCtx: Option[StrictIdentifierContext]): Unit = {
@@ -396,9 +394,8 @@ class SqlScriptingLabelContext {
   }
 
   /**
-   * Enter a labeled scope and return the label text.
-   * If the label is defined, it will be returned and added to seenLabels.
-   * If the label is not defined, a random UUID will be returned.
+   * Enter a labeled scope and return the label text. If the label is defined, it will be returned
+   * and added to seenLabels. If the label is not defined, a random UUID will be returned.
    */
   def enterLabeledScope(
       beginLabelCtx: Option[BeginLabelContext],
@@ -430,19 +427,18 @@ class SqlScriptingLabelContext {
   }
 
   /**
-   * Exit a labeled scope.
-   * If the label is defined, it will be removed from seenLabels.
+   * Exit a labeled scope. If the label is defined, it will be removed from seenLabels.
    */
   def exitLabeledScope(beginLabelCtx: Option[BeginLabelContext]): Unit = {
     if (isLabelDefined(beginLabelCtx)) {
-      seenLabels.remove(getLabelText(beginLabelCtx.get.strictIdentifier()).toLowerCase(Locale.ROOT))
+      seenLabels.remove(
+        getLabelText(beginLabelCtx.get.strictIdentifier()).toLowerCase(Locale.ROOT))
     }
   }
 
   /**
-   * Enter a for loop scope.
-   * If the for loop variable is defined, it will be asserted to not be inside seenLabels.
-   * Then, if the for loop variable is defined, it will be added to seenLabels.
+   * Enter a for loop scope. If the for loop variable is defined, it will be asserted to not be
+   * inside seenLabels. Then, if the for loop variable is defined, it will be added to seenLabels.
    */
   def enterForScope(identifierCtx: Option[StrictIdentifierContext]): Unit = {
     identifierCtx.foreach { ctx =>
@@ -461,8 +457,8 @@ class SqlScriptingLabelContext {
   }
 
   /**
-   * Exit a for loop scope.
-   * If the for loop variable is defined, it will be removed from seenLabels.
+   * Exit a for loop scope. If the for loop variable is defined, it will be removed from
+   * seenLabels.
    */
   def exitForScope(identifierCtx: Option[StrictIdentifierContext]): Unit = {
     identifierCtx.foreach { ctx =>
@@ -485,7 +481,8 @@ object SqlScriptingLabelContext {
 class SqlScriptingConditionContext {
   private val conditionNameToSqlStateMap = mutable.HashMap[String, String]()
 
-  def contains(conditionName: String): Boolean = conditionNameToSqlStateMap.contains(conditionName)
+  def contains(conditionName: String): Boolean =
+    conditionNameToSqlStateMap.contains(conditionName)
 
   def getSqlStateForCondition(conditionName: String): Option[String] =
     conditionNameToSqlStateMap.get(conditionName)

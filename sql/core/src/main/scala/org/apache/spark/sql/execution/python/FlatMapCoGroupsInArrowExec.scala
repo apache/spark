@@ -21,25 +21,21 @@ import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.SparkPlan
 
-
 /**
  * Physical node for [[org.apache.spark.sql.catalyst.plans.logical.FlatMapCoGroupsInArrow]]
  *
- * The input dataframes are first Cogrouped.  Rows from each side of the cogroup are passed to the
- * Python worker via Arrow.  As each side of the cogroup may have a different schema we send every
- * group in its own Arrow stream.
- * The Python worker turns the resulting record batches to `pyarrow.Table`s, invokes the
- * user-defined function, and passes the resulting `pyarrow.Table`
- * as an Arrow record batch. Finally, each record batch is turned to
- * Iterator[InternalRow] using ColumnarBatch.
+ * The input dataframes are first Cogrouped. Rows from each side of the cogroup are passed to the
+ * Python worker via Arrow. As each side of the cogroup may have a different schema we send every
+ * group in its own Arrow stream. The Python worker turns the resulting record batches to
+ * `pyarrow.Table`s, invokes the user-defined function, and passes the resulting `pyarrow.Table`
+ * as an Arrow record batch. Finally, each record batch is turned to Iterator[InternalRow] using
+ * ColumnarBatch.
  *
- * Note on memory usage:
- * Both the Python worker and the Java executor need to have enough memory to
- * hold the largest cogroup. The memory on the Java side is used to construct the
- * record batches (off heap memory). The memory on the Python side is used for
- * holding the `pyarrow.Table`. It's possible to further split one group into
- * multiple record batches to reduce the memory footprint on the Java side, this
- * is left as future work.
+ * Note on memory usage: Both the Python worker and the Java executor need to have enough memory
+ * to hold the largest cogroup. The memory on the Java side is used to construct the record
+ * batches (off heap memory). The memory on the Python side is used for holding the
+ * `pyarrow.Table`. It's possible to further split one group into multiple record batches to
+ * reduce the memory footprint on the Java side, this is left as future work.
  */
 case class FlatMapCoGroupsInArrowExec(
     leftGroup: Seq[Attribute],
@@ -48,11 +44,12 @@ case class FlatMapCoGroupsInArrowExec(
     output: Seq[Attribute],
     left: SparkPlan,
     right: SparkPlan)
-  extends FlatMapCoGroupsInBatchExec {
+    extends FlatMapCoGroupsInBatchExec {
 
   protected val pythonEvalType: Int = PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF
 
   override protected def withNewChildrenInternal(
-      newLeft: SparkPlan, newRight: SparkPlan): FlatMapCoGroupsInArrowExec =
+      newLeft: SparkPlan,
+      newRight: SparkPlan): FlatMapCoGroupsInArrowExec =
     copy(left = newLeft, right = newRight)
 }

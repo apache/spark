@@ -21,10 +21,8 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
 
-case class RefreshTableExec(
-    catalog: TableCatalog,
-    ident: Identifier,
-    refreshCache: () => Unit) extends LeafV2CommandExec {
+case class RefreshTableExec(catalog: TableCatalog, ident: Identifier, refreshCache: () => Unit)
+    extends LeafV2CommandExec {
   override protected def run(): Seq[InternalRow] = {
     catalog.invalidateTable(ident)
 

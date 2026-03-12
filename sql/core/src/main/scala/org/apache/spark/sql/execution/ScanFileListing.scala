@@ -26,13 +26,14 @@ case class ListingPartition(
     files: Iterator[FileStatusWithMetadata])
 
 /**
- * Trait used to represent the selected partitions and dynamically selected partitions
- * during file listing.
+ * Trait used to represent the selected partitions and dynamically selected partitions during file
+ * listing.
  *
  * The `ScanFileListing` trait defines the core API for interacting with selected partitions,
  * establishing a contract for subclasses. It is situated at the root of this package and it is
  * designed to provide a widely accessible definition, that is accessible to other packages and
- * classes that need a way to represent the selected partitions and dynamically selected partitions.
+ * classes that need a way to represent the selected partitions and dynamically selected
+ * partitions.
  */
 trait ScanFileListing {
 
@@ -42,7 +43,8 @@ trait ScanFileListing {
   def partitionCount: Int
 
   /**
-   * Calculates the total size in bytes of all files across the current file listing representation.
+   * Calculates the total size in bytes of all files across the current file listing
+   * representation.
    */
   def totalFileSize: Long
 
@@ -59,7 +61,8 @@ trait ScanFileListing {
    * only to files within partitions that have already passed the static predicate filter.
    */
   def filterAndPruneFiles(
-      boundPredicate: BasePredicate, dynamicFileFilters: Seq[Expression]): ScanFileListing
+      boundPredicate: BasePredicate,
+      dynamicFileFilters: Seq[Expression]): ScanFileListing
 
   /**
    * Returns an [[Array[PartitionedFile]] from the current ScanFileListing representation.
@@ -69,18 +72,18 @@ trait ScanFileListing {
   /**
    * Returns the total partition size in bytes for the current ScanFileListing representation.
    */
-  def calculateTotalPartitionBytes : Long
+  def calculateTotalPartitionBytes: Long
 
   /**
-   * Returns an iterator of over the partitions and their files for the file listing representation.
-   * This allows us to iterate over the partitions without the additional overhead of materializing
-   * the whole collection.
+   * Returns an iterator of over the partitions and their files for the file listing
+   * representation. This allows us to iterate over the partitions without the additional overhead
+   * of materializing the whole collection.
    */
   def filePartitionIterator: Iterator[ListingPartition]
 
   /**
-   * Determines if each bucket in the current file listing representation contains at most one file.
-   * This function returns true if it does, or false otherwise.
+   * Determines if each bucket in the current file listing representation contains at most one
+   * file. This function returns true if it does, or false otherwise.
    */
   def bucketsContainSingleFile: Boolean
 }

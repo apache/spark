@@ -39,7 +39,6 @@ class DistinctKeyVisitorSuite extends PlanTest {
   private val y = AttributeReference("y", IntegerType)()
   private val z = AttributeReference("z", IntegerType)()
 
-
   private val t1 = LocalRelation(a, b, c).as("t1")
   private val t2 = LocalRelation(x, y, z).as("t2")
 
@@ -47,7 +46,7 @@ class DistinctKeyVisitorSuite extends PlanTest {
     assert(plan.analyze.distinctKeys === distinctKeys)
   }
 
-  implicit private def productEncoder[T <: Product : TypeTag]: ExpressionEncoder[T] =
+  implicit private def productEncoder[T <: Product: TypeTag]: ExpressionEncoder[T] =
     ExpressionEncoder[T]()
 
   test("Aggregate's distinct attributes") {
@@ -56,24 +55,31 @@ class DistinctKeyVisitorSuite extends PlanTest {
     checkDistinctAttributes(t1.groupBy($"a", $"b")($"a", $"b"), Set(ExpressionSet(Seq(a, b))))
     checkDistinctAttributes(t1.groupBy($"a", $"b", 1)($"a", $"b"), Set(ExpressionSet(Seq(a, b))))
     checkDistinctAttributes(t1.groupBy($"a", $"b")($"a", $"b", 1), Set(ExpressionSet(Seq(a, b))))
-    checkDistinctAttributes(t1.groupBy($"a", $"b", 1)($"a", $"b", 1), Set(ExpressionSet(Seq(a, b))))
+    checkDistinctAttributes(
+      t1.groupBy($"a", $"b", 1)($"a", $"b", 1),
+      Set(ExpressionSet(Seq(a, b))))
     checkDistinctAttributes(t1.groupBy($"a", $"b")($"a", $"a"), Set.empty)
     checkDistinctAttributes(t1.groupBy($"a", $"b")($"a"), Set.empty)
     checkDistinctAttributes(t1.groupBy($"a")($"a", max($"b")), Set(ExpressionSet(Seq(a))))
-    checkDistinctAttributes(t1.groupBy($"a", $"b")($"a", $"b", d, e),
+    checkDistinctAttributes(
+      t1.groupBy($"a", $"b")($"a", $"b", d, e),
       Set(ExpressionSet(Seq(a, b)), ExpressionSet(Seq(d.toAttribute, e.toAttribute))))
     checkDistinctAttributes(t1.groupBy()(sum($"c")), Set(ExpressionSet()))
     // ExpressionSet() is a subset of anything, so we do not need ExpressionSet(c2)
-    checkDistinctAttributes(t1.groupBy()(sum($"c") as "c2").groupBy($"c2")("c2"),
+    checkDistinctAttributes(
+      t1.groupBy()(sum($"c") as "c2").groupBy($"c2")("c2"),
       Set(ExpressionSet()))
     checkDistinctAttributes(t1.groupBy()(), Set(ExpressionSet()))
-    checkDistinctAttributes(t1.groupBy($"a")($"a", $"a" % 10, d, sum($"b")),
+    checkDistinctAttributes(
+      t1.groupBy($"a")($"a", $"a" % 10, d, sum($"b")),
       Set(ExpressionSet(Seq(a)), ExpressionSet(Seq(d.toAttribute))))
-    checkDistinctAttributes(t1.groupBy(f.child, $"b")(f, $"b", sum($"c")),
+    checkDistinctAttributes(
+      t1.groupBy(f.child, $"b")(f, $"b", sum($"c")),
       Set(ExpressionSet(Seq(f.toAttribute, b))))
 
     // Aggregate should also propagate distinct keys from child
-    checkDistinctAttributes(t1.limit(1).groupBy($"a", $"b")($"a", $"b"),
+    checkDistinctAttributes(
+      t1.limit(1).groupBy($"a", $"b")($"a", $"b"),
       Set(ExpressionSet(Seq(a)), ExpressionSet(Seq(b))))
   }
 
@@ -95,16 +101,20 @@ class DistinctKeyVisitorSuite extends PlanTest {
   test("Limit's distinct attributes") {
     checkDistinctAttributes(Distinct(t1).limit(10), Set(ExpressionSet(Seq(a, b, c))))
     checkDistinctAttributes(LocalLimit(10, Distinct(t1)), Set(ExpressionSet(Seq(a, b, c))))
-    checkDistinctAttributes(t1.limit(1),
+    checkDistinctAttributes(
+      t1.limit(1),
       Set(ExpressionSet(Seq(a)), ExpressionSet(Seq(b)), ExpressionSet(Seq(c))))
   }
 
   test("Offset's distinct attributes") {
-    checkDistinctAttributes(Distinct(t1).limit(12).offset(10).limit(10),
+    checkDistinctAttributes(
+      Distinct(t1).limit(12).offset(10).limit(10),
       Set(ExpressionSet(Seq(a, b, c))))
-    checkDistinctAttributes(LocalLimit(10, Offset(10, LocalLimit(12, Distinct(t1)))),
+    checkDistinctAttributes(
+      LocalLimit(10, Offset(10, LocalLimit(12, Distinct(t1)))),
       Set(ExpressionSet(Seq(a, b, c))))
-    checkDistinctAttributes(t1.offset(1).limit(1),
+    checkDistinctAttributes(
+      t1.offset(1).limit(1),
       Set(ExpressionSet(Seq(a)), ExpressionSet(Seq(b)), ExpressionSet(Seq(c))))
   }
 
@@ -116,11 +126,13 @@ class DistinctKeyVisitorSuite extends PlanTest {
   test("Join's distinct attributes") {
     Seq(LeftSemi, LeftAnti).foreach { joinType =>
       checkDistinctAttributes(
-        Distinct(t1).join(t2, joinType, Some($"a" === $"x")), Set(ExpressionSet(Seq(a, b, c))))
+        Distinct(t1).join(t2, joinType, Some($"a" === $"x")),
+        Set(ExpressionSet(Seq(a, b, c))))
     }
 
     checkDistinctAttributes(
-      Distinct(t1).join(Distinct(t2), Inner, Some($"a" === $"x" && $"b" === $"y" && $"c" === $"z")),
+      Distinct(t1)
+        .join(Distinct(t2), Inner, Some($"a" === $"x" && $"b" === $"y" && $"c" === $"z")),
       Set(ExpressionSet(Seq(a, b, c)), ExpressionSet(Seq(x, y, z))))
 
     checkDistinctAttributes(
@@ -134,19 +146,21 @@ class DistinctKeyVisitorSuite extends PlanTest {
       Set(ExpressionSet(Seq(x, y, z))))
 
     Seq(Inner, Cross, LeftOuter, RightOuter).foreach { joinType =>
-      checkDistinctAttributes(t1.join(t2, joinType, Some($"a" === $"x")),
-        Set.empty)
+      checkDistinctAttributes(t1.join(t2, joinType, Some($"a" === $"x")), Set.empty)
       checkDistinctAttributes(
         Distinct(t1).join(Distinct(t2), joinType, Some($"a" === $"x" && $"b" === $"y")),
         Set.empty)
       checkDistinctAttributes(
-        Distinct(t1).join(Distinct(t2), joinType,
+        Distinct(t1).join(
+          Distinct(t2),
+          joinType,
           Some($"a" === $"x" && $"b" === $"y" && $"c" % 5 === $"z" % 5)),
         Set.empty)
     }
 
     checkDistinctAttributes(
-      Distinct(t1).join(Distinct(t2), Cross, Some($"a" === $"x" && $"b" === $"y" && $"c" === $"z")),
+      Distinct(t1)
+        .join(Distinct(t2), Cross, Some($"a" === $"x" && $"b" === $"y" && $"c" === $"z")),
       Set.empty)
   }
 
@@ -154,35 +168,42 @@ class DistinctKeyVisitorSuite extends PlanTest {
     checkDistinctAttributes(t1.select($"a", $"b"), Set.empty)
     checkDistinctAttributes(Distinct(t1).select($"a"), Set.empty)
     checkDistinctAttributes(Distinct(t1).select($"a", $"b", d, e), Set.empty)
-    checkDistinctAttributes(Distinct(t1)
-      .select($"a", $"b", $"c", 1), Set(ExpressionSet(Seq(a, b, c))))
-    checkDistinctAttributes(Distinct(t1).select($"a", $"b", c, d),
+    checkDistinctAttributes(
+      Distinct(t1)
+        .select($"a", $"b", $"c", 1),
+      Set(ExpressionSet(Seq(a, b, c))))
+    checkDistinctAttributes(
+      Distinct(t1).select($"a", $"b", c, d),
       Set(ExpressionSet(Seq(a, b, c)), ExpressionSet(Seq(b, c, d.toAttribute))))
-    checkDistinctAttributes(t1.groupBy($"a", $"b")($"a", $"b", d).select($"a", $"b", e),
+    checkDistinctAttributes(
+      t1.groupBy($"a", $"b")($"a", $"b", d).select($"a", $"b", e),
       Set(ExpressionSet(Seq(a, b)), ExpressionSet(Seq(a, e.toAttribute))))
   }
 
   test("Repartition's distinct attributes") {
     checkDistinctAttributes(t1.repartition(8), Set.empty)
     checkDistinctAttributes(Distinct(t1).repartition(8), Set(ExpressionSet(Seq(a, b, c))))
-    checkDistinctAttributes(RepartitionByExpression(Seq(a), Distinct(t1), None),
+    checkDistinctAttributes(
+      RepartitionByExpression(Seq(a), Distinct(t1), None),
       Set(ExpressionSet(Seq(a, b, c))))
   }
 
   test("Sample's distinct attributes") {
     checkDistinctAttributes(t1.sample(0, 0.2, false, 1), Set.empty)
-    checkDistinctAttributes(Distinct(t1).sample(0, 0.2, false, 1), Set(ExpressionSet(Seq(a, b, c))))
+    checkDistinctAttributes(
+      Distinct(t1).sample(0, 0.2, false, 1),
+      Set(ExpressionSet(Seq(a, b, c))))
   }
 
   test("Window's distinct attributes") {
-    val winExpr = windowExpr(count($"b"),
-      windowSpec($"a" :: Nil, $"b".asc :: Nil, UnspecifiedFrame))
+    val winExpr =
+      windowExpr(count($"b"), windowSpec($"a" :: Nil, $"b".asc :: Nil, UnspecifiedFrame))
 
     checkDistinctAttributes(
       Distinct(t1)
-        .select($"a", $"b", $"c", winExpr.as("window")), Set(ExpressionSet(Seq(a, b, c))))
-    checkDistinctAttributes(
-      Distinct(t1).select($"a", $"b", winExpr.as("window")), Set())
+        .select($"a", $"b", $"c", winExpr.as("window")),
+      Set(ExpressionSet(Seq(a, b, c))))
+    checkDistinctAttributes(Distinct(t1).select($"a", $"b", winExpr.as("window")), Set())
   }
 
   test("Tail's distinct attributes") {
@@ -195,12 +216,14 @@ class DistinctKeyVisitorSuite extends PlanTest {
   }
 
   test("RebalancePartitions's distinct attributes") {
-    checkDistinctAttributes(RebalancePartitions(Seq(a), Distinct(t1)),
+    checkDistinctAttributes(
+      RebalancePartitions(Seq(a), Distinct(t1)),
       Set(ExpressionSet(Seq(a, b, c))))
   }
 
   test("WithCTE's distinct attributes") {
-    checkDistinctAttributes(WithCTE(Distinct(t1), mutable.ArrayBuffer.empty[CTERelationDef].toSeq),
+    checkDistinctAttributes(
+      WithCTE(Distinct(t1), mutable.ArrayBuffer.empty[CTERelationDef].toSeq),
       Set(ExpressionSet(Seq(a, b, c))))
   }
 }

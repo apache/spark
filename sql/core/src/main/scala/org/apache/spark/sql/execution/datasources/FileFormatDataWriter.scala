@@ -41,14 +41,16 @@ import org.apache.spark.util.{SerializableConfiguration, Utils}
 import org.apache.spark.util.ArrayImplicits._
 
 /**
- * Abstract class for writing out data in a single Spark task.
- * Exceptions thrown by the implementation of this trait will automatically trigger task aborts.
+ * Abstract class for writing out data in a single Spark task. Exceptions thrown by the
+ * implementation of this trait will automatically trigger task aborts.
  */
 abstract class FileFormatDataWriter(
     description: WriteJobDescription,
     taskAttemptContext: TaskAttemptContext,
     committer: FileCommitProtocol,
-    customMetrics: Map[String, SQLMetric]) extends DataWriter[InternalRow] {
+    customMetrics: Map[String, SQLMetric])
+    extends DataWriter[InternalRow] {
+
   /**
    * Max number of files a single task writes out due to file size. In most cases the number of
    * files written should be very small. This is just a safe guard to protect some really bad
@@ -115,10 +117,10 @@ abstract class FileFormatDataWriter(
   }
 
   /**
-   * Returns the summary of relative information which
-   * includes the list of partition strings written out. The list of partitions is sent back
-   * to the driver and used to update the catalog. Other information will be sent back to the
-   * driver too and used to e.g. update the metrics in UI.
+   * Returns the summary of relative information which includes the list of partition strings
+   * written out. The list of partitions is sent back to the driver and used to update the
+   * catalog. Other information will be sent back to the driver too and used to e.g. update the
+   * metrics in UI.
    */
   final override def commit(): WriteTaskResult = enrichWriteError(description.path) {
     releaseResources()
@@ -147,8 +149,8 @@ class EmptyDirectoryDataWriter(
     description: WriteJobDescription,
     taskAttemptContext: TaskAttemptContext,
     committer: FileCommitProtocol,
-    customMetrics: Map[String, SQLMetric] = Map.empty
-) extends FileFormatDataWriter(description, taskAttemptContext, committer, customMetrics) {
+    customMetrics: Map[String, SQLMetric] = Map.empty)
+    extends FileFormatDataWriter(description, taskAttemptContext, committer, customMetrics) {
   override def write(record: InternalRow): Unit = {}
 }
 
@@ -158,7 +160,7 @@ class SingleDirectoryDataWriter(
     taskAttemptContext: TaskAttemptContext,
     committer: FileCommitProtocol,
     customMetrics: Map[String, SQLMetric] = Map.empty)
-  extends FileFormatDataWriter(description, taskAttemptContext, committer, customMetrics) {
+    extends FileFormatDataWriter(description, taskAttemptContext, committer, customMetrics) {
   private var fileCounter: Int = _
   private var recordsInFile: Long = _
   // Initialize currentWriter and statsTrackers
@@ -185,7 +187,8 @@ class SingleDirectoryDataWriter(
   override def write(record: InternalRow): Unit = {
     if (description.maxRecordsPerFile > 0 && recordsInFile >= description.maxRecordsPerFile) {
       fileCounter += 1
-      assert(fileCounter < MAX_FILE_COUNTER,
+      assert(
+        fileCounter < MAX_FILE_COUNTER,
         s"File counter $fileCounter is beyond max value $MAX_FILE_COUNTER")
 
       newOutputWriter()
@@ -206,7 +209,7 @@ abstract class BaseDynamicPartitionDataWriter(
     taskAttemptContext: TaskAttemptContext,
     committer: FileCommitProtocol,
     customMetrics: Map[String, SQLMetric])
-  extends FileFormatDataWriter(description, taskAttemptContext, committer, customMetrics) {
+    extends FileFormatDataWriter(description, taskAttemptContext, committer, customMetrics) {
 
   /** Flag saying whether or not the data to be written out is partitioned. */
   protected val isPartitioned = description.partitionColumns.nonEmpty
@@ -214,7 +217,8 @@ abstract class BaseDynamicPartitionDataWriter(
   /** Flag saying whether or not the data to be written out is bucketed. */
   protected val isBucketed = description.bucketSpec.isDefined
 
-  assert(isPartitioned || isBucketed,
+  assert(
+    isPartitioned || isBucketed,
     s"""DynamicPartitionWriteTask should be used for writing out data that's either
        |partitioned or bucketed. In this case neither is true.
        |WriteJobDescription: $description
@@ -224,8 +228,8 @@ abstract class BaseDynamicPartitionDataWriter(
   protected var recordsInFile: Long = _
 
   /**
-   * File counter for writing current partition or bucket. For same partition or bucket,
-   * we may have more than one file, due to number of records limit per file.
+   * File counter for writing current partition or bucket. For same partition or bucket, we may
+   * have more than one file, due to number of records limit per file.
    */
   protected var fileCounter: Int = _
 
@@ -246,8 +250,8 @@ abstract class BaseDynamicPartitionDataWriter(
     })
 
   /**
-   * Evaluates the `partitionPathExpression` above on a row of `partitionValues` and returns
-   * the partition string.
+   * Evaluates the `partitionPathExpression` above on a row of `partitionValues` and returns the
+   * partition string.
    */
   private lazy val getPartitionPath: InternalRow => String = {
     val proj = UnsafeProjection.create(Seq(partitionPathExpression), description.partitionColumns)
@@ -257,7 +261,8 @@ abstract class BaseDynamicPartitionDataWriter(
   /** Given an input row, returns the corresponding `bucketId` */
   protected lazy val getBucketId: InternalRow => Int = {
     val proj =
-      UnsafeProjection.create(Seq(description.bucketSpec.get.bucketIdExpression),
+      UnsafeProjection.create(
+        Seq(description.bucketSpec.get.bucketIdExpression),
         description.allColumns)
     row => proj(row).getInt(0)
   }
@@ -267,14 +272,16 @@ abstract class BaseDynamicPartitionDataWriter(
     UnsafeProjection.create(description.dataColumns, description.allColumns)
 
   /**
-   * Opens a new OutputWriter given a partition key and/or a bucket id.
-   * If bucket id is specified, we will append it to the end of the file name, but before the
-   * file extension, e.g. part-r-00009-ea518ad4-455a-4431-b471-d24e03814677-00002.gz.parquet
+   * Opens a new OutputWriter given a partition key and/or a bucket id. If bucket id is specified,
+   * we will append it to the end of the file name, but before the file extension, e.g.
+   * part-r-00009-ea518ad4-455a-4431-b471-d24e03814677-00002.gz.parquet
    *
-   * @param partitionValues the partition which all tuples being written by this OutputWriter
-   *                        belong to
-   * @param bucketId the bucket which all tuples being written by this OutputWriter belong to
-   * @param closeCurrentWriter close and release resource for current writer
+   * @param partitionValues
+   *   the partition which all tuples being written by this OutputWriter belong to
+   * @param bucketId
+   *   the bucket which all tuples being written by this OutputWriter belong to
+   * @param closeCurrentWriter
+   *   close and release resource for current writer
    */
   protected def renewCurrentWriter(
       partitionValues: Option[InternalRow],
@@ -322,9 +329,10 @@ abstract class BaseDynamicPartitionDataWriter(
   /**
    * Open a new output writer when number of records exceeding limit.
    *
-   * @param partitionValues the partition which all tuples being written by this `OutputWriter`
-   *                        belong to
-   * @param bucketId the bucket which all tuples being written by this `OutputWriter` belong to
+   * @param partitionValues
+   *   the partition which all tuples being written by this `OutputWriter` belong to
+   * @param bucketId
+   *   the bucket which all tuples being written by this `OutputWriter` belong to
    */
   protected def renewCurrentWriterIfTooManyRecords(
       partitionValues: Option[InternalRow],
@@ -332,7 +340,8 @@ abstract class BaseDynamicPartitionDataWriter(
     // Exceeded the threshold in terms of the number of records per file.
     // Create a new file by increasing the file counter.
     fileCounter += 1
-    assert(fileCounter < MAX_FILE_COUNTER,
+    assert(
+      fileCounter < MAX_FILE_COUNTER,
       s"File counter $fileCounter is beyond max value $MAX_FILE_COUNTER")
     renewCurrentWriter(partitionValues, bucketId, closeCurrentWriter = true)
   }
@@ -340,7 +349,8 @@ abstract class BaseDynamicPartitionDataWriter(
   /**
    * Writes the given record with current writer.
    *
-   * @param record The record to write
+   * @param record
+   *   The record to write
    */
   protected def writeRecord(record: InternalRow): Unit = {
     val outputRow = getOutputRow(record)
@@ -360,8 +370,11 @@ class DynamicPartitionDataSingleWriter(
     taskAttemptContext: TaskAttemptContext,
     committer: FileCommitProtocol,
     customMetrics: Map[String, SQLMetric] = Map.empty)
-  extends BaseDynamicPartitionDataWriter(description, taskAttemptContext, committer,
-    customMetrics) {
+    extends BaseDynamicPartitionDataWriter(
+      description,
+      taskAttemptContext,
+      committer,
+      customMetrics) {
 
   private var currentPartitionValues: Option[UnsafeRow] = None
   private var currentBucketId: Option[Int] = None
@@ -391,15 +404,15 @@ class DynamicPartitionDataSingleWriter(
 }
 
 /**
- * Dynamic partition writer with concurrent writers, meaning multiple concurrent writers are opened
- * for writing.
+ * Dynamic partition writer with concurrent writers, meaning multiple concurrent writers are
+ * opened for writing.
  *
  * The process has the following steps:
- *  - Step 1: Maintain a map of output writers per each partition and/or bucket columns. Keep all
- *            writers opened and write rows one by one.
- *  - Step 2: If number of concurrent writers exceeds limit, sort rest of rows on partition and/or
- *            bucket column(s). Write rows one by one, and eagerly close the writer when finishing
- *            each partition and/or bucket.
+ *   - Step 1: Maintain a map of output writers per each partition and/or bucket columns. Keep all
+ *     writers opened and write rows one by one.
+ *   - Step 2: If number of concurrent writers exceeds limit, sort rest of rows on partition
+ *     and/or bucket column(s). Write rows one by one, and eagerly close the writer when finishing
+ *     each partition and/or bucket.
  *
  * Caller is expected to call `writeWithIterator()` instead of `write()` to write records.
  */
@@ -409,31 +422,35 @@ class DynamicPartitionDataConcurrentWriter(
     committer: FileCommitProtocol,
     concurrentOutputWriterSpec: ConcurrentOutputWriterSpec,
     customMetrics: Map[String, SQLMetric] = Map.empty)
-  extends BaseDynamicPartitionDataWriter(description, taskAttemptContext, committer, customMetrics)
-  with Logging {
+    extends BaseDynamicPartitionDataWriter(
+      description,
+      taskAttemptContext,
+      committer,
+      customMetrics)
+    with Logging {
 
   /** Wrapper class to index a unique concurrent output writer. */
   private case class WriterIndex(
-    var partitionValues: Option[UnsafeRow],
-    var bucketId: Option[Int])
+      var partitionValues: Option[UnsafeRow],
+      var bucketId: Option[Int])
 
   /** Wrapper class for status of a unique concurrent output writer. */
   private class WriterStatus(
-    var outputWriter: OutputWriter,
-    var recordsInFile: Long,
-    var fileCounter: Int)
+      var outputWriter: OutputWriter,
+      var recordsInFile: Long,
+      var fileCounter: Int)
 
   /**
-   * State to indicate if we are falling back to sort-based writer.
-   * Because we first try to use concurrent writers, its initial value is false.
+   * State to indicate if we are falling back to sort-based writer. Because we first try to use
+   * concurrent writers, its initial value is false.
    */
   private var sorted: Boolean = false
   private val concurrentWriters = mutable.HashMap[WriterIndex, WriterStatus]()
 
   /**
-   * The index for current writer. Intentionally make the index mutable and reusable.
-   * Avoid JVM GC issue when many short-living `WriterIndex` objects are created
-   * if switching between concurrent writers frequently.
+   * The index for current writer. Intentionally make the index mutable and reusable. Avoid JVM GC
+   * issue when many short-living `WriterIndex` objects are created if switching between
+   * concurrent writers frequently.
    */
   private val currentWriterId = WriterIndex(None, None)
 
@@ -489,7 +506,9 @@ class DynamicPartitionDataConcurrentWriter(
 
     if (description.maxRecordsPerFile > 0 &&
       recordsInFile >= description.maxRecordsPerFile) {
-      renewCurrentWriterIfTooManyRecords(currentWriterId.partitionValues, currentWriterId.bucketId)
+      renewCurrentWriterIfTooManyRecords(
+        currentWriterId.partitionValues,
+        currentWriterId.bucketId)
       // Update writer status in concurrent writers map, as a new writer is created.
       updateCurrentWriterStatusInMap()
     }
@@ -546,11 +565,13 @@ class DynamicPartitionDataConcurrentWriter(
         currentWriterId.bucketId,
         closeCurrentWriter = false)
       if (!sorted) {
-        assert(concurrentWriters.size <= concurrentOutputWriterSpec.maxWriters,
+        assert(
+          concurrentWriters.size <= concurrentOutputWriterSpec.maxWriters,
           s"Number of concurrent output file writers is ${concurrentWriters.size} " +
             s" which is beyond max value ${concurrentOutputWriterSpec.maxWriters}")
       } else {
-        assert(concurrentWriters.size <= concurrentOutputWriterSpec.maxWriters + 1,
+        assert(
+          concurrentWriters.size <= concurrentOutputWriterSpec.maxWriters + 1,
           s"Number of output file writers after sort is ${concurrentWriters.size} " +
             s" which is beyond max value ${concurrentOutputWriterSpec.maxWriters + 1}")
       }
@@ -587,12 +608,12 @@ class DynamicPartitionDataConcurrentWriter(
 /**
  * Bucketing specification for all the write tasks.
  *
- * @param bucketIdExpression Expression to calculate bucket id based on bucket column(s).
- * @param bucketFileNamePrefix Prefix of output file name based on bucket id.
+ * @param bucketIdExpression
+ *   Expression to calculate bucket id based on bucket column(s).
+ * @param bucketFileNamePrefix
+ *   Prefix of output file name based on bucket id.
  */
-case class WriterBucketSpec(
-  bucketIdExpression: Expression,
-  bucketFileNamePrefix: Int => String)
+case class WriterBucketSpec(bucketIdExpression: Expression, bucketFileNamePrefix: Int => String)
 
 /** A shared job description for all the write tasks. */
 class WriteJobDescription(
@@ -608,9 +629,10 @@ class WriteJobDescription(
     val maxRecordsPerFile: Long,
     val timeZoneId: String,
     val statsTrackers: Seq[WriteJobStatsTracker])
-  extends Serializable {
+    extends Serializable {
 
-  assert(AttributeSet(allColumns) == AttributeSet(partitionColumns ++ dataColumns),
+  assert(
+    AttributeSet(allColumns) == AttributeSet(partitionColumns ++ dataColumns),
     s"""
          |All columns: ${allColumns.mkString(", ")}
          |Partition columns: ${partitionColumns.mkString(", ")}
@@ -620,15 +642,14 @@ class WriteJobDescription(
 
 /** The result of a successful write task. */
 case class WriteTaskResult(commitMsg: TaskCommitMessage, summary: ExecutedWriteSummary)
-  extends WriterCommitMessage
+    extends WriterCommitMessage
 
 /**
  * Wrapper class for the metrics of writing data out.
  *
- * @param updatedPartitions the partitions updated during writing data out. Only valid
- *                          for dynamic partition.
- * @param stats one `WriteTaskStats` object for every `WriteJobStatsTracker` that the job had.
+ * @param updatedPartitions
+ *   the partitions updated during writing data out. Only valid for dynamic partition.
+ * @param stats
+ *   one `WriteTaskStats` object for every `WriteJobStatsTracker` that the job had.
  */
-case class ExecutedWriteSummary(
-    updatedPartitions: Set[String],
-    stats: Seq[WriteTaskStats])
+case class ExecutedWriteSummary(updatedPartitions: Set[String], stats: Seq[WriteTaskStats])

@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-
 package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable.ArrayBuffer
@@ -34,19 +33,23 @@ import org.apache.spark.sql.vectorized.ColumnarBatch
 /**
  * Physical operator that groups input partitions by their partition keys.
  *
- * This operator is used to coalesce partitions from bucketed/partitioned data sources
- * where multiple input partitions share the same partition key. It's commonly used in
+ * This operator is used to coalesce partitions from bucketed/partitioned data sources where
+ * multiple input partitions share the same partition key. It's commonly used in
  * storage-partitioned joins to align partitions from different sides of the join.
  *
- * @param child The child plan providing bucketed/partitioned input
- * @param joinKeyPositions Optional projection to select a subset of the partitioning key
- *                         for join compatibility (e.g., when join keys are a subset of
- *                         partition keys)
- * @param expectedPartitionKeys Optional sequence of expected partition key values and their
- *                              split counts
- * @param reducers Optional reducers to apply to partition keys for grouping compatibility
- * @param applyPartialClustering Whether to apply partial clustering for skewed data
- * @param replicatePartitions Whether to replicate partitions across multiple keys
+ * @param child
+ *   The child plan providing bucketed/partitioned input
+ * @param joinKeyPositions
+ *   Optional projection to select a subset of the partitioning key for join compatibility (e.g.,
+ *   when join keys are a subset of partition keys)
+ * @param expectedPartitionKeys
+ *   Optional sequence of expected partition key values and their split counts
+ * @param reducers
+ *   Optional reducers to apply to partition keys for grouping compatibility
+ * @param applyPartialClustering
+ *   Whether to apply partial clustering for skewed data
+ * @param replicatePartitions
+ *   Whether to replicate partitions across multiple keys
  */
 case class GroupPartitionsExec(
     child: SparkPlan,
@@ -54,8 +57,8 @@ case class GroupPartitionsExec(
     @transient expectedPartitionKeys: Option[Seq[(InternalRowComparableWrapper, Int)]] = None,
     @transient reducers: Option[Seq[Option[Reducer[_, _]]]] = None,
     @transient applyPartialClustering: Boolean = false,
-    @transient replicatePartitions: Boolean = false
-  ) extends UnaryExecNode {
+    @transient replicatePartitions: Boolean = false)
+    extends UnaryExecNode {
 
   override def outputPartitioning: Partitioning = {
     child.outputPartitioning match {
@@ -68,16 +71,18 @@ case class GroupPartitionsExec(
         if (keyedPartitionings.size > 1) {
           val first = keyedPartitionings.head
           keyedPartitionings.tail.foreach { k =>
-            assert(k.partitionKeys == first.partitionKeys,
+            assert(
+              k.partitionKeys == first.partitionKeys,
               "All KeyedPartitioning nodes must have identical partition keys")
           }
         }
 
-        p.transform {
-          case k: KeyedPartitioning =>
-            val projectedExpressions = joinKeyPositions.fold(k.expressions)(_.map(k.expressions))
-            KeyedPartitioning(projectedExpressions, groupedPartitions.map(_._1),
-              isGrouped = isGrouped)
+        p.transform { case k: KeyedPartitioning =>
+          val projectedExpressions = joinKeyPositions.fold(k.expressions)(_.map(k.expressions))
+          KeyedPartitioning(
+            projectedExpressions,
+            groupedPartitions.map(_._1),
+            isGrouped = isGrouped)
         }.asInstanceOf[Partitioning]
       case o => o
     }
@@ -115,15 +120,15 @@ case class GroupPartitionsExec(
 
   /**
    * Computes the grouped partitions by:
-   * 1. Projecting partition keys if joinKeyPositions is specified
-   * 2. Reducing keys if reducers are specified
-   * 3. Grouping input partition indices by their (possibly projected/reduced) keys
-   * 4. Sorting or distributing based on whether partial clustering is enabled
+   *   1. Projecting partition keys if joinKeyPositions is specified
+   *   2. Reducing keys if reducers are specified
+   *   3. Grouping input partition indices by their (possibly projected/reduced) keys
+   *   4. Sorting or distributing based on whether partial clustering is enabled
    *
    * Returns a tuple of (partitions, isGrouped) where:
-   * - partitions: sequence of (partitionKey, inputPartitionIndices) pairs representing
-   *   how input partitions should be grouped together
-   * - isGrouped: whether the output partitioning is grouped (no duplicates in partition keys)
+   *   - partitions: sequence of (partitionKey, inputPartitionIndices) pairs representing how
+   *     input partitions should be grouped together
+   *   - isGrouped: whether the output partitioning is grouped (no duplicates in partition keys)
    */
   @transient private lazy val groupedPartitionsTuple = {
     // There must be a `KeyedPartitioning` in child's output partitioning as a
@@ -137,8 +142,8 @@ case class GroupPartitionsExec(
     // Project partition keys if join key positions are specified
     val (projectedDataTypes, projectedKeys) =
       joinKeyPositions.fold(
-        (keyedPartitioning.expressionDataTypes, keyedPartitioning.partitionKeys)
-      )(keyedPartitioning.projectKeys)
+        (keyedPartitioning.expressionDataTypes, keyedPartitioning.partitionKeys))(
+        keyedPartitioning.projectKeys)
 
     // Reduce keys if reducers are specified
     val reducedKeys = reducers.fold(projectedKeys)(
@@ -196,16 +201,17 @@ case class GroupPartitionsExec(
 /**
  * A PartitionCoalescer that groups partitions according to a pre-computed grouping plan.
  *
- * Unlike Spark's default coalescer which tries to minimize data movement, this coalescer
- * groups partitions based on their partition keys to maintain the grouping semantics
- * required for storage-partitioned operations.
+ * Unlike Spark's default coalescer which tries to minimize data movement, this coalescer groups
+ * partitions based on their partition keys to maintain the grouping semantics required for
+ * storage-partitioned operations.
  *
- * @param groupedPartitions Sequence where each element is a sequence of input partition
- *                         indices that should be grouped together
+ * @param groupedPartitions
+ *   Sequence where each element is a sequence of input partition indices that should be grouped
+ *   together
  */
-class GroupedPartitionCoalescer(
-    val groupedPartitions: Seq[Seq[Int]]
-  ) extends PartitionCoalescer with Serializable {
+class GroupedPartitionCoalescer(val groupedPartitions: Seq[Seq[Int]])
+    extends PartitionCoalescer
+    with Serializable {
 
   override def coalesce(maxPartitions: Int, parent: RDD[_]): Array[PartitionGroup] = {
     groupedPartitions.map { partitionIndices =>
@@ -219,7 +225,8 @@ class GroupedPartitionCoalescer(
       // Select the most common location as the preferred location
       val preferredLocation = preferredLocations
         .groupBy(identity)
-        .view.mapValues(_.size)
+        .view
+        .mapValues(_.size)
         .maxByOption(_._2)
         .map(_._1)
       val partitionGroup = new PartitionGroup(preferredLocation)

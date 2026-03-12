@@ -40,7 +40,12 @@ class JsonDataSourceV2 extends FileDataSourceV2 {
     val paths = getPaths(options)
     val tableName = getTableName(options, paths)
     val optionsWithoutPaths = getOptionsWithoutPaths(options)
-    JsonTable(tableName, sparkSession, optionsWithoutPaths, paths, Some(schema), fallbackFileFormat)
+    JsonTable(
+      tableName,
+      sparkSession,
+      optionsWithoutPaths,
+      paths,
+      Some(schema),
+      fallbackFileFormat)
   }
 }
-

@@ -118,8 +118,10 @@ class GlobalTempViewSuite extends QueryTest with SharedSparkSession {
         sql("CREATE GLOBAL TEMP VIEW src AS SELECT 1 AS a, '2' AS b")
         sql(s"CREATE TABLE cloned LIKE $globalTempDB.src")
         val tableMeta = spark.sessionState.catalog.getTableMetadata(TableIdentifier("cloned"))
-        assert(tableMeta.schema == new StructType()
-          .add("a", "int", false).add("b", "string", false))
+        assert(
+          tableMeta.schema == new StructType()
+            .add("a", "int", false)
+            .add("b", "string", false))
       }
     }
   }
@@ -129,11 +131,13 @@ class GlobalTempViewSuite extends QueryTest with SharedSparkSession {
       sql("CREATE GLOBAL TEMP VIEW v1 AS SELECT 3, 4")
       sql("CREATE TEMP VIEW v2 AS SELECT 1, 2")
 
-      checkAnswer(sql(s"SHOW TABLES IN $globalTempDB"),
+      checkAnswer(
+        sql(s"SHOW TABLES IN $globalTempDB"),
         Row(globalTempDB, "v1", true) ::
-        Row("", "v2", true) :: Nil)
+          Row("", "v2", true) :: Nil)
 
-      assert(spark.catalog.listTables(globalTempDB).collect().toSeq.map(_.name) == Seq("v1", "v2"))
+      assert(
+        spark.catalog.listTables(globalTempDB).collect().toSeq.map(_.name) == Seq("v1", "v2"))
     } finally {
       spark.catalog.dropGlobalTempView("v1")
       spark.catalog.dropTempView("v2")
@@ -159,17 +163,18 @@ class GlobalTempViewSuite extends QueryTest with SharedSparkSession {
   }
 
   test("public Catalog should recognize global temp view") {
-    withGlobalTempView("src")  {
+    withGlobalTempView("src") {
       sql("CREATE GLOBAL TEMP VIEW src AS SELECT 1, 2")
 
       assert(spark.catalog.tableExists(globalTempDB, "src"))
-      assert(spark.catalog.getTable(globalTempDB, "src").toString == new Table(
-        name = "src",
-        catalog = null,
-        namespace = Array(globalTempDB),
-        description = null,
-        tableType = "TEMPORARY",
-        isTemporary = true).toString)
+      assert(
+        spark.catalog.getTable(globalTempDB, "src").toString == new Table(
+          name = "src",
+          catalog = null,
+          namespace = Array(globalTempDB),
+          description = null,
+          tableType = "TEMPORARY",
+          isTemporary = true).toString)
     }
   }
 
@@ -182,13 +187,13 @@ class GlobalTempViewSuite extends QueryTest with SharedSparkSession {
         withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
           Seq(
             "SELECT /*+ MAPJOIN(v1) */ * FROM global_temp.v1, v2 WHERE v1.id = v2.id",
-            "SELECT /*+ MAPJOIN(global_temp.v1) */ * FROM global_temp.v1, v2 WHERE v1.id = v2.id"
-          ).foreach { statement =>
-            sql(statement).queryExecution.optimizedPlan match {
-              case Join(_, _, _, _, JoinHint(Some(HintInfo(Some(BROADCAST))), None)) =>
-              case _ => fail("broadcast hint not found in a left-side table")
+            "SELECT /*+ MAPJOIN(global_temp.v1) */ * FROM global_temp.v1, v2 WHERE v1.id = v2.id")
+            .foreach { statement =>
+              sql(statement).queryExecution.optimizedPlan match {
+                case Join(_, _, _, _, JoinHint(Some(HintInfo(Some(BROADCAST))), None)) =>
+                case _ => fail("broadcast hint not found in a left-side table")
+              }
             }
-          }
         }
       }
     }

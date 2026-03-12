@@ -29,10 +29,10 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
 
 /**
- * Returns top/bottom K values ordered by orderingExpr.
- * Uses a heap (min-heap for max_by, max-heap for min_by) to efficiently maintain K elements.
- * This is the internal implementation used by max_by(x, y, k) and min_by(x, y, k).
- * Returns NULL if there are no non-NULL ordering values or the input is empty.
+ * Returns top/bottom K values ordered by orderingExpr. Uses a heap (min-heap for max_by, max-heap
+ * for min_by) to efficiently maintain K elements. This is the internal implementation used by
+ * max_by(x, y, k) and min_by(x, y, k). Returns NULL if there are no non-NULL ordering values or
+ * the input is empty.
  */
 case class MaxMinByK(
     valueExpr: Expression,
@@ -41,9 +41,9 @@ case class MaxMinByK(
     reverse: Boolean = false,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0)
-  extends ImperativeAggregate
-  with TernaryLike[Expression]
-  with ImplicitCastInputTypes {
+    extends ImperativeAggregate
+    with TernaryLike[Expression]
+    with ImplicitCastInputTypes {
 
   def this(valueExpr: Expression, orderingExpr: Expression, kExpr: Expression) =
     this(valueExpr, orderingExpr, kExpr, false, 0, 0)
@@ -66,27 +66,18 @@ case class MaxMinByK(
 
   override def dataType: DataType = ArrayType(valueExpr.dataType, containsNull = true)
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(
-    AnyDataType,
-    AnyDataType,
-    IntegerType
-  )
+  override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType, AnyDataType, IntegerType)
 
   private lazy val valuesAttr = AttributeReference(
     "values",
     ArrayType(valueExpr.dataType, containsNull = true),
-    nullable = false
-  )()
+    nullable = false)()
   private lazy val orderingsAttr = AttributeReference(
     "orderings",
     ArrayType(orderingExpr.dataType, containsNull = true),
-    nullable = false
-  )()
-  private lazy val heapIndicesAttr = AttributeReference(
-    "heapIndices",
-    BinaryType,
-    nullable = false
-  )()
+    nullable = false)()
+  private lazy val heapIndicesAttr =
+    AttributeReference("heapIndices", BinaryType, nullable = false)()
 
   override lazy val aggBufferAttributes: Seq[AttributeReference] =
     Seq(valuesAttr, orderingsAttr, heapIndicesAttr)
@@ -111,9 +102,7 @@ case class MaxMinByK(
         messageParameters = Map(
           "inputName" -> "k",
           "inputType" -> kExpr.dataType.catalogString,
-          "inputExpr" -> kExpr.sql
-        )
-      )
+          "inputExpr" -> kExpr.sql))
     }
 
     val orderingCheck = TypeUtils.checkForOrderingExpr(orderingExpr.dataType, prettyName)
@@ -125,9 +114,7 @@ case class MaxMinByK(
         messageParameters = Map(
           "exprName" -> toSQLId("k"),
           "valueRange" -> s"[1, $MAX_K]",
-          "currentValue" -> k.toString
-        )
-      )
+          "currentValue" -> k.toString))
     }
 
     TypeCheckResult.TypeCheckSuccess
@@ -157,10 +144,12 @@ case class MaxMinByK(
     val value = valueExpr.eval(inputRow)
     val offset = mutableAggBufferOffset
 
-    val valuesArr = MaxMinByKHeap.getMutableArray(
-      mutableAggBuffer, offset + VALUES_OFFSET, valueExpr.dataType)
+    val valuesArr =
+      MaxMinByKHeap.getMutableArray(mutableAggBuffer, offset + VALUES_OFFSET, valueExpr.dataType)
     val orderingsArr = MaxMinByKHeap.getMutableArray(
-      mutableAggBuffer, offset + ORDERINGS_OFFSET, orderingExpr.dataType)
+      mutableAggBuffer,
+      offset + ORDERINGS_OFFSET,
+      orderingExpr.dataType)
     val heap = MaxMinByKHeap.getMutableHeap(mutableAggBuffer, offset + HEAP_OFFSET)
 
     MaxMinByKHeap.insert(value, ord, k, valuesArr, orderingsArr, heap, heapCompare)
@@ -170,16 +159,19 @@ case class MaxMinByK(
     val offset = mutableAggBufferOffset
     val inOff = inputAggBufferOffset
 
-    val valuesArr = MaxMinByKHeap.getMutableArray(
-      mutableAggBuffer, offset + VALUES_OFFSET, valueExpr.dataType)
+    val valuesArr =
+      MaxMinByKHeap.getMutableArray(mutableAggBuffer, offset + VALUES_OFFSET, valueExpr.dataType)
     val orderingsArr = MaxMinByKHeap.getMutableArray(
-      mutableAggBuffer, offset + ORDERINGS_OFFSET, orderingExpr.dataType)
+      mutableAggBuffer,
+      offset + ORDERINGS_OFFSET,
+      orderingExpr.dataType)
     val heap = MaxMinByKHeap.getMutableHeap(mutableAggBuffer, offset + HEAP_OFFSET)
 
-    val inputValues = MaxMinByKHeap.readArray(
-      inputAggBuffer.getArray(inOff + VALUES_OFFSET), valueExpr.dataType)
+    val inputValues =
+      MaxMinByKHeap.readArray(inputAggBuffer.getArray(inOff + VALUES_OFFSET), valueExpr.dataType)
     val inputOrderings = MaxMinByKHeap.readArray(
-      inputAggBuffer.getArray(inOff + ORDERINGS_OFFSET), orderingExpr.dataType)
+      inputAggBuffer.getArray(inOff + ORDERINGS_OFFSET),
+      orderingExpr.dataType)
     val inputHeap = inputAggBuffer.getBinary(inOff + HEAP_OFFSET)
     val inputHeapSize = MaxMinByKHeap.getSize(inputHeap)
 
@@ -187,7 +179,13 @@ case class MaxMinByK(
       val idx = MaxMinByKHeap.getIdx(inputHeap, i)
       val inputOrd = inputOrderings(idx)
       if (inputOrd != null) {
-        MaxMinByKHeap.insert(inputValues(idx), inputOrd, k, valuesArr, orderingsArr, heap,
+        MaxMinByKHeap.insert(
+          inputValues(idx),
+          inputOrd,
+          k,
+          valuesArr,
+          orderingsArr,
+          heap,
           heapCompare)
       }
     }
@@ -196,10 +194,10 @@ case class MaxMinByK(
   override def eval(buffer: InternalRow): Any = {
     val offset = mutableAggBufferOffset
 
-    val valuesArr = MaxMinByKHeap.getMutableArray(
-      buffer, offset + VALUES_OFFSET, valueExpr.dataType)
-    val orderingsArr = MaxMinByKHeap.getMutableArray(
-      buffer, offset + ORDERINGS_OFFSET, orderingExpr.dataType)
+    val valuesArr =
+      MaxMinByKHeap.getMutableArray(buffer, offset + VALUES_OFFSET, valueExpr.dataType)
+    val orderingsArr =
+      MaxMinByKHeap.getMutableArray(buffer, offset + ORDERINGS_OFFSET, orderingExpr.dataType)
     val heap = MaxMinByKHeap.getMutableHeap(buffer, offset + HEAP_OFFSET)
     val heapSize = MaxMinByKHeap.getSize(heap)
 

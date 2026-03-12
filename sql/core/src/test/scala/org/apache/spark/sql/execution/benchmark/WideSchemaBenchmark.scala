@@ -25,8 +25,7 @@ import org.apache.spark.sql.functions.lit
 import org.apache.spark.util.Utils
 
 /**
- * Benchmark for performance with very wide and nested DataFrames.
- * To run this benchmark:
+ * Benchmark for performance with very wide and nested DataFrames. To run this benchmark:
  * {{{
  *   1. without sbt:
  *      bin/spark-submit --class <this class>
@@ -49,8 +48,8 @@ object WideSchemaBenchmark extends SqlBasedBenchmark {
   private def deleteTmpFiles(): Unit = tmpFiles.foreach(Utils.deleteRecursively)
 
   /**
-   * Writes the given DataFrame to parquet at a temporary location, and returns a DataFrame
-   * backed by the written parquet files.
+   * Writes the given DataFrame to parquet at a temporary location, and returns a DataFrame backed
+   * by the written parquet files.
    */
   private def saveAsParquet(df: DataFrame): DataFrame = {
     val tmpFile = File.createTempFile("WideSchemaBenchmark", "tmp")
@@ -100,7 +99,7 @@ object WideSchemaBenchmark extends SqlBasedBenchmark {
     Seq(100, 1000, 10000).foreach { width =>
       val columns = (1 to width).map(i => s"id as c_$i")
       val df = spark.range(1).selectExpr(columns: _*).cache()
-      df.count()  // force caching
+      df.count() // force caching
       benchmark.addCase(s"$width columns") { iter =>
         df.withColumn("id", lit(1)).withColumn("name", lit("name")).queryExecution.optimizedPlan
       }
@@ -115,15 +114,15 @@ object WideSchemaBenchmark extends SqlBasedBenchmark {
       val numRows = scaleFactor / width
       val selectExpr = (1 to width).map(i => s"id as a_$i")
       val df = spark.range(numRows).toDF().selectExpr(selectExpr: _*).cache()
-      df.count()  // force caching
+      df.count() // force caching
       addCases(benchmark, df, s"$width cols x $numRows rows", "a_1")
     }
     benchmark.run()
   }
 
   def wideShallowlyNestedStructFieldReadAndWrite(): Unit = {
-    val benchmark = new Benchmark(
-      "wide shallowly nested struct field r/w", scaleFactor, output = output)
+    val benchmark =
+      new Benchmark("wide shallowly nested struct field r/w", scaleFactor, output = output)
     for (width <- widthsToTest) {
       val numRows = scaleFactor / width
       var datum: String = "{"
@@ -137,7 +136,7 @@ object WideSchemaBenchmark extends SqlBasedBenchmark {
       datum += "}"
       datum = s"""{"a": {"b": {"c": $datum, "d": $datum}, "e": $datum}}"""
       val df = spark.read.json(spark.range(numRows).map(_ => datum)).cache()
-      df.count()  // force caching
+      df.count() // force caching
       addCases(benchmark, df, s"$width wide x $numRows rows", "a.b.c.value_1")
     }
     benchmark.run()
@@ -154,7 +153,7 @@ object WideSchemaBenchmark extends SqlBasedBenchmark {
         selector = selector + ".value"
       }
       val df = spark.read.json(spark.range(numRows).map(_ => datum)).cache()
-      df.count()  // force caching
+      df.count() // force caching
       addCases(benchmark, df, s"$depth deep x $numRows rows", selector)
     }
     benchmark.run()
@@ -177,12 +176,11 @@ object WideSchemaBenchmark extends SqlBasedBenchmark {
       // TODO(ekl) seems like the json parsing is actually the majority of the time, perhaps
       // we should benchmark that too separately.
       val df = spark.read.json(spark.range(numRows).map(_ => datum)).cache()
-      df.count()  // force caching
+      df.count() // force caching
       addCases(benchmark, df, s"$numNodes x $depth deep x $numRows rows", selector)
     }
     benchmark.run()
   }
-
 
   def wideArrayFieldReadAndWrite(): Unit = {
     val benchmark = new Benchmark("wide array field r/w", scaleFactor, output = output)
@@ -198,7 +196,7 @@ object WideSchemaBenchmark extends SqlBasedBenchmark {
       }
       datum += "]}"
       val df = spark.read.json(spark.range(numRows).map(_ => datum)).cache()
-      df.count()  // force caching
+      df.count() // force caching
       addCases(benchmark, df, s"$width wide x $numRows rows", "value[0]")
     }
     benchmark.run()
@@ -210,7 +208,7 @@ object WideSchemaBenchmark extends SqlBasedBenchmark {
       val numRows = scaleFactor / width
       val datum = Tuple1((1 to width).map(i => ("value_" + i -> 1)).toMap)
       val df = spark.range(numRows).map(_ => datum).toDF().cache()
-      df.count()  // force caching
+      df.count() // force caching
       addCases(benchmark, df, s"$width wide x $numRows rows", "_1[\"value_1\"]")
     }
     benchmark.run()

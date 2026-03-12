@@ -21,7 +21,6 @@ import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.types.StringType
 
-
 /**
  * The command for `SHOW CATALOGS`.
  */

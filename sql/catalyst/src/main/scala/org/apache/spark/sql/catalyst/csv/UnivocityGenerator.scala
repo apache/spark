@@ -29,10 +29,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
 
-class UnivocityGenerator(
-    schema: StructType,
-    writer: Writer,
-    options: CSVOptions) {
+class UnivocityGenerator(schema: StructType, writer: Writer, options: CSVOptions) {
   private val writerSettings = options.asWriterSettings
   writerSettings.setHeaders(schema.fieldNames: _*)
   private val gen = new CsvWriter(writer, writerSettings)
@@ -90,12 +87,18 @@ class UnivocityGenerator(
     case YearMonthIntervalType(start, end) =>
       (getter, ordinal) =>
         IntervalUtils.toYearMonthIntervalString(
-          getter.getInt(ordinal), IntervalStringStyles.ANSI_STYLE, start, end)
+          getter.getInt(ordinal),
+          IntervalStringStyles.ANSI_STYLE,
+          start,
+          end)
 
     case DayTimeIntervalType(start, end) =>
       (getter, ordinal) =>
         IntervalUtils.toDayTimeIntervalString(
-          getter.getLong(ordinal), IntervalStringStyles.ANSI_STYLE, start, end)
+          getter.getLong(ordinal),
+          IntervalStringStyles.ANSI_STYLE,
+          start,
+          end)
 
     case udt: UserDefinedType[_] => makeConverter(udt.sqlType)
 

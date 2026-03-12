@@ -29,45 +29,40 @@ import org.apache.spark.sql.streaming.TTLConfig
 import org.apache.spark.sql.types._
 
 /**
- * Any state variable that wants to support TTL must implement this trait,
- * which they can do by extending [[OneToOneTTLState]] or [[OneToManyTTLState]].
+ * Any state variable that wants to support TTL must implement this trait, which they can do by
+ * extending [[OneToOneTTLState]] or [[OneToManyTTLState]].
  *
- * The only required methods here are ones relating to evicting expired and all
- * state, via clearExpiredStateForAllKeys and clearAllStateForElementKey,
- * respectively. How classes do this is implementation detail, but the general
- * pattern is to use secondary indexes to make sure cleanup scans
- * theta(records to evict), not theta(all records).
+ * The only required methods here are ones relating to evicting expired and all state, via
+ * clearExpiredStateForAllKeys and clearAllStateForElementKey, respectively. How classes do this
+ * is implementation detail, but the general pattern is to use secondary indexes to make sure
+ * cleanup scans theta(records to evict), not theta(all records).
  *
- * There are two broad patterns of implementing stateful variables, and thus
- * there are two broad patterns for implementing TTL. The first is when there
- * is a one-to-one mapping between an element key [1] and a value; the primary
- * and secondary index management for this case is implemented by
- * [[OneToOneTTLState]]. When a single element key can have multiple values,
- * all of which can expire at their own, unique times, then
- * [[OneToManyTTLState]] should be used.
+ * There are two broad patterns of implementing stateful variables, and thus there are two broad
+ * patterns for implementing TTL. The first is when there is a one-to-one mapping between an
+ * element key [1] and a value; the primary and secondary index management for this case is
+ * implemented by [[OneToOneTTLState]]. When a single element key can have multiple values, all of
+ * which can expire at their own, unique times, then [[OneToManyTTLState]] should be used.
  *
- * In either case, implementations need to use some sort of secondary index
- * that orders element keys by expiration time. This base functionality
- * is provided by methods in this trait that read/write/delete to the
- * so-called "TTL index". It is a secondary index with the layout of
- * (expirationMs, elementKey) -> EMPTY_ROW. The expirationMs is big-endian
- * encoded to allow for efficient range scans to find all expired keys.
+ * In either case, implementations need to use some sort of secondary index that orders element
+ * keys by expiration time. This base functionality is provided by methods in this trait that
+ * read/write/delete to the so-called "TTL index". It is a secondary index with the layout of
+ * (expirationMs, elementKey) -> EMPTY_ROW. The expirationMs is big-endian encoded to allow for
+ * efficient range scans to find all expired keys.
  *
- * TTLState (or any abstract sub-classes) should never deal with encoding or
- * decoding UnsafeRows to and from their user-facing types. The stateful variable
- * themselves should be doing this; all other TTLState sub-classes should be concerned
- * only with writing, reading, and deleting UnsafeRows and their associated
- * expirations from the primary and secondary indexes. [2]
+ * TTLState (or any abstract sub-classes) should never deal with encoding or decoding UnsafeRows
+ * to and from their user-facing types. The stateful variable themselves should be doing this; all
+ * other TTLState sub-classes should be concerned only with writing, reading, and deleting
+ * UnsafeRows and their associated expirations from the primary and secondary indexes. [2]
  *
- * [1]. You might ask, why call it "element key" instead of "grouping key"?
- *      This is because a single grouping key might have multiple elements, as in
- *      the case of a map, which has composite keys of the form (groupingKey, mapKey).
- *      In the case of ValueState, though, the element key is the grouping key.
- *      To generalize to both cases, this class should always use the term elementKey.)
+ * [1]. You might ask, why call it "element key" instead of "grouping key"? This is because a
+ * single grouping key might have multiple elements, as in the case of a map, which has composite
+ * keys of the form (groupingKey, mapKey). In the case of ValueState, though, the element key is
+ * the grouping key. To generalize to both cases, this class should always use the term
+ * elementKey.)
  *
- * [2]. You might also ask, why design it this way? We want the TTLState abstract
- *      sub-classes to write to both the primary and secondary indexes, since they
- *      both need to stay in sync; co-locating the logic is cleanest.
+ * [2]. You might also ask, why design it this way? We want the TTLState abstract sub-classes to
+ * write to both the primary and secondary indexes, since they both need to stay in sync;
+ * co-locating the logic is cleanest.
  */
 trait TTLState {
   // Name of the state variable, e.g. the string the user passes to get{Value/List/Map}State
@@ -117,8 +112,7 @@ trait TTLState {
     TTL_INDEX_KEY_SCHEMA,
     TTL_EMPTY_VALUE_ROW_SCHEMA,
     RangeKeyScanStateEncoderSpec(TTL_INDEX_KEY_SCHEMA, Seq(0)),
-    isInternal = true
-  )
+    isInternal = true)
 
   private[sql] def insertIntoTTLIndex(expirationMs: Long, elementKey: UnsafeRow): Unit = {
     val secondaryIndexKey = TTL_ENCODER.encodeTTLRow(expirationMs, elementKey)
@@ -165,54 +159,53 @@ trait TTLState {
 
     // Recall that the format is (expirationMs, elementKey) -> TTL_EMPTY_VALUE_ROW, so
     // kv.value doesn't ever need to be used.
-    ttlIterator.takeWhile { kv =>
-      val expirationMs = kv.key.getLong(0)
-      StateTTL.isExpired(expirationMs, batchTimestampMs)
-    }.map(_.key)
+    ttlIterator
+      .takeWhile { kv =>
+        val expirationMs = kv.key.getLong(0)
+        StateTTL.isExpired(expirationMs, batchTimestampMs)
+      }
+      .map(_.key)
   }
 
   // Encapsulates a row stored in a TTL index. Exposed for testing.
   private[sql] case class TTLRow(elementKey: UnsafeRow, expirationMs: Long)
 
   /**
-   * Evicts the state associated with this stateful variable that has expired
-   * due to TTL. The eviction applies to all grouping keys, and to all indexes,
-   * primary or secondary.
+   * Evicts the state associated with this stateful variable that has expired due to TTL. The
+   * eviction applies to all grouping keys, and to all indexes, primary or secondary.
    *
-   * This method can be called at any time in the micro-batch execution,
-   * as long as it is allowed to complete before subsequent state operations are
-   * issued. Operations to the state variable should not be issued concurrently while
-   * this is running, since it may leave the state variable in an inconsistent state
-   * as it cleans up.
+   * This method can be called at any time in the micro-batch execution, as long as it is allowed
+   * to complete before subsequent state operations are issued. Operations to the state variable
+   * should not be issued concurrently while this is running, since it may leave the state
+   * variable in an inconsistent state as it cleans up.
    *
-   * @return number of values cleaned up.
+   * @return
+   *   number of values cleaned up.
    */
   private[sql] def clearExpiredStateForAllKeys(): Long
 
   /**
-   * When a user calls clear() on a stateful variable, this method is invoked to
-   * clear all of the state for the current (implicit) grouping key. It is responsible
-   * for deleting from the primary index as well as any secondary index(es).
+   * When a user calls clear() on a stateful variable, this method is invoked to clear all of the
+   * state for the current (implicit) grouping key. It is responsible for deleting from the
+   * primary index as well as any secondary index(es).
    *
-   * If a given state variable has to clean up multiple elementKeys (in MapState, for
-   * example, every key in the map is its own elementKey), then this method should
-   * be invoked for each of those keys.
+   * If a given state variable has to clean up multiple elementKeys (in MapState, for example,
+   * every key in the map is its own elementKey), then this method should be invoked for each of
+   * those keys.
    */
   private[sql] def clearAllStateForElementKey(elementKey: UnsafeRow): Unit
 }
 
 /**
- * OneToOneTTLState is an implementation of [[TTLState]] that is used to manage
- * TTL for state variables that need a single secondary index to efficiently manage
- * records with an expiration.
+ * OneToOneTTLState is an implementation of [[TTLState]] that is used to manage TTL for state
+ * variables that need a single secondary index to efficiently manage records with an expiration.
  *
- * The primary index for state variables that can use a [[OneToOneTTLState]] have
- * the form of: [elementKey -> (value, elementExpiration)]. You'll notice that, given
- * a timestamp, it would take linear time to probe the primary index for all of its
- * expired values.
+ * The primary index for state variables that can use a [[OneToOneTTLState]] have the form of:
+ * [elementKey -> (value, elementExpiration)]. You'll notice that, given a timestamp, it would
+ * take linear time to probe the primary index for all of its expired values.
  *
- * As a result, this class uses helper methods from [[TTLState]] to maintain the secondary
- * index from [(elementExpiration, elementKey) -> EMPTY_ROW].
+ * As a result, this class uses helper methods from [[TTLState]] to maintain the secondary index
+ * from [(elementExpiration, elementKey) -> EMPTY_ROW].
  *
  * For an explanation of why this structure is not always sufficient (e.g. why the class
  * [[OneToManyTTLState]] is needed), please visit its class-doc comment.
@@ -223,7 +216,8 @@ abstract class OneToOneTTLState(
     elementKeySchemaArg: StructType,
     ttlConfigArg: TTLConfig,
     batchTimestampMsArg: Long,
-    metricsArg: Map[String, SQLMetric]) extends TTLState {
+    metricsArg: Map[String, SQLMetric])
+    extends TTLState {
   override private[sql] def stateName: String = stateNameArg
   override private[sql] def store: StateStore = storeArg
   override private[sql] def elementKeySchema: StructType = elementKeySchemaArg
@@ -232,21 +226,22 @@ abstract class OneToOneTTLState(
   override private[sql] def metrics: Map[String, SQLMetric] = metricsArg
 
   /**
-   * This method updates the TTL for the given elementKey to be expirationMs,
-   * updating both the primary and secondary indices if needed.
+   * This method updates the TTL for the given elementKey to be expirationMs, updating both the
+   * primary and secondary indices if needed.
    *
-   * Note that an elementKey may be the state variable's grouping key, _or_ it
-   * could be a composite key. MapState is an example of a state variable that
-   * has composite keys, which has the structure of the groupingKey followed by
-   * the specific key in the map. This method doesn't need to know what type of
-   * key is being used, though, since in either case, it's just an UnsafeRow.
+   * Note that an elementKey may be the state variable's grouping key, _or_ it could be a
+   * composite key. MapState is an example of a state variable that has composite keys, which has
+   * the structure of the groupingKey followed by the specific key in the map. This method doesn't
+   * need to know what type of key is being used, though, since in either case, it's just an
+   * UnsafeRow.
    *
-   * @param elementKey the key for which the TTL should be updated, which may
-   *                   either be the encoded grouping key, or the grouping key
-   *                   and some user-defined key.
-   * @param elementValue the value to update the primary index with. It is of the
-   *                     form (value, expirationMs).
-   * @param expirationMs the new expiration timestamp to use for elementKey.
+   * @param elementKey
+   *   the key for which the TTL should be updated, which may either be the encoded grouping key,
+   *   or the grouping key and some user-defined key.
+   * @param elementValue
+   *   the value to update the primary index with. It is of the form (value, expirationMs).
+   * @param expirationMs
+   *   the new expiration timestamp to use for elementKey.
    */
   private[sql] def updatePrimaryAndSecondaryIndices(
       elementKey: UnsafeRow,
@@ -307,30 +302,29 @@ abstract class OneToOneTTLState(
 }
 
 /**
- * [[OneToManyTTLState]] is an implementation of [[TTLState]] for stateful variables
- * that associate a single key with multiple values; every value has its own expiration
- * timestamp.
+ * [[OneToManyTTLState]] is an implementation of [[TTLState]] for stateful variables that
+ * associate a single key with multiple values; every value has its own expiration timestamp.
  *
- * We need an efficient way to find all the values that have expired, but we cannot
- * issue point-wise deletes to the elements, since they are merged together using the
- * RocksDB StringAppendOperator for merging. As such, we cannot keep a secondary index
- * on the key (expirationMs, groupingKey, indexInList), since we have no way to delete a
- * specific indexInList from the RocksDB value. (In the future, we could write a custom
- * merge operator that can handle tombstones for deleted indexes, but RocksDB doesn't
- * support custom merge operators written in Java/Scala.)
+ * We need an efficient way to find all the values that have expired, but we cannot issue
+ * point-wise deletes to the elements, since they are merged together using the RocksDB
+ * StringAppendOperator for merging. As such, we cannot keep a secondary index on the key
+ * (expirationMs, groupingKey, indexInList), since we have no way to delete a specific indexInList
+ * from the RocksDB value. (In the future, we could write a custom merge operator that can handle
+ * tombstones for deleted indexes, but RocksDB doesn't support custom merge operators written in
+ * Java/Scala.)
  *
- * Instead, we manage expiration per grouping key instead. Our secondary index will look
- * like (expirationMs, groupingKey) -> EMPTY_ROW. This way, we can quickly find all the
- * grouping keys that contain at least one element that has expired.
+ * Instead, we manage expiration per grouping key instead. Our secondary index will look like
+ * (expirationMs, groupingKey) -> EMPTY_ROW. This way, we can quickly find all the grouping keys
+ * that contain at least one element that has expired.
  *
- * To make sure that we aren't "late" in cleaning up expired values, this secondary index
- * maps from the minimum expiration in a list and a grouping key to the EMPTY_VALUE. This
- * index is called the "TTL index" in the code (to be consistent with [[OneToOneTTLState]]),
- * though it behaves more like a work queue of lists that need to be cleaned up.
+ * To make sure that we aren't "late" in cleaning up expired values, this secondary index maps
+ * from the minimum expiration in a list and a grouping key to the EMPTY_VALUE. This index is
+ * called the "TTL index" in the code (to be consistent with [[OneToOneTTLState]]), though it
+ * behaves more like a work queue of lists that need to be cleaned up.
  *
- * Since a grouping key may have a large list and we need to quickly know what the
- * minimum expiration is, we need to reverse this work queue index. This reversed index
- * maps from key to the minimum expiration in the list, and it is called the "min-expiry" index.
+ * Since a grouping key may have a large list and we need to quickly know what the minimum
+ * expiration is, we need to reverse this work queue index. This reversed index maps from key to
+ * the minimum expiration in the list, and it is called the "min-expiry" index.
  *
  * Note: currently, this is only used by ListState with TTL.
  */
@@ -340,7 +334,8 @@ abstract class OneToManyTTLState(
     elementKeySchemaArg: StructType,
     ttlConfigArg: TTLConfig,
     batchTimestampMsArg: Long,
-    metricsArg: Map[String, SQLMetric]) extends TTLState {
+    metricsArg: Map[String, SQLMetric])
+    extends TTLState {
   override private[sql] def stateName: String = stateNameArg
   override private[sql] def store: StateStore = storeArg
   override private[sql] def elementKeySchema: StructType = elementKeySchemaArg
@@ -372,16 +367,14 @@ abstract class OneToManyTTLState(
     MIN_INDEX_SCHEMA,
     MIN_INDEX_VALUE_SCHEMA,
     NoPrefixKeyStateEncoderSpec(MIN_INDEX_SCHEMA),
-    isInternal = true
-  )
+    isInternal = true)
 
   store.createColFamilyIfAbsent(
     COUNT_INDEX,
     elementKeySchema,
     COUNT_INDEX_VALUE_SCHEMA,
     NoPrefixKeyStateEncoderSpec(elementKeySchema),
-    isInternal = true
-  )
+    isInternal = true)
 
   // Helper method to get the number of entries in the list state for a given element key
   private def getEntryCount(elementKey: UnsafeRow): Long = {
@@ -396,10 +389,10 @@ abstract class OneToManyTTLState(
   // Helper function to update the number of entries in the list state for a given element key
   private def updateEntryCount(elementKey: UnsafeRow, updatedCount: Long): Unit = {
     reusedCountIndexValueRow.setLong(0, updatedCount)
-    store.put(elementKey,
+    store.put(
+      elementKey,
       countIndexValueProjector(reusedCountIndexValueRow.asInstanceOf[InternalRow]),
-      COUNT_INDEX
-    )
+      COUNT_INDEX)
   }
 
   // Helper function to remove the number of entries in the list state for a given element key
@@ -475,9 +468,7 @@ abstract class OneToManyTTLState(
   // must go through all of the values. numValuesExpired represents the number of entries
   // that were removed (for metrics), and newMinExpirationMs is the new minimum expiration
   // for the values remaining in the state variable.
-  case class ValueExpirationResult(
-      numValuesExpired: Long,
-      newMinExpirationMs: Option[Long])
+  case class ValueExpirationResult(numValuesExpired: Long, newMinExpirationMs: Option[Long])
 
   // Clears all the expired values for the given elementKey.
   protected def clearExpiredValues(elementKey: UnsafeRow): ValueExpirationResult
@@ -556,9 +547,7 @@ object StateTTL {
     batchTtlExpirationMs + ttlDuration.toMillis
   }
 
-  def isExpired(
-      expirationMs: Long,
-      batchTtlExpirationMs: Long): Boolean = {
+  def isExpired(expirationMs: Long, batchTtlExpirationMs: Long): Boolean = {
     batchTtlExpirationMs >= expirationMs
   }
 }

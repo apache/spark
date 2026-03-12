@@ -34,7 +34,8 @@ case class CreateMetricViewCommand(
     properties: Map[String, String],
     originalText: String,
     allowExisting: Boolean,
-    replace: Boolean) extends UnaryRunnableCommand {
+    replace: Boolean)
+    extends UnaryRunnableCommand {
 
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
@@ -43,25 +44,37 @@ case class CreateMetricViewCommand(
     val name = child match {
       case v: ResolvedIdentifier =>
         v.identifier.asTableIdentifier
-      case _ => throw SparkException.internalError(
-        s"Failed to resolve identifier for creating metric view")
+      case _ =>
+        throw SparkException.internalError(
+          s"Failed to resolve identifier for creating metric view")
     }
     val analyzed = MetricViewHelper.analyzeMetricViewText(sparkSession, name, originalText)
 
     if (userSpecifiedColumns.nonEmpty) {
       if (userSpecifiedColumns.length > analyzed.output.length) {
         throw QueryCompilationErrors.cannotCreateViewNotEnoughColumnsError(
-          name, userSpecifiedColumns.map(_._1), analyzed)
+          name,
+          userSpecifiedColumns.map(_._1),
+          analyzed)
       } else if (userSpecifiedColumns.length < analyzed.output.length) {
         throw QueryCompilationErrors.cannotCreateViewTooManyColumnsError(
-          name, userSpecifiedColumns.map(_._1), analyzed)
+          name,
+          userSpecifiedColumns.map(_._1),
+          analyzed)
       }
     }
     catalog.createTable(
       ViewHelper.prepareTable(
-        sparkSession, name, Some(originalText), analyzed, userSpecifiedColumns,
-        properties, SchemaUnsupported, comment,
-        None, isMetricView = true),
+        sparkSession,
+        name,
+        Some(originalText),
+        analyzed,
+        userSpecifiedColumns,
+        properties,
+        SchemaUnsupported,
+        comment,
+        None,
+        isMetricView = true),
       ignoreIfExists = allowExisting)
     Seq.empty
   }
@@ -87,8 +100,8 @@ object MetricViewHelper {
       schema = new StructType(),
       viewOriginalText = Some(viewText),
       viewText = Some(viewText))
-    val metricViewNode = MetricViewPlanner.planWrite(
-      tableMeta, viewText, session.sessionState.sqlParser)
+    val metricViewNode =
+      MetricViewPlanner.planWrite(tableMeta, viewText, session.sessionState.sqlParser)
     val analyzed = analyzer.executeAndCheck(metricViewNode, new QueryPlanningTracker)
     ViewHelper.verifyTemporaryObjectsNotExists(isTemporary = false, name, analyzed, Seq.empty)
     analyzed

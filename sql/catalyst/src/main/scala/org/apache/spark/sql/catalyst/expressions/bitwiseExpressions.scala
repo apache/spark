@@ -36,8 +36,9 @@ import org.apache.spark.sql.types._
   """,
   since = "1.4.0",
   group = "bitwise_funcs")
-case class BitwiseAnd(left: Expression, right: Expression) extends BinaryArithmetic
-  with CommutativeExpression {
+case class BitwiseAnd(left: Expression, right: Expression)
+    extends BinaryArithmetic
+    with CommutativeExpression {
 
   override def evalMode: EvalMode.Value = EvalMode.LEGACY
 
@@ -51,7 +52,8 @@ case class BitwiseAnd(left: Expression, right: Expression) extends BinaryArithme
     case ByteType =>
       ((evalE1: Byte, evalE2: Byte) => (evalE1 & evalE2).toByte).asInstanceOf[(Any, Any) => Any]
     case ShortType =>
-      ((evalE1: Short, evalE2: Short) => (evalE1 & evalE2).toShort).asInstanceOf[(Any, Any) => Any]
+      ((evalE1: Short, evalE2: Short) => (evalE1 & evalE2).toShort)
+        .asInstanceOf[(Any, Any) => Any]
     case IntegerType =>
       ((evalE1: Int, evalE2: Int) => evalE1 & evalE2).asInstanceOf[(Any, Any) => Any]
     case LongType =>
@@ -61,13 +63,13 @@ case class BitwiseAnd(left: Expression, right: Expression) extends BinaryArithme
   protected override def nullSafeEval(input1: Any, input2: Any): Any = and(input1, input2)
 
   override protected def withNewChildrenInternal(
-    newLeft: Expression, newRight: Expression): BitwiseAnd = copy(left = newLeft, right = newRight)
+      newLeft: Expression,
+      newRight: Expression): BitwiseAnd = copy(left = newLeft, right = newRight)
 
   override lazy val canonicalized: Expression = {
     buildCanonicalizedPlan(
       { case BitwiseAnd(l, r) => Seq(l, r) },
-      { case (l: Expression, r: Expression) => BitwiseAnd(l, r)}
-    )
+      { case (l: Expression, r: Expression) => BitwiseAnd(l, r) })
   }
 }
 
@@ -85,8 +87,9 @@ case class BitwiseAnd(left: Expression, right: Expression) extends BinaryArithme
   """,
   since = "1.4.0",
   group = "bitwise_funcs")
-case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmetic
-  with CommutativeExpression {
+case class BitwiseOr(left: Expression, right: Expression)
+    extends BinaryArithmetic
+    with CommutativeExpression {
 
   override def evalMode: EvalMode.Value = EvalMode.LEGACY
 
@@ -100,7 +103,8 @@ case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmet
     case ByteType =>
       ((evalE1: Byte, evalE2: Byte) => (evalE1 | evalE2).toByte).asInstanceOf[(Any, Any) => Any]
     case ShortType =>
-      ((evalE1: Short, evalE2: Short) => (evalE1 | evalE2).toShort).asInstanceOf[(Any, Any) => Any]
+      ((evalE1: Short, evalE2: Short) => (evalE1 | evalE2).toShort)
+        .asInstanceOf[(Any, Any) => Any]
     case IntegerType =>
       ((evalE1: Int, evalE2: Int) => evalE1 | evalE2).asInstanceOf[(Any, Any) => Any]
     case LongType =>
@@ -110,13 +114,13 @@ case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmet
   protected override def nullSafeEval(input1: Any, input2: Any): Any = or(input1, input2)
 
   override protected def withNewChildrenInternal(
-    newLeft: Expression, newRight: Expression): BitwiseOr = copy(left = newLeft, right = newRight)
+      newLeft: Expression,
+      newRight: Expression): BitwiseOr = copy(left = newLeft, right = newRight)
 
   override lazy val canonicalized: Expression = {
     buildCanonicalizedPlan(
       { case BitwiseOr(l, r) => Seq(l, r) },
-      { case (l: Expression, r: Expression) => BitwiseOr(l, r)}
-    )
+      { case (l: Expression, r: Expression) => BitwiseOr(l, r) })
   }
 }
 
@@ -126,7 +130,8 @@ case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmet
  * Code generation inherited from BinaryArithmetic.
  */
 @ExpressionDescription(
-  usage = "expr1 _FUNC_ expr2 - Returns the result of bitwise exclusive OR of `expr1` and `expr2`.",
+  usage =
+    "expr1 _FUNC_ expr2 - Returns the result of bitwise exclusive OR of `expr1` and `expr2`.",
   examples = """
     Examples:
       > SELECT 3 _FUNC_ 5;
@@ -134,8 +139,9 @@ case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmet
   """,
   since = "1.4.0",
   group = "bitwise_funcs")
-case class BitwiseXor(left: Expression, right: Expression) extends BinaryArithmetic
-  with CommutativeExpression {
+case class BitwiseXor(left: Expression, right: Expression)
+    extends BinaryArithmetic
+    with CommutativeExpression {
 
   override def evalMode: EvalMode.Value = EvalMode.LEGACY
 
@@ -149,7 +155,8 @@ case class BitwiseXor(left: Expression, right: Expression) extends BinaryArithme
     case ByteType =>
       ((evalE1: Byte, evalE2: Byte) => (evalE1 ^ evalE2).toByte).asInstanceOf[(Any, Any) => Any]
     case ShortType =>
-      ((evalE1: Short, evalE2: Short) => (evalE1 ^ evalE2).toShort).asInstanceOf[(Any, Any) => Any]
+      ((evalE1: Short, evalE2: Short) => (evalE1 ^ evalE2).toShort)
+        .asInstanceOf[(Any, Any) => Any]
     case IntegerType =>
       ((evalE1: Int, evalE2: Int) => evalE1 ^ evalE2).asInstanceOf[(Any, Any) => Any]
     case LongType =>
@@ -159,13 +166,13 @@ case class BitwiseXor(left: Expression, right: Expression) extends BinaryArithme
   protected override def nullSafeEval(input1: Any, input2: Any): Any = xor(input1, input2)
 
   override protected def withNewChildrenInternal(
-    newLeft: Expression, newRight: Expression): BitwiseXor = copy(left = newLeft, right = newRight)
+      newLeft: Expression,
+      newRight: Expression): BitwiseXor = copy(left = newLeft, right = newRight)
 
   override lazy val canonicalized: Expression = {
     buildCanonicalizedPlan(
       { case BitwiseXor(l, r) => Seq(l, r) },
-      { case (l: Expression, r: Expression) => BitwiseXor(l, r)}
-    )
+      { case (l: Expression, r: Expression) => BitwiseXor(l, r) })
   }
 }
 
@@ -181,8 +188,7 @@ case class BitwiseXor(left: Expression, right: Expression) extends BinaryArithme
   """,
   since = "1.4.0",
   group = "bitwise_funcs")
-case class BitwiseNot(child: Expression)
-  extends UnaryExpression with ExpectsInputTypes {
+case class BitwiseNot(child: Expression) extends UnaryExpression with ExpectsInputTypes {
   override def nullIntolerant: Boolean = true
   override def inputTypes: Seq[AbstractDataType] = Seq(IntegralType)
 
@@ -223,8 +229,7 @@ case class BitwiseNot(child: Expression)
   """,
   since = "3.0.0",
   group = "bitwise_funcs")
-case class BitwiseCount(child: Expression)
-  extends UnaryExpression with ExpectsInputTypes {
+case class BitwiseCount(child: Expression) extends UnaryExpression with ExpectsInputTypes {
   override def nullIntolerant: Boolean = true
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(IntegralType, BooleanType))
@@ -276,7 +281,8 @@ object BitwiseGetUtil {
   since = "3.2.0",
   group = "bitwise_funcs")
 case class BitwiseGet(left: Expression, right: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes {
+    extends BinaryExpression
+    with ImplicitCastInputTypes {
   override def nullIntolerant: Boolean = true
 
   override def inputTypes: Seq[AbstractDataType] = Seq(IntegralType, IntegerType)
@@ -297,18 +303,22 @@ case class BitwiseGet(left: Expression, right: Expression)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, (target, pos) => {
-      s"""
+    nullSafeCodeGen(
+      ctx,
+      ev,
+      (target, pos) => {
+        s"""
          |org.apache.spark.sql.catalyst.expressions.BitwiseGetUtil.checkPosition(
          |  "$prettyName", $pos, $bitSize);
          |${ev.value} = (byte) ((((long) $target) >> $pos) & 1);
        """.stripMargin
-    })
+      })
   }
 
   override def prettyName: String =
     getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("bit_get")
 
   override protected def withNewChildrenInternal(
-    newLeft: Expression, newRight: Expression): BitwiseGet = copy(left = newLeft, right = newRight)
+      newLeft: Expression,
+      newRight: Expression): BitwiseGet = copy(left = newLeft, right = newRight)
 }

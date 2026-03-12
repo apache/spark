@@ -99,8 +99,7 @@ class TableLookupCacheSuite extends AnalysisTest with Matchers {
         CatalogTableType.VIEW,
         CatalogStorageFormat.empty,
         StructType(Seq(StructField("a", IntegerType, nullable = true))),
-        viewText = Some("select * from t1")
-      )
+        viewText = Some("select * from t1"))
       catalog.createTable(viewDef, ignoreIfExists = false)
       reset(catalog)
       analyzer.execute(table("t1").join(table("view")).join(table("view")))

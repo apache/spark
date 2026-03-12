@@ -26,8 +26,9 @@ import org.apache.spark.sql.types.{LongType, StringType, StructType}
 import org.apache.spark.tags.SlowSQLTest
 
 @SlowSQLTest
-class StreamingDeduplicationWithinWatermarkSuite extends StateStoreMetricsTest
-  with StreamingDeduplicationSuiteBase {
+class StreamingDeduplicationWithinWatermarkSuite
+    extends StateStoreMetricsTest
+    with StreamingDeduplicationSuiteBase {
 
   import testImplicits._
 
@@ -44,7 +45,9 @@ class StreamingDeduplicationWithinWatermarkSuite extends StateStoreMetricsTest
     val result = spark.range(10).dropDuplicatesWithinWatermark()
     testAndVerify(result)
 
-    val result2 = spark.range(10).withColumn("newcol", $"id")
+    val result2 = spark
+      .range(10)
+      .withColumn("newcol", $"id")
       .dropDuplicatesWithinWatermark("newcol")
     testAndVerify(result2)
   }
@@ -63,16 +66,20 @@ class StreamingDeduplicationWithinWatermarkSuite extends StateStoreMetricsTest
     val result = inputData.toDS().dropDuplicatesWithinWatermark()
     testAndVerify(result)
 
-    val result2 = inputData.toDS().withColumn("newcol", $"value")
+    val result2 = inputData
+      .toDS()
+      .withColumn("newcol", $"value")
       .dropDuplicatesWithinWatermark("newcol")
     testAndVerify(result2)
 
     val inputData2 = MemoryStream[(String, Int)]
-    val otherSideForJoin = inputData2.toDF()
+    val otherSideForJoin = inputData2
+      .toDF()
       .select($"_1" as "key", timestamp_seconds($"_2") as "time")
       .withWatermark("Time", "10 seconds")
 
-    val result3 = inputData.toDS()
+    val result3 = inputData
+      .toDS()
       .select($"value".as("key"))
       // there are two streams which one stream only defines the watermark. the stream which
       // contains dropDuplicatesWithinWatermark does not define the watermark, which is not
@@ -84,7 +91,8 @@ class StreamingDeduplicationWithinWatermarkSuite extends StateStoreMetricsTest
 
   test("deduplicate with all columns with event time column in DataFrame") {
     val inputData = MemoryStream[Int]
-    val result = inputData.toDS()
+    val result = inputData
+      .toDS()
       .withColumn("eventTime", timestamp_seconds($"value"))
       .withWatermark("eventTime", "10 seconds")
       .dropDuplicatesWithinWatermark()
@@ -101,7 +109,6 @@ class StreamingDeduplicationWithinWatermarkSuite extends StateStoreMetricsTest
       // 13 to 15 are duplicated
       CheckNewAnswer(16, 17),
       assertNumStateRows(total = 8, updated = 2),
-
       AddData(inputData, 5), // Should not emit anything as data less than watermark
       CheckNewAnswer(),
       assertNumStateRows(total = 8, updated = 0, droppedByWatermark = 1),
@@ -114,13 +121,13 @@ class StreamingDeduplicationWithinWatermarkSuite extends StateStoreMetricsTest
       // Advance watermark to 45 seconds, no-data-batch drops state rows having expired time <= 45
       AddData(inputData, 55),
       CheckNewAnswer(55),
-      assertNumStateRows(total = 1, updated = 1)
-    )
+      assertNumStateRows(total = 1, updated = 1))
   }
 
   test("deduplicate with subset of columns which event time column is not in subset") {
     val inputData = MemoryStream[(String, Int)]
-    val result = inputData.toDS()
+    val result = inputData
+      .toDS()
       .withColumn("eventTime", timestamp_seconds($"_2"))
       .withWatermark("eventTime", "2 seconds")
       .dropDuplicatesWithinWatermark("_1")
@@ -160,14 +167,14 @@ class StreamingDeduplicationWithinWatermarkSuite extends StateStoreMetricsTest
       // Advances watermark to 23. no-data batch drops state row ("a" -> 23), ("c" -> 23)
       AddData(inputData, "d" -> 25),
       CheckNewAnswer("d" -> 25),
-      assertNumStateRows(total = 2, updated = 1)
-    )
+      assertNumStateRows(total = 2, updated = 1))
   }
 
   test("SPARK-39650: duplicate with specific keys should allow input to change schema") {
     withTempDir { checkpoint =>
       val dedupeInputData = MemoryStream[(String, Int)]
-      val dedupe = dedupeInputData.toDS()
+      val dedupe = dedupeInputData
+        .toDS()
         .withColumn("eventTime", timestamp_seconds($"_2"))
         .withWatermark("eventTime", "10 second")
         .dropDuplicatesWithinWatermark("_1")
@@ -175,16 +182,14 @@ class StreamingDeduplicationWithinWatermarkSuite extends StateStoreMetricsTest
 
       testStream(dedupe, Append)(
         StartStream(checkpointLocation = checkpoint.getCanonicalPath),
-
         AddData(dedupeInputData, "a" -> 1),
         CheckNewAnswer("a" -> 1),
-
         AddData(dedupeInputData, "a" -> 2, "b" -> 3),
-        CheckNewAnswer("b" -> 3)
-      )
+        CheckNewAnswer("b" -> 3))
 
       val dedupeInputData2 = MemoryStream[(String, Int, String)]
-      val dedupe2 = dedupeInputData2.toDS()
+      val dedupe2 = dedupeInputData2
+        .toDS()
         .withColumn("eventTime", timestamp_seconds($"_2"))
         .withWatermark("eventTime", "10 second")
         .dropDuplicatesWithinWatermark(Seq("_1"))
@@ -196,17 +201,16 @@ class StreamingDeduplicationWithinWatermarkSuite extends StateStoreMetricsTest
 
       testStream(dedupe2, Append)(
         StartStream(checkpointLocation = checkpoint.getCanonicalPath),
-
         AddData(dedupeInputData2, ("a", 5, "a"), ("b", 2, "b"), ("c", 9, "c")),
-        CheckNewAnswer(("c", 9, "c"))
-      )
+        CheckNewAnswer(("c", 9, "c")))
     }
   }
 
   test("SPARK-46676: canonicalization of StreamingDeduplicateWithinWatermarkExec should work") {
     withTempDir { checkpoint =>
       val dedupeInputData = MemoryStream[(String, Int)]
-      val dedupe = dedupeInputData.toDS()
+      val dedupe = dedupeInputData
+        .toDS()
         .withColumn("eventTime", timestamp_seconds($"_2"))
         .withWatermark("eventTime", "10 second")
         .dropDuplicatesWithinWatermark("_1")
@@ -219,28 +223,26 @@ class StreamingDeduplicationWithinWatermarkSuite extends StateStoreMetricsTest
         Execute { q =>
           // This threw out error before SPARK-46676.
           q.lastExecution.executedPlan.canonicalized
-        }
-      )
+        })
     }
   }
 
   test("SPARK-50492: drop event time column after dropDuplicatesWithinWatermark") {
     val inputData = MemoryStream[(Int, Int)]
-    val result = inputData.toDS()
+    val result = inputData
+      .toDS()
       .withColumn("first", timestamp_seconds($"_1"))
       .withWatermark("first", "10 seconds")
       .dropDuplicatesWithinWatermark("_2")
       .select("_2")
 
-    testStream(result, Append)(
-      AddData(inputData, (1, 2)),
-      CheckAnswer(2)
-    )
+    testStream(result, Append)(AddData(inputData, (1, 2)), CheckAnswer(2))
   }
 
   test("Partition key extraction - DedupeWithinWatermark") {
     val df = (input: Dataset[(String, Int)]) => {
-      input.withColumn("eventTime", timestamp_seconds($"_2"))
+      input
+        .withColumn("eventTime", timestamp_seconds($"_2"))
         .withWatermark("eventTime", "10 seconds")
         .dropDuplicatesWithinWatermark("_1")
         .select($"_1", $"eventTime".cast("long").as[Long])
@@ -254,7 +256,6 @@ class StreamingDeduplicationWithinWatermarkSuite extends StateStoreMetricsTest
       keySchema = new StructType().add("_1", StringType),
       // Value schema includes the expiration time
       valueSchema = new StructType().add("expiresAtMicros", LongType),
-      sqlConf = spark.sessionState.conf
-    )
+      sqlConf = spark.sessionState.conf)
   }
 }

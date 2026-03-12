@@ -143,12 +143,14 @@ class CompactibleFileStreamLogSuite extends SharedSparkSession {
             |"entry_2"
             |"entry_3"""".stripMargin
         val expected = Array("entry_1", "entry_2", "entry_3")
-        assert(expected ===
-          compactibleLog.deserialize(new ByteArrayInputStream(logs.getBytes(UTF_8))))
+        assert(
+          expected ===
+            compactibleLog.deserialize(new ByteArrayInputStream(logs.getBytes(UTF_8))))
 
-        assert(Nil ===
-          compactibleLog.deserialize(
-            new ByteArrayInputStream(s"v${FakeCompactibleFileStreamLog.VERSION}".getBytes(UTF_8))))
+        assert(
+          Nil ===
+            compactibleLog.deserialize(new ByteArrayInputStream(
+              s"v${FakeCompactibleFileStreamLog.VERSION}".getBytes(UTF_8))))
       })
   }
 
@@ -157,9 +159,10 @@ class CompactibleFileStreamLogSuite extends SharedSparkSession {
       def newFakeCompactibleFileStreamLog(version: Int): FakeCompactibleFileStreamLog =
         new FakeCompactibleFileStreamLog(
           version,
-          _fileCleanupDelayMs = Long.MaxValue, // this param does not matter here in this test case
-          _defaultCompactInterval = 3,         // this param does not matter here in this test case
-          _defaultMinBatchesToRetain = 1,      // this param does not matter here in this test case
+          _fileCleanupDelayMs =
+            Long.MaxValue, // this param does not matter here in this test case
+          _defaultCompactInterval = 3, // this param does not matter here in this test case
+          _defaultMinBatchesToRetain = 1, // this param does not matter here in this test case
           spark,
           dir.getCanonicalPath)
 
@@ -171,9 +174,9 @@ class CompactibleFileStreamLogSuite extends SharedSparkSession {
       }
       Seq(
         "maximum supported log version is v1, but encountered v2",
-        "produced by a newer version of Spark and cannot be read by this version"
-      ).foreach { message =>
-        assert(e.getMessage.contains(message))
+        "produced by a newer version of Spark and cannot be read by this version").foreach {
+        message =>
+          assert(e.getMessage.contains(message))
       }
     }
   }
@@ -206,14 +209,17 @@ class CompactibleFileStreamLogSuite extends SharedSparkSession {
         val fs = compactibleLog.metadataPath.getFileSystem(spark.sessionState.newHadoopConf())
 
         def listBatchFiles(): Set[String] = {
-          fs.listStatus(compactibleLog.metadataPath).map(_.getPath.getName).filter { fileName =>
-            try {
-              getBatchIdFromFileName(fileName)
-              true
-            } catch {
-              case _: NumberFormatException => false
+          fs.listStatus(compactibleLog.metadataPath)
+            .map(_.getPath.getName)
+            .filter { fileName =>
+              try {
+                getBatchIdFromFileName(fileName)
+                true
+              } catch {
+                case _: NumberFormatException => false
+              }
             }
-          }.toSet
+            .toSet
         }
 
         compactibleLog.add(0, Array("some_path_0"))
@@ -308,11 +314,10 @@ class CompactibleFileStreamLogSuite extends SharedSparkSession {
   }
 
   private def withFakeCompactibleFileStreamLog(
-    fileCleanupDelayMs: Long,
-    defaultCompactInterval: Int,
-    defaultMinBatchesToRetain: Int,
-    f: FakeCompactibleFileStreamLog => Unit
-  ): Unit = {
+      fileCleanupDelayMs: Long,
+      defaultCompactInterval: Int,
+      defaultMinBatchesToRetain: Int,
+      f: FakeCompactibleFileStreamLog => Unit): Unit = {
     withTempDir { file =>
       val compactibleLog = new FakeCompactibleFileStreamLog(
         FakeCompactibleFileStreamLog.VERSION,
@@ -337,11 +342,7 @@ class FakeCompactibleFileStreamLog(
     _defaultMinBatchesToRetain: Int,
     sparkSession: SparkSession,
     path: String)
-  extends CompactibleFileStreamLog[String](
-    metadataLogVersion,
-    sparkSession,
-    path
-  ) {
+    extends CompactibleFileStreamLog[String](metadataLogVersion, sparkSession, path) {
 
   override protected def fileCleanupDelayMs: Long = _fileCleanupDelayMs
 

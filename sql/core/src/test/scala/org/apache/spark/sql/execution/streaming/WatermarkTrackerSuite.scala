@@ -36,15 +36,18 @@ class WatermarkTrackerSuite extends StreamTest {
     val inputStream2 = MemoryStream[Int]
     val inputStream3 = MemoryStream[Int]
 
-    val df1 = inputStream1.toDF()
+    val df1 = inputStream1
+      .toDF()
       .withColumn("eventTime", timestamp_seconds($"value"))
       .withWatermark("eventTime", "10 seconds")
 
-    val df2 = inputStream2.toDF()
+    val df2 = inputStream2
+      .toDF()
       .withColumn("eventTime", timestamp_seconds($"value"))
       .withWatermark("eventTime", "20 seconds")
 
-    val df3 = inputStream3.toDF()
+    val df3 = inputStream3
+      .toDF()
       .withColumn("eventTime", timestamp_seconds($"value"))
       .withWatermark("eventTime", "30 seconds")
 
@@ -52,11 +55,7 @@ class WatermarkTrackerSuite extends StreamTest {
 
     testStream(union)(
       // just to ensure that executedPlan has watermark nodes for every stream.
-      MultiAddData(
-        (inputStream1, Seq(0)),
-        (inputStream2, Seq(0)),
-        (inputStream3, Seq(0))
-      ),
+      MultiAddData((inputStream1, Seq(0)), (inputStream2, Seq(0)), (inputStream3, Seq(0))),
       ProcessAllAvailable(),
       Execute { q =>
         val initialPlan = q.logicalPlan
@@ -65,12 +64,12 @@ class WatermarkTrackerSuite extends StreamTest {
         val tracker = WatermarkTracker(spark.conf, initialPlan)
         tracker.setWatermark(5)
 
-        val delayMsToNodeId = executedPlan.collect {
-          case e: EventTimeWatermarkExec => e.delayMs -> e.nodeId
+        val delayMsToNodeId = executedPlan.collect { case e: EventTimeWatermarkExec =>
+          e.delayMs -> e.nodeId
         }.toMap
 
-        def setupScenario(
-            data: Map[Long, Seq[Long]])(fnToPruneSubtree: UnionExec => UnionExec): SparkPlan = {
+        def setupScenario(data: Map[Long, Seq[Long]])(
+            fnToPruneSubtree: UnionExec => UnionExec): SparkPlan = {
           val eventTimeStatsMap = new mutable.HashMap[Long, EventTimeStatsAccum]()
           executedPlan.foreach {
             case e: EventTimeWatermarkExec =>
@@ -86,16 +85,17 @@ class WatermarkTrackerSuite extends StreamTest {
             }
           }
 
-          executedPlan.transform {
-            case e: UnionExec => fnToPruneSubtree(e)
+          executedPlan.transform { case e: UnionExec =>
+            fnToPruneSubtree(e)
           }
         }
 
         def verifyWatermarkMap(expectation: Map[UUID, Option[Long]]): Unit = {
           expectation.foreach { case (nodeId, watermarkValue) =>
-            assert(tracker.watermarkMap(nodeId) === watermarkValue,
-            s"Watermark value for nodeId $nodeId is ${tracker.watermarkMap(nodeId)}, where " +
-              s"we expect $watermarkValue")
+            assert(
+              tracker.watermarkMap(nodeId) === watermarkValue,
+              s"Watermark value for nodeId $nodeId is ${tracker.watermarkMap(nodeId)}, where " +
+                s"we expect $watermarkValue")
           }
         }
 
@@ -119,9 +119,7 @@ class WatermarkTrackerSuite extends StreamTest {
             // watermark value for this node: 42 - 20 = 22
             20000L -> Seq(40000L, 41000L, 42000L),
             // watermark value for this node: 62 - 30 = 32
-            30000L -> Seq(60000L, 61000L, 62000L)
-          )
-        ) { unionExec =>
+            30000L -> Seq(60000L, 61000L, 62000L))) { unionExec =>
           // drop the subtree which has watermark node having delay 10 seconds
           unionExec.copy(unionExec.children.drop(1))
         }
@@ -135,8 +133,7 @@ class WatermarkTrackerSuite extends StreamTest {
           Map(
             delayMsToNodeId(10000L) -> None,
             delayMsToNodeId(20000L) -> Some(22000L),
-            delayMsToNodeId(30000L) -> Some(32000L))
-        )
+            delayMsToNodeId(30000L) -> Some(32000L)))
 
         // NOTE: Before SPARK-50046, the above verification failed and the below verification works.
         // WatermarkTracker can't track the dropped node, hence it advances the watermark from the
@@ -163,9 +160,7 @@ class WatermarkTrackerSuite extends StreamTest {
             // watermark value for this node: 72 - 20 = 52
             20000L -> Seq(70000L, 71000L, 72000L),
             // watermark value for this node: 92 - 30 = 62
-            30000L -> Seq(90000L, 91000L, 92000L)
-          )
-        ) { unionExec =>
+            30000L -> Seq(90000L, 91000L, 92000L))) { unionExec =>
           // only take the middle of the subtree, dropping remaining
           unionExec.copy(Seq(unionExec.children(1)))
         }
@@ -180,9 +175,7 @@ class WatermarkTrackerSuite extends StreamTest {
           Map(
             delayMsToNodeId(10000L) -> None,
             delayMsToNodeId(20000L) -> Some(52000L),
-            delayMsToNodeId(30000L) -> Some(32000L))
-        )
-      }
-    )
+            delayMsToNodeId(30000L) -> Some(32000L)))
+      })
   }
 }

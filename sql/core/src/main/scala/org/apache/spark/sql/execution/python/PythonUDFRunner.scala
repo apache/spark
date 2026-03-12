@@ -37,8 +37,12 @@ abstract class BasePythonUDFRunner(
     pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
     sessionUUID: Option[String])
-  extends BasePythonRunner[Array[Byte], Array[Byte]](
-    funcs.map(_._1), evalType, argOffsets, jobArtifactUUID, pythonMetrics) {
+    extends BasePythonRunner[Array[Byte], Array[Byte]](
+      funcs.map(_._1),
+      evalType,
+      argOffsets,
+      jobArtifactUUID,
+      pythonMetrics) {
 
   override val envVars: util.Map[String, String] = {
     val envVars = new util.HashMap(funcs.head._1.funcs.head.envVars)
@@ -49,14 +53,13 @@ abstract class BasePythonUDFRunner(
   }
 
   override def runnerConf: Map[String, String] = {
-    super.runnerConf ++ SQLConf.get.pythonUDFProfiler.map(p =>
-      Map(SQLConf.PYTHON_UDF_PROFILER.key -> p)
-    ).getOrElse(Map.empty)
+    super.runnerConf ++ SQLConf.get.pythonUDFProfiler
+      .map(p => Map(SQLConf.PYTHON_UDF_PROFILER.key -> p))
+      .getOrElse(Map.empty)
   }
 
   override val pythonExec: String =
-    SQLConf.get.pysparkWorkerPythonExecutable.getOrElse(
-      funcs.head._1.funcs.head.pythonExec)
+    SQLConf.get.pysparkWorkerPythonExecutable.getOrElse(funcs.head._1.funcs.head.pythonExec)
 
   override val hideTraceback: Boolean = SQLConf.get.pysparkHideTraceback
   override val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
@@ -110,8 +113,7 @@ abstract class BasePythonUDFRunner(
       pid: Option[Int],
       releasedOrClosed: AtomicBoolean,
       context: TaskContext): Iterator[Array[Byte]] = {
-    new ReaderIterator(
-      stream, writer, startTime, env, worker, pid, releasedOrClosed, context) {
+    new ReaderIterator(stream, writer, startTime, env, worker, pid, releasedOrClosed, context) {
 
       protected override def read(): Array[Byte] = {
         if (writer.exception.isDefined) {
@@ -147,8 +149,13 @@ class PythonUDFRunner(
     pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
     sessionUUID: Option[String])
-  extends BasePythonUDFRunner(funcs, evalType, argOffsets, pythonMetrics,
-    jobArtifactUUID, sessionUUID) {
+    extends BasePythonUDFRunner(
+      funcs,
+      evalType,
+      argOffsets,
+      pythonMetrics,
+      jobArtifactUUID,
+      sessionUUID) {
 
   override protected def writeUDF(dataOut: DataOutputStream): Unit = {
     PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets)
@@ -162,9 +169,13 @@ class PythonUDFWithNamedArgumentsRunner(
     pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
     sessionUUID: Option[String])
-  extends BasePythonUDFRunner(
-    funcs, evalType, argMetas.map(_.map(_.offset)), pythonMetrics,
-    jobArtifactUUID, sessionUUID) {
+    extends BasePythonUDFRunner(
+      funcs,
+      evalType,
+      argMetas.map(_.map(_.offset)),
+      pythonMetrics,
+      jobArtifactUUID,
+      sessionUUID) {
 
   override protected def writeUDF(dataOut: DataOutputStream): Unit = {
     PythonUDFRunner.writeUDFs(dataOut, funcs, argMetas)
@@ -187,16 +198,15 @@ object PythonUDFRunner {
     dataOut.writeInt(funcs.length)
     funcs.zip(argMetas).foreach { case ((chained, resultId), metas) =>
       dataOut.writeInt(metas.length)
-      metas.foreach {
-        case ArgumentMetadata(offset, name, _) =>
-          dataOut.writeInt(offset)
-          name match {
-            case Some(name) =>
-              dataOut.writeBoolean(true)
-              PythonWorkerUtils.writeUTF(name, dataOut)
-            case _ =>
-              dataOut.writeBoolean(false)
-          }
+      metas.foreach { case ArgumentMetadata(offset, name, _) =>
+        dataOut.writeInt(offset)
+        name match {
+          case Some(name) =>
+            dataOut.writeBoolean(true)
+            PythonWorkerUtils.writeUTF(name, dataOut)
+          case _ =>
+            dataOut.writeBoolean(false)
+        }
       }
       dataOut.writeInt(chained.funcs.length)
       chained.funcs.foreach { f =>

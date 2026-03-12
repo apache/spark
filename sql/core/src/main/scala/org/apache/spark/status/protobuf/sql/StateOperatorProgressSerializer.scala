@@ -43,8 +43,8 @@ private[protobuf] object StateOperatorProgressSerializer {
     builder.build()
   }
 
-  def deserializeToArray(
-      stateOperatorList: JList[StoreTypes.StateOperatorProgress]): Array[StateOperatorProgress] = {
+  def deserializeToArray(stateOperatorList: JList[StoreTypes.StateOperatorProgress])
+      : Array[StateOperatorProgress] = {
     val size = stateOperatorList.size()
     val result = new Array[StateOperatorProgress](size)
     var i = 0
@@ -70,7 +70,6 @@ private[protobuf] object StateOperatorProgressSerializer {
       numRowsDroppedByWatermark = stateOperator.getNumRowsDroppedByWatermark,
       numShufflePartitions = stateOperator.getNumShufflePartitions,
       numStateStoreInstances = stateOperator.getNumStateStoreInstances,
-      customMetrics = new JHashMap(stateOperator.getCustomMetricsMap)
-    )
+      customMetrics = new JHashMap(stateOperator.getCustomMetricsMap))
   }
 }

@@ -122,8 +122,8 @@ class SparkPlanSuite extends QueryTest with SharedSparkSession {
     val emptyResults = ColumnarOp(LocalTableScanExec(Nil, Nil, None)).toRowBased.executeCollect()
     assert(emptyResults.isEmpty)
 
-    val relation = LocalTableScanExec(
-      Seq(AttributeReference("val", IntegerType)()), Seq(InternalRow(1)), None)
+    val relation =
+      LocalTableScanExec(Seq(AttributeReference("val", IntegerType)()), Seq(InternalRow(1)), None)
     val nonEmpty = ColumnarOp(relation).toRowBased.executeCollect()
     assert(nonEmpty === relation.executeCollect())
   }
@@ -152,7 +152,8 @@ case class ColumnarOp(child: SparkPlan) extends UnaryExecNode {
   override val supportsColumnar: Boolean = true
   override protected def doExecuteColumnar(): RDD[ColumnarBatch] =
     RowToColumnarExec(child).executeColumnar()
-  override protected def doExecute(): RDD[InternalRow] = throw SparkUnsupportedOperationException()
+  override protected def doExecute(): RDD[InternalRow] =
+    throw SparkUnsupportedOperationException()
   override def output: Seq[Attribute] = child.output
   override protected def withNewChildInternal(newChild: SparkPlan): ColumnarOp =
     copy(child = newChild)

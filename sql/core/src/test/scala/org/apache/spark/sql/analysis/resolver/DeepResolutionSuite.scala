@@ -38,8 +38,7 @@ class DeepResolutionSuite extends QueryTest with SharedSparkSession {
 
   test("Binary arithmetic") {
     spark.sql(
-      generateSelectFromValues(50, projection = s"col1 + ${generateAdditions(3000)} + col2")
-    )
+      generateSelectFromValues(50, projection = s"col1 + ${generateAdditions(3000)} + col2"))
   }
 
   private def generateUnions(numberOfUnions: Int, selectClause: String) = {

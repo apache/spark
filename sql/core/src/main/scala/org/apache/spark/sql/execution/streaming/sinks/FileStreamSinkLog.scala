@@ -29,13 +29,20 @@ import org.apache.spark.sql.internal.SQLConf
  * The status of a file outputted by [[FileStreamSink]]. A file is visible only if it appears in
  * the sink log and its action is not "delete".
  *
- * @param path the file path as a uri-encoded string.
- * @param size the file size.
- * @param isDir whether this file is a directory.
- * @param modificationTime the file last modification time.
- * @param blockReplication the block replication.
- * @param blockSize the block size.
- * @param action the file action. Must be either "add" or "delete".
+ * @param path
+ *   the file path as a uri-encoded string.
+ * @param size
+ *   the file size.
+ * @param isDir
+ *   whether this file is a directory.
+ * @param modificationTime
+ *   the file last modification time.
+ * @param blockReplication
+ *   the block replication.
+ * @param blockSize
+ *   the block size.
+ * @param action
+ *   the file action. Must be either "add" or "delete".
  */
 case class SinkFileStatus(
     path: String,
@@ -79,25 +86,27 @@ object SinkFileStatus {
  * As reading from many small files is usually pretty slow, [[FileStreamSinkLog]] will compact log
  * files every "spark.sql.sink.file.log.compactLen" batches into a big file. When doing a
  * compaction, it will read all old log files and merge them with the new batch. During the
- * compaction, it will also delete the files that are deleted (marked by [[SinkFileStatus.action]]).
- * When the reader uses `allFiles` to list all files, this method only returns the visible files
- * (drops the deleted files).
+ * compaction, it will also delete the files that are deleted (marked by
+ * [[SinkFileStatus.action]]). When the reader uses `allFiles` to list all files, this method only
+ * returns the visible files (drops the deleted files).
  */
 class FileStreamSinkLog(
     metadataLogVersion: Int,
     sparkSession: SparkSession,
     path: String,
     _retentionMs: Option[Long] = None)
-  extends CompactibleFileStreamLog[SinkFileStatus](metadataLogVersion, sparkSession, path) {
+    extends CompactibleFileStreamLog[SinkFileStatus](metadataLogVersion, sparkSession, path) {
 
-  protected override val fileCleanupDelayMs = sparkSession.sessionState.conf.fileSinkLogCleanupDelay
+  protected override val fileCleanupDelayMs =
+    sparkSession.sessionState.conf.fileSinkLogCleanupDelay
 
   protected override val isDeletingExpiredLog = sparkSession.sessionState.conf.fileSinkLogDeletion
 
   protected override val defaultCompactInterval =
     sparkSession.sessionState.conf.fileSinkLogCompactInterval
 
-  require(defaultCompactInterval > 0,
+  require(
+    defaultCompactInterval > 0,
     s"Please set ${SQLConf.FILE_SINK_LOG_COMPACT_INTERVAL.key} (was $defaultCompactInterval) " +
       "to a positive value.")
 
@@ -112,8 +121,9 @@ class FileStreamSinkLog(
   override def shouldRetain(log: SinkFileStatus, currentTime: Long): Boolean = {
     if (retentionMs < Long.MaxValue) {
       if (currentTime - log.modificationTime > retentionMs) {
-        logDebug(s"${log.path} excluded by retention - current time: $currentTime / " +
-          s"modification time: ${log.modificationTime} / retention: $retentionMs ms.")
+        logDebug(
+          s"${log.path} excluded by retention - current time: $currentTime / " +
+            s"modification time: ${log.modificationTime} / retention: $retentionMs ms.")
         false
       } else {
         true

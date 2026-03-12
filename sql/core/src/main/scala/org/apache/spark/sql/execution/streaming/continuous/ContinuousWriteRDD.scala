@@ -36,8 +36,11 @@ import org.apache.spark.util.Utils
  *
  * We keep repeating prev.compute() and writing new epochs until the query is shut down.
  */
-class ContinuousWriteRDD(var prev: RDD[InternalRow], writerFactory: StreamingDataWriterFactory,
-    customMetrics: Map[String, SQLMetric]) extends RDD[Unit](prev) {
+class ContinuousWriteRDD(
+    var prev: RDD[InternalRow],
+    writerFactory: StreamingDataWriterFactory,
+    customMetrics: Map[String, SQLMetric])
+    extends RDD[Unit](prev) {
 
   override val partitioner = prev.partitioner
 
@@ -63,40 +66,44 @@ class ContinuousWriteRDD(var prev: RDD[InternalRow], writerFactory: StreamingDat
           while (dataIterator.hasNext) {
             if (count % CustomMetrics.NUM_ROWS_PER_UPDATE == 0) {
               CustomMetrics.updateMetrics(
-                dataWriter.currentMetricsValues.toImmutableArraySeq, customMetrics)
+                dataWriter.currentMetricsValues.toImmutableArraySeq,
+                customMetrics)
             }
             count += 1
             dataWriter.write(dataIterator.next())
           }
           CustomMetrics.updateMetrics(
-            dataWriter.currentMetricsValues.toImmutableArraySeq, customMetrics)
-          logInfo(log"Writer for partition ${MDC(PARTITION_ID, context.partitionId())} " +
-            log"in epoch ${MDC(EPOCH, EpochTracker.getCurrentEpoch.get)} is committing.")
+            dataWriter.currentMetricsValues.toImmutableArraySeq,
+            customMetrics)
+          logInfo(
+            log"Writer for partition ${MDC(PARTITION_ID, context.partitionId())} " +
+              log"in epoch ${MDC(EPOCH, EpochTracker.getCurrentEpoch.get)} is committing.")
           val msg = dataWriter.commit()
           epochCoordinator.send(
-            CommitPartitionEpoch(
-              context.partitionId(),
-              EpochTracker.getCurrentEpoch.get,
-              msg)
-          )
-          logInfo(log"Writer for partition ${MDC(PARTITION_ID, context.partitionId())} " +
-            log"in epoch ${MDC(EPOCH, EpochTracker.getCurrentEpoch.get)} committed.")
+            CommitPartitionEpoch(context.partitionId(), EpochTracker.getCurrentEpoch.get, msg))
+          logInfo(
+            log"Writer for partition ${MDC(PARTITION_ID, context.partitionId())} " +
+              log"in epoch ${MDC(EPOCH, EpochTracker.getCurrentEpoch.get)} committed.")
           EpochTracker.incrementCurrentEpoch()
         } catch {
           case _: InterruptedException =>
           // Continuous shutdown always involves an interrupt. Just finish the task.
         }
-      })(catchBlock = {
-        // If there is an error, abort this writer. We enter this callback in the middle of
-        // rethrowing an exception, so compute() will stop executing at this point.
-        logError(log"Writer for partition ${MDC(LogKeys.PARTITION_ID, context.partitionId())} " +
-          log"is aborting.")
-        if (dataWriter != null) dataWriter.abort()
-        logError(log"Writer for partition ${MDC(LogKeys.PARTITION_ID, context.partitionId())} " +
-          log"aborted.")
-      }, finallyBlock = {
-        if (dataWriter != null) dataWriter.close()
-      })
+      })(
+        catchBlock = {
+          // If there is an error, abort this writer. We enter this callback in the middle of
+          // rethrowing an exception, so compute() will stop executing at this point.
+          logError(
+            log"Writer for partition ${MDC(LogKeys.PARTITION_ID, context.partitionId())} " +
+              log"is aborting.")
+          if (dataWriter != null) dataWriter.abort()
+          logError(
+            log"Writer for partition ${MDC(LogKeys.PARTITION_ID, context.partitionId())} " +
+              log"aborted.")
+        },
+        finallyBlock = {
+          if (dataWriter != null) dataWriter.close()
+        })
     }
 
     Iterator()

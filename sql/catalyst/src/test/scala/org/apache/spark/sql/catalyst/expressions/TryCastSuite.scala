@@ -37,14 +37,14 @@ class TryCastSuite extends CastWithAnsiOnSuite {
     }
   }
 
-  override def checkExceptionInExpression[T <: Throwable : ClassTag](
+  override def checkExceptionInExpression[T <: Throwable: ClassTag](
       expression: => Expression,
       inputRow: InternalRow,
       expectedErrMsg: String): Unit = {
     checkEvaluation(expression, null, inputRow)
   }
 
-  override def checkErrorInExpression[T <: SparkThrowable : ClassTag](
+  override def checkErrorInExpression[T <: SparkThrowable: ClassTag](
       expression: => Expression,
       inputRow: InternalRow,
       condition: String,
@@ -56,8 +56,11 @@ class TryCastSuite extends CastWithAnsiOnSuite {
     checkEvaluation(cast(l, to), tryCastResult, InternalRow(l.value))
   }
 
-  override def checkCastToNumericError(l: Literal, to: DataType,
-      expectedDataTypeInErrorMsg: DataType, tryCastResult: Any): Unit = {
+  override def checkCastToNumericError(
+      l: Literal,
+      to: DataType,
+      expectedDataTypeInErrorMsg: DataType,
+      tryCastResult: Any): Unit = {
     checkEvaluation(cast(l, to), tryCastResult, InternalRow(l.value))
   }
 
@@ -87,13 +90,13 @@ class TryCastSuite extends CastWithAnsiOnSuite {
   }
 
   test("element type nullability") {
-    val array = Literal.create(Seq("123", "true"),
-      ArrayType(StringType, containsNull = false))
+    val array = Literal.create(Seq("123", "true"), ArrayType(StringType, containsNull = false))
     // array element can be null after try_cast which violates the target type.
     val c1 = cast(array, ArrayType(BooleanType, containsNull = false))
     assert(!c1.resolved)
 
-    val map = Literal.create(Map("a" -> "123", "b" -> "true"),
+    val map = Literal.create(
+      Map("a" -> "123", "b" -> "true"),
       MapType(StringType, StringType, valueContainsNull = false))
     // key can be null after try_cast which violates the map key requirement.
     val c2 = cast(map, MapType(IntegerType, StringType, valueContainsNull = true))
@@ -103,16 +106,16 @@ class TryCastSuite extends CastWithAnsiOnSuite {
     assert(!c3.resolved)
 
     val struct = Literal.create(
-      InternalRow(
-        UTF8String.fromString("123"),
-        UTF8String.fromString("true")),
+      InternalRow(UTF8String.fromString("123"), UTF8String.fromString("true")),
       new StructType()
         .add("a", StringType, nullable = true)
         .add("b", StringType, nullable = true))
     // struct field `b` can be null after try_cast which violates the target type.
-    val c4 = cast(struct, new StructType()
-      .add("a", BooleanType, nullable = true)
-      .add("b", BooleanType, nullable = false))
+    val c4 = cast(
+      struct,
+      new StructType()
+        .add("a", BooleanType, nullable = true)
+        .add("b", BooleanType, nullable = false))
     assert(!c4.resolved)
   }
 }

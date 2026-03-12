@@ -24,7 +24,8 @@ import org.apache.spark.sql.types.{AbstractDataType, DataType, DoubleType, Numer
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(y, x) - Returns the number of non-null number pairs in a group, where `y` is the dependent variable and `x` is the independent variable.",
+  usage =
+    "_FUNC_(y, x) - Returns the number of non-null number pairs in a group, where `y` is the dependent variable and `x` is the independent variable.",
   examples = """
     Examples:
       > SELECT _FUNC_(y, x) FROM VALUES (1, 2), (2, 2), (2, 3), (2, 4) AS tab(y, x);
@@ -42,21 +43,23 @@ import org.apache.spark.sql.types.{AbstractDataType, DataType, DoubleType, Numer
   since = "3.3.0")
 // scalastyle:on line.size.limit
 case class RegrCount(left: Expression, right: Expression)
-  extends AggregateFunction
-  with RuntimeReplaceableAggregate
-  with ImplicitCastInputTypes
-  with BinaryLike[Expression] {
+    extends AggregateFunction
+    with RuntimeReplaceableAggregate
+    with ImplicitCastInputTypes
+    with BinaryLike[Expression] {
   override lazy val replacement: Expression = Count(Seq(left, right))
   override def nodeName: String = "regr_count"
   override def inputTypes: Seq[AbstractDataType] = Seq(NumericType, NumericType)
   override protected def withNewChildrenInternal(
-      newLeft: Expression, newRight: Expression): RegrCount =
+      newLeft: Expression,
+      newRight: Expression): RegrCount =
     this.copy(left = newLeft, right = newRight)
 }
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(y, x) - Returns the average of the independent variable for non-null pairs in a group, where `y` is the dependent variable and `x` is the independent variable.",
+  usage =
+    "_FUNC_(y, x) - Returns the average of the independent variable for non-null pairs in a group, where `y` is the dependent variable and `x` is the independent variable.",
   examples = """
     Examples:
       > SELECT _FUNC_(y, x) FROM VALUES (1, 2), (2, 2), (2, 3), (2, 4) AS tab(y, x);
@@ -73,25 +76,26 @@ case class RegrCount(left: Expression, right: Expression)
   group = "agg_funcs",
   since = "3.3.0")
 // scalastyle:on line.size.limit
-case class RegrAvgX(
-    left: Expression,
-    right: Expression)
-  extends AggregateFunction
-  with RuntimeReplaceableAggregate
-  with ImplicitCastInputTypes
-  with BinaryLike[Expression] {
+case class RegrAvgX(left: Expression, right: Expression)
+    extends AggregateFunction
+    with RuntimeReplaceableAggregate
+    with ImplicitCastInputTypes
+    with BinaryLike[Expression] {
   override lazy val replacement: Expression =
-    Average(If(And(IsNotNull(left), IsNotNull(right)), right, Literal.create(null, right.dataType)))
+    Average(
+      If(And(IsNotNull(left), IsNotNull(right)), right, Literal.create(null, right.dataType)))
   override def nodeName: String = "regr_avgx"
   override def inputTypes: Seq[AbstractDataType] = Seq(NumericType, NumericType)
   override protected def withNewChildrenInternal(
-      newLeft: Expression, newRight: Expression): RegrAvgX =
+      newLeft: Expression,
+      newRight: Expression): RegrAvgX =
     this.copy(left = newLeft, right = newRight)
 }
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(y, x) - Returns the average of the dependent variable for non-null pairs in a group, where `y` is the dependent variable and `x` is the independent variable.",
+  usage =
+    "_FUNC_(y, x) - Returns the average of the dependent variable for non-null pairs in a group, where `y` is the dependent variable and `x` is the independent variable.",
   examples = """
     Examples:
       > SELECT _FUNC_(y, x) FROM VALUES (1, 2), (2, 2), (2, 3), (2, 4) AS tab(y, x);
@@ -108,25 +112,25 @@ case class RegrAvgX(
   group = "agg_funcs",
   since = "3.3.0")
 // scalastyle:on line.size.limit
-case class RegrAvgY(
-    left: Expression,
-    right: Expression)
-  extends AggregateFunction
-  with RuntimeReplaceableAggregate
-  with ImplicitCastInputTypes
-  with BinaryLike[Expression] {
+case class RegrAvgY(left: Expression, right: Expression)
+    extends AggregateFunction
+    with RuntimeReplaceableAggregate
+    with ImplicitCastInputTypes
+    with BinaryLike[Expression] {
   override lazy val replacement: Expression =
     Average(If(And(IsNotNull(left), IsNotNull(right)), left, Literal.create(null, left.dataType)))
   override def nodeName: String = "regr_avgy"
   override def inputTypes: Seq[AbstractDataType] = Seq(NumericType, NumericType)
   override protected def withNewChildrenInternal(
-      newLeft: Expression, newRight: Expression): RegrAvgY =
+      newLeft: Expression,
+      newRight: Expression): RegrAvgY =
     this.copy(left = newLeft, right = newRight)
 }
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(y, x) - Returns the coefficient of determination for non-null pairs in a group, where `y` is the dependent variable and `x` is the independent variable.",
+  usage =
+    "_FUNC_(y, x) - Returns the coefficient of determination for non-null pairs in a group, where `y` is the dependent variable and `x` is the independent variable.",
   examples = """
     Examples:
       > SELECT _FUNC_(y, x) FROM VALUES (1, 2), (2, 2), (2, 3), (2, 4) AS tab(y, x);
@@ -147,17 +151,21 @@ case class RegrR2(y: Expression, x: Expression) extends PearsonCorrelation(y, x,
   override def prettyName: String = "regr_r2"
   override val evaluateExpression: Expression = {
     val corr = ck / sqrt(xMk * yMk)
-    If(xMk === 0.0, Literal.create(null, DoubleType),
+    If(
+      xMk === 0.0,
+      Literal.create(null, DoubleType),
       If(yMk === 0.0, Literal.create(1.0, DoubleType), corr * corr))
   }
   override protected def withNewChildrenInternal(
-      newLeft: Expression, newRight: Expression): RegrR2 =
+      newLeft: Expression,
+      newRight: Expression): RegrR2 =
     this.copy(y = newLeft, x = newRight)
 }
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(y, x) - Returns REGR_COUNT(y, x) * VAR_POP(x) for non-null pairs in a group, where `y` is the dependent variable and `x` is the independent variable.",
+  usage =
+    "_FUNC_(y, x) - Returns REGR_COUNT(y, x) * VAR_POP(x) for non-null pairs in a group, where `y` is the dependent variable and `x` is the independent variable.",
   examples = """
     Examples:
       > SELECT _FUNC_(y, x) FROM VALUES (1, 2), (2, 2), (2, 3), (2, 4) AS tab(y, x);
@@ -174,10 +182,8 @@ case class RegrR2(y: Expression, x: Expression) extends PearsonCorrelation(y, x,
   group = "agg_funcs",
   since = "3.4.0")
 // scalastyle:on line.size.limit
-case class RegrSXX(
-    left: Expression,
-    right: Expression)
-  extends AggregateFunction
+case class RegrSXX(left: Expression, right: Expression)
+    extends AggregateFunction
     with RuntimeReplaceableAggregate
     with ImplicitCastInputTypes
     with BinaryLike[Expression] {
@@ -186,13 +192,15 @@ case class RegrSXX(
   override def nodeName: String = "regr_sxx"
   override def inputTypes: Seq[DoubleType] = Seq(DoubleType, DoubleType)
   override protected def withNewChildrenInternal(
-      newLeft: Expression, newRight: Expression): RegrSXX =
+      newLeft: Expression,
+      newRight: Expression): RegrSXX =
     this.copy(left = newLeft, right = newRight)
 }
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(y, x) - Returns REGR_COUNT(y, x) * COVAR_POP(y, x) for non-null pairs in a group, where `y` is the dependent variable and `x` is the independent variable.",
+  usage =
+    "_FUNC_(y, x) - Returns REGR_COUNT(y, x) * COVAR_POP(y, x) for non-null pairs in a group, where `y` is the dependent variable and `x` is the independent variable.",
   examples = """
     Examples:
       > SELECT _FUNC_(y, x) FROM VALUES (1, 2), (2, 2), (2, 3), (2, 4) AS tab(y, x);
@@ -215,13 +223,15 @@ case class RegrSXY(y: Expression, x: Expression) extends Covariance(y, x, true) 
     If(n === 0.0, Literal.create(null, DoubleType), ck)
   }
   override protected def withNewChildrenInternal(
-      newLeft: Expression, newRight: Expression): RegrSXY =
+      newLeft: Expression,
+      newRight: Expression): RegrSXY =
     this.copy(y = newLeft, x = newRight)
 }
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(y, x) - Returns REGR_COUNT(y, x) * VAR_POP(y) for non-null pairs in a group, where `y` is the dependent variable and `x` is the independent variable.",
+  usage =
+    "_FUNC_(y, x) - Returns REGR_COUNT(y, x) * VAR_POP(y) for non-null pairs in a group, where `y` is the dependent variable and `x` is the independent variable.",
   examples = """
     Examples:
       > SELECT _FUNC_(y, x) FROM VALUES (1, 2), (2, 2), (2, 3), (2, 4) AS tab(y, x);
@@ -238,10 +248,8 @@ case class RegrSXY(y: Expression, x: Expression) extends Covariance(y, x, true) 
   group = "agg_funcs",
   since = "3.4.0")
 // scalastyle:on line.size.limit
-case class RegrSYY(
-    left: Expression,
-    right: Expression)
-  extends AggregateFunction
+case class RegrSYY(left: Expression, right: Expression)
+    extends AggregateFunction
     with RuntimeReplaceableAggregate
     with ImplicitCastInputTypes
     with BinaryLike[Expression] {
@@ -250,13 +258,15 @@ case class RegrSYY(
   override def nodeName: String = "regr_syy"
   override def inputTypes: Seq[DoubleType] = Seq(DoubleType, DoubleType)
   override protected def withNewChildrenInternal(
-      newLeft: Expression, newRight: Expression): RegrSYY =
+      newLeft: Expression,
+      newRight: Expression): RegrSYY =
     this.copy(left = newLeft, right = newRight)
 }
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(y, x) - Returns the slope of the linear regression line for non-null pairs in a group, where `y` is the dependent variable and `x` is the independent variable.",
+  usage =
+    "_FUNC_(y, x) - Returns the slope of the linear regression line for non-null pairs in a group, where `y` is the dependent variable and `x` is the independent variable.",
   examples = """
     Examples:
       > SELECT _FUNC_(y, x) FROM VALUES (1, 1), (2, 2), (3, 3), (4, 4) AS tab(y, x);
@@ -273,8 +283,10 @@ case class RegrSYY(
   group = "agg_funcs",
   since = "3.4.0")
 // scalastyle:on line.size.limit
-case class RegrSlope(left: Expression, right: Expression) extends DeclarativeAggregate
-  with ImplicitCastInputTypes with BinaryLike[Expression] {
+case class RegrSlope(left: Expression, right: Expression)
+    extends DeclarativeAggregate
+    with ImplicitCastInputTypes
+    with BinaryLike[Expression] {
 
   private val covarPop = new CovPopulation(right, left)
 
@@ -289,7 +301,8 @@ case class RegrSlope(left: Expression, right: Expression) extends DeclarativeAgg
   override lazy val aggBufferAttributes: Seq[AttributeReference] =
     covarPop.aggBufferAttributes ++ varPop.aggBufferAttributes
 
-  override lazy val initialValues: Seq[Expression] = covarPop.initialValues ++ varPop.initialValues
+  override lazy val initialValues: Seq[Expression] =
+    covarPop.initialValues ++ varPop.initialValues
 
   override lazy val updateExpressions: Seq[Expression] = {
     // RegrSlope only handles pairs where both y and x are non-empty, so we need additional
@@ -313,13 +326,15 @@ case class RegrSlope(left: Expression, right: Expression) extends DeclarativeAgg
   override def prettyName: String = "regr_slope"
 
   override protected def withNewChildrenInternal(
-      newLeft: Expression, newRight: Expression): RegrSlope =
+      newLeft: Expression,
+      newRight: Expression): RegrSlope =
     copy(left = newLeft, right = newRight)
 }
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(y, x) - Returns the intercept of the univariate linear regression line for non-null pairs in a group, where `y` is the dependent variable and `x` is the independent variable.",
+  usage =
+    "_FUNC_(y, x) - Returns the intercept of the univariate linear regression line for non-null pairs in a group, where `y` is the dependent variable and `x` is the independent variable.",
   examples = """
     Examples:
       > SELECT _FUNC_(y, x) FROM VALUES (1, 1), (2, 2), (3, 3), (4, 4) AS tab(y, x);
@@ -336,8 +351,10 @@ case class RegrSlope(left: Expression, right: Expression) extends DeclarativeAgg
   group = "agg_funcs",
   since = "3.4.0")
 // scalastyle:on line.size.limit
-case class RegrIntercept(left: Expression, right: Expression) extends DeclarativeAggregate
-  with ImplicitCastInputTypes with BinaryLike[Expression] {
+case class RegrIntercept(left: Expression, right: Expression)
+    extends DeclarativeAggregate
+    with ImplicitCastInputTypes
+    with BinaryLike[Expression] {
 
   private val covarPop = new CovPopulation(right, left)
 
@@ -352,7 +369,8 @@ case class RegrIntercept(left: Expression, right: Expression) extends Declarativ
   override lazy val aggBufferAttributes: Seq[AttributeReference] =
     covarPop.aggBufferAttributes ++ varPop.aggBufferAttributes
 
-  override lazy val initialValues: Seq[Expression] = covarPop.initialValues ++ varPop.initialValues
+  override lazy val initialValues: Seq[Expression] =
+    covarPop.initialValues ++ varPop.initialValues
 
   override lazy val updateExpressions: Seq[Expression] = {
     // RegrIntercept only handles pairs where both y and x are non-empty, so we need additional
@@ -367,7 +385,9 @@ case class RegrIntercept(left: Expression, right: Expression) extends Declarativ
     covarPop.mergeExpressions ++ varPop.mergeExpressions
 
   override lazy val evaluateExpression: Expression = {
-    If(varPop.m2 === 0.0, Literal.create(null, DoubleType),
+    If(
+      varPop.m2 === 0.0,
+      Literal.create(null, DoubleType),
       covarPop.yAvg - covarPop.ck / varPop.m2 * covarPop.xAvg)
   }
 
@@ -377,6 +397,7 @@ case class RegrIntercept(left: Expression, right: Expression) extends Declarativ
   override def prettyName: String = "regr_intercept"
 
   override protected def withNewChildrenInternal(
-      newLeft: Expression, newRight: Expression): RegrIntercept =
+      newLeft: Expression,
+      newRight: Expression): RegrIntercept =
     copy(left = newLeft, right = newRight)
 }

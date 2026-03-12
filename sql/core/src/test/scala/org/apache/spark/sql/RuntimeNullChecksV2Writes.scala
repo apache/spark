@@ -75,8 +75,7 @@ class RuntimeNullChecksV2Writes extends QueryTest with SharedSparkSession {
 
   private def checkNotNullNestedStructArrayMap(byName: Boolean): Unit = {
     withTable("t") {
-      sql(
-        s"""CREATE TABLE t (
+      sql(s"""CREATE TABLE t (
            | i INT,
            | s STRUCT<
            |  ns: STRUCT<x: INT, y: INT> NOT NULL,
@@ -87,15 +86,13 @@ class RuntimeNullChecksV2Writes extends QueryTest with SharedSparkSession {
 
       val e1 = intercept[SparkRuntimeException] {
         if (byName) {
-          val inputDF = sql(
-            s"""SELECT
+          val inputDF = sql(s"""SELECT
                | 1 AS i,
                | named_struct('ns', null, 'arr', array(1), 'm', map(1, 1)) AS s
              """.stripMargin)
           inputDF.writeTo("t").append()
         } else {
-          sql(
-            s"""INSERT INTO t VALUES (
+          sql(s"""INSERT INTO t VALUES (
                | 1 AS i,
                | named_struct('ns', null, 'arr', array(1), 'm', map(1, 1)) AS s)
              """.stripMargin)
@@ -105,15 +102,13 @@ class RuntimeNullChecksV2Writes extends QueryTest with SharedSparkSession {
 
       val e2 = intercept[SparkRuntimeException] {
         if (byName) {
-          val inputDF = sql(
-            s"""SELECT
+          val inputDF = sql(s"""SELECT
                | 1 AS i,
                | named_struct('ns', named_struct('x', 1, 'y', 1), 'arr', null, 'm', map(1, 1)) AS s
            """.stripMargin)
           inputDF.writeTo("t").append()
         } else {
-          sql(
-            s"""INSERT INTO t VALUES (
+          sql(s"""INSERT INTO t VALUES (
                | 1 AS i,
                | named_struct('ns', named_struct('x', 1, 'y', 1), 'arr', null, 'm', map(1, 1)) AS s)
              """.stripMargin)
@@ -123,15 +118,13 @@ class RuntimeNullChecksV2Writes extends QueryTest with SharedSparkSession {
 
       val e3 = intercept[SparkRuntimeException] {
         if (byName) {
-          val inputDF = sql(
-            s"""SELECT
+          val inputDF = sql(s"""SELECT
                | 1 AS i,
                | named_struct('ns', named_struct('x', 1, 'y', 1), 'arr', array(1), 'm', null) AS s
            """.stripMargin)
           inputDF.writeTo("t").append()
         } else {
-          sql(
-            s"""INSERT INTO t VALUES (
+          sql(s"""INSERT INTO t VALUES (
                | 1 AS i,
                | named_struct('ns', named_struct('x', 1, 'y', 1), 'arr', array(1), 'm', null))
              """.stripMargin)
@@ -151,23 +144,20 @@ class RuntimeNullChecksV2Writes extends QueryTest with SharedSparkSession {
 
   private def checkNotNullNestedStructFields(byName: Boolean): Unit = {
     withTable("t") {
-      sql(
-        s"""CREATE TABLE t (
+      sql(s"""CREATE TABLE t (
            | i INT,
            | s STRUCT<ni: INT, ns: STRUCT<x: INT NOT NULL, y: INT>>)
            |USING $FORMAT
          """.stripMargin)
 
       if (byName) {
-        val inputDF = sql(
-          s"""SELECT
+        val inputDF = sql(s"""SELECT
              | 1 AS i,
              | named_struct('ni', 1, 'ns', null) AS s
            """.stripMargin)
         inputDF.writeTo("t").append()
       } else {
-        sql(
-          s"""INSERT INTO t VALUES (
+        sql(s"""INSERT INTO t VALUES (
              | 1 AS i,
              | named_struct('ni', 1, 'ns', null) AS s)
            """.stripMargin)
@@ -176,15 +166,13 @@ class RuntimeNullChecksV2Writes extends QueryTest with SharedSparkSession {
 
       val e = intercept[SparkRuntimeException] {
         if (byName) {
-          val inputDF = sql(
-            s"""SELECT
+          val inputDF = sql(s"""SELECT
                | 1 AS i,
                | named_struct('ni', 1, 'ns', named_struct('x', null, 'y', 1)) AS s
              """.stripMargin)
           inputDF.writeTo("t").append()
         } else {
-          sql(
-            s"""INSERT INTO t VALUES (
+          sql(s"""INSERT INTO t VALUES (
                | 1 AS i,
                | named_struct('ni', 1, 'ns', named_struct('x', null, 'y', 1)) AS s)
              """.stripMargin)
@@ -206,14 +194,13 @@ class RuntimeNullChecksV2Writes extends QueryTest with SharedSparkSession {
     withTable("t") {
       val structType = new StructType().add("x", "int").add("y", "int")
       val tableInfo = new TableInfo.Builder()
-        .withColumns(Array(
-          ColumnV2.create("i", IntegerType),
-          ColumnV2.create("arr", ArrayType(structType, containsNull = false))))
+        .withColumns(
+          Array(
+            ColumnV2.create("i", IntegerType),
+            ColumnV2.create("arr", ArrayType(structType, containsNull = false))))
         .build()
 
-      catalog.createTable(
-        ident = Identifier.of(Array(), "t"),
-        tableInfo = tableInfo)
+      catalog.createTable(ident = Identifier.of(Array(), "t"), tableInfo = tableInfo)
 
       if (byName) {
         val inputDF = sql("SELECT 1 AS i, null AS arr")
@@ -225,15 +212,13 @@ class RuntimeNullChecksV2Writes extends QueryTest with SharedSparkSession {
 
       val e = intercept[SparkRuntimeException] {
         if (byName) {
-          val inputDF = sql(
-            s"""SELECT
+          val inputDF = sql(s"""SELECT
                | 1 AS i,
                | array(null, named_struct('x', 1, 'y', 1)) AS arr
              """.stripMargin)
           inputDF.writeTo("t").append()
         } else {
-          sql(
-            s"""INSERT INTO t VALUES (
+          sql(s"""INSERT INTO t VALUES (
                | 1 AS i,
                | array(null, named_struct('x', 1, 'y', 1)) AS arr)
              """.stripMargin)
@@ -255,24 +240,21 @@ class RuntimeNullChecksV2Writes extends QueryTest with SharedSparkSession {
     withTable("t") {
       val structType = new StructType().add("x", "int", nullable = false).add("y", "int")
       val tableInfo = new TableInfo.Builder()
-        .withColumns(Array(
-          ColumnV2.create("i", IntegerType),
-          ColumnV2.create("arr", ArrayType(structType, containsNull = true))))
+        .withColumns(
+          Array(
+            ColumnV2.create("i", IntegerType),
+            ColumnV2.create("arr", ArrayType(structType, containsNull = true))))
         .build()
-      catalog.createTable(
-        ident = Identifier.of(Array(), "t"),
-        tableInfo = tableInfo)
+      catalog.createTable(ident = Identifier.of(Array(), "t"), tableInfo = tableInfo)
 
       if (byName) {
-        val inputDF = sql(
-          s"""SELECT
+        val inputDF = sql(s"""SELECT
              | 1 AS i,
              | array(null, named_struct('x', 1, 'y', 1)) AS arr
            """.stripMargin)
         inputDF.writeTo("t").append()
       } else {
-        sql(
-          s"""INSERT INTO t VALUES (
+        sql(s"""INSERT INTO t VALUES (
              | 1 AS i,
              | array(null, named_struct('x', 1, 'y', 1)) AS arr)
            """.stripMargin)
@@ -281,15 +263,13 @@ class RuntimeNullChecksV2Writes extends QueryTest with SharedSparkSession {
 
       val e = intercept[SparkRuntimeException] {
         if (byName) {
-          val inputDF = sql(
-            s"""SELECT
+          val inputDF = sql(s"""SELECT
                | 1 AS i,
                | array(null, named_struct('x', null, 'y', 1)) AS arr
              """.stripMargin)
           inputDF.writeTo("t").append()
         } else {
-          sql(
-            s"""INSERT INTO t VALUES (
+          sql(s"""INSERT INTO t VALUES (
                | 1 AS i,
                | array(null, named_struct('x', null, 'y', 1)) AS arr)
              """.stripMargin)
@@ -310,13 +290,12 @@ class RuntimeNullChecksV2Writes extends QueryTest with SharedSparkSession {
   private def checkNullableMapWithNonNullValues(byName: Boolean): Unit = {
     withTable("t") {
       val tableInfo = new TableInfo.Builder()
-        .withColumns(Array(
-          ColumnV2.create("i", IntegerType),
-          ColumnV2.create("m", MapType(IntegerType, IntegerType, valueContainsNull = false))))
+        .withColumns(
+          Array(
+            ColumnV2.create("i", IntegerType),
+            ColumnV2.create("m", MapType(IntegerType, IntegerType, valueContainsNull = false))))
         .build()
-      catalog.createTable(
-        ident = Identifier.of(Array(), "t"),
-        tableInfo = tableInfo)
+      catalog.createTable(ident = Identifier.of(Array(), "t"), tableInfo = tableInfo)
 
       if (byName) {
         val inputDF = sql("SELECT 1 AS i, null AS m")
@@ -350,13 +329,12 @@ class RuntimeNullChecksV2Writes extends QueryTest with SharedSparkSession {
     withTable("t") {
       val structType = new StructType().add("x", "int", nullable = false).add("y", "int")
       val tableInfo = new TableInfo.Builder()
-        .withColumns(Array(
-          ColumnV2.create("i", IntegerType),
-          ColumnV2.create("m", MapType(structType, structType, valueContainsNull = true))))
+        .withColumns(
+          Array(
+            ColumnV2.create("i", IntegerType),
+            ColumnV2.create("m", MapType(structType, structType, valueContainsNull = true))))
         .build()
-      catalog.createTable(
-        ident = Identifier.of(Array(), "t"),
-        tableInfo = tableInfo)
+      catalog.createTable(ident = Identifier.of(Array(), "t"), tableInfo = tableInfo)
 
       if (byName) {
         val inputDF = sql("SELECT 1 AS i, map(named_struct('x', 1, 'y', 1), null) AS m")
@@ -368,15 +346,13 @@ class RuntimeNullChecksV2Writes extends QueryTest with SharedSparkSession {
 
       val e1 = intercept[SparkRuntimeException] {
         if (byName) {
-          val inputDF = sql(
-            s"""SELECT
+          val inputDF = sql(s"""SELECT
                | 1 AS i,
                | map(named_struct('x', null, 'y', 1), null) AS m
              """.stripMargin)
           inputDF.writeTo("t").append()
         } else {
-          sql(
-            s"""INSERT INTO t VALUES (
+          sql(s"""INSERT INTO t VALUES (
                | 1 AS i,
                | map(named_struct('x', null, 'y', 1), null) AS m)
              """.stripMargin)
@@ -386,15 +362,13 @@ class RuntimeNullChecksV2Writes extends QueryTest with SharedSparkSession {
 
       val e2 = intercept[SparkRuntimeException] {
         if (byName) {
-          val inputDF = sql(
-            s"""SELECT
+          val inputDF = sql(s"""SELECT
                | 1 AS i,
                | map(named_struct('x', 1, 'y', 1), named_struct('x', null, 'y', 1)) AS m
              """.stripMargin)
           inputDF.writeTo("t").append()
         } else {
-          sql(
-            s"""INSERT INTO t VALUES (
+          sql(s"""INSERT INTO t VALUES (
                | 1 AS i,
                | map(named_struct('x', 1, 'y', 1), named_struct('x', null, 'y', 1)) AS m)
              """.stripMargin)

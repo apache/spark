@@ -36,14 +36,15 @@ import org.apache.spark.sql.types._
  * Create a table and optionally insert some data into it. Note that this plan is unresolved and
  * has to be replaced by the concrete implementations during analysis.
  *
- * @param tableDesc the metadata of the table to be created.
- * @param mode the data writing mode
- * @param query an optional logical plan representing data to write into the created table.
+ * @param tableDesc
+ *   the metadata of the table to be created.
+ * @param mode
+ *   the data writing mode
+ * @param query
+ *   an optional logical plan representing data to write into the created table.
  */
-case class CreateTable(
-    tableDesc: CatalogTable,
-    mode: SaveMode,
-    query: Option[LogicalPlan]) extends LogicalPlan {
+case class CreateTable(tableDesc: CatalogTable, mode: SaveMode, query: Option[LogicalPlan])
+    extends LogicalPlan {
   assert(tableDesc.provider.isDefined, "The table to be created must have a provider.")
 
   if (query.isEmpty) {
@@ -63,7 +64,8 @@ case class CreateTable(
   /**
    * Identifies the underlying table's location is qualified or absent.
    *
-   * @return true if the location is absolute or absent, false otherwise.
+   * @return
+   *   true if the location is absolute or absent, false otherwise.
    */
   def locationQualifiedOrAbsent: Boolean = {
     tableDesc.storage.locationUri.map(_.isAbsolute).getOrElse(true)
@@ -79,7 +81,8 @@ case class CreateTempViewUsing(
     replace: Boolean,
     global: Boolean,
     provider: String,
-    options: Map[String, String]) extends LeafRunnableCommand {
+    options: Map[String, String])
+    extends LeafRunnableCommand {
 
   if (tableIdent.database.isDefined) {
     throw QueryCompilationErrors.cannotSpecifyDatabaseForTempViewError(tableIdent)
@@ -99,11 +102,17 @@ case class CreateTempViewUsing(
     }
 
     val catalog = sparkSession.sessionState.catalog
-    val unresolvedPlan = DataSource.lookupDataSourceV2(provider, sparkSession.sessionState.conf)
+    val unresolvedPlan = DataSource
+      .lookupDataSourceV2(provider, sparkSession.sessionState.conf)
       .flatMap { tblProvider =>
-        DataSourceV2Utils.loadV2Source(sparkSession, tblProvider, userSpecifiedSchema,
-          CaseInsensitiveMap(options), provider)
-      }.getOrElse {
+        DataSourceV2Utils.loadV2Source(
+          sparkSession,
+          tblProvider,
+          userSpecifiedSchema,
+          CaseInsensitiveMap(options),
+          provider)
+      }
+      .getOrElse {
         val dataSource = DataSource(
           sparkSession,
           userSpecifiedSchema = userSpecifiedSchema,
@@ -143,8 +152,7 @@ case class CreateTempViewUsing(
   }
 }
 
-case class RefreshResource(path: String)
-  extends LeafRunnableCommand {
+case class RefreshResource(path: String) extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     sparkSession.catalog.refreshByPath(path)

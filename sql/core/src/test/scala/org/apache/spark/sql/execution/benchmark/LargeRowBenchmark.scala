@@ -34,20 +34,28 @@ import org.apache.spark.sql.functions.lit
 object LargeRowBenchmark extends SqlBasedBenchmark {
 
   /**
-   * Prepares a table with large row for benchmarking. The table will be written into
-   * the given path.
+   * Prepares a table with large row for benchmarking. The table will be written into the given
+   * path.
    */
-  private def writeLargeRow(path: String, rowsNum: Int, numCols: Int, cellSizeMb: Double): Unit = {
+  private def writeLargeRow(
+      path: String,
+      rowsNum: Int,
+      numCols: Int,
+      cellSizeMb: Double): Unit = {
     val stringLength = (cellSizeMb * 1024 * 1024).toInt
-    spark.range(rowsNum)
+    spark
+      .range(rowsNum)
       .select(Seq.tabulate(numCols)(i => lit("a".repeat(stringLength)).as(s"col$i")): _*)
-      .write.parquet(path)
+      .write
+      .parquet(path)
   }
 
   private def runLargeRowBenchmark(rowsNum: Int, numCols: Int, cellSizeMb: Double): Unit = {
     withTempPath { path =>
       val benchmark = new Benchmark(
-        s"#rows: $rowsNum, #cols: $numCols, cell: $cellSizeMb MB", rowsNum, output = output)
+        s"#rows: $rowsNum, #cols: $numCols, cell: $cellSizeMb MB",
+        rowsNum,
+        output = output)
       writeLargeRow(path.getAbsolutePath, rowsNum, numCols, cellSizeMb)
       val df = spark.read.parquet(path.getAbsolutePath)
       df.createOrReplaceTempView("T")

@@ -36,13 +36,22 @@ class SQLLiveEntitiesEventFilterSuite extends SparkFunSuite {
     val liveRDDs = Set(3, 4, 5, 6)
     val liveExecutors: Set[String] = Set("1", "2")
 
-    val filter = new SQLLiveEntitiesEventFilter(liveSQLExecutions, liveJobs, liveStages, liveTasks,
-      liveRDDs)
+    val filter =
+      new SQLLiveEntitiesEventFilter(liveSQLExecutions, liveJobs, liveStages, liveTasks, liveRDDs)
     val acceptFn = filter.acceptFn().lift
 
     // Verifying with finished SQL execution 1
-    assert(Some(false) === acceptFn(SparkListenerSQLExecutionStart(1, Some(1),
-      "description1", "details1", "plan", null, 0, Map.empty)))
+    assert(
+      Some(false) === acceptFn(
+        SparkListenerSQLExecutionStart(
+          1,
+          Some(1),
+          "description1",
+          "details1",
+          "plan",
+          null,
+          0,
+          Map.empty)))
     assert(Some(false) === acceptFn(SparkListenerSQLExecutionEnd(1, 0)))
     assert(Some(false) === acceptFn(SparkListenerSQLAdaptiveExecutionUpdate(1, "plan", null)))
     assert(Some(false) === acceptFn(SparkListenerDriverAccumUpdates(1, Seq.empty)))
@@ -70,8 +79,8 @@ class SQLLiveEntitiesEventFilterSuite extends SparkFunSuite {
       assert(None === acceptFn(event))
     }
 
-    val taskSpeculativeTaskSubmittedEvent = SparkListenerSpeculativeTaskSubmitted(stage1.stageId,
-      stageAttemptId = 1)
+    val taskSpeculativeTaskSubmittedEvent =
+      SparkListenerSpeculativeTaskSubmitted(stage1.stageId, stageAttemptId = 1)
     assert(None === acceptFn(taskSpeculativeTaskSubmittedEvent))
 
     // task events for finished job should be considered as "don't know"
@@ -82,14 +91,29 @@ class SQLLiveEntitiesEventFilterSuite extends SparkFunSuite {
       val taskGettingResultEvent = SparkListenerTaskGettingResult(task)
       assert(None === acceptFn(taskGettingResultEvent))
 
-      val taskEndEvent = SparkListenerTaskEnd(stage1.stageId, 0, "taskType",
-        Success, task, new ExecutorMetrics, null)
+      val taskEndEvent = SparkListenerTaskEnd(
+        stage1.stageId,
+        0,
+        "taskType",
+        Success,
+        task,
+        new ExecutorMetrics,
+        null)
       assert(None === acceptFn(taskEndEvent))
     }
 
     // Verifying with live SQL execution 2
-    assert(Some(true) === acceptFn(SparkListenerSQLExecutionStart(2, Some(2),
-      "description2", "details2", "plan", null, 0, Map.empty)))
+    assert(
+      Some(true) === acceptFn(
+        SparkListenerSQLExecutionStart(
+          2,
+          Some(2),
+          "description2",
+          "details2",
+          "plan",
+          null,
+          0,
+          Map.empty)))
     assert(Some(true) === acceptFn(SparkListenerSQLExecutionEnd(2, 0)))
     assert(Some(true) === acceptFn(SparkListenerSQLAdaptiveExecutionUpdate(2, "plan", null)))
     assert(Some(true) === acceptFn(SparkListenerDriverAccumUpdates(2, Seq.empty)))
@@ -115,8 +139,8 @@ class SQLLiveEntitiesEventFilterSuite extends SparkFunSuite {
       assert(Some(true) === acceptFn(event))
     }
 
-    val taskSpeculativeTaskSubmittedEvent2 = SparkListenerSpeculativeTaskSubmitted(stage2.stageId,
-      stageAttemptId = 1)
+    val taskSpeculativeTaskSubmittedEvent2 =
+      SparkListenerSpeculativeTaskSubmitted(stage2.stageId, stageAttemptId = 1)
     assert(Some(true) === acceptFn(taskSpeculativeTaskSubmittedEvent2))
 
     // task events for live job should be accepted
@@ -127,8 +151,14 @@ class SQLLiveEntitiesEventFilterSuite extends SparkFunSuite {
       val taskGettingResultEvent = SparkListenerTaskGettingResult(task)
       assert(Some(true) === acceptFn(taskGettingResultEvent))
 
-      val taskEndEvent = SparkListenerTaskEnd(stage1.stageId, 0, "taskType",
-        Success, task, new ExecutorMetrics, null)
+      val taskEndEvent = SparkListenerTaskEnd(
+        stage1.stageId,
+        0,
+        "taskType",
+        Success,
+        task,
+        new ExecutorMetrics,
+        null)
       assert(Some(true) === acceptFn(taskEndEvent))
     }
   }

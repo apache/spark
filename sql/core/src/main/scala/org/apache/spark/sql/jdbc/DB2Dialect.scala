@@ -40,8 +40,16 @@ private case class DB2Dialect() extends JdbcDialect with SQLConfHelper with NoLe
     Set("COVAR_POP", "COVAR_SAMP", "REGR_INTERCEPT", "REGR_R2", "REGR_SLOPE", "REGR_SXY")
 
   // See https://www.ibm.com/docs/en/db2/11.5?topic=functions-aggregate
-  private val supportedAggregateFunctions = Set("MAX", "MIN", "SUM", "COUNT", "AVG",
-    "VAR_POP", "VAR_SAMP", "STDDEV_POP", "STDDEV_SAMP") ++ distinctUnsupportedAggregateFunctions
+  private val supportedAggregateFunctions = Set(
+    "MAX",
+    "MIN",
+    "SUM",
+    "COUNT",
+    "AVG",
+    "VAR_POP",
+    "VAR_SAMP",
+    "STDDEV_POP",
+    "STDDEV_SAMP") ++ distinctUnsupportedAggregateFunctions
   private val supportedFunctions = supportedAggregateFunctions
 
   override def isSupportedFunction(funcName: String): Boolean =
@@ -54,13 +62,13 @@ private case class DB2Dialect() extends JdbcDialect with SQLConfHelper with NoLe
   class DB2SQLBuilder extends JDBCSQLBuilder {
 
     override def visitAggregateFunction(
-        funcName: String, isDistinct: Boolean, inputs: Array[String]): String =
+        funcName: String,
+        isDistinct: Boolean,
+        inputs: Array[String]): String =
       if (isDistinct && distinctUnsupportedAggregateFunctions.contains(funcName)) {
         throw new SparkUnsupportedOperationException(
           errorClass = "_LEGACY_ERROR_TEMP_3184",
-          messageParameters = Map(
-            "class" -> this.getClass.getSimpleName,
-            "funcName" -> funcName))
+          messageParameters = Map("class" -> this.getClass.getSimpleName, "funcName" -> funcName))
       } else {
         super.visitAggregateFunction(funcName, isDistinct, inputs)
       }
@@ -210,7 +218,7 @@ private case class DB2Dialect() extends JdbcDialect with SQLConfHelper with NoLe
   }
 
   class DB2SQLQueryBuilder(dialect: JdbcDialect, options: JDBCOptions)
-    extends JdbcSQLQueryBuilder(dialect, options) {
+      extends JdbcSQLQueryBuilder(dialect, options) {
 
     override def build(): String = {
       val limitClause = dialect.getLimitClause(limit)

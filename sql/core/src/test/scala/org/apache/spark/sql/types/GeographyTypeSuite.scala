@@ -38,8 +38,7 @@ class GeographyTypeSuite extends SparkFunSuite {
         },
         condition = "ST_INVALID_SRID_VALUE",
         sqlState = "22023",
-        parameters = Map("srid" -> srid.toString)
-      )
+        parameters = Map("srid" -> srid.toString))
     }
   }
 
@@ -63,9 +62,8 @@ class GeographyTypeSuite extends SparkFunSuite {
   }
 
   test("GEOGRAPHY type with specified valid CRS and algorithm") {
-    val typeInformation: Seq[(Int, String, EdgeInterpolationAlgorithm)] = Seq(
-      (4326, "OGC:CRS84", EdgeInterpolationAlgorithm.SPHERICAL)
-    )
+    val typeInformation: Seq[(Int, String, EdgeInterpolationAlgorithm)] =
+      Seq((4326, "OGC:CRS84", EdgeInterpolationAlgorithm.SPHERICAL))
     typeInformation.foreach { case (srid, crs, algorithm) =>
       val g = GeographyType(crs, algorithm)
       // Verify that the type is correctly created.
@@ -132,8 +130,7 @@ class GeographyTypeSuite extends SparkFunSuite {
     assertStringRepresentation(
       GeographyType(4326),
       "geography(4326)",
-      "geography(OGC:CRS84, SPHERICAL)"
-    )
+      "geography(OGC:CRS84, SPHERICAL)")
   }
 
   // These tests verify the JSON parsing of different GEOGRAPHY types.
@@ -148,8 +145,7 @@ class GeographyTypeSuite extends SparkFunSuite {
       "\"geography(  spherical)\"",
       "\"geography(OGC:CRS84,    spherical    )\"",
       "\"geography( OGC:CRS84   , spherical )\"",
-      "\"geography( OGC:CRS84   , SPHERICAL )\""
-    )
+      "\"geography( OGC:CRS84   , SPHERICAL )\"")
     validGeographies.foreach { geog =>
       DataType.fromJson(geog).isInstanceOf[GeographyType]
     }
@@ -165,29 +161,21 @@ class GeographyTypeSuite extends SparkFunSuite {
       "\"geography(srid:srid)\"",
       "\"geography(karney)\"",
       "\"geography(srid:srid, spherical)\"",
-      "\"geography(OGC:CRS84, karney)\""
-    )
+      "\"geography(OGC:CRS84, karney)\"")
     invalidGeographies.foreach { geog =>
       val exception = intercept[SparkIllegalArgumentException] {
         DataType.fromJson(geog)
       }
       assert(
-        Seq(
-          "INVALID_JSON_DATA_TYPE",
-          "ST_INVALID_CRS_VALUE",
-          "ST_INVALID_ALGORITHM_VALUE"
-        ).contains(exception.getCondition)
-      )
+        Seq("INVALID_JSON_DATA_TYPE", "ST_INVALID_CRS_VALUE", "ST_INVALID_ALGORITHM_VALUE")
+          .contains(exception.getCondition))
     }
   }
 
   // These tests verify the SQL parsing of different GEOGRAPHY types.
 
   test("GEOGRAPHY data type SQL parsing with valid SRID") {
-    val validGeographies = Seq(
-      "GEOGRAPHY(ANY)",
-      "GEOGRAPHY(4326)"
-    )
+    val validGeographies = Seq("GEOGRAPHY(ANY)", "GEOGRAPHY(4326)")
     validGeographies.foreach { geog =>
       val dt = DataType.fromDDL(geog)
       assert(dt.isInstanceOf[GeographyType])
@@ -201,8 +189,7 @@ class GeographyTypeSuite extends SparkFunSuite {
       "GEOGRAPHY(-4326)",
       "GEOGRAPHY(99999)",
       "GEOGRAPHY(SRID)",
-      "GEOGRAPHY(MIXED)"
-    )
+      "GEOGRAPHY(MIXED)")
     invalidGeographies.foreach { geog =>
       val exception = intercept[Exception] {
         DataType.fromDDL(geog)
@@ -219,10 +206,7 @@ class GeographyTypeSuite extends SparkFunSuite {
   }
 
   test("PhysicalDataType maps GeographyType to PhysicalGeographyType") {
-    val geometryTypes: Seq[DataType] = Seq(
-      GeographyType(4326),
-      GeographyType("ANY")
-    )
+    val geometryTypes: Seq[DataType] = Seq(GeographyType(4326), GeographyType("ANY"))
     geometryTypes.foreach { geometryType =>
       val pdt = PhysicalDataType(geometryType)
       assert(pdt.isInstanceOf[PhysicalGeographyType])

@@ -27,13 +27,12 @@ import org.apache.spark.sql.types.{ArrayType, MapType, StructType}
 import org.apache.spark.util.ArrayImplicits.SparkArrayOps
 
 /**
- * Adds [[MapSort]] to [[Aggregate]] expressions containing map columns,
- * as the key/value pairs need to be in the correct order before grouping:
+ * Adds [[MapSort]] to [[Aggregate]] expressions containing map columns, as the key/value pairs
+ * need to be in the correct order before grouping:
  *
- * SELECT map_column, COUNT(*) FROM TABLE GROUP BY map_column =>
- * SELECT _groupingmapsort as map_column, COUNT(*) FROM (
- *   SELECT map_sort(map_column) as _groupingmapsort FROM TABLE
- * ) GROUP BY _groupingmapsort
+ * SELECT map_column, COUNT(*) FROM TABLE GROUP BY map_column => SELECT _groupingmapsort as
+ * map_column, COUNT(*) FROM ( SELECT map_sort(map_column) as _groupingmapsort FROM TABLE ) GROUP
+ * BY _groupingmapsort
  */
 object InsertMapSortInGroupingExpressions extends Rule[LogicalPlan] {
   import InsertMapSortExpression._
@@ -56,10 +55,9 @@ object InsertMapSortInGroupingExpressions extends Rule[LogicalPlan] {
         val newGroupingKeys = groupingExprs.map { expr =>
           val inserted = insertMapSortRecursively(expr)
           if (expr.ne(inserted)) {
-            exprToMapSort.getOrElseUpdate(
-              expr.canonicalized,
-              Alias(inserted, "_groupingmapsort")()
-            ).toAttribute
+            exprToMapSort
+              .getOrElseUpdate(expr.canonicalized, Alias(inserted, "_groupingmapsort")())
+              .toAttribute
           } else {
             expr
           }
@@ -69,9 +67,11 @@ object InsertMapSortInGroupingExpressions extends Rule[LogicalPlan] {
             // If we replace the top-level named expr, then should add back the original name
             exprToMapSort(named.canonicalized).toAttribute.withName(named.name)
           case other =>
-            other.transformUp {
-              case e => exprToMapSort.get(e.canonicalized).map(_.toAttribute).getOrElse(e)
-            }.asInstanceOf[NamedExpression]
+            other
+              .transformUp { case e =>
+                exprToMapSort.get(e.canonicalized).map(_.toAttribute).getOrElse(e)
+              }
+              .asInstanceOf[NamedExpression]
         }
         val newChild = Project(child.output ++ exprToMapSort.values, child)
         val newAgg = Aggregate(newGroupingKeys, newAggregateExprs, newChild, hint)
@@ -81,11 +81,11 @@ object InsertMapSortInGroupingExpressions extends Rule[LogicalPlan] {
 }
 
 /**
- * Adds [[MapSort]] to [[RepartitionByExpression]] expressions containing map columns,
- * as the key/value pairs need to be in the correct order before repartitioning:
+ * Adds [[MapSort]] to [[RepartitionByExpression]] expressions containing map columns, as the
+ * key/value pairs need to be in the correct order before repartitioning:
  *
- * SELECT * FROM TABLE DISTRIBUTE BY map_column =>
- * SELECT * FROM TABLE DISTRIBUTE BY map_sort(map_column)
+ * SELECT * FROM TABLE DISTRIBUTE BY map_column => SELECT * FROM TABLE DISTRIBUTE BY
+ * map_sort(map_column)
  */
 object InsertMapSortInRepartitionExpressions extends Rule[LogicalPlan] {
   import InsertMapSortExpression._
@@ -93,7 +93,7 @@ object InsertMapSortInRepartitionExpressions extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     plan.transformUpWithPruning(_.containsPattern(REPARTITION_OPERATION)) {
       case rep: RepartitionByExpression
-        if rep.partitionExpressions.exists(mapTypeExistsRecursively) =>
+          if rep.partitionExpressions.exists(mapTypeExistsRecursively) =>
         val exprToMapSort = new mutable.HashMap[Expression, Expression]
         val newPartitionExprs = rep.partitionExpressions.map { expr =>
           val inserted = insertMapSortRecursively(expr)
@@ -118,7 +118,8 @@ private[optimizer] object InsertMapSortExpression {
   }
 
   /**
-   * Inserts [[MapSort]] recursively taking into account when it is nested inside a struct or array.
+   * Inserts [[MapSort]] recursively taking into account when it is nested inside a struct or
+   * array.
    */
   def insertMapSortRecursively(e: Expression): Expression = {
     e.dataType match {
@@ -134,10 +135,9 @@ private[optimizer] object InsertMapSortExpression {
         MapSort(mapSortExpr)
 
       case StructType(fields)
-        if fields.exists(_.dataType.existsRecursively(_.isInstanceOf[MapType])) =>
+          if fields.exists(_.dataType.existsRecursively(_.isInstanceOf[MapType])) =>
         val struct = CreateNamedStruct(fields.zipWithIndex.flatMap { case (f, i) =>
-          Seq(Literal(f.name), insertMapSortRecursively(
-            GetStructField(e, i, Some(f.name))))
+          Seq(Literal(f.name), insertMapSortRecursively(GetStructField(e, i, Some(f.name))))
         }.toImmutableArraySeq)
         if (struct.valExprs.forall(_.isInstanceOf[GetStructField])) {
           // No field needs MapSort processing, just return the original expression.

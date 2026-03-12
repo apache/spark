@@ -32,45 +32,46 @@ class XSDToSchemaSuite extends SharedSparkSession {
   test("Basic parsing") {
     val parsedSchema = XSDToSchema.read(new Path(testFile(resDir + "basket.xsd")))
     val expectedSchema = buildSchema(
-      field("basket",
-        structField(
-          structArray("entry",
-            field("key"),
-            field("value"))), nullable = false))
+      field(
+        "basket",
+        structField(structArray("entry", field("key"), field("value"))),
+        nullable = false))
     assert(expectedSchema === parsedSchema)
   }
 
   test("Relative path parsing") {
     val parsedSchema = XSDToSchema.read(new Path(testFile(resDir + "include-example/first.xsd")))
     val expectedSchema = buildSchema(
-      field("basket",
-        structField(
-          structArray("entry",
-            field("key"),
-            field("value"))), nullable = false))
+      field(
+        "basket",
+        structField(structArray("entry", field("key"), field("value"))),
+        nullable = false))
     assert(expectedSchema === parsedSchema)
   }
 
   test("Test schema types and attributes") {
     val parsedSchema = XSDToSchema.read(new Path(testFile(resDir + "catalog.xsd")))
-    val expectedSchema = buildSchema(
-      field("catalog",
-        structField(
-          field("product",
-            structField(
-              structArray("catalog_item",
-                field("item_number", nullable = false),
-                field("price", FloatType, nullable = false),
-                structArray("size",
-                  structArray("color_swatch",
-                    field("_VALUE"),
-                    field("_image")),
-                  field("_description")),
-                field("_gender")),
-              field("_description"),
-              field("_product_image")),
-            nullable = false)),
-        nullable = false))
+    val expectedSchema =
+      buildSchema(
+        field(
+          "catalog",
+          structField(
+            field(
+              "product",
+              structField(
+                structArray(
+                  "catalog_item",
+                  field("item_number", nullable = false),
+                  field("price", FloatType, nullable = false),
+                  structArray(
+                    "size",
+                    structArray("color_swatch", field("_VALUE"), field("_image")),
+                    field("_description")),
+                  field("_gender")),
+                field("_description"),
+                field("_product_image")),
+              nullable = false)),
+          nullable = false))
     assert(expectedSchema === parsedSchema)
   }
 
@@ -83,31 +84,24 @@ class XSDToSchemaSuite extends SharedSparkSession {
 
   test("Two root elements") {
     val parsedSchema = XSDToSchema.read(new Path(testFile(resDir + "twoelements.xsd")))
-    val expectedSchema = buildSchema(field("bar", nullable = false), field("foo", nullable = false))
+    val expectedSchema =
+      buildSchema(field("bar", nullable = false), field("foo", nullable = false))
     assert(expectedSchema === parsedSchema)
   }
 
   test("xs:any schema") {
     val parsedSchema = XSDToSchema.read(new Path(testFile(resDir + "xsany.xsd")))
     val expectedSchema = buildSchema(
-      field("root",
+      field(
+        "root",
         structField(
-          field("foo",
-            structField(
-              field("xs_any")),
+          field("foo", structField(field("xs_any")), nullable = false),
+          field("bar", structField(field("xs_any", nullable = false)), nullable = false),
+          field(
+            "baz",
+            structField(field("xs_any", ArrayType(StringType), nullable = false)),
             nullable = false),
-          field("bar",
-            structField(
-              field("xs_any", nullable = false)),
-            nullable = false),
-          field("baz",
-            structField(
-              field("xs_any", ArrayType(StringType), nullable = false)),
-            nullable = false),
-          field("bing",
-            structField(
-              field("xs_any")),
-            nullable = false)),
+          field("bing", structField(field("xs_any")), nullable = false)),
         nullable = false))
     assert(expectedSchema === parsedSchema)
   }
@@ -115,18 +109,17 @@ class XSDToSchemaSuite extends SharedSparkSession {
   test("Tests xs:long type / Issue 520") {
     val parsedSchema = XSDToSchema.read(new Path(testFile(resDir + "long.xsd")))
     val expectedSchema = buildSchema(
-      field("test",
-        structField(field("userId", LongType, nullable = false)), nullable = false))
+      field("test", structField(field("userId", LongType, nullable = false)), nullable = false))
     assert(parsedSchema === expectedSchema)
   }
 
   test("Test xs:decimal type with restriction[fractionalDigits]") {
-    val parsedSchema = XSDToSchema.read(new Path(testFile(resDir + "decimal-with-restriction.xsd")))
+    val parsedSchema =
+      XSDToSchema.read(new Path(testFile(resDir + "decimal-with-restriction.xsd")))
     val expectedSchema = buildSchema(
       field("decimal_type_3", DecimalType(12, 6), nullable = false),
       field("decimal_type_1", DecimalType(38, 18), nullable = false),
-      field("decimal_type_2", DecimalType(38, 2), nullable = false)
-    )
+      field("decimal_type_2", DecimalType(38, 2), nullable = false))
     assert(parsedSchema === expectedSchema)
   }
 
@@ -138,10 +131,8 @@ class XSDToSchemaSuite extends SharedSparkSession {
         structField(
           field("name", StringType, false),
           field("author", StringType, false),
-          field("isbn", StringType, false)
-        ),
-        false
-      ),
+          field("isbn", StringType, false)),
+        false),
       field(
         "bookList",
         structField(
@@ -149,12 +140,8 @@ class XSDToSchemaSuite extends SharedSparkSession {
             "book",
             field("name", StringType, false),
             field("author", StringType, false),
-            field("isbn", StringType, false)
-          )
-        ),
-        false
-      )
-    )
+            field("isbn", StringType, false))),
+        false))
     assert(parsedSchema === expectedSchema)
   }
 
@@ -170,11 +157,8 @@ class XSDToSchemaSuite extends SharedSparkSession {
           field("lastname", StringType, false),
           field("address", StringType, false),
           field("city", StringType, false),
-          field("country", StringType, false)
-        ),
-        false
-      )
-    )
+          field("country", StringType, false)),
+        false))
     assert(parsedSchema === expectedSchema)
   }
 
@@ -243,55 +227,58 @@ class XSDToSchemaSuite extends SharedSparkSession {
         |</xs:schema>
         |""".stripMargin
     val parsedSchema = XSDToSchema.read(xsdString)
-    val expectedSchema = StructType(StructField("basket",
+    val expectedSchema =
       StructType(
-        StructField("xs_anyType", StringType, false) ::
-          StructField("xs_anySimpleType", StringType, false) ::
-          StructField("xs_anyURI", StringType, false) ::
-          StructField("xs_base64Binary", StringType, false) ::
-          StructField("xs_boolean", BooleanType, false) ::
-          StructField("xs_byte", ByteType, false) ::
-          StructField("xs_date", DateType, false) ::
-          StructField("xs_dateTime", TimestampType, false) ::
-          StructField("xs_decimal", DecimalType(38, 18), false) ::
-          StructField("xs_double", DoubleType, false) ::
-          StructField("xs_duration", StringType, false) ::
-          StructField("xs_ENTITIES", StringType, false) ::
-          StructField("xs_ENTITY", StringType, false) ::
-          StructField("xs_float", FloatType, false) ::
-          StructField("xs_gDay", StringType, false) ::
-          StructField("xs_gMonth", StringType, false) ::
-          StructField("xs_gMonthDay", StringType, false) ::
-          StructField("xs_gYear", StringType, false) ::
-          StructField("xs_gYearMonth", StringType, false) ::
-          StructField("xs_hexBinary", StringType, false) ::
-          StructField("xs_ID", StringType, false) ::
-          StructField("xs_IDREF", StringType, false) ::
-          StructField("xs_IDREFS", StringType, false) ::
-          StructField("xs_int", IntegerType, false) ::
-          StructField("xs_integer", DecimalType(38, 0), false) ::
-          StructField("xs_language", StringType, false) ::
-          StructField("xs_long", LongType, false) ::
-          StructField("xs_Name", StringType, false) ::
-          StructField("xs_NCName", StringType, false) ::
-          StructField("xs_negativeInteger", DecimalType(38, 0), false) ::
-          StructField("xs_NMTOKEN", StringType, false) ::
-          StructField("xs_NMTOKENS", StringType, false) ::
-          StructField("xs_nonNegativeInteger", DecimalType(38, 0), false) ::
-          StructField("xs_nonPositiveInteger", DecimalType(38, 0), false) ::
-          StructField("xs_normalizedString", StringType, false) ::
-          StructField("xs_NOTATION", StringType, false) ::
-          StructField("xs_positiveInteger", DecimalType(38, 0), false) ::
-          StructField("xs_QName", StringType, false) ::
-          StructField("xs_short", ShortType, false) ::
-          StructField("xs_string", StringType, false) ::
-          StructField("xs_time", StringType, false) ::
-          StructField("xs_token", StringType, false) ::
-          StructField("xs_unsignedByte", ShortType, false) ::
-          StructField("xs_unsignedInt", LongType, false) ::
-          StructField("xs_unsignedLong", DecimalType(38, 0), false) ::
-          StructField("xs_unsignedShort", IntegerType, false) :: Nil),
-      false) :: Nil)
+        StructField(
+          "basket",
+          StructType(
+            StructField("xs_anyType", StringType, false) ::
+              StructField("xs_anySimpleType", StringType, false) ::
+              StructField("xs_anyURI", StringType, false) ::
+              StructField("xs_base64Binary", StringType, false) ::
+              StructField("xs_boolean", BooleanType, false) ::
+              StructField("xs_byte", ByteType, false) ::
+              StructField("xs_date", DateType, false) ::
+              StructField("xs_dateTime", TimestampType, false) ::
+              StructField("xs_decimal", DecimalType(38, 18), false) ::
+              StructField("xs_double", DoubleType, false) ::
+              StructField("xs_duration", StringType, false) ::
+              StructField("xs_ENTITIES", StringType, false) ::
+              StructField("xs_ENTITY", StringType, false) ::
+              StructField("xs_float", FloatType, false) ::
+              StructField("xs_gDay", StringType, false) ::
+              StructField("xs_gMonth", StringType, false) ::
+              StructField("xs_gMonthDay", StringType, false) ::
+              StructField("xs_gYear", StringType, false) ::
+              StructField("xs_gYearMonth", StringType, false) ::
+              StructField("xs_hexBinary", StringType, false) ::
+              StructField("xs_ID", StringType, false) ::
+              StructField("xs_IDREF", StringType, false) ::
+              StructField("xs_IDREFS", StringType, false) ::
+              StructField("xs_int", IntegerType, false) ::
+              StructField("xs_integer", DecimalType(38, 0), false) ::
+              StructField("xs_language", StringType, false) ::
+              StructField("xs_long", LongType, false) ::
+              StructField("xs_Name", StringType, false) ::
+              StructField("xs_NCName", StringType, false) ::
+              StructField("xs_negativeInteger", DecimalType(38, 0), false) ::
+              StructField("xs_NMTOKEN", StringType, false) ::
+              StructField("xs_NMTOKENS", StringType, false) ::
+              StructField("xs_nonNegativeInteger", DecimalType(38, 0), false) ::
+              StructField("xs_nonPositiveInteger", DecimalType(38, 0), false) ::
+              StructField("xs_normalizedString", StringType, false) ::
+              StructField("xs_NOTATION", StringType, false) ::
+              StructField("xs_positiveInteger", DecimalType(38, 0), false) ::
+              StructField("xs_QName", StringType, false) ::
+              StructField("xs_short", ShortType, false) ::
+              StructField("xs_string", StringType, false) ::
+              StructField("xs_time", StringType, false) ::
+              StructField("xs_token", StringType, false) ::
+              StructField("xs_unsignedByte", ShortType, false) ::
+              StructField("xs_unsignedInt", LongType, false) ::
+              StructField("xs_unsignedLong", DecimalType(38, 0), false) ::
+              StructField("xs_unsignedShort", IntegerType, false) :: Nil),
+          false) :: Nil)
     assert(parsedSchema === expectedSchema)
   }
 }

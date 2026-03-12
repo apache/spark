@@ -23,6 +23,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.util.SparkStringUtils
 
 object ExpressionSet {
+
   /**
    * Constructs a new [[ExpressionSet]] by applying [[Expression#canonicalized]] to `expressions`.
    */
@@ -39,13 +40,13 @@ object ExpressionSet {
 
 /**
  * A [[Set]] where membership is determined based on determinacy and a canonical representation of
- * an [[Expression]] (i.e. one that attempts to ignore cosmetic differences).
- * See [[Expression#canonicalized]] for more details.
+ * an [[Expression]] (i.e. one that attempts to ignore cosmetic differences). See
+ * [[Expression#canonicalized]] for more details.
  *
  * Internally this set uses the canonical representation, but keeps also track of the original
- * expressions to ease debugging.  Since different expressions can share the same canonical
+ * expressions to ease debugging. Since different expressions can share the same canonical
  * representation, this means that operations that extract expressions from this set are only
- * guaranteed to see at least one such expression.  For example:
+ * guaranteed to see at least one such expression. For example:
  *
  * {{{
  *   val set = ExpressionSet(a + 1, 1 + a)
@@ -57,20 +58,20 @@ object ExpressionSet {
  * }}}
  *
  * For non-deterministic expressions, they are always considered as not contained in the [[Set]].
- * On adding a non-deterministic expression, simply append it to the original expressions.
- * This is consistent with how we define `semanticEquals` between two expressions.
+ * On adding a non-deterministic expression, simply append it to the original expressions. This is
+ * consistent with how we define `semanticEquals` between two expressions.
  *
  * The constructor of this class is protected so caller can only initialize an Expression from
- * empty, then build it using `add` and `remove` methods. So every instance of this class holds the
- * invariant that:
- * 1. Every expr `e` in `baseSet` satisfies `e.deterministic && e.canonicalized == e`
- * 2. Every deterministic expr `e` in `originals` satisfies that `e.canonicalized` is already
- *    accessed.
+ * empty, then build it using `add` and `remove` methods. So every instance of this class holds
+ * the invariant that:
+ *   1. Every expr `e` in `baseSet` satisfies `e.deterministic && e.canonicalized == e`
+ *   2. Every deterministic expr `e` in `originals` satisfies that `e.canonicalized` is already
+ *      accessed.
  */
-class ExpressionSet protected(
+class ExpressionSet protected (
     private val baseSet: mutable.Set[Expression] = new mutable.HashSet,
     private var originals: mutable.Buffer[Expression] = new ArrayBuffer)
-  extends scala.collection.Set[Expression]
+    extends scala.collection.Set[Expression]
     with scala.collection.SetOps[Expression, scala.collection.Set, ExpressionSet] {
 
   override protected def fromSpecific(coll: IterableOnce[Expression]): ExpressionSet = {
@@ -172,8 +173,8 @@ class ExpressionSet protected(
   override def clone(): ExpressionSet = new ExpressionSet(baseSet.clone(), originals.clone())
 
   /**
-   * Returns a string containing both the post [[Expression#canonicalized]] expressions
-   * and the original expressions in this set.
+   * Returns a string containing both the post [[Expression#canonicalized]] expressions and the
+   * original expressions in this set.
    */
   def toDebugString: String =
     s"""
@@ -185,7 +186,11 @@ class ExpressionSet protected(
   def simpleString(maxFields: Int): String = {
     val customToString = { e: Expression => e.simpleString(maxFields) }
     SparkStringUtils.truncatedString(
-      seq = originals.toSeq, start = "Set(", sep = ", ", end = ")", maxFields, Some(customToString))
+      seq = originals.toSeq,
+      start = "Set(",
+      sep = ", ",
+      end = ")",
+      maxFields,
+      Some(customToString))
   }
 }
-

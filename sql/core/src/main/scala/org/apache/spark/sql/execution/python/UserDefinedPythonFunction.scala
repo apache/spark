@@ -47,13 +47,13 @@ case class UserDefinedPythonFunction(
 
   def builder(e: Seq[Expression]): Expression = {
     if (pythonEvalType == PythonEvalType.SQL_BATCHED_UDF
-        || pythonEvalType ==PythonEvalType.SQL_ARROW_BATCHED_UDF
-        || pythonEvalType == PythonEvalType.SQL_SCALAR_PANDAS_UDF
-        || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF
-        || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF
-        || pythonEvalType == PythonEvalType.SQL_SCALAR_ARROW_UDF
-        || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF
-        || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF) {
+      || pythonEvalType == PythonEvalType.SQL_ARROW_BATCHED_UDF
+      || pythonEvalType == PythonEvalType.SQL_SCALAR_PANDAS_UDF
+      || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF
+      || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF
+      || pythonEvalType == PythonEvalType.SQL_SCALAR_ARROW_UDF
+      || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF
+      || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF) {
       /*
        * Check if the named arguments:
        * - don't have duplicated names
@@ -111,11 +111,7 @@ case class UserDefinedPythonTableFunction(
     this(name, func, Some(returnType), pythonEvalType, udfDeterministic)
   }
 
-  def this(
-      name: String,
-      func: PythonFunction,
-      pythonEvalType: Int,
-      udfDeterministic: Boolean) = {
+  def this(name: String, func: PythonFunction, pythonEvalType: Int, udfDeterministic: Boolean) = {
     this(name, func, None, pythonEvalType, udfDeterministic)
   }
 
@@ -169,8 +165,7 @@ case class UserDefinedPythonTableFunction(
       outer = false,
       qualifier = None,
       generatorOutput = Nil,
-      child = OneRowRelation()
-    )
+      child = OneRowRelation())
   }
 
   /** Returns a [[DataFrame]] that will evaluate to calling this UDTF with the given input. */
@@ -179,9 +174,9 @@ case class UserDefinedPythonTableFunction(
     val expressions = exprs.map {
       case col: Column => session.expression(col)
       case tableArg: TableArg => tableArg.expression
-      case other => throw new IllegalArgumentException(
-        s"Unsupported argument type: ${other.getClass.getName}"
-      )
+      case other =>
+        throw new IllegalArgumentException(
+          s"Unsupported argument type: ${other.getClass.getName}")
     }
     val udtf = builder(expressions, parser)
     Dataset.ofRows(session, udtf)
@@ -191,21 +186,21 @@ case class UserDefinedPythonTableFunction(
 /**
  * Runs the Python UDTF's `analyze` static method.
  *
- * When the Python UDTF is defined without a static return type,
- * the analyzer will call this while resolving table-valued functions.
+ * When the Python UDTF is defined without a static return type, the analyzer will call this while
+ * resolving table-valued functions.
  *
  * This expects the Python UDTF to have `analyze` static method that take arguments:
  *
- * - The number and order of arguments are the same as the UDTF inputs
- * - Each argument is an `AnalyzeArgument`, containing:
- *   - dataType: DataType
- *   - value: Any: if the argument is foldable; otherwise None
- *   - isTable: bool: True if the argument is TABLE
+ *   - The number and order of arguments are the same as the UDTF inputs
+ *   - Each argument is an `AnalyzeArgument`, containing:
+ *     - dataType: DataType
+ *     - value: Any: if the argument is foldable; otherwise None
+ *     - isTable: bool: True if the argument is TABLE
  *
  * and that return an `AnalyzeResult`.
  *
- * It serializes/deserializes the data types via JSON,
- * and the values for the case the argument is foldable are pickled.
+ * It serializes/deserializes the data types via JSON, and the values for the case the argument is
+ * foldable are pickled.
  *
  * `AnalysisException` with the error class "TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON"
  * will be thrown when an exception is raised in Python.
@@ -216,7 +211,7 @@ class UserDefinedPythonTableFunctionAnalyzeRunner(
     exprs: Seq[Expression],
     tableArgs: Seq[Boolean],
     parser: ParserInterface)
-  extends PythonPlannerRunner[PythonUDTFAnalyzeResult](func) {
+    extends PythonPlannerRunner[PythonUDTFAnalyzeResult](func) {
 
   override val workerModule = "pyspark.sql.worker.analyze_udtf"
 
@@ -235,8 +230,8 @@ class UserDefinedPythonTableFunctionAnalyzeRunner(
       }
       if (value.foldable) {
         dataOut.writeBoolean(true)
-        val obj = pickler.dumps(EvaluatePython.toJava(
-          value.eval(), value.dataType, SQLConf.get.pysparkBinaryAsBytes))
+        val obj = pickler.dumps(
+          EvaluatePython.toJava(value.eval(), value.dataType, SQLConf.get.pysparkBinaryAsBytes))
         PythonWorkerUtils.writeBytes(obj, dataOut)
       } else {
         dataOut.writeBoolean(false)
@@ -257,15 +252,18 @@ class UserDefinedPythonTableFunctionAnalyzeRunner(
     // Receive the schema or an exception raised in Python worker.
     val length = dataIn.readInt()
     if (length == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
-      val msg = PythonWorkerUtils.readUTF(dataIn)
+      val msg = PythonWorkerUtils
+        .readUTF(dataIn)
         // Remove the leading traceback stack trace from the error message string, if any, since it
         // usually only includes the "analyze_udtf.py" filename and a line number.
-        .split("PySparkValueError:").last.strip()
+        .split("PySparkValueError:")
+        .last
+        .strip()
       throw QueryCompilationErrors.tableValuedFunctionFailedToAnalyseInPythonError(msg)
     }
 
-    val schema = DataType.fromJson(
-      PythonWorkerUtils.readUTF(length, dataIn)).asInstanceOf[StructType]
+    val schema =
+      DataType.fromJson(PythonWorkerUtils.readUTF(length, dataIn)).asInstanceOf[StructType]
 
     // Receive the pickled AnalyzeResult buffer, if any.
     val pickledAnalyzeResult: Array[Byte] = PythonWorkerUtils.readBytes(dataIn)
@@ -311,9 +309,7 @@ class UserDefinedPythonTableFunctionAnalyzeRunner(
       val parsed: Expression = parser.parseExpression(expressionSql)
       val alias: String = PythonWorkerUtils.readUTF(dataIn)
       selectedInputExpressions.append(
-        PythonUDTFSelectedExpression(
-          parsed,
-          if (alias.nonEmpty) Some(alias) else None))
+        PythonUDTFSelectedExpression(parsed, if (alias.nonEmpty) Some(alias) else None))
     }
     PythonUDTFAnalyzeResult(
       schema = schema,

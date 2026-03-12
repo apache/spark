@@ -25,7 +25,7 @@ object NumberConverter {
 
   /**
    * The output string has a max length of one char per bit in the 64-bit `Long` intermediate
-   * representation plus one char for the '-' sign.  This happens in practice when converting
+   * representation plus one char for the '-' sign. This happens in practice when converting
    * `Long.MinValue` with `toBase` equal to -2.
    */
   private final val MAX_OUTPUT_LENGTH = java.lang.Long.SIZE + 1
@@ -33,8 +33,10 @@ object NumberConverter {
   /**
    * Decode v into value[].
    *
-   * @param v is treated as an unsigned 64-bit integer
-   * @param radix must be between MIN_RADIX and MAX_RADIX
+   * @param v
+   *   is treated as an unsigned 64-bit integer
+   * @param radix
+   *   must be between MIN_RADIX and MAX_RADIX
    */
   private def decode(v: Long, radix: Int, value: Array[Byte]): Unit = {
     var tmpV = v
@@ -49,12 +51,15 @@ object NumberConverter {
   }
 
   /**
-   * Convert value[] into a long. On overflow, return -1 (as mySQL does). If a
-   * negative digit is found, ignore the suffix starting there.
+   * Convert value[] into a long. On overflow, return -1 (as mySQL does). If a negative digit is
+   * found, ignore the suffix starting there.
    *
-   * @param radix  must be between MIN_RADIX and MAX_RADIX
-   * @param fromPos is the first element that should be considered
-   * @return the result should be treated as an unsigned 64-bit integer.
+   * @param radix
+   *   must be between MIN_RADIX and MAX_RADIX
+   * @param fromPos
+   *   is the first element that should be considered
+   * @return
+   *   the result should be treated as an unsigned 64-bit integer.
    */
   private def encode(
       radix: Int,
@@ -101,8 +106,10 @@ object NumberConverter {
   /**
    * Convert the bytes in value[] to the corresponding chars.
    *
-   * @param radix must be between MIN_RADIX and MAX_RADIX
-   * @param fromPos is the first nonzero element
+   * @param radix
+   *   must be between MIN_RADIX and MAX_RADIX
+   * @param fromPos
+   *   is the first nonzero element
    */
   private def byte2char(radix: Int, fromPos: Int, value: Array[Byte]): Unit = {
     var i = fromPos
@@ -113,11 +120,13 @@ object NumberConverter {
   }
 
   /**
-   * Convert the chars in value[] to the corresponding integers. If invalid
-   * character is found, convert it to -1 and ignore the suffix starting there.
+   * Convert the chars in value[] to the corresponding integers. If invalid character is found,
+   * convert it to -1 and ignore the suffix starting there.
    *
-   * @param radix must be between MIN_RADIX and MAX_RADIX
-   * @param fromPos is the first nonzero element
+   * @param radix
+   *   must be between MIN_RADIX and MAX_RADIX
+   * @param fromPos
+   *   is the first nonzero element
    */
   private def char2byte(radix: Int, fromPos: Int, value: Array[Byte]): Unit = {
     var i = fromPos
@@ -132,9 +141,8 @@ object NumberConverter {
   }
 
   /**
-   * Convert numbers between different number bases. If toBase>0 the result is
-   * unsigned, otherwise it is signed.
-   * NB: This logic is borrowed from org.apache.hadoop.hive.ql.ud.UDFConv
+   * Convert numbers between different number bases. If toBase>0 the result is unsigned, otherwise
+   * it is signed. NB: This logic is borrowed from org.apache.hadoop.hive.ql.ud.UDFConv
    */
   def convert(
       n: Array[Byte],
@@ -143,8 +151,8 @@ object NumberConverter {
       ansiEnabled: Boolean,
       context: QueryContext): UTF8String = {
     if (fromBase < Character.MIN_RADIX || fromBase > Character.MAX_RADIX
-        || Math.abs(toBase) < Character.MIN_RADIX
-        || Math.abs(toBase) > Character.MAX_RADIX) {
+      || Math.abs(toBase) < Character.MIN_RADIX
+      || Math.abs(toBase) > Character.MAX_RADIX) {
       return null
     }
 
@@ -179,7 +187,7 @@ object NumberConverter {
 
     // Find the first non-zero digit or the last digits if all are zero.
     val firstNonZeroPos = {
-      val firstNonZero = temp.indexWhere( _ != 0)
+      val firstNonZero = temp.indexWhere(_ != 0)
       if (firstNonZero != -1) firstNonZero else temp.length - 1
     }
     byte2char(Math.abs(toBase), firstNonZeroPos, temp)
@@ -194,30 +202,30 @@ object NumberConverter {
 
   def toBinary(l: Long): Array[Byte] = {
     val result = new Array[Byte](8)
-    result(0) = (l >>> 56 & 0xFF).toByte
-    result(1) = (l >>> 48 & 0xFF).toByte
-    result(2) = (l >>> 40 & 0xFF).toByte
-    result(3) = (l >>> 32 & 0xFF).toByte
-    result(4) = (l >>> 24 & 0xFF).toByte
-    result(5) = (l >>> 16 & 0xFF).toByte
-    result(6) = (l >>> 8 & 0xFF).toByte
-    result(7) = (l & 0xFF).toByte
+    result(0) = (l >>> 56 & 0xff).toByte
+    result(1) = (l >>> 48 & 0xff).toByte
+    result(2) = (l >>> 40 & 0xff).toByte
+    result(3) = (l >>> 32 & 0xff).toByte
+    result(4) = (l >>> 24 & 0xff).toByte
+    result(5) = (l >>> 16 & 0xff).toByte
+    result(6) = (l >>> 8 & 0xff).toByte
+    result(7) = (l & 0xff).toByte
     result
   }
 
   def toBinary(i: Int): Array[Byte] = {
     val result = new Array[Byte](4)
-    result(0) = (i >>> 24 & 0xFF).toByte
-    result(1) = (i >>> 16 & 0xFF).toByte
-    result(2) = (i >>> 8 & 0xFF).toByte
-    result(3) = (i & 0xFF).toByte
+    result(0) = (i >>> 24 & 0xff).toByte
+    result(1) = (i >>> 16 & 0xff).toByte
+    result(2) = (i >>> 8 & 0xff).toByte
+    result(3) = (i & 0xff).toByte
     result
   }
 
   def toBinary(s: Short): Array[Byte] = {
     val result = new Array[Byte](2)
-    result(0) = (s >>> 8 & 0xFF).toByte
-    result(1) = (s & 0xFF).toByte
+    result(0) = (s >>> 8 & 0xff).toByte
+    result(1) = (s & 0xff).toByte
     result
   }
 

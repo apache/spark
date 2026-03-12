@@ -58,7 +58,7 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
     addBatch(1, 4 to 6)
     assert(sink.latestBatchId === Some(1))
     checkAnswer(sink.latestBatchData, 4 to 6)
-    checkAnswer(sink.allData, 1 to 6)     // new data should get appended to old data
+    checkAnswer(sink.allData, 1 to 6) // new data should get appended to old data
 
     // Re-add batch 1 with different data, should not be added and outputs should not be changed
     addBatch(1, 7 to 9)
@@ -128,7 +128,7 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
     addBatch(1, 4 to 6)
     assert(sink.latestBatchId === Some(1))
     checkAnswer(sink.latestBatchData, 4 to 6)
-    checkAnswer(sink.allData, 4 to 6)     // new data should replace old data
+    checkAnswer(sink.allData, 4 to 6) // new data should replace old data
 
     // Re-add batch 1 with different data, should not be added and outputs should not be changed
     addBatch(1, 7 to 9)
@@ -143,10 +143,11 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
     checkAnswer(sink.allData, 7 to 9)
   }
 
-
   test("registering as a table in Append output mode") {
     val input = MemoryStream[Int]
-    val query = input.toDF().writeStream
+    val query = input
+      .toDF()
+      .writeStream
       .format("memory")
       .outputMode("append")
       .queryName("memStream")
@@ -154,22 +155,19 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
     input.addData(1, 2, 3)
     query.processAllAvailable()
 
-    checkDataset(
-      spark.table("memStream").as[Int],
-      1, 2, 3)
+    checkDataset(spark.table("memStream").as[Int], 1, 2, 3)
 
     input.addData(4, 5, 6)
     query.processAllAvailable()
-    checkDataset(
-      spark.table("memStream").as[Int],
-      1, 2, 3, 4, 5, 6)
+    checkDataset(spark.table("memStream").as[Int], 1, 2, 3, 4, 5, 6)
 
     query.stop()
   }
 
   test("registering as a table in Complete output mode") {
     val input = MemoryStream[Int]
-    val query = input.toDF()
+    val query = input
+      .toDF()
       .groupBy("value")
       .count()
       .writeStream
@@ -180,22 +178,27 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
     input.addData(1, 2, 3)
     query.processAllAvailable()
 
-    checkDatasetUnorderly(
-      spark.table("memStream").as[(Int, Long)],
-      (1, 1L), (2, 1L), (3, 1L))
+    checkDatasetUnorderly(spark.table("memStream").as[(Int, Long)], (1, 1L), (2, 1L), (3, 1L))
 
     input.addData(4, 5, 6)
     query.processAllAvailable()
     checkDatasetUnorderly(
       spark.table("memStream").as[(Int, Long)],
-      (1, 1L), (2, 1L), (3, 1L), (4, 1L), (5, 1L), (6, 1L))
+      (1, 1L),
+      (2, 1L),
+      (3, 1L),
+      (4, 1L),
+      (5, 1L),
+      (6, 1L))
 
     query.stop()
   }
 
   test("registering as a table in Update output mode") {
     val input = MemoryStream[Int]
-    val query = input.toDF().writeStream
+    val query = input
+      .toDF()
+      .writeStream
       .format("memory")
       .outputMode("update")
       .queryName("memStream")
@@ -203,15 +206,11 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
     input.addData(1, 2, 3)
     query.processAllAvailable()
 
-    checkDataset(
-      spark.table("memStream").as[Int],
-      1, 2, 3)
+    checkDataset(spark.table("memStream").as[Int], 1, 2, 3)
 
     input.addData(4, 5, 6)
     query.processAllAvailable()
-    checkDataset(
-      spark.table("memStream").as[Int],
-      1, 2, 3, 4, 5, 6)
+    checkDataset(spark.table("memStream").as[Int], 1, 2, 3, 4, 5, 6)
 
     query.stop()
   }
@@ -239,22 +238,20 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
     // Ignore the stress test as it takes several minutes to run
     (0 until 1000).foreach { _ =>
       val input = MemoryStream[Int]
-      val query = input.toDF().writeStream
+      val query = input
+        .toDF()
+        .writeStream
         .format("memory")
         .queryName("memStream")
         .start()
       input.addData(1, 2, 3)
       query.processAllAvailable()
 
-      checkDataset(
-        spark.table("memStream").as[Int],
-        1, 2, 3)
+      checkDataset(spark.table("memStream").as[Int], 1, 2, 3)
 
       input.addData(4, 5, 6)
       query.processAllAvailable()
-      checkDataset(
-        spark.table("memStream").as[Int],
-        1, 2, 3, 4, 5, 6)
+      checkDataset(spark.table("memStream").as[Int], 1, 2, 3, 4, 5, 6)
 
       query.stop()
     }
@@ -263,9 +260,11 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
   test("error when no name is specified") {
     val error = intercept[AnalysisException] {
       val input = MemoryStream[Int]
-      val query = input.toDF().writeStream
-          .format("memory")
-          .start()
+      val query = input
+        .toDF()
+        .writeStream
+        .format("memory")
+        .start()
     }
 
     assert(error.message contains "queryName must be specified")
@@ -275,17 +274,21 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
     val location = Utils.createTempDir(namePrefix = "steaming.checkpoint").getCanonicalPath
 
     val input = MemoryStream[Int]
-    val query = input.toDF().writeStream
-        .format("memory")
-        .queryName("memStream")
-        .option("checkpointLocation", location)
-        .start()
+    val query = input
+      .toDF()
+      .writeStream
+      .format("memory")
+      .queryName("memStream")
+      .option("checkpointLocation", location)
+      .start()
     input.addData(1, 2, 3)
     query.processAllAvailable()
     query.stop()
 
     intercept[AnalysisException] {
-      input.toDF().writeStream
+      input
+        .toDF()
+        .writeStream
         .format("memory")
         .queryName("memStream")
         .option("checkpointLocation", location)
@@ -295,8 +298,7 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
 
   test("data writer") {
     val partition = 1234
-    val writer = new MemoryDataWriter(
-      partition, new StructType().add("i", "int"))
+    val writer = new MemoryDataWriter(partition, new StructType().add("i", "int"))
     writer.write(InternalRow(1))
     writer.write(InternalRow(2))
     writer.write(InternalRow(44))
@@ -310,21 +312,21 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
 
   test("streaming writer") {
     val sink = new MemorySink
-    val write = new MemoryStreamingWrite(
-      sink, new StructType().add("i", "int"), needTruncate = false)
-    write.commit(0,
+    val write =
+      new MemoryStreamingWrite(sink, new StructType().add("i", "int"), needTruncate = false)
+    write.commit(
+      0,
       Array(
         MemoryWriterCommitMessage(0, Seq(Row(1), Row(2))),
         MemoryWriterCommitMessage(1, Seq(Row(3), Row(4))),
-        MemoryWriterCommitMessage(2, Seq(Row(6), Row(7)))
-      ))
+        MemoryWriterCommitMessage(2, Seq(Row(6), Row(7)))))
     assert(sink.latestBatchId.contains(0))
     assert(sink.latestBatchData.map(_.getInt(0)).sorted == Seq(1, 2, 3, 4, 6, 7))
-    write.commit(19,
+    write.commit(
+      19,
       Array(
         MemoryWriterCommitMessage(3, Seq(Row(11), Row(22))),
-        MemoryWriterCommitMessage(0, Seq(Row(33)))
-      ))
+        MemoryWriterCommitMessage(0, Seq(Row(33)))))
     assert(sink.latestBatchId.contains(19))
     assert(sink.latestBatchData.map(_.getInt(0)).sorted == Seq(11, 22, 33))
 
@@ -337,7 +339,9 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
     sink.write(batchId, needTruncate, vals.map(Row(_)).toArray)
   }
 
-  private def checkAnswer(rows: Seq[Row], expected: Seq[Int])(implicit schema: StructType): Unit = {
+  private def checkAnswer(
+      rows: Seq[Row],
+      expected: Seq[Int])(implicit schema: StructType): Unit = {
     checkAnswer(
       sqlContext.createDataFrame(sparkContext.makeRDD(rows), schema),
       intsToDF(expected)(schema))

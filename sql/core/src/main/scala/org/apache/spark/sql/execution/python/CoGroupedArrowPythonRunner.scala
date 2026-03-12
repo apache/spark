@@ -50,10 +50,13 @@ class CoGroupedArrowPythonRunner(
     override val pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
     sessionUUID: Option[String])
-  extends BasePythonRunner[
-    (Iterator[InternalRow], Iterator[InternalRow]), ColumnarBatch](
-    funcs.map(_._1), evalType, argOffsets, jobArtifactUUID, pythonMetrics)
-  with BasicPythonArrowOutput {
+    extends BasePythonRunner[(Iterator[InternalRow], Iterator[InternalRow]), ColumnarBatch](
+      funcs.map(_._1),
+      evalType,
+      argOffsets,
+      jobArtifactUUID,
+      pythonMetrics)
+    with BasicPythonArrowOutput {
   ArrowUtils.failDuplicatedFieldNames(leftSchema)
   ArrowUtils.failDuplicatedFieldNames(rightSchema)
 
@@ -67,8 +70,7 @@ class CoGroupedArrowPythonRunner(
     envVars
   }
   override val pythonExec: String =
-    SQLConf.get.pysparkWorkerPythonExecutable.getOrElse(
-      funcs.head._1.funcs.head.pythonExec)
+    SQLConf.get.pysparkWorkerPythonExecutable.getOrElse(funcs.head._1.funcs.head.pythonExec)
 
   override val faultHandlerEnabled: Boolean = SQLConf.get.pythonUDFWorkerFaulthandlerEnabled
   override val idleTimeoutSeconds: Long = SQLConf.get.pythonUDFWorkerIdleTimeoutSeconds
@@ -156,9 +158,13 @@ class CoGroupedArrowPythonRunner(
         var numRowsInBatch: Int = 0
         if (nextBatchInLeftGroup != null) {
           if (leftGroupArrowWriter == null) {
-            leftGroupArrowWriter = ArrowWriterWrapper.createAndStartArrowWriter(leftSchema,
-              timeZoneId, pythonExec + " (left)",
-              largeVarTypes, dataOut, context)
+            leftGroupArrowWriter = ArrowWriterWrapper.createAndStartArrowWriter(
+              leftSchema,
+              timeZoneId,
+              pythonExec + " (left)",
+              largeVarTypes,
+              dataOut,
+              context)
             // Set the unloader with compression after creating the writer
             leftGroupArrowWriter.unloader = createUnloader(leftGroupArrowWriter.root)
           }
@@ -179,9 +185,13 @@ class CoGroupedArrowPythonRunner(
           }
         } else if (nextBatchInRightGroup != null) {
           if (rightGroupArrowWriter == null) {
-            rightGroupArrowWriter = ArrowWriterWrapper.createAndStartArrowWriter(rightSchema,
-              timeZoneId, pythonExec + " (right)",
-              largeVarTypes, dataOut, context)
+            rightGroupArrowWriter = ArrowWriterWrapper.createAndStartArrowWriter(
+              rightSchema,
+              timeZoneId,
+              pythonExec + " (right)",
+              largeVarTypes,
+              dataOut,
+              context)
             // Set the unloader with compression after creating the writer
             rightGroupArrowWriter.unloader = createUnloader(rightGroupArrowWriter.root)
           }
@@ -213,4 +223,3 @@ class CoGroupedArrowPythonRunner(
     }
   }
 }
-

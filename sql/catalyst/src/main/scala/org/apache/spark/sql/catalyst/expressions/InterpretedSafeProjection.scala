@@ -22,12 +22,11 @@ import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, Generic
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
-
 /**
  * An interpreted version of a safe projection.
  *
- * @param expressions that produces the resulting fields. These expressions must be bound
- *                    to a schema.
+ * @param expressions
+ *   that produces the resulting fields. These expressions must be bound to a schema.
  */
 class InterpretedSafeProjection(expressions: Seq[Expression]) extends Projection {
 
@@ -36,25 +35,27 @@ class InterpretedSafeProjection(expressions: Seq[Expression]) extends Projection
 
   private[this] val mutableRow = new SpecificInternalRow(expressions.map(_.dataType))
 
-  private[this] val exprsWithWriters = expressions.zipWithIndex.filter {
-    case (NoOp, _) => false
-    case _ => true
-  }.map { case (e, i) =>
-    val converter = generateSafeValueConverter(e.dataType)
-    val writer = InternalRow.getWriter(i, e.dataType)
-    val f = if (!e.nullable) {
-      (v: Any) => writer(mutableRow, converter(v))
-    } else {
-      (v: Any) => {
-        if (v == null) {
-          mutableRow.setNullAt(i)
-        } else {
-          writer(mutableRow, converter(v))
+  private[this] val exprsWithWriters = expressions.zipWithIndex
+    .filter {
+      case (NoOp, _) => false
+      case _ => true
+    }
+    .map { case (e, i) =>
+      val converter = generateSafeValueConverter(e.dataType)
+      val writer = InternalRow.getWriter(i, e.dataType)
+      val f = if (!e.nullable) { (v: Any) =>
+        writer(mutableRow, converter(v))
+      } else { (v: Any) =>
+        {
+          if (v == null) {
+            mutableRow.setNullAt(i)
+          } else {
+            writer(mutableRow, converter(v))
+          }
         }
       }
+      (exprs(i), f)
     }
-    (exprs(i), f)
-  }
 
   private def generateSafeValueConverter(dt: DataType): Any => Any = dt match {
     case ArrayType(elemType, _) =>
@@ -62,9 +63,11 @@ class InterpretedSafeProjection(expressions: Seq[Expression]) extends Projection
       v => {
         val arrayValue = v.asInstanceOf[ArrayData]
         val result = new Array[Any](arrayValue.numElements())
-        arrayValue.foreach(elemType, (i, e) => {
-          result(i) = elementConverter(e)
-        })
+        arrayValue.foreach(
+          elemType,
+          (i, e) => {
+            result(i) = elementConverter(e)
+          })
         new GenericArrayData(result)
       }
 

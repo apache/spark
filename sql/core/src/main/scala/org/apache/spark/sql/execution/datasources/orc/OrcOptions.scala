@@ -32,7 +32,7 @@ import org.apache.spark.sql.internal.SQLConf
 class OrcOptions(
     @transient private val parameters: CaseInsensitiveMap[String],
     @transient private val sqlConf: SQLConf)
-  extends FileSourceOptions(parameters) {
+    extends FileSourceOptions(parameters) {
 
   import OrcOptions._
 
@@ -40,8 +40,7 @@ class OrcOptions(
     this(CaseInsensitiveMap(parameters), sqlConf)
 
   /**
-   * Compression codec to use.
-   * Acceptable values are defined in [[shortOrcCompressionCodecNames]].
+   * Compression codec to use. Acceptable values are defined in [[shortOrcCompressionCodecNames]].
    */
   val compressionCodec: String = {
     // `compression`, `orc.compress`(i.e., OrcConf.COMPRESS), and `spark.sql.orc.compression.codec`
@@ -60,8 +59,8 @@ class OrcOptions(
   }
 
   /**
-   * Whether it merges schemas or not. When the given Orc files have different schemas,
-   * the schemas can be merged. By default use the value specified in SQLConf.
+   * Whether it merges schemas or not. When the given Orc files have different schemas, the
+   * schemas can be merged. By default use the value specified in SQLConf.
    */
   val mergeSchema: Boolean = parameters
     .get(MERGE_SCHEMA)
@@ -75,9 +74,12 @@ object OrcOptions extends DataSourceOptions {
   val COMPRESSION = newOption("compression")
 
   // The ORC compression short names
-  private val shortOrcCompressionCodecNames = OrcCompressionCodec.values().map {
-    mapper => mapper.lowerCaseName() -> mapper.getCompressionKind.name()
-  }.toMap
+  private val shortOrcCompressionCodecNames = OrcCompressionCodec
+    .values()
+    .map { mapper =>
+      mapper.lowerCaseName() -> mapper.getCompressionKind.name()
+    }
+    .toMap
 
   def getORCCompressionCodecName(name: String): String = shortOrcCompressionCodecNames(name)
 }

@@ -38,15 +38,19 @@ import org.apache.spark.sql.types.StructType
 /**
  * A write-only table for forwarding data into the specified [[ForeachWriter]].
  *
- * @param writer The [[ForeachWriter]] to process all data.
- * @param converter An object to convert internal rows to target type T. Either it can be
- *                  a [[ExpressionEncoder]] or a direct converter function.
- * @tparam T The expected type of the sink.
+ * @param writer
+ *   The [[ForeachWriter]] to process all data.
+ * @param converter
+ *   An object to convert internal rows to target type T. Either it can be a [[ExpressionEncoder]]
+ *   or a direct converter function.
+ * @tparam T
+ *   The expected type of the sink.
  */
 case class ForeachWriterTable[T](
     writer: ForeachWriter[T],
     converter: Either[ExpressionEncoder[T], InternalRow => T])
-  extends Table with SupportsWrite {
+    extends Table
+    with SupportsWrite {
 
   override def name(): String = "ForeachSink"
 
@@ -73,7 +77,8 @@ case class ForeachWriterTable[T](
 class ForeachWrite[T](
     info: LogicalWriteInfo,
     writer: ForeachWriter[T],
-    converter: Either[ExpressionEncoder[T], InternalRow => T]) extends Write {
+    converter: Either[ExpressionEncoder[T], InternalRow => T])
+    extends Write {
   private val inputSchema: StructType = info.schema()
   override def toStreaming: StreamingWrite = {
     new StreamingWrite {
@@ -81,7 +86,7 @@ class ForeachWrite[T](
       override def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}
 
       override def createStreamingWriterFactory(
-        info: PhysicalWriteInfo): StreamingDataWriterFactory = {
+          info: PhysicalWriteInfo): StreamingDataWriterFactory = {
         val rowConverter: InternalRow => T = converter match {
           case Left(enc) =>
             val boundEnc = enc.resolveAndBind(
@@ -98,23 +103,20 @@ class ForeachWrite[T](
 }
 
 object ForeachWriterTable {
-  def apply[T](
-      writer: ForeachWriter[T],
-      encoder: ExpressionEncoder[T]): ForeachWriterTable[_] = {
+  def apply[T](writer: ForeachWriter[T], encoder: ExpressionEncoder[T]): ForeachWriterTable[_] = {
     writer match {
       case pythonWriter: PythonForeachWriter =>
         new ForeachWriterTable[UnsafeRow](
-          pythonWriter, Right((x: InternalRow) => x.asInstanceOf[UnsafeRow]))
+          pythonWriter,
+          Right((x: InternalRow) => x.asInstanceOf[UnsafeRow]))
       case _ =>
         new ForeachWriterTable[T](writer, Left(encoder))
     }
   }
 }
 
-case class ForeachWriterFactory[T](
-    writer: ForeachWriter[T],
-    rowConverter: InternalRow => T)
-  extends StreamingDataWriterFactory {
+case class ForeachWriterFactory[T](writer: ForeachWriter[T], rowConverter: InternalRow => T)
+    extends StreamingDataWriterFactory {
   override def createWriter(
       partitionId: Int,
       taskId: Long,
@@ -126,18 +128,21 @@ case class ForeachWriterFactory[T](
 /**
  * A [[DataWriter]] which writes data in this partition to a [[ForeachWriter]].
  *
- * @param writer The [[ForeachWriter]] to process all data.
- * @param rowConverter A function which can convert [[InternalRow]] to the required type [[T]]
+ * @param writer
+ *   The [[ForeachWriter]] to process all data.
+ * @param rowConverter
+ *   A function which can convert [[InternalRow]] to the required type [[T]]
  * @param partitionId
  * @param epochId
- * @tparam T The type expected by the writer.
+ * @tparam T
+ *   The type expected by the writer.
  */
 class ForeachDataWriter[T](
     writer: ForeachWriter[T],
     rowConverter: InternalRow => T,
     partitionId: Int,
     epochId: Long)
-  extends DataWriter[InternalRow] {
+    extends DataWriter[InternalRow] {
 
   // If open returns false, we should skip writing rows.
   private val opened = writer.open(partitionId, epochId)
@@ -175,7 +180,8 @@ class ForeachDataWriter[T](
 }
 
 /**
- * An empty [[WriterCommitMessage]]. [[ForeachWriter]] implementations have no global coordination.
+ * An empty [[WriterCommitMessage]]. [[ForeachWriter]] implementations have no global
+ * coordination.
  */
 case object ForeachWriterCommitMessage extends WriterCommitMessage
 
@@ -183,7 +189,7 @@ case object ForeachWriterCommitMessage extends WriterCommitMessage
  * Exception that wraps the exception thrown in the user provided function in Foreach sink.
  */
 private[sql] case class ForeachUserFuncException(cause: Throwable)
-  extends SparkException(
-    errorClass = "FOREACH_USER_FUNCTION_ERROR",
-    messageParameters = Map("reason" -> Option(cause.getMessage).getOrElse("")),
-    cause = cause)
+    extends SparkException(
+      errorClass = "FOREACH_USER_FUNCTION_ERROR",
+      messageParameters = Map("reason" -> Option(cause.getMessage).getOrElse("")),
+      cause = cause)

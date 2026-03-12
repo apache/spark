@@ -25,8 +25,8 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.StringType
 
 /**
- * Benchmark for Dataset typed operations comparing with DataFrame and RDD versions.
- * To run this benchmark:
+ * Benchmark for Dataset typed operations comparing with DataFrame and RDD versions. To run this
+ * benchmark:
  * {{{
  *   1. without sbt:
  *      bin/spark-submit --class <this class>
@@ -173,9 +173,7 @@ object DatasetBenchmark extends SqlBasedBenchmark {
     val df = spark.range(1, numRows).select($"id".as("l"), $"id".cast(StringType).as("s"))
     val benchmark = new Benchmark("back-to-back filter", numRows, output = output)
     val func = (d: Data, i: Int) => d.l % (100L + i) == 0L
-    val funcs = 0.until(numChains).map { i =>
-      (d: Data) => func(d, i)
-    }
+    val funcs = 0.until(numChains).map { i => (d: Data) => func(d, i) }
 
     val rdd = spark.sparkContext.range(1, numRows).map(l => Data(l, l.toString))
     benchmark.addCase("RDD") { iter =>
@@ -252,7 +250,8 @@ object DatasetBenchmark extends SqlBasedBenchmark {
   }
 
   override def getSparkSession: SparkSession = {
-    SparkSession.builder()
+    SparkSession
+      .builder()
       .master("local[*]")
       .appName("Dataset benchmark")
       .getOrCreate()

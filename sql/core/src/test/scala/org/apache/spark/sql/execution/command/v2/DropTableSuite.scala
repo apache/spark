@@ -36,8 +36,7 @@ class DropTableSuite extends command.DropTableSuiteBase with CommandSuiteBase {
           sql(s"DROP TABLE $catalog.ns.tbl PURGE")
         },
         condition = "UNSUPPORTED_FEATURE.PURGE_TABLE",
-        parameters = Map.empty
-      )
+        parameters = Map.empty)
     }
   }
 
@@ -46,14 +45,10 @@ class DropTableSuite extends command.DropTableSuiteBase with CommandSuiteBase {
       V2_SESSION_CATALOG_IMPLEMENTATION.key -> classOf[InMemoryTableSessionCatalog].getName) {
 
       sql("CREATE TABLE tbl USING json AS SELECT 1 AS i")
-      checkAnswer(
-        sql("SHOW TABLES IN spark_catalog.default").select("tableName"),
-        Row("tbl"))
+      checkAnswer(sql("SHOW TABLES IN spark_catalog.default").select("tableName"), Row("tbl"))
 
       sql("DROP TABLE spark_catalog.default.tbl")
-      checkAnswer(
-        sql("SHOW TABLES IN spark_catalog.default").select("tableName"),
-        Seq.empty)
+      checkAnswer(sql("SHOW TABLES IN spark_catalog.default").select("tableName"), Seq.empty)
     }
   }
 }

@@ -20,8 +20,8 @@ package org.apache.spark.sql.test
 import org.scalatest.wordspec.AnyWordSpec
 
 /**
- * The purpose of this suite is to make sure that generic WordSpec-based scala
- * tests work with a shared spark session
+ * The purpose of this suite is to make sure that generic WordSpec-based scala tests work with a
+ * shared spark session
  */
 class GenericWordSpecSuite extends AnyWordSpec with SharedSparkSessionBase {
   import testImplicits._

@@ -42,17 +42,20 @@ class XmlInputFormat extends TextInputFormat {
 }
 
 object XmlInputFormat {
+
   /** configuration key for start tag */
   val START_TAG_KEY: String = "xmlinput.start"
+
   /** configuration key for end tag */
   val END_TAG_KEY: String = "xmlinput.end"
+
   /** configuration key for encoding type */
   val ENCODING_KEY: String = "xmlinput.encoding"
 }
 
 /**
- * XMLRecordReader class to read through a given xml document to output xml blocks as records
- * as specified by the start tag and end tag.
+ * XMLRecordReader class to read through a given xml document to output xml blocks as records as
+ * specified by the start tag and end tag.
  *
  * This implementation is ultimately loosely based on LineRecordReader in Hadoop.
  */
@@ -108,8 +111,9 @@ private[xml] class XmlRecordReader extends RecordReader[LongWritable, Text] {
           if (start != 0) {
             // So we have a split that is only part of a file stored using
             // a Compression codec that cannot be split.
-            throw new IOException("Cannot seek in " +
-              codec.getClass.getSimpleName + " compressed stream")
+            throw new IOException(
+              "Cannot seek in " +
+                codec.getClass.getSimpleName + " compressed stream")
           }
           val cIn = c.createInputStream(fsin, decompressor)
           in = cIn
@@ -117,7 +121,8 @@ private[xml] class XmlRecordReader extends RecordReader[LongWritable, Text] {
       }
     } else {
       fsin.seek(start)
-      countingIn = BoundedInputStream.builder()
+      countingIn = BoundedInputStream
+        .builder()
         .setInputStream(fsin)
         .get()
       in = countingIn
@@ -171,12 +176,14 @@ private[xml] class XmlRecordReader extends RecordReader[LongWritable, Text] {
   }
 
   /**
-   * Finds the start of the next record.
-   * It treats data from `startTag` and `endTag` as a record.
+   * Finds the start of the next record. It treats data from `startTag` and `endTag` as a record.
    *
-   * @param key the current key that will be written
-   * @param value  the object that will be written
-   * @return whether it reads successfully
+   * @param key
+   *   the current key that will be written
+   * @param value
+   *   the object that will be written
+   * @return
+   *   whether it reads successfully
    */
   private def next(key: LongWritable, value: Text): Boolean = {
     if (readUntilStartElement()) {

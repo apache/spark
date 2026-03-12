@@ -44,7 +44,8 @@ case class ShuffledHashJoinExec private (
     left: SparkPlan,
     right: SparkPlan,
     isSkewJoin: Boolean = false)
-  extends HashJoin with ShuffledJoin {
+    extends HashJoin
+    with ShuffledJoin {
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
@@ -126,8 +127,8 @@ case class ShuffledHashJoinExec private (
     streamedPlan.execute().zipPartitions(buildPlan.execute()) { (streamIter, buildIter) =>
       val hashed = buildHashedRelation(buildIter)
       joinType match {
-        case FullOuter => buildSideOrFullOuterJoin(streamIter, hashed, numOutputRows,
-          isFullOuterJoin = true)
+        case FullOuter =>
+          buildSideOrFullOuterJoin(streamIter, hashed, numOutputRows, isFullOuterJoin = true)
         case LeftOuter if buildSide.equals(BuildLeft) =>
           buildSideOrFullOuterJoin(streamIter, hashed, numOutputRows, isFullOuterJoin = false)
         case RightOuter if buildSide.equals(BuildRight) =>
@@ -164,11 +165,25 @@ case class ShuffledHashJoinExec private (
     }
 
     val iter = if (hashedRelation.keyIsUnique) {
-      buildSideOrFullOuterJoinUniqueKey(streamIter, hashedRelation, joinKeys, joinRowWithStream,
-        joinRowWithBuild, streamNullJoinRowWithBuild, buildNullRow, isFullOuterJoin)
+      buildSideOrFullOuterJoinUniqueKey(
+        streamIter,
+        hashedRelation,
+        joinKeys,
+        joinRowWithStream,
+        joinRowWithBuild,
+        streamNullJoinRowWithBuild,
+        buildNullRow,
+        isFullOuterJoin)
     } else {
-      buildSideOrFullOuterJoinNonUniqueKey(streamIter, hashedRelation, joinKeys, joinRowWithStream,
-        joinRowWithBuild, streamNullJoinRowWithBuild, buildNullRow, isFullOuterJoin)
+      buildSideOrFullOuterJoinNonUniqueKey(
+        streamIter,
+        hashedRelation,
+        joinKeys,
+        joinRowWithStream,
+        joinRowWithBuild,
+        streamNullJoinRowWithBuild,
+        buildNullRow,
+        isFullOuterJoin)
     }
 
     val resultProj = UnsafeProjection.create(output, output)
@@ -180,12 +195,10 @@ case class ShuffledHashJoinExec private (
 
   /**
    * Shuffled hash join with unique join keys, where an outer side is the build side.
-   * 1. Process rows from stream side by looking up hash relation.
-   *    Mark the matched rows from build side be looked up.
-   *    A bit set is used to track matched rows with key index.
-   * 2. Process rows from build side by iterating hash relation.
-   *    Filter out rows from build side being matched already,
-   *    by checking key index from bit set.
+   *   1. Process rows from stream side by looking up hash relation. Mark the matched rows from
+   *      build side be looked up. A bit set is used to track matched rows with key index.
+   *   2. Process rows from build side by iterating hash relation. Filter out rows from build side
+   *      being matched already, by checking key index from bit set.
    */
   private def buildSideOrFullOuterJoinUniqueKey(
       streamIter: Iterator[InternalRow],
@@ -230,16 +243,15 @@ case class ShuffledHashJoinExec private (
     }
 
     // Process build side with filtering out the matched rows
-    val buildResultIter = hashedRelation.valuesWithKeyIndex().flatMap {
-      valueRowWithKeyIndex =>
-        val keyIndex = valueRowWithKeyIndex.getKeyIndex
-        val isMatched = matchedKeys.get(keyIndex)
-        if (!isMatched) {
-          val buildRow = valueRowWithKeyIndex.getValue
-          Some(streamNullJoinRowWithBuild(buildRow))
-        } else {
-          None
-        }
+    val buildResultIter = hashedRelation.valuesWithKeyIndex().flatMap { valueRowWithKeyIndex =>
+      val keyIndex = valueRowWithKeyIndex.getKeyIndex
+      val isMatched = matchedKeys.get(keyIndex)
+      if (!isMatched) {
+        val buildRow = valueRowWithKeyIndex.getValue
+        Some(streamNullJoinRowWithBuild(buildRow))
+      } else {
+        None
+      }
     }
 
     streamResultIter ++ buildResultIter
@@ -247,18 +259,15 @@ case class ShuffledHashJoinExec private (
 
   /**
    * Shuffled hash join with non-unique join keys, where an outer side is the build side.
-   * 1. Process rows from stream side by looking up hash relation.
-   *    Mark the matched rows from build side be looked up.
-   *    A [[OpenHashSet]] (Long) is used to track matched rows with
-   *    key index (Int) and value index (Int) together.
-   * 2. Process rows from build side by iterating hash relation.
-   *    Filter out rows from build side being matched already,
-   *    by checking key index and value index from [[OpenHashSet]].
+   *   1. Process rows from stream side by looking up hash relation. Mark the matched rows from
+   *      build side be looked up. A [[OpenHashSet]] (Long) is used to track matched rows with key
+   *      index (Int) and value index (Int) together.
+   *   2. Process rows from build side by iterating hash relation. Filter out rows from build side
+   *      being matched already, by checking key index and value index from [[OpenHashSet]].
    *
-   * The "value index" is defined as the index of the tuple in the chain
-   * of tuples having the same key. For example, if certain key is found thrice,
-   * the value indices of its tuples will be 0, 1 and 2.
-   * Note that value indices of tuples with different keys are incomparable.
+   * The "value index" is defined as the index of the tuple in the chain of tuples having the same
+   * key. For example, if certain key is found thrice, the value indices of its tuples will be 0,
+   * 1 and 2. Note that value indices of tuples with different keys are incomparable.
    */
   private def buildSideOrFullOuterJoinNonUniqueKey(
       streamIter: Iterator[InternalRow],
@@ -270,14 +279,16 @@ case class ShuffledHashJoinExec private (
       buildNullRow: GenericInternalRow,
       isFullOuterJoin: Boolean): Iterator[InternalRow] = {
     val matchedRows = new OpenHashSet[Long]
-    TaskContext.get().addTaskCompletionListener[Unit](_ => {
-      // At the end of the task, update the task's memory usage for this
-      // [[OpenHashSet]] to track matched rows, which has two parts:
-      // [[OpenHashSet._bitset]] and [[OpenHashSet._data]].
-      val bitSetEstimatedSize = matchedRows.getBitSet.capacity / 8
-      val dataEstimatedSize = matchedRows.capacity * 8
-      longMetric("buildDataSize") += bitSetEstimatedSize + dataEstimatedSize
-    })
+    TaskContext
+      .get()
+      .addTaskCompletionListener[Unit](_ => {
+        // At the end of the task, update the task's memory usage for this
+        // [[OpenHashSet]] to track matched rows, which has two parts:
+        // [[OpenHashSet._bitset]] and [[OpenHashSet._data]].
+        val bitSetEstimatedSize = matchedRows.getBitSet.capacity / 8
+        val dataEstimatedSize = matchedRows.capacity * 8
+        longMetric("buildDataSize") += bitSetEstimatedSize + dataEstimatedSize
+      })
 
     def markRowMatched(keyIndex: Int, valueIndex: Int): Unit = {
       val rowIndex: Long = (keyIndex.toLong << 32) | valueIndex
@@ -337,23 +348,22 @@ case class ShuffledHashJoinExec private (
     // Process build side with filtering out the matched rows
     var prevKeyIndex = -1
     var valueIndex = -1
-    val buildResultIter = hashedRelation.valuesWithKeyIndex().flatMap {
-      valueRowWithKeyIndex =>
-        val keyIndex = valueRowWithKeyIndex.getKeyIndex
-        if (prevKeyIndex == -1 || keyIndex != prevKeyIndex) {
-          valueIndex = 0
-          prevKeyIndex = keyIndex
-        } else {
-          valueIndex += 1
-        }
+    val buildResultIter = hashedRelation.valuesWithKeyIndex().flatMap { valueRowWithKeyIndex =>
+      val keyIndex = valueRowWithKeyIndex.getKeyIndex
+      if (prevKeyIndex == -1 || keyIndex != prevKeyIndex) {
+        valueIndex = 0
+        prevKeyIndex = keyIndex
+      } else {
+        valueIndex += 1
+      }
 
-        val isMatched = isRowMatched(keyIndex, valueIndex)
-        if (!isMatched) {
-          val buildRow = valueRowWithKeyIndex.getValue
-          Some(streamNullJoinRowWithBuild(buildRow))
-        } else {
-          None
-        }
+      val isMatched = isRowMatched(keyIndex, valueIndex)
+      if (!isMatched) {
+        val buildRow = valueRowWithKeyIndex.getValue
+        Some(streamNullJoinRowWithBuild(buildRow))
+      } else {
+        None
+      }
     }
 
     streamResultIter ++ buildResultIter
@@ -379,8 +389,11 @@ case class ShuffledHashJoinExec private (
     val clsName = classOf[HashedRelation].getName
 
     // Inline mutable state since not many join operations in a task
-    val relationTerm = ctx.addMutableState(clsName, "relation",
-      v => s"$v = $thisPlan.buildHashedRelation(inputs[1]);", forceInline = true)
+    val relationTerm = ctx.addMutableState(
+      clsName,
+      "relation",
+      v => s"$v = $thisPlan.buildHashedRelation(inputs[1]);",
+      forceInline = true)
     HashedRelationInfo(relationTerm, keyIsUnique = false, isEmpty = false)
   }
 
@@ -400,18 +413,29 @@ case class ShuffledHashJoinExec private (
     val HashedRelationInfo(relationTerm, _, _) = prepareRelation(ctx)
 
     // Inline mutable state since not many join operations in a task
-    val keyIsUnique = ctx.addMutableState("boolean", "keyIsUnique",
-      v => s"$v = $relationTerm.keyIsUnique();", forceInline = true)
-    val streamedInput = ctx.addMutableState("scala.collection.Iterator", "streamedInput",
-      v => s"$v = inputs[0];", forceInline = true)
-    val buildInput = ctx.addMutableState("scala.collection.Iterator", "buildInput",
-      v => s"$v = $relationTerm.valuesWithKeyIndex();", forceInline = true)
+    val keyIsUnique = ctx.addMutableState(
+      "boolean",
+      "keyIsUnique",
+      v => s"$v = $relationTerm.keyIsUnique();",
+      forceInline = true)
+    val streamedInput = ctx.addMutableState(
+      "scala.collection.Iterator",
+      "streamedInput",
+      v => s"$v = inputs[0];",
+      forceInline = true)
+    val buildInput = ctx.addMutableState(
+      "scala.collection.Iterator",
+      "buildInput",
+      v => s"$v = $relationTerm.valuesWithKeyIndex();",
+      forceInline = true)
     val streamedRow = ctx.addMutableState("InternalRow", "streamedRow", forceInline = true)
     val buildRow = ctx.addMutableState("InternalRow", "buildRow", forceInline = true)
 
     // Generate variables and related code from streamed side
     val streamedVars = genOneSideJoinVars(ctx, streamedRow, streamedPlan, setDefaultValue = false)
-    val streamedKeyVariables = evaluateRequiredVariables(streamedOutput, streamedVars,
+    val streamedKeyVariables = evaluateRequiredVariables(
+      streamedOutput,
+      streamedVars,
       AttributeSet.fromAttributeSets(streamedKeys.map(_.references)))
     ctx.currentVars = streamedVars
     val streamedKeyExprCode = GenerateUnsafeProjection.createCode(ctx, streamedBoundKeys)
@@ -428,16 +452,16 @@ case class ShuffledHashJoinExec private (
 
     // Generate code for result output in separate function, as we need to output result from
     // multiple places in join code.
-    val streamedResultVars = genOneSideJoinVars(
-      ctx, streamedRow, streamedPlan, setDefaultValue = true)
-    val buildResultVars = genOneSideJoinVars(
-      ctx, buildRow, buildPlan, setDefaultValue = true)
+    val streamedResultVars =
+      genOneSideJoinVars(ctx, streamedRow, streamedPlan, setDefaultValue = true)
+    val buildResultVars = genOneSideJoinVars(ctx, buildRow, buildPlan, setDefaultValue = true)
     val resultVars = buildSide match {
       case BuildLeft => buildResultVars ++ streamedResultVars
       case BuildRight => streamedResultVars ++ buildResultVars
     }
     val consumeOuterJoinRow = ctx.freshName("consumeOuterJoinRow")
-    ctx.addNewFunction(consumeOuterJoinRow,
+    ctx.addNewFunction(
+      consumeOuterJoinRow,
       s"""
          |private void $consumeOuterJoinRow() throws java.io.IOException {
          |  ${metricTerm(ctx, "numOutputRows")}.add(1);
@@ -447,12 +471,26 @@ case class ShuffledHashJoinExec private (
 
     val isFullOuterJoin = joinType == FullOuter
     val joinWithUniqueKey = codegenBuildSideOrFullOuterJoinWithUniqueKey(
-      ctx, (streamedRow, buildRow), (streamedInput, buildInput), streamedKeyEv, streamedKeyAnyNull,
-      streamedKeyExprCode.value, relationTerm, conditionCheck, consumeOuterJoinRow,
+      ctx,
+      (streamedRow, buildRow),
+      (streamedInput, buildInput),
+      streamedKeyEv,
+      streamedKeyAnyNull,
+      streamedKeyExprCode.value,
+      relationTerm,
+      conditionCheck,
+      consumeOuterJoinRow,
       isFullOuterJoin)
     val joinWithNonUniqueKey = codegenBuildSideOrFullOuterJoinNonUniqueKey(
-      ctx, (streamedRow, buildRow), (streamedInput, buildInput), streamedKeyEv, streamedKeyAnyNull,
-      streamedKeyExprCode.value, relationTerm, conditionCheck, consumeOuterJoinRow,
+      ctx,
+      (streamedRow, buildRow),
+      (streamedInput, buildInput),
+      streamedKeyEv,
+      streamedKeyAnyNull,
+      streamedKeyExprCode.value,
+      relationTerm,
+      conditionCheck,
+      consumeOuterJoinRow,
       isFullOuterJoin)
 
     s"""
@@ -465,8 +503,8 @@ case class ShuffledHashJoinExec private (
   }
 
   /**
-   * Generates the code for build-side or full outer join with unique join keys.
-   * This is code-gen version of `buildSideOrFullOuterJoinUniqueKey()`.
+   * Generates the code for build-side or full outer join with unique join keys. This is code-gen
+   * version of `buildSideOrFullOuterJoinUniqueKey()`.
    */
   private def codegenBuildSideOrFullOuterJoinWithUniqueKey(
       ctx: CodegenContext,
@@ -481,8 +519,11 @@ case class ShuffledHashJoinExec private (
       isFullOuterJoin: Boolean): String = {
     // Inline mutable state since not many join operations in a task
     val matchedKeySetClsName = classOf[BitSet].getName
-    val matchedKeySet = ctx.addMutableState(matchedKeySetClsName, "matchedKeySet",
-      v => s"$v = new $matchedKeySetClsName($relationTerm.maxNumKeysIndex());", forceInline = true)
+    val matchedKeySet = ctx.addMutableState(
+      matchedKeySetClsName,
+      "matchedKeySet",
+      v => s"$v = new $matchedKeySetClsName($relationTerm.maxNumKeysIndex());",
+      forceInline = true)
     val rowWithIndexClsName = classOf[ValueRowWithKeyIndex].getName
     val rowWithIndex = ctx.freshName("rowWithIndex")
     val foundMatch = ctx.freshName("foundMatch")
@@ -550,8 +591,8 @@ case class ShuffledHashJoinExec private (
   }
 
   /**
-   * Generates the code for build-side or full outer join with non-unique join keys.
-   * This is code-gen version of `buildSideOrFullOuterJoinNonUniqueKey()`.
+   * Generates the code for build-side or full outer join with non-unique join keys. This is
+   * code-gen version of `buildSideOrFullOuterJoinNonUniqueKey()`.
    */
   private def codegenBuildSideOrFullOuterJoinNonUniqueKey(
       ctx: CodegenContext,
@@ -566,13 +607,15 @@ case class ShuffledHashJoinExec private (
       isFullOuterJoin: Boolean): String = {
     // Inline mutable state since not many join operations in a task
     val matchedRowSetClsName = classOf[OpenHashSet[_]].getName
-    val matchedRowSet = ctx.addMutableState(matchedRowSetClsName, "matchedRowSet",
+    val matchedRowSet = ctx.addMutableState(
+      matchedRowSetClsName,
+      "matchedRowSet",
       v => s"$v = new $matchedRowSetClsName(scala.reflect.ClassTag$$.MODULE$$.Long());",
       forceInline = true)
-    val prevKeyIndex = ctx.addMutableState("int", "prevKeyIndex",
-      v => s"$v = -1;", forceInline = true)
-    val valueIndex = ctx.addMutableState("int", "valueIndex",
-      v => s"$v = -1;", forceInline = true)
+    val prevKeyIndex =
+      ctx.addMutableState("int", "prevKeyIndex", v => s"$v = -1;", forceInline = true)
+    val valueIndex =
+      ctx.addMutableState("int", "valueIndex", v => s"$v = -1;", forceInline = true)
     val rowWithIndexClsName = classOf[ValueRowWithKeyIndex].getName
     val rowWithIndex = ctx.freshName("rowWithIndex")
     val buildIterator = ctx.freshName("buildIterator")
@@ -656,7 +699,8 @@ case class ShuffledHashJoinExec private (
   }
 
   override protected def withNewChildrenInternal(
-      newLeft: SparkPlan, newRight: SparkPlan): ShuffledHashJoinExec =
+      newLeft: SparkPlan,
+      newRight: SparkPlan): ShuffledHashJoinExec =
     copy(left = newLeft, right = newRight)
 }
 
@@ -670,7 +714,8 @@ object ShuffledHashJoinExec {
       left: SparkPlan,
       right: SparkPlan,
       isSkewJoin: Boolean = false): ShuffledHashJoinExec = {
-    val (normalizedLeftKeys, normalizedRightKeys) = HashJoin.normalizeJoinKeys(leftKeys, rightKeys)
+    val (normalizedLeftKeys, normalizedRightKeys) =
+      HashJoin.normalizeJoinKeys(leftKeys, rightKeys)
 
     new ShuffledHashJoinExec(
       normalizedLeftKeys,

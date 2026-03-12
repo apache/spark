@@ -42,9 +42,9 @@ import org.apache.spark.unsafe.types.UTF8String
  * Use [[testWithMemoryLeakDetection]] rather than [[test]] to construct test cases.
  */
 class UnsafeFixedWidthAggregationMapSuite
-  extends SparkFunSuite
-  with Matchers
-  with SharedSparkSession {
+    extends SparkFunSuite
+    with Matchers
+    with SharedSparkSession {
 
   import UnsafeFixedWidthAggregationMap._
 
@@ -74,16 +74,17 @@ class UnsafeFixedWidthAggregationMapSuite
       taskContext = mock(classOf[TaskContext])
       when(taskContext.taskMemoryManager()).thenReturn(taskMemoryManager)
 
-      TaskContext.setTaskContext(new TaskContextImpl(
-        stageId = 0,
-        stageAttemptNumber = 0,
-        partitionId = 0,
-        numPartitions = 1,
-        taskAttemptId = Random.nextInt(10000),
-        attemptNumber = 0,
-        taskMemoryManager = taskMemoryManager,
-        localProperties = new Properties,
-        metricsSystem = null))
+      TaskContext.setTaskContext(
+        new TaskContextImpl(
+          stageId = 0,
+          stageAttemptNumber = 0,
+          partitionId = 0,
+          numPartitions = 1,
+          taskAttemptId = Random.nextInt(10000),
+          attemptNumber = 0,
+          taskMemoryManager = taskMemoryManager,
+          localProperties = new Properties,
+          metricsSystem = null))
 
       try {
         f
@@ -98,19 +99,24 @@ class UnsafeFixedWidthAggregationMapSuite
 
   private def randomStrings(n: Int): Seq[String] = {
     val rand = new Random(42)
-    Seq.fill(512) {
-      Seq.fill(rand.nextInt(100))(rand.nextPrintableChar()).mkString
-    }.distinct
+    Seq
+      .fill(512) {
+        Seq.fill(rand.nextInt(100))(rand.nextPrintableChar()).mkString
+      }
+      .distinct
   }
 
   testWithMemoryLeakDetection("supported schemas") {
-    assert(supportsAggregationBufferSchema(
-      StructType(StructField("x", DecimalType.USER_DEFAULT) :: Nil)))
-    assert(supportsAggregationBufferSchema(
-      StructType(StructField("x", DecimalType.SYSTEM_DEFAULT) :: Nil)))
+    assert(
+      supportsAggregationBufferSchema(
+        StructType(StructField("x", DecimalType.USER_DEFAULT) :: Nil)))
+    assert(
+      supportsAggregationBufferSchema(
+        StructType(StructField("x", DecimalType.SYSTEM_DEFAULT) :: Nil)))
     assert(!supportsAggregationBufferSchema(StructType(StructField("x", StringType) :: Nil)))
     assert(
-      !supportsAggregationBufferSchema(StructType(StructField("x", ArrayType(IntegerType)) :: Nil)))
+      !supportsAggregationBufferSchema(
+        StructType(StructField("x", ArrayType(IntegerType)) :: Nil)))
   }
 
   testWithMemoryLeakDetection("empty map") {
@@ -120,8 +126,7 @@ class UnsafeFixedWidthAggregationMapSuite
       groupKeySchema,
       taskContext,
       1024, // initial capacity,
-      PAGE_SIZE_BYTES
-    )
+      PAGE_SIZE_BYTES)
     assert(!map.iterator().next())
     map.free()
   }
@@ -133,8 +138,7 @@ class UnsafeFixedWidthAggregationMapSuite
       groupKeySchema,
       taskContext,
       1024, // initial capacity
-      PAGE_SIZE_BYTES
-    )
+      PAGE_SIZE_BYTES)
     val groupKey = InternalRow(UTF8String.fromString("cats"))
     val row = map.getAggregationBuffer(groupKey)
 
@@ -142,13 +146,13 @@ class UnsafeFixedWidthAggregationMapSuite
     assert(row != null)
     val iter = map.iterator()
     assert(iter.next())
-    iter.getKey.getString(0) should be ("cats")
-    iter.getValue.getInt(0) should be (0)
+    iter.getKey.getString(0) should be("cats")
+    iter.getValue.getInt(0) should be(0)
     assert(!iter.next())
 
     // Modifications to rows retrieved from the map should update the values in the map
     iter.getValue.setInt(0, 42)
-    row.getInt(0) should be (42)
+    row.getInt(0) should be(42)
 
     map.free()
   }
@@ -160,8 +164,7 @@ class UnsafeFixedWidthAggregationMapSuite
       groupKeySchema,
       taskContext,
       128, // initial capacity
-      PAGE_SIZE_BYTES
-    )
+      PAGE_SIZE_BYTES)
     val rand = new Random(42)
     val groupKeys: Set[String] = Seq.fill(512)(rand.nextString(1024)).toSet
     groupKeys.foreach { keyString =>
@@ -185,8 +188,7 @@ class UnsafeFixedWidthAggregationMapSuite
       groupKeySchema,
       taskContext,
       128, // initial capacity
-      PAGE_SIZE_BYTES
-    )
+      PAGE_SIZE_BYTES)
 
     val keys = randomStrings(1024).take(512)
     keys.foreach { keyString =>
@@ -232,8 +234,7 @@ class UnsafeFixedWidthAggregationMapSuite
       groupKeySchema,
       taskContext,
       128, // initial capacity
-      PAGE_SIZE_BYTES
-    )
+      PAGE_SIZE_BYTES)
     val sorter = map.destructAndCreateExternalSorter()
 
     // Add more keys to the sorter and make sure the results come out sorted.
@@ -272,8 +273,7 @@ class UnsafeFixedWidthAggregationMapSuite
       StructType(Nil),
       taskContext,
       128, // initial capacity
-      PAGE_SIZE_BYTES
-    )
+      PAGE_SIZE_BYTES)
     (1 to 10).foreach { i =>
       val buf = map.getAggregationBuffer(UnsafeRow.createFromByteArray(0, 0))
       assert(buf != null)
@@ -316,8 +316,7 @@ class UnsafeFixedWidthAggregationMapSuite
       groupKeySchema,
       taskContext,
       128, // initial capacity
-      pageSize
-    )
+      pageSize)
 
     val rand = new Random(42)
     for (i <- 1 to 100) {
@@ -353,8 +352,7 @@ class UnsafeFixedWidthAggregationMapSuite
       groupKeySchema,
       taskContext,
       128, // initial capacity
-      pageSize
-    )
+      pageSize)
 
     val rand = new Random(42)
     for (i <- 1 to 63) {

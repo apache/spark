@@ -29,7 +29,8 @@ import org.apache.spark.sql.types.{StringType, StructType}
  *   - V2 table catalog tests: `org.apache.spark.sql.execution.command.v2.ShowNamespacesSuite`
  *   - V1 table catalog tests: `org.apache.spark.sql.execution.command.v1.ShowNamespacesSuiteBase`
  *     - V1 In-Memory catalog: `org.apache.spark.sql.execution.command.v1.ShowNamespacesSuite`
- *     - V1 Hive External catalog: `org.apache.spark.sql.hive.execution.command.ShowNamespacesSuite`
+ *     - V1 Hive External catalog:
+ *       `org.apache.spark.sql.hive.execution.command.ShowNamespacesSuite`
  */
 trait ShowNamespacesSuiteBase extends QueryTest with DDLCommandTestUtils {
   override val command = "SHOW NAMESPACES"
@@ -98,8 +99,7 @@ trait ShowNamespacesSuiteBase extends QueryTest with DDLCommandTestUtils {
       Seq(
         "'*db1A'" -> Seq("showdb1a"),
         "'*2*'" -> Seq("showdb2b"),
-        "'*db1A|*db2B'" -> Seq("showdb1a", "showdb2b")
-      ).foreach { case (pattern, expected) =>
+        "'*db1A|*db2B'" -> Seq("showdb1a", "showdb2b")).foreach { case (pattern, expected) =>
         runShowNamespacesSql(s"SHOW NAMESPACES IN $catalog LIKE $pattern", expected)
       }
     }

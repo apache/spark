@@ -34,16 +34,17 @@ import org.apache.spark.sql.execution.streaming.sinks.FileStreamSink
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.HadoopFSUtils
 
-
 /**
  * A [[FileIndex]] that generates the list of files to process by recursively listing all the
  * files present in `paths`.
  *
- * @param rootPathsSpecified the list of root table paths to scan (some of which might be
- *                           filtered out later)
- * @param parameters as set of options to control discovery
- * @param userSpecifiedSchema an optional user specified schema that will be use to provide
- *                            types for the discovered partitions
+ * @param rootPathsSpecified
+ *   the list of root table paths to scan (some of which might be filtered out later)
+ * @param parameters
+ *   as set of options to control discovery
+ * @param userSpecifiedSchema
+ *   an optional user specified schema that will be use to provide types for the discovered
+ *   partitions
  */
 class InMemoryFileIndex(
     sparkSession: SparkSession,
@@ -53,8 +54,11 @@ class InMemoryFileIndex(
     fileStatusCache: FileStatusCache = NoopCache,
     userSpecifiedPartitionSpec: Option[PartitionSpec] = None,
     override val metadataOpsTimeNs: Option[Long] = None)
-  extends PartitioningAwareFileIndex(
-    sparkSession, parameters, userSpecifiedSchema, fileStatusCache) {
+    extends PartitioningAwareFileIndex(
+      sparkSession,
+      parameters,
+      userSpecifiedSchema,
+      fileStatusCache) {
 
   // Filter out streaming metadata dirs or files such as "/.../_spark_metadata" (the metadata dir)
   // or "/.../_spark_metadata/0" (a file in the metadata dir). `rootPathsSpecified` might contain
@@ -111,9 +115,9 @@ class InMemoryFileIndex(
   override def hashCode(): Int = rootPaths.toSet.hashCode()
 
   /**
-   * List leaf files of given paths. This method will submit a Spark job to do parallel
-   * listing whenever there is a path having more files than the parallel partition discovery
-   * discovery threshold.
+   * List leaf files of given paths. This method will submit a Spark job to do parallel listing
+   * whenever there is a path having more files than the parallel partition discovery discovery
+   * threshold.
    *
    * This is publicly visible for testing.
    */
@@ -132,14 +136,19 @@ class InMemoryFileIndex(
     }
     val filter = FileInputFormat.getInputPathFilter(new JobConf(hadoopConf, this.getClass))
     val discovered = InMemoryFileIndex.bulkListLeafFiles(
-      pathsToFetch.toSeq, hadoopConf, filter, sparkSession, parameters)
+      pathsToFetch.toSeq,
+      hadoopConf,
+      filter,
+      sparkSession,
+      parameters)
     discovered.foreach { case (path, leafFiles) =>
       HiveCatalogMetrics.incrementFilesDiscovered(leafFiles.size)
       fileStatusCache.putLeafFiles(path, leafFiles.toArray)
       output ++= leafFiles
     }
-    logInfo(log"It took ${MDC(ELAPSED_TIME, (System.nanoTime() - startTime) / (1000 * 1000))} ms" +
-      log" to list leaf files for ${MDC(COUNT, paths.length)} paths.")
+    logInfo(
+      log"It took ${MDC(ELAPSED_TIME, (System.nanoTime() - startTime) / (1000 * 1000))} ms" +
+        log" to list leaf files for ${MDC(COUNT, paths.length)} paths.")
     output
   }
 }
@@ -156,12 +165,13 @@ object InMemoryFileIndex extends Logging {
       sparkSession.sessionState.conf.useListFilesFileSystemList.split(",").map(_.trim)
     val ignoreMissingFiles =
       new FileSourceOptions(CaseInsensitiveMap(parameters)).ignoreMissingFiles
-    val useListFiles = try {
-      val scheme = paths.head.getFileSystem(hadoopConf).getScheme
-      paths.size == 1 && fileSystemList.contains(scheme)
-    } catch {
-      case NonFatal(_) => false
-    }
+    val useListFiles =
+      try {
+        val scheme = paths.head.getFileSystem(hadoopConf).getScheme
+        paths.size == 1 && fileSystemList.contains(scheme)
+      } catch {
+        case NonFatal(_) => false
+      }
     if (useListFiles) {
       HadoopFSUtils.listFiles(
         path = paths.head,
@@ -184,6 +194,7 @@ object InMemoryFileIndex extends Logging {
 
 private class PathFilterWrapper(val filter: PathFilter) extends PathFilter with Serializable {
   override def accept(path: Path): Boolean = {
-    (filter == null || filter.accept(path)) && !HadoopFSUtils.shouldFilterOutPathName(path.getName)
+    (filter == null || filter.accept(path)) && !HadoopFSUtils.shouldFilterOutPathName(
+      path.getName)
   }
 }

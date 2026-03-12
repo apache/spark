@@ -31,7 +31,8 @@ case class CSVWrite(
     paths: Seq[String],
     formatName: String,
     supportsDataType: DataType => Boolean,
-    info: LogicalWriteInfo) extends FileWrite {
+    info: LogicalWriteInfo)
+    extends FileWrite {
 
   override def allowDuplicatedColumnNames: Boolean = true
 

@@ -24,20 +24,19 @@ import org.apache.spark.sql.connector.read.streaming.SparkDataStream
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.util.ArrayImplicits._
 
-
 /**
  * Physical plan node for scanning data from a local collection.
  *
- * `Seq` may not be serializable and ideally we should not send `rows` and `unsafeRows`
- * to the executors. Thus marking them as transient.
+ * `Seq` may not be serializable and ideally we should not send `rows` and `unsafeRows` to the
+ * executors. Thus marking them as transient.
  */
 case class LocalTableScanExec(
     output: Seq[Attribute],
     @transient rows: Seq[InternalRow],
     @transient stream: Option[SparkDataStream])
-  extends LeafExecNode
-  with StreamSourceAwareSparkPlan
-  with InputRDDCodegen {
+    extends LeafExecNode
+    with StreamSourceAwareSparkPlan
+    with InputRDDCodegen {
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
@@ -55,8 +54,7 @@ case class LocalTableScanExec(
     if (rows.isEmpty) {
       sparkContext.emptyRDD
     } else {
-      val numSlices = math.min(
-        unsafeRows.length, session.leafNodeDefaultParallelism)
+      val numSlices = math.min(unsafeRows.length, session.leafNodeDefaultParallelism)
       sparkContext.parallelize(unsafeRows.toImmutableArraySeq, numSlices)
     }
   }

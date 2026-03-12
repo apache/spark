@@ -19,11 +19,7 @@ package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
-import org.apache.spark.sql.catalyst.analysis.resolver.{
-  MetadataResolver,
-  ProhibitedResolver,
-  Resolver
-}
+import org.apache.spark.sql.catalyst.analysis.resolver.{MetadataResolver, ProhibitedResolver, Resolver}
 import org.apache.spark.sql.catalyst.catalog.UnresolvedCatalogRelation
 import org.apache.spark.sql.catalyst.plans.logical.SubqueryAlias
 import org.apache.spark.sql.test.SharedSparkSession
@@ -31,11 +27,7 @@ import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructT
 
 class DataSourceResolverSuite extends QueryTest with SharedSparkSession {
   private val keyValueTableSchema = StructType(
-    Seq(
-      StructField("key", IntegerType, true),
-      StructField("value", StringType, true)
-    )
-  )
+    Seq(StructField("key", IntegerType, true), StructField("value", StringType, true)))
 
   test("CSV relation") {
     withTable("src_csv") {
@@ -44,8 +36,7 @@ class DataSourceResolverSuite extends QueryTest with SharedSparkSession {
       checkResolveOperator(
         sqlText = "SELECT * FROM src_csv",
         expectedTableName = "spark_catalog.default.src_csv",
-        expectedTableSchema = keyValueTableSchema
-      )
+        expectedTableSchema = keyValueTableSchema)
     }
   }
 
@@ -56,8 +47,7 @@ class DataSourceResolverSuite extends QueryTest with SharedSparkSession {
       checkResolveOperator(
         sqlText = "SELECT * FROM src_json",
         expectedTableName = "spark_catalog.default.src_json",
-        expectedTableSchema = keyValueTableSchema
-      )
+        expectedTableSchema = keyValueTableSchema)
     }
   }
 
@@ -68,8 +58,7 @@ class DataSourceResolverSuite extends QueryTest with SharedSparkSession {
       checkResolveOperator(
         sqlText = "SELECT * FROM src_parquet",
         expectedTableName = "spark_catalog.default.src_parquet",
-        expectedTableSchema = keyValueTableSchema
-      )
+        expectedTableSchema = keyValueTableSchema)
     }
   }
 
@@ -80,8 +69,7 @@ class DataSourceResolverSuite extends QueryTest with SharedSparkSession {
       checkResolveOperator(
         sqlText = "SELECT * FROM src_orc",
         expectedTableName = "spark_catalog.default.src_orc",
-        expectedTableSchema = keyValueTableSchema
-      )
+        expectedTableSchema = keyValueTableSchema)
     }
   }
 
@@ -91,10 +79,8 @@ class DataSourceResolverSuite extends QueryTest with SharedSparkSession {
       expectedTableSchema: StructType) = {
     val relationResolution =
       Resolver.createRelationResolution(spark.sessionState.catalogManager)
-    val metadataResolver = new MetadataResolver(
-      spark.sessionState.catalogManager,
-      relationResolution
-    )
+    val metadataResolver =
+      new MetadataResolver(spark.sessionState.catalogManager, relationResolution)
     val dataSourceResolver = new DataSourceResolver(spark)
 
     val unresolvedPlan = spark.sql(sqlText).queryExecution.logical
@@ -119,8 +105,7 @@ class DataSourceResolverSuite extends QueryTest with SharedSparkSession {
     val logicalRelation = result.asInstanceOf[LogicalRelation]
     assert(
       logicalRelation.catalogTable.get.identifier.unquotedString
-      == expectedTableName
-    )
+        == expectedTableName)
     assert(logicalRelation.relation.schema == expectedTableSchema)
   }
 }

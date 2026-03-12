@@ -18,8 +18,8 @@
 package org.apache.spark.sql.execution.benchmark
 
 /**
- * Synthetic benchmark for nested schema pruning performance for ORC V2 datasource.
- * To run this benchmark:
+ * Synthetic benchmark for nested schema pruning performance for ORC V2 datasource. To run this
+ * benchmark:
  * {{{
  *   1. without sbt:
  *      bin/spark-submit --class <this class>

@@ -47,20 +47,23 @@ class StreamingQueryPageSuite extends SharedSparkSession with BeforeAndAfter {
     val streamQuery = createStreamQueryUIData(id)
     when(store.allQueryUIData).thenReturn(Seq(streamQuery))
     var html = renderStreamingQueryPage(request, tab)
-      .toString().toLowerCase(Locale.ROOT)
+      .toString()
+      .toLowerCase(Locale.ROOT)
     assert(html.contains("active streaming queries (1)"))
 
     when(streamQuery.summary.isActive).thenReturn(false)
     when(streamQuery.summary.exception).thenReturn(None)
     html = renderStreamingQueryPage(request, tab)
-      .toString().toLowerCase(Locale.ROOT)
+      .toString()
+      .toLowerCase(Locale.ROOT)
     assert(html.contains("completed streaming queries (1)"))
     assert(html.contains("finished"))
 
     when(streamQuery.summary.isActive).thenReturn(false)
     when(streamQuery.summary.exception).thenReturn(Option("exception in query"))
     html = renderStreamingQueryPage(request, tab)
-      .toString().toLowerCase(Locale.ROOT)
+      .toString()
+      .toLowerCase(Locale.ROOT)
     assert(html.contains("completed streaming queries (1)"))
     assert(html.contains("failed"))
     assert(html.contains("exception in query"))
@@ -85,7 +88,8 @@ class StreamingQueryPageSuite extends SharedSparkSession with BeforeAndAfter {
     val streamQuery = createStreamQueryUIData(id)
     when(store.allQueryUIData).thenReturn(Seq(streamQuery))
     val html = renderStreamingQueryStatisticsPage(request, tab)
-      .toString().toLowerCase(Locale.ROOT)
+      .toString()
+      .toLowerCase(Locale.ROOT)
 
     assert(html.contains("<strong>name: </strong>query<"))
     assert(html.contains("""{"x": 1001898000100, "y": 10.0}"""))
@@ -118,8 +122,8 @@ class StreamingQueryPageSuite extends SharedSparkSession with BeforeAndAfter {
   }
 
   /**
-   * Render a stage page started with the given conf and return the HTML.
-   * This also runs a dummy execution page to populate the page with useful content.
+   * Render a stage page started with the given conf and return the HTML. This also runs a dummy
+   * execution page to populate the page with useful content.
    */
   private def renderStreamingQueryPage(
       request: HttpServletRequest,

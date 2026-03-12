@@ -39,11 +39,13 @@ import org.apache.spark.sql.types.{StringType, StructField, StructType}
  * }}}
  */
 case class SetCommand(kv: Option[(String, Option[String])])
-  extends LeafRunnableCommand with Logging {
+    extends LeafRunnableCommand
+    with Logging {
 
   private def keyValueOutput: Seq[Attribute] = {
-    val schema = StructType(Array(
-      StructField("key", StringType, nullable = false),
+    val schema = StructType(
+      Array(
+        StructField("key", StringType, nullable = false),
         StructField("value", StringType, nullable = false)))
     toAttributes(schema)
   }
@@ -96,23 +98,22 @@ case class SetCommand(kv: Option[(String, Option[String])])
     // Configures a single property.
     case Some((key, Some(value))) =>
       val runFunc = (sparkSession: SparkSession) => {
+
         /**
-         * Be nice and detect if the key matches a SQL variable.
-         * If it does give a meaningful error pointing the user to SET VARIABLE
+         * Be nice and detect if the key matches a SQL variable. If it does give a meaningful
+         * error pointing the user to SET VARIABLE
          */
-        val varName = try {
-          sparkSession.sessionState.sqlParser.parseMultipartIdentifier(key)
-        } catch {
-          case _: ParseException =>
-          Seq()
-        }
+        val varName =
+          try {
+            sparkSession.sessionState.sqlParser.parseMultipartIdentifier(key)
+          } catch {
+            case _: ParseException =>
+              Seq()
+          }
         if (varName.nonEmpty && varName.length <= 3) {
           val variableResolution = new VariableResolution(
-            sparkSession.sessionState.analyzer.catalogManager.tempVariableManager
-          )
-          val variable = variableResolution.lookupVariable(
-            nameParts = varName
-          )
+            sparkSession.sessionState.analyzer.catalogManager.tempVariableManager)
+          val variable = variableResolution.lookupVariable(nameParts = varName)
           if (variable.isDefined) {
             throw new AnalysisException(
               errorClass = "UNSUPPORTED_FEATURE.SET_VARIABLE_USING_SET",
@@ -120,13 +121,14 @@ case class SetCommand(kv: Option[(String, Option[String])])
           }
         }
         if (sparkSession.conf.get(CATALOG_IMPLEMENTATION.key).equals("hive") &&
-            key.startsWith("hive.")) {
-          logWarning(log"'SET ${MDC(KEY, key)}=${MDC(VALUE, value)}' might not work, since Spark " +
-            log"doesn't support changing the Hive config dynamically. Please pass the " +
-            log"Hive-specific config by adding the prefix spark.hadoop " +
-            log"(e.g. spark.hadoop.${MDC(KEY, key)}) when starting a Spark application. For " +
-            log"details, see the link: https://spark.apache.org/docs/latest/configuration.html#" +
-            log"dynamically-loading-spark-properties.")
+          key.startsWith("hive.")) {
+          logWarning(
+            log"'SET ${MDC(KEY, key)}=${MDC(VALUE, value)}' might not work, since Spark " +
+              log"doesn't support changing the Hive config dynamically. Please pass the " +
+              log"Hive-specific config by adding the prefix spark.hadoop " +
+              log"(e.g. spark.hadoop.${MDC(KEY, key)}) when starting a Spark application. For " +
+              log"details, see the link: https://spark.apache.org/docs/latest/configuration.html#" +
+              log"dynamically-loading-spark-properties.")
         }
         sparkSession.conf.set(key, value)
         Seq(Row(key, value))
@@ -155,8 +157,9 @@ case class SetCommand(kv: Option[(String, Option[String])])
               Option(version).getOrElse("<unknown>"))
         }
       }
-      val schema = StructType(Array(
-        StructField("key", StringType, nullable = false),
+      val schema = StructType(
+        Array(
+          StructField("key", StringType, nullable = false),
           StructField("value", StringType, nullable = false),
           StructField("meaning", StringType, nullable = false),
           StructField("Since version", StringType, nullable = false)))
@@ -168,9 +171,10 @@ case class SetCommand(kv: Option[(String, Option[String])])
         logWarning(
           log"Property ${MDC(CONFIG, SQLConf.Deprecated.MAPRED_REDUCE_TASKS)} is deprecated, " +
             log"showing ${MDC(CONFIG2, SQLConf.SHUFFLE_PARTITIONS.key)} instead.")
-        Seq(Row(
-          SQLConf.SHUFFLE_PARTITIONS.key,
-          sparkSession.sessionState.conf.defaultNumShufflePartitions.toString))
+        Seq(
+          Row(
+            SQLConf.SHUFFLE_PARTITIONS.key,
+            sparkSession.sessionState.conf.defaultNumShufflePartitions.toString))
       }
       (keyValueOutput, runFunc)
 
@@ -224,13 +228,15 @@ case class ResetCommand(config: Option[String]) extends LeafRunnableCommand {
     config match {
       case Some(key) =>
         sparkSession.conf.unset(key)
-        sparkSession.initialSessionOptions.get(key)
+        sparkSession.initialSessionOptions
+          .get(key)
           .orElse(globalInitialConfigs.getOption(key))
           .foreach(sparkSession.conf.set(key, _))
       case None =>
         sparkSession.sessionState.conf.clear()
         SQLConf.mergeSparkConf(sparkSession.sessionState.conf, globalInitialConfigs)
-        SQLConf.mergeNonStaticSQLConfigs(sparkSession.sessionState.conf,
+        SQLConf.mergeNonStaticSQLConfigs(
+          sparkSession.sessionState.conf,
           sparkSession.initialSessionOptions)
     }
     Seq.empty[Row]

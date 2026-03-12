@@ -50,9 +50,6 @@ class TruncateTableParserSuite extends AnalysisTest {
       condition = "INVALID_SQL_SYNTAX.EMPTY_PARTITION_VALUE",
       sqlState = "42000",
       parameters = Map("partKey" -> "`b`"),
-      context = ExpectedContext(
-        fragment = "PARTITION (a='1', b)",
-        start = 24,
-        stop = 43))
+      context = ExpectedContext(fragment = "PARTITION (a='1', b)", start = 24, stop = 43))
   }
 }

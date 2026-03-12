@@ -36,18 +36,27 @@ abstract class ResolveInsertionBase extends Rule[LogicalPlan] {
     if (i.userSpecifiedCols.size != i.query.output.size) {
       if (i.userSpecifiedCols.size > i.query.output.size) {
         throw QueryCompilationErrors.cannotWriteNotEnoughColumnsToTableError(
-          tblName, i.userSpecifiedCols, i.query.output)
+          tblName,
+          i.userSpecifiedCols,
+          i.query.output)
       } else {
         throw QueryCompilationErrors.cannotWriteTooManyColumnsToTableError(
-          tblName, i.userSpecifiedCols, i.query.output)
+          tblName,
+          i.userSpecifiedCols,
+          i.query.output)
       }
     }
-    val projectByName = i.userSpecifiedCols.zip(i.query.output)
+    val projectByName = i.userSpecifiedCols
+      .zip(i.query.output)
       .map { case (userSpecifiedCol, queryOutputCol) =>
-        val resolvedCol = i.table.resolve(Seq(userSpecifiedCol), resolver)
+        val resolvedCol = i.table
+          .resolve(Seq(userSpecifiedCol), resolver)
           .getOrElse(
             throw QueryCompilationErrors.unresolvedAttributeError(
-              "UNRESOLVED_COLUMN", userSpecifiedCol, i.table.output.map(_.name), i.origin))
+              "UNRESOLVED_COLUMN",
+              userSpecifiedCol,
+              i.table.output.map(_.name),
+              i.origin))
         (queryOutputCol.dataType, resolvedCol.dataType) match {
           case (input: StructType, expected: StructType) =>
             // Rename inner fields of the input column to pass the by-name INSERT analysis.

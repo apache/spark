@@ -37,11 +37,7 @@ object TypeUtils extends QueryErrorsBase {
     } else {
       DataTypeMismatch(
         errorSubClass = "INVALID_ORDERING_TYPE",
-        Map(
-          "functionName" -> toSQLId(caller),
-          "dataType" -> toSQLType(dt)
-        )
-      )
+        Map("functionName" -> toSQLId(caller), "dataType" -> toSQLType(dt)))
     }
   }
 
@@ -50,8 +46,7 @@ object TypeUtils extends QueryErrorsBase {
       expression.failAnalysis(
         errorClass = "EXPRESSION_TYPE_IS_NOT_ORDERABLE",
         messageParameters =
-          Map("expr" -> toSQLExpr(expression), "exprType" -> toSQLType(expression.dataType))
-      )
+          Map("expr" -> toSQLExpr(expression), "exprType" -> toSQLType(expression.dataType)))
     }
   }
 
@@ -63,38 +58,35 @@ object TypeUtils extends QueryErrorsBase {
         errorSubClass = "DATA_DIFF_TYPES",
         messageParameters = Map(
           "functionName" -> toSQLId(caller),
-          "dataType" -> types.map(toSQLType).mkString("(", " or ", ")")
-        )
-      )
+          "dataType" -> types.map(toSQLType).mkString("(", " or ", ")")))
     }
   }
 
   def checkForMapKeyType(keyType: DataType): TypeCheckResult = {
-    if (keyType.existsRecursively(dt => dt.isInstanceOf[MapType] || dt.isInstanceOf[VariantType])) {
+    if (keyType.existsRecursively(dt =>
+        dt.isInstanceOf[MapType] || dt.isInstanceOf[VariantType])) {
       DataTypeMismatch(
         errorSubClass = "INVALID_MAP_KEY_TYPE",
-        messageParameters = Map(
-          "keyType" -> toSQLType(keyType)
-        )
-      )
+        messageParameters = Map("keyType" -> toSQLType(keyType)))
     } else {
       TypeCheckResult.TypeCheckSuccess
     }
   }
 
-  def checkForAnsiIntervalOrNumericType(input: Expression): TypeCheckResult = input.dataType match {
-    case _: AnsiIntervalType | NullType =>
-      TypeCheckResult.TypeCheckSuccess
-    case dt if dt.isInstanceOf[NumericType] => TypeCheckResult.TypeCheckSuccess
-    case other =>
-      DataTypeMismatch(
-        errorSubClass = "UNEXPECTED_INPUT_TYPE",
-        messageParameters = Map(
-          "paramIndex" -> ordinalNumber(0),
-          "requiredType" -> Seq(NumericType, AnsiIntervalType).map(toSQLType).mkString(" or "),
-          "inputSql" -> toSQLExpr(input),
-          "inputType" -> toSQLType(other)))
-  }
+  def checkForAnsiIntervalOrNumericType(input: Expression): TypeCheckResult =
+    input.dataType match {
+      case _: AnsiIntervalType | NullType =>
+        TypeCheckResult.TypeCheckSuccess
+      case dt if dt.isInstanceOf[NumericType] => TypeCheckResult.TypeCheckSuccess
+      case other =>
+        DataTypeMismatch(
+          errorSubClass = "UNEXPECTED_INPUT_TYPE",
+          messageParameters = Map(
+            "paramIndex" -> ordinalNumber(0),
+            "requiredType" -> Seq(NumericType, AnsiIntervalType).map(toSQLType).mkString(" or "),
+            "inputSql" -> toSQLExpr(input),
+            "inputType" -> toSQLType(other)))
+    }
 
   def getNumeric(t: DataType, exactNumericRequired: Boolean = false): Numeric[Any] = {
     if (exactNumericRequired) {
@@ -114,8 +106,8 @@ object TypeUtils extends QueryErrorsBase {
 
   /**
    * Returns true if the equals method of the elements of the data type is implemented properly.
-   * This also means that they can be safely used in collections relying on the equals method,
-   * as sets or maps.
+   * This also means that they can be safely used in collections relying on the equals method, as
+   * sets or maps.
    */
   def typeWithProperEquals(dataType: DataType): Boolean = dataType match {
     case BinaryType => false
@@ -130,7 +122,9 @@ object TypeUtils extends QueryErrorsBase {
     }
   }
 
-  def invokeOnceForInterval(dataType: DataType, forbidAnsiIntervals: Boolean)(f: => Unit): Unit = {
+  def invokeOnceForInterval(
+      dataType: DataType,
+      forbidAnsiIntervals: Boolean)(f: => Unit): Unit = {
     def isInterval(dataType: DataType): Boolean = dataType match {
       case _: AnsiIntervalType => forbidAnsiIntervals
       case CalendarIntervalType => true

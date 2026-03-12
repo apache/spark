@@ -37,8 +37,8 @@ import org.apache.spark.sql.types.{DayTimeIntervalType => DT, YearMonthIntervalT
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 /**
- * Test basic expression parsing.
- * If the type of an expression is supported it should be tested here.
+ * Test basic expression parsing. If the type of an expression is supported it should be tested
+ * here.
  *
  * Please note that some of the expressions test don't have to be sound expressions, only their
  * structure needs to be valid. Unsound expressions should be caught by the Analyzer or
@@ -114,9 +114,13 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("a or b or c and d", $"a" || $"b" || ($"c" && $"d"))
 
     // Multiple AND/OR get converted into a balanced tree
-    assertEqual("a or b or c or d or e or f", (($"a" || $"b") || $"c") || (($"d" || $"e") || $"f"))
-    assertEqual("a and b and c and d and e and f", (($"a" && $"b") && $"c")
-      && (($"d" && $"e") && $"f"))
+    assertEqual(
+      "a or b or c or d or e or f",
+      (($"a" || $"b") || $"c") || (($"d" || $"e") || $"f"))
+    assertEqual(
+      "a and b and c and d and e and f",
+      (($"a" && $"b") && $"c")
+        && (($"d" && $"e") && $"f"))
   }
 
   test("long binary logical expressions") {
@@ -157,9 +161,11 @@ class ExpressionParserSuite extends AnalysisTest {
   }
 
   test("between expressions") {
-    assertEqual("a between b and c",
+    assertEqual(
+      "a between b and c",
       UnresolvedFunction("between", Seq($"a", $"b", $"c"), isDistinct = false))
-    assertEqual("a not between b and c",
+    assertEqual(
+      "a not between b and c",
       !UnresolvedFunction("between", Seq($"a", $"b", $"c"), isDistinct = false))
   }
 
@@ -203,19 +209,13 @@ class ExpressionParserSuite extends AnalysisTest {
       exception = parseException("a like 'pattern%' escape '##'"),
       condition = "INVALID_ESC",
       parameters = Map("invalidEscape" -> "'##'"),
-      context = ExpectedContext(
-        fragment = "like 'pattern%' escape '##'",
-        start = 2,
-        stop = 28))
+      context = ExpectedContext(fragment = "like 'pattern%' escape '##'", start = 2, stop = 28))
 
     checkError(
       exception = parseException("a like 'pattern%' escape ''"),
       condition = "INVALID_ESC",
       parameters = Map("invalidEscape" -> "''"),
-      context = ExpectedContext(
-        fragment = "like 'pattern%' escape ''",
-        start = 2,
-        stop = 26))
+      context = ExpectedContext(fragment = "like 'pattern%' escape ''", start = 2, stop = 26))
 
     assertEqual("a not like 'pattern%' escape '#'", !($"a".like("pattern%", '#')))
     assertEqual("a not like 'pattern%' escape '\"'", !($"a".like("pattern%", '\"')))
@@ -224,19 +224,14 @@ class ExpressionParserSuite extends AnalysisTest {
       exception = parseException("a not like 'pattern%' escape '\"/'"),
       condition = "INVALID_ESC",
       parameters = Map("invalidEscape" -> "'\"/'"),
-      context = ExpectedContext(
-        fragment = "not like 'pattern%' escape '\"/'",
-        start = 2,
-        stop = 32))
+      context =
+        ExpectedContext(fragment = "not like 'pattern%' escape '\"/'", start = 2, stop = 32))
 
     checkError(
       exception = parseException("a not like 'pattern%' escape ''"),
       condition = "INVALID_ESC",
       parameters = Map("invalidEscape" -> "''"),
-      context = ExpectedContext(
-        fragment = "not like 'pattern%' escape ''",
-        start = 2,
-        stop = 30))
+      context = ExpectedContext(fragment = "not like 'pattern%' escape ''", start = 2, stop = 30))
   }
 
   test("like expressions with ESCAPED_STRING_LITERALS = true") {
@@ -250,13 +245,13 @@ class ExpressionParserSuite extends AnalysisTest {
 
   test("(NOT) LIKE (ANY | SOME | ALL) expressions") {
     Seq("any", "some").foreach { quantifier =>
-      assertEqual(s"a like $quantifier ('foo%', 'b%')", $"a" likeAny("foo%", "b%"))
-      assertEqual(s"a not like $quantifier ('foo%', 'b%')", $"a" notLikeAny("foo%", "b%"))
-      assertEqual(s"not (a like $quantifier ('foo%', 'b%'))", !($"a" likeAny("foo%", "b%")))
+      assertEqual(s"a like $quantifier ('foo%', 'b%')", $"a" likeAny ("foo%", "b%"))
+      assertEqual(s"a not like $quantifier ('foo%', 'b%')", $"a" notLikeAny ("foo%", "b%"))
+      assertEqual(s"not (a like $quantifier ('foo%', 'b%'))", !($"a" likeAny ("foo%", "b%")))
     }
-    assertEqual("a like all ('foo%', 'b%')", $"a" likeAll("foo%", "b%"))
-    assertEqual("a not like all ('foo%', 'b%')", $"a" notLikeAll("foo%", "b%"))
-    assertEqual("not (a like all ('foo%', 'b%'))", !($"a" likeAll("foo%", "b%")))
+    assertEqual("a like all ('foo%', 'b%')", $"a" likeAll ("foo%", "b%"))
+    assertEqual("a not like all ('foo%', 'b%')", $"a" notLikeAll ("foo%", "b%"))
+    assertEqual("not (a like all ('foo%', 'b%'))", !($"a" likeAll ("foo%", "b%")))
 
     Seq("any", "some", "all").foreach { quantifier =>
       checkError(
@@ -304,7 +299,7 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("+a", +$"a")
     assertEqual("-a", -$"a")
     assertEqual("~a", ~$"a")
-    assertEqual("-+~~a", -( +(~(~$"a"))))
+    assertEqual("-+~~a", -(+(~(~$"a"))))
   }
 
   test("cast expressions") {
@@ -317,7 +312,8 @@ class ExpressionParserSuite extends AnalysisTest {
 
   test("function expressions") {
     assertEqual("foo()", $"foo".function())
-    assertEqual("foo.bar()",
+    assertEqual(
+      "foo.bar()",
       UnresolvedFunction(FunctionIdentifier("bar", Some("foo")), Seq.empty, isDistinct = false))
     assertEqual("foo(*)", $"foo".function(star()))
     assertEqual("count(*)", $"count".function(1))
@@ -333,19 +329,27 @@ class ExpressionParserSuite extends AnalysisTest {
   }
 
   test("function expressions with named arguments") {
-    assertEqual("encode(value => 'abc', charset => 'utf-8')",
-      $"encode".function(NamedArgumentExpression("value", Literal("abc")),
-      NamedArgumentExpression("charset", Literal("utf-8"))))
-    assertEqual("encode('abc', charset => 'utf-8')",
+    assertEqual(
+      "encode(value => 'abc', charset => 'utf-8')",
+      $"encode".function(
+        NamedArgumentExpression("value", Literal("abc")),
+        NamedArgumentExpression("charset", Literal("utf-8"))))
+    assertEqual(
+      "encode('abc', charset => 'utf-8')",
       $"encode".function(Literal("abc"), NamedArgumentExpression("charset", Literal("utf-8"))))
-    assertEqual("encode(charset => 'utf-8', 'abc')",
+    assertEqual(
+      "encode(charset => 'utf-8', 'abc')",
       $"encode".function(NamedArgumentExpression("charset", Literal("utf-8")), Literal("abc")))
-    assertEqual("encode('abc', charset => 'utf' || '-8')",
-      $"encode".function(Literal("abc"), NamedArgumentExpression("charset",
-        Concat(Literal("utf") :: Literal("-8") :: Nil))))
+    assertEqual(
+      "encode('abc', charset => 'utf' || '-8')",
+      $"encode".function(
+        Literal("abc"),
+        NamedArgumentExpression("charset", Concat(Literal("utf") :: Literal("-8") :: Nil))))
     val unresolvedAlias = Project(Seq(UnresolvedAlias(Literal("1"))), OneRowRelation())
-    assertEqual("encode(value => ((select '1')), charset => 'utf-8')",
-      $"encode".function(NamedArgumentExpression("value", ScalarSubquery(plan = unresolvedAlias)),
+    assertEqual(
+      "encode(value => ((select '1')), charset => 'utf-8')",
+      $"encode".function(
+        NamedArgumentExpression("value", ScalarSubquery(plan = unresolvedAlias)),
         NamedArgumentExpression("charset", Literal("utf-8"))))
   }
 
@@ -353,8 +357,9 @@ class ExpressionParserSuite extends AnalysisTest {
 
   test("lambda functions") {
     assertEqual("x -> x + 1", LambdaFunction(lv(Symbol("x")) + 1, Seq(lv(Symbol("x")))))
-    assertEqual("(x, y) -> x + y", LambdaFunction(lv(Symbol("x")) + lv(Symbol("y")),
-      Seq(lv(Symbol("x")), lv(Symbol("y")))))
+    assertEqual(
+      "(x, y) -> x + y",
+      LambdaFunction(lv(Symbol("x")) + lv(Symbol("y")), Seq(lv(Symbol("x")), lv(Symbol("y")))))
   }
 
   test("window function expressions") {
@@ -372,23 +377,29 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("foo(*) over (partition by a, b)", windowed(Seq($"a", $"b")))
     assertEqual("foo(*) over (distribute by a, b)", windowed(Seq($"a", $"b")))
     assertEqual("foo(*) over (cluster by a, b)", windowed(Seq($"a", $"b")))
-    assertEqual("foo(*) over (order by a desc, b asc)",
+    assertEqual(
+      "foo(*) over (order by a desc, b asc)",
       windowed(Seq.empty, Seq($"a".desc, $"b".asc)))
-    assertEqual("foo(*) over (sort by a desc, b asc)",
+    assertEqual(
+      "foo(*) over (sort by a desc, b asc)",
       windowed(Seq.empty, Seq($"a".desc, $"b".asc)))
-    assertEqual("foo(*) over (partition by a, b order by c)",
+    assertEqual(
+      "foo(*) over (partition by a, b order by c)",
       windowed(Seq($"a", $"b"), Seq($"c".asc)))
-    assertEqual("foo(*) over (distribute by a, b sort by c)",
+    assertEqual(
+      "foo(*) over (distribute by a, b sort by c)",
       windowed(Seq($"a", $"b"), Seq($"c".asc)))
 
     // Test use of expressions in window functions.
     assertEqual(
       "sum(product + 1) over (partition by ((product) + (1)) order by 2)",
-      WindowExpression($"sum".function($"product" + 1),
+      WindowExpression(
+        $"sum".function($"product" + 1),
         WindowSpecDefinition(Seq($"product" + 1), Seq(Literal(2).asc), UnspecifiedFrame)))
     assertEqual(
       "sum(product + 1) over (partition by ((product / 2) + 1) order by 2)",
-      WindowExpression($"sum".function($"product" + 1),
+      WindowExpression(
+        $"sum".function($"product" + 1),
         WindowSpecDefinition(Seq($"product" / 2 + 1), Seq(Literal(2).asc), UnspecifiedFrame)))
   }
 
@@ -417,12 +428,15 @@ class ExpressionParserSuite extends AnalysisTest {
       ("unbounded following", UnboundedFollowing, CurrentRow), // Will fail during analysis
 
       // Between combinations
-      ("between unbounded preceding and 5 following",
-        UnboundedPreceding, Literal(5)),
-      ("between unbounded preceding and 3 + 1 following",
-        UnboundedPreceding, Add(Literal(3), Literal(1))),
-      ("between unbounded preceding and 2147483649 following",
-        UnboundedPreceding, Literal(2147483649L)),
+      ("between unbounded preceding and 5 following", UnboundedPreceding, Literal(5)),
+      (
+        "between unbounded preceding and 3 + 1 following",
+        UnboundedPreceding,
+        Add(Literal(3), Literal(1))),
+      (
+        "between unbounded preceding and 2147483649 following",
+        UnboundedPreceding,
+        Literal(2147483649L)),
       ("between unbounded preceding and current row", UnboundedPreceding, CurrentRow),
       ("between 2147483648 preceding and current row", -Literal(2147483648L), CurrentRow),
       ("between 10 preceding and current row", -Literal(10), CurrentRow),
@@ -434,28 +448,29 @@ class ExpressionParserSuite extends AnalysisTest {
       ("between current row and 3 + 1 following", CurrentRow, Add(Literal(3), Literal(1))),
       ("between current row and 2147483649 following", CurrentRow, Literal(2147483649L)),
       ("between current row and unbounded following", CurrentRow, UnboundedFollowing),
-      ("between 2147483648 preceding and unbounded following",
-        -Literal(2147483648L), UnboundedFollowing),
-      ("between 10 preceding and unbounded following",
-        -Literal(10), UnboundedFollowing),
-      ("between 3 + 1 preceding and unbounded following",
-        -Add(Literal(3), Literal(1)), UnboundedFollowing),
+      (
+        "between 2147483648 preceding and unbounded following",
+        -Literal(2147483648L),
+        UnboundedFollowing),
+      ("between 10 preceding and unbounded following", -Literal(10), UnboundedFollowing),
+      (
+        "between 3 + 1 preceding and unbounded following",
+        -Add(Literal(3), Literal(1)),
+        UnboundedFollowing),
       ("between 0 preceding and unbounded following", -Literal(0), UnboundedFollowing),
 
       // Between partial and full range
       ("between 10 preceding and 5 following", -Literal(10), Literal(5)),
-      ("between unbounded preceding and unbounded following",
-        UnboundedPreceding, UnboundedFollowing)
-    )
-    frameTypes.foreach {
-      case (frameTypeSql, frameType) =>
-        boundaries.foreach {
-          case (boundarySql, begin, end) =>
-            val query = s"foo(*) over (partition by a order by b $frameTypeSql $boundarySql)"
-            val expr = windowed(Seq($"a"), Seq($"b".asc),
-              SpecifiedWindowFrame(frameType, begin, end))
-            assertEqual(query, expr)
-        }
+      (
+        "between unbounded preceding and unbounded following",
+        UnboundedPreceding,
+        UnboundedFollowing))
+    frameTypes.foreach { case (frameTypeSql, frameType) =>
+      boundaries.foreach { case (boundarySql, begin, end) =>
+        val query = s"foo(*) over (partition by a order by b $frameTypeSql $boundarySql)"
+        val expr = windowed(Seq($"a"), Seq($"b".asc), SpecifiedWindowFrame(frameType, begin, end))
+        assertEqual(query, expr)
+      }
     }
 
     // We cannot use an arbitrary expression.
@@ -463,10 +478,7 @@ class ExpressionParserSuite extends AnalysisTest {
       exception = parseException("foo(*) over (partition by a order by b rows exp(b) preceding)"),
       condition = "_LEGACY_ERROR_TEMP_0064",
       parameters = Map("msg" -> "Frame bound value must be a literal."),
-      context = ExpectedContext(
-        fragment = "exp(b) preceding",
-        start = 44,
-        stop = 59))
+      context = ExpectedContext(fragment = "exp(b) preceding", start = 44, stop = 59))
   }
 
   test("row constructor") {
@@ -480,23 +492,29 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual(
       "(select max(val) from tbl) > current",
       ScalarSubquery(table("tbl").select($"max".function($"val"))) > $"current")
-    assertEqual(
-      "a = (select b from s)",
-      $"a" === ScalarSubquery(table("s").select($"b")))
+    assertEqual("a = (select b from s)", $"a" === ScalarSubquery(table("s").select($"b")))
   }
 
   test("case when") {
-    assertEqual("case a when 1 then b when 2 then c else d end",
+    assertEqual(
+      "case a when 1 then b when 2 then c else d end",
       CaseKeyWhen($"a", Seq(1, $"b", 2, $"c", $"d")))
-    assertEqual("case (a or b) when true then c when false then d else e end",
+    assertEqual(
+      "case (a or b) when true then c when false then d else e end",
       CaseKeyWhen($"a" || $"b", Seq(true, $"c", false, $"d", $"e")))
-    assertEqual("case 'a'='a' when true then 1 end",
-      CaseKeyWhen("a" ===  "a", Seq(true, 1)))
-    assertEqual("case when a = 1 then b when a = 2 then c else d end",
+    assertEqual("case 'a'='a' when true then 1 end", CaseKeyWhen("a" === "a", Seq(true, 1)))
+    assertEqual(
+      "case when a = 1 then b when a = 2 then c else d end",
       CaseWhen(Seq(($"a" === 1, $"b".expr), ($"a" === 2, $"c".expr)), $"d"))
-    assertEqual("case when (1) + case when a > b then c else d end then f else g end",
-      CaseWhen(Seq((Literal(1)
-        + CaseWhen(Seq(($"a" > $"b", $"c".expr)), $"d".expr), $"f".expr)), $"g"))
+    assertEqual(
+      "case when (1) + case when a > b then c else d end then f else g end",
+      CaseWhen(
+        Seq(
+          (
+            Literal(1)
+              + CaseWhen(Seq(($"a" > $"b", $"c".expr)), $"d".expr),
+            $"f".expr)),
+        $"g"))
   }
 
   test("dereference") {
@@ -536,32 +554,30 @@ class ExpressionParserSuite extends AnalysisTest {
   test("type constructors") {
     def checkTimestampNTZAndLTZ(): Unit = {
       // Timestamp with local time zone
-      assertEqual("tImEstAmp_LTZ '2016-03-11 20:54:00.000'",
+      assertEqual(
+        "tImEstAmp_LTZ '2016-03-11 20:54:00.000'",
         Literal(Timestamp.valueOf("2016-03-11 20:54:00.000")))
       checkError(
         exception = parseException("timestamP_LTZ '2016-33-11 20:54:00.000'"),
         condition = "INVALID_TYPED_LITERAL",
         sqlState = "42604",
-        parameters = Map(
-          "valueType" -> "\"TIMESTAMP_LTZ\"",
-          "value" -> "'2016-33-11 20:54:00.000'"
-        ),
+        parameters =
+          Map("valueType" -> "\"TIMESTAMP_LTZ\"", "value" -> "'2016-33-11 20:54:00.000'"),
         context = ExpectedContext(
           fragment = "timestamP_LTZ '2016-33-11 20:54:00.000'",
           start = 0,
           stop = 38))
 
       // Timestamp without time zone
-      assertEqual("tImEstAmp_Ntz '2016-03-11 20:54:00.000'",
+      assertEqual(
+        "tImEstAmp_Ntz '2016-03-11 20:54:00.000'",
         Literal(LocalDateTime.parse("2016-03-11T20:54:00.000")))
       checkError(
         exception = parseException("tImEstAmp_Ntz '2016-33-11 20:54:00.000'"),
         condition = "INVALID_TYPED_LITERAL",
         sqlState = "42604",
-        parameters = Map(
-          "valueType" -> "\"TIMESTAMP_NTZ\"",
-          "value" -> "'2016-33-11 20:54:00.000'"
-        ),
+        parameters =
+          Map("valueType" -> "\"TIMESTAMP_NTZ\"", "value" -> "'2016-33-11 20:54:00.000'"),
         context = ExpectedContext(
           fragment = "tImEstAmp_Ntz '2016-33-11 20:54:00.000'",
           start = 0,
@@ -575,27 +591,24 @@ class ExpressionParserSuite extends AnalysisTest {
       condition = "INVALID_TYPED_LITERAL",
       sqlState = "42604",
       parameters = Map("valueType" -> "\"DATE\"", "value" -> "'mar 11 2016'"),
-      context = ExpectedContext(
-        fragment = "DAtE 'mar 11 2016'",
-        start = 0,
-        stop = 17))
+      context = ExpectedContext(fragment = "DAtE 'mar 11 2016'", start = 0, stop = 17))
 
     // Timestamps.
-    assertEqual("tImEstAmp '2016-03-11 20:54:00.000'",
+    assertEqual(
+      "tImEstAmp '2016-03-11 20:54:00.000'",
       Literal(Timestamp.valueOf("2016-03-11 20:54:00.000")))
     checkError(
       exception = parseException("timestamP '2016-33-11 20:54:00.000'"),
       condition = "INVALID_TYPED_LITERAL",
       sqlState = "42604",
       parameters = Map("valueType" -> "\"TIMESTAMP\"", "value" -> "'2016-33-11 20:54:00.000'"),
-      context = ExpectedContext(
-        fragment = "timestamP '2016-33-11 20:54:00.000'",
-        start = 0,
-        stop = 34))
+      context =
+        ExpectedContext(fragment = "timestamP '2016-33-11 20:54:00.000'", start = 0, stop = 34))
 
     checkTimestampNTZAndLTZ()
     withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> TimestampTypes.TIMESTAMP_NTZ.toString) {
-      assertEqual("tImEstAmp '2016-03-11 20:54:00.000'",
+      assertEqual(
+        "tImEstAmp '2016-03-11 20:54:00.000'",
         Literal(LocalDateTime.parse("2016-03-11T20:54:00.000")))
 
       checkError(
@@ -603,13 +616,12 @@ class ExpressionParserSuite extends AnalysisTest {
         condition = "INVALID_TYPED_LITERAL",
         sqlState = "42604",
         parameters = Map("valueType" -> "\"TIMESTAMP\"", "value" -> "'2016-33-11 20:54:00.000'"),
-        context = ExpectedContext(
-          fragment = "timestamP '2016-33-11 20:54:00.000'",
-          start = 0,
-          stop = 34))
+        context =
+          ExpectedContext(fragment = "timestamP '2016-33-11 20:54:00.000'", start = 0, stop = 34))
 
       // If the timestamp string contains time zone, return a timestamp with local time zone literal
-      assertEqual("tImEstAmp '1970-01-01 00:00:00.000 +01:00'",
+      assertEqual(
+        "tImEstAmp '1970-01-01 00:00:00.000 +01:00'",
         Literal(-3600000000L, TimestampType))
 
       // The behavior of TIMESTAMP_NTZ and TIMESTAMP_LTZ is independent of SQLConf.TIMESTAMP_TYPE
@@ -622,10 +634,8 @@ class ExpressionParserSuite extends AnalysisTest {
     checkError(
       exception = parseException("Interval 'interval 1 yearsss 2 monthsss'"),
       condition = "INVALID_TYPED_LITERAL",
-      parameters = Map(
-        "valueType" -> "\"INTERVAL\"",
-        "value" -> "'interval 1 yearsss 2 monthsss'"
-      ),
+      parameters =
+        Map("valueType" -> "\"INTERVAL\"", "value" -> "'interval 1 yearsss 2 monthsss'"),
       context = ExpectedContext(
         fragment = "Interval 'interval 1 yearsss 2 monthsss'",
         start = 0,
@@ -639,24 +649,20 @@ class ExpressionParserSuite extends AnalysisTest {
     checkError(
       exception = parseException("Interval 'interval 1 daysss 2 hoursss'"),
       condition = "INVALID_TYPED_LITERAL",
-      parameters = Map(
-        "valueType" -> "\"INTERVAL\"",
-        "value" -> "'interval 1 daysss 2 hoursss'"
-      ),
+      parameters = Map("valueType" -> "\"INTERVAL\"", "value" -> "'interval 1 daysss 2 hoursss'"),
       context = ExpectedContext(
         fragment = "Interval 'interval 1 daysss 2 hoursss'",
         start = 0,
         stop = 37))
 
-    assertEqual("-interval '1 day 2 hour 3 minute 4.005006 second'", UnaryMinus(dtIntervalLiteral))
+    assertEqual(
+      "-interval '1 day 2 hour 3 minute 4.005006 second'",
+      UnaryMinus(dtIntervalLiteral))
     checkError(
       exception = parseException("INTERVAL '1 year 2 second'"),
       condition = "_LEGACY_ERROR_TEMP_0029",
       parameters = Map("literal" -> "INTERVAL '1 year 2 second'"),
-      context = ExpectedContext(
-        fragment = "INTERVAL '1 year 2 second'",
-        start = 0,
-        stop = 25))
+      context = ExpectedContext(fragment = "INTERVAL '1 year 2 second'", start = 0, stop = 25))
 
     withSQLConf(SQLConf.LEGACY_INTERVAL_ENABLED.key -> "true") {
       val intervalLiteral = Literal(IntervalUtils.stringToInterval("interval 3 month 1 hour"))
@@ -665,10 +671,8 @@ class ExpressionParserSuite extends AnalysisTest {
       checkError(
         exception = parseException("Interval 'interval 3 monthsss 1 hoursss'"),
         condition = "INVALID_TYPED_LITERAL",
-        parameters = Map(
-          "valueType" -> "\"INTERVAL\"",
-          "value" -> "'interval 3 monthsss 1 hoursss'"
-        ),
+        parameters =
+          Map("valueType" -> "\"INTERVAL\"", "value" -> "'interval 3 monthsss 1 hoursss'"),
         context = ExpectedContext(
           fragment = "Interval 'interval 3 monthsss 1 hoursss'",
           start = 0,
@@ -690,14 +694,8 @@ class ExpressionParserSuite extends AnalysisTest {
       exception = parseException("x'A1OC'"),
       condition = "INVALID_TYPED_LITERAL",
       sqlState = "42604",
-      parameters = Map(
-        "valueType" -> "\"X\"",
-        "value" -> "'A1OC'"
-      ),
-      context = ExpectedContext(
-        fragment = "x'A1OC'",
-        start = 0,
-        stop = 6))
+      parameters = Map("valueType" -> "\"X\"", "value" -> "'A1OC'"),
+      context = ExpectedContext(fragment = "x'A1OC'", start = 0, stop = 6))
 
     checkError(
       exception = parseException("GEO '(10,-6)'"),
@@ -705,11 +703,8 @@ class ExpressionParserSuite extends AnalysisTest {
       parameters = Map(
         "unsupportedType" -> "\"GEO\"",
         "supportedTypes" ->
-        """"DATE", "TIMESTAMP_NTZ", "TIMESTAMP_LTZ", "TIMESTAMP", "INTERVAL", "X", "TIME""""),
-      context = ExpectedContext(
-        fragment = "GEO '(10,-6)'",
-        start = 0,
-        stop = 12))
+          """"DATE", "TIMESTAMP_NTZ", "TIMESTAMP_LTZ", "TIMESTAMP", "INTERVAL", "X", "TIME""""),
+      context = ExpectedContext(fragment = "GEO '(10,-6)'", start = 0, stop = 12))
   }
 
   test("literals") {
@@ -756,10 +751,7 @@ class ExpressionParserSuite extends AnalysisTest {
         "minValue" -> Byte.MinValue.toString,
         "maxValue" -> Byte.MaxValue.toString,
         "typeName" -> "tinyint"),
-      context = ExpectedContext(
-        fragment = "1000Y",
-        start = 0,
-        stop = 4))
+      context = ExpectedContext(fragment = "1000Y", start = 0, stop = 4))
 
     // Small Int Literal
     assertEqual("10S", Literal(10.toShort))
@@ -771,10 +763,7 @@ class ExpressionParserSuite extends AnalysisTest {
         "minValue" -> Short.MinValue.toString,
         "maxValue" -> Short.MaxValue.toString,
         "typeName" -> "smallint"),
-      context = ExpectedContext(
-        fragment = "40000S",
-        start = 0,
-        stop = 5))
+      context = ExpectedContext(fragment = "40000S", start = 0, stop = 5))
 
     // Long Int Literal
     assertEqual("10L", Literal(10L))
@@ -786,13 +775,10 @@ class ExpressionParserSuite extends AnalysisTest {
         "minValue" -> Long.MinValue.toString,
         "maxValue" -> Long.MaxValue.toString,
         "typeName" -> "bigint"),
-      context = ExpectedContext(
-        fragment = "78732472347982492793712334L",
-        start = 0,
-        stop = 26))
+      context = ExpectedContext(fragment = "78732472347982492793712334L", start = 0, stop = 26))
 
     // Double Literal
-    assertEqual("10.0D", Literal(10.0D))
+    assertEqual("10.0D", Literal(10.0d))
     checkError(
       exception = parseException("-1.8E308D"),
       condition = "INVALID_NUMERIC_LITERAL_RANGE",
@@ -801,10 +787,7 @@ class ExpressionParserSuite extends AnalysisTest {
         "minValue" -> BigDecimal(Double.MinValue).toString,
         "maxValue" -> BigDecimal(Double.MaxValue).toString,
         "typeName" -> "double"),
-      context = ExpectedContext(
-        fragment = "-1.8E308D",
-        start = 0,
-        stop = 8))
+      context = ExpectedContext(fragment = "-1.8E308D", start = 0, stop = 8))
     checkError(
       exception = parseException("1.8E308D"),
       condition = "INVALID_NUMERIC_LITERAL_RANGE",
@@ -813,26 +796,19 @@ class ExpressionParserSuite extends AnalysisTest {
         "minValue" -> BigDecimal(Double.MinValue).toString,
         "maxValue" -> BigDecimal(Double.MaxValue).toString,
         "typeName" -> "double"),
-      context = ExpectedContext(
-        fragment = "1.8E308D",
-        start = 0,
-        stop = 7))
+      context = ExpectedContext(fragment = "1.8E308D", start = 0, stop = 7))
 
     // BigDecimal Literal
-    assertEqual("90912830918230182310293801923652346786BD",
+    assertEqual(
+      "90912830918230182310293801923652346786BD",
       Literal(BigDecimal("90912830918230182310293801923652346786").underlying()))
     assertEqual("123.0E-28BD", Literal(BigDecimal("123.0E-28").underlying()))
     assertEqual("123.08BD", Literal(BigDecimal("123.08").underlying()))
     checkError(
       exception = parseException("1.20E-38BD"),
       condition = "DECIMAL_PRECISION_EXCEEDS_MAX_PRECISION",
-      parameters = Map(
-        "precision" -> "40",
-        "maxPrecision" -> "38"),
-      context = ExpectedContext(
-        fragment = "1.20E-38BD",
-        start = 0,
-        stop = 9))
+      parameters = Map("precision" -> "40", "maxPrecision" -> "38"),
+      context = ExpectedContext(fragment = "1.20E-38BD", start = 0, stop = 9))
   }
 
   test("SPARK-30252: Decimal should set zero scale rather than negative scale by default") {
@@ -912,11 +888,16 @@ class ExpressionParserSuite extends AnalysisTest {
 
           // The unescape Octals for 2.0+ don't work when ESCAPED_STRING_LITERALS is enabled.
           // They are parsed literally.
-          assertEqual("'\\110\\145\\154\\154\\157\\041'", "\\110\\145\\154\\154\\157\\041", parser)
+          assertEqual(
+            "'\\110\\145\\154\\154\\157\\041'",
+            "\\110\\145\\154\\154\\157\\041",
+            parser)
           // The unescape Unicode for 2.0+ doesn't work when ESCAPED_STRING_LITERALS is enabled.
           // They are parsed literally.
-          assertEqual("'\\u0057\\u006F\\u0072\\u006C\\u0064\\u0020\\u003A\\u0029'",
-            "\\u0057\\u006F\\u0072\\u006C\\u0064\\u0020\\u003A\\u0029", parser)
+          assertEqual(
+            "'\\u0057\\u006F\\u0072\\u006C\\u0064\\u0020\\u003A\\u0029'",
+            "\\u0057\\u006F\\u0072\\u006C\\u0064\\u0020\\u003A\\u0029",
+            parser)
         } else {
           // Default behavior
 
@@ -939,7 +920,9 @@ class ExpressionParserSuite extends AnalysisTest {
           assertEqual("'\\110\\145\\154\\154\\157\\041'", "Hello!", parser)
 
           // Unicode
-          assertEqual("'\\u0057\\u006F\\u0072\\u006C\\u0064\\u0020\\u003A\\u0029'", "World :)",
+          assertEqual(
+            "'\\u0057\\u006F\\u0072\\u006C\\u0064\\u0020\\u003A\\u0029'",
+            "World :)",
             parser)
         }
 
@@ -948,7 +931,8 @@ class ExpressionParserSuite extends AnalysisTest {
   }
 
   val ymIntervalUnits = Seq("year", "month")
-  val dtIntervalUnits = Seq("week", "day", "hour", "minute", "second", "millisecond", "microsecond")
+  val dtIntervalUnits =
+    Seq("week", "day", "hour", "minute", "second", "millisecond", "microsecond")
 
   def ymIntervalLiteral(u: String, s: String): Literal = {
     val period = u match {
@@ -982,10 +966,7 @@ class ExpressionParserSuite extends AnalysisTest {
 
   test("intervals") {
     def checkIntervals(intervalValue: String, expected: Literal): Unit = {
-      Seq(
-        "" -> expected,
-        "-" -> UnaryMinus(expected)
-      ).foreach { case (sign, expectedLiteral) =>
+      Seq("" -> expected, "-" -> UnaryMinus(expected)).foreach { case (sign, expectedLiteral) =>
         assertEqual(s"${sign}interval $intervalValue", expectedLiteral)
       }
     }
@@ -1029,17 +1010,12 @@ class ExpressionParserSuite extends AnalysisTest {
       }
       checkIntervals(
         "-13.123456789 second",
-        Literal(new CalendarInterval(
-          0,
-          0,
-          DateTimeTestUtils.secFrac(-13, -123, -456))))
+        Literal(new CalendarInterval(0, 0, DateTimeTestUtils.secFrac(-13, -123, -456))))
       checkIntervals(
         "13.123456 second",
-        Literal(new CalendarInterval(
-          0,
-          0,
-          DateTimeTestUtils.secFrac(13, 123, 456))))
-      checkIntervals("1.001 second",
+        Literal(new CalendarInterval(0, 0, DateTimeTestUtils.secFrac(13, 123, 456))))
+      checkIntervals(
+        "1.001 second",
         Literal(IntervalUtils.stringToInterval("1 second 1 millisecond")))
     }
 
@@ -1066,15 +1042,12 @@ class ExpressionParserSuite extends AnalysisTest {
       }
 
       // Hour-Time intervals.
-      val hourTimeValues = Seq(
-        "11:22:33.123456789",
-        "9:8:7.123456789",
-        "-19:18:17.123456789",
-        "0:0:0",
-        "0:0:1")
+      val hourTimeValues =
+        Seq("11:22:33.123456789", "9:8:7.123456789", "-19:18:17.123456789", "0:0:0", "0:0:1")
       hourTimeValues.foreach { value =>
-        val result = Literal(IntervalUtils.fromDayTimeString(
-          value, DayTimeIntervalType.HOUR, DayTimeIntervalType.SECOND))
+        val result = Literal(
+          IntervalUtils
+            .fromDayTimeString(value, DayTimeIntervalType.HOUR, DayTimeIntervalType.SECOND))
         checkIntervals(s"'$value' hour to second", result)
       }
     }
@@ -1084,14 +1057,12 @@ class ExpressionParserSuite extends AnalysisTest {
       exception = parseException("interval '10' month to second"),
       condition = "INVALID_INTERVAL_FORMAT.UNSUPPORTED_FROM_TO_EXPRESSION",
       parameters = Map("input" -> "10", "from" -> "month", "to" -> "second"),
-      context = ExpectedContext(
-        fragment = "'10' month to second",
-        start = 9,
-        stop = 28))
+      context = ExpectedContext(fragment = "'10' month to second", start = 9, stop = 28))
 
     // Composed intervals.
     checkIntervals(
-      "10 years 3 months", Literal.create(Period.of(10, 3, 0), YearMonthIntervalType()))
+      "10 years 3 months",
+      Literal.create(Period.of(10, 3, 0), YearMonthIntervalType()))
     checkIntervals(
       "8 days 2 hours 3 minutes 21 seconds",
       Literal.create(Duration.ofDays(8).plusHours(2).plusMinutes(3).plusSeconds(21)))
@@ -1106,10 +1077,7 @@ class ExpressionParserSuite extends AnalysisTest {
             exception = parseException(s"interval $intervalStr"),
             condition = "_LEGACY_ERROR_TEMP_0029",
             parameters = Map("literal" -> "interval 3 monThs 4 dayS 22 sEcond 1 millisecond"),
-            context = ExpectedContext(
-              fragment = s"interval $intervalStr",
-              start = 0,
-              stop = 47))
+            context = ExpectedContext(fragment = s"interval $intervalStr", start = 0, stop = 47))
         }
       }
     }
@@ -1195,7 +1163,8 @@ class ExpressionParserSuite extends AnalysisTest {
   }
 
   test("current date/timestamp/time braceless expressions") {
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true",
+    withSQLConf(
+      SQLConf.ANSI_ENABLED.key -> "true",
       SQLConf.ENFORCE_RESERVED_KEYWORDS.key -> "true") {
       assertEqual("current_date", CurrentDate())
       assertEqual("current_timestamp", CurrentTimestamp())
@@ -1221,13 +1190,17 @@ class ExpressionParserSuite extends AnalysisTest {
 
   test("SPARK-36736: (NOT) ILIKE (ANY | SOME | ALL) expressions") {
     Seq("any", "some").foreach { quantifier =>
-      assertEqual(s"a ilike $quantifier ('FOO%', 'b%')", lower($"a") likeAny("foo%", "b%"))
-      assertEqual(s"a not ilike $quantifier ('foo%', 'B%')", lower($"a") notLikeAny("foo%", "b%"))
-      assertEqual(s"not (a ilike $quantifier ('FOO%', 'B%'))", !(lower($"a") likeAny("foo%", "b%")))
+      assertEqual(s"a ilike $quantifier ('FOO%', 'b%')", lower($"a") likeAny ("foo%", "b%"))
+      assertEqual(
+        s"a not ilike $quantifier ('foo%', 'B%')",
+        lower($"a") notLikeAny ("foo%", "b%"))
+      assertEqual(
+        s"not (a ilike $quantifier ('FOO%', 'B%'))",
+        !(lower($"a") likeAny ("foo%", "b%")))
     }
-    assertEqual("a ilike all ('Foo%', 'b%')", lower($"a") likeAll("foo%", "b%"))
-    assertEqual("a not ilike all ('foo%', 'B%')", lower($"a") notLikeAll("foo%", "b%"))
-    assertEqual("not (a ilike all ('foO%', 'b%'))", !(lower($"a") likeAll("foo%", "b%")))
+    assertEqual("a ilike all ('Foo%', 'b%')", lower($"a") likeAll ("foo%", "b%"))
+    assertEqual("a not ilike all ('foo%', 'B%')", lower($"a") notLikeAll ("foo%", "b%"))
+    assertEqual("not (a ilike all ('foO%', 'b%'))", !(lower($"a") likeAll ("foo%", "b%")))
 
     Seq("any", "some", "all").foreach { quantifier =>
       checkError(
@@ -1250,9 +1223,6 @@ class ExpressionParserSuite extends AnalysisTest {
       condition = "INVALID_TYPED_LITERAL",
       sqlState = "42604",
       parameters = Map("valueType" -> "\"TIME\"", "value" -> "'12-13.14'"),
-      context = ExpectedContext(
-        fragment = "time '12-13.14'",
-        start = 0,
-        stop = 14))
+      context = ExpectedContext(fragment = "time '12-13.14'", start = 0, stop = 14))
   }
 }

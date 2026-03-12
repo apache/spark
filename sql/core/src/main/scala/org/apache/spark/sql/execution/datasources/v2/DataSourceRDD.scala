@@ -33,7 +33,8 @@ import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.ArrayImplicits._
 
 class DataSourceRDDPartition(val index: Int, val inputPartition: Option[InputPartition])
-  extends Partition with Serializable
+    extends Partition
+    with Serializable
 
 /**
  * Holds the state for a reader in a task, used by the completion listener to access the most
@@ -43,8 +44,10 @@ class DataSourceRDDPartition(val index: Int, val inputPartition: Option[InputPar
  * coalesced), this state is updated on each call to track the most recent reader. The task
  * completion listener then uses this most recent reader for final cleanup and metrics reporting.
  *
- * @param reader The partition reader
- * @param iterator The metrics iterator wrapping the reader
+ * @param reader
+ *   The partition reader
+ * @param iterator
+ *   The metrics iterator wrapping the reader
  */
 private case class ReaderState(reader: PartitionReader[_], iterator: MetricsIterator[_])
 
@@ -57,11 +60,16 @@ private case class ReaderState(reader: PartitionReader[_], iterator: MetricsIter
  * and ensures that task completion listeners are added only once per thread to avoid duplicate
  * metric updates and resource cleanup.
  *
- * @param sc The Spark context
- * @param inputPartitions The input partitions to read from
- * @param partitionReaderFactory Factory for creating partition readers
- * @param columnarReads Whether to use columnar reads
- * @param customMetrics Custom metrics defined by the data source
+ * @param sc
+ *   The Spark context
+ * @param inputPartitions
+ *   The input partitions to read from
+ * @param partitionReaderFactory
+ *   Factory for creating partition readers
+ * @param columnarReads
+ *   Whether to use columnar reads
+ * @param customMetrics
+ *   Custom metrics defined by the data source
  */
 class DataSourceRDD(
     sc: SparkContext,
@@ -69,7 +77,7 @@ class DataSourceRDD(
     partitionReaderFactory: PartitionReaderFactory,
     columnarReads: Boolean,
     customMetrics: Map[String, SQLMetric])
-  extends RDD[InternalRow](sc, Nil) {
+    extends RDD[InternalRow](sc, Nil) {
 
   // Map from task attempt ID to the most recently created ReaderState for that task.
   // When compute() is called multiple times for the same task (due to coalescing), the map entry
@@ -77,8 +85,8 @@ class DataSourceRDD(
   @transient private lazy val taskReaderStates = new ConcurrentHashMap[Long, ReaderState]()
 
   override protected def getPartitions: Array[Partition] = {
-    inputPartitions.zipWithIndex.map {
-      case (inputPartition, index) => new DataSourceRDDPartition(index, inputPartition)
+    inputPartitions.zipWithIndex.map { case (inputPartition, index) =>
+      new DataSourceRDDPartition(index, inputPartition)
     }.toArray
   }
 
@@ -101,7 +109,8 @@ class DataSourceRDD(
           val readerState = taskReaderStates.get(ctx.taskAttemptId())
           if (readerState != null) {
             CustomMetrics.updateMetrics(
-              readerState.reader.currentMetricsValues.toImmutableArraySeq, customMetrics)
+              readerState.reader.currentMetricsValues.toImmutableArraySeq,
+              customMetrics)
             readerState.iterator.forceUpdateMetrics()
             readerState.reader.close()
           }
@@ -119,8 +128,8 @@ class DataSourceRDD(
         (iter, batchReader)
       } else {
         val rowReader = partitionReaderFactory.createReader(inputPartition)
-        val iter = new MetricsRowIterator(
-          new PartitionIterator[InternalRow](rowReader, customMetrics))
+        val iter =
+          new MetricsRowIterator(new PartitionIterator[InternalRow](rowReader, customMetrics))
         (iter, rowReader)
       }
 
@@ -149,7 +158,8 @@ class DataSourceRDD(
 
 private class PartitionIterator[T](
     reader: PartitionReader[T],
-    customMetrics: Map[String, SQLMetric]) extends Iterator[T] {
+    customMetrics: Map[String, SQLMetric])
+    extends Iterator[T] {
   private[this] var valuePrepared = false
   private[this] var hasMoreInput = true
 
@@ -206,8 +216,8 @@ private abstract class MetricsIterator[I](iter: Iterator[I]) extends Iterator[I]
   def forceUpdateMetrics(): Unit = metricsHandler.updateMetrics(0, force = true)
 }
 
-private class MetricsRowIterator(
-    iter: Iterator[InternalRow]) extends MetricsIterator[InternalRow](iter) {
+private class MetricsRowIterator(iter: Iterator[InternalRow])
+    extends MetricsIterator[InternalRow](iter) {
   override def next(): InternalRow = {
     val item = iter.next()
     metricsHandler.updateMetrics(1)
@@ -215,8 +225,8 @@ private class MetricsRowIterator(
   }
 }
 
-private class MetricsBatchIterator(
-    iter: Iterator[ColumnarBatch]) extends MetricsIterator[ColumnarBatch](iter) {
+private class MetricsBatchIterator(iter: Iterator[ColumnarBatch])
+    extends MetricsIterator[ColumnarBatch](iter) {
   override def next(): ColumnarBatch = {
     val batch: ColumnarBatch = iter.next()
     metricsHandler.updateMetrics(batch.numRows)

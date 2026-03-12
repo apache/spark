@@ -26,8 +26,14 @@ import org.apache.spark.unsafe.types.UTF8String
 class CollationRegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("Like/ILike/RLike expressions with collated strings") {
-    case class LikeTestCase[R](l: String, regexLike: String, regexRLike: String, collation: String,
-      expectedLike: R, expectedILike: R, expectedRLike: R)
+    case class LikeTestCase[R](
+        l: String,
+        regexLike: String,
+        regexRLike: String,
+        collation: String,
+        expectedLike: R,
+        expectedILike: R,
+        expectedRLike: R)
     val testCases = Seq(
       LikeTestCase("AbC", "%AbC%", ".b.", "UTF8_BINARY", true, true, true),
       LikeTestCase("AbC", "%ABC%", ".B.", "UTF8_BINARY", false, true, false),
@@ -38,27 +44,38 @@ class CollationRegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalH
       LikeTestCase("AbC", "%ABC%", ".B.", "UTF8_BINARY", false, true, false),
       LikeTestCase(null, "%foo%", ".o.", "UTF8_BINARY", null, null, null),
       LikeTestCase("Foo", null, null, "UTF8_BINARY", null, null, null),
-      LikeTestCase(null, null, null, "UTF8_BINARY", null, null, null)
-    )
+      LikeTestCase(null, null, null, "UTF8_BINARY", null, null, null))
     testCases.foreach(t => {
       // Like
-      checkEvaluation(Like(
-        Literal.create(t.l, StringType(CollationFactory.collationNameToId(t.collation))),
-        Literal.create(t.regexLike, StringType), '\\'), t.expectedLike)
+      checkEvaluation(
+        Like(
+          Literal.create(t.l, StringType(CollationFactory.collationNameToId(t.collation))),
+          Literal.create(t.regexLike, StringType),
+          '\\'),
+        t.expectedLike)
       // ILike
-      checkEvaluation(ILike(
-        Literal.create(t.l, StringType(CollationFactory.collationNameToId(t.collation))),
-        Literal.create(t.regexLike, StringType), '\\'), t.expectedILike)
+      checkEvaluation(
+        ILike(
+          Literal.create(t.l, StringType(CollationFactory.collationNameToId(t.collation))),
+          Literal.create(t.regexLike, StringType),
+          '\\'),
+        t.expectedILike)
       // RLike
-      checkEvaluation(RLike(
-        Literal.create(t.l, StringType(CollationFactory.collationNameToId(t.collation))),
-        Literal.create(t.regexRLike, StringType)), t.expectedRLike)
+      checkEvaluation(
+        RLike(
+          Literal.create(t.l, StringType(CollationFactory.collationNameToId(t.collation))),
+          Literal.create(t.regexRLike, StringType)),
+        t.expectedRLike)
     })
   }
 
   test("StringSplit expression with collated strings") {
-    case class StringSplitTestCase[R](s: String, r: String, collation: String,
-      expected: R, limit: Int)
+    case class StringSplitTestCase[R](
+        s: String,
+        r: String,
+        collation: String,
+        expected: R,
+        limit: Int)
     val testCases = Seq(
       StringSplitTestCase("1A2B3C", "[ABC]", "UTF8_BINARY", Seq("1", "2", "3", ""), -1),
       StringSplitTestCase("1A2B3C", "[abc]", "UTF8_BINARY", Seq("1A2B3C"), -1),
@@ -81,19 +98,26 @@ class CollationRegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalH
       StringSplitTestCase("", "[1-9]+", "UTF8_BINARY", Seq(""), -1),
       StringSplitTestCase(null, "[1-9]+", "UTF8_BINARY", null, -1),
       StringSplitTestCase("1A2B3C", null, "UTF8_BINARY", null, -1),
-      StringSplitTestCase(null, null, "UTF8_BINARY", null, -1)
-    )
+      StringSplitTestCase(null, null, "UTF8_BINARY", null, -1))
     testCases.foreach(t => {
       // StringSplit
-      checkEvaluation(StringSplit(
-        Literal.create(t.s, StringType(CollationFactory.collationNameToId(t.collation))),
-        Literal.create(t.r, StringType), t.limit), t.expected)
+      checkEvaluation(
+        StringSplit(
+          Literal.create(t.s, StringType(CollationFactory.collationNameToId(t.collation))),
+          Literal.create(t.r, StringType),
+          t.limit),
+        t.expected)
     })
   }
 
   test("Regexp expressions with collated strings") {
-    case class RegexpTestCase[R](l: String, r: String, collation: String,
-      expectedExtract: R, expectedExtractAll: R, expectedCount: R)
+    case class RegexpTestCase[R](
+        l: String,
+        r: String,
+        collation: String,
+        expectedExtract: R,
+        expectedExtractAll: R,
+        expectedCount: R)
     val testCases = Seq(
       RegexpTestCase("AbC-aBc", ".b.", "UTF8_BINARY", "AbC", Seq("AbC"), 1),
       RegexpTestCase("AbC-abc", ".b.", "UTF8_BINARY", "AbC", Seq("AbC", "abc"), 2),
@@ -105,37 +129,51 @@ class CollationRegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalH
       RegexpTestCase("Foo", ".O.", "UTF8_BINARY", "", Seq(), 0),
       RegexpTestCase(null, ".O.", "UTF8_BINARY", null, null, null),
       RegexpTestCase("Foo", null, "UTF8_BINARY", null, null, null),
-      RegexpTestCase(null, null, "UTF8_BINARY", null, null, null)
-    )
+      RegexpTestCase(null, null, "UTF8_BINARY", null, null, null))
     testCases.foreach(t => {
       // RegExpExtract
-      checkEvaluation(RegExpExtract(
-        Literal.create(t.l, StringType(CollationFactory.collationNameToId(t.collation))),
-        Literal.create(t.r, StringType), 0), t.expectedExtract)
+      checkEvaluation(
+        RegExpExtract(
+          Literal.create(t.l, StringType(CollationFactory.collationNameToId(t.collation))),
+          Literal.create(t.r, StringType),
+          0),
+        t.expectedExtract)
       // RegExpExtractAll
-      checkEvaluation(RegExpExtractAll(
-        Literal.create(t.l, StringType(CollationFactory.collationNameToId(t.collation))),
-        Literal.create(t.r, StringType), 0), t.expectedExtractAll)
+      checkEvaluation(
+        RegExpExtractAll(
+          Literal.create(t.l, StringType(CollationFactory.collationNameToId(t.collation))),
+          Literal.create(t.r, StringType),
+          0),
+        t.expectedExtractAll)
       // RegExpCount
-      checkEvaluation(RegExpCount(
-        Literal.create(t.l, StringType(CollationFactory.collationNameToId(t.collation))),
-        Literal.create(t.r, StringType)), t.expectedCount)
+      checkEvaluation(
+        RegExpCount(
+          Literal.create(t.l, StringType(CollationFactory.collationNameToId(t.collation))),
+          Literal.create(t.r, StringType)),
+        t.expectedCount)
       // RegExpInStr
       def expectedInStr(count: Any): Any = count match {
         case null => null
         case 0 => 0
         case n: Int if n >= 1 => 1
       }
-      checkEvaluation(RegExpInStr(
-        Literal.create(t.l, StringType(CollationFactory.collationNameToId(t.collation))),
-        Literal.create(t.r, StringType), 0), expectedInStr(t.expectedCount))
+      checkEvaluation(
+        RegExpInStr(
+          Literal.create(t.l, StringType(CollationFactory.collationNameToId(t.collation))),
+          Literal.create(t.r, StringType),
+          0),
+        expectedInStr(t.expectedCount))
     })
   }
 
   test("MultiLikeBase regexp expressions with collated strings") {
     // LikeAll
-    case class LikeAllTestCase[R](l: String, p1: String, p2: String, collation: String,
-      expectedLikeAll: R)
+    case class LikeAllTestCase[R](
+        l: String,
+        p1: String,
+        p2: String,
+        collation: String,
+        expectedLikeAll: R)
     val likeAllTestCases = Seq(
       LikeAllTestCase("foo", "%foo%", "%oo", "UTF8_BINARY", true),
       LikeAllTestCase("foo", "%foo%", "%bar%", "UTF8_BINARY", false),
@@ -145,17 +183,22 @@ class CollationRegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalH
       LikeAllTestCase("foo", "%foo%", "%bar%", "UTF8_BINARY", false),
       LikeAllTestCase("foo", "%foo%", null, "UTF8_BINARY", null),
       LikeAllTestCase("foo", "%feo%", null, "UTF8_BINARY", false),
-      LikeAllTestCase(null, "%foo%", "%oo", "UTF8_BINARY", null)
-    )
+      LikeAllTestCase(null, "%foo%", "%oo", "UTF8_BINARY", null))
     likeAllTestCases.foreach(t => {
-      checkEvaluation(LikeAll(
-        Literal.create(t.l, StringType(CollationFactory.collationNameToId(t.collation))),
-          Seq(UTF8String.fromString(t.p1), UTF8String.fromString(t.p2))), t.expectedLikeAll)
+      checkEvaluation(
+        LikeAll(
+          Literal.create(t.l, StringType(CollationFactory.collationNameToId(t.collation))),
+          Seq(UTF8String.fromString(t.p1), UTF8String.fromString(t.p2))),
+        t.expectedLikeAll)
     })
 
     // NotLikeAll
-    case class NotLikeAllTestCase[R](l: String, p1: String, p2: String, collation: String,
-      expectedNotLikeAll: R)
+    case class NotLikeAllTestCase[R](
+        l: String,
+        p1: String,
+        p2: String,
+        collation: String,
+        expectedNotLikeAll: R)
     val notLikeAllTestCases = Seq(
       NotLikeAllTestCase("foo", "%foo%", "%oo", "UTF8_BINARY", false),
       NotLikeAllTestCase("foo", "%goo%", "%bar%", "UTF8_BINARY", true),
@@ -165,17 +208,22 @@ class CollationRegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalH
       NotLikeAllTestCase("foo", "%goo%", "%bar%", "UTF8_BINARY", true),
       NotLikeAllTestCase("foo", "%foo%", null, "UTF8_BINARY", false),
       NotLikeAllTestCase("foo", "%feo%", null, "UTF8_BINARY", null),
-      NotLikeAllTestCase(null, "%foo%", "%oo", "UTF8_BINARY", null)
-    )
+      NotLikeAllTestCase(null, "%foo%", "%oo", "UTF8_BINARY", null))
     notLikeAllTestCases.foreach(t => {
-      checkEvaluation(NotLikeAll(
-        Literal.create(t.l, StringType(CollationFactory.collationNameToId(t.collation))),
-        Seq(UTF8String.fromString(t.p1), UTF8String.fromString(t.p2))), t.expectedNotLikeAll)
+      checkEvaluation(
+        NotLikeAll(
+          Literal.create(t.l, StringType(CollationFactory.collationNameToId(t.collation))),
+          Seq(UTF8String.fromString(t.p1), UTF8String.fromString(t.p2))),
+        t.expectedNotLikeAll)
     })
 
     // LikeAny
-    case class LikeAnyTestCase[R](l: String, p1: String, p2: String, collation: String,
-      expectedLikeAny: R)
+    case class LikeAnyTestCase[R](
+        l: String,
+        p1: String,
+        p2: String,
+        collation: String,
+        expectedLikeAny: R)
     val likeAnyTestCases = Seq(
       LikeAnyTestCase("foo", "%goo%", "%hoo", "UTF8_BINARY", false),
       LikeAnyTestCase("foo", "%foo%", "%bar%", "UTF8_BINARY", true),
@@ -185,17 +233,22 @@ class CollationRegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalH
       LikeAnyTestCase("foo", "%foo%", "%bar%", "UTF8_BINARY", true),
       LikeAnyTestCase("foo", "%foo%", null, "UTF8_BINARY", true),
       LikeAnyTestCase("foo", "%feo%", null, "UTF8_BINARY", null),
-      LikeAnyTestCase(null, "%foo%", "%oo", "UTF8_BINARY", null)
-    )
+      LikeAnyTestCase(null, "%foo%", "%oo", "UTF8_BINARY", null))
     likeAnyTestCases.foreach(t => {
-      checkEvaluation(LikeAny(
-        Literal.create(t.l, StringType(CollationFactory.collationNameToId(t.collation))),
-        Seq(UTF8String.fromString(t.p1), UTF8String.fromString(t.p2))), t.expectedLikeAny)
+      checkEvaluation(
+        LikeAny(
+          Literal.create(t.l, StringType(CollationFactory.collationNameToId(t.collation))),
+          Seq(UTF8String.fromString(t.p1), UTF8String.fromString(t.p2))),
+        t.expectedLikeAny)
     })
 
     // NotLikeAny
-    case class NotLikeAnyTestCase[R](l: String, p1: String, p2: String, collation: String,
-      expectedNotLikeAny: R)
+    case class NotLikeAnyTestCase[R](
+        l: String,
+        p1: String,
+        p2: String,
+        collation: String,
+        expectedNotLikeAny: R)
     val notLikeAnyTestCases = Seq(
       NotLikeAnyTestCase("foo", "%foo%", "%hoo", "UTF8_BINARY", true),
       NotLikeAnyTestCase("foo", "%foo%", "%oo%", "UTF8_BINARY", false),
@@ -205,12 +258,13 @@ class CollationRegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalH
       NotLikeAnyTestCase("foo", "%foo%", "%oo%", "UTF8_BINARY", false),
       NotLikeAnyTestCase("foo", "%foo%", null, "UTF8_BINARY", null),
       NotLikeAnyTestCase("foo", "%feo%", null, "UTF8_BINARY", true),
-      NotLikeAnyTestCase(null, "%foo%", "%oo", "UTF8_BINARY", null)
-    )
+      NotLikeAnyTestCase(null, "%foo%", "%oo", "UTF8_BINARY", null))
     notLikeAnyTestCases.foreach(t => {
-      checkEvaluation(NotLikeAny(
-        Literal.create(t.l, StringType(CollationFactory.collationNameToId(t.collation))),
-        Seq(UTF8String.fromString(t.p1), UTF8String.fromString(t.p2))), t.expectedNotLikeAny)
+      checkEvaluation(
+        NotLikeAny(
+          Literal.create(t.l, StringType(CollationFactory.collationNameToId(t.collation))),
+          Seq(UTF8String.fromString(t.p1), UTF8String.fromString(t.p2))),
+        t.expectedNotLikeAny)
     })
   }
 }

@@ -68,8 +68,7 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
 
             testStream(spark.readStream.table(tblName))(
               ProcessAllAvailable(),
-              CheckAnswer(Row(0), Row(1), Row(2))
-            )
+              CheckAnswer(Row(0), Row(1), Row(2)))
           }
         }
       }
@@ -89,12 +88,11 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
     withTable(tblName) {
       stream.toDF().createOrReplaceTempView(tblName)
 
-      testStream(spark.readStream.table(tblName)) (
+      testStream(spark.readStream.table(tblName))(
         AddData(stream, 1, 2, 3),
         CheckLastBatch(1, 2, 3),
         AddData(stream, 4, 5),
-        CheckLastBatch(4, 5)
-      )
+        CheckLastBatch(4, 5))
     }
   }
 
@@ -120,9 +118,7 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
       condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
       parameters = Map(
         "tableName" -> "`testcat`.`table_name`",
-        "operation" -> "either micro-batch or continuous scan"
-      )
-    )
+        "operation" -> "either micro-batch or continuous scan"))
   }
 
   test("read: read table with custom catalog") {
@@ -134,12 +130,11 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
       val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
       table.asInstanceOf[InMemoryStreamTable].setStream(stream)
 
-      testStream(spark.readStream.table(tblName)) (
+      testStream(spark.readStream.table(tblName))(
         AddData(stream, 1, 2, 3),
         CheckLastBatch(1, 2, 3),
         AddData(stream, 4, 5),
-        CheckLastBatch(4, 5)
-      )
+        CheckLastBatch(4, 5))
     }
   }
 
@@ -154,18 +149,18 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
       val table = testCatalog.loadTable(Identifier.of(Array("ns"), "table_name"))
       table.asInstanceOf[InMemoryStreamTable].setStream(stream)
 
-      testStream(spark.readStream.table(tblName)) (
+      testStream(spark.readStream.table(tblName))(
         AddData(stream, 1, 2, 3),
         CheckLastBatch(1, 2, 3),
         AddData(stream, 4, 5),
-        CheckLastBatch(4, 5)
-      )
+        CheckLastBatch(4, 5))
     }
   }
 
   test("read: fallback to V1 relation") {
     val tblName = DataStreamTableAPISuite.V1FallbackTestTableName
-    spark.conf.set(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION.key,
+    spark.conf.set(
+      SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION.key,
       classOf[InMemoryStreamTableCatalog].getName)
     val v2Source = classOf[FakeV2Provider].getName
     withTempDir { tempDir =>
@@ -173,8 +168,12 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
         spark.sql(s"CREATE TABLE $tblName (data int) USING $v2Source")
 
         // Check the StreamingRelationV2 has been replaced by StreamingRelation
-        val exists = spark.readStream.option("path", tempDir.getCanonicalPath).table(tblName)
-          .queryExecution.analyzed.exists(_.isInstanceOf[StreamingRelationV2])
+        val exists = spark.readStream
+          .option("path", tempDir.getCanonicalPath)
+          .table(tblName)
+          .queryExecution
+          .analyzed
+          .exists(_.isInstanceOf[StreamingRelationV2])
         assert(!exists)
       }
     }
@@ -205,7 +204,8 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
 
   test("write: write to table with default session catalog") {
     val v2Source = classOf[FakeV2ProviderWithCustomSchema].getName
-    spark.conf.set(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION.key,
+    spark.conf.set(
+      SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION.key,
       classOf[InMemoryTableSessionCatalog].getName)
 
     spark.sql("CREATE NAMESPACE ns")
@@ -284,8 +284,12 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
         // The file written by batch will not be seen after the table was written by a streaming
         // query. This is because we load files from the metadata log instead of listing them
         // using HDFS API.
-        Seq(4, 5, 6).toDF("value").write.format("parquet")
-          .option("path", dir.getCanonicalPath).saveAsTable(tableName)
+        Seq(4, 5, 6)
+          .toDF("value")
+          .write
+          .format("parquet")
+          .option("path", dir.getCanonicalPath)
+          .saveAsTable(tableName)
 
         checkForStreamTable(Some(dir), tableName)
       }
@@ -311,8 +315,12 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
         // The file written by batch will not be seen after the table was written by a streaming
         // query. This is because we load files from the metadata log instead of listing them
         // using HDFS API.
-        Seq(4, 5, 6).toDF("value").write
-          .mode("append").format("parquet").save(dir.getCanonicalPath)
+        Seq(4, 5, 6)
+          .toDF("value")
+          .write
+          .mode("append")
+          .format("parquet")
+          .save(dir.getCanonicalPath)
 
         checkForStreamTable(Some(dir), tableName)
       }
@@ -329,8 +337,9 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
       val exc = intercept[AnalysisException] {
         runStreamQueryAppendMode(tableName, checkpointDir, Seq.empty, Seq.empty)
       }
-      assert(exc.getMessage.contains("The input source(parquet) is different from the table " +
-        s"$tableName's data source provider(json)"))
+      assert(
+        exc.getMessage.contains("The input source(parquet) is different from the table " +
+          s"$tableName's data source provider(json)"))
     }
   }
 
@@ -340,7 +349,9 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
     withTable(tableIdentifier) {
       runStreamAppendWithClusterBy(tableIdentifier)
 
-      val table = spark.sessionState.catalogManager.catalog("testcat").asTableCatalog
+      val table = spark.sessionState.catalogManager
+        .catalog("testcat")
+        .asTableCatalog
         .loadTable(Identifier.of(Array(), "cluster_test"))
       assert(table.partitioning === Seq(ClusterByTransform(Seq(FieldReference("id")))))
     }
@@ -353,7 +364,9 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
       sql(s"CREATE TABLE $tableIdentifier (id BIGINT, data STRING) CLUSTER BY (id)")
       runStreamAppendWithClusterBy(tableIdentifier)
 
-      val table = spark.sessionState.catalogManager.catalog("testcat").asTableCatalog
+      val table = spark.sessionState.catalogManager
+        .catalog("testcat")
+        .asTableCatalog
         .loadTable(Identifier.of(Array(), "cluster_test"))
       assert(table.partitioning === Seq(ClusterByTransform(Seq(FieldReference("id")))))
     }
@@ -379,17 +392,22 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
           .format("parquet")
           .option("checkpointLocation", dir.getCanonicalPath)
           .toTable(tblTargetQualified)
-          .asInstanceOf[StreamingQueryWrapper].streamingQuery
+          .asInstanceOf[StreamingQueryWrapper]
+          .streamingQuery
 
         try {
           sq.processAllAvailable()
 
           val explainWithoutExtended = sq.explainInternal(false)
           // `extended = false` only displays the physical plan.
-          assert("FileScan".r
-            .findAllMatchIn(explainWithoutExtended).size === 1)
-          assert(tblSourceName.r
-            .findAllMatchIn(explainWithoutExtended).size === 1)
+          assert(
+            "FileScan".r
+              .findAllMatchIn(explainWithoutExtended)
+              .size === 1)
+          assert(
+            tblSourceName.r
+              .findAllMatchIn(explainWithoutExtended)
+              .size === 1)
 
           // We have marker node for DSv1 sink only in logical node. In physical plan, there is no
           // information for DSv1 sink.
@@ -397,18 +415,28 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
           val explainWithExtended = sq.explainInternal(true)
           // `extended = true` displays 3 logical plans (Parsed/Analyzed/Optimized) and 1 physical
           // plan.
-          assert("Relation".r
-            .findAllMatchIn(explainWithExtended).size === 3)
-          assert("FileScan".r
-            .findAllMatchIn(explainWithExtended).size === 1)
+          assert(
+            "Relation".r
+              .findAllMatchIn(explainWithExtended)
+              .size === 3)
+          assert(
+            "FileScan".r
+              .findAllMatchIn(explainWithExtended)
+              .size === 1)
           // we don't compare with exact number since the number is also affected by SubqueryAlias
-          assert(tblSourceQualified.r
-            .findAllMatchIn(explainWithExtended).size >= 4)
+          assert(
+            tblSourceQualified.r
+              .findAllMatchIn(explainWithExtended)
+              .size >= 4)
 
-          assert("WriteToMicroBatchDataSourceV1".r
-            .findAllMatchIn(explainWithExtended).size === 2)
-          assert(tblTargetQualified.r
-            .findAllMatchIn(explainWithExtended).size >= 2)
+          assert(
+            "WriteToMicroBatchDataSourceV1".r
+              .findAllMatchIn(explainWithExtended)
+              .size === 2)
+          assert(
+            tblTargetQualified.r
+              .findAllMatchIn(explainWithExtended)
+              .size >= 2)
         } finally {
           sq.stop()
         }
@@ -435,12 +463,14 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
         val table = testCatalog.loadTable(Identifier.of(Array("ns"), tblSourceName))
         table.asInstanceOf[InMemoryStreamTable].setStream(stream)
 
-        val df = spark.readStream.table(tblSourceQualified)
+        val df = spark.readStream
+          .table(tblSourceQualified)
           .select(lit('a'), $"value")
         val sq = df.writeStream
           .option("checkpointLocation", dir.getCanonicalPath)
           .toTable(tblTargetQualified)
-          .asInstanceOf[StreamingQueryWrapper].streamingQuery
+          .asInstanceOf[StreamingQueryWrapper]
+          .streamingQuery
 
         try {
           stream.addData(1, 2, 3)
@@ -450,29 +480,45 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
           val explainWithoutExtended = sq.explainInternal(false)
           // `extended = false` only displays the physical plan.
           // we don't guarantee the table information is available in physical plan.
-          assert("MicroBatchScan".r
-            .findAllMatchIn(explainWithoutExtended).size === 1)
-          assert("WriteToDataSourceV2".r
-            .findAllMatchIn(explainWithoutExtended).size === 1)
+          assert(
+            "MicroBatchScan".r
+              .findAllMatchIn(explainWithoutExtended)
+              .size === 1)
+          assert(
+            "WriteToDataSourceV2".r
+              .findAllMatchIn(explainWithoutExtended)
+              .size === 1)
 
           val explainWithExtended = sq.explainInternal(true)
           // `extended = true` displays 3 logical plans (Parsed/Analyzed/Optimized) and 1 physical
           // plan.
-          assert("StreamingDataSourceV2ScanRelation".r
-            .findAllMatchIn(explainWithExtended).size === 3)
+          assert(
+            "StreamingDataSourceV2ScanRelation".r
+              .findAllMatchIn(explainWithExtended)
+              .size === 3)
           // WriteToMicroBatchDataSource is used for both parsed and analyzed logical plan
-          assert("WriteToMicroBatchDataSource".r
-            .findAllMatchIn(explainWithExtended).size === 2)
+          assert(
+            "WriteToMicroBatchDataSource".r
+              .findAllMatchIn(explainWithExtended)
+              .size === 2)
           // optimizer replaces WriteToMicroBatchDataSource to WriteToDataSourceV2
-          assert("WriteToDataSourceV2".r
-            .findAllMatchIn(explainWithExtended).size === 2)
-          assert("MicroBatchScan".r
-            .findAllMatchIn(explainWithExtended).size === 1)
+          assert(
+            "WriteToDataSourceV2".r
+              .findAllMatchIn(explainWithExtended)
+              .size === 2)
+          assert(
+            "MicroBatchScan".r
+              .findAllMatchIn(explainWithExtended)
+              .size === 1)
 
-          assert(tblSourceQualified.r
-            .findAllMatchIn(explainWithExtended).size >= 3)
-          assert(tblTargetQualified.r
-            .findAllMatchIn(explainWithExtended).size >= 3)
+          assert(
+            tblSourceQualified.r
+              .findAllMatchIn(explainWithExtended)
+              .size >= 3)
+          assert(
+            tblTargetQualified.r
+              .findAllMatchIn(explainWithExtended)
+              .size >= 3)
         } finally {
           sq.stop()
         }
@@ -489,11 +535,18 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
         val checkpointLocation = new File(dir, "checkpoint")
 
         val format = "parquet"
-        Seq((1, 2)).toDF("i", "d")
-          .write.format(format).option("path", tbl1File.getCanonicalPath).saveAsTable("tbl1")
+        Seq((1, 2))
+          .toDF("i", "d")
+          .write
+          .format(format)
+          .option("path", tbl1File.getCanonicalPath)
+          .saveAsTable("tbl1")
 
-        val query = spark.readStream.format(format).table("tbl1")
-          .writeStream.format(format)
+        val query = spark.readStream
+          .format(format)
+          .table("tbl1")
+          .writeStream
+          .format(format)
           .option("checkpointLocation", checkpointLocation.getCanonicalPath)
           .option("path", tbl2File.getCanonicalPath)
           .toTable("tbl2")
@@ -502,15 +555,21 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
           query.processAllAvailable()
           checkAnswer(spark.table("tbl2").sort($"i"), Seq(Row(1, 2)))
 
-          Seq((3, 4)).toDF("i", "d")
-            .write.format(format).option("path", tbl1File.getCanonicalPath)
-            .mode(SaveMode.Append).saveAsTable("tbl1")
+          Seq((3, 4))
+            .toDF("i", "d")
+            .write
+            .format(format)
+            .option("path", tbl1File.getCanonicalPath)
+            .mode(SaveMode.Append)
+            .saveAsTable("tbl1")
 
           query.processAllAvailable()
           checkAnswer(spark.table("tbl2").sort($"i"), Seq(Row(1, 2), Row(3, 4)))
 
-          assert(query.exception.isEmpty, "No exception should happen in streaming query: " +
-            s"exception - ${query.exception}")
+          assert(
+            query.exception.isEmpty,
+            "No exception should happen in streaming query: " +
+              s"exception - ${query.exception}")
         } finally {
           query.stop()
         }
@@ -557,18 +616,14 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
     memory.addData(1, 2, 3)
     sq.processAllAvailable()
 
-    checkDataset(
-      spark.table(tableName).as[Int],
-      1, 2, 3)
+    checkDataset(spark.table(tableName).as[Int], 1, 2, 3)
     val catalogTable = spark.sessionState.catalog.getTableMetadata(TableIdentifier(tableName))
     val path = if (dir.nonEmpty) {
       dir.get
     } else {
       new File(catalogTable.location)
     }
-    checkDataset(
-      spark.read.format("parquet").load(path.getCanonicalPath).as[Int],
-      1, 2, 3)
+    checkDataset(spark.read.format("parquet").load(path.getCanonicalPath).as[Int], 1, 2, 3)
   }
 
   private def runTestWithStreamAppend(tableIdentifier: String) = {
@@ -593,8 +648,7 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
       inputData.addData(inputsPerBatch: _*)
     }
 
-    val query = inputDF
-      .writeStream
+    val query = inputDF.writeStream
       .option("checkpointLocation", checkpointDir.getAbsolutePath)
       .toTable(tableIdentifier)
 
@@ -613,8 +667,7 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
     runStreamQueryAppendMode(tableIdentifier, checkpointDir, prevInputs, newInputs)
     checkAnswer(
       spark.table(tableIdentifier),
-      expectedOutputs.map { case (id, data) => Row(id, data) }
-    )
+      expectedOutputs.map { case (id, data) => Row(id, data) })
   }
 
   private def runStreamAppendWithClusterBy(tableIdentifier: String): Unit = {
@@ -622,8 +675,7 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
       val inputData = MemoryStream[(Long, String)]
       val inputDF = inputData.toDF().toDF("id", "data")
 
-      val query = inputDF
-        .writeStream
+      val query = inputDF.writeStream
         .clusterBy("id")
         .option("checkpointLocation", ckptDir.getAbsolutePath)
         .toTable(tableIdentifier)
@@ -641,9 +693,9 @@ object DataStreamTableAPISuite {
 }
 
 class InMemoryStreamTable(override val name: String)
-  extends Table
-  with SupportsRead
-  with SupportsMetadataColumns {
+    extends Table
+    with SupportsRead
+    with SupportsMetadataColumns {
   var stream: MemoryStream[Int] = _
 
   def setStream(inputData: MemoryStream[Int]): Unit = stream = inputData
@@ -668,11 +720,14 @@ class InMemoryStreamTable(override val name: String)
 }
 
 class NonStreamV2Table(override val name: String)
-    extends Table with SupportsRead with V2TableWithV1Fallback {
+    extends Table
+    with SupportsRead
+    with V2TableWithV1Fallback {
   override def schema(): StructType = StructType(Nil)
   override def capabilities(): util.Set[TableCapability] =
     util.EnumSet.of(TableCapability.BATCH_READ)
-  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = new FakeScanBuilder
+  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
+    new FakeScanBuilder
 
   override def v1Table: CatalogTable = {
     CatalogTable(
@@ -685,7 +740,6 @@ class NonStreamV2Table(override val name: String)
       provider = Some("parquet"))
   }
 }
-
 
 class InMemoryStreamTableCatalog extends InMemoryTableCatalog {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._

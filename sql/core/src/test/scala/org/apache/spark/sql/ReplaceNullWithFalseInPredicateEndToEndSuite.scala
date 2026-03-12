@@ -48,7 +48,8 @@ class ReplaceNullWithFalseInPredicateEndToEndSuite extends QueryTest with Shared
       checkAnswer(q2, Seq.empty)
       checkPlanIsEmptyLocalScan(q2)
 
-      val q3 = df1.join(df2, when(df1("l") > df2("l"), lit(null)).otherwise(df1("b") && lit(null)))
+      val q3 =
+        df1.join(df2, when(df1("l") > df2("l"), lit(null)).otherwise(df1("b") && lit(null)))
       checkAnswer(q3, Seq.empty)
       checkPlanIsEmptyLocalScan(q3)
 
@@ -84,13 +85,15 @@ class ReplaceNullWithFalseInPredicateEndToEndSuite extends QueryTest with Shared
 
     withTable("t1", "t2") {
       // to test ArrayFilter and ArrayExists
-      spark.sql("select array(null, 1, null, 3) as a")
-        .write.saveAsTable("t1")
+      spark.sql("select array(null, 1, null, 3) as a").write.saveAsTable("t1")
       // to test MapFilter
-      spark.sql("""
+      spark
+        .sql("""
         select map_from_entries(arrays_zip(a, transform(a, e -> if(mod(e, 2) = 0, null, e)))) as m
         from (select array(0, 1, 2, 3) as a)
-      """).write.saveAsTable("t2")
+      """)
+        .write
+        .saveAsTable("t2")
 
       val df1 = spark.table("t1")
       val df2 = spark.table("t2")

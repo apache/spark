@@ -27,7 +27,8 @@ import org.apache.spark.sql.types._
  * A benchmark that compares the performance of different ways to evaluate SQL IN expressions.
  *
  * Specifically, this class compares the if-based approach, which might iterate through all items
- * inside the IN value list, to other options with better worst-case time complexities (e.g., sets).
+ * inside the IN value list, to other options with better worst-case time complexities (e.g.,
+ * sets).
  *
  * To run this benchmark:
  * {{{
@@ -57,7 +58,10 @@ object InExpressionBenchmark extends SqlBasedBenchmark {
     runBenchmark(name, df, values, numRows, minNumIters)
   }
 
-  private def runNonCompactShortBenchmark(numItems: Int, numRows: Long, minNumIters: Int): Unit = {
+  private def runNonCompactShortBenchmark(
+      numItems: Int,
+      numRows: Long,
+      minNumIters: Int): Unit = {
     val step = (Short.MaxValue.toInt - Short.MinValue.toInt) / numItems
     val maxValue = Short.MinValue + numItems * step
     val rangeSize = maxValue - Short.MinValue

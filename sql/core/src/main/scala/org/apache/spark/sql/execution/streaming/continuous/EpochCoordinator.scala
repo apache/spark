@@ -37,18 +37,18 @@ private[continuous] sealed trait EpochCoordinatorMessage extends Serializable
 private[sql] case object IncrementAndGetEpoch extends EpochCoordinatorMessage
 
 /**
- * The RpcEndpoint stop() will wait to clear out the message queue before terminating the
- * object. This can lead to a race condition where the query restarts at epoch n, a new
- * EpochCoordinator starts at epoch n, and then the old epoch coordinator commits epoch n + 1.
- * The framework doesn't provide a handle to wait on the message queue, so we use a synchronous
- * message to stop any writes to the ContinuousExecution object.
+ * The RpcEndpoint stop() will wait to clear out the message queue before terminating the object.
+ * This can lead to a race condition where the query restarts at epoch n, a new EpochCoordinator
+ * starts at epoch n, and then the old epoch coordinator commits epoch n + 1. The framework
+ * doesn't provide a handle to wait on the message queue, so we use a synchronous message to stop
+ * any writes to the ContinuousExecution object.
  */
 private[sql] case object StopContinuousExecutionWrites extends EpochCoordinatorMessage
 
 // Init messages
 /**
- * Set the reader and writer partition counts. Tasks may not be started until the coordinator
- * has acknowledged these messages.
+ * Set the reader and writer partition counts. Tasks may not be started until the coordinator has
+ * acknowledged these messages.
  */
 private[sql] case class SetReaderPartitions(numPartitions: Int) extends EpochCoordinatorMessage
 case class SetWriterPartitions(numPartitions: Int) extends EpochCoordinatorMessage
@@ -58,21 +58,24 @@ case class SetWriterPartitions(numPartitions: Int) extends EpochCoordinatorMessa
  * Get the current epoch.
  */
 private[sql] case object GetCurrentEpoch extends EpochCoordinatorMessage
+
 /**
  * Commit a partition at the specified epoch with the given message.
  */
 private[sql] case class CommitPartitionEpoch(
     partitionId: Int,
     epoch: Long,
-    message: WriterCommitMessage) extends EpochCoordinatorMessage
+    message: WriterCommitMessage)
+    extends EpochCoordinatorMessage
+
 /**
  * Report that a partition is ending the specified epoch at the specified offset.
  */
 private[sql] case class ReportPartitionOffset(
     partitionId: Int,
     epoch: Long,
-    offset: PartitionOffset) extends EpochCoordinatorMessage
-
+    offset: PartitionOffset)
+    extends EpochCoordinatorMessage
 
 /** Helper object used to create reference to [[EpochCoordinator]]. */
 private[sql] object EpochCoordinatorRef extends Logging {
@@ -89,8 +92,8 @@ private[sql] object EpochCoordinatorRef extends Logging {
       startEpoch: Long,
       session: SparkSession,
       env: SparkEnv): RpcEndpointRef = synchronized {
-    val coordinator = new EpochCoordinator(
-      writeSupport, stream, query, startEpoch, session, env.rpcEnv)
+    val coordinator =
+      new EpochCoordinator(writeSupport, stream, query, startEpoch, session, env.rpcEnv)
     val ref = env.rpcEnv.setupEndpoint(endpointName(epochCoordinatorId), coordinator)
     logInfo("Registered EpochCoordinator endpoint")
     ref
@@ -106,13 +109,12 @@ private[sql] object EpochCoordinatorRef extends Logging {
 /**
  * Handles three major epoch coordination tasks for continuous processing:
  *
- * * Maintains a local epoch counter (the "driver epoch"), incremented by IncrementAndGetEpoch
- *   and pollable from executors by GetCurrentEpoch. Note that this epoch is *not* immediately
- *   reflected anywhere in ContinuousExecution.
- * * Collates ReportPartitionOffset messages, and forwards to ContinuousExecution when all
- *   readers have ended a given epoch.
- * * Collates CommitPartitionEpoch messages, and forwards to ContinuousExecution when all readers
- *   have both committed and reported an end offset for a given epoch.
+ * * Maintains a local epoch counter (the "driver epoch"), incremented by IncrementAndGetEpoch and
+ * pollable from executors by GetCurrentEpoch. Note that this epoch is *not* immediately reflected
+ * anywhere in ContinuousExecution. * Collates ReportPartitionOffset messages, and forwards to
+ * ContinuousExecution when all readers have ended a given epoch. * Collates CommitPartitionEpoch
+ * messages, and forwards to ContinuousExecution when all readers have both committed and reported
+ * an end offset for a given epoch.
  */
 private[continuous] class EpochCoordinator(
     writeSupport: StreamingWrite,
@@ -121,7 +123,8 @@ private[continuous] class EpochCoordinator(
     startEpoch: Long,
     session: SparkSession,
     override val rpcEnv: RpcEnv)
-  extends ThreadSafeRpcEndpoint with Logging {
+    extends ThreadSafeRpcEndpoint
+    with Logging {
 
   private val epochBacklogQueueSize =
     session.sessionState.conf.continuousStreamingEpochBacklogQueueSize
@@ -156,8 +159,9 @@ private[continuous] class EpochCoordinator(
       // If not, add the epoch being currently processed to epochs waiting to be committed,
       // otherwise commit it.
       if (lastCommittedEpoch != epoch - 1) {
-        logDebug(s"Epoch $epoch has received commits from all partitions " +
-          s"and is waiting for epoch ${epoch - 1} to be committed first.")
+        logDebug(
+          s"Epoch $epoch has received commits from all partitions " +
+            s"and is waiting for epoch ${epoch - 1} to be committed first.")
         epochsWaitingToBeCommitted.add(epoch)
       } else {
         commitEpoch(epoch, thisEpochCommits)
@@ -197,8 +201,9 @@ private[continuous] class EpochCoordinator(
    * Commit epoch to the offset log.
    */
   private def commitEpoch(epoch: Long, messages: Iterable[WriterCommitMessage]): Unit = {
-    logDebug(s"Epoch $epoch has received commits from all partitions " +
-      s"and is ready to be committed. Committing epoch $epoch.")
+    logDebug(
+      s"Epoch $epoch has received commits from all partitions " +
+        s"and is ready to be committed. Committing epoch $epoch.")
     // Sequencing is important here. We must commit to the writer before recording the commit
     // in the query, or we will end up dropping the commit if we restart in the middle.
     writeSupport.commit(epoch, messages.toArray)
@@ -232,16 +237,22 @@ private[continuous] class EpochCoordinator(
 
   private def checkProcessingQueueBoundaries() = {
     if (partitionOffsets.size > epochBacklogQueueSize) {
-      query.stopInNewThread(new IllegalStateException("Size of the partition offset queue has " +
-        "exceeded its maximum"))
+      query.stopInNewThread(
+        new IllegalStateException(
+          "Size of the partition offset queue has " +
+            "exceeded its maximum"))
     }
     if (partitionCommits.size > epochBacklogQueueSize) {
-      query.stopInNewThread(new IllegalStateException("Size of the partition commit queue has " +
-        "exceeded its maximum"))
+      query.stopInNewThread(
+        new IllegalStateException(
+          "Size of the partition commit queue has " +
+            "exceeded its maximum"))
     }
     if (epochsWaitingToBeCommitted.size > epochBacklogQueueSize) {
-      query.stopInNewThread(new IllegalStateException("Size of the epoch queue has " +
-        "exceeded its maximum"))
+      query.stopInNewThread(
+        new IllegalStateException(
+          "Size of the epoch queue has " +
+            "exceeded its maximum"))
     }
   }
 

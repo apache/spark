@@ -28,17 +28,21 @@ import org.apache.spark.sql.scripting.SqlScriptingExecutionContext
 private[v2] object CursorCommandUtils extends DataTypeErrorsBase {
 
   /**
-   * Gets the current SQL scripting execution context.
-   * Throws an exception if cursor is used outside of a scripting context.
+   * Gets the current SQL scripting execution context. Throws an exception if cursor is used
+   * outside of a scripting context.
    *
-   * @param cursorName Cursor name for error message
-   * @return The SQL scripting execution context
+   * @param cursorName
+   *   Cursor name for error message
+   * @return
+   *   The SQL scripting execution context
    */
   def getScriptingContext(cursorName: String): SqlScriptingExecutionContext = {
-    val scriptingContextManager = SqlScriptingContextManager.get()
-      .getOrElse(throw new AnalysisException(
-        errorClass = "CURSOR_OUTSIDE_SCRIPT",
-        messageParameters = Map("cursorName" -> toSQLId(cursorName))))
+    val scriptingContextManager = SqlScriptingContextManager
+      .get()
+      .getOrElse(
+        throw new AnalysisException(
+          errorClass = "CURSOR_OUTSIDE_SCRIPT",
+          messageParameters = Map("cursorName" -> toSQLId(cursorName))))
 
     scriptingContextManager.getContext
       .asInstanceOf[SqlScriptingExecutionContext]

@@ -45,17 +45,22 @@ class MapStateImpl[K, V](
     keyExprEnc: ExpressionEncoder[Any],
     userKeyEnc: ExpressionEncoder[Any],
     valEncoder: ExpressionEncoder[Any],
-    metrics: Map[String, SQLMetric] = Map.empty) extends MapState[K, V] with Logging {
+    metrics: Map[String, SQLMetric] = Map.empty)
+    extends MapState[K, V]
+    with Logging {
 
   // Pack grouping key and user key together as a prefixed composite key
   private val schemaForCompositeKeyRow: StructType = {
     getCompositeKeySchema(keyExprEnc.schema, userKeyEnc.schema)
   }
   private val schemaForValueRow: StructType = valEncoder.schema
-  private val stateTypesEncoder = new CompositeKeyStateEncoder(
-    keyExprEnc, userKeyEnc, valEncoder, stateName)
+  private val stateTypesEncoder =
+    new CompositeKeyStateEncoder(keyExprEnc, userKeyEnc, valEncoder, stateName)
 
-  store.createColFamilyIfAbsent(stateName, schemaForCompositeKeyRow, schemaForValueRow,
+  store.createColFamilyIfAbsent(
+    stateName,
+    schemaForCompositeKeyRow,
+    schemaForValueRow,
     PrefixKeyScanStateEncoderSpec(schemaForCompositeKeyRow, 1))
 
   /** Whether state exists or not. */
@@ -95,11 +100,12 @@ class MapStateImpl[K, V](
   /** Get the map associated with grouping key */
   override def iterator(): Iterator[(K, V)] = {
     val encodedGroupingKey = stateTypesEncoder.encodeGroupingKey()
-    store.prefixScan(encodedGroupingKey, stateName)
-      .map {
-        case iter: UnsafeRowPair =>
-          (stateTypesEncoder.decodeCompositeKey(iter.key).asInstanceOf[K],
-            stateTypesEncoder.decodeValue(iter.value).asInstanceOf[V])
+    store
+      .prefixScan(encodedGroupingKey, stateName)
+      .map { case iter: UnsafeRowPair =>
+        (
+          stateTypesEncoder.decodeCompositeKey(iter.key).asInstanceOf[K],
+          stateTypesEncoder.decodeValue(iter.value).asInstanceOf[V])
       }
   }
 

@@ -24,12 +24,15 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
  * The result of [[SubqueryExpression.plan]] resolution. This is used internally in
  * [[SubqueryExpressionResolver]].
  *
- * @param plan The resolved plan of the subquery.
- * @param output Plan output. We don't use [[LogicalPlan.output]] in the single-pass Analyzer,
- *   because this method is often recursive.
- * @param outerExpressions The outer expressions that are references in the plan. [[OuterReference]]
- *   wrapper is stripped away. These can be either actual leaf [[AttributeReference]]s or
- *   [[AggregateExpression]]s with outer references inside.
+ * @param plan
+ *   The resolved plan of the subquery.
+ * @param output
+ *   Plan output. We don't use [[LogicalPlan.output]] in the single-pass Analyzer, because this
+ *   method is often recursive.
+ * @param outerExpressions
+ *   The outer expressions that are references in the plan. [[OuterReference]] wrapper is stripped
+ *   away. These can be either actual leaf [[AttributeReference]]s or [[AggregateExpression]]s
+ *   with outer references inside.
  */
 case class ResolvedSubqueryExpressionPlan(
     plan: LogicalPlan,

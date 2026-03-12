@@ -76,31 +76,37 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
     val intArray = Array(1, 100, 10000)
     val intUnsafeArray = UnsafeArrayData.fromPrimitiveArray(intArray)
     val intArrayType = ArrayType(IntegerType, false)
-    assert(CatalystTypeConverters.createToScalaConverter(intArrayType)(intUnsafeArray) === intArray)
+    assert(
+      CatalystTypeConverters.createToScalaConverter(intArrayType)(intUnsafeArray) === intArray)
 
     val doubleArray = Array(1.1, 111.1, 11111.1)
     val doubleUnsafeArray = UnsafeArrayData.fromPrimitiveArray(doubleArray)
     val doubleArrayType = ArrayType(DoubleType, false)
-    assert(CatalystTypeConverters.createToScalaConverter(doubleArrayType)(doubleUnsafeArray)
-      === doubleArray)
+    assert(
+      CatalystTypeConverters.createToScalaConverter(doubleArrayType)(doubleUnsafeArray)
+        === doubleArray)
   }
 
   test("An array with null handling") {
     val intArray = Array(1, null, 100, null, 10000)
     val intGenericArray = new GenericArrayData(intArray)
     val intArrayType = ArrayType(IntegerType, true)
-    assert(CatalystTypeConverters.createToScalaConverter(intArrayType)(intGenericArray)
-      === intArray)
-    assert(CatalystTypeConverters.createToCatalystConverter(intArrayType)(intArray)
-      == intGenericArray)
+    assert(
+      CatalystTypeConverters.createToScalaConverter(intArrayType)(intGenericArray)
+        === intArray)
+    assert(
+      CatalystTypeConverters.createToCatalystConverter(intArrayType)(intArray)
+        == intGenericArray)
 
     val doubleArray = Array(1.1, null, 111.1, null, 11111.1)
     val doubleGenericArray = new GenericArrayData(doubleArray)
     val doubleArrayType = ArrayType(DoubleType, true)
-    assert(CatalystTypeConverters.createToScalaConverter(doubleArrayType)(doubleGenericArray)
-      === doubleArray)
-    assert(CatalystTypeConverters.createToCatalystConverter(doubleArrayType)(doubleArray)
-      == doubleGenericArray)
+    assert(
+      CatalystTypeConverters.createToScalaConverter(doubleArrayType)(doubleGenericArray)
+        === doubleArray)
+    assert(
+      CatalystTypeConverters.createToCatalystConverter(doubleArrayType)(doubleArray)
+        == doubleGenericArray)
   }
 
   test("converting a wrong value to the struct type") {
@@ -137,10 +143,8 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
         CatalystTypeConverters.createToCatalystConverter(arrayType)("test")
       },
       condition = "_LEGACY_ERROR_TEMP_3220",
-      parameters = Map(
-        "other" -> "test",
-        "otherClass" -> "java.lang.String",
-        "elementType" -> "int"))
+      parameters =
+        Map("other" -> "test", "otherClass" -> "java.lang.String", "elementType" -> "int"))
   }
 
   test("converting a wrong value to the decimal type") {
@@ -150,10 +154,8 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
         CatalystTypeConverters.createToCatalystConverter(decimalType)("test")
       },
       condition = "_LEGACY_ERROR_TEMP_3219",
-      parameters = Map(
-        "other" -> "test",
-        "otherClass" -> "java.lang.String",
-        "dataType" -> "decimal(10,0)"))
+      parameters =
+        Map("other" -> "test", "otherClass" -> "java.lang.String", "dataType" -> "decimal(10,0)"))
   }
 
   test("SPARK-51941: convert BigDecimal to Decimal") {
@@ -170,10 +172,8 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
         CatalystTypeConverters.createToCatalystConverter(StringType)(0.1)
       },
       condition = "_LEGACY_ERROR_TEMP_3219",
-      parameters = Map(
-        "other" -> "0.1",
-        "otherClass" -> "java.lang.Double",
-        "dataType" -> "STRING"))
+      parameters =
+        Map("other" -> "0.1", "otherClass" -> "java.lang.Double", "dataType" -> "STRING"))
   }
 
   test("SPARK-24571: convert Char to String") {
@@ -209,12 +209,7 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
 
   test("converting TimestampType to java.time.Instant") {
     withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
-      Seq(
-        -9463427405253013L,
-        -244000001L,
-        0L,
-        99628200102030L,
-        1543749753123456L).foreach { us =>
+      Seq(-9463427405253013L, -244000001L, 0L, 99628200102030L, 1543749753123456L).foreach { us =>
         val instant = DateTimeUtils.microsToInstant(us)
         assert(CatalystTypeConverters.createToScalaConverter(TimestampType)(us) === instant)
       }
@@ -238,15 +233,11 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("SPARK-35664: converting TimestampNTZType to java.time.LocalDateTime") {
-    Seq(
-      -9463427405253013L,
-      -244000001L,
-      0L,
-      99628200102030L,
-      1543749753123456L).foreach { us =>
+    Seq(-9463427405253013L, -244000001L, 0L, 99628200102030L, 1543749753123456L).foreach { us =>
       val localDateTime = DateTimeUtils.microsToLocalDateTime(us)
-      assert(CatalystTypeConverters.createToScalaConverter(TimestampNTZType)(us) ===
-        localDateTime)
+      assert(
+        CatalystTypeConverters.createToScalaConverter(TimestampNTZType)(us) ===
+          localDateTime)
     }
   }
 
@@ -268,17 +259,7 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
 
   test("converting DateType to java.time.LocalDate") {
     withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
-      Seq(
-        -701265,
-        -371419,
-        -199722,
-        -1,
-        0,
-        967,
-        2094,
-        17877,
-        24837,
-        1110657).foreach { days =>
+      Seq(-701265, -371419, -199722, -1, 0, 967, 2094, 17877, 24837, 1110657).foreach { days =>
         val localDate = DateTimeUtils.daysToLocalDate(days)
         assert(CatalystTypeConverters.createToScalaConverter(DateType)(days) === localDate)
       }
@@ -307,7 +288,8 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
 
   test("SPARK-35726: Truncate java.time.Duration by fields of day-time interval type") {
     val duration = Duration.ofSeconds(90061, 1000000023)
-    Seq((DayTimeIntervalType(DAY), 86400000000L, -86400000000L),
+    Seq(
+      (DayTimeIntervalType(DAY), 86400000000L, -86400000000L),
       (DayTimeIntervalType(DAY, HOUR), 90000000000L, -90000000000L),
       (DayTimeIntervalType(DAY, MINUTE), 90060000000L, -90060000000L),
       (DayTimeIntervalType(DAY, SECOND), 90062000000L, -90062000001L),
@@ -325,17 +307,13 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("SPARK-34605: converting DayTimeIntervalType to java.time.Duration") {
-    Seq(
-      0L,
-      1L,
-      999999,
-      -1000000,
-      Long.MaxValue).foreach { input =>
+    Seq(0L, 1L, 999999, -1000000, Long.MaxValue).foreach { input =>
       Seq(1L, -1L).foreach { sign =>
         val us = sign * input
         val duration = IntervalUtils.microsToDuration(us)
-        assert(CatalystTypeConverters.createToScalaConverter(DayTimeIntervalType())(us)
-          === duration)
+        assert(
+          CatalystTypeConverters.createToScalaConverter(DayTimeIntervalType())(us)
+            === duration)
       }
     }
   }
@@ -361,7 +339,8 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("SPARK-35769: Truncate java.time.Period by fields of year-month interval type") {
-    Seq(YearMonthIntervalType(YEAR) -> 12,
+    Seq(
+      YearMonthIntervalType(YEAR) -> 12,
       YearMonthIntervalType(YEAR, MONTH) -> 13,
       YearMonthIntervalType(MONTH) -> 13)
       .foreach { case (ym, value) =>
@@ -370,17 +349,13 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("SPARK-34615: converting YearMonthIntervalType to java.time.Period") {
-    Seq(
-      0,
-      1,
-      999999,
-      1000000,
-      Int.MaxValue).foreach { input =>
+    Seq(0, 1, 999999, 1000000, Int.MaxValue).foreach { input =>
       Seq(1, -1).foreach { sign =>
         val months = sign * input
         val period = IntervalUtils.monthsToPeriod(months)
         assert(
-          CatalystTypeConverters.createToScalaConverter(YearMonthIntervalType())(months) === period)
+          CatalystTypeConverters.createToScalaConverter(YearMonthIntervalType())(
+            months) === period)
       }
     }
   }
@@ -441,14 +416,7 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("converting TimeType to java.time.LocalTime") {
-    Seq(
-      0,
-      1,
-      59000000,
-      3600000001L,
-      43200999999L,
-      86399000000L,
-      86399999999L).foreach { us =>
+    Seq(0, 1, 59000000, 3600000001L, 43200999999L, 86399000000L, 86399999999L).foreach { us =>
       val nanos = us * 1000L
       val localTime = DateTimeUtils.nanosToLocalTime(nanos)
       assert(CatalystTypeConverters.createToScalaConverter(TimeType())(nanos) === localTime)
@@ -457,7 +425,9 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
 
   // WKB bytes for POINT (17 7), reused across geospatial tests.
   private val pointWkb: Array[Byte] = "010100000000000000000031400000000000001C40"
-    .grouped(2).map(Integer.parseInt(_, 16).toByte).toArray
+    .grouped(2)
+    .map(Integer.parseInt(_, 16).toByte)
+    .toArray
 
   test("converting Geometry to GeometryType via convertToCatalyst") {
     val geom = Geometry.fromWKB(pointWkb, 0)
@@ -553,10 +523,8 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
         CatalystTypeConverters.createToCatalystConverter(gt)("test")
       },
       condition = "_LEGACY_ERROR_TEMP_3219",
-      parameters = Map(
-        "other" -> "test",
-        "otherClass" -> "java.lang.String",
-        "dataType" -> "STRING"))
+      parameters =
+        Map("other" -> "test", "otherClass" -> "java.lang.String", "dataType" -> "STRING"))
   }
 
   test("converting a wrong value to GeographyType") {
@@ -566,10 +534,8 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
         CatalystTypeConverters.createToCatalystConverter(gt)("test")
       },
       condition = "_LEGACY_ERROR_TEMP_3219",
-      parameters = Map(
-        "other" -> "test",
-        "otherClass" -> "java.lang.String",
-        "dataType" -> "STRING"))
+      parameters =
+        Map("other" -> "test", "otherClass" -> "java.lang.String", "dataType" -> "STRING"))
   }
 
   test("convertToCatalyst with Geometry nested in Seq") {
@@ -580,8 +546,8 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
     assert(array.numElements() === 1)
     val element = array.get(0, GeometryType("ANY"))
     assert(element.isInstanceOf[GeometryVal])
-    assert(java.util.Arrays.equals(
-      STUtils.stAsBinary(element.asInstanceOf[GeometryVal]), pointWkb))
+    assert(
+      java.util.Arrays.equals(STUtils.stAsBinary(element.asInstanceOf[GeometryVal]), pointWkb))
   }
 
   test("convertToCatalyst with Geometry nested in Array") {
@@ -592,8 +558,8 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
     assert(array.numElements() === 1)
     val element = array.get(0, GeometryType("ANY"))
     assert(element.isInstanceOf[GeometryVal])
-    assert(java.util.Arrays.equals(
-      STUtils.stAsBinary(element.asInstanceOf[GeometryVal]), pointWkb))
+    assert(
+      java.util.Arrays.equals(STUtils.stAsBinary(element.asInstanceOf[GeometryVal]), pointWkb))
   }
 
   test("convertToCatalyst with Geometry nested in Map") {
@@ -603,8 +569,7 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
     val mapData = result.asInstanceOf[ArrayBasedMapData]
     val value = mapData.valueArray.get(0, GeometryType("ANY"))
     assert(value.isInstanceOf[GeometryVal])
-    assert(java.util.Arrays.equals(
-      STUtils.stAsBinary(value.asInstanceOf[GeometryVal]), pointWkb))
+    assert(java.util.Arrays.equals(STUtils.stAsBinary(value.asInstanceOf[GeometryVal]), pointWkb))
   }
 
   test("convertToCatalyst with Geometry nested in Row") {
@@ -613,8 +578,8 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
     assert(result.isInstanceOf[InternalRow])
     val element = result.asInstanceOf[InternalRow].get(0, GeometryType("ANY"))
     assert(element.isInstanceOf[GeometryVal])
-    assert(java.util.Arrays.equals(
-      STUtils.stAsBinary(element.asInstanceOf[GeometryVal]), pointWkb))
+    assert(
+      java.util.Arrays.equals(STUtils.stAsBinary(element.asInstanceOf[GeometryVal]), pointWkb))
   }
 
   test("convertToCatalyst with Geography nested in Seq") {
@@ -625,8 +590,8 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
     assert(array.numElements() === 1)
     val element = array.get(0, GeographyType("ANY"))
     assert(element.isInstanceOf[GeographyVal])
-    assert(java.util.Arrays.equals(
-      STUtils.stAsBinary(element.asInstanceOf[GeographyVal]), pointWkb))
+    assert(
+      java.util.Arrays.equals(STUtils.stAsBinary(element.asInstanceOf[GeographyVal]), pointWkb))
   }
 
   test("convertToCatalyst with Geography nested in Array") {
@@ -637,8 +602,8 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
     assert(array.numElements() === 1)
     val element = array.get(0, GeographyType("ANY"))
     assert(element.isInstanceOf[GeographyVal])
-    assert(java.util.Arrays.equals(
-      STUtils.stAsBinary(element.asInstanceOf[GeographyVal]), pointWkb))
+    assert(
+      java.util.Arrays.equals(STUtils.stAsBinary(element.asInstanceOf[GeographyVal]), pointWkb))
   }
 
   test("convertToCatalyst with Geography nested in Map") {
@@ -648,8 +613,8 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
     val mapData = result.asInstanceOf[ArrayBasedMapData]
     val value = mapData.valueArray.get(0, GeographyType("ANY"))
     assert(value.isInstanceOf[GeographyVal])
-    assert(java.util.Arrays.equals(
-      STUtils.stAsBinary(value.asInstanceOf[GeographyVal]), pointWkb))
+    assert(
+      java.util.Arrays.equals(STUtils.stAsBinary(value.asInstanceOf[GeographyVal]), pointWkb))
   }
 
   test("convertToCatalyst with Geography nested in Row") {
@@ -658,7 +623,7 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
     assert(result.isInstanceOf[InternalRow])
     val element = result.asInstanceOf[InternalRow].get(0, GeographyType("ANY"))
     assert(element.isInstanceOf[GeographyVal])
-    assert(java.util.Arrays.equals(
-      STUtils.stAsBinary(element.asInstanceOf[GeographyVal]), pointWkb))
+    assert(
+      java.util.Arrays.equals(STUtils.stAsBinary(element.asInstanceOf[GeographyVal]), pointWkb))
   }
 }

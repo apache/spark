@@ -35,8 +35,8 @@ abstract class V1ReadFallbackSuite extends QueryTest with SharedSparkSession {
 
   test("full scan") {
     val df = baseTableScan()
-    val v1Scan = df.queryExecution.executedPlan.collect {
-      case s: RowDataSourceScanExec => s
+    val v1Scan = df.queryExecution.executedPlan.collect { case s: RowDataSourceScanExec =>
+      s
     }
     assert(v1Scan.length == 1)
     checkAnswer(df, Seq(Row(1, 10), Row(2, 20), Row(3, 30)))
@@ -44,8 +44,8 @@ abstract class V1ReadFallbackSuite extends QueryTest with SharedSparkSession {
 
   test("column pruning") {
     val df = baseTableScan().select("i")
-    val v1Scan = df.queryExecution.executedPlan.collect {
-      case s: RowDataSourceScanExec => s
+    val v1Scan = df.queryExecution.executedPlan.collect { case s: RowDataSourceScanExec =>
+      s
     }
     assert(v1Scan.length == 1)
     assert(v1Scan.head.output.map(_.name) == Seq("i"))
@@ -54,8 +54,8 @@ abstract class V1ReadFallbackSuite extends QueryTest with SharedSparkSession {
 
   test("filter push down") {
     val df = baseTableScan().filter("i > 1 and j < 30")
-    val v1Scan = df.queryExecution.executedPlan.collect {
-      case s: RowDataSourceScanExec => s
+    val v1Scan = df.queryExecution.executedPlan.collect { case s: RowDataSourceScanExec =>
+      s
     }
     assert(v1Scan.length == 1)
     // `j < 30` can't be pushed.
@@ -65,8 +65,8 @@ abstract class V1ReadFallbackSuite extends QueryTest with SharedSparkSession {
 
   test("filter push down + column pruning") {
     val df = baseTableScan().filter("i > 1").select("i")
-    val v1Scan = df.queryExecution.executedPlan.collect {
-      case s: RowDataSourceScanExec => s
+    val v1Scan = df.queryExecution.executedPlan.collect { case s: RowDataSourceScanExec =>
+      s
     }
     assert(v1Scan.length == 1)
     assert(v1Scan.head.output.map(_.name) == Seq("i"))
@@ -141,8 +141,10 @@ class TableWithV1ReadFallback(override val name: String) extends Table with Supp
     new V1ReadFallbackScanBuilder
   }
 
-  private class V1ReadFallbackScanBuilder extends ScanBuilder
-    with SupportsPushDownRequiredColumns with SupportsPushDownFilters {
+  private class V1ReadFallbackScanBuilder
+      extends ScanBuilder
+      with SupportsPushDownRequiredColumns
+      with SupportsPushDownFilters {
 
     private var requiredSchema: StructType = CatalogV2Util.v2ColumnsToStructType(columns())
     override def pruneColumns(requiredSchema: StructType): Unit = {
@@ -163,9 +165,8 @@ class TableWithV1ReadFallback(override val name: String) extends Table with Supp
     override def build(): Scan = new V1ReadFallbackScan(requiredSchema, filters)
   }
 
-  private class V1ReadFallbackScan(
-      requiredSchema: StructType,
-      filters: Array[Filter]) extends V1Scan {
+  private class V1ReadFallbackScan(requiredSchema: StructType, filters: Array[Filter])
+      extends V1Scan {
     override def readSchema(): StructType = requiredSchema
 
     override def toV1TableScan[T <: BaseRelation with TableScan](context: SQLContext): T = {
@@ -174,10 +175,9 @@ class TableWithV1ReadFallback(override val name: String) extends Table with Supp
   }
 }
 
-class V1TableScan(
-    context: SQLContext,
-    requiredSchema: StructType,
-    filters: Array[Filter]) extends BaseRelation with TableScan {
+class V1TableScan(context: SQLContext, requiredSchema: StructType, filters: Array[Filter])
+    extends BaseRelation
+    with TableScan {
   override def sqlContext: SQLContext = context
   override def schema: StructType = requiredSchema
   override def buildScan(): RDD[Row] = {

@@ -30,15 +30,15 @@ class AlterTableClusterByParserSuite extends AnalysisTest with SharedSparkSessio
       parsePlan("ALTER TABLE table_name CLUSTER BY (`a.b`, c.d, none)"),
       AlterTableClusterBy(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... CLUSTER BY"),
-        Some(ClusterBySpec(Seq(
-          FieldReference(Seq("a.b")),
-          FieldReference(Seq("c", "d")),
-          FieldReference(Seq("none")))))))
+        Some(
+          ClusterBySpec(
+            Seq(
+              FieldReference(Seq("a.b")),
+              FieldReference(Seq("c", "d")),
+              FieldReference(Seq("none")))))))
 
     comparePlans(
       parsePlan("ALTER TABLE table_name CLUSTER BY NONE"),
-      AlterTableClusterBy(
-        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... CLUSTER BY"),
-        None))
+      AlterTableClusterBy(UnresolvedTable(Seq("table_name"), "ALTER TABLE ... CLUSTER BY"), None))
   }
 }

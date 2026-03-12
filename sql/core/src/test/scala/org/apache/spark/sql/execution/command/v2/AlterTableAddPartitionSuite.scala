@@ -25,12 +25,12 @@ import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * The class contains tests for the `ALTER TABLE .. ADD PARTITION` command
- * to check V2 table catalogs.
+ * The class contains tests for the `ALTER TABLE .. ADD PARTITION` command to check V2 table
+ * catalogs.
  */
 class AlterTableAddPartitionSuite
-  extends command.AlterTableAddPartitionSuiteBase
-  with CommandSuiteBase {
+    extends command.AlterTableAddPartitionSuiteBase
+    with CommandSuiteBase {
   override def defaultPartitionName: String = "null"
 
   test("SPARK-33650: add partition into a table which doesn't support partition management") {
@@ -45,10 +45,7 @@ class AlterTableAddPartitionSuite
         },
         condition = "INVALID_PARTITION_OPERATION.PARTITION_MANAGEMENT_IS_UNSUPPORTED",
         parameters = Map("name" -> tableName),
-        context = ExpectedContext(
-          fragment = t,
-          start = 12,
-          stop = 39))
+        context = ExpectedContext(fragment = t, start = 12, stop = 39))
     }
   }
 
@@ -111,7 +108,9 @@ class AlterTableAddPartitionSuite
         sql(s"CREATE GLOBAL TEMP VIEW v2 AS SELECT *, 'a' FROM $t")
         cacheRelation(v2)
         sql(s"ALTER TABLE $t ADD PARTITION (id=2, part=3)")
-        checkCachedRelation(v2, Seq(Row(0, 0, "a"), Row(0, 1, "a"), Row(1, 2, "a"), Row(2, 3, "a")))
+        checkCachedRelation(
+          v2,
+          Seq(Row(0, 0, "a"), Row(0, 1, "a"), Row(1, 2, "a"), Row(2, 3, "a")))
       }
     }
   }
@@ -123,16 +122,20 @@ class AlterTableAddPartitionSuite
       sql(s"ALTER TABLE $t ADD PARTITION (id=2) LOCATION 'loc1'")
 
       val e = intercept[PartitionsAlreadyExistException] {
-        sql(s"ALTER TABLE $t ADD PARTITION (id=1) LOCATION 'loc'" +
-          " PARTITION (id=2) LOCATION 'loc1'")
+        sql(
+          s"ALTER TABLE $t ADD PARTITION (id=1) LOCATION 'loc'" +
+            " PARTITION (id=2) LOCATION 'loc1'")
       }
-      checkError(e,
+      checkError(
+        e,
         condition = "PARTITIONS_ALREADY_EXIST",
-        parameters = Map("partitionList" -> "PARTITION (`id` = 2)",
-        "tableName" -> "`test_catalog`.`ns`.`tbl`"))
+        parameters = Map(
+          "partitionList" -> "PARTITION (`id` = 2)",
+          "tableName" -> "`test_catalog`.`ns`.`tbl`"))
 
-      sql(s"ALTER TABLE $t ADD IF NOT EXISTS PARTITION (id=1) LOCATION 'loc'" +
-        " PARTITION (id=2) LOCATION 'loc1'")
+      sql(
+        s"ALTER TABLE $t ADD IF NOT EXISTS PARTITION (id=1) LOCATION 'loc'" +
+          " PARTITION (id=2) LOCATION 'loc1'")
       checkPartitions(t, Map("id" -> "1"), Map("id" -> "2"))
     }
   }

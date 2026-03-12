@@ -33,17 +33,18 @@ class ExternalCatalogEventSuite extends SparkFunSuite {
 
   protected def newCatalog: ExternalCatalog = new InMemoryCatalog()
 
-  private def testWithCatalog(
-      name: String)(
+  private def testWithCatalog(name: String)(
       f: (ExternalCatalog, Seq[ExternalCatalogEvent] => Unit) => Unit): Unit = test(name) {
     val catalog = new ExternalCatalogWithListener(newCatalog)
     val recorder = mutable.Buffer.empty[ExternalCatalogEvent]
     catalog.addListener((event: ExternalCatalogEvent) => recorder += event)
-    f(catalog, (expected: Seq[ExternalCatalogEvent]) => {
-      val actual = recorder.clone()
-      recorder.clear()
-      assert(expected === actual)
-    })
+    f(
+      catalog,
+      (expected: Seq[ExternalCatalogEvent]) => {
+        val actual = recorder.clone()
+        recorder.clear()
+        assert(expected === actual)
+      })
   }
 
   private def createDbDefinition(uri: URI): CatalogDatabase = {
@@ -98,8 +99,7 @@ class ExternalCatalogEventSuite extends SparkFunSuite {
     // CREATE
     val dbDefinition = createDbDefinition(uri1)
 
-    val storage = CatalogStorageFormat.empty.copy(
-      locationUri = Option(uri2))
+    val storage = CatalogStorageFormat.empty.copy(locationUri = Option(uri2))
     val tableDefinition = CatalogTable(
       identifier = TableIdentifier("tbl1", Some("db5")),
       tableType = CatalogTableType.MANAGED,
@@ -123,25 +123,28 @@ class ExternalCatalogEventSuite extends SparkFunSuite {
     // ALTER
     val newTableDefinition = tableDefinition.copy(tableType = CatalogTableType.EXTERNAL)
     catalog.alterTable(newTableDefinition)
-    checkEvents(AlterTablePreEvent("db5", "tbl1", AlterTableKind.TABLE) ::
-      AlterTableEvent("db5", "tbl1", AlterTableKind.TABLE) :: Nil)
+    checkEvents(
+      AlterTablePreEvent("db5", "tbl1", AlterTableKind.TABLE) ::
+        AlterTableEvent("db5", "tbl1", AlterTableKind.TABLE) :: Nil)
 
     // ALTER schema
     val newSchema = new StructType().add("id", "long", nullable = false)
     catalog.alterTableSchema("db5", "tbl1", newSchema)
-    checkEvents(AlterTablePreEvent("db5", "tbl1", AlterTableKind.SCHEMA) ::
-      AlterTableEvent("db5", "tbl1", AlterTableKind.SCHEMA) :: Nil)
+    checkEvents(
+      AlterTablePreEvent("db5", "tbl1", AlterTableKind.SCHEMA) ::
+        AlterTableEvent("db5", "tbl1", AlterTableKind.SCHEMA) :: Nil)
 
     // ALTER stats
     catalog.alterTableStats("db5", "tbl1", None)
-    checkEvents(AlterTablePreEvent("db5", "tbl1", AlterTableKind.STATS) ::
-      AlterTableEvent("db5", "tbl1", AlterTableKind.STATS) :: Nil)
+    checkEvents(
+      AlterTablePreEvent("db5", "tbl1", AlterTableKind.STATS) ::
+        AlterTableEvent("db5", "tbl1", AlterTableKind.STATS) :: Nil)
 
     // RENAME
     catalog.renameTable("db5", "tbl1", "tbl2")
     checkEvents(
       RenameTablePreEvent("db5", "tbl1", "tbl2") ::
-      RenameTableEvent("db5", "tbl1", "tbl2") :: Nil)
+        RenameTableEvent("db5", "tbl1", "tbl2") :: Nil)
 
     intercept[AnalysisException] {
       catalog.renameTable("db5", "tbl1", "tbl2")
@@ -185,7 +188,7 @@ class ExternalCatalogEventSuite extends SparkFunSuite {
     catalog.renameFunction("db5", "fn7", "fn4")
     checkEvents(
       RenameFunctionPreEvent("db5", "fn7", "fn4") ::
-      RenameFunctionEvent("db5", "fn7", "fn4") :: Nil)
+        RenameFunctionEvent("db5", "fn7", "fn4") :: Nil)
     intercept[AnalysisException] {
       catalog.renameFunction("db5", "fn7", "fn4")
     }
@@ -197,8 +200,7 @@ class ExternalCatalogEventSuite extends SparkFunSuite {
       className = "org.apache.spark.AlterFunction",
       resources = Seq.empty)
     catalog.alterFunction("db5", alteredFunctionDefinition)
-    checkEvents(
-      AlterFunctionPreEvent("db5", "fn4") :: AlterFunctionEvent("db5", "fn4") :: Nil)
+    checkEvents(AlterFunctionPreEvent("db5", "fn4") :: AlterFunctionEvent("db5", "fn4") :: Nil)
 
     // DROP
     intercept[AnalysisException] {
@@ -214,16 +216,13 @@ class ExternalCatalogEventSuite extends SparkFunSuite {
     // Prepare db
     val db = "db1"
     val dbUri = preparePath(Files.createTempDirectory(db + "_"))
-    val dbDefinition = CatalogDatabase(
-      name = db,
-      description = "",
-      locationUri = dbUri,
-      properties = Map.empty)
+    val dbDefinition =
+      CatalogDatabase(name = db, description = "", locationUri = dbUri, properties = Map.empty)
 
     catalog.createDatabase(dbDefinition, ignoreIfExists = false)
     checkEvents(
       CreateDatabasePreEvent(db) ::
-      CreateDatabaseEvent(db) :: Nil)
+        CreateDatabaseEvent(db) :: Nil)
 
     // Prepare table
     val table = "table1"
@@ -240,7 +239,7 @@ class ExternalCatalogEventSuite extends SparkFunSuite {
     catalog.createTable(tableDefinition, ignoreIfExists = false)
     checkEvents(
       CreateTablePreEvent(db, table) ::
-      CreateTableEvent(db, table) :: Nil)
+        CreateTableEvent(db, table) :: Nil)
 
     // Prepare partitions
     val storageFormat = CatalogStorageFormat(
@@ -260,13 +259,13 @@ class ExternalCatalogEventSuite extends SparkFunSuite {
     catalog.createPartitions(db, table, parts, ignoreIfExists = false)
     checkEvents(
       CreatePartitionsPreEvent(db, table, partSpecs) ::
-      CreatePartitionsEvent(db, table, partSpecs) :: Nil)
+        CreatePartitionsEvent(db, table, partSpecs) :: Nil)
 
     // Re-create with ignoreIfExists as true
     catalog.createPartitions(db, table, parts, ignoreIfExists = true)
     checkEvents(
       CreatePartitionsPreEvent(db, table, partSpecs) ::
-      CreatePartitionsEvent(db, table, partSpecs) :: Nil)
+        CreatePartitionsEvent(db, table, partSpecs) :: Nil)
 
     // createPartitions() failed because re-creating with ignoreIfExists as false, so PreEvent only
     intercept[AnalysisException] {
@@ -278,14 +277,14 @@ class ExternalCatalogEventSuite extends SparkFunSuite {
     catalog.alterPartitions(db, table, parts)
     checkEvents(
       AlterPartitionsPreEvent(db, table, partSpecs) ::
-      AlterPartitionsEvent(db, table, partSpecs) ::
-      Nil)
+        AlterPartitionsEvent(db, table, partSpecs) ::
+        Nil)
 
     // RENAME
     catalog.renamePartitions(db, table, partSpecs, newPartSpecs)
     checkEvents(
       RenamePartitionsPreEvent(db, table, partSpecs, newPartSpecs) ::
-      RenamePartitionsEvent(db, table, partSpecs, newPartSpecs) :: Nil)
+        RenamePartitionsEvent(db, table, partSpecs, newPartSpecs) :: Nil)
 
     // renamePartitions() failed because partitions have been renamed according to newPartSpecs,
     // so PreEvent only
@@ -299,23 +298,38 @@ class ExternalCatalogEventSuite extends SparkFunSuite {
     // because partition of (old) partSpecs do not exist and ignoreIfNotExists is false,
     // So PreEvent only
     intercept[AnalysisException] {
-      catalog.dropPartitions(db, table, partSpecs,
-        ignoreIfNotExists = false, purge = true, retainData = true)
+      catalog.dropPartitions(
+        db,
+        table,
+        partSpecs,
+        ignoreIfNotExists = false,
+        purge = true,
+        retainData = true)
     }
     checkEvents(DropPartitionsPreEvent(db, table, partSpecs) :: Nil)
 
     // Drop the renamed partitions
-    catalog.dropPartitions(db, table, newPartSpecs,
-      ignoreIfNotExists = false, purge = true, retainData = true)
+    catalog.dropPartitions(
+      db,
+      table,
+      newPartSpecs,
+      ignoreIfNotExists = false,
+      purge = true,
+      retainData = true)
     checkEvents(
       DropPartitionsPreEvent(db, table, newPartSpecs) ::
-      DropPartitionsEvent(db, table, newPartSpecs) :: Nil)
+        DropPartitionsEvent(db, table, newPartSpecs) :: Nil)
 
     // Re-drop with ignoreIfNotExists being true
-    catalog.dropPartitions(db, table, newPartSpecs,
-      ignoreIfNotExists = true, purge = true, retainData = true)
+    catalog.dropPartitions(
+      db,
+      table,
+      newPartSpecs,
+      ignoreIfNotExists = true,
+      purge = true,
+      retainData = true)
     checkEvents(
       DropPartitionsPreEvent(db, table, newPartSpecs) ::
-      DropPartitionsEvent(db, table, newPartSpecs) :: Nil)
+        DropPartitionsEvent(db, table, newPartSpecs) :: Nil)
   }
 }

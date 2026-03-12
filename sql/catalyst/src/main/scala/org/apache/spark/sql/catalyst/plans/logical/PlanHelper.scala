@@ -21,35 +21,36 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, Generator, WindowE
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 
 /**
- * [[PlanHelper]] contains utility methods that can be used by Analyzer and Optimizer.
- * It can also be container of methods that are common across multiple rules in Analyzer
- * and Optimizer.
+ * [[PlanHelper]] contains utility methods that can be used by Analyzer and Optimizer. It can also
+ * be container of methods that are common across multiple rules in Analyzer and Optimizer.
  */
 object PlanHelper {
+
   /**
    * Check if there's any expression in this query plan operator that is
-   * - A WindowExpression but the plan is not Window
-   * - An AggregateExpression but the plan is not Aggregate or Window
-   * - A Generator but the plan is not Generate
-   * Returns the list of invalid expressions that this operator hosts. This can happen when
-   * 1. The input query from users contain invalid expressions.
-   *    Example : SELECT * FROM tab WHERE max(c1) > 0
-   * 2. Query rewrites inadvertently produce plans that are invalid.
+   *   - A WindowExpression but the plan is not Window
+   *   - An AggregateExpression but the plan is not Aggregate or Window
+   *   - A Generator but the plan is not Generate Returns the list of invalid expressions that
+   *     this operator hosts. This can happen when
+   *   1. The input query from users contain invalid expressions. Example : SELECT * FROM tab
+   *      WHERE max(c1) > 0
+   *   2. Query rewrites inadvertently produce plans that are invalid.
    */
   def specialExpressionsInUnsupportedOperator(plan: LogicalPlan): Seq[Expression] = {
     val exprs = plan.expressions
     val invalidExpressions = exprs.flatMap { root =>
       root.collect {
-        case e: WindowExpression
-          if !plan.isInstanceOf[Window] => e
+        case e: WindowExpression if !plan.isInstanceOf[Window] => e
         case e: AggregateExpression
-          if !(plan.isInstanceOf[Aggregate] ||
-               plan.isInstanceOf[Window] ||
-               plan.isInstanceOf[CollectMetrics] ||
-               onlyInLateralSubquery(plan)) => e
+            if !(plan.isInstanceOf[Aggregate] ||
+              plan.isInstanceOf[Window] ||
+              plan.isInstanceOf[CollectMetrics] ||
+              onlyInLateralSubquery(plan)) =>
+          e
         case e: Generator
-          if !(plan.isInstanceOf[Generate] ||
-               plan.isInstanceOf[BaseEvalPythonUDTF]) => e
+            if !(plan.isInstanceOf[Generate] ||
+              plan.isInstanceOf[BaseEvalPythonUDTF]) =>
+          e
       }
     }
     invalidExpressions

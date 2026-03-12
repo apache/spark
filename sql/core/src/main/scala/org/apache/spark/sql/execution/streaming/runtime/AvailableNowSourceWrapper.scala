@@ -28,7 +28,8 @@ import org.apache.spark.sql.types.StructType
  * See [[AvailableNowDataStreamWrapper]] for more details.
  */
 class AvailableNowSourceWrapper(delegate: Source)
-  extends AvailableNowDataStreamWrapper(delegate) with Source {
+    extends AvailableNowDataStreamWrapper(delegate)
+    with Source {
 
   override def schema: StructType = delegate.schema
 

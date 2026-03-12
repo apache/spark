@@ -31,14 +31,28 @@ import org.apache.spark.util.ArrayImplicits._
 class MutableProjectionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   val fixedLengthTypes = Array[DataType](
-    BooleanType, ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType,
-    DateType, TimestampType, TimestampNTZType, new TimeType(6)) ++
+    BooleanType,
+    ByteType,
+    ShortType,
+    IntegerType,
+    LongType,
+    FloatType,
+    DoubleType,
+    DateType,
+    TimestampType,
+    TimestampNTZType,
+    new TimeType(6)) ++
     dayTimeIntervalTypes ++ yearMonthIntervalTypes
 
   val variableLengthTypes = Array(
-    StringType, DecimalType.defaultConcreteType, CalendarIntervalType, BinaryType,
-    ArrayType(StringType), MapType(IntegerType, StringType),
-    StructType.fromDDL("a INT, b STRING"), ObjectType(classOf[java.lang.Integer]))
+    StringType,
+    DecimalType.defaultConcreteType,
+    CalendarIntervalType,
+    BinaryType,
+    ArrayType(StringType),
+    MapType(IntegerType, StringType),
+    StructType.fromDDL("a INT, b STRING"),
+    ObjectType(classOf[java.lang.Integer]))
 
   def createMutableProjection(dataTypes: Array[DataType]): MutableProjection = {
     MutableProjection.create(
@@ -46,19 +60,19 @@ class MutableProjectionSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   testBothCodegenAndInterpreted("fixed-length types") {
-    val inputRow = InternalRow.fromSeq(Seq(
-      true, 3.toByte, 15.toShort, -83, 129L, 1.0f, 5.0, 1, 2L, 3L, 4L) ++
-      Seq.tabulate(dayTimeIntervalTypes.length)(_ => Long.MaxValue) ++
-      Seq.tabulate(yearMonthIntervalTypes.length)(_ => Int.MaxValue))
+    val inputRow = InternalRow.fromSeq(
+      Seq(true, 3.toByte, 15.toShort, -83, 129L, 1.0f, 5.0, 1, 2L, 3L, 4L) ++
+        Seq.tabulate(dayTimeIntervalTypes.length)(_ => Long.MaxValue) ++
+        Seq.tabulate(yearMonthIntervalTypes.length)(_ => Int.MaxValue))
     val proj = createMutableProjection(fixedLengthTypes)
     assert(proj(inputRow) === inputRow)
   }
 
   testBothCodegenAndInterpreted("unsafe buffer") {
-    val inputRow = InternalRow.fromSeq(Seq(
-      false, 1.toByte, 9.toShort, -18, 53L, 3.2f, 7.8, 4, 9L, 10L, 11L) ++
-      Seq.tabulate(dayTimeIntervalTypes.length)(_ => Long.MaxValue) ++
-      Seq.tabulate(yearMonthIntervalTypes.length)(_ => Int.MaxValue))
+    val inputRow = InternalRow.fromSeq(
+      Seq(false, 1.toByte, 9.toShort, -18, 53L, 3.2f, 7.8, 4, 9L, 10L, 11L) ++
+        Seq.tabulate(dayTimeIntervalTypes.length)(_ => Long.MaxValue) ++
+        Seq.tabulate(yearMonthIntervalTypes.length)(_ => Int.MaxValue))
     val numFields = fixedLengthTypes.length
     val numBytes = Platform.BYTE_ARRAY_OFFSET + UnsafeRow.calculateBitSetWidthInBytes(numFields) +
       UnsafeRow.WORD_SIZE * numFields
@@ -68,16 +82,13 @@ class MutableProjectionSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(SafeProjection.create(fixedLengthTypes)(projUnsafeRow) === inputRow)
   }
 
-  def testRows(
-      bufferSchema: StructType,
-      buffer: InternalRow,
-      scalaRows: Seq[Seq[Any]]): Unit = {
+  def testRows(bufferSchema: StructType, buffer: InternalRow, scalaRows: Seq[Seq[Any]]): Unit = {
     val bufferTypes = bufferSchema.map(_.dataType).toArray
     val proj = createMutableProjection(bufferTypes)
 
     scalaRows.foreach { scalaRow =>
-      val inputRow = InternalRow.fromSeq(scalaRow.zip(bufferTypes).map {
-        case (v, dataType) => CatalystTypeConverters.createToCatalystConverter(dataType)(v)
+      val inputRow = InternalRow.fromSeq(scalaRow.zip(bufferTypes).map { case (v, dataType) =>
+        CatalystTypeConverters.createToCatalystConverter(dataType)(v)
       })
       val projRow = proj.target(buffer)(inputRow)
       assert(SafeProjection.create(bufferTypes)(projRow) === inputRow)
@@ -85,83 +96,86 @@ class MutableProjectionSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   testBothCodegenAndInterpreted("SPARK-41395: unsafe buffer with null decimal (high precision)") {
-    val bufferSchema = StructType(Array(
-      StructField("dec1", DecimalType(27, 2), nullable = true),
-      StructField("dec2", DecimalType(27, 2), nullable = true)))
-    val buffer = UnsafeProjection.create(bufferSchema)
+    val bufferSchema = StructType(
+      Array(
+        StructField("dec1", DecimalType(27, 2), nullable = true),
+        StructField("dec2", DecimalType(27, 2), nullable = true)))
+    val buffer = UnsafeProjection
+      .create(bufferSchema)
       .apply(new GenericInternalRow(bufferSchema.length))
-    val scalaRows = Seq(
-      Seq(null, null),
-      Seq(BigDecimal(77.77), BigDecimal(245.00)))
+    val scalaRows = Seq(Seq(null, null), Seq(BigDecimal(77.77), BigDecimal(245.00)))
     testRows(bufferSchema, buffer, scalaRows)
   }
 
   testBothCodegenAndInterpreted("SPARK-41395: unsafe buffer with null decimal (low precision)") {
-    val bufferSchema = StructType(Array(
-      StructField("dec1", DecimalType(10, 2), nullable = true),
-      StructField("dec2", DecimalType(10, 2), nullable = true)))
-    val buffer = UnsafeProjection.create(bufferSchema)
+    val bufferSchema = StructType(
+      Array(
+        StructField("dec1", DecimalType(10, 2), nullable = true),
+        StructField("dec2", DecimalType(10, 2), nullable = true)))
+    val buffer = UnsafeProjection
+      .create(bufferSchema)
       .apply(new GenericInternalRow(bufferSchema.length))
-    val scalaRows = Seq(
-      Seq(null, null),
-      Seq(BigDecimal(77.77), BigDecimal(245.00)))
+    val scalaRows = Seq(Seq(null, null), Seq(BigDecimal(77.77), BigDecimal(245.00)))
     testRows(bufferSchema, buffer, scalaRows)
   }
 
-  testBothCodegenAndInterpreted("SPARK-41395: generic buffer with null decimal (high precision)") {
-    val bufferSchema = StructType(Array(
-      StructField("dec1", DecimalType(27, 2), nullable = true),
-      StructField("dec2", DecimalType(27, 2), nullable = true)))
+  testBothCodegenAndInterpreted(
+    "SPARK-41395: generic buffer with null decimal (high precision)") {
+    val bufferSchema = StructType(
+      Array(
+        StructField("dec1", DecimalType(27, 2), nullable = true),
+        StructField("dec2", DecimalType(27, 2), nullable = true)))
     val buffer = new GenericInternalRow(bufferSchema.length)
-    val scalaRows = Seq(
-      Seq(null, null),
-      Seq(BigDecimal(77.77), BigDecimal(245.00)))
+    val scalaRows = Seq(Seq(null, null), Seq(BigDecimal(77.77), BigDecimal(245.00)))
     testRows(bufferSchema, buffer, scalaRows)
   }
 
   testBothCodegenAndInterpreted("SPARK-41395: generic buffer with null decimal (low precision)") {
-    val bufferSchema = StructType(Array(
-      StructField("dec1", DecimalType(10, 2), nullable = true),
-      StructField("dec2", DecimalType(10, 2), nullable = true)))
+    val bufferSchema = StructType(
+      Array(
+        StructField("dec1", DecimalType(10, 2), nullable = true),
+        StructField("dec2", DecimalType(10, 2), nullable = true)))
     val buffer = new GenericInternalRow(bufferSchema.length)
-    val scalaRows = Seq(
-      Seq(null, null),
-      Seq(BigDecimal(77.77), BigDecimal(245.00)))
+    val scalaRows = Seq(Seq(null, null), Seq(BigDecimal(77.77), BigDecimal(245.00)))
     testRows(bufferSchema, buffer, scalaRows)
   }
 
   testBothCodegenAndInterpreted("SPARK-41535: unsafe buffer with null intervals") {
-    val bufferSchema = StructType(Array(
-      StructField("intv1", CalendarIntervalType, nullable = true),
-      StructField("intv2", CalendarIntervalType, nullable = true)))
-    val buffer = UnsafeProjection.create(bufferSchema)
+    val bufferSchema = StructType(
+      Array(
+        StructField("intv1", CalendarIntervalType, nullable = true),
+        StructField("intv2", CalendarIntervalType, nullable = true)))
+    val buffer = UnsafeProjection
+      .create(bufferSchema)
       .apply(new GenericInternalRow(bufferSchema.length))
     val scalaRows = Seq(
       Seq(null, null),
-      Seq(
-        new CalendarInterval(0, 7, 0L),
-        new CalendarInterval(12*17, 2, 0L)))
+      Seq(new CalendarInterval(0, 7, 0L), new CalendarInterval(12 * 17, 2, 0L)))
     testRows(bufferSchema, buffer, scalaRows)
   }
 
   testBothCodegenAndInterpreted("SPARK-41535: generic buffer with null intervals") {
-    val bufferSchema = StructType(Array(
-      StructField("intv1", CalendarIntervalType, nullable = true),
-      StructField("intv2", CalendarIntervalType, nullable = true)))
+    val bufferSchema = StructType(
+      Array(
+        StructField("intv1", CalendarIntervalType, nullable = true),
+        StructField("intv2", CalendarIntervalType, nullable = true)))
     val buffer = new GenericInternalRow(bufferSchema.length)
     val scalaRows = Seq(
       Seq(null, null),
-      Seq(
-        new CalendarInterval(0, 7, 0L),
-        new CalendarInterval(12*17, 2, 0L)))
+      Seq(new CalendarInterval(0, 7, 0L), new CalendarInterval(12 * 17, 2, 0L)))
     testRows(bufferSchema, buffer, scalaRows)
   }
 
   testBothCodegenAndInterpreted("variable-length types") {
     val proj = createMutableProjection(variableLengthTypes)
-    val scalaValues = Seq("abc", BigDecimal(10),
+    val scalaValues = Seq(
+      "abc",
+      BigDecimal(10),
       IntervalUtils.stringToInterval(UTF8String.fromString("interval 1 day")),
-      Array[Byte](1, 2), Array("123", "456"), Map(1 -> "a", 2 -> "b"), Row(1, "a"),
+      Array[Byte](1, 2),
+      Array("123", "456"),
+      Map(1 -> "a", 2 -> "b"),
+      Row(1, "a"),
       Integer.valueOf(5))
     val inputRow = InternalRow.fromSeq(scalaValues.zip(variableLengthTypes).map {
       case (v, dataType) => CatalystTypeConverters.createToCatalystConverter(dataType)(v)
@@ -174,7 +188,8 @@ class MutableProjectionSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("unsupported types for unsafe buffer") {
-    withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> CodegenObjectFactoryMode.NO_CODEGEN.toString) {
+    withSQLConf(
+      SQLConf.CODEGEN_FACTORY_MODE.key -> CodegenObjectFactoryMode.NO_CODEGEN.toString) {
       val proj = createMutableProjection(Array(StringType))
       val errMsg = intercept[IllegalArgumentException] {
         proj.target(new UnsafeRow(1))
@@ -197,8 +212,8 @@ class MutableProjectionSuite extends SparkFunSuite with ExpressionEvalHelper {
         val sum = Add(mul2, sqrt)
 
         val proj = MutableProjection.create(Seq(sum))
-        val result = (d1: Double, d2: Double) =>
-          ((d1 * d2) * (d1 * d2)) + Math.sqrt((d1 * d2) * (d1 * d2))
+        val result =
+          (d1: Double, d2: Double) => ((d1 * d2) * (d1 * d2)) + Math.sqrt((d1 * d2) * (d1 * d2))
 
         val inputRows = Seq(
           InternalRow.fromSeq(Seq(1.0, 2.0)),
@@ -206,16 +221,9 @@ class MutableProjectionSuite extends SparkFunSuite with ExpressionEvalHelper {
           InternalRow.fromSeq(Seq(1.0, null)),
           InternalRow.fromSeq(Seq(null, 2.0)),
           InternalRow.fromSeq(Seq(3.0, 4.0)),
-          InternalRow.fromSeq(Seq(null, null))
-        )
-        val expectedResults = Seq(
-          result(1.0, 2.0),
-          result(2.0, 3.0),
-          null,
-          null,
-          result(3.0, 4.0),
-          null
-        )
+          InternalRow.fromSeq(Seq(null, null)))
+        val expectedResults =
+          Seq(result(1.0, 2.0), result(2.0, 3.0), null, null, result(3.0, 4.0), null)
 
         inputRows.zip(expectedResults).foreach { case (inputRow, expected) =>
           val projRow = proj.apply(inputRow)

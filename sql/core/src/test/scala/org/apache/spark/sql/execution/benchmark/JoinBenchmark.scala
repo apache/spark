@@ -23,8 +23,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.IntegerType
 
 /**
- * Benchmark to measure performance for joins.
- * To run this benchmark:
+ * Benchmark to measure performance for joins. To run this benchmark:
  * {{{
  *   1. without sbt:
  *      bin/spark-submit --class <this class>
@@ -63,13 +62,18 @@ object JoinBenchmark extends SqlBasedBenchmark {
   def broadcastHashJoinTwoIntKey(): Unit = {
     val N = 20 << 20
     val M = 1 << 16
-    val dim2 = broadcast(spark.range(M)
-      .selectExpr("cast(id as int) as k1", "cast(id as int) as k2", "cast(id as string) as v"))
+    val dim2 = broadcast(
+      spark
+        .range(M)
+        .selectExpr("cast(id as int) as k1", "cast(id as int) as k2", "cast(id as string) as v"))
 
     codegenBenchmark("Join w 2 ints", N) {
-      val df = spark.range(N).join(dim2,
-        (col("id") % M).cast(IntegerType) === col("k1")
-          && (col("id") % M).cast(IntegerType) === col("k2"))
+      val df = spark
+        .range(N)
+        .join(
+          dim2,
+          (col("id") % M).cast(IntegerType) === col("k1")
+            && (col("id") % M).cast(IntegerType) === col("k2"))
       assert(df.queryExecution.sparkPlan.exists(_.isInstanceOf[BroadcastHashJoinExec]))
       df.noop()
     }
@@ -78,12 +82,14 @@ object JoinBenchmark extends SqlBasedBenchmark {
   def broadcastHashJoinTwoLongKey(): Unit = {
     val N = 20 << 20
     val M = 1 << 16
-    val dim3 = broadcast(spark.range(M)
-      .selectExpr("id as k1", "id as k2", "cast(id as string) as v"))
+    val dim3 = broadcast(
+      spark
+        .range(M)
+        .selectExpr("id as k1", "id as k2", "cast(id as string) as v"))
 
     codegenBenchmark("Join w 2 longs", N) {
-      val df = spark.range(N).join(dim3,
-        (col("id") % M) === col("k1") && (col("id") % M) === col("k2"))
+      val df =
+        spark.range(N).join(dim3, (col("id") % M) === col("k1") && (col("id") % M) === col("k2"))
       assert(df.queryExecution.sparkPlan.exists(_.isInstanceOf[BroadcastHashJoinExec]))
       df.noop()
     }
@@ -92,12 +98,17 @@ object JoinBenchmark extends SqlBasedBenchmark {
   def broadcastHashJoinTwoLongKeyWithDuplicates(): Unit = {
     val N = 20 << 20
     val M = 1 << 16
-    val dim4 = broadcast(spark.range(M)
-      .selectExpr("cast(id/10 as long) as k1", "cast(id/10 as long) as k2"))
+    val dim4 = broadcast(
+      spark
+        .range(M)
+        .selectExpr("cast(id/10 as long) as k1", "cast(id/10 as long) as k2"))
 
     codegenBenchmark("Join w 2 longs duplicated", N) {
-      val df = spark.range(N).join(dim4,
-        (col("id") bitwiseAND M) === col("k1") && (col("id") bitwiseAND M) === col("k2"))
+      val df = spark
+        .range(N)
+        .join(
+          dim4,
+          (col("id") bitwiseAND M) === col("k1") && (col("id") bitwiseAND M) === col("k2"))
       assert(df.queryExecution.sparkPlan.exists(_.isInstanceOf[BroadcastHashJoinExec]))
       df.noop()
     }
@@ -139,10 +150,12 @@ object JoinBenchmark extends SqlBasedBenchmark {
   def sortMergeJoinWithDuplicates(): Unit = {
     val N = 2 << 20
     codegenBenchmark("sort merge join with duplicates", N) {
-      val df1 = spark.range(N)
-        .selectExpr(s"(id * 15485863) % ${N*10} as k1")
-      val df2 = spark.range(N)
-        .selectExpr(s"(id * 15485867) % ${N*10} as k2")
+      val df1 = spark
+        .range(N)
+        .selectExpr(s"(id * 15485863) % ${N * 10} as k1")
+      val df2 = spark
+        .range(N)
+        .selectExpr(s"(id * 15485867) % ${N * 10} as k2")
       val df = df1.join(df2, col("k1") === col("k2"))
       assert(df.queryExecution.sparkPlan.exists(_.isInstanceOf[SortMergeJoinExec]))
       df.noop()

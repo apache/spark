@@ -48,21 +48,22 @@ private[sql] object SQLUtils extends Logging {
       enableHiveSupport: Boolean): SparkSession = {
     val spark =
       if (enableHiveSupport &&
-          jsc.sc.conf.get(CATALOG_IMPLEMENTATION.key, "hive") == "hive" &&
-          // Note that the order of conditions here are on purpose.
-          // `SparkSession.hiveClassesArePresent` checks if Hive's `HiveConf` is loadable or not;
-          // however, `HiveConf` itself has some static logic to check if Hadoop version is
-          // supported or not, which throws an `IllegalArgumentException` if unsupported.
-          // If this is checked first, there's no way to disable Hive support in the case above.
-          // So, we intentionally check if Hive classes are loadable or not only when
-          // Hive support is explicitly enabled by short-circuiting. See also SPARK-26422.
-          SparkSession.hiveClassesArePresent) {
+        jsc.sc.conf.get(CATALOG_IMPLEMENTATION.key, "hive") == "hive" &&
+        // Note that the order of conditions here are on purpose.
+        // `SparkSession.hiveClassesArePresent` checks if Hive's `HiveConf` is loadable or not;
+        // however, `HiveConf` itself has some static logic to check if Hadoop version is
+        // supported or not, which throws an `IllegalArgumentException` if unsupported.
+        // If this is checked first, there's no way to disable Hive support in the case above.
+        // So, we intentionally check if Hive classes are loadable or not only when
+        // Hive support is explicitly enabled by short-circuiting. See also SPARK-26422.
+        SparkSession.hiveClassesArePresent) {
         SparkSession.builder().enableHiveSupport().sparkContext(jsc.sc).getOrCreate()
       } else {
         if (enableHiveSupport) {
-          logWarning(log"SparkR: enableHiveSupport is requested for SparkSession but " +
-            log"Spark is not built with Hive or ${MDC(CONFIG, CATALOG_IMPLEMENTATION.key)} " +
-            log"is not set to 'hive', falling back to without Hive support.")
+          logWarning(
+            log"SparkR: enableHiveSupport is requested for SparkSession but " +
+              log"Spark is not built with Hive or ${MDC(CONFIG, CATALOG_IMPLEMENTATION.key)} " +
+              log"is not set to 'hive', falling back to without Hive support.")
         }
         SparkSession.builder().sparkContext(jsc.sc).getOrCreate()
       }
@@ -103,7 +104,10 @@ private[sql] object SQLUtils extends Logging {
     StructField(name, dtObj, nullable)
   }
 
-  def createDF(rdd: RDD[Array[Byte]], schema: StructType, sparkSession: SparkSession): DataFrame = {
+  def createDF(
+      rdd: RDD[Array[Byte]],
+      schema: StructType,
+      sparkSession: SparkSession): DataFrame = {
     val num = schema.fields.length
     val rowRDD = rdd.map(bytesToRow(_, schema))
     sparkSession.createDataFrame(rowRDD, schema)
@@ -173,7 +177,6 @@ private[sql] object SQLUtils extends Logging {
     gd.flatMapGroupsInR(func, packageNames, bv, realSchema)
   }
 
-
   def dfToCols(df: DataFrame): Array[Array[Any]] = {
     val localDF: Array[Row] = df.collect()
     val numCols = df.columns.length
@@ -227,8 +230,8 @@ private[sql] object SQLUtils extends Logging {
   }
 
   /**
-   * R callable function to read a file in Arrow stream format and create an `RDD`
-   * using each serialized ArrowRecordBatch as a partition.
+   * R callable function to read a file in Arrow stream format and create an `RDD` using each
+   * serialized ArrowRecordBatch as a partition.
    */
   def readArrowStreamFromFile(
       sparkSession: SparkSession,
@@ -249,13 +252,7 @@ private[sql] object SQLUtils extends Logging {
     val timeZoneId = sparkSession.sessionState.conf.sessionLocalTimeZone
     val rdd = arrowBatchRDD.rdd.mapPartitions { iter =>
       val context = TaskContext.get()
-      ArrowConverters.fromBatchIterator(
-        iter,
-        schema,
-        timeZoneId,
-        true,
-        false,
-        context)
+      ArrowConverters.fromBatchIterator(iter, schema, timeZoneId, true, false, context)
     }
     sparkSession.internalCreateDataFrame(rdd.setName("arrow"), schema)
   }

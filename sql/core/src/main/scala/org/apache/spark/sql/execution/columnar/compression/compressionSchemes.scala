@@ -29,7 +29,6 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.columnar._
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector
 
-
 private[columnar] case object PassThrough extends CompressionScheme {
   override val typeId = 0
 
@@ -40,7 +39,8 @@ private[columnar] case object PassThrough extends CompressionScheme {
   }
 
   override def decoder[T <: PhysicalDataType](
-      buffer: ByteBuffer, columnType: NativeColumnType[T]): Decoder[T] = {
+      buffer: ByteBuffer,
+      columnType: NativeColumnType[T]): Decoder[T] = {
     new this.Decoder(buffer, columnType)
   }
 
@@ -58,7 +58,7 @@ private[columnar] case object PassThrough extends CompressionScheme {
   }
 
   class Decoder[T <: PhysicalDataType](buffer: ByteBuffer, columnType: NativeColumnType[T])
-    extends compression.Decoder[T] {
+      extends compression.Decoder[T] {
 
     override def next(row: InternalRow, ordinal: Int): Unit = {
       columnType.extract(buffer, row, ordinal)
@@ -67,39 +67,60 @@ private[columnar] case object PassThrough extends CompressionScheme {
     override def hasNext: Boolean = buffer.hasRemaining
 
     private def putBooleans(
-        columnVector: WritableColumnVector, pos: Int, bufferPos: Int, len: Int): Unit = {
+        columnVector: WritableColumnVector,
+        pos: Int,
+        bufferPos: Int,
+        len: Int): Unit = {
       for (i <- 0 until len) {
         columnVector.putBoolean(pos + i, (buffer.get(bufferPos + i) != 0))
       }
     }
 
     private def putBytes(
-        columnVector: WritableColumnVector, pos: Int, bufferPos: Int, len: Int): Unit = {
+        columnVector: WritableColumnVector,
+        pos: Int,
+        bufferPos: Int,
+        len: Int): Unit = {
       columnVector.putBytes(pos, len, buffer.array, bufferPos)
     }
 
     private def putShorts(
-        columnVector: WritableColumnVector, pos: Int, bufferPos: Int, len: Int): Unit = {
+        columnVector: WritableColumnVector,
+        pos: Int,
+        bufferPos: Int,
+        len: Int): Unit = {
       columnVector.putShorts(pos, len, buffer.array, bufferPos)
     }
 
     private def putInts(
-        columnVector: WritableColumnVector, pos: Int, bufferPos: Int, len: Int): Unit = {
+        columnVector: WritableColumnVector,
+        pos: Int,
+        bufferPos: Int,
+        len: Int): Unit = {
       columnVector.putInts(pos, len, buffer.array, bufferPos)
     }
 
     private def putLongs(
-        columnVector: WritableColumnVector, pos: Int, bufferPos: Int, len: Int): Unit = {
+        columnVector: WritableColumnVector,
+        pos: Int,
+        bufferPos: Int,
+        len: Int): Unit = {
       columnVector.putLongs(pos, len, buffer.array, bufferPos)
     }
 
     private def putFloats(
-        columnVector: WritableColumnVector, pos: Int, bufferPos: Int, len: Int): Unit = {
+        columnVector: WritableColumnVector,
+        pos: Int,
+        bufferPos: Int,
+        len: Int): Unit = {
       columnVector.putFloats(pos, len, buffer.array, bufferPos)
     }
 
     private def putDoubles(
-        columnVector: WritableColumnVector, pos: Int, bufferPos: Int, len: Int): Unit = {
+        columnVector: WritableColumnVector,
+        pos: Int,
+        bufferPos: Int,
+        len: Int): Unit = {
       columnVector.putDoubles(pos, len, buffer.array, bufferPos)
     }
 
@@ -171,7 +192,8 @@ private[columnar] case object RunLengthEncoding extends CompressionScheme {
   }
 
   override def decoder[T <: PhysicalDataType](
-      buffer: ByteBuffer, columnType: NativeColumnType[T]): Decoder[T] = {
+      buffer: ByteBuffer,
+      columnType: NativeColumnType[T]): Decoder[T] = {
     new this.Decoder(buffer, columnType)
   }
 
@@ -246,7 +268,7 @@ private[columnar] case object RunLengthEncoding extends CompressionScheme {
   }
 
   class Decoder[T <: PhysicalDataType](buffer: ByteBuffer, columnType: NativeColumnType[T])
-    extends compression.Decoder[T] {
+      extends compression.Decoder[T] {
 
     private var run = 0
     private var valueCount = 0
@@ -363,8 +385,9 @@ private[columnar] case object DictionaryEncoding extends CompressionScheme {
   // 32K unique values allowed
   val MAX_DICT_SIZE = Short.MaxValue
 
-  override def decoder[T <: PhysicalDataType](buffer: ByteBuffer, columnType: NativeColumnType[T])
-    : Decoder[T] = {
+  override def decoder[T <: PhysicalDataType](
+      buffer: ByteBuffer,
+      columnType: NativeColumnType[T]): Decoder[T] = {
     new this.Decoder(buffer, columnType)
   }
 
@@ -480,7 +503,10 @@ private[columnar] case object DictionaryEncoding extends CompressionScheme {
     }
 
     override def next(row: InternalRow, ordinal: Int): Unit = {
-      columnType.setField(row, ordinal, dictionary(buffer.getShort()).asInstanceOf[T#InternalType])
+      columnType.setField(
+        row,
+        ordinal,
+        dictionary(buffer.getShort()).asInstanceOf[T#InternalType])
     }
 
     override def hasNext: Boolean = buffer.hasRemaining
@@ -532,8 +558,9 @@ private[columnar] case object BooleanBitSet extends CompressionScheme {
 
   val BITS_PER_LONG = 64
 
-  override def decoder[T <: PhysicalDataType](buffer: ByteBuffer, columnType: NativeColumnType[T])
-    : compression.Decoder[T] = {
+  override def decoder[T <: PhysicalDataType](
+      buffer: ByteBuffer,
+      columnType: NativeColumnType[T]): compression.Decoder[T] = {
     new this.Decoder(buffer).asInstanceOf[compression.Decoder[T]]
   }
 
@@ -652,8 +679,9 @@ private[columnar] case object BooleanBitSet extends CompressionScheme {
 private[columnar] case object IntDelta extends CompressionScheme {
   override def typeId: Int = 4
 
-  override def decoder[T <: PhysicalDataType](buffer: ByteBuffer, columnType: NativeColumnType[T])
-    : compression.Decoder[T] = {
+  override def decoder[T <: PhysicalDataType](
+      buffer: ByteBuffer,
+      columnType: NativeColumnType[T]): compression.Decoder[T] = {
     new Decoder(buffer, INT).asInstanceOf[compression.Decoder[T]]
   }
 
@@ -716,7 +744,7 @@ private[columnar] case object IntDelta extends CompressionScheme {
   }
 
   class Decoder(buffer: ByteBuffer, columnType: NativeColumnType[PhysicalIntegerType.type])
-    extends compression.Decoder[PhysicalIntegerType.type] {
+      extends compression.Decoder[PhysicalIntegerType.type] {
 
     private var prev: Int = _
 
@@ -740,8 +768,8 @@ private[columnar] case object IntDelta extends CompressionScheme {
       while (pos < capacity) {
         if (pos != nextNullIndex) {
           val delta = buffer.get
-          prevLocal = if (delta > Byte.MinValue) { prevLocal + delta } else
-          { ByteBufferHelper.getInt(buffer) }
+          prevLocal = if (delta > Byte.MinValue) { prevLocal + delta }
+          else { ByteBufferHelper.getInt(buffer) }
           columnVector.putInt(pos, prevLocal)
         } else {
           seenNulls += 1
@@ -759,8 +787,9 @@ private[columnar] case object IntDelta extends CompressionScheme {
 private[columnar] case object LongDelta extends CompressionScheme {
   override def typeId: Int = 5
 
-  override def decoder[T <: PhysicalDataType](buffer: ByteBuffer, columnType: NativeColumnType[T])
-    : compression.Decoder[T] = {
+  override def decoder[T <: PhysicalDataType](
+      buffer: ByteBuffer,
+      columnType: NativeColumnType[T]): compression.Decoder[T] = {
     new Decoder(buffer, LONG).asInstanceOf[compression.Decoder[T]]
   }
 
@@ -823,7 +852,7 @@ private[columnar] case object LongDelta extends CompressionScheme {
   }
 
   class Decoder(buffer: ByteBuffer, columnType: NativeColumnType[PhysicalLongType.type])
-    extends compression.Decoder[PhysicalLongType.type] {
+      extends compression.Decoder[PhysicalLongType.type] {
 
     private var prev: Long = _
 
@@ -847,8 +876,8 @@ private[columnar] case object LongDelta extends CompressionScheme {
       while (pos < capacity) {
         if (pos != nextNullIndex) {
           val delta = buffer.get()
-          prevLocal = if (delta > Byte.MinValue) { prevLocal + delta } else
-          { ByteBufferHelper.getLong(buffer) }
+          prevLocal = if (delta > Byte.MinValue) { prevLocal + delta }
+          else { ByteBufferHelper.getLong(buffer) }
           columnVector.putLong(pos, prevLocal)
         } else {
           seenNulls += 1

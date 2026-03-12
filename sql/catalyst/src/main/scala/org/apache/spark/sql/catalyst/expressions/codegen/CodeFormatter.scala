@@ -20,8 +20,8 @@ package org.apache.spark.sql.catalyst.expressions.codegen
 import java.util.regex.Matcher
 
 /**
- * An utility class that indents a block of code based on the curly braces and parentheses.
- * This is used to prettify generated code when in debug mode (or exceptions).
+ * An utility class that indents a block of code based on the curly braces and parentheses. This
+ * is used to prettify generated code when in debug mode (or exceptions).
  *
  * Written by Matei Zaharia.
  */
@@ -29,8 +29,8 @@ object CodeFormatter {
   val commentHolder = """\/\*(.+?)\*\/""".r
   val commentRegexp =
     ("""([ |\t]*?\/\*[\s|\S]*?\*\/[ |\t]*?)|""" + // strip /*comment*/
-      """([ |\t]*?\/\/[\s\S]*?\n)""").r           // strip //comment
-  val extraNewLinesRegexp = """\n\s*\n""".r       // strip extra newlines
+      """([ |\t]*?\/\/[\s\S]*?\n)""").r // strip //comment
+  val extraNewLinesRegexp = """\n\s*\n""".r // strip extra newlines
 
   def format(code: CodeAndComment, maxLines: Int = -1): String = {
     val formatter = new CodeFormatter
@@ -55,7 +55,8 @@ object CodeFormatter {
     var lastLine: String = "dummy"
     input.split('\n').foreach { l =>
       val line = l.trim()
-      val skip = line == "" && (lastLine == "" || lastLine.endsWith("{") || lastLine.endsWith("*/"))
+      val skip =
+        line == "" && (lastLine == "" || lastLine.endsWith("{") || lastLine.endsWith("*/"))
       if (!skip) {
         code.append(line)
         code.append("\n")
@@ -81,10 +82,10 @@ object CodeFormatter {
     codeAndComment.body.split('\n').foreach { l =>
       val line = l.trim()
 
-      val skip = getComment(lastLine).zip(getComment(line)).exists {
-        case (lastComment, currentComment) =>
+      val skip =
+        getComment(lastLine).zip(getComment(line)).exists { case (lastComment, currentComment) =>
           lastComment.substring(3).contains(currentComment.substring(3))
-      }
+        }
 
       if (!skip) {
         code.append(line).append("\n")
@@ -118,7 +119,8 @@ private class CodeFormatter {
     // We currently infer the level of indentation of a given line based on a simple heuristic that
     // examines the number of parenthesis and braces in that line. This isn't the most robust
     // implementation but works for all code that we generate.
-    val indentChange = line.count(c => "({".indexOf(c) >= 0) - line.count(c => ")}".indexOf(c) >= 0)
+    val indentChange =
+      line.count(c => "({".indexOf(c) >= 0) - line.count(c => ")}".indexOf(c) >= 0)
     var newIndentLevel = math.max(0, indentLevel + indentChange)
 
     // Please note that while we try to format the comment blocks in exactly the same way as the

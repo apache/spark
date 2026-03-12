@@ -25,8 +25,8 @@ import org.apache.spark.sql.exceptions.SqlScriptingException
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * Object for grouping error messages thrown during parsing/interpreting phase
- * of the SQL Scripting Language interpreter.
+ * Object for grouping error messages thrown during parsing/interpreting phase of the SQL
+ * Scripting Language interpreter.
  */
 private[sql] object SqlScriptingErrors {
 
@@ -43,7 +43,8 @@ private[sql] object SqlScriptingErrors {
       origin = origin,
       errorClass = "LABELS_MISMATCH",
       cause = null,
-      messageParameters = Map("beginLabel" -> toSQLId(beginLabel), "endLabel" -> toSQLId(endLabel)))
+      messageParameters =
+        Map("beginLabel" -> toSQLId(beginLabel), "endLabel" -> toSQLId(endLabel)))
   }
 
   def endLabelWithoutBeginLabel(origin: Origin, endLabel: String): Throwable = {
@@ -59,13 +60,10 @@ private[sql] object SqlScriptingErrors {
       origin = origin,
       errorClass = "LABEL_OR_FOR_VARIABLE_NAME_FORBIDDEN",
       cause = null,
-      messageParameters = Map("label" -> toSQLId(label))
-    )
+      messageParameters = Map("label" -> toSQLId(label)))
   }
 
-  def variableDeclarationNotAllowedInScope(
-      origin: Origin,
-      varName: Seq[String]): Throwable = {
+  def variableDeclarationNotAllowedInScope(origin: Origin, varName: Seq[String]): Throwable = {
     new SqlScriptingException(
       origin = origin,
       errorClass = "INVALID_VARIABLE_DECLARATION.NOT_ALLOWED_IN_SCOPE",
@@ -73,9 +71,7 @@ private[sql] object SqlScriptingErrors {
       messageParameters = Map("varName" -> toSQLId(varName)))
   }
 
-  def variableDeclarationOnlyAtBeginning(
-      origin: Origin,
-      varName: Seq[String]): Throwable = {
+  def variableDeclarationOnlyAtBeginning(origin: Origin, varName: Seq[String]): Throwable = {
     new SqlScriptingException(
       origin = origin,
       errorClass = "INVALID_VARIABLE_DECLARATION.ONLY_AT_BEGINNING",
@@ -83,9 +79,7 @@ private[sql] object SqlScriptingErrors {
       messageParameters = Map("varName" -> toSQLId(varName)))
   }
 
-  def invalidBooleanStatement(
-      origin: Origin,
-      stmt: String): Throwable = {
+  def invalidBooleanStatement(origin: Origin, stmt: String): Throwable = {
     new SqlScriptingException(
       origin = origin,
       errorClass = "INVALID_BOOLEAN_STATEMENT",
@@ -110,22 +104,16 @@ private[sql] object SqlScriptingErrors {
       messageParameters = Map.empty)
   }
 
-  def labelDoesNotExist(
-      origin: Origin,
-      labelName: String,
-      statementType: String): Throwable = {
+  def labelDoesNotExist(origin: Origin, labelName: String, statementType: String): Throwable = {
     new SqlScriptingException(
       origin = origin,
       errorClass = "INVALID_LABEL_USAGE.DOES_NOT_EXIST",
       cause = null,
-      messageParameters = Map(
-        "labelName" -> toSQLStmt(labelName),
-        "statementType" -> statementType))
+      messageParameters =
+        Map("labelName" -> toSQLStmt(labelName), "statementType" -> statementType))
   }
 
-  def invalidIterateLabelUsageForCompound(
-      origin: Origin,
-      labelName: String): Throwable = {
+  def invalidIterateLabelUsageForCompound(origin: Origin, labelName: String): Throwable = {
     new SqlScriptingException(
       origin = origin,
       errorClass = "INVALID_LABEL_USAGE.ITERATE_IN_COMPOUND",
@@ -133,9 +121,7 @@ private[sql] object SqlScriptingErrors {
       messageParameters = Map("labelName" -> toSQLStmt(labelName)))
   }
 
-  def labelCannotBeQualified(
-      origin: Origin,
-      labelName: String): Throwable = {
+  def labelCannotBeQualified(origin: Origin, labelName: String): Throwable = {
     new SqlScriptingException(
       origin = origin,
       errorClass = "INVALID_LABEL_USAGE.QUALIFIED_LABEL_NAME",
@@ -143,9 +129,7 @@ private[sql] object SqlScriptingErrors {
       messageParameters = Map("labelName" -> toSQLStmt(labelName)))
   }
 
-  def conditionCannotBeQualified(
-      origin: Origin,
-      conditionName: String): Throwable = {
+  def conditionCannotBeQualified(origin: Origin, conditionName: String): Throwable = {
     new SqlScriptingException(
       origin = origin,
       errorClass = "INVALID_ERROR_CONDITION_DECLARATION.QUALIFIED_CONDITION_NAME",
@@ -228,7 +212,6 @@ private[sql] object SqlScriptingErrors {
       cause = null,
       messageParameters = Map("sqlState" -> sqlState))
   }
-
 
   def continueHandlerNotSupported(origin: Origin): Throwable = {
     new SqlScriptingException(

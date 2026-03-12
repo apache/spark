@@ -22,22 +22,24 @@ import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 /**
  * Options for the data source.
  */
-class SourceOptions(
-     @transient private val parameters: CaseInsensitiveMap[String])
-  extends Serializable {
+class SourceOptions(@transient private val parameters: CaseInsensitiveMap[String])
+    extends Serializable {
   import SourceOptions._
 
   def this(parameters: Map[String, String]) = this(CaseInsensitiveMap(parameters))
 
   // A flag to disable saving a data source table's metadata in hive compatible way.
   val skipHiveMetadata: Boolean = parameters
-    .get(SKIP_HIVE_METADATA).map(_.toBoolean).getOrElse(DEFAULT_SKIP_HIVE_METADATA)
+    .get(SKIP_HIVE_METADATA)
+    .map(_.toBoolean)
+    .getOrElse(DEFAULT_SKIP_HIVE_METADATA)
 
   // A flag to always respect the Spark schema restored from the table properties
   val respectSparkSchema: Boolean = parameters
-    .get(RESPECT_SPARK_SCHEMA).map(_.toBoolean).getOrElse(DEFAULT_RESPECT_SPARK_SCHEMA)
+    .get(RESPECT_SPARK_SCHEMA)
+    .map(_.toBoolean)
+    .getOrElse(DEFAULT_RESPECT_SPARK_SCHEMA)
 }
-
 
 object SourceOptions {
 

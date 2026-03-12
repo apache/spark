@@ -38,7 +38,10 @@ import org.apache.spark.util.ArrayImplicits._
  * Runs a query returning the result in Hive compatible form.
  */
 object HiveResult extends SQLConfHelper {
-  case class TimeFormatters(date: DateFormatter, time: TimeFormatter, timestamp: TimestampFormatter)
+  case class TimeFormatters(
+      date: DateFormatter,
+      time: TimeFormatter,
+      timestamp: TimestampFormatter)
 
   def getTimeFormatters: TimeFormatters = {
     val dateFormatter = DateFormatter()
@@ -79,7 +82,7 @@ object HiveResult extends SQLConfHelper {
         executedPlan.executeCollect().map(_.getString(1)).toImmutableArraySeq
       // SHOW TABLES in Hive only output table names while our v2 command outputs
       // namespace and table name.
-      case _ : ShowTablesExec =>
+      case _: ShowTablesExec =>
         executedPlan.executeCollect().map(_.getString(1)).toImmutableArraySeq
       // SHOW VIEWS in Hive only outputs view names while our v1 command outputs
       // namespace, viewName, and isTemporary.
@@ -92,16 +95,16 @@ object HiveResult extends SQLConfHelper {
         // We need the types so we can output struct field names
         val types = executedPlan.output.map(_.dataType)
         // Reformat to match hive tab delimited output.
-        result.map(_.zip(types).map(e => toHiveString(e, false, timeFormatters, binaryFormatter)))
+        result
+          .map(_.zip(types).map(e => toHiveString(e, false, timeFormatters, binaryFormatter)))
           .map(_.mkString("\t"))
     }
 
   private def formatDescribeTableOutput(rows: Array[Row]): Seq[String] = {
-    rows.map {
-      case Row(name: String, dataType: String, comment) =>
-        Seq(name, dataType, Option(comment.asInstanceOf[String]).getOrElse(""))
-          .map(s => String.format("%-20s", s))
-          .mkString("\t")
+    rows.map { case Row(name: String, dataType: String, comment) =>
+      Seq(name, dataType, Option(comment.asInstanceOf[String]).getOrElse(""))
+        .map(s => String.format("%-20s", s))
+        .mkString("\t")
     }.toImmutableArraySeq
   }
 
@@ -125,17 +128,24 @@ object HiveResult extends SQLConfHelper {
     case (s: String, _: StringType) => if (nested) "\"" + s + "\"" else s
     case (interval: CalendarInterval, CalendarIntervalType) => interval.toString
     case (seq: scala.collection.Seq[_], ArrayType(typ, _)) =>
-      seq.map(v => (v, typ)).map(e => toHiveString(e, true, formatters, binaryFormatter))
+      seq
+        .map(v => (v, typ))
+        .map(e => toHiveString(e, true, formatters, binaryFormatter))
         .mkString("[", ",", "]")
     case (m: Map[_, _], MapType(kType, vType, _)) =>
       m.map { case (key, value) =>
         toHiveString((key, kType), true, formatters, binaryFormatter) + ":" +
           toHiveString((value, vType), true, formatters, binaryFormatter)
-      }.toSeq.sorted.mkString("{", ",", "}")
+      }.toSeq
+        .sorted
+        .mkString("{", ",", "}")
     case (struct: Row, StructType(fields)) =>
-      struct.toSeq.zip(fields).map { case (v, t) =>
-        s""""${t.name}":${toHiveString((v, t.dataType), true, formatters, binaryFormatter)}"""
-      }.mkString("{", ",", "}")
+      struct.toSeq
+        .zip(fields)
+        .map { case (v, t) =>
+          s""""${t.name}":${toHiveString((v, t.dataType), true, formatters, binaryFormatter)}"""
+        }
+        .mkString("{", ",", "}")
     case (period: Period, YearMonthIntervalType(startField, endField)) =>
       toYearMonthIntervalString(
         periodToMonths(period, endField),

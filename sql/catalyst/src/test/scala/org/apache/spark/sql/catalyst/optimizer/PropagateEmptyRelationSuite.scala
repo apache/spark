@@ -33,7 +33,9 @@ import org.apache.spark.sql.types.{IntegerType, MetadataBuilder}
 class PropagateEmptyRelationSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
-      Batch("PropagateEmptyRelation", FixedPoint(1),
+      Batch(
+        "PropagateEmptyRelation",
+        FixedPoint(1),
         CombineUnions,
         ReplaceDistinctWithAggregate,
         ReplaceExceptWithAntiJoin,
@@ -46,7 +48,9 @@ class PropagateEmptyRelationSuite extends PlanTest {
 
   object OptimizeWithoutPropagateEmptyRelation extends RuleExecutor[LogicalPlan] {
     val batches =
-      Batch("OptimizeWithoutPropagateEmptyRelation", FixedPoint(1),
+      Batch(
+        "OptimizeWithoutPropagateEmptyRelation",
+        FixedPoint(1),
         CombineUnions,
         ReplaceDistinctWithAggregate,
         ReplaceExceptWithAntiJoin,
@@ -60,7 +64,9 @@ class PropagateEmptyRelationSuite extends PlanTest {
   val testRelation2 = LocalRelation.fromExternalRows(Seq($"b".int), data = Seq(Row(1)))
   val metadata = new MetadataBuilder().putLong("test", 1).build()
   val testRelation3 =
-    LocalRelation.fromExternalRows(Seq($"c".int.notNull.withMetadata(metadata)), data = Seq(Row(1)))
+    LocalRelation.fromExternalRows(
+      Seq($"c".int.notNull.withMetadata(metadata)),
+      data = Seq(Row(1)))
 
   test("propagate empty relation through Union") {
     val query = testRelation1
@@ -117,44 +123,51 @@ class PropagateEmptyRelationSuite extends PlanTest {
       (true, true, FullOuter, None),
       (true, true, LeftAnti, None),
       (true, true, LeftSemi, None),
-
       (true, false, Inner, Some(LocalRelation($"a".int, $"b".int))),
       (true, false, Cross, Some(LocalRelation($"a".int, $"b".int))),
-      (true, false, LeftOuter,
-        Some(Project(Seq($"a", Literal(null).cast(IntegerType).as("b")), testRelation1)
-          .analyze)),
+      (
+        true,
+        false,
+        LeftOuter,
+        Some(Project(Seq($"a", Literal(null).cast(IntegerType).as("b")), testRelation1).analyze)),
       (true, false, RightOuter, Some(LocalRelation($"a".int, $"b".int))),
-      (true, false, FullOuter,
-        Some(Project(Seq($"a", Literal(null).cast(IntegerType).as("b")), testRelation1)
-          .analyze)),
+      (
+        true,
+        false,
+        FullOuter,
+        Some(Project(Seq($"a", Literal(null).cast(IntegerType).as("b")), testRelation1).analyze)),
       (true, false, LeftAnti, Some(testRelation1)),
       (true, false, LeftSemi, Some(LocalRelation($"a".int))),
-
       (false, true, Inner, Some(LocalRelation($"a".int, $"b".int))),
       (false, true, Cross, Some(LocalRelation($"a".int, $"b".int))),
       (false, true, LeftOuter, Some(LocalRelation($"a".int, $"b".int))),
-      (false, true, RightOuter,
-        Some(Project(Seq(Literal(null).cast(IntegerType).as("a"), $"b"), testRelation2)
-          .analyze)),
-      (false, true, FullOuter,
-        Some(Project(Seq(Literal(null).cast(IntegerType).as("a"), $"b"), testRelation2)
-          .analyze)),
+      (
+        false,
+        true,
+        RightOuter,
+        Some(Project(Seq(Literal(null).cast(IntegerType).as("a"), $"b"), testRelation2).analyze)),
+      (
+        false,
+        true,
+        FullOuter,
+        Some(Project(Seq(Literal(null).cast(IntegerType).as("a"), $"b"), testRelation2).analyze)),
       (false, true, LeftAnti, Some(LocalRelation($"a".int))),
       (false, true, LeftSemi, Some(LocalRelation($"a".int))),
-
       (false, false, Inner, Some(LocalRelation($"a".int, $"b".int))),
       (false, false, Cross, Some(LocalRelation($"a".int, $"b".int))),
       (false, false, LeftOuter, Some(LocalRelation($"a".int, $"b".int))),
       (false, false, RightOuter, Some(LocalRelation($"a".int, $"b".int))),
       (false, false, FullOuter, Some(LocalRelation($"a".int, $"b".int))),
       (false, false, LeftAnti, Some(LocalRelation($"a".int))),
-      (false, false, LeftSemi, Some(LocalRelation($"a".int)))
-    )
+      (false, false, LeftSemi, Some(LocalRelation($"a".int))))
 
     testcases.foreach { case (left, right, jt, answer) =>
       val query = testRelation1
         .where(left)
-        .join(testRelation2.where(right), joinType = jt, condition = Some($"a".attr === $"b".attr))
+        .join(
+          testRelation2.where(right),
+          joinType = jt,
+          condition = Some($"a".attr === $"b".attr))
       val optimized = Optimize.execute(query.analyze)
       val correctAnswer =
         answer.getOrElse(OptimizeWithoutPropagateEmptyRelation.execute(query.analyze))
@@ -166,16 +179,15 @@ class PropagateEmptyRelationSuite extends PlanTest {
     val testcases = Seq(
       (Inner, Some(LocalRelation($"a".int, $"b".int))),
       (Cross, Some(LocalRelation($"a".int, $"b".int))),
-      (LeftOuter,
-        Some(Project(Seq($"a", Literal(null).cast(IntegerType).as("b")), testRelation1)
-          .analyze)),
-      (RightOuter,
-        Some(Project(Seq(Literal(null).cast(IntegerType).as("a"), $"b"), testRelation2)
-          .analyze)),
+      (
+        LeftOuter,
+        Some(Project(Seq($"a", Literal(null).cast(IntegerType).as("b")), testRelation1).analyze)),
+      (
+        RightOuter,
+        Some(Project(Seq(Literal(null).cast(IntegerType).as("a"), $"b"), testRelation2).analyze)),
       (FullOuter, None),
       (LeftAnti, Some(testRelation1)),
-      (LeftSemi, Some(LocalRelation($"a".int)))
-    )
+      (LeftSemi, Some(LocalRelation($"a".int))))
 
     testcases.foreach { case (jt, answer) =>
       val query = testRelation1.join(testRelation2, joinType = jt, condition = Some(FalseLiteral))
@@ -205,10 +217,8 @@ class PropagateEmptyRelationSuite extends PlanTest {
     val data = Seq(Row(1))
     val schema = DataTypeUtils.fromAttributes(output)
     val converter = CatalystTypeConverters.createToCatalystConverter(schema)
-    val relation = LocalRelation(
-      output,
-      data.map(converter(_).asInstanceOf[InternalRow]),
-      isStreaming = true)
+    val relation =
+      LocalRelation(output, data.map(converter(_).asInstanceOf[InternalRow]), isStreaming = true)
 
     val query = relation
       .where(false)
@@ -217,28 +227,28 @@ class PropagateEmptyRelationSuite extends PlanTest {
       .where($"a" =!= 200)
       .orderBy($"a".asc)
 
-    withSQLConf(
-        SQLConf.PRUNE_FILTERS_CAN_PRUNE_STREAMING_SUBPLAN.key -> "true") {
+    withSQLConf(SQLConf.PRUNE_FILTERS_CAN_PRUNE_STREAMING_SUBPLAN.key -> "true") {
       val optimized = Optimize.execute(query.analyze)
       val correctAnswer = LocalRelation(output, isStreaming = true)
       comparePlans(optimized, correctAnswer)
     }
 
-    withSQLConf(
-        SQLConf.PRUNE_FILTERS_CAN_PRUNE_STREAMING_SUBPLAN.key -> "false") {
+    withSQLConf(SQLConf.PRUNE_FILTERS_CAN_PRUNE_STREAMING_SUBPLAN.key -> "false") {
       val optimized = Optimize.execute(query.analyze)
       val correctAnswer = relation
         .where(false)
         .where($"a" > 1)
         .select($"a")
         .where($"a" =!= 200)
-        .orderBy($"a".asc).analyze
+        .orderBy($"a".asc)
+        .analyze
       comparePlans(optimized, correctAnswer)
     }
   }
 
-  test("SPARK-47305 correctly tag isStreaming when propagating empty relation " +
-    "with the plan containing batch and streaming") {
+  test(
+    "SPARK-47305 correctly tag isStreaming when propagating empty relation " +
+      "with the plan containing batch and streaming") {
     val data = Seq(Row(1))
 
     val outputForStream = Seq($"a".int)
@@ -259,8 +269,7 @@ class PropagateEmptyRelationSuite extends PlanTest {
       isStreaming = false)
 
     val query = streamingRelation
-      .join(batchRelation.where(false).select($"b"), LeftOuter,
-        Some(EqualTo($"a", $"b")))
+      .join(batchRelation.where(false).select($"b"), LeftOuter, Some(EqualTo($"a", $"b")))
 
     val analyzedQuery = query.analyze
 
@@ -269,8 +278,8 @@ class PropagateEmptyRelationSuite extends PlanTest {
     // filter and projection in batch relation, and know they will go away after optimization.
     // The point to check here is that the node is replaced with "empty" LocalRelation, but the
     // flag `isStreaming` is properly propagated.
-    val correctAnswer = analyzedQuery transform {
-      case Project(_, Filter(_, l: LocalRelation)) => l.copy(data = Seq.empty)
+    val correctAnswer = analyzedQuery transform { case Project(_, Filter(_, l: LocalRelation)) =>
+      l.copy(data = Seq.empty)
     }
 
     comparePlans(optimized, correctAnswer)
@@ -281,10 +290,8 @@ class PropagateEmptyRelationSuite extends PlanTest {
     val data = Seq(Row(1))
     val schema = DataTypeUtils.fromAttributes(output)
     val converter = CatalystTypeConverters.createToCatalystConverter(schema)
-    val relation = LocalRelation(
-      output,
-      data.map(converter(_).asInstanceOf[InternalRow]),
-      isStreaming = true)
+    val relation =
+      LocalRelation(output, data.map(converter(_).asInstanceOf[InternalRow]), isStreaming = true)
 
     val query = relation
       .groupBy($"a")($"a")
@@ -337,7 +344,9 @@ class PropagateEmptyRelationSuite extends PlanTest {
 
   test("propagate empty relation keeps the plan resolved") {
     val query = testRelation1.join(
-      LocalRelation($"a".int, $"b".int), UsingJoin(FullOuter, "a" :: Nil), None)
+      LocalRelation($"a".int, $"b".int),
+      UsingJoin(FullOuter, "a" :: Nil),
+      None)
     val optimized = Optimize.execute(query.analyze)
     assert(optimized.resolved)
   }
@@ -349,7 +358,9 @@ class PropagateEmptyRelationSuite extends PlanTest {
   }
 
   test("SPARK-37689: Expand should be supported PropagateEmptyRelation") {
-    val query = Expand(Seq(Seq($"a", $"b", "null"), Seq($"a", "null", $"c")), Seq($"a", $"b", $"c"),
+    val query = Expand(
+      Seq(Seq($"a", $"b", "null"), Seq($"a", "null", $"c")),
+      Seq($"a", $"b", $"c"),
       LocalRelation.fromExternalRows(Seq($"a".int, $"b".int, $"c".int), Nil)).analyze
     val optimized = Optimize.execute(query)
     val expected = LocalRelation.fromExternalRows(Seq($"a".int, $"b".int, $"c".int), Nil)
@@ -374,7 +385,9 @@ class PropagateEmptyRelationSuite extends PlanTest {
   test("SPARK-39449: Propagate empty relation through Window") {
     val relation = LocalRelation.fromExternalRows(Seq($"a".int, $"b".int), Nil)
 
-    val originalQuery = relation.select($"a", $"b",
+    val originalQuery = relation.select(
+      $"a",
+      $"b",
       windowExpr(count($"b"), windowSpec($"a" :: Nil, $"b".asc :: Nil, UnspecifiedFrame))
         .as("window"))
 
@@ -385,21 +398,19 @@ class PropagateEmptyRelationSuite extends PlanTest {
 
   test("Propagate empty relation with repartition") {
     val emptyRelation = LocalRelation($"a".int, $"b".int)
-    comparePlans(Optimize.execute(
-      emptyRelation.repartition(1).sortBy($"a".asc).analyze
-    ), emptyRelation.analyze)
+    comparePlans(
+      Optimize.execute(emptyRelation.repartition(1).sortBy($"a".asc).analyze),
+      emptyRelation.analyze)
 
-    comparePlans(Optimize.execute(
-      emptyRelation.distribute($"a")(1).sortBy($"a".asc).analyze
-    ), emptyRelation.analyze)
+    comparePlans(
+      Optimize.execute(emptyRelation.distribute($"a")(1).sortBy($"a".asc).analyze),
+      emptyRelation.analyze)
 
-    comparePlans(Optimize.execute(
-      emptyRelation.repartition().analyze
-    ), emptyRelation.analyze)
+    comparePlans(Optimize.execute(emptyRelation.repartition().analyze), emptyRelation.analyze)
 
-    comparePlans(Optimize.execute(
-      emptyRelation.repartition(1).sortBy($"a".asc).repartition().analyze
-    ), emptyRelation.analyze)
+    comparePlans(
+      Optimize.execute(emptyRelation.repartition(1).sortBy($"a".asc).repartition().analyze),
+      emptyRelation.analyze)
   }
 
   test("SPARK-39915: Dataset.repartition(N) may not create N partitions") {

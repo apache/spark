@@ -47,6 +47,7 @@ import org.apache.spark.util.random.XORShiftRandom
  * Common trait for all shuffle exchange implementations to facilitate pattern matching.
  */
 trait ShuffleExchangeLike extends Exchange {
+
   /**
    * Returns the number of mappers of this shuffle.
    */
@@ -71,8 +72,7 @@ trait ShuffleExchangeLike extends Exchange {
   private lazy val promise = Promise[MapOutputStatistics]()
 
   @transient
-  private lazy val completionFuture
-  : scala.concurrent.Future[MapOutputStatistics] = promise.future
+  private lazy val completionFuture: scala.concurrent.Future[MapOutputStatistics] = promise.future
 
   @transient
   private[sql] // Exposed for testing
@@ -113,8 +113,8 @@ trait ShuffleExchangeLike extends Exchange {
   }
 
   /**
-   * The asynchronous job that materializes the shuffle. It also does the preparations work,
-   * such as waiting for the subqueries.
+   * The asynchronous job that materializes the shuffle. It also does the preparations work, such
+   * as waiting for the subqueries.
    */
   final def submitShuffleJob(): Future[MapOutputStatistics] = {
     triggerFuture
@@ -190,7 +190,7 @@ case class ShuffleExchangeExec(
     child: SparkPlan,
     shuffleOrigin: ShuffleOrigin = ENSURE_REQUIREMENTS,
     advisoryPartitionSize: Option[Long] = None)
-  extends ShuffleExchangeLike {
+    extends ShuffleExchangeLike {
 
   private lazy val writeMetrics =
     SQLShuffleWriteMetricsReporter.createShuffleWriteMetrics(sparkContext)
@@ -198,8 +198,9 @@ case class ShuffleExchangeExec(
     SQLShuffleReadMetricsReporter.createShuffleReadMetrics(sparkContext)
   override lazy val metrics = Map(
     "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size"),
-    "numPartitions" -> SQLMetrics.createMetric(sparkContext, "number of partitions")
-  ) ++ readMetrics ++ writeMetrics
+    "numPartitions" -> SQLMetrics.createMetric(
+      sparkContext,
+      "number of partitions")) ++ readMetrics ++ writeMetrics
 
   override def nodeName: String = "Exchange"
 
@@ -235,12 +236,12 @@ case class ShuffleExchangeExec(
   override def shuffleId: Int = shuffleDependency.shuffleId
 
   /**
-   * A [[ShuffleDependency]] that will partition rows of its child based on
-   * the partitioning scheme defined in `newPartitioning`. Those partitions of
-   * the returned ShuffleDependency will be the input of shuffle.
+   * A [[ShuffleDependency]] that will partition rows of its child based on the partitioning
+   * scheme defined in `newPartitioning`. Those partitions of the returned ShuffleDependency will
+   * be the input of shuffle.
    */
   @transient
-  lazy val shuffleDependency : ShuffleDependency[Int, InternalRow, InternalRow] = {
+  lazy val shuffleDependency: ShuffleDependency[Int, InternalRow, InternalRow] = {
     val dep = ShuffleExchangeExec.prepareShuffleDependency(
       inputRDD,
       child.output,
@@ -249,8 +250,7 @@ case class ShuffleExchangeExec(
       writeMetrics)
     metrics("numPartitions").set(dep.partitioner.numPartitions)
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
-    SQLMetrics.postDriverMetricUpdates(
-      sparkContext, executionId, metrics("numPartitions") :: Nil)
+    SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics("numPartitions") :: Nil)
     dep
   }
 
@@ -267,7 +267,8 @@ case class ShuffleExchangeExec(
 object ShuffleExchangeExec {
 
   private[execution] val executionContext = ExecutionContext.fromExecutorService(
-    ThreadUtils.newDaemonCachedThreadPool("shuffle-exchange",
+    ThreadUtils.newDaemonCachedThreadPool(
+      "shuffle-exchange",
       SQLConf.get.getConf(StaticSQLConf.SHUFFLE_EXCHANGE_MAX_THREAD_THRESHOLD)))
 
   /**
@@ -284,8 +285,10 @@ object ShuffleExchangeExec {
    *
    * See SPARK-2967, SPARK-4479, and SPARK-7375 for more discussion of this issue.
    *
-   * @param partitioner the partitioner for the shuffle
-   * @return true if rows should be copied before being shuffled, false otherwise
+   * @param partitioner
+   *   the partitioner for the shuffle
+   * @return
+   *   true if rows should be copied before being shuffled, false otherwise
    */
   private def needToCopyObjectsBeforeShuffle(partitioner: Partitioner): Boolean = {
     // Note: even though we only use the partitioner's `numPartitions` field, we require it to be
@@ -327,17 +330,16 @@ object ShuffleExchangeExec {
   }
 
   /**
-   * Returns a [[ShuffleDependency]] that will partition rows of its child based on
-   * the partitioning scheme defined in `newPartitioning`. Those partitions of
-   * the returned ShuffleDependency will be the input of shuffle.
+   * Returns a [[ShuffleDependency]] that will partition rows of its child based on the
+   * partitioning scheme defined in `newPartitioning`. Those partitions of the returned
+   * ShuffleDependency will be the input of shuffle.
    */
   def prepareShuffleDependency(
       rdd: RDD[InternalRow],
       outputAttributes: Seq[Attribute],
       newPartitioning: Partitioning,
       serializer: Serializer,
-      writeMetrics: Map[String, SQLMetric])
-    : ShuffleDependency[Int, InternalRow, InternalRow] = {
+      writeMetrics: Map[String, SQLMetric]): ShuffleDependency[Int, InternalRow, InternalRow] = {
     val part: Partitioner = newPartitioning match {
       case RoundRobinPartitioning(numPartitions) => new HashPartitioner(numPartitions)
       case HashPartitioning(_, n) =>
@@ -375,8 +377,11 @@ object ShuffleExchangeExec {
         val valueMap = keyGroupedPartitioning.partitionKeys.zipWithIndex.map {
           case (key, index) => (key.row.toSeq(keyGroupedPartitioning.expressionDataTypes), index)
         }.toMap
-        new KeyGroupedPartitioner(mutable.Map.from(valueMap), keyGroupedPartitioning.numPartitions)
-      case _ => throw SparkException.internalError(s"Exchange not implemented for $newPartitioning")
+        new KeyGroupedPartitioner(
+          mutable.Map.from(valueMap),
+          keyGroupedPartitioning.numPartitions)
+      case _ =>
+        throw SparkException.internalError(s"Exchange not implemented for $newPartitioning")
       // TODO: Handle BroadcastPartitioning.
     }
     def getPartitionKeyExtractor(): InternalRow => Any = newPartitioning match {
@@ -399,7 +404,8 @@ object ShuffleExchangeExec {
         val projection = UnsafeProjection.create(h.partitionIdExpression :: Nil, outputAttributes)
         row => projection(row).getInt(0)
       case RangePartitioning(sortingExpressions, _) =>
-        val projection = UnsafeProjection.create(sortingExpressions.map(_.child), outputAttributes)
+        val projection =
+          UnsafeProjection.create(sortingExpressions.map(_.child), outputAttributes)
         row => projection(row)
       case SinglePartition => identity
       case KeyedPartitioning(expressions, _, _) =>
@@ -409,7 +415,8 @@ object ShuffleExchangeExec {
         // If the value is null, `InternalRow#getInt` returns 0.
         val projection = UnsafeProjection.create(s.partitionIdExpression :: Nil, outputAttributes)
         row => projection(row).getInt(0)
-      case _ => throw SparkException.internalError(s"Exchange not implemented for $newPartitioning")
+      case _ =>
+        throw SparkException.internalError(s"Exchange not implemented for $newPartitioning")
     }
 
     val isRoundRobin = newPartitioning.isInstanceOf[RoundRobinPartitioning] &&
@@ -437,8 +444,8 @@ object ShuffleExchangeExec {
           // limited range.
           val prefixComputer = new UnsafeExternalRowSorter.PrefixComputer {
             private val result = new UnsafeExternalRowSorter.PrefixComputer.Prefix
-            override def computePrefix(row: InternalRow):
-            UnsafeExternalRowSorter.PrefixComputer.Prefix = {
+            override def computePrefix(
+                row: InternalRow): UnsafeExternalRowSorter.PrefixComputer.Prefix = {
               // The hashcode generated from the binary form of a [[UnsafeRow]] should not be null.
               result.isNull = false
               result.value = row.hashCode()
@@ -465,16 +472,20 @@ object ShuffleExchangeExec {
       // round-robin function is order sensitive if we don't sort the input.
       val isOrderSensitive = isRoundRobin && !SQLConf.get.sortBeforeRepartition
       if (needToCopyObjectsBeforeShuffle(part)) {
-        newRdd.mapPartitionsWithIndexInternal((_, iter) => {
-          val getPartitionKey = getPartitionKeyExtractor()
-          iter.map { row => (part.getPartition(getPartitionKey(row)), row.copy()) }
-        }, isOrderSensitive = isOrderSensitive)
+        newRdd.mapPartitionsWithIndexInternal(
+          (_, iter) => {
+            val getPartitionKey = getPartitionKeyExtractor()
+            iter.map { row => (part.getPartition(getPartitionKey(row)), row.copy()) }
+          },
+          isOrderSensitive = isOrderSensitive)
       } else {
-        newRdd.mapPartitionsWithIndexInternal((_, iter) => {
-          val getPartitionKey = getPartitionKeyExtractor()
-          val mutablePair = new MutablePair[Int, InternalRow]()
-          iter.map { row => mutablePair.update(part.getPartition(getPartitionKey(row)), row) }
-        }, isOrderSensitive = isOrderSensitive)
+        newRdd.mapPartitionsWithIndexInternal(
+          (_, iter) => {
+            val getPartitionKey = getPartitionKeyExtractor()
+            val mutablePair = new MutablePair[Int, InternalRow]()
+            iter.map { row => mutablePair.update(part.getPartition(getPartitionKey(row)), row) }
+          },
+          isOrderSensitive = isOrderSensitive)
       }
     }
 

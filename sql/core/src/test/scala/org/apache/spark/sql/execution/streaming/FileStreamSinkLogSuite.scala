@@ -118,8 +118,8 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSparkSession {
           sinkLog.add(
             batchId,
             Array(newFakeSinkFileStatus("/a/b/" + batchId, FileStreamSinkLog.ADD_ACTION)))
-          val expectedFiles = (0 to batchId).map {
-            id => newFakeSinkFileStatus("/a/b/" + id, FileStreamSinkLog.ADD_ACTION)
+          val expectedFiles = (0 to batchId).map { id =>
+            newFakeSinkFileStatus("/a/b/" + id, FileStreamSinkLog.ADD_ACTION)
           }
           assert(sinkLog.allFiles() === expectedFiles)
           if (isCompactionBatch(batchId, 3)) {
@@ -132,14 +132,17 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSparkSession {
   }
 
   private def listBatchFiles(fs: FileSystem, sinkLog: FileStreamSinkLog): Set[String] = {
-    fs.listStatus(sinkLog.metadataPath).map(_.getPath.getName).filter { fileName =>
-      try {
-        getBatchIdFromFileName(fileName)
-        true
-      } catch {
-        case _: NumberFormatException => false
+    fs.listStatus(sinkLog.metadataPath)
+      .map(_.getPath.getName)
+      .filter { fileName =>
+        try {
+          getBatchIdFromFileName(fileName)
+          true
+        } catch {
+          case _: NumberFormatException => false
+        }
       }
-    }.toSet
+      .toSet
   }
 
   test("delete expired file") {
@@ -198,35 +201,37 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSparkSession {
 
   test("filter out outdated entries when compacting") {
     val curTime = System.currentTimeMillis()
-    withFileStreamSinkLog(sinkLog => {
-      val logs = Seq(
-        newFakeSinkFileStatus("/a/b/x", FileStreamSinkLog.ADD_ACTION, curTime),
-        newFakeSinkFileStatus("/a/b/y", FileStreamSinkLog.ADD_ACTION, curTime),
-        newFakeSinkFileStatus("/a/b/z", FileStreamSinkLog.ADD_ACTION, curTime))
-      logs.foreach { log => assert(sinkLog.shouldRetain(log, curTime)) }
+    withFileStreamSinkLog(
+      sinkLog => {
+        val logs = Seq(
+          newFakeSinkFileStatus("/a/b/x", FileStreamSinkLog.ADD_ACTION, curTime),
+          newFakeSinkFileStatus("/a/b/y", FileStreamSinkLog.ADD_ACTION, curTime),
+          newFakeSinkFileStatus("/a/b/z", FileStreamSinkLog.ADD_ACTION, curTime))
+        logs.foreach { log => assert(sinkLog.shouldRetain(log, curTime)) }
 
-      val logs2 = Seq(
-        newFakeSinkFileStatus("/a/b/m", FileStreamSinkLog.ADD_ACTION, curTime - 80000),
-        newFakeSinkFileStatus("/a/b/n", FileStreamSinkLog.ADD_ACTION, curTime - 120000))
-      logs2.foreach { log =>
-        assert(!sinkLog.shouldRetain(log, curTime))
-      }
-    }, Some(60000))
+        val logs2 = Seq(
+          newFakeSinkFileStatus("/a/b/m", FileStreamSinkLog.ADD_ACTION, curTime - 80000),
+          newFakeSinkFileStatus("/a/b/n", FileStreamSinkLog.ADD_ACTION, curTime - 120000))
+        logs2.foreach { log =>
+          assert(!sinkLog.shouldRetain(log, curTime))
+        }
+      },
+      Some(60000))
   }
 
   test("read Spark 2.1.0 log format") {
-    assert(readFromResource("file-sink-log-version-2.1.0") === Seq(
-      SinkFileStatus("/a/b/0", 1, false, 1, 1, 100, FileStreamSinkLog.ADD_ACTION),
-      SinkFileStatus("/a/b/1", 100, false, 100, 1, 100, FileStreamSinkLog.ADD_ACTION),
-      SinkFileStatus("/a/b/2", 200, false, 200, 1, 100, FileStreamSinkLog.ADD_ACTION),
-      SinkFileStatus("/a/b/3", 300, false, 300, 1, 100, FileStreamSinkLog.ADD_ACTION),
-      SinkFileStatus("/a/b/4", 400, false, 400, 1, 100, FileStreamSinkLog.ADD_ACTION),
-      SinkFileStatus("/a/b/5", 500, false, 500, 1, 100, FileStreamSinkLog.ADD_ACTION),
-      SinkFileStatus("/a/b/6", 600, false, 600, 1, 100, FileStreamSinkLog.ADD_ACTION),
-      SinkFileStatus("/a/b/7", 700, false, 700, 1, 100, FileStreamSinkLog.ADD_ACTION),
-      SinkFileStatus("/a/b/8", 800, false, 800, 1, 100, FileStreamSinkLog.ADD_ACTION),
-      SinkFileStatus("/a/b/9", 900, false, 900, 3, 200, FileStreamSinkLog.ADD_ACTION)
-    ))
+    assert(
+      readFromResource("file-sink-log-version-2.1.0") === Seq(
+        SinkFileStatus("/a/b/0", 1, false, 1, 1, 100, FileStreamSinkLog.ADD_ACTION),
+        SinkFileStatus("/a/b/1", 100, false, 100, 1, 100, FileStreamSinkLog.ADD_ACTION),
+        SinkFileStatus("/a/b/2", 200, false, 200, 1, 100, FileStreamSinkLog.ADD_ACTION),
+        SinkFileStatus("/a/b/3", 300, false, 300, 1, 100, FileStreamSinkLog.ADD_ACTION),
+        SinkFileStatus("/a/b/4", 400, false, 400, 1, 100, FileStreamSinkLog.ADD_ACTION),
+        SinkFileStatus("/a/b/5", 500, false, 500, 1, 100, FileStreamSinkLog.ADD_ACTION),
+        SinkFileStatus("/a/b/6", 600, false, 600, 1, 100, FileStreamSinkLog.ADD_ACTION),
+        SinkFileStatus("/a/b/7", 700, false, 700, 1, 100, FileStreamSinkLog.ADD_ACTION),
+        SinkFileStatus("/a/b/8", 800, false, 800, 1, 100, FileStreamSinkLog.ADD_ACTION),
+        SinkFileStatus("/a/b/9", 900, false, 900, 3, 200, FileStreamSinkLog.ADD_ACTION)))
   }
 
   test("getLatestBatchId") {
@@ -234,7 +239,9 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSparkSession {
       val scheme = CountOpenLocalFileSystem.scheme
       withSQLConf(SQLConf.FILE_SINK_LOG_COMPACT_INTERVAL.key -> "3") {
         withTempDir { dir =>
-          val sinkLog = new FileStreamSinkLog(FileStreamSinkLog.VERSION, spark,
+          val sinkLog = new FileStreamSinkLog(
+            FileStreamSinkLog.VERSION,
+            spark,
             s"$scheme:///${dir.getCanonicalPath}")
           for (batchId <- 0L to 2L) {
             sinkLog.add(
@@ -268,8 +275,8 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSparkSession {
   }
 
   /**
-   * Create a fake SinkFileStatus using path and action, and optionally modification time.
-   * Most of tests don't care about other fields in SinkFileStatus.
+   * Create a fake SinkFileStatus using path and action, and optionally modification time. Most of
+   * tests don't care about other fields in SinkFileStatus.
    */
   private def newFakeSinkFileStatus(
       path: String,
@@ -289,8 +296,8 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSparkSession {
       f: FileStreamSinkLog => Unit,
       ttl: Option[Long] = None): Unit = {
     withTempDir { file =>
-      val sinkLog = new FileStreamSinkLog(FileStreamSinkLog.VERSION, spark, file.getCanonicalPath,
-        ttl)
+      val sinkLog =
+        new FileStreamSinkLog(FileStreamSinkLog.VERSION, spark, file.getCanonicalPath, ttl)
       f(sinkLog)
     }
   }
@@ -325,9 +332,11 @@ class CountOpenLocalFileSystem extends RawLocalFileSystem {
 
   override def open(f: Path, bufferSize: Int): FSDataInputStream = {
     val path = f.toUri.getPath
-    pathToNumOpenCalled.compute(path, (_, v) => {
-      if (v == null) 1L else v + 1
-    })
+    pathToNumOpenCalled.compute(
+      path,
+      (_, v) => {
+        if (v == null) 1L else v + 1
+      })
     super.open(f, bufferSize)
   }
 }

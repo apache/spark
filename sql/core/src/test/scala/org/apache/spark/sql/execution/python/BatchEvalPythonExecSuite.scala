@@ -28,9 +28,10 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{BooleanType, DoubleType}
 
-class BatchEvalPythonExecSuite extends SparkPlanTest
-  with SharedSparkSession
-  with AdaptiveSparkPlanHelper {
+class BatchEvalPythonExecSuite
+    extends SparkPlanTest
+    with SharedSparkSession
+    with AdaptiveSparkPlanHelper {
   import testImplicits.newProductEncoder
   import testImplicits.localSeqToDatasetHolder
 
@@ -48,19 +49,22 @@ class BatchEvalPythonExecSuite extends SparkPlanTest
   }
 
   test("Python UDF: push down deterministic FilterExec predicates") {
-    val df = Seq(("Hello", 4)).toDF("a", "b")
+    val df = Seq(("Hello", 4))
+      .toDF("a", "b")
       .where("dummyPythonUDF(b) and dummyPythonUDF(a) and a in (3, 4)")
     val qualifiedPlanNodes = df.queryExecution.executedPlan.collect {
       case f @ FilterExec(
-          And(_: AttributeReference, _: AttributeReference),
-          InputAdapter(_: BatchEvalPythonExec)) => f
+            And(_: AttributeReference, _: AttributeReference),
+            InputAdapter(_: BatchEvalPythonExec)) =>
+        f
       case b @ BatchEvalPythonExec(_, _, WholeStageCodegenExec(FilterExec(_: In, _))) => b
     }
     assert(qualifiedPlanNodes.size == 2)
   }
 
   test("Nested Python UDF: push down deterministic FilterExec predicates") {
-    val df = Seq(("Hello", 4)).toDF("a", "b")
+    val df = Seq(("Hello", 4))
+      .toDF("a", "b")
       .where("dummyPythonUDF(a, dummyPythonUDF(a, b)) and a in (3, 4)")
     val qualifiedPlanNodes = df.queryExecution.executedPlan.collect {
       case f @ FilterExec(_: AttributeReference, InputAdapter(_: BatchEvalPythonExec)) => f
@@ -70,25 +74,29 @@ class BatchEvalPythonExecSuite extends SparkPlanTest
   }
 
   test("Python UDF: no push down on non-deterministic") {
-    val df = Seq(("Hello", 4)).toDF("a", "b")
+    val df = Seq(("Hello", 4))
+      .toDF("a", "b")
       .where("b > 4 and dummyPythonUDF(a) and rand() > 0.3")
     val qualifiedPlanNodes = df.queryExecution.executedPlan.collect {
       case f @ FilterExec(
-          And(_: AttributeReference, _: GreaterThan),
-          InputAdapter(_: BatchEvalPythonExec)) => f
+            And(_: AttributeReference, _: GreaterThan),
+            InputAdapter(_: BatchEvalPythonExec)) =>
+        f
       case b @ BatchEvalPythonExec(_, _, WholeStageCodegenExec(_: FilterExec)) => b
     }
     assert(qualifiedPlanNodes.size == 2)
   }
 
   test("Python UDF: push down on deterministic predicates after the first non-deterministic") {
-    val df = Seq(("Hello", 4)).toDF("a", "b")
+    val df = Seq(("Hello", 4))
+      .toDF("a", "b")
       .where("dummyPythonUDF(a) and rand() > 0.3 and b > 4")
 
     val qualifiedPlanNodes = df.queryExecution.executedPlan.collect {
       case f @ FilterExec(
-          And(_: AttributeReference, _: GreaterThan),
-          InputAdapter(_: BatchEvalPythonExec)) => f
+            And(_: AttributeReference, _: GreaterThan),
+            InputAdapter(_: BatchEvalPythonExec)) =>
+        f
       case b @ BatchEvalPythonExec(_, _, WholeStageCodegenExec(_: FilterExec)) => b
     }
     assert(qualifiedPlanNodes.size == 2)
@@ -121,39 +129,44 @@ class BatchEvalPythonExecSuite extends SparkPlanTest
 }
 
 // This Python UDF is dummy and just for testing. Unable to execute.
-class DummyUDF extends SimplePythonFunction(
-  command = Array[Byte](),
-  envVars = Map("" -> "").asJava,
-  pythonIncludes = ArrayBuffer("").asJava,
-  pythonExec = "",
-  pythonVer = "",
-  broadcastVars = null,
-  accumulator = null)
+class DummyUDF
+    extends SimplePythonFunction(
+      command = Array[Byte](),
+      envVars = Map("" -> "").asJava,
+      pythonIncludes = ArrayBuffer("").asJava,
+      pythonExec = "",
+      pythonVer = "",
+      broadcastVars = null,
+      accumulator = null)
 
-class MyDummyPythonUDF extends UserDefinedPythonFunction(
-  name = "dummyUDF",
-  func = new DummyUDF,
-  dataType = BooleanType,
-  pythonEvalType = PythonEvalType.SQL_BATCHED_UDF,
-  udfDeterministic = true)
+class MyDummyPythonUDF
+    extends UserDefinedPythonFunction(
+      name = "dummyUDF",
+      func = new DummyUDF,
+      dataType = BooleanType,
+      pythonEvalType = PythonEvalType.SQL_BATCHED_UDF,
+      udfDeterministic = true)
 
-class MyDummyNondeterministicPythonUDF extends UserDefinedPythonFunction(
-  name = "dummyNondeterministicUDF",
-  func = new DummyUDF,
-  dataType = BooleanType,
-  pythonEvalType = PythonEvalType.SQL_BATCHED_UDF,
-  udfDeterministic = false)
+class MyDummyNondeterministicPythonUDF
+    extends UserDefinedPythonFunction(
+      name = "dummyNondeterministicUDF",
+      func = new DummyUDF,
+      dataType = BooleanType,
+      pythonEvalType = PythonEvalType.SQL_BATCHED_UDF,
+      udfDeterministic = false)
 
-class MyDummyGroupedAggPandasUDF extends UserDefinedPythonFunction(
-  name = "dummyGroupedAggPandasUDF",
-  func = new DummyUDF,
-  dataType = DoubleType,
-  pythonEvalType = PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
-  udfDeterministic = true)
+class MyDummyGroupedAggPandasUDF
+    extends UserDefinedPythonFunction(
+      name = "dummyGroupedAggPandasUDF",
+      func = new DummyUDF,
+      dataType = DoubleType,
+      pythonEvalType = PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
+      udfDeterministic = true)
 
-class MyDummyScalarPandasUDF extends UserDefinedPythonFunction(
-  name = "dummyScalarPandasUDF",
-  func = new DummyUDF,
-  dataType = BooleanType,
-  pythonEvalType = PythonEvalType.SQL_SCALAR_PANDAS_UDF,
-  udfDeterministic = true)
+class MyDummyScalarPandasUDF
+    extends UserDefinedPythonFunction(
+      name = "dummyScalarPandasUDF",
+      func = new DummyUDF,
+      dataType = BooleanType,
+      pythonEvalType = PythonEvalType.SQL_SCALAR_PANDAS_UDF,
+      udfDeterministic = true)

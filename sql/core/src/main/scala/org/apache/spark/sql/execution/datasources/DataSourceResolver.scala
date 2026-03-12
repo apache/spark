@@ -17,11 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import org.apache.spark.sql.catalyst.analysis.resolver.{
-  ExplicitlyUnsupportedResolverFeature,
-  LogicalPlanResolver,
-  ResolverExtension
-}
+import org.apache.spark.sql.catalyst.analysis.resolver.{ExplicitlyUnsupportedResolverFeature, LogicalPlanResolver, ResolverExtension}
 import org.apache.spark.sql.catalyst.catalog.UnresolvedCatalogRelation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
@@ -38,8 +34,8 @@ class DataSourceResolver(sparkSession: SparkSession) extends ResolverExtension {
 
   /**
    * Resolve [[UnresolvedCatalogRelation]]:
-   * - Reuse [[FindDataSourceTable]] code to resolve [[UnresolvedCatalogRelation]]
-   * - Explicitly disallow [[StreamingRelation]] and [[StreamingRelationV2]] for now
+   *   - Reuse [[FindDataSourceTable]] code to resolve [[UnresolvedCatalogRelation]]
+   *   - Explicitly disallow [[StreamingRelation]] and [[StreamingRelationV2]] for now
    */
   override def resolveOperator(
       operator: LogicalPlan,
@@ -49,12 +45,10 @@ class DataSourceResolver(sparkSession: SparkSession) extends ResolverExtension {
       Some(result match {
         case streamingRelation: StreamingRelation =>
           throw new ExplicitlyUnsupportedResolverFeature(
-            s"unsupported operator: ${streamingRelation.getClass.getName}"
-          )
+            s"unsupported operator: ${streamingRelation.getClass.getName}")
         case streamingRelationV2: StreamingRelationV2 =>
           throw new ExplicitlyUnsupportedResolverFeature(
-            s"unsupported operator: ${streamingRelationV2.getClass.getName}"
-          )
+            s"unsupported operator: ${streamingRelationV2.getClass.getName}")
         case other =>
           other
       })

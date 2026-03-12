@@ -30,7 +30,15 @@ import org.apache.spark.util.ArrayImplicits._
 
 class CreateTablePartitioningValidationSuite extends AnalysisTest {
   val tableSpec =
-    UnresolvedTableSpec(Map.empty, None, OptionList(Seq.empty), None, None, None, None, false,
+    UnresolvedTableSpec(
+      Map.empty,
+      None,
+      OptionList(Seq.empty),
+      None,
+      None,
+      None,
+      None,
+      false,
       Seq.empty)
   test("CreateTableAsSelect: fail missing top-level column") {
     val plan = CreateTableAsSelect(
@@ -42,7 +50,8 @@ class CreateTablePartitioningValidationSuite extends AnalysisTest {
       ignoreIfExists = false)
 
     assert(!plan.resolved)
-    assertAnalysisErrorCondition(plan,
+    assertAnalysisErrorCondition(
+      plan,
       expectedErrorCondition = "UNSUPPORTED_FEATURE.PARTITION_WITH_NESTED_COLUMN_IS_UNSUPPORTED",
       expectedMessageParameters = Map("cols" -> "`does_not_exist`"))
   }
@@ -57,7 +66,8 @@ class CreateTablePartitioningValidationSuite extends AnalysisTest {
       ignoreIfExists = false)
 
     assert(!plan.resolved)
-    assertAnalysisErrorCondition(plan,
+    assertAnalysisErrorCondition(
+      plan,
       expectedErrorCondition = "UNSUPPORTED_FEATURE.PARTITION_WITH_NESTED_COLUMN_IS_UNSUPPORTED",
       expectedMessageParameters = Map("cols" -> "`does_not_exist`.`z`"))
   }
@@ -72,7 +82,8 @@ class CreateTablePartitioningValidationSuite extends AnalysisTest {
       ignoreIfExists = false)
 
     assert(!plan.resolved)
-    assertAnalysisErrorCondition(plan,
+    assertAnalysisErrorCondition(
+      plan,
       expectedErrorCondition = "UNSUPPORTED_FEATURE.PARTITION_WITH_NESTED_COLUMN_IS_UNSUPPORTED",
       expectedMessageParameters = Map("cols" -> "`point`.`z`"))
   }
@@ -87,7 +98,8 @@ class CreateTablePartitioningValidationSuite extends AnalysisTest {
       ignoreIfExists = false)
 
     assert(!plan.resolved)
-    assertAnalysisErrorCondition(plan,
+    assertAnalysisErrorCondition(
+      plan,
       expectedErrorCondition = "UNSUPPORTED_FEATURE.PARTITION_WITH_NESTED_COLUMN_IS_UNSUPPORTED",
       expectedMessageParameters = Map("cols" -> "`does_not_exist`, `point`.`z`"))
   }
@@ -137,9 +149,9 @@ private[sql] object CreateTablePartitioningValidationSuite {
   }
 
   val schema: StructType = new StructType()
-      .add("id", LongType)
-      .add("data", StringType)
-      .add("point", new StructType().add("x", DoubleType).add("y", DoubleType))
+    .add("id", LongType)
+    .add("data", StringType)
+    .add("point", new StructType().add("x", DoubleType).add("y", DoubleType))
 }
 
 private[sql] case object TestRelation2 extends LeafNode with NamedRelation {

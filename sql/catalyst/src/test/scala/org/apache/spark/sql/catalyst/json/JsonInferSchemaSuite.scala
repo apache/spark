@@ -66,13 +66,9 @@ class JsonInferSchemaSuite extends SparkFunSuite with SQLHelper {
     Seq("legacy", "corrected").foreach { legacyParser =>
       withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> legacyParser) {
         checkType(
-          options = Map(
-            "prefersDecimal" -> "true",
-            "timestampFormat" -> "yyyyMMdd.HHmmssSSS"
-          ),
+          options = Map("prefersDecimal" -> "true", "timestampFormat" -> "yyyyMMdd.HHmmssSSS"),
           json = """{"a": "20181202.210400123"}""",
-          dt = DecimalType(17, 9)
-        )
+          dt = DecimalType(17, 9))
       }
     }
   }
@@ -85,11 +81,9 @@ class JsonInferSchemaSuite extends SparkFunSuite with SQLHelper {
             options = Map(
               "prefersDecimal" -> "false",
               "timestampFormat" -> "yyyyMMdd.HHmmssSSS",
-              "inferTimestamp" -> inferTimestamp.toString
-            ),
+              "inferTimestamp" -> inferTimestamp.toString),
             json = """{"a": "20181202.210400123"}""",
-            dt = if (inferTimestamp) TimestampType else StringType
-          )
+            dt = if (inferTimestamp) TimestampType else StringType)
         }
       }
     }
@@ -101,8 +95,7 @@ class JsonInferSchemaSuite extends SparkFunSuite with SQLHelper {
         checkType(
           options = Map("timestampFormat" -> "yyyy,MM,dd.HHmmssSSS"),
           json = """{"a": "20181202.210400123"}""",
-          dt = StringType
-        )
+          dt = StringType)
       }
     }
   }
@@ -113,8 +106,9 @@ class JsonInferSchemaSuite extends SparkFunSuite with SQLHelper {
     checkType(Map("inferTimestamp" -> "false"), json, StringType)
   }
 
-  test("SPARK-45433: inferring the schema when timestamps do not match specified timestampFormat" +
-    " with only one row") {
+  test(
+    "SPARK-45433: inferring the schema when timestamps do not match specified timestampFormat" +
+      " with only one row") {
     checkType(
       Map("timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss", "inferTimestamp" -> "true"),
       """{"a": "2884-06-24T02:45:51.138"}""",

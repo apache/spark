@@ -45,8 +45,10 @@ import org.apache.spark.tags.ExtendedSQLTest
  * unsafe map in [[org.apache.spark.sql.execution.joins.UnsafeHashedRelation]] is not triggered
  * without serializing the hashed relation, which does not happen in local mode.
  */
-abstract class BroadcastJoinSuiteBase extends QueryTest with SQLTestUtils
-  with AdaptiveSparkPlanHelper {
+abstract class BroadcastJoinSuiteBase
+    extends QueryTest
+    with SQLTestUtils
+    with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   protected var spark: SparkSession = null
@@ -58,7 +60,8 @@ abstract class BroadcastJoinSuiteBase extends QueryTest with SQLTestUtils
    */
   override def beforeAll(): Unit = {
     super.beforeAll()
-    spark = SparkSession.builder()
+    spark = SparkSession
+      .builder()
       .master("local-cluster[2,1,512]")
       .config(EXECUTOR_MEMORY.key, "512m")
       .appName("testing")
@@ -189,7 +192,7 @@ abstract class BroadcastJoinSuiteBase extends QueryTest with SQLTestUtils
     }
   }
 
-  private def assertBroadcastJoin(df : Dataset[Row]) : Unit = {
+  private def assertBroadcastJoin(df: Dataset[Row]): Unit = {
     val df1 = Seq((1, "4"), (2, "2")).toDF("key", "value")
     val joined = df1.join(df, Seq("key"), "inner")
 
@@ -226,12 +229,12 @@ abstract class BroadcastJoinSuiteBase extends QueryTest with SQLTestUtils
       spark.range(10).createOrReplaceTempView("u")
 
       for (name <- Seq("BROADCAST", "BROADCASTJOIN", "MAPJOIN")) {
-        val plan1 = sql(s"SELECT /*+ $name(t) */ * FROM t JOIN u ON t.id = u.id").queryExecution
-          .optimizedPlan
-        val plan2 = sql(s"SELECT /*+ $name(u) */ * FROM t JOIN u ON t.id = u.id").queryExecution
-          .optimizedPlan
-        val plan3 = sql(s"SELECT /*+ $name(v) */ * FROM t JOIN u ON t.id = u.id").queryExecution
-          .optimizedPlan
+        val plan1 = sql(
+          s"SELECT /*+ $name(t) */ * FROM t JOIN u ON t.id = u.id").queryExecution.optimizedPlan
+        val plan2 = sql(
+          s"SELECT /*+ $name(u) */ * FROM t JOIN u ON t.id = u.id").queryExecution.optimizedPlan
+        val plan3 = sql(
+          s"SELECT /*+ $name(v) */ * FROM t JOIN u ON t.id = u.id").queryExecution.optimizedPlan
 
         assert(plan1.asInstanceOf[Join].hint.leftHint.get.strategy.contains(BROADCAST))
         assert(plan1.asInstanceOf[Join].hint.rightHint.isEmpty)
@@ -253,42 +256,67 @@ abstract class BroadcastJoinSuiteBase extends QueryTest with SQLTestUtils
     assert(HashJoin.rewriteKeyExpr(l :: l :: Nil) === l :: l :: Nil)
     assert(HashJoin.rewriteKeyExpr(l :: i :: Nil) === l :: i :: Nil)
 
-    assert(HashJoin.rewriteKeyExpr(i :: Nil) ===
-      Cast(i, LongType, Some(conf.sessionLocalTimeZone)) :: Nil)
+    assert(
+      HashJoin.rewriteKeyExpr(i :: Nil) ===
+        Cast(i, LongType, Some(conf.sessionLocalTimeZone)) :: Nil)
     assert(HashJoin.rewriteKeyExpr(i :: l :: Nil) === i :: l :: Nil)
-    assert(HashJoin.rewriteKeyExpr(i :: i :: Nil) ===
-      BitwiseOr(ShiftLeft(Cast(i, LongType, Some(conf.sessionLocalTimeZone)), Literal(32)),
-        BitwiseAnd(Cast(i, LongType, Some(conf.sessionLocalTimeZone)), Literal((1L << 32) - 1))) ::
+    assert(
+      HashJoin.rewriteKeyExpr(i :: i :: Nil) ===
+        BitwiseOr(
+          ShiftLeft(Cast(i, LongType, Some(conf.sessionLocalTimeZone)), Literal(32)),
+          BitwiseAnd(
+            Cast(i, LongType, Some(conf.sessionLocalTimeZone)),
+            Literal((1L << 32) - 1))) ::
         Nil)
     assert(HashJoin.rewriteKeyExpr(i :: i :: i :: Nil) === i :: i :: i :: Nil)
 
-    assert(HashJoin.rewriteKeyExpr(s :: Nil) ===
-      Cast(s, LongType, Some(conf.sessionLocalTimeZone)) :: Nil)
+    assert(
+      HashJoin.rewriteKeyExpr(s :: Nil) ===
+        Cast(s, LongType, Some(conf.sessionLocalTimeZone)) :: Nil)
     assert(HashJoin.rewriteKeyExpr(s :: l :: Nil) === s :: l :: Nil)
-    assert(HashJoin.rewriteKeyExpr(s :: s :: Nil) ===
-      BitwiseOr(ShiftLeft(Cast(s, LongType, Some(conf.sessionLocalTimeZone)), Literal(16)),
-        BitwiseAnd(Cast(s, LongType, Some(conf.sessionLocalTimeZone)), Literal((1L << 16) - 1))) ::
+    assert(
+      HashJoin.rewriteKeyExpr(s :: s :: Nil) ===
+        BitwiseOr(
+          ShiftLeft(Cast(s, LongType, Some(conf.sessionLocalTimeZone)), Literal(16)),
+          BitwiseAnd(
+            Cast(s, LongType, Some(conf.sessionLocalTimeZone)),
+            Literal((1L << 16) - 1))) ::
         Nil)
-    assert(HashJoin.rewriteKeyExpr(s :: s :: s :: Nil) ===
-      BitwiseOr(ShiftLeft(
-        BitwiseOr(ShiftLeft(Cast(s, LongType, Some(conf.sessionLocalTimeZone)), Literal(16)),
-          BitwiseAnd(Cast(s, LongType, Some(conf.sessionLocalTimeZone)), Literal((1L << 16) - 1))),
-        Literal(16)),
-        BitwiseAnd(Cast(s, LongType, Some(conf.sessionLocalTimeZone)), Literal((1L << 16) - 1))) ::
+    assert(
+      HashJoin.rewriteKeyExpr(s :: s :: s :: Nil) ===
+        BitwiseOr(
+          ShiftLeft(
+            BitwiseOr(
+              ShiftLeft(Cast(s, LongType, Some(conf.sessionLocalTimeZone)), Literal(16)),
+              BitwiseAnd(
+                Cast(s, LongType, Some(conf.sessionLocalTimeZone)),
+                Literal((1L << 16) - 1))),
+            Literal(16)),
+          BitwiseAnd(
+            Cast(s, LongType, Some(conf.sessionLocalTimeZone)),
+            Literal((1L << 16) - 1))) ::
         Nil)
-    assert(HashJoin.rewriteKeyExpr(s :: s :: s :: s :: Nil) ===
-      BitwiseOr(ShiftLeft(
-        BitwiseOr(ShiftLeft(
-          BitwiseOr(ShiftLeft(Cast(s, LongType, Some(conf.sessionLocalTimeZone)), Literal(16)),
-            BitwiseAnd(Cast(s, LongType, Some(conf.sessionLocalTimeZone)),
-              Literal((1L << 16) - 1))),
-          Literal(16)),
-          BitwiseAnd(Cast(s, LongType, Some(conf.sessionLocalTimeZone)), Literal((1L << 16) - 1))),
-        Literal(16)),
-        BitwiseAnd(Cast(s, LongType, Some(conf.sessionLocalTimeZone)), Literal((1L << 16) - 1))) ::
+    assert(
+      HashJoin.rewriteKeyExpr(s :: s :: s :: s :: Nil) ===
+        BitwiseOr(
+          ShiftLeft(
+            BitwiseOr(
+              ShiftLeft(
+                BitwiseOr(
+                  ShiftLeft(Cast(s, LongType, Some(conf.sessionLocalTimeZone)), Literal(16)),
+                  BitwiseAnd(
+                    Cast(s, LongType, Some(conf.sessionLocalTimeZone)),
+                    Literal((1L << 16) - 1))),
+                Literal(16)),
+              BitwiseAnd(
+                Cast(s, LongType, Some(conf.sessionLocalTimeZone)),
+                Literal((1L << 16) - 1))),
+            Literal(16)),
+          BitwiseAnd(Cast(s, LongType, Some(conf.sessionLocalTimeZone)), Literal((1L << 16) - 1))) ::
         Nil)
-    assert(HashJoin.rewriteKeyExpr(s :: s :: s :: s :: s :: Nil) ===
-      s :: s :: s :: s :: s :: Nil)
+    assert(
+      HashJoin.rewriteKeyExpr(s :: s :: s :: s :: s :: Nil) ===
+        s :: s :: s :: s :: s :: Nil)
 
     assert(HashJoin.rewriteKeyExpr(ss :: Nil) === ss :: Nil)
     assert(HashJoin.rewriteKeyExpr(l :: ss :: Nil) === l :: ss :: Nil)
@@ -307,21 +335,31 @@ abstract class BroadcastJoinSuiteBase extends QueryTest with SQLTestUtils
       /* ######## test cases for equal join ######### */
       // INNER JOIN && t1Size < t2Size => BuildLeft
       assertJoinBuildSide(
-        "SELECT /*+ MAPJOIN(t1, t2) */ * FROM t1 JOIN t2 ON t1.key = t2.key", bh, BuildLeft)
+        "SELECT /*+ MAPJOIN(t1, t2) */ * FROM t1 JOIN t2 ON t1.key = t2.key",
+        bh,
+        BuildLeft)
       // LEFT JOIN => BuildRight
       // broadcast hash join can not build left side for left join.
       assertJoinBuildSide(
-        "SELECT /*+ MAPJOIN(t1, t2) */ * FROM t1 LEFT JOIN t2 ON t1.key = t2.key", bh, BuildRight)
+        "SELECT /*+ MAPJOIN(t1, t2) */ * FROM t1 LEFT JOIN t2 ON t1.key = t2.key",
+        bh,
+        BuildRight)
       // RIGHT JOIN => BuildLeft
       // broadcast hash join can not build right side for right join.
       assertJoinBuildSide(
-        "SELECT /*+ MAPJOIN(t1, t2) */ * FROM t1 RIGHT JOIN t2 ON t1.key = t2.key", bh, BuildLeft)
+        "SELECT /*+ MAPJOIN(t1, t2) */ * FROM t1 RIGHT JOIN t2 ON t1.key = t2.key",
+        bh,
+        BuildLeft)
       // INNER JOIN && broadcast(t1) => BuildLeft
       assertJoinBuildSide(
-        "SELECT /*+ MAPJOIN(t1) */ * FROM t1 JOIN t2 ON t1.key = t2.key", bh, BuildLeft)
+        "SELECT /*+ MAPJOIN(t1) */ * FROM t1 JOIN t2 ON t1.key = t2.key",
+        bh,
+        BuildLeft)
       // INNER JOIN && broadcast(t2) => BuildRight
       assertJoinBuildSide(
-        "SELECT /*+ MAPJOIN(t2) */ * FROM t1 JOIN t2 ON t1.key = t2.key", bh, BuildRight)
+        "SELECT /*+ MAPJOIN(t2) */ * FROM t1 JOIN t2 ON t1.key = t2.key",
+        bh,
+        BuildRight)
 
       /* ######## test cases for non-equal join ######### */
       withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
@@ -332,9 +370,15 @@ abstract class BroadcastJoinSuiteBase extends QueryTest with SQLTestUtils
         // FULL OUTER && t1Size < t2Size => BuildLeft
         assertJoinBuildSide("SELECT * FROM t1 FULL OUTER JOIN t2", bl, BuildLeft)
         // LEFT JOIN => BuildRight
-        assertJoinBuildSide("SELECT /*+ MAPJOIN(t1, t2) */ * FROM t1 LEFT JOIN t2", bl, BuildRight)
+        assertJoinBuildSide(
+          "SELECT /*+ MAPJOIN(t1, t2) */ * FROM t1 LEFT JOIN t2",
+          bl,
+          BuildRight)
         // RIGHT JOIN => BuildLeft
-        assertJoinBuildSide("SELECT /*+ MAPJOIN(t1, t2) */ * FROM t1 RIGHT JOIN t2", bl, BuildLeft)
+        assertJoinBuildSide(
+          "SELECT /*+ MAPJOIN(t1, t2) */ * FROM t1 RIGHT JOIN t2",
+          bl,
+          BuildLeft)
 
         /* #### test with broadcast hint #### */
         // INNER JOIN && broadcast(t1) => BuildLeft
@@ -342,10 +386,15 @@ abstract class BroadcastJoinSuiteBase extends QueryTest with SQLTestUtils
         // INNER JOIN && broadcast(t2) => BuildRight
         assertJoinBuildSide("SELECT /*+ MAPJOIN(t2) */ * FROM t1 JOIN t2", bl, BuildRight)
         // FULL OUTER && broadcast(t1) => BuildLeft
-        assertJoinBuildSide("SELECT /*+ MAPJOIN(t1) */ * FROM t1 FULL OUTER JOIN t2", bl, BuildLeft)
+        assertJoinBuildSide(
+          "SELECT /*+ MAPJOIN(t1) */ * FROM t1 FULL OUTER JOIN t2",
+          bl,
+          BuildLeft)
         // FULL OUTER && broadcast(t2) => BuildRight
         assertJoinBuildSide(
-          "SELECT /*+ MAPJOIN(t2) */ * FROM t1 FULL OUTER JOIN t2", bl, BuildRight)
+          "SELECT /*+ MAPJOIN(t2) */ * FROM t1 FULL OUTER JOIN t2",
+          bl,
+          BuildRight)
         // LEFT JOIN && broadcast(t1) => BuildLeft
         assertJoinBuildSide("SELECT /*+ MAPJOIN(t1) */ * FROM t1 LEFT JOIN t2", bl, BuildLeft)
         // RIGHT JOIN && broadcast(t2) => BuildRight
@@ -400,7 +449,10 @@ abstract class BroadcastJoinSuiteBase extends QueryTest with SQLTestUtils
   private val bh = classOf[BroadcastHashJoinExec].getSimpleName
   private val bl = classOf[BroadcastNestedLoopJoinExec].getSimpleName
 
-  private def assertJoinBuildSide(sqlStr: String, joinMethod: String, buildSide: BuildSide): Any = {
+  private def assertJoinBuildSide(
+      sqlStr: String,
+      joinMethod: String,
+      buildSide: BuildSide): Any = {
     val executedPlan = stripAQEPlan(sql(sqlStr).queryExecution.executedPlan)
     executedPlan match {
       case b: BroadcastNestedLoopJoinExec =>
@@ -460,13 +512,14 @@ abstract class BroadcastJoinSuiteBase extends QueryTest with SQLTestUtils
           val p = broadcastJoins(0).outputPartitioning.asInstanceOf[PartitioningCollection]
           assert(p.partitionings.size == 4)
           // Verify all the combinations of output partitioning.
-          Seq(Seq(t1("i1"), t1("j1")),
+          Seq(
+            Seq(t1("i1"), t1("j1")),
             Seq(t1("i1"), df2("j2")),
             Seq(df2("i2"), t1("j1")),
             Seq(df2("i2"), df2("j2"))).foreach { expected =>
             val expectedExpressions = expected.map(_.expr)
-            assert(p.partitionings.exists {
-              case h: HashPartitioning => expressionsEqual(h.expressions, expectedExpressions)
+            assert(p.partitionings.exists { case h: HashPartitioning =>
+              expressionsEqual(h.expressions, expectedExpressions)
             })
           }
         }
@@ -515,8 +568,8 @@ abstract class BroadcastJoinSuiteBase extends QueryTest with SQLTestUtils
       // Verify all the combinations of output partitioning.
       Seq(Seq(t1("i1")), Seq(t2("i2")), Seq(t3("i3"))).foreach { expected =>
         val expectedExpressions = expected.map(_.expr)
-        assert(p.partitionings.exists {
-          case h: HashPartitioning => expressionsEqual(h.expressions, expectedExpressions)
+        assert(p.partitionings.exists { case h: HashPartitioning =>
+          expressionsEqual(h.expressions, expectedExpressions)
         })
       }
 
@@ -554,11 +607,12 @@ abstract class BroadcastJoinSuiteBase extends QueryTest with SQLTestUtils
       None,
       left = DummySparkPlan(outputPartitioning = HashPartitioning(Seq(l1, l2, l3), 1)),
       right = DummySparkPlan())
-    var expected = PartitioningCollection(Seq(
-      HashPartitioning(Seq(l1, l2, l3), 1),
-      HashPartitioning(Seq(l1, r1, l3), 1),
-      HashPartitioning(Seq(l1, l2, r2), 1),
-      HashPartitioning(Seq(l1, r1, r2), 1)))
+    var expected = PartitioningCollection(
+      Seq(
+        HashPartitioning(Seq(l1, l2, l3), 1),
+        HashPartitioning(Seq(l1, r1, l3), 1),
+        HashPartitioning(Seq(l1, l2, r2), 1),
+        HashPartitioning(Seq(l1, r1, r2), 1)))
     assert(bhj.outputPartitioning === expected)
 
     // Streamed side has a PartitioningCollection.
@@ -568,16 +622,17 @@ abstract class BroadcastJoinSuiteBase extends QueryTest with SQLTestUtils
       Inner,
       BuildRight,
       None,
-      left = DummySparkPlan(outputPartitioning = PartitioningCollection(Seq(
-        HashPartitioning(Seq(l1, l2), 1), HashPartitioning(Seq(l3), 1)))),
+      left = DummySparkPlan(outputPartitioning = PartitioningCollection(
+        Seq(HashPartitioning(Seq(l1, l2), 1), HashPartitioning(Seq(l3), 1)))),
       right = DummySparkPlan())
-    expected = PartitioningCollection(Seq(
-      HashPartitioning(Seq(l1, l2), 1),
-      HashPartitioning(Seq(r1, l2), 1),
-      HashPartitioning(Seq(l1, r2), 1),
-      HashPartitioning(Seq(r1, r2), 1),
-      HashPartitioning(Seq(l3), 1),
-      HashPartitioning(Seq(r3), 1)))
+    expected = PartitioningCollection(
+      Seq(
+        HashPartitioning(Seq(l1, l2), 1),
+        HashPartitioning(Seq(r1, l2), 1),
+        HashPartitioning(Seq(l1, r2), 1),
+        HashPartitioning(Seq(r1, r2), 1),
+        HashPartitioning(Seq(l3), 1),
+        HashPartitioning(Seq(r3), 1)))
     assert(bhj.outputPartitioning === expected)
 
     // Streamed side has a nested PartitioningCollection.
@@ -587,17 +642,19 @@ abstract class BroadcastJoinSuiteBase extends QueryTest with SQLTestUtils
       Inner,
       BuildRight,
       None,
-      left = DummySparkPlan(outputPartitioning = PartitioningCollection(Seq(
-        PartitioningCollection(Seq(HashPartitioning(Seq(l1), 1), HashPartitioning(Seq(l2), 1))),
-        HashPartitioning(Seq(l3), 1)))),
+      left = DummySparkPlan(outputPartitioning = PartitioningCollection(
+        Seq(
+          PartitioningCollection(Seq(HashPartitioning(Seq(l1), 1), HashPartitioning(Seq(l2), 1))),
+          HashPartitioning(Seq(l3), 1)))),
       right = DummySparkPlan())
-    expected = PartitioningCollection(Seq(
-      HashPartitioning(Seq(l1), 1),
-      HashPartitioning(Seq(r1), 1),
-      HashPartitioning(Seq(l2), 1),
-      HashPartitioning(Seq(r2), 1),
-      HashPartitioning(Seq(l3), 1),
-      HashPartitioning(Seq(r3), 1)))
+    expected = PartitioningCollection(
+      Seq(
+        HashPartitioning(Seq(l1), 1),
+        HashPartitioning(Seq(r1), 1),
+        HashPartitioning(Seq(l2), 1),
+        HashPartitioning(Seq(r2), 1),
+        HashPartitioning(Seq(l3), 1),
+        HashPartitioning(Seq(r3), 1)))
     assert(bhj.outputPartitioning === expected)
 
     // One-to-mapping case ("l1" = "r1" AND "l1" = "r2")
@@ -609,10 +666,11 @@ abstract class BroadcastJoinSuiteBase extends QueryTest with SQLTestUtils
       None,
       left = DummySparkPlan(outputPartitioning = HashPartitioning(Seq(l1, l2), 1)),
       right = DummySparkPlan())
-    expected = PartitioningCollection(Seq(
-      HashPartitioning(Seq(l1, l2), 1),
-      HashPartitioning(Seq(r1, l2), 1),
-      HashPartitioning(Seq(r2, l2), 1)))
+    expected = PartitioningCollection(
+      Seq(
+        HashPartitioning(Seq(l1, l2), 1),
+        HashPartitioning(Seq(r1, l2), 1),
+        HashPartitioning(Seq(r2, l2), 1)))
     assert(bhj.outputPartitioning === expected)
   }
 
@@ -629,8 +687,7 @@ abstract class BroadcastJoinSuiteBase extends QueryTest with SQLTestUtils
       HashPartitioning(Seq(r1, r2), 1))
 
     Seq(1, 2, 3, 4).foreach { limit =>
-      withSQLConf(
-        SQLConf.BROADCAST_HASH_JOIN_OUTPUT_PARTITIONING_EXPAND_LIMIT.key -> s"$limit") {
+      withSQLConf(SQLConf.BROADCAST_HASH_JOIN_OUTPUT_PARTITIONING_EXPAND_LIMIT.key -> s"$limit") {
         val bhj = BroadcastHashJoinExec(
           leftKeys = Seq(l1, l2),
           rightKeys = Seq(r1, r2),

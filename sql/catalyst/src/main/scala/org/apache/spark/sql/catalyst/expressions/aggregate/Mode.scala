@@ -36,8 +36,10 @@ case class Mode(
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0,
     reverseOpt: Option[Boolean] = None)
-  extends TypedAggregateWithHashMapAsBuffer with ImplicitCastInputTypes
-    with SupportsOrderingWithinGroup with UnaryLike[Expression] {
+    extends TypedAggregateWithHashMapAsBuffer
+    with ImplicitCastInputTypes
+    with SupportsOrderingWithinGroup
+    with UnaryLike[Expression] {
 
   def this(child: Expression) = this(child, 0, 0)
 
@@ -78,11 +80,11 @@ case class Mode(
       childDataType: DataType,
       buffer: OpenHashMap[AnyRef, Long]): Iterable[(AnyRef, Long)] = {
     def groupAndReduceBuffer(groupingFunction: AnyRef => _): Iterable[(AnyRef, Long)] = {
-      buffer.groupMapReduce(t =>
-        groupingFunction(t._1))(x => x)((x, y) => (x._1, x._2 + y._2)).values
+      buffer
+        .groupMapReduce(t => groupingFunction(t._1))(x => x)((x, y) => (x._1, x._2 + y._2))
+        .values
     }
-    def determineBufferingFunction(
-        childDataType: DataType): Option[AnyRef => _] = {
+    def determineBufferingFunction(childDataType: DataType): Option[AnyRef => _] = {
       childDataType match {
         case _ if UnsafeRowUtils.isBinaryStable(child.dataType) => None
         case _ => Some(collationAwareTransform(_, childDataType))
@@ -106,19 +108,15 @@ case class Mode(
           messageParameters = Map(
             "expression" -> toSQLExpr(this),
             "functionName" -> toSQLType(prettyName),
-            "dataType" -> toSQLType(child.dataType))
-        )
+            "dataType" -> toSQLType(child.dataType)))
     }
   }
 
-  private def processStructTypeWithBuffer(
-      tuples: Seq[(Any, StructField)]): Seq[Any] = {
+  private def processStructTypeWithBuffer(tuples: Seq[(Any, StructField)]): Seq[Any] = {
     tuples.map(t => collationAwareTransform(t._1.asInstanceOf[AnyRef], t._2.dataType))
   }
 
-  private def processArrayTypeWithBuffer(
-      a: ArrayType,
-      data: ArrayData): Seq[Any] = {
+  private def processArrayTypeWithBuffer(a: ArrayType, data: ArrayData): Seq[Any] = {
     (0 until data.numElements()).map(i =>
       collationAwareTransform(data.get(i, a.elementType), a.elementType))
   }
@@ -153,15 +151,18 @@ case class Mode(
     // It is expected to work for all simple and complex types with collated fields.
     val collationAwareBuffer = getCollationAwareBuffer(child.dataType, buffer)
 
-    reverseOpt.map { reverse =>
-      val defaultKeyOrdering = if (reverse) {
-        PhysicalDataType.ordering(child.dataType).asInstanceOf[Ordering[AnyRef]].reverse
-      } else {
-        PhysicalDataType.ordering(child.dataType).asInstanceOf[Ordering[AnyRef]]
+    reverseOpt
+      .map { reverse =>
+        val defaultKeyOrdering = if (reverse) {
+          PhysicalDataType.ordering(child.dataType).asInstanceOf[Ordering[AnyRef]].reverse
+        } else {
+          PhysicalDataType.ordering(child.dataType).asInstanceOf[Ordering[AnyRef]]
+        }
+        val ordering = Ordering.Tuple2(Ordering.Long, defaultKeyOrdering)
+        collationAwareBuffer.maxBy { case (key, count) => (count, key) }(ordering)
       }
-      val ordering = Ordering.Tuple2(Ordering.Long, defaultKeyOrdering)
-      collationAwareBuffer.maxBy { case (key, count) => (count, key) }(ordering)
-    }.getOrElse(collationAwareBuffer.maxBy(_._2))._1
+      .getOrElse(collationAwareBuffer.maxBy(_._2))
+      ._1
   }
 
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): Mode =
@@ -171,14 +172,15 @@ case class Mode(
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
   override def sql(isDistinct: Boolean): String = {
-    reverseOpt.map {
-      reverse =>
+    reverseOpt
+      .map { reverse =>
         if (reverse) {
           s"$prettyName() WITHIN GROUP (ORDER BY ${child.sql} DESC)"
         } else {
           s"$prettyName() WITHIN GROUP (ORDER BY ${child.sql})"
         }
-    }.getOrElse(super.sql(isDistinct))
+      }
+      .getOrElse(super.sql(isDistinct))
   }
 
   override def orderingFilled: Boolean = child != UnresolvedWithinGroup
@@ -192,7 +194,9 @@ case class Mode(
       case UnresolvedWithinGroup =>
         if (orderingWithinGroup.length != 1) {
           throw QueryCompilationErrors.wrongNumOrderingsForFunctionError(
-            nodeName, 1, orderingWithinGroup.length)
+            nodeName,
+            1,
+            orderingWithinGroup.length)
         }
         orderingWithinGroup.head match {
           case SortOrder(child, Ascending, _, _) =>
@@ -251,7 +255,9 @@ object ModeBuilder extends ExpressionBuilder {
       // For compatibility with function calls without WITHIN GROUP.
       if (!expressions(1).foldable) {
         throw QueryCompilationErrors.nonFoldableArgumentError(
-          funcName, "deterministic", BooleanType)
+          funcName,
+          "deterministic",
+          BooleanType)
       }
       val deterministicResult = expressions(1).eval()
       if (deterministicResult == null) {
@@ -259,7 +265,10 @@ object ModeBuilder extends ExpressionBuilder {
       }
       if (expressions(1).dataType != BooleanType) {
         throw QueryCompilationErrors.unexpectedInputDataTypeError(
-          funcName, 2, BooleanType, expressions(1))
+          funcName,
+          2,
+          BooleanType,
+          expressions(1))
       }
       if (deterministicResult.asInstanceOf[Boolean]) {
         new Mode(expressions(0), true)
@@ -273,17 +282,18 @@ object ModeBuilder extends ExpressionBuilder {
 }
 
 /**
- * Mode in Pandas' fashion. This expression is dedicated only for Pandas API on Spark.
- * It has two main difference from `Mode`:
- * 1, it accepts NULLs when `ignoreNA` is False;
- * 2, it returns all the modes for a multimodal dataset;
+ * Mode in Pandas' fashion. This expression is dedicated only for Pandas API on Spark. It has two
+ * main difference from `Mode`: 1, it accepts NULLs when `ignoreNA` is False; 2, it returns all
+ * the modes for a multimodal dataset;
  */
 case class PandasMode(
     child: Expression,
     ignoreNA: Boolean = true,
     mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0) extends TypedAggregateWithHashMapAsBuffer
-  with ImplicitCastInputTypes with UnaryLike[Expression] {
+    inputAggBufferOffset: Int = 0)
+    extends TypedAggregateWithHashMapAsBuffer
+    with ImplicitCastInputTypes
+    with UnaryLike[Expression] {
 
   def this(child: Expression) = this(child, true, 0, 0)
 

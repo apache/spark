@@ -64,15 +64,20 @@ class ResolveHintsSuite extends AnalysisTest {
   test("multiple broadcast hint aliases") {
     checkAnalysisWithoutViewWrapper(
       UnresolvedHint("MAPJOIN", Seq("table", "table2"), table("table").join(table("table2"))),
-      Join(ResolvedHint(testRelation, HintInfo(strategy = Some(BROADCAST))),
+      Join(
+        ResolvedHint(testRelation, HintInfo(strategy = Some(BROADCAST))),
         ResolvedHint(testRelation2, HintInfo(strategy = Some(BROADCAST))),
-        Inner, None, JoinHint.NONE),
+        Inner,
+        None,
+        JoinHint.NONE),
       caseSensitive = false)
   }
 
   test("do not traverse past existing broadcast hints") {
     checkAnalysisWithoutViewWrapper(
-      UnresolvedHint("MAPJOIN", Seq("table"),
+      UnresolvedHint(
+        "MAPJOIN",
+        Seq("table"),
         ResolvedHint(table("table").where($"a" > 1), HintInfo(strategy = Some(BROADCAST)))),
       ResolvedHint(testRelation.where($"a" > 1), HintInfo(strategy = Some(BROADCAST))).analyze,
       caseSensitive = false)
@@ -98,34 +103,37 @@ class ResolveHintsSuite extends AnalysisTest {
 
   test("do not traverse past subquery alias") {
     checkAnalysisWithoutViewWrapper(
-      UnresolvedHint("MAPJOIN", Seq("table"), table("table").where($"a" > 1)
-        .subquery("tableAlias")),
+      UnresolvedHint(
+        "MAPJOIN",
+        Seq("table"),
+        table("table")
+          .where($"a" > 1)
+          .subquery("tableAlias")),
       testRelation.where($"a" > 1).analyze,
       caseSensitive = false)
   }
 
   test("should work for CTE") {
     checkAnalysisWithoutViewWrapper(
-      CatalystSqlParser.parsePlan(
-        """
+      CatalystSqlParser.parsePlan("""
           |WITH ctetable AS (SELECT * FROM table WHERE a > 1)
           |SELECT /*+ BROADCAST(ctetable) */ * FROM ctetable
-        """.stripMargin
-      ),
-      ResolvedHint(testRelation.where($"a" > 1).select($"a"), HintInfo(strategy = Some(BROADCAST)))
-        .select($"a").analyze,
+        """.stripMargin),
+      ResolvedHint(
+        testRelation.where($"a" > 1).select($"a"),
+        HintInfo(strategy = Some(BROADCAST)))
+        .select($"a")
+        .analyze,
       caseSensitive = false,
       inlineCTE = true)
   }
 
   test("should not traverse down CTE") {
     checkAnalysisWithoutViewWrapper(
-      CatalystSqlParser.parsePlan(
-        """
+      CatalystSqlParser.parsePlan("""
           |WITH ctetable AS (SELECT * FROM table WHERE a > 1)
           |SELECT /*+ BROADCAST(table) */ * FROM ctetable
-        """.stripMargin
-      ),
+        """.stripMargin),
       testRelation.where($"a" > 1).select($"a").select($"a").analyze,
       caseSensitive = false,
       inlineCTE = true)
@@ -153,9 +161,7 @@ class ResolveHintsSuite extends AnalysisTest {
 
     val errMsg = "COALESCE Hint expects a partition number as a parameter"
 
-    assertAnalysisError(
-      UnresolvedHint("COALESCE", Seq.empty, table("TaBlE")),
-      Seq(errMsg))
+    assertAnalysisError(UnresolvedHint("COALESCE", Seq.empty, table("TaBlE")), Seq(errMsg))
     assertAnalysisError(
       UnresolvedHint("COALESCE", Seq(Literal(10), Literal(false)), table("TaBlE")),
       Seq(errMsg))
@@ -173,42 +179,49 @@ class ResolveHintsSuite extends AnalysisTest {
 
     checkAnalysisWithoutViewWrapper(
       UnresolvedHint("REPARTITION", Seq(UnresolvedAttribute("a")), table("TaBlE")),
-      RepartitionByExpression(
-        Seq(AttributeReference("a", IntegerType)()), testRelation, None))
+      RepartitionByExpression(Seq(AttributeReference("a", IntegerType)()), testRelation, None))
 
     val e = intercept[AnalysisException] {
       checkAnalysis(
-        UnresolvedHint("REPARTITION",
+        UnresolvedHint(
+          "REPARTITION",
           Seq(SortOrder(AttributeReference("a", IntegerType)(), Ascending)),
           table("TaBlE")),
         RepartitionByExpression(
-          Seq(SortOrder(AttributeReference("a", IntegerType)(), Ascending)), testRelation, 10)
-      )
+          Seq(SortOrder(AttributeReference("a", IntegerType)(), Ascending)),
+          testRelation,
+          10))
     }
     e.getMessage.contains("For range partitioning use REPARTITION_BY_RANGE instead")
 
     checkAnalysisWithoutViewWrapper(
       UnresolvedHint(
-        "REPARTITION_BY_RANGE", Seq(Literal(10), UnresolvedAttribute("a")), table("TaBlE")),
-      RepartitionByExpression(
-        Seq(SortOrder(AttributeReference("a", IntegerType)(), Ascending)), testRelation, 10))
-
-    checkAnalysisWithoutViewWrapper(
-      UnresolvedHint(
-        "REPARTITION_BY_RANGE", Seq(UnresolvedAttribute("a")), table("TaBlE")),
+        "REPARTITION_BY_RANGE",
+        Seq(Literal(10), UnresolvedAttribute("a")),
+        table("TaBlE")),
       RepartitionByExpression(
         Seq(SortOrder(AttributeReference("a", IntegerType)(), Ascending)),
-        testRelation, None))
+        testRelation,
+        10))
 
-    val errMsg2 = "REPARTITION Hint parameters should include an optional integral partitionNum " +
-      "and/or columns, but"
+    checkAnalysisWithoutViewWrapper(
+      UnresolvedHint("REPARTITION_BY_RANGE", Seq(UnresolvedAttribute("a")), table("TaBlE")),
+      RepartitionByExpression(
+        Seq(SortOrder(AttributeReference("a", IntegerType)(), Ascending)),
+        testRelation,
+        None))
+
+    val errMsg2 =
+      "REPARTITION Hint parameters should include an optional integral partitionNum " +
+        "and/or columns, but"
 
     assertAnalysisError(
       UnresolvedHint("REPARTITION", Seq(Literal(true)), table("TaBlE")),
       Seq(errMsg2))
 
     assertAnalysisError(
-      UnresolvedHint("REPARTITION",
+      UnresolvedHint(
+        "REPARTITION",
         Seq(Literal(1.0), AttributeReference("a", IntegerType)()),
         table("TaBlE")),
       Seq(errMsg2))
@@ -216,19 +229,19 @@ class ResolveHintsSuite extends AnalysisTest {
     val errMsg3 = "REPARTITION_BY_RANGE Hint parameters should include an optional " +
       "integral partitionNum and/or columns, but"
     assertAnalysisError(
-      UnresolvedHint("REPARTITION_BY_RANGE",
+      UnresolvedHint(
+        "REPARTITION_BY_RANGE",
         Seq(Literal(1.0), AttributeReference("a", IntegerType)()),
         table("TaBlE")),
       Seq(errMsg3))
 
     assertAnalysisError(
-      UnresolvedHint("REPARTITION_BY_RANGE",
-        Seq(Literal(10), Literal(10)),
-        table("TaBlE")),
+      UnresolvedHint("REPARTITION_BY_RANGE", Seq(Literal(10), Literal(10)), table("TaBlE")),
       Seq(errMsg3))
 
     assertAnalysisError(
-      UnresolvedHint("REPARTITION_BY_RANGE",
+      UnresolvedHint(
+        "REPARTITION_BY_RANGE",
         Seq(Literal(10), Literal(10), UnresolvedAttribute("a")),
         table("TaBlE")),
       Seq(errMsg3))
@@ -242,9 +255,10 @@ class ResolveHintsSuite extends AnalysisTest {
         testRelation,
         caseSensitive = false)
     }
-    assert(logAppender.loggingEvents.exists(
-      e => e.getLevel == Level.WARN &&
-        e.getMessage.getFormattedMessage.contains("Unrecognized hint: unknown_hint")))
+    assert(
+      logAppender.loggingEvents.exists(e =>
+        e.getLevel == Level.WARN &&
+          e.getMessage.getFormattedMessage.contains("Unrecognized hint: unknown_hint")))
   }
 
   test("SPARK-30003: Do not throw stack overflow exception in non-root unknown hint resolution") {
@@ -255,14 +269,14 @@ class ResolveHintsSuite extends AnalysisTest {
   }
 
   test("Supports multi-part table names for join strategy hint resolution") {
-    Seq(("MAPJOIN", BROADCAST),
-        ("MERGEJOIN", SHUFFLE_MERGE),
-        ("SHUFFLE_HASH", SHUFFLE_HASH),
-        ("SHUFFLE_REPLICATE_NL", SHUFFLE_REPLICATE_NL)).foreach { case (hintName, st) =>
+    Seq(
+      ("MAPJOIN", BROADCAST),
+      ("MERGEJOIN", SHUFFLE_MERGE),
+      ("SHUFFLE_HASH", SHUFFLE_HASH),
+      ("SHUFFLE_REPLICATE_NL", SHUFFLE_REPLICATE_NL)).foreach { case (hintName, st) =>
       // local temp table (single-part identifier case)
       checkAnalysisWithoutViewWrapper(
-        UnresolvedHint(hintName, Seq("table", "table2"),
-          table("TaBlE").join(table("TaBlE2"))),
+        UnresolvedHint(hintName, Seq("table", "table2"), table("TaBlE").join(table("TaBlE2"))),
         Join(
           ResolvedHint(testRelation, HintInfo(strategy = Some(st))),
           ResolvedHint(testRelation2, HintInfo(strategy = Some(st))),
@@ -272,8 +286,7 @@ class ResolveHintsSuite extends AnalysisTest {
         caseSensitive = false)
 
       checkAnalysisWithoutViewWrapper(
-        UnresolvedHint(hintName, Seq("TaBlE", "table2"),
-          table("TaBlE").join(table("TaBlE2"))),
+        UnresolvedHint(hintName, Seq("TaBlE", "table2"), table("TaBlE").join(table("TaBlE2"))),
         Join(
           ResolvedHint(testRelation, HintInfo(strategy = Some(st))),
           testRelation2,
@@ -284,7 +297,9 @@ class ResolveHintsSuite extends AnalysisTest {
 
       // global temp table (multi-part identifier case)
       checkAnalysisWithoutViewWrapper(
-        UnresolvedHint(hintName, Seq("GlOBal_TeMP.table4", "table5"),
+        UnresolvedHint(
+          hintName,
+          Seq("GlOBal_TeMP.table4", "table5"),
           table("global_temp", "table4").join(table("global_temp", "table5"))),
         Join(
           ResolvedHint(testRelation4, HintInfo(strategy = Some(st))),
@@ -295,7 +310,9 @@ class ResolveHintsSuite extends AnalysisTest {
         caseSensitive = false)
 
       checkAnalysisWithoutViewWrapper(
-        UnresolvedHint(hintName, Seq("global_temp.TaBlE4", "table5"),
+        UnresolvedHint(
+          hintName,
+          Seq("global_temp.TaBlE4", "table5"),
           table("global_temp", "TaBlE4").join(table("global_temp", "TaBlE5"))),
         Join(
           ResolvedHint(testRelation4, HintInfo(strategy = Some(st))),
@@ -352,9 +369,7 @@ class ResolveHintsSuite extends AnalysisTest {
       UnresolvedHint("REBALANCE", Seq(Literal(1), Literal(1)), table("TaBlE")),
       Seq(msg))
 
-    assertAnalysisError(
-      UnresolvedHint("REBALANCE", Seq(1, Literal(1)), table("TaBlE")),
-      Seq(msg))
+    assertAnalysisError(UnresolvedHint("REBALANCE", Seq(1, Literal(1)), table("TaBlE")), Seq(msg))
 
     assertAnalysisError(
       UnresolvedHint("REBALANCE", Seq(1, Literal(Array[Byte](0, 1, 3))), table("TaBlE")),
@@ -367,9 +382,13 @@ class ResolveHintsSuite extends AnalysisTest {
         Nil -> 3,
         Seq(Literal(1)) -> 1,
         Seq(UnresolvedAttribute("a")) -> 3,
-        Seq(Literal(1), UnresolvedAttribute("a")) -> 1).foreach { case (param, numberPartitions) =>
-        assert(UnresolvedHint("REBALANCE", param, testRelation).analyze
-          .asInstanceOf[RebalancePartitions].partitioning.numPartitions == numberPartitions)
+        Seq(Literal(1), UnresolvedAttribute("a")) -> 1).foreach {
+        case (param, numberPartitions) =>
+          assert(
+            UnresolvedHint("REBALANCE", param, testRelation).analyze
+              .asInstanceOf[RebalancePartitions]
+              .partitioning
+              .numPartitions == numberPartitions)
       }
     }
   }

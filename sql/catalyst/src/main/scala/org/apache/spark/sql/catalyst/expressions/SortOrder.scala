@@ -54,18 +54,18 @@ case object NullsLast extends NullOrdering {
 }
 
 /**
- * An expression that can be used to sort a tuple.  This class extends expression primarily so that
- * transformations over expression will descend into its child.
- * `sameOrderExpressions` is a set of expressions with the same sort order as the child. It is
- * derived from equivalence relation in an operator, e.g. left/right keys of an inner sort merge
- * join.
+ * An expression that can be used to sort a tuple. This class extends expression primarily so that
+ * transformations over expression will descend into its child. `sameOrderExpressions` is a set of
+ * expressions with the same sort order as the child. It is derived from equivalence relation in
+ * an operator, e.g. left/right keys of an inner sort merge join.
  */
 case class SortOrder(
     child: Expression,
     direction: SortDirection,
     nullOrdering: NullOrdering,
     sameOrderExpressions: Seq[Expression])
-  extends Expression with Unevaluable {
+    extends Expression
+    with Unevaluable {
 
   override def children: Seq[Expression] = child +: sameOrderExpressions
 
@@ -82,7 +82,7 @@ case class SortOrder(
 
   def satisfies(required: SortOrder): Boolean = {
     children.exists(required.child.semanticEquals) &&
-      direction == required.direction && nullOrdering == required.nullOrdering
+    direction == required.direction && nullOrdering == required.nullOrdering
   }
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): SortOrder =
@@ -91,21 +91,19 @@ case class SortOrder(
 
 object SortOrder {
   def apply(
-     child: Expression,
-     direction: SortDirection,
-     sameOrderExpressions: Seq[Expression] = Seq.empty): SortOrder = {
+      child: Expression,
+      direction: SortDirection,
+      sameOrderExpressions: Seq[Expression] = Seq.empty): SortOrder = {
     new SortOrder(child, direction, direction.defaultNullOrdering, sameOrderExpressions)
   }
 
   /**
    * Returns if a sequence of SortOrder satisfies another sequence of SortOrder.
    *
-   * SortOrder sequence A satisfies SortOrder sequence B if and only if B is an equivalent of A
-   * or of A's prefix. Here are examples of ordering A satisfying ordering B:
-   * <ul>
-   *   <li>ordering A is [x, y] and ordering B is [x]</li>
-   *   <li>ordering A is [x(sameOrderExpressions=x1)] and ordering B is [x1]</li>
-   *   <li>ordering A is [x(sameOrderExpressions=x1), y] and ordering B is [x1]</li>
+   * SortOrder sequence A satisfies SortOrder sequence B if and only if B is an equivalent of A or
+   * of A's prefix. Here are examples of ordering A satisfying ordering B: <ul> <li>ordering A is
+   * [x, y] and ordering B is [x]</li> <li>ordering A is [x(sameOrderExpressions=x1)] and ordering
+   * B is [x1]</li> <li>ordering A is [x(sameOrderExpressions=x1), y] and ordering B is [x1]</li>
    * </ul>
    */
   def orderingSatisfies(ordering1: Seq[SortOrder], ordering2: Seq[SortOrder]): Boolean = {
@@ -114,8 +112,8 @@ object SortOrder {
     } else if (ordering2.length > ordering1.length) {
       false
     } else {
-      ordering2.zip(ordering1).forall {
-        case (o2, o1) => o1.satisfies(o2)
+      ordering2.zip(ordering1).forall { case (o2, o1) =>
+        o1.satisfies(o2)
       }
     }
   }
@@ -129,7 +127,7 @@ case class SortPrefix(child: SortOrder) extends UnaryExpression {
 
   val nullValue = child.child.dataType match {
     case BooleanType | DateType | TimestampType | TimestampNTZType | _: TimeType |
-         _: IntegralType | _: AnsiIntervalType =>
+        _: IntegralType | _: AnsiIntervalType =>
       if (nullAsSmallest) Long.MinValue else Long.MaxValue
     case dt: DecimalType if dt.precision - dt.scale <= Decimal.MAX_LONG_DIGITS =>
       if (nullAsSmallest) Long.MinValue else Long.MaxValue
@@ -145,23 +143,22 @@ case class SortPrefix(child: SortOrder) extends UnaryExpression {
 
   private def nullAsSmallest: Boolean = {
     (child.isAscending && child.nullOrdering == NullsFirst) ||
-      (!child.isAscending && child.nullOrdering == NullsLast)
+    (!child.isAscending && child.nullOrdering == NullsLast)
   }
 
   private lazy val calcPrefix: Any => Long = child.child.dataType match {
-    case BooleanType => (raw) =>
-      if (raw.asInstanceOf[Boolean]) 1 else 0
-    case DateType | TimestampType | TimestampNTZType | _: TimeType |
-         _: IntegralType | _: AnsiIntervalType => (raw) =>
-      raw.asInstanceOf[java.lang.Number].longValue()
-    case FloatType | DoubleType => (raw) => {
-      val dVal = raw.asInstanceOf[java.lang.Number].doubleValue()
-      DoublePrefixComparator.computePrefix(dVal)
-    }
-    case StringType => (raw) =>
-      StringPrefixComparator.computePrefix(raw.asInstanceOf[UTF8String])
-    case BinaryType => (raw) =>
-      BinaryPrefixComparator.computePrefix(raw.asInstanceOf[Array[Byte]])
+    case BooleanType => (raw) => if (raw.asInstanceOf[Boolean]) 1 else 0
+    case DateType | TimestampType | TimestampNTZType | _: TimeType | _: IntegralType |
+        _: AnsiIntervalType =>
+      (raw) => raw.asInstanceOf[java.lang.Number].longValue()
+    case FloatType | DoubleType =>
+      (raw) => {
+        val dVal = raw.asInstanceOf[java.lang.Number].doubleValue()
+        DoublePrefixComparator.computePrefix(dVal)
+      }
+    case StringType => (raw) => StringPrefixComparator.computePrefix(raw.asInstanceOf[UTF8String])
+    case BinaryType =>
+      (raw) => BinaryPrefixComparator.computePrefix(raw.asInstanceOf[Array[Byte]])
     case dt: DecimalType if dt.precision <= Decimal.MAX_LONG_DIGITS =>
       _.asInstanceOf[Decimal].toUnscaledLong
     case dt: DecimalType if dt.precision - dt.scale <= Decimal.MAX_LONG_DIGITS =>
@@ -177,8 +174,8 @@ case class SortPrefix(child: SortOrder) extends UnaryExpression {
           Long.MaxValue
         }
       }
-    case dt: DecimalType => (raw) =>
-      DoublePrefixComparator.computePrefix(raw.asInstanceOf[Decimal].toDouble)
+    case dt: DecimalType =>
+      (raw) => DoublePrefixComparator.computePrefix(raw.asInstanceOf[Decimal].toDouble)
     case _ => (Any) => 0L
   }
 
@@ -215,7 +212,7 @@ case class SortPrefix(child: SortOrder) extends UnaryExpression {
         val p = Decimal.MAX_LONG_DIGITS
         val s = p - (dt.precision - dt.scale)
         s"$input.changePrecision($p, $s) ? $input.toUnscaledLong() : " +
-            s"$input.toBigDecimal().signum() < 0 ? ${Long.MinValue}L : ${Long.MaxValue}L"
+          s"$input.toBigDecimal().signum() < 0 ? ${Long.MinValue}L : ${Long.MaxValue}L"
       case dt: DecimalType =>
         s"$DoublePrefixCmp.computePrefix($input.toDouble())"
       case _ => "0L"

@@ -22,7 +22,6 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData._
 
-
 class PartitionBatchPruningSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
 
   import testImplicits._
@@ -60,16 +59,24 @@ class PartitionBatchPruningSuite extends SharedSparkSession with AdaptiveSparkPl
     super.beforeEach()
     // This creates accumulators, which get cleaned up after every single test,
     // so we need to do this before every test.
-    val pruningData = sparkContext.makeRDD((1 to 100).map { key =>
-      val string = if (((key - 1) / 10) % 2 == 0) null else key.toString
-      TestData(key, string)
-    }, 5).toDF()
+    val pruningData = sparkContext
+      .makeRDD(
+        (1 to 100).map { key =>
+          val string = if (((key - 1) / 10) % 2 == 0) null else key.toString
+          TestData(key, string)
+        },
+        5)
+      .toDF()
     pruningData.createOrReplaceTempView("pruningData")
     spark.catalog.cacheTable("pruningData")
 
-    val pruningStringData = sparkContext.makeRDD((100 to 200).map { key =>
-      StringData(key.toString)
-    }, 5).toDF()
+    val pruningStringData = sparkContext
+      .makeRDD(
+        (100 to 200).map { key =>
+          StringData(key.toString)
+        },
+        5)
+      .toDF()
     pruningStringData.createOrReplaceTempView("pruningStringData")
     spark.catalog.cacheTable("pruningStringData")
 
@@ -112,8 +119,8 @@ class PartitionBatchPruningSuite extends SharedSparkSession with AdaptiveSparkPl
   checkBatchPruning("SELECT _1 FROM pruningArrayData WHERE _1 >= array(1)", 5, 10)(
     testArrayData.map(_._1))
   // Do not filter on binary type
-  checkBatchPruning(
-    "SELECT _1 FROM pruningBinaryData WHERE _1 == binary(chr(1))", 5, 10)(Seq(Array(1.toByte)))
+  checkBatchPruning("SELECT _1 FROM pruningBinaryData WHERE _1 == binary(chr(1))", 5, 10)(
+    Seq(Array(1.toByte)))
 
   // IS NULL
   checkBatchPruning("SELECT key FROM pruningData WHERE value IS NULL", 5, 5) {
@@ -128,8 +135,12 @@ class PartitionBatchPruningSuite extends SharedSparkSession with AdaptiveSparkPl
   // Conjunction and disjunction
   checkBatchPruning("SELECT key FROM pruningData WHERE key > 8 AND key <= 21", 2, 3)(9 to 21)
   checkBatchPruning("SELECT key FROM pruningData WHERE key < 2 OR key > 99", 2, 2)(Seq(1, 100))
-  checkBatchPruning("SELECT key FROM pruningData WHERE key < 12 AND key IS NOT NULL", 1, 2)(1 to 11)
-  checkBatchPruning("SELECT key FROM pruningData WHERE key < 2 OR (key > 78 AND key < 92)", 3, 4) {
+  checkBatchPruning("SELECT key FROM pruningData WHERE key < 12 AND key IS NOT NULL", 1, 2)(
+    1 to 11)
+  checkBatchPruning(
+    "SELECT key FROM pruningData WHERE key < 2 OR (key > 78 AND key < 92)",
+    3,
+    4) {
     Seq(1) ++ (79 to 91)
   }
   checkBatchPruning("SELECT key FROM pruningData WHERE NOT (key < 88)", 1, 2) {
@@ -144,12 +155,14 @@ class PartitionBatchPruningSuite extends SharedSparkSession with AdaptiveSparkPl
   checkBatchPruning("SELECT key FROM pruningData WHERE key IN (1, 11)", 1, 2)(Seq(1, 11))
   checkBatchPruning("SELECT key FROM pruningData WHERE key IN (1, 21, 41, 61, 81)", 5, 5)(
     Seq(1, 21, 41, 61, 81))
-  checkBatchPruning("SELECT CAST(s AS INT) FROM pruningStringData WHERE s = '100'", 1, 1)(Seq(100))
+  checkBatchPruning("SELECT CAST(s AS INT) FROM pruningStringData WHERE s = '100'", 1, 1)(
+    Seq(100))
   checkBatchPruning("SELECT CAST(s AS INT) FROM pruningStringData WHERE s < '102'", 1, 1)(
     Seq(100, 101))
   checkBatchPruning(
-    "SELECT CAST(s AS INT) FROM pruningStringData WHERE s IN ('99', '150', '201')", 1, 1)(
-      Seq(150))
+    "SELECT CAST(s AS INT) FROM pruningStringData WHERE s IN ('99', '150', '201')",
+    1,
+    1)(Seq(150))
   // Do not filter on array type
   checkBatchPruning("SELECT _1 FROM pruningArrayData WHERE _1 IN (array(1), array(2, 2))", 5, 10)(
     Seq(Array(1), Array(2, 2)))
@@ -159,19 +172,21 @@ class PartitionBatchPruningSuite extends SharedSparkSession with AdaptiveSparkPl
     val seq = (1 to 30).mkString(", ")
     checkBatchPruning(s"SELECT key FROM pruningData WHERE key IN ($seq)", 5, 10)(1 to 30)
     checkBatchPruning(s"SELECT key FROM pruningData WHERE NOT (key IN ($seq))", 5, 10)(31 to 100)
-    checkBatchPruning(s"SELECT key FROM pruningData WHERE NOT (key IN ($seq)) AND key > 88", 1, 2) {
+    checkBatchPruning(
+      s"SELECT key FROM pruningData WHERE NOT (key IN ($seq)) AND key > 88",
+      1,
+      2) {
       89 to 100
     }
   }
 
   // Support `StartsWith` predicate
   checkBatchPruning("SELECT CAST(s AS INT) FROM pruningStringData WHERE s like '18%'", 1, 1)(
-    180 to 189
-  )
+    180 to 189)
   checkBatchPruning("SELECT CAST(s AS INT) FROM pruningStringData WHERE s like '%'", 5, 11)(
-    100 to 200
-  )
-  checkBatchPruning("SELECT CAST(s AS INT) FROM pruningStringData WHERE '18%' like s", 5, 11)(Seq())
+    100 to 200)
+  checkBatchPruning("SELECT CAST(s AS INT) FROM pruningStringData WHERE '18%' like s", 5, 11)(
+    Seq())
 
   // With disable IN_MEMORY_PARTITION_PRUNING option
   test("disable IN_MEMORY_PARTITION_PRUNING") {
@@ -182,16 +197,13 @@ class PartitionBatchPruningSuite extends SharedSparkSession with AdaptiveSparkPl
     assert(result.length === 1)
 
     val (readPartitions, readBatches) = collect(df.queryExecution.executedPlan) {
-        case in: InMemoryTableScanExec => (in.readPartitions.value, in.readBatches.value)
-      }.head
+      case in: InMemoryTableScanExec => (in.readPartitions.value, in.readBatches.value)
+    }.head
     assert(readPartitions === 5)
     assert(readBatches === 10)
   }
 
-  def checkBatchPruning(
-      query: String,
-      expectedReadPartitions: Int,
-      expectedReadBatches: Int)(
+  def checkBatchPruning(query: String, expectedReadPartitions: Int, expectedReadBatches: Int)(
       expectedQueryResult: => Seq[Any]): Unit = {
 
     test(query) {
@@ -206,7 +218,9 @@ class PartitionBatchPruningSuite extends SharedSparkSession with AdaptiveSparkPl
         case in: InMemoryTableScanExec => (in.readPartitions.value, in.readBatches.value)
       }.head
 
-      assert(readBatches === expectedReadBatches, s"Wrong number of read batches: $queryExecution")
+      assert(
+        readBatches === expectedReadBatches,
+        s"Wrong number of read batches: $queryExecution")
       assert(
         readPartitions === expectedReadPartitions,
         s"Wrong number of read partitions: $queryExecution")

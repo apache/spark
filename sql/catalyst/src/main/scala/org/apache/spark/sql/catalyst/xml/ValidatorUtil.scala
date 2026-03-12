@@ -35,8 +35,10 @@ import org.apache.spark.internal.LogKeys._
 object ValidatorUtil extends Logging {
   // Parsing XSDs may be slow, so cache them by path:
 
-  private val cache = CacheBuilder.newBuilder().softValues().build(
-    new CacheLoader[String, Schema] {
+  private val cache = CacheBuilder
+    .newBuilder()
+    .softValues()
+    .build(new CacheLoader[String, Schema] {
       override def load(key: String): Schema = {
         val in = openSchemaFile(new Path(key))
         try {
@@ -57,8 +59,9 @@ object ValidatorUtil extends Logging {
       case e: Throwable =>
         // Handle case where it was added with sc.addFile
         // When they are added via sc.addFile, they are always downloaded to local file system
-        logInfo(log"${MDC(XSD_PATH, xsdPath)} was not found, " +
-          log"falling back to look up files added by Spark")
+        logInfo(
+          log"${MDC(XSD_PATH, xsdPath)} was not found, " +
+            log"falling back to look up files added by Spark")
         val f = new File(SparkFiles.get(xsdPath.toString))
         if (f.exists()) {
           new FileInputStream(f)
@@ -71,8 +74,10 @@ object ValidatorUtil extends Logging {
   /**
    * Parses the XSD at the given local path and caches it.
    *
-   * @param path path to XSD
-   * @return Schema for the file at that path
+   * @param path
+   *   path to XSD
+   * @return
+   *   Schema for the file at that path
    */
   def getSchema(path: String): Schema = cache.get(path)
 }

@@ -36,8 +36,8 @@ import org.apache.spark.sql.test.SharedSparkSession
 class LateralColumnAliasSuiteBase extends QueryTest with SharedSparkSession {
   // by default the tests in this suites run with LCA off
   val lcaEnabled: Boolean = false
-  override protected def test(testName: String, testTags: Tag*)(testFun: => Any)
-                             (implicit pos: Position): Unit = {
+  override protected def test(testName: String, testTags: Tag*)(testFun: => Any)(implicit
+      pos: Position): Unit = {
     super.test(testName, testTags: _*) {
       withSQLConf(SQLConf.LATERAL_COLUMN_ALIAS_IMPLICIT_ENABLED.key -> lcaEnabled.toString) {
         testFun
@@ -49,8 +49,7 @@ class LateralColumnAliasSuiteBase extends QueryTest with SharedSparkSession {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    sql(
-      s"""
+    sql(s"""
          |CREATE TABLE $testTable (
          |  dept INTEGER,
          |  name String,
@@ -59,8 +58,7 @@ class LateralColumnAliasSuiteBase extends QueryTest with SharedSparkSession {
          |  properties STRUCT<joinYear INTEGER, mostRecentEmployer STRING>)
          |USING orc
          |""".stripMargin)
-    sql(
-      s"""
+    sql(s"""
          |INSERT INTO $testTable VALUES
          |  (1, 'amy', 10000, 1000, named_struct('joinYear', 2019, 'mostRecentEmployer', 'A')),
          |  (2, 'alex', 12000, 1200, named_struct('joinYear', 2017, 'mostRecentEmployer', 'A')),
@@ -103,31 +101,30 @@ class LateralColumnAliasSuiteBase extends QueryTest with SharedSparkSession {
       Row(20000, 22000))
 
     checkAnswer(
-      sql(s"SELECT named_struct('joinYear', 2022) AS properties, properties.joinYear " +
-        s"FROM $testTable WHERE name = 'amy'"),
+      sql(
+        s"SELECT named_struct('joinYear', 2022) AS properties, properties.joinYear " +
+          s"FROM $testTable WHERE name = 'amy'"),
       Row(Row(2022), 2019))
 
     checkAnswer(
-      sql(s"SELECT named_struct('name', 'someone') AS $testTable, $testTable.name " +
-        s"FROM $testTable WHERE name = 'amy'"),
+      sql(
+        s"SELECT named_struct('name', 'someone') AS $testTable, $testTable.name " +
+          s"FROM $testTable WHERE name = 'amy'"),
       Row(Row("someone"), "amy"))
 
     // CTE table
     checkAnswer(
-      sql(
-        s"""
+      sql(s"""
            |WITH temp_table(x, y) AS (SELECT 1, 2)
            |SELECT 100 AS x, x + 1
            |FROM temp_table
-           |""".stripMargin
-      ),
+           |""".stripMargin),
       Row(100, 2))
   }
 
   test("Lateral alias conflicts with table column - Aggregate") {
     checkAnswer(
-      sql(
-        s"""
+      sql(s"""
            |SELECT
            |  sum(salary) AS salary,
            |  sum(bonus) AS bonus,
@@ -141,25 +138,26 @@ class LateralColumnAliasSuiteBase extends QueryTest with SharedSparkSession {
         Nil)
 
     checkAnswer(
-      sql(s"SELECT avg(bonus) AS dept, dept, avg(salary) " +
-        s"FROM $testTable GROUP BY dept ORDER BY dept"),
-      Row(1100, 1, 9500.0) :: Row(1250, 2, 11000) :: Row(1200, 6, 12000) :: Nil
-    )
+      sql(
+        s"SELECT avg(bonus) AS dept, dept, avg(salary) " +
+          s"FROM $testTable GROUP BY dept ORDER BY dept"),
+      Row(1100, 1, 9500.0) :: Row(1250, 2, 11000) :: Row(1200, 6, 12000) :: Nil)
 
     checkAnswer(
-      sql("SELECT named_struct('joinYear', 2022) AS properties, min(properties.joinYear) " +
-        s"FROM $testTable GROUP BY dept ORDER BY dept"),
+      sql(
+        "SELECT named_struct('joinYear', 2022) AS properties, min(properties.joinYear) " +
+          s"FROM $testTable GROUP BY dept ORDER BY dept"),
       Row(Row(2022), 2019) :: Row(Row(2022), 2017) :: Row(Row(2022), 2018) :: Nil)
 
     checkAnswer(
-      sql(s"SELECT named_struct('salary', 20000) AS $testTable, avg($testTable.salary) " +
-        s"FROM $testTable GROUP BY dept ORDER BY dept"),
+      sql(
+        s"SELECT named_struct('salary', 20000) AS $testTable, avg($testTable.salary) " +
+          s"FROM $testTable GROUP BY dept ORDER BY dept"),
       Row(Row(20000), 9500) :: Row(Row(20000), 11000) :: Row(Row(20000), 12000) :: Nil)
 
     // CTE table
     checkAnswer(
-      sql(
-        s"""
+      sql(s"""
            |WITH temp_table(x, y) AS (SELECT 1, 2)
            |SELECT 100 AS x, x + 1
            |FROM temp_table
@@ -177,36 +175,39 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
   override val lcaEnabled: Boolean = true
 
   // mark special testcases test both LCA on and off
-  protected def testOnAndOff(testName: String, testTags: Tag*)(testFun: => Any)
-                            (implicit pos: Position): Unit = {
+  protected def testOnAndOff(testName: String, testTags: Tag*)(testFun: => Any)(implicit
+      pos: Position): Unit = {
     super.test(testName, testTags: _*)(testFun)
   }
 
   private def checkDuplicatedAliasErrorHelper(
-      query: String, parameters: Map[String, String]): Unit = {
+      query: String,
+      parameters: Map[String, String]): Unit = {
     checkError(
-      exception = intercept[AnalysisException] {sql(query)},
+      exception = intercept[AnalysisException] { sql(query) },
       condition = "AMBIGUOUS_LATERAL_COLUMN_ALIAS",
       sqlState = "42702",
-      parameters = parameters
-    )
+      parameters = parameters)
   }
 
   private def checkLCAUnsupportedInWindowErrorHelper(
-      query: String, lca: String, windowExprRegex: String): Unit = {
+      query: String,
+      lca: String,
+      windowExprRegex: String): Unit = {
     checkErrorMatchPVals(
-      exception = intercept[AnalysisException] {sql(query)},
+      exception = intercept[AnalysisException] { sql(query) },
       condition = "UNSUPPORTED_FEATURE.LATERAL_COLUMN_ALIAS_IN_WINDOW",
-      parameters = Map("lca" -> lca, "windowExpr" -> windowExprRegex)
-    )
+      parameters = Map("lca" -> lca, "windowExpr" -> windowExprRegex))
   }
 
   private def checkAnswerWhenOnAndExceptionWhenOff(
-      query: String, expectedAnswerLCAOn: Seq[Row]): Unit = {
+      query: String,
+      expectedAnswerLCAOn: Seq[Row]): Unit = {
     withLCAOn { checkAnswer(sql(query), expectedAnswerLCAOn) }
     withLCAOff {
-      assert(intercept[AnalysisException]{ sql(query) }
-        .getCondition == "UNRESOLVED_COLUMN.WITH_SUGGESTION")
+      assert(intercept[AnalysisException] {
+        sql(query)
+      }.getCondition == "UNRESOLVED_COLUMN.WITH_SUGGESTION")
     }
   }
 
@@ -265,10 +266,7 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
         },
         condition = "UNSUPPORTED_FEATURE.LATERAL_COLUMN_ALIAS_IN_AGGREGATE_FUNC",
         sqlState = "0A000",
-        parameters = Map(
-          "lca" -> "`lca`",
-          "aggFunc" -> "\"count(lateralAliasReference(lca))\""
-        )))
+        parameters = Map("lca" -> "`lca`", "aggFunc" -> "\"count(lateralAliasReference(lca))\"")))
     withLCAOn(
       checkError(
         exception = intercept[AnalysisException] {
@@ -276,10 +274,7 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
         },
         condition = "UNSUPPORTED_FEATURE.LATERAL_COLUMN_ALIAS_IN_AGGREGATE_FUNC",
         sqlState = "0A000",
-        parameters = Map(
-          "lca" -> "`lca`",
-          "aggFunc" -> "\"avg(lateralAliasReference(lca))\""
-        )))
+        parameters = Map("lca" -> "`lca`", "aggFunc" -> "\"avg(lateralAliasReference(lca))\"")))
     // doesn't support nested aggregate expressions
     withLCAOn(
       checkError(
@@ -288,14 +283,11 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
         },
         condition = "UNSUPPORTED_FEATURE.LATERAL_COLUMN_ALIAS_IN_AGGREGATE_FUNC",
         sqlState = "0A000",
-        parameters = Map(
-          "lca" -> "`a`",
-          "aggFunc" -> "\"avg(lateralAliasReference(a))\""
-        )))
+        parameters = Map("lca" -> "`a`", "aggFunc" -> "\"avg(lateralAliasReference(a))\"")))
 
     // literal as LCA, used in various cases of expressions
     checkAnswerWhenOnAndExceptionWhenOff(
-        s"""
+      s"""
            |SELECT
            |  10000 AS baseline_salary,
            |  baseline_salary * 1.5,
@@ -307,12 +299,11 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
            |""".stripMargin,
       Row(10000, 15000.0, 20000, 11100.0) ::
         Row(10000, 15000.0, 30000, 11250.0) ::
-        Row(10000, 15000.0, 70000, 11200.0) :: Nil
-    )
+        Row(10000, 15000.0, 70000, 11200.0) :: Nil)
 
     // grouping attribute as LCA, used in various cases of expressions
     checkAnswerWhenOnAndExceptionWhenOff(
-        s"""
+      s"""
            |SELECT
            |  salary + 1000 AS new_salary,
            |  new_salary - 1000 AS prev_salary,
@@ -324,12 +315,11 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
            |""".stripMargin,
       Row(10000, 9000, 1000, 1000.0) ::
         Row(11000, 10000, 1000, 1000.0) ::
-        Row(13000, 12000, 1000, 1000.0) :: Nil
-    )
+        Row(13000, 12000, 1000, 1000.0) :: Nil)
 
     // aggregate expression as LCA, used in various cases of expressions
     checkAnswerWhenOnAndExceptionWhenOff(
-        s"""
+      s"""
            |SELECT
            |  sum(salary) AS dept_salary_sum,
            |  sum(bonus) AS dept_bonus_sum,
@@ -346,17 +336,14 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
       Row(19000, 2200, 28500.0, "19000: dept1", 21200, 21200, 25350, 25350) ::
         Row(22000, 2500, 33000.0, "22000: dept2", 24500, 24500, 27750, 27750) ::
         Row(12000, 1200, 18000.0, "12000: dept6", 13200, 13200, 29200, 29200) ::
-        Nil
-    )
+        Nil)
     checkAnswerWhenOnAndExceptionWhenOff(
       s"SELECT sum(salary) AS s, s + sum(bonus) AS total FROM $testTable",
-      Row(53000, 58900) :: Nil
-    )
+      Row(53000, 58900) :: Nil)
 
     // grouping expression are correctly recognized and pushed down
     checkAnswer(
-      sql(
-        s"""
+      sql(s"""
            |SELECT dept AS a, dept + 10 AS b, avg(salary) + dept, avg(salary) AS c,
            |       c + dept, avg(salary + dept), count(dept)
            |FROM $testTable GROUP BY dept ORDER BY dept
@@ -367,15 +354,12 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
 
     // two grouping expressions
     checkAnswer(
-      sql(
-        s"""
+      sql(s"""
            |SELECT dept + salary, avg(salary) + dept, avg(bonus) AS c, c + salary + dept,
            |       avg(bonus) + salary
            |FROM $testTable GROUP BY dept, salary  HAVING dept = 2 ORDER BY dept, salary
-           |""".stripMargin
-      ),
-      Row(10002, 10002, 1300, 11302, 11300) :: Row(12002, 12002, 1200, 13202, 13200) :: Nil
-    )
+           |""".stripMargin),
+      Row(10002, 10002, 1300, 11302, 11300) :: Row(12002, 12002, 1200, 13202, 13200) :: Nil)
 
     // LCA and conflicted table column mixed
     checkAnswerWhenOnAndExceptionWhenOff(
@@ -397,92 +381,78 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
     // Has duplicated names but not referenced is fine
     checkAnswer(
       sql(s"SELECT salary AS d, bonus AS d FROM $testTable WHERE name = 'jen'"),
-      Row(12000, 1200)
-    )
+      Row(12000, 1200))
     checkAnswer(
       sql(s"SELECT salary AS d, d, 10000 AS d FROM $testTable WHERE name = 'jen'"),
-      Row(12000, 12000, 10000)
-    )
+      Row(12000, 12000, 10000))
     checkAnswer(
       sql(s"SELECT salary * 1.5 AS d, d, 10000 AS d FROM $testTable WHERE name = 'jen'"),
-      Row(18000, 18000, 10000)
-    )
+      Row(18000, 18000, 10000))
     checkAnswer(
-      sql(s"SELECT salary + 1000 AS new_salary, new_salary * 1.0 AS new_salary " +
-        s"FROM $testTable WHERE name = 'jen'"),
+      sql(
+        s"SELECT salary + 1000 AS new_salary, new_salary * 1.0 AS new_salary " +
+          s"FROM $testTable WHERE name = 'jen'"),
       Row(13000, 13000.0))
 
     // Referencing duplicated names raises error
     checkDuplicatedAliasErrorHelper(
       s"SELECT salary * 1.5 AS d, d, 10000 AS d, d + 1 FROM $testTable",
-      parameters = Map("name" -> "`d`", "n" -> "2")
-    )
+      parameters = Map("name" -> "`d`", "n" -> "2"))
     checkDuplicatedAliasErrorHelper(
       s"SELECT 10000 AS d, d * 1.0, salary * 1.5 AS d, d FROM $testTable",
-      parameters = Map("name" -> "`d`", "n" -> "2")
-    )
+      parameters = Map("name" -> "`d`", "n" -> "2"))
     checkDuplicatedAliasErrorHelper(
       s"SELECT salary AS d, d + 1 AS d, d + 1 AS d FROM $testTable",
-      parameters = Map("name" -> "`d`", "n" -> "2")
-    )
+      parameters = Map("name" -> "`d`", "n" -> "2"))
     checkDuplicatedAliasErrorHelper(
       s"SELECT salary * 1.5 AS d, d, bonus * 1.5 AS d, d + d FROM $testTable",
-      parameters = Map("name" -> "`d`", "n" -> "2")
-    )
+      parameters = Map("name" -> "`d`", "n" -> "2"))
 
     checkAnswer(
-      sql(
-        s"""
+      sql(s"""
            |SELECT salary * 1.5 AS salary, salary, 10000 AS salary, salary
            |FROM $testTable
            |WHERE name = 'jen'
            |""".stripMargin),
-      Row(18000, 12000, 10000, 12000)
-    )
+      Row(18000, 12000, 10000, 12000))
   }
 
   test("Duplicated lateral alias names - Aggregate") {
     // Has duplicated names but not referenced is fine
     checkAnswer(
       sql(s"SELECT dept AS d, name AS d FROM $testTable GROUP BY dept, name ORDER BY dept, name"),
-      Row(1, "amy") :: Row(1, "cathy") :: Row(2, "alex") :: Row(2, "david") :: Row(6, "jen") :: Nil
-    )
+      Row(1, "amy") :: Row(1, "cathy") :: Row(2, "alex") :: Row(2, "david") :: Row(
+        6,
+        "jen") :: Nil)
     checkAnswer(
       sql(s"SELECT dept AS d, d, 10 AS d FROM $testTable GROUP BY dept ORDER BY dept"),
-      Row(1, 1, 10) :: Row(2, 2, 10) :: Row(6, 6, 10) :: Nil
-    )
-    checkAnswer(
-      sql(s"SELECT sum(salary * 1.5) AS d, d, 10 AS d FROM $testTable GROUP BY dept ORDER BY dept"),
-      Row(28500, 28500, 10) :: Row(33000, 33000, 10) :: Row(18000, 18000, 10) :: Nil
-    )
+      Row(1, 1, 10) :: Row(2, 2, 10) :: Row(6, 6, 10) :: Nil)
     checkAnswer(
       sql(
-        s"""
+        s"SELECT sum(salary * 1.5) AS d, d, 10 AS d FROM $testTable GROUP BY dept ORDER BY dept"),
+      Row(28500, 28500, 10) :: Row(33000, 33000, 10) :: Row(18000, 18000, 10) :: Nil)
+    checkAnswer(
+      sql(s"""
            |SELECT sum(salary * 1.5) AS d, d, d + sum(bonus) AS d
            |FROM $testTable
            |GROUP BY dept
            |ORDER BY dept
            |""".stripMargin),
-      Row(28500, 28500, 30700) :: Row(33000, 33000, 35500) :: Row(18000, 18000, 19200) :: Nil
-    )
+      Row(28500, 28500, 30700) :: Row(33000, 33000, 35500) :: Row(18000, 18000, 19200) :: Nil)
 
     // Referencing duplicated names raises error
     checkDuplicatedAliasErrorHelper(
       s"SELECT dept * 2.0 AS d, d, 10000 AS d, d + 1 FROM $testTable GROUP BY dept",
-      parameters = Map("name" -> "`d`", "n" -> "2")
-    )
+      parameters = Map("name" -> "`d`", "n" -> "2"))
     checkDuplicatedAliasErrorHelper(
       s"SELECT 10000 AS d, d * 1.0, dept * 2.0 AS d, d FROM $testTable GROUP BY dept",
-      parameters = Map("name" -> "`d`", "n" -> "2")
-    )
+      parameters = Map("name" -> "`d`", "n" -> "2"))
     checkDuplicatedAliasErrorHelper(
       s"SELECT avg(salary) AS d, d * 1.0, avg(bonus * 1.5) AS d, d FROM $testTable GROUP BY dept",
-      parameters = Map("name" -> "`d`", "n" -> "2")
-    )
+      parameters = Map("name" -> "`d`", "n" -> "2"))
     checkDuplicatedAliasErrorHelper(
       s"SELECT dept AS d, d + 1 AS d, d + 1 AS d FROM $testTable GROUP BY dept",
-      parameters = Map("name" -> "`d`", "n" -> "2")
-    )
+      parameters = Map("name" -> "`d`", "n" -> "2"))
 
     checkAnswer(
       sql(s"""
@@ -491,8 +461,7 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
              |GROUP BY dept
              |HAVING dept = 6
              |""".stripMargin),
-      Row(18000, 12000, 6, 12000)
-    )
+      Row(18000, 12000, 6, 12000))
   }
 
   testOnAndOff("Lateral alias conflicts with OuterReference - Project") {
@@ -526,10 +495,7 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
         condition = "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
         sqlState = "42703",
         parameters = Map("objectName" -> s"`id1`"),
-        context = ExpectedContext(
-          fragment = "id1",
-          start = 73,
-          stop = 75))
+        context = ExpectedContext(fragment = "id1", start = 73, stop = 75))
     }
     withLCAOn { checkAnswer(sql(query2), Seq.empty) }
 
@@ -548,7 +514,7 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
     // a bit complex subquery that the id + 1 is first wrapped with OuterReference
     // test if lca rule strips the OuterReference and resolves to lateral alias
     val query4 =
-    s"""
+      s"""
        |SELECT *
        |FROM range(1, 7)
        |WHERE (
@@ -560,10 +526,7 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
       val exception = intercept[SparkRuntimeException] {
         sql(query4).collect()
       }
-      checkError(
-        exception,
-        condition = "SCALAR_SUBQUERY_TOO_MANY_ROWS"
-      )
+      checkError(exception, condition = "SCALAR_SUBQUERY_TOO_MANY_ROWS")
     }
     withLCAOn {
       val analyzedPlan = sql(query4).queryExecution.analyzed
@@ -596,21 +559,24 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
         sql(s"SELECT named_struct('a', 1) AS foo, foo.a + 1 AS bar, bar + 1 $querySuffix"),
         Row(Row(1), 2, 3))
       checkAnswer(
-        sql("SELECT named_struct('a', named_struct('b', 1)) AS foo, foo.a.b + 1 AS bar " +
-          s"$querySuffix"),
+        sql(
+          "SELECT named_struct('a', named_struct('b', 1)) AS foo, foo.a.b + 1 AS bar " +
+            s"$querySuffix"),
         Row(Row(Row(1)), 2))
 
       checkAnswer(
         sql(s"SELECT array(1, 2, 3) AS foo, foo[1] AS bar, bar + 1 $querySuffix"),
         Row(Seq(1, 2, 3), 2, 3))
       checkAnswer(
-        sql("SELECT array(array(1, 2), array(1, 2, 3), array(100)) AS foo, foo[2][0] + 1 AS bar " +
+        sql(
+          "SELECT array(array(1, 2), array(1, 2, 3), array(100)) AS foo, foo[2][0] + 1 AS bar " +
             s"$querySuffix"),
-          Row(Seq(Seq(1, 2), Seq(1, 2, 3), Seq(100)), 101))
+        Row(Seq(Seq(1, 2), Seq(1, 2, 3), Seq(100)), 101))
       checkAnswer(
-        sql("SELECT array(named_struct('a', 1), named_struct('a', 2)) AS foo, foo[0].a + 1 AS bar" +
+        sql(
+          "SELECT array(named_struct('a', 1), named_struct('a', 2)) AS foo, foo[0].a + 1 AS bar" +
             s" $querySuffix"),
-          Row(Seq(Row(1), Row(2)), 2))
+        Row(Seq(Row(1), Row(2)), 2))
 
       checkAnswer(
         sql(s"SELECT map('a', 1, 'b', 2) AS foo, foo['b'] AS bar, bar + 1 $querySuffix"),
@@ -618,144 +584,146 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
     }
 
     checkAnswer(
-      sql("SELECT named_struct('s', salary * 1.0) AS foo, foo.s + 1 AS bar, bar + 1 " +
-        s"FROM $testTable WHERE dept = 1 ORDER BY name"),
+      sql(
+        "SELECT named_struct('s', salary * 1.0) AS foo, foo.s + 1 AS bar, bar + 1 " +
+          s"FROM $testTable WHERE dept = 1 ORDER BY name"),
       Row(Row(10000), 10001, 10002) :: Row(Row(9000), 9001, 9002) :: Nil)
 
     checkAnswer(
-      sql(s"SELECT properties AS foo, foo.joinYear AS bar, bar + 1 " +
-        s"FROM $testTable GROUP BY properties HAVING properties.mostRecentEmployer = 'B'"),
+      sql(
+        s"SELECT properties AS foo, foo.joinYear AS bar, bar + 1 " +
+          s"FROM $testTable GROUP BY properties HAVING properties.mostRecentEmployer = 'B'"),
       Row(Row(2020, "B"), 2020, 2021))
 
     checkAnswer(
-      sql(s"SELECT named_struct('avg_salary', avg(salary)) AS foo, foo.avg_salary + 1 AS bar " +
-        s"FROM $testTable GROUP BY dept ORDER BY dept"),
+      sql(
+        s"SELECT named_struct('avg_salary', avg(salary)) AS foo, foo.avg_salary + 1 AS bar " +
+          s"FROM $testTable GROUP BY dept ORDER BY dept"),
       Row(Row(9500), 9501) :: Row(Row(11000), 11001) :: Row(Row(12000), 12001) :: Nil)
 
     // test Window
     checkLCAUnsupportedInWindowErrorHelper(
       "select named_struct('s', salary * 1.0) as foo, " +
         s"sum(foo.s) over (partition by dept order by bonus) from $testTable",
-      lca = "`foo`.`s`", windowExprRegex = "\"sum.*\"")
+      lca = "`foo`.`s`",
+      windowExprRegex = "\"sum.*\"")
     checkLCAUnsupportedInWindowErrorHelper(
       "select named_struct('s', named_struct('b', sum(salary) * 1.0)) as foo, " +
         s"rank() over (partition by foo.s.b order by avg(bonus)) from $testTable group by dept",
-      lca = "`foo`.`s`.`b`", windowExprRegex = "\"RANK.*\"")
+      lca = "`foo`.`s`.`b`",
+      windowExprRegex = "\"RANK.*\"")
     checkLCAUnsupportedInWindowErrorHelper(
       "select dept, array(array(1, 2), array(1, 2, 3), array(100)) as foo, " +
         s"rank() over (partition by foo[2][0] order by dept) from $testTable where dept in (1, 6)",
-      lca = "`foo`", windowExprRegex = "\"RANK.*\"")
+      lca = "`foo`",
+      windowExprRegex = "\"RANK.*\"")
     checkLCAUnsupportedInWindowErrorHelper(
       "select dept, array(named_struct('a', 1), named_struct('a', 2)) as foo, " +
         s"sum(foo[0].a + 1) over (partition by min(bonus) order by dept) " +
         s"from $testTable group by dept",
-      lca = "`foo`", windowExprRegex = "\"sum.*\"")
+      lca = "`foo`",
+      windowExprRegex = "\"sum.*\"")
     checkLCAUnsupportedInWindowErrorHelper(
       s"SELECT dept, map('a', 1, 'b', 2) AS foo, foo['b'] AS bar, bar + 1, " +
         s"rank() over (partition by max(bonus) order by bar)" +
         s"from $testTable group by dept",
-      lca = "`bar`", windowExprRegex = "\"RANK.*\"")
+      lca = "`bar`",
+      windowExprRegex = "\"RANK.*\"")
   }
 
   test("Lateral alias reference works with having and order by") {
     // order by is resolved by an attribute in project / aggregate
     // this is not in the scope of lateral alias feature but things already supported
     checkAnswer(
-      sql(s"SELECT properties AS new_properties, new_properties.joinYear AS new_join_year " +
-        s"FROM $testTable WHERE dept = 1 ORDER BY new_join_year DESC"),
-      Row(Row(2020, "B"), 2020) :: Row(Row(2019, "A"), 2019) :: Nil
-    )
+      sql(
+        s"SELECT properties AS new_properties, new_properties.joinYear AS new_join_year " +
+          s"FROM $testTable WHERE dept = 1 ORDER BY new_join_year DESC"),
+      Row(Row(2020, "B"), 2020) :: Row(Row(2019, "A"), 2019) :: Nil)
     checkAnswer(
-      sql(s"SELECT avg(bonus) AS avg_bonus, avg_bonus * 1.0 AS new_avg_bonus, avg(salary) " +
-        s"FROM $testTable GROUP BY dept ORDER BY new_avg_bonus"),
-      Row(1100, 1100, 9500.0) :: Row(1200, 1200, 12000) :: Row(1250, 1250, 11000) :: Nil
-    )
+      sql(
+        s"SELECT avg(bonus) AS avg_bonus, avg_bonus * 1.0 AS new_avg_bonus, avg(salary) " +
+          s"FROM $testTable GROUP BY dept ORDER BY new_avg_bonus"),
+      Row(1100, 1100, 9500.0) :: Row(1200, 1200, 12000) :: Row(1250, 1250, 11000) :: Nil)
     checkAnswer(
-      sql(s"SELECT avg(bonus) AS dept, dept, avg(salary) AS a, a + 10 AS b " +
-        s"FROM $testTable GROUP BY dept ORDER BY dept"),
-      Row(1100, 1, 9500, 9510) :: Row(1250, 2, 11000, 11010) :: Row(1200, 6, 12000, 12010) :: Nil
-    )
+      sql(
+        s"SELECT avg(bonus) AS dept, dept, avg(salary) AS a, a + 10 AS b " +
+          s"FROM $testTable GROUP BY dept ORDER BY dept"),
+      Row(1100, 1, 9500, 9510) :: Row(1250, 2, 11000, 11010) :: Row(1200, 6, 12000, 12010) :: Nil)
     // order by is resolved by aggregate's child
     checkAnswer(
-      sql(s"SELECT avg(bonus) AS dept, dept, avg(salary) AS a, a + 10 AS b " +
-        s"FROM $testTable GROUP BY dept ORDER BY max(name)"),
-      Row(1100, 1, 9500, 9510) :: Row(1250, 2, 11000, 11010) :: Row(1200, 6, 12000, 12010) :: Nil
-    )
+      sql(
+        s"SELECT avg(bonus) AS dept, dept, avg(salary) AS a, a + 10 AS b " +
+          s"FROM $testTable GROUP BY dept ORDER BY max(name)"),
+      Row(1100, 1, 9500, 9510) :: Row(1250, 2, 11000, 11010) :: Row(1200, 6, 12000, 12010) :: Nil)
     checkAnswer(
-      sql(s"SELECT avg(bonus) AS dept, dept, avg(salary) AS a, a " + // no extra calculation
-        s"FROM $testTable GROUP BY dept ORDER BY dept"),
-      Row(1100, 1, 9500, 9500) :: Row(1250, 2, 11000, 11000) :: Row(1200, 6, 12000, 12000) :: Nil
-    )
+      sql(
+        s"SELECT avg(bonus) AS dept, dept, avg(salary) AS a, a " + // no extra calculation
+          s"FROM $testTable GROUP BY dept ORDER BY dept"),
+      Row(1100, 1, 9500, 9500) :: Row(1250, 2, 11000, 11000) :: Row(1200, 6, 12000, 12000) :: Nil)
     checkAnswer(
-      sql(s"SELECT dept as a, a " + // even no extra function resolution
-        s"FROM $testTable GROUP BY dept ORDER BY max(name)"),
-      Row(1, 1) :: Row(2, 2) :: Row(6, 6) :: Nil
-    )
+      sql(
+        s"SELECT dept as a, a " + // even no extra function resolution
+          s"FROM $testTable GROUP BY dept ORDER BY max(name)"),
+      Row(1, 1) :: Row(2, 2) :: Row(6, 6) :: Nil)
     checkAnswer(
       sql("SELECT dept, avg(salary) AS a, a + 10 FROM employee GROUP BY dept ORDER BY max(name)"),
-      Row(1, 9500, 9510) :: Row(2, 11000, 11010) :: Row(6, 12000, 12010) :: Nil
-    )
+      Row(1, 9500, 9510) :: Row(2, 11000, 11010) :: Row(6, 12000, 12010) :: Nil)
     checkAnswer(
-      sql("SELECT dept, avg(salary) AS a, a + 10 AS b " +
-        "FROM employee GROUP BY dept ORDER BY max(name)"),
-      Row(1, 9500, 9510) :: Row(2, 11000, 11010) :: Row(6, 12000, 12010) :: Nil
-    )
+      sql(
+        "SELECT dept, avg(salary) AS a, a + 10 AS b " +
+          "FROM employee GROUP BY dept ORDER BY max(name)"),
+      Row(1, 9500, 9510) :: Row(2, 11000, 11010) :: Row(6, 12000, 12010) :: Nil)
     checkAnswer(
-      sql("SELECT dept, avg(salary) AS a, a + cast(10 as double) AS b " +
-        "FROM employee GROUP BY dept ORDER BY max(name)"),
-      Row(1, 9500, 9510) :: Row(2, 11000, 11010) :: Row(6, 12000, 12010) :: Nil
-    )
+      sql(
+        "SELECT dept, avg(salary) AS a, a + cast(10 as double) AS b " +
+          "FROM employee GROUP BY dept ORDER BY max(name)"),
+      Row(1, 9500, 9510) :: Row(2, 11000, 11010) :: Row(6, 12000, 12010) :: Nil)
 
     // having cond is resolved by aggregate's child
     checkAnswer(
-      sql(s"SELECT avg(bonus) AS dept, dept, avg(salary) AS a, a + 10 AS b " +
-        s"FROM $testTable GROUP BY dept HAVING max(name) = 'david'"),
-      Row(1250, 2, 11000, 11010) :: Nil
-    )
+      sql(
+        s"SELECT avg(bonus) AS dept, dept, avg(salary) AS a, a + 10 AS b " +
+          s"FROM $testTable GROUP BY dept HAVING max(name) = 'david'"),
+      Row(1250, 2, 11000, 11010) :: Nil)
     checkAnswer(
-      sql("SELECT dept, avg(salary) AS a, a + 10 " +
-        "FROM employee GROUP BY dept HAVING max(bonus) > 1200"),
-      Row(2, 11000, 11010) :: Nil
-    )
+      sql(
+        "SELECT dept, avg(salary) AS a, a + 10 " +
+          "FROM employee GROUP BY dept HAVING max(bonus) > 1200"),
+      Row(2, 11000, 11010) :: Nil)
     checkAnswer(
-      sql("SELECT dept, avg(salary) AS a, a + 10 AS b " +
-        "FROM employee GROUP BY dept HAVING max(bonus) > 1200"),
-      Row(2, 11000, 11010) :: Nil
-    )
+      sql(
+        "SELECT dept, avg(salary) AS a, a + 10 AS b " +
+          "FROM employee GROUP BY dept HAVING max(bonus) > 1200"),
+      Row(2, 11000, 11010) :: Nil)
     checkAnswer(
-      sql("SELECT dept, avg(salary) AS a, a + cast(10 as double) AS b " +
-        "FROM employee GROUP BY dept HAVING max(bonus) > 1200"),
-      Row(2, 11000, 11010) :: Nil
-    )
+      sql(
+        "SELECT dept, avg(salary) AS a, a + cast(10 as double) AS b " +
+          "FROM employee GROUP BY dept HAVING max(bonus) > 1200"),
+      Row(2, 11000, 11010) :: Nil)
     // having cond is resolved by aggregate itself
     checkAnswer(
       sql(s"SELECT avg(bonus) AS a, a FROM $testTable GROUP BY dept HAVING a > 1200"),
-      Row(1250, 1250) :: Nil
-    )
+      Row(1250, 1250) :: Nil)
   }
 
   test("Lateral alias chaining") {
     // Project
     checkAnswer(
-      sql(
-        s"""
+      sql(s"""
            |SELECT bonus * 1.1 AS new_bonus, salary + new_bonus AS new_base,
            |       new_base * 1.1 AS new_total, new_total - new_base AS r,
            |       new_total - r
            |FROM $testTable WHERE name = 'cathy'
            |""".stripMargin),
-      Row(1320, 10320, 11352, 1032, 10320)
-    )
+      Row(1320, 10320, 11352, 1032, 10320))
 
     checkAnswer(
       sql("SELECT 1 AS a, a + 1 AS b, b - 1, b + 1 AS c, c + 1 AS d, d - a AS e, e + 1"),
-      Row(1, 2, 1, 3, 4, 3, 4)
-    )
+      Row(1, 2, 1, 3, 4, 3, 4))
 
     // Aggregate
     checkAnswer(
-      sql(
-        s"""
+      sql(s"""
            |SELECT
            |  dept,
            |  sum(salary) AS salary_sum,
@@ -768,8 +736,7 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
            |""".stripMargin),
       Row(1, 19000, 21200, 31800.0, 12800.0) ::
         Row(2, 22000, 24500, 36750.0, 14750.0) ::
-        Row(6, 12000, 13200, 19800.0, 7800.0) :: Nil
-    )
+        Row(6, 12000, 13200, 19800.0, 7800.0) :: Nil)
   }
 
   test("non-deterministic expression as LCA is evaluated only once") {
@@ -793,8 +760,7 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
         sql(s"SELECT salary AS new_salary, New_Salary + 1 FROM $testTable WHERE name = 'jen'"),
         Row(12000, 12001))
       checkAnswer(
-        sql(
-          s"""
+        sql(s"""
              |SELECT avg(salary) AS AVG_SALARY, avg_salary + avg(bonus)
              |FROM $testTable
              |GROUP BY dept
@@ -811,38 +777,33 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
       },
       condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       sqlState = "42703",
-      parameters = Map("objectName" -> s"`new_dep`",
+      parameters = Map(
+        "objectName" -> s"`new_dep`",
         "proposal" -> "`dept`, `name`, `bonus`, `salary`, `properties`"),
-      context = ExpectedContext(
-        fragment = "new_dep",
-        start = 33,
-        stop = 39))
+      context = ExpectedContext(fragment = "new_dep", start = 33, stop = 39))
 
     checkError(
       exception = intercept[AnalysisException] {
-        sql(s"SELECT count(name) AS cnt, cnt + 1, count(unresovled) FROM $testTable GROUP BY dept")
+        sql(
+          s"SELECT count(name) AS cnt, cnt + 1, count(unresovled) FROM $testTable GROUP BY dept")
       },
       condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       sqlState = "42703",
-      parameters = Map("objectName" -> s"`unresovled`",
+      parameters = Map(
+        "objectName" -> s"`unresovled`",
         "proposal" -> "`name`, `bonus`, `dept`, `properties`, `salary`"),
-      context = ExpectedContext(
-        fragment = "unresovled",
-        start = 42,
-        stop = 51))
+      context = ExpectedContext(fragment = "unresovled", start = 42, stop = 51))
 
     checkError(
       exception = intercept[AnalysisException] {
-        sql(s"SELECT * FROM range(1, 7) WHERE (" +
-          s"SELECT id2 FROM (SELECT 1 AS id, other_id + 1 AS id2)) > 5")
+        sql(
+          s"SELECT * FROM range(1, 7) WHERE (" +
+            s"SELECT id2 FROM (SELECT 1 AS id, other_id + 1 AS id2)) > 5")
       },
       condition = "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
       sqlState = "42703",
       parameters = Map("objectName" -> s"`other_id`"),
-      context = ExpectedContext(
-        fragment = "other_id",
-        start = 66,
-        stop = 73))
+      context = ExpectedContext(fragment = "other_id", start = 66, stop = 73))
   }
 
   test("Pushed-down aggregateExpressions should have no duplicates") {
@@ -854,22 +815,24 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
        |HAVING dept = 2
        |""".stripMargin
     val analyzedPlan = sql(query).queryExecution.analyzed
-    analyzedPlan.collect {
-      case Aggregate(_, aggregateExpressions, _, _) =>
-        val extracted = aggregateExpressions.collect {
-          case Alias(child, _) => child
-          case a: Attribute => a
-        }
-        val expressionSet = ExpressionSet(extracted)
-        assert(
-          extracted.size == expressionSet.size,
-          "The pushed-down aggregateExpressions in Aggregate should have no duplicates " +
-            s"after extracted from Alias. Current aggregateExpressions: $aggregateExpressions")
+    analyzedPlan.collect { case Aggregate(_, aggregateExpressions, _, _) =>
+      val extracted = aggregateExpressions.collect {
+        case Alias(child, _) => child
+        case a: Attribute => a
+      }
+      val expressionSet = ExpressionSet(extracted)
+      assert(
+        extracted.size == expressionSet.size,
+        "The pushed-down aggregateExpressions in Aggregate should have no duplicates " +
+          s"after extracted from Alias. Current aggregateExpressions: $aggregateExpressions")
     }
   }
 
   test("Aggregate expressions not eligible to lift up, throws same error as inline") {
-    def checkSameMissingAggregationError(q1: String, q2: String, expressionParam: String): Unit = {
+    def checkSameMissingAggregationError(
+        q1: String,
+        q2: String,
+        expressionParam: String): Unit = {
       checkSameError(q1, q2, "MISSING_AGGREGATION", Map("expression" -> expressionParam))
     }
 
@@ -879,57 +842,52 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
       checkSameMissingAggregationError(
         s"SELECT dept AS a, dept, salary $windowExpr $groupBySeg",
         s"SELECT dept AS a, a,    salary $windowExpr $groupBySeg",
-        "\"salary\""
-      )
+        "\"salary\"")
       checkSameMissingAggregationError(
         s"SELECT dept AS a, dept + salary $windowExpr $groupBySeg",
         s"SELECT dept AS a, a    + salary $windowExpr $groupBySeg",
-        "\"salary\""
-      )
+        "\"salary\"")
       checkSameMissingAggregationError(
         s"SELECT avg(salary) AS a, avg(salary) + bonus $windowExpr $groupBySeg",
         s"SELECT avg(salary) AS a, a           + bonus $windowExpr $groupBySeg",
-        "\"bonus\""
-      )
+        "\"bonus\"")
       checkSameMissingAggregationError(
         s"SELECT dept AS a, dept, avg(salary) + bonus + 10 $windowExpr $groupBySeg",
         s"SELECT dept AS a, a,    avg(salary) + bonus + 10 $windowExpr $groupBySeg",
-        "\"bonus\""
-      )
+        "\"bonus\"")
     }
     checkSameMissingAggregationError(
       s"SELECT avg(salary) AS a, avg(salary), dept FROM $testTable GROUP BY dept + 10",
       s"SELECT avg(salary) AS a, a,           dept FROM $testTable GROUP BY dept + 10",
-      "\"dept\""
-    )
+      "\"dept\"")
     checkSameMissingAggregationError(
       s"SELECT avg(salary) AS a, avg(salary) + dept + 10 FROM $testTable GROUP BY dept + 10",
       s"SELECT avg(salary) AS a, a           + dept + 10 FROM $testTable GROUP BY dept + 10",
-      "\"dept\""
-    )
+      "\"dept\"")
     checkError(
-      exception = intercept[AnalysisException] { sql(
-        "SELECT dept AS a, dept, " +
-          s"(SELECT count(col) FROM VALUES (1), (2) AS data(col) WHERE col = dept) $groupBySeg") },
+      exception = intercept[AnalysisException] {
+        sql(
+          "SELECT dept AS a, dept, " +
+            s"(SELECT count(col) FROM VALUES (1), (2) AS data(col) WHERE col = dept) $groupBySeg")
+      },
       condition = "SCALAR_SUBQUERY_IS_IN_GROUP_BY_OR_AGGREGATE_FUNCTION",
       parameters = Map("sqlExpr" -> "\"scalarsubquery(dept)\""),
       context = ExpectedContext(
         fragment = "(SELECT count(col) FROM VALUES (1), (2) AS data(col) WHERE col = dept)",
         start = 24,
-        stop = 93)
-    )
+        stop = 93))
     checkError(
-      exception = intercept[AnalysisException] { sql(
-        "SELECT dept AS a, a, " +
-          s"(SELECT count(col) FROM VALUES (1), (2) AS data(col) WHERE col = dept) $groupBySeg"
-      ) },
+      exception = intercept[AnalysisException] {
+        sql(
+          "SELECT dept AS a, a, " +
+            s"(SELECT count(col) FROM VALUES (1), (2) AS data(col) WHERE col = dept) $groupBySeg")
+      },
       condition = "SCALAR_SUBQUERY_IS_IN_GROUP_BY_OR_AGGREGATE_FUNCTION",
       parameters = Map("sqlExpr" -> "\"scalarsubquery(dept)\""),
       context = ExpectedContext(
         fragment = "(SELECT count(col) FROM VALUES (1), (2) AS data(col) WHERE col = dept)",
         start = 21,
-        stop = 90)
-    )
+        stop = 90))
 
     // one exception: no longer throws NESTED_AGGREGATE_FUNCTION but UNSUPPORTED_FEATURE
     Seq("", windowSeg).foreach { windowExpr =>
@@ -939,30 +897,31 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
         },
         condition = "UNSUPPORTED_FEATURE.LATERAL_COLUMN_ALIAS_IN_AGGREGATE_FUNC",
         sqlState = "0A000",
-        parameters = Map("lca" -> "`a`", "aggFunc" -> "\"avg(lateralAliasReference(a))\"")
-      )
+        parameters = Map("lca" -> "`a`", "aggFunc" -> "\"avg(lateralAliasReference(a))\""))
     }
   }
 
   test("Leaf expression as aggregate expressions should be eligible to lift up") {
     // literal
-    sql(s"select 1, avg(salary) as m, m + 1 from $testTable group by dept")
-      .queryExecution.assertAnalyzed()
+    sql(s"select 1, avg(salary) as m, m + 1 from $testTable group by dept").queryExecution
+      .assertAnalyzed()
     // leaf expression current_date, now and etc
-    sql(s"select current_date(), max(salary) as m, m + 1 from $testTable group by dept")
-      .queryExecution.assertAnalyzed()
-    sql("select dateadd(month, 5, current_date()), min(salary) as m, m + 1 as n " +
-      s"from $testTable group by dept").queryExecution.assertAnalyzed()
-    sql(s"select now() as n, dateadd(day, -1, n) from $testTable group by name")
-      .queryExecution.assertAnalyzed()
+    sql(s"select current_date(), max(salary) as m, m + 1 from $testTable group by dept").queryExecution
+      .assertAnalyzed()
+    sql(
+      "select dateadd(month, 5, current_date()), min(salary) as m, m + 1 as n " +
+        s"from $testTable group by dept").queryExecution.assertAnalyzed()
+    sql(s"select now() as n, dateadd(day, -1, n) from $testTable group by name").queryExecution
+      .assertAnalyzed()
   }
 
   test("Aggregate expressions containing no aggregate or grouping expressions still resolves") {
     // Note these queries are without HAVING, otherwise during resolution the grouping or aggregate
     // functions in having will be added to Aggregate by rule ResolveAggregateFunctions
     checkAnswer(
-      sql("SELECT named_struct('a', named_struct('b', 1)) AS foo, foo.a.b + 1 AS bar " +
-        s"FROM $testTable GROUP BY dept"),
+      sql(
+        "SELECT named_struct('a', named_struct('b', 1)) AS foo, foo.a.b + 1 AS bar " +
+          s"FROM $testTable GROUP BY dept"),
       Row(Row(Row(1)), 2) :: Row(Row(Row(1)), 2) :: Row(Row(Row(1)), 2) :: Nil)
 
     checkAnswer(
@@ -970,8 +929,9 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
       Row(1, 2) :: Row(1, 2) :: Row(1, 2) :: Nil)
 
     checkAnswer(
-      sql(s"select 1 as a, a, rank() over(partition by 1 order by 1) " +
-        s"from $testTable group by dept"),
+      sql(
+        s"select 1 as a, a, rank() over(partition by 1 order by 1) " +
+          s"from $testTable group by dept"),
       Row(1, 1, 1) :: Row(1, 1, 1) :: Row(1, 1, 1) :: Nil)
   }
 
@@ -991,30 +951,34 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
       sql("select name, properties.joinYear as jy, jy - 2017, sum(salary) over " +
         s"(partition by dept order by properties.joinYear) from $testTable where dept in (2, 6)"),
       Row("alex", 2017, 0, 12000) :: Row("david", 2019, 2, 22000) ::
-        Row("jen", 2018, 1, 12000) :: Nil
-    )
+        Row("jen", 2018, 1, 12000) :: Nil)
 
     // non-window expressions as lca, used in window expressions
     checkLCAUnsupportedInWindowErrorHelper(
       "select name, dept as d, rank() over " +
         s"(partition by d order by salary) as rank from $testTable where dept in (1, 6)",
-      lca = "`d`", windowExprRegex = "\"RANK.*\"")
+      lca = "`d`",
+      windowExprRegex = "\"RANK.*\"")
     checkLCAUnsupportedInWindowErrorHelper(
       "select name, dept as d, d * 1.0, salary as s, sum(salary) over " +
         s"(partition by d order by s) from $testTable where dept in (1, 6)",
-      lca = "`d`", windowExprRegex = "\"sum.*\"")
+      lca = "`d`",
+      windowExprRegex = "\"sum.*\"")
     checkLCAUnsupportedInWindowErrorHelper(
       "select name, dept as d, d * 1.0, salary as s, sum(s) over " +
         s"(partition by d order by s) from $testTable where dept in (1, 6)",
-      lca = "`s`", windowExprRegex = "\"sum.*\"")
+      lca = "`s`",
+      windowExprRegex = "\"sum.*\"")
     checkLCAUnsupportedInWindowErrorHelper(
       "select name, properties.joinYear as jy, min(jy) over " +
         s"(partition by dept order by salary) from $testTable where dept in (2, 6)",
-      lca = "`jy`", windowExprRegex = "\"min.*\"")
+      lca = "`jy`",
+      windowExprRegex = "\"min.*\"")
     checkLCAUnsupportedInWindowErrorHelper(
       "select name, properties.joinYear as jy, sum(salary) over " +
         s"(partition by dept order by jy) from $testTable where dept in (2, 6)",
-      lca = "`jy`", windowExprRegex = "\"sum.*\"")
+      lca = "`jy`",
+      windowExprRegex = "\"sum.*\"")
     // this is initially not supported
     checkError(
       exception = intercept[ParseException] {
@@ -1024,8 +988,7 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
       },
       condition = "_LEGACY_ERROR_TEMP_0064",
       parameters = Map("msg" -> "Frame bound value must be a literal."),
-      context = ExpectedContext(fragment = "n preceding", start = 87, stop = 97)
-    )
+      context = ExpectedContext(fragment = "n preceding", start = 87, stop = 97))
 
     // window expressions as lca, used in non-window expressions
     checkAnswer(
@@ -1044,17 +1007,20 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
       "select name, dept, rank() over (partition by dept order by salary) as rank, " +
         "rank() over (partition by dept order by rank DESC) as new_rank " +
         s"from $testTable",
-      lca = "`rank`", windowExprRegex = "\"RANK.*\"")
+      lca = "`rank`",
+      windowExprRegex = "\"RANK.*\"")
     checkLCAUnsupportedInWindowErrorHelper(
       "select name, dept, rank() over (partition by dept order by salary) as rank, " +
         "rank() over (partition by rank order by salary) as new_rank " +
         s"from $testTable",
-      lca = "`rank`", windowExprRegex = "\"RANK.*\"")
+      lca = "`rank`",
+      windowExprRegex = "\"RANK.*\"")
     checkLCAUnsupportedInWindowErrorHelper(
       "select name, dept, rank() over (partition by dept order by salary) as rank, " +
         "sum(rank) over (partition by dept order by rank) as new_rank " +
         s"from $testTable",
-      lca = "`rank`", windowExprRegex = "\"sum.*\"")
+      lca = "`rank`",
+      windowExprRegex = "\"sum.*\"")
 
     // all together
     checkLCAUnsupportedInWindowErrorHelper(
@@ -1065,7 +1031,8 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
         "sum(rank) over (partition by min order by n) as sum, " +
         "min(jy - 2017) over (partition by rank order by dept) " +
         s"from $testTable",
-      lca = "`new_d`", windowExprRegex = "\"RANK.*\"")
+      lca = "`new_d`",
+      windowExprRegex = "\"RANK.*\"")
   }
 
   test("Lateral alias basics - Window on Aggregate") {
@@ -1080,61 +1047,58 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
         checkAnswer( // literal as lca
           sql(
             "select 1 as n, n as n1, n1 * 1.5, dept, " +
-            "sum(sum(salary)) over (partition by dept order by sum(salary)) as sum_sum " +
-            s"from $testTable $whereSeg group by dept $havingSeg"
-          ),
-          Row(1, 1, 1.5, 1, 19000) :: Row(1, 1, 1.5, 2, 22000) :: Row(1, 1, 1.5, 6, 12000) :: Nil
-        )
+              "sum(sum(salary)) over (partition by dept order by sum(salary)) as sum_sum " +
+              s"from $testTable $whereSeg group by dept $havingSeg"),
+          Row(1, 1, 1.5, 1, 19000) :: Row(1, 1, 1.5, 2, 22000) :: Row(1, 1, 1.5, 6, 12000) :: Nil)
         checkAnswer( // group by expression as lca
           sql(
             "select dept as d, d, " +
-            "rank() over (partition by dept order by avg(salary)) as rank " +
-            s"from $testTable $whereSeg group by dept $havingSeg"
-          ),
-          Row(1, 1, 1) :: Row(2, 2, 1) :: Row(6, 6, 1) :: Nil
-        )
+              "rank() over (partition by dept order by avg(salary)) as rank " +
+              s"from $testTable $whereSeg group by dept $havingSeg"),
+          Row(1, 1, 1) :: Row(2, 2, 1) :: Row(6, 6, 1) :: Nil)
         checkAnswer( // aggregate expression as lca
           sql(
             "select dept, sum(bonus) as s, s + sum(salary),  " +
-            "rank() over (partition by dept order by avg(salary)) as rank " +
-            s"from $testTable $whereSeg group by dept $havingSeg"
-          ),
-          Row(1, 2200, 21200, 1) :: Row(2, 2500, 24500, 1) :: Row(6, 1200, 13200, 1) :: Nil
-        )
+              "rank() over (partition by dept order by avg(salary)) as rank " +
+              s"from $testTable $whereSeg group by dept $havingSeg"),
+          Row(1, 2200, 21200, 1) :: Row(2, 2500, 24500, 1) :: Row(6, 1200, 13200, 1) :: Nil)
         checkAnswer( // struct field as lca
           sql(
             "select dept as d, d, d * 1.5, d as d1, d1, properties.joinYear as jy, jy - 2017, " +
-            "sum(avg(bonus)) over (partition by properties.joinYear order by dept) as sum_avg " +
-            s"from $testTable $whereSeg group by dept, properties.joinYear $havingSeg"
-          ),
+              "sum(avg(bonus)) over (partition by properties.joinYear order by dept) as sum_avg " +
+              s"from $testTable $whereSeg group by dept, properties.joinYear $havingSeg"),
           Row(1, 1, 1.5, 1, 1, 2019, 2, 1000) :: Row(1, 1, 1.5, 1, 1, 2020, 3, 1200) ::
-          Row(2, 2, 3, 2, 2, 2017, 0, 1200) :: Row(2, 2, 3, 2, 2, 2019, 2, 2300) ::
-          Row(6, 6, 9, 6, 6, 2018, 1, 1200) :: Nil
-        )
+            Row(2, 2, 3, 2, 2, 2017, 0, 1200) :: Row(2, 2, 3, 2, 2, 2019, 2, 2300) ::
+            Row(6, 6, 9, 6, 6, 2018, 1, 1200) :: Nil)
 
         // non-window expressions as lca, used in window expression
         checkLCAUnsupportedInWindowErrorHelper(
           "select dept as d, rank() over (partition by d order by avg(salary)) as rank " +
             s"from $testTable $whereSeg group by dept $havingSeg",
-          lca = "`d`", windowExprRegex = "\"RANK.*\"")
+          lca = "`d`",
+          windowExprRegex = "\"RANK.*\"")
         checkLCAUnsupportedInWindowErrorHelper(
           "select dept as d, sum(salary) as s, avg(s) over (partition by d order by s) " +
             s"from $testTable $whereSeg group by dept $havingSeg",
-          lca = "`s`", windowExprRegex = "\"avg.*\"")
+          lca = "`s`",
+          windowExprRegex = "\"avg.*\"")
         checkLCAUnsupportedInWindowErrorHelper(
           "select dept as d, sum(salary) as s, avg(s) over (partition by s order by d) " +
             s"from $testTable $whereSeg group by dept $havingSeg",
-          lca = "`s`", windowExprRegex = "\"avg.*\"")
+          lca = "`s`",
+          windowExprRegex = "\"avg.*\"")
         checkLCAUnsupportedInWindowErrorHelper(
           "select dept as d, properties.joinYear as jy, avg(bonus) as a, " +
             "sum(a) over (partition by jy order by d) " +
             s"from $testTable $whereSeg group by dept, properties.joinYear $havingSeg",
-          lca = "`a`", windowExprRegex = "\"sum.*\"")
+          lca = "`a`",
+          windowExprRegex = "\"sum.*\"")
         checkLCAUnsupportedInWindowErrorHelper(
           "select dept as d, properties.joinYear as jy, avg(bonus) as a, " +
             "sum(a) over (partition by a order by jy) " +
             s"from $testTable $whereSeg group by dept, properties.joinYear $havingSeg",
-          lca = "`a`", windowExprRegex = "\"sum.*\"")
+          lca = "`a`",
+          windowExprRegex = "\"sum.*\"")
 
         // window expressions as lca, used in window expression
         checkLCAUnsupportedInWindowErrorHelper(
@@ -1142,26 +1106,25 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
             "sum(avg(bonus)) over (partition by properties.joinYear order by dept) as sum_avg, " +
             "sum(sum_avg) over (partition by dept order by sum_avg) " +
             s"from $testTable $whereSeg group by dept, properties.joinYear $havingSeg",
-          lca = "`sum_avg`", windowExprRegex = "\"sum.*\"")
+          lca = "`sum_avg`",
+          windowExprRegex = "\"sum.*\"")
         checkLCAUnsupportedInWindowErrorHelper(
           "select dept, properties.joinYear, " +
             "sum(avg(bonus)) over (partition by properties.joinYear order by dept) as sum_avg, " +
             "min(properties.joinYear) over (partition by sum_avg order by dept) " +
             s"from $testTable $whereSeg group by dept, properties.joinYear $havingSeg",
-          lca = "`sum_avg`", windowExprRegex = "\"min.*\"")
+          lca = "`sum_avg`",
+          windowExprRegex = "\"min.*\"")
 
         // window expression as lca, used in non-window expression
         checkAnswer(
-          sql(
-            "select dept, properties.joinYear, " +
+          sql("select dept, properties.joinYear, " +
             "sum(avg(bonus)) over (partition by properties.joinYear order by dept) as sum_avg, " +
             "sum_avg * 1.0 as sum_avg1, sum_avg1 + dept " +
-            s"from $testTable $whereSeg group by dept, properties.joinYear $havingSeg"
-          ),
+            s"from $testTable $whereSeg group by dept, properties.joinYear $havingSeg"),
           Row(1, 2019, 1000, 1000, 1001) :: Row(1, 2020, 1200, 1200, 1201) ::
-          Row(2, 2017, 1200, 1200, 1202) :: Row(2, 2019, 2300, 2300, 2302) ::
-          Row(6, 2018, 1200, 1200, 1206) :: Nil
-        )
+            Row(2, 2017, 1200, 1200, 1202) :: Row(2, 2019, 2300, 2300, 2302) ::
+            Row(6, 2018, 1200, 1200, 1206) :: Nil)
       }
     }
   }
@@ -1169,7 +1132,7 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
   test("Lateral alias basics - Window on Aggregate with Having") {
     // TODO(anchovyu): Remove this tese case and re-enable the "Window on Aggregate" when having
     //  is supported
-    Seq( "having dept < 10", "having sum(bonus) < 3000").foreach { havingSuffix =>
+    Seq("having dept < 10", "having sum(bonus) < 3000").foreach { havingSuffix =>
       Seq(
         "select 1 as n, n as n1, n1 * 1.5, dept, " +
           "sum(sum(salary)) over (partition by dept order by sum(salary)) as sum_sum " +
@@ -1186,10 +1149,10 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
         "select dept, properties.joinYear, " +
           "sum(avg(bonus)) over (partition by properties.joinYear order by dept) as sum_avg, " +
           "sum_avg * 1.0 as sum_avg1, sum_avg1 + dept " +
-          s"from $testTable group by dept, properties.joinYear $havingSuffix"
-      ).foreach { query =>
-        assert(intercept[AnalysisException](sql(query)).getCondition ==
-          "UNSUPPORTED_FEATURE.LATERAL_COLUMN_ALIAS_IN_AGGREGATE_WITH_WINDOW_AND_HAVING")
+          s"from $testTable group by dept, properties.joinYear $havingSuffix").foreach { query =>
+        assert(
+          intercept[AnalysisException](sql(query)).getCondition ==
+            "UNSUPPORTED_FEATURE.LATERAL_COLUMN_ALIAS_IN_AGGREGATE_WITH_WINDOW_AND_HAVING")
       }
     }
   }
@@ -1202,16 +1165,14 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
       s"select dept as d, d,    rank() over (partition by dept order by avg(salary)) " +
         s"from $testTable",
       condition = "MISSING_GROUP_BY",
-      errorParams = Map.empty
-    )
+      errorParams = Map.empty)
     checkSameError(
       "select salary as s, salary, sum(sum(salary)) over (partition by dept order by salary) " +
         s"from $testTable",
       "select salary as s, s,      sum(sum(salary)) over (partition by dept order by salary) " +
         s"from $testTable",
       condition = "MISSING_GROUP_BY",
-      errorParams = Map.empty
-    )
+      errorParams = Map.empty)
 
     // non group by or non aggregate function in Aggregate queries negative cases are covered in
     // "Aggregate expressions not eligible to lift up, throws same error as inline".
@@ -1231,8 +1192,7 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
 
     // CTE definition contains window and LCA; outer query contains having
     checkAnswer(
-      sql(
-        s"""
+      sql(s"""
            |with w as (
            |  select name, dept, salary, rank() over (partition by dept order by salary) as r, r
            |  from $testTable
@@ -1242,11 +1202,9 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
            |group by dept
            |having max(salary) > 10000
            |""".stripMargin),
-      Row(2) :: Row(6) :: Nil
-    )
+      Row(2) :: Row(6) :: Nil)
     checkAnswer(
-      sql(
-        s"""
+      sql(s"""
            |with w as (
            |  select name, dept, salary, rank() over (partition by dept order by salary) as r, r
            |  from $testTable
@@ -1256,11 +1214,9 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
            |group by dept
            |having max(salary) > 10000
            |""".stripMargin),
-      Row(2, 2) :: Row(6, 6) :: Nil
-    )
+      Row(2, 2) :: Row(6, 6) :: Nil)
     checkAnswer(
-      sql(
-        s"""
+      sql(s"""
            |with w as (
            |  select name, dept, salary, rank() over (partition by dept order by salary) as r, r
            |  from $testTable
@@ -1270,13 +1226,11 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
            |group by dept
            |having d = 2
            |""".stripMargin),
-      Row(2) :: Nil
-    )
+      Row(2) :: Nil)
 
     // inner subquery contains window and LCA; outer query contains having
     checkAnswer(
-      sql(
-        s"""
+      sql(s"""
           |SELECT
           |  dept
           |FROM
@@ -1291,11 +1245,9 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
           |  dept
           |HAVING max(salary) > 10000
           |""".stripMargin),
-      Row(2) :: Row(6) :: Nil
-    )
+      Row(2) :: Row(6) :: Nil)
     checkAnswer(
-      sql(
-        s"""
+      sql(s"""
            |SELECT
            |  dept as d, d
            |FROM
@@ -1310,11 +1262,9 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
            |  dept
            |HAVING max(salary) > 10000
            |""".stripMargin),
-      Row(2, 2) :: Row(6, 6) :: Nil
-    )
+      Row(2, 2) :: Row(6, 6) :: Nil)
     checkAnswer(
-      sql(
-        s"""
+      sql(s"""
            |SELECT
            |  dept as d
            |FROM
@@ -1329,16 +1279,14 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
            |  dept
            |HAVING d = 2
            |""".stripMargin),
-      Row(2) :: Nil
-    )
+      Row(2) :: Nil)
   }
 
   test("LCA internal error should have lower priority") {
     // in this query, the 'order by Freq DESC' error should be the top error surfaced to users
     checkError(
       exception = intercept[AnalysisException] {
-        sql(
-          """
+        sql("""
             |WITH group_counts AS (
             |  SELECT id, count(*) as Freq, CASE WHEN Freq <= 10 THEN "1" ELSE "2" END AS Group
             |  FROM values (123) as data(id)
@@ -1348,20 +1296,13 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
             |FROM group_counts
             |Group BY Group
             |ORDER BY Freq DESC;
-            |""".stripMargin
-        )
+            |""".stripMargin)
       },
       condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       sqlState = "42703",
-      parameters = Map(
-        "objectName" -> "`Freq`",
-        "proposal" -> "`Percentage`, `group_counts`.`Group`"
-      ),
-      context = ExpectedContext(
-        fragment = "Freq",
-        start = 280,
-        stop = 283)
-    )
+      parameters =
+        Map("objectName" -> "`Freq`", "proposal" -> "`Percentage`, `group_counts`.`Group`"),
+      context = ExpectedContext(fragment = "Freq", start = 280, stop = 283))
 
     // the states are cleared - a subsequent correct query should succeed
     sql("select 1 as a, a").queryExecution.assertAnalyzed()
@@ -1370,19 +1311,16 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
   test("LateralColumnAlias with Generate") {
     checkAnswer(
       sql("WITH cte AS (SELECT EXPLODE(ARRAY(1, 2, 3)) AS c1, c1) SELECT * FROM cte"),
-      Row(1, 1) :: Row(2, 2) :: Row(3, 3) :: Nil
-    )
+      Row(1, 1) :: Row(2, 2) :: Row(3, 3) :: Nil)
     checkAnswer(
-      sql(
-        s"""
+      sql(s"""
            |SELECT
            |  explode(split(name , ',')) AS new_name,
            |  new_name like 'a%'
            |FROM $testTable
            |""".stripMargin),
       Row("alex", true) :: Row("amy", true) :: Row("cathy", false) ::
-        Row("david", false) :: Row("jen", false) :: Nil
-    )
+        Row("david", false) :: Row("jen", false) :: Nil)
   }
 
   test("Order in inner project lists should respect original project list order") {

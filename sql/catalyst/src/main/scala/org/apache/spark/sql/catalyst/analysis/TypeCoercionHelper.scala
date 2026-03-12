@@ -18,75 +18,14 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion.PromoteStrings.conf
-import org.apache.spark.sql.catalyst.expressions.{
-  Alias,
-  ArrayJoin,
-  BinaryOperator,
-  CaseWhen,
-  Cast,
-  Coalesce,
-  Concat,
-  CreateArray,
-  CreateMap,
-  DateAdd,
-  DateSub,
-  Elt,
-  ExpectsInputTypes,
-  Expression,
-  Greatest,
-  If,
-  ImplicitCastInputTypes,
-  In,
-  InSubquery,
-  Least,
-  ListQuery,
-  Literal,
-  MapConcat,
-  MapZipWith,
-  NaNvl,
-  RandStr,
-  RangeFrame,
-  ScalaUDF,
-  Sequence,
-  SpecialFrameBoundary,
-  SpecifiedWindowFrame,
-  SubtractTimestamps,
-  TimestampAddInterval,
-  WindowSpecDefinition
-}
+import org.apache.spark.sql.catalyst.expressions.{Alias, ArrayJoin, BinaryOperator, CaseWhen, Cast, Coalesce, Concat, CreateArray, CreateMap, DateAdd, DateSub, Elt, ExpectsInputTypes, Expression, Greatest, If, ImplicitCastInputTypes, In, InSubquery, Least, ListQuery, Literal, MapConcat, MapZipWith, NaNvl, RandStr, RangeFrame, ScalaUDF, Sequence, SpecialFrameBoundary, SpecifiedWindowFrame, SubtractTimestamps, TimestampAddInterval, WindowSpecDefinition}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Average, Sum}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.{AbstractArrayType, StringTypeWithCollation}
-import org.apache.spark.sql.types.{
-  AbstractDataType,
-  AnyDataType,
-  AnyTimestampTypeExpression,
-  ArrayType,
-  BinaryType,
-  BooleanType,
-  DataType,
-  DatetimeType,
-  DateType,
-  DateTypeExpression,
-  DecimalType,
-  DoubleType,
-  FloatType,
-  FractionalType,
-  IntegerType,
-  IntegralType,
-  MapType,
-  NullType,
-  StringType,
-  StringTypeExpression,
-  StructType,
-  TimestampNTZType,
-  TimestampType,
-  TimestampTypeExpression,
-  TimeType
-}
+import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, AnyTimestampTypeExpression, ArrayType, BinaryType, BooleanType, DataType, DatetimeType, DateType, DateTypeExpression, DecimalType, DoubleType, FloatType, FractionalType, IntegerType, IntegralType, MapType, NullType, StringType, StringTypeExpression, StructType, TimestampNTZType, TimestampType, TimestampTypeExpression, TimeType}
 
 abstract class TypeCoercionHelper {
 
@@ -97,35 +36,34 @@ abstract class TypeCoercionHelper {
   def typeCoercionRules: List[Rule[LogicalPlan]]
 
   /**
-   * Find the tightest common type of two types that might be used in a binary expression.
-   * This handles all numeric types except fixed-precision decimals interacting with each other or
-   * with primitive types, because in that case the precision and scale of the result depends on
-   * the operation. Those rules are implemented in [[DecimalPrecision]].
+   * Find the tightest common type of two types that might be used in a binary expression. This
+   * handles all numeric types except fixed-precision decimals interacting with each other or with
+   * primitive types, because in that case the precision and scale of the result depends on the
+   * operation. Those rules are implemented in [[DecimalPrecision]].
    */
   val findTightestCommonType: (DataType, DataType) => Option[DataType]
 
   /**
-   * Looking for a widened data type of two given data types with some acceptable loss of precision.
-   * E.g. there is no common type for double and decimal because double's range
-   * is larger than decimal, and yet decimal is more precise than double, but in
-   * union we would cast the decimal into double.
+   * Looking for a widened data type of two given data types with some acceptable loss of
+   * precision. E.g. there is no common type for double and decimal because double's range is
+   * larger than decimal, and yet decimal is more precise than double, but in union we would cast
+   * the decimal into double.
    */
   def findWiderTypeForTwo(t1: DataType, t2: DataType): Option[DataType]
 
   /**
    * Looking for a widened data type of a given sequence of data types with some acceptable loss
-   * of precision.
-   * E.g. there is no common type for double and decimal because double's range
-   * is larger than decimal, and yet decimal is more precise than double, but in
-   * union we would cast the decimal into double.
+   * of precision. E.g. there is no common type for double and decimal because double's range is
+   * larger than decimal, and yet decimal is more precise than double, but in union we would cast
+   * the decimal into double.
    */
   def findWiderCommonType(types: Seq[DataType]): Option[DataType]
 
   /**
    * Given an expected data type, try to cast the expression and return the cast expression.
    *
-   * If the expression already fits the input type, we simply return the expression itself.
-   * If the expression has an incompatible type that cannot be implicitly cast, return None.
+   * If the expression already fits the input type, we simply return the expression itself. If the
+   * expression has an incompatible type that cannot be implicitly cast, return None.
    */
   def implicitCast(e: Expression, expectedType: AbstractDataType): Option[Expression]
 
@@ -143,8 +81,7 @@ abstract class TypeCoercionHelper {
         ArrayType(
           et,
           containsNull1 || containsNull2 ||
-          Cast.forceNullable(et1, et) || Cast.forceNullable(et2, et)
-        )
+            Cast.forceNullable(et1, et) || Cast.forceNullable(et2, et))
       }
     case (MapType(kt1, vt1, valueContainsNull1), MapType(kt2, vt2, valueContainsNull2)) =>
       findTypeFunc(kt1, kt2)
@@ -157,8 +94,7 @@ abstract class TypeCoercionHelper {
               kt,
               vt,
               valueContainsNull1 || valueContainsNull2 ||
-              Cast.forceNullable(vt1, vt) || Cast.forceNullable(vt2, vt)
-            )
+                Cast.forceNullable(vt1, vt) || Cast.forceNullable(vt2, vt))
           }
         }
     case (StructType(fields1), StructType(fields2)) if fields1.length == fields2.length =>
@@ -170,8 +106,8 @@ abstract class TypeCoercionHelper {
               field1.name,
               dt,
               field1.nullable || field2.nullable ||
-              Cast.forceNullable(field1.dataType, dt) || Cast.forceNullable(field2.dataType, dt)
-            )
+                Cast.forceNullable(field1.dataType, dt) || Cast
+                  .forceNullable(field2.dataType, dt))
           }
         case _ => None
       }
@@ -180,8 +116,8 @@ abstract class TypeCoercionHelper {
 
   /**
    * Finds a wider type when one or both types are decimals. If the wider decimal type exceeds
-   * system limitation, this rule will truncate the decimal type. If a decimal and other fractional
-   * types are compared, returns a double type.
+   * system limitation, this rule will truncate the decimal type. If a decimal and other
+   * fractional types are compared, returns a double type.
    */
   protected def findWiderTypeForDecimal(dt1: DataType, dt2: DataType): Option[DataType] = {
     (dt1, dt2) match {
@@ -199,8 +135,8 @@ abstract class TypeCoercionHelper {
 
   /**
    * Similar to [[findWiderTypeForTwo]] that can handle decimal types, but can't promote to
-   * string. If the wider decimal type exceeds system limitation, this rule will truncate
-   * the decimal type before return it.
+   * string. If the wider decimal type exceeds system limitation, this rule will truncate the
+   * decimal type before return it.
    */
   private[catalyst] def findWiderTypeWithoutStringPromotionForTwo(
       t1: DataType,
@@ -211,17 +147,16 @@ abstract class TypeCoercionHelper {
   }
 
   def findWiderTypeWithoutStringPromotion(types: Seq[DataType]): Option[DataType] = {
-    types.foldLeft[Option[DataType]](Some(NullType))(
-      (r, c) =>
-        r match {
-          case Some(d) => findWiderTypeWithoutStringPromotionForTwo(d, c)
-          case None => None
-        }
-    )
+    types.foldLeft[Option[DataType]](Some(NullType))((r, c) =>
+      r match {
+        case Some(d) => findWiderTypeWithoutStringPromotionForTwo(d, c)
+        case None => None
+      })
   }
 
   /**
-   * Check whether the given types are equal ignoring nullable, containsNull and valueContainsNull.
+   * Check whether the given types are equal ignoring nullable, containsNull and
+   * valueContainsNull.
    */
   def haveSameType(types: Seq[DataType]): Boolean = {
     if (types.size <= 1) {
@@ -262,14 +197,14 @@ abstract class TypeCoercionHelper {
     def apply(expression: Expression): Expression = expression match {
       // Handle type casting required between value expression and subquery output
       // in IN subquery.
-      case i @ InSubquery(lhs, l: ListQuery) if !i.resolved && lhs.length == l.plan.output.length =>
+      case i @ InSubquery(lhs, l: ListQuery)
+          if !i.resolved && lhs.length == l.plan.output.length =>
         // LHS is the value expressions of IN subquery.
         // RHS is the subquery output.
         val rhs = l.plan.output
 
-        val commonTypes = lhs.zip(rhs).flatMap {
-          case (l, r) =>
-            findWiderTypeForTwo(l.dataType, r.dataType)
+        val commonTypes = lhs.zip(rhs).flatMap { case (l, r) =>
+          findWiderTypeForTwo(l.dataType, r.dataType)
         }
 
         // The number of columns/expressions must match between LHS and RHS of an
@@ -306,8 +241,8 @@ abstract class TypeCoercionHelper {
   }
 
   /**
-   * Type coercion helper that matches against function expression in order to type coerce function
-   * argument types to expected types.
+   * Type coercion helper that matches against function expression in order to type coerce
+   * function argument types to expected types.
    */
   object FunctionArgumentTypeCoercion {
     def apply(expression: Expression): Expression = expression match {
@@ -320,7 +255,7 @@ abstract class TypeCoercionHelper {
 
       case c @ Concat(children)
           if children.forall(c => ArrayType.acceptsType(c.dataType)) &&
-          !haveSameType(c.inputTypesForMerging) =>
+            !haveSameType(c.inputTypesForMerging) =>
         val types = children.map(_.dataType)
         findWiderCommonType(types) match {
           case Some(finalDataType) => Concat(children.map(castIfNotSameType(_, finalDataType)))
@@ -328,9 +263,9 @@ abstract class TypeCoercionHelper {
         }
 
       case aj @ ArrayJoin(arr, d, nr)
-          if !AbstractArrayType(StringTypeWithCollation(supportsTrimCollation = true)).
-            acceptsType(arr.dataType) &&
-          ArrayType.acceptsType(arr.dataType) =>
+          if !AbstractArrayType(StringTypeWithCollation(supportsTrimCollation = true))
+            .acceptsType(arr.dataType) &&
+            ArrayType.acceptsType(arr.dataType) =>
         val containsNull = arr.dataType.asInstanceOf[ArrayType].containsNull
         implicitCast(arr, ArrayType(StringType, containsNull)) match {
           case Some(castedArr) => ArrayJoin(castedArr, d, nr)
@@ -347,7 +282,7 @@ abstract class TypeCoercionHelper {
 
       case m @ MapConcat(children)
           if children.forall(c => MapType.acceptsType(c.dataType)) &&
-          !haveSameType(m.inputTypesForMerging) =>
+            !haveSameType(m.inputTypesForMerging) =>
         val types = children.map(_.dataType)
         findWiderCommonType(types) match {
           case Some(finalDataType) => MapConcat(children.map(castIfNotSameType(_, finalDataType)))
@@ -356,7 +291,7 @@ abstract class TypeCoercionHelper {
 
       case m @ CreateMap(children, _)
           if m.keys.length == m.values.length &&
-          (!haveSameType(m.keys.map(_.dataType)) || !haveSameType(m.values.map(_.dataType))) =>
+            (!haveSameType(m.keys.map(_.dataType)) || !haveSameType(m.values.map(_.dataType))) =>
         val keyTypes = m.keys.map(_.dataType)
         val newKeys = findWiderCommonType(keyTypes) match {
           case Some(finalDataType) => m.keys.map(castIfNotSameType(_, finalDataType))
@@ -411,9 +346,11 @@ abstract class TypeCoercionHelper {
       case NaNvl(l, r) if r.dataType == NullType => NaNvl(l, Cast(r, l.dataType))
 
       case r: RandStr if r.length.dataType != IntegerType =>
-        implicitCast(r.length, IntegerType).map { casted =>
-          r.copy(length = casted)
-        }.getOrElse(r)
+        implicitCast(r.length, IntegerType)
+          .map { casted =>
+            r.copy(length = casted)
+          }
+          .getOrElse(r)
 
       case other => other
     }
@@ -429,7 +366,7 @@ abstract class TypeCoercionHelper {
       case c @ Concat(children) if children.isEmpty => c
       case c @ Concat(children)
           if conf.concatBinaryAsString ||
-          !children.map(_.dataType).forall(_ == BinaryType) =>
+            !children.map(_.dataType).forall(_ == BinaryType) =>
         val newChildren = c.children.map { e =>
           implicitCast(e, StringType).getOrElse(e)
         }
@@ -447,19 +384,17 @@ abstract class TypeCoercionHelper {
       // Lambda function isn't resolved when the rule is executed.
       case m @ MapZipWith(left, right, function)
           if m.arguments.forall(a => MapType.acceptsType(a.dataType)) &&
-          !DataTypeUtils.sameType(m.leftKeyType, m.rightKeyType) =>
+            !DataTypeUtils.sameType(m.leftKeyType, m.rightKeyType) =>
         findWiderTypeForTwo(m.leftKeyType, m.rightKeyType) match {
           case Some(finalKeyType)
               if !Cast.forceNullable(m.leftKeyType, finalKeyType) &&
-              !Cast.forceNullable(m.rightKeyType, finalKeyType) =>
+                !Cast.forceNullable(m.rightKeyType, finalKeyType) =>
             val newLeft = castIfNotSameType(
               left,
-              MapType(finalKeyType, m.leftValueType, m.leftValueContainsNull)
-            )
+              MapType(finalKeyType, m.leftValueType, m.leftValueContainsNull))
             val newRight = castIfNotSameType(
               right,
-              MapType(finalKeyType, m.rightValueType, m.rightValueContainsNull)
-            )
+              MapType(finalKeyType, m.rightValueType, m.rightValueContainsNull))
             MapZipWith(newLeft, newRight, function)
           case _ => m
         }
@@ -501,9 +436,8 @@ abstract class TypeCoercionHelper {
         val maybeCommonType = findWiderCommonType(c.inputTypesForMerging)
         maybeCommonType
           .map { commonType =>
-            val newBranches = c.branches.map {
-              case (condition, value) =>
-                (condition, castIfNotSameType(value, commonType))
+            val newBranches = c.branches.map { case (condition, value) =>
+              (condition, castIfNotSameType(value, commonType))
             }
             val newElseValue = c.elseValue.map(castIfNotSameType(_, commonType))
             CaseWhen(newBranches, newElseValue)
@@ -560,40 +494,35 @@ abstract class TypeCoercionHelper {
           .getOrElse(b) // If there is no applicable conversion, leave expression unchanged.
 
       case e: ImplicitCastInputTypes if e.inputTypes.nonEmpty =>
-        val children: Seq[Expression] = e.children.zip(e.inputTypes).map {
-          case (in, expected) =>
-            // If we cannot do the implicit cast, just use the original input.
-            implicitCast(in, expected).getOrElse(in)
+        val children: Seq[Expression] = e.children.zip(e.inputTypes).map { case (in, expected) =>
+          // If we cannot do the implicit cast, just use the original input.
+          implicitCast(in, expected).getOrElse(in)
         }
         e.withNewChildren(children)
 
       case e: ExpectsInputTypes if e.inputTypes.nonEmpty =>
         // Convert NullType into some specific target type for ExpectsInputTypes that don't do
         // general implicit casting.
-        val children: Seq[Expression] = e.children.zip(e.inputTypes).map {
-          case (in, expected) =>
-            if (in.dataType == NullType && !expected.acceptsType(NullType)) {
-              Literal.create(null, expected.defaultConcreteType)
-            } else {
-              in
-            }
+        val children: Seq[Expression] = e.children.zip(e.inputTypes).map { case (in, expected) =>
+          if (in.dataType == NullType && !expected.acceptsType(NullType)) {
+            Literal.create(null, expected.defaultConcreteType)
+          } else {
+            in
+          }
         }
         e.withNewChildren(children)
 
       case udf: ScalaUDF if udf.inputTypes.nonEmpty =>
-        val children = udf.children.zip(udf.inputTypes).map {
-          case (in, expected) =>
-            // Currently Scala UDF will only expect `AnyDataType` at top level, so this trick works.
-            // In the future we should create types like `AbstractArrayType`, so that Scala UDF can
-            // accept inputs of array type of arbitrary element type.
-            if (expected == AnyDataType) {
-              in
-            } else {
-              implicitCast(
-                in,
-                udfInputToCastType(in.dataType, expected.asInstanceOf[DataType])
-              ).getOrElse(in)
-            }
+        val children = udf.children.zip(udf.inputTypes).map { case (in, expected) =>
+          // Currently Scala UDF will only expect `AnyDataType` at top level, so this trick works.
+          // In the future we should create types like `AbstractArrayType`, so that Scala UDF can
+          // accept inputs of array type of arbitrary element type.
+          if (expected == AnyDataType) {
+            in
+          } else {
+            implicitCast(in, udfInputToCastType(in.dataType, expected.asInstanceOf[DataType]))
+              .getOrElse(in)
+          }
 
         }
         udf.copy(children = children)
@@ -626,17 +555,14 @@ abstract class TypeCoercionHelper {
           MapType(
             udfInputToCastType(keyDtIn, keyDtExp),
             udfInputToCastType(valueDtIn, valueDtExp),
-            nullableExp
-          )
+            nullableExp)
         case (StructType(fieldsIn), StructType(fieldsExp)) =>
           val fieldTypes =
-            fieldsIn.map(_.dataType).zip(fieldsExp.map(_.dataType)).map {
-              case (dtIn, dtExp) =>
-                udfInputToCastType(dtIn, dtExp)
+            fieldsIn.map(_.dataType).zip(fieldsExp.map(_.dataType)).map { case (dtIn, dtExp) =>
+              udfInputToCastType(dtIn, dtExp)
             }
-          StructType(fieldsExp.zip(fieldTypes).map {
-            case (field, newDt) =>
-              field.copy(dataType = newDt)
+          StructType(fieldsExp.zip(fieldTypes).map { case (field, newDt) =>
+            field.copy(dataType = newDt)
           })
         case (_, other) => other
       }
@@ -652,15 +578,11 @@ abstract class TypeCoercionHelper {
       case s @ WindowSpecDefinition(
             _,
             Seq(order),
-            SpecifiedWindowFrame(RangeFrame, lower, upper)
-          ) =>
-        s.copy(
-          frameSpecification = SpecifiedWindowFrame(
-            RangeFrame,
-            createBoundaryCast(lower, order.dataType),
-            createBoundaryCast(upper, order.dataType)
-          )
-        )
+            SpecifiedWindowFrame(RangeFrame, lower, upper)) =>
+        s.copy(frameSpecification = SpecifiedWindowFrame(
+          RangeFrame,
+          createBoundaryCast(lower, order.dataType),
+          createBoundaryCast(upper, order.dataType)))
 
       case other => other
     }
@@ -685,17 +607,22 @@ abstract class TypeCoercionHelper {
     def apply(expression: Expression): Expression = expression match {
       case d @ DateAdd(AnyTimestampTypeExpression(), _) =>
         d.copy(startDate = Cast(d.startDate, DateType))
-      case d @ DateAdd(StringTypeExpression(), _) => d.copy(startDate = Cast(d.startDate, DateType))
+      case d @ DateAdd(StringTypeExpression(), _) =>
+        d.copy(startDate = Cast(d.startDate, DateType))
       case d @ DateSub(AnyTimestampTypeExpression(), _) =>
         d.copy(startDate = Cast(d.startDate, DateType))
-      case d @ DateSub(StringTypeExpression(), _) => d.copy(startDate = Cast(d.startDate, DateType))
+      case d @ DateSub(StringTypeExpression(), _) =>
+        d.copy(startDate = Cast(d.startDate, DateType))
 
       case s @ SubtractTimestamps(DateTypeExpression(), AnyTimestampTypeExpression(), _, _) =>
         s.copy(left = Cast(s.left, s.right.dataType))
       case s @ SubtractTimestamps(AnyTimestampTypeExpression(), DateTypeExpression(), _, _) =>
         s.copy(right = Cast(s.right, s.left.dataType))
-      case s @ SubtractTimestamps(AnyTimestampTypeExpression(), AnyTimestampTypeExpression(), _, _)
-          if s.left.dataType != s.right.dataType =>
+      case s @ SubtractTimestamps(
+            AnyTimestampTypeExpression(),
+            AnyTimestampTypeExpression(),
+            _,
+            _) if s.left.dataType != s.right.dataType =>
         val newLeft = castIfNotSameType(s.left, TimestampNTZType)
         val newRight = castIfNotSameType(s.right, TimestampNTZType)
         s.copy(left = newLeft, right = newRight)
@@ -722,8 +649,11 @@ abstract class TypeCoercionHelper {
         s.copy(left = Cast(s.left, s.right.dataType))
       case s @ SubtractTimestamps(AnyTimestampTypeExpression(), DateTypeExpression(), _, _) =>
         s.copy(right = Cast(s.right, s.left.dataType))
-      case s @ SubtractTimestamps(AnyTimestampTypeExpression(), AnyTimestampTypeExpression(), _, _)
-          if s.left.dataType != s.right.dataType =>
+      case s @ SubtractTimestamps(
+            AnyTimestampTypeExpression(),
+            AnyTimestampTypeExpression(),
+            _,
+            _) if s.left.dataType != s.right.dataType =>
         val newLeft = castIfNotSameType(s.left, TimestampNTZType)
         val newRight = castIfNotSameType(s.right, TimestampNTZType)
         s.copy(left = newLeft, right = newRight)

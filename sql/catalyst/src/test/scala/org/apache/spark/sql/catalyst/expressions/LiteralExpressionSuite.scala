@@ -167,8 +167,7 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
           Literal.create("123456", typ)
         }),
         condition = "EXCEED_LIMIT_LENGTH",
-        parameters = Map("limit" -> "5")
-      )
+        parameters = Map("limit" -> "5"))
     }
   }
 
@@ -185,8 +184,7 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
           Literal.create("123456", typ)
         }),
         condition = "EXCEED_LIMIT_LENGTH",
-        parameters = Map("limit" -> "5")
-      )
+        parameters = Map("limit" -> "5"))
     }
   }
 
@@ -208,7 +206,8 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(Literal(Decimal(d)), Decimal(d))
       checkEvaluation(Literal(Decimal(d.toInt)), Decimal(d.toInt))
       checkEvaluation(Literal(Decimal(d.toLong)), Decimal(d.toLong))
-      checkEvaluation(Literal(Decimal((d * 1000L).toLong, 10, 3)),
+      checkEvaluation(
+        Literal(Decimal((d * 1000L).toLong, 10, 3)),
         Decimal((d * 1000L).toLong, 10, 3))
       checkEvaluation(Literal(BigDecimal(d.toString)), Decimal(d))
       checkEvaluation(Literal(new java.math.BigDecimal(d.toString)), Decimal(d))
@@ -216,7 +215,8 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(Literal.create(Decimal(d)), Decimal(d))
       checkEvaluation(Literal.create(Decimal(d.toInt)), Decimal(d.toInt))
       checkEvaluation(Literal.create(Decimal(d.toLong)), Decimal(d.toLong))
-      checkEvaluation(Literal.create(Decimal((d * 1000L).toLong, 10, 3)),
+      checkEvaluation(
+        Literal.create(Decimal((d * 1000L).toLong, 10, 3)),
         Decimal((d * 1000L).toLong, 10, 3))
       checkEvaluation(Literal.create(BigDecimal(d.toString)), Decimal(d))
       checkEvaluation(Literal.create(new java.math.BigDecimal(d.toString)), Decimal(d))
@@ -285,7 +285,7 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Literal(Array('h', 'e', 'l', 'l', 'o')), "hello")
     checkEvaluation(Literal(Array("hello".toCharArray)), Array("hello"))
     // scalastyle:off
-    checkEvaluation(Literal(Array('测','试')), "测试")
+    checkEvaluation(Literal(Array('测', '试')), "测试")
     checkEvaluation(Literal(Array('a', '测', 'b', '试', 'c')), "a测b试c")
     // scalastyle:on
   }
@@ -344,9 +344,7 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  private def withTimeZones(
-      sessionTimeZone: String,
-      systemTimeZone: String)(f: => Unit): Unit = {
+  private def withTimeZones(sessionTimeZone: String, systemTimeZone: String)(f: => Unit): Unit = {
     withSQLConf(
       SQLConf.SESSION_LOCAL_TIMEZONE.key -> sessionTimeZone,
       SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
@@ -362,7 +360,8 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("format timestamp literal using spark.sql.session.timeZone") {
     withTimeZones(sessionTimeZone = "GMT+01:00", systemTimeZone = "GMT-08:00") {
-      val timestamp = LocalDateTime.of(2019, 3, 21, 0, 2, 3, 456000000)
+      val timestamp = LocalDateTime
+        .of(2019, 3, 21, 0, 2, 3, 456000000)
         .atZone(ZoneOffset.UTC)
         .toInstant
       val expected = "TIMESTAMP '2019-03-21 01:02:03.456'"
@@ -383,21 +382,25 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("SPARK-33860: Make CatalystTypeConverters.convertToCatalyst match special Array value") {
     assert(Literal(Array(1, 2, 3)) == Literal.create(Array(1, 2, 3), ArrayType(IntegerType)))
     assert(Literal(Array(1L, 2L, 3L)) == Literal.create(Array(1L, 2L, 3L), ArrayType(LongType)))
-    assert(Literal(Array(1D, 2D, 3D)) == Literal.create(Array(1D, 2D, 3D), ArrayType(DoubleType)))
+    assert(Literal(Array(1d, 2d, 3d)) == Literal.create(Array(1d, 2d, 3d), ArrayType(DoubleType)))
     assert(Literal("123") == Literal.create(Array('1', '2', '3'), StringType))
-    assert(Literal(Array(1.toByte, 2.toByte, 3.toByte)) ==
-      Literal.create(Array(1.toByte, 2.toByte, 3.toByte), BinaryType))
-    assert(Literal(Array("1", "2", "3")) ==
-      Literal.create(Array("1", "2", "3"), ArrayType(StringType)))
-    assert(Literal(Array(Period.ofMonths(1))) ==
-      Literal.create(Array(Period.ofMonths(1)), ArrayType(YearMonthIntervalType())))
+    assert(
+      Literal(Array(1.toByte, 2.toByte, 3.toByte)) ==
+        Literal.create(Array(1.toByte, 2.toByte, 3.toByte), BinaryType))
+    assert(
+      Literal(Array("1", "2", "3")) ==
+        Literal.create(Array("1", "2", "3"), ArrayType(StringType)))
+    assert(
+      Literal(Array(Period.ofMonths(1))) ==
+        Literal.create(Array(Period.ofMonths(1)), ArrayType(YearMonthIntervalType())))
   }
 
   test("SPARK-34342: Date/Timestamp toString") {
     assert(Literal.default(DateType).toString === "1970-01-01")
     assert(Literal.default(TimestampType).toString === "1969-12-31 16:00:00")
     withTimeZones(sessionTimeZone = "GMT+01:00", systemTimeZone = "GMT-08:00") {
-      val timestamp = LocalDateTime.of(2021, 2, 3, 16, 50, 3, 456000000)
+      val timestamp = LocalDateTime
+        .of(2021, 2, 3, 16, 50, 3, 456000000)
         .atZone(ZoneOffset.UTC)
         .toInstant
       val literalStr = Literal.create(timestamp).toString
@@ -419,8 +422,7 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       LocalDateTime.of(1, 1, 1, 0, 0, 0, 0),
       LocalDateTime.of(2021, 5, 31, 23, 59, 59, 100),
       LocalDateTime.of(2020, 2, 29, 23, 50, 57, 9999),
-      LocalDateTime.parse("9999-12-31T23:59:59.999999")
-    ).foreach { dateTime =>
+      LocalDateTime.parse("9999-12-31T23:59:59.999999")).foreach { dateTime =>
       checkEvaluation(Literal(dateTime), dateTime)
     }
   }
@@ -465,12 +467,12 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     Seq(
       Duration.ofDays(-1) -> "-1 00:00:00",
       Duration.of(10, ChronoUnit.MICROS) -> "0 00:00:00.00001",
-      Duration.of(MICROS_PER_DAY - 1, ChronoUnit.MICROS) -> "0 23:59:59.999999"
-    ).foreach { case (duration, intervalPayload) =>
-      val literal = Literal.apply(duration)
-      val expected = s"INTERVAL '$intervalPayload' DAY TO SECOND"
-      assert(literal.sql === expected)
-      assert(literal.toString === expected)
+      Duration.of(MICROS_PER_DAY - 1, ChronoUnit.MICROS) -> "0 23:59:59.999999").foreach {
+      case (duration, intervalPayload) =>
+        val literal = Literal.apply(duration)
+        val expected = s"INTERVAL '$intervalPayload' DAY TO SECOND"
+        assert(literal.sql === expected)
+        assert(literal.toString === expected)
     }
   }
 
@@ -478,8 +480,7 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     Seq(
       Period.ofYears(-1) -> "-1-0",
       Period.of(9999, 11, 0) -> "9999-11",
-      Period.ofMonths(-11) -> "-0-11"
-    ).foreach { case (period, intervalPayload) =>
+      Period.ofMonths(-11) -> "-0-11").foreach { case (period, intervalPayload) =>
       val literal = Literal.apply(period)
       val expected = s"INTERVAL '$intervalPayload' YEAR TO MONTH"
       assert(literal.sql === expected)
@@ -522,7 +523,7 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   // A generic internal row that throws exception when accessing null values
   class NullAccessForbiddenGenericInternalRow(override val values: Array[Any])
-    extends GenericInternalRow(values) {
+      extends GenericInternalRow(values) {
     override def get(ordinal: Int, dataType: DataType): AnyRef = {
       if (values(ordinal) == null) {
         throw new RuntimeException(s"Should not access null field at $ordinal!")
@@ -553,10 +554,10 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       Literal(LocalTime.NOON) -> "12:00:00",
       Literal(LocalTime.of(23, 59, 59, 100 * 1000 * 1000)) -> "23:59:59.1",
       Literal(LocalTime.of(23, 59, 59, 10000)) -> "23:59:59.00001",
-      Literal(LocalTime.of(23, 59, 59, 999999000)) -> "23:59:59.999999"
-    ).foreach { case (lit, str) =>
-      assert(lit.toString === str)
-      assert(lit.sql === s"TIME '$str'")
+      Literal(LocalTime.of(23, 59, 59, 999999000)) -> "23:59:59.999999").foreach {
+      case (lit, str) =>
+        assert(lit.toString === str)
+        assert(lit.sql === s"TIME '$str'")
     }
   }
 
@@ -567,11 +568,12 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       MapType(StringType, StringType, valueContainsNull = true))
     val struct = Literal.create(
       Row(1, "2", true, null),
-      StructType(Seq(
-        StructField("a", IntegerType),
-        StructField("b", StringType),
-        StructField("c", BooleanType),
-        StructField("d", NullType))))
+      StructType(
+        Seq(
+          StructField("a", IntegerType),
+          StructField("b", StringType),
+          StructField("c", BooleanType),
+          StructField("d", NullType))))
     // Create an array containing timestamps
     val array2 = Literal.create(
       Seq(java.sql.Timestamp.valueOf("2021-01-01 12:00:00")),
@@ -585,9 +587,7 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     // Create a struct with a timestamp field
     val struct2 = Literal.create(
       Row(1, java.sql.Timestamp.valueOf("2021-01-01 12:00:00")),
-      StructType(Seq(
-        StructField("a", IntegerType),
-        StructField("b", TimestampType))))
+      StructType(Seq(StructField("a", IntegerType), StructField("b", TimestampType))))
     Seq(
       Literal(1),
       Literal(1L),
@@ -609,10 +609,10 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       map,
       map2,
       struct,
-      struct2
-    ).foreach { expr =>
+      struct2).foreach { expr =>
       assert(expr.foldable, s"Expression $expr should be foldable")
-      assert(expr.contextIndependentFoldable,
+      assert(
+        expr.contextIndependentFoldable,
         s"Expression $expr should be context independent foldable")
     }
   }
@@ -627,9 +627,7 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       Literal.create(point1, new ExamplePointUDT),
 
       // Array containing UDT elements
-      Literal.create(
-        Array(point1, point2),
-        ArrayType(new ExamplePointUDT)),
+      Literal.create(Array(point1, point2), ArrayType(new ExamplePointUDT)),
 
       // Map with UDT values
       Literal.create(
@@ -639,20 +637,21 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       // Struct containing UDT fields
       Literal.create(
         Row("point", point1, 42),
-        StructType(Seq(
-          StructField("name", StringType),
-          StructField("coordinates", new ExamplePointUDT),
-          StructField("id", IntegerType)
-        ))),
+        StructType(
+          Seq(
+            StructField("name", StringType),
+            StructField("coordinates", new ExamplePointUDT),
+            StructField("id", IntegerType)))),
 
       // Nested structure with UDT
       Literal.create(
         Map("points" -> Array(point1, point2)),
-        MapType(StringType, ArrayType(new ExamplePointUDT), valueContainsNull = false))
-    ).foreach { expr =>
-      assert(expr.foldable, s"Expression $expr should be foldable")
-      assert(expr.contextIndependentFoldable,
-        s"Expression $expr should not be context independent foldable")
+        MapType(StringType, ArrayType(new ExamplePointUDT), valueContainsNull = false))).foreach {
+      expr =>
+        assert(expr.foldable, s"Expression $expr should be foldable")
+        assert(
+          expr.contextIndependentFoldable,
+          s"Expression $expr should not be context independent foldable")
     }
   }
 
@@ -664,7 +663,9 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("Literal.create with Geography value") {
     val pointBytes = "010100000000000000000031400000000000001C40"
-      .grouped(2).map(Integer.parseInt(_, 16).toByte).toArray
+      .grouped(2)
+      .map(Integer.parseInt(_, 16).toByte)
+      .toArray
     val geog = Geography.fromWKB(pointBytes, 4326)
     val lit = Literal.create(geog, GeographyType(4326))
     assert(lit.dataType === GeographyType(4326))
@@ -679,7 +680,9 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("Literal.create with Geometry value") {
     val pointBytes = "010100000000000000000031400000000000001C40"
-      .grouped(2).map(Integer.parseInt(_, 16).toByte).toArray
+      .grouped(2)
+      .map(Integer.parseInt(_, 16).toByte)
+      .toArray
     val geom = Geometry.fromWKB(pointBytes, 0)
     val lit = Literal.create(geom, GeometryType(0))
     assert(lit.dataType === GeometryType(0))

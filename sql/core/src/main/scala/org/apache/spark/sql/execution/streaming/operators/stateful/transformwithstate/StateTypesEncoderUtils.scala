@@ -29,14 +29,15 @@ import org.apache.spark.sql.execution.streaming.state.{IndexBasedStatePartitionK
 import org.apache.spark.sql.types._
 
 /**
- * Helper object for getting schema of key/value row that are used in state schema
- * files and to be passed into `RocksDBStateKey(/Value)Encoder`.
+ * Helper object for getting schema of key/value row that are used in state schema files and to be
+ * passed into `RocksDBStateKey(/Value)Encoder`.
  */
 object TransformWithStateKeyValueRowSchemaUtils {
+
   /**
-   * Creates a schema that is the concatenation of the grouping key and a user-defined
-   * key. This is used by MapState to create a composite key that is then treated as
-   * an "elementKey" by OneToOneTTLState.
+   * Creates a schema that is the concatenation of the grouping key and a user-defined key. This
+   * is used by MapState to create a composite key that is then treated as an "elementKey" by
+   * OneToOneTTLState.
    */
   def getCompositeKeySchema(
       groupingKeySchema: StructType,
@@ -47,9 +48,9 @@ object TransformWithStateKeyValueRowSchemaUtils {
   }
 
   /**
-   * Represents the schema of keys in the TTL index, managed by TTLState implementations.
-   * There is no value associated with entries in the TTL index, so there is no method
-   * called, for example, getTTLValueSchema.
+   * Represents the schema of keys in the TTL index, managed by TTLState implementations. There is
+   * no value associated with entries in the TTL index, so there is no method called, for example,
+   * getTTLValueSchema.
    */
   def getTTLRowKeySchema(keySchema: StructType): StructType =
     new StructType()
@@ -57,17 +58,17 @@ object TransformWithStateKeyValueRowSchemaUtils {
       .add("elementKey", keySchema)
 
   /**
-   * Represents the schema of a single long value, which is used to store the expiration
-   * timestamp of elements in the minimum index, managed by OneToManyTTLState.
+   * Represents the schema of a single long value, which is used to store the expiration timestamp
+   * of elements in the minimum index, managed by OneToManyTTLState.
    */
   def getExpirationMsRowSchema(): StructType =
     new StructType()
       .add("expirationMs", LongType)
 
   /**
-   * Represents the schema of an element with TTL in the primary index. We store the expiration
-   * of each value along with the value itself, since each value has its own TTL. It is used as
-   * the value schema of every value, for every stateful variable.
+   * Represents the schema of an element with TTL in the primary index. We store the expiration of
+   * each value along with the value itself, since each value has its own TTL. It is used as the
+   * value schema of every value, for every stateful variable.
    */
   def getValueSchemaWithTTL(schema: StructType, hasTTL: Boolean): StructType = {
     if (hasTTL) {
@@ -128,8 +129,7 @@ class StateTypesEncoder[V](
   }
 
   /**
-   * Encode the specified value in Spark UnsafeRow
-   * with provided ttl expiration.
+   * Encode the specified value in Spark UnsafeRow with provided ttl expiration.
    */
   def encodeValue(value: V, expirationMs: Long): UnsafeRow = {
     val objRow: InternalRow = objToRowSerializer.apply(value)
@@ -145,9 +145,8 @@ class StateTypesEncoder[V](
   }
 
   /**
-   * Decode the ttl information out of Value row. If the ttl has
-   * not been set (-1L specifies no user defined value), the API will
-   * return None.
+   * Decode the ttl information out of Value row. If the ttl has not been set (-1L specifies no
+   * user defined value), the API will return None.
    */
   def decodeTtlExpirationMs(row: UnsafeRow): Option[Long] = {
     // ensure ttl has been set
@@ -182,7 +181,7 @@ class CompositeKeyStateEncoder[K, V](
     valEncoder: Encoder[V],
     stateName: String,
     hasTtl: Boolean = false)
-  extends StateTypesEncoder[V](keyEncoder, valEncoder, stateName, hasTtl) {
+    extends StateTypesEncoder[V](keyEncoder, valEncoder, stateName, hasTtl) {
   import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.TransformWithStateKeyValueRowSchemaUtils._
 
   /** Encoders */
@@ -227,8 +226,8 @@ class CompositeKeyStateEncoder[K, V](
   }
 
   /**
-   * Grouping key and user key are encoded as a row of `schemaForCompositeKeyRow` schema.
-   * Grouping key will be encoded in `RocksDBStateEncoder` as the prefix column.
+   * Grouping key and user key are encoded as a row of `schemaForCompositeKeyRow` schema. Grouping
+   * key will be encoded in `RocksDBStateEncoder` as the prefix column.
    */
   def encodeCompositeKey(userKey: K): UnsafeRow = {
     val keyOption = ImplicitGroupingKeyTracker.getImplicitKeyOption
@@ -249,8 +248,8 @@ class CompositeKeyStateEncoder[K, V](
   }
 
   /**
-   * The input row is of composite Key schema.
-   * Only user key is returned though grouping key also exist in the row.
+   * The input row is of composite Key schema. Only user key is returned though grouping key also
+   * exist in the row.
    */
   def decodeCompositeKey(row: UnsafeRow): K = {
     userKeyRowToObjDeserializer.apply(row.getStruct(1, userKeyEnc.schema.length))
@@ -264,8 +263,7 @@ class TTLEncoder(schema: StructType) {
 
   // Take a groupingKey UnsafeRow and turn it into a (expirationMs, groupingKey) UnsafeRow.
   def encodeTTLRow(expirationMs: Long, elementKey: UnsafeRow): UnsafeRow = {
-    ttlKeyProjection.apply(
-      InternalRow(expirationMs, elementKey.asInstanceOf[InternalRow]))
+    ttlKeyProjection.apply(InternalRow(expirationMs, elementKey.asInstanceOf[InternalRow]))
   }
 }
 
@@ -315,27 +313,26 @@ class TimerKeyEncoder(keyExprEnc: ExpressionEncoder[Any]) {
 
 /**
  * For MapState main CF, the state key is the composite key (grouping key + user key) i.e.
- * StructType("key": StructType, "userKey": StructType). The partition key
- * is the grouping key i.e. first field.
+ * StructType("key": StructType, "userKey": StructType). The partition key is the grouping key
+ * i.e. first field.
  */
 class MapStatePartitionKeyExtractor(stateKeySchema: StructType)
-  extends IndexBasedStatePartitionKeyExtractor(stateKeySchema, partitionKeyIndex = 0)
+    extends IndexBasedStatePartitionKeyExtractor(stateKeySchema, partitionKeyIndex = 0)
 
 /**
- * TTL main CF have state keys with schema (expirationMs, elementKey). The partition key
- * is the elementKey part. This is used by Value and List TTL main CF.
+ * TTL main CF have state keys with schema (expirationMs, elementKey). The partition key is the
+ * elementKey part. This is used by Value and List TTL main CF.
  */
 class TTLStatePartitionKeyExtractor(stateKeySchema: StructType)
-  extends IndexBasedStatePartitionKeyExtractor(stateKeySchema, partitionKeyIndex = 1)
+    extends IndexBasedStatePartitionKeyExtractor(stateKeySchema, partitionKeyIndex = 1)
 
 /**
- * For MapTTL CF, TTL keys have schema (expirationMs, elementKey),
- * but for map, the elementKey is the composite key (grouping key, user key).
- * Hence we need to extract the composite key from TTL key,
- * then extract the grouping key from the composite key.
+ * For MapTTL CF, TTL keys have schema (expirationMs, elementKey), but for map, the elementKey is
+ * the composite key (grouping key, user key). Hence we need to extract the composite key from TTL
+ * key, then extract the grouping key from the composite key.
  */
 class MapTTLStatePartitionKeyExtractor(stateKeySchema: StructType)
-  extends StatePartitionKeyExtractor {
+    extends StatePartitionKeyExtractor {
   // This will extract the compositeKey from the TTL key
   private lazy val compositeKeyExtractor = new TTLStatePartitionKeyExtractor(stateKeySchema)
   // This will extract the grouping key from the compositeKey
@@ -350,16 +347,18 @@ class MapTTLStatePartitionKeyExtractor(stateKeySchema: StructType)
 }
 
 /**
- * For extracting partition keys from Timer state keys (both event & processing time)
- * Timer state has two key schemas:
- * - Primary index CF: (key, expiryTimestampMs)
- * - Secondary index CF: (expiryTimestampMs, key)
- * The partition key for both is just the key field.
+ * For extracting partition keys from Timer state keys (both event & processing time) Timer state
+ * has two key schemas:
+ *   - Primary index CF: (key, expiryTimestampMs)
+ *   - Secondary index CF: (expiryTimestampMs, key) The partition key for both is just the key
+ *     field.
  */
 class TimerStatePartitionKeyExtractor(
-  stateKeySchema: StructType, isSecondaryIndex: Boolean = false)
-  extends IndexBasedStatePartitionKeyExtractor(
-    stateKeySchema, partitionKeyIndex = if (isSecondaryIndex) 1 else 0)
+    stateKeySchema: StructType,
+    isSecondaryIndex: Boolean = false)
+    extends IndexBasedStatePartitionKeyExtractor(
+      stateKeySchema,
+      partitionKeyIndex = if (isSecondaryIndex) 1 else 0)
 
 object TransformWithStatePartitionKeyExtractorFactory {
   def create(
@@ -391,11 +390,12 @@ object TransformWithStatePartitionKeyExtractorFactory {
         case StateVariableType.MapState => new MapTTLStatePartitionKeyExtractor(stateKeySchema)
         case StateVariableType.ListState | StateVariableType.ValueState =>
           new TTLStatePartitionKeyExtractor(stateKeySchema)
-        case _ => throw OfflineStateRepartitionErrors.unsupportedTransformWithStateVarTypeError(
-          checkpointLocation = "",
-          stateVariableInfo.stateVariableType.toString,
-          stateVariableInfo.ttlEnabled,
-          colFamilyName)
+        case _ =>
+          throw OfflineStateRepartitionErrors.unsupportedTransformWithStateVarTypeError(
+            checkpointLocation = "",
+            stateVariableInfo.stateVariableType.toString,
+            stateVariableInfo.ttlEnabled,
+            colFamilyName)
       }
     } else if (StateStoreColumnFamilySchemaUtils.isMinExpiryIndexCFName(colFamilyName)) {
       val stateName = StateStoreColumnFamilySchemaUtils
@@ -424,15 +424,18 @@ object TransformWithStatePartitionKeyExtractorFactory {
         new NoopStatePartitionKeyExtractor(stateKeySchema)
       case StateVariableType.MapState => new MapStatePartitionKeyExtractor(stateKeySchema)
       case StateVariableType.TimerState =>
-        require(TimerStateUtils.isTimerCFName(colFamilyName),
+        require(
+          TimerStateUtils.isTimerCFName(colFamilyName),
           s"Column family name must be for a timer: $colFamilyName")
         new TimerStatePartitionKeyExtractor(
-          stateKeySchema, TimerStateUtils.isTimerSecondaryIndexCF(colFamilyName))
-      case _ => throw OfflineStateRepartitionErrors.unsupportedTransformWithStateVarTypeError(
-        checkpointLocation = "",
-        stateVariableInfo.stateVariableType.toString,
-        stateVariableInfo.ttlEnabled,
-        colFamilyName)
+          stateKeySchema,
+          TimerStateUtils.isTimerSecondaryIndexCF(colFamilyName))
+      case _ =>
+        throw OfflineStateRepartitionErrors.unsupportedTransformWithStateVarTypeError(
+          checkpointLocation = "",
+          stateVariableInfo.stateVariableType.toString,
+          stateVariableInfo.ttlEnabled,
+          colFamilyName)
     }
   }
 }

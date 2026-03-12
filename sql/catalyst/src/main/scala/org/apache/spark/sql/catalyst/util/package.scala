@@ -82,9 +82,9 @@ package object util extends Logging {
 
   /**
    * Replaces attributes, string literals, complex type extractors with their pretty form so that
-   * generated column names don't contain back-ticks or double-quotes.
-   * In case value of `shouldTrimTempResolvedColumn` is true, trim [[TempResolvedColumn]]s from the
-   * expression tree to avoid having it in an [[Alias]] name.
+   * generated column names don't contain back-ticks or double-quotes. In case value of
+   * `shouldTrimTempResolvedColumn` is true, trim [[TempResolvedColumn]]s from the expression tree
+   * to avoid having it in an [[Alias]] name.
    */
   private def usePrettyExpression(
       e: Expression,
@@ -97,13 +97,11 @@ package object util extends Logging {
       val name = e.name.getOrElse(e.childSchema(e.ordinal).name)
       PrettyAttribute(
         usePrettyExpression(e.child, shouldTrimTempResolvedColumn).sql + "." + name,
-        e.dataType
-      )
+        e.dataType)
     case e: GetArrayStructFields =>
       PrettyAttribute(
         s"${usePrettyExpression(e.child, shouldTrimTempResolvedColumn)}.${e.field.name}",
-        e.dataType
-      )
+        e.dataType)
     case r: InheritAnalysisRules =>
       val proposedParameters = if (shouldTrimTempResolvedColumn) {
         r.parameters.map(trimTempResolvedColumn)
@@ -111,11 +109,9 @@ package object util extends Logging {
         r.parameters
       }
       PrettyAttribute(
-        name = r.makeSQLString(
-          proposedParameters.map(parameter => toPrettySQL(parameter, shouldTrimTempResolvedColumn))
-        ),
-        dataType = r.dataType
-      )
+        name = r.makeSQLString(proposedParameters.map(parameter =>
+          toPrettySQL(parameter, shouldTrimTempResolvedColumn))),
+        dataType = r.dataType)
     case c: Cast if !c.containsTag(Cast.USER_SPECIFIED_CAST) =>
       PrettyAttribute(usePrettyExpression(c.child, shouldTrimTempResolvedColumn).sql, c.dataType)
     case p: PythonFuncExpression => PrettyPythonUDF(p.name, p.dataType, p.children)
@@ -144,7 +140,8 @@ package object util extends Logging {
    * Format a sequence with semantics similar to calling .mkString(). Any elements beyond
    * maxNumToStringFields will be dropped and replaced by a "... N more fields" placeholder.
    *
-   * @return the trimmed and formatted string.
+   * @return
+   *   the trimmed and formatted string.
    */
   def truncatedString[T](
       seq: Seq[T],
@@ -178,9 +175,9 @@ package object util extends Logging {
 
   /**
    * If set, this metadata column can only be accessed under [[AggregateExpression]]. This is
-   * important when resolving columns in ORDER BY and HAVING clauses on top of [[Aggregate]].
-   * In this case we can only reference attributes from grouping expressions, or attributes marked
-   * as "__aggregated_access_only" under [[AggregateExpression]].
+   * important when resolving columns in ORDER BY and HAVING clauses on top of [[Aggregate]]. In
+   * this case we can only reference attributes from grouping expressions, or attributes marked as
+   * "__aggregated_access_only" under [[AggregateExpression]].
    */
   val AGGREGATED_ACCESS_ONLY = "__aggregated_access_only"
 
@@ -201,16 +198,14 @@ package object util extends Logging {
         .withMetadata(attr.metadata)
         .putString(METADATA_COL_ATTR_KEY, attr.name)
         .putBoolean(QUALIFIED_ACCESS_ONLY, true)
-        .build()
-    )
+        .build())
 
     def markAsAggregatedAccessOnly(): Attribute = attr.withMetadata(
       new MetadataBuilder()
         .withMetadata(attr.metadata)
         .putString(METADATA_COL_ATTR_KEY, attr.name)
         .putBoolean(AGGREGATED_ACCESS_ONLY, true)
-        .build()
-    )
+        .build())
 
     def markAsAllowAnyAccess(): Attribute = {
       if (qualifiedAccessOnly) {
@@ -219,8 +214,7 @@ package object util extends Logging {
             .withMetadata(attr.metadata)
             .remove(QUALIFIED_ACCESS_ONLY)
             .remove(AGGREGATED_ACCESS_ONLY)
-            .build()
-        )
+            .build())
       } else {
         attr
       }
@@ -238,8 +232,7 @@ package object util extends Logging {
     FileSourceGeneratedMetadataStructField.FILE_SOURCE_GENERATED_METADATA_COL_ATTR_KEY,
     MetadataColumn.PRESERVE_ON_DELETE,
     MetadataColumn.PRESERVE_ON_UPDATE,
-    MetadataColumn.PRESERVE_ON_REINSERT
-  )
+    MetadataColumn.PRESERVE_ON_REINSERT)
 
   def removeInternalMetadata(schema: StructType): StructType = {
     StructType(schema.map { field =>

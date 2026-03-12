@@ -67,7 +67,8 @@ class UnsafeRowSuite extends SparkFunSuite {
   }
 
   test("writeToStream") {
-    val row = InternalRow.apply(UTF8String.fromString("hello"), UTF8String.fromString("world"), 123)
+    val row =
+      InternalRow.apply(UTF8String.fromString("hello"), UTF8String.fromString("world"), 123)
     val arrayBackedUnsafeRow: UnsafeRow =
       UnsafeProjection.create(Array[DataType](StringType, StringType, IntegerType)).apply(row)
     assert(arrayBackedUnsafeRow.getBaseObject.isInstanceOf[Array[Byte]])
@@ -84,14 +85,12 @@ class UnsafeRowSuite extends SparkFunSuite {
           arrayBackedUnsafeRow.getBaseOffset,
           offheapRowPage.getBaseObject,
           offheapRowPage.getBaseOffset,
-          arrayBackedUnsafeRow.getSizeInBytes
-        )
+          arrayBackedUnsafeRow.getSizeInBytes)
         val offheapUnsafeRow: UnsafeRow = new UnsafeRow(3)
         offheapUnsafeRow.pointTo(
           offheapRowPage.getBaseObject,
           offheapRowPage.getBaseOffset,
-          arrayBackedUnsafeRow.getSizeInBytes
-        )
+          arrayBackedUnsafeRow.getSizeInBytes)
         assert(offheapUnsafeRow.getBaseObject === null)
         val baos = new ByteArrayOutputStream()
         val writeBuffer = new Array[Byte](1024)
@@ -105,8 +104,12 @@ class UnsafeRowSuite extends SparkFunSuite {
       val baos = new ByteArrayOutputStream()
       val numBytes = arrayBackedUnsafeRow.getSizeInBytes
       val bytesWithOffset = new Array[Byte](numBytes + 100)
-      System.arraycopy(arrayBackedUnsafeRow.getBaseObject.asInstanceOf[Array[Byte]], 0,
-        bytesWithOffset, 100, numBytes)
+      System.arraycopy(
+        arrayBackedUnsafeRow.getBaseObject.asInstanceOf[Array[Byte]],
+        0,
+        bytesWithOffset,
+        100,
+        numBytes)
       val arrayBackedRow = new UnsafeRow(arrayBackedUnsafeRow.numFields())
       arrayBackedRow.pointTo(bytesWithOffset, Platform.BYTE_ARRAY_OFFSET + 100, numBytes)
       arrayBackedRow.writeToStream(baos, null)
@@ -199,9 +202,7 @@ class UnsafeRowSuite extends SparkFunSuite {
     }.getMessage
     assert(
       errorMsg.contains(
-        "Invalid byte array backed UnsafeRow: byte array length=64, offset=50, byte size=32"
-      )
-    )
+        "Invalid byte array backed UnsafeRow: byte array length=64, offset=50, byte size=32"))
 
     // Negative size
     errorMsg = intercept[SparkIllegalArgumentException] {
@@ -209,19 +210,14 @@ class UnsafeRowSuite extends SparkFunSuite {
     }.getMessage
     assert(
       errorMsg.contains(
-        "Invalid byte array backed UnsafeRow: byte array length=64, offset=50, byte size=-32"
-      )
-    )
+        "Invalid byte array backed UnsafeRow: byte array length=64, offset=50, byte size=-32"))
 
     // Negative offset
     errorMsg = intercept[SparkIllegalArgumentException] {
       emptyRow.pointTo(byteArray, -5, 32)
     }.getMessage
     assert(
-      errorMsg.contains(
-        s"Invalid byte array backed UnsafeRow: byte array length=64, " +
-          s"offset=${-5 - Platform.BYTE_ARRAY_OFFSET}, byte size=32"
-      )
-    )
+      errorMsg.contains(s"Invalid byte array backed UnsafeRow: byte array length=64, " +
+        s"offset=${-5 - Platform.BYTE_ARRAY_OFFSET}, byte size=32"))
   }
 }

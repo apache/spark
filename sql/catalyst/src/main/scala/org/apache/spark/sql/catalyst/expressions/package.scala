@@ -27,7 +27,7 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{StructField, StructType}
 
 /**
- * A set of classes that can be used to represent trees of relational expressions.  A key goal of
+ * A set of classes that can be used to represent trees of relational expressions. A key goal of
  * the expression library is to hide the details of naming and scoping from developers who want to
  * manipulate trees of relational operators. As such, the library defines a special type of
  * expression, a [[NamedExpression]] in addition to the standard collection of expressions.
@@ -41,22 +41,22 @@ import org.apache.spark.sql.types.{StructField, StructType}
  * Some expression are named and thus can be referenced by later operators in the dataflow graph.
  * The two types of named expressions are [[AttributeReference]]s and [[Alias]]es.
  * [[AttributeReference]]s refer to attributes of the input tuple for a given operator and form
- * the leaves of some expression trees.  Aliases assign a name to intermediate computations.
- * For example, in the SQL statement `SELECT a+b AS c FROM ...`, the expressions `a` and `b` would
- * be represented by `AttributeReferences` and `c` would be represented by an `Alias`.
+ * the leaves of some expression trees. Aliases assign a name to intermediate computations. For
+ * example, in the SQL statement `SELECT a+b AS c FROM ...`, the expressions `a` and `b` would be
+ * represented by `AttributeReferences` and `c` would be represented by an `Alias`.
  *
  * During [[analysis]], all named expressions are assigned a globally unique expression id, which
- * can be used for equality comparisons.  While the original names are kept around for debugging
- * purposes, they should never be used to check if two attributes refer to the same value, as
- * plan transformations can result in the introduction of naming ambiguity. For example, consider
- * a plan that contains subqueries, both of which are reading from the same table.  If an
+ * can be used for equality comparisons. While the original names are kept around for debugging
+ * purposes, they should never be used to check if two attributes refer to the same value, as plan
+ * transformations can result in the introduction of naming ambiguity. For example, consider a
+ * plan that contains subqueries, both of which are reading from the same table. If an
  * optimization removes the subqueries, scoping information would be destroyed, eliminating the
  * ability to reason about which subquery produced a given attribute.
  *
  * ==Evaluation==
  * The result of expressions can be evaluated using the `Expression.apply(Row)` method.
  */
-package object expressions  {
+package object expressions {
 
   /**
    * Used as input into expressions whose output does not depend on any input value.
@@ -90,6 +90,7 @@ package object expressions  {
    * Helper functions for working with `Seq[Attribute]`.
    */
   implicit class AttributeSeq(val attrs: Seq[Attribute]) extends Serializable {
+
     /** Creates a StructType with a schema matching this `Seq[Attribute]`. */
     def toStructType: StructType = {
       StructType(attrs.map(a => StructField(a.name, a.dataType, a.nullable, a.metadata)))
@@ -119,7 +120,8 @@ package object expressions  {
     def apply(ordinal: Int): Attribute = attrsArray(ordinal)
 
     /**
-     * Returns the index of first attribute with a matching expression id, or -1 if no match exists.
+     * Returns the index of first attribute with a matching expression id, or -1 if no match
+     * exists.
      */
     def indexOf(exprId: ExprId): Int = {
       Option(exprIdToOrdinal.get(exprId)).getOrElse(-1)
@@ -137,8 +139,8 @@ package object expressions  {
     /** Map to use for qualified case insensitive attribute lookups with 2 part key */
     @transient private lazy val qualified: Map[(String, String), Seq[Attribute]] = {
       // key is 2 part: table/alias and name
-      val grouped = attrs.filter(_.qualifier.nonEmpty).groupBy {
-        a => (a.qualifier.last.toLowerCase(Locale.ROOT), a.name.toLowerCase(Locale.ROOT))
+      val grouped = attrs.filter(_.qualifier.nonEmpty).groupBy { a =>
+        (a.qualifier.last.toLowerCase(Locale.ROOT), a.name.toLowerCase(Locale.ROOT))
       }
       unique(grouped)
     }
@@ -146,14 +148,16 @@ package object expressions  {
     /** Map to use for qualified case insensitive attribute lookups with 3 part key */
     @transient private lazy val qualified3Part: Map[(String, String, String), Seq[Attribute]] = {
       // key is 3 part: database name, table name and name
-      val grouped = attrs.filter(a => a.qualifier.length >= 2 && a.qualifier.length <= 3)
+      val grouped = attrs
+        .filter(a => a.qualifier.length >= 2 && a.qualifier.length <= 3)
         .groupBy { a =>
           val qualifier = if (a.qualifier.length == 2) {
             a.qualifier
           } else {
             a.qualifier.takeRight(2)
           }
-          (qualifier.head.toLowerCase(Locale.ROOT),
+          (
+            qualifier.head.toLowerCase(Locale.ROOT),
             qualifier.last.toLowerCase(Locale.ROOT),
             a.name.toLowerCase(Locale.ROOT))
         }
@@ -167,7 +171,8 @@ package object expressions  {
       val grouped = attrs.filter(_.qualifier.length == 3).groupBy { a =>
         a.qualifier match {
           case Seq(catalog, db, tbl) =>
-            (catalog.toLowerCase(Locale.ROOT),
+            (
+              catalog.toLowerCase(Locale.ROOT),
               db.toLowerCase(Locale.ROOT),
               tbl.toLowerCase(Locale.ROOT),
               a.name.toLowerCase(Locale.ROOT))
@@ -201,12 +206,15 @@ package object expressions  {
       // Attribute(b, qualifier("cat", "db1", "a")) and List("c") will be the second element
       var matches: (Seq[Attribute], Seq[String]) = nameParts match {
         case catalogPart +: dbPart +: tblPart +: name +: nestedFields =>
-          val key = (catalogPart.toLowerCase(Locale.ROOT), dbPart.toLowerCase(Locale.ROOT),
-            tblPart.toLowerCase(Locale.ROOT), name.toLowerCase(Locale.ROOT))
+          val key = (
+            catalogPart.toLowerCase(Locale.ROOT),
+            dbPart.toLowerCase(Locale.ROOT),
+            tblPart.toLowerCase(Locale.ROOT),
+            name.toLowerCase(Locale.ROOT))
           val attributes = collectMatches(name, qualified4Part.get(key)).filter { a =>
             assert(a.qualifier.length == 3)
             resolver(catalogPart, a.qualifier(0)) && resolver(dbPart, a.qualifier(1)) &&
-              resolver(tblPart, a.qualifier(2))
+            resolver(tblPart, a.qualifier(2))
           }
           (attributes, nestedFields)
         case _ =>
@@ -224,8 +232,10 @@ package object expressions  {
       if (matches._1.isEmpty) {
         matches = nameParts match {
           case dbPart +: tblPart +: name +: nestedFields =>
-            val key = (dbPart.toLowerCase(Locale.ROOT),
-              tblPart.toLowerCase(Locale.ROOT), name.toLowerCase(Locale.ROOT))
+            val key = (
+              dbPart.toLowerCase(Locale.ROOT),
+              tblPart.toLowerCase(Locale.ROOT),
+              name.toLowerCase(Locale.ROOT))
             val attributes = collectMatches(name, qualified3Part.get(key)).filter { a =>
               val qualifier = if (a.qualifier.length == 2) {
                 a.qualifier
@@ -273,7 +283,8 @@ package object expressions  {
     }
 
     /**
-     * Match attributes for the case where at least one qualifier in `attrs` has more than 3 parts.
+     * Match attributes for the case where at least one qualifier in `attrs` has more than 3
+     * parts.
      */
     private def matchWithFourOrMoreQualifierParts(
         nameParts: Seq[String],
@@ -283,9 +294,10 @@ package object expressions  {
       // but not a subset of Seq("a", "b", "b").
       def matchQualifier(short: Seq[String], long: Seq[String]): Boolean = {
         (long.length >= short.length) &&
-          long.takeRight(short.length)
-            .zip(short)
-            .forall(x => resolver(x._1, x._2))
+        long
+          .takeRight(short.length)
+          .zip(short)
+          .forall(x => resolver(x._1, x._2))
       }
 
       // Collect attributes that match the given name and qualifier.
@@ -336,13 +348,15 @@ package object expressions  {
      *
      * This method finds all suitable candidates for the resolution based on the name matches and
      * checks if the nested fields are requested.
-     * - If there's only one match and nested fields are requested, wrap the matched attribute with
-     *   [[ExtractValue]], and recursively wrap that with additional [[ExtractValue]]s
-     *   for each nested field. In the end, alias the final expression with the last nested field
-     *   name.
-     * - If there's only one match and no nested fields are requested, return the matched attribute.
-     * - If there are no matches, return None.
-     * - If there is more than one match, throw [[QueryCompilationErrors.ambiguousReferenceError]].
+     *   - If there's only one match and nested fields are requested, wrap the matched attribute
+     *     with [[ExtractValue]], and recursively wrap that with additional [[ExtractValue]]s for
+     *     each nested field. In the end, alias the final expression with the last nested field
+     *     name.
+     *   - If there's only one match and no nested fields are requested, return the matched
+     *     attribute.
+     *   - If there are no matches, return None.
+     *   - If there is more than one match, throw
+     *     [[QueryCompilationErrors.ambiguousReferenceError]].
      */
     def resolve(nameParts: Seq[String], resolver: Resolver): Option[NamedExpression] = {
       val (candidates, nestedFields) = getCandidatesForResolution(nameParts, resolver)
@@ -353,8 +367,7 @@ package object expressions  {
         case _ =>
           throw QueryCompilationErrors.ambiguousReferenceError(
             UnresolvedAttribute(nameParts).name,
-            resolvedCandidates.map(_.toAttribute)
-          )
+            resolvedCandidates.map(_.toAttribute))
       }
     }
 

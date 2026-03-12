@@ -27,11 +27,11 @@ import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_COLLATION
 /**
  * The logical plan of the ALTER (DATABASE|SCHEMA|NAMESPACE) ... DEFAULT COLLATION command.
  */
-case class SetNamespaceCollationCommand(
-    namespace: LogicalPlan,
-    collation: String) extends UnaryRunnableCommand {
+case class SetNamespaceCollationCommand(namespace: LogicalPlan, collation: String)
+    extends UnaryRunnableCommand {
   override def child: LogicalPlan = namespace
-  override protected def withNewChildInternal(newChild: LogicalPlan): SetNamespaceCollationCommand =
+  override protected def withNewChildInternal(
+      newChild: LogicalPlan): SetNamespaceCollationCommand =
     copy(namespace = newChild)
 
   override def run(sparkSession: SparkSession): Seq[Row] = {

@@ -26,8 +26,7 @@ import org.apache.spark.sql.execution.LeafExecNode
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.storage.{BlockId, PythonWorkerLogBlockId, PythonWorkerLogLine}
 
-case class PythonWorkerLogsExec(jsonAttr: Attribute)
-  extends LeafExecNode {
+case class PythonWorkerLogsExec(jsonAttr: Attribute) extends LeafExecNode {
 
   override def output: Seq[Attribute] = Seq(jsonAttr)
 
@@ -54,10 +53,12 @@ case class PythonWorkerLogsExec(jsonAttr: Attribute)
 
   private def getBlockIds(sessionId: String): Seq[BlockId] = {
     val blockManager = SparkEnv.get.blockManager.master
-    blockManager.getMatchingBlockIds(
-      id => id.isInstanceOf[PythonWorkerLogBlockId] &&
-        id.asInstanceOf[PythonWorkerLogBlockId].sessionId == sessionId,
-      askStorageEndpoints = true
-    ).distinct
+    blockManager
+      .getMatchingBlockIds(
+        id =>
+          id.isInstanceOf[PythonWorkerLogBlockId] &&
+            id.asInstanceOf[PythonWorkerLogBlockId].sessionId == sessionId,
+        askStorageEndpoints = true)
+      .distinct
   }
 }

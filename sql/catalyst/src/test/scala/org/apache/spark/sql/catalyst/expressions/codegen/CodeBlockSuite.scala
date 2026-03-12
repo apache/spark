@@ -77,9 +77,13 @@ class CodeBlockSuite extends SparkFunSuite {
            |boolean $isNull = false;
            |int $value = -1;
           """.stripMargin
-    val exprValues = code.asInstanceOf[CodeBlock].blockInputs.collect {
-      case e: ExprValue => e
-    }.toSet
+    val exprValues = code
+      .asInstanceOf[CodeBlock]
+      .blockInputs
+      .collect { case e: ExprValue =>
+        e
+      }
+      .toSet
     assert(exprValues.size == 2)
     assert(exprValues === Set(value, isNull))
   }
@@ -95,7 +99,7 @@ class CodeBlockSuite extends SparkFunSuite {
       code"""
            |boolean $isNull1 = false;
            |int $value1 = -1;""".stripMargin +
-      code"""
+        code"""
            |boolean $isNull2 = true;
            |int $value2 = $literal;""".stripMargin
 
@@ -108,9 +112,11 @@ class CodeBlockSuite extends SparkFunSuite {
 
     assert(code.toString == expected)
 
-    val exprValues = code.children.flatMap(_.asInstanceOf[CodeBlock].blockInputs.collect {
-      case e: ExprValue => e
-    }).toSet
+    val exprValues = code.children
+      .flatMap(_.asInstanceOf[CodeBlock].blockInputs.collect { case e: ExprValue =>
+        e
+      })
+      .toSet
     assert(exprValues.size == 5)
     assert(exprValues === Set(isNull1, value1, isNull2, value2, literal))
   }
@@ -122,8 +128,8 @@ class CodeBlockSuite extends SparkFunSuite {
         code"$obj"
       },
       condition = "INTERNAL_ERROR",
-      parameters = Map("message" -> s"Can not interpolate ${obj.getClass.getName} into code block.")
-    )
+      parameters =
+        Map("message" -> s"Can not interpolate ${obj.getClass.getName} into code block."))
   }
 
   test("transform expr in code block") {
@@ -153,7 +159,7 @@ class CodeBlockSuite extends SparkFunSuite {
     assert(aliasedCode.toString == expected.toString)
   }
 
-  test ("transform expr in nested blocks") {
+  test("transform expr in nested blocks") {
     val expr = JavaCode.expression("1 + 1", IntegerType)
     val isNull = JavaCode.isNullVariable("expr1_isNull")
     val exprInFunc = JavaCode.variable("expr1", IntegerType)
@@ -170,11 +176,13 @@ class CodeBlockSuite extends SparkFunSuite {
     val aliasedParam = JavaCode.variable("aliased", expr.javaType)
 
     val block = code"${subBlocks(0)}\n${subBlocks(1)}\n${subBlocks(2)}"
-    val transformedBlock = block.transform {
-      case b: Block => b.transformExprValues {
-        case SimpleExprValue("1 + 1", java.lang.Integer.TYPE) => aliasedParam
+    val transformedBlock = block
+      .transform { case b: Block =>
+        b.transformExprValues { case SimpleExprValue("1 + 1", java.lang.Integer.TYPE) =>
+          aliasedParam
+        }
       }
-    }.asInstanceOf[CodeBlock]
+      .asInstanceOf[CodeBlock]
 
     val expected1 =
       code"""
@@ -198,8 +206,8 @@ class CodeBlockSuite extends SparkFunSuite {
         |}""".stripMargin
 
     val exprValues = transformedBlock.children.flatMap { block =>
-      block.asInstanceOf[CodeBlock].blockInputs.collect {
-        case e: ExprValue => e
+      block.asInstanceOf[CodeBlock].blockInputs.collect { case e: ExprValue =>
+        e
       }
     }.toSet
 

@@ -22,7 +22,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, TestSQLContext}
 import org.apache.spark.util.ResetSystemProperties
 
-class SetCommandSuite extends QueryTest with SharedSparkSession with ResetSystemProperties  {
+class SetCommandSuite extends QueryTest with SharedSparkSession with ResetSystemProperties {
   test("SET commands semantics using sql()") {
     spark.sessionState.conf.clear()
     val testKey = "test.key.0"
@@ -34,9 +34,7 @@ class SetCommandSuite extends QueryTest with SharedSparkSession with ResetSystem
     sql("SET").collect().foreach { row =>
       val key = row.getString(0)
       val value = row.getString(1)
-      assert(
-        TestSQLContext.overrideConfs.contains(key),
-        s"$key should exist in SQLConf.")
+      assert(TestSQLContext.overrideConfs.contains(key), s"$key should exist in SQLConf.")
       assert(
         TestSQLContext.overrideConfs(key) === value,
         s"The value of $key should be ${TestSQLContext.overrideConfs(key)} instead of $value.")
@@ -45,26 +43,16 @@ class SetCommandSuite extends QueryTest with SharedSparkSession with ResetSystem
 
     // "set key=val"
     sql(s"SET $testKey=$testVal")
-    checkAnswer(
-      sql("SET"),
-      overrideConfs ++ Seq(Row(testKey, testVal))
-    )
+    checkAnswer(sql("SET"), overrideConfs ++ Seq(Row(testKey, testVal)))
 
     sql(s"SET ${testKey + testKey}=${testVal + testVal}")
     checkAnswer(
       sql("set"),
-      overrideConfs ++ Seq(Row(testKey, testVal), Row(testKey + testKey, testVal + testVal))
-    )
+      overrideConfs ++ Seq(Row(testKey, testVal), Row(testKey + testKey, testVal + testVal)))
 
     // "set key"
-    checkAnswer(
-      sql(s"SET $testKey"),
-      Row(testKey, testVal)
-    )
-    checkAnswer(
-      sql(s"SET $nonexistentKey"),
-      Row(nonexistentKey, "<undefined>")
-    )
+    checkAnswer(sql(s"SET $testKey"), Row(testKey, testVal))
+    checkAnswer(sql(s"SET $nonexistentKey"), Row(nonexistentKey, "<undefined>"))
     spark.sessionState.conf.clear()
   }
 
@@ -75,11 +63,8 @@ class SetCommandSuite extends QueryTest with SharedSparkSession with ResetSystem
     sql(s"SET test.key1=3")
     val result = sql("SET").collect()
     assert(result ===
-      (overrideConfs ++ Seq(
-        Row("test.key1", "3"),
-        Row("test.key2", "2"),
-        Row("test.key3", "1"))).sortBy(_.getString(0))
-    )
+      (overrideConfs ++ Seq(Row("test.key1", "3"), Row("test.key2", "2"), Row("test.key3", "1")))
+        .sortBy(_.getString(0)))
     spark.sessionState.conf.clear()
   }
 
@@ -125,7 +110,7 @@ class SetCommandSuite extends QueryTest with SharedSparkSession with ResetSystem
     val value1 = "test.value1"
     val key2 = "test.token"
     val value2 = "test.value2"
-    withSQLConf (key1 -> value1, key2 -> value2) {
+    withSQLConf(key1 -> value1, key2 -> value2) {
       checkAnswer(sql(s"SET $key1"), Row(key1, "*********(redacted)"))
       checkAnswer(sql(s"SET $key2"), Row(key2, "*********(redacted)"))
       val allValues = sql("SET").collect().map(_.getString(1))
@@ -139,8 +124,7 @@ class SetCommandSuite extends QueryTest with SharedSparkSession with ResetSystem
     withSQLConf(key1 -> value1) {
       checkError(
         intercept[ParseException](sql("SET ${test.password}")),
-        condition = "INVALID_SET_SYNTAX"
-      )
+        condition = "INVALID_SET_SYNTAX")
     }
   }
 }

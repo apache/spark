@@ -29,17 +29,19 @@ import org.apache.spark.sql.execution.command
  *   - V1 Hive External catalog:
  *     `org.apache.spark.sql.hive.execution.command.AlterNamespaceSetLocationSuite`
  */
-trait AlterNamespaceSetLocationSuiteBase extends command.AlterNamespaceSetLocationSuiteBase
+trait AlterNamespaceSetLocationSuiteBase
+    extends command.AlterNamespaceSetLocationSuiteBase
     with command.TestsV1AndV2Commands {
   override def namespace: String = "db"
   override def notFoundMsgPrefix: String = "Database"
 }
 
 /**
- * The class contains tests for the `ALTER NAMESPACE ... SET LOCATION` command to
- * check V1 In-Memory table catalog.
+ * The class contains tests for the `ALTER NAMESPACE ... SET LOCATION` command to check V1
+ * In-Memory table catalog.
  */
-class AlterNamespaceSetLocationSuite extends AlterNamespaceSetLocationSuiteBase
+class AlterNamespaceSetLocationSuite
+    extends AlterNamespaceSetLocationSuiteBase
     with CommandSuiteBase {
   override def commandVersion: String = super[AlterNamespaceSetLocationSuiteBase].commandVersion
 

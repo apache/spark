@@ -25,16 +25,20 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.DataType
 
 /**
- * Represents an expression when used with a SQL pipe operator.
- * We use this to check invariants about whether aggregate functions may exist in these expressions.
- * @param child The child expression.
- * @param isAggregate Whether the pipe operator is |> AGGREGATE.
- *                    If true, the child expression must contain at least one aggregate function.
- *                    If false, the child expression must not contain any aggregate functions.
- * @param clause The clause of the pipe operator. This is used to generate error messages.
+ * Represents an expression when used with a SQL pipe operator. We use this to check invariants
+ * about whether aggregate functions may exist in these expressions.
+ * @param child
+ *   The child expression.
+ * @param isAggregate
+ *   Whether the pipe operator is |> AGGREGATE. If true, the child expression must contain at
+ *   least one aggregate function. If false, the child expression must not contain any aggregate
+ *   functions.
+ * @param clause
+ *   The clause of the pipe operator. This is used to generate error messages.
  */
 case class PipeExpression(child: Expression, isAggregate: Boolean, clause: String)
-  extends UnaryExpression with Unevaluable {
+    extends UnaryExpression
+    with Unevaluable {
   final override val nodePatterns = Seq(PIPE_EXPRESSION)
   final override lazy val resolved = false
   override def withNewChildInternal(newChild: Expression): Expression =
@@ -43,9 +47,9 @@ case class PipeExpression(child: Expression, isAggregate: Boolean, clause: Strin
 }
 
 /**
- * Represents the location within a logical plan that a SQL pipe operator appeared.
- * This acts as a logical boundary that works to prevent the analyzer from modifying the logical
- * operators above and below the boundary.
+ * Represents the location within a logical plan that a SQL pipe operator appeared. This acts as a
+ * logical boundary that works to prevent the analyzer from modifying the logical operators above
+ * and below the boundary.
  */
 case class PipeOperator(child: LogicalPlan) extends UnaryNode {
   final override val nodePatterns: Seq[TreePattern] = Seq(PIPE_OPERATOR)
@@ -55,10 +59,10 @@ case class PipeOperator(child: LogicalPlan) extends UnaryNode {
 
 /** This rule removes all PipeOperator nodes from a logical plan at the end of analysis. */
 object EliminatePipeOperators extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
-    _.containsPattern(PIPE_OPERATOR), ruleId) {
-    case PipeOperator(child) => child
-  }
+  def apply(plan: LogicalPlan): LogicalPlan =
+    plan.transformWithPruning(_.containsPattern(PIPE_OPERATOR), ruleId) {
+      case PipeOperator(child) => child
+    }
 }
 
 /**
@@ -66,14 +70,14 @@ object EliminatePipeOperators extends Rule[LogicalPlan] {
  * resolved.
  */
 case object ValidateAndStripPipeExpressions extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
-    _.containsPattern(PIPE_EXPRESSION), ruleId) {
-    case node: LogicalPlan =>
-      node.resolveExpressions {
-        case p: PipeExpression if p.child.resolved =>
-          validateAndStripPipeExpression(p, p.child)
-      }
-  }
+  def apply(plan: LogicalPlan): LogicalPlan =
+    plan.resolveOperatorsUpWithPruning(_.containsPattern(PIPE_EXPRESSION), ruleId) {
+      case node: LogicalPlan =>
+        node.resolveExpressions {
+          case p: PipeExpression if p.child.resolved =>
+            validateAndStripPipeExpression(p, p.child)
+        }
+    }
 
   /**
    * Validates aggregate function constraints for a [[PipeExpression]] and returns the resolved
@@ -81,9 +85,12 @@ case object ValidateAndStripPipeExpressions extends Rule[LogicalPlan] {
    *
    * This method is shared between the fixed-point analyzer rule and the single-pass resolver.
    *
-   * @param pipeExpression The [[PipeExpression]] containing metadata about the pipe clause.
-   * @param resolvedChild The resolved child expression to validate and return.
-   * @return The resolved child expression after validation.
+   * @param pipeExpression
+   *   The [[PipeExpression]] containing metadata about the pipe clause.
+   * @param resolvedChild
+   *   The resolved child expression to validate and return.
+   * @return
+   *   The resolved child expression after validation.
    */
   def validateAndStripPipeExpression(
       pipeExpression: PipeExpression,
@@ -91,7 +98,7 @@ case object ValidateAndStripPipeExpressions extends Rule[LogicalPlan] {
     val firstAggregateFunction: Option[AggregateFunction] = findFirstAggregate(resolvedChild)
     if (pipeExpression.isAggregate && firstAggregateFunction.isEmpty) {
       throw QueryCompilationErrors
-          .pipeOperatorAggregateExpressionContainsNoAggregateFunction(resolvedChild)
+        .pipeOperatorAggregateExpressionContainsNoAggregateFunction(resolvedChild)
     }
     if (!pipeExpression.isAggregate) {
       // For non-aggregate clauses, only allow aggregate functions in SELECT.
@@ -101,8 +108,7 @@ case object ValidateAndStripPipeExpressions extends Rule[LogicalPlan] {
         firstAggregateFunction.foreach { a =>
           throw QueryCompilationErrors.pipeOperatorContainsAggregateFunction(
             a,
-            pipeExpression.clause
-          )
+            pipeExpression.clause)
         }
       }
     }

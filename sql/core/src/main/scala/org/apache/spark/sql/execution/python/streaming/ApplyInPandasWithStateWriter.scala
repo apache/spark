@@ -40,9 +40,9 @@ import org.apache.spark.unsafe.types.UTF8String
  *
  * This class requires that the parameter `root` has been initialized with the Arrow schema like
  * below:
- * - data fields
- * - state field
- *   - nested schema (Refer ApplyInPandasWithStateWriter.STATE_METADATA_SCHEMA)
+ *   - data fields
+ *   - state field
+ *     - nested schema (Refer ApplyInPandasWithStateWriter.STATE_METADATA_SCHEMA)
  *
  * Please refer the code comment in the implementation to see how the writes of data and state
  * against Arrow RecordBatch work with consideration of bin-packing and chunking.
@@ -52,7 +52,11 @@ class ApplyInPandasWithStateWriter(
     writer: ArrowStreamWriter,
     arrowMaxRecordsPerBatch: Int,
     arrowMaxBytesPerBatch: Long)
-  extends BaseStreamingArrowWriter(root, writer, arrowMaxRecordsPerBatch, arrowMaxBytesPerBatch) {
+    extends BaseStreamingArrowWriter(
+      root,
+      writer,
+      arrowMaxRecordsPerBatch,
+      arrowMaxBytesPerBatch) {
 
   import ApplyInPandasWithStateWriter._
 
@@ -124,12 +128,13 @@ class ApplyInPandasWithStateWriter(
   // variables for tracking the status of current chunk
   private var startOffsetForCurrentChunk = 0
 
-
   /**
    * Indicates writer to start with new grouping key.
    *
-   * @param keyRow The grouping key row for current group.
-   * @param groupState The instance of GroupStateImpl for current group.
+   * @param keyRow
+   *   The grouping key row for current group.
+   * @param groupState
+   *   The instance of GroupStateImpl for current group.
    */
   def startNewGroup(keyRow: UnsafeRow, groupState: GroupStateImpl[Row]): Unit = {
     currentGroupKeyRow = keyRow
@@ -183,15 +188,17 @@ class ApplyInPandasWithStateWriter(
         groupState.getOption.map(PythonSQLUtils.toPyRow).orNull,
         startOffset,
         numRows,
-        isLastChunk
-      )
-    )
+        isLastChunk))
     new GenericInternalRow(Array[Any](stateUnderlyingRow))
   }
 
   override protected def finalizeCurrentChunk(isLastChunkForGroup: Boolean): Unit = {
-    val stateInfoRow = buildStateInfoRow(currentGroupKeyRow, currentGroupState,
-      startOffsetForCurrentChunk, numRowsForCurrentChunk, isLastChunkForGroup)
+    val stateInfoRow = buildStateInfoRow(
+      currentGroupKeyRow,
+      currentGroupState,
+      startOffsetForCurrentChunk,
+      numRowsForCurrentChunk,
+      isLastChunkForGroup)
     arrowWriterForState.write(stateInfoRow)
     totalNumStatesForBatch += 1
 
@@ -249,9 +256,7 @@ object ApplyInPandasWithStateWriter {
       // the number of rows for the data chunk
       StructField("numRows", IntegerType),
       // whether the current data chunk is the last one for current grouping key or not
-      StructField("isLastChunk", BooleanType)
-    )
-  )
+      StructField("isLastChunk", BooleanType)))
 
   // To avoid initializing a new row for empty state metadata row.
   val EMPTY_STATE_METADATA_ROW = new GenericInternalRow(

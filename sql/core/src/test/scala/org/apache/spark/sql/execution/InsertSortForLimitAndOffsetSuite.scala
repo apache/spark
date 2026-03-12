@@ -25,9 +25,10 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.IntegerType
 
-class InsertSortForLimitAndOffsetSuite extends QueryTest
-  with SharedSparkSession
-  with AdaptiveSparkPlanHelper {
+class InsertSortForLimitAndOffsetSuite
+    extends QueryTest
+    with SharedSparkSession
+    with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   private def assertHasTopKSort(plan: SparkPlan): Unit = {

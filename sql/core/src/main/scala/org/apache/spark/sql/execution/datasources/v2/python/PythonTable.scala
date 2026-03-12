@@ -23,16 +23,14 @@ import org.apache.spark.sql.connector.write.{LogicalWriteInfo, WriteBuilder}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-
-class PythonTable(
-    ds: PythonDataSourceV2,
-    shortName: String,
-    outputSchema: StructType
-  ) extends Table with SupportsRead with SupportsWrite {
+class PythonTable(ds: PythonDataSourceV2, shortName: String, outputSchema: StructType)
+    extends Table
+    with SupportsRead
+    with SupportsWrite {
   override def name(): String = shortName
 
-  override def capabilities(): java.util.Set[TableCapability] = java.util.EnumSet.of(
-    BATCH_READ, BATCH_WRITE, MICRO_BATCH_READ, STREAMING_WRITE, TRUNCATE)
+  override def capabilities(): java.util.Set[TableCapability] =
+    java.util.EnumSet.of(BATCH_READ, BATCH_WRITE, MICRO_BATCH_READ, STREAMING_WRITE, TRUNCATE)
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
     new PythonScanBuilder(ds, shortName, outputSchema, options)

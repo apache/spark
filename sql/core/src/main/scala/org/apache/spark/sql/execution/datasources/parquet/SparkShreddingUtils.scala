@@ -79,10 +79,8 @@ case class FieldToExtract(path: Array[SchemaPathSegment], reader: ParquetVariant
 
 // A helper class to cast from scalar `typed_value` into a scalar `dataType`. Need a custom
 // expression because it has different error reporting code than `Cast`.
-case class ScalarCastHelper(
-    child: Expression,
-    dataType: DataType,
-    castArgs: VariantCastArgs) extends UnaryExpression {
+case class ScalarCastHelper(child: Expression, dataType: DataType, castArgs: VariantCastArgs)
+    extends UnaryExpression {
   // The expression is only for the internal use of `ScalarReader`, which can guarantee the child
   // is not nullable.
   assert(!child.nullable)
@@ -97,7 +95,8 @@ case class ScalarCastHelper(
   private val castToString = Cast(child, StringType, castArgs.zoneStr, EvalMode.ANSI)
 
   override def nullable: Boolean = !castArgs.failOnError
-  override def withNewChildInternal(newChild: Expression): UnaryExpression = copy(child = newChild)
+  override def withNewChildInternal(newChild: Expression): UnaryExpression =
+    copy(child = newChild)
 
   // No need to define the interpreted version of `eval`: the codegen must succeed.
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -168,7 +167,9 @@ object ScalarCastHelper {
 // For convenience, we also allow creating an instance of the base class itself. None of its
 // functions can be used, but it can serve as a container of `targetType` and `castArgs`.
 class ParquetVariantReader(
-    val schema: VariantSchema, val targetType: DataType, val castArgs: VariantCastArgs) {
+    val schema: VariantSchema,
+    val targetType: DataType,
+    val castArgs: VariantCastArgs) {
   // Read from a row containing a Parquet variant value (shredded or unshredded) and return a value
   // of `targetType`. The row schema is described by `schema`.
   // This function throws MALFORMED_VARIANT if the variant is missing. If the variant can be
@@ -202,7 +203,8 @@ class ParquetVariantReader(
   protected final def invalidCast(row: InternalRow, topLevelMetadata: Array[Byte]): Any = {
     if (castArgs.failOnError) {
       throw QueryExecutionErrors.invalidVariantCast(
-        rebuildVariant(row, topLevelMetadata).toJson(castArgs.zoneId), targetType)
+        rebuildVariant(row, topLevelMetadata).toJson(castArgs.zoneId),
+        targetType)
     } else {
       null
     }
@@ -213,12 +215,15 @@ object ParquetVariantReader {
   // Create a reader for `targetType`. If `schema` is null, meaning that the extraction path doesn't
   // exist in `typed_value`, it returns an instance of `ParquetVariantReader`. As described in the
   // class comment, the reader is only a container of `targetType` and `castArgs` in this case.
-  def apply(schema: VariantSchema, targetType: DataType, castArgs: VariantCastArgs,
-            isTopLevelUnshredded: Boolean = false): ParquetVariantReader = targetType match {
+  def apply(
+      schema: VariantSchema,
+      targetType: DataType,
+      castArgs: VariantCastArgs,
+      isTopLevelUnshredded: Boolean = false): ParquetVariantReader = targetType match {
     case _ if schema == null => new ParquetVariantReader(schema, targetType, castArgs)
     case s: StructType => new StructReader(schema, s, castArgs)
     case a: ArrayType => new ArrayReader(schema, a, castArgs)
-    case m@MapType(_: StringType, _, _) => new MapReader(schema, m, castArgs)
+    case m @ MapType(_: StringType, _, _) => new MapReader(schema, m, castArgs)
     case v: VariantType => new VariantReader(schema, v, castArgs, isTopLevelUnshredded)
     case s: AtomicType => new ScalarReader(schema, s, castArgs)
     case _ =>
@@ -234,12 +239,15 @@ object ParquetVariantReader {
 // is not enforced. If `value` does contain a shredded field, no error will occur, and the field in
 // object `typed_value` will be the final result.
 private[this] final class StructReader(
-  schema: VariantSchema, targetType: StructType, castArgs: VariantCastArgs)
-  extends ParquetVariantReader(schema, targetType, castArgs) {
+    schema: VariantSchema,
+    targetType: StructType,
+    castArgs: VariantCastArgs)
+    extends ParquetVariantReader(schema, targetType, castArgs) {
   // For each field in `targetType`, store the index of the field with the same name in object
   // `typed_value`, or -1 if it doesn't exist in object `typed_value`.
   private[this] val fieldInputIndices: Array[Int] = targetType.fields.map { f =>
-    val inputIdx = if (schema.objectSchemaMap != null) schema.objectSchemaMap.get(f.name) else null
+    val inputIdx =
+      if (schema.objectSchemaMap != null) schema.objectSchemaMap.get(f.name) else null
     if (inputIdx != null) inputIdx.intValue() else -1
   }
   // For each field in `targetType`, store the reader from the corresponding field in object
@@ -296,8 +304,10 @@ private[this] final class StructReader(
 
 // Read Parquet variant values into a Spark array type.
 private[this] final class ArrayReader(
-    schema: VariantSchema, targetType: ArrayType, castArgs: VariantCastArgs)
-  extends ParquetVariantReader(schema, targetType, castArgs) {
+    schema: VariantSchema,
+    targetType: ArrayType,
+    castArgs: VariantCastArgs)
+    extends ParquetVariantReader(schema, targetType, castArgs) {
   private[this] val elementReader = if (schema.arraySchema != null) {
     ParquetVariantReader(schema.arraySchema, targetType.elementType, castArgs)
   } else {
@@ -328,8 +338,10 @@ private[this] final class ArrayReader(
 // `StructReader`, this requirement is enforced in `MapReader`. If `value` does contain a shredded
 // field, throw a MALFORMED_VARIANT error. The purpose is to avoid duplicate map keys.
 private[this] final class MapReader(
-    schema: VariantSchema, targetType: MapType, castArgs: VariantCastArgs)
-  extends ParquetVariantReader(schema, targetType, castArgs) {
+    schema: VariantSchema,
+    targetType: MapType,
+    castArgs: VariantCastArgs)
+    extends ParquetVariantReader(schema, targetType, castArgs) {
   // Readers that convert each shredded field into the map value type.
   private[this] val valueReaders = if (schema.objectSchema != null) {
     schema.objectSchema.map { f =>
@@ -396,12 +408,14 @@ private[this] final class MapReader(
 
 // Read Parquet variant values into a Spark variant type (the binary format).
 private[this] final class VariantReader(
-    schema: VariantSchema, targetType: DataType, castArgs: VariantCastArgs,
+    schema: VariantSchema,
+    targetType: DataType,
+    castArgs: VariantCastArgs,
     // An optional optimization: the user can set it to true if the Parquet variant column is
     // unshredded and the extraction path is empty. We are not required to do anything special, bu
     // we can avoid rebuilding variant for optimization purpose.
     private[this] val isTopLevelUnshredded: Boolean)
-  extends ParquetVariantReader(schema, targetType, castArgs) {
+    extends ParquetVariantReader(schema, targetType, castArgs) {
   override def read(row: InternalRow, topLevelMetadata: Array[Byte]): Any = {
     if (isTopLevelUnshredded) {
       if (row.isNullAt(schema.variantIdx)) throw QueryExecutionErrors.malformedVariant()
@@ -420,8 +434,10 @@ private[this] final class VariantReader(
 // same time. The requirement is not enforced in this reader. If they are both non-null, no error
 // will occur, and the reader will read from `typed_value`.
 private[this] final class ScalarReader(
-    schema: VariantSchema, targetType: DataType, castArgs: VariantCastArgs)
-  extends ParquetVariantReader(schema, targetType, castArgs) {
+    schema: VariantSchema,
+    targetType: DataType,
+    castArgs: VariantCastArgs)
+    extends ParquetVariantReader(schema, targetType, castArgs) {
   private[this] val castProject = if (schema.scalarSchema != null) {
     val scalarType = SparkShreddingUtils.scalarSchemaToSparkType(schema.scalarSchema)
     // Read the cast input from ordinal `schema.typedIdx` in the input row. The cast input is never
@@ -461,55 +477,49 @@ case object SparkShreddingUtils {
 
   /**
    * Given an expected schema of a Variant value, returns a suitable schema for shredding, by
-   * inserting appropriate intermediate value/typed_value fields at each level.
-   * For example, to represent the JSON {"a": 1, "b": "hello"},
-   * the schema struct<a: int, b: string> could be passed into this function, and it would return
-   * the shredding schema:
-   * struct<
-   *  metadata: binary,
-   *  value: binary,
-   *  typed_value: struct<
-   *   a: struct<typed_value: int, value: binary>,
-   *   b: struct<typed_value: string, value: binary>>>
-   *
+   * inserting appropriate intermediate value/typed_value fields at each level. For example, to
+   * represent the JSON {"a": 1, "b": "hello"}, the schema struct<a: int, b: string> could be
+   * passed into this function, and it would return the shredding schema: struct< metadata:
+   * binary, value: binary, typed_value: struct< a: struct<typed_value: int, value: binary>, b:
+   * struct<typed_value: string, value: binary>>>
    */
-  def variantShreddingSchema(dataType: DataType,
+  def variantShreddingSchema(
+      dataType: DataType,
       isTopLevel: Boolean = true,
-      isObjectField : Boolean = false): StructType = {
+      isObjectField: Boolean = false): StructType = {
     val fields = dataType match {
       case ArrayType(elementType, _) =>
         // Always set containsNull to false. One of value or typed_value must always be set for
         // array elements.
         val arrayShreddingSchema =
-          ArrayType(variantShreddingSchema(elementType, isTopLevel = false,
-            isObjectField = false), containsNull = false)
+          ArrayType(
+            variantShreddingSchema(elementType, isTopLevel = false, isObjectField = false),
+            containsNull = false)
         Seq(
           StructField(VARIANT_VALUE_FIELD_NAME, BinaryType, nullable = true),
-          StructField(TYPED_VALUE_FIELD_NAME, arrayShreddingSchema, nullable = true)
-        )
+          StructField(TYPED_VALUE_FIELD_NAME, arrayShreddingSchema, nullable = true))
       case StructType(fields) =>
         // The field name level is always non-nullable: Variant null values are represented in the
         // "value" column as "00", and missing values are represented by setting both "value" and
         // "typed_value" to null.
-        val objectShreddingSchema = StructType(fields.map(f =>
-            f.copy(dataType = variantShreddingSchema(f.dataType, isTopLevel = false,
-              isObjectField = true), nullable = false)))
+        val objectShreddingSchema = StructType(
+          fields.map(f =>
+            f.copy(
+              dataType =
+                variantShreddingSchema(f.dataType, isTopLevel = false, isObjectField = true),
+              nullable = false)))
         Seq(
           StructField(VARIANT_VALUE_FIELD_NAME, BinaryType, nullable = true),
-          StructField(TYPED_VALUE_FIELD_NAME, objectShreddingSchema, nullable = true)
-        )
+          StructField(TYPED_VALUE_FIELD_NAME, objectShreddingSchema, nullable = true))
       case VariantType =>
         // For Variant, we don't need a typed column. If there is no typed column, value is required
         // for array elements or top-level fields, but optional for objects (where a null represents
         // a missing field).
-        Seq(
-          StructField(VARIANT_VALUE_FIELD_NAME, BinaryType, nullable = isObjectField)
-        )
+        Seq(StructField(VARIANT_VALUE_FIELD_NAME, BinaryType, nullable = isObjectField))
       case _: NumericType | BooleanType | _: StringType | BinaryType | _: DatetimeType =>
         Seq(
           StructField(VARIANT_VALUE_FIELD_NAME, BinaryType, nullable = true),
-          StructField(TYPED_VALUE_FIELD_NAME, dataType, nullable = true)
-        )
+          StructField(TYPED_VALUE_FIELD_NAME, dataType, nullable = true))
       case _ =>
         // No other types have a corresponding shreddings schema.
         throw QueryCompilationErrors.invalidVariantShreddingSchema(dataType)
@@ -529,10 +539,10 @@ case object SparkShreddingUtils {
    */
   def addWriteShreddingMetadata(schema: StructType): StructType = {
     val newFields = schema.fields.map { f =>
-      f.copy(metadata = new
-          MetadataBuilder()
-            .withMetadata(f.metadata)
-            .putNull(VARIANT_WRITE_SHREDDING_KEY).build())
+      f.copy(metadata = new MetadataBuilder()
+        .withMetadata(f.metadata)
+        .putNull(VARIANT_WRITE_SHREDDING_KEY)
+        .build())
     }
     StructType(newFields)
   }
@@ -578,7 +588,8 @@ case object SparkShreddingUtils {
                 field.dataType match {
                   case s: StructType =>
                     val fieldSchema = buildVariantSchema(s, topLevel = false)
-                    objectSchema(fieldIdx) = new VariantSchema.ObjectField(field.name, fieldSchema)
+                    objectSchema(fieldIdx) =
+                      new VariantSchema.ObjectField(field.name, fieldSchema)
                   case _ => throw QueryCompilationErrors.invalidVariantShreddingSchema(schema)
                 }
               }
@@ -587,22 +598,23 @@ case object SparkShreddingUtils {
                 case s: StructType => arraySchema = buildVariantSchema(s, topLevel = false)
                 case _ => throw QueryCompilationErrors.invalidVariantShreddingSchema(schema)
               }
-            case t => scalarSchema = t match {
-              case BooleanType => new VariantSchema.BooleanType
-              case ByteType => new VariantSchema.IntegralType(VariantSchema.IntegralSize.BYTE)
-              case ShortType => new VariantSchema.IntegralType(VariantSchema.IntegralSize.SHORT)
-              case IntegerType => new VariantSchema.IntegralType(VariantSchema.IntegralSize.INT)
-              case LongType => new VariantSchema.IntegralType(VariantSchema.IntegralSize.LONG)
-              case FloatType => new VariantSchema.FloatType
-              case DoubleType => new VariantSchema.DoubleType
-              case StringType => new VariantSchema.StringType
-              case BinaryType => new VariantSchema.BinaryType
-              case DateType => new VariantSchema.DateType
-              case TimestampType => new VariantSchema.TimestampType
-              case TimestampNTZType => new VariantSchema.TimestampNTZType
-              case d: DecimalType => new VariantSchema.DecimalType(d.precision, d.scale)
-              case _ => throw QueryCompilationErrors.invalidVariantShreddingSchema(schema)
-            }
+            case t =>
+              scalarSchema = t match {
+                case BooleanType => new VariantSchema.BooleanType
+                case ByteType => new VariantSchema.IntegralType(VariantSchema.IntegralSize.BYTE)
+                case ShortType => new VariantSchema.IntegralType(VariantSchema.IntegralSize.SHORT)
+                case IntegerType => new VariantSchema.IntegralType(VariantSchema.IntegralSize.INT)
+                case LongType => new VariantSchema.IntegralType(VariantSchema.IntegralSize.LONG)
+                case FloatType => new VariantSchema.FloatType
+                case DoubleType => new VariantSchema.DoubleType
+                case StringType => new VariantSchema.StringType
+                case BinaryType => new VariantSchema.BinaryType
+                case DateType => new VariantSchema.DateType
+                case TimestampType => new VariantSchema.TimestampType
+                case TimestampNTZType => new VariantSchema.TimestampNTZType
+                case d: DecimalType => new VariantSchema.DecimalType(d.precision, d.scale)
+                case _ => throw QueryCompilationErrors.invalidVariantShreddingSchema(schema)
+              }
           }
         case VARIANT_VALUE_FIELD_NAME =>
           if (variantIdx != -1 || f.dataType != BinaryType) {
@@ -621,19 +633,26 @@ case object SparkShreddingUtils {
     if (topLevel != (topLevelMetadataIdx >= 0)) {
       throw QueryCompilationErrors.invalidVariantShreddingSchema(schema)
     }
-    new VariantSchema(typedIdx, variantIdx, topLevelMetadataIdx, schema.fields.length,
-      scalarSchema, objectSchema, arraySchema)
+    new VariantSchema(
+      typedIdx,
+      variantIdx,
+      topLevelMetadataIdx,
+      schema.fields.length,
+      scalarSchema,
+      objectSchema,
+      arraySchema)
   }
 
   // Convert a scalar variant schema into a Spark scalar type.
   def scalarSchemaToSparkType(scalar: VariantSchema.ScalarType): DataType = scalar match {
     case _: VariantSchema.StringType => StringType
-    case it: VariantSchema.IntegralType => it.size match {
-      case VariantSchema.IntegralSize.BYTE => ByteType
-      case VariantSchema.IntegralSize.SHORT => ShortType
-      case VariantSchema.IntegralSize.INT => IntegerType
-      case VariantSchema.IntegralSize.LONG => LongType
-    }
+    case it: VariantSchema.IntegralType =>
+      it.size match {
+        case VariantSchema.IntegralSize.BYTE => ByteType
+        case VariantSchema.IntegralSize.SHORT => ShortType
+        case VariantSchema.IntegralSize.INT => IntegerType
+        case VariantSchema.IntegralSize.LONG => LongType
+      }
     case _: VariantSchema.FloatType => FloatType
     case _: VariantSchema.DoubleType => DoubleType
     case _: VariantSchema.BooleanType => BooleanType
@@ -654,13 +673,12 @@ case object SparkShreddingUtils {
   }
 
   private class SparkShreddedResult(schema: VariantSchema)
-    extends VariantShreddingWriter.ShreddedResult {
+      extends VariantShreddingWriter.ShreddedResult {
     // Result is stored as an InternalRow.
     val row = new GenericInternalRow(schema.numFields)
 
     override def addArray(array: Array[VariantShreddingWriter.ShreddedResult]): Unit = {
-      val arrayResult = new GenericArrayData(
-          array.map(_.asInstanceOf[SparkShreddedResult].row))
+      val arrayResult = new GenericArrayData(array.map(_.asInstanceOf[SparkShreddedResult].row))
       row.update(schema.typedIdx, arrayResult)
     }
 
@@ -704,15 +722,18 @@ case object SparkShreddingUtils {
    * Converts an input variant into shredded components. Returns the shredded result.
    */
   def castShredded(v: Variant, schema: VariantSchema): InternalRow = {
-    VariantShreddingWriter.castShredded(v, schema, new SparkShreddedResultBuilder())
-        .asInstanceOf[SparkShreddedResult]
-        .row
+    VariantShreddingWriter
+      .castShredded(v, schema, new SparkShreddedResultBuilder())
+      .asInstanceOf[SparkShreddedResult]
+      .row
   }
 
   // Return a list of fields to extract. `targetType` must be either variant or variant struct.
   // If it is variant, return null because the target is the full variant and there is no field to
   // extract. If it is variant struct, return a list of fields matching the variant struct fields.
-  def getFieldsToExtract(targetType: DataType, inputSchema: VariantSchema): Array[FieldToExtract] =
+  def getFieldsToExtract(
+      targetType: DataType,
+      inputSchema: VariantSchema): Array[FieldToExtract] =
     targetType match {
       case _: VariantType => null
       case s: StructType if VariantMetadata.isVariantStruct(s) =>
@@ -747,10 +768,13 @@ case object SparkShreddingUtils {
             }
             schemaPath(i) = SchemaPathSegment(rawPath(i), isObject, typedIdx, extractionIdx)
           }
-          val reader = ParquetVariantReader(schema, f.dataType, VariantCastArgs(
-            metadata.failOnError,
-            Some(metadata.timeZoneId),
-            DateTimeUtils.getZoneId(metadata.timeZoneId)),
+          val reader = ParquetVariantReader(
+            schema,
+            f.dataType,
+            VariantCastArgs(
+              metadata.failOnError,
+              Some(metadata.timeZoneId),
+              DateTimeUtils.getZoneId(metadata.timeZoneId)),
             isTopLevelUnshredded = schemaPath.isEmpty && inputSchema.isUnshredded)
           FieldToExtract(schemaPath, reader)
         }
@@ -836,8 +860,14 @@ case object SparkShreddingUtils {
     val resultRow = new GenericInternalRow(numFields)
     var fieldIdx = 0
     while (fieldIdx < numFields) {
-      resultRow.update(fieldIdx, extractField(inputRow, topLevelMetadata, schema,
-        fields(fieldIdx).path, fields(fieldIdx).reader))
+      resultRow.update(
+        fieldIdx,
+        extractField(
+          inputRow,
+          topLevelMetadata,
+          schema,
+          fields(fieldIdx).path,
+          fields(fieldIdx).reader))
       fieldIdx += 1
     }
     resultRow
@@ -876,7 +906,8 @@ case object SparkShreddingUtils {
     val numRows = input.getElementsAppended
     output.reset()
     output.reserve(numRows)
-    val converter = new RowToColumnConverter(StructType(Array(StructField("", output.dataType()))))
+    val converter = new RowToColumnConverter(
+      StructType(Array(StructField("", output.dataType()))))
     val converterVectors = Array(output)
     val converterRow = new GenericInternalRow(1)
     var i = 0

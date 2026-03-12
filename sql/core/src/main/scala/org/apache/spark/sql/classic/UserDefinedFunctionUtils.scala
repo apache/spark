@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, ScalaUDF}
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
 
 private[sql] object UserDefinedFunctionUtils {
+
   /**
    * Convert a UDF into an (executable) ScalaUDF expressions.
    *

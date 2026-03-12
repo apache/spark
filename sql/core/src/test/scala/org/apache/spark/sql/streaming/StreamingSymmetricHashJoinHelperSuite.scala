@@ -43,7 +43,8 @@ class StreamingSymmetricHashJoinHelperSuite extends StreamTest {
   test("only literals") {
     // Literal-only conjuncts end up on the left side because that's the first bucket they fit in.
     // There's no semantic reason they couldn't be in any bucket.
-    val predicate = Literal(1) < Literal(5) && Literal(6) < Literal(7) && Literal(0) === Literal(-1)
+    val predicate =
+      Literal(1) < Literal(5) && Literal(6) < Literal(7) && Literal(0) === Literal(-1)
     val split = JoinConditionSplitPredicates(Some(predicate), left, right)
 
     assert(split.leftSideOnly.contains(predicate))
@@ -54,7 +55,8 @@ class StreamingSymmetricHashJoinHelperSuite extends StreamTest {
 
   test("only left") {
     val predicate =
-      leftAttributeA > Literal(1) && leftAttributeB > Literal(5) && leftAttributeA < leftAttributeB
+      leftAttributeA > Literal(1) && leftAttributeB > Literal(
+        5) && leftAttributeA < leftAttributeB
     val split = JoinConditionSplitPredicates(Some(predicate), left, right)
 
     assert(split.leftSideOnly.contains(predicate))
@@ -82,10 +84,11 @@ class StreamingSymmetricHashJoinHelperSuite extends StreamTest {
         && Literal(1) === Literal(1))
     val split = JoinConditionSplitPredicates(Some(predicate), left, right)
 
-    assert(split.leftSideOnly.contains(
-      leftAttributeA > leftAttributeB && Literal(1) === Literal(1)))
-    assert(split.rightSideOnly.contains(
-      rightAttributeC > rightAttributeD && Literal(1) === Literal(1)))
+    assert(
+      split.leftSideOnly.contains(leftAttributeA > leftAttributeB && Literal(1) === Literal(1)))
+    assert(
+      split.rightSideOnly.contains(
+        rightAttributeC > rightAttributeD && Literal(1) === Literal(1)))
     assert(split.bothSides.contains((leftAttributeA === rightAttributeC)))
     assert(split.full.contains(predicate))
   }
@@ -99,15 +102,15 @@ class StreamingSymmetricHashJoinHelperSuite extends StreamTest {
         && Literal(1) === Literal(1))
     val split = JoinConditionSplitPredicates(Some(predicate), left, right)
 
-    assert(split.leftSideOnly.contains(
-      leftAttributeA > leftAttributeB && Literal(1) === Literal(1)))
-    assert(split.rightSideOnly.contains(
-      rightAttributeC > rightAttributeD && Literal(1) === Literal(1)))
-    assert(split.bothSides.contains(
-      leftAttributeA === rightAttributeC && rand(9).expr > Literal(0)))
+    assert(
+      split.leftSideOnly.contains(leftAttributeA > leftAttributeB && Literal(1) === Literal(1)))
+    assert(
+      split.rightSideOnly.contains(
+        rightAttributeC > rightAttributeD && Literal(1) === Literal(1)))
+    assert(
+      split.bothSides.contains(leftAttributeA === rightAttributeC && rand(9).expr > Literal(0)))
     assert(split.full.contains(predicate))
   }
-
 
   test("conjuncts before nondeterministic") {
     val randAttribute = rand(0)
@@ -119,12 +122,13 @@ class StreamingSymmetricHashJoinHelperSuite extends StreamTest {
         && randAttribute > Literal(0))
     val split = JoinConditionSplitPredicates(Some(predicate), left, right)
 
-    assert(split.leftSideOnly.contains(
-      leftAttributeA > leftAttributeB && Literal(1) === Literal(1)))
-    assert(split.rightSideOnly.contains(
-      rightAttributeC > rightAttributeD && Literal(1) === Literal(1)))
-    assert(split.bothSides.contains(
-      leftAttributeA === rightAttributeC && randAttribute > Literal(0)))
+    assert(
+      split.leftSideOnly.contains(leftAttributeA > leftAttributeB && Literal(1) === Literal(1)))
+    assert(
+      split.rightSideOnly.contains(
+        rightAttributeC > rightAttributeD && Literal(1) === Literal(1)))
+    assert(
+      split.bothSides.contains(leftAttributeA === rightAttributeC && randAttribute > Literal(0)))
     assert(split.full.contains(predicate))
   }
 }

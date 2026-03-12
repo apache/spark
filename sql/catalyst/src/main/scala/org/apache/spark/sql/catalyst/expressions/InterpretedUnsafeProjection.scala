@@ -30,8 +30,8 @@ import org.apache.spark.util.ArrayImplicits._
  * An interpreted unsafe projection. This class reuses the [[UnsafeRow]] it produces, a consumer
  * should copy the row if it is being buffered. This class is not thread safe.
  *
- * @param expressions that produces the resulting fields. These expressions must be bound
- *                    to a schema.
+ * @param expressions
+ *   that produces the resulting fields. These expressions must be bound to a schema.
  */
 class InterpretedUnsafeProjection(expressions: Array[Expression]) extends UnsafeProjection {
   import InterpretedUnsafeProjection._
@@ -62,10 +62,11 @@ class InterpretedUnsafeProjection(expressions: Array[Expression]) extends Unsafe
       baseWriter
     } else {
       // Zero out the null bit mask before we write the row.
-      row => {
-        rowWriter.zeroOutNullBytes()
-        baseWriter(row)
-      }
+      row =>
+        {
+          rowWriter.zeroOutNullBytes()
+          baseWriter(row)
+        }
     }
   }
 
@@ -96,6 +97,7 @@ class InterpretedUnsafeProjection(expressions: Array[Expression]) extends Unsafe
  * Helper functions for creating an [[InterpretedUnsafeProjection]].
  */
 object InterpretedUnsafeProjection {
+
   /**
    * Returns an [[UnsafeProjection]] for given sequence of bound Expressions.
    */
@@ -128,8 +130,8 @@ object InterpretedUnsafeProjection {
 
   /**
    * Generate a writer function for a struct field, array element, map key or map value. The
-   * generated function writes the element at an index in a [[SpecializedGetters]] object (row
-   * or array) to the given buffer using the given [[UnsafeWriter]].
+   * generated function writes the element at an index in a [[SpecializedGetters]] object (row or
+   * array) to the given buffer using the given [[UnsafeWriter]].
    */
   private def generateFieldWriter(
       writer: UnsafeWriter,
@@ -139,109 +141,100 @@ object InterpretedUnsafeProjection {
     // Create the basic writer.
     val unsafeWriter: (SpecializedGetters, Int) => Unit = dt match {
       case udt: UserDefinedType[_] => generateFieldWriter(writer, udt.sqlType, nullable)
-      case _ => PhysicalDataType(dt) match {
-        case PhysicalBooleanType => (v, i) => writer.write(i, v.getBoolean(i))
+      case _ =>
+        PhysicalDataType(dt) match {
+          case PhysicalBooleanType => (v, i) => writer.write(i, v.getBoolean(i))
 
-        case PhysicalByteType => (v, i) => writer.write(i, v.getByte(i))
+          case PhysicalByteType => (v, i) => writer.write(i, v.getByte(i))
 
-        case PhysicalShortType => (v, i) => writer.write(i, v.getShort(i))
+          case PhysicalShortType => (v, i) => writer.write(i, v.getShort(i))
 
-        case PhysicalIntegerType => (v, i) => writer.write(i, v.getInt(i))
+          case PhysicalIntegerType => (v, i) => writer.write(i, v.getInt(i))
 
-        case PhysicalLongType => (v, i) => writer.write(i, v.getLong(i))
+          case PhysicalLongType => (v, i) => writer.write(i, v.getLong(i))
 
-        case PhysicalFloatType => (v, i) => writer.write(i, v.getFloat(i))
+          case PhysicalFloatType => (v, i) => writer.write(i, v.getFloat(i))
 
-        case PhysicalDoubleType => (v, i) => writer.write(i, v.getDouble(i))
+          case PhysicalDoubleType => (v, i) => writer.write(i, v.getDouble(i))
 
-        case PhysicalDecimalType(precision, scale) =>
-          (v, i) => writer.write(i, v.getDecimal(i, precision, scale), precision, scale)
+          case PhysicalDecimalType(precision, scale) =>
+            (v, i) => writer.write(i, v.getDecimal(i, precision, scale), precision, scale)
 
-        case PhysicalCalendarIntervalType => (v, i) => writer.write(i, v.getInterval(i))
+          case PhysicalCalendarIntervalType => (v, i) => writer.write(i, v.getInterval(i))
 
-        case PhysicalBinaryType => (v, i) => writer.write(i, v.getBinary(i))
+          case PhysicalBinaryType => (v, i) => writer.write(i, v.getBinary(i))
 
-        case _: PhysicalStringType => (v, i) => writer.write(i, v.getUTF8String(i))
+          case _: PhysicalStringType => (v, i) => writer.write(i, v.getUTF8String(i))
 
-        case _: PhysicalGeographyType => (v, i) => writer.write(i, v.getGeography(i))
+          case _: PhysicalGeographyType => (v, i) => writer.write(i, v.getGeography(i))
 
-        case _: PhysicalGeometryType => (v, i) => writer.write(i, v.getGeometry(i))
+          case _: PhysicalGeometryType => (v, i) => writer.write(i, v.getGeometry(i))
 
-        case PhysicalVariantType => (v, i) => writer.write(i, v.getVariant(i))
+          case PhysicalVariantType => (v, i) => writer.write(i, v.getVariant(i))
 
-        case PhysicalStructType(fields) =>
-          val numFields = fields.length
-          val rowWriter = new UnsafeRowWriter(writer, numFields)
-          val structWriter = generateStructWriter(rowWriter, fields)
+          case PhysicalStructType(fields) =>
+            val numFields = fields.length
+            val rowWriter = new UnsafeRowWriter(writer, numFields)
+            val structWriter = generateStructWriter(rowWriter, fields)
             (v, i) => {
-            v.getStruct(i, fields.length) match {
-              case row: UnsafeRow =>
-                writer.write(i, row)
-              case row =>
-                val previousCursor = writer.cursor()
-                // Nested struct. We don't know where this will start because a row can be
-                // variable length, so we need to update the offsets and zero out the bit mask.
-                rowWriter.resetRowWriter()
-                structWriter.apply(row)
-                writer.setOffsetAndSizeFromPreviousCursor(i, previousCursor)
+              v.getStruct(i, fields.length) match {
+                case row: UnsafeRow =>
+                  writer.write(i, row)
+                case row =>
+                  val previousCursor = writer.cursor()
+                  // Nested struct. We don't know where this will start because a row can be
+                  // variable length, so we need to update the offsets and zero out the bit mask.
+                  rowWriter.resetRowWriter()
+                  structWriter.apply(row)
+                  writer.setOffsetAndSizeFromPreviousCursor(i, previousCursor)
+              }
             }
-          }
 
-        case PhysicalArrayType(elementType, containsNull) =>
-          val arrayWriter = new UnsafeArrayWriter(writer, getElementSize(elementType))
-          val elementWriter = generateFieldWriter(
-            arrayWriter,
-            elementType,
-            containsNull)
+          case PhysicalArrayType(elementType, containsNull) =>
+            val arrayWriter = new UnsafeArrayWriter(writer, getElementSize(elementType))
+            val elementWriter = generateFieldWriter(arrayWriter, elementType, containsNull)
             (v, i) => {
-            val previousCursor = writer.cursor()
-            writeArray(arrayWriter, elementWriter, v.getArray(i))
-            writer.setOffsetAndSizeFromPreviousCursor(i, previousCursor)
-          }
-
-        case PhysicalMapType(keyType, valueType, valueContainsNull) =>
-          val keyArrayWriter = new UnsafeArrayWriter(writer, getElementSize(keyType))
-          val keyWriter = generateFieldWriter(
-            keyArrayWriter,
-            keyType,
-            nullable = false)
-          val valueArrayWriter = new UnsafeArrayWriter(writer, getElementSize(valueType))
-          val valueWriter = generateFieldWriter(
-            valueArrayWriter,
-            valueType,
-            valueContainsNull)
-            (v, i) => {
-            v.getMap(i) match {
-              case map: UnsafeMapData =>
-                writer.write(i, map)
-              case map =>
-                val previousCursor = writer.cursor()
-
-                // preserve 8 bytes to write the key array numBytes later.
-                valueArrayWriter.grow(8)
-                valueArrayWriter.increaseCursor(8)
-
-                // Write the keys and write the numBytes of key array into the first 8 bytes.
-                writeArray(keyArrayWriter, keyWriter, map.keyArray())
-                Platform.putLong(
-                  valueArrayWriter.getBuffer,
-                  previousCursor,
-                  valueArrayWriter.cursor - previousCursor - 8
-                )
-
-                // Write the values.
-                writeArray(valueArrayWriter, valueWriter, map.valueArray())
-                writer.setOffsetAndSizeFromPreviousCursor(i, previousCursor)
+              val previousCursor = writer.cursor()
+              writeArray(arrayWriter, elementWriter, v.getArray(i))
+              writer.setOffsetAndSizeFromPreviousCursor(i, previousCursor)
             }
-          }
 
-        case PhysicalNullType => (_, _) => {}
+          case PhysicalMapType(keyType, valueType, valueContainsNull) =>
+            val keyArrayWriter = new UnsafeArrayWriter(writer, getElementSize(keyType))
+            val keyWriter = generateFieldWriter(keyArrayWriter, keyType, nullable = false)
+            val valueArrayWriter = new UnsafeArrayWriter(writer, getElementSize(valueType))
+            val valueWriter = generateFieldWriter(valueArrayWriter, valueType, valueContainsNull)
+            (v, i) => {
+              v.getMap(i) match {
+                case map: UnsafeMapData =>
+                  writer.write(i, map)
+                case map =>
+                  val previousCursor = writer.cursor()
 
-        case _ =>
-          throw SparkException.internalError(
-            s"The data type '${dt.typeName}' is not supported in " +
-            "generating a writer function for a struct field, array element, map key or map value.")
-      }
+                  // preserve 8 bytes to write the key array numBytes later.
+                  valueArrayWriter.grow(8)
+                  valueArrayWriter.increaseCursor(8)
+
+                  // Write the keys and write the numBytes of key array into the first 8 bytes.
+                  writeArray(keyArrayWriter, keyWriter, map.keyArray())
+                  Platform.putLong(
+                    valueArrayWriter.getBuffer,
+                    previousCursor,
+                    valueArrayWriter.cursor - previousCursor - 8)
+
+                  // Write the values.
+                  writeArray(valueArrayWriter, valueWriter, map.valueArray())
+                  writer.setOffsetAndSizeFromPreviousCursor(i, previousCursor)
+              }
+            }
+
+          case PhysicalNullType => (_, _) => {}
+
+          case _ =>
+            throw SparkException.internalError(
+              s"The data type '${dt.typeName}' is not supported in " +
+                "generating a writer function for a struct field, array element, map key or map value.")
+        }
     }
 
     // Always wrap the writer with a null safe version.
@@ -293,15 +286,16 @@ object InterpretedUnsafeProjection {
 
   /**
    * Get the number of bytes elements of a data type will occupy in the fixed part of an
-   * [[UnsafeArrayData]] object. Reference types are stored as an 8 byte combination of an
-   * offset (upper 4 bytes) and a length (lower 4 bytes), these point to the variable length
-   * portion of the array object. Primitives take up to 8 bytes, depending on the size of the
-   * underlying data type.
+   * [[UnsafeArrayData]] object. Reference types are stored as an 8 byte combination of an offset
+   * (upper 4 bytes) and a length (lower 4 bytes), these point to the variable length portion of
+   * the array object. Primitives take up to 8 bytes, depending on the size of the underlying data
+   * type.
    */
   @scala.annotation.tailrec
   private def getElementSize(dataType: DataType): Int = dataType match {
     case NullType | _: StringType | BinaryType | CalendarIntervalType | VariantType |
-         _: DecimalType | _: StructType | _: ArrayType | _: MapType => 8
+        _: DecimalType | _: StructType | _: ArrayType | _: MapType =>
+      8
     case udt: UserDefinedType[_] =>
       getElementSize(udt.sqlType)
     case _ => dataType.defaultSize

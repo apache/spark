@@ -71,7 +71,8 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(tree.collection.length == 2)
     assert(tree.collection.forall(_.isInstanceOf[SingleStatement]))
 
-    sqlScriptText.split(";")
+    sqlScriptText
+      .split(";")
       .map(cleanupStatementString)
       .zip(tree.collection)
       .foreach { case (expected, statement) =>
@@ -147,7 +148,8 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
     assert(tree.collection.length == 5)
     assert(tree.collection.forall(_.isInstanceOf[SingleStatement]))
-    sqlScriptText.split(";")
+    sqlScriptText
+      .split(";")
       .map(cleanupStatementString)
       .zip(tree.collection)
       .foreach { case (expected, statement) =>
@@ -176,17 +178,20 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(tree.collection.head.isInstanceOf[CompoundBody])
     val body1 = tree.collection.head.asInstanceOf[CompoundBody]
     assert(body1.collection.length == 1)
-    assert(body1.collection.head.asInstanceOf[SingleStatement].getText
-      == "SELECT 1")
+    assert(
+      body1.collection.head.asInstanceOf[SingleStatement].getText
+        == "SELECT 1")
 
     val body2 = tree.collection(1).asInstanceOf[CompoundBody]
     assert(body2.collection.length == 1)
     assert(body2.collection.head.isInstanceOf[CompoundBody])
     val nestedBody = body2.collection.head.asInstanceOf[CompoundBody]
-    assert(nestedBody.collection.head.asInstanceOf[SingleStatement].getText
-      == "SELECT 2")
-    assert(nestedBody.collection(1).asInstanceOf[SingleStatement].getText
-      == "SELECT 3")
+    assert(
+      nestedBody.collection.head.asInstanceOf[SingleStatement].getText
+        == "SELECT 2")
+    assert(
+      nestedBody.collection(1).asInstanceOf[SingleStatement].getText
+        == "SELECT 3")
   }
 
   test("not atomic body") {
@@ -511,8 +516,9 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
     assert(tree.collection.length == 2)
     assert(tree.collection.forall(_.isInstanceOf[SingleStatement]))
-    assert(tree.collection.forall(
-      _.asInstanceOf[SingleStatement].parsedPlan.isInstanceOf[CreateVariable]))
+    assert(
+      tree.collection.forall(
+        _.asInstanceOf[SingleStatement].parsedPlan.isInstanceOf[CreateVariable]))
   }
 
   test("declare after beginning") {
@@ -634,13 +640,15 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
 
     assert(ifStmt.conditionalBodies.head.collection.length == 1)
     assert(ifStmt.conditionalBodies.head.collection.head.isInstanceOf[SingleStatement])
-    assert(ifStmt.conditionalBodies.head.collection.head.asInstanceOf[SingleStatement]
-      .getText == "SELECT 1")
+    assert(
+      ifStmt.conditionalBodies.head.collection.head
+        .asInstanceOf[SingleStatement]
+        .getText == "SELECT 1")
 
     assert(ifStmt.elseBody.get.collection.length == 1)
     assert(ifStmt.elseBody.get.collection.head.isInstanceOf[SingleStatement])
-    assert(ifStmt.elseBody.get.collection.head.asInstanceOf[SingleStatement]
-      .getText == "SELECT 2")
+    assert(
+      ifStmt.elseBody.get.collection.head.asInstanceOf[SingleStatement].getText == "SELECT 2")
   }
 
   test("if elseif") {
@@ -668,19 +676,26 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(ifStmt.conditions.head.getText == "1 = 1")
 
     assert(ifStmt.conditionalBodies.head.collection.head.isInstanceOf[SingleStatement])
-    assert(ifStmt.conditionalBodies.head.collection.head.asInstanceOf[SingleStatement]
-      .getText == "SELECT 1")
+    assert(
+      ifStmt.conditionalBodies.head.collection.head
+        .asInstanceOf[SingleStatement]
+        .getText == "SELECT 1")
 
     assert(ifStmt.conditions(1).isInstanceOf[SingleStatement])
     assert(ifStmt.conditions(1).getText == "2 = 2")
 
     assert(ifStmt.conditionalBodies(1).collection.head.isInstanceOf[SingleStatement])
-    assert(ifStmt.conditionalBodies(1).collection.head.asInstanceOf[SingleStatement]
-      .getText == "SELECT 2")
+    assert(
+      ifStmt
+        .conditionalBodies(1)
+        .collection
+        .head
+        .asInstanceOf[SingleStatement]
+        .getText == "SELECT 2")
 
     assert(ifStmt.elseBody.get.collection.head.isInstanceOf[SingleStatement])
-    assert(ifStmt.elseBody.get.collection.head.asInstanceOf[SingleStatement]
-      .getText == "SELECT 3")
+    assert(
+      ifStmt.elseBody.get.collection.head.asInstanceOf[SingleStatement].getText == "SELECT 3")
   }
 
   test("if multi elseif") {
@@ -708,22 +723,34 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(ifStmt.conditions.head.getText == "1 = 1")
 
     assert(ifStmt.conditionalBodies.head.collection.head.isInstanceOf[SingleStatement])
-    assert(ifStmt.conditionalBodies.head.collection.head.asInstanceOf[SingleStatement]
-      .getText == "SELECT 1")
+    assert(
+      ifStmt.conditionalBodies.head.collection.head
+        .asInstanceOf[SingleStatement]
+        .getText == "SELECT 1")
 
     assert(ifStmt.conditions(1).isInstanceOf[SingleStatement])
     assert(ifStmt.conditions(1).getText == "2 = 2")
 
     assert(ifStmt.conditionalBodies(1).collection.head.isInstanceOf[SingleStatement])
-    assert(ifStmt.conditionalBodies(1).collection.head.asInstanceOf[SingleStatement]
-      .getText == "SELECT 2")
+    assert(
+      ifStmt
+        .conditionalBodies(1)
+        .collection
+        .head
+        .asInstanceOf[SingleStatement]
+        .getText == "SELECT 2")
 
     assert(ifStmt.conditions(2).isInstanceOf[SingleStatement])
     assert(ifStmt.conditions(2).getText == "3 = 3")
 
     assert(ifStmt.conditionalBodies(2).collection.head.isInstanceOf[SingleStatement])
-    assert(ifStmt.conditionalBodies(2).collection.head.asInstanceOf[SingleStatement]
-      .getText == "SELECT 3")
+    assert(
+      ifStmt
+        .conditionalBodies(2)
+        .collection
+        .head
+        .asInstanceOf[SingleStatement]
+        .getText == "SELECT 3")
   }
 
   test("if - multi elseif - else nested") {
@@ -761,15 +788,22 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(ifStmt.conditions.head.getText == "1 = 1")
 
     assert(ifStmt.conditionalBodies.head.collection.head.isInstanceOf[SingleStatement])
-    assert(ifStmt.conditionalBodies.head.collection.head.asInstanceOf[SingleStatement]
-      .getText == "SELECT 1")
+    assert(
+      ifStmt.conditionalBodies.head.collection.head
+        .asInstanceOf[SingleStatement]
+        .getText == "SELECT 1")
 
     assert(ifStmt.conditions(1).isInstanceOf[SingleStatement])
     assert(ifStmt.conditions(1).getText == "2 = 2")
 
     assert(ifStmt.conditionalBodies(1).collection.head.isInstanceOf[SingleStatement])
-    assert(ifStmt.conditionalBodies(1).collection.head.asInstanceOf[SingleStatement]
-      .getText == "SELECT 2")
+    assert(
+      ifStmt
+        .conditionalBodies(1)
+        .collection
+        .head
+        .asInstanceOf[SingleStatement]
+        .getText == "SELECT 2")
 
     assert(ifStmt.elseBody.get.collection.head.isInstanceOf[IfElseStatement])
     val nestedIf_1 = ifStmt.elseBody.get.collection.head.asInstanceOf[IfElseStatement]
@@ -778,20 +812,26 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(nestedIf_1.conditionalBodies.length == 2)
     assert(nestedIf_1.elseBody.nonEmpty)
 
-
     assert(nestedIf_1.conditions.head.isInstanceOf[SingleStatement])
     assert(nestedIf_1.conditions.head.getText == "3 = 3")
 
     assert(nestedIf_1.conditionalBodies.head.collection.head.isInstanceOf[SingleStatement])
-    assert(nestedIf_1.conditionalBodies.head.collection.head.asInstanceOf[SingleStatement]
-      .getText == "SELECT 3")
+    assert(
+      nestedIf_1.conditionalBodies.head.collection.head
+        .asInstanceOf[SingleStatement]
+        .getText == "SELECT 3")
 
     assert(nestedIf_1.conditions(1).isInstanceOf[SingleStatement])
     assert(nestedIf_1.conditions(1).getText == "4 = 4")
 
     assert(nestedIf_1.conditionalBodies(1).collection.head.isInstanceOf[SingleStatement])
-    assert(nestedIf_1.conditionalBodies(1).collection.head.asInstanceOf[SingleStatement]
-      .getText == "SELECT 4")
+    assert(
+      nestedIf_1
+        .conditionalBodies(1)
+        .collection
+        .head
+        .asInstanceOf[SingleStatement]
+        .getText == "SELECT 4")
 
     assert(nestedIf_1.elseBody.get.collection.head.isInstanceOf[IfElseStatement])
     val nestedIf_2 = nestedIf_1.elseBody.get.collection.head.asInstanceOf[IfElseStatement]
@@ -800,11 +840,13 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(nestedIf_2.conditionalBodies.length == 1)
     assert(nestedIf_2.elseBody.nonEmpty)
 
-    assert(nestedIf_2.conditionalBodies.head.collection.head.asInstanceOf[SingleStatement]
-      .getText == "SELECT 5")
+    assert(
+      nestedIf_2.conditionalBodies.head.collection.head
+        .asInstanceOf[SingleStatement]
+        .getText == "SELECT 5")
 
-    assert(nestedIf_2.elseBody.get.collection.head.asInstanceOf[SingleStatement]
-      .getText == "SELECT 6")
+    assert(
+      nestedIf_2.elseBody.get.collection.head.asInstanceOf[SingleStatement].getText == "SELECT 6")
   }
 
   test("if nested") {
@@ -843,12 +885,16 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(nestedIfStmt.conditions.head.getText == "2=1")
 
     assert(nestedIfStmt.conditionalBodies.head.collection.head.isInstanceOf[SingleStatement])
-    assert(nestedIfStmt.conditionalBodies.head.collection.head.asInstanceOf[SingleStatement]
-      .getText == "SELECT 41")
+    assert(
+      nestedIfStmt.conditionalBodies.head.collection.head
+        .asInstanceOf[SingleStatement]
+        .getText == "SELECT 41")
 
     assert(nestedIfStmt.elseBody.get.collection.head.isInstanceOf[SingleStatement])
-    assert(nestedIfStmt.elseBody.get.collection.head.asInstanceOf[SingleStatement]
-      .getText == "SELECT 42")
+    assert(
+      nestedIfStmt.elseBody.get.collection.head
+        .asInstanceOf[SingleStatement]
+        .getText == "SELECT 42")
   }
 
   test("while") {
@@ -947,12 +993,14 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(ifStmt.conditions.head.getText == "1 = 1")
 
     assert(ifStmt.conditionalBodies.head.collection.head.isInstanceOf[SingleStatement])
-    assert(ifStmt.conditionalBodies.head.collection.head.asInstanceOf[SingleStatement]
-      .getText == "SELECT 1")
+    assert(
+      ifStmt.conditionalBodies.head.collection.head
+        .asInstanceOf[SingleStatement]
+        .getText == "SELECT 1")
 
     assert(ifStmt.elseBody.get.collection.head.isInstanceOf[SingleStatement])
-    assert(ifStmt.elseBody.get.collection.head.asInstanceOf[SingleStatement]
-      .getText == "SELECT 2")
+    assert(
+      ifStmt.elseBody.get.collection.head.asInstanceOf[SingleStatement].getText == "SELECT 2")
 
     assert(whileStmt.label.contains("lbl"))
   }
@@ -986,8 +1034,8 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(nestedWhileStmt.body.isInstanceOf[CompoundBody])
     assert(nestedWhileStmt.body.collection.length == 1)
     assert(nestedWhileStmt.body.collection.head.isInstanceOf[SingleStatement])
-    assert(nestedWhileStmt.body.collection.
-      head.asInstanceOf[SingleStatement].getText == "SELECT 42")
+    assert(
+      nestedWhileStmt.body.collection.head.asInstanceOf[SingleStatement].getText == "SELECT 42")
 
     assert(whileStmt.label.contains("lbl"))
   }
@@ -1065,7 +1113,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(repeatStmt.body.collection(1).asInstanceOf[LeaveStatement].label == "lbl")
   }
 
-  test ("iterate compound block - should fail") {
+  test("iterate compound block - should fail") {
     val sqlScriptText =
       """
         |BEGIN
@@ -1198,7 +1246,8 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(nestedWhileStmt.condition.getText == "2 = 2")
 
     assert(nestedWhileStmt.body.collection.head.isInstanceOf[SingleStatement])
-    assert(nestedWhileStmt.body.collection.head.asInstanceOf[SingleStatement].getText == "SELECT 1")
+    assert(
+      nestedWhileStmt.body.collection.head.asInstanceOf[SingleStatement].getText == "SELECT 1")
 
     assert(nestedWhileStmt.body.collection(1).isInstanceOf[LeaveStatement])
     assert(nestedWhileStmt.body.collection(1).asInstanceOf[LeaveStatement].label == "lbl")
@@ -1267,7 +1316,8 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(nestedWhileStmt.condition.getText == "2 = 2")
 
     assert(nestedWhileStmt.body.collection.head.isInstanceOf[SingleStatement])
-    assert(nestedWhileStmt.body.collection.head.asInstanceOf[SingleStatement].getText == "SELECT 1")
+    assert(
+      nestedWhileStmt.body.collection.head.asInstanceOf[SingleStatement].getText == "SELECT 1")
 
     assert(nestedWhileStmt.body.collection(1).isInstanceOf[IterateStatement])
     assert(nestedWhileStmt.body.collection(1).asInstanceOf[IterateStatement].label == "lbl")
@@ -1411,12 +1461,14 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(ifStmt.conditions.head.getText == "1 = 1")
 
     assert(ifStmt.conditionalBodies.head.collection.head.isInstanceOf[SingleStatement])
-    assert(ifStmt.conditionalBodies.head.collection.head.asInstanceOf[SingleStatement]
-      .getText == "SELECT 1")
+    assert(
+      ifStmt.conditionalBodies.head.collection.head
+        .asInstanceOf[SingleStatement]
+        .getText == "SELECT 1")
 
     assert(ifStmt.elseBody.get.collection.head.isInstanceOf[SingleStatement])
-    assert(ifStmt.elseBody.get.collection.head.asInstanceOf[SingleStatement]
-      .getText == "SELECT 2")
+    assert(
+      ifStmt.elseBody.get.collection.head.asInstanceOf[SingleStatement].getText == "SELECT 2")
 
     assert(whileStmt.label.contains("lbl"))
   }
@@ -1454,8 +1506,8 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(nestedWhileStmt.body.isInstanceOf[CompoundBody])
     assert(nestedWhileStmt.body.collection.length == 1)
     assert(nestedWhileStmt.body.collection.head.isInstanceOf[SingleStatement])
-    assert(nestedWhileStmt.body.collection.
-      head.asInstanceOf[SingleStatement].getText == "SELECT 42")
+    assert(
+      nestedWhileStmt.body.collection.head.asInstanceOf[SingleStatement].getText == "SELECT 42")
 
     assert(whileStmt.label.contains("lbl"))
   }
@@ -1523,22 +1575,34 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(caseStmt.conditions.head.getText == "1 IN (1,2,3)")
 
     assert(caseStmt.conditionalBodies.head.collection.head.isInstanceOf[SingleStatement])
-    assert(caseStmt.conditionalBodies.head.collection.head.asInstanceOf[SingleStatement]
-      .getText == "SELECT 1")
+    assert(
+      caseStmt.conditionalBodies.head.collection.head
+        .asInstanceOf[SingleStatement]
+        .getText == "SELECT 1")
 
     assert(caseStmt.conditions(1).isInstanceOf[SingleStatement])
     assert(caseStmt.conditions(1).getText == "(SELECT * FROM t)")
 
     assert(caseStmt.conditionalBodies(1).collection.head.isInstanceOf[SingleStatement])
-    assert(caseStmt.conditionalBodies(1).collection.head.asInstanceOf[SingleStatement]
-      .getText == "SELECT * FROM b")
+    assert(
+      caseStmt
+        .conditionalBodies(1)
+        .collection
+        .head
+        .asInstanceOf[SingleStatement]
+        .getText == "SELECT * FROM b")
 
     assert(caseStmt.conditions(2).isInstanceOf[SingleStatement])
     assert(caseStmt.conditions(2).getText == "1 = 1")
 
     assert(caseStmt.conditionalBodies(2).collection.head.isInstanceOf[SingleStatement])
-    assert(caseStmt.conditionalBodies(2).collection.head.asInstanceOf[SingleStatement]
-      .getText == "SELECT 42")
+    assert(
+      caseStmt
+        .conditionalBodies(2)
+        .collection
+        .head
+        .asInstanceOf[SingleStatement]
+        .getText == "SELECT 42")
   }
 
   test("searched case statement with else") {
@@ -1563,8 +1627,8 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(caseStmt.conditions.head.getText == "1 = 1")
 
     assert(caseStmt.elseBody.get.collection.head.isInstanceOf[SingleStatement])
-    assert(caseStmt.elseBody.get.collection.head.asInstanceOf[SingleStatement]
-      .getText == "SELECT 43")
+    assert(
+      caseStmt.elseBody.get.collection.head.asInstanceOf[SingleStatement].getText == "SELECT 43")
   }
 
   test("searched case statement nested") {
@@ -1606,12 +1670,16 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(nestedCaseStmt.conditions.head.getText == "2 = 1")
 
     assert(nestedCaseStmt.conditionalBodies.head.collection.head.isInstanceOf[SingleStatement])
-    assert(nestedCaseStmt.conditionalBodies.head.collection.head.asInstanceOf[SingleStatement]
-      .getText == "SELECT 41")
+    assert(
+      nestedCaseStmt.conditionalBodies.head.collection.head
+        .asInstanceOf[SingleStatement]
+        .getText == "SELECT 41")
 
     assert(nestedCaseStmt.elseBody.get.collection.head.isInstanceOf[SingleStatement])
-    assert(nestedCaseStmt.elseBody.get.collection.head.asInstanceOf[SingleStatement]
-      .getText == "SELECT 42")
+    assert(
+      nestedCaseStmt.elseBody.get.collection.head
+        .asInstanceOf[SingleStatement]
+        .getText == "SELECT 42")
   }
 
   test("simple case statement") {
@@ -1633,8 +1701,10 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(caseStmt.conditionExpressions.head == Literal(1))
 
     assert(caseStmt.conditionalBodies.length == 1)
-    assert(caseStmt.conditionalBodies.head.collection.head.asInstanceOf[SingleStatement]
-      .getText == "SELECT 1")
+    assert(
+      caseStmt.conditionalBodies.head.collection.head
+        .asInstanceOf[SingleStatement]
+        .getText == "SELECT 1")
   }
 
   test("simple case statement with empty body") {
@@ -1681,20 +1751,32 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(caseStmt.conditionExpressions.head == Literal(1))
 
     assert(caseStmt.conditionalBodies.head.collection.head.isInstanceOf[SingleStatement])
-    assert(caseStmt.conditionalBodies.head.collection.head.asInstanceOf[SingleStatement]
-      .getText == "SELECT 1")
+    assert(
+      caseStmt.conditionalBodies.head.collection.head
+        .asInstanceOf[SingleStatement]
+        .getText == "SELECT 1")
 
     assert(caseStmt.conditionExpressions(1).isInstanceOf[ScalarSubquery])
 
     assert(caseStmt.conditionalBodies(1).collection.head.isInstanceOf[SingleStatement])
-    assert(caseStmt.conditionalBodies(1).collection.head.asInstanceOf[SingleStatement]
-      .getText == "SELECT * FROM b")
+    assert(
+      caseStmt
+        .conditionalBodies(1)
+        .collection
+        .head
+        .asInstanceOf[SingleStatement]
+        .getText == "SELECT * FROM b")
 
     assert(caseStmt.conditionExpressions(2).isInstanceOf[In])
 
     assert(caseStmt.conditionalBodies(2).collection.head.isInstanceOf[SingleStatement])
-    assert(caseStmt.conditionalBodies(2).collection.head.asInstanceOf[SingleStatement]
-      .getText == "SELECT 42")
+    assert(
+      caseStmt
+        .conditionalBodies(2)
+        .collection
+        .head
+        .asInstanceOf[SingleStatement]
+        .getText == "SELECT 42")
   }
 
   test("simple case statement with else") {
@@ -1717,15 +1799,17 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(caseStmt.caseVariableExpression == Literal(1))
     assert(caseStmt.elseBody.isDefined)
     assert(caseStmt.conditionExpressions.length == 1)
-    assert(caseStmt.conditionExpressions.head  == Literal(1))
+    assert(caseStmt.conditionExpressions.head == Literal(1))
 
     assert(caseStmt.conditionalBodies.length == 1)
-    assert(caseStmt.conditionalBodies.head.collection.head.asInstanceOf[SingleStatement]
-      .getText == "SELECT 42")
+    assert(
+      caseStmt.conditionalBodies.head.collection.head
+        .asInstanceOf[SingleStatement]
+        .getText == "SELECT 42")
 
     assert(caseStmt.elseBody.get.collection.head.isInstanceOf[SingleStatement])
-    assert(caseStmt.elseBody.get.collection.head.asInstanceOf[SingleStatement]
-      .getText == "SELECT 43")
+    assert(
+      caseStmt.elseBody.get.collection.head.asInstanceOf[SingleStatement].getText == "SELECT 43")
   }
 
   test("simple case statement nested") {
@@ -1768,12 +1852,16 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(nestedCaseStmt.conditionExpressions.head == Literal(2))
 
     assert(nestedCaseStmt.conditionalBodies.head.collection.head.isInstanceOf[SingleStatement])
-    assert(nestedCaseStmt.conditionalBodies.head.collection.head.asInstanceOf[SingleStatement]
-      .getText == "SELECT 41")
+    assert(
+      nestedCaseStmt.conditionalBodies.head.collection.head
+        .asInstanceOf[SingleStatement]
+        .getText == "SELECT 41")
 
     assert(nestedCaseStmt.elseBody.get.collection.head.isInstanceOf[SingleStatement])
-    assert(nestedCaseStmt.elseBody.get.collection.head.asInstanceOf[SingleStatement]
-      .getText == "SELECT 42")
+    assert(
+      nestedCaseStmt.elseBody.get.collection.head
+        .asInstanceOf[SingleStatement]
+        .getText == "SELECT 42")
   }
 
   test("loop statement") {
@@ -1846,12 +1934,14 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(ifStmt.conditions.head.getText == "1 = 1")
 
     assert(ifStmt.conditionalBodies.head.collection.head.isInstanceOf[SingleStatement])
-    assert(ifStmt.conditionalBodies.head.collection.head.asInstanceOf[SingleStatement]
-      .getText == "SELECT 1")
+    assert(
+      ifStmt.conditionalBodies.head.collection.head
+        .asInstanceOf[SingleStatement]
+        .getText == "SELECT 1")
 
     assert(ifStmt.elseBody.get.collection.head.isInstanceOf[SingleStatement])
-    assert(ifStmt.elseBody.get.collection.head.asInstanceOf[SingleStatement]
-      .getText == "SELECT 2")
+    assert(
+      ifStmt.elseBody.get.collection.head.asInstanceOf[SingleStatement].getText == "SELECT 2")
 
     assert(loopStmt.label.contains("lbl"))
   }
@@ -1880,8 +1970,8 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(nestedLoopStmt.body.isInstanceOf[CompoundBody])
     assert(nestedLoopStmt.body.collection.length == 1)
     assert(nestedLoopStmt.body.collection.head.isInstanceOf[SingleStatement])
-    assert(nestedLoopStmt.body.collection.
-      head.asInstanceOf[SingleStatement].getText == "SELECT 42")
+    assert(
+      nestedLoopStmt.body.collection.head.asInstanceOf[SingleStatement].getText == "SELECT 42")
 
     assert(loopStmt.label.contains("lbl"))
   }
@@ -2586,8 +2676,8 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(nestedForStmt.body.isInstanceOf[CompoundBody])
     assert(nestedForStmt.body.collection.length == 1)
     assert(nestedForStmt.body.collection.head.isInstanceOf[SingleStatement])
-    assert(nestedForStmt.body.collection.
-      head.asInstanceOf[SingleStatement].getText == "SELECT i + j")
+    assert(
+      nestedForStmt.body.collection.head.asInstanceOf[SingleStatement].getText == "SELECT i + j")
   }
 
   test("for statement - no variable") {
@@ -2717,8 +2807,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(nestedForStmt.body.isInstanceOf[CompoundBody])
     assert(nestedForStmt.body.collection.length == 1)
     assert(nestedForStmt.body.collection.head.isInstanceOf[SingleStatement])
-    assert(nestedForStmt.body.collection.
-      head.asInstanceOf[SingleStatement].getText == "SELECT 3")
+    assert(nestedForStmt.body.collection.head.asInstanceOf[SingleStatement].getText == "SELECT 3")
   }
 
   test("declare condition: custom sqlstate") {
@@ -3128,8 +3217,11 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(tree.handlers.head.exceptionHandlerTriggers.conditions.contains("DIVIDE_BY_ZERO"))
     assert(tree.handlers.head.body.collection.size == 1)
     assert(tree.handlers.head.body.collection.head.isInstanceOf[SingleStatement])
-    assert(tree.handlers.head.body.collection.head.asInstanceOf[SingleStatement]
-      .parsedPlan.isInstanceOf[Project])
+    assert(
+      tree.handlers.head.body.collection.head
+        .asInstanceOf[SingleStatement]
+        .parsedPlan
+        .isInstanceOf[Project])
   }
 
   test("declare continue handler with compound body") {
@@ -3145,8 +3237,11 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(tree.handlers.head.exceptionHandlerTriggers.conditions.contains("DIVIDE_BY_ZERO"))
     assert(tree.handlers.head.body.collection.size == 1)
     assert(tree.handlers.head.body.collection.head.isInstanceOf[SingleStatement])
-    assert(tree.handlers.head.body.collection.head.asInstanceOf[SingleStatement]
-      .parsedPlan.isInstanceOf[Project])
+    assert(
+      tree.handlers.head.body.collection.head
+        .asInstanceOf[SingleStatement]
+        .parsedPlan
+        .isInstanceOf[Project])
   }
 
   // This test works because END is not keyword here but a part of the statement.
@@ -3164,8 +3259,11 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(tree.handlers.head.exceptionHandlerTriggers.conditions.contains("DIVIDE_BY_ZERO"))
     assert(tree.handlers.head.body.collection.size == 1)
     assert(tree.handlers.head.body.collection.head.isInstanceOf[SingleStatement])
-    assert(tree.handlers.head.body.collection.head.asInstanceOf[SingleStatement]
-      .parsedPlan.isInstanceOf[Project])
+    assert(
+      tree.handlers.head.body.collection.head
+        .asInstanceOf[SingleStatement]
+        .parsedPlan
+        .isInstanceOf[Project])
   }
 
   test("declare continue handler single statement with END") {
@@ -3181,8 +3279,11 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(tree.handlers.head.exceptionHandlerTriggers.conditions.contains("DIVIDE_BY_ZERO"))
     assert(tree.handlers.head.body.collection.size == 1)
     assert(tree.handlers.head.body.collection.head.isInstanceOf[SingleStatement])
-    assert(tree.handlers.head.body.collection.head.asInstanceOf[SingleStatement]
-      .parsedPlan.isInstanceOf[Project])
+    assert(
+      tree.handlers.head.body.collection.head
+        .asInstanceOf[SingleStatement]
+        .parsedPlan
+        .isInstanceOf[Project])
   }
 
   test("declare exit handler single statement") {
@@ -3198,8 +3299,11 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(tree.handlers.head.exceptionHandlerTriggers.conditions.contains("DIVIDE_BY_ZERO"))
     assert(tree.handlers.head.body.collection.size == 1)
     assert(tree.handlers.head.body.collection.head.isInstanceOf[SingleStatement])
-    assert(tree.handlers.head.body.collection.head.asInstanceOf[SingleStatement]
-      .parsedPlan.isInstanceOf[Project])
+    assert(
+      tree.handlers.head.body.collection.head
+        .asInstanceOf[SingleStatement]
+        .parsedPlan
+        .isInstanceOf[Project])
   }
 
   test("declare continue handler single statement") {
@@ -3215,8 +3319,11 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(tree.handlers.head.exceptionHandlerTriggers.conditions.contains("DIVIDE_BY_ZERO"))
     assert(tree.handlers.head.body.collection.size == 1)
     assert(tree.handlers.head.body.collection.head.isInstanceOf[SingleStatement])
-    assert(tree.handlers.head.body.collection.head.asInstanceOf[SingleStatement]
-      .parsedPlan.isInstanceOf[Project])
+    assert(
+      tree.handlers.head.body.collection.head
+        .asInstanceOf[SingleStatement]
+        .parsedPlan
+        .isInstanceOf[Project])
   }
 
   test("declare exit handler set statement") {
@@ -3232,8 +3339,11 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(tree.handlers.head.exceptionHandlerTriggers.conditions.contains("DIVIDE_BY_ZERO"))
     assert(tree.handlers.head.body.collection.size == 1)
     assert(tree.handlers.head.body.collection.head.isInstanceOf[SingleStatement])
-    assert(tree.handlers.head.body.collection.head.asInstanceOf[SingleStatement]
-      .parsedPlan.isInstanceOf[SetVariable])
+    assert(
+      tree.handlers.head.body.collection.head
+        .asInstanceOf[SingleStatement]
+        .parsedPlan
+        .isInstanceOf[SetVariable])
   }
 
   test("declare continue handler set statement") {
@@ -3249,8 +3359,11 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(tree.handlers.head.exceptionHandlerTriggers.conditions.contains("DIVIDE_BY_ZERO"))
     assert(tree.handlers.head.body.collection.size == 1)
     assert(tree.handlers.head.body.collection.head.isInstanceOf[SingleStatement])
-    assert(tree.handlers.head.body.collection.head.asInstanceOf[SingleStatement]
-      .parsedPlan.isInstanceOf[SetVariable])
+    assert(
+      tree.handlers.head.body.collection.head
+        .asInstanceOf[SingleStatement]
+        .parsedPlan
+        .isInstanceOf[SetVariable])
   }
 
   test("declare exit handler with multiple conditions/sqlstates") {
@@ -3272,8 +3385,11 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(tree.handlers.head.exceptionHandlerTriggers.sqlStates.contains("22012"))
     assert(tree.handlers.head.body.collection.size == 1)
     assert(tree.handlers.head.body.collection.head.isInstanceOf[SingleStatement])
-    assert(tree.handlers.head.body.collection.head.asInstanceOf[SingleStatement]
-      .parsedPlan.isInstanceOf[SetVariable])
+    assert(
+      tree.handlers.head.body.collection.head
+        .asInstanceOf[SingleStatement]
+        .parsedPlan
+        .isInstanceOf[SetVariable])
   }
 
   test("declare continue handler with multiple conditions/sqlstates") {
@@ -3295,8 +3411,11 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(tree.handlers.head.exceptionHandlerTriggers.sqlStates.contains("22012"))
     assert(tree.handlers.head.body.collection.size == 1)
     assert(tree.handlers.head.body.collection.head.isInstanceOf[SingleStatement])
-    assert(tree.handlers.head.body.collection.head.asInstanceOf[SingleStatement]
-      .parsedPlan.isInstanceOf[SetVariable])
+    assert(
+      tree.handlers.head.body.collection.head
+        .asInstanceOf[SingleStatement]
+        .parsedPlan
+        .isInstanceOf[SetVariable])
   }
 
   test("declare exit handler for SQLEXCEPTION") {
@@ -3415,7 +3534,8 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(handlerBody.handlers.length == 1)
     assert(handlerBody.handlers.head.isInstanceOf[ExceptionHandler])
     assert(handlerBody.handlers.head.exceptionHandlerTriggers.conditions.size == 1)
-    assert(handlerBody.handlers.head.exceptionHandlerTriggers.conditions.contains("TEST_CONDITION"))
+    assert(
+      handlerBody.handlers.head.exceptionHandlerTriggers.conditions.contains("TEST_CONDITION"))
     assert(handlerBody.handlers.head.body.collection.size == 1)
   }
 
@@ -3433,7 +3553,8 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(handlerBody.handlers.length == 1)
     assert(handlerBody.handlers.head.isInstanceOf[ExceptionHandler])
     assert(handlerBody.handlers.head.exceptionHandlerTriggers.conditions.size == 1)
-    assert(handlerBody.handlers.head.exceptionHandlerTriggers.conditions.contains("TEST_CONDITION"))
+    assert(
+      handlerBody.handlers.head.exceptionHandlerTriggers.conditions.contains("TEST_CONDITION"))
     assert(handlerBody.handlers.head.body.collection.size == 1)
   }
 
@@ -3450,10 +3571,14 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |  END;
         |END""".stripMargin
     val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
-    val handlerBody = tree
-      .collection.head.asInstanceOf[CompoundBody]
-      .handlers.head.body.asInstanceOf[CompoundBody]
-      .handlers.head
+    val handlerBody = tree.collection.head
+      .asInstanceOf[CompoundBody]
+      .handlers
+      .head
+      .body
+      .asInstanceOf[CompoundBody]
+      .handlers
+      .head
     assert(handlerBody.exceptionHandlerTriggers.conditions.contains("TEST_CONDITION"))
   }
 
@@ -3470,10 +3595,14 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |  END;
         |END""".stripMargin
     val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
-    val handlerBody = tree
-      .collection.head.asInstanceOf[CompoundBody]
-      .handlers.head.body.asInstanceOf[CompoundBody]
-      .handlers.head
+    val handlerBody = tree.collection.head
+      .asInstanceOf[CompoundBody]
+      .handlers
+      .head
+      .body
+      .asInstanceOf[CompoundBody]
+      .handlers
+      .head
     assert(handlerBody.exceptionHandlerTriggers.conditions.contains("TEST_CONDITION"))
   }
 

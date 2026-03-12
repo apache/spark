@@ -46,21 +46,16 @@ class InMemoryPartitionTableCatalog extends InMemoryTableCatalog {
             c.dataType(),
             c.nullable(),
             c.comment(),
-            new ColumnDefaultValue(
-              c.defaultValue().getSql,
-              c.defaultValue().getExpression,
-              null
-            ),
-            c.metadataInJSON()
-          )
+            new ColumnDefaultValue(c.defaultValue().getSql, c.defaultValue().getExpression, null),
+            c.metadataInJSON())
         }
       }
     } else {
       columns
     }
     val schema = CatalogV2Util.v2ColumnsToStructType(finalCols)
-    val table = new InMemoryAtomicPartitionTable(
-      s"$name.${ident.quoted}", schema, partitions, properties)
+    val table =
+      new InMemoryAtomicPartitionTable(s"$name.${ident.quoted}", schema, partitions, properties)
     tables.put(ident, table)
     namespaces.putIfAbsent(ident.namespace.toList, Map())
     table

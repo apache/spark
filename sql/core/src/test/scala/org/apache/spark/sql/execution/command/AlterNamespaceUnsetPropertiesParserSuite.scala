@@ -41,7 +41,8 @@ class AlterNamespaceUnsetPropertiesParserSuite extends AnalysisTest with SharedS
         comparePlans(
           parsePlan(s"ALTER $nsToken a.b.c UNSET $propToken ('a', 'b', 'c')"),
           UnsetNamespacePropertiesCommand(
-            UnresolvedNamespace(Seq("a", "b", "c")), Seq("a", "b", "c")))
+            UnresolvedNamespace(Seq("a", "b", "c")),
+            Seq("a", "b", "c")))
 
         comparePlans(
           parsePlan(s"ALTER $nsToken a.b.c UNSET $propToken ('a')"),
@@ -55,11 +56,9 @@ class AlterNamespaceUnsetPropertiesParserSuite extends AnalysisTest with SharedS
     checkError(
       exception = parseException(sql),
       condition = "_LEGACY_ERROR_TEMP_0035",
-      parameters = Map("message" -> "Values should not be specified for key(s): [key_with_value]"),
-      context = ExpectedContext(
-        fragment = sql,
-        start = 0,
-        stop = 80))
+      parameters =
+        Map("message" -> "Values should not be specified for key(s): [key_with_value]"),
+      context = ExpectedContext(fragment = sql, start = 0, stop = 80))
   }
 
   test("not support clause - IF EXISTS") {
@@ -69,8 +68,7 @@ class AlterNamespaceUnsetPropertiesParserSuite extends AnalysisTest with SharedS
         checkError(
           exception = parseException(sql),
           condition = "PARSE_SYNTAX_ERROR",
-          parameters = Map("error" -> "'IF'", "hint" -> ": missing '('")
-        )
+          parameters = Map("error" -> "'IF'", "hint" -> ": missing '('"))
       }
     }
   }

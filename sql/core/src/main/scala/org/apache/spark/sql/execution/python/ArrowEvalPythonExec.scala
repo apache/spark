@@ -31,13 +31,12 @@ import org.apache.spark.sql.types.{StructType, UserDefinedType}
 import org.apache.spark.sql.types.DataType.equalsIgnoreCompatibleCollation
 
 /**
- * Grouped a iterator into batches.
- * This is similar to iter.grouped but returns Iterator[T] instead of Seq[T].
- * This is necessary because sometimes we cannot hold reference of input rows
+ * Grouped a iterator into batches. This is similar to iter.grouped but returns Iterator[T]
+ * instead of Seq[T]. This is necessary because sometimes we cannot hold reference of input rows
  * because the some input rows are mutable and can be reused.
  */
 private[spark] class BatchIterator[T](iter: Iterator[T], batchSize: Int)
-  extends Iterator[Iterator[T]] {
+    extends Iterator[Iterator[T]] {
 
   override def hasNext: Boolean = iter.hasNext
 
@@ -60,23 +59,20 @@ private[spark] class BatchIterator[T](iter: Iterator[T], batchSize: Int)
 }
 
 /**
- * A physical plan that evaluates a vectorized UDF.
- * Following eval types are supported:
+ * A physical plan that evaluates a vectorized UDF. Following eval types are supported:
  *
- * <ul>
- *   <li> SQL_ARROW_BATCHED_UDF for Arrow Optimized Python UDF
- *   <li> SQL_SCALAR_ARROW_UDF for Scalar Arrow UDF
- *   <li> SQL_SCALAR_ARROW_ITER_UDF for Scalar Iterator Arrow UDF
- *   <li> SQL_SCALAR_PANDAS_UDF for Scalar Pandas UDF
- *   <li> SQL_SCALAR_PANDAS_ITER_UDF for Scalar Iterator Pandas UDF
- * </ul>
- *
+ * <ul> <li> SQL_ARROW_BATCHED_UDF for Arrow Optimized Python UDF <li> SQL_SCALAR_ARROW_UDF for
+ * Scalar Arrow UDF <li> SQL_SCALAR_ARROW_ITER_UDF for Scalar Iterator Arrow UDF <li>
+ * SQL_SCALAR_PANDAS_UDF for Scalar Pandas UDF <li> SQL_SCALAR_PANDAS_ITER_UDF for Scalar Iterator
+ * Pandas UDF </ul>
  */
 case class ArrowEvalPythonExec(
     udfs: Seq[PythonUDF],
     resultAttrs: Seq[Attribute],
     child: SparkPlan,
-    evalType: Int) extends EvalPythonExec with PythonSQLMetrics {
+    evalType: Int)
+    extends EvalPythonExec
+    with PythonSQLMetrics {
   if (!supportedPythonEvalTypes.contains(evalType)) {
     throw SparkException.internalError(s"Unexpected eval type $evalType")
   }
@@ -128,7 +124,7 @@ class ArrowEvalPythonEvaluatorFactory(
     pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
     sessionUUID: Option[String])
-  extends EvalPythonEvaluatorFactory(childOutput, udfs, output) {
+    extends EvalPythonEvaluatorFactory(childOutput, udfs, output) {
 
   override def evaluate(
       funcs: Seq[(ChainedPythonFunctions, Long)],
@@ -137,9 +133,11 @@ class ArrowEvalPythonEvaluatorFactory(
       schema: StructType,
       context: TaskContext): Iterator[InternalRow] = {
 
-    val outputTypes = output.drop(childOutput.length).map(_.dataType.transformRecursively {
-      case udt: UserDefinedType[_] => udt.sqlType
-    })
+    val outputTypes = output
+      .drop(childOutput.length)
+      .map(_.dataType.transformRecursively { case udt: UserDefinedType[_] =>
+        udt.sqlType
+      })
 
     val batchIter = Iterator(iter)
 
@@ -160,7 +158,9 @@ class ArrowEvalPythonEvaluatorFactory(
       val actualDataTypes = (0 until batch.numCols()).map(i => batch.column(i).dataType())
       if (!equalsIgnoreCompatibleCollation(outputTypes, actualDataTypes)) {
         throw QueryExecutionErrors.arrowDataTypeMismatchError(
-          "pandas_udf()", outputTypes, actualDataTypes)
+          "pandas_udf()",
+          outputTypes,
+          actualDataTypes)
       }
       batch.rowIterator.asScala
     }

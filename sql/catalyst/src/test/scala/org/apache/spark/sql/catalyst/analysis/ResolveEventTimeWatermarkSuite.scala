@@ -40,19 +40,15 @@ class ResolveEventTimeWatermarkSuite extends AnalysisTest {
     // with expected shape of plan as a whole.
     val uuid = java.util.UUID.randomUUID()
 
-    val uuidInjectedAnalyzed = analyzed.transform {
-      case e: EventTimeWatermark => e.copy(nodeId = uuid)
+    val uuidInjectedAnalyzed = analyzed.transform { case e: EventTimeWatermark =>
+      e.copy(nodeId = uuid)
     }
 
     comparePlans(
       uuidInjectedAnalyzed,
       streamingRelation
-        .withWatermark(
-          uuid,
-          $"ts",
-          new CalendarInterval(0, 0, 1000)
-        ).analyze
-    )
+        .withWatermark(uuid, $"ts", new CalendarInterval(0, 0, 1000))
+        .analyze)
   }
 
   test("event time column expr deduces a new column from alias") {
@@ -60,9 +56,10 @@ class ResolveEventTimeWatermarkSuite extends AnalysisTest {
       .unresolvedWithWatermark(
         Alias(
           UnresolvedFunction(
-            Seq("timestamp_seconds"), Seq(UnresolvedAttribute("a")), isDistinct = false),
-          "event_time"
-        )(),
+            Seq("timestamp_seconds"),
+            Seq(UnresolvedAttribute("a")),
+            isDistinct = false),
+          "event_time")(),
         new CalendarInterval(0, 0, 1000))
 
     val analyzed = getAnalyzer.execute(planBeforeRule)
@@ -71,8 +68,8 @@ class ResolveEventTimeWatermarkSuite extends AnalysisTest {
     // with expected shape of plan as a whole.
     val uuid = java.util.UUID.randomUUID()
 
-    val uuidInjectedAnalyzed = analyzed.transform {
-      case e: EventTimeWatermark => e.copy(nodeId = uuid)
+    val uuidInjectedAnalyzed = analyzed.transform { case e: EventTimeWatermark =>
+      e.copy(nodeId = uuid)
     }
 
     comparePlans(
@@ -81,19 +78,15 @@ class ResolveEventTimeWatermarkSuite extends AnalysisTest {
         .select(
           Alias(
             UnresolvedFunction(
-              Seq("timestamp_seconds"), Seq(UnresolvedAttribute("a")), isDistinct = false),
-            "event_time"
-          )(),
+              Seq("timestamp_seconds"),
+              Seq(UnresolvedAttribute("a")),
+              isDistinct = false),
+            "event_time")(),
           // `*` will be resolved to `a`, `ts`
           $"a",
-          $"ts"
-        )
-        .withWatermark(
-          uuid,
-          $"event_time",
-          new CalendarInterval(0, 0, 1000)
-        ).analyze
-    )
+          $"ts")
+        .withWatermark(uuid, $"event_time", new CalendarInterval(0, 0, 1000))
+        .analyze)
   }
 
   test("event time column expr deduces a new column but the name is not explicitly given") {
@@ -101,8 +94,9 @@ class ResolveEventTimeWatermarkSuite extends AnalysisTest {
       .unresolvedWithWatermark(
         UnresolvedAlias(
           UnresolvedFunction(
-            Seq("timestamp_seconds"), Seq(UnresolvedAttribute("a")), isDistinct = false)
-        ),
+            Seq("timestamp_seconds"),
+            Seq(UnresolvedAttribute("a")),
+            isDistinct = false)),
         new CalendarInterval(0, 0, 1000))
 
     import org.apache.spark.sql.AnalysisException
@@ -114,7 +108,6 @@ class ResolveEventTimeWatermarkSuite extends AnalysisTest {
       condition = "REQUIRES_EXPLICIT_NAME_IN_WATERMARK_CLAUSE",
       sqlState = "42000",
       // The sqlExpr is updated to the auto generated alias
-      parameters = Map("sqlExpr" -> "timestamp_seconds(a) AS `timestamp_seconds(a)`")
-    )
+      parameters = Map("sqlExpr" -> "timestamp_seconds(a) AS `timestamp_seconds(a)`"))
   }
 }

@@ -29,22 +29,22 @@ import org.apache.spark.sql.metricview.serde.SourceType.SourceType
 private[sql] sealed abstract class MetricViewSerdeException(
     message: String,
     cause: Option[Throwable] = None)
-  extends Exception(message, cause.orNull)
+    extends Exception(message, cause.orNull)
 
 private[sql] case class MetricViewValidationException(
     message: String,
     cause: Option[Throwable] = None)
-  extends MetricViewSerdeException(message, cause)
+    extends MetricViewSerdeException(message, cause)
 
 private[sql] case class MetricViewFromProtoException(
     message: String,
     cause: Option[Throwable] = None)
-  extends MetricViewSerdeException(message, cause)
+    extends MetricViewSerdeException(message, cause)
 
 private[sql] case class MetricViewYAMLParsingException(
     message: String,
     cause: Option[Throwable] = None)
-  extends MetricViewSerdeException(message, cause)
+    extends MetricViewSerdeException(message, cause)
 
 // Expression types in a Metric View
 private[sql] sealed trait Expression {
@@ -63,9 +63,7 @@ private[sql] object SourceType extends Enumeration {
 
   def fromString(sourceType: String): SourceType = {
     values.find(_.toString.equalsIgnoreCase(sourceType)).getOrElse {
-      throw MetricViewFromProtoException(
-        s"Unsupported source type: $sourceType"
-      )
+      throw MetricViewFromProtoException(s"Unsupported source type: $sourceType")
     }
   }
 }
@@ -100,26 +98,19 @@ private[sql] object Source {
         Try(CatalystSqlParser.parseQuery(sourceText)) match {
           case Success(_) => SQLSource(sourceText)
           case Failure(queryEx) =>
-            throw MetricViewValidationException(
-              s"Invalid source: $sourceText",
-              Some(queryEx)
-            )
+            throw MetricViewValidationException(s"Invalid source: $sourceText", Some(queryEx))
         }
     }
   }
 }
 
-private[sql] case class Column(
-    name: String,
-    expression: Expression,
-    ordinal: Int) {
+private[sql] case class Column(name: String, expression: Expression, ordinal: Int) {
   def columnType: ColumnType = expression match {
     case _: DimensionExpression => ColumnType.Dimension
     case _: MeasureExpression => ColumnType.Measure
     case _ =>
       throw MetricViewValidationException(
-        s"Unsupported expression type: ${expression.getClass.getName}"
-      )
+        s"Unsupported expression type: ${expression.getClass.getName}")
   }
 
   def getColumnMetadata: ColumnMetadata = {
@@ -127,8 +118,7 @@ private[sql] case class Column(
     if (expr.length > Constants.MAXIMUM_PROPERTY_SIZE) {
       throw MetricViewValidationException(
         s"Expression length ${expr.length} exceeds maximum allowed size " +
-        s"${Constants.MAXIMUM_PROPERTY_SIZE} for column '$name'"
-      )
+          s"${Constants.MAXIMUM_PROPERTY_SIZE} for column '$name'")
     }
     ColumnMetadata(columnType.toString, expr)
   }
@@ -142,9 +132,7 @@ private[sql] object ColumnType extends Enumeration {
   // Method to match case-insensitively and return the correct value
   def fromString(columnType: String): ColumnType = {
     values.find(_.toString.equalsIgnoreCase(columnType)).getOrElse {
-      throw MetricViewFromProtoException(
-        s"Unsupported column type: $columnType"
-      )
+      throw MetricViewFromProtoException(s"Unsupported column type: $columnType")
     }
   }
 }
@@ -160,8 +148,7 @@ private[sql] case class ColumnMetadata(
 
 // Only parse the "version" field and ignore all others
 @JsonIgnoreProperties(ignoreUnknown = true)
-private[sql] case class YAMLVersion(version: String) {
-}
+private[sql] case class YAMLVersion(version: String) {}
 
 private[sql] case class MetricView(
     version: String,

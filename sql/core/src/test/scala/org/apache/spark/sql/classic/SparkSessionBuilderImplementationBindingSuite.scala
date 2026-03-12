@@ -23,5 +23,5 @@ import org.apache.spark.sql.test.SharedSparkSession
  * Make sure the api.SparkSessionBuilder binds to Classic implementation.
  */
 class SparkSessionBuilderImplementationBindingSuite
-  extends SharedSparkSession
-  with sql.SparkSessionBuilderImplementationBindingSuite
+    extends SharedSparkSession
+    with sql.SparkSessionBuilderImplementationBindingSuite

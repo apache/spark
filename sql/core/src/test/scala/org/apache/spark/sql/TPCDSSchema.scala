@@ -21,25 +21,25 @@ package org.apache.spark.sql
  * Base trait for TPC-DS related tests.
  *
  * Datatype mapping for TPC-DS and Spark SQL, fully matching schemas defined in `tpcds.sql` of the
- * official tpcds toolkit
- * see more at:
- *   http://www.tpc.org/tpc_documents_current_versions/pdf/tpc-ds_v2.9.0.pdf
+ * official tpcds toolkit see more at:
+ * http://www.tpc.org/tpc_documents_current_versions/pdf/tpc-ds_v2.9.0.pdf
  *
- *    |---------------|---------------|
- *    |    TPC-DS     |  Spark  SQL   |
- *    |---------------|---------------|
- *    |  Identifier   |      INT      |
- *    |---------------|---------------|
- *    |    Integer    |      INT      |
- *    |---------------|---------------|
- *    | Decimal(d, f) | Decimal(d, f) |
- *    |---------------|---------------|
- *    |    Char(N)    |    Char(N)    |
- *    |---------------|---------------|
- *    |  Varchar(N)   |  Varchar(N)   |
- *    |---------------|---------------|
- *    |     Date      |     Date      |
- *    |---------------|---------------|
+ * | --------------- | --------------- |
+ * |:----------------|:----------------|
+ * | TPC-DS          | Spark  SQL      |
+ * | --------------- | --------------- |
+ * | Identifier      | INT             |
+ * | --------------- | --------------- |
+ * | Integer         | INT             |
+ * | --------------- | --------------- |
+ * | Decimal(d, f)   | Decimal(d, f)   |
+ * | --------------- | --------------- |
+ * | Char(N)         | Char(N)         |
+ * | --------------- | --------------- |
+ * | Varchar(N)      | Varchar(N)      |
+ * | --------------- | --------------- |
+ * | Date            | Date            |
+ * | --------------- | --------------- |
  */
 trait TPCDSSchema {
 
@@ -540,8 +540,7 @@ trait TPCDSSchema {
         |`t_shift` CHAR(20),
         |`t_sub_shift` CHAR(20),
         |`t_meal_time` CHAR(20)
-      """.stripMargin
-  )
+      """.stripMargin)
 
   // The partition column is consistent with the databricks/spark-sql-perf project.
   protected val tablePartitionColumns = Map(
@@ -551,6 +550,5 @@ trait TPCDSSchema {
     "store_sales" -> Seq("`ss_sold_date_sk`"),
     "store_returns" -> Seq("`sr_returned_date_sk`"),
     "web_sales" -> Seq("`ws_sold_date_sk`"),
-    "web_returns" -> Seq("`wr_returned_date_sk`")
-  )
+    "web_returns" -> Seq("`wr_returned_date_sk`"))
 }

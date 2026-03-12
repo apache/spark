@@ -36,15 +36,16 @@ class InMemoryPartitionTable(
     columns: Array[Column],
     partitioning: Array[Transform],
     properties: util.Map[String, String])
-  extends InMemoryTable(name, columns, partitioning, properties) with SupportsPartitionManagement {
+    extends InMemoryTable(name, columns, partitioning, properties)
+    with SupportsPartitionManagement {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
   def this(
-    name: String,
-    schema: StructType,
-    partitioning: Array[Transform],
-    properties: util.Map[String, String]
-  ) = this(name, CatalogV2Util.structTypeToV2Columns(schema), partitioning, properties)
+      name: String,
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: util.Map[String, String]) =
+    this(name, CatalogV2Util.structTypeToV2Columns(schema), partitioning, properties)
 
   protected val memoryTablePartitions: util.Map[InternalRow, util.Map[String, String]] =
     new ConcurrentHashMap[InternalRow, util.Map[String, String]]()
@@ -54,9 +55,7 @@ class InMemoryPartitionTable(
     new StructType(schema.filter(p => partitionColumnNames.contains(p.name)).toArray)
   }
 
-  def createPartition(
-      ident: InternalRow,
-      properties: util.Map[String, String]): Unit = {
+  def createPartition(ident: InternalRow, properties: util.Map[String, String]): Unit = {
     if (memoryTablePartitions.containsKey(ident)) {
       throw new PartitionsAlreadyExistException(name, ident, partitionSchema)
     } else {
@@ -98,22 +97,28 @@ class InMemoryPartitionTable(
   override def listPartitionIdentifiers(
       names: Array[String],
       ident: InternalRow): Array[InternalRow] = {
-    assert(names.length == ident.numFields,
+    assert(
+      names.length == ident.numFields,
       s"Number of partition names (${names.length}) must be equal to " +
-      s"the number of partition values (${ident.numFields}).")
+        s"the number of partition values (${ident.numFields}).")
     val schema = partitionSchema
-    assert(names.forall(fieldName => schema.fieldNames.contains(fieldName)),
+    assert(
+      names.forall(fieldName => schema.fieldNames.contains(fieldName)),
       s"Some partition names ${names.mkString("[", ", ", "]")} don't belong to " +
-      s"the partition schema '${schema.sql}'.")
+        s"the partition schema '${schema.sql}'.")
     val indexes = names.map(schema.fieldIndex)
     val dataTypes = names.map(schema(_).dataType)
     val currentRow = new GenericInternalRow(new Array[Any](names.length))
-    memoryTablePartitions.keySet().asScala.filter { key =>
-      for (i <- names.indices) {
-        currentRow.values(i) = key.get(indexes(i), dataTypes(i))
+    memoryTablePartitions
+      .keySet()
+      .asScala
+      .filter { key =>
+        for (i <- names.indices) {
+          currentRow.values(i) = key.get(indexes(i), dataTypes(i))
+        }
+        currentRow == ident
       }
-      currentRow == ident
-    }.toArray
+      .toArray
   }
 
   override def renamePartition(from: InternalRow, to: InternalRow): Boolean = {
@@ -125,7 +130,7 @@ class InMemoryPartitionTable(
         throw new NoSuchPartitionException(name, from, partitionSchema)
       }
       memoryTablePartitions.put(to, partValue) == null &&
-        renamePartitionKey(partitionSchema, from.toSeq(schema), to.toSeq(schema))
+      renamePartitionKey(partitionSchema, from.toSeq(schema), to.toSeq(schema))
     }
   }
 

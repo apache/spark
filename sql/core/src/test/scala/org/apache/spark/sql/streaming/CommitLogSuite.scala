@@ -35,8 +35,7 @@ class CommitLogSuite extends SparkFunSuite with SharedSparkSession {
       "test",
       "resources",
       "structured-streaming",
-      "testCommitLogV2"
-    )
+      "testCommitLogV2")
   }
 
   private def testCommitLogV2FilePathEmptyUniqueId: Path = {
@@ -47,8 +46,7 @@ class CommitLogSuite extends SparkFunSuite with SharedSparkSession {
       "test",
       "resources",
       "structured-streaming",
-      "testCommitLogV2-empty-unique-id"
-    )
+      "testCommitLogV2-empty-unique-id")
   }
 
   private def testCommitLogV1FilePath: Path = {
@@ -59,8 +57,7 @@ class CommitLogSuite extends SparkFunSuite with SharedSparkSession {
       "test",
       "resources",
       "structured-streaming",
-      "testCommitLogV1"
-    )
+      "testCommitLogV1")
   }
 
   private def testSerde(commitMetadata: CommitMetadata, path: Path): Unit = {
@@ -81,8 +78,8 @@ class CommitLogSuite extends SparkFunSuite with SharedSparkSession {
         commitMetadata.stateUniqueIds.get.foreach { case (operatorId, uniqueIds) =>
           assert(metadata.stateUniqueIds.get.contains(operatorId))
           assert(metadata.stateUniqueIds.get(operatorId).length == uniqueIds.length)
-          assert(metadata.stateUniqueIds.get(operatorId).zip(uniqueIds).forall {
-            case (a, b) => a.sameElements(b)
+          assert(metadata.stateUniqueIds.get(operatorId).zip(uniqueIds).forall { case (a, b) =>
+            a.sameElements(b)
           })
         }
       }
@@ -101,8 +98,7 @@ class CommitLogSuite extends SparkFunSuite with SharedSparkSession {
       val testStateUniqueIds: Map[Long, Array[Array[String]]] =
         Map(
           0L -> Array(Array("unique_id1", "unique_id2"), Array("unique_id3", "unique_id4")),
-            1L -> Array(Array("unique_id5", "unique_id6"), Array("unique_id7", "unique_id8"))
-        )
+          1L -> Array(Array("unique_id5", "unique_id6"), Array("unique_id7", "unique_id8")))
       val testMetadataV2 = CommitMetadata(0, Some(testStateUniqueIds))
       testSerde(testMetadataV2, testCommitLogV2FilePath)
     }
@@ -134,7 +130,7 @@ class CommitLogSuite extends SparkFunSuite with SharedSparkSession {
         new CommitLog(spark, testCommitLogV1FilePath.toString).deserialize(inputStream)
       }
 
-      assert (e.getMessage.contains("only supported log version"))
+      assert(e.getMessage.contains("only supported log version"))
     }
   }
 }

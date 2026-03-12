@@ -76,23 +76,25 @@ abstract class BenchmarkQueryTest extends QueryTest with SharedSparkSession {
     findSubtrees(plan)
     codegenSubtrees.toSeq.foreach { subtree =>
       val code = subtree.doCodeGen()._2
-      val (_, ByteCodeStats(maxMethodCodeSize, _, _)) = try {
-        // Just check the generated code can be properly compiled
-        CodeGenerator.compile(code)
-      } catch {
-        case e: Exception =>
-          val msg =
-            s"""
+      val (_, ByteCodeStats(maxMethodCodeSize, _, _)) =
+        try {
+          // Just check the generated code can be properly compiled
+          CodeGenerator.compile(code)
+        } catch {
+          case e: Exception =>
+            val msg =
+              s"""
                |failed to compile:
                |Subtree:
                |$subtree
                |Generated code:
                |${CodeFormatter.format(code)}
              """.stripMargin
-          throw new Exception(msg, e)
-      }
+            throw new Exception(msg, e)
+        }
 
-      assert(!checkMethodCodeSize ||
+      assert(
+        !checkMethodCodeSize ||
           maxMethodCodeSize <= CodeGenerator.DEFAULT_JVM_HUGE_METHOD_LIMIT,
         s"too long generated codes found in the WholeStageCodegenExec subtree (id=${subtree.id}) " +
           s"and JIT optimization might not work:\n${subtree.treeString}")

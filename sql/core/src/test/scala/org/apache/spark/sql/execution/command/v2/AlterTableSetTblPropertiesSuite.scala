@@ -25,11 +25,12 @@ import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.execution.command
 
 /**
- * The class contains tests for the `ALTER TABLE .. SET TBLPROPERTIES` command to
- * check V2 table catalogs.
+ * The class contains tests for the `ALTER TABLE .. SET TBLPROPERTIES` command to check V2 table
+ * catalogs.
  */
 class AlterTableSetTblPropertiesSuite
-  extends command.AlterTableSetTblPropertiesSuiteBase with CommandSuiteBase {
+    extends command.AlterTableSetTblPropertiesSuiteBase
+    with CommandSuiteBase {
 
   private def normalizeTblProps(props: Map[String, String]): Map[String, String] = {
     props.filterNot(p => Seq("provider", "owner").contains(p._1))
@@ -42,7 +43,8 @@ class AlterTableSetTblPropertiesSuite
     v2Catalog.loadTable(Identifier.of(namespace, nameParts.last))
   }
 
-  override def checkTblProps(tableIdent: TableIdentifier,
+  override def checkTblProps(
+      tableIdent: TableIdentifier,
       expectedTblProps: Map[String, String]): Unit = {
     val actualTblProps = getTableMetadata(tableIdent).properties.asScala.toMap
     assert(normalizeTblProps(actualTblProps) === expectedTblProps)

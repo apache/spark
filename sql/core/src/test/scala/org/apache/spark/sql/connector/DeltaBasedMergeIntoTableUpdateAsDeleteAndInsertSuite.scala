@@ -21,7 +21,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.types.StructType
 
 class DeltaBasedMergeIntoTableUpdateAsDeleteAndInsertSuite
-  extends DeltaBasedMergeIntoTableSuiteBase {
+    extends DeltaBasedMergeIntoTableSuiteBase {
 
   import testImplicits._
 
@@ -34,7 +34,8 @@ class DeltaBasedMergeIntoTableUpdateAsDeleteAndInsertSuite
 
   test("merge handles metadata columns correctly") {
     withTempView("source") {
-      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+      createAndInitTable(
+        "pk INT NOT NULL, salary INT, dep STRING",
         """{ "pk": 1, "salary": 100, "dep": "hr" }
           |{ "pk": 2, "salary": 200, "dep": "software" }
           |{ "pk": 3, "salary": 300, "dep": "hr" }
@@ -45,8 +46,7 @@ class DeltaBasedMergeIntoTableUpdateAsDeleteAndInsertSuite
       val sourceDF = Seq(3, 4, 5, 6).toDF("pk")
       sourceDF.createOrReplaceTempView("source")
 
-      sql(
-        s"""MERGE INTO $tableNameAsString t
+      sql(s"""MERGE INTO $tableNameAsString t
            |USING source s
            |ON t.pk = s.pk
            |WHEN MATCHED THEN
@@ -64,7 +64,9 @@ class DeltaBasedMergeIntoTableUpdateAsDeleteAndInsertSuite
           Row(3, 301, "hr"), // update
           Row(4, 401, "hr"), // update
           Row(5, 501, "hr"), // update
-          Row(6, 0, "new"))) // insert
+          Row(6, 0, "new")
+        )
+      ) // insert
 
       checkLastWriteInfo(
         expectedRowSchema = table.schema,

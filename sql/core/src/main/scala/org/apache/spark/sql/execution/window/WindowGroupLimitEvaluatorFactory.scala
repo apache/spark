@@ -29,7 +29,7 @@ class WindowGroupLimitEvaluatorFactory(
     limit: Int,
     childOutput: Seq[Attribute],
     numOutputRows: SQLMetric)
-  extends PartitionEvaluatorFactory[InternalRow, InternalRow] {
+    extends PartitionEvaluatorFactory[InternalRow, InternalRow] {
 
   override def createEvaluator(): PartitionEvaluator[InternalRow, InternalRow] = {
     val limitFunc = rankLikeFunction match {
@@ -46,13 +46,13 @@ class WindowGroupLimitEvaluatorFactory(
     if (partitionSpec.isEmpty) {
       new WindowGroupLimitPartitionEvaluator(limitFunc)
     } else {
-      new WindowGroupLimitPartitionEvaluator(
-        input => new GroupedLimitIterator(input, childOutput, partitionSpec, limitFunc))
+      new WindowGroupLimitPartitionEvaluator(input =>
+        new GroupedLimitIterator(input, childOutput, partitionSpec, limitFunc))
     }
   }
 
   class WindowGroupLimitPartitionEvaluator(f: Iterator[InternalRow] => Iterator[InternalRow])
-    extends PartitionEvaluator[InternalRow, InternalRow] {
+      extends PartitionEvaluator[InternalRow, InternalRow] {
 
     override def eval(
         partitionIndex: Int,

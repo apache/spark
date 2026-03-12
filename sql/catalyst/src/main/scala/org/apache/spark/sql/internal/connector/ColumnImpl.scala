@@ -29,4 +29,5 @@ case class ColumnImpl(
     defaultValue: ColumnDefaultValue,
     generationExpression: String,
     identityColumnSpec: IdentityColumnSpec,
-    metadataInJSON: String) extends Column
+    metadataInJSON: String)
+    extends Column

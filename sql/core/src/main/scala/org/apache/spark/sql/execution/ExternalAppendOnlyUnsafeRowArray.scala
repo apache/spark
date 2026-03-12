@@ -33,17 +33,17 @@ import org.apache.spark.storage.BlockManager
 import org.apache.spark.util.collection.unsafe.sort.{UnsafeExternalSorter, UnsafeSorterIterator}
 
 /**
- * An append-only array for [[UnsafeRow]]s that strictly keeps content in an in-memory array
- * until [[numRowsInMemoryBufferThreshold]] or [[sizeInBytesInMemoryBufferThreshold]] is reached
- * post which it will switch to a mode (backed by [[UnsafeExternalSorter]]) which would flush to
- * disk after [[numRowsSpillThreshold]] or [[sizeInBytesSpillThreshold]] is met (or before if there
- * is excessive memory consumption). Setting these threshold involves following trade-offs:
+ * An append-only array for [[UnsafeRow]]s that strictly keeps content in an in-memory array until
+ * [[numRowsInMemoryBufferThreshold]] or [[sizeInBytesInMemoryBufferThreshold]] is reached post
+ * which it will switch to a mode (backed by [[UnsafeExternalSorter]]) which would flush to disk
+ * after [[numRowsSpillThreshold]] or [[sizeInBytesSpillThreshold]] is met (or before if there is
+ * excessive memory consumption). Setting these threshold involves following trade-offs:
  *
- * - If [[numRowsInMemoryBufferThreshold]] and [[sizeInBytesInMemoryBufferThreshold]] are too high,
- *   the in-memory array may occupy more memory than is available, resulting in OOM.
- * - If [[numRowsSpillThreshold]] or [[sizeInBytesSpillThreshold]] is too low, data will be spilled
- *   frequently and lead to excessive disk writes. This may lead to a performance regression
- *   compared to the normal case of using an [[ArrayBuffer]] or [[Array]].
+ *   - If [[numRowsInMemoryBufferThreshold]] and [[sizeInBytesInMemoryBufferThreshold]] are too
+ *     high, the in-memory array may occupy more memory than is available, resulting in OOM.
+ *   - If [[numRowsSpillThreshold]] or [[sizeInBytesSpillThreshold]] is too low, data will be
+ *     spilled frequently and lead to excessive disk writes. This may lead to a performance
+ *     regression compared to the normal case of using an [[ArrayBuffer]] or [[Array]].
  */
 class ExternalAppendOnlyUnsafeRowArray(
     taskMemoryManager: TaskMemoryManager,
@@ -55,7 +55,8 @@ class ExternalAppendOnlyUnsafeRowArray(
     numRowsInMemoryBufferThreshold: Int,
     sizeInBytesInMemoryBufferThreshold: Long,
     numRowsSpillThreshold: Int,
-    sizeInBytesSpillThreshold: Long) extends Logging {
+    sizeInBytesSpillThreshold: Long)
+    extends Logging {
 
   def this(
       numRowsInMemoryBufferThreshold: Int,
@@ -137,10 +138,11 @@ class ExternalAppendOnlyUnsafeRowArray(
       inMemoryBufferSizeInBytes += unsafeRow.getSizeInBytes
     } else {
       if (spillableArray == null) {
-        logInfo(log"Reached spill threshold of " +
-          log"${MDC(MAX_NUM_ROWS_IN_MEMORY_BUFFER, numRowsInMemoryBufferThreshold)} rows, " +
-          log"or ${MDC(NUM_BYTES_MAX, sizeInBytesInMemoryBufferThreshold)} bytes, " +
-          log"switching to ${MDC(CLASS_NAME, classOf[UnsafeExternalSorter].getName)}")
+        logInfo(
+          log"Reached spill threshold of " +
+            log"${MDC(MAX_NUM_ROWS_IN_MEMORY_BUFFER, numRowsInMemoryBufferThreshold)} rows, " +
+            log"or ${MDC(NUM_BYTES_MAX, sizeInBytesInMemoryBufferThreshold)} bytes, " +
+            log"switching to ${MDC(CLASS_NAME, classOf[UnsafeExternalSorter].getName)}")
 
         // We will not sort the rows, so prefixComparator and recordComparator are null
         spillableArray = UnsafeExternalSorter.create(
@@ -164,8 +166,7 @@ class ExternalAppendOnlyUnsafeRowArray(
               existingUnsafeRow.getBaseOffset,
               existingUnsafeRow.getSizeInBytes,
               0,
-              false)
-          )
+              false))
           inMemoryBuffer.clear()
           inMemoryBufferSizeInBytes = 0
         }
@@ -205,8 +206,8 @@ class ExternalAppendOnlyUnsafeRowArray(
 
   def generateIterator(): Iterator[UnsafeRow] = generateIterator(startIndex = 0)
 
-  private[this]
-  abstract class ExternalAppendOnlyUnsafeRowArrayIterator extends Iterator[UnsafeRow] {
+  private[this] abstract class ExternalAppendOnlyUnsafeRowArrayIterator
+      extends Iterator[UnsafeRow] {
     private val expectedModificationsCount = modificationsCount
 
     protected def isModified(): Boolean = expectedModificationsCount != modificationsCount
@@ -224,7 +225,7 @@ class ExternalAppendOnlyUnsafeRowArray(
   }
 
   private[this] class InMemoryBufferIterator(startIndex: Int)
-    extends ExternalAppendOnlyUnsafeRowArrayIterator {
+      extends ExternalAppendOnlyUnsafeRowArrayIterator {
 
     private var currentIndex = startIndex
 
@@ -238,10 +239,8 @@ class ExternalAppendOnlyUnsafeRowArray(
     }
   }
 
-  private[this] class SpillableArrayIterator(
-      iterator: UnsafeSorterIterator,
-      numFieldPerRow: Int)
-    extends ExternalAppendOnlyUnsafeRowArrayIterator {
+  private[this] class SpillableArrayIterator(iterator: UnsafeSorterIterator, numFieldPerRow: Int)
+      extends ExternalAppendOnlyUnsafeRowArrayIterator {
 
     private val currentRow = new UnsafeRow(numFieldPerRow)
 

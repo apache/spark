@@ -61,7 +61,7 @@ trait MergeIntoSchemaEvolutionSuiteBase extends RowLevelOperationSuiteBase {
   }
 
   protected case class NotMatchedBySourceClause(condition: String, action: String)
-    extends MergeClause {
+      extends MergeClause {
     override def clause: String = "NOT MATCHED BY SOURCE"
   }
 
@@ -96,11 +96,16 @@ trait MergeIntoSchemaEvolutionSuiteBase extends RowLevelOperationSuiteBase {
   /**
    * Execute a merge operation. Subclasses implement this to use either SQL or DataFrame API.
    *
-   * @param withSchemaEvolution Whether to enable schema evolution
-   * @param targetTableName     The target table name
-   * @param sourceViewName      The source temp view name
-   * @param cond                The join condition (e.g., "t.pk = s.pk")
-   * @param clauses             The merge clauses (UPDATE, INSERT, DELETE)
+   * @param withSchemaEvolution
+   *   Whether to enable schema evolution
+   * @param targetTableName
+   *   The target table name
+   * @param sourceViewName
+   *   The source temp view name
+   * @param cond
+   *   The join condition (e.g., "t.pk = s.pk")
+   * @param clauses
+   *   The merge clauses (UPDATE, INSERT, DELETE)
    */
   protected def executeMerge(
       withSchemaEvolution: Boolean,
@@ -110,34 +115,41 @@ trait MergeIntoSchemaEvolutionSuiteBase extends RowLevelOperationSuiteBase {
       clauses: Seq[MergeClause]): Unit
 
   /**
-   * Helper method to test merge schema evolution scenarios.
-   * This generates two tests: one with schema evolution disabled and one enabled.
+   * Helper method to test merge schema evolution scenarios. This generates two tests: one with
+   * schema evolution disabled and one enabled.
    *
    * If requiresNestedTypeCoercion is true, it generates two additional tests with
    * MERGE_INTO_NESTED_TYPE_COERCION_ENABLED set to false, expecting both to fail.
    *
-   * @param name                                Base name for the generated tests
-   * @param targetData                          Function returning DataFrame for target table data
-   *                                            (schema inferred from it)
-   * @param sourceData                          Function returning DataFrame for source data
-   * @param cond                                Merge condition (default: "t.pk = s.pk")
-   * @param clauses                             Sequence of MergeClause
-   *                                            (use update, delete, insert, etc. helpers)
-   * @param expected                            Expected rows when schema evolution is enabled
-   *                                            (null if error expected)
-   * @param expectedWithoutEvolution            Expected rows without evolution
-   *                                            (null if error expected)
-   * @param expectedSchema                      Expected schema with evolution
-   *                                            (null to skip schema check)
-   * @param expectedSchemaWithoutEvolution      Expected schema without evolution
-   * @param expectErrorContains                 Error message substring expected with evolution
-   *                                            (null if no error)
-   * @param expectErrorWithoutEvolutionContains Error message substring expected without evolution
-   * @param confs                               Additional SQL configurations to apply during test
-   * @param disableAutoSchemaEvolution          If true, sets 'auto-schema-evolution' table property
-   *                                            to false
-   * @param requiresNestedTypeCoercion          If true, enables coercion for main tests and adds
-   *                                            coercion-disabled tests that expect failure
+   * @param name
+   *   Base name for the generated tests
+   * @param targetData
+   *   Function returning DataFrame for target table data (schema inferred from it)
+   * @param sourceData
+   *   Function returning DataFrame for source data
+   * @param cond
+   *   Merge condition (default: "t.pk = s.pk")
+   * @param clauses
+   *   Sequence of MergeClause (use update, delete, insert, etc. helpers)
+   * @param expected
+   *   Expected rows when schema evolution is enabled (null if error expected)
+   * @param expectedWithoutEvolution
+   *   Expected rows without evolution (null if error expected)
+   * @param expectedSchema
+   *   Expected schema with evolution (null to skip schema check)
+   * @param expectedSchemaWithoutEvolution
+   *   Expected schema without evolution
+   * @param expectErrorContains
+   *   Error message substring expected with evolution (null if no error)
+   * @param expectErrorWithoutEvolutionContains
+   *   Error message substring expected without evolution
+   * @param confs
+   *   Additional SQL configurations to apply during test
+   * @param disableAutoSchemaEvolution
+   *   If true, sets 'auto-schema-evolution' table property to false
+   * @param requiresNestedTypeCoercion
+   *   If true, enables coercion for main tests and adds coercion-disabled tests that expect
+   *   failure
    */
   // scalastyle:off argcount
   protected def testEvolution(name: String)(
@@ -173,8 +185,7 @@ trait MergeIntoSchemaEvolutionSuiteBase extends RowLevelOperationSuiteBase {
 
           // Optionally disable auto-schema-evolution via table property
           if (disableAutoSchemaEvolution) {
-            sql(
-              s"""ALTER TABLE $tableNameAsString SET TBLPROPERTIES
+            sql(s"""ALTER TABLE $tableNameAsString SET TBLPROPERTIES
                  | ('auto-schema-evolution' = 'false')""".stripMargin)
           }
 
@@ -186,14 +197,16 @@ trait MergeIntoSchemaEvolutionSuiteBase extends RowLevelOperationSuiteBase {
             val ex = intercept[Exception] {
               executeMerge(withSchemaEvolution, tableNameAsString, "source", cond, clauses)
             }
-            assert(ex.getMessage.contains(errorSubstring),
+            assert(
+              ex.getMessage.contains(errorSubstring),
               s"Expected error containing '$errorSubstring' but got: ${ex.getMessage}")
           } else {
             executeMerge(withSchemaEvolution, tableNameAsString, "source", cond, clauses)
             checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), expectedDf.collect().toSeq)
 
             if (schema != null) {
-              assert(sql(s"SELECT * FROM $tableNameAsString").schema === schema,
+              assert(
+                sql(s"SELECT * FROM $tableNameAsString").schema === schema,
                 s"Schema mismatch: expected $schema but got " +
                   s"${sql(s"SELECT * FROM $tableNameAsString").schema}")
             }
@@ -258,9 +271,9 @@ trait MergeIntoSchemaEvolutionSuiteBase extends RowLevelOperationSuiteBase {
   // scalastyle:on argcount
 
   /**
-   * Helper for nested struct evolution tests that uses JSON strings for data.
-   * This is more readable for complex nested structures than Row objects.
-   * The targetSchema and sourceSchema are used to parse the JSON and create DataFrames.
+   * Helper for nested struct evolution tests that uses JSON strings for data. This is more
+   * readable for complex nested structures than Row objects. The targetSchema and sourceSchema
+   * are used to parse the JSON and create DataFrames.
    */
   // scalastyle:off argcount
   protected def testNestedStructsEvolution(name: String)(
@@ -289,27 +302,24 @@ trait MergeIntoSchemaEvolutionSuiteBase extends RowLevelOperationSuiteBase {
       sourceData = readJson(source, sourceSchema),
       cond = cond,
       clauses = clauses,
-      expected =
-        if (result != null) {
-          val schema = if (resultSchema != null) resultSchema else targetSchema
-          readJson(result, schema)
-        } else {
-          null
-        },
+      expected = if (result != null) {
+        val schema = if (resultSchema != null) resultSchema else targetSchema
+        readJson(result, schema)
+      } else {
+        null
+      },
       expectedSchema = resultSchema,
       expectErrorContains = expectErrorContains,
-      expectedWithoutEvolution =
-        if (resultWithoutEvolution != null) {
-          readJson(resultWithoutEvolution, targetSchema)
-        } else {
-          null
-        },
+      expectedWithoutEvolution = if (resultWithoutEvolution != null) {
+        readJson(resultWithoutEvolution, targetSchema)
+      } else {
+        null
+      },
       expectedSchemaWithoutEvolution = targetSchema,
       expectErrorWithoutEvolutionContains = expectErrorWithoutEvolutionContains,
       confs = confs,
       partitionCols = partitionCols,
-      requiresNestedTypeCoercion = requiresNestedTypeCoercion
-    )
+      requiresNestedTypeCoercion = requiresNestedTypeCoercion)
   }
   // scalastyle:on argcount
 
@@ -328,8 +338,8 @@ trait MergeIntoSchemaEvolutionSuiteBase extends RowLevelOperationSuiteBase {
 }
 
 /**
- * SQL-based implementation of merge schema evolution tests.
- * Executes merge operations using SQL statements.
+ * SQL-based implementation of merge schema evolution tests. Executes merge operations using SQL
+ * statements.
  */
 trait MergeIntoSchemaEvolutionSQLSuiteBase extends MergeIntoSchemaEvolutionSuiteBase {
 
@@ -352,10 +362,9 @@ trait MergeIntoSchemaEvolutionSQLSuiteBase extends MergeIntoSchemaEvolutionSuite
   }
 }
 
-
 /**
- * Scala/DataFrame API-based implementation of merge schema evolution tests.
- * Executes merge operations using the DataFrame merge builder API.
+ * Scala/DataFrame API-based implementation of merge schema evolution tests. Executes merge
+ * operations using the DataFrame merge builder API.
  */
 trait MergeIntoSchemaEvolutionScalaSuiteBase extends MergeIntoSchemaEvolutionSuiteBase {
 
@@ -368,8 +377,8 @@ trait MergeIntoSchemaEvolutionScalaSuiteBase extends MergeIntoSchemaEvolutionSui
 
     val sourceDf = spark.table(sourceTableName)
 
-    val mergeBuilder = sourceDf.mergeInto(targetTableName,
-      toExpr(cond, targetTableName, sourceTableName))
+    val mergeBuilder =
+      sourceDf.mergeInto(targetTableName, toExpr(cond, targetTableName, sourceTableName))
 
     // Apply each clause to the merge builder
     clauses.foreach {
@@ -383,16 +392,15 @@ trait MergeIntoSchemaEvolutionScalaSuiteBase extends MergeIntoSchemaEvolutionSui
           case "UPDATE SET *" => matched.updateAll()
           case "DELETE" => matched.delete()
           case s if s.startsWith("UPDATE SET ") =>
-            val assignments = parseAssignments(s.stripPrefix("UPDATE SET "),
-              targetTableName, sourceTableName)
+            val assignments =
+              parseAssignments(s.stripPrefix("UPDATE SET "), targetTableName, sourceTableName)
             matched.update(assignments)
           case _ => throw new IllegalArgumentException(s"Unknown matched action: $action")
         }
 
       case NotMatchedClause(condition, action) =>
         val notMatched = if (condition != null) {
-          mergeBuilder.whenNotMatched(
-            toExpr(condition, targetTableName, sourceTableName))
+          mergeBuilder.whenNotMatched(toExpr(condition, targetTableName, sourceTableName))
         } else {
           mergeBuilder.whenNotMatched()
         }
@@ -414,8 +422,8 @@ trait MergeIntoSchemaEvolutionScalaSuiteBase extends MergeIntoSchemaEvolutionSui
         action match {
           case "DELETE" => notMatchedBySource.delete()
           case s if s.startsWith("UPDATE SET ") =>
-            val assignments = parseAssignments(s.stripPrefix("UPDATE SET "),
-              targetTableName, sourceTableName)
+            val assignments =
+              parseAssignments(s.stripPrefix("UPDATE SET "), targetTableName, sourceTableName)
             notMatchedBySource.update(assignments)
           case _ =>
             throw new IllegalArgumentException(s"Unknown not matched by source action: $action")
@@ -474,9 +482,12 @@ trait MergeIntoSchemaEvolutionScalaSuiteBase extends MergeIntoSchemaEvolutionSui
         s"Column count ${cols.length} doesn't match value count ${values.length}")
     }
 
-    cols.zip(values).map { case (col, value) =>
-      col -> toExpr(value, targetTableName, sourceTableName)
-    }.toMap
+    cols
+      .zip(values)
+      .map { case (col, value) =>
+        col -> toExpr(value, targetTableName, sourceTableName)
+      }
+      .toMap
   }
 
   /**
@@ -511,14 +522,15 @@ trait MergeIntoSchemaEvolutionScalaSuiteBase extends MergeIntoSchemaEvolutionSui
 
   /**
    * Helper to replace table aliases in string expressions.
-   * t. -> targetTableName., s. -> sourceTableName.
-   * Uses regex to only replace when preceded by start of string or non-word, non-dot char.
+   *   t. -> targetTableName., s. -> sourceTableName. Uses regex to only replace when preceded by
+   *      start of string or non-word, non-dot char.
    */
   protected def replaceAliases(
       str: String,
       targetTableName: String,
       sourceTableName: String): String = {
-    str.replaceAll("(?<![\\w.])t\\.", targetTableName + ".")
+    str
+      .replaceAll("(?<![\\w.])t\\.", targetTableName + ".")
       .replaceAll("(?<![\\w.])s\\.", sourceTableName + ".")
   }
 
@@ -530,4 +542,3 @@ trait MergeIntoSchemaEvolutionScalaSuiteBase extends MergeIntoSchemaEvolutionSui
     expr(replaceAliases(str, targetTableName, sourceTableName))
   }
 }
-

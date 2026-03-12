@@ -35,25 +35,30 @@ private[sql] class MSSQLConnectionProvider extends SecureConnectionProvider {
     val configName = "jaasConfigurationName"
     val appEntryDefault = "SQLJDBCDriver"
 
-    val parseURL = try {
-      // The default parser method signature is the following:
-      // private Properties parseAndMergeProperties(String Url, Properties suppliedProperties)
-      val m = driver.getClass.getDeclaredMethod(parserMethod, classOf[String], classOf[Properties])
-      m.setAccessible(true)
-      Some(m)
-    } catch {
-      case _: NoSuchMethodException => None
-    }
+    val parseURL =
+      try {
+        // The default parser method signature is the following:
+        // private Properties parseAndMergeProperties(String Url, Properties suppliedProperties)
+        val m =
+          driver.getClass.getDeclaredMethod(parserMethod, classOf[String], classOf[Properties])
+        m.setAccessible(true)
+        Some(m)
+      } catch {
+        case _: NoSuchMethodException => None
+      }
 
     parseURL match {
       case Some(m) =>
         logDebug("Property parser method found, using it")
-        m.invoke(driver, options.url, null).asInstanceOf[Properties]
+        m.invoke(driver, options.url, null)
+          .asInstanceOf[Properties]
           .getProperty(configName, appEntryDefault)
 
       case None =>
         logDebug("Property parser method not found, using custom parsing mechanism")
-        options.url.split(';').map(_.split('='))
+        options.url
+          .split(';')
+          .map(_.split('='))
           .find(kv => kv.length == 2 && kv(0) == configName)
           .getOrElse(Array(configName, appEntryDefault))(1)
     }
@@ -62,14 +67,13 @@ private[sql] class MSSQLConnectionProvider extends SecureConnectionProvider {
   override def getConnection(driver: Driver, options: Map[String, String]): Connection = {
     val jdbcOptions = new JDBCOptions(options)
     setAuthenticationConfig(driver, jdbcOptions)
-    UserGroupInformation.loginUserFromKeytabAndReturnUGI(jdbcOptions.principal, jdbcOptions.keytab)
-      .doAs(
-        new PrivilegedExceptionAction[Connection]() {
-          override def run(): Connection = {
-            MSSQLConnectionProvider.super.getConnection(driver, options)
-          }
+    UserGroupInformation
+      .loginUserFromKeytabAndReturnUGI(jdbcOptions.principal, jdbcOptions.keytab)
+      .doAs(new PrivilegedExceptionAction[Connection]() {
+        override def run(): Connection = {
+          MSSQLConnectionProvider.super.getConnection(driver, options)
         }
-      )
+      })
   }
 
   override def getAdditionalProperties(options: JDBCOptions): Properties = {

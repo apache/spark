@@ -22,7 +22,6 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
 
-
 // Wrapped in an object to check Scala compatibility. See SPARK-13929
 object TestUDT {
 
@@ -78,14 +77,14 @@ class ExampleBaseClass(override val field: Int) extends IExampleBaseType
 
 // a derived class
 class ExampleSubClass(override val field: Int)
-  extends ExampleBaseClass(field) with IExampleSubType
+    extends ExampleBaseClass(field)
+    with IExampleSubType
 
 // UDT for base class
 class ExampleBaseTypeUDT extends UserDefinedType[IExampleBaseType] {
 
   override def sqlType: StructType = {
-    StructType(Seq(
-      StructField("intfield", IntegerType, nullable = false)))
+    StructType(Seq(StructField("intfield", IntegerType, nullable = false)))
   }
 
   override def serialize(obj: IExampleBaseType): InternalRow = {
@@ -97,8 +96,7 @@ class ExampleBaseTypeUDT extends UserDefinedType[IExampleBaseType] {
   override def deserialize(datum: Any): IExampleBaseType = {
     datum match {
       case row: InternalRow =>
-        require(row.numFields == 1,
-          "ExampleBaseTypeUDT requires row with length == 1")
+        require(row.numFields == 1, "ExampleBaseTypeUDT requires row with length == 1")
         val field = row.getInt(0)
         new ExampleBaseClass(field)
     }
@@ -111,8 +109,7 @@ class ExampleBaseTypeUDT extends UserDefinedType[IExampleBaseType] {
 private[spark] class ExampleSubTypeUDT extends UserDefinedType[IExampleSubType] {
 
   override def sqlType: StructType = {
-    StructType(Seq(
-      StructField("intfield", IntegerType, nullable = false)))
+    StructType(Seq(StructField("intfield", IntegerType, nullable = false)))
   }
 
   override def serialize(obj: IExampleSubType): InternalRow = {
@@ -124,8 +121,7 @@ private[spark] class ExampleSubTypeUDT extends UserDefinedType[IExampleSubType] 
   override def deserialize(datum: Any): IExampleSubType = {
     datum match {
       case row: InternalRow =>
-        require(row.numFields == 1,
-          "ExampleSubTypeUDT requires row with length == 1")
+        require(row.numFields == 1, "ExampleSubTypeUDT requires row with length == 1")
         val field = row.getInt(0)
         new ExampleSubClass(field)
     }
@@ -134,11 +130,9 @@ private[spark] class ExampleSubTypeUDT extends UserDefinedType[IExampleSubType] 
   override def userClass: Class[IExampleSubType] = classOf[IExampleSubType]
 }
 
-
 class ExampleIntRowUDT(cols: Int) extends UserDefinedType[Row] {
   override def sqlType: DataType = {
-    StructType((0 until cols).map(i =>
-      StructField(s"col$i", IntegerType, nullable = false)))
+    StructType((0 until cols).map(i => StructField(s"col$i", IntegerType, nullable = false)))
   }
 
   override def serialize(obj: Row): InternalRow = {

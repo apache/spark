@@ -46,13 +46,13 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
 
 /**
- * Interface used to write a [[Dataset]] to external storage systems (e.g. file systems,
- * key-value stores, etc). Use `Dataset.write` to access this.
+ * Interface used to write a [[Dataset]] to external storage systems (e.g. file systems, key-value
+ * stores, etc). Use `Dataset.write` to access this.
  *
  * @since 1.4.0
  */
 @Stable
-final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFrameWriter[T] {
+final class DataFrameWriter[T] private[sql] (ds: Dataset[T]) extends sql.DataFrameWriter[T] {
   format(ds.sparkSession.sessionState.conf.defaultDataSourceName)
 
   private val df = ds.toDF()
@@ -129,7 +129,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
 
   private[sql] def saveCommand(path: Option[String]): LogicalPlan = {
     if (path.isDefined && !df.sparkSession.sessionState.conf.legacyPathOptionBehavior &&
-        extraOptions.contains("path")) {
+      extraOptions.contains("path")) {
       throw QueryCompilationErrors.pathOptionNotSetCorrectlyWhenWritingError()
     }
     if (source.toLowerCase(Locale.ROOT) == DDLUtils.HIVE_PROVIDER) {
@@ -141,8 +141,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
     val maybeV2Provider = lookupV2Provider()
     if (maybeV2Provider.isDefined) {
       val provider = maybeV2Provider.get
-      val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
-        provider, df.sparkSession.sessionState.conf)
+      val sessionOptions =
+        DataSourceV2Utils.extractSessionConfigs(provider, df.sparkSession.sessionState.conf)
 
       val optionsWithPath = getOptionsWithPath(path)
 
@@ -173,8 +173,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
           val (table, catalog, ident) = provider match {
             case supportsExtract: SupportsCatalogOptions =>
               val ident = supportsExtract.extractIdentifier(dsOptions)
-              val catalog = CatalogV2Util.getTableProviderCatalog(
-                supportsExtract, catalogManager, dsOptions)
+              val catalog =
+                CatalogV2Util.getTableProviderCatalog(supportsExtract, catalogManager, dsOptions)
 
               (catalog.loadTable(ident), Some(catalog), Some(ident))
             case _: TableProvider =>
@@ -196,16 +196,15 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
           } else {
             // Truncate the table. TableCapabilityCheck will throw a nice exception if this
             // isn't supported
-            OverwriteByExpression.byName(
-              relation, df.logicalPlan, Literal(true), finalOptions)
+            OverwriteByExpression.byName(relation, df.logicalPlan, Literal(true), finalOptions)
           }
 
         case createMode =>
           provider match {
             case supportsExtract: SupportsCatalogOptions =>
               val ident = supportsExtract.extractIdentifier(dsOptions)
-              val catalog = CatalogV2Util.getTableProviderCatalog(
-                supportsExtract, catalogManager, dsOptions)
+              val catalog =
+                CatalogV2Util.getTableProviderCatalog(supportsExtract, catalogManager, dsOptions)
 
               val tableSpec = UnresolvedTableSpec(
                 properties = Map.empty,
@@ -228,7 +227,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
             case _: TableProvider =>
               if (getTable.supports(BATCH_WRITE)) {
                 throw QueryCompilationErrors.writeWithSaveModeUnsupportedBySourceError(
-                  source, createMode.name())
+                  source,
+                  createMode.name())
               } else {
                 // Streaming also uses the data source V2 API. So it may be that the data source
                 // implements v2, but has no v2 implementation for batch writes. In that case, we
@@ -253,13 +253,11 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
 
   private def saveToV1SourceCommand(path: Option[String]): LogicalPlan = {
     partitioningColumns.foreach { columns =>
-      extraOptions = extraOptions + (
-        DataSourceUtils.PARTITIONING_COLUMNS_KEY ->
+      extraOptions = extraOptions + (DataSourceUtils.PARTITIONING_COLUMNS_KEY ->
         DataSourceUtils.encodePartitioningColumns(columns))
     }
     clusteringColumns.foreach { columns =>
-      extraOptions = extraOptions + (
-        DataSourceUtils.CLUSTERING_COLUMNS_KEY ->
+      extraOptions = extraOptions + (DataSourceUtils.CLUSTERING_COLUMNS_KEY ->
         DataSourceUtils.encodePartitioningColumns(columns))
     }
 
@@ -274,14 +272,16 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
   }
 
   /**
-   * Inserts the content of the `DataFrame` to the specified table. It requires that
-   * the schema of the `DataFrame` is the same as the schema of the table.
+   * Inserts the content of the `DataFrame` to the specified table. It requires that the schema of
+   * the `DataFrame` is the same as the schema of the table.
    *
-   * @note Unlike `saveAsTable`, `insertInto` ignores the column names and just uses position-based
-   * resolution. For example:
+   * @note
+   *   Unlike `saveAsTable`, `insertInto` ignores the column names and just uses position-based
+   *   resolution. For example:
    *
-   * @note SaveMode.ErrorIfExists and SaveMode.Ignore behave as SaveMode.Append in `insertInto` as
-   *       `insertInto` is not a table creating operation.
+   * @note
+   *   SaveMode.ErrorIfExists and SaveMode.Ignore behave as SaveMode.Append in `insertInto` as
+   *   `insertInto` is not a table creating operation.
    *
    * {{{
    *    scala> Seq((1, 2)).toDF("i", "j").write.mode("overwrite").saveAsTable("t1")
@@ -357,7 +357,11 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
         if (dynamicPartitionOverwrite) {
           OverwritePartitionsDynamic.byPosition(table, df.logicalPlan, extraOptions.toMap)
         } else {
-          OverwriteByExpression.byPosition(table, df.logicalPlan, Literal(true), extraOptions.toMap)
+          OverwriteByExpression.byPosition(
+            table,
+            df.logicalPlan,
+            Literal(true),
+            extraOptions.toMap)
         }
     }
   }
@@ -392,15 +396,15 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
   /**
    * Saves the content of the `DataFrame` as the specified table.
    *
-   * In the case the table already exists, behavior of this function depends on the
-   * save mode, specified by the `mode` function (default to throwing an exception).
-   * When `mode` is `Overwrite`, the schema of the `DataFrame` does not need to be
-   * the same as that of the existing table.
+   * In the case the table already exists, behavior of this function depends on the save mode,
+   * specified by the `mode` function (default to throwing an exception). When `mode` is
+   * `Overwrite`, the schema of the `DataFrame` does not need to be the same as that of the
+   * existing table.
    *
    * When `mode` is `Append`, if there is an existing table, we will use the format and options of
    * the existing table. The column order in the schema of the `DataFrame` doesn't need to be same
-   * as that of the existing table. Unlike `insertInto`, `saveAsTable` will use the column names to
-   * find the correct column positions. For example:
+   * as that of the existing table. Unlike `insertInto`, `saveAsTable` will use the column names
+   * to find the correct column positions. For example:
    *
    * {{{
    *    scala> Seq((1, 2)).toDF("i", "j").write.mode("overwrite").saveAsTable("t1")
@@ -414,10 +418,10 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
    *    +---+---+
    * }}}
    *
-   * In this method, save mode is used to determine the behavior if the data source table exists in
-   * Spark catalog. We will always overwrite the underlying data of data source (e.g. a table in
-   * JDBC data source) if the table doesn't exist in Spark catalog, and will always append to the
-   * underlying data of data source if the table already exists.
+   * In this method, save mode is used to determine the behavior if the data source table exists
+   * in Spark catalog. We will always overwrite the underlying data of data source (e.g. a table
+   * in JDBC data source) if the table doesn't exist in Spark catalog, and will always append to
+   * the underlying data of data source if the table already exists.
    *
    * When the DataFrame is created from a non-partitioned `HadoopFsRelation` with a single input
    * path, and the data source provider can be mapped to an existing Hive builtin SerDe (i.e. ORC
@@ -440,8 +444,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
     val session = df.sparkSession
     val v2ProviderOpt = lookupV2Provider()
     val canUseV2 = v2ProviderOpt.isDefined || (hasCustomSessionCatalog &&
-        !df.sparkSession.sessionState.catalogManager.catalog(CatalogManager.SESSION_CATALOG_NAME)
-          .isInstanceOf[CatalogExtension])
+      !df.sparkSession.sessionState.catalogManager
+        .catalog(CatalogManager.SESSION_CATALOG_NAME)
+        .isInstanceOf[CatalogExtension])
 
     session.sessionState.sqlParser.parseMultipartIdentifier(tableName) match {
       case nameParts @ NonSessionCatalogAndIdentifier(catalog, ident) =>
@@ -464,9 +469,11 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
       v2ProviderOpt: Option[TableProvider],
       ident: Identifier,
       nameParts: Seq[String]): LogicalPlan = {
-    val tableOpt = try Option(catalog.loadTable(ident, getWritePrivileges.toSet.asJava)) catch {
-      case _: NoSuchTableException => None
-    }
+    val tableOpt =
+      try Option(catalog.loadTable(ident, getWritePrivileges.toSet.asJava))
+      catch {
+        case _: NoSuchTableException => None
+      }
 
     (curmode, tableOpt) match {
       case (_, Some(_: V1Table)) =>
@@ -501,7 +508,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
           df.queryExecution.analyzed,
           tableSpec,
           writeOptions = writeOptions.toMap,
-          orCreate = true) // Create the table if it doesn't exist
+          orCreate = true
+        ) // Create the table if it doesn't exist
 
       case (other, _) =>
         // We have a potential race condition here in AppendMode, if the table suddenly gets
@@ -539,8 +547,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
     val properties = if (clusteringColumns.isEmpty) {
       Map.empty[String, String]
     } else {
-      Map(ClusterBySpec.toPropertyWithoutValidation(
-        ClusterBySpec.fromColumnNames(clusteringColumns.get)))
+      Map(
+        ClusterBySpec.toPropertyWithoutValidation(
+          ClusterBySpec.fromColumnNames(clusteringColumns.get)))
     }
 
     val tableDesc = CatalogTable(
@@ -558,9 +567,11 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
 
   /** Converts the provided partitioning and bucketing information to DataSourceV2 Transforms. */
   private def partitioningAsV2: Seq[Transform] = {
-    val partitioning = partitioningColumns.map { colNames =>
-      colNames.map(name => IdentityTransform(FieldReference(name)))
-    }.getOrElse(Seq.empty[Transform])
+    val partitioning = partitioningColumns
+      .map { colNames =>
+        colNames.map(name => IdentityTransform(FieldReference(name)))
+      }
+      .getOrElse(Seq.empty[Transform])
     val bucketing =
       getBucketSpec.map(spec => CatalogV2Implicits.BucketSpecHelper(spec).asTransform).toSeq
     val clustering = clusteringColumns.map { colNames =>
@@ -576,10 +587,11 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
   private def checkPartitioningMatchesV2Table(existingTable: Table): Unit = {
     val v2Partitions = partitioningAsV2
     if (v2Partitions.isEmpty) return
-    require(v2Partitions.sameElements(existingTable.partitioning()),
+    require(
+      v2Partitions.sameElements(existingTable.partitioning()),
       "The provided partitioning or clustering columns do not match the existing table's.\n" +
-      s" - provided: ${v2Partitions.mkString(", ")}\n" +
-      s" - table: ${existingTable.partitioning().mkString(", ")}")
+        s" - provided: ${v2Partitions.mkString(", ")}\n" +
+        s" - table: ${existingTable.partitioning().mkString(", ")}")
   }
 
   /**
@@ -587,9 +599,12 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
    * user-registered callback functions.
    */
   private def runCommand(session: SparkSession)(command: LogicalPlan): Unit = {
-    val qe = new QueryExecution(session, command, df.queryExecution.tracker,
-      shuffleCleanupModeOpt =
-        Some(QueryExecution.determineShuffleCleanupMode(session.sessionState.conf)))
+    val qe = new QueryExecution(
+      session,
+      command,
+      df.queryExecution.tracker,
+      shuffleCleanupModeOpt = Some(
+        QueryExecution.determineShuffleCleanupMode(session.sessionState.conf)))
     qe.assertCommandExecuted()
   }
 

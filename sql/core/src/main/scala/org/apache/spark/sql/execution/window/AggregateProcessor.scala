@@ -25,7 +25,6 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.util.ArrayImplicits._
 
-
 /**
  * This class prepares and manages the processing of a number of [[AggregateFunction]]s within a
  * single frame. The [[WindowFunctionFrame]] takes care of processing the frame in the correct way
@@ -33,8 +32,8 @@ import org.apache.spark.util.ArrayImplicits._
  * [[AggregateFunction]]. All [[AggregateFunction]]s are processed in [[Complete]] mode.
  *
  * [[SizeBasedWindowFunction]]s are initialized in a slightly different way. These functions
- * require the size of the partition processed and this value is exposed to them when
- * the processor is constructed.
+ * require the size of the partition processed and this value is exposed to them when the
+ * processor is constructed.
  *
  * Processing of distinct aggregates is currently not supported.
  *
@@ -47,9 +46,9 @@ private[window] object AggregateProcessor {
       ordinal: Int,
       inputAttributes: Seq[Attribute],
       newMutableProjection: (Seq[Expression], Seq[Attribute]) => MutableProjection,
-      filters: Array[Option[Expression]])
-    : AggregateProcessor = {
-    assert(filters.length == functions.length,
+      filters: Array[Option[Expression]]): AggregateProcessor = {
+    assert(
+      filters.length == functions.length,
       s"filters length (${filters.length}) must match functions length (${functions.length})")
     val aggBufferAttributes = mutable.Buffer.empty[AttributeReference]
     val initialValues = mutable.Buffer.empty[Expression]
@@ -92,9 +91,10 @@ private[window] object AggregateProcessor {
         evaluateExpressions += agg.evaluateExpression
       case (agg: ImperativeAggregate, filterOpt) =>
         val offset = aggBufferAttributes.size
-        val imperative = BindReferences.bindReference(agg
-          .withNewInputAggBufferOffset(offset)
-          .withNewMutableAggBufferOffset(offset),
+        val imperative = BindReferences.bindReference(
+          agg
+            .withNewInputAggBufferOffset(offset)
+            .withNewMutableAggBufferOffset(offset),
           inputAttributes)
         imperatives += imperative
         imperativeFilterExprs += filterOpt.map(f =>
@@ -111,7 +111,9 @@ private[window] object AggregateProcessor {
     // Create the projections.
     val initialProj = newMutableProjection(initialValues.toSeq, partitionSize.toSeq)
     val updateProj =
-      newMutableProjection(updateExpressions.toSeq, (aggBufferAttributes ++ inputAttributes).toSeq)
+      newMutableProjection(
+        updateExpressions.toSeq,
+        (aggBufferAttributes ++ inputAttributes).toSeq)
     val evalProj = newMutableProjection(evaluateExpressions.toSeq, aggBufferAttributes.toSeq)
 
     // Create the processor

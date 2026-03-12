@@ -26,21 +26,22 @@ import org.apache.spark.sql.execution.datasources.FileFormatWriter.processStats
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
-class FileBatchWrite(
-    job: Job,
-    description: WriteJobDescription,
-    committer: FileCommitProtocol)
-  extends BatchWrite with Logging {
+class FileBatchWrite(job: Job, description: WriteJobDescription, committer: FileCommitProtocol)
+    extends BatchWrite
+    with Logging {
   override def commit(messages: Array[WriterCommitMessage]): Unit = {
     val results = messages.map(_.asInstanceOf[WriteTaskResult])
     logInfo(log"Start to commit write Job ${MDC(LogKeys.UUID, description.uuid)}.")
     val (_, duration) = Utils
       .timeTakenMs { committer.commitJob(job, results.map(_.commitMsg).toImmutableArraySeq) }
-    logInfo(log"Write Job ${MDC(LogKeys.UUID, description.uuid)} committed. " +
-      log"Elapsed time: ${MDC(LogKeys.ELAPSED_TIME, duration)} ms.")
+    logInfo(
+      log"Write Job ${MDC(LogKeys.UUID, description.uuid)} committed. " +
+        log"Elapsed time: ${MDC(LogKeys.ELAPSED_TIME, duration)} ms.")
 
     processStats(
-      description.statsTrackers, results.map(_.summary.stats).toImmutableArraySeq, duration)
+      description.statsTrackers,
+      results.map(_.summary.stats).toImmutableArraySeq,
+      duration)
     logInfo(log"Finished processing stats for write job ${MDC(LogKeys.UUID, description.uuid)}.")
   }
 
@@ -54,4 +55,3 @@ class FileBatchWrite(
     FileWriterFactory(description, committer)
   }
 }
-

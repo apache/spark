@@ -34,12 +34,12 @@ class ReplaceIntegerLiteralsWithOrdinalsSqlSuite extends QueryTest with SharedSp
       val parsedPlan = query.queryExecution.logical
       val analyzedPlan = query.queryExecution.analyzed
 
-      assert(parsedPlan.expressions.collect {
-        case ordinal @ UnresolvedOrdinal(1) => ordinal
+      assert(parsedPlan.expressions.collect { case ordinal @ UnresolvedOrdinal(1) =>
+        ordinal
       }.nonEmpty)
 
-      assert(analyzedPlan.expressions.collect {
-        case ordinal @ UnresolvedOrdinal(1) => ordinal
+      assert(analyzedPlan.expressions.collect { case ordinal @ UnresolvedOrdinal(1) =>
+        ordinal
       }.isEmpty)
 
       checkAnswer(query, Row(1, 3) :: Row(2, 4) :: Nil)
@@ -48,22 +48,21 @@ class ReplaceIntegerLiteralsWithOrdinalsSqlSuite extends QueryTest with SharedSp
         exception = intercept[AnalysisException](sql(groupByPosOutOfRangeSqlText)),
         condition = "GROUP_BY_POS_OUT_OF_RANGE",
         parameters = Map("index" -> "-1", "size" -> "2"),
-        queryContext = Array(ExpectedContext(fragment = "-1", start = 61, stop = 62))
-      )
+        queryContext = Array(ExpectedContext(fragment = "-1", start = 61, stop = 62)))
     }
 
     withSQLConf(SQLConf.GROUP_BY_ORDINAL.key -> "false") {
       val parsedPlan = spark.sessionState.sqlParser.parsePlan(correctSqlText)
 
-      assert(parsedPlan.expressions.collect {
-        case ordinal @ UnresolvedOrdinal(1) => ordinal
+      assert(parsedPlan.expressions.collect { case ordinal @ UnresolvedOrdinal(1) =>
+        ordinal
       }.isEmpty)
 
       checkError(
         exception = intercept[AnalysisException](sql(groupByPosOutOfRangeSqlText)),
         condition = "MISSING_AGGREGATION",
-        parameters = Map("expression" -> "\"col1\"", "expressionAnyValue" -> "\"any_value(col1)\"")
-      )
+        parameters =
+          Map("expression" -> "\"col1\"", "expressionAnyValue" -> "\"any_value(col1)\""))
     }
   }
 
@@ -90,8 +89,7 @@ class ReplaceIntegerLiteralsWithOrdinalsSqlSuite extends QueryTest with SharedSp
         exception = intercept[AnalysisException](sql(orderByPosOutOfRangeSqlText)),
         condition = "ORDER_BY_POS_OUT_OF_RANGE",
         parameters = Map("index" -> "-1", "size" -> "1"),
-        queryContext = Array(ExpectedContext(fragment = "-1", start = 44, stop = 45))
-      )
+        queryContext = Array(ExpectedContext(fragment = "-1", start = 44, stop = 45)))
     }
 
     withSQLConf(SQLConf.ORDER_BY_ORDINAL.key -> "false") {

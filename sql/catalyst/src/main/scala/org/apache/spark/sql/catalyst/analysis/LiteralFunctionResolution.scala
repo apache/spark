@@ -24,9 +24,10 @@ import org.apache.spark.sql.catalyst.util.toPrettySQL
  * Resolves literal functions by mapping them to their ''real'' function counterparts.
  */
 object LiteralFunctionResolution {
+
   /**
-   * Literal functions do not require the user to specify braces when calling them
-   * When an attributes is not resolvable, we try to resolve it as a literal function.
+   * Literal functions do not require the user to specify braces when calling them When an
+   * attributes is not resolvable, we try to resolve it as a literal function.
    */
   def resolve(nameParts: Seq[String]): Option[NamedExpression] = {
     if (nameParts.length != 1) return None
@@ -47,6 +48,8 @@ object LiteralFunctionResolution {
     (CurrentUser().prettyName, () => CurrentUser(), e => toPrettySQL(e)),
     ("user", () => CurrentUser(), e => toPrettySQL(e)),
     ("session_user", () => CurrentUser(), e => toPrettySQL(e)),
-    (VirtualColumn.hiveGroupingIdName, () => GroupingID(Nil), _ => VirtualColumn.hiveGroupingIdName)
-  )
+    (
+      VirtualColumn.hiveGroupingIdName,
+      () => GroupingID(Nil),
+      _ => VirtualColumn.hiveGroupingIdName))
 }

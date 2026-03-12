@@ -29,7 +29,8 @@ import org.apache.spark.sql.types._
  * (can be accessed via variables), and then copies the data into a scratch buffer space in the
  * form of UnsafeRow (the scratch buffer will grow as needed).
  *
- * @note The returned UnsafeRow will be pointed to a scratch buffer inside the projection.
+ * @note
+ *   The returned UnsafeRow will be pointed to a scratch buffer inside the projection.
  */
 object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafeProjection] {
 
@@ -64,7 +65,9 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     }
 
     val rowWriterClass = classOf[UnsafeRowWriter].getName
-    val structRowWriter = ctx.addMutableState(rowWriterClass, "rowWriter",
+    val structRowWriter = ctx.addMutableState(
+      rowWriterClass,
+      "rowWriter",
       v => s"$v = new $rowWriterClass($rowWriter, ${fieldEvals.length});")
     val previousCursor = ctx.freshName("previousCursor")
     s"""
@@ -103,8 +106,8 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       s"$rowWriter.resetRowWriter();"
     }
 
-    val writeFields = inputs.zip(schemas).zipWithIndex.map {
-      case ((input, Schema(dataType, nullable)), index) =>
+    val writeFields =
+      inputs.zip(schemas).zipWithIndex.map { case ((input, Schema(dataType, nullable)), index) =>
         val dt = UserDefinedType.sqlType(dataType)
 
         val setNull = dt match {
@@ -131,7 +134,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
              |}
            """.stripMargin
         }
-    }
+      }
 
     val writeFieldsCode = if (isTopLevel && (row == null || ctx.currentVars != null)) {
       // TODO: support whole stage codegen
@@ -167,11 +170,13 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     val elementOrOffsetSize = et match {
       case t: DecimalType if t.precision <= Decimal.MAX_LONG_DIGITS => 8
       case _ if CodeGenerator.isPrimitiveType(jt) => et.defaultSize
-      case _ => 8  // we need 8 bytes to store offset and length
+      case _ => 8 // we need 8 bytes to store offset and length
     }
 
     val arrayWriterClass = classOf[UnsafeArrayWriter].getName
-    val arrayWriter = ctx.addMutableState(arrayWriterClass, "arrayWriter",
+    val arrayWriter = ctx.addMutableState(
+      arrayWriterClass,
+      "arrayWriter",
       v => s"$v = new $arrayWriterClass($rowWriter, $elementOrOffsetSize);")
 
     val element = CodeGenerator.getValue(tmpInput, et, index)
@@ -217,10 +222,9 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     val previousCursor = ctx.freshName("previousCursor")
 
     // Writes out unsafe map according to the format described in `UnsafeMapData`.
-    val keyArray = writeArrayToBuffer(
-      ctx, s"$tmpInput.keyArray()", keyType, false, rowWriter)
-    val valueArray = writeArrayToBuffer(
-      ctx, s"$tmpInput.valueArray()", valueType, valueContainsNull, rowWriter)
+    val keyArray = writeArrayToBuffer(ctx, s"$tmpInput.keyArray()", keyType, false, rowWriter)
+    val valueArray =
+      writeArrayToBuffer(ctx, s"$tmpInput.valueArray()", valueType, valueContainsNull, rowWriter)
 
     s"""
        |final MapData $tmpInput = $input;
@@ -259,8 +263,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       dt: DataType,
       writer: String): String = dt match {
     case t: StructType =>
-      writeStructToBuffer(
-        ctx, input, index, t.map(e => Schema(e.dataType, e.nullable)), writer)
+      writeStructToBuffer(ctx, input, index, t.map(e => Schema(e.dataType, e.nullable)), writer)
 
     case ArrayType(et, en) =>
       val previousCursor = ctx.freshName("previousCursor")
@@ -290,20 +293,27 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     val exprEvals = ctx.generateExpressions(expressions, useSubexprElimination)
     val exprSchemas = expressions.map(e => Schema(e.dataType, e.nullable))
 
-    val numVarLenFields = exprSchemas.count {
-      case Schema(dt, _) => !UnsafeRow.isFixedLength(dt)
-      // TODO: consider large decimal and interval type
+    val numVarLenFields = exprSchemas.count { case Schema(dt, _) =>
+      !UnsafeRow.isFixedLength(dt)
+    // TODO: consider large decimal and interval type
     }
 
     val rowWriterClass = classOf[UnsafeRowWriter].getName
-    val rowWriter = ctx.addMutableState(rowWriterClass, "rowWriter",
+    val rowWriter = ctx.addMutableState(
+      rowWriterClass,
+      "rowWriter",
       v => s"$v = new $rowWriterClass(${expressions.length}, ${numVarLenFields * 32});")
 
     // Evaluate all the subexpression.
     val evalSubexpr = ctx.subexprFunctionsCode
 
     val writeExpressions = writeExpressionsToBuffer(
-      ctx, ctx.INPUT_ROW, exprEvals, exprSchemas, rowWriter, isTopLevel = true)
+      ctx,
+      ctx.INPUT_ROW,
+      exprEvals,
+      exprSchemas,
+      rowWriter,
+      isTopLevel = true)
 
     val code =
       code"""

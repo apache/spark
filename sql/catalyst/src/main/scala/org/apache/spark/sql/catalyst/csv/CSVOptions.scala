@@ -36,14 +36,12 @@ class CSVOptions(
     val columnPruning: Boolean,
     private val defaultTimeZoneId: String,
     private val defaultColumnNameOfCorruptRecord: String)
-  extends FileSourceOptions(parameters) with Logging {
+    extends FileSourceOptions(parameters)
+    with Logging {
 
   import CSVOptions._
 
-  def this(
-    parameters: Map[String, String],
-    columnPruning: Boolean,
-    defaultTimeZoneId: String) = {
+  def this(parameters: Map[String, String], columnPruning: Boolean, defaultTimeZoneId: String) = {
     this(
       CaseInsensitiveMap(parameters),
       columnPruning,
@@ -52,21 +50,21 @@ class CSVOptions(
   }
 
   def this(
-    parameters: Map[String, String],
-    columnPruning: Boolean,
-    defaultTimeZoneId: String,
-    defaultColumnNameOfCorruptRecord: String) = {
-      this(
-        CaseInsensitiveMap(parameters),
-        columnPruning,
-        defaultTimeZoneId,
-        defaultColumnNameOfCorruptRecord)
+      parameters: Map[String, String],
+      columnPruning: Boolean,
+      defaultTimeZoneId: String,
+      defaultColumnNameOfCorruptRecord: String) = {
+    this(
+      CaseInsensitiveMap(parameters),
+      columnPruning,
+      defaultTimeZoneId,
+      defaultColumnNameOfCorruptRecord)
   }
 
   override def equals(obj: Any): Boolean = obj match {
     case other: CSVOptions =>
       (parameters == null && other.parameters == null ||
-      parameters != null && parameters == other.parameters) &&
+        parameters != null && parameters == other.parameters) &&
       columnPruning == other.columnPruning &&
       defaultTimeZoneId == other.defaultTimeZoneId &&
       defaultColumnNameOfCorruptRecord == other.defaultColumnNameOfCorruptRecord
@@ -97,12 +95,13 @@ class CSVOptions(
     paramValue match {
       case None => default
       case Some(null) => default
-      case Some(value) => try {
-        value.toInt
-      } catch {
-        case e: NumberFormatException =>
-          throw QueryExecutionErrors.paramIsNotIntegerError(paramName, value)
-      }
+      case Some(value) =>
+        try {
+          value.toInt
+        } catch {
+          case e: NumberFormatException =>
+            throw QueryExecutionErrors.paramIsNotIntegerError(paramName, value)
+        }
     }
   }
 
@@ -119,8 +118,8 @@ class CSVOptions(
     }
   }
 
-  val delimiter = CSVExprUtils.toDelimiterStr(
-    parameters.getOrElse(SEP, parameters.getOrElse(DELIMITER, ",")))
+  val delimiter =
+    CSVExprUtils.toDelimiterStr(parameters.getOrElse(SEP, parameters.getOrElse(DELIMITER, ",")))
 
   val extension = {
     val ext = parameters.getOrElse(EXTENSION, "csv")
@@ -133,9 +132,12 @@ class CSVOptions(
 
   val parseMode: ParseMode =
     parameters.get(MODE).map(ParseMode.fromString).getOrElse(PermissiveMode)
-  val charset = parameters.get(ENCODING).orElse(parameters.get(CHARSET))
+  val charset = parameters
+    .get(ENCODING)
+    .orElse(parameters.get(CHARSET))
     .map(CharsetProvider.forName(_, SQLConf.get.legacyJavaCharsets, caller = "CSVOptions"))
-    .getOrElse(StandardCharsets.UTF_8).name()
+    .getOrElse(StandardCharsets.UTF_8)
+    .name()
 
   val quote = getChar(QUOTE, '\"')
   val escape = getChar(ESCAPE, '\\')
@@ -167,7 +169,6 @@ class CSVOptions(
 
   val positiveInf = parameters.getOrElse(POSITIVE_INF, "Inf")
   val negativeInf = parameters.getOrElse(NEGATIVE_INF, "-Inf")
-
 
   val compressionCodec: Option[String] = {
     val name = parameters.get(COMPRESSION).orElse(parameters.get(CODEC))
@@ -210,8 +211,9 @@ class CSVOptions(
 
   val timestampFormatInRead: Option[String] =
     if (SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {
-      Some(parameters.getOrElse(TIMESTAMP_FORMAT,
-        s"${DateFormatter.defaultPattern}'T'HH:mm:ss.SSSXXX"))
+      Some(
+        parameters
+          .getOrElse(TIMESTAMP_FORMAT, s"${DateFormatter.defaultPattern}'T'HH:mm:ss.SSSXXX"))
     } else {
       parameters.get(TIMESTAMP_FORMAT)
     }
@@ -219,7 +221,8 @@ class CSVOptions(
     parameters.getOrElse(TIMESTAMP_FORMAT, commonTimestampFormat)
 
   val timestampNTZFormatInRead: Option[String] = parameters.get(TIMESTAMP_NTZ_FORMAT)
-  val timestampNTZFormatInWrite: String = parameters.getOrElse(TIMESTAMP_NTZ_FORMAT,
+  val timestampNTZFormatInWrite: String = parameters.getOrElse(
+    TIMESTAMP_NTZ_FORMAT,
     s"${DateFormatter.defaultPattern}'T'HH:mm:ss[.SSS]")
 
   val timeFormatInRead: Option[String] = parameters.get(TIME_FORMAT)
@@ -260,8 +263,8 @@ class CSVOptions(
     parameters.get(SAMPLING_RATIO).map(_.toDouble).getOrElse(1.0)
 
   /**
-   * Forcibly apply the specified or inferred schema to datasource files.
-   * If the option is enabled, headers of CSV files will be ignored.
+   * Forcibly apply the specified or inferred schema to datasource files. If the option is
+   * enabled, headers of CSV files will be ignored.
    */
   val enforceSchema = getBool(ENFORCE_SCHEMA, default = true)
 
@@ -269,11 +272,13 @@ class CSVOptions(
    * String representation of an empty value in read and in write.
    */
   val emptyValue = parameters.get(EMPTY_VALUE)
+
   /**
-   * The string is returned when CSV reader doesn't have any characters for input value,
-   * or an empty quoted string `""`. Default value is empty string.
+   * The string is returned when CSV reader doesn't have any characters for input value, or an
+   * empty quoted string `""`. Default value is empty string.
    */
   val emptyValueInRead = emptyValue.getOrElse("")
+
   /**
    * The value is used instead of an empty string in write. Default value is `""`
    */
@@ -288,8 +293,9 @@ class CSVOptions(
     // Intentionally allow it up to 2 for Window's CRLF although multiple
     // characters have an issue with quotes. This is intentionally undocumented.
     require(sep.length <= 2, "'lineSep' can contain only 1 character.")
-    if (sep.length == 2) logWarning("It is not recommended to set 'lineSep' " +
-      "with 2 characters due to the limitation of supporting multi-char 'lineSep' within quotes.")
+    if (sep.length == 2)
+      logWarning("It is not recommended to set 'lineSep' " +
+        "with 2 characters due to the limitation of supporting multi-char 'lineSep' within quotes.")
     sep
   }
 
@@ -298,24 +304,27 @@ class CSVOptions(
   }
   val lineSeparatorInWrite: Option[String] = lineSeparator
 
-  val inputBufferSize: Option[Int] = parameters.get(INPUT_BUFFER_SIZE).map(_.toInt)
+  val inputBufferSize: Option[Int] = parameters
+    .get(INPUT_BUFFER_SIZE)
+    .map(_.toInt)
     .orElse(SQLConf.get.getConf(SQLConf.CSV_INPUT_BUFFER_SIZE))
 
   /**
    * The handling method to be used when unescaped quotes are found in the input.
    */
-  val unescapedQuoteHandling: UnescapedQuoteHandling = UnescapedQuoteHandling.valueOf(parameters
-    .getOrElse(UNESCAPED_QUOTE_HANDLING, "STOP_AT_DELIMITER").toUpperCase(Locale.ROOT))
+  val unescapedQuoteHandling: UnescapedQuoteHandling = UnescapedQuoteHandling.valueOf(
+    parameters
+      .getOrElse(UNESCAPED_QUOTE_HANDLING, "STOP_AT_DELIMITER")
+      .toUpperCase(Locale.ROOT))
 
   /**
    * Returns true if column pruning is enabled and there are no existence column default values in
    * the [[schema]].
    *
-   * The column pruning feature can be enabled either via the CSV option `columnPruning` or
-   * in non-multiline mode via initialization of CSV options by the SQL config:
-   * `spark.sql.csv.parser.columnPruning.enabled`.
-   * The feature is disabled in the `multiLine` mode because of the issue:
-   * https://github.com/uniVocity/univocity-parsers/issues/529
+   * The column pruning feature can be enabled either via the CSV option `columnPruning` or in
+   * non-multiline mode via initialization of CSV options by the SQL config:
+   * `spark.sql.csv.parser.columnPruning.enabled`. The feature is disabled in the `multiLine` mode
+   * because of the issue: https://github.com/uniVocity/univocity-parsers/issues/529
    *
    * We disable column pruning when there are any column defaults, instead preferring to reach in
    * each row and then post-process it to substitute the default values after.

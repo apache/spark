@@ -31,11 +31,8 @@ import org.apache.spark.unsafe.types.UTF8String
 class OuterJoinEliminationSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
-      Batch("Subqueries", Once,
-        EliminateSubqueryAliases) ::
-      Batch("Outer Join Elimination", Once,
-        EliminateOuterJoin,
-        PushPredicateThroughJoin) :: Nil
+      Batch("Subqueries", Once, EliminateSubqueryAliases) ::
+        Batch("Outer Join Elimination", Once, EliminateOuterJoin, PushPredicateThroughJoin) :: Nil
   }
 
   val testRelation = LocalRelation($"a".int, $"b".int, $"c".int)
@@ -170,8 +167,9 @@ class OuterJoinEliminationSuite extends PlanTest {
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val left = testRelation
-    val right = testRelation1.where((!$"e".isNull || ($"d".isNotNull && $"f".isNull))
-      && $"e".isNull)
+    val right = testRelation1.where(
+      (!$"e".isNull || ($"d".isNotNull && $"f".isNull))
+        && $"e".isNull)
     val correctAnswer =
       left.join(right, Inner, Option("a".attr === "d".attr)).analyze
 
@@ -211,8 +209,10 @@ class OuterJoinEliminationSuite extends PlanTest {
     val left = testRelation
     val right = testRelation1
     val correctAnswer =
-      left.join(right, FullOuter, Option("a".attr === "d".attr))
-        .where(Coalesce("e".attr :: "a".attr :: Nil) === 0).analyze
+      left
+        .join(right, FullOuter, Option("a".attr === "d".attr))
+        .where(Coalesce("e".attr :: "a".attr :: Nil) === 0)
+        .analyze
 
     comparePlans(optimized, correctAnswer)
   }
@@ -230,8 +230,10 @@ class OuterJoinEliminationSuite extends PlanTest {
     val left = testRelation
     val right = testRelation1
     val correctAnswer =
-      left.join(right, FullOuter, Option("a".attr === "d".attr))
-        .where(IsNotNull(Coalesce("e".attr :: "a".attr :: Nil))).analyze
+      left
+        .join(right, FullOuter, Option("a".attr === "d".attr))
+        .where(IsNotNull(Coalesce("e".attr :: "a".attr :: Nil)))
+        .analyze
 
     comparePlans(optimized, correctAnswer)
   }
@@ -246,8 +248,8 @@ class OuterJoinEliminationSuite extends PlanTest {
       // When we disable it, the predicate can't be evaluated on left or right plan and used to
       // filter out nulls. So the Outer Join will not be eliminated.
       val originalQuery =
-      x.join(y, FullOuter, Option("x.a".attr === "y.d".attr))
-        .where("x.b".attr + "y.d".attr >= 3)
+        x.join(y, FullOuter, Option("x.a".attr === "y.d".attr))
+          .where("x.b".attr + "y.d".attr >= 3)
 
       val optimized = Optimize.execute(originalQuery.analyze)
 
@@ -269,50 +271,64 @@ class OuterJoinEliminationSuite extends PlanTest {
     comparePlans(optimized, originalQuery.analyze)
   }
 
-  test("SPARK-39172: Remove left/right outer join if only left/right side columns are selected " +
-    "and the join keys on the other side are unique") {
+  test(
+    "SPARK-39172: Remove left/right outer join if only left/right side columns are selected " +
+      "and the join keys on the other side are unique") {
     val x = testRelation.subquery("x")
     val y = testRelation1.subquery("y")
-    comparePlans(Optimize.execute(
-      x.join(y.groupBy($"d")($"d"), LeftOuter, Some($"a" === $"d"))
-        .select($"a", $"b", $"c").analyze),
-      x.select($"a", $"b", $"c").analyze
-    )
+    comparePlans(
+      Optimize.execute(
+        x.join(y.groupBy($"d")($"d"), LeftOuter, Some($"a" === $"d"))
+          .select($"a", $"b", $"c")
+          .analyze),
+      x.select($"a", $"b", $"c").analyze)
 
-    comparePlans(Optimize.execute(
-      x.join(y.groupBy($"d")($"d", count($"d").as("x")), LeftOuter,
-        Some($"a" === $"d" && $"b" === $"x"))
-        .select($"a", $"b", $"c").analyze),
-      x.select($"a", $"b", $"c").analyze
-    )
+    comparePlans(
+      Optimize.execute(
+        x.join(
+          y.groupBy($"d")($"d", count($"d").as("x")),
+          LeftOuter,
+          Some($"a" === $"d" && $"b" === $"x"))
+          .select($"a", $"b", $"c")
+          .analyze),
+      x.select($"a", $"b", $"c").analyze)
 
-    comparePlans(Optimize.execute(
-      x.groupBy($"a")($"a").join(y, RightOuter, Some($"a" === $"d"))
-        .select($"d", $"e", $"f").analyze),
-      y.select($"d", $"e", $"f").analyze
-    )
+    comparePlans(
+      Optimize.execute(
+        x.groupBy($"a")($"a")
+          .join(y, RightOuter, Some($"a" === $"d"))
+          .select($"d", $"e", $"f")
+          .analyze),
+      y.select($"d", $"e", $"f").analyze)
 
-    comparePlans(Optimize.execute(
-      x.groupBy($"a")($"a", count($"a").as("x")).join(y, RightOuter,
-        Some($"a" === $"d" && $"x" === $"e"))
-        .select($"d", $"e", $"f").analyze),
-      y.select($"d", $"e", $"f").analyze
-    )
+    comparePlans(
+      Optimize.execute(
+        x.groupBy($"a")($"a", count($"a").as("x"))
+          .join(y, RightOuter, Some($"a" === $"d" && $"x" === $"e"))
+          .select($"d", $"e", $"f")
+          .analyze),
+      y.select($"d", $"e", $"f").analyze)
 
     // negative cases
     // not a equi-join
-    val p1 = x.join(y.groupBy($"d")($"d"), LeftOuter, Some($"a" > $"d"))
-      .select($"a").analyze
+    val p1 = x
+      .join(y.groupBy($"d")($"d"), LeftOuter, Some($"a" > $"d"))
+      .select($"a")
+      .analyze
     comparePlans(Optimize.execute(p1), p1)
 
     // do not exist unique key
-    val p2 = x.join(y.groupBy($"d", $"e")($"d", $"e"), LeftOuter, Some($"a" === $"d"))
-      .select($"a").analyze
+    val p2 = x
+      .join(y.groupBy($"d", $"e")($"d", $"e"), LeftOuter, Some($"a" === $"d"))
+      .select($"a")
+      .analyze
     comparePlans(Optimize.execute(p2), p2)
 
     // output comes from the right side of a left outer join
-    val p3 = x.join(y.groupBy($"d")($"d"), LeftOuter, Some($"a" === $"d"))
-      .select($"a", $"d").analyze
+    val p3 = x
+      .join(y.groupBy($"d")($"d"), LeftOuter, Some($"a" === $"d"))
+      .select($"a", $"d")
+      .analyze
     comparePlans(Optimize.execute(p3), p3)
   }
 }

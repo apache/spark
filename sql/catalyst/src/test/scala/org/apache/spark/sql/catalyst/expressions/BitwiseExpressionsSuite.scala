@@ -22,7 +22,6 @@ import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.types._
 
-
 class BitwiseExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   import IntegralLiteralTestUtils._
@@ -70,7 +69,8 @@ class BitwiseExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(BitwiseAnd(nullLit, Literal(1)), null)
     checkEvaluation(BitwiseAnd(Literal(1), nullLit), null)
     checkEvaluation(BitwiseAnd(nullLit, nullLit), null)
-    checkEvaluation(BitwiseAnd(positiveShortLit, negativeShortLit),
+    checkEvaluation(
+      BitwiseAnd(positiveShortLit, negativeShortLit),
       (positiveShort & negativeShort).toShort)
     checkEvaluation(BitwiseAnd(positiveIntLit, negativeIntLit), positiveInt & negativeInt)
     checkEvaluation(BitwiseAnd(positiveLongLit, negativeLongLit), positiveLong & negativeLong)
@@ -97,7 +97,8 @@ class BitwiseExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(BitwiseOr(nullLit, Literal(1)), null)
     checkEvaluation(BitwiseOr(Literal(1), nullLit), null)
     checkEvaluation(BitwiseOr(nullLit, nullLit), null)
-    checkEvaluation(BitwiseOr(positiveShortLit, negativeShortLit),
+    checkEvaluation(
+      BitwiseOr(positiveShortLit, negativeShortLit),
       (positiveShort | negativeShort).toShort)
     checkEvaluation(BitwiseOr(positiveIntLit, negativeIntLit), positiveInt | negativeInt)
     checkEvaluation(BitwiseOr(positiveLongLit, negativeLongLit), positiveLong | negativeLong)
@@ -124,7 +125,8 @@ class BitwiseExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(BitwiseXor(nullLit, Literal(1)), null)
     checkEvaluation(BitwiseXor(Literal(1), nullLit), null)
     checkEvaluation(BitwiseXor(nullLit, nullLit), null)
-    checkEvaluation(BitwiseXor(positiveShortLit, negativeShortLit),
+    checkEvaluation(
+      BitwiseXor(positiveShortLit, negativeShortLit),
       (positiveShort ^ negativeShort).toShort)
     checkEvaluation(BitwiseXor(positiveIntLit, negativeIntLit), positiveInt ^ negativeInt)
     checkEvaluation(BitwiseXor(positiveLongLit, negativeLongLit), positiveLong ^ negativeLong)
@@ -201,32 +203,47 @@ class BitwiseExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     val expr = BitwiseGet(tl, p)
     checkErrorInExpression[SparkIllegalArgumentException](
-      expr, row1, "INVALID_PARAMETER_VALUE.BIT_POSITION_RANGE",
-      Map("parameter" -> "`pos`",
+      expr,
+      row1,
+      "INVALID_PARAMETER_VALUE.BIT_POSITION_RANGE",
+      Map(
+        "parameter" -> "`pos`",
         "functionName" -> "`bit_get`",
         "upper" -> "64",
         "invalidValue" -> "-1"))
     checkErrorInExpression[SparkIllegalArgumentException](
-      expr, row2, "INVALID_PARAMETER_VALUE.BIT_POSITION_RANGE",
-      Map("parameter" -> "`pos`",
+      expr,
+      row2,
+      "INVALID_PARAMETER_VALUE.BIT_POSITION_RANGE",
+      Map(
+        "parameter" -> "`pos`",
         "functionName" -> "`bit_get`",
         "upper" -> "64",
         "invalidValue" -> "64"))
     checkErrorInExpression[SparkIllegalArgumentException](
-      BitwiseGet(ti, p), row3, "INVALID_PARAMETER_VALUE.BIT_POSITION_RANGE",
-      Map("parameter" -> "`pos`",
+      BitwiseGet(ti, p),
+      row3,
+      "INVALID_PARAMETER_VALUE.BIT_POSITION_RANGE",
+      Map(
+        "parameter" -> "`pos`",
         "functionName" -> "`bit_get`",
         "upper" -> "32",
         "invalidValue" -> "32"))
     checkErrorInExpression[SparkIllegalArgumentException](
-      BitwiseGet(ts, p), row4, "INVALID_PARAMETER_VALUE.BIT_POSITION_RANGE",
-      Map("parameter" -> "`pos`",
+      BitwiseGet(ts, p),
+      row4,
+      "INVALID_PARAMETER_VALUE.BIT_POSITION_RANGE",
+      Map(
+        "parameter" -> "`pos`",
         "functionName" -> "`bit_get`",
         "upper" -> "16",
         "invalidValue" -> "16"))
     checkErrorInExpression[SparkIllegalArgumentException](
-      BitwiseGet(tb, p), row5, "INVALID_PARAMETER_VALUE.BIT_POSITION_RANGE",
-      Map("parameter" -> "`pos`",
+      BitwiseGet(tb, p),
+      row5,
+      "INVALID_PARAMETER_VALUE.BIT_POSITION_RANGE",
+      Map(
+        "parameter" -> "`pos`",
         "functionName" -> "`bit_get`",
         "upper" -> "8",
         "invalidValue" -> "16"))

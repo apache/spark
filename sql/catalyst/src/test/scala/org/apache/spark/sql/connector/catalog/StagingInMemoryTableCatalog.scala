@@ -35,8 +35,11 @@ class StagingInMemoryTableCatalog extends InMemoryTableCatalog with StagingTable
     validateStagedTable(tableInfo.partitions, tableInfo.properties)
     new TestStagedCreateTable(
       ident,
-      new InMemoryTable(s"$name.${ident.quoted}",
-        tableInfo.columns(), tableInfo.partitions(), tableInfo.properties(),
+      new InMemoryTable(
+        s"$name.${ident.quoted}",
+        tableInfo.columns(),
+        tableInfo.partitions(),
+        tableInfo.properties(),
         tableInfo.constraints()))
   }
 
@@ -44,17 +47,23 @@ class StagingInMemoryTableCatalog extends InMemoryTableCatalog with StagingTable
     validateStagedTable(tableInfo.partitions, tableInfo.properties)
     new TestStagedReplaceTable(
       ident,
-      new InMemoryTable(s"$name.${ident.quoted}",
-        tableInfo.columns(), tableInfo.partitions(), tableInfo.properties(),
+      new InMemoryTable(
+        s"$name.${ident.quoted}",
+        tableInfo.columns(),
+        tableInfo.partitions(),
+        tableInfo.properties(),
         tableInfo.constraints()))
   }
 
-  override def stageCreateOrReplace(ident: Identifier, tableInfo: TableInfo) : StagedTable = {
+  override def stageCreateOrReplace(ident: Identifier, tableInfo: TableInfo): StagedTable = {
     validateStagedTable(tableInfo.partitions, tableInfo.properties)
     new TestStagedCreateOrReplaceTable(
       ident,
-      new InMemoryTable(s"$name.${ident.quoted}",
-        tableInfo.columns(), tableInfo.partitions(), tableInfo.properties(),
+      new InMemoryTable(
+        s"$name.${ident.quoted}",
+        tableInfo.columns(),
+        tableInfo.partitions(),
+        tableInfo.properties(),
         tableInfo.constraints()))
   }
 
@@ -69,10 +78,10 @@ class StagingInMemoryTableCatalog extends InMemoryTableCatalog with StagingTable
     maybeSimulateFailedTableCreation(properties)
   }
 
-  protected abstract class TestStagedTable(
-      ident: Identifier,
-      delegateTable: InMemoryTable)
-    extends StagedTable with SupportsWrite with SupportsRead {
+  protected abstract class TestStagedTable(ident: Identifier, delegateTable: InMemoryTable)
+      extends StagedTable
+      with SupportsWrite
+      with SupportsRead {
 
     override def abortStagedChanges(): Unit = {}
 
@@ -91,9 +100,8 @@ class StagingInMemoryTableCatalog extends InMemoryTableCatalog with StagingTable
     }
   }
 
-  private class TestStagedCreateTable(
-      ident: Identifier,
-      delegateTable: InMemoryTable) extends TestStagedTable(ident, delegateTable) {
+  private class TestStagedCreateTable(ident: Identifier, delegateTable: InMemoryTable)
+      extends TestStagedTable(ident, delegateTable) {
 
     override def commitStagedChanges(): Unit = {
       val maybePreCommittedTable = tables.putIfAbsent(ident, delegateTable)
@@ -103,9 +111,8 @@ class StagingInMemoryTableCatalog extends InMemoryTableCatalog with StagingTable
     }
   }
 
-  private class TestStagedReplaceTable(
-      ident: Identifier,
-      delegateTable: InMemoryTable) extends TestStagedTable(ident, delegateTable) {
+  private class TestStagedReplaceTable(ident: Identifier, delegateTable: InMemoryTable)
+      extends TestStagedTable(ident, delegateTable) {
 
     override def commitStagedChanges(): Unit = {
       maybeSimulateDropBeforeCommit()
@@ -117,15 +124,14 @@ class StagingInMemoryTableCatalog extends InMemoryTableCatalog with StagingTable
 
     private def maybeSimulateDropBeforeCommit(): Unit = {
       if ("true".equalsIgnoreCase(
-        delegateTable.properties.get(SIMULATE_DROP_BEFORE_REPLACE_PROPERTY))) {
+          delegateTable.properties.get(SIMULATE_DROP_BEFORE_REPLACE_PROPERTY))) {
         tables.remove(ident)
       }
     }
   }
 
-  private class TestStagedCreateOrReplaceTable(
-      ident: Identifier,
-      delegateTable: InMemoryTable) extends TestStagedTable(ident, delegateTable) {
+  private class TestStagedCreateOrReplaceTable(ident: Identifier, delegateTable: InMemoryTable)
+      extends TestStagedTable(ident, delegateTable) {
 
     override def commitStagedChanges(): Unit = {
       tables.put(ident, delegateTable)

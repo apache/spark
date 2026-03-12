@@ -29,21 +29,27 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
 /**
- * An adaptor from a [[PartitionedFile]] to an [[Iterator]] of [[Text]], which are all of the lines
- * in that file.
+ * An adaptor from a [[PartitionedFile]] to an [[Iterator]] of [[Text]], which are all of the
+ * lines in that file.
  *
- * @param file A part (i.e. "block") of a single file that should be read line by line.
- * @param lineSeparator A line separator that should be used for each line. If the value is `None`,
- *                      it covers `\r`, `\r\n` and `\n`.
- * @param conf Hadoop configuration
+ * @param file
+ *   A part (i.e. "block") of a single file that should be read line by line.
+ * @param lineSeparator
+ *   A line separator that should be used for each line. If the value is `None`, it covers `\r`,
+ *   `\r\n` and `\n`.
+ * @param conf
+ *   Hadoop configuration
  *
- * @note The behavior when `lineSeparator` is `None` (covering `\r`, `\r\n` and `\n`) is defined
- * by [[LineRecordReader]], not within Spark.
+ * @note
+ *   The behavior when `lineSeparator` is `None` (covering `\r`, `\r\n` and `\n`) is defined by
+ *   [[LineRecordReader]], not within Spark.
  */
 class HadoopFileLinesReader(
     file: PartitionedFile,
     lineSeparator: Option[Array[Byte]],
-    conf: Configuration) extends Iterator[Text] with Closeable {
+    conf: Configuration)
+    extends Iterator[Text]
+    with Closeable {
 
   def this(file: PartitionedFile, conf: Configuration) = this(file, None, conf)
 
@@ -65,8 +71,7 @@ class HadoopFileLinesReader(
         new HadoopLineRecordReader(lineSeparator.orNull)
       } else {
         new LineRecordReader(lineSeparator.orNull)
-      }
-    ) { reader =>
+      }) { reader =>
       reader.initialize(fileSplit, hadoopAttemptContext)
       new RecordReaderIterator(reader)
     }

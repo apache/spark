@@ -30,8 +30,7 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
     override protected val excludedOnceBatches = Set("PullupCorrelatedPredicates")
 
     val batches =
-      Batch("PullupCorrelatedPredicates", Once,
-        PullupCorrelatedPredicates) :: Nil
+      Batch("PullupCorrelatedPredicates", Once, PullupCorrelatedPredicates) :: Nil
   }
 
   val testRelation = LocalRelation($"a".int, $"b".double)
@@ -45,7 +44,8 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
     val inSubquery =
       testRelation
         .where(InSubquery(Seq($"a"), ListQuery(subPlan)))
-        .select($"a").analyze
+        .select($"a")
+        .analyze
     assert(inSubquery.resolved)
 
     val optimized = Optimize.execute(inSubquery)
@@ -55,12 +55,13 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
   test("PullupCorrelatedPredicates in correlated subquery idempotency check") {
     val subPlan =
       testRelation2
-      .where($"b" < $"d")
-      .select($"c")
+        .where($"b" < $"d")
+        .select($"c")
     val inSubquery =
       testRelation
-      .where(InSubquery(Seq($"a"), ListQuery(subPlan)))
-      .select($"a").analyze
+        .where(InSubquery(Seq($"a"), ListQuery(subPlan)))
+        .select($"a")
+        .analyze
     assert(inSubquery.resolved)
 
     val optimized = Optimize.execute(inSubquery)
@@ -76,7 +77,8 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
     val existsSubquery =
       testRelation
         .where(Exists(subPlan))
-        .select($"a").analyze
+        .select($"a")
+        .analyze
     assert(existsSubquery.resolved)
 
     val optimized = Optimize.execute(existsSubquery)
@@ -92,7 +94,8 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
     val scalarSubquery =
       testRelation
         .where(ScalarSubquery(subPlan) === 1)
-        .select($"a").analyze
+        .select($"a")
+        .analyze
 
     val optimized = Optimize.execute(scalarSubquery)
     val doubleOptimized = Optimize.execute(optimized)
@@ -105,7 +108,8 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
         .where($"b" === $"d" && $"d" === 1)
         .select($"c")
     val left = testRelation
-    val lateralJoin = LateralJoin(left, LateralSubquery(right), Inner, Some($"a" === $"c")).analyze
+    val lateralJoin =
+      LateralJoin(left, LateralSubquery(right), Inner, Some($"a" === $"c")).analyze
     val optimized = Optimize.execute(lateralJoin)
     val doubleOptimized = Optimize.execute(optimized)
     comparePlans(optimized, doubleOptimized)

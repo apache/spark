@@ -33,8 +33,7 @@ import org.apache.spark.tags.ExtendedSQLTest
  * Test logic related to choice of output committers.
  */
 @ExtendedSQLTest
-class ParquetCommitterSuite extends SparkFunSuite with SQLTestUtils
-  with LocalSparkContext {
+class ParquetCommitterSuite extends SparkFunSuite with SQLTestUtils with LocalSparkContext {
 
   private val PARQUET_COMMITTER = classOf[ParquetOutputCommitter].getCanonicalName
 
@@ -45,7 +44,8 @@ class ParquetCommitterSuite extends SparkFunSuite with SQLTestUtils
    */
   override def beforeAll(): Unit = {
     super.beforeAll()
-    spark = SparkSession.builder()
+    spark = SparkSession
+      .builder()
       .master("local-cluster[2,1,1024]")
       .appName("testing")
       .getOrCreate()
@@ -79,12 +79,15 @@ class ParquetCommitterSuite extends SparkFunSuite with SQLTestUtils
   }
 
   /**
-   * Write a trivial dataframe as Parquet, using the given committer
-   * and job summary option.
-   * @param committer committer to use
-   * @param summary create a job summary
-   * @param check look for a marker file
-   * @return if a marker file was sought, it's file status.
+   * Write a trivial dataframe as Parquet, using the given committer and job summary option.
+   * @param committer
+   *   committer to use
+   * @param summary
+   *   create a job summary
+   * @param check
+   *   look for a marker file
+   * @return
+   *   if a marker file was sought, it's file status.
    */
   private def writeDataFrame(
       committer: String,
@@ -99,16 +102,15 @@ class ParquetCommitterSuite extends SparkFunSuite with SQLTestUtils
     withSQLConf(
       SQLConf.PARQUET_OUTPUT_COMMITTER_CLASS.key -> committer,
       ParquetOutputFormat.JOB_SUMMARY_LEVEL -> summaryLevel) {
-        withTempPath { dest =>
-          val df = spark.createDataFrame(Seq((1, "4"), (2, "2")))
-          val destPath = new Path(dest.toURI)
-          df.write.format("parquet").save(destPath.toString)
-          if (check) {
-            result = Some(MarkingFileOutput.checkMarker(
-              destPath,
-              spark.sessionState.newHadoopConf()))
-          }
+      withTempPath { dest =>
+        val df = spark.createDataFrame(Seq((1, "4"), (2, "2")))
+        val destPath = new Path(dest.toURI)
+        df.write.format("parquet").save(destPath.toString)
+        if (check) {
+          result =
+            Some(MarkingFileOutput.checkMarker(destPath, spark.sessionState.newHadoopConf()))
         }
+      }
     }
     result
   }
@@ -124,14 +126,15 @@ class ParquetCommitterSuite extends SparkFunSuite with SQLTestUtils
 }
 
 /**
- * A file output committer which explicitly touches a file "marker"; this
- * is how tests can verify that this committer was used.
- * @param outputPath output path
- * @param context task context
+ * A file output committer which explicitly touches a file "marker"; this is how tests can verify
+ * that this committer was used.
+ * @param outputPath
+ *   output path
+ * @param context
+ *   task context
  */
-private class MarkingFileOutputCommitter(
-    outputPath: Path,
-    context: TaskAttemptContext) extends FileOutputCommitter(outputPath, context) {
+private class MarkingFileOutputCommitter(outputPath: Path, context: TaskAttemptContext)
+    extends FileOutputCommitter(outputPath, context) {
 
   override def commitJob(context: JobContext): Unit = {
     super.commitJob(context)
@@ -145,8 +148,10 @@ private object MarkingFileOutput {
 
   /**
    * Touch the marker.
-   * @param outputPath destination directory
-   * @param conf configuration to create the FS with
+   * @param outputPath
+   *   destination directory
+   * @param conf
+   *   configuration to create the FS with
    */
   def touch(outputPath: Path, conf: Configuration): Unit = {
     outputPath.getFileSystem(conf).create(new Path(outputPath, "marker")).close()
@@ -155,10 +160,14 @@ private object MarkingFileOutput {
   /**
    * Get the file status of the marker
    *
-   * @param outputPath destination directory
-   * @param conf configuration to create the FS with
-   * @return the status of the marker
-   * @throws java.io.FileNotFoundException if the marker is absent
+   * @param outputPath
+   *   destination directory
+   * @param conf
+   *   configuration to create the FS with
+   * @return
+   *   the status of the marker
+   * @throws java.io.FileNotFoundException
+   *   if the marker is absent
    */
   def checkMarker(outputPath: Path, conf: Configuration): FileStatus = {
     outputPath.getFileSystem(conf).getFileStatus(new Path(outputPath, "marker"))

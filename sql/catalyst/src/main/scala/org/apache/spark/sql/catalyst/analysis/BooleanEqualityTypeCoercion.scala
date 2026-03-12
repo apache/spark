@@ -17,22 +17,8 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.{
-  And,
-  Cast,
-  EqualNullSafe,
-  EqualTo,
-  Expression,
-  IsNotNull,
-  Literal,
-  Not
-}
-import org.apache.spark.sql.types.{
-  BooleanTypeExpression,
-  Decimal,
-  NumericType,
-  NumericTypeExpression
-}
+import org.apache.spark.sql.catalyst.expressions.{And, Cast, EqualNullSafe, EqualTo, Expression, IsNotNull, Literal, Not}
+import org.apache.spark.sql.types.{BooleanTypeExpression, Decimal, NumericType, NumericTypeExpression}
 
 /**
  * Type coercion helper that matches against [[Equality]] expressions in order to type coerce

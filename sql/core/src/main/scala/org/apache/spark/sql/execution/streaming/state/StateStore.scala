@@ -56,9 +56,9 @@ import org.apache.spark.util.{NextIterator, ThreadUtils, Utils}
  * The caller MUST call `close()` on the iterator if it was not fully consumed, and it is no
  * longer needed.
  */
-class StateStoreIterator[A](
-    val iter: Iterator[A],
-    val onClose: () => Unit = () => {}) extends Iterator[A] with Closeable {
+class StateStoreIterator[A](val iter: Iterator[A], val onClose: () => Unit = () => {})
+    extends Iterator[A]
+    with Closeable {
   override def hasNext: Boolean = iter.hasNext
 
   override def next(): A = iter.next()
@@ -91,13 +91,12 @@ object MaintenanceTaskType {
  * `ReadStateStore` represents a specific version of state data, and such instances are created
  * through a [[StateStoreProvider]].
  *
- * `abort` method will be called when the task is completed - please clean up the resources in
- * the method.
+ * `abort` method will be called when the task is completed - please clean up the resources in the
+ * method.
  *
- * IMPLEMENTATION NOTES:
- * * The implementation can throw exception on calling prefixScan method if the functionality is
- *   not supported yet from the implementation. Note that some stateful operations would not work
- *   on disabling prefixScan functionality.
+ * IMPLEMENTATION NOTES: * The implementation can throw exception on calling prefixScan method if
+ * the functionality is not supported yet from the implementation. Note that some stateful
+ * operations would not work on disabling prefixScan functionality.
  */
 trait ReadStateStore {
 
@@ -109,20 +108,22 @@ trait ReadStateStore {
 
   /**
    * Get the current value of a non-null key.
-   * @return a non-null row if the key exists in the store, otherwise null.
+   * @return
+   *   a non-null row if the key exists in the store, otherwise null.
    */
-  def get(
-      key: UnsafeRow,
-      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): UnsafeRow
+  def get(key: UnsafeRow, colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): UnsafeRow
 
   /**
-   * Get the values for multiple keys in a single batch operation.
-   * Default implementation throws UnsupportedOperationException.
-   * Providers that support batch retrieval should override this method.
+   * Get the values for multiple keys in a single batch operation. Default implementation throws
+   * UnsupportedOperationException. Providers that support batch retrieval should override this
+   * method.
    *
-   * @param keys          Array of keys to look up
-   * @param colFamilyName The column family name
-   * @return Iterator of values corresponding to the keys (null for keys that don't exist)
+   * @param keys
+   *   Array of keys to look up
+   * @param colFamilyName
+   *   The column family name
+   * @return
+   *   Iterator of values corresponding to the keys (null for keys that don't exist)
    */
   def multiGet(keys: Array[UnsafeRow], colFamilyName: String): Iterator[UnsafeRow] = {
     throw new UnsupportedOperationException("multiGet is not supported by this StateStore")
@@ -131,13 +132,15 @@ trait ReadStateStore {
   /**
    * Check if a key exists in the store, with 100% guarantee of a correct result.
    *
-   * Default implementation calls get() and checks if the result is null.
-   * Implementations backed by RocksDB should override this to use the native
-   * keyExists() method for better performance.
+   * Default implementation calls get() and checks if the result is null. Implementations backed
+   * by RocksDB should override this to use the native keyExists() method for better performance.
    *
-   * @param key The key to check
-   * @param colFamilyName The column family name
-   * @return true if the key exists, false if it doesn't exist
+   * @param key
+   *   The key to check
+   * @param colFamilyName
+   *   The column family name
+   * @return
+   *   true if the key exists, false if it doesn't exist
    */
   def keyExists(
       key: UnsafeRow,
@@ -146,19 +149,20 @@ trait ReadStateStore {
   }
 
   /**
-   * Provides an iterator containing all values of a non-null key. If key does not exist,
-   * an empty iterator is returned. Implementations should make sure to return an empty
-   * iterator if the key does not exist.
+   * Provides an iterator containing all values of a non-null key. If key does not exist, an empty
+   * iterator is returned. Implementations should make sure to return an empty iterator if the key
+   * does not exist.
    *
    * It is expected to throw exception if Spark calls this method without setting
    * multipleValuesPerKey as true for the column family.
    */
-  def valuesIterator(key: UnsafeRow,
+  def valuesIterator(
+      key: UnsafeRow,
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Iterator[UnsafeRow]
 
   /**
-   * Return an iterator containing all the key-value pairs which are matched with
-   * the given prefix key.
+   * Return an iterator containing all the key-value pairs which are matched with the given prefix
+   * key.
    *
    * The operator will provide numColsPrefixKey greater than 0 in StateStoreProvider.init method
    * if the operator needs to leverage the "prefix scan" feature. The schema of the prefix key
@@ -167,25 +171,25 @@ trait ReadStateStore {
    * It is expected to throw exception if Spark calls this method without setting numColsPrefixKey
    * to the greater than 0.
    */
-  def prefixScan(
-      prefixKey: UnsafeRow,
-      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): StateStoreIterator[UnsafeRowPair]
+  def prefixScan(prefixKey: UnsafeRow, colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME)
+      : StateStoreIterator[UnsafeRowPair]
 
   /**
-   * Return an iterator containing all the (key, value) pairs which are matched with
-   * the given prefix key.
+   * Return an iterator containing all the (key, value) pairs which are matched with the given
+   * prefix key.
    *
-   * It is expected to throw exception if Spark calls this method without proper key encoding spec.
-   * It is also expected to throw exception if Spark calls this method without setting
+   * It is expected to throw exception if Spark calls this method without proper key encoding
+   * spec. It is also expected to throw exception if Spark calls this method without setting
    * multipleValuesPerKey as true for the column family.
    */
   def prefixScanWithMultiValues(
       prefixKey: UnsafeRow,
-      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): StateStoreIterator[UnsafeRowPair]
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME)
+      : StateStoreIterator[UnsafeRowPair]
 
   /** Return an iterator containing all the key-value pairs in the StateStore. */
-  def iterator(
-      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): StateStoreIterator[UnsafeRowPair]
+  def iterator(colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME)
+      : StateStoreIterator[UnsafeRowPair]
 
   /**
    * Return an iterator containing all the key-value pairs in the StateStore.
@@ -193,8 +197,8 @@ trait ReadStateStore {
    * It is expected to throw exception if Spark calls this method without setting
    * multipleValuesPerKey as true for the column family.
    */
-  def iteratorWithMultiValues(
-      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): StateStoreIterator[UnsafeRowPair]
+  def iteratorWithMultiValues(colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME)
+      : StateStoreIterator[UnsafeRowPair]
 
   /**
    * Clean up the resource.
@@ -203,17 +207,15 @@ trait ReadStateStore {
    */
   def abort(): Unit
 
-
   /**
    * Releases resources associated with this read-only state store.
    *
    * This method should be called when the store is no longer needed but has completed
-   * successfully (i.e., no errors occurred during reading). It performs any necessary
-   * cleanup operations without invalidating or rolling back the data that was read.
+   * successfully (i.e., no errors occurred during reading). It performs any necessary cleanup
+   * operations without invalidating or rolling back the data that was read.
    *
-   * In contrast to `abort()`, which is called on error paths to cancel operations,
-   * `release()` is the proper method to call in success scenarios when a read-only
-   * store is no longer needed.
+   * In contrast to `abort()`, which is called on error paths to cancel operations, `release()` is
+   * the proper method to call in success scenarios when a read-only store is no longer needed.
    *
    * This method is idempotent and safe to call multiple times.
    */
@@ -222,7 +224,8 @@ trait ReadStateStore {
   /**
    * Returns all column family names in this state store.
    *
-   * @return Set of all column family names
+   * @return
+   *   Set of all column family names
    */
   def allColumnFamilyNames: Set[String]
 }
@@ -232,8 +235,8 @@ trait ReadStateStore {
  * instance of a `StateStore` represents a specific version of state data, and such instances are
  * created through a [[StateStoreProvider]].
  *
- * Unlike [[ReadStateStore]], `abort` method may not be called if the `commit` method succeeds
- * to commit the change. (`hasCommitted` returns `true`.) Otherwise, `abort` method will be called.
+ * Unlike [[ReadStateStore]], `abort` method may not be called if the `commit` method succeeds to
+ * commit the change. (`hasCommitted` returns `true`.) Otherwise, `abort` method will be called.
  * Implementation should deal with resource cleanup in both methods, and also need to guard with
  * double resource cleanup.
  */
@@ -247,7 +250,8 @@ trait StateStore extends ReadStateStore {
   /**
    * Create column family with given name, if absent.
    *
-   * @return column family ID
+   * @return
+   *   column family ID
    */
   def createColFamilyIfAbsent(
       colFamilyName: String,
@@ -258,8 +262,9 @@ trait StateStore extends ReadStateStore {
       isInternal: Boolean = false): Unit
 
   /**
-   * Put a new non-null value for a non-null key. Implementations must be aware that the UnsafeRows
-   * in the params can be reused, and must make copies of the data as needed for persistence.
+   * Put a new non-null value for a non-null key. Implementations must be aware that the
+   * UnsafeRows in the params can be reused, and must make copies of the data as needed for
+   * persistence.
    */
   def put(
       key: UnsafeRow,
@@ -279,17 +284,18 @@ trait StateStore extends ReadStateStore {
   /**
    * Remove a single non-null key.
    */
-  def remove(
-      key: UnsafeRow,
-      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit
+  def remove(key: UnsafeRow, colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit
 
   /**
-   * Delete all keys in the range [beginKey, endKey).
-   * Uses RocksDB's native deleteRange for efficient bulk deletion.
+   * Delete all keys in the range [beginKey, endKey). Uses RocksDB's native deleteRange for
+   * efficient bulk deletion.
    *
-   * @param beginKey      The start key of the range (inclusive)
-   * @param endKey        The end key of the range (exclusive)
-   * @param colFamilyName The column family name
+   * @param beginKey
+   *   The start key of the range (inclusive)
+   * @param endKey
+   *   The end key of the range (exclusive)
+   * @param colFamilyName
+   *   The column family name
    */
   def deleteRange(
       beginKey: UnsafeRow,
@@ -299,13 +305,15 @@ trait StateStore extends ReadStateStore {
   }
 
   /**
-   * Merges the provided value with existing values of a non-null key. If a existing
-   * value does not exist, this operation behaves as [[StateStore.put()]].
+   * Merges the provided value with existing values of a non-null key. If a existing value does
+   * not exist, this operation behaves as [[StateStore.put()]].
    *
    * It is expected to throw exception if Spark calls this method without setting
    * multipleValuesPerKey as true for the column family.
    */
-  def merge(key: UnsafeRow, value: UnsafeRow,
+  def merge(
+      key: UnsafeRow,
+      value: UnsafeRow,
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit
 
   /**
@@ -328,8 +336,8 @@ trait StateStore extends ReadStateStore {
   def commit(): Long
 
   /**
-   * Abort all the updates that have been made to the store. Implementations should ensure that
-   * no more updates (puts, removes) can be after an abort in order to avoid incorrect usage.
+   * Abort all the updates that have been made to the store. Implementations should ensure that no
+   * more updates (puts, removes) can be after an abort in order to avoid incorrect usage.
    */
   override def abort(): Unit
 
@@ -346,20 +354,19 @@ trait StateStore extends ReadStateStore {
    * calling this method if all updates should be visible in the returned iterator.
    */
   override def iterator(colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME)
-    : StateStoreIterator[UnsafeRowPair]
+      : StateStoreIterator[UnsafeRowPair]
 
   /** Current metrics of the state store */
   def metrics: StateStoreMetrics
 
   /**
-   * Return information on recently generated checkpoints
-   * The information should only be usable when checkpoint format version 2 is used and
-   * underlying state store supports it.
-   * If it is not the case, the method can return a dummy result. The result eventually won't
-   * be sent to the driver, but not all the stateful operator is able to figure out whether
-   * the function should be called to now. They would anyway call it and pass it to
+   * Return information on recently generated checkpoints The information should only be usable
+   * when checkpoint format version 2 is used and underlying state store supports it. If it is not
+   * the case, the method can return a dummy result. The result eventually won't be sent to the
+   * driver, but not all the stateful operator is able to figure out whether the function should
+   * be called to now. They would anyway call it and pass it to
    * StatefulOperator.setStateStoreCheckpointInfo(), where it will be ignored.
-   * */
+   */
   def getStateStoreCheckpointInfo(): StateStoreCheckpointInfo
 
   /**
@@ -374,9 +381,10 @@ class WrappedReadStateStore(store: StateStore) extends ReadStateStore {
 
   override def version: Long = store.version
 
-  override def get(key: UnsafeRow,
-    colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): UnsafeRow = store.get(key,
-    colFamilyName)
+  override def get(
+      key: UnsafeRow,
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): UnsafeRow =
+    store.get(key, colFamilyName)
 
   override def multiGet(keys: Array[UnsafeRow], colFamilyName: String): Iterator[UnsafeRow] = {
     store.multiGet(keys, colFamilyName)
@@ -389,15 +397,16 @@ class WrappedReadStateStore(store: StateStore) extends ReadStateStore {
   }
 
   override def iterator(colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME)
-    : StateStoreIterator[UnsafeRowPair] = store.iterator(colFamilyName)
+      : StateStoreIterator[UnsafeRowPair] = store.iterator(colFamilyName)
 
   override def abort(): Unit = store.abort()
 
   override def release(): Unit = store.release()
 
-  override def prefixScan(prefixKey: UnsafeRow,
+  override def prefixScan(
+      prefixKey: UnsafeRow,
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME)
-    : StateStoreIterator[UnsafeRowPair] = store.prefixScan(prefixKey, colFamilyName)
+      : StateStoreIterator[UnsafeRowPair] = store.prefixScan(prefixKey, colFamilyName)
 
   override def valuesIterator(key: UnsafeRow, colFamilyName: String): Iterator[UnsafeRow] = {
     store.valuesIterator(key, colFamilyName)
@@ -419,15 +428,17 @@ class WrappedReadStateStore(store: StateStore) extends ReadStateStore {
 
 /**
  * Metrics reported by a state store
- * @param numKeys         Number of keys in the state store
- * @param memoryUsedBytes Memory used by the state store
- * @param customMetrics   Custom implementation-specific metrics
- *                        The metrics reported through this must have the same `name` as those
- *                        reported by `StateStoreProvider.supportedCustomMetrics`.
- * @param instanceMetrics Custom implementation-specific metrics that are specific to state stores
- *                        The metrics reported through this must have the same `name` as those
- *                        reported by `StateStoreProvider.supportedInstanceMetrics`,
- *                        including partition id and store name.
+ * @param numKeys
+ *   Number of keys in the state store
+ * @param memoryUsedBytes
+ *   Memory used by the state store
+ * @param customMetrics
+ *   Custom implementation-specific metrics The metrics reported through this must have the same
+ *   `name` as those reported by `StateStoreProvider.supportedCustomMetrics`.
+ * @param instanceMetrics
+ *   Custom implementation-specific metrics that are specific to state stores The metrics reported
+ *   through this must have the same `name` as those reported by
+ *   `StateStoreProvider.supportedInstanceMetrics`, including partition id and store name.
  */
 case class StateStoreMetrics(
     numKeys: Long,
@@ -436,13 +447,13 @@ case class StateStoreMetrics(
     instanceMetrics: Map[StateStoreInstanceMetric, Long] = Map.empty)
 
 /**
- * State store checkpoint information, used to pass checkpointing information from executors
- * to the driver after execution.
- * @param stateStoreCkptId The checkpoint ID for a checkpoint at `batchVersion`. This is used to
- *                         identify the checkpoint
- * @param baseStateStoreCkptId The checkpoint ID for `batchVersion` - 1, that is used to finish this
- *                             batch. This is used to validate the batch is processed based on the
- *                             correct checkpoint.
+ * State store checkpoint information, used to pass checkpointing information from executors to
+ * the driver after execution.
+ * @param stateStoreCkptId
+ *   The checkpoint ID for a checkpoint at `batchVersion`. This is used to identify the checkpoint
+ * @param baseStateStoreCkptId
+ *   The checkpoint ID for `batchVersion` - 1, that is used to finish this batch. This is used to
+ *   validate the batch is processed based on the correct checkpoint.
  */
 case class StateStoreCheckpointInfo(
     partitionId: Int,
@@ -469,9 +480,9 @@ object StateStoreMetrics {
 }
 
 /**
- * Name and description of custom implementation-specific metrics that a
- * state store may wish to expose. Also provides [[SQLMetric]] instance to
- * show the metric in UI and accumulate it at the query level.
+ * Name and description of custom implementation-specific metrics that a state store may wish to
+ * expose. Also provides [[SQLMetric]] instance to show the metric in UI and accumulate it at the
+ * query level.
  */
 trait StateStoreCustomMetric {
   def name: String
@@ -494,7 +505,8 @@ case class StateStoreCustomSizeMetric(name: String, desc: String) extends StateS
     SQLMetrics.createSizeMetric(sparkContext, desc)
 }
 
-case class StateStoreCustomTimingMetric(name: String, desc: String) extends StateStoreCustomMetric {
+case class StateStoreCustomTimingMetric(name: String, desc: String)
+    extends StateStoreCustomMetric {
   override def withNewDesc(desc: String): StateStoreCustomTimingMetric = copy(desc = desc)
 
   override def createSQLMetric(sparkContext: SparkContext): SQLMetric =
@@ -511,9 +523,9 @@ trait StateStoreInstanceMetric {
   def createSQLMetric(sparkContext: SparkContext): SQLMetric
 
   /**
-   * Defines how instance metrics are selected for progress reporting.
-   * Metrics are sorted by value using this ordering, and only the first N metrics are displayed.
-   * For example, the highest N metrics by value should use Ordering.Long.reverse.
+   * Defines how instance metrics are selected for progress reporting. Metrics are sorted by value
+   * using this ordering, and only the first N metrics are displayed. For example, the highest N
+   * metrics by value should use Ordering.Long.reverse.
    */
   def ordering: Ordering[Long]
 
@@ -521,9 +533,9 @@ trait StateStoreInstanceMetric {
   def ignoreIfUnchanged: Boolean
 
   /**
-   * Defines how to merge metric values from different executors for the same state store
-   * instance in situations like speculative execution or provider unloading. In most cases,
-   * the original metric value is at its initial value.
+   * Defines how to merge metric values from different executors for the same state store instance
+   * in situations like speculative execution or provider unloading. In most cases, the original
+   * metric value is at its initial value.
    */
   def combine(originalMetric: SQLMetric, value: Long): Long
 
@@ -543,7 +555,7 @@ trait StateStoreInstanceMetric {
 case class StateStoreSnapshotLastUploadInstanceMetric(
     partitionId: Option[Int] = None,
     storeName: String = StateStoreId.DEFAULT_STORE_NAME)
-  extends StateStoreInstanceMetric {
+    extends StateStoreInstanceMetric {
 
   override def metricPrefix: String = "SnapshotLastUploaded"
 
@@ -589,9 +601,12 @@ sealed trait KeyStateEncoderSpec {
   /**
    * Creates a RocksDBKeyStateEncoder for this specification.
    *
-   * @param dataEncoder The encoder to handle the actual data encoding/decoding
-   * @param useColumnFamilies Whether to use RocksDB column families
-   * @return A RocksDBKeyStateEncoder configured for this spec
+   * @param dataEncoder
+   *   The encoder to handle the actual data encoding/decoding
+   * @param useColumnFamilies
+   *   Whether to use RocksDB column families
+   * @return
+   *   A RocksDBKeyStateEncoder configured for this spec
    */
   def toEncoder(
       dataEncoder: RocksDBDataEncoder,
@@ -605,8 +620,8 @@ object KeyStateEncoderSpec {
       case "NoPrefixKeyStateEncoderSpec" =>
         NoPrefixKeyStateEncoderSpec(keySchema)
       case "RangeKeyScanStateEncoderSpec" =>
-        val orderingOrdinals = m("orderingOrdinals").
-          asInstanceOf[List[_]].map(_.asInstanceOf[BigInt].toInt)
+        val orderingOrdinals =
+          m("orderingOrdinals").asInstanceOf[List[_]].map(_.asInstanceOf[BigInt].toInt)
         RangeKeyScanStateEncoderSpec(keySchema, orderingOrdinals)
       case "PrefixKeyScanStateEncoderSpec" =>
         val numColsPrefixKey = m("numColsPrefixKey").asInstanceOf[BigInt].toInt
@@ -623,14 +638,12 @@ case class NoPrefixKeyStateEncoderSpec(keySchema: StructType) extends KeyStateEn
   override def toEncoder(
       dataEncoder: RocksDBDataEncoder,
       useColumnFamilies: Boolean): RocksDBKeyStateEncoder = {
-    new NoPrefixKeyStateEncoder(
-      dataEncoder, keySchema, useColumnFamilies)
+    new NoPrefixKeyStateEncoder(dataEncoder, keySchema, useColumnFamilies)
   }
 }
 
-case class PrefixKeyScanStateEncoderSpec(
-    keySchema: StructType,
-    numColsPrefixKey: Int) extends KeyStateEncoderSpec {
+case class PrefixKeyScanStateEncoderSpec(keySchema: StructType, numColsPrefixKey: Int)
+    extends KeyStateEncoderSpec {
   if (numColsPrefixKey == 0 || numColsPrefixKey >= keySchema.length) {
     throw StateStoreErrors.incorrectNumOrderingColsForPrefixScan(numColsPrefixKey.toString)
   }
@@ -638,8 +651,7 @@ case class PrefixKeyScanStateEncoderSpec(
   override def toEncoder(
       dataEncoder: RocksDBDataEncoder,
       useColumnFamilies: Boolean): RocksDBKeyStateEncoder = {
-    new PrefixKeyScanStateEncoder(
-      dataEncoder, keySchema, numColsPrefixKey, useColumnFamilies)
+    new PrefixKeyScanStateEncoder(dataEncoder, keySchema, numColsPrefixKey, useColumnFamilies)
   }
 
   override def jsonValue: JValue = {
@@ -649,9 +661,8 @@ case class PrefixKeyScanStateEncoderSpec(
 }
 
 /** Encodes rows so that they can be range-scanned based on orderingOrdinals */
-case class RangeKeyScanStateEncoderSpec(
-    keySchema: StructType,
-    orderingOrdinals: Seq[Int]) extends KeyStateEncoderSpec {
+case class RangeKeyScanStateEncoderSpec(keySchema: StructType, orderingOrdinals: Seq[Int])
+    extends KeyStateEncoderSpec {
   if (orderingOrdinals.isEmpty || orderingOrdinals.length > keySchema.length) {
     throw StateStoreErrors.incorrectNumOrderingColsForRangeScan(orderingOrdinals.length.toString)
   }
@@ -659,8 +670,7 @@ case class RangeKeyScanStateEncoderSpec(
   override def toEncoder(
       dataEncoder: RocksDBDataEncoder,
       useColumnFamilies: Boolean): RocksDBKeyStateEncoder = {
-    new RangeKeyScanStateEncoder(
-      dataEncoder, keySchema, orderingOrdinals, useColumnFamilies)
+    new RangeKeyScanStateEncoder(dataEncoder, keySchema, orderingOrdinals, useColumnFamilies)
   }
 
   override def jsonValue: JValue = {
@@ -671,7 +681,7 @@ case class RangeKeyScanStateEncoderSpec(
 
 /** The encoder specification for [[TimestampAsPrefixKeyStateEncoder]]. */
 case class TimestampAsPrefixKeyStateEncoderSpec(keySchema: StructType)
-  extends KeyStateEncoderSpec {
+    extends KeyStateEncoderSpec {
 
   override def toEncoder(
       dataEncoder: RocksDBDataEncoder,
@@ -686,7 +696,7 @@ case class TimestampAsPrefixKeyStateEncoderSpec(keySchema: StructType)
 
 /** The encoder specification for [[TimestampAsPostfixKeyStateEncoder]]. */
 case class TimestampAsPostfixKeyStateEncoderSpec(keySchema: StructType)
-  extends KeyStateEncoderSpec {
+    extends KeyStateEncoderSpec {
 
   override def toEncoder(
       dataEncoder: RocksDBDataEncoder,
@@ -700,46 +710,51 @@ case class TimestampAsPostfixKeyStateEncoderSpec(keySchema: StructType)
 }
 
 /**
- * Trait representing a provider that provide [[StateStore]] instances representing
- * versions of state data.
+ * Trait representing a provider that provide [[StateStore]] instances representing versions of
+ * state data.
  *
  * The life cycle of a provider and its provide stores are as follows.
  *
- * - A StateStoreProvider is created in a executor for each unique [[StateStoreId]] when
- *   the first batch of a streaming query is executed on the executor. All subsequent batches reuse
- *   this provider instance until the query is stopped.
+ *   - A StateStoreProvider is created in a executor for each unique [[StateStoreId]] when the
+ *     first batch of a streaming query is executed on the executor. All subsequent batches reuse
+ *     this provider instance until the query is stopped.
+ *   - Every batch of streaming data request a specific version of the state data by invoking
+ *     `getStore(version)` which returns an instance of [[StateStore]] through which the required
+ *     version of the data can be accessed. It is the responsible of the provider to populate this
+ *     store with context information like the schema of keys and values, etc.
  *
- * - Every batch of streaming data request a specific version of the state data by invoking
- *   `getStore(version)` which returns an instance of [[StateStore]] through which the required
- *   version of the data can be accessed. It is the responsible of the provider to populate
- *   this store with context information like the schema of keys and values, etc.
+ * If the checkpoint format version 2 is used, an additional argument `checkpointID` may be
+ * provided as part of `getStore(version, checkpointID)`. The provider needs to guarantee that the
+ * loaded version is of this unique ID. It needs to load the version for this specific ID from the
+ * checkpoint if needed.
  *
- *   If the checkpoint format version 2 is used, an additional argument `checkpointID` may be
- *   provided as part of `getStore(version, checkpointID)`. The provider needs to guarantee
- *   that the loaded version is of this unique ID. It needs to load the version for this specific
- *   ID from the checkpoint if needed.
- *
- * - After the streaming query is stopped, the created provider instances are lazily disposed off.
+ *   - After the streaming query is stopped, the created provider instances are lazily disposed
+ *     off.
  */
 trait StateStoreProvider {
 
   /**
-   * Initialize the provide with more contextual information from the SQL operator.
-   * This method will be called first after creating an instance of the StateStoreProvider by
-   * reflection.
+   * Initialize the provide with more contextual information from the SQL operator. This method
+   * will be called first after creating an instance of the StateStoreProvider by reflection.
    *
-   * @param stateStoreId Id of the versioned StateStores that this provider will generate
-   * @param keySchema Schema of keys to be stored
-   * @param valueSchema Schema of value to be stored
-   * @param numColsPrefixKey The number of leftmost columns to be used as prefix key.
-   *                         A value not greater than 0 means the operator doesn't activate prefix
-   *                         key, and the operator should not call prefixScan method in StateStore.
-   * @param useColumnFamilies Whether the underlying state store uses a single or multiple column
-   *                          families
-   * @param storeConfs Configurations used by the StateStores
-   * @param hadoopConf Hadoop configuration that could be used by StateStore to save state data
-   * @param useMultipleValuesPerKey Whether the underlying state store needs to support multiple
-   *                                values for a single key.
+   * @param stateStoreId
+   *   Id of the versioned StateStores that this provider will generate
+   * @param keySchema
+   *   Schema of keys to be stored
+   * @param valueSchema
+   *   Schema of value to be stored
+   * @param numColsPrefixKey
+   *   The number of leftmost columns to be used as prefix key. A value not greater than 0 means
+   *   the operator doesn't activate prefix key, and the operator should not call prefixScan
+   *   method in StateStore.
+   * @param useColumnFamilies
+   *   Whether the underlying state store uses a single or multiple column families
+   * @param storeConfs
+   *   Configurations used by the StateStores
+   * @param hadoopConf
+   *   Hadoop configuration that could be used by StateStore to save state data
+   * @param useMultipleValuesPerKey
+   *   Whether the underlying state store needs to support multiple values for a single key.
    */
   def init(
       stateStoreId: StateStoreId,
@@ -753,23 +768,22 @@ trait StateStoreProvider {
       stateSchemaProvider: Option[StateSchemaProvider] = None): Unit
 
   /**
-   * Return the id of the StateStores this provider will generate.
-   * Should be the same as the one passed in init().
+   * Return the id of the StateStores this provider will generate. Should be the same as the one
+   * passed in init().
    */
   def stateStoreId: StateStoreId
 
   /**
-   * Called when the provider instance is unloaded from the executor
-   * WARNING: IF PROVIDER FROM [[StateStore.loadedProviders]],
-   * CLOSE MUST ONLY BE CALLED FROM MAINTENANCE THREAD!
+   * Called when the provider instance is unloaded from the executor WARNING: IF PROVIDER FROM
+   * [[StateStore.loadedProviders]], CLOSE MUST ONLY BE CALLED FROM MAINTENANCE THREAD!
    */
   def close(): Unit
 
   /**
-   * Return an instance of [[StateStore]] representing state data of the given version.
-   * If `stateStoreCkptId` is provided, the instance also needs to match the ID.
-   * If `loadEmpty` is true, creates an empty store at this version without loading previous data.
-   * */
+   * Return an instance of [[StateStore]] representing state data of the given version. If
+   * `stateStoreCkptId` is provided, the instance also needs to match the ID. If `loadEmpty` is
+   * true, creates an empty store at this version without loading previous data.
+   */
   def getStore(
       version: Long,
       stateStoreCkptId: Option[String] = None,
@@ -777,11 +791,10 @@ trait StateStoreProvider {
       loadEmpty: Boolean = false): StateStore
 
   /**
-   * Return an instance of [[ReadStateStore]] representing state data of the given version
-   * and uniqueID if provided.
-   * By default it will return the same instance as getStore(version) but wrapped to prevent
-   * modification. Providers can override and return optimized version of [[ReadStateStore]]
-   * based on the fact the instance will be only used for reading.
+   * Return an instance of [[ReadStateStore]] representing state data of the given version and
+   * uniqueID if provided. By default it will return the same instance as getStore(version) but
+   * wrapped to prevent modification. Providers can override and return optimized version of
+   * [[ReadStateStore]] based on the fact the instance will be only used for reading.
    */
   def getReadStore(version: Long, uniqueId: Option[String] = None): ReadStateStore =
     new WrappedReadStateStore(getStore(version, uniqueId))
@@ -789,20 +802,24 @@ trait StateStoreProvider {
   /**
    * Creates a writable store from an existing read-only store for the specified version.
    *
-   * This method enables an important optimization pattern for stateful operations where
-   * the same state store needs to be accessed for both reading and writing within a task.
-   * Instead of opening two separate state store instances (which can cause contention issues),
-   * this method converts an existing read-only store to a writable store that can commit changes.
+   * This method enables an important optimization pattern for stateful operations where the same
+   * state store needs to be accessed for both reading and writing within a task. Instead of
+   * opening two separate state store instances (which can cause contention issues), this method
+   * converts an existing read-only store to a writable store that can commit changes.
    *
    * This approach is particularly beneficial when:
-   * - A stateful operation needs to first read the existing state, then update it
-   * - The state store has locking mechanisms that prevent concurrent access
-   * - Multiple state store connections would cause unnecessary resource duplication
+   *   - A stateful operation needs to first read the existing state, then update it
+   *   - The state store has locking mechanisms that prevent concurrent access
+   *   - Multiple state store connections would cause unnecessary resource duplication
    *
-   * @param readStore The existing read-only store instance to convert to a writable store
-   * @param version The version of the state store (must match the read store's version)
-   * @param uniqueId Optional unique identifier for checkpointing
-   * @return A writable StateStore instance that can be used to update and commit changes
+   * @param readStore
+   *   The existing read-only store instance to convert to a writable store
+   * @param version
+   *   The version of the state store (must match the read store's version)
+   * @param uniqueId
+   *   Optional unique identifier for checkpointing
+   * @return
+   *   A writable StateStore instance that can be used to update and commit changes
    */
   def upgradeReadStoreToWriteStore(
       readStore: ReadStateStore,
@@ -811,21 +828,22 @@ trait StateStoreProvider {
       forceSnapshotOnCommit: Boolean = false): StateStore =
     getStore(version, uniqueId, forceSnapshotOnCommit)
 
-
   /** Optional method for providers to allow for background maintenance (e.g. compactions) */
-  def doMaintenance(): Unit = { }
+  def doMaintenance(): Unit = {}
 
   /**
    * Optional custom metrics that the implementation may want to report.
-   * @note The StateStore objects created by this provider must report the same custom metrics
-   * (specifically, same names) through `StateStore.metrics.customMetrics`.
+   * @note
+   *   The StateStore objects created by this provider must report the same custom metrics
+   *   (specifically, same names) through `StateStore.metrics.customMetrics`.
    */
   def supportedCustomMetrics: Seq[StateStoreCustomMetric] = Nil
 
   /**
    * Optional custom state store instance metrics that the implementation may want to report.
-   * @note The StateStore objects created by this provider must report the same instance metrics
-   * (specifically, same names) through `StateStore.metrics.instanceMetrics`.
+   * @note
+   *   The StateStore objects created by this provider must report the same instance metrics
+   *   (specifically, same names) through `StateStore.metrics.instanceMetrics`.
    */
   def supportedInstanceMetrics: Seq[StateStoreInstanceMetric] = Seq.empty
 }
@@ -833,9 +851,9 @@ trait StateStoreProvider {
 object StateStoreProvider extends Logging {
 
   /**
-   * The state store coordinator reference used to report events such as snapshot uploads from
-   * the state store providers.
-   * For all other messages, refer to the coordinator reference in the [[StateStore]] object.
+   * The state store coordinator reference used to report events such as snapshot uploads from the
+   * state store providers. For all other messages, refer to the coordinator reference in the
+   * [[StateStore]] object.
    */
   @GuardedBy("this")
   private var stateStoreCoordinatorRef: StateStoreCoordinatorRef = _
@@ -869,8 +887,16 @@ object StateStoreProvider extends Logging {
       stateSchemaProvider: Option[StateSchemaProvider]): StateStoreProvider = {
     hadoopConf.set(StreamExecution.RUN_ID_KEY, providerId.queryRunId.toString)
     val provider = create(storeConf.providerClass)
-    provider.init(providerId.storeId, keySchema, valueSchema, keyStateEncoderSpec,
-      useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey, stateSchemaProvider)
+    provider.init(
+      providerId.storeId,
+      keySchema,
+      valueSchema,
+      keyStateEncoderSpec,
+      useColumnFamilies,
+      storeConf,
+      hadoopConf,
+      useMultipleValuesPerKey,
+      stateSchemaProvider)
     provider
   }
 
@@ -885,7 +911,8 @@ object StateStoreProvider extends Logging {
       stateStoreId: StateStoreId,
       conf: StateStoreConf): Unit = {
     if (conf.formatValidationEnabled) {
-      val validationError = UnsafeRowUtils.validateStructuralIntegrityWithReason(keyRow, keySchema)
+      val validationError =
+        UnsafeRowUtils.validateStructuralIntegrityWithReason(keyRow, keySchema)
       validationError.foreach { error =>
         throw StateStoreErrors.keyRowFormatValidationFailure(error, stateStoreId.toString)
       }
@@ -901,19 +928,17 @@ object StateStoreProvider extends Logging {
   }
 
   /**
-   * If file checksum is enabled, then when we delete store files, using fm.delete,
-   * then the corresponding checksum file would be deleted too. But there are situations
-   * where we can have orphan checksum files (i.e. the main file no longer exist),
-   * so we need to delete them too:
-   *   1. If the file was created when file checksum was enabled, but then file checksum
-   *      was later disabled. In this case, fm.delete will not delete the checksum file.
-   *      Since we use a specific fm (checksum file manager) when checksum is enabled.
-   *   2. We enable concurrent file deletion for the checksum file manager,
-   *      for perf improvement, hence there is a slight chance deleting the main file was
-   *      successful but the checksum file deletion failed. Hence, we need to clean it up by
-   *      ourselves. If we don't want this behavior we can turn off concurrent deletion
-   *      for the checksum file manager
-   * */
+   * If file checksum is enabled, then when we delete store files, using fm.delete, then the
+   * corresponding checksum file would be deleted too. But there are situations where we can have
+   * orphan checksum files (i.e. the main file no longer exist), so we need to delete them too:
+   *   1. If the file was created when file checksum was enabled, but then file checksum was later
+   *      disabled. In this case, fm.delete will not delete the checksum file. Since we use a
+   *      specific fm (checksum file manager) when checksum is enabled.
+   *   2. We enable concurrent file deletion for the checksum file manager, for perf improvement,
+   *      hence there is a slight chance deleting the main file was successful but the checksum
+   *      file deletion failed. Hence, we need to clean it up by ourselves. If we don't want this
+   *      behavior we can turn off concurrent deletion for the checksum file manager
+   */
   private[streaming] def deleteOrphanChecksumFiles(
       fm: CheckpointFileManager,
       checksumFiles: Seq[ChecksumFile],
@@ -943,25 +968,29 @@ object StateStoreProvider extends Logging {
         } catch {
           case NonFatal(e) =>
             failedFiles += f.path
-            logWarning(log"Failed to delete orphan checksum file " +
-              log"${MDC(LogKeys.FILE_NAME, f.path)}", e)
+            logWarning(
+              log"Failed to delete orphan checksum file " +
+                log"${MDC(LogKeys.FILE_NAME, f.path)}",
+              e)
         }
       }
     }
 
     if (orphanChecksumFiles.nonEmpty) {
-      logInfo(log"Deleted orphan checksum files older than version " +
-        log"${MDC(LogKeys.FILE_VERSION, minVersionToRetain)} " +
-        log"(timeTakenMs = ${MDC(LogKeys.DURATION, dur)}) - " +
-        log"Orphan files: ${MDC(LogKeys.FILE_NAME, orphanChecksumFiles.mkString(", "))}" +
-        log"Failed to Delete: ${MDC(LogKeys.FILE_NAME, failedFiles.mkString(", "))}")
+      logInfo(
+        log"Deleted orphan checksum files older than version " +
+          log"${MDC(LogKeys.FILE_VERSION, minVersionToRetain)} " +
+          log"(timeTakenMs = ${MDC(LogKeys.DURATION, dur)}) - " +
+          log"Orphan files: ${MDC(LogKeys.FILE_NAME, orphanChecksumFiles.mkString(", "))}" +
+          log"Failed to Delete: ${MDC(LogKeys.FILE_NAME, failedFiles.mkString(", "))}")
     }
   }
 
   /**
    * Get the runId from the provided hadoopConf. If it is not found, an error will be thrown.
    *
-   * @param hadoopConf Hadoop configuration used by the StateStore to save state data
+   * @param hadoopConf
+   *   Hadoop configuration used by the StateStore to save state data
    */
   private[state] def getRunId(hadoopConf: Configuration): String = {
     val runId = hadoopConf.get(StreamExecution.RUN_ID_KEY)
@@ -970,10 +999,10 @@ object StateStoreProvider extends Logging {
   }
 
   /**
-   * Create the state store coordinator reference which will be reused across state store providers
-   * in the executor.
-   * This coordinator reference should only be used to report events from store providers regarding
-   * snapshot uploads to avoid lock contention with other coordinator RPC messages.
+   * Create the state store coordinator reference which will be reused across state store
+   * providers in the executor. This coordinator reference should only be used to report events
+   * from store providers regarding snapshot uploads to avoid lock contention with other
+   * coordinator RPC messages.
    */
   private[state] def coordinatorRef: Option[StateStoreCoordinatorRef] = synchronized {
     val env = SparkEnv.get
@@ -986,8 +1015,9 @@ object StateStoreProvider extends Logging {
         logDebug("Getting StateStoreCoordinatorRef")
         stateStoreCoordinatorRef = StateStoreCoordinatorRef.forExecutor(env)
       }
-      logInfo(log"Retrieved reference to StateStoreCoordinator: " +
-        log"${MDC(LogKeys.STATE_STORE_COORDINATOR, stateStoreCoordinatorRef)}")
+      logInfo(
+        log"Retrieved reference to StateStoreCoordinator: " +
+          log"${MDC(LogKeys.STATE_STORE_COORDINATOR, stateStoreCoordinatorRef)}")
       Some(stateStoreCoordinatorRef)
     } else {
       stateStoreCoordinatorRef = null
@@ -1004,17 +1034,23 @@ object StateStoreProvider extends Logging {
 trait SupportsFineGrainedReplay {
 
   /**
-   * Return an instance of [[StateStore]] representing state data of the given version.
-   * The State Store will be constructed from the snapshot at snapshotVersion, and applying delta
-   * files up to the endVersion. If there is no snapshot file at snapshotVersion, an exception will
-   * be thrown.
+   * Return an instance of [[StateStore]] representing state data of the given version. The State
+   * Store will be constructed from the snapshot at snapshotVersion, and applying delta files up
+   * to the endVersion. If there is no snapshot file at snapshotVersion, an exception will be
+   * thrown.
    *
-   * @param snapshotVersion checkpoint version of the snapshot to start with
-   * @param endVersion   checkpoint version to end with
-   * @param readOnly whether the state store should be read-only
-   * @param snapshotVersionStateStoreCkptId state store checkpoint ID of the snapshot version
-   * @param endVersionStateStoreCkptId state store checkpoint ID of the end version
-   * @return An instance of [[StateStore]] representing state data of the given version
+   * @param snapshotVersion
+   *   checkpoint version of the snapshot to start with
+   * @param endVersion
+   *   checkpoint version to end with
+   * @param readOnly
+   *   whether the state store should be read-only
+   * @param snapshotVersionStateStoreCkptId
+   *   state store checkpoint ID of the snapshot version
+   * @param endVersionStateStoreCkptId
+   *   state store checkpoint ID of the end version
+   * @return
+   *   An instance of [[StateStore]] representing state data of the given version
    */
   def replayStateFromSnapshot(
       snapshotVersion: Long,
@@ -1024,17 +1060,21 @@ trait SupportsFineGrainedReplay {
       endVersionStateStoreCkptId: Option[String] = None): StateStore
 
   /**
-   * Return an instance of [[ReadStateStore]] representing state data of the given version.
-   * The State Store will be constructed from the snapshot at snapshotVersion, and applying delta
-   * files up to the endVersion. If there is no snapshot file at snapshotVersion, an exception will
-   * be thrown.
-   * Only implement this if there is read-only optimization for the state store.
+   * Return an instance of [[ReadStateStore]] representing state data of the given version. The
+   * State Store will be constructed from the snapshot at snapshotVersion, and applying delta
+   * files up to the endVersion. If there is no snapshot file at snapshotVersion, an exception
+   * will be thrown. Only implement this if there is read-only optimization for the state store.
    *
-   * @param snapshotVersion checkpoint version of the snapshot to start with
-   * @param endVersion   checkpoint version to end with
-   * @param snapshotVersionStateStoreCkptId state store checkpoint ID of the snapshot version
-   * @param endVersionStateStoreCkptId state store checkpoint ID of the end version
-   * @return An instance of [[ReadStateStore]] representing state data of the given version
+   * @param snapshotVersion
+   *   checkpoint version of the snapshot to start with
+   * @param endVersion
+   *   checkpoint version to end with
+   * @param snapshotVersionStateStoreCkptId
+   *   state store checkpoint ID of the snapshot version
+   * @param endVersionStateStoreCkptId
+   *   state store checkpoint ID of the end version
+   * @return
+   *   An instance of [[ReadStateStore]] representing state data of the given version
    */
   def replayReadStateFromSnapshot(
       snapshotVersion: Long,
@@ -1051,32 +1091,36 @@ trait SupportsFineGrainedReplay {
   }
 
   /**
-   * Return an iterator that reads all the entries of changelogs from startVersion to
-   * endVersion.
-   * Each record is represented by a tuple of (recordType: [[RecordType.Value]], key: [[UnsafeRow]],
-   * value: [[UnsafeRow]], batchId: [[Long]])
-   * A put record is returned as a tuple(recordType, key, value, batchId)
-   * A delete record is return as a tuple(recordType, key, null, batchId)
+   * Return an iterator that reads all the entries of changelogs from startVersion to endVersion.
+   * Each record is represented by a tuple of (recordType: [[RecordType.Value]], key:
+   * [[UnsafeRow]], value: [[UnsafeRow]], batchId: [[Long]]) A put record is returned as a
+   * tuple(recordType, key, value, batchId) A delete record is return as a tuple(recordType, key,
+   * null, batchId)
    *
-   * @param startVersion starting changelog version
-   * @param endVersion ending changelog version
-   * @param colFamilyNameOpt optional column family name to read from
-   * @param endVersionStateStoreCkptId state store checkpoint ID of the end version
-   * @return iterator that gives tuple(recordType: [[RecordType.Value]], nested key: [[UnsafeRow]],
-   *         nested value: [[UnsafeRow]], batchId: [[Long]])
+   * @param startVersion
+   *   starting changelog version
+   * @param endVersion
+   *   ending changelog version
+   * @param colFamilyNameOpt
+   *   optional column family name to read from
+   * @param endVersionStateStoreCkptId
+   *   state store checkpoint ID of the end version
+   * @return
+   *   iterator that gives tuple(recordType: [[RecordType.Value]], nested key: [[UnsafeRow]],
+   *   nested value: [[UnsafeRow]], batchId: [[Long]])
    */
   def getStateStoreChangeDataReader(
       startVersion: Long,
       endVersion: Long,
       colFamilyNameOpt: Option[String] = None,
-      endVersionStateStoreCkptId: Option[String] = None):
-    NextIterator[(RecordType.Value, UnsafeRow, UnsafeRow, Long)]
+      endVersionStateStoreCkptId: Option[String] = None)
+      : NextIterator[(RecordType.Value, UnsafeRow, UnsafeRow, Long)]
 }
 
 /**
- * Unique identifier for a provider, used to identify when providers can be reused.
- * Note that `queryRunId` is used uniquely identify a provider, so that the same provider
- * instance is not reused across query restarts.
+ * Unique identifier for a provider, used to identify when providers can be reused. Note that
+ * `queryRunId` is used uniquely identify a provider, so that the same provider instance is not
+ * reused across query restarts.
  */
 case class StateStoreProviderId(storeId: StateStoreId, queryRunId: UUID) {
   override def toString: String = {
@@ -1089,19 +1133,23 @@ object StateStoreProviderId {
       stateInfo: StatefulOperatorStateInfo,
       partitionIndex: Int,
       storeName: String): StateStoreProviderId = {
-    val storeId = StateStoreId(
-      stateInfo.checkpointLocation, stateInfo.operatorId, partitionIndex, storeName)
+    val storeId =
+      StateStoreId(stateInfo.checkpointLocation, stateInfo.operatorId, partitionIndex, storeName)
     StateStoreProviderId(storeId, stateInfo.queryRunId)
   }
 }
 
 /**
  * Unique identifier for a bunch of keyed state data.
- * @param checkpointRootLocation Root directory where all the state data of a query is stored
- * @param operatorId Unique id of a stateful operator
- * @param partitionId Index of the partition of an operators state data
- * @param storeName Optional, name of the store. Each partition can optionally use multiple state
- *                  stores, but they have to be identified by distinct names.
+ * @param checkpointRootLocation
+ *   Root directory where all the state data of a query is stored
+ * @param operatorId
+ *   Unique id of a stateful operator
+ * @param partitionId
+ *   Index of the partition of an operators state data
+ * @param storeName
+ *   Optional, name of the store. Each partition can optionally use multiple state stores, but
+ *   they have to be identified by distinct names.
  */
 case class StateStoreId(
     checkpointRootLocation: String,
@@ -1144,8 +1192,8 @@ class UnsafeRowPair(var key: UnsafeRow = null, var value: UnsafeRow = null) {
 
 /**
  * Companion object to [[StateStore]] that provides helper methods to create and retrieve stores
- * by their unique ids. In addition, when a SparkContext is active (i.e. SparkEnv.get is not null),
- * it also runs a periodic background task to do maintenance on the loaded stores. For each
+ * by their unique ids. In addition, when a SparkContext is active (i.e. SparkEnv.get is not
+ * null), it also runs a periodic background task to do maintenance on the loaded stores. For each
  * store, it uses the [[StateStoreCoordinator]] to ensure whether the current loaded instance of
  * the store is the active instance. Accordingly, it either keeps it loaded and performs
  * maintenance, or unloads the store.
@@ -1181,10 +1229,10 @@ object StateStore extends Logging {
       // The coordinator will handle whether tracking is active for this batch
       // If tracking is not active, it will just reply without processing
       StateStoreProvider.coordinatorRef.foreach(
-        _.reportStateStoreCommit(providerId, version, stateStoreId.storeName)
-      )
-      logDebug(log"Reported commit for store " +
-        log"${MDC(STATE_STORE_ID, stateStoreId)} at version ${MDC(VERSION_NUM, version)}")
+        _.reportStateStoreCommit(providerId, version, stateStoreId.storeName))
+      logDebug(
+        log"Reported commit for store " +
+          log"${MDC(STATE_STORE_ID, stateStoreId)} at version ${MDC(VERSION_NUM, version)}")
     } catch {
       case NonFatal(e) =>
         // Log but don't fail the commit if reporting fails
@@ -1196,8 +1244,8 @@ object StateStore extends Logging {
    * Runs the `task` periodically and bubbles any exceptions that it encounters.
    *
    * Note: exceptions in the maintenance thread pool are caught and logged; the associated
-   * StateStoreProvider is also unloaded. Any exception that happens in the MaintenanceTask
-   * is indeed exceptional and thus we let it propagate.
+   * StateStoreProvider is also unloaded. Any exception that happens in the MaintenanceTask is
+   * indeed exceptional and thus we let it propagate.
    */
   class MaintenanceTask(periodMs: Long, task: => Unit) {
     private val executor =
@@ -1215,8 +1263,8 @@ object StateStore extends Logging {
       }
     }
 
-    private val future: ScheduledFuture[_] = executor.scheduleAtFixedRate(
-      runnable, periodMs, periodMs, TimeUnit.MILLISECONDS)
+    private val future: ScheduledFuture[_] =
+      executor.scheduleAtFixedRate(runnable, periodMs, periodMs, TimeUnit.MILLISECONDS)
 
     def stop(): Unit = {
       future.cancel(false)
@@ -1227,15 +1275,15 @@ object StateStore extends Logging {
   }
 
   /**
-   * Thread Pool that runs maintenance on partitions that are scheduled by
-   * MaintenanceTask periodically
+   * Thread Pool that runs maintenance on partitions that are scheduled by MaintenanceTask
+   * periodically
    */
   class MaintenanceThreadPool(
       numThreads: Int,
       shutdownTimeout: Long,
       forceShutdownTimeout: Long) {
-    private val threadPool = ThreadUtils.newDaemonFixedThreadPool(
-      numThreads, "state-store-maintenance-thread")
+    private val threadPool =
+      ThreadUtils.newDaemonFixedThreadPool(numThreads, "state-store-maintenance-thread")
 
     def execute(runnable: Runnable): Unit = {
       threadPool.execute(runnable)
@@ -1249,8 +1297,8 @@ object StateStore extends Logging {
       if (!threadPool.awaitTermination(shutdownTimeout, TimeUnit.SECONDS)) {
         logWarning(
           log"MaintenanceThreadPool failed to terminate within " +
-          log"waitTimeout=${MDC(LogKeys.TIMEOUT, shutdownTimeout)} seconds, " +
-          log"forcefully shutting down now.")
+            log"waitTimeout=${MDC(LogKeys.TIMEOUT, shutdownTimeout)} seconds, " +
+            log"forcefully shutting down now.")
         threadPool.shutdownNow() // Cancel currently executing tasks
 
         // Wait a while for tasks to respond to being cancelled
@@ -1288,8 +1336,15 @@ object StateStore extends Logging {
     if (version < 0) {
       throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
     }
-    val (storeProvider, _) = getStateStoreProvider(storeProviderId, keySchema, valueSchema,
-      keyStateEncoderSpec, useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey,
+    val (storeProvider, _) = getStateStoreProvider(
+      storeProviderId,
+      keySchema,
+      valueSchema,
+      keyStateEncoderSpec,
+      useColumnFamilies,
+      storeConf,
+      hadoopConf,
+      useMultipleValuesPerKey,
       stateSchemaBroadcast)
     storeProvider.getReadStore(version, stateStoreCkptId)
   }
@@ -1297,29 +1352,43 @@ object StateStore extends Logging {
   /**
    * Converts an existing read-only state store to a writable state store.
    *
-   * This method provides an optimization for stateful operations that need to both read and update
-   * state within the same task. Instead of opening separate read and write instances (which may
-   * cause resource contention or duplication), this method reuses the already loaded read store
-   * and transforms it into a writable store.
+   * This method provides an optimization for stateful operations that need to both read and
+   * update state within the same task. Instead of opening separate read and write instances
+   * (which may cause resource contention or duplication), this method reuses the already loaded
+   * read store and transforms it into a writable store.
    *
-   * The optimization is particularly valuable for state stores with expensive initialization costs
-   * or limited concurrency capabilities (like RocksDB). It eliminates redundant loading of the same
-   * state data and reduces resource usage.
+   * The optimization is particularly valuable for state stores with expensive initialization
+   * costs or limited concurrency capabilities (like RocksDB). It eliminates redundant loading of
+   * the same state data and reduces resource usage.
    *
-   * @param readStore The existing read-only state store to convert to a writable store
-   * @param storeProviderId Unique identifier for the state store provider
-   * @param keySchema Schema of the state store keys
-   * @param valueSchema Schema of the state store values
-   * @param keyStateEncoderSpec Specification for encoding the state keys
-   * @param version The version of the state store (must match the read store's version)
-   * @param stateStoreCkptId Optional checkpoint identifier for the state store
-   * @param stateSchemaBroadcast Optional broadcast of the state schema
-   * @param useColumnFamilies Whether to use column families in the state store
-   * @param storeConf Configuration for the state store
-   * @param hadoopConf Hadoop configuration
-   * @param useMultipleValuesPerKey Whether the store supports multiple values per key
-   * @return A writable StateStore instance that can be used to update and commit changes
-   * @throws SparkException If the store cannot be loaded or if there's insufficient memory
+   * @param readStore
+   *   The existing read-only state store to convert to a writable store
+   * @param storeProviderId
+   *   Unique identifier for the state store provider
+   * @param keySchema
+   *   Schema of the state store keys
+   * @param valueSchema
+   *   Schema of the state store values
+   * @param keyStateEncoderSpec
+   *   Specification for encoding the state keys
+   * @param version
+   *   The version of the state store (must match the read store's version)
+   * @param stateStoreCkptId
+   *   Optional checkpoint identifier for the state store
+   * @param stateSchemaBroadcast
+   *   Optional broadcast of the state schema
+   * @param useColumnFamilies
+   *   Whether to use column families in the state store
+   * @param storeConf
+   *   Configuration for the state store
+   * @param hadoopConf
+   *   Hadoop configuration
+   * @param useMultipleValuesPerKey
+   *   Whether the store supports multiple values per key
+   * @return
+   *   A writable StateStore instance that can be used to update and commit changes
+   * @throws SparkException
+   *   If the store cannot be loaded or if there's insufficient memory
    */
   def getWriteStore(
       readStore: ReadStateStore,
@@ -1338,10 +1407,20 @@ object StateStore extends Logging {
     if (version < 0) {
       throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
     }
-    val (storeProvider, shouldForceSnapshotUpload) = getStateStoreProvider(storeProviderId,
-      keySchema, valueSchema, keyStateEncoderSpec, useColumnFamilies, storeConf, hadoopConf,
-      useMultipleValuesPerKey, stateSchemaBroadcast)
-    storeProvider.upgradeReadStoreToWriteStore(readStore, version, stateStoreCkptId,
+    val (storeProvider, shouldForceSnapshotUpload) = getStateStoreProvider(
+      storeProviderId,
+      keySchema,
+      valueSchema,
+      keyStateEncoderSpec,
+      useColumnFamilies,
+      storeConf,
+      hadoopConf,
+      useMultipleValuesPerKey,
+      stateSchemaBroadcast)
+    storeProvider.upgradeReadStoreToWriteStore(
+      readStore,
+      version,
+      stateStoreCkptId,
       shouldForceSnapshotUpload)
   }
 
@@ -1362,9 +1441,16 @@ object StateStore extends Logging {
     if (version < 0) {
       throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
     }
-    val (storeProvider, shouldForceSnapshotUpload) = getStateStoreProvider(storeProviderId,
-      keySchema, valueSchema, keyStateEncoderSpec, useColumnFamilies, storeConf, hadoopConf,
-      useMultipleValuesPerKey, stateSchemaBroadcast)
+    val (storeProvider, shouldForceSnapshotUpload) = getStateStoreProvider(
+      storeProviderId,
+      keySchema,
+      valueSchema,
+      keyStateEncoderSpec,
+      useColumnFamilies,
+      storeConf,
+      hadoopConf,
+      useMultipleValuesPerKey,
+      stateSchemaBroadcast)
     storeProvider.getStore(version, stateStoreCkptId, shouldForceSnapshotUpload)
   }
   // scalastyle:on
@@ -1393,17 +1479,23 @@ object StateStore extends Logging {
         loadedProviders.getOrElseUpdate(
           storeProviderId,
           StateStoreProvider.createAndInit(
-            storeProviderId, keySchema, valueSchema, keyStateEncoderSpec,
-            useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey,
-            stateSchemaBroadcast)
-        )
+            storeProviderId,
+            keySchema,
+            valueSchema,
+            keyStateEncoderSpec,
+            useColumnFamilies,
+            storeConf,
+            hadoopConf,
+            useMultipleValuesPerKey,
+            stateSchemaBroadcast))
       }
 
       if (loadTimeMs > 2000L) {
-        logWarning(log"Loaded state store provider in loadTimeMs=" +
-          log"${MDC(LogKeys.LOAD_TIME, loadTimeMs)} " +
-          log"for storeId=${MDC(LogKeys.STORE_ID, storeProviderId.storeId.toString)} and " +
-          log"queryRunId=${MDC(LogKeys.QUERY_RUN_ID, storeProviderId.queryRunId)}")
+        logWarning(
+          log"Loaded state store provider in loadTimeMs=" +
+            log"${MDC(LogKeys.LOAD_TIME, loadTimeMs)} " +
+            log"for storeId=${MDC(LogKeys.STORE_ID, storeProviderId.storeId.toString)} and " +
+            log"queryRunId=${MDC(LogKeys.QUERY_RUN_ID, storeProviderId.queryRunId)}")
       }
 
       // Only tell the state store coordinator we are active if we will remain active
@@ -1412,20 +1504,27 @@ object StateStore extends Logging {
       val shouldForceSnapshotUpload = if (!storeConf.unloadOnCommit) {
         val otherProviderIds = loadedProviders.keys.filter(_ != storeProviderId).toSeq
         val providerStatus = reportActiveStoreInstance(storeProviderId, otherProviderIds)
-        val taskContextIdLogLine = Option(TaskContext.get()).map { tc =>
-          log"taskId=${MDC(LogKeys.TASK_ID, tc.taskAttemptId())}"
-        }.getOrElse(log"")
+        val taskContextIdLogLine = Option(TaskContext.get())
+          .map { tc =>
+            log"taskId=${MDC(LogKeys.TASK_ID, tc.taskAttemptId())}"
+          }
+          .getOrElse(log"")
         providerStatus.providerIdsToUnload.foreach(id => {
-          loadedProviders.remove(id).foreach( provider => {
-            // Trigger maintenance thread to immediately do maintenance on and close the provider.
-            // Doing maintenance first allows us to do maintenance for a constantly-moving state
-            // store.
-            logInfo(log"Submitted maintenance from task thread to close " +
-              log"provider=${MDC(LogKeys.STATE_STORE_PROVIDER_ID, id)}." + taskContextIdLogLine +
-              log"Removed provider from loadedProviders")
-            submitMaintenanceWorkForProvider(
-              id, provider, storeConf, MaintenanceTaskType.FromTaskThread)
-          })
+          loadedProviders
+            .remove(id)
+            .foreach(provider => {
+              // Trigger maintenance thread to immediately do maintenance on and close the provider.
+              // Doing maintenance first allows us to do maintenance for a constantly-moving state
+              // store.
+              logInfo(log"Submitted maintenance from task thread to close " +
+                log"provider=${MDC(LogKeys.STATE_STORE_PROVIDER_ID, id)}." + taskContextIdLogLine +
+                log"Removed provider from loadedProviders")
+              submitMaintenanceWorkForProvider(
+                id,
+                provider,
+                storeConf,
+                MaintenanceTaskType.FromTaskThread)
+            })
         })
         providerStatus.shouldForceSnapshotUpload
       } else {
@@ -1438,21 +1537,21 @@ object StateStore extends Logging {
 
   /** Runs maintenance and then unload a state store provider */
   def doMaintenanceAndUnload(storeProviderId: StateStoreProviderId): Unit = {
-    loadedProviders.synchronized {
-      loadedProviders.remove(storeProviderId)
-    }.foreach { provider =>
-      provider.doMaintenance()
-      provider.close()
-    }
+    loadedProviders
+      .synchronized {
+        loadedProviders.remove(storeProviderId)
+      }
+      .foreach { provider =>
+        provider.doMaintenance()
+        provider.close()
+      }
   }
 
   /**
-   * Unload a state store provider.
-   * If alreadyRemovedFromLoadedProviders is None, provider will be
-   * removed from loadedProviders and closed.
-   * If alreadyRemovedFromLoadedProviders is Some, provider will be closed
-   * using passed in provider.
-   * WARNING: CAN ONLY BE CALLED FROM MAINTENANCE THREAD!
+   * Unload a state store provider. If alreadyRemovedFromLoadedProviders is None, provider will be
+   * removed from loadedProviders and closed. If alreadyRemovedFromLoadedProviders is Some,
+   * provider will be closed using passed in provider. WARNING: CAN ONLY BE CALLED FROM
+   * MAINTENANCE THREAD!
    */
   def removeFromLoadedProvidersAndClose(
       storeProviderId: StateStoreProviderId,
@@ -1489,9 +1588,9 @@ object StateStore extends Logging {
   }
 
   /**
-   * Only used for unit tests. The function doesn't hold loadedProviders lock. Calling
-   * it can work-around a deadlock condition where a maintenance task is waiting for the lock
-   * */
+   * Only used for unit tests. The function doesn't hold loadedProviders lock. Calling it can
+   * work-around a deadlock condition where a maintenance task is waiting for the lock
+   */
   private[streaming] def stopMaintenanceTaskWithoutLock(): Unit = {
     if (maintenanceThreadPool != null) {
       maintenanceThreadPoolLock.synchronized {
@@ -1522,35 +1621,35 @@ object StateStore extends Logging {
     val maintenanceForceShutdownTimeout = storeConf.stateStoreMaintenanceForceShutdownTimeout
     loadedProviders.synchronized {
       if (SparkEnv.get != null && !isMaintenanceRunning && !storeConf.unloadOnCommit) {
-        maintenanceTask = new MaintenanceTask(
-          storeConf.maintenanceInterval,
-          task = { doMaintenance(storeConf) }
-        )
-        maintenanceThreadPool = new MaintenanceThreadPool(numMaintenanceThreads,
-          maintenanceShutdownTimeout, maintenanceForceShutdownTimeout)
+        maintenanceTask =
+          new MaintenanceTask(storeConf.maintenanceInterval, task = { doMaintenance(storeConf) })
+        maintenanceThreadPool = new MaintenanceThreadPool(
+          numMaintenanceThreads,
+          maintenanceShutdownTimeout,
+          maintenanceForceShutdownTimeout)
         logInfo("State Store maintenance task started")
       }
     }
   }
 
   // Wait until this partition can be processed
-  private def awaitProcessThisPartition(
-      id: StateStoreProviderId,
-      timeoutMs: Long): Boolean = maintenanceThreadPoolLock synchronized  {
-    val startTime = System.currentTimeMillis()
-    val endTime = startTime + timeoutMs
+  private def awaitProcessThisPartition(id: StateStoreProviderId, timeoutMs: Long): Boolean =
+    maintenanceThreadPoolLock synchronized {
+      val startTime = System.currentTimeMillis()
+      val endTime = startTime + timeoutMs
 
-    // If immediate processing fails, wait with timeout
-    var canProcessThisPartition = processThisPartition(id)
-    while (!canProcessThisPartition && System.currentTimeMillis() < endTime) {
-      maintenanceThreadPoolLock.wait(timeoutMs)
-      canProcessThisPartition = processThisPartition(id)
+      // If immediate processing fails, wait with timeout
+      var canProcessThisPartition = processThisPartition(id)
+      while (!canProcessThisPartition && System.currentTimeMillis() < endTime) {
+        maintenanceThreadPoolLock.wait(timeoutMs)
+        canProcessThisPartition = processThisPartition(id)
+      }
+      val elapsedTime = System.currentTimeMillis() - startTime
+      logInfo(
+        log"Waited for ${MDC(LogKeys.TOTAL_TIME, elapsedTime)} ms to be able to process " +
+          log"maintenance for partition ${MDC(LogKeys.STATE_STORE_PROVIDER_ID, id)}")
+      canProcessThisPartition
     }
-    val elapsedTime = System.currentTimeMillis() - startTime
-    logInfo(log"Waited for ${MDC(LogKeys.TOTAL_TIME, elapsedTime)} ms to be able to process " +
-      log"maintenance for partition ${MDC(LogKeys.STATE_STORE_PROVIDER_ID, id)}")
-    canProcessThisPartition
-  }
 
   private def doMaintenance(): Unit = doMaintenance(StateStoreConf.empty)
 
@@ -1566,8 +1665,8 @@ object StateStore extends Logging {
   }
 
   /**
-   * Execute background maintenance task in all the loaded store providers if they are still
-   * the active instances according to the coordinator.
+   * Execute background maintenance task in all the loaded store providers if they are still the
+   * active instances according to the coordinator.
    */
   private def doMaintenance(storeConf: StateStoreConf): Unit = {
     logDebug("Doing maintenance")
@@ -1586,38 +1685,50 @@ object StateStore extends Logging {
 
       if (processThisPartition(providerId)) {
         submitMaintenanceWorkForProvider(
-          providerId, provider, storeConf, MaintenanceTaskType.FromUnloadedProvidersQueue)
+          providerId,
+          provider,
+          storeConf,
+          MaintenanceTaskType.FromUnloadedProvidersQueue)
       } else {
         providersToRequeue += ((providerId, provider))
       }
     }
 
     if (providersToRequeue.nonEmpty) {
-      logInfo(log"Had to requeue ${MDC(LogKeys.SIZE, providersToRequeue.size)} providers " +
-        log"for maintenance in doMaintenance")
+      logInfo(
+        log"Had to requeue ${MDC(LogKeys.SIZE, providersToRequeue.size)} providers " +
+          log"for maintenance in doMaintenance")
     }
 
     providersToRequeue.foreach(unloadedProvidersToClose.offer)
 
-    loadedProviders.synchronized {
-      loadedProviders.toSeq
-    }.foreach { case (id, provider) =>
-      if (processThisPartition(id)) {
-        submitMaintenanceWorkForProvider(
-          id, provider, storeConf, MaintenanceTaskType.FromLoadedProviders)
-      } else {
-        logInfo(log"Not processing partition ${MDC(LogKeys.PARTITION_ID, id)} " +
-          log"for maintenance because it is currently " +
-          log"being processed")
+    loadedProviders
+      .synchronized {
+        loadedProviders.toSeq
       }
-    }
+      .foreach { case (id, provider) =>
+        if (processThisPartition(id)) {
+          submitMaintenanceWorkForProvider(
+            id,
+            provider,
+            storeConf,
+            MaintenanceTaskType.FromLoadedProviders)
+        } else {
+          logInfo(
+            log"Not processing partition ${MDC(LogKeys.PARTITION_ID, id)} " +
+              log"for maintenance because it is currently " +
+              log"being processed")
+        }
+      }
   }
 
   /**
    * Submits maintenance work for a provider to the maintenance thread pool.
    *
-   * @param id The StateStore provider ID to perform maintenance on
-   * @param provider The StateStore provider instance
+   * @param id
+   *   The StateStore provider ID to perform maintenance on
+   * @param provider
+   *   The StateStore provider instance
    */
   private def submitMaintenanceWorkForProvider(
       id: StateStoreProviderId,
@@ -1671,9 +1782,11 @@ object StateStore extends Logging {
           logInfo(log"Unloaded ${MDC(LogKeys.STATE_STORE_PROVIDER_ID, id)}")
         } catch {
           case NonFatal(e) =>
-            logWarning(log"Error doing maintenance on provider:" +
-              log" ${MDC(LogKeys.STATE_STORE_PROVIDER_ID, id)}. " +
-              log"Could not unload state store provider", e)
+            logWarning(
+              log"Error doing maintenance on provider:" +
+                log" ${MDC(LogKeys.STATE_STORE_PROVIDER_ID, id)}. " +
+                log"Could not unload state store provider",
+              e)
             // When we get a non-fatal exception, we just unload the provider.
             //
             // By not bubbling the exception to the maintenance task thread or the query execution
@@ -1723,15 +1836,17 @@ object StateStore extends Logging {
       val executorId = SparkEnv.get.blockManager.blockManagerId.executorId
       val storeStatus = coordinatorRef
         .map(_.reportActiveInstance(storeProviderId, host, executorId, otherProviderIds))
-        .getOrElse(ReportActiveInstanceResponse(
-          shouldForceSnapshotUpload = false,
-          providerIdsToUnload = Seq.empty[StateStoreProviderId]))
+        .getOrElse(
+          ReportActiveInstanceResponse(
+            shouldForceSnapshotUpload = false,
+            providerIdsToUnload = Seq.empty[StateStoreProviderId]))
       logInfo(log"Reported that the loaded instance " +
         log"${MDC(LogKeys.STATE_STORE_PROVIDER_ID, storeProviderId)} is active" +
         log", shouldForceSnapshotUpload=" +
         log"${MDC(LogKeys.STREAM_SHOULD_FORCE_SNAPSHOT, storeStatus.shouldForceSnapshotUpload)}")
-      logDebug(log"The loaded instances are going to unload: " +
-        log"${MDC(LogKeys.STATE_STORE_PROVIDER_IDS, storeStatus.providerIdsToUnload)}")
+      logDebug(
+        log"The loaded instances are going to unload: " +
+          log"${MDC(LogKeys.STATE_STORE_PROVIDER_IDS, storeStatus.providerIdsToUnload)}")
       storeStatus
     } else {
       ReportActiveInstanceResponse(
@@ -1764,8 +1879,9 @@ object StateStore extends Logging {
         logDebug("Getting StateStoreCoordinatorRef")
         _coordRef = StateStoreCoordinatorRef.forExecutor(env)
       }
-      logInfo(log"Retrieved reference to StateStoreCoordinator: " +
-        log"${MDC(LogKeys.STATE_STORE_COORDINATOR, _coordRef)}")
+      logInfo(
+        log"Retrieved reference to StateStoreCoordinator: " +
+          log"${MDC(LogKeys.STATE_STORE_COORDINATOR, _coordRef)}")
       Some(_coordRef)
     } else {
       _coordRef = null

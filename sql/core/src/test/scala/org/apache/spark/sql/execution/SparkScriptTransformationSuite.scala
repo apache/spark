@@ -22,7 +22,9 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.test.SharedSparkSession
 
-class SparkScriptTransformationSuite extends BaseScriptTransformationSuite with SharedSparkSession {
+class SparkScriptTransformationSuite
+    extends BaseScriptTransformationSuite
+    with SharedSparkSession {
   import testImplicits._
 
   override protected def defaultSerDe(): String = "row-format-delimited"
@@ -36,8 +38,7 @@ class SparkScriptTransformationSuite extends BaseScriptTransformationSuite with 
       script = script,
       output = output,
       child = child,
-      ioschema = ioschema
-    )
+      ioschema = ioschema)
   }
 
   test("SPARK-32106: TRANSFORM with serde without hive should throw exception") {

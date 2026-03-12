@@ -27,8 +27,10 @@ import org.apache.spark.sql.execution.columnar.compression.{AllCompressionScheme
 import org.apache.spark.sql.types._
 
 private[columnar] trait ColumnBuilder {
+
   /**
-   * Initializes with an approximate lower bound on the expected number of elements in this column.
+   * Initializes with an approximate lower bound on the expected number of elements in this
+   * column.
    */
   def initialize(initialSize: Int, columnName: String = "", useCompression: Boolean = false): Unit
 
@@ -51,7 +53,7 @@ private[columnar] trait ColumnBuilder {
 private[columnar] class BasicColumnBuilder[JvmType](
     val columnStats: ColumnStats,
     val columnType: ColumnType[JvmType])
-  extends ColumnBuilder {
+    extends ColumnBuilder {
 
   protected var columnName: String = _
 
@@ -87,72 +89,73 @@ private[columnar] class BasicColumnBuilder[JvmType](
 }
 
 private[columnar] class NullColumnBuilder
-  extends BasicColumnBuilder[Any](new ObjectColumnStats(NullType), NULL)
-  with NullableColumnBuilder
+    extends BasicColumnBuilder[Any](new ObjectColumnStats(NullType), NULL)
+    with NullableColumnBuilder
 
 private[columnar] abstract class ComplexColumnBuilder[JvmType](
     columnStats: ColumnStats,
     columnType: ColumnType[JvmType])
-  extends BasicColumnBuilder[JvmType](columnStats, columnType)
-  with NullableColumnBuilder
+    extends BasicColumnBuilder[JvmType](columnStats, columnType)
+    with NullableColumnBuilder
 
 private[columnar] abstract class NativeColumnBuilder[T <: PhysicalDataType](
     override val columnStats: ColumnStats,
     override val columnType: NativeColumnType[T])
-  extends BasicColumnBuilder[T#InternalType](columnStats, columnType)
-  with NullableColumnBuilder
-  with AllCompressionSchemes
-  with CompressibleColumnBuilder[T]
+    extends BasicColumnBuilder[T#InternalType](columnStats, columnType)
+    with NullableColumnBuilder
+    with AllCompressionSchemes
+    with CompressibleColumnBuilder[T]
 
-private[columnar]
-class BooleanColumnBuilder extends NativeColumnBuilder(new BooleanColumnStats, BOOLEAN)
+private[columnar] class BooleanColumnBuilder
+    extends NativeColumnBuilder(new BooleanColumnStats, BOOLEAN)
 
-private[columnar]
-class ByteColumnBuilder extends NativeColumnBuilder(new ByteColumnStats, BYTE)
+private[columnar] class ByteColumnBuilder extends NativeColumnBuilder(new ByteColumnStats, BYTE)
 
-private[columnar] class ShortColumnBuilder extends NativeColumnBuilder(new ShortColumnStats, SHORT)
+private[columnar] class ShortColumnBuilder
+    extends NativeColumnBuilder(new ShortColumnStats, SHORT)
 
 private[columnar] class IntColumnBuilder extends NativeColumnBuilder(new IntColumnStats, INT)
 
 private[columnar] class LongColumnBuilder extends NativeColumnBuilder(new LongColumnStats, LONG)
 
-private[columnar] class FloatColumnBuilder extends NativeColumnBuilder(new FloatColumnStats, FLOAT)
+private[columnar] class FloatColumnBuilder
+    extends NativeColumnBuilder(new FloatColumnStats, FLOAT)
 
-private[columnar]
-class DoubleColumnBuilder extends NativeColumnBuilder(new DoubleColumnStats, DOUBLE)
+private[columnar] class DoubleColumnBuilder
+    extends NativeColumnBuilder(new DoubleColumnStats, DOUBLE)
 
-private[columnar]
-class StringColumnBuilder(dataType: StringType)
-  extends NativeColumnBuilder(new StringColumnStats(dataType), STRING(dataType))
+private[columnar] class StringColumnBuilder(dataType: StringType)
+    extends NativeColumnBuilder(new StringColumnStats(dataType), STRING(dataType))
 
-private[columnar]
-class BinaryColumnBuilder extends ComplexColumnBuilder(new BinaryColumnStats, BINARY)
+private[columnar] class BinaryColumnBuilder
+    extends ComplexColumnBuilder(new BinaryColumnStats, BINARY)
 
-private[columnar]
-class IntervalColumnBuilder extends ComplexColumnBuilder(new IntervalColumnStats, CALENDAR_INTERVAL)
+private[columnar] class IntervalColumnBuilder
+    extends ComplexColumnBuilder(new IntervalColumnStats, CALENDAR_INTERVAL)
 
-private[columnar]
-class VariantColumnBuilder extends ComplexColumnBuilder(new VariantColumnStats, VARIANT)
+private[columnar] class VariantColumnBuilder
+    extends ComplexColumnBuilder(new VariantColumnStats, VARIANT)
 
 private[columnar] class CompactDecimalColumnBuilder(dataType: DecimalType)
-  extends NativeColumnBuilder(new DecimalColumnStats(dataType), COMPACT_DECIMAL(dataType))
+    extends NativeColumnBuilder(new DecimalColumnStats(dataType), COMPACT_DECIMAL(dataType))
 
 private[columnar] class DecimalColumnBuilder(dataType: DecimalType)
-  extends ComplexColumnBuilder(new DecimalColumnStats(dataType), LARGE_DECIMAL(dataType))
+    extends ComplexColumnBuilder(new DecimalColumnStats(dataType), LARGE_DECIMAL(dataType))
 
 private[columnar] class StructColumnBuilder(dataType: StructType)
-  extends ComplexColumnBuilder(
-    new ObjectColumnStats(dataType), STRUCT(PhysicalStructType(dataType.fields)))
+    extends ComplexColumnBuilder(
+      new ObjectColumnStats(dataType),
+      STRUCT(PhysicalStructType(dataType.fields)))
 
 private[columnar] class ArrayColumnBuilder(dataType: ArrayType)
-  extends ComplexColumnBuilder(
-    new ObjectColumnStats(dataType),
-    ARRAY(PhysicalArrayType(dataType.elementType, dataType.containsNull)))
+    extends ComplexColumnBuilder(
+      new ObjectColumnStats(dataType),
+      ARRAY(PhysicalArrayType(dataType.elementType, dataType.containsNull)))
 
 private[columnar] class MapColumnBuilder(dataType: MapType)
-  extends ComplexColumnBuilder(
-    new ObjectColumnStats(dataType),
-    MAP(PhysicalMapType(dataType.keyType, dataType.valueType, dataType.valueContainsNull)))
+    extends ComplexColumnBuilder(
+      new ObjectColumnStats(dataType),
+      MAP(PhysicalMapType(dataType.keyType, dataType.valueType, dataType.valueContainsNull)))
 
 private[columnar] object ColumnBuilder {
   val DEFAULT_INITIAL_BUFFER_SIZE = 128 * 1024

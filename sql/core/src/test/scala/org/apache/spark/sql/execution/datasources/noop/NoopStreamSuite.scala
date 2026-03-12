@@ -34,7 +34,9 @@ class NoopStreamSuite extends StreamTest {
     val input = MemoryStream[Int]
     withTempDir { checkpointDir =>
       def testWithCheckpoint(): Unit = {
-        val query = input.toDF().writeStream
+        val query = input
+          .toDF()
+          .writeStream
           .option("checkpointLocation", checkpointDir.getAbsolutePath)
           .format("noop")
           .start()
@@ -93,4 +95,3 @@ class NoopStreamSuite extends StreamTest {
       .select($"value")
   }
 }
-

@@ -33,21 +33,26 @@ import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.util.ThreadUtils
 
 /**
- * Physical plan for a custom subquery that collects and transforms the broadcast key values.
- * This subquery retrieves the partition keys from the broadcast results based on the type of
- * [[HashedRelation]] returned. If a key is packed inside a Long, we extract it through
- * bitwise operations, otherwise we return it from the appropriate index of the [[UnsafeRow]].
+ * Physical plan for a custom subquery that collects and transforms the broadcast key values. This
+ * subquery retrieves the partition keys from the broadcast results based on the type of
+ * [[HashedRelation]] returned. If a key is packed inside a Long, we extract it through bitwise
+ * operations, otherwise we return it from the appropriate index of the [[UnsafeRow]].
  *
- * @param indices the indices of the join keys in the list of keys from the build side
- * @param buildKeys the join keys from the build side of the join used
- * @param child the BroadcastExchange or the AdaptiveSparkPlan with BroadcastQueryStageExec
- *              from the build side of the join
+ * @param indices
+ *   the indices of the join keys in the list of keys from the build side
+ * @param buildKeys
+ *   the join keys from the build side of the join used
+ * @param child
+ *   the BroadcastExchange or the AdaptiveSparkPlan with BroadcastQueryStageExec from the build
+ *   side of the join
  */
 case class SubqueryBroadcastExec(
     name: String,
     indices: Seq[Int],
     buildKeys: Seq[Expression],
-    child: SparkPlan) extends BaseSubqueryExec with UnaryExecNode {
+    child: SparkPlan)
+    extends BaseSubqueryExec
+    with UnaryExecNode {
 
   // `SubqueryBroadcastExec` is only used with `InSubqueryExec`. No one would reference this output,
   // so the exprId doesn't matter here. But it's important to correctly report the output length, so
@@ -79,7 +84,8 @@ case class SubqueryBroadcastExec(
     // relationFuture is used in "doExecute". Therefore we can get the execution id correctly here.
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
     SQLExecution.withThreadLocalCaptured[Array[InternalRow]](
-      session, SubqueryBroadcastExec.executionContext) {
+      session,
+      SubqueryBroadcastExec.executionContext) {
       // This will run in another thread. Set the execution id so that we can connect these jobs
       // with the correct execution.
       SQLExecution.withExecutionId(session, executionId) {
@@ -90,7 +96,8 @@ case class SubqueryBroadcastExec(
           indices.map { idx => HashJoin.extractKeyExprAt(buildKeys, idx) }
         } else {
           indices.map { idx =>
-            BoundReference(idx, buildKeys(idx).dataType, buildKeys(idx).nullable) }
+            BoundReference(idx, buildKeys(idx).dataType, buildKeys(idx).nullable)
+          }
         }
 
         val proj = UnsafeProjection.create(exprs)
@@ -134,6 +141,7 @@ case class SubqueryBroadcastExec(
 
 object SubqueryBroadcastExec {
   private[execution] val executionContext = ExecutionContext.fromExecutorService(
-    ThreadUtils.newDaemonCachedThreadPool("dynamicpruning",
+    ThreadUtils.newDaemonCachedThreadPool(
+      "dynamicpruning",
       SQLConf.get.getConf(StaticSQLConf.BROADCAST_EXCHANGE_MAX_THREAD_THRESHOLD)))
 }

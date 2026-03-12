@@ -22,8 +22,8 @@ import org.apache.spark.sql.catalyst.expressions.AttributeSet
 /**
  * A trait that overrides `references` using children output.
  *
- * It's unnecessary to rewrite attributes for `ReferenceAllColumns` since all of references
- * come from it's children.
+ * It's unnecessary to rewrite attributes for `ReferenceAllColumns` since all of references come
+ * from it's children.
  *
  * Note, the only used place is at [[QueryPlan.transformUpWithNewOutput]].
  */

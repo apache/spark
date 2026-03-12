@@ -21,8 +21,10 @@ import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BinaryArit
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.types.{AbstractDataType, DataType, IntegralType}
 
-abstract class BitAggregate extends DeclarativeAggregate with ExpectsInputTypes
-  with UnaryLike[Expression] {
+abstract class BitAggregate
+    extends DeclarativeAggregate
+    with ExpectsInputTypes
+    with UnaryLike[Expression] {
 
   val child: Expression
 
@@ -43,12 +45,11 @@ abstract class BitAggregate extends DeclarativeAggregate with ExpectsInputTypes
   override lazy val evaluateExpression: AttributeReference = bitAgg
 
   override lazy val updateExpressions: Seq[Expression] =
-    If(IsNull(bitAgg),
-      child,
-      If(IsNull(child), bitAgg, bitOperator(bitAgg, child))) :: Nil
+    If(IsNull(bitAgg), child, If(IsNull(child), bitAgg, bitOperator(bitAgg, child))) :: Nil
 
   override lazy val mergeExpressions: Seq[Expression] =
-    If(IsNull(bitAgg.left),
+    If(
+      IsNull(bitAgg.left),
       bitAgg.right,
       If(IsNull(bitAgg.right), bitAgg.left, bitOperator(bitAgg.left, bitAgg.right))) :: Nil
 }

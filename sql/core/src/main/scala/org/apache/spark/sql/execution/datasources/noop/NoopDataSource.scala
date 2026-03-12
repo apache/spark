@@ -30,8 +30,8 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.Utils
 
 /**
- * This is no-op datasource. It does not do anything besides consuming its input.
- * This can be useful for benchmarking or to cache data without any additional overhead.
+ * This is no-op datasource. It does not do anything besides consuming its input. This can be
+ * useful for benchmarking or to cache data without any additional overhead.
  */
 class NoopDataSource extends SimpleTableProvider with DataSourceRegister {
   override def shortName(): String = "noop"
@@ -52,8 +52,10 @@ private[noop] object NoopTable extends Table with SupportsWrite {
   override def toString: String = Utils.getFormattedClassName(this)
 }
 
-private[noop] object NoopWriteBuilder extends WriteBuilder
-  with SupportsTruncate with SupportsStreamingUpdateAsAppend {
+private[noop] object NoopWriteBuilder
+    extends WriteBuilder
+    with SupportsTruncate
+    with SupportsStreamingUpdateAsAppend {
   override def truncate(): WriteBuilder = this
   override def build(): Write = NoopWrite
 }
@@ -85,8 +87,8 @@ private[noop] object NoopWriter extends DataWriter[InternalRow] {
 }
 
 private[noop] object NoopStreamingWrite extends StreamingWrite {
-  override def createStreamingWriterFactory(
-      info: PhysicalWriteInfo): StreamingDataWriterFactory = NoopStreamingDataWriterFactory
+  override def createStreamingWriterFactory(info: PhysicalWriteInfo): StreamingDataWriterFactory =
+    NoopStreamingDataWriterFactory
   override def useCommitCoordinator(): Boolean = false
   override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}
   override def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}

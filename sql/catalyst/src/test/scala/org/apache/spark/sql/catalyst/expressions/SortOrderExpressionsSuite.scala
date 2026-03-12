@@ -46,8 +46,8 @@ class SortOrderExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper 
     val s1 = Literal.create("T", StringType)
     val s2 = Literal.create("This is longer than 8 characters", StringType)
     val bin1 = Literal.create(Array[Byte](12), BinaryType)
-    val bin2 = Literal.create(Array[Byte](12, 17, 99, 0, 0, 0, 2, 3, 0xf4.asInstanceOf[Byte]),
-      BinaryType)
+    val bin2 =
+      Literal.create(Array[Byte](12, 17, 99, 0, 0, 0, 2, 3, 0xf4.asInstanceOf[Byte]), BinaryType)
     val dec1 = Literal(Decimal(20132983L, 10, 2))
     val dec2 = Literal(Decimal(20132983L, 19, 2))
     val dec3 = Literal(Decimal(20132983L, 21, 2))
@@ -66,25 +66,34 @@ class SortOrderExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper 
     // For some reason, the Literal.create code gives us the number of days since the epoch
     checkEvaluation(SortPrefix(SortOrder(d1, Ascending)), 17649L)
     checkEvaluation(SortPrefix(SortOrder(t1, Ascending)), millis * 1000)
-    checkEvaluation(SortPrefix(SortOrder(f1, Ascending)),
+    checkEvaluation(
+      SortPrefix(SortOrder(f1, Ascending)),
       DoublePrefixComparator.computePrefix(f1.value.asInstanceOf[Float].toDouble))
-    checkEvaluation(SortPrefix(SortOrder(f2, Ascending)),
+    checkEvaluation(
+      SortPrefix(SortOrder(f2, Ascending)),
       DoublePrefixComparator.computePrefix(f2.value.asInstanceOf[Float].toDouble))
-    checkEvaluation(SortPrefix(SortOrder(db1, Ascending)),
+    checkEvaluation(
+      SortPrefix(SortOrder(db1, Ascending)),
       DoublePrefixComparator.computePrefix(db1.value.asInstanceOf[Double]))
-    checkEvaluation(SortPrefix(SortOrder(db2, Ascending)),
+    checkEvaluation(
+      SortPrefix(SortOrder(db2, Ascending)),
       DoublePrefixComparator.computePrefix(db2.value.asInstanceOf[Double]))
-    checkEvaluation(SortPrefix(SortOrder(s1, Ascending)),
+    checkEvaluation(
+      SortPrefix(SortOrder(s1, Ascending)),
       StringPrefixComparator.computePrefix(s1.value.asInstanceOf[UTF8String]))
-    checkEvaluation(SortPrefix(SortOrder(s2, Ascending)),
+    checkEvaluation(
+      SortPrefix(SortOrder(s2, Ascending)),
       StringPrefixComparator.computePrefix(s2.value.asInstanceOf[UTF8String]))
-    checkEvaluation(SortPrefix(SortOrder(bin1, Ascending)),
+    checkEvaluation(
+      SortPrefix(SortOrder(bin1, Ascending)),
       BinaryPrefixComparator.computePrefix(bin1.value.asInstanceOf[Array[Byte]]))
-    checkEvaluation(SortPrefix(SortOrder(bin2, Ascending)),
+    checkEvaluation(
+      SortPrefix(SortOrder(bin2, Ascending)),
       BinaryPrefixComparator.computePrefix(bin2.value.asInstanceOf[Array[Byte]]))
     checkEvaluation(SortPrefix(SortOrder(dec1, Ascending)), 20132983L)
     checkEvaluation(SortPrefix(SortOrder(dec2, Ascending)), 2013298L)
-    checkEvaluation(SortPrefix(SortOrder(dec3, Ascending)),
+    checkEvaluation(
+      SortPrefix(SortOrder(dec3, Ascending)),
       DoublePrefixComparator.computePrefix(201329.83d))
     checkEvaluation(SortPrefix(SortOrder(list1, Ascending)), 0L)
     checkEvaluation(SortPrefix(SortOrder(nullVal, Ascending)), null)
@@ -94,11 +103,11 @@ class SortOrderExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper 
   test("Cannot sort map type") {
     val m = Literal.create(Map(), MapType(StringType, StringType, valueContainsNull = false))
     val sortOrderExpression = SortOrder(m, Ascending)
-    assert(sortOrderExpression.checkInputDataTypes() ==
-      DataTypeMismatch(
-        errorSubClass = "INVALID_ORDERING_TYPE",
-        messageParameters = Map(
-          "functionName" -> "`sortorder`",
-          "dataType" -> "\"MAP<STRING, STRING>\"")))
+    assert(
+      sortOrderExpression.checkInputDataTypes() ==
+        DataTypeMismatch(
+          errorSubClass = "INVALID_ORDERING_TYPE",
+          messageParameters =
+            Map("functionName" -> "`sortorder`", "dataType" -> "\"MAP<STRING, STRING>\"")))
   }
 }

@@ -55,7 +55,7 @@ abstract class PythonDataSourceSuiteBase
     // Create a Python Data Source package before starting up the Spark Session
     // that triggers automatic registration of the Python Data Source.
     val dataSourceScript =
-    s"""
+      s"""
        |from pyspark.sql.datasource import DataSource, DataSourceReader
        |$simpleDataSourceReaderScript
        |
@@ -76,8 +76,8 @@ abstract class PythonDataSourceSuiteBase
     // tmp/my_source/__init__.py
     val packageDir = new File(tempDir, "pyspark_mysource")
     assert(packageDir.mkdir())
-    Utils.tryWithResource(
-      new FileWriter(new File(packageDir, "__init__.py")))(_.write(dataSourceScript))
+    Utils.tryWithResource(new FileWriter(new File(packageDir, "__init__.py")))(
+      _.write(dataSourceScript))
     // So Spark Session initialization can lookup this temporary directory.
     DataSourceManager.dataSourceBuilders = None
     PythonUtils.additionalTestingPath = Some(tempDir.toString)
@@ -110,16 +110,18 @@ class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
       spark.read.format("org.apache.spark.sql.test").load()
       spark.range(3).write.mode("overwrite").format("noop").save()
     }
-    assert(!testAppender.loggingEvents
-      .exists(msg => msg.getMessage.getFormattedMessage.contains(
-        "Loading static Python Data Sources.")))
+    assert(
+      !testAppender.loggingEvents
+        .exists(msg =>
+          msg.getMessage.getFormattedMessage.contains("Loading static Python Data Sources.")))
     // Now trigger a Python data source lookup
     withLogAppender(testAppender) {
       spark.read.format(staticSourceName).load()
     }
-    assert(testAppender.loggingEvents
-      .exists(msg => msg.getMessage.getFormattedMessage.contains(
-        "Loading static Python Data Sources.")))
+    assert(
+      testAppender.loggingEvents
+        .exists(msg =>
+          msg.getMessage.getFormattedMessage.contains("Loading static Python Data Sources.")))
   }
 
   test("SPARK-45917: automatic registration of Python Data Source") {
@@ -137,8 +139,8 @@ class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
          |    def schema(self) -> str:
          |        raise Exception("$errorText")
          |""".stripMargin
-    val dataSource = createUserDefinedPythonDataSource(
-      name = staticSourceName, pythonScript = dataSourceScript)
+    val dataSource =
+      createUserDefinedPythonDataSource(name = staticSourceName, pythonScript = dataSourceScript)
     spark.dataSource.registerPython(staticSourceName, dataSource)
     val err = intercept[AnalysisException] {
       spark.read.format(staticSourceName).load()
@@ -158,15 +160,15 @@ class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
         |        return SimpleDataSourceReader()
         |""".stripMargin
     val schema = StructType.fromDDL("id INT, partition INT")
-    val dataSource = createUserDefinedPythonDataSource(
-      name = dataSourceName, pythonScript = dataSourceScript)
+    val dataSource =
+      createUserDefinedPythonDataSource(name = dataSourceName, pythonScript = dataSourceScript)
     spark.dataSource.registerPython(dataSourceName, dataSource)
     val df = spark.read.format(dataSourceName).schema(schema).load()
     assert(df.rdd.getNumPartitions == 2)
     val plan = df.queryExecution.optimizedPlan
     plan match {
       case s: DataSourceV2ScanRelation
-        if s.relation.table.getClass.toString.contains("PythonTable") =>
+          if s.relation.table.getClass.toString.contains("PythonTable") =>
       case _ => fail(s"Plan did not match the expected pattern. Actual plan:\n$plan")
     }
     checkAnswer(df, Seq(Row(0, 0), Row(0, 1), Row(1, 0), Row(1, 1), Row(2, 0), Row(2, 1)))
@@ -280,30 +282,24 @@ class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
       val plan = df.queryExecution.executedPlan
 
       /**
-       * == Physical Plan ==
-       * *(1) Project [id#261, partition#262]
-       * +- *(1) Filter ((isnotnull(id#261) AND isnotnull(partition#262)) AND (id#261 = 1))
-       *    +- BatchScan SimpleDataSource[id#261, partition#262] (Python)
-       *       PushedFilters: [EqualTo(partition,0)],
-       *       ReadSchema: struct<id:int,partition:int> RuntimeFilters: []
+       * ==Physical Plan==
+       * *(1) Project [id#261, partition#262] +- *(1) Filter ((isnotnull(id#261) AND
+       * isnotnull(partition#262)) AND (id#261 = 1)) +- BatchScan SimpleDataSource[id#261,
+       * partition#262] (Python) PushedFilters: [EqualTo(partition,0)], ReadSchema:
+       * struct<id:int,partition:int> RuntimeFilters: []
        */
-      val filter = collectFirst(df.queryExecution.executedPlan) {
-        case s: FilterExec =>
-          val condition = s.condition.toString
-          assert(!condition.contains("= 0")) // pushed filter is not in FilterExec
-          assert(condition.contains("= 1")) // unsupported filter is in FilterExec
-          s
-      }.getOrElse(
-        fail(s"Filter not found in the plan. Actual plan:\n$plan")
-      )
+      val filter = collectFirst(df.queryExecution.executedPlan) { case s: FilterExec =>
+        val condition = s.condition.toString
+        assert(!condition.contains("= 0")) // pushed filter is not in FilterExec
+        assert(condition.contains("= 1")) // unsupported filter is in FilterExec
+        s
+      }.getOrElse(fail(s"Filter not found in the plan. Actual plan:\n$plan"))
 
       collectFirst(filter) {
         case s: BatchScanExec if s.scan.isInstanceOf[PythonScan] =>
           val p = s.scan.asInstanceOf[PythonScan]
           assert(p.getMetaData().get("PushedFilters").contains("[EqualTo(partition,0)]"))
-      }.getOrElse(
-        fail(s"PythonScan not found in the plan. Actual plan:\n$plan")
-      )
+      }.getOrElse(fail(s"PythonScan not found in the plan. Actual plan:\n$plan"))
 
       checkAnswer(df, Seq(Row(1, 0), Row(1, 1)))
     }
@@ -349,9 +345,7 @@ class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
     val newDataSource = createUserDefinedPythonDataSource(dataSourceName, newScript)
     spark.dataSource.registerPython(dataSourceName, newDataSource)
     assert(spark.sessionState.dataSourceManager.dataSourceExists(dataSourceName))
-    checkAnswer(
-      spark.read.format(dataSourceName).load(),
-      Seq(Row(0)))
+    checkAnswer(spark.read.format(dataSourceName).load(), Seq(Row(0)))
   }
 
   test("load data source") {
@@ -416,11 +410,19 @@ class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
          |""".stripMargin
     val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
     Seq(
-      "text", "json", "csv", "avro", "orc", "parquet", "jdbc",
-      "binaryFile", "xml", "kafka", "noop",
+      "text",
+      "json",
+      "csv",
+      "avro",
+      "orc",
+      "parquet",
+      "jdbc",
+      "binaryFile",
+      "xml",
+      "kafka",
+      "noop",
       "org.apache.spark.sql.test",
-      "org.apache.spark.sql.hive.orc"
-    ).foreach { provider =>
+      "org.apache.spark.sql.hive.orc").foreach { provider =>
       withClue(s"Data source: $provider") {
         checkError(
           exception = intercept[AnalysisException] {
@@ -435,14 +437,14 @@ class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
   test("reader not implemented") {
     assume(shouldTestPandasUDFs)
     val dataSourceScript =
-       s"""
+      s"""
         |from pyspark.sql.datasource import DataSource, DataSourceReader
         |class $dataSourceName(DataSource):
         |    pass
         |""".stripMargin
     val schema = StructType.fromDDL("id INT, partition INT")
-    val dataSource = createUserDefinedPythonDataSource(
-      name = dataSourceName, pythonScript = dataSourceScript)
+    val dataSource =
+      createUserDefinedPythonDataSource(name = dataSourceName, pythonScript = dataSourceScript)
     spark.dataSource.registerPython(dataSourceName, dataSource)
     val err = intercept[AnalysisException] {
       spark.read.format(dataSourceName).schema(schema).load().collect()
@@ -461,8 +463,8 @@ class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
         |        raise Exception("error creating reader")
         |""".stripMargin
     val schema = StructType.fromDDL("id INT, partition INT")
-    val dataSource = createUserDefinedPythonDataSource(
-      name = dataSourceName, pythonScript = dataSourceScript)
+    val dataSource =
+      createUserDefinedPythonDataSource(name = dataSourceName, pythonScript = dataSourceScript)
     spark.dataSource.registerPython(dataSourceName, dataSource)
     val err = intercept[AnalysisException] {
       spark.read.format(dataSourceName).schema(schema).load().collect()
@@ -480,8 +482,8 @@ class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
         |       ...
         |""".stripMargin
     val schema = StructType.fromDDL("id INT, partition INT")
-    val dataSource = createUserDefinedPythonDataSource(
-      name = dataSourceName, pythonScript = dataSourceScript)
+    val dataSource =
+      createUserDefinedPythonDataSource(name = dataSourceName, pythonScript = dataSourceScript)
     spark.dataSource.registerPython(dataSourceName, dataSource)
     val err = intercept[AnalysisException] {
       spark.read.format(dataSourceName).schema(schema).load().collect()
@@ -595,8 +597,7 @@ class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
            |""".stripMargin
       val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
       spark.dataSource.registerPython(dataSourceName, dataSource)
-      val err = intercept[AnalysisException](
-        spark.read.format(dataSourceName).load().collect())
+      val err = intercept[AnalysisException](spark.read.format(dataSourceName).load().collect())
       assert(err.getCondition == "PYTHON_DATA_SOURCE_ERROR")
       assert(err.getMessage.contains("partitions"))
     }
@@ -670,8 +671,8 @@ class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
       Thread.sleep(100)
     }
 
-    val executedPlan = df.queryExecution.executedPlan.collectFirst {
-      case p: BatchScanExec => p
+    val executedPlan = df.queryExecution.executedPlan.collectFirst { case p: BatchScanExec =>
+      p
     }
     assert(executedPlan.isDefined)
 
@@ -721,8 +722,7 @@ class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
       "SELECT * FROM range(0, 5, 1, 3)",
       "SELECT * FROM testData LIMIT 5",
       "SELECT * FROM testData3",
-      "SELECT * FROM arrayData"
-    ).foreach { query =>
+      "SELECT * FROM arrayData").foreach { query =>
       withTempDir { dir =>
         val df = sql(query)
         val path = dir.getAbsolutePath
@@ -751,7 +751,8 @@ class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
          |    def writer(self, schema, saveMode):
          |        return SimpleDataSourceWriter()
          |""".stripMargin
-    spark.dataSource.registerPython(dataSourceName,
+    spark.dataSource.registerPython(
+      dataSourceName,
       createUserDefinedPythonDataSource(dataSourceName, dataSourceScript))
 
     withClue("user error") {
@@ -834,17 +835,11 @@ class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
     withTempDir { dir =>
       val path = dir.getAbsolutePath
       spark.range(1).write.format(dataSourceName).mode("append").save(path)
-      checkAnswer(
-        spark.read.json(path),
-        Seq(Row(0)))
+      checkAnswer(spark.read.json(path), Seq(Row(0)))
       spark.range(1).write.format(dataSourceName).mode("append").save(path)
-      checkAnswer(
-        spark.read.json(path),
-        Seq(Row(0), Row(0)))
+      checkAnswer(spark.read.json(path), Seq(Row(0), Row(0)))
       spark.range(2, 3).write.format(dataSourceName).mode("overwrite").save(path)
-      checkAnswer(
-        spark.read.json(path),
-        Seq(Row(2)))
+      checkAnswer(spark.read.json(path), Seq(Row(2)))
     }
   }
 
@@ -902,24 +897,26 @@ class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
       val path = dir.getAbsolutePath
 
       withClue("commit") {
-        sql("SELECT * FROM range(0, 5, 1, 3)")
-          .write.format(dataSourceName)
+        sql("SELECT * FROM range(0, 5, 1, 3)").write
+          .format(dataSourceName)
           .mode("append")
           .save(path)
         checkAnswer(
-          spark.read.format("json")
+          spark.read
+            .format("json")
             .schema("num_files bigint, count bigint")
             .load(path + "/success.json"),
           Seq(Row(3, 5)))
       }
 
       withClue("commit again") {
-        sql("SELECT * FROM range(5, 7, 1, 1)")
-          .write.format(dataSourceName)
+        sql("SELECT * FROM range(5, 7, 1, 1)").write
+          .format(dataSourceName)
           .mode("append")
           .save(path)
         checkAnswer(
-          spark.read.format("json")
+          spark.read
+            .format("json")
             .schema("num_files bigint, count bigint")
             .load(path + "/success.json"),
           Seq(Row(3, 5), Row(1, 2)))
@@ -927,14 +924,12 @@ class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
 
       withClue("abort") {
         intercept[PythonException] {
-          sql("SELECT * FROM range(8, 12, 1, 4)")
-            .write.format(dataSourceName)
+          sql("SELECT * FROM range(8, 12, 1, 4)").write
+            .format(dataSourceName)
             .mode("append")
             .save(path)
         }
-        checkAnswer(
-          spark.read.text(path + "/failed.txt"),
-          Seq(Row("failed")))
+        checkAnswer(spark.read.text(path + "/failed.txt"), Seq(Row("failed")))
       }
     }
   }
@@ -976,8 +971,12 @@ class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
          |""".stripMargin
     val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
     spark.dataSource.registerPython(dataSourceName, dataSource)
-    val df = spark.read.option("foo", 1).option("bar", 2).option("BAZ", 3)
-      .format(dataSourceName).load()
+    val df = spark.read
+      .option("foo", 1)
+      .option("bar", 2)
+      .option("BAZ", 3)
+      .format(dataSourceName)
+      .load()
     checkAnswer(df, Row("1", "2", "true"))
     df.write.option("foo", 1).option("bar", 2).format(dataSourceName).mode("append").save()
   }

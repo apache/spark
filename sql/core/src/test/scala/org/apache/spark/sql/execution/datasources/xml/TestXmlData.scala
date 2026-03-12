@@ -79,7 +79,7 @@ private[xml] trait TestXmlData {
           |  <str_bool>str1</str_bool>
           |</ROW>
           |""".stripMargin ::
-    """
+      """
            |<ROW>
            |  <num_num_1/>
            |  <num_num_2>21474836470.9</num_num_2>
@@ -88,7 +88,7 @@ private[xml] trait TestXmlData {
            |  <num_str/>
            |  <str_bool>true</str_bool>
            |</ROW>""".stripMargin ::
-    """
+      """
             |<ROW>
             |  <num_num_1>21474836470</num_num_1>
             |  <num_num_2>92233720368547758070</num_num_2>
@@ -97,7 +97,7 @@ private[xml] trait TestXmlData {
             |  <num_str>str1</num_str>
             |  <str_bool>false</str_bool>
             |</ROW>""".stripMargin ::
-    """
+      """
             |<ROW>
             |  <num_num_1>21474836570</num_num_1>
             |  <num_num_2>1.1</num_num_2>
@@ -116,17 +116,17 @@ private[xml] trait TestXmlData {
           |    <Charset>UTF-8</Charset>
           |  </headers>
           |</ROW>""".stripMargin ::
-    """<ROW>
+      """<ROW>
           |  <nullstr></nullstr>
           |  <ip>27.31.100.29</ip>
           |  <headers/>
           |</ROW>""".stripMargin ::
-    """<ROW>
+      """<ROW>
           |  <nullstr></nullstr>
           |  <ip>27.31.100.29</ip>
           |  <headers></headers>
           |</ROW>""".stripMargin ::
-    """<ROW>
+      """<ROW>
           |  <nullstr/>
           |  <ip>27.31.100.29</ip>
           |  <headers/>
@@ -142,7 +142,7 @@ private[xml] trait TestXmlData {
       <struct_array></struct_array>
       <struct></struct>
     </ROW>""" ::
-    """<ROW>
+      """<ROW>
       <num_struct>
         <field>false</field>
       </num_struct>
@@ -151,7 +151,7 @@ private[xml] trait TestXmlData {
       <struct_array></struct_array>
       <struct/>
     </ROW>""" ::
-    """<ROW>
+      """<ROW>
       <num_struct/>
       <str_array>str</str_array>
       <array>4</array>
@@ -164,7 +164,7 @@ private[xml] trait TestXmlData {
         <field/>
       </struct>
     </ROW>""" ::
-    """<ROW>
+      """<ROW>
       <num_struct></num_struct>
       <str_array>str1</str_array>
       <str_array>str2</str_array>
@@ -215,7 +215,7 @@ private[xml] trait TestXmlData {
           |   </array2>
           |</ROW>
           |""".stripMargin ::
-    """
+      """
           |<ROW>
           |  <array3>
           |    <field>str</field>
@@ -225,7 +225,7 @@ private[xml] trait TestXmlData {
           |  </array3>
           |</ROW>
           |""".stripMargin ::
-    """
+      """
           |<ROW>
           |  <array3>1</array3>
           |  <array3>2</array3>
@@ -237,16 +237,16 @@ private[xml] trait TestXmlData {
     """
         <ROW><a>true</a></ROW>
         """ ::
-    """
+      """
         <ROW><b>21474836470</b></ROW>
         """ ::
-    """
+      """
         <ROW><c>33</c><c>44</c></ROW>
         """ ::
-    """
+      """
         <ROW><d><field>true</field></d></ROW>
         """ ::
-    """
+      """
         <ROW><e>str</e></ROW>
         """ :: Nil
 
@@ -372,7 +372,7 @@ private[xml] trait TestXmlData {
           </field1>
           <field1/>
         </ROW>""" ::
-    """
+      """
         <ROW>
           <field2/>
           <field2>
@@ -382,7 +382,7 @@ private[xml] trait TestXmlData {
             <array1/>
           </field2>
         </ROW>""" ::
-    """
+      """
         <ROW>
           <field1/>
           <field1><array1/></field1>
@@ -391,19 +391,19 @@ private[xml] trait TestXmlData {
 
   def corruptRecords: Seq[String] =
     """<ROW>""" ::
-    """""" ::
-    """<ROW>
+      """""" ::
+      """<ROW>
         |  <a>1</a>
         |  <b>2</b>
         |</ROW>""".stripMargin ::
-    """
+      """
         |<ROW>
         |  <a>str_a_4</a>
         |  <b>str_b_4</b>
         |  <c>str_c_4</c>
         |</ROW>
         |""".stripMargin ::
-    """
+      """
         |</ROW>
         |""".stripMargin :: Nil
 
@@ -411,12 +411,12 @@ private[xml] trait TestXmlData {
     """<ROW>
           <a><struct></struct></a>
         </ROW>""" ::
-    """<ROW>
+      """<ROW>
           <a>
             <struct><b><c/></b></struct>
           </a>
         </ROW>""" ::
-    """<ROW>
+      """<ROW>
           <b>
             <item>
               <c><struct></struct></c>
@@ -431,10 +431,10 @@ private[xml] trait TestXmlData {
             <b>1</b>
           </a>
         </ROW>""" ::
-    """<ROW>
+      """<ROW>
           <a><item/><item/></a>
         </ROW>""" ::
-    Nil
+      Nil
 
   def valueTagsTypeConflict: Seq[String] =
     """
@@ -450,7 +450,7 @@ private[xml] trait TestXmlData {
       |    string
       |</ROW>
       |""".stripMargin ::
-    """
+      """
       |<ROW>
       |    string
       |    <a>
@@ -463,7 +463,7 @@ private[xml] trait TestXmlData {
       |    true
       |</ROW>
       |""".stripMargin ::
-    """
+      """
         |<ROW>
         |<a>
         |    <b>
@@ -483,9 +483,9 @@ private[xml] trait TestXmlData {
       |    </a>str2
       |</ROW>
       |""".stripMargin ::
-    """<ROW> <a><b/> value</a></ROW>""" ::
-    """<ROW><a><b>3</b> </a> </ROW>""" ::
-    """<ROW><a><b>4</b> </a>
+      """<ROW> <a><b/> value</a></ROW>""" ::
+      """<ROW><a><b>3</b> </a> </ROW>""" ::
+      """<ROW><a><b>4</b> </a>
       |    str3
       |</ROW>""".stripMargin :: Nil
 
@@ -497,7 +497,7 @@ private[xml] trait TestXmlData {
       |    value2
       |</ROW>
       |""".stripMargin ::
-    """
+      """
       |<ROW>
       |    value3
       |    value4<a>1</a>
@@ -519,7 +519,7 @@ private[xml] trait TestXmlData {
       |    value5
       |</ROW>
       |""".stripMargin ::
-    """
+      """
       |<ROW>
       |    value1
       |    <a>
@@ -529,7 +529,7 @@ private[xml] trait TestXmlData {
       |    </a>
       |</ROW>
       |""".stripMargin ::
-  """
+      """
       |<ROW>
       |    <a>
       |        <b></b>
@@ -540,7 +540,7 @@ private[xml] trait TestXmlData {
       |    value6
       |</ROW>
       |""".stripMargin ::
-    """
+      """
       |<ROW>
       |    value1
       |    <a>
@@ -589,14 +589,14 @@ private[xml] trait TestXmlData {
       |    value13
       |</ROW>
       |""".stripMargin ::
-    """
+      """
       |<ROW>
       |    <array1>
       |        value1
       |    </array1>
       |</ROW>
       |""".stripMargin ::
-    """
+      """
       |<ROW>
       |    <array1>
       |        <array2>

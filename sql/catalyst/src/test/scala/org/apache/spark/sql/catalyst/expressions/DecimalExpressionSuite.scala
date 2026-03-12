@@ -60,8 +60,10 @@ class DecimalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(CheckOverflow(Literal(d1), DecimalType(4, 2), true), d1)
     checkEvaluation(CheckOverflow(Literal(d1), DecimalType(4, 3), true), null)
     intercept[ArithmeticException](CheckOverflow(Literal(d1), DecimalType(4, 3), false).eval())
-    intercept[ArithmeticException](checkEvaluationWithMutableProjection(
-      CheckOverflow(Literal(d1), DecimalType(4, 3), false), null))
+    intercept[ArithmeticException](
+      checkEvaluationWithMutableProjection(
+        CheckOverflow(Literal(d1), DecimalType(4, 3), false),
+        null))
 
     val d2 = Decimal(101, 3, 1)
     checkEvaluation(CheckOverflow(Literal(d2), DecimalType(4, 0), true), Decimal("10"))
@@ -69,29 +71,30 @@ class DecimalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(CheckOverflow(Literal(d2), DecimalType(4, 2), true), d2)
     checkEvaluation(CheckOverflow(Literal(d2), DecimalType(4, 3), true), null)
     intercept[ArithmeticException](CheckOverflow(Literal(d2), DecimalType(4, 3), false).eval())
-    intercept[ArithmeticException](checkEvaluationWithMutableProjection(
-      CheckOverflow(Literal(d2), DecimalType(4, 3), false), null))
+    intercept[ArithmeticException](
+      checkEvaluationWithMutableProjection(
+        CheckOverflow(Literal(d2), DecimalType(4, 3), false),
+        null))
 
-    checkEvaluation(CheckOverflow(
-      Literal.create(null, DecimalType(2, 1)), DecimalType(3, 2), true), null)
-    checkEvaluation(CheckOverflow(
-      Literal.create(null, DecimalType(2, 1)), DecimalType(3, 2), false), null)
+    checkEvaluation(
+      CheckOverflow(Literal.create(null, DecimalType(2, 1)), DecimalType(3, 2), true),
+      null)
+    checkEvaluation(
+      CheckOverflow(Literal.create(null, DecimalType(2, 1)), DecimalType(3, 2), false),
+      null)
   }
 
-  test("SPARK-39208: CheckOverflow & CheckOverflowInSum support query context in runtime errors") {
+  test(
+    "SPARK-39208: CheckOverflow & CheckOverflowInSum support query context in runtime errors") {
     val d = Decimal(101, 3, 1)
     val query = "select cast(d as decimal(4, 3)) from t"
-    val origin = Origin(
-      startIndex = Some(7),
-      stopIndex = Some(30),
-      sqlText = Some(query))
+    val origin = Origin(startIndex = Some(7), stopIndex = Some(30), sqlText = Some(query))
     val expr1 = withOrigin(origin) {
       CheckOverflow(Literal(d), DecimalType(4, 3), false)
     }
     checkExceptionInExpression[ArithmeticException](expr1, query)
 
-    val expr2 = CheckOverflowInSum(
-      Literal(d), DecimalType(4, 3), false, context = origin.context)
+    val expr2 = CheckOverflowInSum(Literal(d), DecimalType(4, 3), false, context = origin.context)
     checkExceptionInExpression[ArithmeticException](expr2, query)
   }
 }

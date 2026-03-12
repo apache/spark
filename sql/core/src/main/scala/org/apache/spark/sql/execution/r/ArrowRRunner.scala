@@ -38,7 +38,6 @@ import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
 import org.apache.spark.util.Utils
 
-
 /**
  * Similar to `ArrowPythonRunner`, but exchange data with R worker via Arrow stream.
  */
@@ -49,19 +48,19 @@ class ArrowRRunner(
     schema: StructType,
     timeZoneId: String,
     mode: Int)
-  extends BaseRRunner[Iterator[InternalRow], ColumnarBatch](
-    func,
-    "arrow",
-    "arrow",
-    packageNames,
-    broadcastVars,
-    numPartitions = -1,
-    isDataFrame = true,
-    schema.fieldNames,
-    mode) {
+    extends BaseRRunner[Iterator[InternalRow], ColumnarBatch](
+      func,
+      "arrow",
+      "arrow",
+      packageNames,
+      broadcastVars,
+      numPartitions = -1,
+      isDataFrame = true,
+      schema.fieldNames,
+      mode) {
 
-  protected def bufferedWrite(
-      dataOut: DataOutputStream)(writeFunc: ByteArrayOutputStream => Unit): Unit = {
+  protected def bufferedWrite(dataOut: DataOutputStream)(
+      writeFunc: ByteArrayOutputStream => Unit): Unit = {
     val out = new ByteArrayOutputStream()
     writeFunc(out)
 
@@ -86,9 +85,12 @@ class ArrowRRunner(
         if (inputIterator.hasNext) {
           val arrowSchema =
             ArrowUtils.toArrowSchema(
-              schema, timeZoneId, errorOnDuplicatedFieldNames = true, largeVarTypes = false)
-          val allocator = ArrowUtils.rootAllocator.newChildAllocator(
-            "stdout writer for R", 0, Long.MaxValue)
+              schema,
+              timeZoneId,
+              errorOnDuplicatedFieldNames = true,
+              largeVarTypes = false)
+          val allocator =
+            ArrowUtils.rootAllocator.newChildAllocator("stdout writer for R", 0, Long.MaxValue)
           val root = VectorSchemaRoot.create(arrowSchema, allocator)
 
           bufferedWrite(dataOut) { out =>
@@ -122,10 +124,11 @@ class ArrowRRunner(
   }
 
   protected override def newReaderIterator(
-      dataStream: DataInputStream, errThread: BufferedStreamThread): ReaderIterator = {
+      dataStream: DataInputStream,
+      errThread: BufferedStreamThread): ReaderIterator = {
     new ReaderIterator(dataStream, errThread) {
-      private val allocator = ArrowUtils.rootAllocator.newChildAllocator(
-        "stdin reader for R", 0, Long.MaxValue)
+      private val allocator =
+        ArrowUtils.rootAllocator.newChildAllocator("stdin reader for R", 0, Long.MaxValue)
 
       private var reader: ArrowStreamReader = _
       private var root: VectorSchemaRoot = _
@@ -173,8 +176,7 @@ class ArrowRRunner(
                 log"read-input = ${MDC(LogKeys.INPUT, format(input))} s, " +
                 log"compute = ${MDC(LogKeys.COMPUTE, format(compute))} s, " +
                 log"write-output = ${MDC(LogKeys.OUTPUT, format(output))} s, " +
-                log"total = ${MDC(LogKeys.TOTAL,
-                  format(boot + init + broadcast + input + compute + output))} s")
+                log"total = ${MDC(LogKeys.TOTAL, format(boot + init + broadcast + input + compute + output))} s")
               read()
             case length if length > 0 =>
               // Likewise, there looks no way to send each batch in streaming format via socket
@@ -185,9 +187,11 @@ class ArrowRRunner(
               val in = new ByteArrayReadableSeekableByteChannel(buffer)
               reader = new ArrowStreamReader(in, allocator)
               root = reader.getVectorSchemaRoot
-              vectors = root.getFieldVectors.asScala.map { vector =>
-                new ArrowColumnVector(vector)
-              }.toArray[ColumnVector]
+              vectors = root.getFieldVectors.asScala
+                .map { vector =>
+                  new ArrowColumnVector(vector)
+                }
+                .toArray[ColumnVector]
               read()
             case length if length == 0 =>
               // End of stream

@@ -29,20 +29,20 @@ import org.apache.spark.sql.execution.streaming.operators.stateful.transformwith
 import org.apache.spark.sql.execution.streaming.runtime.StreamingCheckpointConstants.DIR_NAME_STATE
 
 case class StatePartitionWriterColumnFamilyInfo(
-  schema: StateStoreColFamilySchema,
-  // set this to true if state variable is ListType in TransformWithState
-  useMultipleValuesPerKey: Boolean = false)
+    schema: StateStoreColFamilySchema,
+    // set this to true if state variable is ListType in TransformWithState
+    useMultipleValuesPerKey: Boolean = false)
 
 /**
  * A writer that can directly write binary data to the streaming state store.
  *
  * This writer expects input rows with the same schema produced by
- * StatePartitionAllColumnFamiliesReader:
- *   (partition_key, key_bytes, value_bytes, column_family_name)
+ * StatePartitionAllColumnFamiliesReader: (partition_key, key_bytes, value_bytes,
+ * column_family_name)
  *
- * The writer creates a fresh (empty) state store instance for the target commit version
- * instead of loading previous partition data. After writing all rows for the partition, it will
- * commit all changes as a snapshot
+ * The writer creates a fresh (empty) state store instance for the target commit version instead
+ * of loading previous partition data. After writing all rows for the partition, it will commit
+ * all changes as a snapshot
  */
 class StatePartitionAllColumnFamiliesWriter(
     storeConf: StateStoreConf,
@@ -63,8 +63,10 @@ class StatePartitionAllColumnFamiliesWriter(
     colFamilyToWriterInfoMap.get(StateStore.DEFAULT_COL_FAMILY_NAME) match {
       case Some(info) => info.schema
       case None =>
-        assert(useColumnFamilies, "useColumnFamilies should be true when there is no " +
-          "StatePartitionWriterColumnFamilyInfo for DEFAULT column family")
+        assert(
+          useColumnFamilies,
+          "useColumnFamilies should be true when there is no " +
+            "StatePartitionWriterColumnFamilyInfo for DEFAULT column family")
         // Return a dummy StateStoreColFamilySchema if not found
         val placeholderSchema = colFamilyToWriterInfoMap.head._2.schema
         StateStoreColFamilySchema(
@@ -84,15 +86,19 @@ class StatePartitionAllColumnFamiliesWriter(
 
   protected lazy val provider: StateStoreProvider = {
     val stateCheckpointLocation = new Path(targetCpLocation, DIR_NAME_STATE).toString
-    val stateStoreId = StateStoreId(stateCheckpointLocation,
-      operatorId, partitionId, storeName)
+    val stateStoreId = StateStoreId(stateCheckpointLocation, operatorId, partitionId, storeName)
     val stateStoreProviderId = StateStoreProviderId(stateStoreId, UUID.randomUUID())
 
     val provider = StateStoreProvider.createAndInit(
-      stateStoreProviderId, defaultSchema.keySchema, defaultSchema.valueSchema,
+      stateStoreProviderId,
+      defaultSchema.keySchema,
+      defaultSchema.valueSchema,
       defaultSchema.keyStateEncoderSpec.get,
-      useColumnFamilies = useColumnFamilies, storeConf, hadoopConf,
-      useMultipleValuesPerKey = false, stateSchemaProvider = schemaProviderOpt)
+      useColumnFamilies = useColumnFamilies,
+      storeConf,
+      hadoopConf,
+      useMultipleValuesPerKey = false,
+      stateSchemaProvider = schemaProviderOpt)
     provider
   }
 
@@ -102,11 +108,7 @@ class StatePartitionAllColumnFamiliesWriter(
     // Use loadEmpty=true to create a fresh state store without loading previous versions
     // We create the empty store AT version, and the next commit will
     // produce version + 1
-    val store = provider.getStore(
-      currentBatchId,
-      stateStoreCkptId = None,
-      loadEmpty = true
-    )
+    val store = provider.getStore(currentBatchId, stateStoreCkptId = None, loadEmpty = true)
     if (useColumnFamilies) {
       colFamilyToWriterInfoMap.foreach { pair =>
         val colFamilyName = pair._1
@@ -114,7 +116,8 @@ class StatePartitionAllColumnFamiliesWriter(
         colFamilyName match {
           case StateStore.DEFAULT_COL_FAMILY_NAME => // createAndInit has registered default
           case _ =>
-            require(cfSchema.keyStateEncoderSpec.isDefined,
+            require(
+              cfSchema.keyStateEncoderSpec.isDefined,
               s"keyStateEncoderSpec must be defined for column family ${cfSchema.colFamilyName}")
             val isInternal = StateStoreColumnFamilySchemaUtils.isInternalColFamily(colFamilyName)
             store.createColFamilyIfAbsent(
@@ -151,9 +154,10 @@ class StatePartitionAllColumnFamiliesWriter(
   }
 
   private def writeRow(record: InternalRow): Unit = {
-    assert(record.numFields == 4,
-        s"Invalid record schema: expected 4 fields (partition_key, key_bytes, value_bytes, " +
-          s"column_family_name), got ${record.numFields}")
+    assert(
+      record.numFields == 4,
+      s"Invalid record schema: expected 4 fields (partition_key, key_bytes, value_bytes, " +
+        s"column_family_name), got ${record.numFields}")
 
     // Extract raw bytes and column family name from the record
     val keyBytes = record.getBinary(1)
@@ -171,7 +175,7 @@ class StatePartitionAllColumnFamiliesWriter(
     // if a column family useMultipleValuesPerKey (e.g. ListType), we will
     // write with 1 put followed by merge
     if (colFamilyToWriterInfoMap(colFamilyName).useMultipleValuesPerKey &&
-        stateStore.keyExists(keyRow, colFamilyName)) {
+      stateStore.keyExists(keyRow, colFamilyName)) {
       stateStore.merge(keyRow, valueRow, colFamilyName)
     } else {
       stateStore.put(keyRow, valueRow, colFamilyName)

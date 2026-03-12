@@ -36,7 +36,8 @@ trait SqlBasedBenchmark extends BenchmarkBase with SQLHelper {
 
   /** Subclass can override this function to build their own SparkSession */
   def getSparkSession: SparkSession = {
-    SparkSession.builder()
+    SparkSession
+      .builder()
       .master("local[1]")
       .appName(this.getClass.getCanonicalName)
       .config(SQLConf.SHUFFLE_PARTITIONS.key, 1)
@@ -78,16 +79,18 @@ trait SqlBasedBenchmark extends BenchmarkBase with SQLHelper {
   }
 
   /**
-   * Prepares a table with wide row for benchmarking. The table will be written into
-   * the given path.
+   * Prepares a table with wide row for benchmarking. The table will be written into the given
+   * path.
    */
-  protected  def writeWideRow(path: String, rowsNum: Int, numCols: Int): StructType = {
+  protected def writeWideRow(path: String, rowsNum: Int, numCols: Int): StructType = {
     val fields = Seq.tabulate(numCols)(i => StructField(s"col$i", IntegerType))
     val schema = StructType(fields)
 
-    spark.range(rowsNum)
+    spark
+      .range(rowsNum)
       .select(Seq.tabulate(numCols)(i => lit(i).as(s"col$i")): _*)
-      .write.json(path)
+      .write
+      .json(path)
 
     schema
   }

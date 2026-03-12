@@ -40,7 +40,12 @@ class OrcDataSourceV2 extends FileDataSourceV2 {
     val paths = getPaths(options)
     val tableName = getTableName(options, paths)
     val optionsWithoutPaths = getOptionsWithoutPaths(options)
-    OrcTable(tableName, sparkSession, optionsWithoutPaths, paths, Some(schema), fallbackFileFormat)
+    OrcTable(
+      tableName,
+      sparkSession,
+      optionsWithoutPaths,
+      paths,
+      Some(schema),
+      fallbackFileFormat)
   }
 }
-

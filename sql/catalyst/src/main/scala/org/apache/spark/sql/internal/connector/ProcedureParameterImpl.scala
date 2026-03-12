@@ -27,4 +27,5 @@ case class ProcedureParameterImpl(
     name: String,
     dataType: DataType,
     defaultValue: DefaultValue,
-    comment: String) extends ProcedureParameter
+    comment: String)
+    extends ProcedureParameter

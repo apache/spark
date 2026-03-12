@@ -23,7 +23,8 @@ import org.apache.spark.sql.execution.command
  * The class contains tests for the `ALTER NAMESPACE ... SET LOCATION` command to check V2 table
  * catalogs.
  */
-class AlterNamespaceSetLocationSuite extends command.AlterNamespaceSetLocationSuiteBase
+class AlterNamespaceSetLocationSuite
+    extends command.AlterNamespaceSetLocationSuiteBase
     with CommandSuiteBase {
   override def namespace: String = "ns1.ns2"
   override def notFoundMsgPrefix: String = "Namespace"

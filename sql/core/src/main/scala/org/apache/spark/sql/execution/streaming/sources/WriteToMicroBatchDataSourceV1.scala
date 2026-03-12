@@ -26,8 +26,8 @@ import org.apache.spark.sql.streaming.OutputMode
 /**
  * Marker node to represent a DSv1 sink on streaming query.
  *
- * Despite this is expected to be the top node, this node should behave like "pass-through"
- * since the DSv1 codepath on microbatch execution handles sink operation separately.
+ * Despite this is expected to be the top node, this node should behave like "pass-through" since
+ * the DSv1 codepath on microbatch execution handles sink operation separately.
  *
  * This node is eliminated in streaming specific optimization phase, which means there is no
  * matching physical node.
@@ -40,7 +40,7 @@ case class WriteToMicroBatchDataSourceV1(
     writeOptions: Map[String, String],
     outputMode: OutputMode,
     batchId: Option[Long] = None)
-  extends UnaryNode {
+    extends UnaryNode {
 
   override def child: LogicalPlan = query
 

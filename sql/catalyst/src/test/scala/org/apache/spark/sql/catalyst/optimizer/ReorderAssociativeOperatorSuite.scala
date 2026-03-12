@@ -30,7 +30,9 @@ class ReorderAssociativeOperatorSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
-      Batch("ReorderAssociativeOperator", FixedPoint(10),
+      Batch(
+        "ReorderAssociativeOperator",
+        FixedPoint(10),
         ConstantFolding,
         ReorderAssociativeOperator) :: Nil
   }
@@ -66,7 +68,8 @@ class ReorderAssociativeOperatorSuite extends PlanTest {
 
   test("nested expression with aggregate operator") {
     val originalQuery =
-      testRelation.as("t1")
+      testRelation
+        .as("t1")
         .join(testRelation.as("t2"), Inner, Some("t1.a".attr === "t2.a".attr))
         .groupBy("t1.a".attr + 1, "t2.a".attr + 1)(
           (("t1.a".attr + 1) + ("t2.a".attr + 1)).as("col"))
@@ -88,8 +91,7 @@ class ReorderAssociativeOperatorSuite extends PlanTest {
         $"b" * 1 * 1,
         ($"b" + 0) * 1 * 2 * 3 * 4,
         $"a" + 0 + $"b" + 0 + $"c" + 0,
-        $"a" + 0 + $"b" * 1 + $"c" + 0
-      )
+        $"a" + 0 + $"b" * 1 + $"c" + 0)
 
     val optimized = Optimize.execute(originalQuery.analyze)
 
@@ -103,23 +105,26 @@ class ReorderAssociativeOperatorSuite extends PlanTest {
           $"b".as("((b * 1) * 1)"),
           ($"b" * 24).as("(((((b + 0) * 1) * 2) * 3) * 4)"),
           ($"a" + $"b" + $"c").as("""(((((a + 0) + b) + 0) + c) + 0)"""),
-          ($"a" + $"b" + $"c").as("((((a + 0) + (b * 1)) + c) + 0)")
-        ).analyze
+          ($"a" + $"b" + $"c").as("((((a + 0) + (b * 1)) + c) + 0)"))
+        .analyze
 
     comparePlans(optimized, correctAnswer)
   }
 
   test("SPARK-50380: conditional branches with error expression") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> true.toString) {
-      val originalQuery1 = testRelation.select(If($"a" === 1, 1L, Literal(1).div(0) + $"b")).analyze
+      val originalQuery1 =
+        testRelation.select(If($"a" === 1, 1L, Literal(1).div(0) + $"b")).analyze
       val optimized1 = Optimize.execute(originalQuery1)
       comparePlans(optimized1, originalQuery1)
 
-      val originalQuery2 = testRelation.select(
-        If($"a" === 1, 1, ($"b" + Literal(Int.MaxValue)) + 1).as("col")).analyze
+      val originalQuery2 = testRelation
+        .select(If($"a" === 1, 1, ($"b" + Literal(Int.MaxValue)) + 1).as("col"))
+        .analyze
       val optimized2 = Optimize.execute(originalQuery2)
-      val correctAnswer2 = testRelation.select(
-        If($"a" === 1, 1, $"b" + (Literal(Int.MaxValue) + 1)).as("col")).analyze
+      val correctAnswer2 = testRelation
+        .select(If($"a" === 1, 1, $"b" + (Literal(Int.MaxValue) + 1)).as("col"))
+        .analyze
       comparePlans(optimized2, correctAnswer2)
     }
   }

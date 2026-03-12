@@ -27,12 +27,11 @@ import org.apache.spark.util.ArrayImplicits._
 
 /**
  * The base class of [[SortBasedAggregationIterator]], [[TungstenAggregationIterator]] and
- * [[ObjectAggregationIterator]].
- * It mainly contains two parts:
- * 1. It initializes aggregate functions.
- * 2. It creates two functions, `processRow` and `generateOutput` based on [[AggregateMode]] of
- *    its aggregate functions. `processRow` is the function to handle an input. `generateOutput`
- *    is used to generate result.
+ * [[ObjectAggregationIterator]]. It mainly contains two parts:
+ *   1. It initializes aggregate functions.
+ *   2. It creates two functions, `processRow` and `generateOutput` based on [[AggregateMode]] of
+ *      its aggregate functions. `processRow` is the function to handle an input. `generateOutput`
+ *      is used to generate result.
  */
 abstract class AggregationIterator(
     partIndex: Int,
@@ -43,7 +42,8 @@ abstract class AggregationIterator(
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
     newMutableProjection: (Seq[Expression], Seq[Attribute]) => MutableProjection)
-  extends Iterator[UnsafeRow] with Logging {
+    extends Iterator[UnsafeRow]
+    with Logging {
 
   ///////////////////////////////////////////////////////////////////////////
   // Initializing functions.
@@ -51,21 +51,23 @@ abstract class AggregationIterator(
 
   /**
    * The following combinations of AggregationMode are supported:
-   * - Partial
-   * - PartialMerge (for single distinct)
-   * - Partial and PartialMerge (for single distinct)
-   * - Final
-   * - Complete (for SortAggregate with functions that does not support Partial)
-   * - Final and Complete (currently not used)
+   *   - Partial
+   *   - PartialMerge (for single distinct)
+   *   - Partial and PartialMerge (for single distinct)
+   *   - Final
+   *   - Complete (for SortAggregate with functions that does not support Partial)
+   *   - Final and Complete (currently not used)
    *
-   * TODO: AggregateMode should have only two modes: Update and Merge, AggregateExpression
-   * could have a flag to tell it's final or not.
+   * TODO: AggregateMode should have only two modes: Update and Merge, AggregateExpression could
+   * have a flag to tell it's final or not.
    */
   {
     val modes = aggregateExpressions.map(_.mode).distinct.toSet
-    require(modes.size <= 2,
+    require(
+      modes.size <= 2,
       s"$aggregateExpressions are not supported because they have more than 2 distinct modes.")
-    require(modes.subsetOf(Set(Partial, PartialMerge)) || modes.subsetOf(Set(Final, Complete)),
+    require(
+      modes.subsetOf(Set(Partial, PartialMerge)) || modes.subsetOf(Set(Final, Complete)),
       s"$aggregateExpressions can't have Partial/PartialMerge and Final/Complete in the same time.")
   }
 
@@ -187,19 +189,17 @@ abstract class AggregationIterator(
           }
         case _ => None
       }
-      val updateFunctions = functions.zipWithIndex.collect {
-        case (ae: ImperativeAggregate, i) =>
-          expressions(i).mode match {
-            case Partial | Complete =>
-              if (predicateOptions(i).isDefined) {
-                (buffer: InternalRow, row: InternalRow) =>
-                  if (predicateOptions(i).get.eval(row)) { ae.update(buffer, row) }
-              } else {
-                (buffer: InternalRow, row: InternalRow) => ae.update(buffer, row)
-              }
-            case PartialMerge | Final =>
-              (buffer: InternalRow, row: InternalRow) => ae.merge(buffer, row)
-          }
+      val updateFunctions = functions.zipWithIndex.collect { case (ae: ImperativeAggregate, i) =>
+        expressions(i).mode match {
+          case Partial | Complete =>
+            if (predicateOptions(i).isDefined) { (buffer: InternalRow, row: InternalRow) =>
+              if (predicateOptions(i).get.eval(row)) { ae.update(buffer, row) }
+            } else { (buffer: InternalRow, row: InternalRow) =>
+              ae.update(buffer, row)
+            }
+          case PartialMerge | Final =>
+            (buffer: InternalRow, row: InternalRow) => ae.merge(buffer, row)
+        }
       }.toArray
       // This projection is used to merge buffer values for all expression-based aggregates.
       val aggregationBufferSchema = functions.flatMap(_.aggBufferAttributes)
@@ -223,8 +223,10 @@ abstract class AggregationIterator(
   }
 
   protected val processRow: (InternalRow, InternalRow) => Unit =
-    generateProcessRow(aggregateExpressions,
-      aggregateFunctions.toImmutableArraySeq, inputAttributes)
+    generateProcessRow(
+      aggregateExpressions,
+      aggregateFunctions.toImmutableArraySeq,
+      inputAttributes)
 
   protected val groupingProjection: UnsafeProjection =
     UnsafeProjection.create(groupingExpressions, inputAttributes)
@@ -242,7 +244,8 @@ abstract class AggregationIterator(
       }
       val aggregateResult = new SpecificInternalRow(aggregateAttributes.map(_.dataType))
       val expressionAggEvalProjection = newMutableProjection(
-        evalExpressions.toImmutableArraySeq, bufferAttributes.toImmutableArraySeq)
+        evalExpressions.toImmutableArraySeq,
+        bufferAttributes.toImmutableArraySeq)
       expressionAggEvalProjection.target(aggregateResult)
 
       val resultProjection =
@@ -271,8 +274,8 @@ abstract class AggregationIterator(
       // TypedImperativeAggregate stores generic object in aggregation buffer, and requires
       // calling serialization before shuffling. See [[TypedImperativeAggregate]] for more info.
       val typedImperativeAggregates: Array[TypedImperativeAggregate[_]] = {
-        aggregateFunctions.collect {
-          case (ag: TypedImperativeAggregate[_]) => ag
+        aggregateFunctions.collect { case (ag: TypedImperativeAggregate[_]) =>
+          ag
         }
       }
 

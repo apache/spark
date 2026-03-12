@@ -21,33 +21,29 @@ import java.util.{ArrayDeque, ArrayList}
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.sql.catalyst.plans.logical.{
-  CTERelationDef,
-  LogicalPlan,
-  UnresolvedWith,
-  WithCTE
-}
+import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, LogicalPlan, UnresolvedWith, WithCTE}
 import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_WITH
 
 /**
- * The [[CteScope]] is responsible for keeping track of visible and known CTE definitions at a given
- * stage of a SQL query/DataFrame program resolution. These scopes are stacked and the stack is
- * managed by the [[CteRegistry]]. The scope is created per single WITH clause.
+ * The [[CteScope]] is responsible for keeping track of visible and known CTE definitions at a
+ * given stage of a SQL query/DataFrame program resolution. These scopes are stacked and the stack
+ * is managed by the [[CteRegistry]]. The scope is created per single WITH clause.
  *
  * The CTE operators are:
- *  - [[UnresolvedWith]]. This is a `host` operator that contains a list of unresolved CTE
- *    definitions from the WITH clause and a single child operator, which is the actual unresolved
- *    SELECT query.
- *  - [[UnresolvedRelation]]. This is a generic unresolved relation operator that will sometimes
- *    be resolved to a CTE definition and later replaced with a [[CTERelationRef]]. The CTE takes
- *    precedence over a regular table or a view when resolving this identifier.
- *  - [[CTERelationDef]]. This is a reusable logical plan, which will later be referenced by the
- *    lower CTE definitions and [[UnresolvedWith]] child.
- *  - [[CTERelationRef]]. This is a leaf node similar to a relation operator that references a
- *    certain [[CTERelationDef]] by its ID. It has a name (unique locally for a WITH clause list)
- *    and an ID (unique for all the CTEs in a query).
- *  - [[WithCTE]]. This is a `host` operator that contains a list of resolved CTE definitions from
- *    the WITH clause and a single child operator, which is the actual resolved SELECT query.
+ *   - [[UnresolvedWith]]. This is a `host` operator that contains a list of unresolved CTE
+ *     definitions from the WITH clause and a single child operator, which is the actual
+ *     unresolved SELECT query.
+ *   - [[UnresolvedRelation]]. This is a generic unresolved relation operator that will sometimes
+ *     be resolved to a CTE definition and later replaced with a [[CTERelationRef]]. The CTE takes
+ *     precedence over a regular table or a view when resolving this identifier.
+ *   - [[CTERelationDef]]. This is a reusable logical plan, which will later be referenced by the
+ *     lower CTE definitions and [[UnresolvedWith]] child.
+ *   - [[CTERelationRef]]. This is a leaf node similar to a relation operator that references a
+ *     certain [[CTERelationDef]] by its ID. It has a name (unique locally for a WITH clause list)
+ *     and an ID (unique for all the CTEs in a query).
+ *   - [[WithCTE]]. This is a `host` operator that contains a list of resolved CTE definitions
+ *     from the WITH clause and a single child operator, which is the actual resolved SELECT
+ *     query.
  *
  * The task of the [[Resolver]] is to correctly place [[WithCTE]] with [[CTERelationDef]]s inside
  * and make sure that [[CTERelationRef]]s correctly reference [[CTERelationDef]]s with their IDs.
@@ -55,21 +51,21 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_WITH
  * what Spark does for the [[View]]s (always inline during the analysis).
  *
  * There are some caveats in how Spark places those operators and resolves their names:
- *  - Ambiguous CTE definition names are disallowed only within a single WITH clause, and this is
- *    validated by the Parser in [[AstBuilder]]
- *    using [[QueryParsingErrors.duplicateCteDefinitionNamesError]]:
+ *   - Ambiguous CTE definition names are disallowed only within a single WITH clause, and this is
+ *     validated by the Parser in [[AstBuilder]] using
+ *     [[QueryParsingErrors.duplicateCteDefinitionNamesError]]:
  *
- *    {{{
+ * {{{
  *    -- This is disallowed.
  *    WITH cte AS (SELECT 1),
  *    cte AS (SELECT 2)
  *    SELECT * FROM cte;
- *    }}}
+ * }}}
  *
- *  - When [[UnresolvedRelation]] identifier is resolved to a [[CTERelationDef]] and there is a
- *    name conflict on several layers of CTE definitions, the lower definitions take precedence:
+ *   - When [[UnresolvedRelation]] identifier is resolved to a [[CTERelationDef]] and there is a
+ *     name conflict on several layers of CTE definitions, the lower definitions take precedence:
  *
- *    {{{
+ * {{{
  *    -- The result is `3`, lower [[CTERelationDef]] takes precedence.
  *    WITH cte AS (
  *      SELECT 1
@@ -85,14 +81,14 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_WITH
  *        SELECT * FROM cte
  *      )
  *    )
- *    }}}
+ * }}}
  *
- *  - Any subquery can contain [[UnresolvedWith]] on top of it, but [[WithCTE]] is not gonna be
- *    1 to 1 to its unresolved counterpart. For example, if we are dealing with simple subqueries,
- *    [[CTERelationDef]]s will be merged together under a single [[WithCTE]]. The previous example
- *    would produce the following resolved plan:
+ *   - Any subquery can contain [[UnresolvedWith]] on top of it, but [[WithCTE]] is not gonna be 1
+ *     to 1 to its unresolved counterpart. For example, if we are dealing with simple subqueries,
+ *     [[CTERelationDef]]s will be merged together under a single [[WithCTE]]. The previous
+ *     example would produce the following resolved plan:
  *
- *    {{{
+ * {{{
  *    WithCTE
  *    :- CTERelationDef 18, false
  *    :  +- ...
@@ -102,18 +98,19 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_WITH
  *    :  +- ...
  *    +- Project [3#1203]
  *    :  +- ...
- *    }}}
+ * }}}
  *
- *  - The [[WithCTE]] operator is placed on top of the resolved operator if one of the following
- *    conditions are met:
- *      1. We just resolved an [[UnresolvedWith]], which is the topmost [[UnresolvedWith]] of this
- *         root query, view or an expression subquery.
- *      2. In case there is no single topmost [[UnresolvedWith]], we pick the least common ancestor
- *         of those branches. This is going to be a multi-child operator - [[Union]], [[Join]], etc.
+ *   - The [[WithCTE]] operator is placed on top of the resolved operator if one of the following
+ *     conditions are met:
+ *     1. We just resolved an [[UnresolvedWith]], which is the topmost [[UnresolvedWith]] of this
+ *        root query, view or an expression subquery.
+ *     2. In case there is no single topmost [[UnresolvedWith]], we pick the least common ancestor
+ *        of those branches. This is going to be a multi-child operator - [[Union]], [[Join]],
+ *        etc.
  *
- *    Here's an example for the second case:
+ * Here's an example for the second case:
  *
- *    {{{
+ * {{{
  *    SELECT * FROM (
  *      WITH cte AS (
  *        SELECT 1
@@ -127,11 +124,11 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_WITH
  *        SELECT * FROM cte
  *      )
  *    )
- *    }}}
+ * }}}
  *
- *    ->
+ * ->
  *
- *    {{{
+ * {{{
  *    Project [1#60]
  *    +- SubqueryAlias __auto_generated_subquery_name
  *       +- WithCTE
@@ -144,11 +141,11 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_WITH
  *             :  +- ...
  *             +- Project [2#61]
  *                +- ...
- *    }}}
+ * }}}
  *
- *    Consider a different example though:
+ * Consider a different example though:
  *
- *    {{{
+ * {{{
  *    SELECT * FROM (
  *      SELECT 1
  *      UNION ALL
@@ -159,17 +156,17 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_WITH
  *        SELECT * FROM cte
  *      )
  *    )
- *    }}}
+ * }}}
  *
- *    The [[Union]] operator is not the least common ancestor of the [[UnresolvedWith]]s in the
- *    query. In fact, there's just a single [[UnresolvedWith]], which is a proper place where we
- *    need to place a [[WithCTE]].
+ * The [[Union]] operator is not the least common ancestor of the [[UnresolvedWith]]s in the
+ * query. In fact, there's just a single [[UnresolvedWith]], which is a proper place where we need
+ * to place a [[WithCTE]].
  *
- *  - However, if we have any expression subquery (scalar/IN/EXISTS...), the top
- *    [[CTERelationDef]]s and subquery's [[CTERelationDef]] won't be merged together (as they are
- *    separated by an expression tree):
+ *   - However, if we have any expression subquery (scalar/IN/EXISTS...), the top
+ *     [[CTERelationDef]]s and subquery's [[CTERelationDef]] won't be merged together (as they are
+ *     separated by an expression tree):
  *
- *    {{{
+ * {{{
  *    WITH cte AS (
  *      SELECT 1 AS col1
  *    )
@@ -179,11 +176,11 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_WITH
  *      )
  *      SELECT * FROM cte
  *    )
- *    }}}
+ * }}}
  *
- *    ->
+ * ->
  *
- *    {{{
+ * {{{
  *    WithCTE
  *    :- CTERelationDef 21, false
  *    :  +- ...
@@ -195,12 +192,12 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_WITH
  *          :     +- Project [2#1241]
  *          :        +- ...
  *          +- ...
- *    }}}
+ * }}}
  *
- *  - Upper CTEs are visible through subqueries and can be referenced by lower operators, but not
- *    through the [[View]] boundary:
+ *   - Upper CTEs are visible through subqueries and can be referenced by lower operators, but not
+ *     through the [[View]] boundary:
  *
- *    {{{
+ * {{{
  *    CREATE VIEW v1 AS SELECT 1;
  *    CREATE VIEW v2 AS SELECT * FROM v1;
  *
@@ -211,19 +208,21 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_WITH
  *      SELECT 2
  *    )
  *    SELECT * FROM v2;
- *    }}}
+ * }}}
  *
- * @param isRoot This marks the place where [[WithCTE]] has to be placed with all the merged
+ * @param isRoot
+ *   This marks the place where [[WithCTE]] has to be placed with all the merged
  *   [[CTERelationDef]] that were collected under it. It will be true for root query, [[View]]s
  *   and expression subqueries.
- * @param isOpaque This flag makes this [[CteScope]] opaque for [[CTERelationDef]] lookups. It will
- *   be true for root query and [[View]]s.
+ * @param isOpaque
+ *   This flag makes this [[CteScope]] opaque for [[CTERelationDef]] lookups. It will be true for
+ *   root query and [[View]]s.
  */
 class CteScope(val isRoot: Boolean, val isOpaque: Boolean) {
 
   /**
-   * Known [[CTERelationDef]]s that were already resolved in this scope or in child scopes. This is
-   * used to merge CTE definitions together in a single [[WithCTE]].
+   * Known [[CTERelationDef]]s that were already resolved in this scope or in child scopes. This
+   * is used to merge CTE definitions together in a single [[WithCTE]].
    */
   private val knownCtes = new ArrayList[CTERelationDef]
 
@@ -239,7 +238,9 @@ class CteScope(val isRoot: Boolean, val isOpaque: Boolean) {
    * scopes in the context of a correct `unresolvedOperator`. Return the `resolvedOperator`
    * otherwise.
    */
-  def tryPutWithCTE(unresolvedOperator: LogicalPlan, resolvedOperator: LogicalPlan): LogicalPlan = {
+  def tryPutWithCTE(
+      unresolvedOperator: LogicalPlan,
+      resolvedOperator: LogicalPlan): LogicalPlan = {
     if (!knownCtes.isEmpty && isRoot && isSuitableOperatorForWithCTE(unresolvedOperator)) {
       WithCTE(resolvedOperator, knownCtes.asScala.toSeq)
     } else {
@@ -248,8 +249,8 @@ class CteScope(val isRoot: Boolean, val isOpaque: Boolean) {
   }
 
   /**
-   * Register a new CTE definition in this scope. Since the scope is created per single WITH clause,
-   * there can be no name conflicts, but this is validated by the Parser in [[AstBuilder]]
+   * Register a new CTE definition in this scope. Since the scope is created per single WITH
+   * clause, there can be no name conflicts, but this is validated by the Parser in [[AstBuilder]]
    * using [[QueryParsingErrors.duplicateCteDefinitionNamesError]]. This definition will be both
    * known and visible.
    */
@@ -279,8 +280,8 @@ class CteScope(val isRoot: Boolean, val isOpaque: Boolean) {
   /**
    * This predicate returns `true` if the `unresolvedOperator` is suitable to place a [[WithCTE]]
    * on top of its resolved counterpart. This is the case for:
-   *  - [[UnresolvedWith]];
-   *  - Multi-child operators with [[UnresolvedWith]]s in multiple subtrees.
+   *   - [[UnresolvedWith]];
+   *   - Multi-child operators with [[UnresolvedWith]]s in multiple subtrees.
    */
   private def isSuitableOperatorForWithCTE(unresolvedOperator: LogicalPlan): Boolean = {
     unresolvedOperator match {
@@ -292,8 +293,8 @@ class CteScope(val isRoot: Boolean, val isOpaque: Boolean) {
 }
 
 /**
- * The [[CteRegistry]] is responsible for managing the stack of [[CteScope]]s and resolving visible
- * [[CTERelationDef]] names.
+ * The [[CteRegistry]] is responsible for managing the stack of [[CteScope]]s and resolving
+ * visible [[CTERelationDef]] names.
  */
 class CteRegistry {
   private val stack = new ArrayDeque[CteScope]
@@ -302,29 +303,26 @@ class CteRegistry {
   def currentScope: CteScope = stack.peek()
 
   /**
-   * This is a [[pushScope]] variant specifically designed to be called above multi-child
-   * operator children resolution (e.g. for children of a [[Join]] or [[Union]]).
+   * This is a [[pushScope]] variant specifically designed to be called above multi-child operator
+   * children resolution (e.g. for children of a [[Join]] or [[Union]]).
    *
    * The `isRoot` flag has to be propagated from the parent scope if all of the following
    * conditions are met:
-   *  - The current scope is a root scope
-   *  - The multi-child `unresolvedOperator` IS NOT suitable to place a [[WithCTE]]
-   *  - Some operator in `unresolvedChild` subtree IS suitable to place a [[WithCTE]].
+   *   - The current scope is a root scope
+   *   - The multi-child `unresolvedOperator` IS NOT suitable to place a [[WithCTE]]
+   *   - Some operator in `unresolvedChild` subtree IS suitable to place a [[WithCTE]].
    */
   def pushScopeForMultiChildOperator[R](
       unresolvedOperator: LogicalPlan,
-      unresolvedChild: LogicalPlan
-  ): Unit = {
-    pushScope(
-      isRoot = currentScope.isRoot &&
-        !CteRegistry.isSuitableMultiChildOperatorForWithCTE(unresolvedOperator) &&
-        CteRegistry.hasSuitableOperatorForWithCTEInSubtree(unresolvedChild)
-    )
+      unresolvedChild: LogicalPlan): Unit = {
+    pushScope(isRoot = currentScope.isRoot &&
+      !CteRegistry.isSuitableMultiChildOperatorForWithCTE(unresolvedOperator) &&
+      CteRegistry.hasSuitableOperatorForWithCTEInSubtree(unresolvedChild))
   }
 
   /**
-   * Push new scope to the stack. This is used by the [[Resolver]] to create a new scope for
-   * each WITH clause.
+   * Push new scope to the stack. This is used by the [[Resolver]] to create a new scope for each
+   * WITH clause.
    */
   def pushScope(isRoot: Boolean = false, isOpaque: Boolean = false): Unit = {
     stack.push(new CteScope(isRoot = isRoot, isOpaque = isOpaque))
@@ -368,8 +366,8 @@ object CteRegistry {
 
   /**
    * This predicate returns `true` if the `unresolvedOperator` is a multi-child operator that
-   * contains multiple [[UnresolvedWith]] operators in its subtrees. This way we determine if
-   * this operator is suitable to place a [[WithCTE]] on top of its resolved counterpart.
+   * contains multiple [[UnresolvedWith]] operators in its subtrees. This way we determine if this
+   * operator is suitable to place a [[WithCTE]] on top of its resolved counterpart.
    */
   def isSuitableMultiChildOperatorForWithCTE(unresolvedOperator: LogicalPlan): Boolean = {
     unresolvedOperator.children.count(hasSuitableOperatorForWithCTEInSubtree(_)) > 1

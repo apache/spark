@@ -19,8 +19,8 @@ package org.apache.spark.sql.execution.datasources.v2.state
 import org.apache.spark.SparkRuntimeException
 
 /**
- * Object for grouping error messages from (most) exceptions thrown from State Data Source.
- * State Metadata Data Source may (re/co)use this object.
+ * Object for grouping error messages from (most) exceptions thrown from State Data Source. State
+ * Metadata Data Source may (re/co)use this object.
  *
  * ERROR_CLASS has a prefix of "STDS_" representing STateDataSource.
  */
@@ -99,103 +99,87 @@ abstract class StateDataSourceException(
     errorClass: String,
     messageParameters: Map[String, String],
     cause: Throwable)
-  extends SparkRuntimeException(
-    errorClass,
-    messageParameters,
-    cause)
+    extends SparkRuntimeException(errorClass, messageParameters, cause)
 
 class StateDataSourceInternalError(message: String, cause: Throwable = null)
-  extends StateDataSourceException(
-    "STDS_INTERNAL_ERROR",
-    Map("message" -> message),
-    cause)
+    extends StateDataSourceException("STDS_INTERNAL_ERROR", Map("message" -> message), cause)
 
 class StateDataSourceInvalidOptionValue(optionName: String, message: String)
-  extends StateDataSourceException(
-    "STDS_INVALID_OPTION_VALUE.WITH_MESSAGE",
-    Map("optionName" -> optionName, "message" -> message),
-    cause = null)
+    extends StateDataSourceException(
+      "STDS_INVALID_OPTION_VALUE.WITH_MESSAGE",
+      Map("optionName" -> optionName, "message" -> message),
+      cause = null)
 
 class StateDataSourceInvalidOptionValueIsNegative(optionName: String)
-  extends StateDataSourceException(
-    "STDS_INVALID_OPTION_VALUE.IS_NEGATIVE",
-    Map("optionName" -> optionName),
-    cause = null)
+    extends StateDataSourceException(
+      "STDS_INVALID_OPTION_VALUE.IS_NEGATIVE",
+      Map("optionName" -> optionName),
+      cause = null)
 
 class StateDataSourceInvalidOptionValueIsEmpty(optionName: String)
-  extends StateDataSourceException(
-    "STDS_INVALID_OPTION_VALUE.IS_EMPTY",
-    Map("optionName" -> optionName),
-    cause = null)
+    extends StateDataSourceException(
+      "STDS_INVALID_OPTION_VALUE.IS_EMPTY",
+      Map("optionName" -> optionName),
+      cause = null)
 
-class StateDataSourceUnspecifiedRequiredOption(
-    missingOptionName: String)
-  extends StateDataSourceException(
-    "STDS_REQUIRED_OPTION_UNSPECIFIED",
-    Map("optionName" -> missingOptionName),
-    cause = null)
+class StateDataSourceUnspecifiedRequiredOption(missingOptionName: String)
+    extends StateDataSourceException(
+      "STDS_REQUIRED_OPTION_UNSPECIFIED",
+      Map("optionName" -> missingOptionName),
+      cause = null)
 
-class StateDataSourceOffsetLogUnavailable(
-    batchId: Long,
-    checkpointLocation: String)
-  extends StateDataSourceException(
-    "STDS_OFFSET_LOG_UNAVAILABLE",
-    Map("batchId" -> batchId.toString, "checkpointLocation" -> checkpointLocation),
-    cause = null)
+class StateDataSourceOffsetLogUnavailable(batchId: Long, checkpointLocation: String)
+    extends StateDataSourceException(
+      "STDS_OFFSET_LOG_UNAVAILABLE",
+      Map("batchId" -> batchId.toString, "checkpointLocation" -> checkpointLocation),
+      cause = null)
 
-class StateDataSourceOffsetMetadataLogUnavailable(
-    batchId: Long,
-    checkpointLocation: String)
-  extends StateDataSourceException(
-    "STDS_OFFSET_METADATA_LOG_UNAVAILABLE",
-    Map("batchId" -> batchId.toString, "checkpointLocation" -> checkpointLocation),
-    cause = null)
+class StateDataSourceOffsetMetadataLogUnavailable(batchId: Long, checkpointLocation: String)
+    extends StateDataSourceException(
+      "STDS_OFFSET_METADATA_LOG_UNAVAILABLE",
+      Map("batchId" -> batchId.toString, "checkpointLocation" -> checkpointLocation),
+      cause = null)
 
-class StateDataSourceReadStateSchemaFailure(
-   sourceOptions: StateSourceOptions,
-   cause: Throwable)
-  extends StateDataSourceException(
-    "STDS_FAILED_TO_READ_STATE_SCHEMA",
-    Map("sourceOptions" -> sourceOptions.toString),
-    cause)
+class StateDataSourceReadStateSchemaFailure(sourceOptions: StateSourceOptions, cause: Throwable)
+    extends StateDataSourceException(
+      "STDS_FAILED_TO_READ_STATE_SCHEMA",
+      Map("sourceOptions" -> sourceOptions.toString),
+      cause)
 
 class StateDataSourceConflictOptions(options: Seq[String])
-  extends StateDataSourceException(
-    "STDS_CONFLICT_OPTIONS",
-    Map("options" -> options.map(x => s"'$x'").mkString("[", ", ", "]")),
-    cause = null)
+    extends StateDataSourceException(
+      "STDS_CONFLICT_OPTIONS",
+      Map("options" -> options.map(x => s"'$x'").mkString("[", ", ", "]")),
+      cause = null)
 
 class StataDataSourceCommittedBatchUnavailable(checkpointLocation: String)
-  extends StateDataSourceException(
-    "STDS_COMMITTED_BATCH_UNAVAILABLE",
-    Map("checkpointLocation" -> checkpointLocation),
-    cause = null)
+    extends StateDataSourceException(
+      "STDS_COMMITTED_BATCH_UNAVAILABLE",
+      Map("checkpointLocation" -> checkpointLocation),
+      cause = null)
 
 class StateDataSourceNoPartitionDiscoveredInStateStore(sourceOptions: StateSourceOptions)
-  extends StateDataSourceException(
-    "STDS_NO_PARTITION_DISCOVERED_IN_STATE_STORE",
-    Map("sourceOptions" -> sourceOptions.toString),
-    cause = null)
+    extends StateDataSourceException(
+      "STDS_NO_PARTITION_DISCOVERED_IN_STATE_STORE",
+      Map("sourceOptions" -> sourceOptions.toString),
+      cause = null)
 
-class StateDataSourceReadOperatorMetadataFailure(
-    checkpointLocation: String,
-    batchId: Long)
-  extends StateDataSourceException(
-    "STDS_FAILED_TO_READ_OPERATOR_METADATA",
-    Map("checkpointLocation" -> checkpointLocation, "batchId" -> batchId.toString),
-    cause = null)
+class StateDataSourceReadOperatorMetadataFailure(checkpointLocation: String, batchId: Long)
+    extends StateDataSourceException(
+      "STDS_FAILED_TO_READ_OPERATOR_METADATA",
+      Map("checkpointLocation" -> checkpointLocation, "batchId" -> batchId.toString),
+      cause = null)
 
 class StateDataSourceMixedCheckpointFormatVersionsNotSupported(
     startBatchId: Long,
     endBatchId: Long,
     startFormatVersion: Int,
     endFormatVersion: Int)
-  extends StateDataSourceException(
-    "STDS_MIXED_CHECKPOINT_FORMAT_VERSIONS_NOT_SUPPORTED",
-    Map(
-      "startBatchId" -> startBatchId.toString,
-      "endBatchId" -> endBatchId.toString,
-      "startFormatVersion" -> startFormatVersion.toString,
-      "endFormatVersion" -> endFormatVersion.toString
-    ),
-    cause = null)
+    extends StateDataSourceException(
+      "STDS_MIXED_CHECKPOINT_FORMAT_VERSIONS_NOT_SUPPORTED",
+      Map(
+        "startBatchId" -> startBatchId.toString,
+        "endBatchId" -> endBatchId.toString,
+        "startFormatVersion" -> startFormatVersion.toString,
+        "endFormatVersion" -> endFormatVersion.toString),
+      cause = null)

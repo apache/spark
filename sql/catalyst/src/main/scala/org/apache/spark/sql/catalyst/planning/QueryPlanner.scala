@@ -22,9 +22,9 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.TreeNode
 
 /**
- * Given a [[LogicalPlan]], returns a list of `PhysicalPlan`s that can
- * be used for execution. If this strategy does not apply to the given logical operation then an
- * empty list should be returned.
+ * Given a [[LogicalPlan]], returns a list of `PhysicalPlan`s that can be used for execution. If
+ * this strategy does not apply to the given logical operation then an empty list should be
+ * returned.
  */
 abstract class GenericStrategy[PhysicalPlan <: TreeNode[PhysicalPlan]] extends Logging {
 
@@ -39,20 +39,21 @@ abstract class GenericStrategy[PhysicalPlan <: TreeNode[PhysicalPlan]] extends L
 }
 
 /**
- * Abstract class for transforming [[LogicalPlan]]s into physical plans.
- * Child classes are responsible for specifying a list of [[GenericStrategy]] objects that
- * each of which can return a list of possible physical plan options.
- * If a given strategy is unable to plan all of the remaining operators in the tree,
- * it can call [[GenericStrategy#planLater planLater]], which returns a placeholder
- * object that will be [[collectPlaceholders collected]] and filled in
- * using other available strategies.
+ * Abstract class for transforming [[LogicalPlan]]s into physical plans. Child classes are
+ * responsible for specifying a list of [[GenericStrategy]] objects that each of which can return
+ * a list of possible physical plan options. If a given strategy is unable to plan all of the
+ * remaining operators in the tree, it can call [[GenericStrategy#planLater planLater]], which
+ * returns a placeholder object that will be [[collectPlaceholders collected]] and filled in using
+ * other available strategies.
  *
- * TODO: RIGHT NOW ONLY ONE PLAN IS RETURNED EVER...
- *       PLAN SPACE EXPLORATION WILL BE IMPLEMENTED LATER.
+ * TODO: RIGHT NOW ONLY ONE PLAN IS RETURNED EVER... PLAN SPACE EXPLORATION WILL BE IMPLEMENTED
+ * LATER.
  *
- * @tparam PhysicalPlan The type of physical plan produced by this [[QueryPlanner]]
+ * @tparam PhysicalPlan
+ *   The type of physical plan produced by this [[QueryPlanner]]
  */
 abstract class QueryPlanner[PhysicalPlan <: TreeNode[PhysicalPlan]] {
+
   /** A list of execution strategies that can be used by the planner */
   def strategies: Seq[GenericStrategy[PhysicalPlan]]
 
@@ -95,8 +96,7 @@ abstract class QueryPlanner[PhysicalPlan <: TreeNode[PhysicalPlan]] {
   }
 
   /**
-   * Collects placeholders marked using [[GenericStrategy#planLater planLater]]
-   * by [[strategies]].
+   * Collects placeholders marked using [[GenericStrategy#planLater planLater]] by [[strategies]].
    */
   protected def collectPlaceholders(plan: PhysicalPlan): Seq[(PhysicalPlan, LogicalPlan)]
 

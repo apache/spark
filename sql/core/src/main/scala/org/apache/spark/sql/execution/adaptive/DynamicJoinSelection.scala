@@ -28,12 +28,12 @@ import org.apache.spark.sql.internal.SQLConf
 /**
  * This optimization rule includes three join selection:
  *   1. detects a join child that has a high ratio of empty partitions and adds a
- *      NO_BROADCAST_HASH hint to avoid it being broadcast, as shuffle join is faster in this case:
- *      many tasks complete immediately since one join side is empty.
+ *      NO_BROADCAST_HASH hint to avoid it being broadcast, as shuffle join is faster in this
+ *      case: many tasks complete immediately since one join side is empty.
  *   2. detects a join child that every partition size is less than local map threshold and adds a
  *      PREFER_SHUFFLE_HASH hint to encourage being shuffle hash join instead of sort merge join.
- *   3. if a join satisfies both NO_BROADCAST_HASH and PREFER_SHUFFLE_HASH,
- *      then add a SHUFFLE_HASH hint.
+ *   3. if a join satisfies both NO_BROADCAST_HASH and PREFER_SHUFFLE_HASH, then add a
+ *      SHUFFLE_HASH hint.
  */
 object DynamicJoinSelection extends Rule[LogicalPlan] with JoinSelectionHelper {
 
@@ -41,7 +41,7 @@ object DynamicJoinSelection extends Rule[LogicalPlan] with JoinSelectionHelper {
     val partitionCnt = mapStats.bytesByPartitionId.length
     val nonZeroCnt = mapStats.bytesByPartitionId.count(_ > 0)
     partitionCnt > 0 && nonZeroCnt > 0 &&
-      (nonZeroCnt * 1.0 / partitionCnt) < conf.nonEmptyPartitionRatioForBroadcastJoin
+    (nonZeroCnt * 1.0 / partitionCnt) < conf.nonEmptyPartitionRatioForBroadcastJoin
   }
 
   private def preferShuffledHashJoin(mapStats: MapOutputStatistics): Boolean = {
@@ -49,23 +49,24 @@ object DynamicJoinSelection extends Rule[LogicalPlan] with JoinSelectionHelper {
       conf.getConf(SQLConf.ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD)
     val advisoryPartitionSize = conf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES)
     advisoryPartitionSize <= maxShuffledHashJoinLocalMapThreshold &&
-      mapStats.bytesByPartitionId.forall(_ <= maxShuffledHashJoinLocalMapThreshold)
+    mapStats.bytesByPartitionId.forall(_ <= maxShuffledHashJoinLocalMapThreshold)
   }
 
-  private def selectJoinStrategy(
-      join: Join,
-      isLeft: Boolean): Option[JoinStrategyHint] = {
+  private def selectJoinStrategy(join: Join, isLeft: Boolean): Option[JoinStrategyHint] = {
     val plan = if (isLeft) join.left else join.right
     plan match {
-      case LogicalQueryStage(_, stage: ShuffleQueryStageExec) if stage.isMaterialized
-        && stage.mapStats.isDefined =>
+      case LogicalQueryStage(_, stage: ShuffleQueryStageExec)
+          if stage.isMaterialized
+            && stage.mapStats.isDefined =>
 
         val manyEmptyInPlan = hasManyEmptyPartitions(stage.mapStats.get)
         val canBroadcastPlan = (isLeft && canBuildBroadcastLeft(join.joinType)) ||
           (!isLeft && canBuildBroadcastRight(join.joinType))
         val manyEmptyInOther = (if (isLeft) join.right else join.left) match {
-          case LogicalQueryStage(_, stage: ShuffleQueryStageExec) if stage.isMaterialized
-            && stage.mapStats.isDefined => hasManyEmptyPartitions(stage.mapStats.get)
+          case LogicalQueryStage(_, stage: ShuffleQueryStageExec)
+              if stage.isMaterialized
+                && stage.mapStats.isDefined =>
+            hasManyEmptyPartitions(stage.mapStats.get)
           case _ => false
         }
 

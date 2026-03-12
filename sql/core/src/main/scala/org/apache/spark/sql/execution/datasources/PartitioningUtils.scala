@@ -51,14 +51,12 @@ object PartitionPath {
 }
 
 /**
- * Holds a directory in a partitioned collection of files as well as the partition values
- * in the form of a Row.  Before scanning, the files at `path` need to be enumerated.
+ * Holds a directory in a partitioned collection of files as well as the partition values in the
+ * form of a Row. Before scanning, the files at `path` need to be enumerated.
  */
 case class PartitionPath(values: InternalRow, path: Path)
 
-case class PartitionSpec(
-    partitionColumns: StructType,
-    partitions: Seq[PartitionPath])
+case class PartitionSpec(partitionColumns: StructType, partitions: Seq[PartitionPath])
 
 object PartitionSpec {
   val emptySpec = PartitionSpec(StructType(Seq.empty[StructField]), Seq.empty[PartitionPath])
@@ -71,8 +69,7 @@ object PartitioningUtils extends SQLConfHelper {
 
   case class TypedPartValue(value: String, dataType: DataType)
 
-  case class PartitionValues(columnNames: Seq[String], typedValues: Seq[TypedPartValue])
-  {
+  case class PartitionValues(columnNames: Seq[String], typedValues: Seq[TypedPartValue]) {
     require(columnNames.size == typedValues.size)
   }
 
@@ -110,8 +107,15 @@ object PartitioningUtils extends SQLConfHelper {
       validatePartitionColumns: Boolean,
       timeZoneId: String,
       ignoreInvalidPartitionPaths: Boolean): PartitionSpec = {
-    parsePartitions(paths, typeInference, basePaths, userSpecifiedSchema, caseSensitive,
-      validatePartitionColumns, DateTimeUtils.getZoneId(timeZoneId), ignoreInvalidPartitionPaths)
+    parsePartitions(
+      paths,
+      typeInference,
+      basePaths,
+      userSpecifiedSchema,
+      caseSensitive,
+      validatePartitionColumns,
+      DateTimeUtils.getZoneId(timeZoneId),
+      ignoreInvalidPartitionPaths)
   }
 
   private[datasources] def parsePartitions(
@@ -142,15 +146,21 @@ object PartitioningUtils extends SQLConfHelper {
     }
 
     val dateFormatter = DateFormatter(DateFormatter.defaultPattern)
-    val timestampFormatter = TimestampFormatter(
-      timestampPartitionPattern,
-      zoneId,
-      isParsing = true)
+    val timestampFormatter =
+      TimestampFormatter(timestampPartitionPattern, zoneId, isParsing = true)
     val timeFormatter = TimeFormatter(timePartitionPattern, isParsing = true)
     // First, we need to parse every partition's path and see if we can find partition values.
     val (partitionValues, optDiscoveredBasePaths) = paths.map { path =>
-      parsePartition(path, typeInference, basePaths, userSpecifiedDataTypes,
-        validatePartitionColumns, zoneId, dateFormatter, timestampFormatter, timeFormatter)
+      parsePartition(
+        path,
+        typeInference,
+        basePaths,
+        userSpecifiedDataTypes,
+        validatePartitionColumns,
+        zoneId,
+        dateFormatter,
+        timestampFormatter,
+        timeFormatter)
     }.unzip
 
     // We create pairs of (path -> path's partition value) here
@@ -203,7 +213,9 @@ object PartitioningUtils extends SQLConfHelper {
               case NonFatal(_) =>
                 if (validatePartitionColumns) {
                   throw QueryExecutionErrors.failedToCastValueToDataTypeForPartitionColumnError(
-                    typedValue.value, typedValue.dataType, columnName)
+                    typedValue.value,
+                    typedValue.dataType,
+                    columnName)
                 } else null
             }
           }
@@ -215,8 +227,8 @@ object PartitioningUtils extends SQLConfHelper {
   }
 
   /**
-   * Parses a single partition, returns column names and values of each partition column, also
-   * the path when we stop partition discovery.  For example, given:
+   * Parses a single partition, returns column names and values of each partition column, also the
+   * path when we stop partition discovery. For example, given:
    * {{{
    *   path = hdfs://<host>:<port>/path/to/partition/a=42/b=hello/c=3.14
    * }}}
@@ -264,8 +276,14 @@ object PartitioningUtils extends SQLConfHelper {
         // Let's say currentPath is a path of "/table/a=1/", currentPath.getName will give us a=1.
         // Once we get the string, we try to parse it and find the partition column and value.
         val maybeColumn =
-          parsePartitionColumn(currentPath.getName, typeInference, userSpecifiedDataTypes,
-            zoneId, dateFormatter, timestampFormatter, timeFormatter)
+          parsePartitionColumn(
+            currentPath.getName,
+            typeInference,
+            userSpecifiedDataTypes,
+            zoneId,
+            dateFormatter,
+            timestampFormatter,
+            timeFormatter)
         maybeColumn.foreach(columns += _)
 
         // Now, we determine if we should stop.
@@ -277,8 +295,7 @@ object PartitioningUtils extends SQLConfHelper {
         //  - After we get the new currentPath, this new currentPath represent the top level dir
         //    i.e. currentPath.getParent == null. For the example of "/table/a=1/",
         //    the top level dir is "/table".
-        finished =
-          (maybeColumn.isEmpty && !columns.isEmpty) || currentPath.getParent == null
+        finished = (maybeColumn.isEmpty && !columns.isEmpty) || currentPath.getParent == null
 
         if (!finished) {
           // For the above example, currentPath will be "/table/".
@@ -331,34 +348,38 @@ object PartitioningUtils extends SQLConfHelper {
   }
 
   /**
-   * Given a partition path fragment, e.g. `fieldOne=1/fieldTwo=2`, returns a parsed spec
-   * for that fragment as a `TablePartitionSpec`, e.g. `Map(("fieldOne", "1"), ("fieldTwo", "2"))`.
+   * Given a partition path fragment, e.g. `fieldOne=1/fieldTwo=2`, returns a parsed spec for that
+   * fragment as a `TablePartitionSpec`, e.g. `Map(("fieldOne", "1"), ("fieldTwo", "2"))`.
    */
   def parsePathFragment(pathFragment: String): TablePartitionSpec = {
     parsePathFragmentAsSeq(pathFragment).toMap
   }
 
   /**
-   * Given a partition path fragment, e.g. `fieldOne=1/fieldTwo=2`, returns a parsed spec
-   * for that fragment as a `Seq[(String, String)]`, e.g.
-   * `Seq(("fieldOne", "1"), ("fieldTwo", "2"))`.
+   * Given a partition path fragment, e.g. `fieldOne=1/fieldTwo=2`, returns a parsed spec for that
+   * fragment as a `Seq[(String, String)]`, e.g. `Seq(("fieldOne", "1"), ("fieldTwo", "2"))`.
    */
   def parsePathFragmentAsSeq(pathFragment: String): Seq[(String, String)] = {
-    pathFragment.split("/").map { kv =>
-      val pair = kv.split("=", 2)
-      (unescapePathName(pair(0)), unescapePathName(pair(1)))
-    }.toImmutableArraySeq
+    pathFragment
+      .split("/")
+      .map { kv =>
+        val pair = kv.split("=", 2)
+        (unescapePathName(pair(0)), unescapePathName(pair(1)))
+      }
+      .toImmutableArraySeq
   }
 
   /**
    * This is the inverse of parsePathFragment().
    */
   def getPathFragment(spec: TablePartitionSpec, partitionSchema: StructType): String = {
-    partitionSchema.map { field =>
-      escapePathName(field.name) + "=" +
-        getPartitionValueString(
-          removeLeadingZerosFromNumberTypePartition(spec(field.name), field.dataType))
-    }.mkString("/")
+    partitionSchema
+      .map { field =>
+        escapePathName(field.name) + "=" +
+          getPartitionValueString(
+            removeLeadingZerosFromNumberTypePartition(spec(field.name), field.dataType))
+      }
+      .mkString("/")
   }
 
   def removeLeadingZerosFromNumberTypePartition(value: String, dataType: DataType): String =
@@ -412,20 +433,21 @@ object PartitioningUtils extends SQLConfHelper {
     def groupByKey[K, V](seq: Seq[(K, V)]): Map[K, Iterable[V]] =
       seq.groupBy { case (key, _) => key }.transform((_, v) => v.map { case (_, value) => value })
 
-    val partColNamesToPaths = groupByKey(pathWithPartitionValues.map {
-      case (path, partValues) => partValues.columnNames -> path
+    val partColNamesToPaths = groupByKey(pathWithPartitionValues.map { case (path, partValues) =>
+      partValues.columnNames -> path
     })
 
-    val distinctPartColLists = distinctPartColNames.map(_.mkString(", ")).zipWithIndex.map {
-      case (names, index) =>
+    val distinctPartColLists =
+      distinctPartColNames.map(_.mkString(", ")).zipWithIndex.map { case (names, index) =>
         s"Partition column name list #$index: $names"
-    }
+      }
 
     // Lists out those non-leaf partition directories that also contain files
     val suspiciousPaths = distinctPartColNames.sortBy(_.length).flatMap(partColNamesToPaths)
 
     QueryExecutionErrors.conflictingPartitionColumnNamesError(
-      distinctPartColLists, suspiciousPaths)
+      distinctPartColLists,
+      suspiciousPaths)
   }
 
   // scalastyle:off line.size.limit
@@ -436,9 +458,8 @@ object PartitioningUtils extends SQLConfHelper {
    *
    * When resolving conflicts, it follows the table below:
    *
-   * +--------------------+-------------------+-------------------+-------------------+--------------------+------------+---------------+---------------+------------+------------+
    * | InputA \ InputB    | NullType          | IntegerType       | LongType          | DecimalType(38,0)* | DoubleType | DateType      | TimestampType | StringType | TimeType   |
-   * +--------------------+-------------------+-------------------+-------------------+--------------------+------------+---------------+---------------+------------+------------+
+   * |:-------------------|:------------------|:------------------|:------------------|:-------------------|:-----------|:--------------|:--------------|:-----------|:-----------|
    * | NullType           | NullType          | IntegerType       | LongType          | DecimalType(38,0)  | DoubleType | DateType      | TimestampType | StringType | TimeType   |
    * | IntegerType        | IntegerType       | IntegerType       | LongType          | DecimalType(38,0)  | DoubleType | StringType    | StringType    | StringType | StringType |
    * | LongType           | LongType          | LongType          | LongType          | DecimalType(38,0)  | StringType | StringType    | StringType    | StringType | StringType |
@@ -448,7 +469,6 @@ object PartitioningUtils extends SQLConfHelper {
    * | TimeType           | TimeType          | StringType        | StringType        | StringType         | StringType | StringType    | StringType    | StringType | TimeType   |
    * | TimestampType      | TimestampType     | StringType        | StringType        | StringType         | StringType | TimestampType | TimestampType | StringType | StringType |
    * | StringType         | StringType        | StringType        | StringType        | StringType         | StringType | StringType    | StringType    | StringType | StringType |
-   * +--------------------+-------------------+-------------------+-------------------+--------------------+------------+---------------+---------------+------------+------------+
    * Note that, for DecimalType(38,0)*, the table above intentionally does not cover all other
    * combinations of scales and precisions because currently we only infer decimal type like
    * `BigInteger`/`BigInt`. For example, 1.1 is inferred as double type.
@@ -540,36 +560,34 @@ object PartitioningUtils extends SQLConfHelper {
     }
   }
 
-  def castPartValueToDesiredType(
-      desiredType: DataType,
-      value: String,
-      zoneId: ZoneId): Any = desiredType match {
-    case _ if value == DEFAULT_PARTITION_NAME => null
-    case NullType => null
-    case StringType => UTF8String.fromString(unescapePathName(value))
-    case ByteType => Integer.parseInt(value).toByte
-    case ShortType => Integer.parseInt(value).toShort
-    case IntegerType => Integer.parseInt(value)
-    case LongType => JLong.parseLong(value)
-    case FloatType => JDouble.parseDouble(value).toFloat
-    case DoubleType => JDouble.parseDouble(value)
-    case _: DecimalType => Literal(new JBigDecimal(value)).value
-    case DateType =>
-      Cast(Literal(value), DateType, Some(zoneId.getId)).eval()
-    case tt: TimeType => Cast(Literal(unescapePathName(value)), tt).eval()
-    // Timestamp types
-    case dt if AnyTimestampType.acceptsType(dt) =>
-      Try {
-        Cast(Literal(unescapePathName(value)), dt, Some(zoneId.getId)).eval()
-      }.getOrElse {
-        Cast(Cast(Literal(value), DateType, Some(zoneId.getId)), dt).eval()
-      }
-    case it: AnsiIntervalType =>
-      Cast(Literal(unescapePathName(value)), it).eval()
-    case BinaryType => value.getBytes()
-    case BooleanType => value.toBoolean
-    case dt => throw SparkException.internalError(s"Unsupported partition type: $dt")
-  }
+  def castPartValueToDesiredType(desiredType: DataType, value: String, zoneId: ZoneId): Any =
+    desiredType match {
+      case _ if value == DEFAULT_PARTITION_NAME => null
+      case NullType => null
+      case StringType => UTF8String.fromString(unescapePathName(value))
+      case ByteType => Integer.parseInt(value).toByte
+      case ShortType => Integer.parseInt(value).toShort
+      case IntegerType => Integer.parseInt(value)
+      case LongType => JLong.parseLong(value)
+      case FloatType => JDouble.parseDouble(value).toFloat
+      case DoubleType => JDouble.parseDouble(value)
+      case _: DecimalType => Literal(new JBigDecimal(value)).value
+      case DateType =>
+        Cast(Literal(value), DateType, Some(zoneId.getId)).eval()
+      case tt: TimeType => Cast(Literal(unescapePathName(value)), tt).eval()
+      // Timestamp types
+      case dt if AnyTimestampType.acceptsType(dt) =>
+        Try {
+          Cast(Literal(unescapePathName(value)), dt, Some(zoneId.getId)).eval()
+        }.getOrElse {
+          Cast(Cast(Literal(value), DateType, Some(zoneId.getId)), dt).eval()
+        }
+      case it: AnsiIntervalType =>
+        Cast(Literal(unescapePathName(value)), it).eval()
+      case BinaryType => value.getBytes()
+      case BooleanType => value.toBoolean
+      case dt => throw SparkException.internalError(s"Unsupported partition type: $dt")
+    }
 
   def validatePartitionColumn(
       schema: StructType,
@@ -600,9 +618,7 @@ object PartitioningUtils extends SQLConfHelper {
     case _ => false
   }
 
-  def partitionColumnsSchema(
-      schema: StructType,
-      partitionColumns: Seq[String]): StructType = {
+  def partitionColumnsSchema(schema: StructType, partitionColumns: Seq[String]): StructType = {
     StructType(partitionColumns.map { col =>
       schema.find(f => conf.resolver(f.name, col)).getOrElse {
         val schemaCatalog = schema.catalogString
@@ -627,8 +643,10 @@ object PartitioningUtils extends SQLConfHelper {
     // schema respects the order of the data schema for the overlapping columns, and it
     // respects the data types of the partition schema.
     val fullSchema =
-    StructType(dataSchema.map(f => overlappedPartCols.getOrElse(getColName(f, caseSensitive), f)) ++
-      partitionSchema.filterNot(f => overlappedPartCols.contains(getColName(f, caseSensitive))))
+      StructType(
+        dataSchema.map(f => overlappedPartCols.getOrElse(getColName(f, caseSensitive), f)) ++
+          partitionSchema.filterNot(f =>
+            overlappedPartCols.contains(getColName(f, caseSensitive))))
     (fullSchema, overlappedPartCols.toMap)
   }
 

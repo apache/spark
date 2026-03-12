@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.expressions.codegen.GenerateOrdering
 import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.types._
 
-
 /**
  * A base class for generated/interpreted row ordering.
  */
@@ -71,7 +70,7 @@ class InterpretedOrdering(ordering: Seq[SortOrder]) extends BaseOrdering {
           case _ if order.direction == Ascending =>
             orderingFunc.compare(left, right)
           case _ if order.direction == Descending =>
-            - orderingFunc.compare(left, right)
+            -orderingFunc.compare(left, right)
         }
         if (comparison != 0) {
           return comparison
@@ -89,8 +88,8 @@ object InterpretedOrdering {
    * Creates a [[InterpretedOrdering]] for the given schema, in natural ascending order.
    */
   def forSchema(dataTypes: Seq[DataType]): InterpretedOrdering = {
-    new InterpretedOrdering(dataTypes.zipWithIndex.map {
-      case (dt, index) => SortOrder(BoundReference(index, dt, nullable = true), Ascending)
+    new InterpretedOrdering(dataTypes.zipWithIndex.map { case (dt, index) =>
+      SortOrder(BoundReference(index, dt, nullable = true), Ascending)
     })
   }
 }
@@ -123,8 +122,8 @@ object RowOrdering extends CodeGeneratorWithInterpretedFallback[Seq[SortOrder], 
    * Creates a row ordering for the given schema, in natural ascending order.
    */
   def createNaturalAscendingOrdering(dataTypes: Seq[DataType]): BaseOrdering = {
-    val order: Seq[SortOrder] = dataTypes.zipWithIndex.map {
-      case (dt, index) => SortOrder(BoundReference(index, dt, nullable = true), Ascending)
+    val order: Seq[SortOrder] = dataTypes.zipWithIndex.map { case (dt, index) =>
+      SortOrder(BoundReference(index, dt, nullable = true), Ascending)
     }
     create(order, Seq.empty)
   }

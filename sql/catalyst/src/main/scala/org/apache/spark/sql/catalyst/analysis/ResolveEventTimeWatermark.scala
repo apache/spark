@@ -28,15 +28,15 @@ import org.apache.spark.sql.catalyst.util.AUTO_GENERATED_ALIAS
  */
 object ResolveEventTimeWatermark extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
-    _.containsPattern(TreePattern.UNRESOLVED_EVENT_TIME_WATERMARK), ruleId) {
+    _.containsPattern(TreePattern.UNRESOLVED_EVENT_TIME_WATERMARK),
+    ruleId) {
 
     case u: UnresolvedEventTimeWatermark if u.eventTimeColExpr.resolved && u.childrenResolved =>
       if (u.eventTimeColExpr.metadata.contains(AUTO_GENERATED_ALIAS) &&
-          u.eventTimeColExpr.metadata.getString(AUTO_GENERATED_ALIAS) == "true") {
+        u.eventTimeColExpr.metadata.getString(AUTO_GENERATED_ALIAS) == "true") {
         throw new AnalysisException(
           errorClass = "REQUIRES_EXPLICIT_NAME_IN_WATERMARK_CLAUSE",
-          messageParameters = Map("sqlExpr" -> u.eventTimeColExpr.sql)
-        )
+          messageParameters = Map("sqlExpr" -> u.eventTimeColExpr.sql))
       }
 
       val uuid = java.util.UUID.randomUUID()
@@ -51,5 +51,5 @@ object ResolveEventTimeWatermark extends Rule[LogicalPlan] {
         val proj = Project(Seq(u.eventTimeColExpr) ++ u.child.output, u.child)
         EventTimeWatermark(uuid, attrRef, u.delay, proj)
       }
-    }
+  }
 }

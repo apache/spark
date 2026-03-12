@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 /**
  * Internal [[AnalysisException]] that also captures a [[LogicalPlan]].
  */
-class ExtendedAnalysisException private(
+class ExtendedAnalysisException private (
     message: String,
     line: Option[Int] = None,
     startPosition: Option[Int] = None,
@@ -35,16 +35,16 @@ class ExtendedAnalysisException private(
     context: Array[QueryContext] = Array.empty,
     sqlState: Option[String] = None,
     messageTemplate: Option[String] = None)
-  extends AnalysisException(
-    message,
-    line,
-    startPosition,
-    cause,
-    errorClass,
-    messageParameters,
-    context,
-    sqlState,
-    messageTemplate) {
+    extends AnalysisException(
+      message,
+      line,
+      startPosition,
+      cause,
+      errorClass,
+      messageParameters,
+      context,
+      sqlState,
+      messageTemplate) {
 
   def this(e: AnalysisException, plan: LogicalPlan) = {
     this(
@@ -69,8 +69,17 @@ class ExtendedAnalysisException private(
       context: Array[QueryContext],
       sqlState: Option[String] = this.sqlState,
       messageTemplate: Option[String] = this.messageTemplate): ExtendedAnalysisException = {
-    new ExtendedAnalysisException(message, line, startPosition, plan, cause, errorClass,
-      messageParameters, context, sqlState, messageTemplate)
+    new ExtendedAnalysisException(
+      message,
+      line,
+      startPosition,
+      plan,
+      cause,
+      errorClass,
+      messageParameters,
+      context,
+      sqlState,
+      messageTemplate)
   }
 
   override def getMessage: String = {

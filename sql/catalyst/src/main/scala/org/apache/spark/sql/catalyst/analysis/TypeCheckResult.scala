@@ -18,8 +18,8 @@
 package org.apache.spark.sql.catalyst.analysis
 
 /**
- * Represents the result of `Expression.checkInputDataTypes`.
- * We will throw `AnalysisException` in `CheckAnalysis` if `isFailure` is true.
+ * Represents the result of `Expression.checkInputDataTypes`. We will throw `AnalysisException` in
+ * `CheckAnalysis` if `isFailure` is true.
  */
 trait TypeCheckResult {
   def isFailure: Boolean = !isSuccess
@@ -36,8 +36,8 @@ object TypeCheckResult {
   }
 
   /**
-   * Represents the failing result of `Expression.checkInputDataTypes`,
-   * with an error message to show the reason of failure.
+   * Represents the failing result of `Expression.checkInputDataTypes`, with an error message to
+   * show the reason of failure.
    */
   case class TypeCheckFailure(message: String) extends TypeCheckResult {
     def isSuccess: Boolean = false
@@ -46,26 +46,30 @@ object TypeCheckResult {
   /**
    * Represents an error of data type mismatch with the `DATATYPE_MISMATCH` error class.
    *
-   * @param errorSubClass A sub-class of `DATATYPE_MISMATCH`.
-   * @param messageParameters Parameters of the sub-class error message.
+   * @param errorSubClass
+   *   A sub-class of `DATATYPE_MISMATCH`.
+   * @param messageParameters
+   *   Parameters of the sub-class error message.
    */
   case class DataTypeMismatch(
       errorSubClass: String,
       messageParameters: Map[String, String] = Map.empty)
-    extends TypeCheckResult {
+      extends TypeCheckResult {
     def isSuccess: Boolean = false
   }
 
   /**
    * Represents an error of invalid format with the `INVALID_FORMAT` error class.
    *
-   * @param errorSubClass A sub-class of `INVALID_FORMAT`.
-   * @param messageParameters Parameters of the sub-class error message.
+   * @param errorSubClass
+   *   A sub-class of `INVALID_FORMAT`.
+   * @param messageParameters
+   *   Parameters of the sub-class error message.
    */
   case class InvalidFormat(
       errorSubClass: String,
       messageParameters: Map[String, String] = Map.empty)
-    extends TypeCheckResult {
+      extends TypeCheckResult {
     def isSuccess: Boolean = false
   }
 }

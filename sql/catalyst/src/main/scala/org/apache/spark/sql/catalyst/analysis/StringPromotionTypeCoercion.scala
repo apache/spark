@@ -19,24 +19,8 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion.PromoteStrings.conf
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion.findCommonTypeForBinaryComparison
-import org.apache.spark.sql.catalyst.expressions.{
-  BinaryArithmetic,
-  BinaryComparison,
-  Cast,
-  Equality,
-  Expression,
-  Literal
-}
-import org.apache.spark.sql.types.{
-  AnsiIntervalType,
-  CalendarIntervalType,
-  DataType,
-  DoubleType,
-  NullType,
-  StringTypeExpression,
-  TimestampType,
-  TimestampTypeExpression
-}
+import org.apache.spark.sql.catalyst.expressions.{BinaryArithmetic, BinaryComparison, Cast, Equality, Expression, Literal}
+import org.apache.spark.sql.types.{AnsiIntervalType, CalendarIntervalType, DataType, DoubleType, NullType, StringTypeExpression, TimestampType, TimestampTypeExpression}
 
 /**
  * Type coercion helper that matches against [[BinaryArithmetic]] and [[BinaryComparison]]

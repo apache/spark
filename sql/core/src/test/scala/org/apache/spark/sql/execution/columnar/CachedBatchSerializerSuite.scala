@@ -60,7 +60,8 @@ class TestSingleIntColumnarCachedBatchSerializer extends CachedBatchSerializer {
       storageLevel: StorageLevel,
       conf: SQLConf): RDD[CachedBatch] = {
     if (schema.length != 1 || schema.head.dataType != IntegerType) {
-      throw new IllegalArgumentException("Only a single column of non-nullable ints works. " +
+      throw new IllegalArgumentException(
+        "Only a single column of non-nullable ints works. " +
           s"This is for testing $schema")
     }
     input.map { cb =>
@@ -86,13 +87,15 @@ class TestSingleIntColumnarCachedBatchSerializer extends CachedBatchSerializer {
       }
     } else {
       if (selectedAttributes.length > 1 ||
-          selectedAttributes.head.dataType != IntegerType) {
-        throw new IllegalArgumentException("Only a single column of non-nullable ints works. " +
+        selectedAttributes.head.dataType != IntegerType) {
+        throw new IllegalArgumentException(
+          "Only a single column of non-nullable ints works. " +
             s"This is for testing")
       }
       input.map { cached =>
         val single = cached.asInstanceOf[SingleIntCachedBatch]
-        val cv = OnHeapColumnVector.allocateColumns(single.numRows, selectedAttributes.toStructType)
+        val cv =
+          OnHeapColumnVector.allocateColumns(single.numRows, selectedAttributes.toStructType)
         val data = single.data
         cv(0).putInts(0, data.length, data, 0)
         new ColumnarBatch(cv.toArray, single.numRows)
@@ -141,8 +144,10 @@ class DefaultCachedBatchSerializerNoUnwrap extends DefaultCachedBatchSerializer 
   }
 }
 
-class CachedBatchSerializerSuite extends QueryTest
-  with SharedSparkSession with AdaptiveSparkPlanHelper {
+class CachedBatchSerializerSuite
+    extends QueryTest
+    with SharedSparkSession
+    with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   override protected def sparkConf: SparkConf = {
@@ -191,8 +196,8 @@ class CachedBatchSerializerSuite extends QueryTest
         val tableCache = tableCacheOpt.get.asInstanceOf[InMemoryTableScanExec].relation.cachedPlan
         assert(tableCache.isInstanceOf[AdaptiveSparkPlanExec])
         assert(tableCache.asInstanceOf[AdaptiveSparkPlanExec].supportsColumnar)
-        assert(collect(tableCache) {
-          case _: ColumnarToRowExec => true
+        assert(collect(tableCache) { case _: ColumnarToRowExec =>
+          true
         }.isEmpty)
         df.unpersist()
       }
@@ -200,9 +205,10 @@ class CachedBatchSerializerSuite extends QueryTest
   }
 }
 
-
-class CachedBatchSerializerNoUnwrapSuite extends QueryTest
-  with SharedSparkSession with AdaptiveSparkPlanHelper {
+class CachedBatchSerializerNoUnwrapSuite
+    extends QueryTest
+    with SharedSparkSession
+    with AdaptiveSparkPlanHelper {
 
   import testImplicits._
 
@@ -224,15 +230,14 @@ class CachedBatchSerializerNoUnwrapSuite extends QueryTest
       checkAnswer(df, Row(100) :: Row(200) :: Row(100) :: Row(200) :: Nil)
 
       val finalPlan = df.queryExecution.executedPlan
-      val cachedPlans = finalPlan.collect {
-        case i: InMemoryTableScanExec => i.relation.cachedPlan
+      val cachedPlans = finalPlan.collect { case i: InMemoryTableScanExec =>
+        i.relation.cachedPlan
       }
       assert(cachedPlans.length == 2)
-      cachedPlans.foreach {
-        cachedPlan =>
-          assert(cachedPlan.isInstanceOf[WholeStageCodegenExec])
-          assert(cachedPlan.asInstanceOf[WholeStageCodegenExec]
-            .child.isInstanceOf[ColumnarToRowExec])
+      cachedPlans.foreach { cachedPlan =>
+        assert(cachedPlan.isInstanceOf[WholeStageCodegenExec])
+        assert(
+          cachedPlan.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[ColumnarToRowExec])
       }
     }
   }

@@ -29,8 +29,10 @@ import org.apache.spark.unsafe.types.CalendarInterval
  * An Iterator to walk through the InternalRows from a CachedBatch
  */
 abstract class ColumnarIterator extends Iterator[InternalRow] {
-  def initialize(input: Iterator[DefaultCachedBatch], columnTypes: Array[DataType],
-    columnIndexes: Array[Int]): Unit
+  def initialize(
+      input: Iterator[DefaultCachedBatch],
+      columnTypes: Array[DataType],
+      columnIndexes: Array[Int]): Unit
 }
 
 /**
@@ -60,14 +62,17 @@ class MutableUnsafeRow(val writer: UnsafeRowWriter) extends BaseGenericInternalR
   override def update(i: Int, v: Any): Unit = throw SparkUnsupportedOperationException()
 
   // all other methods inherited from GenericMutableRow are not need
-  override protected def genericGet(ordinal: Int): Any = throw SparkUnsupportedOperationException()
+  override protected def genericGet(ordinal: Int): Any =
+    throw SparkUnsupportedOperationException()
   override def numFields: Int = throw SparkUnsupportedOperationException()
 }
 
 /**
  * Generates bytecode for a [[ColumnarIterator]] for columnar cache.
  */
-object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarIterator] with Logging {
+object GenerateColumnAccessor
+    extends CodeGenerator[Seq[DataType], ColumnarIterator]
+    with Logging {
 
   protected def canonicalize(in: Seq[DataType]): Seq[DataType] = in
   protected def bind(in: Seq[DataType], inputSchema: Seq[Attribute]): Seq[DataType] = in
@@ -81,7 +86,8 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
         case BooleanType => classOf[BooleanColumnAccessor].getName
         case ByteType => classOf[ByteColumnAccessor].getName
         case ShortType => classOf[ShortColumnAccessor].getName
-        case IntegerType | DateType | _: YearMonthIntervalType => classOf[IntColumnAccessor].getName
+        case IntegerType | DateType | _: YearMonthIntervalType =>
+          classOf[IntColumnAccessor].getName
         case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType | _: TimeType =>
           classOf[LongColumnAccessor].getName
         case FloatType => classOf[FloatColumnAccessor].getName
@@ -153,8 +159,9 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
            """.stripMargin
           ctx.addNewFunction(funcName, funcCode)
         }
-        (accessorNames.map { accessorName => s"$accessorName();" }.mkString("\n"),
-         extractorNames.map { extractorName => s"$extractorName();"}.mkString("\n"))
+        (
+          accessorNames.map { accessorName => s"$accessorName();" }.mkString("\n"),
+          extractorNames.map { extractorName => s"$extractorName();" }.mkString("\n"))
       }
 
     val codeBody = s"""

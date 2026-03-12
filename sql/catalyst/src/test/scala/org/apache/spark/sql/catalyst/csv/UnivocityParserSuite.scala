@@ -45,14 +45,25 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
       val decimalValue = new BigDecimal(decimalVal.toString)
       val options = new CSVOptions(Map.empty[String, String], false, "UTC")
       val parser = new UnivocityParser(StructType(Seq.empty), options)
-      assert(parser.makeConverter("_1", decimalType).apply(strVal) ===
-        Decimal(decimalValue, decimalType.precision, decimalType.scale))
+      assert(
+        parser.makeConverter("_1", decimalType).apply(strVal) ===
+          Decimal(decimalValue, decimalType.precision, decimalType.scale))
     }
   }
 
   test("Nullable types are handled") {
-    val types = Seq(ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType,
-      BooleanType, DecimalType.DoubleDecimal, TimestampType, DateType, StringType)
+    val types = Seq(
+      ByteType,
+      ShortType,
+      IntegerType,
+      LongType,
+      FloatType,
+      DoubleType,
+      BooleanType,
+      DecimalType.DoubleDecimal,
+      TimestampType,
+      DateType,
+      StringType)
 
     // Nullable field with nullValue option.
     types.foreach { t =>
@@ -98,7 +109,7 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
   test("Throws exception for empty string with non null type") {
     val options = new CSVOptions(Map.empty[String, String], false, "UTC")
     val parser = new UnivocityParser(StructType(Seq.empty), options)
-    val exception = intercept[RuntimeException]{
+    val exception = intercept[RuntimeException] {
       parser.makeConverter("_1", IntegerType, nullable = false).apply("")
     }
     assert(exception.getMessage.contains("null value found but field _1 is not nullable."))
@@ -124,8 +135,9 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
       TimeZone.getTimeZone(timestampsOptions.zoneId),
       timestampsOptions.locale)
     val expectedTime = format.parse(customTimestamp).getTime
-    val castedTimestamp = parser.makeConverter("_1", TimestampType, nullable = true)
-        .apply(customTimestamp)
+    val castedTimestamp = parser
+      .makeConverter("_1", TimestampType, nullable = true)
+      .apply(customTimestamp)
     assert(castedTimestamp == expectedTime * 1000L)
 
     val customDate = "31/01/2015"
@@ -136,20 +148,24 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
       TimeZone.getTimeZone(dateOptions.zoneId),
       dateOptions.locale)
     val expectedDate = DateTimeUtils.millisToMicros(format.parse(customDate).getTime)
-    val castedDate = parser.makeConverter("_1", DateType, nullable = true)
-        .apply(customDate)
+    val castedDate = parser
+      .makeConverter("_1", DateType, nullable = true)
+      .apply(customDate)
     assert(castedDate == DateTimeUtils.microsToDays(expectedDate, UTC))
 
     val timestamp = "2015-01-01 00:00:00"
-    timestampsOptions = new CSVOptions(Map(
-      "timestampFormat" -> "yyyy-MM-dd HH:mm:ss",
-      "dateFormat" -> "yyyy-MM-dd"), false, "UTC")
+    timestampsOptions = new CSVOptions(
+      Map("timestampFormat" -> "yyyy-MM-dd HH:mm:ss", "dateFormat" -> "yyyy-MM-dd"),
+      false,
+      "UTC")
     parser = new UnivocityParser(StructType(Seq.empty), timestampsOptions)
     val expected = 1420070400 * MICROS_PER_SECOND
-    assert(parser.makeConverter("_1", TimestampType).apply(timestamp) ==
-      expected)
-    assert(parser.makeConverter("_1", DateType).apply("2015-01-01") ==
-      expected / MICROS_PER_DAY)
+    assert(
+      parser.makeConverter("_1", TimestampType).apply(timestamp) ==
+        expected)
+    assert(
+      parser.makeConverter("_1", DateType).apply("2015-01-01") ==
+        expected / MICROS_PER_DAY)
   }
 
   test("Throws exception for casting an invalid string to Float and Double Types") {
@@ -170,8 +186,8 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
   test("Float NaN values are parsed correctly") {
     val options = new CSVOptions(Map("nanValue" -> "nn"), false, "UTC")
     val parser = new UnivocityParser(StructType(Seq.empty), options)
-    val floatVal: Float = parser.makeConverter(
-      "_1", FloatType, nullable = true).apply("nn").asInstanceOf[Float]
+    val floatVal: Float =
+      parser.makeConverter("_1", FloatType, nullable = true).apply("nn").asInstanceOf[Float]
 
     // Java implements the IEEE-754 floating point standard which guarantees that any comparison
     // against NaN will return false (except != which returns true)
@@ -181,8 +197,8 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
   test("Double NaN values are parsed correctly") {
     val options = new CSVOptions(Map("nanValue" -> "-"), false, "UTC")
     val parser = new UnivocityParser(StructType(Seq.empty), options)
-    val doubleVal: Double = parser.makeConverter(
-      "_1", DoubleType, nullable = true).apply("-").asInstanceOf[Double]
+    val doubleVal: Double =
+      parser.makeConverter("_1", DoubleType, nullable = true).apply("-").asInstanceOf[Double]
 
     assert(doubleVal.isNaN)
   }
@@ -190,15 +206,15 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
   test("Float infinite values can be parsed") {
     val negativeInfOptions = new CSVOptions(Map("negativeInf" -> "max"), false, "UTC")
     var parser = new UnivocityParser(StructType(Seq.empty), negativeInfOptions)
-    val floatVal1 = parser.makeConverter(
-      "_1", FloatType, nullable = true).apply("max").asInstanceOf[Float]
+    val floatVal1 =
+      parser.makeConverter("_1", FloatType, nullable = true).apply("max").asInstanceOf[Float]
 
     assert(floatVal1 == Float.NegativeInfinity)
 
     val positiveInfOptions = new CSVOptions(Map("positiveInf" -> "max"), false, "UTC")
     parser = new UnivocityParser(StructType(Seq.empty), positiveInfOptions)
-    val floatVal2 = parser.makeConverter(
-      "_1", FloatType, nullable = true).apply("max").asInstanceOf[Float]
+    val floatVal2 =
+      parser.makeConverter("_1", FloatType, nullable = true).apply("max").asInstanceOf[Float]
 
     assert(floatVal2 == Float.PositiveInfinity)
   }
@@ -206,15 +222,15 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
   test("Double infinite values can be parsed") {
     val negativeInfOptions = new CSVOptions(Map("negativeInf" -> "max"), false, "UTC")
     var parser = new UnivocityParser(StructType(Seq.empty), negativeInfOptions)
-    val doubleVal1 = parser.makeConverter(
-      "_1", DoubleType, nullable = true).apply("max").asInstanceOf[Double]
+    val doubleVal1 =
+      parser.makeConverter("_1", DoubleType, nullable = true).apply("max").asInstanceOf[Double]
 
     assert(doubleVal1 == Double.NegativeInfinity)
 
     val positiveInfOptions = new CSVOptions(Map("positiveInf" -> "max"), false, "UTC")
     parser = new UnivocityParser(StructType(Seq.empty), positiveInfOptions)
-    val doubleVal2 = parser.makeConverter(
-      "_1", DoubleType, nullable = true).apply("max").asInstanceOf[Double]
+    val doubleVal2 =
+      parser.makeConverter("_1", DoubleType, nullable = true).apply("max").asInstanceOf[Double]
 
     assert(doubleVal2 == Double.PositiveInfinity)
   }
@@ -325,10 +341,10 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
 
   test("Bad records test in permissive mode") {
     def checkBadRecord(
-      input: String = "1,a",
-      dataSchema: StructType = StructType.fromDDL("i INTEGER, s STRING, d DOUBLE"),
-      requiredSchema: StructType = StructType.fromDDL("i INTEGER, s STRING"),
-      options: Map[String, String] = Map("mode" -> "PERMISSIVE")): BadRecordException = {
+        input: String = "1,a",
+        dataSchema: StructType = StructType.fromDDL("i INTEGER, s STRING, d DOUBLE"),
+        requiredSchema: StructType = StructType.fromDDL("i INTEGER, s STRING"),
+        options: Map[String, String] = Map("mode" -> "PERMISSIVE")): BadRecordException = {
       val csvOptions = new CSVOptions(options, false, "UTC")
       val parser = new UnivocityParser(dataSchema, requiredSchema, csvOptions, Seq())
       intercept[BadRecordException] {
@@ -361,33 +377,45 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
   test("SPARK-30960: parse date/timestamp string with legacy format") {
     def check(parser: UnivocityParser): Unit = {
       // The legacy format allows 1 or 2 chars for some fields.
-      assert(parser.makeConverter("t", TimestampType).apply("2020-1-12 12:3:45") ==
-        date(2020, 1, 12, 12, 3, 45, 0))
-      assert(parser.makeConverter("t", DateType).apply("2020-1-12") ==
-        days(2020, 1, 12))
+      assert(
+        parser.makeConverter("t", TimestampType).apply("2020-1-12 12:3:45") ==
+          date(2020, 1, 12, 12, 3, 45, 0))
+      assert(
+        parser.makeConverter("t", DateType).apply("2020-1-12") ==
+          days(2020, 1, 12))
       // The legacy format allows arbitrary length of second fraction.
-      assert(parser.makeConverter("t", TimestampType).apply("2020-1-12 12:3:45.1") ==
-        date(2020, 1, 12, 12, 3, 45, 100000))
-      assert(parser.makeConverter("t", TimestampType).apply("2020-1-12 12:3:45.1234") ==
-        date(2020, 1, 12, 12, 3, 45, 123400))
+      assert(
+        parser.makeConverter("t", TimestampType).apply("2020-1-12 12:3:45.1") ==
+          date(2020, 1, 12, 12, 3, 45, 100000))
+      assert(
+        parser.makeConverter("t", TimestampType).apply("2020-1-12 12:3:45.1234") ==
+          date(2020, 1, 12, 12, 3, 45, 123400))
       // The legacy format allow date string to end with T or space, with arbitrary string
-      assert(parser.makeConverter("t", DateType).apply("2020-1-12T") ==
-        days(2020, 1, 12))
-      assert(parser.makeConverter("t", DateType).apply("2020-1-12Txyz") ==
-        days(2020, 1, 12))
-      assert(parser.makeConverter("t", DateType).apply("2020-1-12 ") ==
-        days(2020, 1, 12))
-      assert(parser.makeConverter("t", DateType).apply("2020-1-12 xyz") ==
-        days(2020, 1, 12))
+      assert(
+        parser.makeConverter("t", DateType).apply("2020-1-12T") ==
+          days(2020, 1, 12))
+      assert(
+        parser.makeConverter("t", DateType).apply("2020-1-12Txyz") ==
+          days(2020, 1, 12))
+      assert(
+        parser.makeConverter("t", DateType).apply("2020-1-12 ") ==
+          days(2020, 1, 12))
+      assert(
+        parser.makeConverter("t", DateType).apply("2020-1-12 xyz") ==
+          days(2020, 1, 12))
       // The legacy format ignores the "GMT" from the string
-      assert(parser.makeConverter("t", TimestampType).apply("2020-1-12 12:3:45GMT") ==
-        date(2020, 1, 12, 12, 3, 45, 0))
-      assert(parser.makeConverter("t", TimestampType).apply("GMT2020-1-12 12:3:45") ==
-        date(2020, 1, 12, 12, 3, 45, 0))
-      assert(parser.makeConverter("t", DateType).apply("2020-1-12GMT") ==
-        days(2020, 1, 12))
-      assert(parser.makeConverter("t", DateType).apply("GMT2020-1-12") ==
-        days(2020, 1, 12))
+      assert(
+        parser.makeConverter("t", TimestampType).apply("2020-1-12 12:3:45GMT") ==
+          date(2020, 1, 12, 12, 3, 45, 0))
+      assert(
+        parser.makeConverter("t", TimestampType).apply("GMT2020-1-12 12:3:45") ==
+          date(2020, 1, 12, 12, 3, 45, 0))
+      assert(
+        parser.makeConverter("t", DateType).apply("2020-1-12GMT") ==
+          days(2020, 1, 12))
+      assert(
+        parser.makeConverter("t", DateType).apply("GMT2020-1-12") ==
+          days(2020, 1, 12))
     }
 
     val options = new CSVOptions(Map.empty[String, String], false, "UTC")
@@ -410,8 +438,6 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
         check(new UnivocityParser(StructType(Seq.empty), optionsWithPattern(false)))
       },
       condition = "INVALID_DATETIME_PATTERN.ILLEGAL_CHARACTER",
-      parameters = Map(
-        "c" -> "n",
-        "pattern" -> "invalid"))
+      parameters = Map("c" -> "n", "pattern" -> "invalid"))
   }
 }

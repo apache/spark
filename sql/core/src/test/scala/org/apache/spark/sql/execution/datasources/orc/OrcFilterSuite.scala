@@ -49,8 +49,7 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
   import testImplicits.{toRichColumn, ColumnConstructorExt}
 
   override protected def sparkConf: SparkConf =
-    super
-      .sparkConf
+    super.sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, "")
 
   protected def checkFilterPredicate(
@@ -66,18 +65,21 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
       case PhysicalOperation(_, filters, DataSourceV2ScanRelation(_, o: OrcScan, _, _, _)) =>
         assert(filters.nonEmpty, "No filter is analyzed from the given query")
         assert(o.pushedFilters.nonEmpty, "No filter is pushed down")
-        val maybeFilter = OrcFilters.createFilter(query.schema, o.pushedFilters.toImmutableArraySeq)
-        assert(maybeFilter.isDefined, s"Couldn't generate filter predicate for " +
-          s"${o.pushedFilters.mkString("pushedFilters(", ", ", ")")}")
+        val maybeFilter =
+          OrcFilters.createFilter(query.schema, o.pushedFilters.toImmutableArraySeq)
+        assert(
+          maybeFilter.isDefined,
+          s"Couldn't generate filter predicate for " +
+            s"${o.pushedFilters.mkString("pushedFilters(", ", ", ")")}")
         checker(maybeFilter.get)
 
       case _ => assert(false, "Can not match OrcTable in the query.")
     }
   }
 
-  protected def checkFilterPredicate
-      (predicate: Predicate, filterOperator: PredicateLeaf.Operator)
-      (implicit df: DataFrame): Unit = {
+  protected def checkFilterPredicate(
+      predicate: Predicate,
+      filterOperator: PredicateLeaf.Operator)(implicit df: DataFrame): Unit = {
     def checkComparisonOperator(filter: SearchArgument) = {
       val operator = filter.getLeaves.asScala
       assert(operator.map(_.getOperator).contains(filterOperator))
@@ -85,9 +87,8 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
     checkFilterPredicate(df, predicate, checkComparisonOperator)
   }
 
-  protected def checkFilterPredicate
-      (predicate: Predicate, stringExpr: String)
-      (implicit df: DataFrame): Unit = {
+  protected def checkFilterPredicate(predicate: Predicate, stringExpr: String)(implicit
+      df: DataFrame): Unit = {
     def checkLogicalOperator(filter: SearchArgument) = {
       // HIVE-24458 changes toString output and provides `toOldString` for old style.
       assert(filter.asInstanceOf[SearchArgumentImpl].toOldString == stringExpr)
@@ -122,89 +123,88 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
   }
 
   test("filter pushdown - long") {
-    withNestedOrcDataFrame(
-        (1 to 4).map(i => Tuple1(Option(i.toLong)))) { case (inputDF, colName, _) =>
-      implicit val df: DataFrame = inputDF
+    withNestedOrcDataFrame((1 to 4).map(i => Tuple1(Option(i.toLong)))) {
+      case (inputDF, colName, _) =>
+        implicit val df: DataFrame = inputDF
 
-      val longAttr = df(colName).expr
-      assert(df(colName).expr.dataType === LongType)
+        val longAttr = df(colName).expr
+        assert(df(colName).expr.dataType === LongType)
 
-      checkFilterPredicate(longAttr.isNull, PredicateLeaf.Operator.IS_NULL)
+        checkFilterPredicate(longAttr.isNull, PredicateLeaf.Operator.IS_NULL)
 
-      checkFilterPredicate(longAttr === 1, PredicateLeaf.Operator.EQUALS)
-      checkFilterPredicate(longAttr <=> 1, PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+        checkFilterPredicate(longAttr === 1, PredicateLeaf.Operator.EQUALS)
+        checkFilterPredicate(longAttr <=> 1, PredicateLeaf.Operator.NULL_SAFE_EQUALS)
 
-      checkFilterPredicate(longAttr < 2, PredicateLeaf.Operator.LESS_THAN)
-      checkFilterPredicate(longAttr > 3, PredicateLeaf.Operator.LESS_THAN_EQUALS)
-      checkFilterPredicate(longAttr <= 1, PredicateLeaf.Operator.LESS_THAN_EQUALS)
-      checkFilterPredicate(longAttr >= 4, PredicateLeaf.Operator.LESS_THAN)
+        checkFilterPredicate(longAttr < 2, PredicateLeaf.Operator.LESS_THAN)
+        checkFilterPredicate(longAttr > 3, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+        checkFilterPredicate(longAttr <= 1, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+        checkFilterPredicate(longAttr >= 4, PredicateLeaf.Operator.LESS_THAN)
 
-      checkFilterPredicate(Literal(1) === longAttr, PredicateLeaf.Operator.EQUALS)
-      checkFilterPredicate(Literal(1) <=> longAttr, PredicateLeaf.Operator.NULL_SAFE_EQUALS)
-      checkFilterPredicate(Literal(2) > longAttr, PredicateLeaf.Operator.LESS_THAN)
-      checkFilterPredicate(Literal(3) < longAttr, PredicateLeaf.Operator.LESS_THAN_EQUALS)
-      checkFilterPredicate(Literal(1) >= longAttr, PredicateLeaf.Operator.LESS_THAN_EQUALS)
-      checkFilterPredicate(Literal(4) <= longAttr, PredicateLeaf.Operator.LESS_THAN)
+        checkFilterPredicate(Literal(1) === longAttr, PredicateLeaf.Operator.EQUALS)
+        checkFilterPredicate(Literal(1) <=> longAttr, PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+        checkFilterPredicate(Literal(2) > longAttr, PredicateLeaf.Operator.LESS_THAN)
+        checkFilterPredicate(Literal(3) < longAttr, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+        checkFilterPredicate(Literal(1) >= longAttr, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+        checkFilterPredicate(Literal(4) <= longAttr, PredicateLeaf.Operator.LESS_THAN)
     }
   }
 
   test("filter pushdown - float") {
-    withNestedOrcDataFrame(
-        (1 to 4).map(i => Tuple1(Option(i.toFloat)))) { case (inputDF, colName, _) =>
-      implicit val df: DataFrame = inputDF
+    withNestedOrcDataFrame((1 to 4).map(i => Tuple1(Option(i.toFloat)))) {
+      case (inputDF, colName, _) =>
+        implicit val df: DataFrame = inputDF
 
-      val floatAttr = df(colName).expr
-      assert(df(colName).expr.dataType === FloatType)
+        val floatAttr = df(colName).expr
+        assert(df(colName).expr.dataType === FloatType)
 
-      checkFilterPredicate(floatAttr.isNull, PredicateLeaf.Operator.IS_NULL)
+        checkFilterPredicate(floatAttr.isNull, PredicateLeaf.Operator.IS_NULL)
 
-      checkFilterPredicate(floatAttr === 1, PredicateLeaf.Operator.EQUALS)
-      checkFilterPredicate(floatAttr <=> 1, PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+        checkFilterPredicate(floatAttr === 1, PredicateLeaf.Operator.EQUALS)
+        checkFilterPredicate(floatAttr <=> 1, PredicateLeaf.Operator.NULL_SAFE_EQUALS)
 
-      checkFilterPredicate(floatAttr < 2, PredicateLeaf.Operator.LESS_THAN)
-      checkFilterPredicate(floatAttr > 3, PredicateLeaf.Operator.LESS_THAN_EQUALS)
-      checkFilterPredicate(floatAttr <= 1, PredicateLeaf.Operator.LESS_THAN_EQUALS)
-      checkFilterPredicate(floatAttr >= 4, PredicateLeaf.Operator.LESS_THAN)
+        checkFilterPredicate(floatAttr < 2, PredicateLeaf.Operator.LESS_THAN)
+        checkFilterPredicate(floatAttr > 3, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+        checkFilterPredicate(floatAttr <= 1, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+        checkFilterPredicate(floatAttr >= 4, PredicateLeaf.Operator.LESS_THAN)
 
-      checkFilterPredicate(Literal(1) === floatAttr, PredicateLeaf.Operator.EQUALS)
-      checkFilterPredicate(Literal(1) <=> floatAttr, PredicateLeaf.Operator.NULL_SAFE_EQUALS)
-      checkFilterPredicate(Literal(2) > floatAttr, PredicateLeaf.Operator.LESS_THAN)
-      checkFilterPredicate(Literal(3) < floatAttr, PredicateLeaf.Operator.LESS_THAN_EQUALS)
-      checkFilterPredicate(Literal(1) >= floatAttr, PredicateLeaf.Operator.LESS_THAN_EQUALS)
-      checkFilterPredicate(Literal(4) <= floatAttr, PredicateLeaf.Operator.LESS_THAN)
+        checkFilterPredicate(Literal(1) === floatAttr, PredicateLeaf.Operator.EQUALS)
+        checkFilterPredicate(Literal(1) <=> floatAttr, PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+        checkFilterPredicate(Literal(2) > floatAttr, PredicateLeaf.Operator.LESS_THAN)
+        checkFilterPredicate(Literal(3) < floatAttr, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+        checkFilterPredicate(Literal(1) >= floatAttr, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+        checkFilterPredicate(Literal(4) <= floatAttr, PredicateLeaf.Operator.LESS_THAN)
     }
   }
 
   test("filter pushdown - double") {
-    withNestedOrcDataFrame(
-        (1 to 4).map(i => Tuple1(Option(i.toDouble)))) { case (inputDF, colName, _) =>
-      implicit val df: DataFrame = inputDF
+    withNestedOrcDataFrame((1 to 4).map(i => Tuple1(Option(i.toDouble)))) {
+      case (inputDF, colName, _) =>
+        implicit val df: DataFrame = inputDF
 
-      val doubleAttr = df(colName).expr
-      assert(df(colName).expr.dataType === DoubleType)
+        val doubleAttr = df(colName).expr
+        assert(df(colName).expr.dataType === DoubleType)
 
-      checkFilterPredicate(doubleAttr.isNull, PredicateLeaf.Operator.IS_NULL)
+        checkFilterPredicate(doubleAttr.isNull, PredicateLeaf.Operator.IS_NULL)
 
-      checkFilterPredicate(doubleAttr === 1, PredicateLeaf.Operator.EQUALS)
-      checkFilterPredicate(doubleAttr <=> 1, PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+        checkFilterPredicate(doubleAttr === 1, PredicateLeaf.Operator.EQUALS)
+        checkFilterPredicate(doubleAttr <=> 1, PredicateLeaf.Operator.NULL_SAFE_EQUALS)
 
-      checkFilterPredicate(doubleAttr < 2, PredicateLeaf.Operator.LESS_THAN)
-      checkFilterPredicate(doubleAttr > 3, PredicateLeaf.Operator.LESS_THAN_EQUALS)
-      checkFilterPredicate(doubleAttr <= 1, PredicateLeaf.Operator.LESS_THAN_EQUALS)
-      checkFilterPredicate(doubleAttr >= 4, PredicateLeaf.Operator.LESS_THAN)
+        checkFilterPredicate(doubleAttr < 2, PredicateLeaf.Operator.LESS_THAN)
+        checkFilterPredicate(doubleAttr > 3, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+        checkFilterPredicate(doubleAttr <= 1, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+        checkFilterPredicate(doubleAttr >= 4, PredicateLeaf.Operator.LESS_THAN)
 
-      checkFilterPredicate(Literal(1) === doubleAttr, PredicateLeaf.Operator.EQUALS)
-      checkFilterPredicate(Literal(1) <=> doubleAttr, PredicateLeaf.Operator.NULL_SAFE_EQUALS)
-      checkFilterPredicate(Literal(2) > doubleAttr, PredicateLeaf.Operator.LESS_THAN)
-      checkFilterPredicate(Literal(3) < doubleAttr, PredicateLeaf.Operator.LESS_THAN_EQUALS)
-      checkFilterPredicate(Literal(1) >= doubleAttr, PredicateLeaf.Operator.LESS_THAN_EQUALS)
-      checkFilterPredicate(Literal(4) <= doubleAttr, PredicateLeaf.Operator.LESS_THAN)
+        checkFilterPredicate(Literal(1) === doubleAttr, PredicateLeaf.Operator.EQUALS)
+        checkFilterPredicate(Literal(1) <=> doubleAttr, PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+        checkFilterPredicate(Literal(2) > doubleAttr, PredicateLeaf.Operator.LESS_THAN)
+        checkFilterPredicate(Literal(3) < doubleAttr, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+        checkFilterPredicate(Literal(1) >= doubleAttr, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+        checkFilterPredicate(Literal(4) <= doubleAttr, PredicateLeaf.Operator.LESS_THAN)
     }
   }
 
   test("filter pushdown - string") {
-    withNestedOrcDataFrame(
-        (1 to 4).map(i => Tuple1(i.toString))) { case (inputDF, colName, _) =>
+    withNestedOrcDataFrame((1 to 4).map(i => Tuple1(i.toString))) { case (inputDF, colName, _) =>
       implicit val df: DataFrame = inputDF
 
       val strAttr = df(colName).expr
@@ -230,66 +230,82 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
   }
 
   test("filter pushdown - boolean") {
-    withNestedOrcDataFrame(
-        (true :: false :: Nil).map(b => Tuple1.apply(Option(b)))) { case (inputDF, colName, _) =>
-      implicit val df: DataFrame = inputDF
+    withNestedOrcDataFrame((true :: false :: Nil).map(b => Tuple1.apply(Option(b)))) {
+      case (inputDF, colName, _) =>
+        implicit val df: DataFrame = inputDF
 
-      val booleanAttr = df(colName).expr
-      assert(df(colName).expr.dataType === BooleanType)
+        val booleanAttr = df(colName).expr
+        assert(df(colName).expr.dataType === BooleanType)
 
-      checkFilterPredicate(booleanAttr.isNull, PredicateLeaf.Operator.IS_NULL)
+        checkFilterPredicate(booleanAttr.isNull, PredicateLeaf.Operator.IS_NULL)
 
-      checkFilterPredicate(booleanAttr === true, PredicateLeaf.Operator.EQUALS)
-      checkFilterPredicate(booleanAttr <=> true, PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+        checkFilterPredicate(booleanAttr === true, PredicateLeaf.Operator.EQUALS)
+        checkFilterPredicate(booleanAttr <=> true, PredicateLeaf.Operator.NULL_SAFE_EQUALS)
 
-      checkFilterPredicate(booleanAttr < true, PredicateLeaf.Operator.LESS_THAN)
-      checkFilterPredicate(booleanAttr > false, PredicateLeaf.Operator.LESS_THAN_EQUALS)
-      checkFilterPredicate(booleanAttr <= false, PredicateLeaf.Operator.LESS_THAN_EQUALS)
-      checkFilterPredicate(booleanAttr >= false, PredicateLeaf.Operator.LESS_THAN)
+        checkFilterPredicate(booleanAttr < true, PredicateLeaf.Operator.LESS_THAN)
+        checkFilterPredicate(booleanAttr > false, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+        checkFilterPredicate(booleanAttr <= false, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+        checkFilterPredicate(booleanAttr >= false, PredicateLeaf.Operator.LESS_THAN)
 
-      checkFilterPredicate(Literal(false) === booleanAttr, PredicateLeaf.Operator.EQUALS)
-      checkFilterPredicate(Literal(false) <=> booleanAttr,
-        PredicateLeaf.Operator.NULL_SAFE_EQUALS)
-      checkFilterPredicate(Literal(false) > booleanAttr, PredicateLeaf.Operator.LESS_THAN)
-      checkFilterPredicate(Literal(true) < booleanAttr, PredicateLeaf.Operator.LESS_THAN_EQUALS)
-      checkFilterPredicate(Literal(true) >= booleanAttr, PredicateLeaf.Operator.LESS_THAN_EQUALS)
-      checkFilterPredicate(Literal(true) <= booleanAttr, PredicateLeaf.Operator.LESS_THAN)
+        checkFilterPredicate(Literal(false) === booleanAttr, PredicateLeaf.Operator.EQUALS)
+        checkFilterPredicate(
+          Literal(false) <=> booleanAttr,
+          PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+        checkFilterPredicate(Literal(false) > booleanAttr, PredicateLeaf.Operator.LESS_THAN)
+        checkFilterPredicate(Literal(true) < booleanAttr, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+        checkFilterPredicate(
+          Literal(true) >= booleanAttr,
+          PredicateLeaf.Operator.LESS_THAN_EQUALS)
+        checkFilterPredicate(Literal(true) <= booleanAttr, PredicateLeaf.Operator.LESS_THAN)
     }
   }
 
   test("filter pushdown - decimal") {
-    withNestedOrcDataFrame(
-        (1 to 4).map(i => Tuple1.apply(BigDecimal.valueOf(i)))) { case (inputDF, colName, _) =>
-      implicit val df: DataFrame = inputDF
+    withNestedOrcDataFrame((1 to 4).map(i => Tuple1.apply(BigDecimal.valueOf(i)))) {
+      case (inputDF, colName, _) =>
+        implicit val df: DataFrame = inputDF
 
-      val decimalAttr = df(colName).expr
-      assert(df(colName).expr.dataType === DecimalType(38, 18))
+        val decimalAttr = df(colName).expr
+        assert(df(colName).expr.dataType === DecimalType(38, 18))
 
-      checkFilterPredicate(decimalAttr.isNull, PredicateLeaf.Operator.IS_NULL)
+        checkFilterPredicate(decimalAttr.isNull, PredicateLeaf.Operator.IS_NULL)
 
-      checkFilterPredicate(decimalAttr === BigDecimal.valueOf(1), PredicateLeaf.Operator.EQUALS)
-      checkFilterPredicate(decimalAttr <=> BigDecimal.valueOf(1),
-        PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+        checkFilterPredicate(decimalAttr === BigDecimal.valueOf(1), PredicateLeaf.Operator.EQUALS)
+        checkFilterPredicate(
+          decimalAttr <=> BigDecimal.valueOf(1),
+          PredicateLeaf.Operator.NULL_SAFE_EQUALS)
 
-      checkFilterPredicate(decimalAttr < BigDecimal.valueOf(2), PredicateLeaf.Operator.LESS_THAN)
-      checkFilterPredicate(decimalAttr > BigDecimal.valueOf(3),
-        PredicateLeaf.Operator.LESS_THAN_EQUALS)
-      checkFilterPredicate(decimalAttr <= BigDecimal.valueOf(1),
-        PredicateLeaf.Operator.LESS_THAN_EQUALS)
-      checkFilterPredicate(decimalAttr >= BigDecimal.valueOf(4), PredicateLeaf.Operator.LESS_THAN)
+        checkFilterPredicate(
+          decimalAttr < BigDecimal.valueOf(2),
+          PredicateLeaf.Operator.LESS_THAN)
+        checkFilterPredicate(
+          decimalAttr > BigDecimal.valueOf(3),
+          PredicateLeaf.Operator.LESS_THAN_EQUALS)
+        checkFilterPredicate(
+          decimalAttr <= BigDecimal.valueOf(1),
+          PredicateLeaf.Operator.LESS_THAN_EQUALS)
+        checkFilterPredicate(
+          decimalAttr >= BigDecimal.valueOf(4),
+          PredicateLeaf.Operator.LESS_THAN)
 
-      checkFilterPredicate(
-        Literal(BigDecimal.valueOf(1)) === decimalAttr, PredicateLeaf.Operator.EQUALS)
-      checkFilterPredicate(
-        Literal(BigDecimal.valueOf(1)) <=> decimalAttr, PredicateLeaf.Operator.NULL_SAFE_EQUALS)
-      checkFilterPredicate(
-        Literal(BigDecimal.valueOf(2)) > decimalAttr, PredicateLeaf.Operator.LESS_THAN)
-      checkFilterPredicate(
-        Literal(BigDecimal.valueOf(3)) < decimalAttr, PredicateLeaf.Operator.LESS_THAN_EQUALS)
-      checkFilterPredicate(
-        Literal(BigDecimal.valueOf(1)) >= decimalAttr, PredicateLeaf.Operator.LESS_THAN_EQUALS)
-      checkFilterPredicate(
-        Literal(BigDecimal.valueOf(4)) <= decimalAttr, PredicateLeaf.Operator.LESS_THAN)
+        checkFilterPredicate(
+          Literal(BigDecimal.valueOf(1)) === decimalAttr,
+          PredicateLeaf.Operator.EQUALS)
+        checkFilterPredicate(
+          Literal(BigDecimal.valueOf(1)) <=> decimalAttr,
+          PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+        checkFilterPredicate(
+          Literal(BigDecimal.valueOf(2)) > decimalAttr,
+          PredicateLeaf.Operator.LESS_THAN)
+        checkFilterPredicate(
+          Literal(BigDecimal.valueOf(3)) < decimalAttr,
+          PredicateLeaf.Operator.LESS_THAN_EQUALS)
+        checkFilterPredicate(
+          Literal(BigDecimal.valueOf(1)) >= decimalAttr,
+          PredicateLeaf.Operator.LESS_THAN_EQUALS)
+        checkFilterPredicate(
+          Literal(BigDecimal.valueOf(4)) <= decimalAttr,
+          PredicateLeaf.Operator.LESS_THAN)
     }
   }
 
@@ -317,7 +333,8 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
 
             checkFilterPredicate(Literal(timestamps(0)) === $"_1", PredicateLeaf.Operator.EQUALS)
             checkFilterPredicate(
-              Literal(timestamps(0)) <=> $"_1", PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+              Literal(timestamps(0)) <=> $"_1",
+              PredicateLeaf.Operator.NULL_SAFE_EQUALS)
             checkFilterPredicate(Literal(timestamps(1)) > $"_1", PredicateLeaf.Operator.LESS_THAN)
             checkFilterPredicate(
               Literal(timestamps(2)) < $"_1",
@@ -325,7 +342,9 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
             checkFilterPredicate(
               Literal(timestamps(0)) >= $"_1",
               PredicateLeaf.Operator.LESS_THAN_EQUALS)
-            checkFilterPredicate(Literal(timestamps(3)) <= $"_1", PredicateLeaf.Operator.LESS_THAN)
+            checkFilterPredicate(
+              Literal(timestamps(3)) <= $"_1",
+              PredicateLeaf.Operator.LESS_THAN)
           }
         }
       }
@@ -352,7 +371,8 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
 
         checkFilterPredicate(Literal(localDateTimes(0)) === $"_1", PredicateLeaf.Operator.EQUALS)
         checkFilterPredicate(
-          Literal(localDateTimes(0)) <=> $"_1", PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+          Literal(localDateTimes(0)) <=> $"_1",
+          PredicateLeaf.Operator.NULL_SAFE_EQUALS)
         checkFilterPredicate(Literal(localDateTimes(1)) > $"_1", PredicateLeaf.Operator.LESS_THAN)
         checkFilterPredicate(
           Literal(localDateTimes(2)) < $"_1",
@@ -360,35 +380,30 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
         checkFilterPredicate(
           Literal(localDateTimes(0)) >= $"_1",
           PredicateLeaf.Operator.LESS_THAN_EQUALS)
-        checkFilterPredicate(Literal(localDateTimes(3)) <= $"_1", PredicateLeaf.Operator.LESS_THAN)
+        checkFilterPredicate(
+          Literal(localDateTimes(3)) <= $"_1",
+          PredicateLeaf.Operator.LESS_THAN)
       }
     }
   }
 
   test("filter pushdown - combinations with logical operators") {
     withOrcDataFrame((1 to 4).map(i => Tuple1(Option(i)))) { implicit df =>
-      checkFilterPredicate(
-        $"_1".isNotNull,
-        "leaf-0 = (IS_NULL _1), expr = (not leaf-0)"
-      )
+      checkFilterPredicate($"_1".isNotNull, "leaf-0 = (IS_NULL _1), expr = (not leaf-0)")
       checkFilterPredicate(
         $"_1" =!= 1,
-        "leaf-0 = (IS_NULL _1), leaf-1 = (EQUALS _1 1), expr = (and (not leaf-0) (not leaf-1))"
-      )
+        "leaf-0 = (IS_NULL _1), leaf-1 = (EQUALS _1 1), expr = (and (not leaf-0) (not leaf-1))")
       checkFilterPredicate(
         !($"_1" < 4),
-        "leaf-0 = (IS_NULL _1), leaf-1 = (LESS_THAN _1 4), expr = (and (not leaf-0) (not leaf-1))"
-      )
+        "leaf-0 = (IS_NULL _1), leaf-1 = (LESS_THAN _1 4), expr = (and (not leaf-0) (not leaf-1))")
       checkFilterPredicate(
         $"_1" < 2 || $"_1" > 3,
         "leaf-0 = (LESS_THAN _1 2), leaf-1 = (LESS_THAN_EQUALS _1 3), " +
-          "expr = (or leaf-0 (not leaf-1))"
-      )
+          "expr = (or leaf-0 (not leaf-1))")
       checkFilterPredicate(
         $"_1" < 2 && $"_1" > 3,
         "leaf-0 = (IS_NULL _1), leaf-1 = (LESS_THAN _1 2), leaf-2 = (LESS_THAN_EQUALS _1 3), " +
-          "expr = (and (not leaf-0) leaf-1 (not leaf-2))"
-      )
+          "expr = (and (not leaf-0) leaf-1 (not leaf-2))")
     }
   }
 
@@ -425,95 +440,92 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
 
   test("SPARK-36960: filter pushdown - year-month interval") {
     DataTypeTestUtils.yearMonthIntervalTypes.foreach { ymIntervalType =>
-
       def periods(i: Int): Expression = Literal(Period.of(i, i, 0)).cast(ymIntervalType)
 
-      val baseDF = spark.createDataFrame((1 to 4).map { i =>
-        Tuple1.apply(Period.of(i, i, 0))
-      }).select(col("_1").cast(ymIntervalType))
+      val baseDF = spark
+        .createDataFrame((1 to 4).map { i =>
+          Tuple1.apply(Period.of(i, i, 0))
+        })
+        .select(col("_1").cast(ymIntervalType))
 
-      withNestedOrcDataFrame(baseDF) {
-        case (inputDF, colName, _) =>
-          implicit val df: DataFrame = inputDF
+      withNestedOrcDataFrame(baseDF) { case (inputDF, colName, _) =>
+        implicit val df: DataFrame = inputDF
 
-          val ymIntervalAttr = df(colName).expr
-          assert(df(colName).expr.dataType === ymIntervalType)
+        val ymIntervalAttr = df(colName).expr
+        assert(df(colName).expr.dataType === ymIntervalType)
 
-         checkFilterPredicate(ymIntervalAttr.isNull, PredicateLeaf.Operator.IS_NULL)
+        checkFilterPredicate(ymIntervalAttr.isNull, PredicateLeaf.Operator.IS_NULL)
 
-          checkFilterPredicate(ymIntervalAttr === periods(1),
-            PredicateLeaf.Operator.EQUALS)
-          checkFilterPredicate(ymIntervalAttr <=> periods(1),
-            PredicateLeaf.Operator.NULL_SAFE_EQUALS)
-          checkFilterPredicate(ymIntervalAttr < periods(2),
-            PredicateLeaf.Operator.LESS_THAN)
-          checkFilterPredicate(ymIntervalAttr > periods(3),
-            PredicateLeaf.Operator.LESS_THAN_EQUALS)
-          checkFilterPredicate(ymIntervalAttr <= periods(1),
-            PredicateLeaf.Operator.LESS_THAN_EQUALS)
-          checkFilterPredicate(ymIntervalAttr >= periods(4),
-            PredicateLeaf.Operator.LESS_THAN)
+        checkFilterPredicate(ymIntervalAttr === periods(1), PredicateLeaf.Operator.EQUALS)
+        checkFilterPredicate(
+          ymIntervalAttr <=> periods(1),
+          PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+        checkFilterPredicate(ymIntervalAttr < periods(2), PredicateLeaf.Operator.LESS_THAN)
+        checkFilterPredicate(ymIntervalAttr > periods(3), PredicateLeaf.Operator.LESS_THAN_EQUALS)
+        checkFilterPredicate(
+          ymIntervalAttr <= periods(1),
+          PredicateLeaf.Operator.LESS_THAN_EQUALS)
+        checkFilterPredicate(ymIntervalAttr >= periods(4), PredicateLeaf.Operator.LESS_THAN)
 
-          checkFilterPredicate(periods(1) === ymIntervalAttr,
-            PredicateLeaf.Operator.EQUALS)
-          checkFilterPredicate(periods(1) <=> ymIntervalAttr,
-            PredicateLeaf.Operator.NULL_SAFE_EQUALS)
-          checkFilterPredicate(periods(2) > ymIntervalAttr,
-            PredicateLeaf.Operator.LESS_THAN)
-          checkFilterPredicate(periods(3) < ymIntervalAttr,
-            PredicateLeaf.Operator.LESS_THAN_EQUALS)
-          checkFilterPredicate(periods(1) >= ymIntervalAttr,
-            PredicateLeaf.Operator.LESS_THAN_EQUALS)
-          checkFilterPredicate(periods(4) <= ymIntervalAttr,
-            PredicateLeaf.Operator.LESS_THAN)
+        checkFilterPredicate(periods(1) === ymIntervalAttr, PredicateLeaf.Operator.EQUALS)
+        checkFilterPredicate(
+          periods(1) <=> ymIntervalAttr,
+          PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+        checkFilterPredicate(periods(2) > ymIntervalAttr, PredicateLeaf.Operator.LESS_THAN)
+        checkFilterPredicate(periods(3) < ymIntervalAttr, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+        checkFilterPredicate(
+          periods(1) >= ymIntervalAttr,
+          PredicateLeaf.Operator.LESS_THAN_EQUALS)
+        checkFilterPredicate(periods(4) <= ymIntervalAttr, PredicateLeaf.Operator.LESS_THAN)
       }
     }
   }
 
   test("SPARK-36960: filter pushdown - day-time interval") {
     DataTypeTestUtils.dayTimeIntervalTypes.foreach { dtIntervalType =>
-
       def durations(i: Int): Expression =
-        Literal(Duration.ofDays(i).plusHours(i).plusMinutes(i).plusSeconds(i)).cast(dtIntervalType)
+        Literal(Duration.ofDays(i).plusHours(i).plusMinutes(i).plusSeconds(i))
+          .cast(dtIntervalType)
 
-      val baseDF = spark.createDataFrame((1 to 4).map { i =>
-        Tuple1.apply(Duration.ofDays(i).plusHours(i).plusMinutes(i).plusSeconds(i))
-      }).select(col("_1").cast(dtIntervalType))
+      val baseDF = spark
+        .createDataFrame((1 to 4).map { i =>
+          Tuple1.apply(Duration.ofDays(i).plusHours(i).plusMinutes(i).plusSeconds(i))
+        })
+        .select(col("_1").cast(dtIntervalType))
 
-      withNestedOrcDataFrame(baseDF) {
-        case (inputDF, colName, _) =>
-          implicit val df: DataFrame = inputDF
+      withNestedOrcDataFrame(baseDF) { case (inputDF, colName, _) =>
+        implicit val df: DataFrame = inputDF
 
-          val ymIntervalAttr = df(colName).expr
-          assert(df(colName).expr.dataType === dtIntervalType)
+        val ymIntervalAttr = df(colName).expr
+        assert(df(colName).expr.dataType === dtIntervalType)
 
-          checkFilterPredicate(ymIntervalAttr.isNull, PredicateLeaf.Operator.IS_NULL)
+        checkFilterPredicate(ymIntervalAttr.isNull, PredicateLeaf.Operator.IS_NULL)
 
-          checkFilterPredicate(ymIntervalAttr === durations(1),
-            PredicateLeaf.Operator.EQUALS)
-          checkFilterPredicate(ymIntervalAttr <=> durations(1),
-            PredicateLeaf.Operator.NULL_SAFE_EQUALS)
-          checkFilterPredicate(ymIntervalAttr < durations(2),
-            PredicateLeaf.Operator.LESS_THAN)
-          checkFilterPredicate(ymIntervalAttr > durations(3),
-            PredicateLeaf.Operator.LESS_THAN_EQUALS)
-          checkFilterPredicate(ymIntervalAttr <= durations(1),
-            PredicateLeaf.Operator.LESS_THAN_EQUALS)
-          checkFilterPredicate(ymIntervalAttr >= durations(4),
-            PredicateLeaf.Operator.LESS_THAN)
+        checkFilterPredicate(ymIntervalAttr === durations(1), PredicateLeaf.Operator.EQUALS)
+        checkFilterPredicate(
+          ymIntervalAttr <=> durations(1),
+          PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+        checkFilterPredicate(ymIntervalAttr < durations(2), PredicateLeaf.Operator.LESS_THAN)
+        checkFilterPredicate(
+          ymIntervalAttr > durations(3),
+          PredicateLeaf.Operator.LESS_THAN_EQUALS)
+        checkFilterPredicate(
+          ymIntervalAttr <= durations(1),
+          PredicateLeaf.Operator.LESS_THAN_EQUALS)
+        checkFilterPredicate(ymIntervalAttr >= durations(4), PredicateLeaf.Operator.LESS_THAN)
 
-          checkFilterPredicate(durations(1) === ymIntervalAttr,
-            PredicateLeaf.Operator.EQUALS)
-          checkFilterPredicate(durations(1) <=> ymIntervalAttr,
-            PredicateLeaf.Operator.NULL_SAFE_EQUALS)
-          checkFilterPredicate(durations(2) > ymIntervalAttr,
-            PredicateLeaf.Operator.LESS_THAN)
-          checkFilterPredicate(durations(3) < ymIntervalAttr,
-            PredicateLeaf.Operator.LESS_THAN_EQUALS)
-          checkFilterPredicate(durations(1) >= ymIntervalAttr,
-            PredicateLeaf.Operator.LESS_THAN_EQUALS)
-          checkFilterPredicate(durations(4) <= ymIntervalAttr,
-            PredicateLeaf.Operator.LESS_THAN)
+        checkFilterPredicate(durations(1) === ymIntervalAttr, PredicateLeaf.Operator.EQUALS)
+        checkFilterPredicate(
+          durations(1) <=> ymIntervalAttr,
+          PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+        checkFilterPredicate(durations(2) > ymIntervalAttr, PredicateLeaf.Operator.LESS_THAN)
+        checkFilterPredicate(
+          durations(3) < ymIntervalAttr,
+          PredicateLeaf.Operator.LESS_THAN_EQUALS)
+        checkFilterPredicate(
+          durations(1) >= ymIntervalAttr,
+          PredicateLeaf.Operator.LESS_THAN_EQUALS)
+        checkFilterPredicate(durations(4) <= ymIntervalAttr, PredicateLeaf.Operator.LESS_THAN)
       }
     }
   }
@@ -544,45 +556,53 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
         StructField("a", IntegerType, nullable = true),
         StructField("b", StringType, nullable = true)))
     assertResult("leaf-0 = (LESS_THAN a 10), expr = leaf-0") {
-      OrcFilters.createFilter(schema, Array(
-        LessThan("a", 10),
-        StringContains("b", "prefix")
-      ).toImmutableArraySeq).get.asInstanceOf[SearchArgumentImpl].toOldString
+      OrcFilters
+        .createFilter(
+          schema,
+          Array(LessThan("a", 10), StringContains("b", "prefix")).toImmutableArraySeq)
+        .get
+        .asInstanceOf[SearchArgumentImpl]
+        .toOldString
     }
 
     // The `LessThan` should be converted while the whole inner `And` shouldn't
     assertResult("leaf-0 = (LESS_THAN a 10), expr = leaf-0") {
-      OrcFilters.createFilter(schema, Array(
-        LessThan("a", 10),
-        Not(And(
-          GreaterThan("a", 1),
-          StringContains("b", "prefix")
-        ))
-      ).toImmutableArraySeq).get.asInstanceOf[SearchArgumentImpl].toOldString
+      OrcFilters
+        .createFilter(
+          schema,
+          Array(
+            LessThan("a", 10),
+            Not(And(GreaterThan("a", 1), StringContains("b", "prefix")))).toImmutableArraySeq)
+        .get
+        .asInstanceOf[SearchArgumentImpl]
+        .toOldString
     }
 
     // Safely remove unsupported `StringContains` predicate and push down `LessThan`
     assertResult("leaf-0 = (LESS_THAN a 10), expr = leaf-0") {
-      OrcFilters.createFilter(schema, Array(
-        And(
-          LessThan("a", 10),
-          StringContains("b", "prefix")
-        )
-      ).toImmutableArraySeq).get.asInstanceOf[SearchArgumentImpl].toOldString
+      OrcFilters
+        .createFilter(
+          schema,
+          Array(And(LessThan("a", 10), StringContains("b", "prefix"))).toImmutableArraySeq)
+        .get
+        .asInstanceOf[SearchArgumentImpl]
+        .toOldString
     }
 
     // Safely remove unsupported `StringContains` predicate, push down `LessThan` and `GreaterThan`.
-    assertResult("leaf-0 = (LESS_THAN a 10), leaf-1 = (LESS_THAN_EQUALS a 1)," +
-      " expr = (and leaf-0 (not leaf-1))") {
-      OrcFilters.createFilter(schema, Array(
-        And(
-          And(
-            LessThan("a", 10),
-            StringContains("b", "prefix")
-          ),
-          GreaterThan("a", 1)
-        )
-      ).toImmutableArraySeq).get.asInstanceOf[SearchArgumentImpl].toOldString
+    assertResult(
+      "leaf-0 = (LESS_THAN a 10), leaf-1 = (LESS_THAN_EQUALS a 1)," +
+        " expr = (and leaf-0 (not leaf-1))") {
+      OrcFilters
+        .createFilter(
+          schema,
+          Array(
+            And(
+              And(LessThan("a", 10), StringContains("b", "prefix")),
+              GreaterThan("a", 1))).toImmutableArraySeq)
+        .get
+        .asInstanceOf[SearchArgumentImpl]
+        .toOldString
     }
   }
 
@@ -595,55 +615,62 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
         StructField("b", StringType, nullable = true)))
 
     // The predicate `StringContains` predicate is not able to be pushed down.
-    assertResult("leaf-0 = (LESS_THAN_EQUALS a 10), leaf-1 = (LESS_THAN a 1)," +
-      " expr = (or (not leaf-0) leaf-1)") {
-      OrcFilters.createFilter(schema, Array(
-        Or(
-          GreaterThan("a", 10),
-          And(
-            StringContains("b", "prefix"),
-            LessThan("a", 1)
-          )
-        )
-      ).toImmutableArraySeq).get.asInstanceOf[SearchArgumentImpl].toOldString
+    assertResult(
+      "leaf-0 = (LESS_THAN_EQUALS a 10), leaf-1 = (LESS_THAN a 1)," +
+        " expr = (or (not leaf-0) leaf-1)") {
+      OrcFilters
+        .createFilter(
+          schema,
+          Array(
+            Or(
+              GreaterThan("a", 10),
+              And(StringContains("b", "prefix"), LessThan("a", 1)))).toImmutableArraySeq)
+        .get
+        .asInstanceOf[SearchArgumentImpl]
+        .toOldString
     }
 
-    assertResult("leaf-0 = (LESS_THAN_EQUALS a 10), leaf-1 = (LESS_THAN a 1)," +
-      " expr = (or (not leaf-0) leaf-1)") {
-      OrcFilters.createFilter(schema, Array(
-        Or(
-          And(
-            GreaterThan("a", 10),
-            StringContains("b", "foobar")
-          ),
-          And(
-            StringContains("b", "prefix"),
-            LessThan("a", 1)
-          )
-        )
-      ).toImmutableArraySeq).get.asInstanceOf[SearchArgumentImpl].toOldString
+    assertResult(
+      "leaf-0 = (LESS_THAN_EQUALS a 10), leaf-1 = (LESS_THAN a 1)," +
+        " expr = (or (not leaf-0) leaf-1)") {
+      OrcFilters
+        .createFilter(
+          schema,
+          Array(
+            Or(
+              And(GreaterThan("a", 10), StringContains("b", "foobar")),
+              And(StringContains("b", "prefix"), LessThan("a", 1)))).toImmutableArraySeq)
+        .get
+        .asInstanceOf[SearchArgumentImpl]
+        .toOldString
     }
 
-    assert(OrcFilters.createFilter(schema, Array(
-      Or(
-        StringContains("b", "foobar"),
-        And(
-          StringContains("b", "prefix"),
-          LessThan("a", 1)
-        )
-      )
-    ).toImmutableArraySeq).isEmpty)
+    assert(
+      OrcFilters
+        .createFilter(
+          schema,
+          Array(
+            Or(
+              StringContains("b", "foobar"),
+              And(StringContains("b", "prefix"), LessThan("a", 1)))).toImmutableArraySeq)
+        .isEmpty)
   }
 
   test("SPARK-27160: Fix casting of the DecimalType literal") {
     import org.apache.spark.sql.sources._
     val schema = StructType(Array(StructField("a", DecimalType(3, 2))))
     assertResult("leaf-0 = (LESS_THAN a 3.14), expr = leaf-0") {
-      OrcFilters.createFilter(schema, Array(
-        LessThan(
-          "a",
-          new java.math.BigDecimal(3.14, MathContext.DECIMAL64).setScale(2))).toImmutableArraySeq
-      ).get.asInstanceOf[SearchArgumentImpl].toOldString
+      OrcFilters
+        .createFilter(
+          schema,
+          Array(
+            LessThan(
+              "a",
+              new java.math.BigDecimal(3.14, MathContext.DECIMAL64).setScale(
+                2))).toImmutableArraySeq)
+        .get
+        .asInstanceOf[SearchArgumentImpl]
+        .toOldString
     }
   }
 
@@ -655,19 +682,25 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
 
       // Physical ORC files have both `A` and `a` fields.
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-        spark.range(count).repartition(count).selectExpr("id - 1 as A", "id as a")
-          .write.mode("overwrite").orc(tableDir1)
+        spark
+          .range(count)
+          .repartition(count)
+          .selectExpr("id - 1 as A", "id as a")
+          .write
+          .mode("overwrite")
+          .orc(tableDir1)
       }
 
       // Metastore table has both `A` and `a` fields too.
       withTable(tableName) {
         withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-          sql(
-            s"""
+          sql(s"""
                |CREATE TABLE $tableName (A LONG, a LONG) USING ORC LOCATION '$tableDir1'
              """.stripMargin)
 
-          checkAnswer(sql(s"select a, A from $tableName"), (0 until count).map(c => Row(c, c - 1)))
+          checkAnswer(
+            sql(s"select a, A from $tableName"),
+            (0 until count).map(c => Row(c, c - 1)))
 
           val actual1 = stripSparkFilter(sql(s"select A from $tableName where A < 0"))
           assert(actual1.count() == 1)
@@ -687,20 +720,14 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
               "name" -> "`a`",
               "referenceNames" -> ("[`spark_catalog`.`default`.`spark_32622`.`a`, " +
                 "`spark_catalog`.`default`.`spark_32622`.`a`]")),
-            context = ExpectedContext(
-              fragment = "a",
-              start = 32,
-              stop = 32
-            )
-          )
+            context = ExpectedContext(fragment = "a", start = 32, stop = 32))
         }
       }
 
       // Metastore table has only `A` field.
       withTable(tableName) {
         withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
-          sql(
-            s"""
+          sql(s"""
                |CREATE TABLE $tableName (A LONG) USING ORC LOCATION '$tableDir1'
              """.stripMargin)
 
@@ -709,22 +736,27 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
           }
           assert(ex.getCondition.startsWith("FAILED_READ_FILE"))
           assert(ex.getCause.isInstanceOf[SparkRuntimeException])
-          assert(ex.getCause.getMessage.contains(
-            """Found duplicate field(s) "A": [A, a] in case-insensitive mode"""))
+          assert(
+            ex.getCause.getMessage.contains(
+              """Found duplicate field(s) "A": [A, a] in case-insensitive mode"""))
         }
       }
 
       // Physical ORC files have only `A` field.
       val tableDir2 = s"${dir.getAbsoluteFile}/table2"
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-        spark.range(count).repartition(count).selectExpr("id - 1 as A")
-          .write.mode("overwrite").orc(tableDir2)
+        spark
+          .range(count)
+          .repartition(count)
+          .selectExpr("id - 1 as A")
+          .write
+          .mode("overwrite")
+          .orc(tableDir2)
       }
 
       withTable(tableName) {
         withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
-          sql(
-            s"""
+          sql(s"""
                |CREATE TABLE $tableName (a LONG) USING ORC LOCATION '$tableDir2'
              """.stripMargin)
 
@@ -737,8 +769,7 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
 
       withTable(tableName) {
         withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-          sql(
-            s"""
+          sql(s"""
                |CREATE TABLE $tableName (A LONG) USING ORC LOCATION '$tableDir2'
              """.stripMargin)
 
@@ -760,16 +791,12 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
         caseSensitive: String): Option[SearchArgument] = {
       var orcFilter: Option[SearchArgument] = None
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive) {
-        orcFilter =
-          OrcFilters.createFilter(schema, filters)
+        orcFilter = OrcFilters.createFilter(schema, filters)
       }
       orcFilter
     }
 
-    def testFilter(
-        schema: StructType,
-        filters: Seq[Filter],
-        expected: SearchArgument): Unit = {
+    def testFilter(schema: StructType, filters: Seq[Filter], expected: SearchArgument): Unit = {
       val caseSensitiveFilters = getOrcFilter(schema, filters, "true")
       val caseInsensitiveFilters = getOrcFilter(schema, filters, "false")
 
@@ -779,42 +806,70 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
       assert(caseInsensitiveFilters.get.getLeaves().size() > 0)
       assert(caseInsensitiveFilters.get.getLeaves().size() == expected.getLeaves().size())
       (0 until expected.getLeaves().size()).foreach { index =>
-        assert(caseInsensitiveFilters.get.getLeaves().get(index) == expected.getLeaves().get(index))
+        assert(
+          caseInsensitiveFilters.get.getLeaves().get(index) == expected.getLeaves().get(index))
       }
     }
 
     val schema1 = StructType(Seq(StructField("cint", IntegerType)))
-    testFilter(schema1, Seq(GreaterThan("CINT", 1)),
-      newBuilder.startNot()
-        .lessThanEquals("cint", OrcFilters.getPredicateLeafType(IntegerType), 1L).`end`().build())
-    testFilter(schema1, Seq(
-      And(GreaterThan("CINT", 1), EqualTo("Cint", 2))),
-      newBuilder.startAnd()
+    testFilter(
+      schema1,
+      Seq(GreaterThan("CINT", 1)),
+      newBuilder
         .startNot()
-        .lessThanEquals("cint", OrcFilters.getPredicateLeafType(IntegerType), 1L).`end`()
+        .lessThanEquals("cint", OrcFilters.getPredicateLeafType(IntegerType), 1L)
+        .`end`()
+        .build())
+    testFilter(
+      schema1,
+      Seq(And(GreaterThan("CINT", 1), EqualTo("Cint", 2))),
+      newBuilder
+        .startAnd()
+        .startNot()
+        .lessThanEquals("cint", OrcFilters.getPredicateLeafType(IntegerType), 1L)
+        .`end`()
         .equals("cint", OrcFilters.getPredicateLeafType(IntegerType), 2L)
-        .`end`().build())
+        .`end`()
+        .build())
 
     // Nested column case
-    val schema2 = StructType(Seq(StructField("a",
-      StructType(Seq(StructField("cint", IntegerType))))))
+    val schema2 =
+      StructType(Seq(StructField("a", StructType(Seq(StructField("cint", IntegerType))))))
 
-    testFilter(schema2, Seq(GreaterThan("A.CINT", 1)),
-      newBuilder.startNot()
-        .lessThanEquals("a.cint", OrcFilters.getPredicateLeafType(IntegerType), 1L).`end`().build())
-    testFilter(schema2, Seq(GreaterThan("a.CINT", 1)),
-      newBuilder.startNot()
-        .lessThanEquals("a.cint", OrcFilters.getPredicateLeafType(IntegerType), 1L).`end`().build())
-    testFilter(schema2, Seq(GreaterThan("A.cint", 1)),
-      newBuilder.startNot()
-        .lessThanEquals("a.cint", OrcFilters.getPredicateLeafType(IntegerType), 1L).`end`().build())
-    testFilter(schema2, Seq(
-      And(GreaterThan("a.CINT", 1), EqualTo("a.Cint", 2))),
-      newBuilder.startAnd()
+    testFilter(
+      schema2,
+      Seq(GreaterThan("A.CINT", 1)),
+      newBuilder
         .startNot()
-        .lessThanEquals("a.cint", OrcFilters.getPredicateLeafType(IntegerType), 1L).`end`()
+        .lessThanEquals("a.cint", OrcFilters.getPredicateLeafType(IntegerType), 1L)
+        .`end`()
+        .build())
+    testFilter(
+      schema2,
+      Seq(GreaterThan("a.CINT", 1)),
+      newBuilder
+        .startNot()
+        .lessThanEquals("a.cint", OrcFilters.getPredicateLeafType(IntegerType), 1L)
+        .`end`()
+        .build())
+    testFilter(
+      schema2,
+      Seq(GreaterThan("A.cint", 1)),
+      newBuilder
+        .startNot()
+        .lessThanEquals("a.cint", OrcFilters.getPredicateLeafType(IntegerType), 1L)
+        .`end`()
+        .build())
+    testFilter(
+      schema2,
+      Seq(And(GreaterThan("a.CINT", 1), EqualTo("a.Cint", 2))),
+      newBuilder
+        .startAnd()
+        .startNot()
+        .lessThanEquals("a.cint", OrcFilters.getPredicateLeafType(IntegerType), 1L)
+        .`end`()
         .equals("a.cint", OrcFilters.getPredicateLeafType(IntegerType), 2L)
-        .`end`().build())
+        .`end`()
+        .build())
   }
 }
-

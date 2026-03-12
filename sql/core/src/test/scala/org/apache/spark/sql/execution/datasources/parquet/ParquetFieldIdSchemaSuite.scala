@@ -52,29 +52,29 @@ class ParquetFieldIdSchemaSuite extends ParquetSchemaTest {
       // each fake name should be uniquely generated
       val fakeColumnNames = actual.getPaths.asScala.flatten.filter(_.startsWith(FAKE_COLUMN_NAME))
       assert(
-        fakeColumnNames.distinct == fakeColumnNames, "Should generate unique fake column names")
+        fakeColumnNames.distinct == fakeColumnNames,
+        "Should generate unique fake column names")
 
       // replace the random part of all fake names with a fixed id generator
       val ids1 = (1 to 100).iterator
       val actualNormalized = MessageTypeParser.parseMessageType(
-        UUID_REGEX.replaceAllIn(actual.toString, _ => ids1.next().toString)
-      )
+        UUID_REGEX.replaceAllIn(actual.toString, _ => ids1.next().toString))
       val ids2 = (1 to 100).iterator
       val expectedNormalized = MessageTypeParser.parseMessageType(
-        FAKE_COLUMN_NAME.r.replaceAllIn(expectedSchema, _ => s"$FAKE_COLUMN_NAME${ids2.next()}")
-      )
+        FAKE_COLUMN_NAME.r.replaceAllIn(expectedSchema, _ => s"$FAKE_COLUMN_NAME${ids2.next()}"))
 
       try {
         expectedNormalized.checkContains(actualNormalized)
         actualNormalized.checkContains(expectedNormalized)
-      } catch { case cause: Throwable =>
-        fail(
-          s"""Expected clipped schema:
+      } catch {
+        case cause: Throwable =>
+          fail(
+            s"""Expected clipped schema:
              |$expectedSchema
              |Actual clipped schema:
              |$actual
            """.stripMargin,
-          cause)
+            cause)
       }
       checkEqual(actualNormalized, expectedNormalized)
       // might be redundant but just to have some free tests for the utils
@@ -84,9 +84,9 @@ class ParquetFieldIdSchemaSuite extends ParquetSchemaTest {
   }
 
   private def testSqlToParquet(
-    testName: String,
-    sqlSchema: StructType,
-    parquetSchema: String): Unit = {
+      testName: String,
+      sqlSchema: StructType,
+      parquetSchema: String): Unit = {
     val converter = new SparkToParquetSchemaConverter(
       writeLegacyParquetFormat = false,
       outputTimestampType = SQLConf.ParquetOutputTimestampType.INT96,
@@ -102,15 +102,15 @@ class ParquetFieldIdSchemaSuite extends ParquetSchemaTest {
   private def checkEqual(actual: MessageType, expected: MessageType): Unit = {
     actual.checkContains(expected)
     expected.checkContains(actual)
-    assert(actual.toString == expected.toString,
+    assert(
+      actual.toString == expected.toString,
       s"""
          |Schema mismatch.
          |Expected schema:
          |${expected.toString}
          |Actual schema:
          |${actual.toString}
-         """.stripMargin
-    )
+         """.stripMargin)
   }
 
   test("check hasFieldIds for schema") {
@@ -132,8 +132,8 @@ class ParquetFieldIdSchemaSuite extends ParquetSchemaTest {
 
     assert(ParquetUtils.hasFieldIds(f0Type))
 
-    assert(ParquetUtils.hasFieldIds(
-      new StructType().add("f0", f0Type, nullable = false, withId(1))))
+    assert(
+      ParquetUtils.hasFieldIds(new StructType().add("f0", f0Type, nullable = false, withId(1))))
 
     assert(!ParquetUtils.hasFieldIds(new StructType().add("f0", IntegerType, nullable = true)))
     assert(!ParquetUtils.hasFieldIds(new StructType()));
@@ -141,12 +141,20 @@ class ParquetFieldIdSchemaSuite extends ParquetSchemaTest {
 
   test("check getFieldId for schema") {
     val schema = new StructType()
-      .add("overflowId", DoubleType, nullable = true,
+      .add(
+        "overflowId",
+        DoubleType,
+        nullable = true,
         new MetadataBuilder()
-          .putLong(ParquetUtils.FIELD_ID_METADATA_KEY, 12345678987654321L).build())
-      .add("stringId", StringType, nullable = true,
+          .putLong(ParquetUtils.FIELD_ID_METADATA_KEY, 12345678987654321L)
+          .build())
+      .add(
+        "stringId",
+        StringType,
+        nullable = true,
         new MetadataBuilder()
-          .putString(ParquetUtils.FIELD_ID_METADATA_KEY, "lol").build())
+          .putString(ParquetUtils.FIELD_ID_METADATA_KEY, "lol")
+          .build())
       .add("negativeId", LongType, nullable = true, withId(-20))
       .add("noId", LongType, nullable = true)
 
@@ -170,16 +178,12 @@ class ParquetFieldIdSchemaSuite extends ParquetSchemaTest {
 
     // empty Parquet schema fails too
     assert(
-      !ParquetReadSupport.containsFieldIds(
-        MessageTypeParser.parseMessageType(
-          """message root {
+      !ParquetReadSupport.containsFieldIds(MessageTypeParser.parseMessageType("""message root {
              |}
           """.stripMargin)))
 
     assert(
-      !ParquetReadSupport.containsFieldIds(
-        MessageTypeParser.parseMessageType(
-          """message root {
+      !ParquetReadSupport.containsFieldIds(MessageTypeParser.parseMessageType("""message root {
             |  required group f0 {
             |    optional int32 f00;
             |  }
@@ -187,9 +191,7 @@ class ParquetFieldIdSchemaSuite extends ParquetSchemaTest {
           """.stripMargin)))
 
     assert(
-      ParquetReadSupport.containsFieldIds(
-        MessageTypeParser.parseMessageType(
-          """message root {
+      ParquetReadSupport.containsFieldIds(MessageTypeParser.parseMessageType("""message root {
             |  required group f0 = 1 {
             |    optional int32 f00;
             |    optional binary f01;
@@ -198,9 +200,7 @@ class ParquetFieldIdSchemaSuite extends ParquetSchemaTest {
           """.stripMargin)))
 
     assert(
-      ParquetReadSupport.containsFieldIds(
-        MessageTypeParser.parseMessageType(
-          """message root {
+      ParquetReadSupport.containsFieldIds(MessageTypeParser.parseMessageType("""message root {
             |  required group f0 {
             |    optional int32 f00 = 1;
             |    optional binary f01;
@@ -210,8 +210,7 @@ class ParquetFieldIdSchemaSuite extends ParquetSchemaTest {
 
     assert(
       !ParquetReadSupport.containsFieldIds(
-        MessageTypeParser.parseMessageType(
-          """message spark_schema {
+        MessageTypeParser.parseMessageType("""message spark_schema {
               |  required group f0 {
               |    optional group f00 (LIST) {
               |      repeated group list {
@@ -224,8 +223,7 @@ class ParquetFieldIdSchemaSuite extends ParquetSchemaTest {
 
     assert(
       ParquetReadSupport.containsFieldIds(
-        MessageTypeParser.parseMessageType(
-          """message spark_schema {
+        MessageTypeParser.parseMessageType("""message spark_schema {
             |  required group f0 {
             |    optional group f00 (LIST) {
             |      repeated group list = 1 {
@@ -265,8 +263,7 @@ class ParquetFieldIdSchemaSuite extends ParquetSchemaTest {
 
       new StructType().add("f0", f0Type, nullable = false, withId(1))
     },
-    parquetSchema =
-      """message spark_schema {
+    parquetSchema = """message spark_schema {
         |  required group f0 = 1 {
         |    optional group f00 (LIST) = 2 {
         |      repeated group list {
@@ -288,26 +285,20 @@ class ParquetFieldIdSchemaSuite extends ParquetSchemaTest {
 
   testSchemaClipping(
     "simple nested struct",
-
-    parquetSchema =
-      """message root {
+    parquetSchema = """message root {
         |  required group f0 = 1 {
         |    optional int32 f00 = 2;
         |    optional int32 f01 = 3;
         |  }
         |}
       """.stripMargin,
-
     catalystSchema = {
-      val f0Type = new StructType().add(
-        "g00", IntegerType, nullable = true, withId(2))
+      val f0Type = new StructType().add("g00", IntegerType, nullable = true, withId(2))
       new StructType()
         .add("g0", f0Type, nullable = false, withId(1))
         .add("g1", IntegerType, nullable = true, withId(4))
     },
-
-    expectedSchema =
-      s"""message spark_schema {
+    expectedSchema = s"""message spark_schema {
         |  required group f0 = 1 {
         |    optional int32 f00 = 2;
         |  }
@@ -317,9 +308,7 @@ class ParquetFieldIdSchemaSuite extends ParquetSchemaTest {
 
   testSchemaClipping(
     "standard array",
-
-    parquetSchema =
-      """message root {
+    parquetSchema = """message root {
         |  required group f0 = 1 {
         |    optional group f00 (LIST) = 2 {
         |      repeated group list {
@@ -338,7 +327,6 @@ class ParquetFieldIdSchemaSuite extends ParquetSchemaTest {
         |  }
         |}
       """.stripMargin,
-
     catalystSchema = {
       val f01ElementType = new StructType()
         .add("g011", DoubleType, nullable = true, withId(8))
@@ -350,9 +338,7 @@ class ParquetFieldIdSchemaSuite extends ParquetSchemaTest {
 
       new StructType().add("g0", f0Type, nullable = false, withId(1))
     },
-
-    expectedSchema =
-      s"""message spark_schema {
+    expectedSchema = s"""message spark_schema {
         |  required group f0 = 1 {
         |    optional group f00 (LIST) = 2 {
         |      repeated group list {
@@ -374,9 +360,7 @@ class ParquetFieldIdSchemaSuite extends ParquetSchemaTest {
 
   testSchemaClipping(
     "standard map with complex key",
-
-    parquetSchema =
-      """message root {
+    parquetSchema = """message root {
         |  required group f0 (MAP) = 3 {
         |    repeated group key_value = 1 {
         |      required group key = 2 {
@@ -388,7 +372,6 @@ class ParquetFieldIdSchemaSuite extends ParquetSchemaTest {
         |  }
         |}
       """.stripMargin,
-
     catalystSchema = {
       val keyType =
         new StructType()
@@ -399,9 +382,7 @@ class ParquetFieldIdSchemaSuite extends ParquetSchemaTest {
 
       new StructType().add("g0", f0Type, nullable = false, withId(3))
     },
-
-    expectedSchema =
-      s"""message spark_schema {
+    expectedSchema = s"""message spark_schema {
         |  required group f0 (MAP) = 3 {
         |    repeated group key_value = 1 {
         |      required group key = 2 {
@@ -416,16 +397,13 @@ class ParquetFieldIdSchemaSuite extends ParquetSchemaTest {
 
   testSchemaClipping(
     "won't match field id if structure is different",
-
-    parquetSchema =
-      """message root {
+    parquetSchema = """message root {
         |  required group f0 = 1 {
         |    optional int32 f00 = 2;
         |  }
         |  optional int32 f1 = 3;
         |}
       """.stripMargin,
-
     catalystSchema = {
       val f0Type = new StructType()
         .add("g00", IntegerType, nullable = true, withId(2))
@@ -436,8 +414,7 @@ class ParquetFieldIdSchemaSuite extends ParquetSchemaTest {
     },
 
     // note that f1 is not picked up, even though it's Id is 3
-    expectedSchema =
-      s"""message spark_schema {
+    expectedSchema = s"""message spark_schema {
         |  required group f0 = 1 {
         |    optional int32 f00 = 2;
         |    optional int32 $FAKE_COLUMN_NAME = 3;
@@ -447,9 +424,7 @@ class ParquetFieldIdSchemaSuite extends ParquetSchemaTest {
 
   testSchemaClipping(
     "Complex type with multiple mismatches should work",
-
-    parquetSchema =
-      """message root {
+    parquetSchema = """message root {
         |  required group f0 = 1 {
         |    optional int32 f00 = 2;
         |  }
@@ -457,7 +432,6 @@ class ParquetFieldIdSchemaSuite extends ParquetSchemaTest {
         |  optional int32 f2 = 4;
         |}
       """.stripMargin,
-
     catalystSchema = {
       val f0Type = new StructType()
         .add("g00", IntegerType, nullable = true, withId(2))
@@ -467,9 +441,7 @@ class ParquetFieldIdSchemaSuite extends ParquetSchemaTest {
         .add("g1", IntegerType, nullable = true, withId(3))
         .add("g2", IntegerType, nullable = true, withId(888))
     },
-
-    expectedSchema =
-      s"""message spark_schema {
+    expectedSchema = s"""message spark_schema {
         |  required group $FAKE_COLUMN_NAME = 999 {
         |    optional int32 g00 = 2;
         |  }
@@ -480,9 +452,7 @@ class ParquetFieldIdSchemaSuite extends ParquetSchemaTest {
 
   testSchemaClipping(
     "Should allow fall-back to name matching if id not found",
-
-    parquetSchema =
-      """message root {
+    parquetSchema = """message root {
         |  required group f0 = 1 {
         |    optional int32 f00 = 2;
         |  }
@@ -493,7 +463,6 @@ class ParquetFieldIdSchemaSuite extends ParquetSchemaTest {
         |  }
         |}
       """.stripMargin,
-
     catalystSchema = {
       val f0Type = new StructType()
         // nested f00 without id should also work
@@ -512,9 +481,7 @@ class ParquetFieldIdSchemaSuite extends ParquetSchemaTest {
         // f4 without id will do name matching, but g40 will be matched using id
         .add("f4", f4Type, nullable = true)
     },
-
-    expectedSchema =
-      s"""message spark_schema {
+    expectedSchema = s"""message spark_schema {
         |  required group f0 = 1 {
         |    optional int32 f00 = 2;
         |  }

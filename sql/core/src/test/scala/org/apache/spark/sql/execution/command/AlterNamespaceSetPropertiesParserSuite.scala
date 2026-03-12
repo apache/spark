@@ -29,12 +29,12 @@ class AlterNamespaceSetPropertiesParserSuite extends AnalysisTest {
         comparePlans(
           parsePlan(s"ALTER $nsToken a.b.c SET $propToken ('a'='a', 'b'='b', 'c'='c')"),
           SetNamespaceProperties(
-            UnresolvedNamespace(Seq("a", "b", "c")), Map("a" -> "a", "b" -> "b", "c" -> "c")))
+            UnresolvedNamespace(Seq("a", "b", "c")),
+            Map("a" -> "a", "b" -> "b", "c" -> "c")))
 
         comparePlans(
           parsePlan(s"ALTER $nsToken a.b.c SET $propToken ('a'='a')"),
-          SetNamespaceProperties(
-            UnresolvedNamespace(Seq("a", "b", "c")), Map("a" -> "a")))
+          SetNamespaceProperties(UnresolvedNamespace(Seq("a", "b", "c")), Map("a" -> "a")))
       }
     }
   }
@@ -45,9 +45,6 @@ class AlterNamespaceSetPropertiesParserSuite extends AnalysisTest {
       exception = parseException(parsePlan)(sql),
       condition = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map("message" -> "Values must be specified for key(s): [key_without_value]"),
-      context = ExpectedContext(
-        fragment = sql,
-        start = 0,
-        stop = 78))
+      context = ExpectedContext(fragment = sql, start = 0, stop = 78))
   }
 }

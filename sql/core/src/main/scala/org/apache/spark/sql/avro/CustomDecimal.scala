@@ -29,18 +29,18 @@ private[spark] object CustomDecimal {
 // Avro's builtin Decimal type, but is meant to be registered for long type. It indicates that
 // the long type should be converted to Spark's Decimal type, with provided precision and scale.
 private[spark] class CustomDecimal(schema: Schema) extends LogicalType(CustomDecimal.TYPE_NAME) {
-  val scale : Int = {
+  val scale: Int = {
     val obj = schema.getObjectProp("scale")
     obj match {
       case null =>
         throw new IllegalArgumentException(s"Invalid ${CustomDecimal.TYPE_NAME}: missing scale");
-      case i : Integer =>
+      case i: Integer =>
         i
       case other =>
         throw new IllegalArgumentException(s"Expected int ${CustomDecimal.TYPE_NAME}:scale")
     }
   }
-  val precision : Int = {
+  val precision: Int = {
     val obj = schema.getObjectProp("precision")
     obj match {
       case null =>
@@ -52,7 +52,7 @@ private[spark] class CustomDecimal(schema: Schema) extends LogicalType(CustomDec
         throw new IllegalArgumentException(s"Expected int ${CustomDecimal.TYPE_NAME}:precision")
     }
   }
-  val className : String = schema.getProp("className")
+  val className: String = schema.getProp("className")
 
   override def validate(schema: Schema): Unit = {
     super.validate(schema)
@@ -61,18 +61,21 @@ private[spark] class CustomDecimal(schema: Schema) extends LogicalType(CustomDec
         s"${CustomDecimal.TYPE_NAME} can only be used with an underlying long type")
     }
     if (precision <= 0) {
-      throw new IllegalArgumentException(s"Invalid decimal precision: $precision" +
-        " (must be positive)");
+      throw new IllegalArgumentException(
+        s"Invalid decimal precision: $precision" +
+          " (must be positive)");
     } else if (precision > DecimalType.MAX_PRECISION) {
       throw new IllegalArgumentException(
         s"cannot store $precision digits (max ${DecimalType.MAX_PRECISION})")
     }
     if (scale < 0) {
-      throw new IllegalArgumentException(s"Invalid decimal scale: $scale" +
-        " (must be positive)");
+      throw new IllegalArgumentException(
+        s"Invalid decimal scale: $scale" +
+          " (must be positive)");
     } else if (scale > precision) {
-      throw new IllegalArgumentException(s"Invalid decimal scale: $scale (greater than " +
-        s"precision: $precision)");
+      throw new IllegalArgumentException(
+        s"Invalid decimal scale: $scale (greater than " +
+          s"precision: $precision)");
     }
   }
 }

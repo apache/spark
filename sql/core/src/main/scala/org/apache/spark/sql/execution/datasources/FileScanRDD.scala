@@ -46,13 +46,20 @@ import org.apache.spark.util.NextIterator
  * A part (i.e. "block") of a single file that should be read, along with partition column values
  * that need to be prepended to each row.
  *
- * @param partitionValues value of partition columns to be prepended to each row.
- * @param filePath URI of the file to read
- * @param start the beginning offset (in bytes) of the block.
- * @param length number of bytes to read.
- * @param modificationTime The modification time of the input file, in milliseconds.
- * @param fileSize The length of the input file (not the block), in bytes.
- * @param otherConstantMetadataColumnValues The values of any additional constant metadata columns.
+ * @param partitionValues
+ *   value of partition columns to be prepended to each row.
+ * @param filePath
+ *   URI of the file to read
+ * @param start
+ *   the beginning offset (in bytes) of the block.
+ * @param length
+ *   number of bytes to read.
+ * @param modificationTime
+ *   The modification time of the input file, in milliseconds.
+ * @param fileSize
+ *   The length of the input file (not the block), in bytes.
+ * @param otherConstantMetadataColumnValues
+ *   The values of any additional constant metadata columns.
  */
 case class PartitionedFile(
     partitionValues: InternalRow,
@@ -75,7 +82,8 @@ case class PartitionedFile(
 
 /**
  * An RDD that scans a list of file partitions.
- * @param metadataColumns File-constant metadata columns to append to end of schema.
+ * @param metadataColumns
+ *   File-constant metadata columns to append to end of schema.
  */
 class FileScanRDD(
     @transient private val sparkSession: SparkSession,
@@ -85,7 +93,7 @@ class FileScanRDD(
     val metadataColumns: Seq[AttributeReference] = Seq.empty,
     metadataExtractors: Map[String, PartitionedFile => Any] = Map.empty,
     options: FileSourceOptions = new FileSourceOptions(CaseInsensitiveMap(Map.empty)))
-  extends RDD[InternalRow](sparkSession.sparkContext, Nil) {
+    extends RDD[InternalRow](sparkSession.sparkContext, Nil) {
 
   private val ignoreCorruptFiles = options.ignoreCorruptFiles
   private val ignoreMissingFiles = options.ignoreMissingFiles
@@ -138,7 +146,8 @@ class FileScanRDD(
         try {
           hasNext0
         } catch {
-          case e: Throwable => throw FileDataSourceV2.attachFilePath(currentFile.urlEncodedPath, e)
+          case e: Throwable =>
+            throw FileDataSourceV2.attachFilePath(currentFile.urlEncodedPath, e)
         }
       }
 
@@ -157,14 +166,17 @@ class FileScanRDD(
       }
 
       /**
-       * The value of some of the metadata columns remains exactly the same for each record of
-       * a partitioned file. Only need to update their values in the metadata row when `currentFile`
+       * The value of some of the metadata columns remains exactly the same for each record of a
+       * partitioned file. Only need to update their values in the metadata row when `currentFile`
        * is changed.
        */
       private def updateMetadataRow(): Unit =
         if (metadataColumns.nonEmpty && currentFile != null) {
           updateMetadataInternalRow(
-            metadataRow, metadataColumns.map(_.name), currentFile, metadataExtractors)
+            metadataRow,
+            metadataColumns.map(_.name),
+            currentFile,
+            metadataExtractors)
         }
 
       /**
@@ -189,15 +201,16 @@ class FileScanRDD(
       }
 
       /**
-       * Add metadata columns at the end of nextElement if needed.
-       * For different row implementations, use different methods to update and append.
+       * Add metadata columns at the end of nextElement if needed. For different row
+       * implementations, use different methods to update and append.
        */
       private def addMetadataColumnsIfNeeded(nextElement: Object): Object = {
         if (metadataColumns.nonEmpty) {
           nextElement match {
-            case c: ColumnarBatch => new ColumnarBatch(
-              Array.tabulate(c.numCols())(c.column) ++ createMetadataColumnVector(c),
-              c.numRows())
+            case c: ColumnarBatch =>
+              new ColumnarBatch(
+                Array.tabulate(c.numCols())(c.column) ++ createMetadataColumnVector(c),
+                c.numRows())
             case u: UnsafeRow => projection.apply(new JoinedRow(u, metadataRow))
             case i: InternalRow => new JoinedRow(i, metadataRow)
           }
@@ -217,7 +230,7 @@ class FileScanRDD(
           case _ =>
             // too costly to update every record
             if (inputMetrics.recordsRead %
-              SparkHadoopUtil.UPDATE_INPUT_METRICS_INTERVAL_RECORDS == 0) {
+                SparkHadoopUtil.UPDATE_INPUT_METRICS_INTERVAL_RECORDS == 0) {
               incTaskInputMetricsBytesRead()
             }
             inputMetrics.incRecordsRead(1)
@@ -267,11 +280,14 @@ class FileScanRDD(
                     null
                   // Throw FileNotFoundException even if `ignoreCorruptFiles` is true
                   case e: FileNotFoundException if !ignoreMissingFiles => throw e
-                  case e @ (_ : AccessControlException | _ : BlockMissingException) => throw e
-                  case e if ignoreCorruptFiles &&
-                      DataSourceUtils.shouldIgnoreCorruptFileException(e) =>
-                    logWarning(log"Skipped the rest of the content in the corrupted file: " +
-                      log"${MDC(PATH, currentFile)}", e)
+                  case e @ (_: AccessControlException | _: BlockMissingException) => throw e
+                  case e
+                      if ignoreCorruptFiles &&
+                        DataSourceUtils.shouldIgnoreCorruptFileException(e) =>
+                    logWarning(
+                      log"Skipped the rest of the content in the corrupted file: " +
+                        log"${MDC(PATH, currentFile)}",
+                      e)
                     finished = true
                     null
                 }

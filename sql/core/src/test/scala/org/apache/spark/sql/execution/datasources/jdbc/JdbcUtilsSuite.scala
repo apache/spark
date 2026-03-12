@@ -24,8 +24,8 @@ import org.apache.spark.sql.types._
 
 class JdbcUtilsSuite extends SparkFunSuite {
 
-  val tableSchema = StructType(Seq(
-    StructField("C1", StringType, false), StructField("C2", IntegerType, false)))
+  val tableSchema = StructType(
+    Seq(StructField("C1", StringType, false), StructField("C2", IntegerType, false)))
   val caseSensitive = org.apache.spark.sql.catalyst.analysis.caseSensitiveResolution
   val caseInsensitive = org.apache.spark.sql.catalyst.analysis.caseInsensitiveResolution
 
@@ -35,17 +35,19 @@ class JdbcUtilsSuite extends SparkFunSuite {
 
     assert(JdbcUtils.getCustomSchema(tableSchema, "c1 DATE", caseInsensitive) ===
       StructType(Seq(StructField("C1", DateType, false), StructField("C2", IntegerType, false))))
-    assert(JdbcUtils.getCustomSchema(tableSchema, "c1 DATE", caseSensitive) ===
-      StructType(Seq(StructField("C1", StringType, false), StructField("C2", IntegerType, false))))
+    assert(
+      JdbcUtils.getCustomSchema(tableSchema, "c1 DATE", caseSensitive) ===
+        StructType(
+          Seq(StructField("C1", StringType, false), StructField("C2", IntegerType, false))))
 
     assert(
       JdbcUtils.getCustomSchema(tableSchema, "c1 DATE, C2 STRING", caseInsensitive) ===
-      StructType(Seq(StructField("C1", DateType, false), StructField("C2", StringType, false))))
+        StructType(Seq(StructField("C1", DateType, false), StructField("C2", StringType, false))))
     assert(JdbcUtils.getCustomSchema(tableSchema, "c1 DATE, C2 STRING", caseSensitive) ===
       StructType(Seq(StructField("C1", StringType, false), StructField("C2", StringType, false))))
 
     // Throw AnalysisException
-    val duplicate = intercept[AnalysisException]{
+    val duplicate = intercept[AnalysisException] {
       JdbcUtils.getCustomSchema(tableSchema, "c1 DATE, c1 STRING", caseInsensitive) ===
         StructType(Seq(StructField("c1", DateType, false), StructField("c1", StringType, false)))
     }
@@ -56,14 +58,14 @@ class JdbcUtilsSuite extends SparkFunSuite {
 
     // Throw ParseException
     checkError(
-      exception = intercept[ParseException]{
+      exception = intercept[ParseException] {
         JdbcUtils.getCustomSchema(tableSchema, "c3 DATEE, C2 STRING", caseInsensitive)
       },
       condition = "UNSUPPORTED_DATATYPE",
       parameters = Map("typeName" -> "\"DATEE\""))
 
     checkError(
-      exception = intercept[ParseException]{
+      exception = intercept[ParseException] {
         JdbcUtils.getCustomSchema(tableSchema, "c3 DATE. C2 STRING", caseInsensitive)
       },
       condition = "PARSE_SYNTAX_ERROR",

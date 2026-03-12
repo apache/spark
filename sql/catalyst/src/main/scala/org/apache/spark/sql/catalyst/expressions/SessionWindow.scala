@@ -23,16 +23,17 @@ import org.apache.spark.sql.types._
 /**
  * Represent the session window.
  *
- * @param timeColumn the start time of session window
- * @param gapDuration the duration of session gap. For static gap duration, meaning the session
- *                    will close if there is no new element appeared within "the last element in
- *                    session + gap". Besides a static gap duration value, users can also provide
- *                    an expression to specify gap duration dynamically based on the input row.
- *                    With dynamic gap duration, the closing of a session window does not depend
- *                    on the latest input anymore. A session window's range is the union of all
- *                    events' ranges which are determined by event start time and evaluated gap
- *                    duration during the query execution. Note that the rows with negative or
- *                    zero gap duration will be filtered out from the aggregation.
+ * @param timeColumn
+ *   the start time of session window
+ * @param gapDuration
+ *   the duration of session gap. For static gap duration, meaning the session will close if there
+ *   is no new element appeared within "the last element in session + gap". Besides a static gap
+ *   duration value, users can also provide an expression to specify gap duration dynamically
+ *   based on the input row. With dynamic gap duration, the closing of a session window does not
+ *   depend on the latest input anymore. A session window's range is the union of all events'
+ *   ranges which are determined by event start time and evaluated gap duration during the query
+ *   execution. Note that the rows with negative or zero gap duration will be filtered out from
+ *   the aggregation.
  */
 // scalastyle:off line.size.limit line.contains.tab
 @ExpressionDescription(
@@ -62,10 +63,11 @@ import org.apache.spark.sql.types._
   group = "datetime_funcs",
   since = "3.2.0")
 // scalastyle:on line.size.limit line.contains.tab
-case class SessionWindow(timeColumn: Expression, gapDuration: Expression) extends Expression
-  with ImplicitCastInputTypes
-  with Unevaluable
-  with NonSQLExpression {
+case class SessionWindow(timeColumn: Expression, gapDuration: Expression)
+    extends Expression
+    with ImplicitCastInputTypes
+    with Unevaluable
+    with NonSQLExpression {
 
   private def inputTypeOnTimeColumn: AbstractDataType = {
     TypeCollection(
@@ -77,8 +79,7 @@ case class SessionWindow(timeColumn: Expression, gapDuration: Expression) extend
         .add(StructField("end", TimestampType)),
       new StructType()
         .add(StructField("start", TimestampNTZType))
-        .add(StructField("end", TimestampNTZType))
-    )
+        .add(StructField("end", TimestampNTZType)))
   }
 
   // NOTE: if the window column is given as a time column, we resolve it to the point of time,
@@ -97,7 +98,8 @@ case class SessionWindow(timeColumn: Expression, gapDuration: Expression) extend
 
   override def nullable: Boolean = false
 
-  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): Expression =
     copy(timeColumn = newChildren(0), gapDuration = newChildren(1))
 }
 

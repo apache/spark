@@ -71,8 +71,10 @@ package object debug {
   /**
    * Get WholeStageCodegenExec subtrees and the codegen in a query plan into one String
    *
-   * @param plan the query plan for codegen
-   * @return single String containing all WholeStageCodegen subtrees and corresponding codegen
+   * @param plan
+   *   the query plan for codegen
+   * @return
+   *   single String containing all WholeStageCodegen subtrees and corresponding codegen
    */
   def codegenString(plan: SparkPlan): String = {
     val concat = new StringConcat()
@@ -103,8 +105,10 @@ package object debug {
   /**
    * Get WholeStageCodegenExec subtrees and the codegen in a query plan
    *
-   * @param plan the query plan for codegen
-   * @return Sequence of WholeStageCodegen subtrees and corresponding codegen
+   * @param plan
+   *   the query plan for codegen
+   * @return
+   *   Sequence of WholeStageCodegen subtrees and corresponding codegen
    */
   def codegenStringSeq(plan: SparkPlan): Seq[(String, String, ByteCodeStats)] = {
     val codegenSubtrees = new collection.mutable.HashSet[WholeStageCodegenExec]()
@@ -126,12 +130,13 @@ package object debug {
     findSubtrees(plan)
     codegenSubtrees.toSeq.sortBy(_.codegenStageId).map { subtree =>
       val (_, source) = subtree.doCodeGen()
-      val codeStats = try {
-        CodeGenerator.compile(source)._2
-      } catch {
-        case NonFatal(_) =>
-          ByteCodeStats.UNAVAILABLE
-      }
+      val codeStats =
+        try {
+          CodeGenerator.compile(source)._2
+        } catch {
+          case NonFatal(_) =>
+            ByteCodeStats.UNAVAILABLE
+        }
       (subtree.toString, CodeFormatter.format(source), codeStats)
     }
   }
@@ -139,8 +144,10 @@ package object debug {
   /**
    * Get WholeStageCodegenExec subtrees and the codegen in a query plan into one String
    *
-   * @param query the streaming query for codegen
-   * @return single String containing all WholeStageCodegen subtrees and corresponding codegen
+   * @param query
+   *   the streaming query for codegen
+   * @return
+   *   single String containing all WholeStageCodegen subtrees and corresponding codegen
    */
   def codegenString(query: StreamingQuery): String = {
     val w = asStreamExecution(query)
@@ -154,8 +161,10 @@ package object debug {
   /**
    * Get WholeStageCodegenExec subtrees and the codegen in a query plan
    *
-   * @param query the streaming query for codegen
-   * @return Sequence of WholeStageCodegen subtrees and corresponding codegen
+   * @param query
+   *   the streaming query for codegen
+   * @return
+   *   Sequence of WholeStageCodegen subtrees and corresponding codegen
    */
   def codegenStringSeq(query: StreamingQuery): Seq[(String, String, ByteCodeStats)] = {
     val w = asStreamExecution(query)
@@ -169,8 +178,10 @@ package object debug {
   private def asStreamExecution(query: StreamingQuery): StreamExecution = query match {
     case wrapper: StreamingQueryWrapper => wrapper.streamingQuery
     case q: StreamExecution => q
-    case _ => throw new IllegalArgumentException("Parameter should be an instance of " +
-      "StreamExecution!")
+    case _ =>
+      throw new IllegalArgumentException(
+        "Parameter should be an instance of " +
+          "StreamExecution!")
   }
 
   /**
@@ -205,7 +216,6 @@ package object debug {
       debugPrint(codegenString(query))
     }
   }
-
 
   class SetAccumulator[T] extends AccumulatorV2[T, java.util.Set[T]] {
     private val _set = Collections.synchronizedSet(new java.util.HashSet[T]())
@@ -257,8 +267,8 @@ package object debug {
     }
 
     protected override def doExecute(): RDD[InternalRow] = {
-      val evaluatorFactory = new DebugEvaluatorFactory(tupleCount, numColumns,
-        columnStats.map(_.elementTypes), output)
+      val evaluatorFactory =
+        new DebugEvaluatorFactory(tupleCount, numColumns, columnStats.map(_.elementTypes), output)
       if (conf.usePartitionEvaluator) {
         child.execute().mapPartitionsWithEvaluator(evaluatorFactory)
       } else {

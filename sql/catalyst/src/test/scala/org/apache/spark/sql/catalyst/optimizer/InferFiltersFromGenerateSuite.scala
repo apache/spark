@@ -31,10 +31,11 @@ class InferFiltersFromGenerateSuite extends PlanTest {
     val batches = Batch("Infer Filters", Once, InferFiltersFromGenerate) :: Nil
   }
 
-  val testRelation = LocalRelation($"a".array(StructType(Seq(
-    StructField("x", IntegerType),
-    StructField("y", IntegerType)
-  ))), $"c1".string, $"c2".string, $"c3".int)
+  val testRelation = LocalRelation(
+    $"a".array(StructType(Seq(StructField("x", IntegerType), StructField("y", IntegerType)))),
+    $"c1".string,
+    $"c2".string,
+    $"c3".int)
 
   Seq(Explode(_), PosExplode(_), Inline(_)).foreach { f =>
     val generator = f($"a")
@@ -63,33 +64,29 @@ class InferFiltersFromGenerateSuite extends PlanTest {
       comparePlans(optimized, originalQuery)
     }
 
-    val foldableExplode = f(CreateArray(Seq(
-      CreateStruct(Seq(Literal(0), Literal(1))),
-      CreateStruct(Seq(Literal(2), Literal(3)))
-    )))
+    val foldableExplode = f(CreateArray(
+      Seq(CreateStruct(Seq(Literal(0), Literal(1))), CreateStruct(Seq(Literal(2), Literal(3))))))
     test("Don't infer filters from " + foldableExplode) {
       val originalQuery = testRelation.generate(foldableExplode).analyze
       val optimized = Optimize.execute(originalQuery)
       comparePlans(optimized, originalQuery)
     }
 
-    val generatorWithFromJson = f(JsonToStructs(
-      ArrayType(new StructType().add("s", "string")),
-      Map.empty,
-      $"c1"))
+    val generatorWithFromJson =
+      f(JsonToStructs(ArrayType(new StructType().add("s", "string")), Map.empty, $"c1"))
     test("SPARK-37392: Don't infer filters from " + generatorWithFromJson) {
       val originalQuery = testRelation.generate(generatorWithFromJson).analyze
       val optimized = Optimize.execute(originalQuery)
       comparePlans(optimized, originalQuery)
     }
 
-    val returnSchema = ArrayType(StructType(Seq(
-      StructField("x", IntegerType),
-      StructField("y", StringType)
-    )))
+    val returnSchema =
+      ArrayType(StructType(Seq(StructField("x", IntegerType), StructField("y", StringType))))
     val fakeUDF = ScalaUDF(
       (i: Int) => Array(Row.fromSeq(Seq(1, "a")), Row.fromSeq(Seq(2, "b"))),
-      returnSchema, $"c3" :: Nil, Nil)
+      returnSchema,
+      $"c3" :: Nil,
+      Nil)
     val generatorWithUDF = f(fakeUDF)
     test("SPARK-36715: Don't infer filters from " + generatorWithUDF) {
       val originalQuery = testRelation.generate(generatorWithUDF).analyze

@@ -30,7 +30,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 object TypedAggregateExpression {
-  def apply[BUF : Encoder, OUT : Encoder](
+  def apply[BUF: Encoder, OUT: Encoder](
       aggregator: Aggregator[_, BUF, OUT]): TypedAggregateExpression = {
     val bufferEncoder = encoderFor[BUF]
     val bufferSerializer = bufferEncoder.namedExpressions
@@ -92,7 +92,10 @@ trait TypedAggregateExpression extends AggregateFunction {
   def inputClass: Option[Class[_]]
   def inputSchema: Option[StructType]
 
-  def withInputInfo(deser: Expression, cls: Class[_], schema: StructType): TypedAggregateExpression
+  def withInputInfo(
+      deser: Expression,
+      cls: Class[_],
+      schema: StructType): TypedAggregateExpression
 
   override def toString: String = {
     val input = inputDeserializer match {
@@ -123,7 +126,9 @@ case class SimpleTypedAggregateExpression(
     outputExternalType: DataType,
     dataType: DataType,
     nullable: Boolean)
-  extends DeclarativeAggregate with TypedAggregateExpression with NonSQLExpression {
+    extends DeclarativeAggregate
+    with TypedAggregateExpression
+    with NonSQLExpression {
 
   override lazy val deterministic: Boolean = true
 
@@ -142,8 +147,8 @@ case class SimpleTypedAggregateExpression(
   private def bufferExternalType = bufferDeserializer.dataType
 
   private def serializeToBuffer(expr: Expression): Seq[Expression] = {
-    bufferSerializer.map(_.transform {
-      case _: BoundReference => expr
+    bufferSerializer.map(_.transform { case _: BoundReference =>
+      expr
     })
   }
 
@@ -162,29 +167,23 @@ case class SimpleTypedAggregateExpression(
   }
 
   override lazy val mergeExpressions: Seq[Expression] = {
-    val leftBuffer = bufferDeserializer transform {
-      case a: AttributeReference => a.left
+    val leftBuffer = bufferDeserializer transform { case a: AttributeReference =>
+      a.left
     }
-    val rightBuffer = bufferDeserializer transform {
-      case a: AttributeReference => a.right
+    val rightBuffer = bufferDeserializer transform { case a: AttributeReference =>
+      a.right
     }
-    val merged = Invoke(
-      aggregatorLiteral,
-      "merge",
-      bufferExternalType,
-      leftBuffer :: rightBuffer :: Nil)
+    val merged =
+      Invoke(aggregatorLiteral, "merge", bufferExternalType, leftBuffer :: rightBuffer :: Nil)
     serializeToBuffer(merged)
   }
 
   override lazy val evaluateExpression: Expression = {
-    val resultObj = Invoke(
-      aggregatorLiteral,
-      "finish",
-      outputExternalType,
-      bufferDeserializer :: Nil)
+    val resultObj =
+      Invoke(aggregatorLiteral, "finish", outputExternalType, bufferDeserializer :: Nil)
 
-    val outputSerializeExprs = outputSerializer.map(_.transform {
-      case _: BoundReference => resultObj
+    val outputSerializeExprs = outputSerializer.map(_.transform { case _: BoundReference =>
+      resultObj
     })
 
     dataType match {
@@ -221,7 +220,9 @@ case class ComplexTypedAggregateExpression(
     nullable: Boolean,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0)
-  extends TypedImperativeAggregate[Any] with TypedAggregateExpression with NonSQLExpression {
+    extends TypedImperativeAggregate[Any]
+    with TypedAggregateExpression
+    with NonSQLExpression {
 
   override lazy val deterministic: Boolean = true
 

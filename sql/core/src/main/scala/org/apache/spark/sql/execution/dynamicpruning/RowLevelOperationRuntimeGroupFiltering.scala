@@ -33,24 +33,28 @@ import org.apache.spark.util.ArrayImplicits._
 /**
  * A rule that assigns a subquery to filter groups in row-level operations at runtime.
  *
- * Data skipping during job planning for row-level operations is limited to expressions that can be
- * converted to data source filters. Since not all expressions can be pushed down that way and
- * rewriting groups is expensive, Spark allows data sources to filter group at runtime.
- * If the primary scan in a group-based row-level operation supports runtime filtering, this rule
- * will inject a subquery to find all rows that match the condition so that data sources know
- * exactly which groups must be rewritten.
+ * Data skipping during job planning for row-level operations is limited to expressions that can
+ * be converted to data source filters. Since not all expressions can be pushed down that way and
+ * rewriting groups is expensive, Spark allows data sources to filter group at runtime. If the
+ * primary scan in a group-based row-level operation supports runtime filtering, this rule will
+ * inject a subquery to find all rows that match the condition so that data sources know exactly
+ * which groups must be rewritten.
  *
  * Note this rule only applies to group-based row-level operations.
  */
 class RowLevelOperationRuntimeGroupFiltering(optimizeSubqueries: Rule[LogicalPlan])
-  extends Rule[LogicalPlan] with PredicateHelper {
+    extends Rule[LogicalPlan]
+    with PredicateHelper {
 
   import DataSourceV2Implicits._
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
     // apply special dynamic filtering only for group-based row-level operations
-    case GroupBasedRowLevelOperation(replaceData, _, Some(cond),
-        DataSourceV2ScanRelation(_, scan: SupportsRuntimeV2Filtering, _, _, _))
+    case GroupBasedRowLevelOperation(
+          replaceData,
+          _,
+          Some(cond),
+          DataSourceV2ScanRelation(_, scan: SupportsRuntimeV2Filtering, _, _, _))
         if conf.runtimeRowLevelOperationGroupFilterEnabled && cond != TrueLiteral
           && scan.filterAttributes().nonEmpty =>
 
@@ -68,7 +72,8 @@ class RowLevelOperationRuntimeGroupFiltering(optimizeSubqueries: Rule[LogicalPla
           val filterAttrs = scan.filterAttributes.toImmutableArraySeq
           val buildKeys = V2ExpressionUtils.resolveRefs[Attribute](filterAttrs, matchingRowsPlan)
           val pruningKeys = V2ExpressionUtils.resolveRefs[Attribute](filterAttrs, r)
-          val dynamicPruningCond = buildDynamicPruningCond(matchingRowsPlan, buildKeys, pruningKeys)
+          val dynamicPruningCond =
+            buildDynamicPruningCond(matchingRowsPlan, buildKeys, pruningKeys)
 
           Filter(dynamicPruningCond, r)
       }
@@ -135,9 +140,8 @@ class RowLevelOperationRuntimeGroupFiltering(optimizeSubqueries: Rule[LogicalPla
         .getOrElse {
           throw new AnalysisException(
             errorClass = "_LEGACY_ERROR_TEMP_3075",
-            messageParameters = Map(
-              "tableAttr" -> tableAttr.toString,
-              "scanAttrs" -> scanAttrs.mkString(",")))
+            messageParameters =
+              Map("tableAttr" -> tableAttr.toString, "scanAttrs" -> scanAttrs.mkString(",")))
         }
     }
     AttributeMap(attrMapping)

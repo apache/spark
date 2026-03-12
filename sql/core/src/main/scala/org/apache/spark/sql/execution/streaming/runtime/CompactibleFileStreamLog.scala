@@ -34,20 +34,20 @@ import org.apache.spark.sql.execution.streaming.checkpointing.HDFSMetadataLog
 import org.apache.spark.util.Utils
 
 /**
- * An abstract class for compactible metadata logs. It will write one log file for each batch.
- * The first line of the log file is the version number, and there are multiple serialized
- * metadata lines following.
+ * An abstract class for compactible metadata logs. It will write one log file for each batch. The
+ * first line of the log file is the version number, and there are multiple serialized metadata
+ * lines following.
  *
- * As reading from many small files is usually pretty slow, also too many
- * small files in one folder will mess the FS, [[CompactibleFileStreamLog]] will
- * compact log files every 10 batches by default into a big file. When
- * doing a compaction, it will read all old log files and merge them with the new batch.
+ * As reading from many small files is usually pretty slow, also too many small files in one
+ * folder will mess the FS, [[CompactibleFileStreamLog]] will compact log files every 10 batches
+ * by default into a big file. When doing a compaction, it will read all old log files and merge
+ * them with the new batch.
  */
-abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
+abstract class CompactibleFileStreamLog[T <: AnyRef: ClassTag](
     metadataLogVersion: Int,
     sparkSession: SparkSession,
     path: String)
-  extends HDFSMetadataLog[Array[T]](sparkSession, path) {
+    extends HDFSMetadataLog[Array[T]](sparkSession, path) {
 
   import CompactibleFileStreamLog._
 
@@ -62,9 +62,10 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
   /**
    * If we delete the old files after compaction at once, there is a race condition in S3: other
    * processes may see the old files are deleted but still cannot see the compaction file using
-   * "list". The `allFiles` handles this by looking for the next compaction file directly, however,
-   * a live lock may happen if the compaction happens too frequently: one processing keeps deleting
-   * old files while another one keeps retrying. Setting a reasonable cleanup delay could avoid it.
+   * "list". The `allFiles` handles this by looking for the next compaction file directly,
+   * however, a live lock may happen if the compaction happens too frequently: one processing
+   * keeps deleting old files while another one keeps retrying. Setting a reasonable cleanup delay
+   * could avoid it.
    */
   protected def fileCleanupDelayMs: Long
 
@@ -87,7 +88,8 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
     // e.g., if defaultCompactInterval is 5 (and previous compact interval could have
     // been any 2,3,4,6,12), then a log could be: 11.compact, 12, 13, in which case
     // will ensure that the new compactInterval = 6 > 5 and (11 + 1) % 6 == 0
-    val compactibleBatchIds = fileManager.list(metadataPath, batchFilesFilter)
+    val compactibleBatchIds = fileManager
+      .list(metadataPath, batchFilesFilter)
       .filter(f => f.getPath.toString.endsWith(CompactibleFileStreamLog.COMPACT_FILE_SUFFIX))
       .map(f => pathToBatchId(f.getPath))
       .sorted(Ordering.Long.reverse)
@@ -102,20 +104,22 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
     } else if (compactibleBatchIds.length == 1) {
       // Case 3
       interval = CompactibleFileStreamLog.deriveCompactInterval(
-        defaultCompactInterval, compactibleBatchIds(0).toInt)
+        defaultCompactInterval,
+        compactibleBatchIds(0).toInt)
     }
     assert(interval > 0, s"intervalValue = $interval not positive value.")
-    logInfo(log"Set the compact interval to ${MDC(LogKeys.COMPACT_INTERVAL, interval)} " +
-      log"[defaultCompactInterval: " +
-      log"${MDC(LogKeys.DEFAULT_COMPACT_INTERVAL, defaultCompactInterval)}]")
+    logInfo(
+      log"Set the compact interval to ${MDC(LogKeys.COMPACT_INTERVAL, interval)} " +
+        log"[defaultCompactInterval: " +
+        log"${MDC(LogKeys.DEFAULT_COMPACT_INTERVAL, defaultCompactInterval)}]")
     interval
   }
 
   /**
    * Determine whether the log should be retained or not.
    *
-   * Default implementation retains all log entries. Implementations should override the method
-   * to change the behavior.
+   * Default implementation retains all log entries. Implementations should override the method to
+   * change the behavior.
    */
   def shouldRetain(log: T, currentTime: Long): Boolean = true
 
@@ -191,8 +195,8 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
    * Apply function on all entries in the specific batch. The method will throw
    * FileNotFoundException if the metadata log file doesn't exist.
    *
-   * NOTE: This doesn't fail early on corruption. The caller should handle the exception
-   * properly and make sure the logic is not affected by failing in the middle.
+   * NOTE: This doesn't fail early on corruption. The caller should handle the exception properly
+   * and make sure the logic is not affected by failing in the middle.
    */
   def foreachInBatch(batchId: Long)(fn: T => Unit): Unit = applyFnInBatch(batchId)(_.foreach(fn))
 
@@ -243,8 +247,9 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
     }
 
     if (elapsedMs >= COMPACT_LATENCY_WARN_THRESHOLD_MS) {
-      logWarning(log"Compacting took ${MDC(LogKeys.ELAPSED_TIME, elapsedMs)} ms for " +
-        log"compact batch ${MDC(LogKeys.BATCH_ID, batchId)}")
+      logWarning(
+        log"Compacting took ${MDC(LogKeys.ELAPSED_TIME, elapsedMs)} ms for " +
+          log"compact batch ${MDC(LogKeys.BATCH_ID, batchId)}")
     } else {
       logDebug(s"Compacting took $elapsedMs ms for compact batch $batchId")
     }
@@ -293,41 +298,45 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
   }
 
   /**
-   * Delete expired log entries that proceed the currentBatchId and retain
-   * sufficient minimum number of batches (given by minBatchesToRetain). This
-   * equates to retaining the earliest compaction log that proceeds
-   * batch id position currentBatchId + 1 - minBatchesToRetain. All log entries
-   * prior to the earliest compaction log proceeding that position will be removed.
-   * However, due to the eventual consistency of S3, the compaction file may not
-   * be seen by other processes at once. So we only delete files created
-   * `fileCleanupDelayMs` milliseconds ago.
+   * Delete expired log entries that proceed the currentBatchId and retain sufficient minimum
+   * number of batches (given by minBatchesToRetain). This equates to retaining the earliest
+   * compaction log that proceeds batch id position currentBatchId + 1 - minBatchesToRetain. All
+   * log entries prior to the earliest compaction log proceeding that position will be removed.
+   * However, due to the eventual consistency of S3, the compaction file may not be seen by other
+   * processes at once. So we only delete files created `fileCleanupDelayMs` milliseconds ago.
    */
   private def deleteExpiredLog(currentBatchId: Long): Unit = {
     if (compactInterval <= currentBatchId + 1 - minBatchesToRetain) {
       // Find the first compaction batch id that maintains minBatchesToRetain
       val minBatchId = currentBatchId + 1 - minBatchesToRetain
       val minCompactionBatchId = minBatchId - (minBatchId % compactInterval) - 1
-      assert(isCompactionBatch(minCompactionBatchId, compactInterval),
+      assert(
+        isCompactionBatch(minCompactionBatchId, compactInterval),
         s"$minCompactionBatchId is not a compaction batch")
 
-      logInfo(log"Current compact batch id = ${MDC(LogKeys.CURRENT_BATCH_ID, currentBatchId)} " +
-        log"min compaction batch id to delete = " +
-        log"${MDC(LogKeys.MIN_COMPACTION_BATCH_ID, minCompactionBatchId)}")
+      logInfo(
+        log"Current compact batch id = ${MDC(LogKeys.CURRENT_BATCH_ID, currentBatchId)} " +
+          log"min compaction batch id to delete = " +
+          log"${MDC(LogKeys.MIN_COMPACTION_BATCH_ID, minCompactionBatchId)}")
 
       val expiredTime = System.currentTimeMillis() - fileCleanupDelayMs
-      fileManager.list(metadataPath, (path: Path) => {
-        try {
-          val batchId = getBatchIdFromFileName(path.getName)
-          batchId < minCompactionBatchId
-        } catch {
-          case _: NumberFormatException =>
-            false
+      fileManager
+        .list(
+          metadataPath,
+          (path: Path) => {
+            try {
+              val batchId = getBatchIdFromFileName(path.getName)
+              batchId < minCompactionBatchId
+            } catch {
+              case _: NumberFormatException =>
+                false
+            }
+          })
+        .foreach { f =>
+          if (f.getModificationTime <= expiredTime) {
+            fileManager.delete(f.getPath)
+          }
         }
-      }).foreach { f =>
-        if (f.getModificationTime <= expiredTime) {
-          fileManager.delete(f.getPath)
-        }
-      }
     }
   }
 }
@@ -360,7 +369,8 @@ object CompactibleFileStreamLog {
   def getValidBatchesBeforeCompactionBatch(
       compactionBatchId: Long,
       compactInterval: Int): Seq[Long] = {
-    assert(isCompactionBatch(compactionBatchId, compactInterval),
+    assert(
+      isCompactionBatch(compactionBatchId, compactInterval),
       s"$compactionBatchId is not a compaction batch")
     (math.max(0, compactionBatchId - compactInterval)) until compactionBatchId
   }
@@ -384,10 +394,9 @@ object CompactibleFileStreamLog {
   }
 
   /**
-   * Derives a compact interval from the latest compact batch id and
-   * a default compact interval.
+   * Derives a compact interval from the latest compact batch id and a default compact interval.
    */
-  def deriveCompactInterval(defaultInterval: Int, latestCompactBatchId: Int) : Int = {
+  def deriveCompactInterval(defaultInterval: Int, latestCompactBatchId: Int): Int = {
     if (latestCompactBatchId + 1 <= defaultInterval) {
       latestCompactBatchId + 1
     } else if (defaultInterval < (latestCompactBatchId + 1) / 2) {
@@ -402,4 +411,3 @@ object CompactibleFileStreamLog {
     }
   }
 }
-

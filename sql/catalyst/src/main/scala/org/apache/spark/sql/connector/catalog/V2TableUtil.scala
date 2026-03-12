@@ -38,10 +38,14 @@ private[sql] object V2TableUtil extends SQLConfHelper {
   /**
    * Validates that captured data columns match the current table schema.
    *
-   * @param table the current table metadata
-   * @param relation the relation with captured columns
-   * @param mode validation mode that defines what changes are acceptable
-   * @return validation errors, or empty sequence if valid
+   * @param table
+   *   the current table metadata
+   * @param relation
+   *   the relation with captured columns
+   * @param mode
+   *   validation mode that defines what changes are acceptable
+   * @return
+   *   validation errors, or empty sequence if valid
    */
   def validateCapturedColumns(
       table: Table,
@@ -54,14 +58,18 @@ private[sql] object V2TableUtil extends SQLConfHelper {
    * Validates that captured data columns match the current table schema.
    *
    * Checks for:
-   *  - Column type or nullability changes
-   *  - Removed columns (missing from the current table schema)
-   *  - Added columns (new in the current table schema)
+   *   - Column type or nullability changes
+   *   - Removed columns (missing from the current table schema)
+   *   - Added columns (new in the current table schema)
    *
-   * @param table the current table metadata
-   * @param originCols the originally captured columns
-   * @param mode validation mode that defines what changes are acceptable
-   * @return validation errors, or empty sequence if valid
+   * @param table
+   *   the current table metadata
+   * @param originCols
+   *   the originally captured columns
+   * @param mode
+   *   validation mode that defines what changes are acceptable
+   * @return
+   *   validation errors, or empty sequence if valid
    */
   def validateCapturedColumns(
       table: Table,
@@ -75,10 +83,14 @@ private[sql] object V2TableUtil extends SQLConfHelper {
   /**
    * Validates that captured metadata columns are consistent with the current table metadata.
    *
-   * @param table the current table metadata
-   * @param relation the relation with captured metadata columns
-   * @param mode validation mode that defines what changes are acceptable
-   * @return validation errors, or empty sequence if valid
+   * @param table
+   *   the current table metadata
+   * @param relation
+   *   the relation with captured metadata columns
+   * @param mode
+   *   validation mode that defines what changes are acceptable
+   * @return
+   *   validation errors, or empty sequence if valid
    */
   def validateCapturedMetadataColumns(
       table: Table,
@@ -90,8 +102,10 @@ private[sql] object V2TableUtil extends SQLConfHelper {
   /**
    * Extracts original column info for all metadata attributes in the relation.
    *
-   * @param relation the relation with captured metadata columns
-   * @return metadata columns captured by the relation
+   * @param relation
+   *   the relation with captured metadata columns
+   * @return
+   *   metadata columns captured by the relation
    */
   def extractMetadataColumns(relation: DataSourceV2Relation): Seq[MetadataColumn] = {
     val metaAttrNames = relation.output.filter(_.isMetadataCol).map(_.name)
@@ -102,13 +116,17 @@ private[sql] object V2TableUtil extends SQLConfHelper {
    * Validates that captured metadata columns are consistent with the current table metadata.
    *
    * Checks for:
-   *  - Metadata column type or nullability changes
-   *  - Removed metadata columns (missing from current table)
+   *   - Metadata column type or nullability changes
+   *   - Removed metadata columns (missing from current table)
    *
-   * @param table the current table metadata
-   * @param originMetaCols the originally captured metadata columns
-   * @param mode validation mode that defines what changes are acceptable
-   * @return validation errors, or empty sequence if valid
+   * @param table
+   *   the current table metadata
+   * @param originMetaCols
+   *   the originally captured metadata columns
+   * @param mode
+   *   validation mode that defines what changes are acceptable
+   * @return
+   *   validation errors, or empty sequence if valid
    */
   def validateCapturedMetadataColumns(
       table: Table,

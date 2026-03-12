@@ -35,8 +35,7 @@ sealed trait GeospatialInputTypes extends ImplicitCastInputTypes {
     if (!SQLConf.get.geospatialEnabled) {
       throw new AnalysisException(
         errorClass = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED",
-        messageParameters = Map.empty
-      )
+        messageParameters = Map.empty)
     }
     super.checkInputDataTypes()
   }
@@ -45,7 +44,6 @@ sealed trait GeospatialInputTypes extends ImplicitCastInputTypes {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines expressions for geospatial operations.
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-
 
 // Useful constants for ST expressions.
 private[sql] object ExpressionDefaults {
@@ -56,9 +54,9 @@ private[sql] object ExpressionDefaults {
 /** ST writer expressions. */
 
 /**
- * Returns the input GEOGRAPHY or GEOMETRY value in WKB format.
- * See https://en.wikipedia.org/wiki/Well-known_text_representation_of_geometry#Well-known_binary
- * for more details on the WKB format.
+ * Returns the input GEOGRAPHY or GEOMETRY value in WKB format. See
+ * https://en.wikipedia.org/wiki/Well-known_text_representation_of_geometry#Well-known_binary for
+ * more details on the WKB format.
  */
 @ExpressionDescription(
   usage = "_FUNC_(geo) - Returns the geospatial value (value of type GEOGRAPHY or GEOMETRY) "
@@ -75,24 +73,17 @@ private[sql] object ExpressionDefaults {
        0101000000000000000000F03F0000000000000040
   """,
   since = "4.1.0",
-  group = "st_funcs"
-)
+  group = "st_funcs")
 case class ST_AsBinary(geo: Expression)
     extends RuntimeReplaceable
     with GeospatialInputTypes
     with UnaryLike[Expression] {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(
-    TypeCollection(GeographyType, GeometryType)
-  )
+    TypeCollection(GeographyType, GeometryType))
 
-  override lazy val replacement: Expression = StaticInvoke(
-    classOf[STUtils],
-    BinaryType,
-    "stAsBinary",
-    Seq(geo),
-    returnNullable = false
-  )
+  override lazy val replacement: Expression =
+    StaticInvoke(classOf[STUtils], BinaryType, "stAsBinary", Seq(geo), returnNullable = false)
 
   override def prettyName: String = "st_asbinary"
 
@@ -105,10 +96,10 @@ case class ST_AsBinary(geo: Expression)
 /** ST reader expressions. */
 
 /**
- * Parses the WKB description of a geography and returns the corresponding GEOGRAPHY value. The SRID
- * value of the returned GEOGRAPHY value is 4326.
- * See https://en.wikipedia.org/wiki/Well-known_text_representation_of_geometry#Well-known_binary
- * for more details on the WKB format.
+ * Parses the WKB description of a geography and returns the corresponding GEOGRAPHY value. The
+ * SRID value of the returned GEOGRAPHY value is 4326. See
+ * https://en.wikipedia.org/wiki/Well-known_text_representation_of_geometry#Well-known_binary for
+ * more details on the WKB format.
  */
 @ExpressionDescription(
   usage = "_FUNC_(wkb) - Parses the WKB description of a geography and returns the corresponding "
@@ -123,8 +114,7 @@ case class ST_AsBinary(geo: Expression)
        0101000000000000000000F03F0000000000000040
   """,
   since = "4.1.0",
-  group = "st_funcs"
-)
+  group = "st_funcs")
 case class ST_GeogFromWKB(wkb: Expression)
     extends RuntimeReplaceable
     with GeospatialInputTypes
@@ -137,8 +127,7 @@ case class ST_GeogFromWKB(wkb: Expression)
     GeographyType(ExpressionDefaults.DEFAULT_GEOGRAPHY_SRID),
     "stGeogFromWKB",
     Seq(wkb),
-    returnNullable = false
-  )
+    returnNullable = false)
 
   override def prettyName: String = "st_geogfromwkb"
 
@@ -151,9 +140,9 @@ case class ST_GeogFromWKB(wkb: Expression)
 /**
  * Parses the WKB description of a geometry and returns the corresponding GEOMETRY value. The SRID
  * value of the returned GEOMETRY value is the provided SRID. If not SRID value is provided, the
- * SRID value of the returned GEOMETRY value is set to 0.
- * See https://en.wikipedia.org/wiki/Well-known_text_representation_of_geometry#Well-known_binary
- * for more details on the WKB format.
+ * SRID value of the returned GEOMETRY value is set to 0. See
+ * https://en.wikipedia.org/wiki/Well-known_text_representation_of_geometry#Well-known_binary for
+ * more details on the WKB format.
  */
 @ExpressionDescription(
   usage = "_FUNC_(wkb[, srid]) - Parses the WKB description of a geometry and returns the "
@@ -175,8 +164,7 @@ case class ST_GeogFromWKB(wkb: Expression)
        4326
   """,
   since = "4.1.0",
-  group = "st_funcs"
-)
+  group = "st_funcs")
 case class ST_GeomFromWKB(wkb: Expression, srid: Expression)
     extends RuntimeReplaceable
     with GeospatialInputTypes
@@ -194,8 +182,7 @@ case class ST_GeomFromWKB(wkb: Expression, srid: Expression)
     STExpressionUtils.geometryTypeWithSrid(srid),
     "stGeomFromWKB",
     Seq(wkb, srid),
-    returnNullable = false
-  )
+    returnNullable = false)
 
   override def prettyName: String = "st_geomfromwkb"
 
@@ -231,24 +218,17 @@ case class ST_GeomFromWKB(wkb: Expression, srid: Expression)
        NULL
   """,
   since = "4.1.0",
-  group = "st_funcs"
-)
+  group = "st_funcs")
 case class ST_Srid(geo: Expression)
     extends RuntimeReplaceable
     with GeospatialInputTypes
     with UnaryLike[Expression] {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(
-    TypeCollection(GeographyType, GeometryType)
-  )
+    TypeCollection(GeographyType, GeometryType))
 
-  override lazy val replacement: Expression = StaticInvoke(
-    classOf[STUtils],
-    IntegerType,
-    "stSrid",
-    Seq(geo),
-    returnNullable = false
-  )
+  override lazy val replacement: Expression =
+    StaticInvoke(classOf[STUtils], IntegerType, "stSrid", Seq(geo), returnNullable = false)
 
   override def prettyName: String = "st_srid"
 
@@ -279,26 +259,21 @@ case class ST_Srid(geo: Expression)
        3857
   """,
   since = "4.1.0",
-  group = "st_funcs"
-)
+  group = "st_funcs")
 case class ST_SetSrid(geo: Expression, srid: Expression)
     extends RuntimeReplaceable
     with GeospatialInputTypes
     with BinaryLike[Expression] {
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(
-      TypeCollection(GeographyType, GeometryType),
-      IntegerType
-    )
+    Seq(TypeCollection(GeographyType, GeometryType), IntegerType)
 
   override lazy val replacement: Expression = StaticInvoke(
     classOf[STUtils],
     STExpressionUtils.geospatialTypeWithSrid(geo.dataType, srid),
     "stSetSrid",
     Seq(geo, srid),
-    returnNullable = false
-  )
+    returnNullable = false)
 
   override def prettyName: String = "st_setsrid"
 

@@ -23,11 +23,12 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 
 class MapStatusEndToEndSuite extends SparkFunSuite with SQLTestUtils {
-    override def spark: SparkSession = SparkSession.builder()
-      .master("local")
-      .config(SQLConf.LEAF_NODE_DEFAULT_PARALLELISM.key, value = 5)
-      .config(SQLConf.CLASSIC_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED.key, value = false)
-      .getOrCreate()
+  override def spark: SparkSession = SparkSession
+    .builder()
+    .master("local")
+    .config(SQLConf.LEAF_NODE_DEFAULT_PARALLELISM.key, value = 5)
+    .config(SQLConf.CLASSIC_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED.key, value = false)
+    .getOrCreate()
 
   override def afterAll(): Unit = {
     // This suite should not interfere with the other test suites.
@@ -40,8 +41,9 @@ class MapStatusEndToEndSuite extends SparkFunSuite with SQLTestUtils {
   test("Propagate checksum from executor to driver") {
     assert(spark.sparkContext.conf.get(SQLConf.LEAF_NODE_DEFAULT_PARALLELISM.key) == "5")
     assert(spark.conf.get(SQLConf.LEAF_NODE_DEFAULT_PARALLELISM.key) == "5")
-    assert(spark.sparkContext.conf.get(SQLConf.CLASSIC_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED.key)
-      == "false")
+    assert(
+      spark.sparkContext.conf.get(SQLConf.CLASSIC_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED.key)
+        == "false")
     assert(spark.conf.get(SQLConf.CLASSIC_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED.key) == "false")
 
     var shuffleId = 0
@@ -53,12 +55,12 @@ class MapStatusEndToEndSuite extends SparkFunSuite with SQLTestUtils {
           SQLConf.SHUFFLE_CHECKSUM_MISMATCH_FULL_RETRY_ENABLED.key ->
             checksumMismatchFullRetryEnabled) {
           withTable("t") {
-            spark.range(1000).repartition(10).write.mode("overwrite").
-              saveAsTable("t")
+            spark.range(1000).repartition(10).write.mode("overwrite").saveAsTable("t")
           }
 
-          val shuffleStatuses = spark.sparkContext.env.mapOutputTracker.
-            asInstanceOf[MapOutputTrackerMaster].shuffleStatuses
+          val shuffleStatuses = spark.sparkContext.env.mapOutputTracker
+            .asInstanceOf[MapOutputTrackerMaster]
+            .shuffleStatuses
           assert(shuffleStatuses.contains(shuffleId))
 
           val mapStatuses = shuffleStatuses(shuffleId).mapStatuses

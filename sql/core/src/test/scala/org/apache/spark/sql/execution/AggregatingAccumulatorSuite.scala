@@ -32,9 +32,9 @@ import org.apache.spark.unsafe.types.UTF8String
  * Test suite for [[AggregatingAccumulator]].
  */
 class AggregatingAccumulatorSuite
-  extends SparkFunSuite
-  with SharedSparkSession
-  with ExpressionEvalHelper {
+    extends SparkFunSuite
+    with SharedSparkSession
+    with ExpressionEvalHelper {
   private val a = $"a".long
   private val b = $"b".string
   private val c = $"c".double
@@ -163,38 +163,40 @@ class AggregatingAccumulatorSuite
     spark.sparkContext
       .range(0, 1000, 1, 8)
       .foreachPartition(consume)
-    assert(checkResult(
-      acc.value,
-      InternalRow(
-        500.5d,
-        509500L,
-        str("val_000000"),
-        str("val_000999"),
-        1057L,
-        new GenericArrayData(Seq(0L, 1L, 2L)),
-        0,
-        7,
-        0),
-      acc.schema,
-      false))
+    assert(
+      checkResult(
+        acc.value,
+        InternalRow(
+          500.5d,
+          509500L,
+          str("val_000000"),
+          str("val_000999"),
+          1057L,
+          new GenericArrayData(Seq(0L, 1L, 2L)),
+          0,
+          7,
+          0),
+        acc.schema,
+        false))
 
     // Run job 2
     spark.sparkContext
       .range(1000, 1200, 1, 8)
       .foreachPartition(consume)
-    assert(checkResult(
-      acc.value,
-      InternalRow(
-        600.5d,
-        731400L,
-        str("val_000000"),
-        str("val_001199"),
-        1280L,
-        new GenericArrayData(Seq(0L, 1L, 2L, 3L, 4L, 5L)),
-        0,
-        7,
-        0),
-      acc.schema,
-      false))
+    assert(
+      checkResult(
+        acc.value,
+        InternalRow(
+          600.5d,
+          731400L,
+          str("val_000000"),
+          str("val_001199"),
+          1280L,
+          new GenericArrayData(Seq(0L, 1L, 2L, 3L, 4L, 5L)),
+          0,
+          7,
+          0),
+        acc.schema,
+        false))
   }
 }

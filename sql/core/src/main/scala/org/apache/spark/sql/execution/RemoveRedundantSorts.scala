@@ -22,11 +22,11 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * Remove redundant SortExec node from the spark plan. A sort node is redundant when
- * its child satisfies both its sort orders and its required child distribution. Note
- * this rule differs from the Optimizer rule EliminateSorts in that this rule also checks
- * if the child satisfies the required distribution so that it is safe to remove not only a
- * local sort but also a global sort when its child already satisfies required sort orders.
+ * Remove redundant SortExec node from the spark plan. A sort node is redundant when its child
+ * satisfies both its sort orders and its required child distribution. Note this rule differs from
+ * the Optimizer rule EliminateSorts in that this rule also checks if the child satisfies the
+ * required distribution so that it is safe to remove not only a local sort but also a global sort
+ * when its child already satisfies required sort orders.
  */
 object RemoveRedundantSorts extends Rule[SparkPlan] {
   def apply(plan: SparkPlan): SparkPlan = {

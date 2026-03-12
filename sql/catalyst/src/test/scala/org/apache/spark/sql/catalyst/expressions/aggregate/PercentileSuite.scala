@@ -66,7 +66,7 @@ class PercentileSuite extends SparkFunSuite {
 
     // Test with row with frequency. Second and third columns are frequency in Int and Long
     val countForFrequencyTest = 1000
-    val rowsWithFrequency = (1 to countForFrequencyTest).map(x => Seq(x, x):+ x.toLong)
+    val rowsWithFrequency = (1 to countForFrequencyTest).map(x => Seq(x, x) :+ x.toLong)
     val expectedPercentilesWithFrequency = Seq(1.0, 500.0, 707.0, 866.0, 1000.0)
 
     val frequencyExpressionInt = BoundReference(1, IntegerType, nullable = false)
@@ -78,14 +78,16 @@ class PercentileSuite extends SparkFunSuite {
     runTest(aggLong, rowsWithFrequency, expectedPercentilesWithFrequency)
 
     // Run test with Flatten data
-    val flattenRows = (1 to countForFrequencyTest).flatMap(current =>
-      (1 to current).map(y => current )).map(Seq(_))
+    val flattenRows = (1 to countForFrequencyTest)
+      .flatMap(current => (1 to current).map(y => current))
+      .map(Seq(_))
     runTest(agg, flattenRows, expectedPercentilesWithFrequency)
   }
 
-  private def runTest(agg: Percentile,
-      rows : Seq[Seq[Any]],
-      expectedPercentiles : Seq[Double]): Unit = {
+  private def runTest(
+      agg: Percentile,
+      rows: Seq[Seq[Any]],
+      expectedPercentiles: Seq[Double]): Unit = {
     assert(agg.nullable)
     val group1 = (0 until rows.length / 2)
     val group1Buffer = agg.createAggregationBuffer()
@@ -108,8 +110,10 @@ class PercentileSuite extends SparkFunSuite {
     agg.eval(mergeBuffer) match {
       case arrayData: ArrayData =>
         val percentiles = arrayData.toDoubleArray()
-        assert(percentiles.zip(expectedPercentiles)
-          .forall(pair => pair._1 == pair._2))
+        assert(
+          percentiles
+            .zip(expectedPercentiles)
+            .forall(pair => pair._1 == pair._2))
     }
   }
 
@@ -124,8 +128,8 @@ class PercentileSuite extends SparkFunSuite {
       .withNewInputAggBufferOffset(inputAggregationBufferOffset)
       .withNewMutableAggBufferOffset(mutableAggregationBufferOffset)
 
-    val mutableAggBuffer = new GenericInternalRow(
-      new Array[Any](mutableAggregationBufferOffset + 1))
+    val mutableAggBuffer =
+      new GenericInternalRow(new Array[Any](mutableAggregationBufferOffset + 1))
     agg.initialize(mutableAggBuffer)
     val dataCount = 10
     (1 to dataCount).foreach { data =>
@@ -157,152 +161,155 @@ class PercentileSuite extends SparkFunSuite {
 
     val validFrequencyTypes = Seq(ByteType, ShortType, IntegerType, LongType)
     for (dataType <- validDataTypes;
-      frequencyType <- validFrequencyTypes)  {
+      frequencyType <- validFrequencyTypes) {
       val child = AttributeReference("a", dataType)()
       val frq = AttributeReference("frq", frequencyType)()
       val percentile = new Percentile(child, percentage, frq)
       assertEqual(percentile.checkInputDataTypes(), TypeCheckSuccess)
     }
 
-    val invalidDataTypes = Seq(BooleanType, StringType, DateType, TimestampType,
-      CalendarIntervalType, NullType)
+    val invalidDataTypes =
+      Seq(BooleanType, StringType, DateType, TimestampType, CalendarIntervalType, NullType)
 
     invalidDataTypes.foreach { dataType =>
       val child = AttributeReference("a", dataType)()
       val percentile = new Percentile(child, percentage)
-      assert(percentile.checkInputDataTypes() ==
-        DataTypeMismatch(
-          errorSubClass = "UNEXPECTED_INPUT_TYPE",
-          messageParameters = Map(
-            "paramIndex" -> ordinalNumber(0),
-            "requiredType" -> ("(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" " +
-              "or \"INTERVAL YEAR TO MONTH\")"),
-            "inputSql" -> "\"a\"",
-            "inputType" -> toSQLType(dataType)
-          )
-        )
-      )
+      assert(
+        percentile.checkInputDataTypes() ==
+          DataTypeMismatch(
+            errorSubClass = "UNEXPECTED_INPUT_TYPE",
+            messageParameters = Map(
+              "paramIndex" -> ordinalNumber(0),
+              "requiredType" -> ("(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" " +
+                "or \"INTERVAL YEAR TO MONTH\")"),
+              "inputSql" -> "\"a\"",
+              "inputType" -> toSQLType(dataType))))
     }
 
-    val invalidFrequencyDataTypes = Seq(FloatType, DoubleType, BooleanType,
-        StringType, DateType, TimestampType,
-      CalendarIntervalType, NullType)
+    val invalidFrequencyDataTypes = Seq(
+      FloatType,
+      DoubleType,
+      BooleanType,
+      StringType,
+      DateType,
+      TimestampType,
+      CalendarIntervalType,
+      NullType)
 
     for (dataType <- invalidDataTypes;
-        frequencyType <- validFrequencyTypes) {
+      frequencyType <- validFrequencyTypes) {
       val child = AttributeReference("a", dataType)()
       val frq = AttributeReference("frq", frequencyType)()
       val percentile = new Percentile(child, percentage, frq)
-      assert(percentile.checkInputDataTypes() ==
-        DataTypeMismatch(
-          errorSubClass = "UNEXPECTED_INPUT_TYPE",
-          messageParameters = Map(
-            "paramIndex" -> ordinalNumber(0),
-            "requiredType" -> ("(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" " +
-              "or \"INTERVAL YEAR TO MONTH\")"),
-            "inputSql" -> "\"a\"",
-            "inputType" -> toSQLType(dataType)
-          )
-        )
-      )
+      assert(
+        percentile.checkInputDataTypes() ==
+          DataTypeMismatch(
+            errorSubClass = "UNEXPECTED_INPUT_TYPE",
+            messageParameters = Map(
+              "paramIndex" -> ordinalNumber(0),
+              "requiredType" -> ("(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" " +
+                "or \"INTERVAL YEAR TO MONTH\")"),
+              "inputSql" -> "\"a\"",
+              "inputType" -> toSQLType(dataType))))
     }
 
     for (dataType <- validDataTypes;
-        frequencyType <- invalidFrequencyDataTypes) {
+      frequencyType <- invalidFrequencyDataTypes) {
       val child = AttributeReference("a", dataType)()
       val frq = AttributeReference("frq", frequencyType)()
       val percentile = new Percentile(child, percentage, frq)
-      assert(percentile.checkInputDataTypes() ==
-        DataTypeMismatch(
-          errorSubClass = "UNEXPECTED_INPUT_TYPE",
-          messageParameters = Map(
-            "paramIndex" -> ordinalNumber(2),
-            "requiredType" -> "\"INTEGRAL\"",
-            "inputSql" -> "\"frq\"",
-            "inputType" -> toSQLType(frequencyType)
-          )
-        )
-      )
+      assert(
+        percentile.checkInputDataTypes() ==
+          DataTypeMismatch(
+            errorSubClass = "UNEXPECTED_INPUT_TYPE",
+            messageParameters = Map(
+              "paramIndex" -> ordinalNumber(2),
+              "requiredType" -> "\"INTEGRAL\"",
+              "inputSql" -> "\"frq\"",
+              "inputType" -> toSQLType(frequencyType))))
     }
   }
 
   test("fails analysis if percentage(s) are invalid") {
     val child = Cast(BoundReference(0, IntegerType, nullable = false), DoubleType)
-    val validPercentages = Seq(Literal(0D), Literal(0.5), Literal(1D),
-      CreateArray(Seq(0, 0.5, 1).map(Literal(_))))
+    val validPercentages =
+      Seq(Literal(0d), Literal(0.5), Literal(1d), CreateArray(Seq(0, 0.5, 1).map(Literal(_))))
 
     validPercentages.foreach { percentage =>
       val percentile1 = new Percentile(child, percentage)
       assertEqual(percentile1.checkInputDataTypes(), TypeCheckSuccess)
     }
 
-    val invalidPercentages = Seq(Literal(-0.5), Literal(1.5), Literal(2D),
-      CreateArray(Seq(-0.5, 0, 2).map(Literal(_))))
+    val invalidPercentages =
+      Seq(Literal(-0.5), Literal(1.5), Literal(2d), CreateArray(Seq(-0.5, 0, 2).map(Literal(_))))
 
     invalidPercentages.foreach { percentage =>
       val percentile2 = new Percentile(child, percentage)
       percentage.eval() match {
         case array: ArrayData =>
-          assertEqual(percentile2.checkInputDataTypes(),
+          assertEqual(
+            percentile2.checkInputDataTypes(),
             DataTypeMismatch(
               errorSubClass = "VALUE_OUT_OF_RANGE",
               messageParameters = Map(
                 "exprName" -> "percentage",
                 "valueRange" -> "[0.0, 1.0]",
                 "currentValue" ->
-                  array.toDoubleArray().map(toSQLValue(_, DoubleType)).mkString(",")
-              )
-            )
-          )
+                  array.toDoubleArray().map(toSQLValue(_, DoubleType)).mkString(","))))
         case other =>
-          assertEqual(percentile2.checkInputDataTypes(),
+          assertEqual(
+            percentile2.checkInputDataTypes(),
             DataTypeMismatch(
               errorSubClass = "VALUE_OUT_OF_RANGE",
               messageParameters = Map(
                 "exprName" -> "percentage",
                 "valueRange" -> "[0.0, 1.0]",
                 "currentValue" ->
-                  Array(other).map(toSQLValue(_, DoubleType)).mkString(",")
-              )
-            )
-          )
+                  Array(other).map(toSQLValue(_, DoubleType)).mkString(","))))
       }
     }
 
-    val nonFoldablePercentage = Seq(NonFoldableLiteral(0.5),
-      CreateArray(Seq(0, 0.5, 1).map(NonFoldableLiteral(_))))
+    val nonFoldablePercentage =
+      Seq(NonFoldableLiteral(0.5), CreateArray(Seq(0, 0.5, 1).map(NonFoldableLiteral(_))))
 
     nonFoldablePercentage.foreach { percentage =>
       val percentile3 = new Percentile(child, percentage)
-      assertEqual(percentile3.checkInputDataTypes(),
+      assertEqual(
+        percentile3.checkInputDataTypes(),
         DataTypeMismatch(
           errorSubClass = "NON_FOLDABLE_INPUT",
           messageParameters = Map(
             "inputName" -> toSQLId("percentage"),
             "inputType" -> toSQLType(percentage.dataType),
-            "inputExpr" -> toSQLExpr(percentage))
-        )
-      )
+            "inputExpr" -> toSQLExpr(percentage))))
     }
 
-    val invalidDataTypes = Seq(ByteType, ShortType, IntegerType, LongType, FloatType,
-      BooleanType, StringType, DateType, TimestampType, CalendarIntervalType, NullType)
+    val invalidDataTypes = Seq(
+      ByteType,
+      ShortType,
+      IntegerType,
+      LongType,
+      FloatType,
+      BooleanType,
+      StringType,
+      DateType,
+      TimestampType,
+      CalendarIntervalType,
+      NullType)
 
     invalidDataTypes.foreach { dataType =>
       val percentage = Literal.default(dataType)
       val percentile4 = new Percentile(child, percentage)
       val checkResult = percentile4.checkInputDataTypes()
-      assert(checkResult ==
-        DataTypeMismatch(
-          errorSubClass = "UNEXPECTED_INPUT_TYPE",
-          messageParameters = Map(
-            "paramIndex" -> ordinalNumber(1),
-            "requiredType" -> "\"DOUBLE\"",
-            "inputSql" -> toSQLExpr(percentage),
-            "inputType" -> toSQLType(dataType)
-          )
-        )
-      )
+      assert(
+        checkResult ==
+          DataTypeMismatch(
+            errorSubClass = "UNEXPECTED_INPUT_TYPE",
+            messageParameters = Map(
+              "paramIndex" -> ordinalNumber(1),
+              "requiredType" -> "\"DOUBLE\"",
+              "inputSql" -> toSQLExpr(percentage),
+              "inputType" -> toSQLType(dataType))))
     }
   }
 
@@ -310,49 +317,50 @@ class PercentileSuite extends SparkFunSuite {
     val testRelation = LocalRelation(AttributeReference("a", IntegerType)())
 
     // Compatible percentage types: float, decimal, string
-    val percentageExpressions = Seq(Literal(0.3f), DecimalLiteral(0.5), Literal("0.2"),
-      CreateArray(Seq(Literal(0.3f), Literal(0.5D), DecimalLiteral(0.7))))
+    val percentageExpressions = Seq(
+      Literal(0.3f),
+      DecimalLiteral(0.5),
+      Literal("0.2"),
+      CreateArray(Seq(Literal(0.3f), Literal(0.5d), DecimalLiteral(0.7))))
 
     percentageExpressions.foreach { percentageExpression =>
-      val agg = new Percentile(
-        UnresolvedAttribute("a"),
-        percentageExpression)
+      val agg = new Percentile(UnresolvedAttribute("a"), percentageExpression)
       val analyzed = testRelation.select(agg).analyze.expressions.head
       analyzed match {
         case Alias(agg: Percentile, _) =>
           assert(agg.resolved)
           assert(agg.child.dataType == IntegerType)
-          assert(agg.percentageExpression.dataType == DoubleType ||
-            agg.percentageExpression.dataType == ArrayType(DoubleType, containsNull = false))
+          assert(
+            agg.percentageExpression.dataType == DoubleType ||
+              agg.percentageExpression.dataType == ArrayType(DoubleType, containsNull = false))
         case _ => fail()
       }
     }
   }
 
   test("nulls in percentage expression") {
-    assert(new Percentile(
-      AttributeReference("a", DoubleType)(),
-      percentageExpression = Literal(null, DoubleType)).checkInputDataTypes() ===
-      DataTypeMismatch(errorSubClass = "UNEXPECTED_NULL", Map("exprName" -> "percentage")))
+    assert(
+      new Percentile(
+        AttributeReference("a", DoubleType)(),
+        percentageExpression = Literal(null, DoubleType)).checkInputDataTypes() ===
+        DataTypeMismatch(errorSubClass = "UNEXPECTED_NULL", Map("exprName" -> "percentage")))
 
     val nullPercentageExprs =
-      Seq(CreateArray(Seq(null).map(Literal(_))), CreateArray(Seq(0.1D, null).map(Literal(_))))
+      Seq(CreateArray(Seq(null).map(Literal(_))), CreateArray(Seq(0.1d, null).map(Literal(_))))
 
     nullPercentageExprs.foreach { percentageExpression =>
       val wrongPercentage = new Percentile(
         AttributeReference("a", DoubleType)(),
         percentageExpression = percentageExpression)
-        assert(wrongPercentage.checkInputDataTypes() ==
+      assert(
+        wrongPercentage.checkInputDataTypes() ==
           DataTypeMismatch(
             errorSubClass = "UNEXPECTED_INPUT_TYPE",
             messageParameters = Map(
               "paramIndex" -> ordinalNumber(1),
               "requiredType" -> "\"ARRAY<DOUBLE>\"",
               "inputSql" -> toSQLExpr(percentageExpression),
-              "inputType" -> "\"ARRAY<VOID>\""
-            )
-          )
-        )
+              "inputType" -> "\"ARRAY<VOID>\"")))
     }
   }
 
@@ -404,18 +412,18 @@ class PercentileSuite extends SparkFunSuite {
     agg.initialize(buffer)
 
     checkError(
-      exception =
-        intercept[SparkIllegalArgumentException]{
-          // Add some non-empty row with negative frequency
-          agg.update(buffer, InternalRow(1, -5))
-          agg.eval(buffer)
-        },
+      exception = intercept[SparkIllegalArgumentException] {
+        // Add some non-empty row with negative frequency
+        agg.update(buffer, InternalRow(1, -5))
+        agg.eval(buffer)
+      },
       condition = "NEGATIVE_VALUES_IN_FREQUENCY_EXPRESSION",
       parameters = Map("frequencyExpression" -> "\"boundreference()\"", "negativeValue" -> "-5L"))
   }
 
   private def compareEquals(
-      left: OpenHashMap[AnyRef, Long], right: OpenHashMap[AnyRef, Long]): Boolean = {
+      left: OpenHashMap[AnyRef, Long],
+      right: OpenHashMap[AnyRef, Long]): Boolean = {
     left.size == right.size && left.forall { case (key, count) =>
       right.apply(key) == count
     }

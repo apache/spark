@@ -26,33 +26,28 @@ import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.connector.catalog.{
-  CatalogManager,
-  CatalogNotFoundException,
-  CatalogV2Util,
-  LookupCatalog
-}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogNotFoundException, CatalogV2Util, LookupCatalog}
 
 /**
  * Represents the type/location of a function.
  */
 sealed trait FunctionType
 object FunctionType {
+
   /** Function is a built-in or temporary function in the session registry. */
   case object Local extends FunctionType
+
   /** Function is a persistent function in the external catalog. */
   case object Persistent extends FunctionType
+
   /** Function exists only as a table function (cannot be used in scalar context). */
   case object TableOnly extends FunctionType
+
   /** Function does not exist anywhere. */
   case object NotFound extends FunctionType
 }
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-import org.apache.spark.sql.connector.catalog.functions.{
-  AggregateFunction => V2AggregateFunction,
-  ScalarFunction,
-  UnboundFunction
-}
+import org.apache.spark.sql.connector.catalog.functions.{AggregateFunction => V2AggregateFunction, ScalarFunction, UnboundFunction}
 import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.V1Function
@@ -61,7 +56,9 @@ import org.apache.spark.sql.types._
 class FunctionResolution(
     override val catalogManager: CatalogManager,
     relationResolution: RelationResolution)
-    extends DataTypeErrorsBase with LookupCatalog with Logging {
+    extends DataTypeErrorsBase
+    with LookupCatalog
+    with Logging {
   private val v1SessionCatalog = catalogManager.v1SessionCatalog
 
   private val trimWarningEnabled = new AtomicBoolean(true)
@@ -76,8 +73,10 @@ class FunctionResolution(
   /**
    * Produces the ordered list of fully qualified candidate names for resolution.
    *
-   * @param nameParts The function name parts.
-   * @return A sequence of fully qualified function names to attempt resolution with.
+   * @param nameParts
+   *   The function name parts.
+   * @return
+   *   A sequence of fully qualified function names to attempt resolution with.
    */
   private def resolutionCandidates(nameParts: Seq[String]): Seq[Seq[String]] = {
     if (nameParts.size == 1) {
@@ -86,8 +85,16 @@ class FunctionResolution(
     } else {
       nameParts.size match {
         case 2 if FunctionResolution.sessionNamespaceKind(nameParts).isDefined =>
-          // Partially qualified builtin/session: try persistent first so user schema wins
-          Seq(nameParts, Seq(CatalogManager.SYSTEM_CATALOG_NAME) ++ nameParts)
+          // Partially qualified builtin/session: order depends on prioritizeSystemCatalog config
+          val persistentCandidate = nameParts
+          val systemCandidate = Seq(CatalogManager.SYSTEM_CATALOG_NAME) ++ nameParts
+          if (SQLConf.get.prioritizeSystemCatalog) {
+            // System catalog wins (default for security)
+            Seq(systemCandidate, persistentCandidate)
+          } else {
+            // Persistent catalog wins (legacy behavior)
+            Seq(persistentCandidate, systemCandidate)
+          }
         case _ =>
           Seq(nameParts)
       }
@@ -98,14 +105,16 @@ class FunctionResolution(
       nameParts: Seq[String],
       unresolvedFunc: UnresolvedFunction): Option[Expression] = {
     if (nameParts.length == 3 &&
-        nameParts.head.equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME)) {
+      nameParts.head.equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME)) {
       // Try resolving as a session-namespace function (builtin or temp)
       FunctionResolution.sessionNamespaceKind(nameParts).flatMap { kind =>
         val funcName = nameParts.last
-        val expr = v1SessionCatalog.resolveScalarFunction(kind, funcName, unresolvedFunc.arguments)
+        val expr =
+          v1SessionCatalog.resolveScalarFunction(kind, funcName, unresolvedFunc.arguments)
         if (expr.isEmpty) {
-          if (v1SessionCatalog.lookupFunctionInfo(
-              kind, funcName, tableFunction = true).isDefined) {
+          if (v1SessionCatalog
+              .lookupFunctionInfo(kind, funcName, tableFunction = true)
+              .isDefined) {
             throw QueryCompilationErrors.notAScalarFunctionError(funcName, unresolvedFunc)
           }
         }
@@ -131,8 +140,7 @@ class FunctionResolution(
           None
         case _: CatalogNotFoundException =>
           None
-        case e: AnalysisException
-            if e.getCondition == "FORBIDDEN_OPERATION" =>
+        case e: AnalysisException if e.getCondition == "FORBIDDEN_OPERATION" =>
           None
         case e: AnalysisException =>
           throw e
@@ -146,12 +154,12 @@ class FunctionResolution(
       if (unresolvedFunc.isInternal && unresolvedFunc.nameParts.size == 1) {
         val funcIdentifier = FunctionIdentifier(unresolvedFunc.nameParts.head)
         try {
-          val func = FunctionRegistry.internal.lookupFunction(
-            funcIdentifier, unresolvedFunc.arguments)
+          val func =
+            FunctionRegistry.internal.lookupFunction(funcIdentifier, unresolvedFunc.arguments)
           return validateFunction(func, unresolvedFunc.arguments.length, unresolvedFunc)
         } catch {
           case _: NoSuchFunctionException =>
-            // Ignore and try standard resolution
+          // Ignore and try standard resolution
         }
       }
 
@@ -164,7 +172,9 @@ class FunctionResolution(
       }
       val searchPath = SQLConf.get.resolutionSearchPath(currentCatalogPath)
       throw QueryCompilationErrors.unresolvedRoutineError(
-        unresolvedFunc.nameParts, searchPath.map(toSQLId), unresolvedFunc.origin)
+        unresolvedFunc.nameParts,
+        searchPath.map(toSQLId),
+        unresolvedFunc.origin)
     }
   }
 
@@ -172,13 +182,14 @@ class FunctionResolution(
       nameParts: Seq[String],
       arguments: Seq[Expression]): Option[LogicalPlan] = {
     if (nameParts.length == 3 &&
-        nameParts.head.equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME)) {
+      nameParts.head.equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME)) {
       FunctionResolution.sessionNamespaceKind(nameParts).flatMap { kind =>
         val funcName = nameParts.last
         val resolvedPlan = v1SessionCatalog.resolveTableFunction(kind, funcName, arguments)
         if (resolvedPlan.isDefined) return resolvedPlan
-        if (v1SessionCatalog.lookupFunctionInfo(
-            kind, funcName, tableFunction = false).isDefined) {
+        if (v1SessionCatalog
+            .lookupFunctionInfo(kind, funcName, tableFunction = false)
+            .isDefined) {
           throw QueryCompilationErrors.notATableFunctionError(funcName)
         }
         None
@@ -187,14 +198,15 @@ class FunctionResolution(
       val CatalogAndIdentifier(catalog, ident) = relationResolution.expandIdentifier(nameParts)
       try {
         if (CatalogV2Util.isSessionCatalog(catalog)) {
-          Some(v1SessionCatalog.resolvePersistentTableFunction(
-            ident.asFunctionIdentifier, arguments))
+          Some(
+            v1SessionCatalog
+              .resolvePersistentTableFunction(ident.asFunctionIdentifier, arguments))
         } else {
           throw QueryCompilationErrors.missingCatalogTableValuedFunctionsAbilityError(catalog)
         }
       } catch {
         case _: NoSuchFunctionException | _: NoSuchNamespaceException |
-             _: CatalogNotFoundException =>
+            _: CatalogNotFoundException =>
           try {
             if (CatalogV2Util.isSessionCatalog(catalog)) {
               if (v1SessionCatalog.isPersistentFunction(ident.asFunctionIdentifier)) {
@@ -207,15 +219,13 @@ class FunctionResolution(
             }
           } catch {
             case _: NoSuchFunctionException | _: NoSuchNamespaceException |
-                 _: CatalogNotFoundException =>
-              // ignore
-            case e: AnalysisException
-                if e.getCondition == "FORBIDDEN_OPERATION" =>
-              // ignore
+                _: CatalogNotFoundException =>
+            // ignore
+            case e: AnalysisException if e.getCondition == "FORBIDDEN_OPERATION" =>
+            // ignore
           }
           None
-        case e: AnalysisException
-            if e.getCondition == "FORBIDDEN_OPERATION" =>
+        case e: AnalysisException if e.getCondition == "FORBIDDEN_OPERATION" =>
           None
         case e: AnalysisException =>
           throw e
@@ -277,14 +287,17 @@ class FunctionResolution(
   }
 
   /**
-   * Determines the type/location of a function (builtin, temporary, persistent, etc.).
-   * This is used by the LookupFunctions analyzer rule for early validation and optimization.
+   * Determines the type/location of a function (builtin, temporary, persistent, etc.). This is
+   * used by the LookupFunctions analyzer rule for early validation and optimization.
    *
    * Note: may throw for malformed identifiers (e.g. REQUIRES_SINGLE_PART_NAMESPACE).
    *
-   * @param nameParts The function name parts.
-   * @param unresolvedFunc Optional UnresolvedFunction node for lookups that may need it.
-   * @return The type of the function (Local, Persistent, TableOnly, or NotFound).
+   * @param nameParts
+   *   The function name parts.
+   * @param unresolvedFunc
+   *   Optional UnresolvedFunction node for lookups that may need it.
+   * @return
+   *   The type of the function (Local, Persistent, TableOnly, or NotFound).
    */
   def lookupFunctionType(
       nameParts: Seq[String],
@@ -327,25 +340,25 @@ class FunctionResolution(
         throw QueryCompilationErrors.wrongNumOrderingsForFunctionError(
           owg.prettyName,
           0,
-          unresolvedFunc.orderingWithinGroup.length
-        )
-      case f if !f.isInstanceOf[SupportsOrderingWithinGroup] &&
-          unresolvedFunc.orderingWithinGroup.nonEmpty =>
+          unresolvedFunc.orderingWithinGroup.length)
+      case f
+          if !f.isInstanceOf[SupportsOrderingWithinGroup] &&
+            unresolvedFunc.orderingWithinGroup.nonEmpty =>
         throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
           func.prettyName,
-          "WITHIN GROUP (ORDER BY ...)"
-        )
+          "WITHIN GROUP (ORDER BY ...)")
       // AggregateWindowFunctions are AggregateFunctions that can only be evaluated within
       // the context of a Window clause. They do not need to be wrapped in an
       // AggregateExpression.
       case wf: AggregateWindowFunction =>
         if (unresolvedFunc.isDistinct) {
-          throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(wf.prettyName, "DISTINCT")
+          throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+            wf.prettyName,
+            "DISTINCT")
         } else if (unresolvedFunc.filter.isDefined) {
           throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
             wf.prettyName,
-            "FILTER clause"
-          )
+            "FILTER clause")
         } else {
           resolveIgnoreNulls(wf, unresolvedFunc.ignoreNulls)
         }
@@ -353,13 +366,11 @@ class FunctionResolution(
         if (unresolvedFunc.isDistinct) {
           throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
             owf.prettyName,
-            "DISTINCT"
-          )
+            "DISTINCT")
         } else if (unresolvedFunc.filter.isDefined) {
           throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
             owf.prettyName,
-            "FILTER clause"
-          )
+            "FILTER clause")
         } else {
           resolveIgnoreNulls(owf, unresolvedFunc.ignoreNulls)
         }
@@ -378,19 +389,18 @@ class FunctionResolution(
 
         unresolvedFunc.filter match {
           case Some(filter) if !filter.deterministic =>
-            throw QueryCompilationErrors.nonDeterministicFilterInAggregateError(filterExpr = filter)
+            throw QueryCompilationErrors.nonDeterministicFilterInAggregateError(filterExpr =
+              filter)
           case Some(filter) if filter.dataType != BooleanType =>
             throw QueryCompilationErrors.nonBooleanFilterInAggregateError(filterExpr = filter)
           case Some(filter) if filter.exists(_.isInstanceOf[AggregateExpression]) =>
             throw QueryCompilationErrors.aggregateInAggregateFilterError(
               filterExpr = filter,
-              aggExpr = filter.find(_.isInstanceOf[AggregateExpression]).get
-            )
+              aggExpr = filter.find(_.isInstanceOf[AggregateExpression]).get)
           case Some(filter) if filter.exists(_.isInstanceOf[WindowExpression]) =>
             throw QueryCompilationErrors.windowFunctionInAggregateFilterError(
               filterExpr = filter,
-              windowExpr = filter.find(_.isInstanceOf[WindowExpression]).get
-            )
+              windowExpr = filter.find(_.isInstanceOf[WindowExpression]).get)
           case _ =>
         }
         val aggFunc = resolveIgnoreNulls(newAgg, unresolvedFunc.ignoreNulls)
@@ -402,9 +412,8 @@ class FunctionResolution(
           if (trimWarningEnabled.get) {
             log.warn(
               "Two-parameter TRIM/LTRIM/RTRIM function signatures are deprecated." +
-              " Use SQL syntax `TRIM((BOTH | LEADING | TRAILING)? trimStr FROM str)`" +
-              " instead."
-            )
+                " Use SQL syntax `TRIM((BOTH | LEADING | TRAILING)? trimStr FROM str)`" +
+                " instead.")
             trimWarningEnabled.set(false)
           }
         }
@@ -421,29 +430,27 @@ class FunctionResolution(
     if (unresolvedFunc.filter.isDefined) {
       throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
         func.prettyName,
-        "FILTER clause"
-      )
+        "FILTER clause")
     }
     // Only fail for IGNORE NULLS; RESPECT NULLS is the default behavior
     if (unresolvedFunc.ignoreNulls.contains(true)) {
       throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
         func.prettyName,
-        "IGNORE NULLS"
-      )
+        "IGNORE NULLS")
     }
   }
 
   /**
-   * Resolves the IGNORE NULLS / RESPECT NULLS clause for a function.
-   * If ignoreNulls is defined, applies it to the function; otherwise returns unchanged.
+   * Resolves the IGNORE NULLS / RESPECT NULLS clause for a function. If ignoreNulls is defined,
+   * applies it to the function; otherwise returns unchanged.
    */
   private def resolveIgnoreNulls[T <: Expression](func: T, ignoreNulls: Option[Boolean]): T = {
     ignoreNulls.map(applyIgnoreNulls(func, _)).getOrElse(func)
   }
 
   /**
-   * Applies the IGNORE NULLS / RESPECT NULLS clause to functions that support it.
-   * Returns the modified function if supported, throws error otherwise.
+   * Applies the IGNORE NULLS / RESPECT NULLS clause to functions that support it. Returns the
+   * modified function if supported, throws error otherwise.
    */
   private def applyIgnoreNulls[T <: Expression](func: T, ignoreNulls: Boolean): T = {
     val result = func match {
@@ -461,8 +468,7 @@ class FunctionResolution(
         // Only fail for IGNORE NULLS; RESPECT NULLS is the default behavior
         throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
           func.prettyName,
-          "IGNORE NULLS"
-        )
+          "IGNORE NULLS")
       case _ =>
         // RESPECT NULLS is the default, silently return unchanged
         func
@@ -474,19 +480,19 @@ class FunctionResolution(
       unbound: UnboundFunction,
       arguments: Seq[Expression],
       unresolvedFunc: UnresolvedFunction): Expression = {
-    val inputType = StructType(arguments.zipWithIndex.map {
-      case (exp, pos) => StructField(s"_$pos", exp.dataType, exp.nullable)
+    val inputType = StructType(arguments.zipWithIndex.map { case (exp, pos) =>
+      StructField(s"_$pos", exp.dataType, exp.nullable)
     })
-    val bound = try {
-      unbound.bind(inputType)
-    } catch {
-      case unsupported: UnsupportedOperationException =>
-        throw QueryCompilationErrors.functionCannotProcessInputError(
-          unbound,
-          arguments,
-          unsupported
-        )
-    }
+    val bound =
+      try {
+        unbound.bind(inputType)
+      } catch {
+        case unsupported: UnsupportedOperationException =>
+          throw QueryCompilationErrors.functionCannotProcessInputError(
+            unbound,
+            arguments,
+            unsupported)
+      }
 
     if (bound.inputTypes().length != arguments.length) {
       throw QueryCompilationErrors.v2FunctionInvalidInputTypeLengthError(bound, arguments)
@@ -500,8 +506,7 @@ class FunctionResolution(
       case _ =>
         failAnalysis(
           errorClass = "INVALID_UDF_IMPLEMENTATION",
-          messageParameters = Map("funcName" -> toSQLId(bound.name()))
-        )
+          messageParameters = Map("funcName" -> toSQLId(bound.name())))
     }
   }
 
@@ -510,18 +515,18 @@ class FunctionResolution(
       arguments: Seq[Expression],
       unresolvedFunc: UnresolvedFunction): Expression = {
     if (unresolvedFunc.isDistinct) {
-      throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(scalarFunc.name(), "DISTINCT")
+      throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+        scalarFunc.name(),
+        "DISTINCT")
     } else if (unresolvedFunc.filter.isDefined) {
       throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
         scalarFunc.name(),
-        "FILTER clause"
-      )
+        "FILTER clause")
     } else if (unresolvedFunc.ignoreNulls.contains(true)) {
       // Only fail for IGNORE NULLS; RESPECT NULLS is the default behavior
       throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
         scalarFunc.name(),
-        "IGNORE NULLS"
-      )
+        "IGNORE NULLS")
     } else {
       V2ExpressionUtils.resolveScalarFunction(scalarFunc, arguments)
     }
@@ -535,17 +540,16 @@ class FunctionResolution(
     if (unresolvedFunc.ignoreNulls.contains(true)) {
       throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
         aggFunc.name(),
-        "IGNORE NULLS"
-      )
+        "IGNORE NULLS")
     }
     val aggregator = V2Aggregator(aggFunc, arguments)
     aggregator.toAggregateExpression(unresolvedFunc.isDistinct, unresolvedFunc.filter)
   }
 
-  private def failAnalysis(errorClass: String, messageParameters: Map[String, String]): Nothing = {
-    throw new AnalysisException(
-      errorClass = errorClass,
-      messageParameters = messageParameters)
+  private def failAnalysis(
+      errorClass: String,
+      messageParameters: Map[String, String]): Nothing = {
+    throw new AnalysisException(errorClass = errorClass, messageParameters = messageParameters)
   }
 }
 
@@ -553,31 +557,34 @@ class FunctionResolution(
  * Companion object with shared utility methods for function name qualification checks.
  */
 object FunctionResolution {
+
   /**
-   * Check if a function name is qualified as a builtin function.
-   * Valid forms: builtin.func or system.builtin.func
+   * Check if a function name is qualified as a builtin function. Valid forms: builtin.func or
+   * system.builtin.func
    */
   private def maybeBuiltinFunctionName(nameParts: Seq[String]): Boolean = {
     isQualifiedWithSystemNamespace(nameParts, CatalogManager.BUILTIN_NAMESPACE)
   }
 
   /**
-   * Check if a function name is qualified as a session temporary function.
-   * Valid forms: session.func or system.session.func
+   * Check if a function name is qualified as a session temporary function. Valid forms:
+   * session.func or system.session.func
    */
   private def maybeTempFunctionName(nameParts: Seq[String]): Boolean = {
     isQualifiedWithSystemNamespace(nameParts, CatalogManager.SESSION_NAMESPACE)
   }
 
   /**
-   * Single qualification result for session namespaces: returns the kind when nameParts
-   * is explicitly qualified as builtin or session; None otherwise.
+   * Single qualification result for session namespaces: returns the kind when nameParts is
+   * explicitly qualified as builtin or session; None otherwise.
    *
-   * @param nameParts The function name parts (e.g. Seq("builtin", "abs"), Seq("session", "my_udf"))
-   * @return Some(Builtin) or Some(Temp) for 2/3-part session qualification; None otherwise
+   * @param nameParts
+   *   The function name parts (e.g. Seq("builtin", "abs"), Seq("session", "my_udf"))
+   * @return
+   *   Some(Builtin) or Some(Temp) for 2/3-part session qualification; None otherwise
    */
   def sessionNamespaceKind(nameParts: Seq[String])
-    : Option[org.apache.spark.sql.catalyst.catalog.SessionCatalog.SessionFunctionKind] = {
+      : Option[org.apache.spark.sql.catalyst.catalog.SessionCatalog.SessionFunctionKind] = {
     if (nameParts.length <= 1) None
     else if (maybeBuiltinFunctionName(nameParts)) {
       Some(org.apache.spark.sql.catalyst.catalog.SessionCatalog.Builtin)
@@ -587,15 +594,20 @@ object FunctionResolution {
   }
 
   /**
-   * Checks if a multi-part name is qualified with a specific namespace.
-   * Supports both 2-part (namespace.name) and 3-part (system.namespace.name) qualifications.
-   * Validates both the namespace prefix AND that a function name is present.
+   * Checks if a multi-part name is qualified with a specific namespace. Supports both 2-part
+   * (namespace.name) and 3-part (system.namespace.name) qualifications. Validates both the
+   * namespace prefix AND that a function name is present.
    *
-   * @param nameParts The multi-part name to check
-   * @param namespace The namespace to check for (e.g., "builtin", "session")
-   * @return true if qualified with the given namespace and has a non-empty function name
+   * @param nameParts
+   *   The multi-part name to check
+   * @param namespace
+   *   The namespace to check for (e.g., "builtin", "session")
+   * @return
+   *   true if qualified with the given namespace and has a non-empty function name
    */
-  private def isQualifiedWithSystemNamespace(nameParts: Seq[String], namespace: String): Boolean = {
+  private def isQualifiedWithSystemNamespace(
+      nameParts: Seq[String],
+      namespace: String): Boolean = {
     nameParts.length match {
       case 2 =>
         // Format: namespace.funcName (e.g., "builtin.abs")
@@ -611,14 +623,18 @@ object FunctionResolution {
 
   /**
    * Returns true if the name is unqualified or explicitly qualified as builtin with the given
-   * function name. Used for special syntax (e.g. COUNT(*) -> COUNT(1)) that should only apply
-   * to the builtin function, not to user-defined or persistent functions.
+   * function name. Used for special syntax (e.g. COUNT(*) -> COUNT(1)) that should only apply to
+   * the builtin function, not to user-defined or persistent functions.
    *
-   * @param nameParts The function name parts (e.g. Seq("count"), Seq("builtin", "count")).
-   * @param expectedName The expected function name (e.g. "count").
+   * @param nameParts
+   *   The function name parts (e.g. Seq("count"), Seq("builtin", "count")).
+   * @param expectedName
+   *   The expected function name (e.g. "count").
    */
-  def isUnqualifiedOrBuiltinFunctionName(nameParts: Seq[String], expectedName: String): Boolean = {
+  def isUnqualifiedOrBuiltinFunctionName(
+      nameParts: Seq[String],
+      expectedName: String): Boolean = {
     nameParts.lastOption.exists(_.equalsIgnoreCase(expectedName)) &&
-      (nameParts.size == 1 || maybeBuiltinFunctionName(nameParts))
+    (nameParts.size == 1 || maybeBuiltinFunctionName(nameParts))
   }
 }

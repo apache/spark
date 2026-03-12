@@ -29,7 +29,7 @@ import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Strategy
 import org.apache.spark.sql.internal.SQLConf
 
 class SparkPlanner(val session: SparkSession, val experimentalMethods: ExperimentalMethods)
-  extends SparkStrategies {
+    extends SparkStrategies {
 
   def conf: SQLConf = session.sessionState.conf
 
@@ -37,24 +37,23 @@ class SparkPlanner(val session: SparkSession, val experimentalMethods: Experimen
 
   override def strategies: Seq[Strategy] =
     experimentalMethods.extraStrategies ++
-      extraPlanningStrategies ++ (
-      LogicalQueryStageStrategy ::
-      PythonEvals ::
-      new DataSourceV2Strategy(session) ::
-      V2CommandStrategy ::
-      FileSourceStrategy ::
-      DataSourceStrategy ::
-      SpecialLimits ::
-      Aggregation ::
-      Window ::
-      WindowGroupLimit ::
-      JoinSelection ::
-      InMemoryScans ::
-      SparkScripts ::
-      Pipelines ::
-      BasicOperators ::
-      // Need to be here since users can specify withWatermark in stateless streaming query.
-      EventTimeWatermarkStrategy :: Nil)
+      extraPlanningStrategies ++ (LogicalQueryStageStrategy ::
+        PythonEvals ::
+        new DataSourceV2Strategy(session) ::
+        V2CommandStrategy ::
+        FileSourceStrategy ::
+        DataSourceStrategy ::
+        SpecialLimits ::
+        Aggregation ::
+        Window ::
+        WindowGroupLimit ::
+        JoinSelection ::
+        InMemoryScans ::
+        SparkScripts ::
+        Pipelines ::
+        BasicOperators ::
+        // Need to be here since users can specify withWatermark in stateless streaming query.
+        EventTimeWatermarkStrategy :: Nil)
 
   /**
    * Override to add extra planning strategies to the planner. These strategies are tried after
@@ -63,8 +62,8 @@ class SparkPlanner(val session: SparkSession, val experimentalMethods: Experimen
   def extraPlanningStrategies: Seq[Strategy] = Nil
 
   override protected def collectPlaceholders(plan: SparkPlan): Seq[(SparkPlan, LogicalPlan)] = {
-    plan.collect {
-      case placeholder @ PlanLater(logicalPlan) => placeholder -> logicalPlan
+    plan.collect { case placeholder @ PlanLater(logicalPlan) =>
+      placeholder -> logicalPlan
     }
   }
 
@@ -76,8 +75,8 @@ class SparkPlanner(val session: SparkSession, val experimentalMethods: Experimen
 
   /**
    * Used to build table scan operators where complex projection and filtering are done using
-   * separate physical operators.  This function returns the given scan operator with Project and
-   * Filter nodes added only when needed.  For example, a Project operator is only used when the
+   * separate physical operators. This function returns the given scan operator with Project and
+   * Filter nodes added only when needed. For example, a Project operator is only used when the
    * final desired output requires complex expressions to be evaluated or when columns can be
    * further eliminated out after filtering has been done.
    *
@@ -105,7 +104,7 @@ class SparkPlanner(val session: SparkSession, val experimentalMethods: Experimen
     // avoided safely.
 
     if (AttributeSet(projectList.map(_.toAttribute)) == projectSet &&
-        filterSet.subsetOf(projectSet)) {
+      filterSet.subsetOf(projectSet)) {
       // When it is possible to just use column pruning to get the right projection and
       // when the columns of this projection are enough to evaluate all filter conditions,
       // just do a scan followed by a filter, with no extra project.

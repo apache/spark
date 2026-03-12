@@ -26,7 +26,10 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.util.SecurityUtils
 
-private[jdbc] abstract class SecureConnectionProvider extends BasicConnectionProvider with Logging {
+private[jdbc] abstract class SecureConnectionProvider
+    extends BasicConnectionProvider
+    with Logging {
+
   /**
    * Returns the driver canonical class name which the connection provider supports.
    */
@@ -35,7 +38,7 @@ private[jdbc] abstract class SecureConnectionProvider extends BasicConnectionPro
   override def canHandle(driver: Driver, options: Map[String, String]): Boolean = {
     val jdbcOptions = new JDBCOptions(options)
     jdbcOptions.keytab != null && jdbcOptions.principal != null &&
-      driverClass.equalsIgnoreCase(jdbcOptions.driverClass)
+    driverClass.equalsIgnoreCase(jdbcOptions.driverClass)
   }
 
   override def getConnection(driver: Driver, options: Map[String, String]): Connection = {
@@ -52,8 +55,11 @@ private[jdbc] abstract class SecureConnectionProvider extends BasicConnectionPro
   private[connection] def setAuthenticationConfig(driver: Driver, options: JDBCOptions) = {
     val parent = Configuration.getConfiguration
     val config = new SecureConnectionProvider.JDBCConfiguration(
-      parent, appEntry(driver, options), options.keytab,
-      options.principal, options.refreshKrb5Config)
+      parent,
+      appEntry(driver, options),
+      options.keytab,
+      options.principal,
+      options.refreshKrb5Config)
     logDebug("Adding database specific security configuration")
     Configuration.setConfiguration(config)
   }
@@ -61,24 +67,23 @@ private[jdbc] abstract class SecureConnectionProvider extends BasicConnectionPro
 
 object SecureConnectionProvider {
   class JDBCConfiguration(
-    parent: Configuration,
-    appEntry: String,
-    keytab: String,
-    principal: String,
-    refreshKrb5Config: Boolean) extends Configuration {
-  val entry =
-    new AppConfigurationEntry(
-      SecurityUtils.getKrb5LoginModuleName(),
-      AppConfigurationEntry.LoginModuleControlFlag.REQUIRED,
-      Map[String, Object](
-        "useTicketCache" -> "false",
-        "useKeyTab" -> "true",
-        "keyTab" -> keytab,
-        "principal" -> principal,
-        "debug" -> "true",
-        "refreshKrb5Config" -> refreshKrb5Config.toString
-      ).asJava
-    )
+      parent: Configuration,
+      appEntry: String,
+      keytab: String,
+      principal: String,
+      refreshKrb5Config: Boolean)
+      extends Configuration {
+    val entry =
+      new AppConfigurationEntry(
+        SecurityUtils.getKrb5LoginModuleName(),
+        AppConfigurationEntry.LoginModuleControlFlag.REQUIRED,
+        Map[String, Object](
+          "useTicketCache" -> "false",
+          "useKeyTab" -> "true",
+          "keyTab" -> keytab,
+          "principal" -> principal,
+          "debug" -> "true",
+          "refreshKrb5Config" -> refreshKrb5Config.toString).asJava)
 
     override def getAppConfigurationEntry(name: String): Array[AppConfigurationEntry] = {
       if (name.equals(appEntry)) {

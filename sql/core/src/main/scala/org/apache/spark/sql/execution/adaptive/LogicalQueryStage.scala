@@ -25,9 +25,9 @@ import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 
 /**
- * The LogicalPlan wrapper for a [[QueryStageExec]], or a snippet of physical plan containing
- * a [[QueryStageExec]], in which all ancestor nodes of the [[QueryStageExec]] are linked to
- * the same logical node.
+ * The LogicalPlan wrapper for a [[QueryStageExec]], or a snippet of physical plan containing a
+ * [[QueryStageExec]], in which all ancestor nodes of the [[QueryStageExec]] are linked to the
+ * same logical node.
  *
  * For example, a logical Aggregate can be transformed into FinalAgg - Shuffle - PartialAgg, in
  * which the Shuffle will be wrapped into a [[QueryStageExec]], thus the [[LogicalQueryStage]]
@@ -37,7 +37,8 @@ import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 // planning aware of partitioning.
 case class LogicalQueryStage(
     override val logicalPlan: LogicalPlan,
-    override val physicalPlan: SparkPlan) extends logical.LogicalQueryStage {
+    override val physicalPlan: SparkPlan)
+    extends logical.LogicalQueryStage {
 
   override def output: Seq[Attribute] = logicalPlan.output
   override val isStreaming: Boolean = logicalPlan.isStreaming
@@ -56,11 +57,12 @@ case class LogicalQueryStage(
     // TODO this is not accurate when there is other physical nodes above QueryStageExec.
     val physicalStats = physicalPlan.collectFirst {
       case a: BaseAggregateExec if a.groupingExpressions.isEmpty =>
-        a.collectFirst {
-          case s: QueryStageExec => s.computeStats()
-        }.flatten.map { stat =>
-          if (stat.rowCount.contains(0)) stat.copy(rowCount = Some(1)) else stat
-        }
+        a.collectFirst { case s: QueryStageExec =>
+          s.computeStats()
+        }.flatten
+          .map { stat =>
+            if (stat.rowCount.contains(0)) stat.copy(rowCount = Some(1)) else stat
+          }
       case s: QueryStageExec => s.computeStats()
     }.flatten
     if (physicalStats.isDefined) {
@@ -94,7 +96,8 @@ case class LogicalQueryStage(
       printNodeId: Boolean,
       printOutputColumns: Boolean,
       indent: Int = 0): Unit = {
-    super.generateTreeString(depth,
+    super.generateTreeString(
+      depth,
       lastChildren,
       append,
       verbose,
@@ -106,8 +109,16 @@ case class LogicalQueryStage(
       indent)
     lastChildren.add(true)
     logicalPlan.generateTreeString(
-      depth + 1, lastChildren, append, verbose, "", false, maxFields, printNodeId,
-      printOutputColumns, indent)
+      depth + 1,
+      lastChildren,
+      append,
+      verbose,
+      "",
+      false,
+      maxFields,
+      printNodeId,
+      printOutputColumns,
+      indent)
     lastChildren.remove(lastChildren.size() - 1)
   }
 }

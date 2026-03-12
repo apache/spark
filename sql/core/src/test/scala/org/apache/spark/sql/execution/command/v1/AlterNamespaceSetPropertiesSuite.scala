@@ -20,26 +20,28 @@ package org.apache.spark.sql.execution.command.v1
 import org.apache.spark.sql.execution.command
 
 /**
- * This base suite contains unified tests for the `ALTER NAMESPACE ... SET PROPERTIES` command that
- * checks V1 table catalogs. The tests that cannot run for all V1 catalogs are located in more
- * specific test suites:
+ * This base suite contains unified tests for the `ALTER NAMESPACE ... SET PROPERTIES` command
+ * that checks V1 table catalogs. The tests that cannot run for all V1 catalogs are located in
+ * more specific test suites:
  *
  *   - V1 In-Memory catalog:
  *     `org.apache.spark.sql.execution.command.v1.AlterNamespaceSetPropertiesSuite`
  *   - V1 Hive External catalog:
  *     `org.apache.spark.sql.hive.execution.command.AlterNamespaceSetPropertiesSuite`
  */
-trait AlterNamespaceSetPropertiesSuiteBase extends command.AlterNamespaceSetPropertiesSuiteBase
+trait AlterNamespaceSetPropertiesSuiteBase
+    extends command.AlterNamespaceSetPropertiesSuiteBase
     with command.TestsV1AndV2Commands {
   override def namespace: String = "db"
   override def notFoundMsgPrefix: String = "Database"
 }
 
 /**
- * The class contains tests for the `ALTER NAMESPACE ... SET PROPERTIES` command to
- * check V1 In-Memory table catalog.
+ * The class contains tests for the `ALTER NAMESPACE ... SET PROPERTIES` command to check V1
+ * In-Memory table catalog.
  */
-class AlterNamespaceSetPropertiesSuite extends AlterNamespaceSetPropertiesSuiteBase
+class AlterNamespaceSetPropertiesSuite
+    extends AlterNamespaceSetPropertiesSuiteBase
     with CommandSuiteBase {
   override def commandVersion: String = super[AlterNamespaceSetPropertiesSuiteBase].commandVersion
 }

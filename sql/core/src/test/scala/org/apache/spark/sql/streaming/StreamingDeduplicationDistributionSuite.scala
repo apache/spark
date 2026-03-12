@@ -26,17 +26,22 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StatefulOpClusteredDistributionTestHelper
 import org.apache.spark.util.Utils
 
-class StreamingDeduplicationDistributionSuite extends StreamTest
-  with StatefulOpClusteredDistributionTestHelper {
+class StreamingDeduplicationDistributionSuite
+    extends StreamTest
+    with StatefulOpClusteredDistributionTestHelper {
 
   import testImplicits._
 
-  test("SPARK-38204: streaming deduplication should require StatefulOpClusteredDistribution " +
-    "from children") {
+  test(
+    "SPARK-38204: streaming deduplication should require StatefulOpClusteredDistribution " +
+      "from children") {
 
     val input = MemoryStream[Int]
-    val df1 = input.toDF()
-      .select($"value" as Symbol("key1"), $"value" * 2 as Symbol("key2"),
+    val df1 = input
+      .toDF()
+      .select(
+        $"value" as Symbol("key1"),
+        $"value" * 2 as Symbol("key2"),
         $"value" * 3 as Symbol("value"))
     val dedup = df1.repartition($"key1").dropDuplicates("key1", "key2")
 
@@ -51,25 +56,36 @@ class StreamingDeduplicationDistributionSuite extends StreamTest
         }
 
         assert(dedupExecs.length === 1)
-        assert(requireStatefulOpClusteredDistribution(
-          dedupExecs.head, Seq(Seq("key1", "key2")), numPartitions))
-        assert(hasDesiredHashPartitioningInChildren(
-          dedupExecs.head, Seq(Seq("key1", "key2")), numPartitions))
-      }
-    )
+        assert(
+          requireStatefulOpClusteredDistribution(
+            dedupExecs.head,
+            Seq(Seq("key1", "key2")),
+            numPartitions))
+        assert(
+          hasDesiredHashPartitioningInChildren(
+            dedupExecs.head,
+            Seq(Seq("key1", "key2")),
+            numPartitions))
+      })
   }
 
-  test("SPARK-38204: streaming deduplication should require ClusteredDistribution " +
-    "from children if the query starts from checkpoint in prior to 3.3") {
+  test(
+    "SPARK-38204: streaming deduplication should require ClusteredDistribution " +
+      "from children if the query starts from checkpoint in prior to 3.3") {
 
     val inputData = MemoryStream[Int]
-    val df1 = inputData.toDF()
-      .select($"value" as Symbol("key1"), $"value" * 2 as Symbol("key2"),
+    val df1 = inputData
+      .toDF()
+      .select(
+        $"value" as Symbol("key1"),
+        $"value" * 2 as Symbol("key2"),
         $"value" * 3 as Symbol("value"))
     val dedup = df1.repartition($"key1").dropDuplicates("key1", "key2")
 
-    val resourceUri = this.getClass.getResource(
-      "/structured-streaming/checkpoint-version-3.2.0-deduplication-with-repartition/").toURI
+    val resourceUri = this.getClass
+      .getResource(
+        "/structured-streaming/checkpoint-version-3.2.0-deduplication-with-repartition/")
+      .toURI
 
     val checkpointDir = Utils.createTempDir().getCanonicalFile
     // Copy the checkpoint to a temp dir to prevent changes to the original.
@@ -80,7 +96,8 @@ class StreamingDeduplicationDistributionSuite extends StreamTest
     inputData.addData(3, 4)
 
     testStream(dedup, Update)(
-      StartStream(checkpointLocation = checkpointDir.getAbsolutePath,
+      StartStream(
+        checkpointLocation = checkpointDir.getAbsolutePath,
         additionalConfs = Map(SQLConf.STATEFUL_OPERATOR_USE_STRICT_DISTRIBUTION.key -> "true")),
 
       // scalastyle:off line.size.limit
@@ -136,16 +153,18 @@ class StreamingDeduplicationDistributionSuite extends StreamTest
 
         val numPartitions = query.lastExecution.numStateStores
 
-        val dedupExecs = executedPlan.collect {
-          case d: StreamingDeduplicateExec => d
+        val dedupExecs = executedPlan.collect { case d: StreamingDeduplicateExec =>
+          d
         }
 
         assert(dedupExecs.length === 1)
-        assert(requireClusteredDistribution(
-          dedupExecs.head, Seq(Seq("key1", "key2")), Some(numPartitions)))
-        assert(hasDesiredHashPartitioningInChildren(
-          dedupExecs.head, Seq(Seq("key1")), numPartitions))
-      }
-    )
+        assert(
+          requireClusteredDistribution(
+            dedupExecs.head,
+            Seq(Seq("key1", "key2")),
+            Some(numPartitions)))
+        assert(
+          hasDesiredHashPartitioningInChildren(dedupExecs.head, Seq(Seq("key1")), numPartitions))
+      })
   }
 }

@@ -30,7 +30,8 @@ import org.apache.spark.status.protobuf.Utils.{getStringField, setJMapField, set
 
 private[protobuf] object StreamingQueryProgressSerializer {
 
-  private val mapper: JsonMapper = JsonMapper.builder()
+  private val mapper: JsonMapper = JsonMapper
+    .builder()
     .addModule(DefaultScalaModule)
     .build()
 
@@ -48,11 +49,9 @@ private[protobuf] object StreamingQueryProgressSerializer {
     builder.setBatchDuration(process.batchDuration)
     setJMapField(process.durationMs, builder.putAllDurationMs)
     setJMapField(process.eventTime, builder.putAllEventTime)
-    process.stateOperators.foreach(
-      s => builder.addStateOperators(StateOperatorProgressSerializer.serialize(s)))
-    process.sources.foreach(
-      s => builder.addSources(SourceProgressSerializer.serialize(s))
-    )
+    process.stateOperators.foreach(s =>
+      builder.addStateOperators(StateOperatorProgressSerializer.serialize(s)))
+    process.sources.foreach(s => builder.addSources(SourceProgressSerializer.serialize(s)))
     builder.setSink(SinkProgressSerializer.serialize(process.sink))
     setJMapField(process.observedMetrics, putAllObservedMetrics(builder, _))
     builder.build()
@@ -78,8 +77,7 @@ private[protobuf] object StreamingQueryProgressSerializer {
         StateOperatorProgressSerializer.deserializeToArray(process.getStateOperatorsList),
       sources = SourceProgressSerializer.deserializeToArray(process.getSourcesList),
       sink = SinkProgressSerializer.deserialize(process.getSink),
-      observedMetrics = convertToObservedMetrics(process.getObservedMetricsMap)
-    )
+      observedMetrics = convertToObservedMetrics(process.getObservedMetricsMap))
   }
 
   private def putAllObservedMetrics(
@@ -87,17 +85,16 @@ private[protobuf] object StreamingQueryProgressSerializer {
       observedMetrics: JMap[String, Row]): Unit = {
     // Encode Row as Json to handle it as a string type in protobuf and this way
     // is simpler than defining a message type corresponding to Row in protobuf.
-    observedMetrics.forEach {
-      case (k, v) => builder.putObservedMetrics(k, mapper.writeValueAsString(v))
+    observedMetrics.forEach { case (k, v) =>
+      builder.putObservedMetrics(k, mapper.writeValueAsString(v))
     }
   }
 
   private def convertToObservedMetrics(input: JMap[String, String]): JHashMap[String, Row] = {
     val observedMetrics = new JHashMap[String, Row](input.size())
     val classType = classOf[GenericRowWithSchema]
-    input.forEach {
-      case (k, v) =>
-        observedMetrics.put(k, mapper.readValue(v, classType))
+    input.forEach { case (k, v) =>
+      observedMetrics.put(k, mapper.readValue(v, classType))
     }
     observedMetrics
   }

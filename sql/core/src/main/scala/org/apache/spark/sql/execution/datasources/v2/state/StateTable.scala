@@ -32,9 +32,9 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  * An implementation of [[Table]] with [[SupportsRead]] for State Store data source.
- * @param stateSchemaProviderOpt Optional provider that maintains mapping between schema IDs and
- *                               their corresponding schemas, enabling reading of state data
- *                               written with older schema versions
+ * @param stateSchemaProviderOpt
+ *   Optional provider that maintains mapping between schema IDs and their corresponding schemas,
+ *   enabling reading of state data written with older schema versions
  */
 class StateTable(
     session: SparkSession,
@@ -48,7 +48,9 @@ class StateTable(
     stateSchemaProviderOpt: Option[StateSchemaProvider],
     joinColFamilyOpt: Option[String],
     allColumnFamiliesReaderInfo: Option[AllColumnFamiliesReaderInfo] = None)
-  extends Table with SupportsRead with SupportsMetadataColumns {
+    extends Table
+    with SupportsRead
+    with SupportsMetadataColumns {
 
   import StateTable._
 
@@ -87,10 +89,18 @@ class StateTable(
   override def capabilities(): util.Set[TableCapability] = CAPABILITY
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
-    new StateScanBuilder(session, schema, sourceOptions, stateConf,
-      batchNumPartitions, keyStateEncoderSpec,
-      stateVariableInfoOpt, stateStoreColFamilySchemaOpt, stateSchemaProviderOpt,
-      joinColFamilyOpt, allColumnFamiliesReaderInfo)
+    new StateScanBuilder(
+      session,
+      schema,
+      sourceOptions,
+      stateConf,
+      batchNumPartitions,
+      keyStateEncoderSpec,
+      stateVariableInfoOpt,
+      stateStoreColFamilySchemaOpt,
+      stateSchemaProviderOpt,
+      joinColFamilyOpt,
+      allColumnFamiliesReaderInfo)
 
   override def properties(): util.Map[String, String] = Map.empty[String, String].asJava
 
@@ -98,8 +108,8 @@ class StateTable(
 }
 
 /**
- * Companion object for StateTable class to place constants and nested objects.
- * Currently storing capability of the table and the definition of metadata column(s).
+ * Companion object for StateTable class to place constants and nested objects. Currently storing
+ * capability of the table and the definition of metadata column(s).
  */
 object StateTable {
   private val CAPABILITY = Set(TableCapability.BATCH_READ).asJava

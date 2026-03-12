@@ -47,7 +47,8 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df1.join(df2, $"df1.key" === $"df2.key"),
       sql("SELECT a.key, b.key FROM testData a JOIN testData b ON a.key = b.key")
-        .collect().toSeq)
+        .collect()
+        .toSeq)
   }
 
   test("join - self join auto resolve ambiguity with case insensitivity") {
@@ -111,9 +112,7 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
       // Alias the dataframe and use qualified column names can fix ambiguous self-join.
       val aliasedDf1 = df1.alias("left")
       val aliasedDf2 = df2.as("right")
-      checkAnswer(
-        aliasedDf1.join(aliasedDf2, $"left.id" > $"right.id"),
-        Seq(Row(2, 1)))
+      checkAnswer(aliasedDf1.join(aliasedDf2, $"left.id" > $"right.id"), Seq(Row(2, 1)))
     }
 
     withSQLConf(
@@ -182,13 +181,9 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
       // `df2("id") < df3("id")` is always false
       checkAnswer(df1.join(df2).join(df3, df2("id") < df3("id")), Nil)
       // `df2("id")` actually points to the column of `df1`.
-      checkAnswer(
-        df1.join(df4).join(df2).select(df2("id")),
-        Seq(0, 0, 1, 1, 2, 2).map(Row(_)))
+      checkAnswer(df1.join(df4).join(df2).select(df2("id")), Seq(0, 0, 1, 1, 2, 2).map(Row(_)))
       // `df4("id")` is not ambiguous.
-      checkAnswer(
-        df1.join(df4).join(df2).select(df4("id")),
-        Seq(0, 0, 0, 0, 0, 0).map(Row(_)))
+      checkAnswer(df1.join(df4).join(df2).select(df4("id")), Seq(0, 0, 0, 0, 0, 0).map(Row(_)))
 
       // Alias the dataframe and use qualified column names can fix ambiguous self-join.
       val aliasedDf1 = df1.alias("x")
@@ -211,8 +206,7 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-28344: don't fail if there is no ambiguous self join") {
-    withSQLConf(
-      SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED.key -> "true") {
       val df = Seq(1, 1, 2, 2).toDF("a")
       val w = Window.partitionBy(df("a"))
       checkAnswer(
@@ -226,20 +220,21 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-33071/SPARK-33536: Avoid changing dataset_id of LogicalPlan in join() " +
-    "to not break DetectAmbiguousSelfJoin") {
+  test(
+    "SPARK-33071/SPARK-33536: Avoid changing dataset_id of LogicalPlan in join() " +
+      "to not break DetectAmbiguousSelfJoin") {
     val emp1 = Seq[TestData](
       TestData(1, "sales"),
       TestData(2, "personnel"),
       TestData(3, "develop"),
       TestData(4, "IT")).toDS()
-    val emp2 = Seq[TestData](
-      TestData(1, "sales"),
-      TestData(2, "personnel"),
-      TestData(3, "develop")).toDS()
+    val emp2 =
+      Seq[TestData](TestData(1, "sales"), TestData(2, "personnel"), TestData(3, "develop")).toDS()
     val emp3 = emp1.join(emp2, emp1("key") === emp2("key")).select(emp1("*"))
-    assertAmbiguousSelfJoin(emp1.join(emp3, emp1.col("key") === emp3.col("key"),
-      "left_outer").select(emp1.col("*"), emp3.col("key").as("e2")))
+    assertAmbiguousSelfJoin(
+      emp1
+        .join(emp3, emp1.col("key") === emp3.col("key"), "left_outer")
+        .select(emp1.col("*"), emp3.col("key").as("e2")))
   }
 
   test("df.show() should also not change dataset_id of LogicalPlan") {
@@ -273,11 +268,10 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
     assert(dsIdSetOpt.get.size === 1)
     var col1DsId = -1L
     val col1 = ds.col("key")
-    col1.expr.foreach {
-      case a: AttributeReference =>
-        col1DsId = a.metadata.getLong(DatasetImpl.DATASET_ID_KEY)
-        assert(dsIdSetOpt.get.contains(col1DsId))
-        assert(a.metadata.getLong(DatasetImpl.COL_POS_KEY) === 0)
+    col1.expr.foreach { case a: AttributeReference =>
+      col1DsId = a.metadata.getLong(DatasetImpl.DATASET_ID_KEY)
+      assert(dsIdSetOpt.get.contains(col1DsId))
+      assert(a.metadata.getLong(DatasetImpl.COL_POS_KEY) === 0)
     }
 
     val df = ds.toDF()
@@ -285,11 +279,10 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
     assert(dsIdSetOpt.get.size === 2)
     var col2DsId = -1L
     val col2 = df.col("key")
-    col2.expr.foreach {
-      case a: AttributeReference =>
-        col2DsId = a.metadata.getLong(DatasetImpl.DATASET_ID_KEY)
-        assert(dsIdSetOpt.get.contains(a.metadata.getLong(DatasetImpl.DATASET_ID_KEY)))
-        assert(a.metadata.getLong(DatasetImpl.COL_POS_KEY) === 0)
+    col2.expr.foreach { case a: AttributeReference =>
+      col2DsId = a.metadata.getLong(DatasetImpl.DATASET_ID_KEY)
+      assert(dsIdSetOpt.get.contains(a.metadata.getLong(DatasetImpl.DATASET_ID_KEY)))
+      assert(a.metadata.getLong(DatasetImpl.COL_POS_KEY) === 0)
     }
     assert(col1DsId !== col2DsId)
   }
@@ -333,9 +326,16 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
       val aliasedDf4 = df3.as("z")
       checkAnswer(
         aliasedDf1.join(aliasedDf2).join(aliasedDf3).join(aliasedDf4, $"x.b" < $"y.b"),
-        Seq(Row(0, 0, 1, 2, 0), Row(0, 0, 1, 2, 1), Row(0, 0, 1, 2, 2),
-          Row(1, 1, 1, 2, 0), Row(1, 1, 1, 2, 1), Row(1, 1, 1, 2, 2),
-          Row(2, 2, 1, 2, 0), Row(2, 2, 1, 2, 1), Row(2, 2, 1, 2, 2)))
+        Seq(
+          Row(0, 0, 1, 2, 0),
+          Row(0, 0, 1, 2, 1),
+          Row(0, 0, 1, 2, 2),
+          Row(1, 1, 1, 2, 0),
+          Row(1, 1, 1, 2, 1),
+          Row(1, 1, 1, 2, 2),
+          Row(2, 2, 1, 2, 0),
+          Row(2, 2, 1, 2, 1),
+          Row(2, 2, 1, 2, 2)))
       checkAnswer(
         aliasedDf1.join(df5).join(aliasedDf3).select($"y.b"),
         Seq(0, 0, 0, 1, 1, 1, 2, 2, 2).map(Row(_)))
@@ -349,8 +349,9 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-36874: DeduplicateRelations should copy dataset_id tag " +
-    "to avoid ambiguous self join") {
+  test(
+    "SPARK-36874: DeduplicateRelations should copy dataset_id tag " +
+      "to avoid ambiguous self join") {
     // Test for Project
     val df1 = Seq((1, 2, "A1"), (2, 1, "A2")).toDF("key1", "key2", "value")
     val df2 = df1.filter($"value" === "A2")
@@ -370,7 +371,9 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
     assertAmbiguousSelfJoin(df6.join(df5, df5("key1") === df6("count")))
 
     // Test for MapInPandas
-    val mapInPandasUDF = PythonUDF("mapInPandasUDF", null,
+    val mapInPandasUDF = PythonUDF(
+      "mapInPandasUDF",
+      null,
       StructType(Seq(StructField("x", LongType), StructField("y", LongType))),
       Seq.empty,
       PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
@@ -381,7 +384,9 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
     assertAmbiguousSelfJoin(df8.join(df7, df7("x") === df8("y")))
 
     // Test for FlatMapGroupsInPandas
-    val flatMapGroupsInPandasUDF = PythonUDF("flagMapGroupsInPandasUDF", null,
+    val flatMapGroupsInPandasUDF = PythonUDF(
+      "flagMapGroupsInPandasUDF",
+      null,
       StructType(Seq(StructField("x", LongType), StructField("y", LongType))),
       Seq.empty,
       PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
@@ -392,13 +397,16 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
     assertAmbiguousSelfJoin(df10.join(df9, df9("x") === df10("y")))
 
     // Test for FlatMapCoGroupsInPandas
-    val flatMapCoGroupsInPandasUDF = PythonUDF("flagMapCoGroupsInPandasUDF", null,
+    val flatMapCoGroupsInPandasUDF = PythonUDF(
+      "flagMapCoGroupsInPandasUDF",
+      null,
       StructType(Seq(StructField("x", LongType), StructField("y", LongType))),
       Seq.empty,
       PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
       true)
-    val df11 = df1.groupBy($"key1").flatMapCoGroupsInPandas(
-      df1.groupBy($"key2"), Column(flatMapCoGroupsInPandasUDF))
+    val df11 = df1
+      .groupBy($"key1")
+      .flatMapCoGroupsInPandas(df1.groupBy($"key2"), Column(flatMapCoGroupsInPandasUDF))
     val df12 = df11.filter($"x" > 0)
     assertAmbiguousSelfJoin(df11.join(df12, df11("x") === df12("y")))
     assertAmbiguousSelfJoin(df12.join(df11, df11("x") === df12("y")))
@@ -411,8 +419,14 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
 
     // Test for Generate
     // Ensure that the root of the plan is Generate
-    val df15 = Seq((1, Seq(1, 2, 3))).toDF("a", "intList").select($"a", explode($"intList"))
-      .queryExecution.optimizedPlan.find(_.isInstanceOf[Generate]).get.toDF()
+    val df15 = Seq((1, Seq(1, 2, 3)))
+      .toDF("a", "intList")
+      .select($"a", explode($"intList"))
+      .queryExecution
+      .optimizedPlan
+      .find(_.isInstanceOf[Generate])
+      .get
+      .toDF()
     val df16 = df15.filter($"a" > 0)
     assertAmbiguousSelfJoin(df15.join(df16, df15("a") === df16("col")))
     assertAmbiguousSelfJoin(df16.join(df15, df15("a") === df16("col")))
@@ -422,9 +436,7 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
     val df17 =
       Expand(
         Seq(Seq($"key1".expr, $"key2".expr)),
-        Seq(
-          AttributeReference("x", IntegerType)(),
-          AttributeReference("y", IntegerType)()),
+        Seq(AttributeReference("x", IntegerType)(), AttributeReference("y", IntegerType)()),
         df1.queryExecution.logical).toDF()
     val df18 = df17.filter($"x" > 0)
     assertAmbiguousSelfJoin(df17.join(df18, df17("x") === df18("y")))
@@ -445,23 +457,29 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
     // Test for ScriptTransformation
     val ioSchema =
       ScriptInputOutputSchema(
-        Seq(("TOK_TABLEROWFORMATFIELD", ","),
+        Seq(
+          ("TOK_TABLEROWFORMATFIELD", ","),
           ("TOK_TABLEROWFORMATCOLLITEMS", "#"),
           ("TOK_TABLEROWFORMATMAPKEYS", "@"),
           ("TOK_TABLEROWFORMATNULL", "null"),
           ("TOK_TABLEROWFORMATLINES", "\n")),
-        Seq(("TOK_TABLEROWFORMATFIELD", ","),
+        Seq(
+          ("TOK_TABLEROWFORMATFIELD", ","),
           ("TOK_TABLEROWFORMATCOLLITEMS", "#"),
           ("TOK_TABLEROWFORMATMAPKEYS", "@"),
           ("TOK_TABLEROWFORMATNULL", "null"),
-          ("TOK_TABLEROWFORMATLINES", "\n")), None, None,
-        List.empty, List.empty, None, None, false)
+          ("TOK_TABLEROWFORMATLINES", "\n")),
+        None,
+        None,
+        List.empty,
+        List.empty,
+        None,
+        None,
+        false)
     // Ensure that the root of the plan is ScriptTransformation
     val df21 = ScriptTransformation(
       "cat",
-      Seq(
-        AttributeReference("x", IntegerType)(),
-        AttributeReference("y", IntegerType)()),
+      Seq(AttributeReference("x", IntegerType)(), AttributeReference("y", IntegerType)()),
       df1.queryExecution.logical,
       ioSchema).toDF()
     val df22 = df21.filter($"x" > 0)
@@ -475,17 +493,19 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
       val df1 = df.select(df("tsStr").cast("timestamp")).as("df1")
       val df2 = df.select(df("tsStr").cast("timestamp")).as("df2")
       df1.join(df2, $"df1.tsStr" === $"df2.tsStr", "left_outer")
-      val df3 = df1.join(df2, $"df1.tsStr" === $"df2.tsStr", "left_outer")
-        .select($"df1.tsStr".as("timeStr")).as("df3")
+      val df3 = df1
+        .join(df2, $"df1.tsStr" === $"df2.tsStr", "left_outer")
+        .select($"df1.tsStr".as("timeStr"))
+        .as("df3")
       // Before the fix, it throws "UnresolvedException: Invalid call to
       // dataType on unresolved object".
-      val ex = intercept[AnalysisException](
-        df3.join(df1, year($"df1.timeStr") === year($"df3.tsStr"))
-      )
-      checkError(ex,
+      val ex =
+        intercept[AnalysisException](df3.join(df1, year($"df1.timeStr") === year($"df3.tsStr")))
+      checkError(
+        ex,
         condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-        parameters = Map("objectName" -> "`df1`.`timeStr`",
-          "proposal" -> "`df3`.`timeStr`, `df1`.`tsStr`"),
+        parameters =
+          Map("objectName" -> "`df1`.`timeStr`", "proposal" -> "`df3`.`timeStr`, `df1`.`tsStr`"),
         context = ExpectedContext(fragment = "$", getCurrentClassCallSitePattern))
     }
   }
@@ -500,8 +520,9 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-53098: `DeduplicateRelations` shouldn't remap expressions if old `ExprId` still " +
-  "exists in output") {
+  test(
+    "SPARK-53098: `DeduplicateRelations` shouldn't remap expressions if old `ExprId` still " +
+      "exists in output") {
     val df1 = Seq[TestData](TestData(1, "sales")).toDS()
     val df2 = Seq[TestData](TestData(1, "sales")).toDS()
     val df3 = df1.join(df2, df1("key") === df2("key")).select(df1("*"))
@@ -513,11 +534,13 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
         SQLConf.DONT_DEDUPLICATE_EXPRESSION_IF_EXPR_ID_IN_OUTPUT.key -> conf.toString,
         // Single-pass analyzer always maps self-join condition to the left branch, regardless of
         // conf so we return single-pass result only if deduplication conf is true.
-        SQLConf.ANALYZER_DUAL_RUN_RETURN_SINGLE_PASS_RESULT.key -> conf.toString
-      ) {
+        SQLConf.ANALYZER_DUAL_RUN_RETURN_SINGLE_PASS_RESULT.key -> conf.toString) {
         val analyzedPlan =
-          df1.join(df3, df1.col("key") === df3.col("key"), "left_outer").queryExecution.analyzed
-          .asInstanceOf[Join]
+          df1
+            .join(df3, df1.col("key") === df3.col("key"), "left_outer")
+            .queryExecution
+            .analyzed
+            .asInstanceOf[Join]
         val joinCondition = analyzedPlan.condition.get.asInstanceOf[EqualTo]
         val leftBranchExprId = joinCondition.left.asInstanceOf[NamedExpression]
         val rightBranchExprId = joinCondition.right.asInstanceOf[NamedExpression]
@@ -547,7 +570,9 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
       sql("INSERT INTO table_2 VALUES (1, 'str'), (2, 'test');")
       val df = spark.table("table_2").where("col_1 = 'test'").select("id")
       assert(
-        spark.table("table_1").alias("t")
+        spark
+          .table("table_1")
+          .alias("t")
           .join(df.alias("df1"), usingColumns = Seq("id"))
           .join(df.alias("df2"), joinExprs = $"df1.id" === $"df2.id", joinType = "left")
           .count() == 1)

@@ -26,7 +26,6 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.util.Utils
 
-
 /**
  * [[AnalysisHelper]] defines some infrastructure for the query analyzer. In particular, in query
  * analysis we don't want to repeatedly re-analyze sub-plans that have previously been analyzed.
@@ -46,8 +45,7 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
   private var _analyzed: Boolean = false
 
   /**
-   * Recursively marks all nodes in this plan tree as analyzed.
-   * This should only be called by
+   * Recursively marks all nodes in this plan tree as analyzed. This should only be called by
    * [[org.apache.spark.sql.catalyst.analysis.CheckAnalysis]].
    */
   private[sql] def setAnalyzed(): Unit = {
@@ -59,19 +57,20 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
 
   /**
    * Returns true if this node and its children have already been gone through analysis and
-   * verification.  Note that this is only an optimization used to avoid analyzing trees that
-   * have already been analyzed, and can be reset by transformations.
+   * verification. Note that this is only an optimization used to avoid analyzing trees that have
+   * already been analyzed, and can be reset by transformations.
    */
   def analyzed: Boolean = _analyzed
 
   /**
    * Returns a copy of this node where `rule` has been recursively applied to the tree. When
    * `rule` does not apply to a given node, it is left unchanged. This function is similar to
-   * `transform`, but skips sub-trees that have already been marked as analyzed.
-   * Users should not expect a specific directionality. If a specific directionality is needed,
+   * `transform`, but skips sub-trees that have already been marked as analyzed. Users should not
+   * expect a specific directionality. If a specific directionality is needed,
    * [[resolveOperatorsUp]] or [[resolveOperatorsDown]] should be used.
    *
-   * @param rule the function used to transform this nodes children.
+   * @param rule
+   *   the function used to transform this nodes children.
    */
   def resolveOperators(rule: PartialFunction[LogicalPlan, LogicalPlan]): LogicalPlan = {
     resolveOperatorsWithPruning(AlwaysProcess.fn, UnknownRuleId)(rule)
@@ -80,33 +79,36 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
   /**
    * Returns a copy of this node where `rule` has been recursively applied to the tree. When
    * `rule` does not apply to a given node, it is left unchanged. This function is similar to
-   * `transform`, but skips sub-trees that have already been marked as analyzed.
-   * Users should not expect a specific directionality. If a specific directionality is needed,
+   * `transform`, but skips sub-trees that have already been marked as analyzed. Users should not
+   * expect a specific directionality. If a specific directionality is needed,
    * [[resolveOperatorsUpWithPruning]] or [[resolveOperatorsDownWithPruning]] should be used.
    *
-   * @param rule   the function used to transform this nodes children.
-   * @param cond   a Lambda expression to prune tree traversals. If `cond.apply` returns false
-   *               on an operator T, skips processing T and its subtree; otherwise, processes
-   *               T and its subtree recursively.
-   * @param ruleId is a unique Id for `rule` to prune unnecessary tree traversals. When it is
-   *               UnknownRuleId, no pruning happens. Otherwise, if `rule` (with id `ruleId`)
-   *               has been marked as in effective on an operator T, skips processing T and its
-   *               subtree. Do not pass it if the rule is not purely functional and reads a
-   *               varying initial state for different invocations.
+   * @param rule
+   *   the function used to transform this nodes children.
+   * @param cond
+   *   a Lambda expression to prune tree traversals. If `cond.apply` returns false on an operator
+   *   T, skips processing T and its subtree; otherwise, processes T and its subtree recursively.
+   * @param ruleId
+   *   is a unique Id for `rule` to prune unnecessary tree traversals. When it is UnknownRuleId,
+   *   no pruning happens. Otherwise, if `rule` (with id `ruleId`) has been marked as in effective
+   *   on an operator T, skips processing T and its subtree. Do not pass it if the rule is not
+   *   purely functional and reads a varying initial state for different invocations.
    */
-  def resolveOperatorsWithPruning(cond: TreePatternBits => Boolean,
-    ruleId: RuleId = UnknownRuleId)(rule: PartialFunction[LogicalPlan, LogicalPlan])
-  : LogicalPlan = {
+  def resolveOperatorsWithPruning(
+      cond: TreePatternBits => Boolean,
+      ruleId: RuleId = UnknownRuleId)(
+      rule: PartialFunction[LogicalPlan, LogicalPlan]): LogicalPlan = {
     resolveOperatorsDownWithPruning(cond, ruleId)(rule)
   }
 
   /**
    * Returns a copy of this node where `rule` has been recursively applied first to all of its
    * children and then itself (post-order, bottom-up). When `rule` does not apply to a given node,
-   * it is left unchanged.  This function is similar to `transformUp`, but skips sub-trees that
+   * it is left unchanged. This function is similar to `transformUp`, but skips sub-trees that
    * have already been marked as analyzed.
    *
-   * @param rule the function used to transform this nodes children.
+   * @param rule
+   *   the function used to transform this nodes children.
    */
   def resolveOperatorsUp(rule: PartialFunction[LogicalPlan, LogicalPlan]): LogicalPlan = {
     resolveOperatorsUpWithPruning(AlwaysProcess.fn, UnknownRuleId)(rule)
@@ -115,22 +117,24 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
   /**
    * Returns a copy of this node where `rule` has been recursively applied first to all of its
    * children and then itself (post-order, bottom-up). When `rule` does not apply to a given node,
-   * it is left unchanged.  This function is similar to `transformUp`, but skips sub-trees that
+   * it is left unchanged. This function is similar to `transformUp`, but skips sub-trees that
    * have already been marked as analyzed.
    *
-   * @param rule   the function used to transform this nodes children.
-   * @param cond   a Lambda expression to prune tree traversals. If `cond.apply` returns false
-   *               on an operator T, skips processing T and its subtree; otherwise, processes
-   *               T and its subtree recursively.
-   * @param ruleId is a unique Id for `rule` to prune unnecessary tree traversals. When it is
-   *               UnknownRuleId, no pruning happens. Otherwise, if `rule` (with id `ruleId`)
-   *               has been marked as in effective on an operator T, skips processing T and its
-   *               subtree. Do not pass it if the rule is not purely functional and reads a
-   *               varying initial state for different invocations.
+   * @param rule
+   *   the function used to transform this nodes children.
+   * @param cond
+   *   a Lambda expression to prune tree traversals. If `cond.apply` returns false on an operator
+   *   T, skips processing T and its subtree; otherwise, processes T and its subtree recursively.
+   * @param ruleId
+   *   is a unique Id for `rule` to prune unnecessary tree traversals. When it is UnknownRuleId,
+   *   no pruning happens. Otherwise, if `rule` (with id `ruleId`) has been marked as in effective
+   *   on an operator T, skips processing T and its subtree. Do not pass it if the rule is not
+   *   purely functional and reads a varying initial state for different invocations.
    */
-  def resolveOperatorsUpWithPruning(cond: TreePatternBits => Boolean,
-    ruleId: RuleId = UnknownRuleId)(rule: PartialFunction[LogicalPlan, LogicalPlan])
-  : LogicalPlan = {
+  def resolveOperatorsUpWithPruning(
+      cond: TreePatternBits => Boolean,
+      ruleId: RuleId = UnknownRuleId)(
+      rule: PartialFunction[LogicalPlan, LogicalPlan]): LogicalPlan = {
     if (!analyzed && cond.apply(self) && !isRuleIneffective(ruleId)) {
       AnalysisHelper.allowInvokingTransformsInAnalyzer {
         val afterRuleOnChildren = mapChildren(_.resolveOperatorsUpWithPruning(cond, ruleId)(rule))
@@ -158,8 +162,8 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
 
   /**
    * Similar to [[resolveOperatorsUpWithPruning]], but also applies the given partial function to
-   * all the plans in the subqueries of all nodes. This method is useful when we want to rewrite the
-   * whole plan, including its subqueries, in one go.
+   * all the plans in the subqueries of all nodes. This method is useful when we want to rewrite
+   * the whole plan, including its subqueries, in one go.
    */
   def resolveOperatorsUpWithSubqueriesAndPruning(
       cond: TreePatternBits => Boolean,
@@ -170,13 +174,11 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
         override def isDefinedAt(x: LogicalPlan): Boolean = true
 
         override def apply(plan: LogicalPlan): LogicalPlan = {
-          val transformed = plan.transformExpressionsUpWithPruning(
-            t => t.containsPattern(PLAN_EXPRESSION) && cond(t)
-          ) {
-            case subquery: SubqueryExpression =>
-              val newPlan =
-                subquery.plan.resolveOperatorsUpWithSubqueriesAndPruning(cond, ruleId)(rule)
-              subquery.withNewPlan(newPlan)
+          val transformed = plan.transformExpressionsUpWithPruning(t =>
+            t.containsPattern(PLAN_EXPRESSION) && cond(t)) { case subquery: SubqueryExpression =>
+            val newPlan =
+              subquery.plan.resolveOperatorsUpWithSubqueriesAndPruning(cond, ruleId)(rule)
+            subquery.withNewPlan(newPlan)
           }
           rule.applyOrElse[LogicalPlan, LogicalPlan](transformed, identity)
         }
@@ -191,9 +193,10 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
   }
 
   /** Similar to [[resolveOperatorsUpWithPruning]], but does it top-down. */
-  def resolveOperatorsDownWithPruning(cond: TreePatternBits => Boolean,
-    ruleId: RuleId = UnknownRuleId)(rule: PartialFunction[LogicalPlan, LogicalPlan])
-  : LogicalPlan = {
+  def resolveOperatorsDownWithPruning(
+      cond: TreePatternBits => Boolean,
+      ruleId: RuleId = UnknownRuleId)(
+      rule: PartialFunction[LogicalPlan, LogicalPlan]): LogicalPlan = {
     if (!analyzed && cond.apply(self) && !isRuleIneffective(ruleId)) {
       AnalysisHelper.allowInvokingTransformsInAnalyzer {
         val afterRule = CurrentOrigin.withOrigin(origin) {
@@ -227,7 +230,7 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
    */
   def resolveOperatorsUpWithNewOutput(
       rule: PartialFunction[LogicalPlan, (LogicalPlan, Seq[(Attribute, Attribute)])])
-  : LogicalPlan = {
+      : LogicalPlan = {
     if (!analyzed) {
       transformUpWithNewOutput(rule, skipCond = _.analyzed, canGetOutput = _.resolved)
     } else {
@@ -244,37 +247,41 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
     }
   }
 
-  override def updateOuterReferencesInSubquery(plan: LogicalPlan, attrMap: AttributeMap[Attribute])
-    : LogicalPlan = {
+  override def updateOuterReferencesInSubquery(
+      plan: LogicalPlan,
+      attrMap: AttributeMap[Attribute]): LogicalPlan = {
     AnalysisHelper.allowInvokingTransformsInAnalyzer {
       super.updateOuterReferencesInSubquery(plan, attrMap)
     }
   }
 
   /**
-   * Recursively transforms the expressions of a tree, skipping nodes that have already
-   * been analyzed.
+   * Recursively transforms the expressions of a tree, skipping nodes that have already been
+   * analyzed.
    */
   def resolveExpressions(r: PartialFunction[Expression, Expression]): LogicalPlan = {
     resolveExpressionsWithPruning(AlwaysProcess.fn, UnknownRuleId)(r)
   }
 
   /**
-   * Recursively transforms the expressions of a tree, skipping nodes that have already
-   * been analyzed.
+   * Recursively transforms the expressions of a tree, skipping nodes that have already been
+   * analyzed.
    *
-   * @param rule   the function used to transform this nodes children.
-   * @param cond   a Lambda expression to prune tree traversals. If `cond.apply` returns false
-   *               on a TreeNode T, skips processing T and its subtree; otherwise, processes
-   *               T and its subtree recursively.
-   * @param ruleId is a unique Id for `rule` to prune unnecessary tree traversals. When it is
-   *               UnknownRuleId, no pruning happens. Otherwise, if `rule` (with id `ruleId`)
-   *               has been marked as in effective on a TreeNode T, skips processing T and its
-   *               subtree. Do not pass it if the rule is not purely functional and reads a
-   *               varying initial state for different invocations.
+   * @param rule
+   *   the function used to transform this nodes children.
+   * @param cond
+   *   a Lambda expression to prune tree traversals. If `cond.apply` returns false on a TreeNode
+   *   T, skips processing T and its subtree; otherwise, processes T and its subtree recursively.
+   * @param ruleId
+   *   is a unique Id for `rule` to prune unnecessary tree traversals. When it is UnknownRuleId,
+   *   no pruning happens. Otherwise, if `rule` (with id `ruleId`) has been marked as in effective
+   *   on a TreeNode T, skips processing T and its subtree. Do not pass it if the rule is not
+   *   purely functional and reads a varying initial state for different invocations.
    */
-  def resolveExpressionsWithPruning(cond: TreePatternBits => Boolean,
-    ruleId: RuleId = UnknownRuleId)(rule: PartialFunction[Expression, Expression]): LogicalPlan = {
+  def resolveExpressionsWithPruning(
+      cond: TreePatternBits => Boolean,
+      ruleId: RuleId = UnknownRuleId)(
+      rule: PartialFunction[Expression, Expression]): LogicalPlan = {
     resolveExpressionsDownWithPruning(cond, ruleId)(rule)
   }
 
@@ -290,21 +297,23 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
    * Recursively top-down transforms the expressions of a tree, skipping nodes that have already
    * been analyzed.
    *
-   * @param rule   the function used to transform this nodes children.
-   * @param cond   a Lambda expression to prune tree traversals. If `cond.apply` returns false
-   *               on a TreeNode T, skips processing T and its subtree; otherwise, processes
-   *               T and its subtree recursively.
-   * @param ruleId is a unique Id for `rule` to prune unnecessary tree traversals. When it is
-   *               UnknownRuleId, no pruning happens. Otherwise, if `rule` (with id `ruleId`)
-   *               has been marked as in effective on a TreeNode T, skips processing T and its
-   *               subtree. Do not pass it if the rule is not purely functional and reads a
-   *               varying initial state for different invocations.
+   * @param rule
+   *   the function used to transform this nodes children.
+   * @param cond
+   *   a Lambda expression to prune tree traversals. If `cond.apply` returns false on a TreeNode
+   *   T, skips processing T and its subtree; otherwise, processes T and its subtree recursively.
+   * @param ruleId
+   *   is a unique Id for `rule` to prune unnecessary tree traversals. When it is UnknownRuleId,
+   *   no pruning happens. Otherwise, if `rule` (with id `ruleId`) has been marked as in effective
+   *   on a TreeNode T, skips processing T and its subtree. Do not pass it if the rule is not
+   *   purely functional and reads a varying initial state for different invocations.
    */
-  def resolveExpressionsDownWithPruning(cond: TreePatternBits => Boolean,
+  def resolveExpressionsDownWithPruning(
+      cond: TreePatternBits => Boolean,
       ruleId: RuleId = UnknownRuleId)(
       rule: PartialFunction[Expression, Expression]): LogicalPlan = {
-    resolveOperatorsWithPruning(cond, ruleId) {
-      case p => p.transformExpressionsWithPruning(cond, ruleId)(rule)
+    resolveOperatorsWithPruning(cond, ruleId) { case p =>
+      p.transformExpressionsWithPruning(cond, ruleId)(rule)
     }
   }
 
@@ -317,45 +326,49 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
   }
 
   /**
-   * Recursively transforms all expressions of all the logical nodes in plan tree
-   * in a bottom-up manner. It applies first to all of its children and then itself (post-order),
-   * skipping nodes that have already been analyzed.
+   * Recursively transforms all expressions of all the logical nodes in plan tree in a bottom-up
+   * manner. It applies first to all of its children and then itself (post-order), skipping nodes
+   * that have already been analyzed.
    *
-   * @param rule   the function used to transform this nodes children.
-   * @param cond   a Lambda expression to prune tree traversals. If `cond.apply` returns false
-   *               on a TreeNode T, skips processing T and its subtree; otherwise, processes
-   *               T and its subtree recursively.
-   * @param ruleId is a unique Id for `rule` to prune unnecessary tree traversals. When it is
-   *               UnknownRuleId, no pruning happens. Otherwise, if `rule` (with id `ruleId`)
-   *               has been marked as in effective on a TreeNode T, skips processing T and its
-   *               subtree. Do not pass it if the rule is not purely functional and reads a
-   *               varying initial state for different invocations.
+   * @param rule
+   *   the function used to transform this nodes children.
+   * @param cond
+   *   a Lambda expression to prune tree traversals. If `cond.apply` returns false on a TreeNode
+   *   T, skips processing T and its subtree; otherwise, processes T and its subtree recursively.
+   * @param ruleId
+   *   is a unique Id for `rule` to prune unnecessary tree traversals. When it is UnknownRuleId,
+   *   no pruning happens. Otherwise, if `rule` (with id `ruleId`) has been marked as in effective
+   *   on a TreeNode T, skips processing T and its subtree. Do not pass it if the rule is not
+   *   purely functional and reads a varying initial state for different invocations.
    */
-  def resolveExpressionsUpWithPruning(cond: TreePatternBits => Boolean,
+  def resolveExpressionsUpWithPruning(
+      cond: TreePatternBits => Boolean,
       ruleId: RuleId = UnknownRuleId)(
       rule: PartialFunction[Expression, Expression]): LogicalPlan = {
-    resolveOperatorsUpWithPruning(cond, ruleId) {
-      case p => p.transformExpressionsUpWithPruning(cond, ruleId)(rule)
+    resolveOperatorsUpWithPruning(cond, ruleId) { case p =>
+      p.transformExpressionsUpWithPruning(cond, ruleId)(rule)
     }
   }
 
   protected def assertNotAnalysisRule(): Unit = {
     if (Utils.isTesting &&
-        AnalysisHelper.inAnalyzer.get > 0 &&
-        AnalysisHelper.resolveOperatorDepth.get == 0) {
+      AnalysisHelper.inAnalyzer.get > 0 &&
+      AnalysisHelper.resolveOperatorDepth.get == 0) {
       throw QueryExecutionErrors.methodCalledInAnalyzerNotAllowedError()
     }
   }
 
   /**
-   * In analyzer, use [[resolveOperatorsDown()]] instead. If this is used in the analyzer,
-   * an exception will be thrown in test mode. It is however OK to call this function within
-   * the scope of a [[resolveOperatorsDown()]] call.
-   * @see [[org.apache.spark.sql.catalyst.trees.TreeNode.transformDownWithPruning()]].
+   * In analyzer, use [[resolveOperatorsDown()]] instead. If this is used in the analyzer, an
+   * exception will be thrown in test mode. It is however OK to call this function within the
+   * scope of a [[resolveOperatorsDown()]] call.
+   * @see
+   *   [[org.apache.spark.sql.catalyst.trees.TreeNode.transformDownWithPruning()]].
    */
-  override def transformDownWithPruning(cond: TreePatternBits => Boolean,
-    ruleId: RuleId = UnknownRuleId)(rule: PartialFunction[LogicalPlan, LogicalPlan])
-  : LogicalPlan = {
+  override def transformDownWithPruning(
+      cond: TreePatternBits => Boolean,
+      ruleId: RuleId = UnknownRuleId)(
+      rule: PartialFunction[LogicalPlan, LogicalPlan]): LogicalPlan = {
     assertNotAnalysisRule()
     super.transformDownWithPruning(cond, ruleId)(rule)
   }
@@ -363,23 +376,26 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
   /**
    * Use [[resolveOperators()]] in the analyzer.
    *
-   * @see [[org.apache.spark.sql.catalyst.trees.TreeNode.transformUpWithPruning()]]
+   * @see
+   *   [[org.apache.spark.sql.catalyst.trees.TreeNode.transformUpWithPruning()]]
    */
-  override def transformUpWithPruning(cond: TreePatternBits => Boolean,
-    ruleId: RuleId = UnknownRuleId)(rule: PartialFunction[LogicalPlan, LogicalPlan])
-  : LogicalPlan = {
+  override def transformUpWithPruning(
+      cond: TreePatternBits => Boolean,
+      ruleId: RuleId = UnknownRuleId)(
+      rule: PartialFunction[LogicalPlan, LogicalPlan]): LogicalPlan = {
     assertNotAnalysisRule()
     super.transformUpWithPruning(cond, ruleId)(rule)
   }
 
   /**
    * Use [[resolveExpressions()]] in the analyzer.
-   * @see [[QueryPlan.transformAllExpressionsWithPruning()]]
+   * @see
+   *   [[QueryPlan.transformAllExpressionsWithPruning()]]
    */
   override def transformAllExpressionsWithPruning(
-    cond: TreePatternBits => Boolean,
-    ruleId: RuleId = UnknownRuleId)(rule: PartialFunction[Expression, Expression])
-  : this.type = {
+      cond: TreePatternBits => Boolean,
+      ruleId: RuleId = UnknownRuleId)(
+      rule: PartialFunction[Expression, Expression]): this.type = {
     assertNotAnalysisRule()
     super.transformAllExpressionsWithPruning(cond, ruleId)(rule)
   }
@@ -391,13 +407,12 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
   }
 }
 
-
 object AnalysisHelper {
 
   /**
-   * A thread local to track whether we are in a resolveOperator call (for the purpose of analysis).
-   * This is an int because resolve* calls might be be nested (e.g. a rule might trigger another
-   * query compilation within the rule itself), so we are tracking the depth here.
+   * A thread local to track whether we are in a resolveOperator call (for the purpose of
+   * analysis). This is an int because resolve* calls might be be nested (e.g. a rule might
+   * trigger another query compilation within the rule itself), so we are tracking the depth here.
    */
   private val resolveOperatorDepth: ThreadLocal[Int] = new ThreadLocal[Int] {
     override def initialValue(): Int = 0
@@ -413,14 +428,16 @@ object AnalysisHelper {
 
   def allowInvokingTransformsInAnalyzer[T](f: => T): T = {
     resolveOperatorDepth.set(resolveOperatorDepth.get + 1)
-    try f finally {
+    try f
+    finally {
       resolveOperatorDepth.set(resolveOperatorDepth.get - 1)
     }
   }
 
   def markInAnalyzer[T](f: => T): T = {
     inAnalyzer.set(inAnalyzer.get + 1)
-    try f finally {
+    try f
+    finally {
       inAnalyzer.set(inAnalyzer.get - 1)
     }
   }

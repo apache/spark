@@ -22,7 +22,6 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.types.StructType
 
-
 class CatalogSuite extends AnalysisTest {
 
   test("desc table when owner is set to null") {

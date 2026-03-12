@@ -23,8 +23,8 @@ import org.apache.spark.sql.{QueryTest, Row}
 
 /**
  * This base suite contains unified tests for the `ALTER TABLE .. REPLACE COLUMNS` command that
- * check the V2 table catalog. The tests that cannot run for all supported catalogs are
- * located in more specific test suites:
+ * check the V2 table catalog. The tests that cannot run for all supported catalogs are located in
+ * more specific test suites:
  *
  *   - V2 table catalog tests:
  *     `org.apache.spark.sql.execution.command.v2.AlterTableReplaceColumnsSuite`
@@ -37,8 +37,7 @@ trait AlterTableReplaceColumnsSuiteBase extends QueryTest with DDLCommandTestUti
       sql(s"CREATE TABLE $t (ym INTERVAL MONTH, dt INTERVAL HOUR, data STRING) $defaultUsing")
       // TODO(SPARK-37303): Uncomment the command below after REPLACE COLUMNS is fixed
       // sql(s"INSERT INTO $t SELECT INTERVAL '1' MONTH, INTERVAL '2' HOUR, 'abc'")
-      sql(
-        s"""
+      sql(s"""
            |ALTER TABLE $t REPLACE COLUMNS (
            | new_ym INTERVAL YEAR,
            | new_dt INTERVAL MINUTE,
@@ -47,8 +46,7 @@ trait AlterTableReplaceColumnsSuiteBase extends QueryTest with DDLCommandTestUti
 
       checkAnswer(
         sql(s"SELECT new_ym, new_dt, new_data FROM $t"),
-        Seq(
-          Row(Period.ofYears(3), Duration.ofMinutes(4), 5)))
+        Seq(Row(Period.ofYears(3), Duration.ofMinutes(4), 5)))
     }
   }
 }

@@ -47,7 +47,8 @@ class PythonDataSourceV2 extends TableProvider {
       options: CaseInsensitiveStringMap,
       userSpecifiedSchema: Option[StructType]): PythonDataSourceCreationResult = {
     if (dataSourceInPython == null) {
-      dataSourceInPython = source.createDataSourceInPython(shortName, options, userSpecifiedSchema)
+      dataSourceInPython =
+        source.createDataSourceInPython(shortName, options, userSpecifiedSchema)
     }
     dataSourceInPython
   }
@@ -58,8 +59,7 @@ class PythonDataSourceV2 extends TableProvider {
       shortName: String,
       options: CaseInsensitiveStringMap,
       outputSchema: StructType,
-      isStreaming: Boolean
-  ): PythonDataSourceReadInfo = {
+      isStreaming: Boolean): PythonDataSourceReadInfo = {
     if (readInfo == null) {
       val creationResult = getOrCreateDataSourceInPython(shortName, options, Some(outputSchema))
       readInfo = source.createReadInfoInPython(creationResult, outputSchema, isStreaming)

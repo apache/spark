@@ -21,19 +21,20 @@ import org.apache.spark.sql.execution.streaming.checkpointing.{OffsetSeqLog, Off
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * Utility methods for offline state repartitioning.
- * They can be called by repartition runner or other streaming components.
+ * Utility methods for offline state repartitioning. They can be called by repartition runner or
+ * other streaming components.
  */
 object OfflineStateRepartitionUtils {
+
   /**
    * Determines if a given batch is a repartition batch.
    *
-   * @param batchId The ID of the batch to check
-   * @param offsetLog The offset log for the query
+   * @param batchId
+   *   The ID of the batch to check
+   * @param offsetLog
+   *   The offset log for the query
    */
-  def isRepartitionBatch(
-      batchId: Long,
-      offsetLog: OffsetSeqLog): Boolean = {
+  def isRepartitionBatch(batchId: Long, offsetLog: OffsetSeqLog): Boolean = {
     require(batchId >= 0, "Batch ID must be non-negative")
     batchId match {
       // first batch can never be a repartition batch since we require at least one committed batch
@@ -53,7 +54,8 @@ object OfflineStateRepartitionUtils {
         require(batch.metadataOpt.isDefined, s"Batch $batchId metadata not found")
         val shufflePartitions = getShufflePartitions(batch.metadataOpt.get).get
 
-        require(previousBatch.metadataOpt.isDefined,
+        require(
+          previousBatch.metadataOpt.isDefined,
           s"Previous batch $prevBatchId metadata not found")
         val previousShufflePartitions = getShufflePartitions(previousBatch.metadataOpt.get).get
 

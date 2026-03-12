@@ -36,7 +36,9 @@ import org.apache.spark.sql.sources.StreamSourceProvider
 import org.apache.spark.sql.types.{LongType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-/** The V1 and V2 provider of a streaming source, which blocks indefinitely on the call of stop() */
+/**
+ * The V1 and V2 provider of a streaming source, which blocks indefinitely on the call of stop()
+ */
 object BlockOnStopSourceProvider {
   private var _latch: CountDownLatch = _
   val schema: StructType = new StructType().add("id", LongType)

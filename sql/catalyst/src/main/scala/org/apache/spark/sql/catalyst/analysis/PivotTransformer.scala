@@ -18,28 +18,8 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.catalyst.expressions.{
-  Alias,
-  AliasHelper,
-  Attribute,
-  AttributeSet,
-  Cast,
-  EmptyRow,
-  EqualNullSafe,
-  Expression,
-  ExtractValue,
-  If,
-  Literal,
-  NamedExpression
-}
-import org.apache.spark.sql.catalyst.expressions.aggregate.{
-  AggregateExpression,
-  AggregateFunction,
-  ApproximatePercentile,
-  First,
-  Last,
-  PivotFirst
-}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AliasHelper, Attribute, AttributeSet, Cast, EmptyRow, EqualNullSafe, Expression, ExtractValue, If, Literal, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction, ApproximatePercentile, First, Last, PivotFirst}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -55,39 +35,36 @@ object PivotTransformer extends AliasHelper with SQLConfHelper {
    * Transform a pivot operation into an [[Aggregate]] or a combination of [[Aggregate]]s and
    * [[Project]] operators.
    *
-   *  1. Check all pivot values are literal and match pivot column data type.
-   *
-   *  2. Deduce group-by expressions. Group-by expressions coming from SQL are implicit and need to
-   *     be deduced by filtering out pivot column and aggregate references from child output.
-   *     In case of:
-   *     {{{
+   *   1. Check all pivot values are literal and match pivot column data type.
+   *   2. Deduce group-by expressions. Group-by expressions coming from SQL are implicit and need
+   *      to be deduced by filtering out pivot column and aggregate references from child output.
+   *      In case of:
+   *      {{{
    *       SELECT year, region, q1, q2, q3, q4
    *       FROM sales
    *       PIVOT (sum(sales) AS sales
    *         FOR quarter
    *         IN (1 AS q1, 2 AS q2, 3 AS q3, 4 AS q4));
-   *     }}}
-   *     where table `sales` has `year`, `quarter`, `region`, `sales` as columns.
-   *     In this example: pivot column would be `quarter`, aggregate would be `sales` and because
-   *     of that, `year` and `region` would be grouping expressions.
+   *      }}}
+   *      where table `sales` has `year`, `quarter`, `region`, `sales` as columns. In this
+   *      example: pivot column would be `quarter`, aggregate would be `sales` and because of
+   *      that, `year` and `region` would be grouping expressions.
+   *   3. Choose between two execution strategies based on aggregate data types:
    *
-   *  3. Choose between two execution strategies based on aggregate data types:
+   * a) If all aggregates support [[PivotFirst]] data types (fast path): Since evaluating
+   * `pivotValues` `IF` statements for each input row can get slow, use an alternate plan that
+   * instead uses two steps of aggregation:
+   *   - First aggregation: group by original grouping expressions + pivot column, compute
+   *     aggregates
+   *   - Second aggregation: group by original grouping expressions only, use [[PivotFirst]] to
+   *     extract values for each pivot value
+   *   - Final projection: extract individual pivot outputs using [[ExtractValue]]
    *
-   *     a) If all aggregates support [[PivotFirst]] data types (fast path):
-   *        Since evaluating `pivotValues` `IF` statements for each input row can get slow, use an
-   *        alternate plan that instead uses two steps of aggregation:
-   *        - First aggregation: group by original grouping expressions + pivot column, compute
-   *          aggregates
-   *        - Second aggregation: group by original grouping expressions only, use [[PivotFirst]]
-   *          to extract values for each pivot value
-   *        - Final projection: extract individual pivot outputs using [[ExtractValue]]
-   *
-   *     b) Otherwise (standard path):
-   *        Create a single [[Aggregate]] with filtered aggregates for each pivot value. For each
-   *        aggregate and pivot value combination:
-   *        - Wrap aggregate children with `If(pivotColumn == pivotValue, expr, null)` expressions.
-   *        - Handle special cases for [[First]], [[Last]], and [[ApproximatePercentile]] which
-   *          have specific semantics around null handling.
+   * b) Otherwise (standard path): Create a single [[Aggregate]] with filtered aggregates for each
+   * pivot value. For each aggregate and pivot value combination:
+   *   - Wrap aggregate children with `If(pivotColumn == pivotValue, expr, null)` expressions.
+   *   - Handle special cases for [[First]], [[Last]], and [[ApproximatePercentile]] which have
+   *     specific semantics around null handling.
    */
   def apply(
       child: LogicalPlan,
@@ -127,26 +104,21 @@ object PivotTransformer extends AliasHelper with SQLConfHelper {
         newAlias(
           PivotFirst(namedPivotCol.toAttribute, a.toAttribute, evalPivotValues)
             .toAggregateExpression(),
-          Some("__pivot_" + a.sql)
-        )
+          Some("__pivot_" + a.sql))
       }
       val groupByExpressionsAttributes = groupByExpressions.map(_.toAttribute)
       val secondAgg =
         Aggregate(
           groupByExpressionsAttributes,
           groupByExpressionsAttributes ++ pivotAggregates,
-          firstAgg
-        )
+          firstAgg)
       val pivotAggregatesAttributes = pivotAggregates.map(_.toAttribute)
-      val pivotOutputs = pivotValues.zipWithIndex.flatMap {
-        case (value, i) =>
-          aggregates.zip(pivotAggregatesAttributes).map {
-            case (aggregate, pivotAtt) =>
-              newAlias(
-                ExtractValue(pivotAtt, Literal(i), conf.resolver),
-                Some(outputName(value, aggregate, isSingleAggregate = aggregates.size == 1))
-              )
-          }
+      val pivotOutputs = pivotValues.zipWithIndex.flatMap { case (value, i) =>
+        aggregates.zip(pivotAggregatesAttributes).map { case (aggregate, pivotAtt) =>
+          newAlias(
+            ExtractValue(pivotAtt, Literal(i), conf.resolver),
+            Some(outputName(value, aggregate, isSingleAggregate = aggregates.size == 1)))
+        }
       }
       Project(groupByExpressionsAttributes ++ pivotOutputs, secondAgg)
     } else {
@@ -161,10 +133,9 @@ object PivotTransformer extends AliasHelper with SQLConfHelper {
               case approximatePercentile: ApproximatePercentile =>
                 approximatePercentile.withNewChildren(
                   createIfExpression(approximatePercentile.first, pivotColumn, value) ::
-                  approximatePercentile.second ::
-                  approximatePercentile.third ::
-                  Nil
-                )
+                    approximatePercentile.second ::
+                    approximatePercentile.third ::
+                    Nil)
               case aggregateFunction: AggregateFunction =>
                 aggregateFunction.withNewChildren(aggregateFunction.children.map { child =>
                   createIfExpression(child, pivotColumn, value)
@@ -177,8 +148,7 @@ object PivotTransformer extends AliasHelper with SQLConfHelper {
             }
           newAlias(
             filteredAggregate,
-            Some(outputName(value, aggregate, isSingleAggregate = aggregates.size == 1))
-          )
+            Some(outputName(value, aggregate, isSingleAggregate = aggregates.size == 1)))
         }
       }
       Aggregate(groupByExpressions, groupByExpressions ++ pivotAggregates, child)
@@ -214,10 +184,8 @@ object PivotTransformer extends AliasHelper with SQLConfHelper {
     If(
       EqualNullSafe(
         pivotColumn,
-        Cast(value, pivotColumn.dataType, Some(conf.sessionLocalTimeZone))
-      ),
+        Cast(value, pivotColumn.dataType, Some(conf.sessionLocalTimeZone))),
       expression,
-      Literal(null)
-    )
+      Literal(null))
   }
 }

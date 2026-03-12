@@ -29,10 +29,12 @@ import org.apache.spark.sql.execution.streaming.Sink
 import org.apache.spark.sql.streaming.DataStreamWriter
 
 class ForeachBatchSink[T](batchWriter: (Dataset[T], Long) => Unit, encoder: ExpressionEncoder[T])
-  extends Sink {
+    extends Sink {
 
   override def addBatch(batchId: Long, data: DataFrame): Unit = {
-    val node = LogicalRDD.fromDataset(rdd = data.queryExecution.toRdd, originDataset = data,
+    val node = LogicalRDD.fromDataset(
+      rdd = data.queryExecution.toRdd,
+      originDataset = data,
       isStreaming = false)
     implicit val enc = encoder
     val ds = ofRows(data.sparkSession, node).as[T]
@@ -66,25 +68,27 @@ class ForeachBatchSink[T](batchWriter: (Dataset[T], Long) => Unit, encoder: Expr
  * Exception that wraps the exception thrown in the user provided function in ForeachBatch sink.
  */
 private[sql] case class ForeachBatchUserFuncException(cause: Throwable)
-  extends SparkException(
-    errorClass = "FOREACH_BATCH_USER_FUNCTION_ERROR",
-    messageParameters = Map("reason" -> Option(cause.getMessage).getOrElse("")),
-    cause = cause)
+    extends SparkException(
+      errorClass = "FOREACH_BATCH_USER_FUNCTION_ERROR",
+      messageParameters = Map("reason" -> Option(cause.getMessage).getOrElse("")),
+      cause = cause)
 
 /**
- * Interface that is meant to be extended by Python classes via Py4J.
- * Py4J allows Python classes to implement Java interfaces so that the JVM can call back
- * Python objects. In this case, this allows the user-defined Python `foreachBatch` function
- * to be called from JVM when the query is active.
- * */
+ * Interface that is meant to be extended by Python classes via Py4J. Py4J allows Python classes
+ * to implement Java interfaces so that the JVM can call back Python objects. In this case, this
+ * allows the user-defined Python `foreachBatch` function to be called from JVM when the query is
+ * active.
+ */
 trait PythonForeachBatchFunction {
+
   /** Call the Python implementation of this function */
   def call(batchDF: DataFrame, batchId: Long): Unit
 }
 
 object PythonForeachBatchHelper {
-  def callForeachBatch(dsw: DataStreamWriter[Row], pythonFunc: PythonForeachBatchFunction): Unit = {
+  def callForeachBatch(
+      dsw: DataStreamWriter[Row],
+      pythonFunc: PythonForeachBatchFunction): Unit = {
     dsw.foreachBatch((df: DataFrame, id: Long) => pythonFunc.call(castToImpl(df), id))
   }
 }
-

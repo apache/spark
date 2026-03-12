@@ -24,21 +24,23 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.util.ArrayImplicits._
 
 /**
- * This is a base trait that is used for implementing builder classes that can be used to construct
- * expressions or logical plans depending on if it is a table-valued or scalar-valued function.
+ * This is a base trait that is used for implementing builder classes that can be used to
+ * construct expressions or logical plans depending on if it is a table-valued or scalar-valued
+ * function.
  *
  * Two classes of builders currently exist for this trait: [[GeneratorBuilder]] and
  * [[ExpressionBuilder]]. If a new class of functions are to be added, a new trait should also be
  * created which extends this trait.
  *
- * @tparam T The type that is expected to be returned by the [[FunctionBuilderBase.build]] function
+ * @tparam T
+ *   The type that is expected to be returned by the [[FunctionBuilderBase.build]] function
  */
 trait FunctionBuilderBase[T] {
+
   /**
-   * A method that returns the method signature for this function.
-   * Each function signature includes a list of parameters to which the analyzer can
-   * compare a function call with provided arguments to determine if that function
-   * call is a match for the function signature.
+   * A method that returns the method signature for this function. Each function signature
+   * includes a list of parameters to which the analyzer can compare a function call with provided
+   * arguments to determine if that function call is a match for the function signature.
    *
    * IMPORTANT: For now, each function expression builder should have only one function signature.
    * Also, for any function signature, required arguments must always come before optional ones.
@@ -46,33 +48,41 @@ trait FunctionBuilderBase[T] {
   def functionSignature: Option[FunctionSignature] = None
 
   /**
-   * This function rearranges the arguments provided during function invocation in positional order
-   * according to the function signature. This method will fill in the default values if optional
-   * parameters do not have their values specified. Any function which supports named arguments
-   * will have this routine invoked, even if no named arguments are present in the argument list.
-   * This is done to eliminate constructor overloads in some methods which use them for default
-   * values prior to the implementation of the named argument framework. This function will also
-   * check if the number of arguments are correct. If that is not the case, then an error will be
-   * thrown.
+   * This function rearranges the arguments provided during function invocation in positional
+   * order according to the function signature. This method will fill in the default values if
+   * optional parameters do not have their values specified. Any function which supports named
+   * arguments will have this routine invoked, even if no named arguments are present in the
+   * argument list. This is done to eliminate constructor overloads in some methods which use them
+   * for default values prior to the implementation of the named argument framework. This function
+   * will also check if the number of arguments are correct. If that is not the case, then an
+   * error will be thrown.
    *
    * IMPORTANT: This method will be called before the [[FunctionBuilderBase.build]] method is
    * invoked. It is guaranteed that the expressions provided to the [[FunctionBuilderBase.build]]
    * functions forms a valid set of argument expressions that can be used in the construction of
    * the function expression.
    *
-   * @param expectedSignature The method signature which we rearrange our arguments according to
-   * @param providedArguments The list of arguments passed from function invocation
-   * @param functionName The name of the function
-   * @param resolver The resolver used to match the arguments
-   * @return The rearranged argument list with arguments in positional order
+   * @param expectedSignature
+   *   The method signature which we rearrange our arguments according to
+   * @param providedArguments
+   *   The list of arguments passed from function invocation
+   * @param functionName
+   *   The name of the function
+   * @param resolver
+   *   The resolver used to match the arguments
+   * @return
+   *   The rearranged argument list with arguments in positional order
    */
   def rearrange(
       expectedSignature: FunctionSignature,
       providedArguments: Seq[Expression],
       functionName: String,
-      resolver: Resolver) : Seq[Expression] = {
+      resolver: Resolver): Seq[Expression] = {
     NamedParametersSupport.defaultRearrange(
-      expectedSignature, providedArguments, functionName, resolver)
+      expectedSignature,
+      providedArguments,
+      functionName,
+      resolver)
   }
 
   def build(funcName: String, expressions: Seq[Expression]): T
@@ -81,16 +91,20 @@ trait FunctionBuilderBase[T] {
 }
 
 object NamedParametersSupport {
+
   /**
-   * This method splits named arguments from the argument list.
-   * Also checks if:
-   * - the named arguments don't contains positional arguments once keyword arguments start
-   * - the named arguments don't use the duplicated names
+   * This method splits named arguments from the argument list. Also checks if:
+   *   - the named arguments don't contains positional arguments once keyword arguments start
+   *   - the named arguments don't use the duplicated names
    *
-   * @param args The argument list provided in function invocation
-   * @param functionName The name of the function
-   * @param resolver The resolver used to match the arguments
-   * @return A tuple of a list of positional arguments and a list of keyword arguments
+   * @param args
+   *   The argument list provided in function invocation
+   * @param functionName
+   *   The name of the function
+   * @param resolver
+   *   The resolver used to match the arguments
+   * @return
+   *   A tuple of a list of positional arguments and a list of keyword arguments
    */
   def splitAndCheckNamedArguments(
       args: Seq[Expression],
@@ -100,32 +114,39 @@ object NamedParametersSupport {
 
     val namedParametersSet = collection.mutable.Set[String]()
 
-    (positionalArgs,
+    (
+      positionalArgs,
       namedArgs.zipWithIndex.map {
         case (namedArg @ NamedArgumentExpression(parameterName, _), _) =>
           if (namedParametersSet.exists(resolver(_, parameterName))) {
-            throw QueryCompilationErrors.doubleNamedArgumentReference(
-              functionName, parameterName)
+            throw QueryCompilationErrors.doubleNamedArgumentReference(functionName, parameterName)
           }
           namedParametersSet.add(parameterName)
           namedArg
         case (_, index) =>
           throw QueryCompilationErrors.unexpectedPositionalArgument(
-            functionName, namedArgs(index - 1).asInstanceOf[NamedArgumentExpression].key)
+            functionName,
+            namedArgs(index - 1).asInstanceOf[NamedArgumentExpression].key)
       })
   }
 
   /**
-   * This method is the default routine which rearranges the arguments in positional order according
-   * to the function signature provided. This will also fill in any default values that exists for
-   * optional arguments. This method will also be invoked even if there are no named arguments in
-   * the argument list. This method will keep all positional arguments in their original order.
+   * This method is the default routine which rearranges the arguments in positional order
+   * according to the function signature provided. This will also fill in any default values that
+   * exists for optional arguments. This method will also be invoked even if there are no named
+   * arguments in the argument list. This method will keep all positional arguments in their
+   * original order.
    *
-   * @param functionSignature The function signature that defines the positional ordering
-   * @param args The argument list provided in function invocation
-   * @param functionName The name of the function
-   * @param resolver The resolver used to match the arguments
-   * @return A list of arguments rearranged in positional order defined by the provided signature
+   * @param functionSignature
+   *   The function signature that defines the positional ordering
+   * @param args
+   *   The argument list provided in function invocation
+   * @param functionName
+   *   The name of the function
+   * @param resolver
+   *   The resolver used to match the arguments
+   * @return
+   *   A list of arguments rearranged in positional order defined by the provided signature
    */
   final def defaultRearrange(
       functionSignature: FunctionSignature,
@@ -175,12 +196,15 @@ object NamedParametersSupport {
     namedArgs.foreach { namedArg =>
       val parameterName = namedArg.key
       if (!parameterNamesSet.exists(resolver(_, parameterName))) {
-        throw QueryCompilationErrors.unrecognizedParameterName(routineName, namedArg.key,
+        throw QueryCompilationErrors.unrecognizedParameterName(
+          routineName,
+          namedArg.key,
           parameterNamesSet.toSeq)
       }
       if (positionalParametersSet.exists(resolver(_, parameterName))) {
         throw QueryCompilationErrors.positionalAndNamedArgumentDoubleReference(
-          routineName, namedArg.key)
+          routineName,
+          namedArg.key)
       }
     }
 
@@ -189,7 +213,9 @@ object NamedParametersSupport {
       val validParameterSizes =
         Array.range(parameters.count(_.default.isEmpty), parameters.size + 1).toImmutableArraySeq
       throw QueryCompilationErrors.wrongNumArgsError(
-        routineName, validParameterSizes, args.length)
+        routineName,
+        validParameterSizes,
+        args.length)
     }
 
     // This constructs a map from argument name to value for argument rearrangement.
@@ -215,20 +241,22 @@ object NamedParametersSupport {
 }
 
 /**
- * Represents a parameter of a function expression. Function expressions should use this class
- * to construct the argument lists returned in [[Builder]]
+ * Represents a parameter of a function expression. Function expressions should use this class to
+ * construct the argument lists returned in [[Builder]]
  *
- * @param name     The name of the string.
- * @param default  The default value of the argument. If the default is none, then that means the
- *                 argument is required. If no argument is provided, an exception is thrown.
+ * @param name
+ *   The name of the string.
+ * @param default
+ *   The default value of the argument. If the default is none, then that means the argument is
+ *   required. If no argument is provided, an exception is thrown.
  */
 case class InputParameter(name: String, default: Option[Expression] = None)
 
 /**
- * Represents a method signature and the list of arguments it receives as input.
- * Currently, overloads are not supported and only one FunctionSignature is allowed
- * per function expression.
+ * Represents a method signature and the list of arguments it receives as input. Currently,
+ * overloads are not supported and only one FunctionSignature is allowed per function expression.
  *
- * @param parameters The list of arguments which the function takes
+ * @param parameters
+ *   The list of arguments which the function takes
  */
 case class FunctionSignature(parameters: Seq[InputParameter])

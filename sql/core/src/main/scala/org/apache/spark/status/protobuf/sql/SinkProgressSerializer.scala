@@ -38,7 +38,6 @@ private[protobuf] object SinkProgressSerializer {
     new SinkProgress(
       description = getStringField(sink.hasDescription, () => sink.getDescription),
       numOutputRows = sink.getNumOutputRows,
-      metrics = new JHashMap(sink.getMetricsMap)
-    )
+      metrics = new JHashMap(sink.getMetricsMap))
   }
 }

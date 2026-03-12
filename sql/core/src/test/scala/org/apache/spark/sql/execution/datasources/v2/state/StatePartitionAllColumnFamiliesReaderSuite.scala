@@ -35,8 +35,8 @@ import org.apache.spark.sql.streaming.util.{EventTimeTimerProcessor, MultiStateV
 import org.apache.spark.sql.types.{DataType, NullType, StructField, StructType}
 
 /**
- * Note: This extends StateDataSourceTestBase to access
- * helper methods like runDropDuplicatesQuery without inheriting all predefined tests.
+ * Note: This extends StateDataSourceTestBase to access helper methods like runDropDuplicatesQuery
+ * without inheriting all predefined tests.
  */
 class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase {
 
@@ -44,7 +44,8 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    spark.conf.set(SQLConf.STATE_STORE_PROVIDER_CLASS.key,
+    spark.conf.set(
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key,
       classOf[RocksDBStateStoreProvider].getName)
     spark.conf.set(SQLConf.SHUFFLE_PARTITIONS.key, "2")
   }
@@ -61,8 +62,8 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
   }
 
   private def getBytesReadDf(
-       checkpointDir: String,
-       storeName: Option[String] = Option.empty[String]): DataFrame = {
+      checkpointDir: String,
+      storeName: Option[String] = Option.empty[String]): DataFrame = {
     spark.read
       .format("statestore")
       .option(StateSourceOptions.PATH, checkpointDir)
@@ -77,8 +78,12 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
   private def validateBytesReadDfSchema(df: DataFrame): Unit = {
     // Verify schema
     val schema = df.schema
-    assert(schema.fieldNames === Array(
-      "partition_key", "key_bytes", "value_bytes", "column_family_name"))
+    assert(
+      schema.fieldNames === Array(
+        "partition_key",
+        "key_bytes",
+        "value_bytes",
+        "column_family_name"))
     assert(schema("partition_key").dataType.typeName === "struct")
     assert(schema("key_bytes").dataType.typeName === "binary")
     assert(schema("value_bytes").dataType.typeName === "binary")
@@ -86,16 +91,22 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
   }
 
   /**
-   * Compares normal read data with bytes read data for a specific column family.
-   * Converts normal rows to bytes then compares with bytes read.
+   * Compares normal read data with bytes read data for a specific column family. Converts normal
+   * rows to bytes then compares with bytes read.
    *
-   * @param normalDf Normal read data with columns (partition_id, key, value)
-   * @param bytesDf Bytes read data with columns (partition_key, key_bytes, value_bytes, cf_name)
-   * @param columnFamily The column family name to filter on
-   * @param keySchema Schema of the full key
-   * @param valueSchema Schema of the value
-   * @param partitionKeyExtractor Function to extract partition key from full key Row.
-   *                              If None, assumes partition key equals the full key.
+   * @param normalDf
+   *   Normal read data with columns (partition_id, key, value)
+   * @param bytesDf
+   *   Bytes read data with columns (partition_key, key_bytes, value_bytes, cf_name)
+   * @param columnFamily
+   *   The column family name to filter on
+   * @param keySchema
+   *   Schema of the full key
+   * @param valueSchema
+   *   Schema of the value
+   * @param partitionKeyExtractor
+   *   Function to extract partition key from full key Row. If None, assumes partition key equals
+   *   the full key.
    */
   private def compareNormalAndBytesData(
       normalDf: Array[Row],
@@ -110,7 +121,8 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
       row.getString(3) == columnFamily
     }
     // Verify same number of rows
-    assert(filteredBytesData.length == normalDf.length,
+    assert(
+      filteredBytesData.length == normalDf.length,
       s"Row count mismatch for column family '$columnFamily': " +
         s"normal read has ${normalDf.length} rows, " +
         s"bytes read has ${filteredBytesData.length} rows")
@@ -166,19 +178,25 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
     val normalSorted = normalData.sortBy(x => (x._1.mkString(","), x._2.mkString(",")))
     val bytesSorted = bytesData.sortBy(x => (x._1.mkString(","), x._2.mkString(",")))
 
-    assert(normalSorted.length == bytesSorted.length,
+    assert(
+      normalSorted.length == bytesSorted.length,
       s"Size mismatch: normal has ${normalSorted.length}, bytes has ${bytesSorted.length}")
 
     // Compare each tuple (partitionKeyStruct, keyBytes, valueBytes)
     normalSorted.zip(bytesSorted).zipWithIndex.foreach {
-      case (((normalKey, normalValue, normalPartitionKey),
-             (bytesKey, bytesValue, bytesPartitionKey)), idx) =>
+      case (
+            (
+              (normalKey, normalValue, normalPartitionKey),
+              (bytesKey, bytesValue, bytesPartitionKey)),
+            idx) =>
         assert(normalPartitionKey == bytesPartitionKey)
-        assert(Arrays.equals(normalKey, bytesKey),
+        assert(
+          Arrays.equals(normalKey, bytesKey),
           s"Key mismatch at index $idx:\n" +
             s"  Normal: ${normalKey.mkString("[", ",", "]")}\n" +
             s"  Bytes:  ${bytesKey.mkString("[", ",", "]")}")
-        assert(Arrays.equals(normalValue, bytesValue),
+        assert(
+          Arrays.equals(normalValue, bytesValue),
           s"Value mismatch at index $idx:\n" +
             s"  Normal: ${normalValue.mkString("[", ",", "]")}\n" +
             s"  Bytes:  ${bytesValue.mkString("[", ",", "]")}")
@@ -186,8 +204,8 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
   }
 
   /**
-   * Reads normal data for a state variable and validates it against bytes data.
-   * This helper reduces boilerplate when testing multiple state variables.
+   * Reads normal data for a state variable and validates it against bytes data. This helper
+   * reduces boilerplate when testing multiple state variables.
    */
   private def readAndValidateStateVar(
       checkpointDir: String,
@@ -218,12 +236,12 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
 
   /**
    * Validates timer column families for both event time and processing time timers.
-   * @param checkpointDir The checkpoint directory path
-   * @param timerPrefix The timer prefix: "event" for event time, "proc" for processing time
+   * @param checkpointDir
+   *   The checkpoint directory path
+   * @param timerPrefix
+   *   The timer prefix: "event" for event time, "proc" for processing time
    */
-  private def validateTimerColumnFamilies(
-      checkpointDir: String,
-      timerPrefix: String): Unit = {
+  private def validateTimerColumnFamilies(checkpointDir: String, timerPrefix: String): Unit = {
     val bytesDf = getBytesReadDf(checkpointDir)
 
     validateBytesReadDfSchema(bytesDf)
@@ -234,9 +252,12 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
     val columnFamilies = allBytesData.map(_.getString(3)).distinct.sorted
 
     // Verify countState column family exists
-    assert(columnFamilies.toSet ==
-      Set(s"$$${timerPrefix}Timers_keyToTimestamp",
-        s"$$${timerPrefix}Timers_timestampToKey", "countState"))
+    assert(
+      columnFamilies.toSet ==
+        Set(
+          s"$$${timerPrefix}Timers_keyToTimestamp",
+          s"$$${timerPrefix}Timers_timestampToKey",
+          "countState"))
 
     val (groupByKeySchema, stateValueSchema) = TimerTestUtils.getCountStateSchemas()
     val stateNormalDf = spark.read
@@ -286,14 +307,18 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
   }
 
   /**
-   * Validates a state store by reading both normal and bytes DataFrames separately.
-   * Used for V1/V2 multi-store architecture where each store must be read independently,
-   * or for single-store tests reading the default column family.
+   * Validates a state store by reading both normal and bytes DataFrames separately. Used for
+   * V1/V2 multi-store architecture where each store must be read independently, or for
+   * single-store tests reading the default column family.
    *
-   * @param tempDir The checkpoint directory
-   * @param keySchema The key schema for the state store
-   * @param valueSchema The value schema for the state store
-   * @param storeName Optional name of the state store to validate. If None, reads default store.
+   * @param tempDir
+   *   The checkpoint directory
+   * @param keySchema
+   *   The key schema for the state store
+   * @param valueSchema
+   *   The value schema for the state store
+   * @param storeName
+   *   Optional name of the state store to validate. If None, reads default store.
    */
   private def validateStateStore(
       tempDir: String,
@@ -315,15 +340,19 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
   }
 
   /**
-   * Validates a column family using a shared bytes DataFrame.
-   * Used for V3 multi-column-family architecture where all column families
-   * are read together in a single bytes DataFrame.
+   * Validates a column family using a shared bytes DataFrame. Used for V3 multi-column-family
+   * architecture where all column families are read together in a single bytes DataFrame.
    *
-   * @param tempDir The checkpoint directory
-   * @param colFamilyName The name of the column family to validate
-   * @param sharedBytesDf The shared bytes DataFrame containing all column families
-   * @param keySchema The key schema for the column family
-   * @param valueSchema The value schema for the column family
+   * @param tempDir
+   *   The checkpoint directory
+   * @param colFamilyName
+   *   The name of the column family to validate
+   * @param sharedBytesDf
+   *   The shared bytes DataFrame containing all column families
+   * @param keySchema
+   *   The key schema for the column family
+   * @param valueSchema
+   *   The value schema for the column family
    */
   private def validateColumnFamily(
       tempDir: String,
@@ -372,7 +401,7 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
             validateStateStore(tempDir.getAbsolutePath, keySchema, valueSchema)
           }
         }
-    })
+      })
 
     Seq(1, 2).foreach(version =>
       testWithChangelogConfig(s"SPARK-54388: composite key aggregation state ver $version") {
@@ -385,7 +414,7 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
             validateStateStore(tempDir.getAbsolutePath, keySchema, valueSchema)
           }
         }
-    })
+      })
 
     testWithChangelogConfig("SPARK-54388: dropDuplicates validation") {
       withTempDir { tempDir =>
@@ -401,7 +430,8 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
       withTempDir { tempDir =>
         runDropDuplicatesQueryWithColumnSpecified(tempDir.getAbsolutePath)
 
-        val (keySchema, valueSchema) = DropDuplicatesTestUtils.getDropDuplicatesWithColumnSchemas()
+        val (keySchema, valueSchema) =
+          DropDuplicatesTestUtils.getDropDuplicatesWithColumnSchemas()
 
         validateStateStore(tempDir.getAbsolutePath, keySchema, valueSchema)
       }
@@ -424,7 +454,10 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
 
         val (keySchema, valueSchema) = SessionWindowTestUtils.getSchemas()
 
-        validateStateStore(tempDir.getAbsolutePath, keySchema, valueSchema,
+        validateStateStore(
+          tempDir.getAbsolutePath,
+          keySchema,
+          valueSchema,
           partitionKeyExtractor = Some(row => Row(row.getString(0))))
       }
     }
@@ -440,17 +473,20 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
             val normalData = getNormalReadDf(tempDir.getAbsolutePath).collect()
             val bytesDf = getBytesReadDf(tempDir.getAbsolutePath)
 
-          validateBytesReadDfSchema(bytesDf)
-          compareNormalAndBytesData(
-            normalData, bytesDf.collect(), "default", keySchema, valueSchema)
+            validateBytesReadDfSchema(bytesDf)
+            compareNormalAndBytesData(
+              normalData,
+              bytesDf.collect(),
+              "default",
+              keySchema,
+              valueSchema)
+          }
         }
-      }
-    })
+      })
 
     Seq(1, 2).foreach(version =>
       testWithChangelogConfig(s"stream-stream join, state ver $version") {
-        withSQLConf(
-          SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key -> version.toString) {
+        withSQLConf(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key -> version.toString) {
           withTempDir { tempDir =>
             runStreamStreamJoinQuery(tempDir.getAbsolutePath)
 
@@ -474,21 +510,19 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
                 keyWithIndexKeySchema,
                 keyWithIndexValueSchema,
                 Some(storeName),
-                partitionKeyExtractor = Some(compositeKey =>
-                  Row(compositeKey.getInt(0))))
+                partitionKeyExtractor = Some(compositeKey => Row(compositeKey.getInt(0))))
             }
           }
         }
-    })
+      })
 
     testWithChangelogConfig("SPARK-54419: transformWithState with multiple column families") {
       withTempDir { tempDir =>
         val inputData = MemoryStream[String]
-        val result = inputData.toDS()
+        val result = inputData
+          .toDS()
           .groupByKey(x => x)
-          .transformWithState(new MultiStateVarProcessor(),
-            TimeMode.None(),
-            OutputMode.Update())
+          .transformWithState(new MultiStateVarProcessor(), TimeMode.None(), OutputMode.Update())
 
         testStream(result, OutputMode.Update())(
           StartStream(checkpointLocation = tempDir.getAbsolutePath),
@@ -496,8 +530,7 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
           ProcessAllAvailable(),
           AddData(inputData, "b", "c"),
           ProcessAllAvailable(),
-          StopStream
-        )
+          StopStream)
 
         // Read all column families using internalOnlyReadAllColumnFamilies
         val bytesDf = getBytesReadDf(tempDir.getAbsolutePath)
@@ -520,26 +553,38 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
 
         // Validate countState
         readAndValidateStateVar(
-          tempDir.getAbsolutePath, allBytesData,
-          MultiStateVarProcessorTestUtils.COUNT_STATE, keySchema, countStateValueSchema)
+          tempDir.getAbsolutePath,
+          allBytesData,
+          MultiStateVarProcessorTestUtils.COUNT_STATE,
+          keySchema,
+          countStateValueSchema)
 
         // Validate itemsList
         readAndValidateStateVar(
-          tempDir.getAbsolutePath, allBytesData,
-          MultiStateVarProcessorTestUtils.ITEMS_LIST, keySchema, itemsListValueSchema,
+          tempDir.getAbsolutePath,
+          allBytesData,
+          MultiStateVarProcessorTestUtils.ITEMS_LIST,
+          keySchema,
+          itemsListValueSchema,
           extraOptions = Map(StateSourceOptions.FLATTEN_COLLECTION_TYPES -> "true"),
           selectExprs = MultiStateVarProcessorTestUtils.getSelectExpressions(
             MultiStateVarProcessorTestUtils.ITEMS_LIST))
 
         // Validate $rowCounter_itemsList
         readAndValidateStateVar(
-          tempDir.getAbsolutePath, allBytesData,
-          MultiStateVarProcessorTestUtils.ROW_COUNTER, keySchema, rowCounterValueSchema)
+          tempDir.getAbsolutePath,
+          allBytesData,
+          MultiStateVarProcessorTestUtils.ROW_COUNTER,
+          keySchema,
+          rowCounterValueSchema)
 
         // Validate itemsMap
         readAndValidateStateVar(
-          tempDir.getAbsolutePath, allBytesData,
-          MultiStateVarProcessorTestUtils.ITEMS_MAP, mapKeySchema, mapValueSchema,
+          tempDir.getAbsolutePath,
+          allBytesData,
+          MultiStateVarProcessorTestUtils.ITEMS_MAP,
+          mapKeySchema,
+          mapValueSchema,
           selectExprs = MultiStateVarProcessorTestUtils.getSelectExpressions(
             MultiStateVarProcessorTestUtils.ITEMS_MAP),
           partitionKeyExtractor = Some(compositeKey => compositeKey.getStruct(0)))
@@ -549,7 +594,8 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
     testWithChangelogConfig("SPARK-54419: read all column families with event time timers") {
       withTempDir { tempDir =>
         val inputData = MemoryStream[(String, Long)]
-        val result = inputData.toDS()
+        val result = inputData
+          .toDS()
           .select(col("_1").as("key"), timestamp_seconds(col("_2")).as("eventTime"))
           .withWatermark("eventTime", "10 seconds")
           .as[(String, Timestamp)]
@@ -563,8 +609,7 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
           StartStream(checkpointLocation = tempDir.getAbsolutePath),
           AddData(inputData, ("a", 1L), ("b", 2L), ("c", 3L)),
           CheckLastBatch(("a", "1"), ("b", "1"), ("c", "1")),
-          StopStream
-        )
+          StopStream)
 
         validateTimerColumnFamilies(tempDir.getAbsolutePath, "event")
       }
@@ -574,21 +619,23 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
       withTempDir { tempDir =>
         val clock = new StreamManualClock
         val inputData = MemoryStream[String]
-        val result = inputData.toDS()
+        val result = inputData
+          .toDS()
           .groupByKey(x => x)
-          .transformWithState(new RunningCountStatefulProcessorWithProcTimeTimer(),
+          .transformWithState(
+            new RunningCountStatefulProcessorWithProcTimeTimer(),
             TimeMode.ProcessingTime(),
             OutputMode.Update())
 
         testStream(result, OutputMode.Update())(
-          StartStream(checkpointLocation = tempDir.getAbsolutePath,
+          StartStream(
+            checkpointLocation = tempDir.getAbsolutePath,
             trigger = Trigger.ProcessingTime("1 second"),
             triggerClock = clock),
           AddData(inputData, "a"),
           AdvanceManualClock(1 * 1000),
           CheckNewAnswer(("a", "1")),
-          StopStream
-        )
+          StopStream)
 
         validateTimerColumnFamilies(tempDir.getAbsolutePath, "proc")
       }
@@ -599,21 +646,23 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
         val clock = new StreamManualClock
         val inputData = MemoryStream[InputEvent]
         val ttlConfig = TTLConfig(ttlDuration = Duration.ofMinutes(1))
-        val result = inputData.toDS()
+        val result = inputData
+          .toDS()
           .groupByKey(x => x.key)
-          .transformWithState(new ListStateTTLProcessor(ttlConfig),
+          .transformWithState(
+            new ListStateTTLProcessor(ttlConfig),
             TimeMode.ProcessingTime(),
             OutputMode.Update())
 
         testStream(result, OutputMode.Update())(
-          StartStream(checkpointLocation = tempDir.getAbsolutePath,
+          StartStream(
+            checkpointLocation = tempDir.getAbsolutePath,
             trigger = Trigger.ProcessingTime("1 second"),
             triggerClock = clock),
           AddData(inputData, InputEvent("k1", "put", 1)),
           AdvanceManualClock(1 * 1000),
           CheckNewAnswer(),
-          StopStream
-        )
+          StopStream)
 
         val bytesDf = getBytesReadDf(tempDir.getAbsolutePath)
         validateBytesReadDfSchema(bytesDf)
@@ -647,15 +696,21 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
         val ttlColFamilyPartitionKeyExtractor: Option[Row => Row] =
           Some(compositeKey => compositeKey.getStruct(1))
         val columnFamilyAndKeyValueSchema = Seq(
-          (TTLProcessorUtils.LIST_STATE_TTL_INDEX,
-            ttlIndexKeySchema, ttlValueSchema,
+          (
+            TTLProcessorUtils.LIST_STATE_TTL_INDEX,
+            ttlIndexKeySchema,
+            ttlValueSchema,
             ttlColFamilyPartitionKeyExtractor),
           (TTLProcessorUtils.LIST_STATE_MIN, groupByKeySchema, minExpiryValueSchema, None),
-          (TTLProcessorUtils.LIST_STATE_COUNT, groupByKeySchema, countValueSchema, None)
-        )
+          (TTLProcessorUtils.LIST_STATE_COUNT, groupByKeySchema, countValueSchema, None))
         columnFamilyAndKeyValueSchema.foreach(pair => {
           validateColumnFamily(
-            tempDir.getAbsolutePath, pair._1, bytesDf, pair._2, pair._3, pair._4)
+            tempDir.getAbsolutePath,
+            pair._1,
+            bytesDf,
+            pair._2,
+            pair._3,
+            pair._4)
         })
       }
     }
@@ -665,21 +720,23 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
         val clock = new StreamManualClock
         val inputData = MemoryStream[MapInputEvent]
         val ttlConfig = TTLConfig(ttlDuration = Duration.ofMinutes(1))
-        val result = inputData.toDS()
+        val result = inputData
+          .toDS()
           .groupByKey(x => x.key)
-          .transformWithState(new MapStateTTLProcessor(ttlConfig),
+          .transformWithState(
+            new MapStateTTLProcessor(ttlConfig),
             TimeMode.ProcessingTime(),
             OutputMode.Update())
 
         testStream(result)(
-          StartStream(checkpointLocation = tempDir.getAbsolutePath,
+          StartStream(
+            checkpointLocation = tempDir.getAbsolutePath,
             trigger = Trigger.ProcessingTime("1 second"),
             triggerClock = clock),
           AddData(inputData, MapInputEvent("a", "key1", "put", 1)),
           AdvanceManualClock(1 * 1000),
           CheckNewAnswer(),
-          StopStream
-        )
+          StopStream)
 
         val bytesDf = getBytesReadDf(tempDir.getAbsolutePath)
         validateBytesReadDfSchema(bytesDf)
@@ -696,15 +753,21 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
         val (ttlIndexKeySchema, dummyValueSchema) = schemas(TTLProcessorUtils.MAP_STATE_TTL_INDEX)
 
         readAndValidateStateVar(
-          tempDir.getAbsolutePath, allBytesData,
-          stateVarName = TTLProcessorUtils.MAP_STATE, compositeKeySchema, mapStateValueSchema,
+          tempDir.getAbsolutePath,
+          allBytesData,
+          stateVarName = TTLProcessorUtils.MAP_STATE,
+          compositeKeySchema,
+          mapStateValueSchema,
           selectExprs = TTLProcessorUtils.getTTLSelectExpressions(TTLProcessorUtils.MAP_STATE),
           partitionKeyExtractor = Some(compositeKey => compositeKey.getStruct(0)))
 
         // Validate $ttl_mapState column family
         readAndValidateStateVar(
-          tempDir.getAbsolutePath, allBytesData,
-          stateVarName = TTLProcessorUtils.MAP_STATE_TTL_INDEX, ttlIndexKeySchema, dummyValueSchema,
+          tempDir.getAbsolutePath,
+          allBytesData,
+          stateVarName = TTLProcessorUtils.MAP_STATE_TTL_INDEX,
+          ttlIndexKeySchema,
+          dummyValueSchema,
           partitionKeyExtractor = Some(ttlKey => ttlKey.getStruct(1).getStruct(0)))
       }
     }
@@ -714,22 +777,24 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
         val clock = new StreamManualClock
         val inputData = MemoryStream[InputEvent]
         val ttlConfig = TTLConfig(ttlDuration = Duration.ofMinutes(1))
-        val result = inputData.toDS()
+        val result = inputData
+          .toDS()
           .groupByKey(x => x.key)
-          .transformWithState(new ValueStateTTLProcessor(ttlConfig),
+          .transformWithState(
+            new ValueStateTTLProcessor(ttlConfig),
             TimeMode.ProcessingTime(),
             OutputMode.Update())
 
         testStream(result)(
-          StartStream(checkpointLocation = tempDir.getAbsolutePath,
+          StartStream(
+            checkpointLocation = tempDir.getAbsolutePath,
             trigger = Trigger.ProcessingTime("1 second"),
             triggerClock = clock),
           AddData(inputData, InputEvent("k1", "put", 1)),
           AddData(inputData, InputEvent("k2", "put", 2)),
           AdvanceManualClock(1 * 1000),
           CheckNewAnswer(),
-          StopStream
-        )
+          StopStream)
 
         val bytesDf = getBytesReadDf(tempDir.getAbsolutePath)
         validateBytesReadDfSchema(bytesDf)
@@ -743,10 +808,11 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
         // Define schemas for value state with TTL column families
         val schemas = TTLProcessorUtils.getValueStateTTLSchemas()
         val (groupByKeySchema, valueStateValueSchema) = schemas(TTLProcessorUtils.VALUE_STATE)
-        val (ttlIndexKeySchema, dummyValueSchema) = schemas(TTLProcessorUtils.VALUE_STATE_TTL_INDEX)
+        val (ttlIndexKeySchema, dummyValueSchema) =
+          schemas(TTLProcessorUtils.VALUE_STATE_TTL_INDEX)
 
-        val valueStateNormalDf = getNormalReadDf(tempDir.getAbsolutePath,
-          Option(TTLProcessorUtils.VALUE_STATE))
+        val valueStateNormalDf =
+          getNormalReadDf(tempDir.getAbsolutePath, Option(TTLProcessorUtils.VALUE_STATE))
 
         compareNormalAndBytesData(
           valueStateNormalDf.collect(),
@@ -757,7 +823,8 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
 
         // Validate $ttl_valueState column family
         val ttlValueStateNormalDf = getNormalReadDf(
-          tempDir.getAbsolutePath, Option(TTLProcessorUtils.VALUE_STATE_TTL_INDEX))
+          tempDir.getAbsolutePath,
+          Option(TTLProcessorUtils.VALUE_STATE_TTL_INDEX))
         compareNormalAndBytesData(
           ttlValueStateNormalDf.collect(),
           allBytesData,
@@ -769,9 +836,7 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
     }
 
     testWithChangelogConfig("SPARK-54419: stream-stream joinV3") {
-      withSQLConf(
-        SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key -> "3"
-      ) {
+      withSQLConf(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key -> "3") {
         withTempDir { tempDir =>
           runStreamStreamJoinQuery(tempDir.getAbsolutePath)
           val stateBytesDf = getBytesReadDf(tempDir.getAbsolutePath)
@@ -799,8 +864,7 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
               stateBytesDf,
               keyWithIndexKeySchema,
               keyWithIndexValueSchema,
-              partitionKeyExtractor = Some(compositeKey =>
-                Row(compositeKey.getInt(0))))
+              partitionKeyExtractor = Some(compositeKey => Row(compositeKey.getInt(0))))
           }
         }
       }
@@ -814,21 +878,18 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
         SQLConf.SHUFFLE_PARTITIONS.key -> "2") {
 
         val inputData = MemoryStream[Int]
-        val aggregated = inputData.toDF()
+        val aggregated = inputData
+          .toDF()
           .selectExpr("value", "value % 10 AS groupKey")
           .groupBy($"groupKey")
-          .agg(
-            count("*").as("cnt"),
-            sum("value").as("sum")
-          )
+          .agg(count("*").as("cnt"), sum("value").as("sum"))
           .as[(Int, Long, Long)]
 
         testStream(aggregated, OutputMode.Update)(
           StartStream(checkpointLocation = tempDir.getAbsolutePath),
           AddData(inputData, 0 until 1: _*),
           CheckLastBatch((0, 1, 0)),
-          StopStream
-        )
+          StopStream)
 
         checkError(
           exception = intercept[StateRepartitionUnsupportedProviderError] {
@@ -837,10 +898,8 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
           condition = "STATE_REPARTITION_INVALID_CHECKPOINT.UNSUPPORTED_PROVIDER",
           parameters = Map(
             "checkpointLocation" -> s".*${tempDir.getAbsolutePath}",
-            "provider" -> classOf[HDFSBackedStateStoreProvider].getName
-          ),
-          matchPVals = true
-        )
+            "provider" -> classOf[HDFSBackedStateStoreProvider].getName),
+          matchPVals = true)
       }
     }
   }

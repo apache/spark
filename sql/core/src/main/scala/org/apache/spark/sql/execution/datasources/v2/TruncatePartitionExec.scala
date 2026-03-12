@@ -29,7 +29,8 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 case class TruncatePartitionExec(
     table: SupportsPartitionManagement,
     partSpec: ResolvedPartitionSpec,
-    refreshCache: () => Unit) extends LeafV2CommandExec {
+    refreshCache: () => Unit)
+    extends LeafV2CommandExec {
 
   override def output: Seq[Attribute] = Seq.empty
 
@@ -37,8 +38,8 @@ case class TruncatePartitionExec(
     val isTableAltered = if (table.partitionSchema.length != partSpec.names.length) {
       table match {
         case atomicPartTable: SupportsAtomicPartitionManagement =>
-          val partitionIdentifiers = atomicPartTable.listPartitionIdentifiers(
-            partSpec.names.toArray, partSpec.ident)
+          val partitionIdentifiers =
+            atomicPartTable.listPartitionIdentifiers(partSpec.names.toArray, partSpec.ident)
           atomicPartTable.truncatePartitions(partitionIdentifiers)
         case _ =>
           throw QueryExecutionErrors.truncateMultiPartitionUnsupportedError(table.name())

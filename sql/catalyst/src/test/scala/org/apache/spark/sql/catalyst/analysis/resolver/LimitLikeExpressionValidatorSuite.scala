@@ -31,8 +31,7 @@ class LimitLikeExpressionValidatorSuite extends SparkFunSuite with QueryErrorsBa
     (LocalLimit(_, null), "localLimit", "limit"),
     (GlobalLimit(_, null), "globalLimit", "limit"),
     (Offset(_, null), "offset", "offset"),
-    (Tail(_, null), "tail", "tail")
-  )
+    (Tail(_, null), "tail", "tail"))
 
   for ((planBuilder, name, simpleName) <- testCases) {
     test(s"Basic $name without errors") {
@@ -49,8 +48,7 @@ class LimitLikeExpressionValidatorSuite extends SparkFunSuite with QueryErrorsBa
           limitLikeExpressionValidator.validateLimitLikeExpr(col, plan)
         },
         condition = "INVALID_LIMIT_LIKE_EXPRESSION.IS_UNFOLDABLE",
-        parameters = Map("name" -> simpleName, "expr" -> toSQLExpr(col))
-      )
+        parameters = Map("name" -> simpleName, "expr" -> toSQLExpr(col)))
     }
 
     test(s"$name with non-integer") {
@@ -64,9 +62,7 @@ class LimitLikeExpressionValidatorSuite extends SparkFunSuite with QueryErrorsBa
         parameters = Map(
           "name" -> simpleName,
           "expr" -> toSQLExpr(anyNonInteger),
-          "dataType" -> toSQLType(anyNonInteger.dataType)
-        )
-      )
+          "dataType" -> toSQLType(anyNonInteger.dataType)))
     }
 
     test(s"$name with null") {
@@ -77,8 +73,7 @@ class LimitLikeExpressionValidatorSuite extends SparkFunSuite with QueryErrorsBa
           limitLikeExpressionValidator.validateLimitLikeExpr(expr, plan)
         },
         condition = "INVALID_LIMIT_LIKE_EXPRESSION.IS_NULL",
-        parameters = Map("name" -> simpleName, "expr" -> toSQLExpr(expr))
-      )
+        parameters = Map("name" -> simpleName, "expr" -> toSQLExpr(expr)))
     }
 
     test(s"$name with negative integer") {
@@ -89,9 +84,10 @@ class LimitLikeExpressionValidatorSuite extends SparkFunSuite with QueryErrorsBa
           limitLikeExpressionValidator.validateLimitLikeExpr(expr, plan)
         },
         condition = "INVALID_LIMIT_LIKE_EXPRESSION.IS_NEGATIVE",
-        parameters =
-          Map("name" -> simpleName, "expr" -> toSQLExpr(expr), "v" -> toSQLValue(-1, IntegerType))
-      )
+        parameters = Map(
+          "name" -> simpleName,
+          "expr" -> toSQLExpr(expr),
+          "v" -> toSQLValue(-1, IntegerType)))
     }
   }
 
@@ -103,7 +99,6 @@ class LimitLikeExpressionValidatorSuite extends SparkFunSuite with QueryErrorsBa
         limitLikeExpressionValidator.validateLimitLikeExpr(expr, plan)
       },
       condition = "SUM_OF_LIMIT_AND_OFFSET_EXCEEDS_MAX_INT",
-      parameters = Map("limit" -> Int.MaxValue.toString, "offset" -> Int.MaxValue.toString)
-    )
+      parameters = Map("limit" -> Int.MaxValue.toString, "offset" -> Int.MaxValue.toString))
   }
 }

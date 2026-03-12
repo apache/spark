@@ -28,12 +28,14 @@ import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, Extr
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
- * A rule that rewrites DELETE operations using plans that operate on individual or groups of rows.
+ * A rule that rewrites DELETE operations using plans that operate on individual or groups of
+ * rows.
  *
  * If a table implements [[SupportsDeleteV2]] and [[SupportsRowLevelOperations]], this rule will
  * still rewrite the DELETE operation but the optimizer will check whether this particular DELETE
- * statement can be handled by simply passing delete filters to the connector. If so, the optimizer
- * will discard the rewritten plan and will allow the data source to delete using filters.
+ * statement can be handled by simply passing delete filters to the connector. If so, the
+ * optimizer will discard the rewritten plan and will allow the data source to delete using
+ * filters.
  */
 object RewriteDeleteFromTable extends RewriteRowLevelCommand {
 

@@ -30,8 +30,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DataType, GeographyType, GeometryType, IntegerType, StringType}
 
 /**
- * Read tests for vectorized Delta length byte array  reader.
- * Translated from
+ * Read tests for vectorized Delta length byte array reader. Translated from
  * org.apache.parquet.column.values.delta.TestDeltaLengthByteArray
  */
 class ParquetDeltaLengthByteArrayEncodingSuite
@@ -111,19 +110,22 @@ class ParquetDeltaLengthByteArrayEncodingSuite
 
   testGeo("geo types with multiple geometries") { geoType =>
     // Different WKB sizes exercise variable-length encoding.
-    assertGeoReadWrite(writer, reader, Array(
-      makePointWkb(0, 0),
-      makeLineStringWkb((1, 1), (2, 1)),
-      makePointWkb(3, 4)),
+    assertGeoReadWrite(
+      writer,
+      reader,
+      Array(makePointWkb(0, 0), makeLineStringWkb((1, 1), (2, 1)), makePointWkb(3, 4)),
       geoType)
   }
 
   testGeo("geo types with mixed length polygons") { geoType =>
     // Polygons with increasing vertex count.
-    assertGeoReadWrite(writer, reader, Array(
-      makePolygonWkb((1, 2), (3, 4), (5, 6), (1, 2)),
-      makePolygonWkb((1, 2), (3, 4), (5, 6), (7, 8), (9, 10), (1, 2)),
-      makePolygonWkb((1, 2), (3, 4), (5, 6), (7, 8), (9, 10), (11, 12), (13, 14), (1, 2))),
+    assertGeoReadWrite(
+      writer,
+      reader,
+      Array(
+        makePolygonWkb((1, 2), (3, 4), (5, 6), (1, 2)),
+        makePolygonWkb((1, 2), (3, 4), (5, 6), (7, 8), (9, 10), (1, 2)),
+        makePolygonWkb((1, 2), (3, 4), (5, 6), (7, 8), (9, 10), (11, 12), (13, 14), (1, 2))),
       geoType)
   }
 

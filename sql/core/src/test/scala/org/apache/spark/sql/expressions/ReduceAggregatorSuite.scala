@@ -30,8 +30,8 @@ class ReduceAggregatorSuite extends SparkFunSuite {
   }
 
   test("zero value boxed null") {
-    val func = (v1: java.lang.Integer, v2: java.lang.Integer) =>
-      (v1 + v2).asInstanceOf[java.lang.Integer]
+    val func =
+      (v1: java.lang.Integer, v2: java.lang.Integer) => (v1 + v2).asInstanceOf[java.lang.Integer]
     val aggregator: ReduceAggregator[java.lang.Integer] = new ReduceAggregator(func)(Encoders.INT)
     assert(aggregator.zero == (false, null).asInstanceOf[(Boolean, java.lang.Integer)])
   }
@@ -59,7 +59,7 @@ class ReduceAggregatorSuite extends SparkFunSuite {
     val mergeTwoReduced = aggregator.merge(firstReduce, secondReduce)
     assert(mergeTwoReduced == ((true, 4)))
 
-    assert(aggregator.finish(firstReduce)== 1)
+    assert(aggregator.finish(firstReduce) == 1)
     assert(aggregator.finish(secondReduce) == 3)
     assert(aggregator.finish(thirdReduce) == 6)
     assert(aggregator.finish(mergeWithZero1) == 1)

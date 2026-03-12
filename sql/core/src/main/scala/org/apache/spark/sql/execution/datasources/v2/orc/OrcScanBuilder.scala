@@ -37,8 +37,8 @@ case class OrcScanBuilder(
     schema: StructType,
     dataSchema: StructType,
     options: CaseInsensitiveStringMap)
-  extends FileScanBuilder(sparkSession, fileIndex, dataSchema)
-  with SupportsPushDownAggregates {
+    extends FileScanBuilder(sparkSession, fileIndex, dataSchema)
+    with SupportsPushDownAggregates {
 
   lazy val hadoopConf = {
     val caseSensitiveMap = options.asCaseSensitiveMap.asScala.toMap
@@ -59,15 +59,24 @@ case class OrcScanBuilder(
     if (pushedAggregations.isEmpty) {
       finalSchema = readDataSchema()
     }
-    OrcScan(sparkSession, hadoopConf, fileIndex, dataSchema, finalSchema,
-      readPartitionSchema(), options, pushedAggregations, pushedDataFilters, partitionFilters,
+    OrcScan(
+      sparkSession,
+      hadoopConf,
+      fileIndex,
+      dataSchema,
+      finalSchema,
+      readPartitionSchema(),
+      options,
+      pushedAggregations,
+      pushedDataFilters,
+      partitionFilters,
       dataFilters)
   }
 
   override def pushDataFilters(dataFilters: Array[Filter]): Array[Filter] = {
     if (sparkSession.sessionState.conf.orcFilterPushDown) {
-      val dataTypeMap = OrcFilters.getSearchableTypeMap(
-        readDataSchema(), SQLConf.get.caseSensitiveAnalysis)
+      val dataTypeMap =
+        OrcFilters.getSearchableTypeMap(readDataSchema(), SQLConf.get.caseSensitiveAnalysis)
       OrcFilters.convertibleFilters(dataTypeMap, dataFilters.toImmutableArraySeq).toArray
     } else {
       Array.empty[Filter]

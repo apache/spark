@@ -32,9 +32,9 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DataType, DataTypes, StructField, StructType}
 
 trait JDBCV2JoinPushdownIntegrationSuiteBase
-  extends QueryTest
-  with SharedSparkSession
-  with DataSourcePushdownTestUtils {
+    extends QueryTest
+    with SharedSparkSession
+    with DataSourcePushdownTestUtils {
   val catalogName: String = "join_pushdown_catalog"
   val namespace: String = "join_schema"
   val url: String
@@ -102,13 +102,9 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
   protected val decimalType = DataTypes.createDecimalType(10, 2)
 
   /**
-   * This method should cover the following:
-   * <ul>
-   *   <li>Create the schema where testing tables will be stored.
-   *   <li>Create the testing tables {@code joinTableName1} and {@code joinTableName2}
-   *   in above schema.
-   *   <li>Populate the tables with the data.
-   * </ul>
+   * This method should cover the following: <ul> <li>Create the schema where testing tables will
+   * be stored. <li>Create the testing tables {@code joinTableName1} and {@code joinTableName2} in
+   * above schema. <li>Populate the tables with the data. </ul>
    */
   def dataPreparation(): Unit = {
     schemaPreparation()
@@ -117,7 +113,7 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
   }
 
   def schemaPreparation(): Unit = {
-    withConnection {conn =>
+    withConnection { conn =>
       conn
         .prepareStatement(s"CREATE SCHEMA ${quoteSchemaName(namespace)}")
         .executeUpdate()
@@ -125,43 +121,43 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
   }
 
   def tablePreparation(): Unit = {
-    withConnection{ conn =>
-      conn.prepareStatement(
-        s"""CREATE TABLE $fullyQualifiedTableName1 (
+    withConnection { conn =>
+      conn
+        .prepareStatement(s"""CREATE TABLE $fullyQualifiedTableName1 (
            |  ID ${getJDBCTypeString(integerType)},
            |  AMOUNT ${getJDBCTypeString(decimalType)},
            |  ADDRESS ${getJDBCTypeString(stringType)}
-           |)""".stripMargin
-      ).executeUpdate()
+           |)""".stripMargin)
+        .executeUpdate()
 
-      conn.prepareStatement(
-        s"""CREATE TABLE $fullyQualifiedTableName2 (
+      conn
+        .prepareStatement(s"""CREATE TABLE $fullyQualifiedTableName2 (
            |  ID ${getJDBCTypeString(integerType)},
            |  NEXT_ID ${getJDBCTypeString(integerType)},
            |  SALARY ${getJDBCTypeString(decimalType)},
            |  SURNAME ${getJDBCTypeString(stringType)}
-           |)""".stripMargin
-      ).executeUpdate()
+           |)""".stripMargin)
+        .executeUpdate()
 
       // Complex situations with different capitalization and quotation marks.
-      conn.prepareStatement(
-        s"""CREATE TABLE $fullyQualifiedTableName3(
+      conn
+        .prepareStatement(s"""CREATE TABLE $fullyQualifiedTableName3(
            |${remainColumnCase("id")} ${getJDBCTypeString(integerType)},
            |${remainColumnCase("id_1")} ${getJDBCTypeString(integerType)},
            |${remainColumnCase("id_2")} ${getJDBCTypeString(integerType)},
            |${remainColumnCase("id_1_1")} ${getJDBCTypeString(integerType)},
            |${remainColumnCase("sid")} ${getJDBCTypeString(integerType)}
-           |)""".stripMargin
-      ).executeUpdate()
-      conn.prepareStatement(
-        s"""CREATE TABLE $fullyQualifiedTableName4 (
+           |)""".stripMargin)
+        .executeUpdate()
+      conn
+        .prepareStatement(s"""CREATE TABLE $fullyQualifiedTableName4 (
            |${remainColumnCase("id")} ${getJDBCTypeString(integerType)},
            |${remainColumnCase("id_1")} ${getJDBCTypeString(integerType)},
            |${remainColumnCase("id_2")} ${getJDBCTypeString(integerType)},
            |${remainColumnCase("id_2_1")} ${getJDBCTypeString(integerType)},
            |${remainColumnCase("Sid")} ${getJDBCTypeString(integerType)}
-           |)""".stripMargin
-      ).executeUpdate()
+           |)""".stripMargin)
+        .executeUpdate()
     }
   }
 
@@ -169,7 +165,8 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
 
   private val table1Data = (1 to 100).map { i =>
     val id = i % 11
-    val amount = BigDecimal.valueOf(random.nextDouble() * 10000)
+    val amount = BigDecimal
+      .valueOf(random.nextDouble() * 10000)
       .setScale(2, BigDecimal.RoundingMode.HALF_UP)
     val address = s"address_$i"
     (id, amount, address)
@@ -178,7 +175,8 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
   private val table2Data = (1 to 100).map { i =>
     val id = (i % 17)
     val next_id = (id + 1) % 17
-    val salary = BigDecimal.valueOf(random.nextDouble() * 50000)
+    val salary = BigDecimal
+      .valueOf(random.nextDouble() * 50000)
       .setScale(2, BigDecimal.RoundingMode.HALF_UP)
     val surname = s"surname_$i"
     (id, next_id, salary, surname)
@@ -187,8 +185,7 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
   def fillJoinTables(): Unit = {
     withConnection { conn =>
       val insertStmt1 = conn.prepareStatement(
-        s"INSERT INTO $fullyQualifiedTableName1 (id, amount, address) VALUES (?, ?, ?)"
-      )
+        s"INSERT INTO $fullyQualifiedTableName1 (id, amount, address) VALUES (?, ?, ?)")
       table1Data.foreach { case (id, amount, address) =>
         insertStmt1.setInt(1, id)
         insertStmt1.setBigDecimal(2, amount.bigDecimal)
@@ -199,8 +196,7 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
       insertStmt1.close()
 
       val insertStmt2 = conn.prepareStatement(
-        s"INSERT INTO $fullyQualifiedTableName2 (id, next_id, salary, surname) VALUES (?, ?, ?, ?)"
-      )
+        s"INSERT INTO $fullyQualifiedTableName2 (id, next_id, salary, surname) VALUES (?, ?, ?, ?)")
       table2Data.foreach { case (id, next_id, salary, surname) =>
         insertStmt2.setInt(1, id)
         insertStmt2.setInt(2, next_id)
@@ -211,10 +207,12 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
       insertStmt2.executeBatch()
       insertStmt2.close()
 
-      conn.createStatement().execute(
-        s"""INSERT INTO $fullyQualifiedTableName3 VALUES (0, 1, 2, 3, 4)""")
-      conn.createStatement().execute(
-        s"""INSERT INTO $fullyQualifiedTableName4 VALUES (0, -1, -2, -3, -4)""")
+      conn
+        .createStatement()
+        .execute(s"""INSERT INTO $fullyQualifiedTableName3 VALUES (0, 1, 2, 3, 4)""")
+      conn
+        .createStatement()
+        .execute(s"""INSERT INTO $fullyQualifiedTableName4 VALUES (0, -1, -2, -3, -4)""")
     }
   }
 
@@ -290,13 +288,12 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
       // scalastyle:off line.size.limit
       checkJoinPushed(
         df,
-        s"""PushedFilters: [${caseConvert("id")} = (${caseConvert("id_1")} + 1)], PushedJoins:\u0020
+        s"""PushedFilters: [${caseConvert("id")} = (${caseConvert(
+            "id_1")} + 1)], PushedJoins:\u0020
            |[L]: Relation: $catalogAndNamespace.${caseConvert(joinTableName1)}
            |     PushedFilters: [${caseConvert("id")} IS NOT NULL]
            |[R]: Relation: $catalogAndNamespace.${caseConvert(joinTableName1)}
-           |     PushedFilters: [${caseConvert("id")} IS NOT NULL]"""
-          .stripMargin
-      )
+           |     PushedFilters: [${caseConvert("id")} IS NOT NULL]""".stripMargin)
       // scalastyle:on line.size.limit
       checkAnswer(df, rows)
     }
@@ -321,7 +318,8 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
       // scalastyle:off line.size.limit
       checkJoinPushed(
         df,
-        s"""PushedFilters: [${caseConvert("id_2")} = (${caseConvert("id_1")} - 1)], PushedJoins:\u0020
+        s"""PushedFilters: [${caseConvert("id_2")} = (${caseConvert(
+            "id_1")} - 1)], PushedJoins:\u0020
            |[L]: PushedFilters: [${caseConvert("id_1")} = (${caseConvert("id")} + 1)]
            |     PushedJoins:
            |     [L]: Relation: $catalogAndNamespace.${caseConvert(joinTableName1)}
@@ -329,8 +327,7 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
            |     [R]: Relation: $catalogAndNamespace.${caseConvert(joinTableName1)}
            |          PushedFilters: [${caseConvert("id")} IS NOT NULL]
            |[R]: Relation: $catalogAndNamespace.${caseConvert(joinTableName1)}
-           |     PushedFilters: [${caseConvert("id")} IS NOT NULL]""".stripMargin
-      )
+           |     PushedFilters: [${caseConvert("id")} IS NOT NULL]""".stripMargin)
       // scalastyle:on line.size.limit
       checkAnswer(df, rows)
     }
@@ -356,8 +353,7 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
           StructField(caseConvert("id"), integerType), // ID
           StructField(caseConvert("id_1"), integerType), // ID
           StructField(caseConvert("amount"), decimalType) // AMOUNT
-        )
-      )
+        ))
       checkPrunedColumnsDataTypeAndNullability(df, expectedSchema)
       checkAnswer(df, rows)
     }
@@ -382,13 +378,13 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
         Seq(
           StructField(caseConvert("id"), integerType), // ID
           StructField(caseConvert("next_id"), integerType) // NEXT_ID
-        )
-      )
+        ))
       checkPrunedColumnsDataTypeAndNullability(df, expectedSchema)
-      checkPushedInfo(df,
+      checkPushedInfo(
+        df,
         s"PushedFilters: [${caseConvert("id")} IS NOT NULL",
-          s"${caseConvert("next_id")} IS NOT NULL",
-          s"${caseConvert("id")} = ${caseConvert("next_id")}]")
+        s"${caseConvert("next_id")} IS NOT NULL",
+        s"${caseConvert("id")} = ${caseConvert("next_id")}]")
       checkAnswer(df, rows)
     }
   }
@@ -417,8 +413,7 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
           StructField(caseConvert("address"), stringType), // ADDRESS
           StructField(caseConvert("id_2"), integerType), // ID
           StructField(caseConvert("amount_2"), decimalType) // AMOUNT
-        )
-      )
+        ))
       checkPrunedColumnsDataTypeAndNullability(df, expectedSchema)
       checkAnswer(df, rows)
     }
@@ -512,8 +507,7 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
       sql(sqlQuery).collect().toSeq
     }
 
-    withSQLConf(
-      SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
+    withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
       val df = sql(sqlQuery)
 
       checkSortRemoved(df, supportsSortPushdown)
@@ -698,17 +692,32 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
       val row = df.collect()(0)
       assert(row.toString == Row(0, 1, 2, 3, 4, 0, -1, -2, -3, -4).toString)
 
-      assert(df.schema.fields.map(_.name) sameElements
-        Array("id", "id_1", "id_2", "id_1_1", "sid",
-          "id", "id_1", "id_2", "id_2_1", "Sid"),
+      assert(
+        df.schema.fields.map(_.name) sameElements
+          Array("id", "id_1", "id_2", "id_1_1", "sid", "id", "id_1", "id_2", "id_2_1", "Sid"),
         "Unexpected schema names: " + df.schema.fields.map(_.name).mkString(","))
 
-      val schemaNames = df.queryExecution.optimizedPlan.collectFirst {
-        case j: DataSourceV2ScanRelation => j
-      }.get.schema.fields.map(_.name)
-      assert(schemaNames sameElements
-        Array("id", "id_1", "id_2", "id_1_1", "sid",
-          "id_3", "id_1_2", "id_2_2", "id_2_1", "Sid_1"),
+      val schemaNames = df.queryExecution.optimizedPlan
+        .collectFirst { case j: DataSourceV2ScanRelation =>
+          j
+        }
+        .get
+        .schema
+        .fields
+        .map(_.name)
+      assert(
+        schemaNames sameElements
+          Array(
+            "id",
+            "id_1",
+            "id_2",
+            "id_1_1",
+            "sid",
+            "id_3",
+            "id_1_2",
+            "id_2_2",
+            "id_2_1",
+            "Sid_1"),
         "Unexpected schema names: " + schemaNames.mkString(","))
 
       checkJoinPushed(df)
@@ -744,8 +753,7 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
            |     [R]: Relation: $catalogAndNamespace.${caseConvert(joinTableName3)}
            |          PushedFilters: [id IS NOT NULL]
            |[R]: Relation: $catalogAndNamespace.${caseConvert(joinTableName4)}
-           |     PushedFilters: [id IS NOT NULL]""".stripMargin
-      )
+           |     PushedFilters: [id IS NOT NULL]""".stripMargin)
       // scalastyle:on line.size.limit
     }
   }

@@ -31,19 +31,20 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
 /**
- * Interface for propagating watermark. The implementation is not required to be thread-safe,
- * as all methods are expected to be called from the query execution thread.
- * (The guarantee may change on further improvements on Structured Streaming - update
- * implementations if we change the guarantee.)
+ * Interface for propagating watermark. The implementation is not required to be thread-safe, as
+ * all methods are expected to be called from the query execution thread. (The guarantee may
+ * change on further improvements on Structured Streaming - update implementations if we change
+ * the guarantee.)
  */
 sealed trait WatermarkPropagator {
+
   /**
    * Request to propagate watermark among operators based on origin watermark value. The result
-   * should be input watermark per stateful operator, which Spark will request the value by calling
-   * getInputWatermarkXXX with operator ID.
+   * should be input watermark per stateful operator, which Spark will request the value by
+   * calling getInputWatermarkXXX with operator ID.
    *
-   * It is recommended for implementation to cache the result, as Spark can request the propagation
-   * multiple times with the same batch ID and origin watermark value.
+   * It is recommended for implementation to cache the result, as Spark can request the
+   * propagation multiple times with the same batch ID and origin watermark value.
    */
   def propagate(batchId: Long, plan: SparkPlan, originWatermark: Long): Unit
 
@@ -61,7 +62,8 @@ sealed trait WatermarkPropagator {
 }
 
 /**
- * Do nothing. This is dummy implementation to help creating a dummy IncrementalExecution instance.
+ * Do nothing. This is dummy implementation to help creating a dummy IncrementalExecution
+ * instance.
  */
 object NoOpWatermarkPropagator extends WatermarkPropagator {
   def propagate(batchId: Long, plan: SparkPlan, originWatermark: Long): Unit = {}
@@ -73,8 +75,8 @@ object NoOpWatermarkPropagator extends WatermarkPropagator {
 /**
  * This implementation uses a single global watermark for late events and eviction.
  *
- * This implementation provides the behavior before Structured Streaming supports multiple stateful
- * operators. (prior to SPARK-40925) This is only used for compatibility mode.
+ * This implementation provides the behavior before Structured Streaming supports multiple
+ * stateful operators. (prior to SPARK-40925) This is only used for compatibility mode.
  */
 class UseSingleWatermarkPropagator extends WatermarkPropagator {
   // We use treemap to sort the key (batchID) and evict old batch IDs efficiently.
@@ -87,7 +89,8 @@ class UseSingleWatermarkPropagator extends WatermarkPropagator {
       // no-op
     } else if (isInitialized(batchId)) {
       val cached = batchIdToWatermark.get(batchId)
-      assert(cached == originWatermark,
+      assert(
+        cached == originWatermark,
         s"Watermark has been changed for the same batch ID! Batch ID: $batchId, " +
           s"Value in cache: $cached, value given: $originWatermark")
     } else {
@@ -128,23 +131,23 @@ class UseSingleWatermarkPropagator extends WatermarkPropagator {
  * This implementation simulates propagation of watermark among operators.
  *
  * It is considered a "simulation" because watermarks are not being physically sent between
- * operators, but rather propagated up the tree via post-order (children first) traversal of
- * the query plan. This allows Structured Streaming to determine the new (input watermark, output
+ * operators, but rather propagated up the tree via post-order (children first) traversal of the
+ * query plan. This allows Structured Streaming to determine the new (input watermark, output
  * watermark) for all nodes.
  *
  * For each node, below logic is applied:
  *
- * - Input watermark for specific node is decided by `min(output watermarks from all children)`.
- *   -- Children providing no input watermark (DEFAULT_WATERMARK_MS) are excluded.
- *   -- If there is no valid input watermark from children, input watermark = DEFAULT_WATERMARK_MS.
- * - Output watermark for specific node is decided as following:
- *   -- watermark nodes: origin watermark value
- *      This could be individual origin watermark value, but we decide to retain global watermark
- *      to keep the watermark model be simple.
- *   -- stateless nodes: same as input watermark
- *   -- stateful nodes: the return value of `op.produceOutputWatermark(input watermark)`.
+ *   - Input watermark for specific node is decided by `min(output watermarks from all children)`.
+ *     -- Children providing no input watermark (DEFAULT_WATERMARK_MS) are excluded. -- If there
+ *     is no valid input watermark from children, input watermark = DEFAULT_WATERMARK_MS.
+ *   - Output watermark for specific node is decided as following: -- watermark nodes: origin
+ *     watermark value This could be individual origin watermark value, but we decide to retain
+ *     global watermark to keep the watermark model be simple. -- stateless nodes: same as input
+ *     watermark -- stateful nodes: the return value of
+ *     `op.produceOutputWatermark(input watermark)`.
  *
- *      @see [[StateStoreWriter.produceOutputWatermark]]
+ * @see
+ *   [[StateStoreWriter.produceOutputWatermark]]
  *
  * Note that this implementation will throw an exception if watermark node sees a valid input
  * watermark from children, meaning that we do not support re-definition of watermark.
@@ -182,10 +185,11 @@ class PropagateWatermarkSimulator extends WatermarkPropagator with Logging {
         case a: AdaptiveSparkPlanExec => watermarkForChild(a.executedPlan)
         case e: QueryStageExec => watermarkForChild(e.plan)
         case _ =>
-          nodeToOutputWatermark.getOrElse(child.id, {
-            throw new IllegalStateException(
-              s"watermark for the node ${child.id} should be registered")
-          })
+          nodeToOutputWatermark.getOrElse(
+            child.id, {
+              throw new IllegalStateException(
+                s"watermark for the node ${child.id} should be registered")
+            })
       }
     }
 
@@ -261,12 +265,14 @@ class PropagateWatermarkSimulator extends WatermarkPropagator with Logging {
       // no-op
     } else if (isInitialized(batchId)) {
       val cached = batchIdToWatermark.get(batchId)
-      assert(cached == originWatermark,
+      assert(
+        cached == originWatermark,
         s"Watermark has been changed for the same batch ID! Batch ID: $batchId, " +
           s"Value in cache: $cached, value given: $originWatermark")
     } else {
-      logDebug(s"watermark for batch ID $batchId is received as $originWatermark, " +
-        s"call site: ${Utils.getCallSite().longForm}")
+      logDebug(
+        s"watermark for batch ID $batchId is received as $originWatermark, " +
+          s"call site: ${Utils.getCallSite().longForm}")
 
       if (originWatermark == 0) {
         logDebug(s"skipping the propagation for batch $batchId as origin watermark is 0.")
@@ -296,8 +302,9 @@ class PropagateWatermarkSimulator extends WatermarkPropagator with Logging {
             // all operators would have the input watermark as 0L.
             0L
           } else {
-            throw new IllegalStateException(s"Watermark for batch ID $batchId and " +
-              s"stateOpId $stateOpId is not yet set!")
+            throw new IllegalStateException(
+              s"Watermark for batch ID $batchId and " +
+                s"stateOpId $stateOpId is not yet set!")
           }
       }
     }

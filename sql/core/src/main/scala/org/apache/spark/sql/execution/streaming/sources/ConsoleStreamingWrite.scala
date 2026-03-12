@@ -29,7 +29,8 @@ import org.apache.spark.util.ArrayImplicits._
 
 /** Common methods used to create writes for the console sink */
 class ConsoleWrite(schema: StructType, options: CaseInsensitiveStringMap)
-    extends StreamingWrite with Logging {
+    extends StreamingWrite
+    with Logging {
 
   // Number of rows to display, by default 20 rows
   protected val numRowsToShow = options.getInt("numRows", 20)
@@ -57,8 +58,8 @@ class ConsoleWrite(schema: StructType, options: CaseInsensitiveStringMap)
       commitMessages: Array[WriterCommitMessage],
       schema: StructType,
       printMessage: String): Unit = {
-    val rows = commitMessages.collect {
-      case PackedRowCommitMessage(rs) => rs
+    val rows = commitMessages.collect { case PackedRowCommitMessage(rs) =>
+      rs
     }.flatten
 
     // scalastyle:off println
@@ -66,7 +67,8 @@ class ConsoleWrite(schema: StructType, options: CaseInsensitiveStringMap)
     println(printMessage)
     println("-------------------------------------------")
     // scalastyle:off println
-    Dataset.ofRows(spark, LocalRelation(toAttributes(schema), rows.toImmutableArraySeq))
+    Dataset
+      .ofRows(spark, LocalRelation(toAttributes(schema), rows.toImmutableArraySeq))
       .show(numRowsToShow, isTruncated)
   }
 

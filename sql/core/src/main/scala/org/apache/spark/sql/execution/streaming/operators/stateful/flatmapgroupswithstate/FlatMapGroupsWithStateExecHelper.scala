@@ -25,15 +25,14 @@ import org.apache.spark.sql.execution.streaming.operators.stateful.flatmapgroups
 import org.apache.spark.sql.execution.streaming.state.{NoopStatePartitionKeyExtractor, StateStore}
 import org.apache.spark.sql.types._
 
-
 object FlatMapGroupsWithStateExecHelper {
 
   val supportedVersions = Seq(1, 2)
   val legacyVersion = 1
 
   /**
-   * Class to capture deserialized state and timestamp return by the state manager.
-   * This is intended for reuse.
+   * Class to capture deserialized state and timestamp return by the state manager. This is
+   * intended for reuse.
    */
   case class StateData(
       var keyRow: UnsafeRow = null,
@@ -80,7 +79,7 @@ object FlatMapGroupsWithStateExecHelper {
 
   /** Common methods for StateManager implementations */
   private abstract class StateManagerImplBase(shouldStoreTimestamp: Boolean)
-    extends StateManager {
+      extends StateManager {
 
     protected def stateSerializerExprs: Seq[Expression]
     protected def stateDeserializerExpr: Expression
@@ -93,7 +92,11 @@ object FlatMapGroupsWithStateExecHelper {
     }
 
     /** Put state and timeout timestamp for a key */
-    override def putState(store: StateStore, key: UnsafeRow, state: Any, timestamp: Long): Unit = {
+    override def putState(
+        store: StateStore,
+        key: UnsafeRow,
+        state: Any,
+        timestamp: Long): Unit = {
       val stateRow = getStateRow(state)
       setTimestamp(stateRow, timestamp)
       store.put(key, stateRow)
@@ -110,7 +113,8 @@ object FlatMapGroupsWithStateExecHelper {
       }
     }
 
-    private lazy val stateSerializerFunc = ObjectOperator.serializeObjectToRow(stateSerializerExprs)
+    private lazy val stateSerializerFunc =
+      ObjectOperator.serializeObjectToRow(stateSerializerExprs)
     private lazy val stateDeserializerFunc = {
       ObjectOperator.deserializeRowToObject(stateDeserializerExpr, toAttributes(stateSchema))
     }
@@ -138,26 +142,27 @@ object FlatMapGroupsWithStateExecHelper {
   }
 
   /**
-   * Version 1 of the StateManager which stores the user-defined state as flattened columns in
-   * the UnsafeRow. Say the user-defined state has 3 fields - col1, col2, col3. The
-   * unsafe rows will look like this.
+   * Version 1 of the StateManager which stores the user-defined state as flattened columns in the
+   * UnsafeRow. Say the user-defined state has 3 fields - col1, col2, col3. The unsafe rows will
+   * look like this.
    *
-   *    UnsafeRow[ col1 | col2 | col3 | timestamp ]
+   * UnsafeRow[ col1 | col2 | col3 | timestamp ]
    *
-   * The limitation of this format is that timestamp cannot be set when the user-defined
-   * state has been removed. This is because the columns cannot be collectively marked to be
-   * empty/null.
+   * The limitation of this format is that timestamp cannot be set when the user-defined state has
+   * been removed. This is because the columns cannot be collectively marked to be empty/null.
    */
   private class StateManagerImplV1(
       stateEncoder: ExpressionEncoder[Any],
-      shouldStoreTimestamp: Boolean) extends StateManagerImplBase(shouldStoreTimestamp) {
+      shouldStoreTimestamp: Boolean)
+      extends StateManagerImplBase(shouldStoreTimestamp) {
 
     private val timestampTimeoutAttribute =
       AttributeReference("timeoutTimestamp", dataType = IntegerType, nullable = false)()
 
     private val stateAttributes: Seq[Attribute] = {
       val encSchemaAttribs = toAttributes(stateEncoder.schema)
-      if (shouldStoreTimestamp) encSchemaAttribs :+ timestampTimeoutAttribute else encSchemaAttribs
+      if (shouldStoreTimestamp) encSchemaAttribs :+ timestampTimeoutAttribute
+      else encSchemaAttribs
     }
 
     override val stateSchema: StructType = stateAttributes.toStructType
@@ -201,12 +206,14 @@ object FlatMapGroupsWithStateExecHelper {
    */
   private class StateManagerImplV2(
       stateEncoder: ExpressionEncoder[Any],
-      shouldStoreTimestamp: Boolean) extends StateManagerImplBase(shouldStoreTimestamp) {
+      shouldStoreTimestamp: Boolean)
+      extends StateManagerImplBase(shouldStoreTimestamp) {
 
     /** Schema of the state rows saved in the state store */
     override val stateSchema: StructType = {
       var schema = new StructType().add("groupState", stateEncoder.schema, nullable = true)
-      if (shouldStoreTimestamp) schema = schema.add("timeoutTimestamp", LongType, nullable = false)
+      if (shouldStoreTimestamp)
+        schema = schema.add("timeoutTimestamp", LongType, nullable = false)
       schema
     }
 
@@ -216,7 +223,9 @@ object FlatMapGroupsWithStateExecHelper {
 
     override val stateSerializerExprs: Seq[Expression] = {
       val boundRefToSpecificInternalRow = BoundReference(
-        0, stateEncoder.serializer.head.collect { case b: BoundReference => b.dataType }.head, true)
+        0,
+        stateEncoder.serializer.head.collect { case b: BoundReference => b.dataType }.head,
+        true)
 
       val nestedStateSerExpr =
         CreateNamedStruct(stateEncoder.namedExpressions.flatMap(e => Seq(Literal(e.name), e)))
@@ -248,8 +257,8 @@ object FlatMapGroupsWithStateExecHelper {
 }
 
 /**
- * For FlatMapGroupsWithStateExec and FlatMapGroupsInPandasWithStateExec (v1 & v2),
- * the state key is the partition key i.e. the grouping key
+ * For FlatMapGroupsWithStateExec and FlatMapGroupsInPandasWithStateExec (v1 & v2), the state key
+ * is the partition key i.e. the grouping key
  */
 class FlatMapGroupsWithStatePartitionKeyExtractor(stateKeySchema: StructType)
-  extends NoopStatePartitionKeyExtractor(stateKeySchema)
+    extends NoopStatePartitionKeyExtractor(stateKeySchema)

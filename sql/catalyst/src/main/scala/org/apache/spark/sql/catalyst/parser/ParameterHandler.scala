@@ -22,27 +22,29 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
  * Handler for parameter substitution across different Spark SQL contexts.
  *
  * This object consolidates the common parameter handling logic used by SparkSqlParser,
- * SparkConnectPlanner, and ExecuteImmediate. It provides a single, consistent API
- * for all parameter substitution operations in Spark SQL.
+ * SparkConnectPlanner, and ExecuteImmediate. It provides a single, consistent API for all
+ * parameter substitution operations in Spark SQL.
  *
  * Key features:
- * - Automatic parameter type detection (named vs positional)
- * - Uses CompoundOrSingleStatement parsing for all SQL constructs
- * - Consistent error handling and validation
- * - Support for complex data types (arrays, maps, nested structures)
- * - Thread-safe operations with position-aware error context
+ *   - Automatic parameter type detection (named vs positional)
+ *   - Uses CompoundOrSingleStatement parsing for all SQL constructs
+ *   - Consistent error handling and validation
+ *   - Support for complex data types (arrays, maps, nested structures)
+ *   - Thread-safe operations with position-aware error context
  *
- * The handler integrates with the parser through callback mechanisms stored in
- * CurrentOrigin to ensure error positions are correctly mapped back to the original SQL text.
+ * The handler integrates with the parser through callback mechanisms stored in CurrentOrigin to
+ * ensure error positions are correctly mapped back to the original SQL text.
  *
- * @example Basic usage:
- * {{{
+ * @example
+ *   Basic usage:
+ *   {{{
  * val context = NamedParameterContext(Map("param1" -> Literal(42)))
  * val result = ParameterHandler.substituteParameters("SELECT :param1", context)
  * // result: "SELECT 42"
- * }}}
+ *   }}}
  *
- * @see [[SubstituteParamsParser]] for the underlying parameter substitution logic
+ * @see
+ *   [[SubstituteParamsParser]] for the underlying parameter substitution logic
  */
 object ParameterHandler {
 
@@ -51,13 +53,17 @@ object ParameterHandler {
 
   /**
    * Performs parameter substitution and returns both the substituted SQL and the position mapper.
-   * The position mapper enables accurate error reporting by mapping positions in the
-   * substituted SQL back to the original SQL text.
+   * The position mapper enables accurate error reporting by mapping positions in the substituted
+   * SQL back to the original SQL text.
    *
-   * @param sqlText The SQL text containing parameter markers
-   * @param namedParams Optional named parameters map
-   * @param positionalParams Optional positional parameters list
-   * @return A tuple of (substituted SQL, position mapper)
+   * @param sqlText
+   *   The SQL text containing parameter markers
+   * @param namedParams
+   *   Optional named parameters map
+   * @param positionalParams
+   *   Optional positional parameters list
+   * @return
+   *   A tuple of (substituted SQL, position mapper)
    */
   private def performSubstitution(
       sqlText: String,
@@ -70,18 +76,22 @@ object ParameterHandler {
     }
 
     val substitutor = new SubstituteParamsParser()
-    val (substituted, _, positionMapper) = substitutor.substitute(sqlText,
-      namedParams = namedParams, positionalParams = positionalParams)
+    val (substituted, _, positionMapper) = substitutor.substitute(
+      sqlText,
+      namedParams = namedParams,
+      positionalParams = positionalParams)
 
     (substituted, positionMapper)
   }
 
   /**
-   * Converts a value to an Expression, handling different input types safely.
-   * Uses pattern matching for type safety.
+   * Converts a value to an Expression, handling different input types safely. Uses pattern
+   * matching for type safety.
    *
-   * @param value The value to convert (can be Literal, Expression, or raw value)
-   * @return An Expression representing the value
+   * @param value
+   *   The value to convert (can be Literal, Expression, or raw value)
+   * @return
+   *   An Expression representing the value
    */
   private def convertToExpression(value: Any): Expression = value match {
     case literal: Literal =>
@@ -101,30 +111,36 @@ object ParameterHandler {
   }
 
   /**
-   * Converts an Expression to its SQL string representation.
-   * All expressions must be resolved Literals at this point.
+   * Converts an Expression to its SQL string representation. All expressions must be resolved
+   * Literals at this point.
    *
-   * @param expr The expression to convert (must be a Literal)
-   * @return SQL string representation
+   * @param expr
+   *   The expression to convert (must be a Literal)
+   * @return
+   *   SQL string representation
    */
   private def convertToSql(expr: Expression): String = expr match {
     case lit: Literal => lit.sql
     case other =>
       throw new IllegalArgumentException(
         s"ParameterHandler only accepts resolved Literal expressions. " +
-        s"Received: ${other.getClass.getSimpleName}. " +
-        s"All parameters must be resolved using SparkSession.resolveAndValidateParameters " +
-        s"before being passed to the pre-parser.")
+          s"Received: ${other.getClass.getSimpleName}. " +
+          s"All parameters must be resolved using SparkSession.resolveAndValidateParameters " +
+          s"before being passed to the pre-parser.")
   }
 
   /**
-   * Substitutes parameters in SQL text based on the parameter context.
-   * Returns both the substituted SQL and the position mapper for error reporting.
+   * Substitutes parameters in SQL text based on the parameter context. Returns both the
+   * substituted SQL and the position mapper for error reporting.
    *
-   * @param sqlText The SQL text containing parameter markers
-   * @param context The parameter context (named or positional)
-   * @return A tuple of (substituted SQL, position mapper)
-   * @throws IllegalArgumentException if context is null
+   * @param sqlText
+   *   The SQL text containing parameter markers
+   * @param context
+   *   The parameter context (named or positional)
+   * @return
+   *   A tuple of (substituted SQL, position mapper)
+   * @throws IllegalArgumentException
+   *   if context is null
    */
   def substituteParameters(
       sqlText: String,
@@ -133,14 +149,16 @@ object ParameterHandler {
 
     context match {
       case NamedParameterContext(params) =>
-        performSubstitution(sqlText, namedParams = params.map { case (name, expr) =>
-          (name, convertToSql(expr))
-        })
+        performSubstitution(
+          sqlText,
+          namedParams = params.map { case (name, expr) =>
+            (name, convertToSql(expr))
+          })
 
       case PositionalParameterContext(params) =>
-        performSubstitution(sqlText,
-          positionalParams = params.map(expr =>
-            convertToSql(expr)).toList)
+        performSubstitution(
+          sqlText,
+          positionalParams = params.map(expr => convertToSql(expr)).toList)
 
       case HybridParameterContext(args, paramNames) =>
         handleHybridParameters(sqlText, args.toSeq, paramNames.toSeq)
@@ -151,10 +169,14 @@ object ParameterHandler {
    * Handles hybrid parameter context which can contain both named and positional parameters.
    * Validates parameter consistency and routes to appropriate substitution method.
    *
-   * @param sqlText The SQL text containing parameter markers
-   * @param args The parameter values
-   * @param paramNames The parameter names (empty string for positional parameters)
-   * @return A tuple of (substituted SQL, optional position mapper)
+   * @param sqlText
+   *   The SQL text containing parameter markers
+   * @param args
+   *   The parameter values
+   * @param paramNames
+   *   The parameter names (empty string for positional parameters)
+   * @return
+   *   A tuple of (substituted SQL, optional position mapper)
    */
   private def handleHybridParameters(
       sqlText: String,
@@ -168,10 +190,13 @@ object ParameterHandler {
 
     // Prepare parameters for both types.
     val positionalParams = args.map(convertToExpression).map(convertToSql).toList
-    val namedParams = paramNames.zip(args).collect {
-      case (name, value) if name.nonEmpty =>
-        name -> convertToSql(convertToExpression(value))
-    }.toMap
+    val namedParams = paramNames
+      .zip(args)
+      .collect {
+        case (name, value) if name.nonEmpty =>
+          name -> convertToSql(convertToExpression(value))
+      }
+      .toMap
 
     // Check if all parameters are named (no positional parameters).
     val hasOnlyNamedParams = !paramNames.exists(_.isEmpty)
@@ -179,19 +204,27 @@ object ParameterHandler {
     // Perform substitution; the substitutor validates parameter consistency internally.
     val substitutor = new SubstituteParamsParser()
     val (substitutedSql, _, positionMapper) = substitutor.substitute(
-      sqlText, namedParams, positionalParams, ParameterExpectation.Unknown,
-      hasOnlyNamedParams, args, paramNames)
+      sqlText,
+      namedParams,
+      positionalParams,
+      ParameterExpectation.Unknown,
+      hasOnlyNamedParams,
+      args,
+      paramNames)
 
     (substitutedSql, positionMapper)
   }
 
   /**
-   * Substitutes parameters using named parameter map.
-   * This is a convenience method that wraps the main substituteParameters method.
+   * Substitutes parameters using named parameter map. This is a convenience method that wraps the
+   * main substituteParameters method.
    *
-   * @param sqlText The SQL text containing parameter markers
-   * @param paramMap Map of parameter names to expressions
-   * @return A tuple of (substituted SQL, position mapper)
+   * @param sqlText
+   *   The SQL text containing parameter markers
+   * @param paramMap
+   *   Map of parameter names to expressions
+   * @return
+   *   A tuple of (substituted SQL, position mapper)
    */
   def substituteNamedParameters(
       sqlText: String,
@@ -200,19 +233,22 @@ object ParameterHandler {
 
     val namedParams = paramMap.map { case (name, expr) => (name, convertToSql(expr)) }
     val substitutor = new SubstituteParamsParser()
-    val (substitutedSql, _, positionMapper) = substitutor.substitute(
-      sqlText, namedParams, List.empty, ParameterExpectation.Named)
+    val (substitutedSql, _, positionMapper) =
+      substitutor.substitute(sqlText, namedParams, List.empty, ParameterExpectation.Named)
 
     (substitutedSql, positionMapper)
   }
 
   /**
-   * Substitutes parameters using positional parameter list.
-   * This is a convenience method that wraps the main substituteParameters method.
+   * Substitutes parameters using positional parameter list. This is a convenience method that
+   * wraps the main substituteParameters method.
    *
-   * @param sqlText The SQL text containing parameter markers
-   * @param paramList Sequence of parameter expressions
-   * @return A tuple of (substituted SQL, position mapper)
+   * @param sqlText
+   *   The SQL text containing parameter markers
+   * @param paramList
+   *   Sequence of parameter expressions
+   * @return
+   *   A tuple of (substituted SQL, position mapper)
    */
   def substitutePositionalParameters(
       sqlText: String,
@@ -222,7 +258,10 @@ object ParameterHandler {
     val positionalParams = paramList.map(convertToSql).toList
     val substitutor = new SubstituteParamsParser()
     val (substitutedSql, _, positionMapper) = substitutor.substitute(
-      sqlText, Map.empty, positionalParams, ParameterExpectation.Positional)
+      sqlText,
+      Map.empty,
+      positionalParams,
+      ParameterExpectation.Positional)
 
     (substitutedSql, positionMapper)
   }

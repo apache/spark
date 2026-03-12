@@ -37,24 +37,19 @@ import org.apache.spark.util.Utils
  * larger than those of the rest of the tasks.
  *
  * The general idea is to divide each skew partition into smaller partitions and replicate its
- * matching partition on the other side of the join so that they can run in parallel tasks.
- * Note that when matching partitions from the left side and the right side both have skew,
- * it will become a cartesian product of splits from left and right joining together.
+ * matching partition on the other side of the join so that they can run in parallel tasks. Note
+ * that when matching partitions from the left side and the right side both have skew, it will
+ * become a cartesian product of splits from left and right joining together.
  *
- * For example, assume the Sort-Merge join has 4 partitions:
- * left:  [L1, L2, L3, L4]
- * right: [R1, R2, R3, R4]
+ * For example, assume the Sort-Merge join has 4 partitions: left: [L1, L2, L3, L4] right: [R1,
+ * R2, R3, R4]
  *
  * Let's say L2, L4 and R3, R4 are skewed, and each of them get split into 2 sub-partitions. This
- * is scheduled to run 4 tasks at the beginning: (L1, R1), (L2, R2), (L3, R3), (L4, R4).
- * This rule expands it to 9 tasks to increase parallelism:
- * (L1, R1),
- * (L2-1, R2), (L2-2, R2),
- * (L3, R3-1), (L3, R3-2),
- * (L4-1, R4-1), (L4-2, R4-1), (L4-1, R4-2), (L4-2, R4-2)
+ * is scheduled to run 4 tasks at the beginning: (L1, R1), (L2, R2), (L3, R3), (L4, R4). This rule
+ * expands it to 9 tasks to increase parallelism: (L1, R1), (L2-1, R2), (L2-2, R2), (L3, R3-1),
+ * (L3, R3-2), (L4-1, R4-1), (L4-2, R4-1), (L4-1, R4-2), (L4-2, R4-2)
  */
-case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
-  extends Rule[SparkPlan] {
+case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements) extends Rule[SparkPlan] {
 
   /**
    * A partition is considered as a skewed partition if its size is larger than the median
@@ -62,14 +57,15 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
    * SKEW_JOIN_SKEWED_PARTITION_THRESHOLD. Thus we pick the larger one as the skew threshold.
    */
   def getSkewThreshold(medianSize: Long): Long = {
-    conf.getConf(SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD).max(
-      (medianSize * conf.getConf(SQLConf.SKEW_JOIN_SKEWED_PARTITION_FACTOR)).toLong)
+    conf
+      .getConf(SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD)
+      .max((medianSize * conf.getConf(SQLConf.SKEW_JOIN_SKEWED_PARTITION_FACTOR)).toLong)
   }
 
   /**
-   * The goal of skew join optimization is to make the data distribution more even. The target size
-   * to split skewed partitions is the average size of non-skewed partition, or the
-   * advisory partition size if avg size is smaller than it.
+   * The goal of skew join optimization is to make the data distribution more even. The target
+   * size to split skewed partitions is the average size of non-skewed partition, or the advisory
+   * partition size if avg size is smaller than it.
    */
   private def targetSize(sizes: Array[Long], skewThreshold: Long): Long = {
     val advisorySize = conf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES)
@@ -83,7 +79,7 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
 
   private def canSplitLeftSide(joinType: JoinType) = {
     joinType == Inner || joinType == Cross || joinType == LeftSemi ||
-      joinType == LeftAnti || joinType == LeftOuter
+    joinType == LeftAnti || joinType == LeftOuter
   }
 
   private def canSplitRightSide(joinType: JoinType) = {
@@ -122,8 +118,7 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
     // We use the median size of the original shuffle partitions to detect skewed partitions.
     val leftMedSize = Utils.median(leftSizes, false)
     val rightMedSize = Utils.median(rightSizes, false)
-    logDebug(
-      s"""
+    logDebug(s"""
          |Optimizing skewed join.
          |Left side partitions size info:
          |${getSizeInfo(leftMedSize, leftSizes)}
@@ -152,11 +147,14 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
 
       val leftParts = if (isLeftSkew) {
         val skewSpecs = ShufflePartitionsUtil.createSkewPartitionSpecs(
-          left.mapStats.get.shuffleId, partitionIndex, leftTargetSize)
+          left.mapStats.get.shuffleId,
+          partitionIndex,
+          leftTargetSize)
         if (skewSpecs.isDefined) {
-          logDebug(s"Left side partition $partitionIndex " +
-            s"(${Utils.bytesToString(leftSize)}) is skewed, " +
-            s"split it into ${skewSpecs.get.length} parts.")
+          logDebug(
+            s"Left side partition $partitionIndex " +
+              s"(${Utils.bytesToString(leftSize)}) is skewed, " +
+              s"split it into ${skewSpecs.get.length} parts.")
           numSkewedLeft += 1
         }
         skewSpecs.getOrElse(leftNoSkewPartitionSpec)
@@ -166,11 +164,14 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
 
       val rightParts = if (isRightSkew) {
         val skewSpecs = ShufflePartitionsUtil.createSkewPartitionSpecs(
-          right.mapStats.get.shuffleId, partitionIndex, rightTargetSize)
+          right.mapStats.get.shuffleId,
+          partitionIndex,
+          rightTargetSize)
         if (skewSpecs.isDefined) {
-          logDebug(s"Right side partition $partitionIndex " +
-            s"(${Utils.bytesToString(rightSize)}) is skewed, " +
-            s"split it into ${skewSpecs.get.length} parts.")
+          logDebug(
+            s"Right side partition $partitionIndex " +
+              s"(${Utils.bytesToString(rightSize)}) is skewed, " +
+              s"split it into ${skewSpecs.get.length} parts.")
           numSkewedRight += 1
         }
         skewSpecs.getOrElse(rightNoSkewPartitionSpec)
@@ -188,32 +189,47 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
     }
     logDebug(s"number of skewed partitions: left $numSkewedLeft, right $numSkewedRight")
     if (numSkewedLeft > 0 || numSkewedRight > 0) {
-      Some((
-        SkewJoinChildWrapper(AQEShuffleReadExec(left, leftSidePartitions.toSeq)),
-        SkewJoinChildWrapper(AQEShuffleReadExec(right, rightSidePartitions.toSeq))
-      ))
+      Some(
+        (
+          SkewJoinChildWrapper(AQEShuffleReadExec(left, leftSidePartitions.toSeq)),
+          SkewJoinChildWrapper(AQEShuffleReadExec(right, rightSidePartitions.toSeq))))
     } else {
       None
     }
   }
 
   def optimizeSkewJoin(plan: SparkPlan): SparkPlan = plan.transformUp {
-    case smj @ SortMergeJoinExec(_, _, joinType, _,
-        s1 @ SortExec(_, _, ShuffleStage(left: ShuffleQueryStageExec), _),
-        s2 @ SortExec(_, _, ShuffleStage(right: ShuffleQueryStageExec), _), false) =>
-      tryOptimizeJoinChildren(left, right, joinType).map {
-        case (newLeft, newRight) =>
+    case smj @ SortMergeJoinExec(
+          _,
+          _,
+          joinType,
+          _,
+          s1 @ SortExec(_, _, ShuffleStage(left: ShuffleQueryStageExec), _),
+          s2 @ SortExec(_, _, ShuffleStage(right: ShuffleQueryStageExec), _),
+          false) =>
+      tryOptimizeJoinChildren(left, right, joinType)
+        .map { case (newLeft, newRight) =>
           smj.copy(
-            left = s1.copy(child = newLeft), right = s2.copy(child = newRight), isSkewJoin = true)
-      }.getOrElse(smj)
+            left = s1.copy(child = newLeft),
+            right = s2.copy(child = newRight),
+            isSkewJoin = true)
+        }
+        .getOrElse(smj)
 
-    case shj @ ShuffledHashJoinExec(_, _, joinType, _, _,
-        ShuffleStage(left: ShuffleQueryStageExec),
-        ShuffleStage(right: ShuffleQueryStageExec), false) =>
-      tryOptimizeJoinChildren(left, right, joinType).map {
-        case (newLeft, newRight) =>
+    case shj @ ShuffledHashJoinExec(
+          _,
+          _,
+          joinType,
+          _,
+          _,
+          ShuffleStage(left: ShuffleQueryStageExec),
+          ShuffleStage(right: ShuffleQueryStageExec),
+          false) =>
+      tryOptimizeJoinChildren(left, right, joinType)
+        .map { case (newLeft, newRight) =>
           shj.copy(left = newLeft, right = newRight, isSkewJoin = true)
-      }.getOrElse(shj)
+        }
+        .getOrElse(shj)
   }
 
   override def apply(plan: SparkPlan): SparkPlan = {
@@ -233,12 +249,12 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
       ValidateRequirements.validate(optimized)
     }
     if (requirementSatisfied) {
-      optimized.transform {
-        case SkewJoinChildWrapper(child) => child
+      optimized.transform { case SkewJoinChildWrapper(child) =>
+        child
       }
     } else if (conf.getConf(SQLConf.ADAPTIVE_FORCE_OPTIMIZE_SKEWED_JOIN)) {
-      ensureRequirements.apply(optimized).transform {
-        case SkewJoinChildWrapper(child) => child
+      ensureRequirements.apply(optimized).transform { case SkewJoinChildWrapper(child) =>
+        child
       }
     } else {
       plan
@@ -247,8 +263,9 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
 
   object ShuffleStage {
     def unapply(plan: SparkPlan): Option[ShuffleQueryStageExec] = plan match {
-      case s: ShuffleQueryStageExec if s.isMaterialized && s.mapStats.isDefined &&
-        s.shuffle.shuffleOrigin == ENSURE_REQUIREMENTS =>
+      case s: ShuffleQueryStageExec
+          if s.isMaterialized && s.mapStats.isDefined &&
+            s.shuffle.shuffleOrigin == ENSURE_REQUIREMENTS =>
         Some(s)
       case _ => None
     }
@@ -259,7 +276,8 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
 // caused by skew join optimization. However, this shouldn't apply to the sub-plan under skew join,
 // as it's guaranteed to satisfy distribution requirement.
 case class SkewJoinChildWrapper(plan: SparkPlan) extends LeafExecNode {
-  override protected def doExecute(): RDD[InternalRow] = throw SparkUnsupportedOperationException()
+  override protected def doExecute(): RDD[InternalRow] =
+    throw SparkUnsupportedOperationException()
   override def output: Seq[Attribute] = plan.output
   override def outputPartitioning: Partitioning = plan.outputPartitioning
   override def outputOrdering: Seq[SortOrder] = plan.outputOrdering

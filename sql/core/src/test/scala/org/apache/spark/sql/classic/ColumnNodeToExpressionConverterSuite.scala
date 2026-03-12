@@ -97,9 +97,7 @@ class ColumnNodeToExpressionConverterSuite extends SparkFunSuite {
     testConversion(
       UnresolvedStar(Option("x.y.z.*")),
       analysis.UnresolvedStar(Option(Seq("x", "y", "z"))))
-    testConversion(
-      UnresolvedStar(None, Option(10L)),
-      analysis.UnresolvedDataFrameStar(10L))
+    testConversion(UnresolvedStar(None, Option(10L)), analysis.UnresolvedDataFrameStar(10L))
   }
 
   test("regex") {
@@ -136,13 +134,13 @@ class ColumnNodeToExpressionConverterSuite extends SparkFunSuite {
   test("alias") {
     testConversion(
       Alias(Literal("qwe"), "newA" :: Nil),
-      expressions.Alias(expressions.Literal("qwe"), "newA")(
-        nonInheritableMetadataKeys = Seq(Dataset.DATASET_ID_KEY, Dataset.COL_POS_KEY)))
+      expressions.Alias(expressions.Literal("qwe"), "newA")(nonInheritableMetadataKeys =
+        Seq(Dataset.DATASET_ID_KEY, Dataset.COL_POS_KEY)))
     val metadata = new MetadataBuilder().putLong("q", 10).build()
     testConversion(
       Alias(UnresolvedAttribute("a"), "b" :: Nil, Option(metadata)),
-      expressions.Alias(analysis.UnresolvedAttribute("a"), "b")(
-        explicitMetadata = Option(metadata)))
+      expressions.Alias(analysis.UnresolvedAttribute("a"), "b")(explicitMetadata =
+        Option(metadata)))
     testConversion(
       Alias(UnresolvedAttribute("complex"), "newA" :: "newB" :: Nil),
       analysis.MultiAlias(analysis.UnresolvedAttribute("complex"), Seq("newA", "newB")))
@@ -216,10 +214,7 @@ class ColumnNodeToExpressionConverterSuite extends SparkFunSuite {
         UnresolvedFunction("sum", Seq(UnresolvedAttribute("a"))),
         WindowSpec(
           Seq(UnresolvedAttribute("b"), UnresolvedAttribute("c")),
-          Seq(SortOrder(
-            UnresolvedAttribute("d"),
-            SortOrder.Descending,
-            SortOrder.NullsLast)),
+          Seq(SortOrder(UnresolvedAttribute("d"), SortOrder.Descending, SortOrder.NullsLast)),
           Option(WindowFrame(colFrameType, colLower, colUpper)))),
       expressions.WindowExpression(
         analysis.UnresolvedFunction(
@@ -228,11 +223,12 @@ class ColumnNodeToExpressionConverterSuite extends SparkFunSuite {
           isDistinct = false),
         expressions.WindowSpecDefinition(
           Seq(analysis.UnresolvedAttribute("b"), analysis.UnresolvedAttribute("c")),
-          Seq(expressions.SortOrder(
-            analysis.UnresolvedAttribute("d"),
-            expressions.Descending,
-            expressions.NullsLast,
-            Nil)),
+          Seq(
+            expressions.SortOrder(
+              analysis.UnresolvedAttribute("d"),
+              expressions.Descending,
+              expressions.NullsLast,
+              Nil)),
           expressions.SpecifiedWindowFrame(catFrameType, catLower, catUpper))))
   }
 
@@ -240,10 +236,7 @@ class ColumnNodeToExpressionConverterSuite extends SparkFunSuite {
     testConversion(
       Window(
         UnresolvedFunction("sum", Seq(UnresolvedAttribute("a"))),
-        WindowSpec(
-          Seq(UnresolvedAttribute("b"), UnresolvedAttribute("c")),
-          Nil,
-          None)),
+        WindowSpec(Seq(UnresolvedAttribute("b"), UnresolvedAttribute("c")), Nil, None)),
       expressions.WindowExpression(
         analysis.UnresolvedFunction(
           "sum",
@@ -294,8 +287,7 @@ class ColumnNodeToExpressionConverterSuite extends SparkFunSuite {
         Option(Literal("fallback"))),
       expressions.CaseWhen(
         Seq(analysis.UnresolvedAttribute("c1") -> expressions.Literal("r1")),
-        Option(expressions.Literal("fallback")))
-    )
+        Option(expressions.Literal("fallback"))))
   }
 
   test("extract field") {
@@ -334,21 +326,21 @@ class ColumnNodeToExpressionConverterSuite extends SparkFunSuite {
     // Aggregator applied on the entire Dataset.
     testConversion(
       InvokeInlineUserDefinedFunction(int2LongSum, Nil),
-      aggregate.SimpleTypedAggregateExpression(
-        aggregator = int2LongSum.asInstanceOf[Aggregator[Any, Any, Any]],
-        inputDeserializer = None,
-        inputClass = None,
-        inputSchema = None,
-        bufferSerializer = bufferEncoder.namedExpressions,
-        aggBufferAttributes = bufferAttrs,
-        bufferDeserializer = analysis.UnresolvedDeserializer(
-          bufferEncoder.deserializer,
-          bufferAttrs),
-        outputSerializer = outputEncoder.serializer,
-        outputExternalType = LongType,
-        dataType = LongType,
-        nullable = false
-      ).toAggregateExpression())
+      aggregate
+        .SimpleTypedAggregateExpression(
+          aggregator = int2LongSum.asInstanceOf[Aggregator[Any, Any, Any]],
+          inputDeserializer = None,
+          inputClass = None,
+          inputSchema = None,
+          bufferSerializer = bufferEncoder.namedExpressions,
+          aggBufferAttributes = bufferAttrs,
+          bufferDeserializer =
+            analysis.UnresolvedDeserializer(bufferEncoder.deserializer, bufferAttrs),
+          outputSerializer = outputEncoder.serializer,
+          outputExternalType = LongType,
+          dataType = LongType,
+          nullable = false)
+        .toAggregateExpression())
 
     // Aggregator applied on an input.
     testConversion(
@@ -359,13 +351,15 @@ class ColumnNodeToExpressionConverterSuite extends SparkFunSuite {
           nullable = false,
           givenName = Option("int2LongSum")),
         UnresolvedAttribute("i_col") :: Nil),
-      aggregate.ScalaAggregator(
-        children = analysis.UnresolvedAttribute("i_col") :: Nil,
-        agg = int2LongSum,
-        inputEncoder = encoderFor(PrimitiveIntEncoder),
-        bufferEncoder = encoderFor(PrimitiveLongEncoder),
-        nullable = false,
-        aggregatorName = Option("int2LongSum")).toAggregateExpression())
+      aggregate
+        .ScalaAggregator(
+          children = analysis.UnresolvedAttribute("i_col") :: Nil,
+          agg = int2LongSum,
+          inputEncoder = encoderFor(PrimitiveIntEncoder),
+          bufferEncoder = encoderFor(PrimitiveLongEncoder),
+          nullable = false,
+          aggregatorName = Option("int2LongSum"))
+        .toAggregateExpression())
 
     // Regular function
     val concat = (a: String, b: String) => a + b
@@ -402,7 +396,7 @@ class ColumnNodeToExpressionConverterSuite extends SparkFunSuite {
 }
 
 private[classic] case class Nope(override val origin: Origin = CurrentOrigin.get)
-  extends ColumnNode {
+    extends ColumnNode {
   override private[sql] def normalize(): Nope = this
   override def sql: String = "nope"
   override def children: Seq[ColumnNodeLike] = Seq.empty

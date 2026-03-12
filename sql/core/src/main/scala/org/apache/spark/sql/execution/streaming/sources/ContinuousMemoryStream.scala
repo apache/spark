@@ -37,18 +37,18 @@ import org.apache.spark.sql.execution.streaming.runtime.{ContinuousRecordEndpoin
 import org.apache.spark.util.RpcUtils
 
 /**
- * The overall strategy here is:
- *  * ContinuousMemoryStream maintains a list of records for each partition. addData() will
- *    distribute records evenly-ish across partitions.
- *  * RecordEndpoint is set up as an endpoint for executor-side
- *    ContinuousMemoryStreamInputPartitionReader instances to poll. It returns the record at
- *    the specified offset within the list, or null if that offset doesn't yet have a record.
+ * The overall strategy here is: * ContinuousMemoryStream maintains a list of records for each
+ * partition. addData() will distribute records evenly-ish across partitions. * RecordEndpoint is
+ * set up as an endpoint for executor-side ContinuousMemoryStreamInputPartitionReader instances to
+ * poll. It returns the record at the specified offset within the list, or null if that offset
+ * doesn't yet have a record.
  */
-class ContinuousMemoryStream[A : Encoder](
+class ContinuousMemoryStream[A: Encoder](
     id: Int,
     sparkSession: SparkSession,
     numPartitions: Int = 2)
-  extends MemoryStreamBase[A](sparkSession) with ContinuousStream {
+    extends MemoryStreamBase[A](sparkSession)
+    with ContinuousStream {
 
   private implicit val formats: Formats = Serialization.formats(NoTypeHints)
 
@@ -62,9 +62,8 @@ class ContinuousMemoryStream[A : Encoder](
 
   def addData(data: IterableOnce[A]): Offset = synchronized {
     // Distribute data evenly among partition lists.
-    data.iterator.to(Seq).zipWithIndex.map {
-      case (item, index) =>
-        records(index % numPartitions) += toRow(item).copy().asInstanceOf[UnsafeRow]
+    data.iterator.to(Seq).zipWithIndex.map { case (item, index) =>
+      records(index % numPartitions) += toRow(item).copy().asInstanceOf[UnsafeRow]
     }
 
     // The new target offset is the offset where all records in all partitions have been processed.
@@ -80,23 +79,20 @@ class ContinuousMemoryStream[A : Encoder](
   }
 
   override def mergeOffsets(offsets: Array[PartitionOffset]): ContinuousMemoryStreamOffset = {
-    ContinuousMemoryStreamOffset(
-      offsets.map {
-        case ContinuousRecordPartitionOffset(part, num) => (part, num)
-      }.toMap
-    )
+    ContinuousMemoryStreamOffset(offsets.map { case ContinuousRecordPartitionOffset(part, num) =>
+      (part, num)
+    }.toMap)
   }
-
 
   override def planInputPartitions(start: Offset): Array[InputPartition] = {
     val startOffset = start.asInstanceOf[ContinuousMemoryStreamOffset]
     synchronized {
-      val endpointName = s"ContinuousMemoryStreamRecordEndpoint-${java.util.UUID.randomUUID()}-$id"
-      endpointRef =
-        recordEndpoint.rpcEnv.setupEndpoint(endpointName, recordEndpoint)
+      val endpointName =
+        s"ContinuousMemoryStreamRecordEndpoint-${java.util.UUID.randomUUID()}-$id"
+      endpointRef = recordEndpoint.rpcEnv.setupEndpoint(endpointName, recordEndpoint)
 
-      startOffset.partitionNums.map {
-        case (part, index) => ContinuousMemoryStreamInputPartition(endpointName, part, index)
+      startOffset.partitionNums.map { case (part, index) =>
+        ContinuousMemoryStreamInputPartition(endpointName, part, index)
       }.toArray
     }
   }
@@ -120,8 +116,8 @@ object ContinuousMemoryStream {
     new ContinuousMemoryStream[A](memoryStreamId.getAndIncrement(), sqlContext.sparkSession)
 
   /** Creates a ContinuousMemoryStream with specified partitions (SQLContext). */
-  def apply[A: Encoder](numPartitions: Int)(
-      implicit sqlContext: SQLContext): ContinuousMemoryStream[A] =
+  def apply[A: Encoder](numPartitions: Int)(implicit
+      sqlContext: SQLContext): ContinuousMemoryStream[A] =
     new ContinuousMemoryStream[A](
       memoryStreamId.getAndIncrement(),
       sqlContext.sparkSession,
@@ -132,7 +128,9 @@ object ContinuousMemoryStream {
     new ContinuousMemoryStream[A](memoryStreamId.getAndIncrement(), sparkSession)
 
   /** Creates a ContinuousMemoryStream with specified partitions (SparkSession). */
-  def apply[A: Encoder](sparkSession: SparkSession, numPartitions: Int): ContinuousMemoryStream[A] =
+  def apply[A: Encoder](
+      sparkSession: SparkSession,
+      numPartitions: Int): ContinuousMemoryStream[A] =
     new ContinuousMemoryStream[A](memoryStreamId.getAndIncrement(), sparkSession, numPartitions)
 
   /** Creates a single partition ContinuousMemoryStream (SQLContext). */
@@ -150,7 +148,8 @@ object ContinuousMemoryStream {
 case class ContinuousMemoryStreamInputPartition(
     driverEndpointName: String,
     partition: Int,
-    startOffset: Int) extends InputPartition
+    startOffset: Int)
+    extends InputPartition
 
 object ContinuousMemoryStreamReaderFactory extends ContinuousPartitionReaderFactory {
   override def createReader(partition: InputPartition): ContinuousPartitionReader[InternalRow] = {
@@ -167,11 +166,10 @@ object ContinuousMemoryStreamReaderFactory extends ContinuousPartitionReaderFact
 class ContinuousMemoryStreamPartitionReader(
     driverEndpointName: String,
     partition: Int,
-    startOffset: Int) extends ContinuousPartitionReader[InternalRow] {
-  private val endpoint = RpcUtils.makeDriverRef(
-    driverEndpointName,
-    SparkEnv.get.conf,
-    SparkEnv.get.rpcEnv)
+    startOffset: Int)
+    extends ContinuousPartitionReader[InternalRow] {
+  private val endpoint =
+    RpcUtils.makeDriverRef(driverEndpointName, SparkEnv.get.conf, SparkEnv.get.rpcEnv)
 
   private var currentOffset = startOffset
   private var current: Option[InternalRow] = None
@@ -206,8 +204,7 @@ class ContinuousMemoryStreamPartitionReader(
       GetRecord(ContinuousRecordPartitionOffset(partition, currentOffset)))
 }
 
-case class ContinuousMemoryStreamOffset(partitionNums: Map[Int, Int])
-  extends Offset {
+case class ContinuousMemoryStreamOffset(partitionNums: Map[Int, Int]) extends Offset {
   private implicit val formats: Formats = Serialization.formats(NoTypeHints)
   override def json(): String = Serialization.write(partitionNums)
 }

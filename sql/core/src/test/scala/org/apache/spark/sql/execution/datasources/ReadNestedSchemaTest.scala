@@ -21,7 +21,6 @@ import java.io.File
 
 import org.apache.spark.sql.{DataFrame, Row}
 
-
 /**
  * Add a nested column.
  */
@@ -51,36 +50,28 @@ trait AddNestedColumnTest extends ReadSchemaTest {
     testAdd(
       sql("SELECT 1 c1, named_struct('c3', 2, 'c4', named_struct('c5', 3, 'c6', 4)) c2"),
       sql("SELECT 1 c1, named_struct('c3', 2, 'c4', named_struct('c5', 3, 'c6', 4, 'c7', 5)) c2"),
-      Seq(
-        Row(1, Row(2, Row(3, 4, null)), "one"),
-        Row(1, Row(2, Row(3, 4, 5)), "two")))
+      Seq(Row(1, Row(2, Row(3, 4, null)), "one"), Row(1, Row(2, Row(3, 4, 5)), "two")))
   }
 
   test("add a nested column in the middle of the leaf struct column") {
     testAdd(
       sql("SELECT 1 c1, named_struct('c3', 2, 'c4', named_struct('c5', 3, 'c6', 4)) c2"),
       sql("SELECT 1 c1, named_struct('c3', 2, 'c4', named_struct('c5', 3, 'c7', 5, 'c6', 4)) c2"),
-      Seq(
-        Row(1, Row(2, Row(3, null, 4)), "one"),
-        Row(1, Row(2, Row(3, 5, 4)), "two")))
+      Seq(Row(1, Row(2, Row(3, null, 4)), "one"), Row(1, Row(2, Row(3, 5, 4)), "two")))
   }
 
   test("add a nested column at the end of the middle struct column") {
     testAdd(
       sql("SELECT 1 c1, named_struct('c3', 2, 'c4', named_struct('c5', 3, 'c6', 4)) c2"),
       sql("SELECT 1 c1, named_struct('c3', 2, 'c4', named_struct('c5', 3, 'c6', 4), 'c7', 5) c2"),
-      Seq(
-        Row(1, Row(2, Row(3, 4), null), "one"),
-        Row(1, Row(2, Row(3, 4), 5), "two")))
+      Seq(Row(1, Row(2, Row(3, 4), null), "one"), Row(1, Row(2, Row(3, 4), 5), "two")))
   }
 
   test("add a nested column in the middle of the middle struct column") {
     testAdd(
       sql("SELECT 1 c1, named_struct('c3', 2, 'c4', named_struct('c5', 3, 'c6', 4)) c2"),
       sql("SELECT 1 c1, named_struct('c3', 2, 'c7', 5, 'c4', named_struct('c5', 3, 'c6', 4)) c2"),
-      Seq(
-        Row(1, Row(2, null, Row(3, 4)), "one"),
-        Row(1, Row(2, 5, Row(3, 4)), "two")))
+      Seq(Row(1, Row(2, null, Row(3, 4)), "one"), Row(1, Row(2, 5, Row(3, 4)), "two")))
   }
 }
 
@@ -155,4 +146,3 @@ trait HideNestedColumnTest extends ReadSchemaTest {
         Row(0, Row(2, Row(3, 4)), "three")))
   }
 }
-

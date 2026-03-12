@@ -39,26 +39,24 @@ class ShowCreateTableSuite extends command.ShowCreateTableSuiteBase with Command
   test("SPARK-33898: show create table[CTAS]") {
     // does not work with hive, also different order between v2 with v1/hive
     withNamespaceAndTable(ns, table) { t =>
-      sql(
-        s"""CREATE TABLE $t
+      sql(s"""CREATE TABLE $t
            |$defaultUsing
            |PARTITIONED BY (a)
            |COMMENT 'This is a comment'
            |TBLPROPERTIES ('a' = '1')
            |AS SELECT 1 AS a, "foo" AS b
-         """.stripMargin
-      )
+         """.stripMargin)
       val showDDL = getShowCreateDDL(t, false)
-      assert(showDDL === Array(
-        s"CREATE TABLE $t (",
-        "a INT,",
-        "b STRING COLLATE UTF8_BINARY)",
-        defaultUsing,
-        "PARTITIONED BY (a)",
-        "COMMENT 'This is a comment'",
-        "TBLPROPERTIES (",
-        "'a' = '1')"
-      ))
+      assert(
+        showDDL === Array(
+          s"CREATE TABLE $t (",
+          "a INT,",
+          "b STRING COLLATE UTF8_BINARY)",
+          defaultUsing,
+          "PARTITIONED BY (a)",
+          "COMMENT 'This is a comment'",
+          "TBLPROPERTIES (",
+          "'a' = '1')"))
     }
   }
 
@@ -67,8 +65,7 @@ class ShowCreateTableSuite extends command.ShowCreateTableSuiteBase with Command
     val db = "ns1"
     val table = "tbl"
     withNamespaceAndTable(db, table) { t =>
-      sql(
-        s"""
+      sql(s"""
            |CREATE TABLE $t (
            |  a bigint NOT NULL,
            |  b bigint,
@@ -92,35 +89,34 @@ class ShowCreateTableSuite extends command.ShowCreateTableSuiteBase with Command
            |LOCATION '/tmp'
         """.stripMargin)
       val showDDL = getShowCreateDDL(t, false)
-      assert(showDDL === Array(
-        s"CREATE TABLE $t (",
-        "a BIGINT NOT NULL,",
-        "b BIGINT,",
-        "c BIGINT,",
-        "extraCol ARRAY<INT>,",
-        "`<another>` STRUCT<x: INT, y: ARRAY<BOOLEAN>>)",
-        defaultUsing,
-        "OPTIONS (",
-        "'from' = '0',",
-        "'to' = '1',",
-        "'via' = '2')",
-        "PARTITIONED BY (a)",
-        "COMMENT 'This is a comment'",
-        "LOCATION 'file:/tmp'",
-        "TBLPROPERTIES (",
-        "'password' = '*********(redacted)',",
-        "'prop1' = '1',",
-        "'prop2' = '2',",
-        "'prop3' = '3',",
-        "'prop4' = '4')"
-      ))
+      assert(
+        showDDL === Array(
+          s"CREATE TABLE $t (",
+          "a BIGINT NOT NULL,",
+          "b BIGINT,",
+          "c BIGINT,",
+          "extraCol ARRAY<INT>,",
+          "`<another>` STRUCT<x: INT, y: ARRAY<BOOLEAN>>)",
+          defaultUsing,
+          "OPTIONS (",
+          "'from' = '0',",
+          "'to' = '1',",
+          "'via' = '2')",
+          "PARTITIONED BY (a)",
+          "COMMENT 'This is a comment'",
+          "LOCATION 'file:/tmp'",
+          "TBLPROPERTIES (",
+          "'password' = '*********(redacted)',",
+          "'prop1' = '1',",
+          "'prop2' = '2',",
+          "'prop3' = '3',",
+          "'prop4' = '4')"))
     }
   }
 
   test("SPARK-33898: show create table[multi-partition]") {
     withNamespaceAndTable(ns, table) { t =>
-      sql(
-        s"""
+      sql(s"""
            |CREATE TABLE $t (a INT, b STRING, ts TIMESTAMP) $defaultUsing
            |PARTITIONED BY (
            |    a,
@@ -132,16 +128,16 @@ class ShowCreateTableSuite extends command.ShowCreateTableSuiteBase with Command
          """.stripMargin)
       // V1 transforms cannot be converted to partition columns: bucket,year,...)
       val showDDL = getShowCreateDDL(t, false)
-      assert(showDDL === Array(
-        s"CREATE TABLE $t (",
-        "a INT,",
-        "b STRING COLLATE UTF8_BINARY,",
-        "ts TIMESTAMP)",
-        defaultUsing,
-        "PARTITIONED BY (a, years(ts), months(ts), days(ts), hours(ts))",
-        "CLUSTERED BY (b)",
-        "INTO 16 BUCKETS"
-      ))
+      assert(
+        showDDL === Array(
+          s"CREATE TABLE $t (",
+          "a INT,",
+          "b STRING COLLATE UTF8_BINARY,",
+          "ts TIMESTAMP)",
+          defaultUsing,
+          "PARTITIONED BY (a, years(ts), months(ts), days(ts), hours(ts))",
+          "CLUSTERED BY (b)",
+          "INTO 16 BUCKETS"))
     }
   }
 
@@ -156,8 +152,7 @@ class ShowCreateTableSuite extends command.ShowCreateTableSuiteBase with Command
       val showDDL = getShowCreateDDL(t)
       assert(
         showDDL(0) == s"CREATE TABLE test_catalog.`a_schema-with+special^chars`." +
-        s"`a_table-with+special^chars` ("
-      )
+          s"`a_table-with+special^chars` (")
     }
   }
 
@@ -177,24 +172,20 @@ class ShowCreateTableSuite extends command.ShowCreateTableSuiteBase with Command
           "a STRUCT<b: BIGINT COMMENT 'comment'," +
             " c: STRUCT<d: STRING COLLATE UTF8_BINARY NOT NULL, e: STRING COLLATE UTF8_BINARY>>)",
           "USING parquet",
-          "COMMENT 'This is a comment'"
-        )
-      )
+          "COMMENT 'This is a comment'"))
     }
   }
 
   test("show table constraints") {
     withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
       withNamespaceAndTable("ns", "other_table", nonPartitionCatalog) { otherTable =>
-        sql(
-          s"""
+        sql(s"""
              |CREATE TABLE $otherTable (
              |  id STRING PRIMARY KEY
              |)
              |$defaultUsing
         """.stripMargin)
-        sql(
-          s"""
+        sql(s"""
              |CREATE TABLE $t (
              |  a INT,
              |  b STRING,
@@ -216,19 +207,18 @@ class ShowCreateTableSuite extends command.ShowCreateTableSuiteBase with Command
           "CONSTRAINT tbl_pk PRIMARY KEY (a) NOT ENFORCED NORELY,",
           "CONSTRAINT uk_b UNIQUE (b) NOT ENFORCED NORELY,",
           s"CONSTRAINT fk_c FOREIGN KEY (c) REFERENCES $otherTable (id) NOT ENFORCED RELY,",
-          "CONSTRAINT c1 CHECK (c IS NOT NULL) ENFORCED NORELY,"
-        )
-        assert(showDDL === expectedDDLPrefix ++ Array(
-          "CONSTRAINT c2 CHECK (a > 0) ENFORCED NORELY)",
-          defaultUsing))
+          "CONSTRAINT c1 CHECK (c IS NOT NULL) ENFORCED NORELY,")
+        assert(
+          showDDL === expectedDDLPrefix ++ Array(
+            "CONSTRAINT c2 CHECK (a > 0) ENFORCED NORELY)",
+            defaultUsing))
 
         sql(s"ALTER TABLE $t ADD CONSTRAINT c3 CHECK (b IS NOT NULL) ENFORCED RELY")
         showDDL = getShowCreateDDL(t)
         val expectedDDLArrayWithNewConstraint = expectedDDLPrefix ++ Array(
           "CONSTRAINT c2 CHECK (a > 0) ENFORCED NORELY,",
           "CONSTRAINT c3 CHECK (b IS NOT NULL) ENFORCED RELY)",
-          defaultUsing
-        )
+          defaultUsing)
         assert(showDDL === expectedDDLArrayWithNewConstraint)
         sql(s"ALTER TABLE $t DROP CONSTRAINT c1")
         showDDL = getShowCreateDDL(t)

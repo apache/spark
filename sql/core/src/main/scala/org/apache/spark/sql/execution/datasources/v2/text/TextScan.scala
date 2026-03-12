@@ -40,7 +40,7 @@ case class TextScan(
     options: CaseInsensitiveStringMap,
     partitionFilters: Seq[Expression] = Seq.empty,
     dataFilters: Seq[Expression] = Seq.empty)
-  extends TextBasedFileScan(sparkSession, options) {
+    extends TextBasedFileScan(sparkSession, options) {
 
   private val optionsAsScala = options.asScala.toMap
   private lazy val textOptions: TextOptions = new TextOptions(optionsAsScala)
@@ -73,8 +73,12 @@ case class TextScan(
     }
     val broadcastedConf =
       SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
-    TextPartitionReaderFactory(conf, broadcastedConf, readDataSchema,
-      readPartitionSchema, textOptions)
+    TextPartitionReaderFactory(
+      conf,
+      broadcastedConf,
+      readDataSchema,
+      readPartitionSchema,
+      textOptions)
   }
 
   override def equals(obj: Any): Boolean = obj match {

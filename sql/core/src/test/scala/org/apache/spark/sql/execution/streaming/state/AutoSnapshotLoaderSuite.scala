@@ -22,9 +22,8 @@ import scala.collection.mutable.ListBuffer
 import org.apache.spark.SparkFunSuite
 
 /**
- * Suite to test [[AutoSnapshotLoader]]. Tests different behaviors including
- * when repair is enabled/disabled, when numFailuresBeforeActivating is set,
- * when maxChangeFileReplay is set.
+ * Suite to test [[AutoSnapshotLoader]]. Tests different behaviors including when repair is
+ * enabled/disabled, when numFailuresBeforeActivating is set, when maxChangeFileReplay is set.
  */
 class AutoSnapshotLoaderSuite extends SparkFunSuite {
   test("successful snapshot load without auto repair") {
@@ -38,7 +37,8 @@ class AutoSnapshotLoaderSuite extends SparkFunSuite {
       val (versionLoaded, autoRepairCompleted) = loader.loadSnapshot(5)
       assert(!autoRepairCompleted)
       assert(versionLoaded == 4, "Should load the latest snapshot version")
-      assert(loader.getRequestedSnapshotVersions == Seq(4),
+      assert(
+        loader.getRequestedSnapshotVersions == Seq(4),
         "Should have requested only the latest snapshot version")
     }
   }
@@ -92,7 +92,8 @@ class AutoSnapshotLoaderSuite extends SparkFunSuite {
       val (versionLoaded, autoRepairCompleted) = loader.loadSnapshot(5)
       assert(autoRepairCompleted)
       assert(versionLoaded == 2, "Should have loaded the snapshot version before the corrupt one")
-      assert(loader.getRequestedSnapshotVersions == Seq.fill(numFailures)(4) :+ 2,
+      assert(
+        loader.getRequestedSnapshotVersions == Seq.fill(numFailures)(4) :+ 2,
         s"should have tried to load version 4 $numFailures times before falling back to version 2")
     }
   }
@@ -125,8 +126,7 @@ class AutoSnapshotLoaderSuite extends SparkFunSuite {
         "latestSnapshot" -> "5",
         "stateStoreId" -> "test",
         "selectedSnapshots" -> "4", // only selected 4 due to maxChangeFileReplay = 2
-        "eligibleSnapshots" -> "4,2,0")
-    )
+        "eligibleSnapshots" -> "4,2,0"))
     assert(loader.getRequestedSnapshotVersions == Seq(5, 4))
     assert(ex.getCause.asInstanceOf[TestLoadException].snapshotVersion == 4)
 
@@ -140,17 +140,21 @@ class AutoSnapshotLoaderSuite extends SparkFunSuite {
 }
 
 /**
- * A test implementation of [[AutoSnapshotLoader]] for testing purposes.
- * Allows tracking of requested snapshot versions and simulating load failures.
- * */
+ * A test implementation of [[AutoSnapshotLoader]] for testing purposes. Allows tracking of
+ * requested snapshot versions and simulating load failures.
+ */
 class TestAutoSnapshotLoader(
     autoSnapshotRepairEnabled: Boolean,
     numFailuresBeforeActivating: Int = 1,
     maxChangeFileReplay: Int = 10,
     loggingId: String = "test",
     eligibleSnapshots: Seq[Long],
-    failSnapshots: Seq[Long] = Seq.empty) extends AutoSnapshotLoader(
-  autoSnapshotRepairEnabled, numFailuresBeforeActivating, maxChangeFileReplay, loggingId) {
+    failSnapshots: Seq[Long] = Seq.empty)
+    extends AutoSnapshotLoader(
+      autoSnapshotRepairEnabled,
+      numFailuresBeforeActivating,
+      maxChangeFileReplay,
+      loggingId) {
 
   // track snapshot versions requested via loadSnapshotFromCheckpoint
   private val requestedSnapshotVersions = ListBuffer[Long]()
@@ -174,4 +178,4 @@ class TestAutoSnapshotLoader(
 }
 
 class TestLoadException(val snapshotVersion: Long)
-  extends IllegalStateException(s"Cannot load snapshot version $snapshotVersion")
+    extends IllegalStateException(s"Cannot load snapshot version $snapshotVersion")

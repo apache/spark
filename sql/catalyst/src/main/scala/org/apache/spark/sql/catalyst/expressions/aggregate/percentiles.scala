@@ -35,11 +35,12 @@ import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.collection.OpenHashMap
 
 abstract class PercentileBase
-  extends TypedAggregateWithHashMapAsBuffer with ImplicitCastInputTypes {
+    extends TypedAggregateWithHashMapAsBuffer
+    with ImplicitCastInputTypes {
 
   val child: Expression
   val percentageExpression: Expression
-  val frequencyExpression : Expression
+  val frequencyExpression: Expression
 
   // Whether to reverse calculate percentile value
   val reverse: Boolean
@@ -93,13 +94,11 @@ abstract class PercentileBase
         messageParameters = Map(
           "inputName" -> toSQLId("percentage"),
           "inputType" -> toSQLType(percentageExpression.dataType),
-          "inputExpr" -> toSQLExpr(percentageExpression))
-      )
+          "inputExpr" -> toSQLExpr(percentageExpression)))
     } else if (percentages == null) {
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_NULL",
-        messageParameters = Map("exprName" -> "percentage")
-      )
+        messageParameters = Map("exprName" -> "percentage"))
     } else if (percentages.exists(percentage => percentage < 0.0 || percentage > 1.0)) {
       // percentages(s) must be in the range [0.0, 1.0]
       DataTypeMismatch(
@@ -107,9 +106,7 @@ abstract class PercentileBase
         messageParameters = Map(
           "exprName" -> "percentage",
           "valueRange" -> "[0.0, 1.0]",
-          "currentValue" -> percentages.map(toSQLValue(_, DoubleType)).mkString(",")
-        )
-      )
+          "currentValue" -> percentages.map(toSQLValue(_, DoubleType)).mkString(",")))
     } else {
       TypeCheckSuccess
     }
@@ -133,8 +130,7 @@ abstract class PercentileBase
       if (frqLong > 0) {
         buffer.changeValue(key, frqLong, _ + frqLong)
       } else if (frqLong < 0) {
-        throw QueryExecutionErrors.negativeValueUnexpectedError(
-          frequencyExpression, frqLong)
+        throw QueryExecutionErrors.negativeValueUnexpectedError(frequencyExpression, frqLong)
       }
     }
     buffer
@@ -164,9 +160,11 @@ abstract class PercentileBase
     } else {
       buffer.toSeq.sortBy(_._1)(ordering.asInstanceOf[Ordering[AnyRef]])
     }
-    val accumulatedCounts = sortedCounts.scanLeft((sortedCounts.head._1, 0L)) {
-      case ((key1, count1), (key2, count2)) => (key2, count1 + count2)
-    }.tail
+    val accumulatedCounts = sortedCounts
+      .scanLeft((sortedCounts.head._1, 0L)) { case ((key1, count1), (key2, count2)) =>
+        (key2, count1 + count2)
+      }
+      .tail
 
     percentages.map(getPercentile(accumulatedCounts, _)).toImmutableArraySeq
   }
@@ -187,8 +185,7 @@ abstract class PercentileBase
   }
 
   /**
-   * Get the percentile value.
-   * This function has been based upon similar function from HIVE
+   * Get the percentile value. This function has been based upon similar function from HIVE
    * `org.apache.hadoop.hive.ql.udf.UDAFPercentile.getPercentile()`.
    */
   protected def getPercentile(
@@ -222,7 +219,8 @@ abstract class PercentileBase
       toDoubleValue(lowerKey)
     } else {
       // Linear interpolation to get the exact percentile
-      (higher - position) * toDoubleValue(lowerKey) + (position - lower) * toDoubleValue(higherKey)
+      (higher - position) * toDoubleValue(lowerKey) + (position - lower) * toDoubleValue(
+        higherKey)
     }
   }
 
@@ -230,7 +228,10 @@ abstract class PercentileBase
    * use a binary search to find the index of the position closest to the current value.
    */
   protected def binarySearchCount(
-      countsArray: Array[Long], start: Int, end: Int, value: Long): Int = {
+      countsArray: Array[Long],
+      start: Int,
+      end: Int,
+      value: Long): Int = {
     util.Arrays.binarySearch(countsArray, 0, end, value) match {
       case ix if ix < 0 => -(ix + 1)
       case ix => ix
@@ -246,15 +247,15 @@ abstract class PercentileBase
  * Therefore we have to store all the elements in memory, and so notice that too many elements can
  * cause GC paused and eventually OutOfMemory Errors.
  *
- * @param child child expression that produce numeric column value with `child.eval(inputRow)`
- * @param percentageExpression Expression that represents a single percentage value or an array of
- *                             percentage values. Each percentage value must be in the range
- *                             [0.0, 1.0].
+ * @param child
+ *   child expression that produce numeric column value with `child.eval(inputRow)`
+ * @param percentageExpression
+ *   Expression that represents a single percentage value or an array of percentage values. Each
+ *   percentage value must be in the range [0.0, 1.0].
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage =
-    """
+  usage = """
       _FUNC_(col, percentage [, frequency]) - Returns the exact percentile value of numeric
        or ANSI interval column `col` at the given percentage. The value of percentage must be
        between 0.0 and 1.0. The value of frequency should be positive integral
@@ -282,10 +283,12 @@ abstract class PercentileBase
 case class Percentile(
     child: Expression,
     percentageExpression: Expression,
-    frequencyExpression : Expression,
+    frequencyExpression: Expression,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0,
-    reverse: Boolean = false) extends PercentileBase with TernaryLike[Expression] {
+    reverse: Boolean = false)
+    extends PercentileBase
+    with TernaryLike[Expression] {
 
   def this(child: Expression, percentageExpression: Expression) = {
     this(child, percentageExpression, Literal(1L), 0, 0)
@@ -320,11 +323,10 @@ case class Percentile(
   }
 
   override protected def withNewChildrenInternal(
-      newFirst: Expression, newSecond: Expression, newThird: Expression): Percentile = copy(
-    child = newFirst,
-    percentageExpression = newSecond,
-    frequencyExpression = newThird
-  )
+      newFirst: Expression,
+      newSecond: Expression,
+      newThird: Expression): Percentile =
+    copy(child = newFirst, percentageExpression = newSecond, frequencyExpression = newThird)
 }
 
 @ExpressionDescription(
@@ -339,29 +341,29 @@ case class Percentile(
   group = "agg_funcs",
   since = "3.4.0")
 case class Median(child: Expression)
-  extends AggregateFunction
-  with RuntimeReplaceableAggregate
-  with ImplicitCastInputTypes
-  with UnaryLike[Expression] {
+    extends AggregateFunction
+    with RuntimeReplaceableAggregate
+    with ImplicitCastInputTypes
+    with UnaryLike[Expression] {
   private lazy val percentile = new Percentile(child, Literal(0.5, DoubleType))
   override lazy val replacement: Expression = percentile
   override def nodeName: String = "median"
   override def inputTypes: Seq[AbstractDataType] = percentile.inputTypes.take(1)
-  override protected def withNewChildInternal(
-      newChild: Expression): Median = this.copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): Median =
+    this.copy(child = newChild)
 }
 
 /**
- * Return a percentile value based on a continuous distribution of
- * numeric or ANSI interval column at the given percentage (specified in ORDER BY clause).
- * The value of percentage must be between 0.0 and 1.0.
+ * Return a percentile value based on a continuous distribution of numeric or ANSI interval column
+ * at the given percentage (specified in ORDER BY clause). The value of percentage must be between
+ * 0.0 and 1.0.
  */
 case class PercentileCont(left: Expression, right: Expression, reverse: Boolean = false)
-  extends AggregateFunction
-  with RuntimeReplaceableAggregate
-  with ImplicitCastInputTypes
-  with SupportsOrderingWithinGroup
-  with BinaryLike[Expression] {
+    extends AggregateFunction
+    with RuntimeReplaceableAggregate
+    with ImplicitCastInputTypes
+    with SupportsOrderingWithinGroup
+    with BinaryLike[Expression] {
   private lazy val percentile = new Percentile(left, right, reverse)
   override lazy val replacement: Expression = percentile
   override def nodeName: String = "percentile_cont"
@@ -379,7 +381,9 @@ case class PercentileCont(left: Expression, right: Expression, reverse: Boolean 
   override def withOrderingWithinGroup(orderingWithinGroup: Seq[SortOrder]): AggregateFunction = {
     if (orderingWithinGroup.length != 1) {
       throw QueryCompilationErrors.wrongNumOrderingsForFunctionError(
-        nodeName, 1, orderingWithinGroup.length)
+        nodeName,
+        1,
+        orderingWithinGroup.length)
     }
     orderingWithinGroup.head match {
       case SortOrder(child, Ascending, _, _) => this.copy(left = child)
@@ -388,7 +392,8 @@ case class PercentileCont(left: Expression, right: Expression, reverse: Boolean 
   }
 
   override protected def withNewChildrenInternal(
-      newLeft: Expression, newRight: Expression): PercentileCont =
+      newLeft: Expression,
+      newRight: Expression): PercentileCont =
     this.copy(left = newLeft, right = newRight)
 
   override def orderingFilled: Boolean = left != UnresolvedWithinGroup
@@ -411,7 +416,9 @@ case class PercentileDisc(
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0,
     legacyCalculation: Boolean = SQLConf.get.getConf(SQLConf.LEGACY_PERCENTILE_DISC_CALCULATION))
-  extends PercentileBase with SupportsOrderingWithinGroup with BinaryLike[Expression] {
+    extends PercentileBase
+    with SupportsOrderingWithinGroup
+    with BinaryLike[Expression] {
 
   val frequencyExpression: Expression = Literal(1L)
 
@@ -437,7 +444,9 @@ case class PercentileDisc(
   override def withOrderingWithinGroup(orderingWithinGroup: Seq[SortOrder]): AggregateFunction = {
     if (orderingWithinGroup.length != 1) {
       throw QueryCompilationErrors.wrongNumOrderingsForFunctionError(
-        nodeName, 1, orderingWithinGroup.length)
+        nodeName,
+        1,
+        orderingWithinGroup.length)
     }
     orderingWithinGroup.head match {
       case SortOrder(expr, Ascending, _, _) => this.copy(child = expr)
@@ -446,10 +455,9 @@ case class PercentileDisc(
   }
 
   override protected def withNewChildrenInternal(
-      newLeft: Expression, newRight: Expression): PercentileDisc = copy(
-    child = newLeft,
-    percentageExpression = newRight
-  )
+      newLeft: Expression,
+      newRight: Expression): PercentileDisc =
+    copy(child = newLeft, percentageExpression = newRight)
 
   override protected def getPercentile(
       accumulatedCounts: Seq[(AnyRef, Long)],

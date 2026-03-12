@@ -106,16 +106,19 @@ object CatalystTypeConverters {
   /**
    * Converts a Scala type to its Catalyst equivalent (and vice versa).
    *
-   * @tparam ScalaInputType The type of Scala values that can be converted to Catalyst.
-   * @tparam ScalaOutputType The type of Scala values returned when converting Catalyst to Scala.
-   * @tparam CatalystType The internal Catalyst type used to represent values of this Scala type.
+   * @tparam ScalaInputType
+   *   The type of Scala values that can be converted to Catalyst.
+   * @tparam ScalaOutputType
+   *   The type of Scala values returned when converting Catalyst to Scala.
+   * @tparam CatalystType
+   *   The internal Catalyst type used to represent values of this Scala type.
    */
   private abstract class CatalystTypeConverter[ScalaInputType, ScalaOutputType, CatalystType]
-    extends Serializable {
+      extends Serializable {
 
     /**
-     * Converts a Scala type to its Catalyst equivalent while automatically handling nulls
-     * and Options.
+     * Converts a Scala type to its Catalyst equivalent while automatically handling nulls and
+     * Options.
      */
     final def toCatalyst(@Nullable maybeScalaValue: Any): CatalystType = {
       maybeScalaValue match {
@@ -139,38 +142,39 @@ object CatalystTypeConverters {
 
     /**
      * Converts a Scala value to its Catalyst equivalent.
-     * @param scalaValue the Scala value, guaranteed not to be null.
-     * @return the Catalyst value.
+     * @param scalaValue
+     *   the Scala value, guaranteed not to be null.
+     * @return
+     *   the Catalyst value.
      */
     protected def toCatalystImpl(scalaValue: ScalaInputType): CatalystType
 
     /**
-     * Given a Catalyst row, convert the value at column `column` to its Scala equivalent.
-     * This method will only be called on non-null columns.
+     * Given a Catalyst row, convert the value at column `column` to its Scala equivalent. This
+     * method will only be called on non-null columns.
      */
     protected def toScalaImpl(row: InternalRow, column: Int): ScalaOutputType
   }
 
   private case class IdentityConverter(dataType: DataType)
-    extends CatalystTypeConverter[Any, Any, Any] {
+      extends CatalystTypeConverter[Any, Any, Any] {
     override def toCatalystImpl(scalaValue: Any): Any = scalaValue
     override def toScala(catalystValue: Any): Any = catalystValue
     override def toScalaImpl(row: InternalRow, column: Int): Any = row.get(column, dataType)
   }
 
   /**
-   * Adapter that wraps TypeOps to implement CatalystTypeConverter.
-   * Used by the Types Framework to provide type conversion for framework-supported types.
+   * Adapter that wraps TypeOps to implement CatalystTypeConverter. Used by the Types Framework to
+   * provide type conversion for framework-supported types.
    */
-  private class TypeOpsConverter(ops: TypeOps)
-      extends CatalystTypeConverter[Any, Any, Any] {
+  private class TypeOpsConverter(ops: TypeOps) extends CatalystTypeConverter[Any, Any, Any] {
     override def toCatalystImpl(scalaValue: Any): Any = ops.toCatalystImpl(scalaValue)
     override def toScala(catalystValue: Any): Any = ops.toScala(catalystValue)
     override def toScalaImpl(row: InternalRow, column: Int): Any = ops.toScalaImpl(row, column)
   }
 
-  private case class UDTConverter[A >: Null](
-      udt: UserDefinedType[A]) extends CatalystTypeConverter[A, A, Any] {
+  private case class UDTConverter[A >: Null](udt: UserDefinedType[A])
+      extends CatalystTypeConverter[A, A, Any] {
     // toCatalyst (it calls toCatalystImpl) will do null check.
     override def toCatalystImpl(scalaValue: A): Any = udt.serialize(scalaValue)
 
@@ -183,8 +187,8 @@ object CatalystTypeConverters {
   }
 
   /** Converter for arrays, sequences, and Java iterables. */
-  private case class ArrayConverter(
-      elementType: DataType) extends CatalystTypeConverter[Any, Seq[Any], ArrayData] {
+  private case class ArrayConverter(elementType: DataType)
+      extends CatalystTypeConverter[Any, Seq[Any], ArrayData] {
 
     private[this] val elementConverter = getConverterForType(elementType)
 
@@ -202,12 +206,13 @@ object CatalystTypeConverters {
             convertedIterable += elementConverter.toCatalyst(item)
           }
           new GenericArrayData(convertedIterable.toArray)
-        case other => throw new SparkIllegalArgumentException(
-          errorClass = "_LEGACY_ERROR_TEMP_3220",
-          messageParameters = scala.collection.immutable.Map(
-            "other" -> other.toString,
-            "otherClass" -> other.getClass.getCanonicalName,
-            "elementType" -> elementType.catalogString))
+        case other =>
+          throw new SparkIllegalArgumentException(
+            errorClass = "_LEGACY_ERROR_TEMP_3220",
+            messageParameters = scala.collection.immutable.Map(
+              "other" -> other.toString,
+              "otherClass" -> other.getClass.getCanonicalName,
+              "elementType" -> elementType.catalogString))
       }
     }
 
@@ -218,9 +223,11 @@ object CatalystTypeConverters {
         catalystValue.toArray[Any](elementType).toImmutableArraySeq
       } else {
         val result = new Array[Any](catalystValue.numElements())
-        catalystValue.foreach(elementType, (i, e) => {
-          result(i) = elementConverter.toScala(e)
-        })
+        catalystValue.foreach(
+          elementType,
+          (i, e) => {
+            result(i) = elementConverter.toScala(e)
+          })
         result.toImmutableArraySeq
       }
     }
@@ -229,10 +236,8 @@ object CatalystTypeConverters {
       toScala(row.getArray(column))
   }
 
-  private case class MapConverter(
-      keyType: DataType,
-      valueType: DataType)
-    extends CatalystTypeConverter[Any, Map[Any, Any], MapData] {
+  private case class MapConverter(keyType: DataType, valueType: DataType)
+      extends CatalystTypeConverter[Any, Map[Any, Any], MapData] {
 
     private[this] val keyConverter = getConverterForType(keyType)
     private[this] val valueConverter = getConverterForType(valueType)
@@ -244,13 +249,14 @@ object CatalystTypeConverters {
       scalaValue match {
         case map: Map[_, _] => ArrayBasedMapData(map, keyFunction, valueFunction)
         case javaMap: JavaMap[_, _] => ArrayBasedMapData(javaMap, keyFunction, valueFunction)
-        case other => throw new SparkIllegalArgumentException(
-          errorClass = "_LEGACY_ERROR_TEMP_3221",
-          messageParameters = scala.collection.immutable.Map(
-            "other" -> other.toString,
-            "otherClass" -> other.getClass.getCanonicalName,
-            "keyType" -> keyType.catalogString,
-            "valueType" -> valueType.catalogString))
+        case other =>
+          throw new SparkIllegalArgumentException(
+            errorClass = "_LEGACY_ERROR_TEMP_3221",
+            messageParameters = scala.collection.immutable.Map(
+              "other" -> other.toString,
+              "otherClass" -> other.getClass.getCanonicalName,
+              "keyType" -> keyType.catalogString,
+              "valueType" -> valueType.catalogString))
       }
     }
 
@@ -273,8 +279,8 @@ object CatalystTypeConverters {
       toScala(row.getMap(column))
   }
 
-  private case class StructConverter(
-      structType: StructType) extends CatalystTypeConverter[Any, Row, InternalRow] {
+  private case class StructConverter(structType: StructType)
+      extends CatalystTypeConverter[Any, Row, InternalRow] {
 
     private[this] val converters = structType.fields.map { f => getConverterForType(f.dataType) }
 
@@ -297,12 +303,13 @@ object CatalystTypeConverters {
           idx += 1
         }
         new GenericInternalRow(ar)
-      case other => throw new SparkIllegalArgumentException(
-        errorClass = "_LEGACY_ERROR_TEMP_3219",
-        messageParameters = scala.collection.immutable.Map(
-          "other" -> other.toString,
-          "otherClass" -> other.getClass.getCanonicalName,
-          "dataType" -> structType.catalogString))
+      case other =>
+        throw new SparkIllegalArgumentException(
+          errorClass = "_LEGACY_ERROR_TEMP_3219",
+          messageParameters = scala.collection.immutable.Map(
+            "other" -> other.toString,
+            "otherClass" -> other.getClass.getCanonicalName,
+            "dataType" -> structType.catalogString))
     }
 
     override def toScala(row: InternalRow): Row = {
@@ -323,10 +330,12 @@ object CatalystTypeConverters {
       toScala(row.getStruct(column, structType.size))
   }
 
-  private class CharConverter(length: Int) extends CatalystTypeConverter[Any, String, UTF8String] {
+  private class CharConverter(length: Int)
+      extends CatalystTypeConverter[Any, String, UTF8String] {
     override def toCatalystImpl(scalaValue: Any): UTF8String =
       CharVarcharCodegenUtils.charTypeWriteSideCheck(
-        StringConverter.toCatalystImpl(scalaValue), length)
+        StringConverter.toCatalystImpl(scalaValue),
+        length)
     override def toScala(catalystValue: UTF8String): String = if (catalystValue == null) {
       null
     } else {
@@ -337,17 +346,20 @@ object CatalystTypeConverters {
   }
 
   private class VarcharConverter(length: Int)
-    extends CatalystTypeConverter[Any, String, UTF8String] {
+      extends CatalystTypeConverter[Any, String, UTF8String] {
     override def toCatalystImpl(scalaValue: Any): UTF8String =
       CharVarcharCodegenUtils.varcharTypeWriteSideCheck(
-        StringConverter.toCatalystImpl(scalaValue), length)
+        StringConverter.toCatalystImpl(scalaValue),
+        length)
     override def toScala(catalystValue: UTF8String): String = if (catalystValue == null) {
       null
     } else {
       CharVarcharCodegenUtils.varcharTypeWriteSideCheck(catalystValue, length).toString
     }
     override def toScalaImpl(row: InternalRow, column: Int): String =
-      CharVarcharCodegenUtils.varcharTypeWriteSideCheck(row.getUTF8String(column), length).toString
+      CharVarcharCodegenUtils
+        .varcharTypeWriteSideCheck(row.getUTF8String(column), length)
+        .toString
   }
 
   private object StringConverter extends CatalystTypeConverter[Any, String, UTF8String] {
@@ -356,12 +368,13 @@ object CatalystTypeConverters {
       case utf8: UTF8String => utf8
       case chr: Char => UTF8String.fromString(chr.toString)
       case ac: Array[Char] => UTF8String.fromString(String.valueOf(ac))
-      case other => throw new SparkIllegalArgumentException(
-        errorClass = "_LEGACY_ERROR_TEMP_3219",
-        messageParameters = scala.collection.immutable.Map(
-          "other" -> other.toString,
-          "otherClass" -> other.getClass.getCanonicalName,
-          "dataType" -> StringType.sql))
+      case other =>
+        throw new SparkIllegalArgumentException(
+          errorClass = "_LEGACY_ERROR_TEMP_3219",
+          messageParameters = scala.collection.immutable.Map(
+            "other" -> other.toString,
+            "otherClass" -> other.getClass.getCanonicalName,
+            "dataType" -> StringType.sql))
     }
     override def toScala(catalystValue: UTF8String): String =
       if (catalystValue == null) null else catalystValue.toString
@@ -382,12 +395,13 @@ object CatalystTypeConverters {
     override def toCatalystImpl(scalaValue: Any): GeometryVal = scalaValue match {
       case g: org.apache.spark.sql.types.Geometry if SQLConf.get.geospatialEnabled =>
         STUtils.serializeGeomFromWKB(g, dataType)
-      case other => throw new SparkIllegalArgumentException(
-        errorClass = "_LEGACY_ERROR_TEMP_3219",
-        messageParameters = scala.collection.immutable.Map(
-          "other" -> other.toString,
-          "otherClass" -> other.getClass.getCanonicalName,
-          "dataType" -> StringType.sql))
+      case other =>
+        throw new SparkIllegalArgumentException(
+          errorClass = "_LEGACY_ERROR_TEMP_3219",
+          messageParameters = scala.collection.immutable.Map(
+            "other" -> other.toString,
+            "otherClass" -> other.getClass.getCanonicalName,
+            "dataType" -> StringType.sql))
     }
     override def toScala(catalystValue: GeometryVal): org.apache.spark.sql.types.Geometry = {
       assertGeospatialEnabled()
@@ -395,8 +409,9 @@ object CatalystTypeConverters {
       else STUtils.deserializeGeom(catalystValue, dataType)
     }
 
-    override def toScalaImpl(row: InternalRow, column: Int):
-        org.apache.spark.sql.types.Geometry = {
+    override def toScalaImpl(
+        row: InternalRow,
+        column: Int): org.apache.spark.sql.types.Geometry = {
       assertGeospatialEnabled()
       STUtils.deserializeGeom(row.getGeometry(0), dataType)
     }
@@ -407,12 +422,13 @@ object CatalystTypeConverters {
     override def toCatalystImpl(scalaValue: Any): GeographyVal = scalaValue match {
       case g: org.apache.spark.sql.types.Geography if SQLConf.get.geospatialEnabled =>
         STUtils.serializeGeogFromWKB(g, dataType)
-      case other => throw new SparkIllegalArgumentException(
-        errorClass = "_LEGACY_ERROR_TEMP_3219",
-        messageParameters = scala.collection.immutable.Map(
-          "other" -> other.toString,
-          "otherClass" -> other.getClass.getCanonicalName,
-          "dataType" -> StringType.sql))
+      case other =>
+        throw new SparkIllegalArgumentException(
+          errorClass = "_LEGACY_ERROR_TEMP_3219",
+          messageParameters = scala.collection.immutable.Map(
+            "other" -> other.toString,
+            "otherClass" -> other.getClass.getCanonicalName,
+            "dataType" -> StringType.sql))
     }
     override def toScala(catalystValue: GeographyVal): org.apache.spark.sql.types.Geography = {
       assertGeospatialEnabled()
@@ -420,8 +436,9 @@ object CatalystTypeConverters {
       else STUtils.deserializeGeog(catalystValue, dataType)
     }
 
-    override def toScalaImpl(row: InternalRow, column: Int):
-        org.apache.spark.sql.types.Geography = {
+    override def toScalaImpl(
+        row: InternalRow,
+        column: Int): org.apache.spark.sql.types.Geography = {
       assertGeospatialEnabled()
       STUtils.deserializeGeog(row.getGeography(0), dataType)
     }
@@ -431,15 +448,17 @@ object CatalystTypeConverters {
     override def toCatalystImpl(scalaValue: Any): Int = scalaValue match {
       case d: Date => DateTimeUtils.fromJavaDate(d)
       case l: LocalDate => DateTimeUtils.localDateToDays(l)
-      case other => throw new SparkIllegalArgumentException(
-        errorClass = "_LEGACY_ERROR_TEMP_3219",
-        messageParameters = scala.collection.immutable.Map(
-          "other" -> other.toString,
-          "otherClass" -> other.getClass.getCanonicalName,
-          "dataType" -> DateType.sql))
+      case other =>
+        throw new SparkIllegalArgumentException(
+          errorClass = "_LEGACY_ERROR_TEMP_3219",
+          messageParameters = scala.collection.immutable.Map(
+            "other" -> other.toString,
+            "otherClass" -> other.getClass.getCanonicalName,
+            "dataType" -> DateType.sql))
     }
     override def toScala(catalystValue: Any): Date =
-      if (catalystValue == null) null else DateTimeUtils.toJavaDate(catalystValue.asInstanceOf[Int])
+      if (catalystValue == null) null
+      else DateTimeUtils.toJavaDate(catalystValue.asInstanceOf[Int])
     override def toScalaImpl(row: InternalRow, column: Int): Date =
       DateTimeUtils.toJavaDate(row.getInt(column))
   }
@@ -471,12 +490,13 @@ object CatalystTypeConverters {
     override def toCatalystImpl(scalaValue: Any): Long = scalaValue match {
       case t: Timestamp => DateTimeUtils.fromJavaTimestamp(t)
       case i: Instant => DateTimeUtils.instantToMicros(i)
-      case other => throw new SparkIllegalArgumentException(
-        errorClass = "_LEGACY_ERROR_TEMP_3219",
-        messageParameters = scala.collection.immutable.Map(
-          "other" -> other.toString,
-          "otherClass" -> other.getClass.getCanonicalName,
-          "dataType" -> TimestampType.sql))
+      case other =>
+        throw new SparkIllegalArgumentException(
+          errorClass = "_LEGACY_ERROR_TEMP_3219",
+          messageParameters = scala.collection.immutable.Map(
+            "other" -> other.toString,
+            "otherClass" -> other.getClass.getCanonicalName,
+            "dataType" -> TimestampType.sql))
     }
     override def toScala(catalystValue: Any): Timestamp =
       if (catalystValue == null) null
@@ -495,16 +515,16 @@ object CatalystTypeConverters {
       DateTimeUtils.microsToInstant(row.getLong(column))
   }
 
-  private object TimestampNTZConverter
-    extends CatalystTypeConverter[Any, LocalDateTime, Any] {
+  private object TimestampNTZConverter extends CatalystTypeConverter[Any, LocalDateTime, Any] {
     override def toCatalystImpl(scalaValue: Any): Any = scalaValue match {
       case l: LocalDateTime => DateTimeUtils.localDateTimeToMicros(l)
-      case other => throw new SparkIllegalArgumentException(
-        errorClass = "_LEGACY_ERROR_TEMP_3219",
-        messageParameters = scala.collection.immutable.Map(
-          "other" -> other.toString,
-          "otherClass" -> other.getClass.getCanonicalName,
-          "dataType" -> TimestampNTZType.sql))
+      case other =>
+        throw new SparkIllegalArgumentException(
+          errorClass = "_LEGACY_ERROR_TEMP_3219",
+          messageParameters = scala.collection.immutable.Map(
+            "other" -> other.toString,
+            "otherClass" -> other.getClass.getCanonicalName,
+            "dataType" -> TimestampNTZType.sql))
     }
 
     override def toScala(catalystValue: Any): LocalDateTime =
@@ -516,7 +536,7 @@ object CatalystTypeConverters {
   }
 
   private class DecimalConverter(dataType: DecimalType)
-    extends CatalystTypeConverter[Any, JavaBigDecimal, Decimal] {
+      extends CatalystTypeConverter[Any, JavaBigDecimal, Decimal] {
 
     private val nullOnOverflow = !SQLConf.get.ansiEnabled
 
@@ -526,14 +546,19 @@ object CatalystTypeConverters {
         case d: JavaBigDecimal => Decimal(d)
         case d: JavaBigInteger => Decimal(d)
         case d: Decimal => d
-        case other => throw new SparkIllegalArgumentException(
-          errorClass = "_LEGACY_ERROR_TEMP_3219",
-          messageParameters = scala.collection.immutable.Map(
-            "other" -> other.toString,
-            "otherClass" -> other.getClass.getCanonicalName,
-            "dataType" -> dataType.catalogString))
+        case other =>
+          throw new SparkIllegalArgumentException(
+            errorClass = "_LEGACY_ERROR_TEMP_3219",
+            messageParameters = scala.collection.immutable.Map(
+              "other" -> other.toString,
+              "otherClass" -> other.getClass.getCanonicalName,
+              "dataType" -> dataType.catalogString))
       }
-      decimal.toPrecision(dataType.precision, dataType.scale, Decimal.ROUND_HALF_UP, nullOnOverflow)
+      decimal.toPrecision(
+        dataType.precision,
+        dataType.scale,
+        Decimal.ROUND_HALF_UP,
+        nullOnOverflow)
     }
     override def toScala(catalystValue: Decimal): JavaBigDecimal = {
       if (catalystValue == null) null
@@ -629,9 +654,9 @@ object CatalystTypeConverters {
   }
 
   /**
-   * Creates a converter function that will convert Catalyst types to Scala type.
-   * Typical use case would be converting a collection of rows that have the same schema. You will
-   * call this function once to get a converter, and apply it to every row.
+   * Creates a converter function that will convert Catalyst types to Scala type. Typical use case
+   * would be converting a collection of rows that have the same schema. You will call this
+   * function once to get a converter, and apply it to every row.
    */
   def createToScalaConverter(dataType: DataType): Any => Any = {
     if (isPrimitive(dataType)) {
@@ -642,11 +667,10 @@ object CatalystTypeConverters {
   }
 
   /**
-   *  Converts Scala objects to Catalyst rows / types.
+   * Converts Scala objects to Catalyst rows / types.
    *
-   *  Note: This should be called before do evaluation on Row
-   *        (It does not support UDT)
-   *  This is used to create an RDD or test results with correct types for Catalyst.
+   * Note: This should be called before do evaluation on Row (It does not support UDT) This is
+   * used to create an RDD or test results with correct types for Catalyst.
    */
   def convertToCatalyst(a: Any): Any = a match {
     case s: String => StringConverter.toCatalyst(s)
@@ -680,9 +704,8 @@ object CatalystTypeConverters {
   }
 
   /**
-   * Converts Catalyst types used internally in rows to standard Scala types
-   * This method is slow, and for batch conversion you should be using converter
-   * produced by createToScalaConverter.
+   * Converts Catalyst types used internally in rows to standard Scala types This method is slow,
+   * and for batch conversion you should be using converter produced by createToScalaConverter.
    */
   def convertToScala(catalystValue: Any, dataType: DataType): Any = {
     createToScalaConverter(dataType)(catalystValue)

@@ -31,6 +31,7 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.{AbstractDataType, BooleanType, DataType}
 
 trait TableConstraint extends Expression with Unevaluable {
+
   /** Convert to a data source v2 constraint */
   def toV2Constraint: Constraint
 
@@ -43,25 +44,33 @@ trait TableConstraint extends Expression with Unevaluable {
   /** Returns the user-provided characteristics of the constraint (e.g., ENFORCED, RELY) */
   def userProvidedCharacteristic: ConstraintCharacteristic
 
-  /** Creates a new constraint with the user-provided name
+  /**
+   * Creates a new constraint with the user-provided name
    *
-   * @param name Constraint name
-   * @return New TableConstraint instance
+   * @param name
+   *   Constraint name
+   * @return
+   *   New TableConstraint instance
    */
   def withUserProvidedName(name: String): TableConstraint
 
   /**
    * Creates a new constraint with the given table name
    *
-   * @param tableName Name of the table containing this constraint
-   * @return New TableConstraint instance
+   * @param tableName
+   *   Name of the table containing this constraint
+   * @return
+   *   New TableConstraint instance
    */
   def withTableName(tableName: String): TableConstraint
 
-  /** Creates a new constraint with the user-provided characteristic
+  /**
+   * Creates a new constraint with the user-provided characteristic
    *
-   * @param c Constraint characteristic (ENFORCED, RELY)
-   * @return New TableConstraint instance
+   * @param c
+   *   Constraint characteristic (ENFORCED, RELY)
+   * @return
+   *   New TableConstraint instance
    */
   def withUserProvidedCharacteristic(c: ConstraintCharacteristic): TableConstraint
 
@@ -69,10 +78,11 @@ trait TableConstraint extends Expression with Unevaluable {
   protected def generateName(tableName: String): String
 
   /**
-   * Gets the constraint name. If no name is provided by the user (null or empty),
-   * generates a name based on the table name using generateName.
+   * Gets the constraint name. If no name is provided by the user (null or empty), generates a
+   * name based on the table name using generateName.
    *
-   * @return The constraint name (either user-provided or generated)
+   * @return
+   *   The constraint name (either user-provided or generated)
    */
   final def name: String = {
     if (userProvidedName == null || userProvidedName.isEmpty) {
@@ -96,10 +106,8 @@ trait TableConstraint extends Expression with Unevaluable {
         command = origin.sqlText,
         start = origin,
         errorClass = "UNSUPPORTED_CONSTRAINT_CHARACTERISTIC",
-        messageParameters = Map(
-          "characteristic" -> "ENFORCED",
-          "constraintType" -> constraintType)
-      )
+        messageParameters =
+          Map("characteristic" -> "ENFORCED", "constraintType" -> constraintType))
     }
   }
 
@@ -120,10 +128,11 @@ case class CheckConstraint(
     condition: String,
     override val userProvidedName: String = null,
     override val tableName: String = null,
-    override val userProvidedCharacteristic: ConstraintCharacteristic = ConstraintCharacteristic.empty)
-  extends UnaryExpression
-  with TableConstraint
-  with ImplicitCastInputTypes {
+    override val userProvidedCharacteristic: ConstraintCharacteristic =
+      ConstraintCharacteristic.empty)
+    extends UnaryExpression
+    with TableConstraint
+    with ImplicitCastInputTypes {
 // scalastyle:on line.size.limit
 
   override def inputTypes: Seq[AbstractDataType] = Seq(BooleanType)
@@ -162,10 +171,7 @@ case class CheckConstraint(
         command = origin.sqlText,
         start = origin,
         errorClass = "UNSUPPORTED_CONSTRAINT_CHARACTERISTIC",
-        messageParameters = Map(
-          "characteristic" -> "NOT ENFORCED",
-          "constraintType" -> "CHECK")
-      )
+        messageParameters = Map("characteristic" -> "NOT ENFORCED", "constraintType" -> "CHECK"))
     }
     copy(userProvidedCharacteristic = c)
   }
@@ -176,8 +182,10 @@ case class PrimaryKeyConstraint(
     columns: Seq[String],
     override val userProvidedName: String = null,
     override val tableName: String = null,
-    override val userProvidedCharacteristic: ConstraintCharacteristic = ConstraintCharacteristic.empty)
-  extends LeafExpression with TableConstraint {
+    override val userProvidedCharacteristic: ConstraintCharacteristic =
+      ConstraintCharacteristic.empty)
+    extends LeafExpression
+    with TableConstraint {
 // scalastyle:on line.size.limit
 
   override def toV2Constraint: Constraint = {
@@ -208,8 +216,10 @@ case class UniqueConstraint(
     columns: Seq[String],
     override val userProvidedName: String = null,
     override val tableName: String = null,
-    override val userProvidedCharacteristic: ConstraintCharacteristic = ConstraintCharacteristic.empty)
-  extends LeafExpression with TableConstraint {
+    override val userProvidedCharacteristic: ConstraintCharacteristic =
+      ConstraintCharacteristic.empty)
+    extends LeafExpression
+    with TableConstraint {
 // scalastyle:on line.size.limit
 
   override def toV2Constraint: Constraint = {
@@ -244,8 +254,10 @@ case class ForeignKeyConstraint(
     parentColumns: Seq[String] = Seq.empty,
     override val userProvidedName: String = null,
     override val tableName: String = null,
-    override val userProvidedCharacteristic: ConstraintCharacteristic = ConstraintCharacteristic.empty)
-  extends LeafExpression with TableConstraint {
+    override val userProvidedCharacteristic: ConstraintCharacteristic =
+      ConstraintCharacteristic.empty)
+    extends LeafExpression
+    with TableConstraint {
 // scalastyle:on line.size.limit
 
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
@@ -254,7 +266,8 @@ case class ForeignKeyConstraint(
     val enforced = userProvidedCharacteristic.enforced.getOrElse(false)
     val rely = userProvidedCharacteristic.rely.getOrElse(false)
     Constraint
-      .foreignKey(name,
+      .foreignKey(
+        name,
         childColumns.map(FieldReference.column).toArray,
         parentTableId.asIdentifier,
         parentColumns.map(FieldReference.column).toArray)
@@ -278,22 +291,26 @@ case class ForeignKeyConstraint(
 }
 
 /**
- * An expression that validates a check constraint on a column.
- * If the evaluation result is false, it throws a [[SparkRuntimeException]] indicating constraint
- * violation. Otherwise, it returns true to indicate that the constraint is satisfied, even if the
- * expression is null.
+ * An expression that validates a check constraint on a column. If the evaluation result is false,
+ * it throws a [[SparkRuntimeException]] indicating constraint violation. Otherwise, it returns
+ * true to indicate that the constraint is satisfied, even if the expression is null.
  *
- * @param child The fully resolved expression to be evaluated to check the constraint.
- * @param columnExtractors Extractors for each referenced column. Used to generate readable errors.
- * @param constraintName The name of the constraint.
- * @param predicateSql The SQL representation of the constraint.
+ * @param child
+ *   The fully resolved expression to be evaluated to check the constraint.
+ * @param columnExtractors
+ *   Extractors for each referenced column. Used to generate readable errors.
+ * @param constraintName
+ *   The name of the constraint.
+ * @param predicateSql
+ *   The SQL representation of the constraint.
  */
 case class CheckInvariant(
     child: Expression,
     columnExtractors: Seq[(String, Expression)],
     constraintName: String,
     predicateSql: String)
-  extends Expression with NonSQLExpression {
+    extends Expression
+    with NonSQLExpression {
 
   override def children: Seq[Expression] = child +: columnExtractors.map(_._2)
   override def dataType: DataType = BooleanType
@@ -311,8 +328,8 @@ case class CheckInvariant(
   override def eval(input: InternalRow): Any = {
     val result = child.eval(input)
     if (result == false) {
-      val values = columnExtractors.map {
-        case (column, extractor) => column -> extractor.eval(input)
+      val values = columnExtractors.map { case (column, extractor) =>
+        column -> extractor.eval(input)
       }.toMap
       throw QueryExecutionErrors.checkViolation(constraintName, predicateSql, values)
     }
@@ -320,23 +337,25 @@ case class CheckInvariant(
   }
 
   /**
-   * Generate the code to extract values for the columns referenced in a violated CHECK constraint.
-   * We build parallel lists of full column names and their extracted values in the row which
-   * violates the constraint, to be passed to the constraint violation error
-   * in [[generateExpressionValidationCode()]].
+   * Generate the code to extract values for the columns referenced in a violated CHECK
+   * constraint. We build parallel lists of full column names and their extracted values in the
+   * row which violates the constraint, to be passed to the constraint violation error in
+   * [[generateExpressionValidationCode()]].
    *
-   * Note that this code is a bit expensive, so it shouldn't be run until we already
-   * know the constraint has been violated.
+   * Note that this code is a bit expensive, so it shouldn't be run until we already know the
+   * constraint has been violated.
    */
   private def generateColumnValuesCode(
-    colList: String, valList: String, ctx: CodegenContext): Block = {
+      colList: String,
+      valList: String,
+      ctx: CodegenContext): Block = {
     val start =
       code"""
             |java.util.List<String> $colList = new java.util.ArrayList<String>();
             |java.util.List<Object> $valList = new java.util.ArrayList<Object>();
             |""".stripMargin
-    columnExtractors.map {
-      case (name, extractor) =>
+    columnExtractors
+      .map { case (name, extractor) =>
         val colValue = extractor.genCode(ctx)
         code"""
               |$colList.add("$name");
@@ -347,7 +366,8 @@ case class CheckInvariant(
               |  $valList.add(${colValue.value});
               |}
               |""".stripMargin
-    }.fold(start)(_ + _)
+      }
+      .fold(start)(_ + _)
   }
 
   private def generateExpressionValidationCode(ctx: CodegenContext): Block = {
@@ -371,10 +391,9 @@ case class CheckInvariant(
   }
 
   override protected def withNewChildrenInternal(
-    newChildren: IndexedSeq[Expression]): Expression = {
+      newChildren: IndexedSeq[Expression]): Expression = {
     copy(
       child = newChildren.head,
-      columnExtractors = columnExtractors.map(_._1).zip(newChildren.tail)
-    )
+      columnExtractors = columnExtractors.map(_._1).zip(newChildren.tail))
   }
 }

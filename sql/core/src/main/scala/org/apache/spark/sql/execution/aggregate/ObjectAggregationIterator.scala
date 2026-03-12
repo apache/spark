@@ -47,15 +47,16 @@ class ObjectAggregationIterator(
     numOutputRows: SQLMetric,
     spillSize: SQLMetric,
     numTasksFallBacked: SQLMetric)
-  extends AggregationIterator(
-    partIndex,
-    groupingExpressions,
-    originalInputAttributes,
-    aggregateExpressions,
-    aggregateAttributes,
-    initialInputBufferOffset,
-    resultExpressions,
-    newMutableProjection) with Logging {
+    extends AggregationIterator(
+      partIndex,
+      groupingExpressions,
+      originalInputAttributes,
+      aggregateExpressions,
+      aggregateAttributes,
+      initialInputBufferOffset,
+      resultExpressions,
+      newMutableProjection)
+    with Logging {
 
   // Indicates whether we have fallen back to sort-based aggregation or not.
   private[this] var sortBased: Boolean = false
@@ -78,7 +79,9 @@ class ObjectAggregationIterator(
     val newFunctions = initializeAggregateFunctions(newExpressions, 0)
     val newInputAttributes = newFunctions.flatMap(_.inputAggBufferAttributes)
     generateProcessRow(
-      newExpressions, newFunctions.toImmutableArraySeq, newInputAttributes.toImmutableArraySeq)
+      newExpressions,
+      newFunctions.toImmutableArraySeq,
+      newInputAttributes.toImmutableArraySeq)
   }
 
   /**
@@ -86,10 +89,12 @@ class ObjectAggregationIterator(
    */
   processInputs()
 
-  TaskContext.get().addTaskCompletionListener[Unit](_ => {
-    // At the end of the task, update the task's spill size.
-    spillSize.set(TaskContext.get().taskMetrics().memoryBytesSpilled - spillSizeBefore)
-  })
+  TaskContext
+    .get()
+    .addTaskCompletionListener[Unit](_ => {
+      // At the end of the task, update the task's spill size.
+      spillSize.set(TaskContext.get().taskMetrics().memoryBytesSpilled - spillSizeBefore)
+    })
 
   override final def hasNext: Boolean = {
     aggBufferIterator.hasNext
@@ -135,7 +140,8 @@ class ObjectAggregationIterator(
   }
 
   private def getAggregationBufferByKey(
-    hashMap: ObjectAggregationMap, groupingKey: UnsafeRow): InternalRow = {
+      hashMap: ObjectAggregationMap,
+      groupingKey: UnsafeRow): InternalRow = {
     var aggBuffer = hashMap.getAggregationBuffer(groupingKey)
 
     if (aggBuffer == null) {
@@ -180,8 +186,7 @@ class ObjectAggregationIterator(
               log"(${MDC(OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD, fallbackCountThreshold)}" +
               log" entries), spilling and falling back to sort based aggregation. You may change " +
               log"the threshold by adjust option " +
-              log"${MDC(CONFIG, SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key)}"
-          )
+              log"${MDC(CONFIG, SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key)}")
 
           // Falls back to sort-based aggregation
           sortBased = true
@@ -221,15 +226,21 @@ class ObjectAggregationIterator(
 /**
  * A class used to handle sort-based aggregation, used together with [[ObjectHashAggregateExec]].
  *
- * @param initialAggBufferIterator iterator that points to sorted input aggregation buffers
- * @param inputSchema  The schema of input row
- * @param groupingSchema The schema of grouping key
- * @param processRow  Function to update the aggregation buffer with input rows
- * @param mergeAggregationBuffers Function used to merge the input aggregation buffers into existing
- *                                aggregation buffers
- * @param makeEmptyAggregationBuffer Creates an empty aggregation buffer
+ * @param initialAggBufferIterator
+ *   iterator that points to sorted input aggregation buffers
+ * @param inputSchema
+ *   The schema of input row
+ * @param groupingSchema
+ *   The schema of grouping key
+ * @param processRow
+ *   Function to update the aggregation buffer with input rows
+ * @param mergeAggregationBuffers
+ *   Function used to merge the input aggregation buffers into existing aggregation buffers
+ * @param makeEmptyAggregationBuffer
+ *   Creates an empty aggregation buffer
  *
- * @todo Try to eliminate this class by refactor and reuse code paths in [[SortAggregateExec]].
+ * @todo
+ *   Try to eliminate this class by refactor and reuse code paths in [[SortAggregateExec]].
  */
 class SortBasedAggregator(
     initialAggBufferIterator: KVIterator[UnsafeRow, UnsafeRow],
@@ -248,8 +259,8 @@ class SortBasedAggregator(
   }
 
   /**
-   * Returns a destructive iterator of AggregationBufferEntry.
-   * Notice: it is illegal to call any method after `destructiveIterator()` has been called.
+   * Returns a destructive iterator of AggregationBufferEntry. Notice: it is illegal to call any
+   * method after `destructiveIterator()` has been called.
    */
   def destructiveIterator(): Iterator[AggregationBufferEntry] = {
     new Iterator[AggregationBufferEntry] {
@@ -333,7 +344,6 @@ class SortBasedAggregator(
       TaskContext.get().taskMemoryManager().pageSizeBytes,
       SparkEnv.get.conf.get(config.SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD),
       SparkEnv.get.conf.get(config.SHUFFLE_SPILL_MAX_SIZE_FORCE_SPILL_THRESHOLD),
-      null
-    )
+      null)
   }
 }

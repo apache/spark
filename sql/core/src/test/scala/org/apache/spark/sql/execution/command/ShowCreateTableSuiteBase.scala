@@ -31,7 +31,7 @@ import org.apache.spark.util.Utils
  *     `org.apache.spark.sql.execution.command.v1.ShowCreateTableSuiteBase`
  *     - V1 In-Memory catalog: `org.apache.spark.sql.execution.command.v1.ShowCreateTableSuite`
  *     - V1 Hive External catalog:
-*        `org.apache.spark.sql.hive.execution.command.ShowCreateTableSuite`
+ *       `org.apache.spark.sql.hive.execution.command.ShowCreateTableSuite`
  */
 trait ShowCreateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
   override val command = "SHOW CREATE TABLE"
@@ -41,8 +41,7 @@ trait ShowCreateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
 
   test("SPARK-36012: add null flag when show create table") {
     withNamespaceAndTable(ns, table) { t =>
-      sql(
-        s"""
+      sql(s"""
            |CREATE TABLE $t (
            |  a bigint NOT NULL,
            |  b bigint
@@ -60,8 +59,7 @@ trait ShowCreateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
   test("data source table with user specified schema") {
     withNamespaceAndTable(ns, table) { t =>
       val jsonFilePath = Utils.getSparkClassLoader.getResource("sample.json").getFile
-      sql(
-        s"""CREATE TABLE $t (
+      sql(s"""CREATE TABLE $t (
            |  a STRING,
            |  b STRING,
            |  `extra col` ARRAY<INT>,
@@ -71,8 +69,7 @@ trait ShowCreateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
            |OPTIONS (
            | PATH '$jsonFilePath'
            |)
-         """.stripMargin
-      )
+         """.stripMargin)
       val showDDL = getShowCreateDDL(t)
       assert(showDDL(0) == s"CREATE TABLE $fullName (")
       assert(showDDL(1) == "a STRING COLLATE UTF8_BINARY,")
@@ -86,8 +83,7 @@ trait ShowCreateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
 
   test("SPARK-24911: keep quotes for nested fields") {
     withNamespaceAndTable(ns, table) { t =>
-      sql(
-        s"""
+      sql(s"""
            |CREATE TABLE $t (
            |  `a` STRUCT<`b`: STRING>
            |)
@@ -102,8 +98,7 @@ trait ShowCreateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
 
   test("SPARK-37494: Unify v1 and v2 option output") {
     withNamespaceAndTable(ns, table) { t =>
-      sql(
-        s"""CREATE TABLE $t (
+      sql(s"""CREATE TABLE $t (
            |  a STRING
            |)
            |USING json
@@ -117,8 +112,7 @@ trait ShowCreateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
            | 'k1' = 'v1',
            | k2 = 'v2'
            |)
-         """.stripMargin
-      )
+         """.stripMargin)
       val expected = s"CREATE TABLE $fullName ( a STRING COLLATE UTF8_BINARY) USING json" +
         " OPTIONS ( 'k1' = 'v1', 'k2' = 'v2', 'k3' = 'v3', 'k4' = 'v4', 'k5' = 'v5')" +
         " TBLPROPERTIES ( 'a' = '2', 'b' = '1')"
@@ -128,12 +122,10 @@ trait ShowCreateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
 
   test("data source table CTAS") {
     withNamespaceAndTable(ns, table) { t =>
-      sql(
-        s"""CREATE TABLE $t
+      sql(s"""CREATE TABLE $t
            |USING json
            |AS SELECT 1 AS a, "foo" AS b
-         """.stripMargin
-      )
+         """.stripMargin)
       val expected = s"CREATE TABLE $fullName ( a INT, b STRING COLLATE UTF8_BINARY) USING json"
       assert(getShowCreateDDL(t).mkString(" ") == expected)
     }
@@ -141,13 +133,11 @@ trait ShowCreateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
 
   test("partitioned data source table") {
     withNamespaceAndTable(ns, table) { t =>
-      sql(
-        s"""CREATE TABLE $t
+      sql(s"""CREATE TABLE $t
            |USING json
            |PARTITIONED BY (b)
            |AS SELECT 1 AS a, "foo" AS b
-         """.stripMargin
-      )
+         """.stripMargin)
       val expected = s"CREATE TABLE $fullName ( a INT, b STRING COLLATE UTF8_BINARY) USING json" +
         s" PARTITIONED BY (b)"
       assert(getShowCreateDDL(t).mkString(" ") == expected)
@@ -156,13 +146,11 @@ trait ShowCreateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
 
   test("data source table with a comment") {
     withNamespaceAndTable(ns, table) { t =>
-      sql(
-        s"""CREATE TABLE $t
+      sql(s"""CREATE TABLE $t
            |USING json
            |COMMENT 'This is a comment'
            |AS SELECT 1 AS a, "foo" AS b, 2.5 AS c
-         """.stripMargin
-      )
+         """.stripMargin)
       val expected = s"CREATE TABLE $fullName ( a INT, b STRING COLLATE UTF8_BINARY," +
         s" c DECIMAL(2,1)) USING json COMMENT 'This is a comment'"
       assert(getShowCreateDDL(t).mkString(" ") == expected)
@@ -171,13 +159,11 @@ trait ShowCreateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
 
   test("data source table with table properties") {
     withNamespaceAndTable(ns, table) { t =>
-      sql(
-        s"""CREATE TABLE $t
+      sql(s"""CREATE TABLE $t
            |USING json
            |TBLPROPERTIES ('a' = '1')
            |AS SELECT 1 AS a, "foo" AS b, 2.5 AS c
-         """.stripMargin
-      )
+         """.stripMargin)
       val expected = s"CREATE TABLE $fullName ( a INT, b STRING COLLATE UTF8_BINARY," +
         s" c DECIMAL(2,1)) USING json TBLPROPERTIES ( 'a' = '1')"
       assert(getShowCreateDDL(t).mkString(" ") == expected)

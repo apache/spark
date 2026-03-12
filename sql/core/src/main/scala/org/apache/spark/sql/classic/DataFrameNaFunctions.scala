@@ -34,8 +34,7 @@ import org.apache.spark.sql.types._
  * @since 1.3.1
  */
 @Stable
-final class DataFrameNaFunctions private[sql](df: DataFrame)
-  extends sql.DataFrameNaFunctions {
+final class DataFrameNaFunctions private[sql] (df: DataFrame) extends sql.DataFrameNaFunctions {
   import df.sparkSession.toRichColumn
 
   protected def drop(minNonNulls: Option[Int]): DataFrame = {
@@ -120,13 +119,13 @@ final class DataFrameNaFunctions private[sql](df: DataFrame)
     val output = df.queryExecution.analyzed.output
     val projections = output.map { attr =>
       if (attrs.contains(attr) && (attr.dataType == targetColumnType ||
-        (attr.dataType.isInstanceOf[NumericType] && targetColumnType == DoubleType))) {
+          (attr.dataType.isInstanceOf[NumericType] && targetColumnType == DoubleType))) {
         replaceCol(attr, replacementMap)
       } else {
         Column(attr)
       }
     }
-    df.select(projections : _*)
+    df.select(projections: _*)
   }
 
   protected def fillMap(values: Seq[(String, Any)]): DataFrame = {
@@ -139,41 +138,50 @@ final class DataFrameNaFunctions private[sql](df: DataFrame)
       }
       // Check data type
       replaceValue match {
-        case _: jl.Double | _: jl.Float | _: jl.Integer | _: jl.Long | _: jl.Boolean | _: String =>
-          // This is good
-        case _ => throw new IllegalArgumentException(
-          s"Unsupported value type ${replaceValue.getClass.getName} ($replaceValue).")
+        case _: jl.Double | _: jl.Float | _: jl.Integer | _: jl.Long | _: jl.Boolean |
+            _: String =>
+        // This is good
+        case _ =>
+          throw new IllegalArgumentException(
+            s"Unsupported value type ${replaceValue.getClass.getName} ($replaceValue).")
       }
       attr -> replaceValue
     })
 
     val output = df.queryExecution.analyzed.output
-    val projections = output.map {
-      attr => attrToValue.get(attr).map {
-        case v: jl.Float => fillCol[Float](attr, v)
-        case v: jl.Double => fillCol[Double](attr, v)
-        case v: jl.Long => fillCol[Long](attr, v)
-        case v: jl.Integer => fillCol[Integer](attr, v)
-        case v: jl.Boolean => fillCol[Boolean](attr, v.booleanValue())
-        case v: String => fillCol[String](attr, v)
-      }.getOrElse(Column(attr))
+    val projections = output.map { attr =>
+      attrToValue
+        .get(attr)
+        .map {
+          case v: jl.Float => fillCol[Float](attr, v)
+          case v: jl.Double => fillCol[Double](attr, v)
+          case v: jl.Long => fillCol[Long](attr, v)
+          case v: jl.Integer => fillCol[Integer](attr, v)
+          case v: jl.Boolean => fillCol[Boolean](attr, v.booleanValue())
+          case v: String => fillCol[String](attr, v)
+        }
+        .getOrElse(Column(attr))
     }
-    df.select(projections : _*)
+    df.select(projections: _*)
   }
 
   /**
-   * Returns a [[Column]] expression that replaces null value in column defined by `attr`
-   * with `replacement`.
+   * Returns a [[Column]] expression that replaces null value in column defined by `attr` with
+   * `replacement`.
    */
   private def fillCol[T](attr: Attribute, replacement: T): Column = {
     fillCol(attr.dataType, attr.name, Column(attr), replacement)
   }
 
   /**
-   * Returns a [[Column]] expression that replaces null value in `expr` with `replacement`.
-   * It uses the given `expr` as a column.
+   * Returns a [[Column]] expression that replaces null value in `expr` with `replacement`. It
+   * uses the given `expr` as a column.
    */
-  private def fillCol[T](dataType: DataType, name: String, expr: Column, replacement: T): Column = {
+  private def fillCol[T](
+      dataType: DataType,
+      name: String,
+      expr: Column,
+      replacement: T): Column = {
     val colValue = dataType match {
       case DoubleType | FloatType =>
         nanvl(expr, lit(null)) // nanvl only supports these types
@@ -201,20 +209,19 @@ final class DataFrameNaFunctions private[sql](df: DataFrame)
     case v: Double => v
     case v: Long => v.toDouble
     case v: Int => v.toDouble
-    case v => throw new IllegalArgumentException(
-      s"Unsupported value type ${v.getClass.getName} ($v).")
+    case v =>
+      throw new IllegalArgumentException(s"Unsupported value type ${v.getClass.getName} ($v).")
   }
 
   private def toAttributes(cols: Seq[String]): Seq[Attribute] = {
-    cols.map(name => df.col(name).expr).collect {
-      case a: Attribute => a
+    cols.map(name => df.col(name).expr).collect { case a: Attribute =>
+      a
     }
   }
 
   private def outputAttributes: Seq[Attribute] = {
     df.queryExecution.analyzed.output
   }
-
 
   private def drop0(minNonNulls: Option[Int], cols: Seq[NamedExpression]): DataFrame = {
     // Filtering condition:
@@ -228,9 +235,8 @@ final class DataFrameNaFunctions private[sql](df: DataFrame)
   }
 
   /**
-   * Returns a new `DataFrame` that replaces null or NaN values in the specified
-   * columns. If a specified column is not a numeric, string or boolean column,
-   * it is ignored.
+   * Returns a new `DataFrame` that replaces null or NaN values in the specified columns. If a
+   * specified column is not a numeric, string or boolean column, it is ignored.
    */
   private def fillValue[T](value: T, cols: Seq[Attribute]): DataFrame = {
     // the fill[T] which T is  Long/Double,
@@ -242,8 +248,9 @@ final class DataFrameNaFunctions private[sql](df: DataFrame)
       case _: Double | _: Long => NumericType
       case _: String => StringType
       case _: Boolean => BooleanType
-      case _ => throw new IllegalArgumentException(
-        s"Unsupported value type ${value.getClass.getName} ($value).")
+      case _ =>
+        throw new IllegalArgumentException(
+          s"Unsupported value type ${value.getClass.getName} ($value).")
     }
 
     val projections = outputAttributes.map { col =>
@@ -261,7 +268,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame)
         Column(col)
       }
     }
-    df.select(projections : _*)
+    df.select(projections: _*)
   }
 
   /** @inheritdoc */
@@ -290,7 +297,8 @@ final class DataFrameNaFunctions private[sql](df: DataFrame)
   override def drop(minNonNulls: Int): DataFrame = super.drop(minNonNulls)
 
   /** @inheritdoc */
-  override def drop(minNonNulls: Int, cols: Seq[String]): DataFrame = super.drop(minNonNulls, cols)
+  override def drop(minNonNulls: Int, cols: Seq[String]): DataFrame =
+    super.drop(minNonNulls, cols)
 
   /** @inheritdoc */
   override def fill(value: Long, cols: Array[String]): DataFrame = super.fill(value, cols)

@@ -24,22 +24,19 @@ import org.apache.spark.sql.types.{DataType, DoubleType, FloatType}
 /**
  * The trait exposes util methods for preparing error messages such as quoting of error elements.
  * All classes that extent `QueryErrorsBase` shall follow the rules:
- * 1. Any values shall be outputted in the SQL standard style by usi
- * ng `toSQLValue()`.
- *   For example: 'a string value', 1, NULL.
- * 2. SQL types shall be double quoted and outputted in the upper case using `toSQLType()`.
- *   For example: "INT", "DECIMAL(10,0)".
- * 3. Elements of identifiers shall be wrapped by backticks by using `toSQLId()`.
- *   For example: `namespaceA`.`funcB`, `tableC`.
- * 4. SQL statements shall be in the upper case prepared by using `toSQLStmt`.
- *   For example: DESC PARTITION, DROP TEMPORARY FUNCTION.
- * 5. SQL configs and datasource options shall be wrapped by double quotes by using
- *   `toSQLConf()`/`toDSOption()`.
- *   For example: "spark.sql.ansi.enabled".
- * 6. Any values of datasource options or SQL configs shall be double quoted.
- *   For example: "true", "CORRECTED".
- * 7. SQL expressions shall be wrapped by double quotes.
- *   For example: "earnings + 1".
+ *   1. Any values shall be outputted in the SQL standard style by usi ng `toSQLValue()`. For
+ *      example: 'a string value', 1, NULL.
+ *   2. SQL types shall be double quoted and outputted in the upper case using `toSQLType()`. For
+ *      example: "INT", "DECIMAL(10,0)".
+ *   3. Elements of identifiers shall be wrapped by backticks by using `toSQLId()`. For example:
+ *      `namespaceA`.`funcB`, `tableC`.
+ *   4. SQL statements shall be in the upper case prepared by using `toSQLStmt`. For example: DESC
+ *      PARTITION, DROP TEMPORARY FUNCTION.
+ *   5. SQL configs and datasource options shall be wrapped by double quotes by using
+ *      `toSQLConf()`/`toDSOption()`. For example: "spark.sql.ansi.enabled".
+ *   6. Any values of datasource options or SQL configs shall be double quoted. For example:
+ *      "true", "CORRECTED".
+ *   7. SQL expressions shall be wrapped by double quotes. For example: "earnings + 1".
  */
 private[sql] trait QueryErrorsBase extends DataTypeErrorsBase {
 
@@ -74,4 +71,3 @@ private[sql] trait QueryErrorsBase extends DataTypeErrorsBase {
     case i => s"${i + 1}th"
   }
 }
-

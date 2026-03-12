@@ -34,8 +34,8 @@ protected abstract class ConnectionProviderBase extends Logging {
   protected val providers = loadProviders()
 
   def loadProviders(): Seq[JdbcConnectionProvider] = {
-    val loader = ServiceLoader.load(classOf[JdbcConnectionProvider],
-      Utils.getContextOrSparkClassLoader)
+    val loader =
+      ServiceLoader.load(classOf[JdbcConnectionProvider], Utils.getContextOrSparkClassLoader)
     val providers = mutable.ArrayBuffer[JdbcConnectionProvider]()
 
     val iterator = loader.iterator
@@ -78,15 +78,15 @@ protected abstract class ConnectionProviderBase extends Logging {
         filteredProviders.find(_.name == providerName).getOrElse {
           throw new IllegalArgumentException(
             s"Could not find a JDBC connection provider with name '$providerName' " +
-            "that can handle the specified driver and options. " +
-            s"Available providers are ${providers.mkString("[", ", ", "]")}")
+              "that can handle the specified driver and options. " +
+              s"Available providers are ${providers.mkString("[", ", ", "]")}")
         }
       case None =>
         if (filteredProviders.size != 1) {
           throw new IllegalArgumentException(
             "JDBC connection initiated but more than one connection provider was found. Use " +
-            s"'${JDBCOptions.JDBC_CONNECTION_PROVIDER}' option to select a specific provider. " +
-            s"Found active providers ${filteredProviders.mkString("[", ", ", "]")}")
+              s"'${JDBCOptions.JDBC_CONNECTION_PROVIDER}' option to select a specific provider. " +
+              s"Found active providers ${filteredProviders.mkString("[", ", ", "]")}")
         }
         filteredProviders.head
     }

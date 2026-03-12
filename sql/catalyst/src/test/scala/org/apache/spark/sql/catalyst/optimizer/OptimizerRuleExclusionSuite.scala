@@ -23,7 +23,6 @@ import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.internal.SQLConf.OPTIMIZER_EXCLUDED_RULES
 
-
 class OptimizerRuleExclusionSuite extends PlanTest {
 
   val testRelation = LocalRelation($"a".int, $"b".int, $"c".int)
@@ -43,9 +42,8 @@ class OptimizerRuleExclusionSuite extends PlanTest {
       // Verify removed batches.
       assert(batches.forall(batch => !excludedBatchNames.contains(batch.name)))
       // Verify removed rules.
-      assert(
-        batches
-          .forall(batch => batch.rules.forall(rule => !excludedRuleNames.contains(rule.ruleName))))
+      assert(batches
+        .forall(batch => batch.rules.forall(rule => !excludedRuleNames.contains(rule.ruleName))))
       // Verify non-excludable rules retained.
       nonExcludableRules.foreach { nonExcludableRule =>
         assert(
@@ -56,10 +54,7 @@ class OptimizerRuleExclusionSuite extends PlanTest {
   }
 
   test("Exclude a single rule from multiple batches") {
-    verifyExcludedRules(
-      new SimpleTestOptimizer(),
-      Seq(
-        PushPredicateThroughJoin.ruleName))
+    verifyExcludedRules(new SimpleTestOptimizer(), Seq(PushPredicateThroughJoin.ruleName))
   }
 
   test("Exclude multiple rules from single or multiple batches") {
@@ -74,10 +69,7 @@ class OptimizerRuleExclusionSuite extends PlanTest {
   test("Exclude non-existent rule with other valid rules") {
     verifyExcludedRules(
       new SimpleTestOptimizer(),
-      Seq(
-        LimitPushDown.ruleName,
-        InferFiltersFromConstraints.ruleName,
-        "DummyRuleName"))
+      Seq(LimitPushDown.ruleName, InferFiltersFromConstraints.ruleName, "DummyRuleName"))
   }
 
   test("Try to exclude some non-excludable rules") {
@@ -95,12 +87,13 @@ class OptimizerRuleExclusionSuite extends PlanTest {
   test("Custom optimizer") {
     val optimizer = new SimpleTestOptimizer() {
       override def defaultBatches: Seq[Batch] =
-        Batch("push", Once,
+        Batch(
+          "push",
+          Once,
           PushPredicateThroughNonJoin,
           PushPredicateThroughJoin,
           PushProjectionThroughUnion) ::
-        Batch("pull", Once,
-          PullupCorrelatedPredicates) :: Nil
+          Batch("pull", Once, PullupCorrelatedPredicates) :: Nil
 
       override def nonExcludableRules: Seq[String] =
         PushPredicateThroughNonJoin.ruleName ::

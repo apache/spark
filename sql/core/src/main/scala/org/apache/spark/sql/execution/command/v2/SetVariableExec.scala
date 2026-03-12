@@ -33,7 +33,8 @@ import org.apache.spark.sql.execution.datasources.v2.V2CommandExec
  * Physical plan node for setting a variable.
  */
 case class SetVariableExec(variables: Seq[VariableReference], query: SparkPlan)
-  extends V2CommandExec with UnaryLike[SparkPlan] {
+    extends V2CommandExec
+    with UnaryLike[SparkPlan] {
 
   override protected def run(): Seq[InternalRow] = {
     val values = query.executeCollect()
@@ -56,9 +57,7 @@ case class SetVariableExec(variables: Seq[VariableReference], query: SparkPlan)
     Seq.empty
   }
 
-  private def setVariable(
-      variable: VariableReference,
-      value: Any): Unit = {
+  private def setVariable(variable: VariableReference, value: Any): Unit = {
     val namePartsCaseAdjusted = if (session.sessionState.conf.caseSensitiveAnalysis) {
       variable.originalNameParts
     } else {
@@ -70,12 +69,14 @@ case class SetVariableExec(variables: Seq[VariableReference], query: SparkPlan)
 
     val variableManager = variable.catalog match {
       case FakeLocalCatalog if scriptingVariableManager.isEmpty =>
-        throw SparkException.internalError("SetVariableExec: Variable has FakeLocalCatalog, " +
-          "but ScriptingVariableManager is None.")
+        throw SparkException.internalError(
+          "SetVariableExec: Variable has FakeLocalCatalog, " +
+            "but ScriptingVariableManager is None.")
 
       case FakeLocalCatalog if scriptingVariableManager.get.get(namePartsCaseAdjusted).isEmpty =>
-        throw SparkException.internalError("Local variable should be present in SetVariableExec" +
-          "because ResolveSetVariable has already determined it exists.")
+        throw SparkException.internalError(
+          "Local variable should be present in SetVariableExec" +
+            "because ResolveSetVariable has already determined it exists.")
 
       case FakeLocalCatalog => scriptingVariableManager.get
 
@@ -88,7 +89,9 @@ case class SetVariableExec(variables: Seq[VariableReference], query: SparkPlan)
     }
 
     val varDef = VariableDefinition(
-      variable.identifier, variable.varDef.defaultValueSQL, Literal(value, variable.dataType))
+      variable.identifier,
+      variable.varDef.defaultValueSQL,
+      Literal(value, variable.dataType))
 
     variableManager.set(namePartsCaseAdjusted, varDef)
   }

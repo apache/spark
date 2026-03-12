@@ -28,8 +28,7 @@ class SimplifyStringCaseConversionSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
-      Batch("Simplify CaseConversionExpressions", Once,
-        SimplifyCaseConversionExpressions) :: Nil
+      Batch("Simplify CaseConversionExpressions", Once, SimplifyCaseConversionExpressions) :: Nil
   }
 
   val testRelation = LocalRelation($"a".string)

@@ -44,10 +44,10 @@ case class AttributeScope(attributes: AttributeSet, isSubqueryRoot: Boolean = fa
  *       +- LocalRelation [col1#0, col2#1]
  * }}}
  *
- * The [[LocalRelation]] outputs attributes with IDs #0 and #1, which can be referenced by the lower
- * [[Project]]. This [[Project]] produces a new attribute ID #2 for an alias and retains the old
- * ID #1 for col2. The upper [[Project]] references `a` twice using the same ID #2 and produces a
- * new ID #3 for an alias of `a + col2`.
+ * The [[LocalRelation]] outputs attributes with IDs #0 and #1, which can be referenced by the
+ * lower [[Project]]. This [[Project]] produces a new attribute ID #2 for an alias and retains the
+ * old ID #1 for col2. The upper [[Project]] references `a` twice using the same ID #2 and
+ * produces a new ID #3 for an alias of `a + col2`.
  */
 class AttributeScopeStack {
   private val stack = new ArrayDeque[AttributeScope]
@@ -85,18 +85,14 @@ class AttributeScopeStack {
    */
   def pushScope(isSubqueryRoot: Boolean = false): Unit = {
     stack.push(
-      AttributeScope(
-        attributes = AttributeSet(Seq.empty),
-        isSubqueryRoot = isSubqueryRoot
-      )
-    )
+      AttributeScope(attributes = AttributeSet(Seq.empty), isSubqueryRoot = isSubqueryRoot))
   }
 
   /**
    * Pop current attribute scope.
    */
   def popScope(): Unit = {
-      stack.pop()
+    stack.pop()
   }
 
   override def toString: String = stack.toString

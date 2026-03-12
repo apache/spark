@@ -20,9 +20,8 @@ package org.apache.spark.sql.execution.benchmark
 import org.apache.spark.benchmark.Benchmark
 
 /**
- * Benchmark for measure writing and reading char/varchar values with implicit length check
- * and padding.
- * To run this benchmark:
+ * Benchmark for measure writing and reading char/varchar values with implicit length check and
+ * padding. To run this benchmark:
  * {{{
  *   1. without sbt:
  *      bin/spark-submit --class <this class>
@@ -44,36 +43,40 @@ object RecursiveCTEBenchmark extends SqlBasedBenchmark {
         val benchmark =
           new Benchmark(s"First $i integers", i, output = output)
         benchmark.addCase(s"First $i integers using VALUES", 3) { _ =>
-          spark.sql(
-            s"""WITH RECURSIVE t(n) AS (
+          spark
+            .sql(s"""WITH RECURSIVE t(n) AS (
                |  VALUES(1)
                |  UNION ALL
                |  SELECT n+1 FROM t WHERE n < $i)
-               |SELECT * FROM t""".stripMargin).count()
+               |SELECT * FROM t""".stripMargin)
+            .count()
         }
         benchmark.addCase(s"First $i integers using SELECT", 3) { _ =>
-          spark.sql(
-            s"""WITH RECURSIVE t(n) AS (
+          spark
+            .sql(s"""WITH RECURSIVE t(n) AS (
                |  SELECT 1
                |  UNION ALL
                |  SELECT n+1 FROM t WHERE n < $i)
-               |SELECT * FROM t""".stripMargin).count()
+               |SELECT * FROM t""".stripMargin)
+            .count()
         }
         benchmark.addCase(s"First $i integers using SELECT and LIMIT", 3) { _ =>
-          spark.sql(
-            s"""WITH RECURSIVE t(n) AS (
+          spark
+            .sql(s"""WITH RECURSIVE t(n) AS (
                |  SELECT 1
                |  UNION ALL
                |  SELECT n+1 FROM t)
-               |SELECT * FROM t  LIMIT $i""".stripMargin).count()
+               |SELECT * FROM t  LIMIT $i""".stripMargin)
+            .count()
         }
         benchmark.addCase(s"First $i integers referencing external table in anchor", 3) { _ =>
-          spark.sql(
-            s"""WITH RECURSIVE t(n) AS (
+          spark
+            .sql(s"""WITH RECURSIVE t(n) AS (
                |  SELECT * FROM tb
                |  UNION ALL
                |  SELECT n+1 FROM t WHERE n < $i)
-               |SELECT * FROM t""".stripMargin).count()
+               |SELECT * FROM t""".stripMargin)
+            .count()
         }
         benchmark.run()
       }

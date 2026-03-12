@@ -34,16 +34,14 @@ class SubqueryHintPropagationSuite extends QueryTest with SharedSparkSession {
 
   def verifyJoinContainsHint(plan: LogicalPlan): Unit = {
     val expectedJoinHint = JoinHint(leftHint = None, rightHint = expectedHint)
-    val joinsFound = plan.collect {
-      case j @ Join(_, _, _, _, foundHint) =>
-        assert(expectedJoinHint == foundHint)
+    val joinsFound = plan.collect { case j @ Join(_, _, _, _, foundHint) =>
+      assert(expectedJoinHint == foundHint)
     }
     assert(joinsFound.size == 1)
   }
 
   test("Correlated Exists") {
-    val queryDf = sql(
-      s"""SELECT * FROM testData s1 WHERE EXISTS
+    val queryDf = sql(s"""SELECT * FROM testData s1 WHERE EXISTS
          |(SELECT $hintStringified
          |s2.key FROM testData s2 WHERE s1.key = s2.key AND s1.value = s2.value)
          |""".stripMargin)
@@ -57,13 +55,13 @@ class SubqueryHintPropagationSuite extends QueryTest with SharedSparkSession {
       val df = spark
         .range(1, 30)
         .where("true")
-      val dfWithHints = hints.foldRight(df)((hint, newDf) => newDf.hint(hint))
+      val dfWithHints = hints
+        .foldRight(df)((hint, newDf) => newDf.hint(hint))
         .selectExpr("id as key", "id as value")
         .withColumn("value", col("value").cast("string"))
       dfWithHints.createOrReplaceTempView(tempView)
 
-      val queryDf = sql(
-        s"""SELECT * FROM testData s1 WHERE EXISTS
+      val queryDf = sql(s"""SELECT * FROM testData s1 WHERE EXISTS
            |(SELECT s2.key FROM $tempView s2 WHERE s1.key = s2.key AND s1.value = s2.value)
            |""".stripMargin)
 
@@ -73,8 +71,7 @@ class SubqueryHintPropagationSuite extends QueryTest with SharedSparkSession {
   }
 
   test("Correlated Exists containing join with hint") {
-    val queryDf = sql(
-      s"""SELECT * FROM testData s1 WHERE EXISTS
+    val queryDf = sql(s"""SELECT * FROM testData s1 WHERE EXISTS
          |(SELECT s2.key FROM
          |(SELECT $hintStringified * FROM testData) s2 JOIN testData s3
          |ON s2.key = s3.key
@@ -96,8 +93,7 @@ class SubqueryHintPropagationSuite extends QueryTest with SharedSparkSession {
   }
 
   test("Negated Exists with hint") {
-    val queryDf = sql(
-      s"""SELECT * FROM testData s1 WHERE NOT EXISTS
+    val queryDf = sql(s"""SELECT * FROM testData s1 WHERE NOT EXISTS
          |(SELECT $hintStringified
          |* FROM testData s2 WHERE s1.key = s2.key AND s1.value = s2.value)
          |""".stripMargin)
@@ -106,8 +102,7 @@ class SubqueryHintPropagationSuite extends QueryTest with SharedSparkSession {
   }
 
   test("Exists with complex predicate") {
-    val queryDf = sql(
-      s"""SELECT * FROM testData s1 WHERE EXISTS
+    val queryDf = sql(s"""SELECT * FROM testData s1 WHERE EXISTS
          |(SELECT $hintStringified
          |* FROM testData s2 WHERE s1.key = s2.key AND s1.value = s2.value) OR s1.key = 5
          |""".stripMargin)
@@ -116,8 +111,7 @@ class SubqueryHintPropagationSuite extends QueryTest with SharedSparkSession {
   }
 
   test("Non-correlated IN") {
-    val queryDf = sql(
-      s"""SELECT * FROM testData s1 WHERE key IN
+    val queryDf = sql(s"""SELECT * FROM testData s1 WHERE key IN
          |(SELECT $hintStringified key FROM testData s2)
          |""".stripMargin)
     verifyJoinContainsHint(queryDf.queryExecution.optimizedPlan)
@@ -125,8 +119,7 @@ class SubqueryHintPropagationSuite extends QueryTest with SharedSparkSession {
   }
 
   test("Correlated IN") {
-    val queryDf = sql(
-      s"""SELECT * FROM testData s1 WHERE key IN
+    val queryDf = sql(s"""SELECT * FROM testData s1 WHERE key IN
          |(SELECT $hintStringified
          |key FROM testData s2 WHERE s1.key = s2.key AND s1.value = s2.value)
          |""".stripMargin)
@@ -135,8 +128,7 @@ class SubqueryHintPropagationSuite extends QueryTest with SharedSparkSession {
   }
 
   test("Negated IN with hint") {
-    val queryDf = sql(
-      s"""SELECT * FROM testData s1 WHERE key NOT IN
+    val queryDf = sql(s"""SELECT * FROM testData s1 WHERE key NOT IN
          |(SELECT $hintStringified
          |key FROM testData s2 WHERE s1.key = s2.key AND s1.value = s2.value)
          |""".stripMargin)
@@ -145,8 +137,7 @@ class SubqueryHintPropagationSuite extends QueryTest with SharedSparkSession {
   }
 
   test("IN with complex predicate") {
-    val queryDf = sql(
-      s"""SELECT * FROM testData s1 WHERE key in
+    val queryDf = sql(s"""SELECT * FROM testData s1 WHERE key in
          |(SELECT $hintStringified
          | key FROM testData s2 WHERE s1.key = s2.key AND s1.value = s2.value) OR s1.key = 5
          |""".stripMargin)
@@ -155,8 +146,7 @@ class SubqueryHintPropagationSuite extends QueryTest with SharedSparkSession {
   }
 
   test("Scalar subquery") {
-    val queryDf = sql(
-      s"""SELECT * FROM testData s1 WHERE key =
+    val queryDf = sql(s"""SELECT * FROM testData s1 WHERE key =
          |(SELECT $hintStringified MAX(key) FROM
          |testData s2 WHERE s1.key = s2.key AND s1.value = s2.value)
          |""".stripMargin)
@@ -165,8 +155,7 @@ class SubqueryHintPropagationSuite extends QueryTest with SharedSparkSession {
   }
 
   test("Scalar subquery with COUNT") {
-    val queryDf = sql(
-      s"""SELECT * FROM testData s1 WHERE key =
+    val queryDf = sql(s"""SELECT * FROM testData s1 WHERE key =
          |(SELECT $hintStringified COUNT(key) FROM
          |testData s2 WHERE s1.key = s2.key AND s1.value = s2.value)
          |""".stripMargin)
@@ -175,8 +164,7 @@ class SubqueryHintPropagationSuite extends QueryTest with SharedSparkSession {
   }
 
   test("Scalar subquery with non-equality predicates") {
-    val queryDf = sql(
-      s"""SELECT * FROM testData s1 WHERE key =
+    val queryDf = sql(s"""SELECT * FROM testData s1 WHERE key =
          |(SELECT $hintStringified MAX(key) FROM
          |testData s2 WHERE s1.key > s2.key AND s1.value > s2.value)
          |""".stripMargin)
@@ -198,8 +186,7 @@ class SubqueryHintPropagationSuite extends QueryTest with SharedSparkSession {
   }
 
   test("Scalar subquery nested subquery") {
-    val queryDf = sql(
-      s"""SELECT * FROM testData s1 WHERE key =
+    val queryDf = sql(s"""SELECT * FROM testData s1 WHERE key =
          |(SELECT MAX(key) FROM
          |(SELECT $hintStringified key FROM testData s2 WHERE
          |s1.key = s2.key AND s1.value = s2.value))
@@ -209,8 +196,7 @@ class SubqueryHintPropagationSuite extends QueryTest with SharedSparkSession {
   }
 
   test("Lateral subquery") {
-    val queryDf = sql(
-      s"""SELECT * FROM testData s1, LATERAL
+    val queryDf = sql(s"""SELECT * FROM testData s1, LATERAL
          |(SELECT $hintStringified * FROM testData s2)
          |""".stripMargin)
     verifyJoinContainsHint(queryDf.queryExecution.optimizedPlan)

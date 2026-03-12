@@ -21,7 +21,6 @@ import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 
-
 /** Value range of a column. */
 trait ValueInterval {
   def contains(l: Literal): Boolean
@@ -49,17 +48,15 @@ class NullValueInterval extends ValueInterval {
 }
 
 object ValueInterval {
-  def apply(
-      min: Option[Any],
-      max: Option[Any],
-      dataType: DataType): ValueInterval = dataType match {
-    case StringType | BinaryType => new DefaultValueInterval()
-    case _ if min.isEmpty || max.isEmpty => new NullValueInterval()
-    case _ =>
-      NumericValueInterval(
-        min = EstimationUtils.toDouble(min.get, dataType),
-        max = EstimationUtils.toDouble(max.get, dataType))
-  }
+  def apply(min: Option[Any], max: Option[Any], dataType: DataType): ValueInterval =
+    dataType match {
+      case StringType | BinaryType => new DefaultValueInterval()
+      case _ if min.isEmpty || max.isEmpty => new NullValueInterval()
+      case _ =>
+        NumericValueInterval(
+          min = EstimationUtils.toDouble(min.get, dataType),
+          max = EstimationUtils.toDouble(max.get, dataType))
+    }
 
   def isIntersected(r1: ValueInterval, r2: ValueInterval): Boolean = (r1, r2) match {
     case (_, _: DefaultValueInterval) | (_: DefaultValueInterval, _) =>
@@ -75,10 +72,13 @@ object ValueInterval {
   }
 
   /**
-   * Intersected results of two intervals. This is only for two overlapped intervals.
-   * The outputs are the intersected min/max values.
+   * Intersected results of two intervals. This is only for two overlapped intervals. The outputs
+   * are the intersected min/max values.
    */
-  def intersect(r1: ValueInterval, r2: ValueInterval, dt: DataType): (Option[Any], Option[Any]) = {
+  def intersect(
+      r1: ValueInterval,
+      r2: ValueInterval,
+      dt: DataType): (Option[Any], Option[Any]) = {
     (r1, r2) match {
       case (_, _: DefaultValueInterval) | (_: DefaultValueInterval, _) =>
         // binary/string types don't support intersecting.
@@ -87,7 +87,8 @@ object ValueInterval {
         // Choose the maximum of two min values, and the minimum of two max values.
         val newMin = if (n1.min <= n2.min) n2.min else n1.min
         val newMax = if (n1.max <= n2.max) n1.max else n2.max
-        (Some(EstimationUtils.fromDouble(newMin, dt)),
+        (
+          Some(EstimationUtils.fromDouble(newMin, dt)),
           Some(EstimationUtils.fromDouble(newMax, dt)))
       case _ =>
         throw QueryExecutionErrors.pairUnsupportedAtFunctionError(r1, r2, "intersect")

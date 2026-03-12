@@ -27,32 +27,37 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{NAMED_STREAMING_RELATION
  *
  * This node is introduced during query parsing/resolution and is removed by the
  * [[NameStreamingSources]] analyzer rule. It serves to:
- * 1. Track user-provided source names from `.name()` API
- * 2. Track flow-assigned names from SDP context
- * 3. Ensure all sources have names before execution planning
+ *   1. Track user-provided source names from `.name()` API
+ *   2. Track flow-assigned names from SDP context
+ *   3. Ensure all sources have names before execution planning
  *
  * By extending [[UnaryNode]], this wrapper is transparent to analyzer rules - they naturally
  * descend into the child plan via `mapChildren`, resolve it, and the wrapper persists with the
  * updated child. This eliminates the need for explicit handling in most analyzer rules.
  *
  * The naming happens in the analyzer (before execution) to enable:
- * - Schema lookup at specific offsets during analysis
- * - Stable checkpoint locations for source evolution
- * - SDP flow integration with per-source metadata paths
+ *   - Schema lookup at specific offsets during analysis
+ *   - Stable checkpoint locations for source evolution
+ *   - SDP flow integration with per-source metadata paths
  *
- * @param child The underlying streaming relation (UnresolvedDataSource, etc.)
- * @param sourceIdentifyingName The source identifying name (UserProvided, FlowAssigned,
- *                              or Unassigned)
+ * @param child
+ *   The underlying streaming relation (UnresolvedDataSource, etc.)
+ * @param sourceIdentifyingName
+ *   The source identifying name (UserProvided, FlowAssigned, or Unassigned)
  */
 object NamedStreamingRelation {
+
   /**
-   * Factory method that creates a NamedStreamingRelation with an optional user-provided name.
-   * If nameOpt is Some(name), creates with UserProvided(name).
-   * If nameOpt is None, creates with Unassigned.
+   * Factory method that creates a NamedStreamingRelation with an optional user-provided name. If
+   * nameOpt is Some(name), creates with UserProvided(name). If nameOpt is None, creates with
+   * Unassigned.
    *
-   * @param child The underlying streaming relation
-   * @param nameOpt Optional user-provided source name
-   * @return A NamedStreamingRelation with the appropriate name
+   * @param child
+   *   The underlying streaming relation
+   * @param nameOpt
+   *   Optional user-provided source name
+   * @return
+   *   A NamedStreamingRelation with the appropriate name
    */
   def withUserProvidedName(
       child: LogicalPlan,
@@ -65,7 +70,7 @@ object NamedStreamingRelation {
 case class NamedStreamingRelation(
     child: LogicalPlan,
     sourceIdentifyingName: StreamingSourceIdentifyingName)
-  extends UnaryNode {
+    extends UnaryNode {
 
   override def isStreaming: Boolean = true
 
@@ -81,18 +86,22 @@ case class NamedStreamingRelation(
     copy(child = newChild)
 
   /**
-   * Attaches a user-provided name from the `.name()` API.
-   * If nameOpt is None, returns this node unchanged.
+   * Attaches a user-provided name from the `.name()` API. If nameOpt is None, returns this node
+   * unchanged.
    *
-   * @param nameOpt The user-provided source name
-   * @return A new NamedStreamingRelation with the user name attached
+   * @param nameOpt
+   *   The user-provided source name
+   * @return
+   *   A new NamedStreamingRelation with the user name attached
    */
   def withUserProvidedName(nameOpt: Option[String]): NamedStreamingRelation = {
-    nameOpt.map { n =>
-      copy(sourceIdentifyingName = UserProvided(n))
-    }.getOrElse {
-      this
-    }
+    nameOpt
+      .map { n =>
+        copy(sourceIdentifyingName = UserProvided(n))
+      }
+      .getOrElse {
+        this
+      }
   }
 
   override val nodePatterns: Seq[TreePattern] = Seq(NAMED_STREAMING_RELATION)

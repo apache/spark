@@ -31,7 +31,8 @@ case class DropPartitionExec(
     partSpecs: Seq[ResolvedPartitionSpec],
     ignoreIfNotExists: Boolean,
     purge: Boolean,
-    refreshCache: () => Unit) extends LeafV2CommandExec {
+    refreshCache: () => Unit)
+    extends LeafV2CommandExec {
   import DataSourceV2Implicits._
 
   override def output: Seq[Attribute] = Seq.empty
@@ -42,7 +43,9 @@ case class DropPartitionExec(
 
     if (notExistsPartIdents.nonEmpty && !ignoreIfNotExists) {
       throw new NoSuchPartitionsException(
-        table.name(), notExistsPartIdents, table.partitionSchema())
+        table.name(),
+        notExistsPartIdents,
+        table.partitionSchema())
     }
 
     val isTableAltered = existsPartIdents match {

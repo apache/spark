@@ -62,11 +62,18 @@ class ResolveLambdaVariablesSuite extends PlanTest {
   }
 
   test("resolution - nested") {
-    val in = ArrayTransform(values2, LambdaFunction(
-      ArrayTransform(lv(Symbol("x")), LambdaFunction(lv(Symbol("x")) + 1, lv(Symbol("x")) :: Nil)),
-      lv(Symbol("x")) :: Nil))
-    val out = ArrayTransform(values2, LambdaFunction(
-      ArrayTransform(lvArray, LambdaFunction(lvInt + 1, lvInt :: Nil)), lvArray :: Nil))
+    val in = ArrayTransform(
+      values2,
+      LambdaFunction(
+        ArrayTransform(
+          lv(Symbol("x")),
+          LambdaFunction(lv(Symbol("x")) + 1, lv(Symbol("x")) :: Nil)),
+        lv(Symbol("x")) :: Nil))
+    val out = ArrayTransform(
+      values2,
+      LambdaFunction(
+        ArrayTransform(lvArray, LambdaFunction(lvInt + 1, lvInt :: Nil)),
+        lvArray :: Nil))
     checkExpression(in, out)
   }
 
@@ -77,27 +84,31 @@ class ResolveLambdaVariablesSuite extends PlanTest {
   }
 
   test("fail - name collisions") {
-    val p = plan(ArrayTransform(values1,
-      LambdaFunction(lv(Symbol("x")) + lv(Symbol("X")), lv(Symbol("x")) :: lv(Symbol("X")) :: Nil)))
+    val p = plan(
+      ArrayTransform(
+        values1,
+        LambdaFunction(
+          lv(Symbol("x")) + lv(Symbol("X")),
+          lv(Symbol("x")) :: lv(Symbol("X")) :: Nil)))
 
     checkError(
       exception = intercept[AnalysisException](Analyzer.execute(p)),
       condition = "INVALID_LAMBDA_FUNCTION_CALL.DUPLICATE_ARG_NAMES",
-      parameters = Map(
-        "args" -> "`x`, `x`",
-        "caseSensitiveConfig" -> "\"spark.sql.caseSensitive\"")
-    )
+      parameters =
+        Map("args" -> "`x`, `x`", "caseSensitiveConfig" -> "\"spark.sql.caseSensitive\""))
   }
 
   test("fail - lambda arguments") {
-    val p = plan(ArrayTransform(values1,
-      LambdaFunction(lv(Symbol("x")) + lv(Symbol("y")) + lv(Symbol("z")),
-        lv(Symbol("x")) :: lv(Symbol("y")) :: lv(Symbol("z")) :: Nil)))
+    val p = plan(
+      ArrayTransform(
+        values1,
+        LambdaFunction(
+          lv(Symbol("x")) + lv(Symbol("y")) + lv(Symbol("z")),
+          lv(Symbol("x")) :: lv(Symbol("y")) :: lv(Symbol("z")) :: Nil)))
 
     checkError(
       exception = intercept[AnalysisException](Analyzer.execute(p)),
       condition = "INVALID_LAMBDA_FUNCTION_CALL.NUM_ARGS_MISMATCH",
-      parameters = Map("expectedNumArgs" -> "3", "actualNumArgs" -> "1")
-    )
+      parameters = Map("expectedNumArgs" -> "3", "actualNumArgs" -> "1"))
   }
 }

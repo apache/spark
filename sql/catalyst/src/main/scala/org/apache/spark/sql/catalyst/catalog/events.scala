@@ -36,6 +36,7 @@ trait ExternalCatalogEventListener {
  * Event fired when a database is create or dropped.
  */
 trait DatabaseEvent extends ExternalCatalogEvent {
+
   /**
    * Database of the object that was touched.
    */
@@ -76,6 +77,7 @@ case class AlterDatabaseEvent(database: String) extends DatabaseEvent
  * Event fired when a table is created, dropped or renamed.
  */
 trait TableEvent extends DatabaseEvent {
+
   /**
    * Name of the table that was touched.
    */
@@ -105,20 +107,12 @@ case class DropTableEvent(database: String, name: String) extends TableEvent
 /**
  * Event fired before a table is renamed.
  */
-case class RenameTablePreEvent(
-    database: String,
-    name: String,
-    newName: String)
-  extends TableEvent
+case class RenameTablePreEvent(database: String, name: String, newName: String) extends TableEvent
 
 /**
  * Event fired after a table has been renamed.
  */
-case class RenameTableEvent(
-    database: String,
-    name: String,
-    newName: String)
-  extends TableEvent
+case class RenameTableEvent(database: String, name: String, newName: String) extends TableEvent
 
 /**
  * String to indicate which part of table is altered. If a plain alterTable API is called, then
@@ -134,23 +128,18 @@ object AlterTableKind extends Enumeration {
 /**
  * Event fired before a table is altered.
  */
-case class AlterTablePreEvent(
-    database: String,
-    name: String,
-    kind: String) extends TableEvent
+case class AlterTablePreEvent(database: String, name: String, kind: String) extends TableEvent
 
 /**
  * Event fired after a table is altered.
  */
-case class AlterTableEvent(
-    database: String,
-    name: String,
-    kind: String) extends TableEvent
+case class AlterTableEvent(database: String, name: String, kind: String) extends TableEvent
 
 /**
  * Event fired when a function is created, dropped, altered or renamed.
  */
 trait FunctionEvent extends DatabaseEvent {
+
   /**
    * Name of the function that was touched.
    */
@@ -190,25 +179,20 @@ case class AlterFunctionEvent(database: String, name: String) extends FunctionEv
 /**
  * Event fired before a function is renamed.
  */
-case class RenameFunctionPreEvent(
-    database: String,
-    name: String,
-    newName: String)
-  extends FunctionEvent
+case class RenameFunctionPreEvent(database: String, name: String, newName: String)
+    extends FunctionEvent
 
 /**
  * Event fired after a function has been renamed.
  */
-case class RenameFunctionEvent(
-    database: String,
-    name: String,
-    newName: String)
-  extends FunctionEvent
+case class RenameFunctionEvent(database: String, name: String, newName: String)
+    extends FunctionEvent
 
 /**
  * Event fired when some partitions (of a table) are created, dropped, renamed, altered.
  */
 trait PartitionsEvent extends TableEvent {
+
   /**
    * Specs of the partitions which are touched.
    */
@@ -222,7 +206,7 @@ case class CreatePartitionsPreEvent(
     database: String,
     name /* of table */: String,
     partSpecs: Seq[TablePartitionSpec])
-  extends PartitionsEvent
+    extends PartitionsEvent
 
 /**
  * Event fired after some partitions (of a table) have been created.
@@ -231,60 +215,60 @@ case class CreatePartitionsEvent(
     database: String,
     name /* of table */: String,
     partSpecs: Seq[TablePartitionSpec])
-  extends PartitionsEvent
+    extends PartitionsEvent
 
 /**
  * Event fired before some partitions (of a table) are dropped.
  */
 case class DropPartitionsPreEvent(
     database: String,
-    name /* of table */ : String,
+    name /* of table */: String,
     partSpecs: Seq[TablePartitionSpec])
-  extends PartitionsEvent
+    extends PartitionsEvent
 
 /**
  * Event fired after some partitions (of a table) have been dropped.
  */
 case class DropPartitionsEvent(
     database: String,
-    name /* of table */ : String,
+    name /* of table */: String,
     partSpecs: Seq[TablePartitionSpec])
-  extends PartitionsEvent
+    extends PartitionsEvent
 
 /**
  * Event fired before some partitions (of a table) are renamed.
  */
 case class RenamePartitionsPreEvent(
     database: String,
-    name /* of table */ : String,
+    name /* of table */: String,
     partSpecs: Seq[TablePartitionSpec],
     newPartSpecs: Seq[TablePartitionSpec])
-  extends PartitionsEvent
+    extends PartitionsEvent
 
 /**
  * Event fired after some partitions (of a table) have been renamed.
  */
 case class RenamePartitionsEvent(
     database: String,
-    name /* of table */ : String,
+    name /* of table */: String,
     partSpecs: Seq[TablePartitionSpec],
     newPartSpecs: Seq[TablePartitionSpec])
-  extends PartitionsEvent
+    extends PartitionsEvent
 
 /**
  * Event fired before some partitions (of a table) are altered.
  */
 case class AlterPartitionsPreEvent(
     database: String,
-    name /* of table */ : String,
+    name /* of table */: String,
     partSpecs: Seq[TablePartitionSpec])
-  extends PartitionsEvent
+    extends PartitionsEvent
 
 /**
  * Event fired after some partitions (of a table) have been altered.
  */
 case class AlterPartitionsEvent(
     database: String,
-    name /* of table */ : String,
+    name /* of table */: String,
     partSpecs: Seq[TablePartitionSpec])
-  extends PartitionsEvent
+    extends PartitionsEvent

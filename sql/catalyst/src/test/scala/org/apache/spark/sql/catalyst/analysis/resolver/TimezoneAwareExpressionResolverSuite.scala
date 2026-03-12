@@ -21,25 +21,22 @@ import org.scalatestplus.mockito.MockitoSugar.mock
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.analysis.FunctionResolution
-import org.apache.spark.sql.catalyst.expressions.{
-  AttributeReference,
-  Cast,
-  Expression,
-  TimeZoneAwareExpression
-}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, Expression, TimeZoneAwareExpression}
 import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.types.{IntegerType, StringType}
 
 class TimezoneAwareExpressionResolverSuite extends SparkFunSuite {
 
-  class HardCodedExpressionResolver(catalogManager: CatalogManager, resolvedExpression: Expression)
+  class HardCodedExpressionResolver(
+      catalogManager: CatalogManager,
+      resolvedExpression: Expression)
       extends ExpressionResolver(
         resolver = new Resolver(catalogManager),
-        functionResolution =
-          new FunctionResolution(catalogManager, Resolver.createRelationResolution(catalogManager)),
-        planLogger = new PlanLogger
-      ) {
+        functionResolution = new FunctionResolution(
+          catalogManager,
+          Resolver.createRelationResolution(catalogManager)),
+        planLogger = new PlanLogger) {
     override def resolve(expression: Expression): Expression = resolvedExpression
   }
 
@@ -51,18 +48,14 @@ class TimezoneAwareExpressionResolverSuite extends SparkFunSuite {
     child = Cast(
       child = Cast(child = unresolvedChild, dataType = IntegerType, timeZoneId = Some("UTC")),
       dataType = IntegerType,
-      timeZoneId = None
-    ),
+      timeZoneId = None),
     dataType = IntegerType,
-    timeZoneId = None
-  )
+    timeZoneId = None)
   private val expressionResolver = new HardCodedExpressionResolver(
     catalogManager = mock[CatalogManager],
-    resolvedExpression = resolvedChild
-  )
+    resolvedExpression = resolvedChild)
   private val timezoneAwareExpressionResolver = new TimezoneAwareExpressionResolver(
-    expressionResolver
-  )
+    expressionResolver)
 
   test("TimeZoneAwareExpression resolution") {
     assert(castExpression.children.head == unresolvedChild)
@@ -88,7 +81,6 @@ class TimezoneAwareExpressionResolverSuite extends SparkFunSuite {
 
     assert(expressionWithTimezone.asInstanceOf[Cast].timeZoneId.get == "UTC")
     assert(
-      expressionWithTimezone.asInstanceOf[Cast].child.asInstanceOf[Cast].timeZoneId.get == "UTC"
-    )
+      expressionWithTimezone.asInstanceOf[Cast].child.asInstanceOf[Cast].timeZoneId.get == "UTC")
   }
 }

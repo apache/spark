@@ -28,7 +28,7 @@ class TextOutputWriter(
     dataSchema: StructType,
     lineSeparator: Array[Byte],
     context: TaskAttemptContext)
-  extends OutputWriter {
+    extends OutputWriter {
 
   private val writer = CodecStreams.createOutputStream(context, new Path(path))
 

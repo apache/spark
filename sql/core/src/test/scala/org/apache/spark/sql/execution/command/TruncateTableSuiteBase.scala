@@ -32,15 +32,18 @@ import org.apache.spark.sql.internal.SQLConf
  *   - V2 table catalog tests: `org.apache.spark.sql.execution.command.v2.TruncateTableSuite`
  *   - V1 table catalog tests: `org.apache.spark.sql.execution.command.v1.TruncateTableSuiteBase`
  *     - V1 In-Memory catalog: `org.apache.spark.sql.execution.command.v1.TruncateTableSuite`
- *     - V1 Hive External catalog: `org.apache.spark.sql.hive.execution.command.TruncateTableSuite`
+ *     - V1 Hive External catalog:
+ *       `org.apache.spark.sql.hive.execution.command.TruncateTableSuite`
  */
 trait TruncateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
   override val command = "TRUNCATE TABLE"
 
   test("table does not exist") {
     withNamespaceAndTable("ns", "does_not_exist") { t =>
-      val parsed = CatalystSqlParser.parseMultipartIdentifier(t)
-        .map(part => quoteIdentifier(part)).mkString(".")
+      val parsed = CatalystSqlParser
+        .parseMultipartIdentifier(t)
+        .map(part => quoteIdentifier(part))
+        .mkString(".")
       val e = intercept[AnalysisException] {
         sql(s"TRUNCATE TABLE $t")
       }
@@ -73,7 +76,8 @@ trait TruncateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
       createPartTable(t)
       sql(s"TRUNCATE TABLE $t PARTITION (width = 1, length = 1)")
       checkAnswer(sql(s"SELECT width, length, height FROM $t"), Seq(Row(0, 0, 0), Row(1, 2, 3)))
-      checkPartitions(t,
+      checkPartitions(
+        t,
         Map("width" -> "0", "length" -> "0"),
         Map("width" -> "1", "length" -> "1"),
         Map("width" -> "1", "length" -> "2"))
@@ -84,7 +88,8 @@ trait TruncateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
       // support partial partition spec
       sql(s"TRUNCATE TABLE $t PARTITION (width = 1)")
       QueryTest.checkAnswer(sql(s"SELECT * FROM $t"), Row(0, 0, 0) :: Nil)
-      checkPartitions(t,
+      checkPartitions(
+        t,
         Map("width" -> "0", "length" -> "0"),
         Map("width" -> "1", "length" -> "1"),
         Map("width" -> "1", "length" -> "2"))
@@ -114,10 +119,7 @@ trait TruncateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
           sql(s"TRUNCATE TABLE $t PARTITION (unknown = 1)")
         },
         condition = "PARTITIONS_NOT_FOUND",
-        parameters = Map(
-          "partitionList" -> "`unknown`",
-          "tableName" -> expectedTableName)
-      )
+        parameters = Map("partitionList" -> "`unknown`", "tableName" -> expectedTableName))
     }
   }
 
@@ -148,8 +150,7 @@ trait TruncateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
           sql(s"TRUNCATE TABLE $t PARTITION (c0=1)")
         },
         condition = expectedCondition,
-        parameters = expectedParameters
-      )
+        parameters = expectedParameters)
     }
   }
 
@@ -161,7 +162,8 @@ trait TruncateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
         Seq(Row(0, 0, 0), Row(1, 1, 1), Row(1, 2, 3)))
       sql(s"TRUNCATE TABLE $t")
       checkAnswer(sql(s"SELECT width, length, height FROM $t"), Nil)
-      checkPartitions(t,
+      checkPartitions(
+        t,
         Map("width" -> "0", "length" -> "0"),
         Map("width" -> "1", "length" -> "1"),
         Map("width" -> "1", "length" -> "2"))
@@ -184,10 +186,7 @@ trait TruncateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
             sql(s"TRUNCATE TABLE $t PARTITION (ID=1)")
           },
           condition = "PARTITIONS_NOT_FOUND",
-          parameters = Map(
-            "partitionList" -> "`ID`",
-            "tableName" -> expectedTableName)
-        )
+          parameters = Map("partitionList" -> "`ID`", "tableName" -> expectedTableName))
       }
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
         sql(s"TRUNCATE TABLE $t PARTITION (ID=1)")
@@ -221,14 +220,9 @@ trait TruncateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
             sql("TRUNCATE TABLE v0")
           },
           condition = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
-          parameters = Map(
-            "viewName" -> "`spark_catalog`.`default`.`v0`",
-            "operation" -> "TRUNCATE TABLE"),
-          context = ExpectedContext(
-            fragment = "v0",
-            start = 15,
-            stop = 16)
-        )
+          parameters =
+            Map("viewName" -> "`spark_catalog`.`default`.`v0`", "operation" -> "TRUNCATE TABLE"),
+          context = ExpectedContext(fragment = "v0", start = 15, stop = 16))
       }
 
       withTempView("v1") {
@@ -238,11 +232,8 @@ trait TruncateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
             sql("TRUNCATE TABLE v1")
           },
           condition = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
-          parameters = Map(
-            "viewName" -> "`v1`",
-            "operation" -> "TRUNCATE TABLE"),
-          context = ExpectedContext(fragment = "v1", start = 15, stop = 16)
-        )
+          parameters = Map("viewName" -> "`v1`", "operation" -> "TRUNCATE TABLE"),
+          context = ExpectedContext(fragment = "v1", start = 15, stop = 16))
       }
 
       val v2 = s"${spark.sharedState.globalTempDB}.v2"
@@ -253,11 +244,8 @@ trait TruncateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
             sql(s"TRUNCATE TABLE $v2")
           },
           condition = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
-          parameters = Map(
-            "viewName" -> "`global_temp`.`v2`",
-            "operation" -> "TRUNCATE TABLE"),
-          context = ExpectedContext(fragment = v2, start = 15, stop = 28)
-        )
+          parameters = Map("viewName" -> "`global_temp`.`v2`", "operation" -> "TRUNCATE TABLE"),
+          context = ExpectedContext(fragment = v2, start = 15, stop = 28))
       }
     }
   }

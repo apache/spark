@@ -23,23 +23,23 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{JOIN, OR}
 
 /**
- * Replaces `t1.id is null and t2.id is null or t1.id = t2.id` to `t1.id <=> t2.id`
- * in join condition for better performance.
+ * Replaces `t1.id is null and t2.id is null or t1.id = t2.id` to `t1.id <=> t2.id` in join
+ * condition for better performance.
  */
 object OptimizeJoinCondition extends Rule[LogicalPlan] with PredicateHelper {
-  override def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
-    _.containsPattern(JOIN), ruleId) {
-    case j @ Join(_, _, _, condition, _) if condition.nonEmpty =>
-      val newCondition = condition.map(_.transformWithPruning(_.containsPattern(OR), ruleId) {
-        case Or(EqualTo(l, r), And(IsNull(c1), IsNull(c2)))
-          if (l.semanticEquals(c1) && r.semanticEquals(c2))
-            || (l.semanticEquals(c2) && r.semanticEquals(c1)) =>
-          EqualNullSafe(l, r)
-        case Or(And(IsNull(c1), IsNull(c2)), EqualTo(l, r))
-          if (l.semanticEquals(c1) && r.semanticEquals(c2))
-            || (l.semanticEquals(c2) && r.semanticEquals(c1)) =>
-          EqualNullSafe(l, r)
-      })
-      j.copy(condition = newCondition)
-  }
+  override def apply(plan: LogicalPlan): LogicalPlan =
+    plan.transformWithPruning(_.containsPattern(JOIN), ruleId) {
+      case j @ Join(_, _, _, condition, _) if condition.nonEmpty =>
+        val newCondition = condition.map(_.transformWithPruning(_.containsPattern(OR), ruleId) {
+          case Or(EqualTo(l, r), And(IsNull(c1), IsNull(c2)))
+              if (l.semanticEquals(c1) && r.semanticEquals(c2))
+                || (l.semanticEquals(c2) && r.semanticEquals(c1)) =>
+            EqualNullSafe(l, r)
+          case Or(And(IsNull(c1), IsNull(c2)), EqualTo(l, r))
+              if (l.semanticEquals(c1) && r.semanticEquals(c2))
+                || (l.semanticEquals(c2) && r.semanticEquals(c1)) =>
+            EqualNullSafe(l, r)
+        })
+        j.copy(condition = newCondition)
+    }
 }

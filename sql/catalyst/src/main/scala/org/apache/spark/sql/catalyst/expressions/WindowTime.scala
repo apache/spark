@@ -43,7 +43,7 @@ import org.apache.spark.sql.types._
   since = "3.4.0")
 // scalastyle:on line.size.limit line.contains.tab
 case class WindowTime(windowColumn: Expression)
-  extends UnaryExpression
+    extends UnaryExpression
     with ImplicitCastInputTypes
     with Unevaluable
     with NonSQLExpression {

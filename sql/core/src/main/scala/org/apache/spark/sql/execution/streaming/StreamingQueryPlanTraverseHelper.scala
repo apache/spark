@@ -24,12 +24,11 @@ import org.apache.spark.sql.execution.adaptive.QueryStageExec
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 
 /**
- * This is an utility object placing methods to traverse the query plan for streaming query.
- * This is used for patterns of traversal which are repeated in multiple places.
+ * This is an utility object placing methods to traverse the query plan for streaming query. This
+ * is used for patterns of traversal which are repeated in multiple places.
  */
 object StreamingQueryPlanTraverseHelper extends Logging {
-  def collectFromUnfoldedPlan[B](
-      executedPlan: SparkPlan)(
+  def collectFromUnfoldedPlan[B](executedPlan: SparkPlan)(
       pf: PartialFunction[SparkPlan, B]): Seq[B] = {
     executedPlan.flatMap {
       // InMemoryTableScanExec is a node to represent a cached plan. The node has underlying
@@ -44,8 +43,7 @@ object StreamingQueryPlanTraverseHelper extends Logging {
       case a: AdaptiveSparkPlanExec =>
         if (!a.isFinalPlan) {
           logWarning(log"AQE plan is captured, but the executed plan in AQE plan is not" +
-            log"the final one. Providing incomplete executed plan. AQE plan: ${MDC(
-              LogKeys.AQE_PLAN, a)}")
+            log"the final one. Providing incomplete executed plan. AQE plan: ${MDC(LogKeys.AQE_PLAN, a)}")
         }
         collectFromUnfoldedPlan(a.executedPlan)(pf)
 

@@ -33,7 +33,7 @@ case class RenameTableExec(
     newIdent: Identifier,
     invalidateCache: () => Option[StorageLevel],
     cacheTable: (SparkSession, LogicalPlan, Option[String], StorageLevel) => Unit)
-  extends LeafV2CommandExec {
+    extends LeafV2CommandExec {
 
   override def output: Seq[Attribute] = Seq.empty
 
@@ -53,10 +53,7 @@ case class RenameTableExec(
     optOldStorageLevel.foreach { oldStorageLevel =>
       val tbl = catalog.loadTable(qualifiedNewIdent)
       val newRelation = DataSourceV2Relation.create(tbl, Some(catalog), Some(qualifiedNewIdent))
-      cacheTable(
-        session,
-        newRelation,
-        Some(qualifiedNewIdent.quoted), oldStorageLevel)
+      cacheTable(session, newRelation, Some(qualifiedNewIdent.quoted), oldStorageLevel)
     }
     Seq.empty
   }

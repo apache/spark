@@ -32,9 +32,10 @@ import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.sources.{EqualTo, Filter, IsNotNull}
 import org.apache.spark.sql.test.SharedSparkSession
 
-abstract class CollatedFilterPushDownToParquetSuite extends QueryTest
-  with SharedSparkSession
-  with AdaptiveSparkPlanHelper {
+abstract class CollatedFilterPushDownToParquetSuite
+    extends QueryTest
+    with SharedSparkSession
+    with AdaptiveSparkPlanHelper {
 
   val dataSource = "parquet"
   val nonCollatedCol = "c0"
@@ -50,8 +51,12 @@ abstract class CollatedFilterPushDownToParquetSuite extends QueryTest
   def getPushedDownFilters(query: DataFrame): Seq[Filter]
 
   protected def createParquetFilters(schema: MessageType): ParquetFilters =
-    new ParquetFilters(schema, conf.parquetFilterPushDownDate, conf.parquetFilterPushDownTimestamp,
-      conf.parquetFilterPushDownDecimal, conf.parquetFilterPushDownStringPredicate,
+    new ParquetFilters(
+      schema,
+      conf.parquetFilterPushDownDate,
+      conf.parquetFilterPushDownTimestamp,
+      conf.parquetFilterPushDownDecimal,
+      conf.parquetFilterPushDownStringPredicate,
       conf.parquetFilterPushDownInFilterThreshold,
       conf.caseSensitiveAnalysis,
       RebaseSpec(LegacyBehaviorPolicy.CORRECTED))
@@ -61,8 +66,7 @@ abstract class CollatedFilterPushDownToParquetSuite extends QueryTest
       expectedPushedFilters: Seq[Filter],
       expectedRowCount: Int): Unit = {
     withTempPath { path =>
-      val df = sql(
-        s"""
+      val df = sql(s"""
            |SELECT
            |  c as $nonCollatedCol,
            |  COLLATE(c, $lcaseCollation) as $collatedCol,
@@ -76,7 +80,9 @@ abstract class CollatedFilterPushDownToParquetSuite extends QueryTest
 
       df.write.format(dataSource).save(path.getAbsolutePath)
 
-      val query = spark.read.format(dataSource).load(path.getAbsolutePath)
+      val query = spark.read
+        .format(dataSource)
+        .load(path.getAbsolutePath)
         .filter(filterString)
 
       val actualPushedFilters = getPushedDownFilters(query)
@@ -87,9 +93,9 @@ abstract class CollatedFilterPushDownToParquetSuite extends QueryTest
 
   test("do not push down anything for literal comparison") {
     testPushDown(
-       filterString = s"'aaa' COLLATE UNICODE = 'bbb' COLLATE UNICODE",
-       expectedPushedFilters = Seq.empty,
-       expectedRowCount = 0)
+      filterString = s"'aaa' COLLATE UNICODE = 'bbb' COLLATE UNICODE",
+      expectedPushedFilters = Seq.empty,
+      expectedRowCount = 0)
   }
 
   test("push down null check for collated column") {
@@ -179,7 +185,8 @@ abstract class CollatedFilterPushDownToParquetSuite extends QueryTest
 
   test("mix OR and AND") {
     testPushDown(
-      filterString = s"$collatedCol = 'aaa' AND ($nonCollatedCol = 'aaa' OR $collatedCol = 'aaa')",
+      filterString =
+        s"$collatedCol = 'aaa' AND ($nonCollatedCol = 'aaa' OR $collatedCol = 'aaa')",
       expectedPushedFilters = Seq(IsNotNull(collatedCol)),
       expectedRowCount = 2)
   }
@@ -223,15 +230,16 @@ abstract class CollatedFilterPushDownToParquetSuite extends QueryTest
 
 class CollatedFilterPushDownToParquetV1Suite extends CollatedFilterPushDownToParquetSuite {
   override protected def sparkConf: SparkConf =
-    super
-      .sparkConf
+    super.sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, dataSource)
 
   override def getPushedDownFilters(query: DataFrame): Seq[Filter] = {
     var maybeRelation: Option[HadoopFsRelation] = None
     val maybeAnalyzedPredicate = query.queryExecution.optimizedPlan.collect {
-      case PhysicalOperation(_, filters,
-          LogicalRelationWithTable(relation: HadoopFsRelation, _)) =>
+      case PhysicalOperation(
+            _,
+            filters,
+            LogicalRelationWithTable(relation: HadoopFsRelation, _)) =>
         maybeRelation = Some(relation)
         filters
     }.flatten
@@ -251,15 +259,15 @@ class CollatedFilterPushDownToParquetV1Suite extends CollatedFilterPushDownToPar
 
 class CollatedFilterPushDownToParquetV2Suite extends CollatedFilterPushDownToParquetSuite {
   override protected def sparkConf: SparkConf =
-    super
-      .sparkConf
+    super.sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, "")
 
   override def getPushedDownFilters(query: DataFrame): Seq[Filter] = {
-    query.queryExecution.optimizedPlan.collectFirst {
-      case PhysicalOperation(_, _,
-          DataSourceV2ScanRelation(_, scan: ParquetScan, _, _, _)) =>
-        scan.pushedFilters.toSeq
-    }.getOrElse(Seq.empty)
+    query.queryExecution.optimizedPlan
+      .collectFirst {
+        case PhysicalOperation(_, _, DataSourceV2ScanRelation(_, scan: ParquetScan, _, _, _)) =>
+          scan.pushedFilters.toSeq
+      }
+      .getOrElse(Seq.empty)
   }
 }

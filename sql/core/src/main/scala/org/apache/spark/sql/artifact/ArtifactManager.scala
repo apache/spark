@@ -44,14 +44,15 @@ import org.apache.spark.util.{ChildFirstURLClassLoader, StubClassLoader, Utils}
 /**
  * This class handles the storage of artifacts as well as preparing the artifacts for use.
  *
- * Artifacts belonging to different SparkSessions are isolated from each other with the help of the
- * `sessionUUID`.
+ * Artifacts belonging to different SparkSessions are isolated from each other with the help of
+ * the `sessionUUID`.
  *
  * Jars and classfile artifacts are stored under "jars", "classes" and "pyfiles" sub-directories
  * respectively while other types of artifacts are stored under the root directory for that
  * particular SparkSession.
  *
- * @param session The object used to hold the Spark Connect session state.
+ * @param session
+ *   The object used to hold the Spark Connect session state.
  */
 class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging {
   import ArtifactManager._
@@ -59,15 +60,13 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
   // The base directory where all artifacts are stored.
   protected def artifactRootPath: Path = artifactRootDirectory
 
-  private[artifact] lazy val artifactRootURI: String = SparkEnv
-    .get
-    .rpcEnv
-    .fileServer
+  private[artifact] lazy val artifactRootURI: String = SparkEnv.get.rpcEnv.fileServer
     .addDirectoryIfAbsent(ARTIFACT_DIRECTORY_PREFIX, artifactRootPath.toFile)
 
   // The base directory/URI where all artifacts are stored for this `sessionUUID`.
   protected[artifact] val (artifactPath, artifactURI): (Path, String) =
-    (ArtifactUtils.concatenatePaths(artifactRootPath, session.sessionUUID),
+    (
+      ArtifactUtils.concatenatePaths(artifactRootPath, session.sessionUUID),
       s"$artifactRootURI/${session.sessionUUID}")
 
   // The base directory/URI where all class file artifacts are stored for this `sessionUUID`.
@@ -84,8 +83,8 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
     if (sessionIsolated) JobArtifactState(session.sessionUUID, Some(replClassURI)) else null
 
   /**
-   * Whether any artifact has been added to this artifact manager. We use this to determine whether
-   * we should apply the classloader to the session, see `withClassLoaderIfNeeded`.
+   * Whether any artifact has been added to this artifact manager. We use this to determine
+   * whether we should apply the classloader to the session, see `withClassLoaderIfNeeded`.
    */
   protected val sessionArtifactAdded = new AtomicBoolean(false)
 
@@ -122,8 +121,7 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
   /**
    * Get the URLs of all jar artifacts.
    */
-  def getAddedJars: Seq[URL] = jarsList
-    .asScala
+  def getAddedJars: Seq[URL] = jarsList.asScala
     .map(ArtifactUtils.concatenatePaths(artifactPath, _))
     .map(_.toUri.toURL)
     .toSeq
@@ -163,6 +161,7 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
     // Convert the normalized string back to a Path object
     Paths.get(normalizedPathString).normalize()
   }
+
   /**
    * Add and prepare a staged artifact (i.e an artifact that has been rebuilt locally from bytes
    * over the wire) for use.
@@ -176,8 +175,7 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
       remoteRelativePath: Path,
       serverLocalStagingPath: Path,
       fragment: Option[String],
-      deleteStagedFile: Boolean = true
-  ): Unit = JobArtifactSet.withActiveJobArtifactState(state) {
+      deleteStagedFile: Boolean = true): Unit = JobArtifactSet.withActiveJobArtifactState(state) {
     require(!remoteRelativePath.isAbsolute)
     val normalizedRemoteRelativePath = normalizePath(remoteRelativePath)
     if (normalizedRemoteRelativePath.startsWith(s"cache${File.separator}")) {
@@ -185,9 +183,7 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
       Utils.tryWithSafeFinallyAndFailureCallbacks {
         val hash = normalizedRemoteRelativePath.toString.stripPrefix(s"cache${File.separator}")
         val blockManager = session.sparkContext.env.blockManager
-        val blockId = CacheId(
-          sessionUUID = session.sessionUUID,
-          hash = hash)
+        val blockId = CacheId(sessionUUID = session.sessionUUID, hash = hash)
         // If the exact same block (same CacheId) already exists, skip re-adding.
         // This prevents incorrectly removing the existing block from BlockManager.
         // Note: We only skip if the CacheId matches - if it's a different session's block
@@ -241,8 +237,7 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
 
         throw new SparkRuntimeException(
           "ARTIFACT_ALREADY_EXISTS",
-          Map("normalizedRemoteRelativePath" -> normalizedRemoteRelativePath.toString)
-        )
+          Map("normalizedRemoteRelativePath" -> normalizedRemoteRelativePath.toString))
       }
       transferFile(serverLocalStagingPath, target, deleteSource = deleteStagedFile)
 
@@ -294,11 +289,7 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
       try {
         artifact.storage match {
           case d: Artifact.LocalFile =>
-            addArtifact(
-              artifact.path,
-              d.path,
-              fragment = None,
-              deleteStagedFile = false)
+            addArtifact(artifact.path, d.path, fragment = None, deleteStagedFile = false)
           case d: Artifact.InMemory =>
             val tempDir = Utils.createTempDir().toPath
             val tempFile = tempDir.resolve(artifact.path.getFileName)
@@ -310,7 +301,8 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
               outStream.close()
             })
           case _ =>
-            throw SparkException.internalError(s"Unsupported artifact storage: ${artifact.storage}")
+            throw SparkException.internalError(
+              s"Unsupported artifact storage: ${artifact.storage}")
         }
       } catch {
         case e: SparkRuntimeException if e.getCondition == "ARTIFACT_ALREADY_EXISTS" =>
@@ -383,7 +375,7 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
     // The block is removed from memory only when the ref-count reaches zero.
     hashToCachedIdMap.forEach { (hash: String, refCountedCacheId: RefCountedCacheId) =>
       try {
-        refCountedCacheId.acquire()  // Increment ref-count to prevent premature cleanup
+        refCountedCacheId.acquire() // Increment ref-count to prevent premature cleanup
         newArtifactManager.hashToCachedIdMap.put(hash, refCountedCacheId)
       } catch {
         case e: SparkRuntimeException if e.getCondition == "BLOCK_ALREADY_RELEASED" =>
@@ -401,10 +393,8 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
     // Re-register resources to SparkContext
     JobArtifactSet.withActiveJobArtifactState(newArtifactManager.state) {
       sparkContextRelativePaths.forEach { case (resourceType, relativePath, fragment) =>
-        val uri = s"${newArtifactManager.artifactURI}/${
-          Utils.encodeRelativeUnixPathToURIRawPath(
-            FilenameUtils.separatorsToUnix(relativePath.toString))
-        }"
+        val uri = s"${newArtifactManager.artifactURI}/${Utils.encodeRelativeUnixPathToURIRawPath(
+            FilenameUtils.separatorsToUnix(relativePath.toString))}"
         resourceType match {
           case SparkContextResourceType.JAR =>
             sparkContext.addJar(uri)
@@ -426,23 +416,18 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
     newArtifactManager
   }
 
-  private val cleanUpStateForGlobalResources = ArtifactStateForCleanup(
-    session.sessionUUID,
-    session.sparkContext,
-    state,
-    artifactPath)
+  private val cleanUpStateForGlobalResources =
+    ArtifactStateForCleanup(session.sessionUUID, session.sparkContext, state, artifactPath)
   // Ensure that no reference to `this` is captured/help by the cleanup lambda
-  private def getCleanable: Cleaner.Cleanable = cleaner.register(
-    this, new StateCleanupRunner(cleanUpStateForGlobalResources)
-  )
+  private def getCleanable: Cleaner.Cleanable =
+    cleaner.register(this, new StateCleanupRunner(cleanUpStateForGlobalResources))
   private var cleanable = getCleanable
 
   /**
    * Cleans up all resources specific to this `session`.
    */
   private def cleanUpResources(): Unit = {
-    logDebug(
-      s"Cleaning up resources for session with sessionUUID ${session.sessionUUID}")
+    logDebug(s"Cleaning up resources for session with sessionUUID ${session.sessionUUID}")
 
     // Clean up global resources via the Cleaner process.
     // Note that this will only be run once per instance.
@@ -465,12 +450,15 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
       case urlClassLoader: URLClassLoader =>
         try {
           urlClassLoader.close()
-          logDebug(log"Closed URLClassLoader for session " +
-            log"${MDC(LogKeys.SESSION_ID, session.sessionUUID)}")
+          logDebug(
+            log"Closed URLClassLoader for session " +
+              log"${MDC(LogKeys.SESSION_ID, session.sessionUUID)}")
         } catch {
           case e: IOException =>
-            logWarning(log"Failed to close URLClassLoader for session " +
-              log"${MDC(LogKeys.SESSION_ID, session.sessionUUID)}", e)
+            logWarning(
+              log"Failed to close URLClassLoader for session " +
+                log"${MDC(LogKeys.SESSION_ID, session.sessionUUID)}",
+              e)
         }
       case _ =>
     }
@@ -488,24 +476,23 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
     cleanable = getCleanable
   }
 
-  def uploadArtifactToFs(
-      remoteRelativePath: Path,
-      serverLocalStagingPath: Path): Unit = {
+  def uploadArtifactToFs(remoteRelativePath: Path, serverLocalStagingPath: Path): Unit = {
     val normalizedRemoteRelativePath = normalizePath(remoteRelativePath)
     val hadoopConf = session.sparkContext.hadoopConfiguration
     assert(
-      normalizedRemoteRelativePath.startsWith(
-        ArtifactManager.forwardToFSPrefix + File.separator))
+      normalizedRemoteRelativePath.startsWith(ArtifactManager.forwardToFSPrefix + File.separator))
     val destFSPath = new FSPath(
       Paths
         .get(File.separator)
-        .resolve(normalizedRemoteRelativePath.subpath(1, normalizedRemoteRelativePath.getNameCount))
+        .resolve(
+          normalizedRemoteRelativePath.subpath(1, normalizedRemoteRelativePath.getNameCount))
         .toString)
     val localPath = serverLocalStagingPath
     val fs = destFSPath.getFileSystem(hadoopConf)
     if (fs.isInstanceOf[LocalFileSystem]) {
       val allowDestLocalConf =
-        session.sessionState.conf.getConf(SQLConf.ARTIFACT_COPY_FROM_LOCAL_TO_FS_ALLOW_DEST_LOCAL)
+        session.sessionState.conf
+          .getConf(SQLConf.ARTIFACT_COPY_FROM_LOCAL_TO_FS_ALLOW_DEST_LOCAL)
           .getOrElse(
             session.conf.get("spark.connect.copyFromLocalToFs.allowDestLocal").contains("true"))
 
@@ -566,7 +553,9 @@ object ArtifactManager extends Logging {
         sparkContext.addedJars.contains(state.uuid)
       if (shouldUpdateEnv) {
         sparkContext.addedFiles.remove(state.uuid).foreach(_.keys.foreach(fileServer.removeFile))
-        sparkContext.addedArchives.remove(state.uuid).foreach(_.keys.foreach(fileServer.removeFile))
+        sparkContext.addedArchives
+          .remove(state.uuid)
+          .foreach(_.keys.foreach(fileServer.removeFile))
         sparkContext.addedJars.remove(state.uuid).foreach(_.keys.foreach(fileServer.removeJar))
         sparkContext.postEnvironmentUpdate()
       }
@@ -577,17 +566,19 @@ object ArtifactManager extends Logging {
       Utils.deleteRecursively(artifactPath.toFile)
     } catch {
       case e: IOException =>
-        logWarning(log"Failed to delete directory ${MDC(LogKeys.PATH, artifactPath.toFile)}: " +
-          log"${MDC(LogKeys.EXCEPTION, e.getMessage)}", e)
+        logWarning(
+          log"Failed to delete directory ${MDC(LogKeys.PATH, artifactPath.toFile)}: " +
+            log"${MDC(LogKeys.EXCEPTION, e.getMessage)}",
+          e)
     }
   }
 }
 
 private[artifact] case class ArtifactStateForCleanup(
-  sparkSessionUUID: String,
-  sparkContext: SparkContext,
-  jobArtifactState: JobArtifactState,
-  artifactPath: Path)
+    sparkSessionUUID: String,
+    sparkContext: SparkContext,
+    jobArtifactState: JobArtifactState,
+    artifactPath: Path)
 
 private class RefCountedCacheId(val id: CacheId) {
   private val rc = new AtomicInteger(1)
@@ -604,10 +595,7 @@ private class RefCountedCacheId(val id: CacheId) {
   private def updateRc(delta: Int): Int = {
     rc.updateAndGet { currentRc: Int =>
       if (currentRc == 0) {
-        throw new SparkRuntimeException(
-          "BLOCK_ALREADY_RELEASED",
-          Map("blockId" -> id.toString)
-        )
+        throw new SparkRuntimeException("BLOCK_ALREADY_RELEASED", Map("blockId" -> id.toString))
       }
       currentRc + delta
     }

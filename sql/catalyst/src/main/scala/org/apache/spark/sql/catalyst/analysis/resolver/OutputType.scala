@@ -18,8 +18,8 @@
 package org.apache.spark.sql.catalyst.analysis.resolver
 
 /**
- * [[OutputType]] represents different types of output used during multipart name resolution in the
- * [[NameScope]].
+ * [[OutputType]] represents different types of output used during multipart name resolution in
+ * the [[NameScope]].
  */
 object OutputType extends Enumeration {
   type OutputType = Value

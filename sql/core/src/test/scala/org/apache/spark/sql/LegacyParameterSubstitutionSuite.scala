@@ -21,8 +21,8 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.test.SharedSparkSession
 
 /**
- * Test suite for the legacy parameter substitution configuration.
- * Tests the behavior when spark.sql.legacy.parameterSubstitution.constantsOnly is enabled.
+ * Test suite for the legacy parameter substitution configuration. Tests the behavior when
+ * spark.sql.legacy.parameterSubstitution.constantsOnly is enabled.
  */
 class LegacyParameterSubstitutionSuite extends QueryTest with SharedSparkSession {
 
@@ -110,11 +110,13 @@ class LegacyParameterSubstitutionSuite extends QueryTest with SharedSparkSession
       assert(result(0).getInt(0) == 42)
 
       // Complex SQL should also work
-      val complexResult = spark.sql("""
+      val complexResult = spark
+        .sql("""
         SELECT
           CASE WHEN 1 = 1 THEN 'true' ELSE 'false' END as condition,
           42 + 8 as calculation
-      """).collect()
+      """)
+        .collect()
       assert(complexResult.length == 1)
       assert(complexResult(0).getString(0) == "true")
       assert(complexResult(0).getInt(1) == 50)
@@ -127,16 +129,10 @@ class LegacyParameterSubstitutionSuite extends QueryTest with SharedSparkSession
       // but parameter binding through the analyzer should still work
 
       // Test that positional parameters work through analyzer binding
-      checkAnswer(
-        spark.sql("SELECT ? FROM VALUES (1)", Array(42)),
-        Row(42)
-      )
+      checkAnswer(spark.sql("SELECT ? FROM VALUES (1)", Array(42)), Row(42))
 
       // Test that named parameters work through analyzer binding
-      checkAnswer(
-        spark.sql("SELECT :param FROM VALUES (1)", Map("param" -> "test")),
-        Row("test")
-      )
+      checkAnswer(spark.sql("SELECT :param FROM VALUES (1)", Map("param" -> "test")), Row("test"))
     }
   }
 
@@ -172,8 +168,7 @@ class LegacyParameterSubstitutionSuite extends QueryTest with SharedSparkSession
           spark.sql("SELECT 5::DECIMAL(?, ?)").show()
         },
         condition = "PARSE_SYNTAX_ERROR",
-        parameters = Map("error" -> "'?'", "hint" -> "")
-      )
+        parameters = Map("error" -> "'?'", "hint" -> ""))
 
       // Test that named parameters in VARCHAR type specifications cause parse errors
       checkError(
@@ -182,8 +177,7 @@ class LegacyParameterSubstitutionSuite extends QueryTest with SharedSparkSession
         },
         condition = "PARSE_SYNTAX_ERROR",
         parameters = Map("error" -> "':'", "hint" -> ""),
-        queryContext = Array(ExpectedContext("CREATE TABLE test (col VARCHAR(:len))", 0, 36))
-      )
+        queryContext = Array(ExpectedContext("CREATE TABLE test (col VARCHAR(:len))", 0, 36)))
 
       // Test that parameter markers in CHAR type specifications cause parse errors
       checkError(
@@ -192,8 +186,7 @@ class LegacyParameterSubstitutionSuite extends QueryTest with SharedSparkSession
         },
         condition = "PARSE_SYNTAX_ERROR",
         parameters = Map("error" -> "'?'", "hint" -> ""),
-        queryContext = Array(ExpectedContext("SELECT CAST('hello' AS CHAR(?))", 0, 30))
-      )
+        queryContext = Array(ExpectedContext("SELECT CAST('hello' AS CHAR(?))", 0, 30)))
     }
   }
 
@@ -206,22 +199,23 @@ class LegacyParameterSubstitutionSuite extends QueryTest with SharedSparkSession
         },
         condition = "PARSE_SYNTAX_ERROR",
         parameters = Map("error" -> "'?'", "hint" -> ""),
-        queryContext = Array(ExpectedContext(
-          "CREATE TABLE test (id INT) TBLPROPERTIES ('key' = ?)", 0, 51))
-      )
+        queryContext =
+          Array(ExpectedContext("CREATE TABLE test (id INT) TBLPROPERTIES ('key' = ?)", 0, 51)))
 
       // Test that named parameters in TBLPROPERTIES cause parse errors
       checkError(
         exception = intercept[ParseException] {
           spark.sql(
             "CREATE TABLE test (id INT) TBLPROPERTIES ('timeout' = :timeout)",
-                   Map("timeout" -> "300"))
+            Map("timeout" -> "300"))
         },
         condition = "PARSE_SYNTAX_ERROR",
         parameters = Map("error" -> "':'", "hint" -> ""),
-        queryContext = Array(ExpectedContext(
-          "CREATE TABLE test (id INT) TBLPROPERTIES ('timeout' = :timeout)", 0, 62))
-      )
+        queryContext = Array(
+          ExpectedContext(
+            "CREATE TABLE test (id INT) TBLPROPERTIES ('timeout' = :timeout)",
+            0,
+            62)))
     }
   }
 

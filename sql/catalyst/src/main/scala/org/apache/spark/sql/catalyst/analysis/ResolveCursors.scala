@@ -28,27 +28,27 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_CURSOR
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * Resolves [[UnresolvedCursor]] expressions to [[CursorReference]] expressions.
- * This rule:
- * 1. Normalizes cursor names based on case sensitivity configuration
- * 2. Separates qualified cursor names (label.cursor) into scope label and cursor name
- * 3. Looks up the cursor definition from the scripting context
- * 4. Fails early if cursor is not found
+ * Resolves [[UnresolvedCursor]] expressions to [[CursorReference]] expressions. This rule:
+ *   1. Normalizes cursor names based on case sensitivity configuration
+ *   2. Separates qualified cursor names (label.cursor) into scope label and cursor name
+ *   3. Looks up the cursor definition from the scripting context
+ *   4. Fails early if cursor is not found
  */
 class ResolveCursors extends Rule[LogicalPlan] {
 
-  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveExpressionsWithPruning(
-    _.containsPattern(UNRESOLVED_CURSOR)) {
-    case uc: UnresolvedCursor =>
-      resolveCursor(uc)
-  }
+  override def apply(plan: LogicalPlan): LogicalPlan =
+    plan.resolveExpressionsWithPruning(_.containsPattern(UNRESOLVED_CURSOR)) {
+      case uc: UnresolvedCursor =>
+        resolveCursor(uc)
+    }
 
   private def resolveCursor(uc: UnresolvedCursor): CursorReference = {
     val nameParts = uc.nameParts
     val caseSensitive = SQLConf.get.caseSensitiveAnalysis
 
     // Parser already validates this, so we can assert
-    assert(nameParts.length <= 2,
+    assert(
+      nameParts.length <= 2,
       s"Cursor reference has too many parts: ${nameParts.mkString(".")}")
 
     // Split qualified name into scope label and cursor name
@@ -76,7 +76,8 @@ class ResolveCursors extends Rule[LogicalPlan] {
     }
 
     // Look up cursor definition from scripting context using the extension API
-    val context = SqlScriptingContextManager.get()
+    val context = SqlScriptingContextManager
+      .get()
       .map(_.getContext)
       .getOrElse {
         // Cursors are only allowed within SQL scripts

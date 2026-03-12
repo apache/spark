@@ -24,8 +24,8 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.TIME_ZONE_AWARE_EXPRESSIO
 import org.apache.spark.sql.types.DataType
 
 /**
- * Replace [[TimeZoneAwareExpression]] without timezone id by its copy with session local
- * time zone.
+ * Replace [[TimeZoneAwareExpression]] without timezone id by its copy with session local time
+ * zone.
  */
 object ResolveTimeZone extends Rule[LogicalPlan] {
   private val transformTimeZoneExprs: PartialFunction[Expression, Expression] = {
@@ -39,11 +39,11 @@ object ResolveTimeZone extends Rule[LogicalPlan] {
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan =
-    plan.resolveExpressionsWithPruning(
-      _.containsPattern(TIME_ZONE_AWARE_EXPRESSION), ruleId)(transformTimeZoneExprs)
+    plan.resolveExpressionsWithPruning(_.containsPattern(TIME_ZONE_AWARE_EXPRESSION), ruleId)(
+      transformTimeZoneExprs)
 
-  def resolveTimeZones(e: Expression): Expression = e.transformWithPruning(
-    _.containsPattern(TIME_ZONE_AWARE_EXPRESSION))(transformTimeZoneExprs)
+  def resolveTimeZones(e: Expression): Expression =
+    e.transformWithPruning(_.containsPattern(TIME_ZONE_AWARE_EXPRESSION))(transformTimeZoneExprs)
 }
 
 /**

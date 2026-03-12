@@ -22,13 +22,12 @@ import org.apache.spark.sql.connector.metric.CustomMetric
 import org.apache.spark.sql.connector.write.{BatchWrite, _}
 import org.apache.spark.sql.connector.write.streaming.StreamingWrite
 
-
 class PythonWrite(
     ds: PythonDataSourceV2,
     shortName: String,
     info: LogicalWriteInfo,
-    isTruncate: Boolean
-  ) extends Write {
+    isTruncate: Boolean)
+    extends Write {
 
   override def toString: String = shortName
 
@@ -45,13 +44,13 @@ class PythonWrite(
 
 /**
  * A [[BatchWrite]] for python data source writing. Responsible for generating the writer factory.
- * */
+ */
 class PythonBatchWrite(
     ds: PythonDataSourceV2,
     shortName: String,
     info: LogicalWriteInfo,
-    isTruncate: Boolean
-  ) extends BatchWrite {
+    isTruncate: Boolean)
+    extends BatchWrite {
 
   // Store the pickled data source writer instance.
   private var pythonDataSourceWriter: Array[Byte] = _
@@ -64,8 +63,7 @@ class PythonBatchWrite(
     }
   }
 
-  override def createBatchWriterFactory(physicalInfo: PhysicalWriteInfo): DataWriterFactory =
-  {
+  override def createBatchWriterFactory(physicalInfo: PhysicalWriteInfo): DataWriterFactory = {
     val writeInfo = ds.source.createWriteInfoInPython(
       shortName,
       info.schema(),
@@ -75,8 +73,12 @@ class PythonBatchWrite(
 
     pythonDataSourceWriter = writeInfo.writer
 
-    PythonBatchWriterFactory(ds.source, writeInfo.func, info.schema(),
-      jobArtifactUUID, sessionUUID)
+    PythonBatchWriterFactory(
+      ds.source,
+      writeInfo.func,
+      info.schema(),
+      jobArtifactUUID,
+      sessionUUID)
   }
 
   override def commit(messages: Array[WriterCommitMessage]): Unit = {

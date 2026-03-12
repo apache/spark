@@ -26,17 +26,15 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.types._
 
 object SchemaPruning extends SQLConfHelper {
+
   /**
    * Prunes the nested schema by the requested fields. For example, if the schema is:
-   * `id int, s struct<a:int, b:int>`, and given requested field "s.a", the inner field "b"
-   * is pruned in the returned schema: `id int, s struct<a:int>`.
-   * Note that:
+   * `id int, s struct<a:int, b:int>`, and given requested field "s.a", the inner field "b" is
+   * pruned in the returned schema: `id int, s struct<a:int>`. Note that:
    *   1. The schema field ordering at original schema is still preserved in pruned schema.
    *   2. The top-level fields are not pruned here.
    */
-  def pruneSchema(
-      schema: StructType,
-      requestedRootFields: Seq[RootField]): StructType = {
+  def pruneSchema(schema: StructType, requestedRootFields: Seq[RootField]): StructType = {
     val resolver = conf.resolver
     // Merge the requested root fields into a single schema. Note the ordering of the fields
     // in the resulting schema may differ from their ordering in the logical relation's
@@ -52,20 +50,18 @@ object SchemaPruning extends SQLConfHelper {
   }
 
   /**
-   * Sorts the fields and descendant fields of structs in left according to their order in
-   * right. This function assumes that the fields of left are a subset of the fields of
-   * right, recursively. That is, left is a "subschema" of right, ignoring order of
-   * fields.
+   * Sorts the fields and descendant fields of structs in left according to their order in right.
+   * This function assumes that the fields of left are a subset of the fields of right,
+   * recursively. That is, left is a "subschema" of right, ignoring order of fields.
    */
   private def sortLeftFieldsByRight(left: DataType, right: DataType): DataType =
     (left, right) match {
       case _ if left == right => left
       case (ArrayType(leftElementType, containsNull), ArrayType(rightElementType, _)) =>
-        ArrayType(
-          sortLeftFieldsByRight(leftElementType, rightElementType),
-          containsNull)
-      case (MapType(leftKeyType, leftValueType, containsNull),
-          MapType(rightKeyType, rightValueType, _)) =>
+        ArrayType(sortLeftFieldsByRight(leftElementType, rightElementType), containsNull)
+      case (
+            MapType(leftKeyType, leftValueType, containsNull),
+            MapType(rightKeyType, rightValueType, _)) =>
         MapType(
           sortLeftFieldsByRight(leftKeyType, rightKeyType),
           sortLeftFieldsByRight(leftValueType, rightValueType),
@@ -83,8 +79,12 @@ object SchemaPruning extends SQLConfHelper {
             val leftFieldType = resolvedLeftStruct.dataType
             val rightFieldType = rightStruct(fieldName).dataType
             val sortedLeftFieldType = sortLeftFieldsByRight(leftFieldType, rightFieldType)
-            Some(StructField(fieldName, sortedLeftFieldType, nullable = resolvedLeftStruct.nullable,
-              metadata = resolvedLeftStruct.metadata))
+            Some(
+              StructField(
+                fieldName,
+                sortedLeftFieldType,
+                nullable = resolvedLeftStruct.nullable,
+                metadata = resolvedLeftStruct.metadata))
           } else {
             None
           }
@@ -107,8 +107,8 @@ object SchemaPruning extends SQLConfHelper {
     // field access of above expressions.
     // For example, for a query `SELECT name.first FROM contacts WHERE name IS NOT NULL`,
     // we don't need to read nested fields of `name` struct other than `first` field.
-    val (rootFields, optRootFields) = (projectionRootFields ++ filterRootFields)
-      .distinct.partition(!_.prunedIfAnyChildAccessed)
+    val (rootFields, optRootFields) =
+      (projectionRootFields ++ filterRootFields).distinct.partition(!_.prunedIfAnyChildAccessed)
 
     optRootFields.filter { opt =>
       !rootFields.exists { root =>
@@ -134,14 +134,15 @@ object SchemaPruning extends SQLConfHelper {
   }
 
   /**
-   * Gets the root (aka top-level, no-parent) [[StructField]]s for the given [[Expression]].
-   * When expr is an [[Attribute]], construct a field around it and indicate that that
-   * field was derived from an attribute.
+   * Gets the root (aka top-level, no-parent) [[StructField]]s for the given [[Expression]]. When
+   * expr is an [[Attribute]], construct a field around it and indicate that that field was
+   * derived from an attribute.
    */
   private[catalyst] def getRootFields(expr: Expression): Seq[RootField] = {
     expr match {
       case att: Attribute =>
-        RootField(StructField(att.name, att.dataType, att.nullable, att.metadata),
+        RootField(
+          StructField(att.name, att.dataType, att.nullable, att.metadata),
           derivedFromAtt = true) :: Nil
       case SelectedField(field) => RootField(field, derivedFromAtt = false) :: Nil
       // Root field accesses by `IsNotNull` and `IsNull` are special cases as the expressions
@@ -164,10 +165,12 @@ object SchemaPruning extends SQLConfHelper {
 
   /**
    * This represents a "root" schema field (aka top-level, no-parent). `field` is the
-   * `StructField` for field name and datatype. `derivedFromAtt` indicates whether it
-   * was derived from an attribute or had a proper child. `prunedIfAnyChildAccessed` means
-   * whether this root field can be pruned if any of child field is used in the query.
+   * `StructField` for field name and datatype. `derivedFromAtt` indicates whether it was derived
+   * from an attribute or had a proper child. `prunedIfAnyChildAccessed` means whether this root
+   * field can be pruned if any of child field is used in the query.
    */
-  case class RootField(field: StructField, derivedFromAtt: Boolean,
-    prunedIfAnyChildAccessed: Boolean = false)
+  case class RootField(
+      field: StructField,
+      derivedFromAtt: Boolean,
+      prunedIfAnyChildAccessed: Boolean = false)
 }

@@ -55,9 +55,7 @@ class LookupFunctionsSuite extends PlanTest {
           val cause = intercept[AnalysisException] {
             analyzer.execute(
               UnresolvedRelation(TableIdentifier("undefined_table")).select(
-                UnresolvedFunction("undefined_fn", Nil, isDistinct = false)
-              )
-            )
+                UnresolvedFunction("undefined_fn", Nil, isDistinct = false)))
           }
           checkError(
             exception = cause,
@@ -87,8 +85,11 @@ class LookupFunctionsSuite extends PlanTest {
     val unresolvedPersistentFunc = UnresolvedFunction("func", Seq.empty, false)
     val unresolvedRegisteredFunc = UnresolvedFunction("max", Seq.empty, false)
     val plan = Project(
-      Seq(Alias(unresolvedPersistentFunc, "call1")(), Alias(unresolvedPersistentFunc, "call2")(),
-        Alias(unresolvedPersistentFunc, "call3")(), Alias(unresolvedRegisteredFunc, "call4")(),
+      Seq(
+        Alias(unresolvedPersistentFunc, "call1")(),
+        Alias(unresolvedPersistentFunc, "call2")(),
+        Alias(unresolvedPersistentFunc, "call3")(),
+        Alias(unresolvedRegisteredFunc, "call4")(),
         Alias(unresolvedRegisteredFunc, "call5")()),
       table("TaBlE"))
     analyzer.LookupFunctions.apply(plan)

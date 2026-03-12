@@ -37,34 +37,36 @@ import org.apache.spark.sql.internal.{SessionState, SQLConf}
 import org.apache.spark.sql.types._
 
 // Result returned after validating the schema of the state store for schema changes
-case class StateSchemaValidationResult(
-    evolvedSchema: Boolean,
-    schemaPath: String
-)
+case class StateSchemaValidationResult(evolvedSchema: Boolean, schemaPath: String)
 
 /**
- * An Avro-based encoder used for serializing between UnsafeRow and Avro
- *  byte arrays in RocksDB state stores.
+ * An Avro-based encoder used for serializing between UnsafeRow and Avro byte arrays in RocksDB
+ * state stores.
  *
  * This encoder is primarily utilized by [[RocksDBStateStoreProvider]] and [[RocksDBStateEncoder]]
  * to handle serialization and deserialization of state store data.
  *
- * @param keySerializer Serializer for converting state store keys to Avro format
- * @param keyDeserializer Deserializer for converting Avro-encoded keys back to UnsafeRow
- * @param valueSerializer Serializer for converting state store values to Avro format
- * @param valueDeserializer Deserializer for converting Avro-encoded values back to UnsafeRow
- * @param suffixKeySerializer Optional serializer for handling suffix keys in Avro format
- * @param suffixKeyDeserializer Optional deserializer for converting Avro-encoded suffix
- *                              keys back to UnsafeRow
+ * @param keySerializer
+ *   Serializer for converting state store keys to Avro format
+ * @param keyDeserializer
+ *   Deserializer for converting Avro-encoded keys back to UnsafeRow
+ * @param valueSerializer
+ *   Serializer for converting state store values to Avro format
+ * @param valueDeserializer
+ *   Deserializer for converting Avro-encoded values back to UnsafeRow
+ * @param suffixKeySerializer
+ *   Optional serializer for handling suffix keys in Avro format
+ * @param suffixKeyDeserializer
+ *   Optional deserializer for converting Avro-encoded suffix keys back to UnsafeRow
  */
 case class AvroEncoder(
-  keySerializer: AvroSerializer,
-  keyDeserializer: AvroDeserializer,
-  valueSerializer: AvroSerializer,
-  valueDeserializer: AvroDeserializer,
-  suffixKeySerializer: Option[AvroSerializer] = None,
-  suffixKeyDeserializer: Option[AvroDeserializer] = None
-) extends Serializable
+    keySerializer: AvroSerializer,
+    keyDeserializer: AvroDeserializer,
+    valueSerializer: AvroSerializer,
+    valueDeserializer: AvroDeserializer,
+    suffixKeySerializer: Option[AvroSerializer] = None,
+    suffixKeyDeserializer: Option[AvroDeserializer] = None)
+    extends Serializable
 
 // Used to represent the schema of a column family in the state store
 case class StateStoreColFamilySchema(
@@ -74,15 +76,15 @@ case class StateStoreColFamilySchema(
     valueSchemaId: Short,
     valueSchema: StructType,
     keyStateEncoderSpec: Option[KeyStateEncoderSpec] = None,
-    userKeyEncoderSchema: Option[StructType] = None
-)
+    userKeyEncoderSchema: Option[StructType] = None)
 
 class StateSchemaCompatibilityChecker(
     providerId: StateStoreProviderId,
     hadoopConf: Configuration,
     oldSchemaFilePaths: List[Path] = List.empty,
     newSchemaFilePath: Option[Path] = None,
-    createSchemaDir: Boolean = true) extends Logging {
+    createSchemaDir: Boolean = true)
+    extends Logging {
 
   // For OperatorStateMetadataV1: Only one schema file present per operator
   // per query
@@ -100,11 +102,13 @@ class StateSchemaCompatibilityChecker(
   if (createSchemaDir && !fm.exists(schemaFileLocation.getParent)) {
     fm.mkdirs(schemaFileLocation.getParent)
   } else if (!createSchemaDir) {
-    logInfo(log"Skipping schema directory creation (createSchemaDir=false) " +
-      log"at ${MDC(LogKeys.CHECKPOINT_LOCATION, schemaFileLocation.getParent.toString)}")
+    logInfo(
+      log"Skipping schema directory creation (createSchemaDir=false) " +
+        log"at ${MDC(LogKeys.CHECKPOINT_LOCATION, schemaFileLocation.getParent.toString)}")
   }
 
-  private val conf = SparkSession.getActiveSession.map(_.sessionState.conf).getOrElse(new SQLConf())
+  private val conf =
+    SparkSession.getActiveSession.map(_.sessionState.conf).getOrElse(new SQLConf())
 
   // Read most recent schema file
   def readSchemaFile(): List[StateStoreColFamilySchema] = {
@@ -117,7 +121,8 @@ class StateSchemaCompatibilityChecker(
   // is supported, to read all active schemas in the StateStore for this operator
   def readSchemaFiles(): Map[String, List[StateStoreColFamilySchema]] = {
     val stateSchemaFilePaths = (oldSchemaFilePaths ++ List(schemaFileLocation)).distinct
-    stateSchemaFilePaths.flatMap { schemaFile =>
+    stateSchemaFilePaths
+      .flatMap { schemaFile =>
         if (fm.exists(schemaFile.getParent) && fm.exists(schemaFile)) {
           val inStream = fm.open(schemaFile)
           StateSchemaCompatibilityChecker.readSchemaFile(inStream)
@@ -197,10 +202,9 @@ class StateSchemaCompatibilityChecker(
     // Initialize with old schema IDs
     val resultSchema = newSchema.copy(
       keySchemaId = mostRecentSchema.keySchemaId,
-      valueSchemaId = mostRecentSchema.valueSchemaId
-    )
-    val (storedKeySchema, storedValueSchema) = (mostRecentSchema.keySchema,
-      mostRecentSchema.valueSchema)
+      valueSchemaId = mostRecentSchema.valueSchemaId)
+    val (storedKeySchema, storedValueSchema) =
+      (mostRecentSchema.keySchema, mostRecentSchema.valueSchema)
     val (keySchema, valueSchema) = (newSchema.keySchema, newSchema.valueSchema)
 
     if (storedKeySchema.equals(keySchema) &&
@@ -208,15 +212,21 @@ class StateSchemaCompatibilityChecker(
       // schema is exactly same
       (mostRecentSchema, false)
     } else if (!schemasCompatible(storedKeySchema, keySchema)) {
-      throw StateStoreErrors.stateStoreKeySchemaNotCompatible(storedKeySchema.toString,
+      throw StateStoreErrors.stateStoreKeySchemaNotCompatible(
+        storedKeySchema.toString,
         keySchema.toString)
     } else if (!ignoreValueSchema && schemaEvolutionEnabled) {
       // Check value schema evolution
       // Sort schemas by most recent to least recent
-      val oldStateSchemas = oldSchemas.sortBy(_.valueSchemaId).reverse.map { oldSchema =>
-        StateSchemaMetadataValue(
-          oldSchema.valueSchema, SchemaConverters.toAvroTypeWithDefaults(oldSchema.valueSchema))
-      }.asJava
+      val oldStateSchemas = oldSchemas
+        .sortBy(_.valueSchemaId)
+        .reverse
+        .map { oldSchema =>
+          StateSchemaMetadataValue(
+            oldSchema.valueSchema,
+            SchemaConverters.toAvroTypeWithDefaults(oldSchema.valueSchema))
+        }
+        .asJava
 
       val newAvroSchema = SchemaConverters.toAvroTypeWithDefaults(valueSchema)
 
@@ -227,23 +237,24 @@ class StateSchemaCompatibilityChecker(
         } catch {
           case _: SchemaValidationException =>
             throw StateStoreErrors.stateStoreInvalidValueSchemaEvolution(
-              oldStateSchema.sqlSchema.toString, valueSchema.toString)
+              oldStateSchema.sqlSchema.toString,
+              valueSchema.toString)
           case e: Throwable => throw e
         }
       }
 
       if (resultSchema.valueSchemaId + 1 >=
-        conf.streamingValueStateSchemaEvolutionThreshold) {
+          conf.streamingValueStateSchemaEvolutionThreshold) {
         throw StateStoreErrors.stateStoreValueSchemaEvolutionThresholdExceeded(
           resultSchema.valueSchemaId + 1,
           conf.streamingValueStateSchemaEvolutionThreshold,
-          newSchema.colFamilyName
-        )
+          newSchema.colFamilyName)
       }
       // Schema evolved - increment value schema ID
       (resultSchema.copy(valueSchemaId = incrementSchemaId(mostRecentSchema.valueSchemaId)), true)
     } else if (!ignoreValueSchema && !schemasCompatible(storedValueSchema, valueSchema)) {
-      throw StateStoreErrors.stateStoreValueSchemaNotCompatible(storedValueSchema.toString,
+      throw StateStoreErrors.stateStoreValueSchemaNotCompatible(
+        storedValueSchema.toString,
         valueSchema.toString)
     } else {
       logInfo("Detected schema change which is compatible. Allowing to put rows.")
@@ -274,20 +285,20 @@ class StateSchemaCompatibilityChecker(
       true
     } else {
       // Process each new schema and track if any have evolved
-      val (evolvedSchemas, hasEvolutions) = newStateSchema.foldLeft(
-        (List.empty[StateStoreColFamilySchema], false)) {
-        case ((schemas, evolved), newSchema) =>
-          existingStateSchemaMap.get(newSchema.colFamilyName) match {
-            case Some(existingSchemas) =>
-              val (updatedSchema, hasEvolved) = check(
-                existingSchemas, newSchema, ignoreValueSchema, schemaEvolutionEnabled)
-              (updatedSchema :: schemas, evolved || hasEvolved)
-            case None =>
-              // New column family - initialize with schema ID 0
-              val newSchemaWithIds = newSchema.copy(keySchemaId = 0, valueSchemaId = 0)
-              (newSchemaWithIds :: schemas, true)
-          }
-      }
+      val (evolvedSchemas, hasEvolutions) =
+        newStateSchema.foldLeft((List.empty[StateStoreColFamilySchema], false)) {
+          case ((schemas, evolved), newSchema) =>
+            existingStateSchemaMap.get(newSchema.colFamilyName) match {
+              case Some(existingSchemas) =>
+                val (updatedSchema, hasEvolved) =
+                  check(existingSchemas, newSchema, ignoreValueSchema, schemaEvolutionEnabled)
+                (updatedSchema :: schemas, evolved || hasEvolved)
+              case None =>
+                // New column family - initialize with schema ID 0
+                val newSchemaWithIds = newSchema.copy(keySchemaId = 0, valueSchemaId = 0)
+                (newSchemaWithIds :: schemas, true)
+            }
+        }
 
       val newColFamilies = newStateSchema.map(_.colFamilyName).toSet
       val oldColFamilies = mostRecentColFamilies.toSet
@@ -319,8 +330,7 @@ object StateSchemaCompatibilityChecker extends Logging {
     if (!UnsafeRowUtils.isBinaryStable(schema)) {
       throw new SparkUnsupportedOperationException(
         errorClass = "STATE_STORE_UNSUPPORTED_OPERATION_BINARY_INEQUALITY",
-        messageParameters = Map("schema" -> schema.json)
-      )
+        messageParameters = Map("schema" -> schema.json))
     }
   }
 
@@ -382,10 +392,14 @@ object StateSchemaCompatibilityChecker extends Logging {
     }
 
     val storeConf = new StateStoreConf(sessionState.conf, extraOptions)
-    val providerId = StateStoreProviderId(StateStoreId(stateInfo.checkpointLocation,
-      stateInfo.operatorId, 0, storeName), stateInfo.queryRunId)
-    val checker = new StateSchemaCompatibilityChecker(providerId, hadoopConf,
-      oldSchemaFilePaths = oldSchemaFilePaths, newSchemaFilePath = newSchemaFilePath)
+    val providerId = StateStoreProviderId(
+      StateStoreId(stateInfo.checkpointLocation, stateInfo.operatorId, 0, storeName),
+      stateInfo.queryRunId)
+    val checker = new StateSchemaCompatibilityChecker(
+      providerId,
+      hadoopConf,
+      oldSchemaFilePaths = oldSchemaFilePaths,
+      newSchemaFilePath = newSchemaFilePath)
     // regardless of configuration, we check compatibility to at least write schema file
     // if necessary
     // if the format validation for value schema is disabled, we also disable the schema
@@ -396,10 +410,12 @@ object StateSchemaCompatibilityChecker extends Logging {
     // newer stateSchemaVersions will support evolution through the lifetime of the query as well.
     var evolvedSchema = false
     val result = Try(
-      checker.validateAndMaybeEvolveStateSchema(newStateSchema,
+      checker.validateAndMaybeEvolveStateSchema(
+        newStateSchema,
         ignoreValueSchema = !storeConf.formatValidationCheckValue,
-        stateSchemaVersion = stateSchemaVersion, schemaEvolutionEnabled)
-    ).toEither.fold(Some(_),
+        stateSchemaVersion = stateSchemaVersion,
+        schemaEvolutionEnabled)).toEither.fold(
+      Some(_),
       hasEvolvedSchema => {
         evolvedSchema = hasEvolvedSchema
         None

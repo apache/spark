@@ -37,8 +37,14 @@ class ResolveAliasesSuite extends AnalysisTest {
 
   private def checkAliasName(plan: LogicalPlan, expected: String): Unit = {
     val analyzed = getAnalyzer.execute(plan)
-    val actual = analyzed.find(_.isInstanceOf[Project]).get.asInstanceOf[Project]
-      .projectList.head.asInstanceOf[Alias].name
+    val actual = analyzed
+      .find(_.isInstanceOf[Project])
+      .get
+      .asInstanceOf[Project]
+      .projectList
+      .head
+      .asInstanceOf[Alias]
+      .name
     assert(actual == expected)
   }
 
@@ -49,14 +55,19 @@ class ResolveAliasesSuite extends AnalysisTest {
   private def checkSubqueryAliasName(plan: LogicalPlan, expected: String): Unit = {
     val analyzed = getAnalyzer.execute(plan)
     val subqueryExpression = new ArrayBuffer[SubqueryExpression]()
-    analyzed.transformExpressions {
-      case e: SubqueryExpression =>
-        subqueryExpression.append(e)
-        e
+    analyzed.transformExpressions { case e: SubqueryExpression =>
+      subqueryExpression.append(e)
+      e
     }
     assert(subqueryExpression.length == 1)
-    val actual = subqueryExpression.head.plan.find(_.isInstanceOf[Project]).get
-      .asInstanceOf[Project].projectList.head.asInstanceOf[Alias].name
+    val actual = subqueryExpression.head.plan
+      .find(_.isInstanceOf[Project])
+      .get
+      .asInstanceOf[Project]
+      .projectList
+      .head
+      .asInstanceOf[Alias]
+      .name
     assert(actual == expected)
   }
 
@@ -68,23 +79,27 @@ class ResolveAliasesSuite extends AnalysisTest {
 
   test("SPARK-33989: test binary expression") {
     checkAliasName(t1.select(EqualTo("a".attr, Literal(null))), "(a = NULL)")
-    checkAliasName(t1.select(EqualTo("a".attr.cast(LongType), Literal(1))),
+    checkAliasName(
+      t1.select(EqualTo("a".attr.cast(LongType), Literal(1))),
       "(CAST(a AS BIGINT) = 1)")
-    checkAliasName(t1.select(EqualTo("a".attr.cast(LongType), Literal("2").cast(LongType))),
+    checkAliasName(
+      t1.select(EqualTo("a".attr.cast(LongType), Literal("2").cast(LongType))),
       "(CAST(a AS BIGINT) = CAST(2 AS BIGINT))")
   }
 
   test("SPARK-33989: test nested expression") {
-    checkAliasName(t1.select(StringSplit("a".attr + 1, ",", Literal(-1))),
+    checkAliasName(
+      t1.select(StringSplit("a".attr + 1, ",", Literal(-1))),
       "split((a + 1), ,, -1)")
-    checkAliasName(t1.select(StringSplit(("a".attr + 1).cast(StringType), ",", Literal(-1))),
+    checkAliasName(
+      t1.select(StringSplit(("a".attr + 1).cast(StringType), ",", Literal(-1))),
       "split(CAST((a + 1) AS STRING), ,, -1)")
   }
 
   test("SPARK-33989: test subquery expression") {
     checkSubqueryAliasName(
-     t1.select(ScalarSubquery(t2.select(EqualTo("b".attr, Literal(null))))),
-     "(b = NULL)")
+      t1.select(ScalarSubquery(t2.select(EqualTo("b".attr, Literal(null))))),
+      "(b = NULL)")
     checkSubqueryAliasName(
       t1.select(ScalarSubquery(t2.select(EqualTo("b".attr.cast(IntegerType), Literal(1))))),
       "(CAST(b AS INT) = 1)")
@@ -92,7 +107,8 @@ class ResolveAliasesSuite extends AnalysisTest {
 
   test("SPARK-34150: Strip Null literal.sql in resolve alias") {
     checkAliasName(t1.select(Rand(Literal(null))), "rand(NULL)")
-    checkAliasName(t1.select(DateSub(Literal(Date.valueOf("2021-01-18")), Literal(null))),
+    checkAliasName(
+      t1.select(DateSub(Literal(Date.valueOf("2021-01-18")), Literal(null))),
       "date_sub(DATE '2021-01-18', NULL)")
   }
 
@@ -103,7 +119,8 @@ class ResolveAliasesSuite extends AnalysisTest {
         "' 1'" -> "' 1'",
         """"abc"""" -> """"abc"""",
         """'\t\n xyz \t\r'""" -> """'\t\n xyz \t\r'""",
-        "1l" -> "1L", "1S" -> "1S",
+        "1l" -> "1L",
+        "1S" -> "1S",
         "date'-0001-1-28'" -> "DATE'-0001-1-28'",
         "interval 3 year 1 month" -> "INTERVAL3YEAR1MONTH",
         "x'00'" -> "X'00'",
@@ -131,8 +148,7 @@ class ResolveAliasesSuite extends AnalysisTest {
         "substring('abcdef', 2)" -> "substring('abcdef',2)",
         "split('bcdef', 'e')" -> "split('bcdef','e')",
         "current_timestamp = current_timestamp" -> "CURRENT_TIMESTAMP=CURRENT_TIMESTAMP",
-        "'a' || 'b' || 'c'" -> "'a'||'b'||'c'"
-      ).foreach { case (selectExpr, expected) =>
+        "'a' || 'b' || 'c'" -> "'a'||'b'||'c'").foreach { case (selectExpr, expected) =>
         checkAliasName(s"select $selectExpr", expected)
       }
     }
@@ -179,7 +195,8 @@ class ResolveAliasesSuite extends AnalysisTest {
     val outerRef = OuterReference(intAttr)
     outerRef.setTagValue(OuterReference.SINGLE_PASS_SQL_STRING_OVERRIDE, "sql_override")
     outerRef.setTagValue(
-      OuterReference.SINGLE_PASS_OUTER_AGGREGATE_ALIAS_NAME_OVERRIDE, "alias_override")
+      OuterReference.SINGLE_PASS_OUTER_AGGREGATE_ALIAS_NAME_OVERRIDE,
+      "alias_override")
     val result = AliasResolution.resolve(UnresolvedAlias(outerRef, None))
     val alias = result.asInstanceOf[Alias]
     assert(alias.name == "alias_override")
@@ -188,7 +205,8 @@ class ResolveAliasesSuite extends AnalysisTest {
   test("OuterReference is wrapped in Alias rather than passed through as NamedExpression") {
     val outerRef = OuterReference(intAttr)
     val result = AliasResolution.resolve(UnresolvedAlias(outerRef, None))
-    assert(result.isInstanceOf[Alias],
+    assert(
+      result.isInstanceOf[Alias],
       "OuterReference should be wrapped in Alias, not passed through as NamedExpression")
   }
 
@@ -206,12 +224,10 @@ class ResolveAliasesSuite extends AnalysisTest {
   test("assignAliases with mixed OuterReference and regular expressions") {
     val outerRef = OuterReference(intAttr)
     outerRef.setTagValue(
-      OuterReference.SINGLE_PASS_OUTER_AGGREGATE_ALIAS_NAME_OVERRIDE, "count(x)")
+      OuterReference.SINGLE_PASS_OUTER_AGGREGATE_ALIAS_NAME_OVERRIDE,
+      "count(x)")
     val regularAttr = AttributeReference("y", LongType)()
-    val exprs: Seq[NamedExpression] = Seq(
-      UnresolvedAlias(outerRef, None),
-      regularAttr
-    )
+    val exprs: Seq[NamedExpression] = Seq(UnresolvedAlias(outerRef, None), regularAttr)
     val result = AliasResolution.assignAliases(exprs)
     assert(result.length == 2)
     val alias = result.head.asInstanceOf[Alias]
@@ -220,17 +236,14 @@ class ResolveAliasesSuite extends AnalysisTest {
   }
 
   test("OuterReference with different data types") {
-    Seq(
-      ("str_col", StringType),
-      ("long_col", LongType),
-      ("dbl_col", DoubleType)
-    ).foreach { case (colName, dataType) =>
-      val attr = AttributeReference(colName, dataType)()
-      val outerRef = OuterReference(attr)
-      val result = AliasResolution.resolve(UnresolvedAlias(outerRef, None))
-      val alias = result.asInstanceOf[Alias]
-      assert(alias.child == outerRef)
-      assert(alias.name == colName)
+    Seq(("str_col", StringType), ("long_col", LongType), ("dbl_col", DoubleType)).foreach {
+      case (colName, dataType) =>
+        val attr = AttributeReference(colName, dataType)()
+        val outerRef = OuterReference(attr)
+        val result = AliasResolution.resolve(UnresolvedAlias(outerRef, None))
+        val alias = result.asInstanceOf[Alias]
+        assert(alias.child == outerRef)
+        assert(alias.name == colName)
     }
   }
 }

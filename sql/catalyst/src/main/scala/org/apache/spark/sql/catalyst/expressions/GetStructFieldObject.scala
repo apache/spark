@@ -20,13 +20,11 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.types.StructField
 
 /**
- * A Scala extractor that extracts the child expression and struct field from a [[GetStructField]].
- * This is in contrast to the [[GetStructField]] case class extractor which returns the field
- * ordinal instead of the field itself.
+ * A Scala extractor that extracts the child expression and struct field from a
+ * [[GetStructField]]. This is in contrast to the [[GetStructField]] case class extractor which
+ * returns the field ordinal instead of the field itself.
  */
 object GetStructFieldObject {
   def unapply(getStructField: GetStructField): Option[(Expression, StructField)] =
-    Some((
-      getStructField.child,
-      getStructField.childSchema(getStructField.ordinal)))
+    Some((getStructField.child, getStructField.childSchema(getStructField.ordinal)))
 }

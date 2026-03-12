@@ -48,11 +48,9 @@ import org.apache.spark.util.{Clock, SystemClock, Utils}
  * @since 2.0.0
  */
 @Evolving
-class StreamingQueryManager private[sql] (
-    sparkSession: SparkSession,
-    sqlConf: SQLConf)
-  extends streaming.StreamingQueryManager
-  with Logging {
+class StreamingQueryManager private[sql] (sparkSession: SparkSession, sqlConf: SQLConf)
+    extends streaming.StreamingQueryManager
+    with Logging {
 
   private[sql] val stateStoreCoordinator =
     StateStoreCoordinatorRef.forDriver(sparkSession.sparkContext.env, sqlConf)
@@ -69,10 +67,10 @@ class StreamingQueryManager private[sql] (
    * Track the last terminated query and remember the last failure since the creation of the
    * context, or since `resetTerminated()` was called. There are three possible values:
    *
-   * - null: no query has been been terminated.
-   * - None: some queries have been terminated and no one has failed.
-   * - Some(StreamingQueryException): Some queries have been terminated and at least one query has
-   *   failed. The exception is the exception of the last failed query.
+   *   - null: no query has been been terminated.
+   *   - None: some queries have been terminated and no one has failed.
+   *   - Some(StreamingQueryException): Some queries have been terminated and at least one query
+   *     has failed. The exception is the exception of the last failed query.
    */
   @GuardedBy("awaitTerminationLock")
   private var lastTerminatedQueryException: Option[StreamingQueryException] = _
@@ -80,11 +78,15 @@ class StreamingQueryManager private[sql] (
   try {
     sparkSession.sparkContext.conf.get(STREAMING_QUERY_LISTENERS).foreach { classNames =>
       SQLConf.withExistingConf(sqlConf) {
-        Utils.loadExtensions(classOf[StreamingQueryListener], classNames,
-          sparkSession.sparkContext.conf).foreach { listener =>
-          addListener(listener)
-          logInfo(log"Registered listener ${MDC(CLASS_NAME, listener.getClass.getName)}")
-        }
+        Utils
+          .loadExtensions(
+            classOf[StreamingQueryListener],
+            classNames,
+            sparkSession.sparkContext.conf)
+          .foreach { listener =>
+            addListener(listener)
+            logInfo(log"Registered listener ${MDC(CLASS_NAME, listener.getClass.getName)}")
+          }
       }
     }
     sparkSession.sharedState.streamingQueryStatusListener.foreach { listener =>
@@ -169,8 +171,11 @@ class StreamingQueryManager private[sql] (
   }
 
   private def useAsyncProgressTracking(extraOptions: Map[String, String]): Boolean = {
-    extraOptions.getOrElse(
-      AsyncProgressTrackingMicroBatchExecution.ASYNC_PROGRESS_TRACKING_ENABLED, "false").toBoolean
+    extraOptions
+      .getOrElse(
+        AsyncProgressTrackingMicroBatchExecution.ASYNC_PROGRESS_TRACKING_ENABLED,
+        "false")
+      .toBoolean
   }
 
   // scalastyle:off argcount
@@ -199,9 +204,7 @@ class StreamingQueryManager private[sql] (
           errorClass = "INVALID_STREAMING_REAL_TIME_MODE_TRIGGER_INTERVAL",
           messageParameters = Map(
             "interval" -> realTimeTrigger.batchDurationMs.toString,
-            "minBatchDuration" -> minBatchDuration.toString
-          )
-        )
+            "minBatchDuration" -> minBatchDuration.toString))
       }
     }
 
@@ -219,23 +222,25 @@ class StreamingQueryManager private[sql] (
       catalogTable)
 
     val analyzedStreamWritePlan =
-      sparkSession.sessionState.executePlan(dataStreamWritePlan).analyzed
+      sparkSession.sessionState
+        .executePlan(dataStreamWritePlan)
+        .analyzed
         .asInstanceOf[WriteToStream]
 
     (sink, trigger) match {
       case (_: SupportsWrite, trigger: ContinuousTrigger) =>
-        new StreamingQueryWrapper(new ContinuousExecution(
-          sparkSession,
-          trigger,
-          triggerClock,
-          extraOptions,
-          analyzedStreamWritePlan))
+        new StreamingQueryWrapper(
+          new ContinuousExecution(
+            sparkSession,
+            trigger,
+            triggerClock,
+            extraOptions,
+            analyzedStreamWritePlan))
       case _ =>
         val microBatchExecution = if (useAsyncProgressTracking(extraOptions)) {
           if (trigger.isInstanceOf[RealTimeTrigger]) {
-            throw new SparkIllegalArgumentException(
-              errorClass = "STREAMING_REAL_TIME_MODE.ASYNC_PROGRESS_TRACKING_NOT_SUPPORTED"
-            )
+            throw new SparkIllegalArgumentException(errorClass =
+              "STREAMING_REAL_TIME_MODE.ASYNC_PROGRESS_TRACKING_NOT_SUPPORTED")
           }
           new AsyncProgressTrackingMicroBatchExecution(
             sparkSession,
@@ -260,19 +265,28 @@ class StreamingQueryManager private[sql] (
   /**
    * Start a [[StreamingQuery]].
    *
-   * @param userSpecifiedName Query name optionally specified by the user.
-   * @param userSpecifiedCheckpointLocation  Checkpoint location optionally specified by the user.
-   * @param df Streaming DataFrame.
-   * @param sink  Sink to write the streaming outputs.
-   * @param outputMode  Output mode for the sink.
-   * @param useTempCheckpointLocation  Whether to use a temporary checkpoint location when the user
-   *                                   has not specified one. If false, then error will be thrown.
-   * @param recoverFromCheckpointLocation  Whether to recover query from the checkpoint location.
-   *                                       If false and the checkpoint location exists, then error
-   *                                       will be thrown.
-   * @param trigger [[Trigger]] for the query.
-   * @param triggerClock [[Clock]] to use for the triggering.
-   * @param catalogAndIdent Catalog and identifier for the sink, set when it is a V2 catalog table
+   * @param userSpecifiedName
+   *   Query name optionally specified by the user.
+   * @param userSpecifiedCheckpointLocation
+   *   Checkpoint location optionally specified by the user.
+   * @param df
+   *   Streaming DataFrame.
+   * @param sink
+   *   Sink to write the streaming outputs.
+   * @param outputMode
+   *   Output mode for the sink.
+   * @param useTempCheckpointLocation
+   *   Whether to use a temporary checkpoint location when the user has not specified one. If
+   *   false, then error will be thrown.
+   * @param recoverFromCheckpointLocation
+   *   Whether to recover query from the checkpoint location. If false and the checkpoint location
+   *   exists, then error will be thrown.
+   * @param trigger
+   *   [[Trigger]] for the query.
+   * @param triggerClock
+   *   [[Clock]] to use for the triggering.
+   * @param catalogAndIdent
+   *   Catalog and identifier for the sink, set when it is a V2 catalog table
    */
   @throws[TimeoutException]
   private[sql] def startQuery(
@@ -310,8 +324,9 @@ class StreamingQueryManager private[sql] (
       // Make sure no other query with same name is active
       userSpecifiedName.foreach { name =>
         if (activeQueries.values.exists(_.name == name)) {
-          throw new IllegalArgumentException(s"Cannot start query with name $name as a query " +
-            s"with that name is already active in this SparkSession")
+          throw new IllegalArgumentException(
+            s"Cannot start query with name $name as a query " +
+              s"with that name is already active in this SparkSession")
         }
       }
 
@@ -324,8 +339,9 @@ class StreamingQueryManager private[sql] (
       if (activeOption.isDefined) {
         if (shouldStopActiveRun) {
           val oldQuery = activeOption.get
-          logWarning(log"Stopping existing streaming query [id=${MDC(QUERY_ID, query.id)}, " +
-            log"runId=${MDC(RUN_ID, oldQuery.runId)}], as a new run is being started.")
+          logWarning(
+            log"Stopping existing streaming query [id=${MDC(QUERY_ID, query.id)}, " +
+              log"runId=${MDC(RUN_ID, oldQuery.runId)}], as a new run is being started.")
           Some(oldQuery)
         } else {
           throw new IllegalStateException(
@@ -350,7 +366,9 @@ class StreamingQueryManager private[sql] (
       // stream, while a third one was already active and stopped above. In this case, we throw a
       // ConcurrentModificationException.
       val oldActiveQuery = sparkSession.sharedState.activeStreamingQueries.put(
-        query.id, query.streamingQuery) // we need to put the StreamExecution, not the wrapper
+        query.id,
+        query.streamingQuery
+      ) // we need to put the StreamExecution, not the wrapper
       if (oldActiveQuery != null) {
         throw QueryExecutionErrors.concurrentQueryInstanceError()
       }
@@ -386,8 +404,7 @@ class StreamingQueryManager private[sql] (
   private def unregisterTerminatedStream(terminatedQuery: StreamingQuery): Unit = {
     activeQueriesSharedLock.synchronized {
       // remove from shared state only if the streaming execution also matches
-      sparkSession.sharedState.activeStreamingQueries.remove(
-        terminatedQuery.id, terminatedQuery)
+      sparkSession.sharedState.activeStreamingQueries.remove(terminatedQuery.id, terminatedQuery)
       activeQueries -= terminatedQuery.id
     }
   }

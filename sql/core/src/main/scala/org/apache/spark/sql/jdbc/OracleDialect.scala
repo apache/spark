@@ -30,14 +30,23 @@ import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.sql.jdbc.OracleDialect._
 import org.apache.spark.sql.types._
 
-
 private case class OracleDialect() extends JdbcDialect with SQLConfHelper with NoLegacyJDBCError {
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:oracle")
 
   private val distinctUnsupportedAggregateFunctions =
-    Set("VAR_POP", "VAR_SAMP", "STDDEV_POP", "STDDEV_SAMP", "COVAR_POP", "COVAR_SAMP", "CORR",
-      "REGR_INTERCEPT", "REGR_R2", "REGR_SLOPE", "REGR_SXY")
+    Set(
+      "VAR_POP",
+      "VAR_SAMP",
+      "STDDEV_POP",
+      "STDDEV_SAMP",
+      "COVAR_POP",
+      "COVAR_SAMP",
+      "CORR",
+      "REGR_INTERCEPT",
+      "REGR_R2",
+      "REGR_SLOPE",
+      "REGR_SXY")
 
   // scalastyle:off line.size.limit
   // https://docs.oracle.com/en/database/oracle/oracle-database/19/sqlrf/Aggregate-Functions.html#GUID-62BE676B-AF18-4E63-BD14-25206FEA0848
@@ -51,7 +60,7 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
 
   override def isObjectNotFoundException(e: SQLException): Boolean = {
     e.getMessage.contains("ORA-00942") ||
-      e.getMessage.contains("ORA-39165")
+    e.getMessage.contains("ORA-39165")
   }
 
   class OracleSQLBuilder extends JDBCSQLBuilder {
@@ -81,13 +90,13 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
     }
 
     override def visitAggregateFunction(
-        funcName: String, isDistinct: Boolean, inputs: Array[String]): String =
+        funcName: String,
+        isDistinct: Boolean,
+        inputs: Array[String]): String =
       if (isDistinct && distinctUnsupportedAggregateFunctions.contains(funcName)) {
         throw new SparkUnsupportedOperationException(
           errorClass = "_LEGACY_ERROR_TEMP_3184",
-          messageParameters = Map(
-            "class" -> this.getClass.getSimpleName,
-            "funcName" -> funcName))
+          messageParameters = Map("class" -> this.getClass.getSimpleName, "funcName" -> funcName))
       } else {
         super.visitAggregateFunction(funcName, isDistinct, inputs)
       }
@@ -127,7 +136,10 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
   }
 
   override def getCatalystType(
-      sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
+      sqlType: Int,
+      typeName: String,
+      size: Int,
+      md: MetadataBuilder): Option[DataType] = {
     sqlType match {
       case Types.NUMERIC =>
         val scale = if (null != md) md.build().getLong("scale") else 0L
@@ -204,10 +216,13 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
 
   /**
    * The SQL query used to truncate a table.
-   * @param table The table to truncate
-   * @param cascade Whether or not to cascade the truncation. Default value is the
-   *                value of isCascadingTruncateTable()
-   * @return The SQL query to use for truncating a table
+   * @param table
+   *   The table to truncate
+   * @param cascade
+   *   Whether or not to cascade the truncation. Default value is the value of
+   *   isCascadingTruncateTable()
+   * @return
+   *   The SQL query to use for truncating a table
    */
   override def getTruncateQuery(
       table: String,
@@ -227,15 +242,15 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
 
   // see https://docs.oracle.com/cd/B28359_01/server.111/b28286/statements_3001.htm#SQLRF01001
   override def getUpdateColumnTypeQuery(
-    tableName: String,
-    columnName: String,
-    newDataType: String): String =
+      tableName: String,
+      columnName: String,
+      newDataType: String): String =
     s"ALTER TABLE $tableName MODIFY ${quoteIdentifier(columnName)} $newDataType"
 
   override def getUpdateColumnNullabilityQuery(
-    tableName: String,
-    columnName: String,
-    isNullable: Boolean): String = {
+      tableName: String,
+      columnName: String,
+      isNullable: Boolean): String = {
     val nullable = if (isNullable) "NULL" else "NOT NULL"
     s"ALTER TABLE $tableName MODIFY ${quoteIdentifier(columnName)} $nullable"
   }
@@ -254,7 +269,7 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
   }
 
   class OracleSQLQueryBuilder(dialect: JdbcDialect, options: JDBCOptions)
-    extends JdbcSQLQueryBuilder(dialect, options) {
+      extends JdbcSQLQueryBuilder(dialect, options) {
 
     override def build(): String = {
       val selectStmt = s"SELECT $hintClause$columnList FROM $tableOrQuery" +

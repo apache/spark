@@ -91,8 +91,11 @@ class V1WriteFallbackSuite extends QueryTest with SharedSparkSession with Before
 
       checkAnswer(InMemoryV1Provider.getTableData(spark, "t1"), df)
       assert(InMemoryV1Provider.tables("t1").schema === df.schema.asNullable)
-      assert(InMemoryV1Provider.tables("t1").partitioning.sameElements(
-        Array(IdentityTransform(FieldReference(Seq("a"))))))
+      assert(
+        InMemoryV1Provider
+          .tables("t1")
+          .partitioning
+          .sameElements(Array(IdentityTransform(FieldReference(Seq("a"))))))
     }
   }
 
@@ -130,7 +133,12 @@ class V1WriteFallbackSuite extends QueryTest with SharedSparkSession with Before
     assert(e2.getMessage.contains("partitioning"))
 
     val e3 = intercept[IllegalArgumentException] {
-      Seq((1, "x")).toDF("c", "d").write.mode("append").option("name", "t1").format(format)
+      Seq((1, "x"))
+        .toDF("c", "d")
+        .write
+        .mode("append")
+        .option("name", "t1")
+        .format(format)
         .save()
     }
     assert(e3.getMessage.contains("schema"))
@@ -140,7 +148,8 @@ class V1WriteFallbackSuite extends QueryTest with SharedSparkSession with Before
     SparkSession.clearActiveSession()
     SparkSession.clearDefaultSession()
     try {
-      val session = SparkSession.builder()
+      val session = SparkSession
+        .builder()
         .master("local[1]")
         .withExtensions(_.injectPostHocResolutionRule(_ => OnlyOnceRule))
         .withExtensions(_.injectOptimizerRule(_ => OnlyOnceOptimizerRule))
@@ -161,7 +170,8 @@ class V1WriteFallbackSuite extends QueryTest with SharedSparkSession with Before
     SparkSession.clearActiveSession()
     SparkSession.clearDefaultSession()
     try {
-      val session = SparkSession.builder()
+      val session = SparkSession
+        .builder()
         .master("local[1]")
         .config(V2_SESSION_CATALOG_IMPLEMENTATION.key, classOf[V1FallbackTableCatalog].getName)
         .getOrCreate()
@@ -184,7 +194,8 @@ class V1WriteFallbackSuite extends QueryTest with SharedSparkSession with Before
     SparkSession.clearActiveSession()
     SparkSession.clearDefaultSession()
     try {
-      val session = SparkSession.builder()
+      val session = SparkSession
+        .builder()
         .master("local[1]")
         .config(V2_SESSION_CATALOG_IMPLEMENTATION.key, classOf[V1FallbackTableCatalog].getName)
         .getOrCreate()
@@ -207,7 +218,8 @@ class V1WriteFallbackSuite extends QueryTest with SharedSparkSession with Before
     SparkSession.clearActiveSession()
     SparkSession.clearDefaultSession()
     try {
-      val session = SparkSession.builder()
+      val session = SparkSession
+        .builder()
         .master("local[1]")
         .config(V2_SESSION_CATALOG_IMPLEMENTATION.key, classOf[V1FallbackTableCatalog].getName)
         .getOrCreate()
@@ -250,8 +262,8 @@ class V1WriteFallbackSuite extends QueryTest with SharedSparkSession with Before
 }
 
 class V1WriteFallbackSessionCatalogSuite
-  extends InsertIntoTests(supportsDynamicOverwrite = false, includeSQLOnlyTests = true)
-  with SessionCatalogTest[InMemoryTableWithV1Fallback, V1FallbackTableCatalog] {
+    extends InsertIntoTests(supportsDynamicOverwrite = false, includeSQLOnlyTests = true)
+    with SessionCatalogTest[InMemoryTableWithV1Fallback, V1FallbackTableCatalog] {
 
   override protected val v2Format = classOf[InMemoryV1Provider].getName
   override protected val catalogClassName: String = classOf[V1FallbackTableCatalog].getName
@@ -288,7 +300,8 @@ private object InMemoryV1Provider {
   val tables: mutable.Map[String, InMemoryTableWithV1Fallback] = mutable.Map.empty
 
   def getTableData(spark: SparkSession, name: String): DataFrame = {
-    val t = tables.getOrElse(name, throw new IllegalArgumentException(s"Table $name doesn't exist"))
+    val t =
+      tables.getOrElse(name, throw new IllegalArgumentException(s"Table $name doesn't exist"))
     spark.createDataFrame(t.getData.asJava, t.schema)
   }
 
@@ -298,19 +311,19 @@ private object InMemoryV1Provider {
 }
 
 class InMemoryV1Provider
-  extends FakeV2ProviderWithCustomSchema
-  with DataSourceRegister
-  with CreatableRelationProvider {
+    extends FakeV2ProviderWithCustomSchema
+    with DataSourceRegister
+    with CreatableRelationProvider {
   override def getTable(options: CaseInsensitiveStringMap): Table = {
 
-    InMemoryV1Provider.tables.getOrElse(options.get("name"), {
-      new InMemoryTableWithV1Fallback(
-        "InMemoryTableWithV1Fallback",
-        new StructType(),
-        Array.empty,
-        options.asCaseSensitiveMap()
-      )
-    })
+    InMemoryV1Provider.tables.getOrElse(
+      options.get("name"), {
+        new InMemoryTableWithV1Fallback(
+          "InMemoryTableWithV1Fallback",
+          new StructType(),
+          Array.empty,
+          options.asCaseSensitiveMap())
+      })
   }
 
   override def shortName(): String = "in-memory"
@@ -322,20 +335,23 @@ class InMemoryV1Provider
       data: DataFrame): BaseRelation = {
     val _sqlContext = sqlContext
 
-    val partitioning = parameters.get(DataSourceUtils.PARTITIONING_COLUMNS_KEY).map { value =>
-      DataSourceUtils.decodePartitioningColumns(value).map { partitioningColumn =>
-        IdentityTransform(FieldReference(partitioningColumn))
+    val partitioning = parameters
+      .get(DataSourceUtils.PARTITIONING_COLUMNS_KEY)
+      .map { value =>
+        DataSourceUtils.decodePartitioningColumns(value).map { partitioningColumn =>
+          IdentityTransform(FieldReference(partitioningColumn))
+        }
       }
-    }.getOrElse(Nil)
+      .getOrElse(Nil)
 
     val tableName = parameters("name")
     val tableOpt = InMemoryV1Provider.tables.get(tableName)
-    val table = tableOpt.getOrElse(new InMemoryTableWithV1Fallback(
-      "InMemoryTableWithV1Fallback",
-      data.schema.asNullable,
-      partitioning.toArray,
-      Map.empty[String, String].asJava
-    ))
+    val table = tableOpt.getOrElse(
+      new InMemoryTableWithV1Fallback(
+        "InMemoryTableWithV1Fallback",
+        data.schema.asNullable,
+        partitioning.toArray,
+        Map.empty[String, String].asJava))
     if (tableOpt.isEmpty) {
       InMemoryV1Provider.tables.put(tableName, table)
     } else {
@@ -360,7 +376,9 @@ class InMemoryV1Provider
     }
     val writer = table.newWriteBuilder(
       LogicalWriteInfoImpl(
-        "", StructType(Seq.empty), new CaseInsensitiveStringMap(parameters.asJava)))
+        "",
+        StructType(Seq.empty),
+        new CaseInsensitiveStringMap(parameters.asJava)))
     if (mode == SaveMode.Overwrite) {
       writer.asInstanceOf[SupportsTruncate].truncate()
     }
@@ -379,8 +397,9 @@ class InMemoryTableWithV1Fallback(
     override val schema: StructType,
     override val partitioning: Array[Transform],
     override val properties: java.util.Map[String, String])
-  extends Table
-  with SupportsWrite with SupportsRead {
+    extends Table
+    with SupportsWrite
+    with SupportsRead {
 
   partitioning.foreach { t =>
     if (!t.isInstanceOf[IdentityTransform]) {
@@ -405,9 +424,9 @@ class InMemoryTableWithV1Fallback(
   }
 
   private class FallbackWriteBuilder(options: CaseInsensitiveStringMap)
-    extends WriteBuilder
-    with SupportsTruncate
-    with SupportsOverwrite {
+      extends WriteBuilder
+      with SupportsTruncate
+      with SupportsOverwrite {
 
     private var mode = "append"
 
@@ -437,25 +456,26 @@ class InMemoryTableWithV1Fallback(
       override def reportDriverMetrics(): Array[CustomTaskMetric] = writeMetrics
 
       override def toInsertableRelation: InsertableRelation = {
-        (data: DataFrame, overwrite: Boolean) => {
-          assert(!overwrite, "V1 write fallbacks cannot be called with overwrite=true")
-          val rows = data.collect()
+        (data: DataFrame, overwrite: Boolean) =>
+          {
+            assert(!overwrite, "V1 write fallbacks cannot be called with overwrite=true")
+            val rows = data.collect()
 
-          case class V1WriteTaskMetric(name: String, value: Long) extends CustomTaskMetric
-          writeMetrics = Array(V1WriteTaskMetric("numOutputRows", rows.length))
+            case class V1WriteTaskMetric(name: String, value: Long) extends CustomTaskMetric
+            writeMetrics = Array(V1WriteTaskMetric("numOutputRows", rows.length))
 
-          rows.groupBy(getPartitionValues).foreach { case (partition, elements) =>
-            if (elements.exists(_.toSeq.contains("this-value-fails-the-write"))) {
-              throw new IllegalStateException("Test only mock write failure")
-            } else if (dataMap.contains(partition) && mode == "append") {
-              dataMap.put(partition, dataMap(partition) ++ elements)
-            } else if (dataMap.contains(partition)) {
-              throw new IllegalStateException("Partition was not removed properly")
-            } else {
-              dataMap.put(partition, elements.toImmutableArraySeq)
+            rows.groupBy(getPartitionValues).foreach { case (partition, elements) =>
+              if (elements.exists(_.toSeq.contains("this-value-fails-the-write"))) {
+                throw new IllegalStateException("Test only mock write failure")
+              } else if (dataMap.contains(partition) && mode == "append") {
+                dataMap.put(partition, dataMap(partition) ++ elements)
+              } else if (dataMap.contains(partition)) {
+                throw new IllegalStateException("Partition was not removed properly")
+              } else {
+                dataMap.put(partition, elements.toImmutableArraySeq)
+              }
             }
           }
-        }
       }
     }
   }
@@ -473,9 +493,9 @@ class InMemoryTableWithV1Fallback(
       new V1TableScan(context, schema).asInstanceOf[T]
   }
 
-  private class V1TableScan(
-      context: SQLContext,
-      requiredSchema: StructType) extends BaseRelation with TableScan {
+  private class V1TableScan(context: SQLContext, requiredSchema: StructType)
+      extends BaseRelation
+      with TableScan {
     override def sqlContext: SQLContext = context
     override def schema: StructType = requiredSchema
     override def buildScan(): RDD[Row] = {
@@ -509,12 +529,11 @@ object OnlyOnceRule extends Rule[LogicalPlan] {
 // A rule that fails if the input query of a V2WriteCommand is optimized twice
 object OnlyOnceOptimizerRule extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
-    plan.transform {
-      case l: LocalRelation =>
-        // The test inserts 3 rows with local data and sets OPTIMIZER_MAX_ITERATIONS to 1. This rule
-        // is supposed to be run only once.
-        assert(l.data.length >= 2, "Input query shouldn't be optimized again")
-        l.copy(data = l.data.drop(1))
+    plan.transform { case l: LocalRelation =>
+      // The test inserts 3 rows with local data and sets OPTIMIZER_MAX_ITERATIONS to 1. This rule
+      // is supposed to be run only once.
+      assert(l.data.length >= 2, "Input query shouldn't be optimized again")
+      l.copy(data = l.data.drop(1))
     }
   }
 }

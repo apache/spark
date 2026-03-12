@@ -26,7 +26,8 @@ import org.apache.spark.storage.StorageLevel
  * specific test suites:
  *
  *   - V2 table catalog tests: `org.apache.spark.sql.execution.command.v2.AlterTableRenameSuite`
- *   - V1 table catalog tests: `org.apache.spark.sql.execution.command.v1.AlterTableRenameSuiteBase`
+ *   - V1 table catalog tests:
+ *     `org.apache.spark.sql.execution.command.v1.AlterTableRenameSuiteBase`
  *     - V1 In-Memory catalog: `org.apache.spark.sql.execution.command.v1.AlterTableRenameSuite`
  *     - V1 Hive External catalog:
  *       `org.apache.spark.sql.hive.execution.command.AlterTableRenameSuite`
@@ -50,8 +51,12 @@ trait AlterTableRenameSuiteBase extends QueryTest with DDLCommandTestUtils {
     val e = intercept[AnalysisException] {
       sql(s"ALTER TABLE $catalog.dbx.does_not_exist RENAME TO dbx.tab2")
     }
-    checkErrorTableNotFound(e, s"`$catalog`.`dbx`.`does_not_exist`",
-      ExpectedContext(s"$catalog.dbx.does_not_exist", 12,
+    checkErrorTableNotFound(
+      e,
+      s"`$catalog`.`dbx`.`does_not_exist`",
+      ExpectedContext(
+        s"$catalog.dbx.does_not_exist",
+        12,
         11 + s"$catalog.dbx.does_not_exist".length))
   }
 
@@ -95,7 +100,8 @@ trait AlterTableRenameSuiteBase extends QueryTest with DDLCommandTestUtils {
       spark.catalog.cacheTable(students)
       val expected = Seq(Row(19, "Ana"))
       QueryTest.checkAnswer(spark.table(students), expected)
-      assert(spark.catalog.isCached(students),
+      assert(
+        spark.catalog.isCached(students),
         "bad test: table was not cached in the first place")
       val teachers = s"$catalog.ns.teachers"
       withTable(teachers) {

@@ -29,7 +29,8 @@ import org.apache.spark.sql.types.{ArrayType, DataType, IndeterminateStringType,
 import org.apache.spark.sql.util.SchemaUtils
 
 /**
- * Type coercion helper that matches against expressions in order to apply collation type coercion.
+ * Type coercion helper that matches against expressions in order to apply collation type
+ * coercion.
  */
 object CollationTypeCoercion extends SQLConfHelper {
 
@@ -75,7 +76,8 @@ object CollationTypeCoercion extends SQLConfHelper {
     case getMap @ GetMapValue(child, key) if getMap.keyType != key.dataType =>
       key match {
         case Literal(_, _: StringType) =>
-          GetMapValue(child,
+          GetMapValue(
+            child,
             Cast(key, getMap.keyType, timeZoneId = Some(conf.sessionLocalTimeZone)))
         case _ =>
           getMap
@@ -88,7 +90,7 @@ object CollationTypeCoercion extends SQLConfHelper {
         _: ArrayRemove | _: ArrayUnion | _: ArraysOverlap | _: Contains | _: EndsWith |
         _: EqualNullSafe | _: EqualTo | _: FindInSet | _: GreaterThan | _: GreaterThanOrEqual |
         _: LessThan | _: LessThanOrEqual | _: StartsWith | _: StringInstr | _: ToNumber |
-        _: TryToNumber | _: StringToMap | _: Levenshtein  | _: StringSplitSQL | _: SplitPart |
+        _: TryToNumber | _: StringToMap | _: Levenshtein | _: StringSplitSQL | _: SplitPart |
         _: Lag | _: Lead | _: RegExpReplace | _: StringRPad | _: StringLPad | _: Overlay |
         _: Elt | _: SubstringIndex | _: StringLocate | _: If) =>
       val newChildren = collateToSingleType(otherExpr, otherExpr.children)
@@ -128,8 +130,8 @@ object CollationTypeCoercion extends SQLConfHelper {
   }
 
   /**
-   * Changes the data type of the expression in the subquery to the given `newType`.
-   * Currently only supports subqueries with [[Project]] and [[Aggregate]] plan.
+   * Changes the data type of the expression in the subquery to the given `newType`. Currently
+   * only supports subqueries with [[Project]] and [[Aggregate]] plan.
    */
   private def changeTypeInSubquery(
       subqueryExpression: SubqueryExpression,
@@ -158,8 +160,7 @@ object CollationTypeCoercion extends SQLConfHelper {
   }
 
   /**
-   * If possible, returns the new data type from `inType` by applying
-   * the collation of `castType`.
+   * If possible, returns the new data type from `inType` by applying the collation of `castType`.
    */
   private def mergeTypes(inType: DataType, castType: DataType): Option[DataType] = {
     val outType = mergeStructurally(inType, castType) {
@@ -173,10 +174,8 @@ object CollationTypeCoercion extends SQLConfHelper {
   /**
    * Merges two data types structurally according to the given base case.
    */
-  private def mergeStructurally(
-      leftType: DataType,
-      rightType: DataType)
-      (baseCase: PartialFunction[(DataType, DataType), DataType]): Option[DataType] = {
+  private def mergeStructurally(leftType: DataType, rightType: DataType)(
+      baseCase: PartialFunction[(DataType, DataType), DataType]): Option[DataType] = {
     (leftType, rightType) match {
 
       // handle the base cases first
@@ -205,13 +204,12 @@ object CollationTypeCoercion extends SQLConfHelper {
         if (leftFields.length != rightFields.length) {
           return None
         }
-        val newFields = leftFields.zip(rightFields).map {
-          case (leftField, rightField) =>
-            val newType = mergeStructurally(leftField.dataType, rightField.dataType)(baseCase)
-            if (newType.isEmpty) {
-              return None
-            }
-            leftField.copy(dataType = newType.get)
+        val newFields = leftFields.zip(rightFields).map { case (leftField, rightField) =>
+          val newType = mergeStructurally(leftField.dataType, rightField.dataType)(baseCase)
+          if (newType.isEmpty) {
+            return None
+          }
+          leftField.copy(dataType = newType.get)
         }
         Some(StructType(newFields))
 
@@ -261,9 +259,9 @@ object CollationTypeCoercion extends SQLConfHelper {
   }
 
   /**
-   * Tries to find the data type with the collation context for the given expression.
-   * If found, it will also set the [[COLLATION_CONTEXT_TAG]] on the expression,
-   * so that the context can be reused later.
+   * Tries to find the data type with the collation context for the given expression. If found, it
+   * will also set the [[COLLATION_CONTEXT_TAG]] on the expression, so that the context can be
+   * reused later.
    */
   private def findCollationContext(expr: Expression): Option[DataType] = {
     val contextOpt = expr match {
@@ -363,7 +361,8 @@ object CollationTypeCoercion extends SQLConfHelper {
 
     // if it does have a string type but none of its children do
     // then the collation context strength is default
-    case expr if !expr.children.exists(_.dataType.existsRecursively(_.isInstanceOf[StringType])) =>
+    case expr
+        if !expr.children.exists(_.dataType.existsRecursively(_.isInstanceOf[StringType])) =>
       Some(addContextToStringType(expr.dataType, Default))
   }
 
@@ -371,14 +370,14 @@ object CollationTypeCoercion extends SQLConfHelper {
    * Adds collation context to the given string type so we can know its strength.
    */
   private def addContextToStringType(dt: DataType, strength: CollationStrength): DataType = {
-    dt.transformRecursively {
-      case st: StringType => StringTypeWithContext(st, strength)
+    dt.transformRecursively { case st: StringType =>
+      StringTypeWithContext(st, strength)
     }
   }
 
   /**
-   * Merges multiple data types structurally according to strength of the collations into the
-   * data type of the `start`.
+   * Merges multiple data types structurally according to strength of the collations into the data
+   * type of the `start`.
    *
    * If any of the data types cannot be merged, it returns None.
    */
@@ -429,8 +428,8 @@ object CollationTypeCoercion extends SQLConfHelper {
   }
 
   /**
-   * Throws an analysis exception if the new data type has indeterminate collation,
-   * and the expression is not allowed to have inputs with indeterminate collations.
+   * Throws an analysis exception if the new data type has indeterminate collation, and the
+   * expression is not allowed to have inputs with indeterminate collations.
    */
   private def checkIndeterminateCollation(expression: Expression, newDataType: DataType): Unit = {
     if (shouldFailWithIndeterminateCollation(expression, newDataType)) {
@@ -441,8 +440,8 @@ object CollationTypeCoercion extends SQLConfHelper {
   }
 
   /**
-   * Returns whether the given expression has indeterminate collation in case it isn't allowed
-   * to have inputs with indeterminate collations, and thus should fail.
+   * Returns whether the given expression has indeterminate collation in case it isn't allowed to
+   * have inputs with indeterminate collations, and thus should fail.
    */
   private def shouldFailWithIndeterminateCollation(expression: Expression): Boolean = {
     def getDataTypeSafe(e: Expression): DataType = try {
@@ -482,9 +481,10 @@ object CollationTypeCoercion extends SQLConfHelper {
     // This is not an exhaustive list, and it's fine to miss some expressions. The only difference
     // is that those will fail at runtime once we try to fetch the collator/comparison fn.
     case _: BinaryComparison | _: StringPredicate | _: Upper | _: Lower | _: InitCap |
-         _: FindInSet | _: StringInstr | _: StringReplace | _: StringLocate | _: SubstringIndex |
-         _: StringTrim | _: StringTrimLeft | _: StringTrimRight | _: StringTranslate |
-         _: StringSplitSQL | _: In | _: InSubquery | _: FindInSet => false
+        _: FindInSet | _: StringInstr | _: StringReplace | _: StringLocate | _: SubstringIndex |
+        _: StringTrim | _: StringTrimLeft | _: StringTrimRight | _: StringTranslate |
+        _: StringSplitSQL | _: In | _: InSubquery | _: FindInSet =>
+      false
     case _ => true
   }
 
@@ -496,19 +496,19 @@ object CollationTypeCoercion extends SQLConfHelper {
    * cannot correctly determine their collation strength.
    */
   private[analysis] def preTagCommonExpressionRefs(plan: LogicalPlan): LogicalPlan = {
-    plan.resolveExpressionsDown {
-      case withExpression: With =>
-        withExpression.child.foreach {
-          case ref: CommonExpressionRef =>
-            withExpression.defs.find(d => d.id == ref.id && d.child.resolved)
-              .foreach { definition =>
-                findCollationContext(definition.child).foreach { context =>
-                  ref.setTagValue(COLLATION_CONTEXT_TAG, context)
-                }
+    plan.resolveExpressionsDown { case withExpression: With =>
+      withExpression.child.foreach {
+        case ref: CommonExpressionRef =>
+          withExpression.defs
+            .find(d => d.id == ref.id && d.child.resolved)
+            .foreach { definition =>
+              findCollationContext(definition.child).foreach { context =>
+                ref.setTagValue(COLLATION_CONTEXT_TAG, context)
               }
-          case _ =>
-        }
-        withExpression
+            }
+        case _ =>
+      }
+      withExpression
     }
   }
 }
@@ -520,7 +520,7 @@ private sealed trait CollationStrength {
   val priority: Int
 }
 
-  private object CollationStrength {
+private object CollationStrength {
   case object Explicit extends CollationStrength {
     override val priority: Int = 0
   }
@@ -538,11 +538,13 @@ private sealed trait CollationStrength {
 /**
  * Encapsulates the context for collation, including data type and strength.
  *
- * @param stringType StringType.
- * @param strength The strength level of the collation, which determines its precedence.
+ * @param stringType
+ *   StringType.
+ * @param strength
+ *   The strength level of the collation, which determines its precedence.
  */
 private case class StringTypeWithContext(stringType: StringType, strength: CollationStrength)
-  extends DataType {
+    extends DataType {
 
   override def defaultSize: Int = stringType.defaultSize
 

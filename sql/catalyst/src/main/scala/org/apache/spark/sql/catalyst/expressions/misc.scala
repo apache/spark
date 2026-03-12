@@ -49,8 +49,10 @@ case class PrintToStderr(child: Expression) extends UnaryExpression {
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val outputPrefixField = ctx.addReferenceObj("outputPrefix", outputPrefix)
-    nullSafeCodeGen(ctx, ev, c =>
-      s"""
+    nullSafeCodeGen(
+      ctx,
+      ev,
+      c => s"""
          | System.err.println($outputPrefixField + $c);
          | ${ev.value} = $c;
        """.stripMargin)
@@ -61,21 +63,23 @@ case class PrintToStderr(child: Expression) extends UnaryExpression {
 }
 
 /**
- * Throw with the result of an expression (used for debugging).
- * Caller can specify the errorClass to be thrown and parameters to be passed to this error class.
- * Default is to throw USER_RAISED_EXCEPTION with provided string literal.
+ * Throw with the result of an expression (used for debugging). Caller can specify the errorClass
+ * to be thrown and parameters to be passed to this error class. Default is to throw
+ * USER_RAISED_EXCEPTION with provided string literal.
  */
 case class RaiseError(errorClass: Expression, errorParms: Expression, dataType: DataType)
-  extends BinaryExpression with ImplicitCastInputTypes {
+    extends BinaryExpression
+    with ImplicitCastInputTypes {
 
   def this(str: Expression) = {
-    this(Literal(
-      if (SQLConf.get.getConf(SQLConf.LEGACY_RAISE_ERROR_WITHOUT_ERROR_CLASS)) {
+    this(
+      Literal(if (SQLConf.get.getConf(SQLConf.LEGACY_RAISE_ERROR_WITHOUT_ERROR_CLASS)) {
         "_LEGACY_ERROR_USER_RAISED_EXCEPTION"
       } else {
         "USER_RAISED_EXCEPTION"
       }),
-      CreateMap(Seq(Literal("errorMessage"), str)), NullType)
+      CreateMap(Seq(Literal("errorMessage"), str)),
+      NullType)
   }
 
   def this(errorClass: Expression, errorParms: Expression) = {
@@ -89,8 +93,7 @@ case class RaiseError(errorClass: Expression, errorParms: Expression, dataType: 
       StringTypeWithCollation(supportsTrimCollation = true),
       AbstractMapType(
         StringTypeWithCollation(supportsTrimCollation = true),
-        StringTypeWithCollation(supportsTrimCollation = true)
-      ))
+        StringTypeWithCollation(supportsTrimCollation = true)))
 
   override def left: Expression = errorClass
   override def right: Expression = errorParms
@@ -116,12 +119,12 @@ case class RaiseError(errorClass: Expression, errorParms: Expression, dataType: 
         |    ${parms.value});
         |}""".stripMargin,
       isNull = TrueLiteral,
-      value = JavaCode.defaultLiteral(dataType)
-    )
+      value = JavaCode.defaultLiteral(dataType))
   }
 
   override protected def withNewChildrenInternal(
-    newLeft: Expression, newRight: Expression): RaiseError = {
+      newLeft: Expression,
+      newRight: Expression): RaiseError = {
     copy(errorClass = newLeft, errorParms = newRight)
   }
 }
@@ -170,7 +173,8 @@ object RaiseErrorExpressionBuilder extends ExpressionBuilder {
   since = "2.0.0",
   group = "misc_funcs")
 case class AssertTrue(left: Expression, right: Expression, replacement: Expression)
-  extends RuntimeReplaceable with InheritAnalysisRules {
+    extends RuntimeReplaceable
+    with InheritAnalysisRules {
 
   override def prettyName: String = "assert_true"
 
@@ -205,9 +209,9 @@ object AssertTrue {
   since = "1.6.0",
   group = "misc_funcs")
 case class CurrentDatabase()
-  extends LeafExpression
-  with DefaultStringProducingExpression
-  with Unevaluable {
+    extends LeafExpression
+    with DefaultStringProducingExpression
+    with Unevaluable {
   override def nullable: Boolean = false
   override def prettyName: String = "current_schema"
   final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
@@ -226,9 +230,9 @@ case class CurrentDatabase()
   since = "3.1.0",
   group = "misc_funcs")
 case class CurrentCatalog()
-  extends LeafExpression
-  with DefaultStringProducingExpression
-  with Unevaluable {
+    extends LeafExpression
+    with DefaultStringProducingExpression
+    with Unevaluable {
   override def nullable: Boolean = false
   override def prettyName: String = "current_catalog"
   final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
@@ -236,7 +240,8 @@ case class CurrentCatalog()
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = """_FUNC_() - Returns an universally unique identifier (UUID) string. The value is returned as a canonical UUID 36-character string.""",
+  usage =
+    """_FUNC_() - Returns an universally unique identifier (UUID) string. The value is returned as a canonical UUID 36-character string.""",
   examples = """
     Examples:
       > SELECT _FUNC_();
@@ -248,15 +253,18 @@ case class CurrentCatalog()
   since = "2.3.0",
   group = "misc_funcs")
 // scalastyle:on line.size.limit
-case class Uuid(randomSeed: Option[Long] = None) extends LeafExpression with Nondeterministic
-  with DefaultStringProducingExpression
-  with ExpressionWithRandomSeed {
+case class Uuid(randomSeed: Option[Long] = None)
+    extends LeafExpression
+    with Nondeterministic
+    with DefaultStringProducingExpression
+    with ExpressionWithRandomSeed {
 
   def this() = this(None)
 
   def this(seed: Expression) = this(ExpressionWithRandomSeed.expressionToSeed(seed, "UUID"))
 
-  override def seedExpression: Expression = randomSeed.map(Literal.apply).getOrElse(UnresolvedSeed)
+  override def seedExpression: Expression =
+    randomSeed.map(Literal.apply).getOrElse(UnresolvedSeed)
 
   override def withNewSeed(seed: Long): Uuid = Uuid(Some(seed))
 
@@ -278,20 +286,25 @@ case class Uuid(randomSeed: Option[Long] = None) extends LeafExpression with Non
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val randomGen = ctx.freshName("randomGen")
-    ctx.addMutableState("org.apache.spark.sql.catalyst.util.RandomUUIDGenerator", randomGen,
+    ctx.addMutableState(
+      "org.apache.spark.sql.catalyst.util.RandomUUIDGenerator",
+      randomGen,
       forceInline = true,
       useFreshName = false)
-    ctx.addPartitionInitializationStatement(s"$randomGen = " +
-      "new org.apache.spark.sql.catalyst.util.RandomUUIDGenerator(" +
-      s"${randomSeed.get}L + partitionIndex);")
-    ev.copy(code = code"final UTF8String ${ev.value} = $randomGen.getNextUUIDUTF8String();",
+    ctx.addPartitionInitializationStatement(
+      s"$randomGen = " +
+        "new org.apache.spark.sql.catalyst.util.RandomUUIDGenerator(" +
+        s"${randomSeed.get}L + partitionIndex);")
+    ev.copy(
+      code = code"final UTF8String ${ev.value} = $randomGen.getNextUUIDUTF8String();",
       isNull = FalseLiteral)
   }
 }
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = """_FUNC_() - Returns the Spark version. The string contains 2 fields, the first being a release version and the second being a git revision.""",
+  usage =
+    """_FUNC_() - Returns the Spark version. The string contains 2 fields, the first being a release version and the second being a git revision.""",
   examples = """
     Examples:
       > SELECT _FUNC_();
@@ -301,9 +314,9 @@ case class Uuid(randomSeed: Option[Long] = None) extends LeafExpression with Non
   group = "misc_funcs")
 // scalastyle:on line.size.limit
 case class SparkVersion()
-  extends LeafExpression
-  with RuntimeReplaceable
-  with DefaultStringProducingExpression {
+    extends LeafExpression
+    with RuntimeReplaceable
+    with DefaultStringProducingExpression {
   override def prettyName: String = "version"
 
   override lazy val replacement: Expression = StaticInvoke(
@@ -324,7 +337,9 @@ case class SparkVersion()
   """,
   since = "3.0.0",
   group = "misc_funcs")
-case class TypeOf(child: Expression) extends UnaryExpression with DefaultStringProducingExpression {
+case class TypeOf(child: Expression)
+    extends UnaryExpression
+    with DefaultStringProducingExpression {
   override def nullable: Boolean = false
   override def foldable: Boolean = true
   override def contextIndependentFoldable: Boolean = true
@@ -334,7 +349,8 @@ case class TypeOf(child: Expression) extends UnaryExpression with DefaultStringP
     defineCodeGen(ctx, ev, _ => s"""UTF8String.fromString(${child.dataType.catalogString})""")
   }
 
-  override protected def withNewChildInternal(newChild: Expression): TypeOf = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): TypeOf =
+    copy(child = newChild)
 }
 
 // scalastyle:off line.size.limit
@@ -349,9 +365,9 @@ case class TypeOf(child: Expression) extends UnaryExpression with DefaultStringP
   group = "misc_funcs")
 // scalastyle:on line.size.limit
 case class CurrentUser()
-  extends LeafExpression
-  with DefaultStringProducingExpression
-  with Unevaluable {
+    extends LeafExpression
+    with DefaultStringProducingExpression
+    with Unevaluable {
   override def nullable: Boolean = false
   override def prettyName: String =
     getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("current_user")
@@ -359,9 +375,9 @@ case class CurrentUser()
 }
 
 /**
- * A function that encrypts input using AES. Key lengths of 128, 192 or 256 bits can be used.
- * If either argument is NULL or the key length is not one of the permitted values,
- * the return value is NULL.
+ * A function that encrypts input using AES. Key lengths of 128, 192 or 256 bits can be used. If
+ * either argument is NULL or the key length is not one of the permitted values, the return value
+ * is NULL.
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
@@ -409,7 +425,8 @@ case class AesEncrypt(
     padding: Expression,
     iv: Expression,
     aad: Expression)
-  extends RuntimeReplaceable with ImplicitCastInputTypes {
+    extends RuntimeReplaceable
+    with ImplicitCastInputTypes {
 
   override lazy val replacement: Expression = StaticInvoke(
     classOf[ExpressionImplUtils],
@@ -418,7 +435,12 @@ case class AesEncrypt(
     Seq(input, key, mode, padding, iv, aad),
     inputTypes)
 
-  def this(input: Expression, key: Expression, mode: Expression, padding: Expression, iv: Expression) =
+  def this(
+      input: Expression,
+      key: Expression,
+      mode: Expression,
+      padding: Expression,
+      iv: Expression) =
     this(input, key, mode, padding, iv, Literal(""))
   def this(input: Expression, key: Expression, mode: Expression, padding: Expression) =
     this(input, key, mode, padding, Literal(""))
@@ -430,23 +452,32 @@ case class AesEncrypt(
   override def prettyName: String = "aes_encrypt"
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(BinaryType, BinaryType,
+    Seq(
+      BinaryType,
+      BinaryType,
       StringTypeWithCollation(supportsTrimCollation = true),
       StringTypeWithCollation(supportsTrimCollation = true),
-      BinaryType, BinaryType)
+      BinaryType,
+      BinaryType)
 
   override def children: Seq[Expression] = Seq(input, key, mode, padding, iv, aad)
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): Expression = {
-    copy(newChildren(0), newChildren(1), newChildren(2), newChildren(3), newChildren(4), newChildren(5))
+    copy(
+      newChildren(0),
+      newChildren(1),
+      newChildren(2),
+      newChildren(3),
+      newChildren(4),
+      newChildren(5))
   }
 }
 
 /**
- * A function that decrypts input using AES. Key lengths of 128, 192 or 256 bits can be used.
- * If either argument is NULL or the key length is not one of the permitted values,
- * the return value is NULL.
+ * A function that decrypts input using AES. Key lengths of 128, 192 or 256 bits can be used. If
+ * either argument is NULL or the key length is not one of the permitted values, the return value
+ * is NULL.
  */
 @ExpressionDescription(
   usage = """
@@ -489,7 +520,8 @@ case class AesDecrypt(
     mode: Expression,
     padding: Expression,
     aad: Expression)
-  extends RuntimeReplaceable with ImplicitCastInputTypes {
+    extends RuntimeReplaceable
+    with ImplicitCastInputTypes {
 
   override lazy val replacement: Expression = StaticInvoke(
     classOf[ExpressionImplUtils],
@@ -506,10 +538,12 @@ case class AesDecrypt(
     this(input, key, Literal("GCM"))
 
   override def inputTypes: Seq[AbstractDataType] = {
-    Seq(BinaryType,
+    Seq(
+      BinaryType,
       BinaryType,
       StringTypeWithCollation(supportsTrimCollation = true),
-      StringTypeWithCollation(supportsTrimCollation = true), BinaryType)
+      StringTypeWithCollation(supportsTrimCollation = true),
+      BinaryType)
   }
 
   override def prettyName: String = "aes_decrypt"
@@ -523,7 +557,8 @@ case class AesDecrypt(
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr, key[, mode[, padding[, aad]]]) - This is a special version of `aes_decrypt` that performs the same operation, but returns a NULL value instead of raising an error if the decryption cannot be performed.",
+  usage =
+    "_FUNC_(expr, key[, mode[, padding[, aad]]]) - This is a special version of `aes_decrypt` that performs the same operation, but returns a NULL value instead of raising an error if the decryption cannot be performed.",
   examples = """
     Examples:
       > SELECT _FUNC_(unhex('6E7CA17BBB468D3084B5744BCA729FB7B2B7BCB8E4472847D02670489D95FA97DBBA7D3210'), '0000111122223333', 'GCM');
@@ -540,13 +575,16 @@ case class TryAesDecrypt(
     mode: Expression,
     padding: Expression,
     aad: Expression,
-    replacement: Expression) extends RuntimeReplaceable with InheritAnalysisRules {
+    replacement: Expression)
+    extends RuntimeReplaceable
+    with InheritAnalysisRules {
 
-  def this(input: Expression,
-           key: Expression,
-           mode: Expression,
-           padding: Expression,
-           aad: Expression) =
+  def this(
+      input: Expression,
+      key: Expression,
+      mode: Expression,
+      padding: Expression,
+      aad: Expression) =
     this(input, key, mode, padding, aad, TryEval(AesDecrypt(input, key, mode, padding, aad)))
   def this(input: Expression, key: Expression, mode: Expression, padding: Expression) =
     this(input, key, mode, padding, Literal(""))

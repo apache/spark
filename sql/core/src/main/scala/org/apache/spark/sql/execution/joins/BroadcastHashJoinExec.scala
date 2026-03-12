@@ -32,12 +32,12 @@ import org.apache.spark.sql.execution.{CodegenSupport, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 
 /**
- * Performs an inner hash join of two child relations.  When the output RDD of this operator is
+ * Performs an inner hash join of two child relations. When the output RDD of this operator is
  * being constructed, a Spark job is asynchronously started to calculate the values for the
- * broadcast relation.  This data is then placed in a Spark broadcast variable.  The streamed
+ * broadcast relation. This data is then placed in a Spark broadcast variable. The streamed
  * relation is not shuffled.
  */
-case class BroadcastHashJoinExec private(
+case class BroadcastHashJoinExec private (
     leftKeys: Seq[Expression],
     rightKeys: Seq[Expression],
     joinType: JoinType,
@@ -46,7 +46,7 @@ case class BroadcastHashJoinExec private(
     left: SparkPlan,
     right: SparkPlan,
     isNullAwareAntiJoin: Boolean = false)
-  extends HashJoin {
+    extends HashJoin {
 
   if (isNullAwareAntiJoin) {
     require(leftKeys.length == 1, "leftKeys length should be 1")
@@ -88,13 +88,12 @@ case class BroadcastHashJoinExec private(
   // An one-to-many mapping from a streamed key to build keys.
   private lazy val streamedKeyToBuildKeyMapping = {
     val mapping = mutable.Map.empty[Expression, Seq[Expression]]
-    streamedKeys.zip(buildKeys).foreach {
-      case (streamedKey, buildKey) =>
-        val key = streamedKey.canonicalized
-        mapping.get(key) match {
-          case Some(v) => mapping.put(key, v :+ buildKey)
-          case None => mapping.put(key, Seq(buildKey))
-        }
+    streamedKeys.zip(buildKeys).foreach { case (streamedKey, buildKey) =>
+      val key = streamedKey.canonicalized
+      mapping.get(key) match {
+        case Some(v) => mapping.put(key, v :+ buildKey)
+        case None => mapping.put(key, Seq(buildKey))
+      }
     }
     mapping.toMap
   }
@@ -137,18 +136,20 @@ case class BroadcastHashJoinExec private(
           Iterator.empty
         } else {
           val keyGenerator = streamSideKeyGenerator()
-          streamedIter.filter { row =>
-            val lookupKey: UnsafeRow = keyGenerator(row)
-            if (lookupKey.anyNull()) {
-              false
-            } else {
-              // Anti Join: Drop the row on the streamed side if it is a match on the build
-              hashed.get(lookupKey) == null
+          streamedIter
+            .filter { row =>
+              val lookupKey: UnsafeRow = keyGenerator(row)
+              if (lookupKey.anyNull()) {
+                false
+              } else {
+                // Anti Join: Drop the row on the streamed side if it is a match on the build
+                hashed.get(lookupKey) == null
+              }
             }
-          }.map { row =>
-            numOutputRows += 1
-            row
-          }
+            .map { row =>
+              numOutputRows += 1
+              row
+            }
         }
       }
     } else {
@@ -191,24 +192,27 @@ case class BroadcastHashJoinExec private(
     val clsName = broadcastRelation.value.getClass.getName
 
     // Inline mutable state since not many join operations in a task
-    val relationTerm = ctx.addMutableState(clsName, "relation",
+    val relationTerm = ctx.addMutableState(
+      clsName,
+      "relation",
       v => s"""
          | $v = (($clsName) $broadcast.value()).asReadOnlyCopy();
          | incPeakExecutionMemory($v.estimatedSize());
-       """.stripMargin, forceInline = true)
+       """.stripMargin,
+      forceInline = true)
     (broadcastRelation, relationTerm)
   }
 
   protected override def prepareRelation(ctx: CodegenContext): HashedRelationInfo = {
     val (broadcastRelation, relationTerm) = prepareBroadcast(ctx)
-    HashedRelationInfo(relationTerm,
+    HashedRelationInfo(
+      relationTerm,
       broadcastRelation.value.keyIsUnique,
       broadcastRelation.value == EmptyHashedRelation)
   }
 
   /**
-   * Generates the code for anti join.
-   * Handles NULL-aware anti join (NAAJ) separately here.
+   * Generates the code for anti join. Handles NULL-aware anti join (NAAJ) separately here.
    */
   protected override def codegenAnti(ctx: CodegenContext, input: Seq[ExprCode]): String = {
     if (isNullAwareAntiJoin) {
@@ -242,7 +246,8 @@ case class BroadcastHashJoinExec private(
   }
 
   override protected def withNewChildrenInternal(
-      newLeft: SparkPlan, newRight: SparkPlan): BroadcastHashJoinExec =
+      newLeft: SparkPlan,
+      newRight: SparkPlan): BroadcastHashJoinExec =
     copy(left = newLeft, right = newRight)
 }
 
@@ -256,7 +261,8 @@ object BroadcastHashJoinExec extends JoinSelectionHelper {
       left: SparkPlan,
       right: SparkPlan,
       isNullAwareAntiJoin: Boolean = false): BroadcastHashJoinExec = {
-    val (normalizedLeftKeys, normalizedRightKeys) = HashJoin.normalizeJoinKeys(leftKeys, rightKeys)
+    val (normalizedLeftKeys, normalizedRightKeys) =
+      HashJoin.normalizeJoinKeys(leftKeys, rightKeys)
 
     new BroadcastHashJoinExec(
       normalizedLeftKeys,

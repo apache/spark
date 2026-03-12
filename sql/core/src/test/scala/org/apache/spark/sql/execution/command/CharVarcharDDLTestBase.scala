@@ -50,18 +50,17 @@ trait CharVarcharDDLTestBase extends QueryTest with SQLTestUtils {
       val alterSQL = "ALTER TABLE t CHANGE COLUMN c TYPE CHAR(5)"
       val table = getTableName("t")
       checkError(
-          exception = intercept[AnalysisException] {
-            sql(alterSQL)
-          },
-          condition = "NOT_SUPPORTED_CHANGE_COLUMN",
-          parameters = Map(
-            "originType" -> "\"CHAR(4)\"",
-            "newType" -> "\"CHAR(5)\"",
-            "newName" -> "`c`",
-            "originName" -> "`c`",
-            "table" -> table),
-          queryContext = Array(ExpectedContext(fragment = alterSQL, start = 0, stop = 41))
-      )
+        exception = intercept[AnalysisException] {
+          sql(alterSQL)
+        },
+        condition = "NOT_SUPPORTED_CHANGE_COLUMN",
+        parameters = Map(
+          "originType" -> "\"CHAR(4)\"",
+          "newType" -> "\"CHAR(5)\"",
+          "newName" -> "`c`",
+          "originName" -> "`c`",
+          "table" -> table),
+        queryContext = Array(ExpectedContext(fragment = alterSQL, start = 0, stop = 41)))
     }
   }
 
@@ -71,18 +70,17 @@ trait CharVarcharDDLTestBase extends QueryTest with SQLTestUtils {
       val sql1 = "ALTER TABLE t CHANGE COLUMN c TYPE CHAR(5)"
       val table = getTableName("t")
       checkError(
-          exception = intercept[AnalysisException] {
-            sql(sql1)
-          },
-          condition = "NOT_SUPPORTED_CHANGE_COLUMN",
-          parameters = Map(
-            "originType" -> "\"STRING\"",
-            "newType" -> "\"CHAR(5)\"",
-            "newName" -> "`c`",
-            "originName" -> "`c`",
-            "table" -> table),
-          queryContext = Array(ExpectedContext(fragment = sql1, start = 0, stop = 41))
-      )
+        exception = intercept[AnalysisException] {
+          sql(sql1)
+        },
+        condition = "NOT_SUPPORTED_CHANGE_COLUMN",
+        parameters = Map(
+          "originType" -> "\"STRING\"",
+          "newType" -> "\"CHAR(5)\"",
+          "newName" -> "`c`",
+          "originName" -> "`c`",
+          "table" -> table),
+        queryContext = Array(ExpectedContext(fragment = sql1, start = 0, stop = 41)))
     }
   }
 
@@ -92,18 +90,17 @@ trait CharVarcharDDLTestBase extends QueryTest with SQLTestUtils {
       val sql1 = "ALTER TABLE t CHANGE COLUMN i TYPE CHAR(5)"
       val table = getTableName("t")
       checkError(
-          exception = intercept[AnalysisException] {
-            sql(sql1)
-          },
-          condition = "NOT_SUPPORTED_CHANGE_COLUMN",
-          parameters = Map(
-            "originType" -> "\"INT\"",
-            "newType" -> "\"CHAR(5)\"",
-            "newName" -> "`i`",
-            "originName" -> "`i`",
-            "table" -> table),
-          queryContext = Array(ExpectedContext(fragment = sql1, start = 0, stop = 41))
-      )
+        exception = intercept[AnalysisException] {
+          sql(sql1)
+        },
+        condition = "NOT_SUPPORTED_CHANGE_COLUMN",
+        parameters = Map(
+          "originType" -> "\"INT\"",
+          "newType" -> "\"CHAR(5)\"",
+          "newName" -> "`i`",
+          "originName" -> "`i`",
+          "table" -> table),
+        queryContext = Array(ExpectedContext(fragment = sql1, start = 0, stop = 41)))
     }
   }
 
@@ -121,18 +118,17 @@ trait CharVarcharDDLTestBase extends QueryTest with SQLTestUtils {
       val sql1 = "ALTER TABLE t CHANGE COLUMN c TYPE VARCHAR(3)"
       val table = getTableName("t")
       checkError(
-          exception = intercept[AnalysisException] {
-            sql(sql1)
-          },
-          condition = "NOT_SUPPORTED_CHANGE_COLUMN",
-          parameters = Map(
-            "originType" -> "\"VARCHAR(4)\"",
-            "newType" -> "\"VARCHAR(3)\"",
-            "newName" -> "`c`",
-            "originName" -> "`c`",
-            "table" -> table),
-          queryContext = Array(ExpectedContext(fragment = sql1, start = 0, stop = 44))
-      )
+        exception = intercept[AnalysisException] {
+          sql(sql1)
+        },
+        condition = "NOT_SUPPORTED_CHANGE_COLUMN",
+        parameters = Map(
+          "originType" -> "\"VARCHAR(4)\"",
+          "newType" -> "\"VARCHAR(3)\"",
+          "newName" -> "`c`",
+          "originName" -> "`c`",
+          "table" -> table),
+        queryContext = Array(ExpectedContext(fragment = sql1, start = 0, stop = 44)))
     }
   }
 
@@ -192,9 +188,11 @@ trait CharVarcharDDLTestBase extends QueryTest with SQLTestUtils {
   test("SPARK-33892: DESCRIBE COLUMN w/ char/varchar") {
     withTable("t") {
       sql(s"CREATE TABLE t(v VARCHAR(3), c CHAR(5)) USING $format")
-      checkAnswer(sql("desc t v").selectExpr("info_value").where("info_value like '%char%'"),
+      checkAnswer(
+        sql("desc t v").selectExpr("info_value").where("info_value like '%char%'"),
         Row("varchar(3)"))
-      checkAnswer(sql("desc t c").selectExpr("info_value").where("info_value like '%char%'"),
+      checkAnswer(
+        sql("desc t c").selectExpr("info_value").where("info_value like '%char%'"),
         Row("char(5)"))
     }
   }
@@ -228,7 +226,7 @@ class FileSourceCharVarcharDDLTestSuite extends CharVarcharDDLTestBase with Shar
 
   // TODO(SPARK-33903): MOVE TO SUPER CLASS AFTER THE TARGET TICKET RESOLVED
   test("SPARK-33901: cvas should should not change view's schema") {
-    withTable( "tt") {
+    withTable("tt") {
       sql(s"CREATE TABLE tt(i CHAR(5), c VARCHAR(4)) USING $format")
       withView("t") {
         sql("CREATE VIEW t AS SELECT * FROM tt")
@@ -250,8 +248,7 @@ class FileSourceCharVarcharDDLTestSuite extends CharVarcharDDLTestBase with Shar
   }
 }
 
-class DSV2CharVarcharDDLTestSuite extends CharVarcharDDLTestBase
-  with SharedSparkSession {
+class DSV2CharVarcharDDLTestSuite extends CharVarcharDDLTestBase with SharedSparkSession {
   override def format: String = "foo"
   protected override def sparkConf = {
     super.sparkConf
@@ -308,8 +305,7 @@ class DSV2CharVarcharDDLTestSuite extends CharVarcharDDLTestBase
           "newName" -> "`c`",
           "originName" -> "`c`",
           "table" -> getTableName("t")),
-        context = ExpectedContext(fragment = sql1, start = 0, stop = 44)
-      )
+        context = ExpectedContext(fragment = sql1, start = 0, stop = 44))
     }
   }
 

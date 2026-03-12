@@ -47,9 +47,6 @@ class AlterTableSetTblPropertiesParserSuite extends AnalysisTest with SharedSpar
       exception = parseException(sql),
       condition = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map("message" -> "Values must be specified for key(s): [key_without_value]"),
-      context = ExpectedContext(
-        fragment = sql,
-        start = 0,
-        stop = 78))
+      context = ExpectedContext(fragment = sql, start = 0, stop = 78))
   }
 }

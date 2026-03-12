@@ -42,8 +42,8 @@ class ColumnStatsSuite extends SparkFunSuite {
 
     test(s"$columnStatsName: empty") {
       val columnStats = columnStatsClass.getConstructor().newInstance()
-      columnStats.collectedStatistics.zip(initialStatistics).foreach {
-        case (actual, expected) => assert(actual === expected)
+      columnStats.collectedStatistics.zip(initialStatistics).foreach { case (actual, expected) =>
+        assert(actual === expected)
       }
     }
 
@@ -54,11 +54,12 @@ class ColumnStatsSuite extends SparkFunSuite {
       val rows = Seq.fill(10)(makeRandomRow(columnType)) ++ Seq.fill(10)(makeNullRow(1))
       rows.foreach(columnStats.gatherStats(_, 0))
 
-      val values = rows.take(10).map(_.get(
-        0, ColumnarDataTypeUtils.toLogicalDataType(columnType.dataType))
-        .asInstanceOf[T#InternalType])
-      val ordering = PhysicalDataType.ordering(
-        ColumnarDataTypeUtils.toLogicalDataType(columnType.dataType))
+      val values = rows
+        .take(10)
+        .map(_.get(0, ColumnarDataTypeUtils.toLogicalDataType(columnType.dataType))
+          .asInstanceOf[T#InternalType])
+      val ordering =
+        PhysicalDataType.ordering(ColumnarDataTypeUtils.toLogicalDataType(columnType.dataType))
       val stats = columnStats.collectedStatistics
 
       assertResult(values.min(ordering), "Wrong lower bound")(stats(0))
@@ -81,8 +82,8 @@ class ColumnStatsSuite extends SparkFunSuite {
 
     test(s"$columnStatsName: empty") {
       val columnStats = new DecimalColumnStats(15, 10)
-      columnStats.collectedStatistics.zip(initialStatistics).foreach {
-        case (actual, expected) => assert(actual === expected)
+      columnStats.collectedStatistics.zip(initialStatistics).foreach { case (actual, expected) =>
+        assert(actual === expected)
       }
     }
 
@@ -93,10 +94,10 @@ class ColumnStatsSuite extends SparkFunSuite {
       val rows = Seq.fill(10)(makeRandomRow(columnType)) ++ Seq.fill(10)(makeNullRow(1))
       rows.foreach(columnStats.gatherStats(_, 0))
 
-      val values = rows.take(10).map(_.get(0,
-        ColumnarDataTypeUtils.toLogicalDataType(columnType.dataType)))
-      val ordering = PhysicalDataType.ordering(
-        ColumnarDataTypeUtils.toLogicalDataType(columnType.dataType))
+      val values =
+        rows.take(10).map(_.get(0, ColumnarDataTypeUtils.toLogicalDataType(columnType.dataType)))
+      val ordering =
+        PhysicalDataType.ordering(ColumnarDataTypeUtils.toLogicalDataType(columnType.dataType))
       val stats = columnStats.collectedStatistics
 
       assertResult(values.min(ordering), "Wrong lower bound")(stats(0))
@@ -119,8 +120,8 @@ class ColumnStatsSuite extends SparkFunSuite {
 
     test(s"$columnStatsName: empty") {
       val columnStats = new IntervalColumnStats
-      columnStats.collectedStatistics.zip(initialStatistics).foreach {
-        case (actual, expected) => assert(actual === expected)
+      columnStats.collectedStatistics.zip(initialStatistics).foreach { case (actual, expected) =>
+        assert(actual === expected)
       }
     }
 
@@ -163,10 +164,11 @@ class ColumnStatsSuite extends SparkFunSuite {
         val rows = Seq.fill(10)(makeRandomRow(columnType)) ++ Seq.fill(10)(makeNullRow(1))
         rows.foreach(columnStats.gatherStats(_, 0))
 
-        val values = rows.take(10).map(_.get(0,
-          ColumnarDataTypeUtils.toLogicalDataType(columnType.dataType)))
-        val ordering = PhysicalDataType.ordering(
-          ColumnarDataTypeUtils.toLogicalDataType(columnType.dataType))
+        val values = rows
+          .take(10)
+          .map(_.get(0, ColumnarDataTypeUtils.toLogicalDataType(columnType.dataType)))
+        val ordering =
+          PhysicalDataType.ordering(ColumnarDataTypeUtils.toLogicalDataType(columnType.dataType))
         val stats = columnStats.collectedStatistics
 
         assertResult(values.min(ordering), "Wrong lower bound")(stats(0))

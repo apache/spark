@@ -28,7 +28,8 @@ import org.apache.spark.sql.types.{DataType, UserDefinedType}
  */
 case class UnwrapUDT(child: Expression) extends UnaryExpression with NonSQLExpression {
 
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = child.genCode(ctx)
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
+    child.genCode(ctx)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (child.dataType.isInstanceOf[UserDefinedType[_]]) {

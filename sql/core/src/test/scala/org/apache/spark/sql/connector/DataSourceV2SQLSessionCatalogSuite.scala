@@ -21,9 +21,9 @@ import org.apache.spark.sql.{DataFrame, Row, SaveMode}
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTable, Table, TableCatalog}
 
 class DataSourceV2SQLSessionCatalogSuite
-  extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLOnlyTests = true)
-  with AlterTableTests
-  with SessionCatalogTest[InMemoryTable, InMemoryTableSessionCatalog] {
+    extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLOnlyTests = true)
+    with AlterTableTests
+    with SessionCatalogTest[InMemoryTable, InMemoryTableSessionCatalog] {
 
   override protected val catalogAndNamespace = ""
 
@@ -46,7 +46,8 @@ class DataSourceV2SQLSessionCatalogSuite
   override def getTableMetadata(tableName: String): Table = {
     val v2Catalog = spark.sessionState.catalogManager.currentCatalog
     val nameParts = spark.sessionState.sqlParser.parseMultipartIdentifier(tableName)
-    v2Catalog.asInstanceOf[TableCatalog]
+    v2Catalog
+      .asInstanceOf[TableCatalog]
       .loadTable(Identifier.of(nameParts.init.toArray, nameParts.last))
   }
 
@@ -82,9 +83,7 @@ class DataSourceV2SQLSessionCatalogSuite
 
   test("SPARK-54760: DelegatingCatalogExtension supports both V1 and V2 functions") {
     sessionCatalog.createFunction(Identifier.of(Array("ns"), "strlen"), StrLen(StrLenDefault))
-    checkAnswer(
-      sql("SELECT char_length('Hello') as v1, ns.strlen('Spark') as v2"),
-      Row(5, 5))
+    checkAnswer(sql("SELECT char_length('Hello') as v1, ns.strlen('Spark') as v2"), Row(5, 5))
   }
 
   test("SPARK-55024: data source metadata tables with multi-part identifiers") {
@@ -93,13 +92,14 @@ class DataSourceV2SQLSessionCatalogSuite
     val t1 = "metadata_test_tbl"
 
     def verifySnapshots(snapshots: DataFrame, expectedCount: Int, queryDesc: String): Unit = {
-      assert(snapshots.count() == expectedCount,
-        s"$queryDesc: expected $expectedCount snapshots")
-      assert(snapshots.schema.fieldNames.toSeq == Seq("committed_at", "snapshot_id"),
+      assert(snapshots.count() == expectedCount, s"$queryDesc: expected $expectedCount snapshots")
+      assert(
+        snapshots.schema.fieldNames.toSeq == Seq("committed_at", "snapshot_id"),
         s"$queryDesc: expected schema [committed_at, snapshot_id], " +
           s"got: ${snapshots.schema.fieldNames.toSeq}")
       val snapshotIds = snapshots.select("snapshot_id").collect().map(_.getLong(0))
-      assert(snapshotIds.forall(_ > 0),
+      assert(
+        snapshotIds.forall(_ > 0),
         s"$queryDesc: all snapshot IDs should be positive, got: ${snapshotIds.toSeq}")
     }
 
@@ -109,13 +109,10 @@ class DataSourceV2SQLSessionCatalogSuite
       sql(s"INSERT INTO $t1 VALUES (2, 'second')")
       sql(s"INSERT INTO $t1 VALUES (3, 'third')")
 
-      Seq(
-        s"$t1.snapshots",
-        s"default.$t1.snapshots",
-        s"spark_catalog.default.$t1.snapshots"
-      ).foreach { snapshotTable =>
-        verifySnapshots(sql(s"SELECT * FROM $snapshotTable"), 3, snapshotTable)
-      }
+      Seq(s"$t1.snapshots", s"default.$t1.snapshots", s"spark_catalog.default.$t1.snapshots")
+        .foreach { snapshotTable =>
+          verifySnapshots(sql(s"SELECT * FROM $snapshotTable"), 3, snapshotTable)
+        }
     }
   }
 }

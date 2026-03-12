@@ -31,7 +31,8 @@ case class TextWrite(
     paths: Seq[String],
     formatName: String,
     supportsDataType: DataType => Boolean,
-    info: LogicalWriteInfo) extends FileWrite {
+    info: LogicalWriteInfo)
+    extends FileWrite {
   private def verifySchema(schema: StructType): Unit = {
     if (schema.size != 1) {
       throw QueryCompilationErrors.textDataSourceWithMultiColumnsError(schema)

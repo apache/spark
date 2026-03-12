@@ -40,6 +40,12 @@ class CSVDataSourceV2 extends FileDataSourceV2 {
     val paths = getPaths(options)
     val tableName = getTableName(options, paths)
     val optionsWithoutPaths = getOptionsWithoutPaths(options)
-    CSVTable(tableName, sparkSession, optionsWithoutPaths, paths, Some(schema), fallbackFileFormat)
+    CSVTable(
+      tableName,
+      sparkSession,
+      optionsWithoutPaths,
+      paths,
+      Some(schema),
+      fallbackFileFormat)
   }
 }

@@ -38,15 +38,23 @@ class StreamRelationSuite extends SharedSparkSession with AnalysisTest {
 
   override protected def getAnalyzer: Analyzer = {
     val catalog = new SessionCatalog(
-      new InMemoryCatalog, FunctionRegistry.builtin, TableFunctionRegistry.builtin)
+      new InMemoryCatalog,
+      FunctionRegistry.builtin,
+      TableFunctionRegistry.builtin)
     catalog.createDatabase(
       CatalogDatabase("default", "", new URI("loc"), Map.empty),
       ignoreIfExists = false)
     createTempView(catalog, "table", TestRelations.testRelation, overrideIfExists = true)
     createTempView(catalog, "table2", TestRelations.testRelation2, overrideIfExists = true)
-    createTempView(catalog, "streamingTable", TestRelations.streamingRelation,
+    createTempView(
+      catalog,
+      "streamingTable",
+      TestRelations.streamingRelation,
       overrideIfExists = true)
-    createTempView(catalog, "streamingTable2", TestRelations.streamingRelation,
+    createTempView(
+      catalog,
+      "streamingTable2",
+      TestRelations.streamingRelation,
       overrideIfExists = true)
     new Analyzer(catalog) {
       override val extendedResolutionRules = extendedAnalysisRules
@@ -61,8 +69,7 @@ class StreamRelationSuite extends SharedSparkSession with AnalysisTest {
       "SELECT * FROM STREAM streamingTable JOIN ( SELECT * FROM table )",
       "SELECT * FROM STREAM streamingTable JOIN LATERAL ( SELECT * FROM table )",
       """SELECT * FROM STREAM streamingTable, LATERAL
-        |(SELECT a FROM table WHERE streamingTable.a < table.a)""".stripMargin
-    ).foreach { query =>
+        |(SELECT a FROM table WHERE streamingTable.a < table.a)""".stripMargin).foreach { query =>
       val plan = parsePlan(query)
       assert(plan.isStreaming)
       assertAnalysisSuccess(plan)
@@ -74,8 +81,7 @@ class StreamRelationSuite extends SharedSparkSession with AnalysisTest {
     // "table" here is a temp view with a batch relation, so it should throw.
     assertAnalysisError(
       inputPlan = parsePlan("SELECT * FROM STREAM table"),
-      expectedErrors = Seq("is not a temp view of streaming logical plan")
-    )
+      expectedErrors = Seq("is not a temp view of streaming logical plan"))
   }
 
   test("STREAM options are parsed correctly for streaming by identifier") {
@@ -85,21 +91,13 @@ class StreamRelationSuite extends SharedSparkSession with AnalysisTest {
       Project(
         projectList = Seq(UnresolvedStar(None)),
         child = SubqueryAlias(
-          identifier = AliasIdentifier(
-            name = "t",
-            qualifier = Seq.empty
-          ),
+          identifier = AliasIdentifier(name = "t", qualifier = Seq.empty),
           child = NamedStreamingRelation(
             child = UnresolvedRelation(
               multipartIdentifier = Seq("table1"),
               isStreaming = true,
-              options = new CaseInsensitiveStringMap(Map("key" -> "value").asJava)
-            ),
-            sourceIdentifyingName = Unassigned
-          )
-        )
-      )
-    )
+              options = new CaseInsensitiveStringMap(Map("key" -> "value").asJava)),
+            sourceIdentifyingName = Unassigned))))
   }
 
   test("Analysis Exception: TABLE_OR_VIEW_NOT_FOUND") {
@@ -107,29 +105,23 @@ class StreamRelationSuite extends SharedSparkSession with AnalysisTest {
       inputPlan = parsePlan("SELECT * FROM STREAM(`stream`)"),
       expectedErrorCondition = "TABLE_OR_VIEW_NOT_FOUND",
       expectedMessageParameters = Map("relationName" -> "`stream`"),
-      queryContext = Array(ExpectedContext("STREAM(`stream`)", 14, 29))
-    )
+      queryContext = Array(ExpectedContext("STREAM(`stream`)", 14, 29)))
     assertAnalysisErrorCondition(
       inputPlan = parsePlan("SELECT * FROM STREAM `stream`"),
       expectedErrorCondition = "TABLE_OR_VIEW_NOT_FOUND",
       expectedMessageParameters = Map("relationName" -> "`stream`"),
-      queryContext = Array(ExpectedContext("STREAM `stream`", 14, 28))
-    )
+      queryContext = Array(ExpectedContext("STREAM `stream`", 14, 28)))
   }
 
   test("STREAM with options is correctly propagated to datasource in V1") {
     sql("CREATE TABLE t (id INT) USING PARQUET")
     sql("INSERT INTO t VALUES (1), (2)")
 
-    val actualAnalyzedPlan = sql(
-      """
+    val actualAnalyzedPlan = sql("""
         |SELECT id FROM STREAM t
-        |WITH ('readOptionKey'='readOptionValue')""".stripMargin
-    ).queryExecution.analyzed
+        |WITH ('readOptionKey'='readOptionValue')""".stripMargin).queryExecution.analyzed
 
-    val catalogTable = spark.sessionState.catalog.getTableMetadata(
-      TableIdentifier("t")
-    )
+    val catalogTable = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
     val idAttr = AttributeReference(name = "id", dataType = IntegerType)()
 
     val expectedAnalyzedPlan = Project(
@@ -140,24 +132,14 @@ class StreamRelationSuite extends SharedSparkSession with AnalysisTest {
           dataSource = DataSource(
             sparkSession = spark,
             className = catalogTable.provider.get,
-            options = Map(
-              "readOptionKey" -> "readOptionValue",
-              "path" -> catalogTable.location.toString
-            ),
+            options =
+              Map("readOptionKey" -> "readOptionValue", "path" -> catalogTable.location.toString),
             userSpecifiedSchema = Option(catalogTable.schema),
             catalogTable = Option(catalogTable),
-            userSpecifiedStreamingSourceName = None
-          ),
+            userSpecifiedStreamingSourceName = None),
           sourceName = s"FileSource[${catalogTable.location.toString}]",
-          output = Seq(idAttr)
-        )
-      )
-    )
+          output = Seq(idAttr))))
 
-    comparePlans(
-      expectedAnalyzedPlan,
-      actualAnalyzedPlan,
-      checkAnalysis = true
-    )
+    comparePlans(expectedAnalyzedPlan, actualAnalyzedPlan, checkAnalysis = true)
   }
 }

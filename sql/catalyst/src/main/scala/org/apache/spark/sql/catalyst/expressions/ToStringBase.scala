@@ -57,7 +57,8 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
 
   // Returns a function to convert a value to pretty string. The function assumes input is not null.
   protected final def castToString(
-      from: DataType, to: StringConstraint = NoConstraint): Any => UTF8String =
+      from: DataType,
+      to: StringConstraint = NoConstraint): Any => UTF8String =
     to match {
       case FixedLength(length) =>
         s => CharVarcharCodegenUtils.charTypeWriteSideCheck(castToString(from)(s), length)
@@ -174,11 +175,13 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
     case udt: UserDefinedType[_] =>
       o => UTF8String.fromString(udt.stringifyValue(udt.deserialize(o)))
     case YearMonthIntervalType(startField, endField) =>
-      acceptAny[Int](i => UTF8String.fromString(
-        IntervalUtils.toYearMonthIntervalString(i, ANSI_STYLE, startField, endField)))
+      acceptAny[Int](i =>
+        UTF8String.fromString(
+          IntervalUtils.toYearMonthIntervalString(i, ANSI_STYLE, startField, endField)))
     case DayTimeIntervalType(startField, endField) =>
-      acceptAny[Long](i => UTF8String.fromString(
-        IntervalUtils.toDayTimeIntervalString(i, ANSI_STYLE, startField, endField)))
+      acceptAny[Long](i =>
+        UTF8String.fromString(
+          IntervalUtils.toDayTimeIntervalString(i, ANSI_STYLE, startField, endField)))
     case _: DecimalType if useDecimalPlainString =>
       acceptAny[Decimal](d => UTF8String.fromString(d.toPlainString))
     case _: StringType => acceptAny[UTF8String](identity[UTF8String])
@@ -212,7 +215,8 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
 
   @scala.annotation.tailrec
   private def castToStringCode(
-      from: DataType, ctx: CodegenContext): (ExprValue, ExprValue) => Block = {
+      from: DataType,
+      ctx: CodegenContext): (ExprValue, ExprValue) => Block = {
     from match {
       case BinaryType =>
         val bf = JavaCode.global(
@@ -269,7 +273,11 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
           val buffer = ctx.freshVariable("buffer", classOf[UTF8StringBuilder])
           val bufferClass = JavaCode.javaType(classOf[UTF8StringBuilder])
           val writeStructCode =
-            writeStructToStringBuilder(fields.map(_.dataType).toImmutableArraySeq, row, buffer, ctx)
+            writeStructToStringBuilder(
+              fields.map(_.dataType).toImmutableArraySeq,
+              row,
+              buffer,
+              ctx)
           code"""
              |InternalRow $row = $c;
              |$bufferClass $buffer = new $bufferClass();
@@ -289,7 +297,7 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
         (c, evPrim) =>
           // scalastyle:off line.size.limit
           code"$evPrim = UTF8String.fromString($iu.toYearMonthIntervalString($c, $style, (byte)${i.startField}, (byte)${i.endField}));"
-          // scalastyle:on line.size.limit
+      // scalastyle:on line.size.limit
       case i: DayTimeIntervalType =>
         val iu = IntervalUtils.getClass.getName.stripSuffix("$")
         val iss = IntervalStringStyles.getClass.getName.stripSuffix("$")
@@ -297,7 +305,7 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
         (c, evPrim) =>
           // scalastyle:off line.size.limit
           code"$evPrim = UTF8String.fromString($iu.toDayTimeIntervalString($c, $style, (byte)${i.startField}, (byte)${i.endField}));"
-          // scalastyle:on line.size.limit
+      // scalastyle:on line.size.limit
       // In ANSI mode, Spark always use plain string representation on casting Decimal values
       // as strings. Otherwise, the casting is using `BigDecimal.toString` which may use scientific
       // notation if an exponent is needed.
@@ -329,8 +337,9 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
     val funcName = ctx.freshName("elementToString")
     val element = JavaCode.variable("element", et)
     val elementStr = JavaCode.variable("elementStr", StringType)
-    val elementToStringFunc = inline"${ctx.addNewFunction(funcName,
-      s"""
+    val elementToStringFunc = inline"${ctx.addNewFunction(
+        funcName,
+        s"""
          |private UTF8String $funcName(${CodeGenerator.javaType(et)} $element) {
          |  UTF8String $elementStr = null;
          |  ${elementToStringCode(element, elementStr)}
@@ -353,7 +362,10 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
        |      ${appendNull(buffer, isFirstElement = false)}
        |    } else {
        |      $buffer.append(" ");
-       |      $buffer.append($elementToStringFunc(${CodeGenerator.getValue(array, et, loopIndex)}));
+       |      $buffer.append($elementToStringFunc(${CodeGenerator.getValue(
+           array,
+           et,
+           loopIndex)}));
        |    }
        |  }
        |}
@@ -373,7 +385,8 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
       val dataToStringCode = castToStringCode(dataType, ctx)
       val data = JavaCode.variable("data", dataType)
       val dataStr = JavaCode.variable("dataStr", StringType)
-      val functionCall = ctx.addNewFunction(funcName,
+      val functionCall = ctx.addNewFunction(
+        funcName,
         s"""
            |private UTF8String $funcName(${CodeGenerator.javaType(dataType)} $data) {
            |  UTF8String $dataStr = null;
@@ -389,9 +402,10 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
     val loopIndex = ctx.freshVariable("loopIndex", IntegerType)
     val mapKeyArray = JavaCode.expression(s"$map.keyArray()", classOf[ArrayData])
     val mapValueArray = JavaCode.expression(s"$map.valueArray()", classOf[ArrayData])
-    val getMapFirstKey = CodeGenerator.getValue(mapKeyArray, kt, JavaCode.literal("0", IntegerType))
-    val getMapFirstValue = CodeGenerator.getValue(mapValueArray, vt,
-      JavaCode.literal("0", IntegerType))
+    val getMapFirstKey =
+      CodeGenerator.getValue(mapKeyArray, kt, JavaCode.literal("0", IntegerType))
+    val getMapFirstValue =
+      CodeGenerator.getValue(mapValueArray, vt, JavaCode.literal("0", IntegerType))
     val getMapKeyArray = CodeGenerator.getValue(mapKeyArray, kt, loopIndex)
     val getMapValueArray = CodeGenerator.getValue(mapValueArray, vt, loopIndex)
     code"""
@@ -471,7 +485,8 @@ object ToStringBase {
         (array: Array[Byte]) => UTF8String.fromString(array.mkString("[", ", ", "]"))
       case Some(BinaryOutputStyle.BASE64) =>
         (array: Array[Byte]) =>
-          UTF8String.fromString(java.util.Base64.getEncoder.withoutPadding().encodeToString(array))
+          UTF8String.fromString(
+            java.util.Base64.getEncoder.withoutPadding().encodeToString(array))
       case Some(BinaryOutputStyle.HEX) =>
         (array: Array[Byte]) => Hex.hex(array)
       case _ =>

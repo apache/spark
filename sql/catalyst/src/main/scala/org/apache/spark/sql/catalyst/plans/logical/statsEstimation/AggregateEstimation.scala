@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.plans.logical.statsEstimation
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Statistics}
 
-
 object AggregateEstimation {
   import EstimationUtils._
 
@@ -33,22 +32,21 @@ object AggregateEstimation {
     // Check if we have column stats for all group-by columns.
     val colStatsExist = agg.groupingExpressions.forall { e =>
       e.isInstanceOf[Attribute] &&
-        childStats.attributeStats.get(e.asInstanceOf[Attribute]).exists(_.hasCountStats)
+      childStats.attributeStats.get(e.asInstanceOf[Attribute]).exists(_.hasCountStats)
     }
     if (rowCountsExist(agg.child) && colStatsExist) {
       // Multiply distinct counts of group-by columns. This is an upper bound, which assumes
       // the data contains all combinations of distinct values of group-by columns.
-      var outputRows: BigInt = agg.groupingExpressions.foldLeft(BigInt(1))(
-        (res, expr) => {
-          val columnStat = childStats.attributeStats(expr.asInstanceOf[Attribute])
-          val distinctCount = columnStat.distinctCount.get
-          val distinctValue: BigInt = if (columnStat.nullCount.get > 0) {
-            distinctCount + 1
-          } else {
-            distinctCount
-          }
-          res * distinctValue
-        })
+      var outputRows: BigInt = agg.groupingExpressions.foldLeft(BigInt(1))((res, expr) => {
+        val columnStat = childStats.attributeStats(expr.asInstanceOf[Attribute])
+        val distinctCount = columnStat.distinctCount.get
+        val distinctValue: BigInt = if (columnStat.nullCount.get > 0) {
+          distinctCount + 1
+        } else {
+          distinctCount
+        }
+        res * distinctValue
+      })
 
       outputRows = if (agg.groupingExpressions.isEmpty) {
         // If there's no group-by columns, the output is a single row containing values of aggregate
@@ -60,15 +58,16 @@ object AggregateEstimation {
         outputRows.min(childStats.rowCount.get)
       }
 
-      val aliasStats = EstimationUtils.getAliasStats(
-        agg.expressions, childStats.attributeStats, outputRows)
+      val aliasStats =
+        EstimationUtils.getAliasStats(agg.expressions, childStats.attributeStats, outputRows)
 
-      val outputAttrStats = getOutputMap(
-        AttributeMap(childStats.attributeStats.toSeq ++ aliasStats), agg.output)
-      Some(Statistics(
-        sizeInBytes = getOutputSize(agg.output, outputRows, outputAttrStats),
-        rowCount = Some(outputRows),
-        attributeStats = outputAttrStats))
+      val outputAttrStats =
+        getOutputMap(AttributeMap(childStats.attributeStats.toSeq ++ aliasStats), agg.output)
+      Some(
+        Statistics(
+          sizeInBytes = getOutputSize(agg.output, outputRows, outputAttrStats),
+          rowCount = Some(outputRows),
+          attributeStats = outputAttrStats))
     } else {
       None
     }

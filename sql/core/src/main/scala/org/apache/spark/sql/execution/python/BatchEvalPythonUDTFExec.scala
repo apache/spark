@@ -37,18 +37,23 @@ import org.apache.spark.sql.types.StructType
 /**
  * A physical plan that evaluates a [[PythonUDTF]]. This is similar to [[BatchEvalPythonExec]].
  *
- * @param udtf the user-defined Python function
- * @param requiredChildOutput the required output of the child plan. It's used for omitting data
- *                            generation that will be discarded next by a projection.
- * @param resultAttrs the output schema of the Python UDTF.
- * @param child the child plan
+ * @param udtf
+ *   the user-defined Python function
+ * @param requiredChildOutput
+ *   the required output of the child plan. It's used for omitting data generation that will be
+ *   discarded next by a projection.
+ * @param resultAttrs
+ *   the output schema of the Python UDTF.
+ * @param child
+ *   the child plan
  */
 case class BatchEvalPythonUDTFExec(
     udtf: PythonUDTF,
     requiredChildOutput: Seq[Attribute],
     resultAttrs: Seq[Attribute],
     child: SparkPlan)
-  extends EvalPythonUDTFExec with PythonSQLMetrics {
+    extends EvalPythonUDTFExec
+    with PythonSQLMetrics {
 
   private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
   private[this] val sessionUUID = {
@@ -59,20 +64,20 @@ case class BatchEvalPythonUDTFExec(
   }
 
   /**
-   * Evaluates a Python UDTF. It computes the results using the PythonUDFRunner, and returns
-   * an iterator of internal rows for every input row.
+   * Evaluates a Python UDTF. It computes the results using the PythonUDFRunner, and returns an
+   * iterator of internal rows for every input row.
    */
   override protected def evaluate(
       argMetas: Array[ArgumentMetadata],
       iter: Iterator[InternalRow],
       schema: StructType,
       context: TaskContext): Iterator[Iterator[InternalRow]] = {
-    EvaluatePython.registerPicklers()  // register pickler for Row
+    EvaluatePython.registerPicklers() // register pickler for Row
 
     // Input iterator to Python.
     // For Python UDTF, we don't have a separate configuration for the batch size yet.
-    val inputIterator = BatchEvalPythonExec.getInputIterator(
-      iter, schema, 100, conf.pysparkBinaryAsBytes)
+    val inputIterator =
+      BatchEvalPythonExec.getInputIterator(iter, schema, 100, conf.pysparkBinaryAsBytes)
 
     // Output iterator for results from Python.
     val outputIterator =
@@ -85,16 +90,21 @@ case class BatchEvalPythonUDTFExec(
     val resultType = udtf.dataType
     val fromJava = EvaluatePython.makeFromJava(resultType)
 
-    outputIterator.flatMap { pickedResult =>
-      val unpickledBatch = unpickle.loads(pickedResult)
-      unpickledBatch.asInstanceOf[java.util.ArrayList[Any]].asScala
-    }.map { results =>
-      assert(results.getClass.isArray)
-      val res = results.asInstanceOf[Array[_]]
-      pythonMetrics("pythonNumRowsReceived") += res.length
-      fromJava(results).asInstanceOf[GenericArrayData]
-        .array.map(_.asInstanceOf[InternalRow]).iterator
-    }
+    outputIterator
+      .flatMap { pickedResult =>
+        val unpickledBatch = unpickle.loads(pickedResult)
+        unpickledBatch.asInstanceOf[java.util.ArrayList[Any]].asScala
+      }
+      .map { results =>
+        assert(results.getClass.isArray)
+        val res = results.asInstanceOf[Array[_]]
+        pythonMetrics("pythonNumRowsReceived") += res.length
+        fromJava(results)
+          .asInstanceOf[GenericArrayData]
+          .array
+          .map(_.asInstanceOf[InternalRow])
+          .iterator
+      }
   }
 
   override protected def withNewChildInternal(newChild: SparkPlan): BatchEvalPythonUDTFExec =
@@ -107,10 +117,13 @@ class PythonUDTFRunner(
     pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
     sessionUUID: Option[String])
-  extends BasePythonUDFRunner(
-    Seq((ChainedPythonFunctions(Seq(udtf.func)), udtf.resultId.id)),
-    PythonEvalType.SQL_TABLE_UDF, Array(argMetas.map(_.offset)), pythonMetrics,
-    jobArtifactUUID, sessionUUID) {
+    extends BasePythonUDFRunner(
+      Seq((ChainedPythonFunctions(Seq(udtf.func)), udtf.resultId.id)),
+      PythonEvalType.SQL_TABLE_UDF,
+      Array(argMetas.map(_.offset)),
+      pythonMetrics,
+      jobArtifactUUID,
+      sessionUUID) {
 
   // Overriding here to NOT use the same value of UDF config in UDTF.
   override val bufferSize: Int = SparkEnv.get.conf.get(BUFFER_SIZE)
@@ -128,16 +141,15 @@ object PythonUDTFRunner {
       argMetas: Array[ArgumentMetadata]): Unit = {
     // Write the argument types of the UDTF.
     dataOut.writeInt(argMetas.length)
-    argMetas.foreach {
-      case ArgumentMetadata(offset, name, _) =>
-        dataOut.writeInt(offset)
-        name match {
-          case Some(name) =>
-            dataOut.writeBoolean(true)
-            PythonWorkerUtils.writeUTF(name, dataOut)
-          case _ =>
-            dataOut.writeBoolean(false)
-        }
+    argMetas.foreach { case ArgumentMetadata(offset, name, _) =>
+      dataOut.writeInt(offset)
+      name match {
+        case Some(name) =>
+          dataOut.writeBoolean(true)
+          PythonWorkerUtils.writeUTF(name, dataOut)
+        case _ =>
+          dataOut.writeBoolean(false)
+      }
     }
     // Write the zero-based indexes of the projected results of all PARTITION BY expressions within
     // the TABLE argument of the Python UDTF call, if applicable.

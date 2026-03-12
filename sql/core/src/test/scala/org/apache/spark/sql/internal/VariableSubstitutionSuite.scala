@@ -45,14 +45,14 @@ class VariableSubstitutionSuite extends SparkFunSuite with SQLHelper {
 
   test("multiple substitutes") {
     val q = "select ${bar} ${foo} ${doo} this is great"
-    withSQLConf("bar"-> "1", "foo"-> "2", "doo" -> "3") {
+    withSQLConf("bar" -> "1", "foo" -> "2", "doo" -> "3") {
       assert(sub.substitute(q) == "select 1 2 3 this is great")
     }
   }
 
   test("test nested substitutes") {
     val q = "select ${bar} ${foo} this is great"
-    withSQLConf("bar"-> "1", "foo"-> "${bar}") {
+    withSQLConf("bar" -> "1", "foo" -> "${bar}") {
       assert(sub.substitute(q) == "select 1 1 this is great")
     }
   }

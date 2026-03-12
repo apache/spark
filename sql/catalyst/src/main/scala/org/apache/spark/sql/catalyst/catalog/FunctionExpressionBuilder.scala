@@ -26,7 +26,10 @@ trait FunctionExpressionBuilder {
 }
 
 object DummyFunctionExpressionBuilder extends FunctionExpressionBuilder {
-  override def makeExpression(name: String, clazz: Class[_], input: Seq[Expression]): Expression = {
+  override def makeExpression(
+      name: String,
+      clazz: Class[_],
+      input: Seq[Expression]): Expression = {
     throw SparkUnsupportedOperationException()
   }
 }

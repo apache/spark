@@ -55,8 +55,8 @@ class StreamingAggregationStateManagerSuite extends StreamTest {
   }
 
   val expectedTestValueRowForV2: UnsafeRow = {
-    val valueProjector = GenerateUnsafeProjection.generate(testValuesAttributes,
-      testOutputAttributes)
+    val valueProjector =
+      GenerateUnsafeProjection.generate(testValuesAttributes, testOutputAttributes)
     valueProjector(testRow)
   }
 
@@ -67,24 +67,36 @@ class StreamingAggregationStateManagerSuite extends StreamTest {
   // ============================ StateManagerImplV1 ============================
 
   test("StateManager v1 - get, put, iter") {
-    val stateManager = StreamingAggregationStateManager.createStateManager(testKeyAttributes,
-      testOutputAttributes, 1)
+    val stateManager = StreamingAggregationStateManager.createStateManager(
+      testKeyAttributes,
+      testOutputAttributes,
+      1)
 
     // in V1, input row is stored as value
-    testGetPutIterOnStateManager(stateManager, testOutputSchema, testRow,
-      expectedTestKeyRow, expectedStateValue = testRow)
+    testGetPutIterOnStateManager(
+      stateManager,
+      testOutputSchema,
+      testRow,
+      expectedTestKeyRow,
+      expectedStateValue = testRow)
   }
 
   // ============================ StateManagerImplV2 ============================
   test("StateManager v2 - get, put, iter") {
-    val stateManager = StreamingAggregationStateManager.createStateManager(testKeyAttributes,
-      testOutputAttributes, 2)
+    val stateManager = StreamingAggregationStateManager.createStateManager(
+      testKeyAttributes,
+      testOutputAttributes,
+      2)
 
     // in V2, row for values itself (excluding keys from input row) is stored as value
     // so that stored value doesn't have key part, but state manager V2 will provide same output
     // as V1 when getting row for key
-    testGetPutIterOnStateManager(stateManager, expectedTestValuesSchema, testRow,
-      expectedTestKeyRow, expectedTestValueRowForV2)
+    testGetPutIterOnStateManager(
+      stateManager,
+      expectedTestValuesSchema,
+      testRow,
+      expectedTestKeyRow,
+      expectedTestValueRowForV2)
   }
 
   private def testGetPutIterOnStateManager(
@@ -130,17 +142,19 @@ class StreamingAggregationStateManagerSuite extends StreamTest {
 
   Seq(1, 2).foreach { version =>
     test(s"Partition key extraction - StateManager v$version") {
-      val stateManager = StreamingAggregationStateManager.createStateManager(testKeyAttributes,
-        testOutputAttributes, stateFormatVersion = version)
+      val stateManager = StreamingAggregationStateManager.createStateManager(
+        testKeyAttributes,
+        testOutputAttributes,
+        stateFormatVersion = version)
 
       val keySchema = testKeyAttributes.toStructType
 
       // Create extractor for aggregation operation
       val extractor = StatePartitionKeyExtractorFactory.create(
         StatefulOperatorsUtils.STATE_STORE_SAVE_EXEC_OP_NAME,
-        keySchema
-      )
-      assert(extractor.partitionKeySchema === keySchema,
+        keySchema)
+      assert(
+        extractor.partitionKeySchema === keySchema,
         "Partition key schema should match the aggregation key schema")
 
       // Write input aggregation row via state manager
@@ -151,7 +165,8 @@ class StreamingAggregationStateManagerSuite extends StreamTest {
       // Verify the state key and partition key by reading via store
       val pair = memoryStateStore.iterator().next()
       assert(pair.key === expectedTestKeyRow)
-      assert(extractor.partitionKey(pair.key) === pair.key,
+      assert(
+        extractor.partitionKey(pair.key) === pair.key,
         "Partition key should be the same as the state key")
     }
   }

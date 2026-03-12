@@ -54,8 +54,7 @@ import org.apache.spark.unsafe.types.UTF8String
  * @since 1.4.0
  */
 @Stable
-class DataFrameReader private[sql](sparkSession: SparkSession)
-  extends sql.DataFrameReader {
+class DataFrameReader private[sql] (sparkSession: SparkSession) extends sql.DataFrameReader {
 
   format(sparkSession.sessionState.conf.defaultDataSourceName)
 
@@ -105,8 +104,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession)
   def load(paths: String*): DataFrame = {
     Dataset.ofRows(
       sparkSession,
-      UnresolvedDataSource(source, userSpecifiedSchema, extraOptions, isStreaming = false, paths)
-    )
+      UnresolvedDataSource(source, userSpecifiedSchema, extraOptions, isStreaming = false, paths))
   }
 
   /** @inheritdoc */
@@ -122,7 +120,14 @@ class DataFrameReader private[sql](sparkSession: SparkSession)
       upperBound: Long,
       numPartitions: Int,
       connectionProperties: Properties): DataFrame =
-    super.jdbc(url, table, columnName, lowerBound, upperBound, numPartitions, connectionProperties)
+    super.jdbc(
+      url,
+      table,
+      columnName,
+      lowerBound,
+      upperBound,
+      numPartitions,
+      connectionProperties)
 
   /** @inheritdoc */
   def jdbc(
@@ -166,13 +171,17 @@ class DataFrameReader private[sql](sparkSession: SparkSession)
       sparkSession.sessionState.conf.columnNameOfCorruptRecord)
 
     userSpecifiedSchema.foreach(checkJsonSchema)
-    val schema = userSpecifiedSchema.map {
-      case s if !SQLConf.get.getConf(
-        SQLConf.LEGACY_RESPECT_NULLABILITY_IN_TEXT_DATASET_CONVERSION) => s.asNullable
-      case other => other
-    }.getOrElse {
-      TextInputJsonDataSource.inferFromDataset(jsonDataset, parsedOptions)
-    }
+    val schema = userSpecifiedSchema
+      .map {
+        case s
+            if !SQLConf.get.getConf(
+              SQLConf.LEGACY_RESPECT_NULLABILITY_IN_TEXT_DATASET_CONVERSION) =>
+          s.asNullable
+        case other => other
+      }
+      .getOrElse {
+        TextInputJsonDataSource.inferFromDataset(jsonDataset, parsedOptions)
+      }
 
     ExprUtils.verifyColumnNameOfCorruptRecord(schema, parsedOptions.columnNameOfCorruptRecord)
     val actualSchema =
@@ -216,30 +225,34 @@ class DataFrameReader private[sql](sparkSession: SparkSession)
         None
       }
 
-    val schema = userSpecifiedSchema.map {
-      case s if !SQLConf.get.getConf(
-        SQLConf.LEGACY_RESPECT_NULLABILITY_IN_TEXT_DATASET_CONVERSION) => s.asNullable
-      case other => other
-    }.getOrElse {
-      TextInputCSVDataSource.inferFromDataset(
-        sparkSession,
-        csvDataset,
-        maybeFirstLine,
-        parsedOptions)
-    }
+    val schema = userSpecifiedSchema
+      .map {
+        case s
+            if !SQLConf.get.getConf(
+              SQLConf.LEGACY_RESPECT_NULLABILITY_IN_TEXT_DATASET_CONVERSION) =>
+          s.asNullable
+        case other => other
+      }
+      .getOrElse {
+        TextInputCSVDataSource.inferFromDataset(
+          sparkSession,
+          csvDataset,
+          maybeFirstLine,
+          parsedOptions)
+      }
 
     ExprUtils.verifyColumnNameOfCorruptRecord(schema, parsedOptions.columnNameOfCorruptRecord)
     val actualSchema =
       StructType(schema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
 
-    val linesWithoutHeader: RDD[String] = maybeFirstLine.map { firstLine =>
-      val headerChecker = new CSVHeaderChecker(
-        actualSchema,
-        parsedOptions,
-        source = s"CSV source: $csvDataset")
-      headerChecker.checkHeaderColumnNames(firstLine)
-      filteredLines.rdd.mapPartitions(CSVUtils.filterHeaderLine(_, firstLine, parsedOptions))
-    }.getOrElse(filteredLines.rdd)
+    val linesWithoutHeader: RDD[String] = maybeFirstLine
+      .map { firstLine =>
+        val headerChecker =
+          new CSVHeaderChecker(actualSchema, parsedOptions, source = s"CSV source: $csvDataset")
+        headerChecker.checkHeaderColumnNames(firstLine)
+        filteredLines.rdd.mapPartitions(CSVUtils.filterHeaderLine(_, firstLine, parsedOptions))
+      }
+      .getOrElse(filteredLines.rdd)
 
     val parsed = linesWithoutHeader.mapPartitions { iter =>
       val rawParser = new UnivocityParser(actualSchema, parsedOptions)
@@ -273,13 +286,17 @@ class DataFrameReader private[sql](sparkSession: SparkSession)
 
     userSpecifiedSchema.foreach(checkXmlSchema)
 
-    val schema = userSpecifiedSchema.map {
-      case s if !SQLConf.get.getConf(
-        SQLConf.LEGACY_RESPECT_NULLABILITY_IN_TEXT_DATASET_CONVERSION) => s.asNullable
-      case other => other
-    }.getOrElse {
-      TextInputXmlDataSource.inferFromDataset(xmlDataset, parsedOptions)
-    }
+    val schema = userSpecifiedSchema
+      .map {
+        case s
+            if !SQLConf.get.getConf(
+              SQLConf.LEGACY_RESPECT_NULLABILITY_IN_TEXT_DATASET_CONVERSION) =>
+          s.asNullable
+        case other => other
+      }
+      .getOrElse {
+        TextInputXmlDataSource.inferFromDataset(xmlDataset, parsedOptions)
+      }
 
     ExprUtils.verifyColumnNameOfCorruptRecord(schema, parsedOptions.columnNameOfCorruptRecord)
     val actualSchema =
@@ -316,8 +333,11 @@ class DataFrameReader private[sql](sparkSession: SparkSession)
     assertNoSpecifiedSchema("table")
     val multipartIdentifier =
       sparkSession.sessionState.sqlParser.parseMultipartIdentifier(tableName)
-    Dataset.ofRows(sparkSession, UnresolvedRelation(multipartIdentifier,
-      new CaseInsensitiveStringMap(extraOptions.toMap.asJava)))
+    Dataset.ofRows(
+      sparkSession,
+      UnresolvedRelation(
+        multipartIdentifier,
+        new CaseInsensitiveStringMap(extraOptions.toMap.asJava)))
   }
 
   /** @inheritdoc */

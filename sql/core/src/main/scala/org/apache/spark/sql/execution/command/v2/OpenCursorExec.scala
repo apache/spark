@@ -28,29 +28,34 @@ import org.apache.spark.sql.scripting.{CursorClosed, CursorDeclared, CursorOpene
  * Physical plan node for opening cursors.
  *
  * Transitions cursor from Declared to Opened state by:
- * 1. Parsing the cursor's SQL query text to a LogicalPlan
- * 2. Binding parameters (if USING clause is provided)
- * 3. Analyzing the query (semantic analysis, resolution, type checking)
- * 4. Generating physical plan and creating the result iterator
+ *   1. Parsing the cursor's SQL query text to a LogicalPlan
+ *   2. Binding parameters (if USING clause is provided)
+ *   3. Analyzing the query (semantic analysis, resolution, type checking)
+ *   4. Generating physical plan and creating the result iterator
  *
- * CRITICAL: executeToIterator() MUST be called at OPEN time to capture snapshots.
- * This is the only point where Spark locks in file lists and Delta snapshots.
- * Simply creating the physical plan is not sufficient - execution must start.
+ * CRITICAL: executeToIterator() MUST be called at OPEN time to capture snapshots. This is the
+ * only point where Spark locks in file lists and Delta snapshots. Simply creating the physical
+ * plan is not sufficient - execution must start.
  *
- * The iterator is lazy - it doesn't materialize all data, but it does lock in
- * which files/versions will be scanned.
+ * The iterator is lazy - it doesn't materialize all data, but it does lock in which
+ * files/versions will be scanned.
  *
  * Uses ParameterizedQueryExecutor trait for unified parameter binding with EXECUTE IMMEDIATE.
  *
- * @param cursor CursorReference resolved during analysis phase
- * @param args Parameter expressions from USING clause
- * @param paramNames Parameter names extracted at parse time
+ * @param cursor
+ *   CursorReference resolved during analysis phase
+ * @param args
+ *   Parameter expressions from USING clause
+ * @param paramNames
+ *   Parameter names extracted at parse time
  */
 case class OpenCursorExec(
     cursor: Expression,
     args: Seq[Expression] = Seq.empty,
     paramNames: Seq[String] = Seq.empty)
-  extends LeafV2CommandExec with DataTypeErrorsBase with ParameterizedQueryExecutor {
+    extends LeafV2CommandExec
+    with DataTypeErrorsBase
+    with ParameterizedQueryExecutor {
 
   override protected def run(): Seq[InternalRow] = {
     // Extract CursorReference from the resolved cursor expression
@@ -62,10 +67,12 @@ case class OpenCursorExec(
     val cursorDef = cursorRef.definition
 
     // Get current cursor state and validate it's in Declared state
-    val currentState = scriptingContext.getCursorState(cursorRef).getOrElse(
-      throw new AnalysisException(
-        errorClass = "CURSOR_NOT_FOUND",
-        messageParameters = Map("cursorName" -> toSQLId(cursorRef.definition.name))))
+    val currentState = scriptingContext
+      .getCursorState(cursorRef)
+      .getOrElse(
+        throw new AnalysisException(
+          errorClass = "CURSOR_NOT_FOUND",
+          messageParameters = Map("cursorName" -> toSQLId(cursorRef.definition.name))))
 
     currentState match {
       case CursorDeclared | CursorClosed => // Expected states - new or closed cursor
@@ -81,9 +88,8 @@ case class OpenCursorExec(
 
     // Generate physical plan and create iterator at OPEN time
     // CRITICAL: executeToIterator() must be called NOW to capture snapshot
-    val df = org.apache.spark.sql.classic.Dataset.ofRows(
-      session.asInstanceOf[org.apache.spark.sql.classic.SparkSession],
-      analyzedQuery)
+    val df = org.apache.spark.sql.classic.Dataset
+      .ofRows(session.asInstanceOf[org.apache.spark.sql.classic.SparkSession], analyzedQuery)
     val resultIterator = df.queryExecution.executedPlan.executeToIterator()
 
     // Transition cursor state to Opened with iterator

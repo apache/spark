@@ -34,14 +34,11 @@ import org.apache.spark.util.ArrayImplicits._
 /**
  * `JackGenerator` can only be initialized with a `StructType`, a `MapType` or an `ArrayType`.
  * Once it is initialized with `StructType`, it can be used to write out a struct or an array of
- * struct. Once it is initialized with `MapType`, it can be used to write out a map or an array
- * of map. An exception will be thrown if trying to write out a struct if it is initialized with
- * a `MapType`, and vice verse.
+ * struct. Once it is initialized with `MapType`, it can be used to write out a map or an array of
+ * map. An exception will be thrown if trying to write out a struct if it is initialized with a
+ * `MapType`, and vice verse.
  */
-class JacksonGenerator(
-    dataType: DataType,
-    writer: Writer,
-    options: JSONOptions) {
+class JacksonGenerator(dataType: DataType, writer: Writer, options: JSONOptions) {
   // A `ValueWriter` is responsible for writing a field of an `InternalRow` to appropriate
   // JSON data. Here we are using `SpecializedGetters` rather than `InternalRow` so that
   // we can directly access data in `ArrayData` without the help of `SpecificMutableRow`.
@@ -49,8 +46,9 @@ class JacksonGenerator(
 
   // `JackGenerator` can only be initialized with a `StructType`, a `MapType`, a `ArrayType` or a
   // `VariantType`.
-  require(dataType.isInstanceOf[StructType] || dataType.isInstanceOf[MapType]
-    || dataType.isInstanceOf[ArrayType] || dataType.isInstanceOf[VariantType],
+  require(
+    dataType.isInstanceOf[StructType] || dataType.isInstanceOf[MapType]
+      || dataType.isInstanceOf[ArrayType] || dataType.isInstanceOf[VariantType],
     s"JacksonGenerator only supports to be initialized with a ${StructType.simpleString}, " +
       s"${MapType.simpleString}, ${ArrayType.simpleString} or ${VariantType.simpleString} but " +
       s"got ${dataType.catalogString}")
@@ -58,8 +56,10 @@ class JacksonGenerator(
   // `ValueWriter`s for all fields of the schema
   private lazy val rootFieldWriters: Array[ValueWriter] = dataType match {
     case st: StructType => st.map(_.dataType).map(makeWriter).toArray
-    case _ => throw QueryExecutionErrors.initialTypeNotTargetDataTypeError(
-      dataType, StructType.simpleString)
+    case _ =>
+      throw QueryExecutionErrors.initialTypeNotTargetDataTypeError(
+        dataType,
+        StructType.simpleString)
   }
 
   // `ValueWriter` for array data storing rows of the schema.
@@ -71,8 +71,8 @@ class JacksonGenerator(
 
   private lazy val mapElementWriter: ValueWriter = dataType match {
     case mt: MapType => makeWriter(mt.valueType)
-    case _ => throw QueryExecutionErrors.initialTypeNotTargetDataTypeError(
-      dataType, MapType.simpleString)
+    case _ =>
+      throw QueryExecutionErrors.initialTypeNotTargetDataTypeError(dataType, MapType.simpleString)
   }
 
   private val gen = {
@@ -82,7 +82,7 @@ class JacksonGenerator(
         new DefaultPrettyPrinter(PrettyPrinter.DEFAULT_SEPARATORS.withRootSeparator("")))
     }
     if (options.writeNonAsciiCharacterAsCodePoint) {
-      generator.setHighestNonEscapedChar(0x7F)
+      generator.setHighestNonEscapedChar(0x7f)
     }
     generator
   }
@@ -113,36 +113,28 @@ class JacksonGenerator(
 
   private def makeWriter(dataType: DataType): ValueWriter = dataType match {
     case NullType =>
-      (row: SpecializedGetters, ordinal: Int) =>
-        gen.writeNull()
+      (row: SpecializedGetters, ordinal: Int) => gen.writeNull()
 
     case BooleanType =>
-      (row: SpecializedGetters, ordinal: Int) =>
-        gen.writeBoolean(row.getBoolean(ordinal))
+      (row: SpecializedGetters, ordinal: Int) => gen.writeBoolean(row.getBoolean(ordinal))
 
     case ByteType =>
-      (row: SpecializedGetters, ordinal: Int) =>
-        gen.writeNumber(row.getByte(ordinal))
+      (row: SpecializedGetters, ordinal: Int) => gen.writeNumber(row.getByte(ordinal))
 
     case ShortType =>
-      (row: SpecializedGetters, ordinal: Int) =>
-        gen.writeNumber(row.getShort(ordinal))
+      (row: SpecializedGetters, ordinal: Int) => gen.writeNumber(row.getShort(ordinal))
 
     case IntegerType =>
-      (row: SpecializedGetters, ordinal: Int) =>
-        gen.writeNumber(row.getInt(ordinal))
+      (row: SpecializedGetters, ordinal: Int) => gen.writeNumber(row.getInt(ordinal))
 
     case LongType =>
-      (row: SpecializedGetters, ordinal: Int) =>
-        gen.writeNumber(row.getLong(ordinal))
+      (row: SpecializedGetters, ordinal: Int) => gen.writeNumber(row.getLong(ordinal))
 
     case FloatType =>
-      (row: SpecializedGetters, ordinal: Int) =>
-        gen.writeNumber(row.getFloat(ordinal))
+      (row: SpecializedGetters, ordinal: Int) => gen.writeNumber(row.getFloat(ordinal))
 
     case DoubleType =>
-      (row: SpecializedGetters, ordinal: Int) =>
-        gen.writeNumber(row.getDouble(ordinal))
+      (row: SpecializedGetters, ordinal: Int) => gen.writeNumber(row.getDouble(ordinal))
 
     case _: StringType =>
       (row: SpecializedGetters, ordinal: Int) =>
@@ -155,9 +147,9 @@ class JacksonGenerator(
 
     case TimestampNTZType =>
       (row: SpecializedGetters, ordinal: Int) =>
-      val timestampString =
-        timestampNTZFormatter.format(DateTimeUtils.microsToLocalDateTime(row.getLong(ordinal)))
-      gen.writeString(timestampString)
+        val timestampString =
+          timestampNTZFormatter.format(DateTimeUtils.microsToLocalDateTime(row.getLong(ordinal)))
+        gen.writeString(timestampString)
 
     case DateType =>
       (row: SpecializedGetters, ordinal: Int) =>
@@ -192,8 +184,7 @@ class JacksonGenerator(
         gen.writeString(timeString)
 
     case BinaryType =>
-      (row: SpecializedGetters, ordinal: Int) =>
-        gen.writeBinary(row.getBinary(ordinal))
+      (row: SpecializedGetters, ordinal: Int) => gen.writeBinary(row.getBinary(ordinal))
 
     case dt: DecimalType =>
       (row: SpecializedGetters, ordinal: Int) =>
@@ -237,7 +228,9 @@ class JacksonGenerator(
   }
 
   private def writeFields(
-      row: InternalRow, schema: StructType, fieldWriters: Seq[ValueWriter]): Unit = {
+      row: InternalRow,
+      schema: StructType,
+      fieldWriters: Seq[ValueWriter]): Unit = {
     var i = 0
     while (i < row.numFields) {
       val field = schema(i)
@@ -259,8 +252,7 @@ class JacksonGenerator(
     gen.writeEndArray()
   }
 
-  private def writeArrayData(
-      array: ArrayData, fieldWriter: ValueWriter): Unit = {
+  private def writeArrayData(array: ArrayData, fieldWriter: ValueWriter): Unit = {
     var i = 0
     while (i < array.numElements()) {
       if (!array.isNullAt(i)) {
@@ -272,8 +264,7 @@ class JacksonGenerator(
     }
   }
 
-  private def writeMapData(
-      map: MapData, mapType: MapType, fieldWriter: ValueWriter): Unit = {
+  private def writeMapData(map: MapData, mapType: MapType, fieldWriter: ValueWriter): Unit = {
     val keyArray = map.keyArray()
     val valueArray = map.valueArray()
     var i = 0
@@ -293,36 +284,41 @@ class JacksonGenerator(
   def flush(): Unit = gen.flush()
 
   /**
-   * Transforms a single `InternalRow` to JSON object using Jackson.
-   * This api calling will be validated through accessing `rootFieldWriters`.
+   * Transforms a single `InternalRow` to JSON object using Jackson. This api calling will be
+   * validated through accessing `rootFieldWriters`.
    *
-   * @param row The row to convert
+   * @param row
+   *   The row to convert
    */
   def write(row: InternalRow): Unit = {
-    writeObject(writeFields(
-      fieldWriters = rootFieldWriters.toImmutableArraySeq,
-      row = row,
-      schema = dataType.asInstanceOf[StructType]))
+    writeObject(
+      writeFields(
+        fieldWriters = rootFieldWriters.toImmutableArraySeq,
+        row = row,
+        schema = dataType.asInstanceOf[StructType]))
   }
 
   /**
    * Transforms multiple `InternalRow`s or `MapData`s to JSON array using Jackson
    *
-   * @param array The array of rows or maps to convert
+   * @param array
+   *   The array of rows or maps to convert
    */
   def write(array: ArrayData): Unit = writeArray(writeArrayData(array, arrElementWriter))
 
   /**
-   * Transforms a single `MapData` to JSON object using Jackson
-   * This api calling will will be validated through accessing `mapElementWriter`.
+   * Transforms a single `MapData` to JSON object using Jackson This api calling will will be
+   * validated through accessing `mapElementWriter`.
    *
-   * @param map a map to convert
+   * @param map
+   *   a map to convert
    */
   def write(map: MapData): Unit = {
-    writeObject(writeMapData(
-      fieldWriter = mapElementWriter,
-      map = map,
-      mapType = dataType.asInstanceOf[MapType]))
+    writeObject(
+      writeMapData(
+        fieldWriter = mapElementWriter,
+        map = map,
+        mapType = dataType.asInstanceOf[MapType]))
   }
 
   def write(v: VariantVal): Unit = {

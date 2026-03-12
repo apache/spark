@@ -27,7 +27,8 @@ import org.apache.spark.sql.execution.streaming.Offset
 /**
  * Offset for the [[FileStreamSource]].
  *
- * @param logOffset  Position in the [[FileStreamSourceLog]]
+ * @param logOffset
+ *   Position in the [[FileStreamSourceLog]]
  */
 case class FileStreamSourceOffset(logOffset: Long) extends Offset {
   override def json: String = {
@@ -42,15 +43,16 @@ object FileStreamSourceOffset {
     offset match {
       case f: FileStreamSourceOffset => f
       case SerializedOffset(str) =>
-        catching(classOf[NumberFormatException]).opt {
-          FileStreamSourceOffset(str.toLong)
-        }.getOrElse {
-          Serialization.read[FileStreamSourceOffset](str)
-        }
+        catching(classOf[NumberFormatException])
+          .opt {
+            FileStreamSourceOffset(str.toLong)
+          }
+          .getOrElse {
+            Serialization.read[FileStreamSourceOffset](str)
+          }
       case _ =>
         throw new IllegalArgumentException(
           s"Invalid conversion from offset of ${offset.getClass} to FileStreamSourceOffset")
     }
   }
 }
-

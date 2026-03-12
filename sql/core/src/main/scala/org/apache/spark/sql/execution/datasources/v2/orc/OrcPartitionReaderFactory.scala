@@ -44,12 +44,18 @@ import org.apache.spark.util.ArrayImplicits._
 /**
  * A factory used to create Orc readers.
  *
- * @param sqlConf SQL configuration.
- * @param broadcastedConf Broadcast serializable Hadoop Configuration.
- * @param dataSchema Schema of orc files.
- * @param readDataSchema Required data schema in the batch scan.
- * @param partitionSchema Schema of partitions.
- * @param options Options for parsing ORC files.
+ * @param sqlConf
+ *   SQL configuration.
+ * @param broadcastedConf
+ *   Broadcast serializable Hadoop Configuration.
+ * @param dataSchema
+ *   Schema of orc files.
+ * @param readDataSchema
+ *   Required data schema in the batch scan.
+ * @param partitionSchema
+ *   Schema of partitions.
+ * @param options
+ *   Options for parsing ORC files.
  */
 case class OrcPartitionReaderFactory(
     sqlConf: SQLConf,
@@ -60,7 +66,8 @@ case class OrcPartitionReaderFactory(
     filters: Array[Filter],
     aggregation: Option[Aggregation],
     options: OrcOptions,
-    memoryMode: MemoryMode) extends FilePartitionReaderFactory {
+    memoryMode: MemoryMode)
+    extends FilePartitionReaderFactory {
   private val resultSchema = StructType(readDataSchema.fields ++ partitionSchema.fields)
   private val isCaseSensitive = sqlConf.caseSensitiveAnalysis
   private val capacity = sqlConf.orcVectorizedReaderBatchSize
@@ -68,9 +75,9 @@ case class OrcPartitionReaderFactory(
 
   override def supportColumnarReads(partition: InputPartition): Boolean = {
     sqlConf.orcVectorizedReaderEnabled && sqlConf.wholeStageEnabled &&
-      !WholeStageCodegenExec.isTooManyFields(sqlConf, resultSchema) &&
-      resultSchema.forall(s => OrcUtils.supportColumnarReads(
-        s.dataType, sqlConf.orcVectorizedReaderNestedColumnEnabled))
+    !WholeStageCodegenExec.isTooManyFields(sqlConf, resultSchema) &&
+    resultSchema.forall(s =>
+      OrcUtils.supportColumnarReads(s.dataType, sqlConf.orcVectorizedReaderNestedColumnEnabled))
   }
 
   private def pushDownPredicates(orcSchema: TypeDescription, conf: Configuration): Unit = {
@@ -90,15 +97,21 @@ case class OrcPartitionReaderFactory(
     val filePath = file.toPath
 
     val orcSchema = Utils.tryWithResource(createORCReader(filePath, conf)._1)(_.getSchema)
-    val resultedColPruneInfo = OrcUtils.requestedColumnIds(
-      isCaseSensitive, dataSchema, readDataSchema, orcSchema, conf)
+    val resultedColPruneInfo =
+      OrcUtils.requestedColumnIds(isCaseSensitive, dataSchema, readDataSchema, orcSchema, conf)
 
     if (resultedColPruneInfo.isEmpty) {
       new EmptyPartitionReader[InternalRow]
     } else {
       val (requestedColIds, canPruneCols) = resultedColPruneInfo.get
-      OrcUtils.orcResultSchemaString(canPruneCols, dataSchema, resultSchema, partitionSchema, conf)
-      assert(requestedColIds.length == readDataSchema.length,
+      OrcUtils.orcResultSchemaString(
+        canPruneCols,
+        dataSchema,
+        resultSchema,
+        partitionSchema,
+        conf)
+      assert(
+        requestedColIds.length == readDataSchema.length,
         "[BUG] requested column IDs do not match required schema")
 
       val taskConf = new Configuration(conf)
@@ -113,13 +126,17 @@ case class OrcPartitionReaderFactory(
       val fileReader = new PartitionReader[InternalRow] {
         override def next(): Boolean = orcRecordReader.nextKeyValue()
 
-        override def get(): InternalRow = deserializer.deserialize(orcRecordReader.getCurrentValue)
+        override def get(): InternalRow =
+          deserializer.deserialize(orcRecordReader.getCurrentValue)
 
         override def close(): Unit = orcRecordReader.close()
       }
 
-      new PartitionReaderWithPartitionValues(fileReader, readDataSchema,
-        partitionSchema, file.partitionValues)
+      new PartitionReaderWithPartitionValues(
+        fileReader,
+        readDataSchema,
+        partitionSchema,
+        file.partitionValues)
     }
   }
 
@@ -131,17 +148,22 @@ case class OrcPartitionReaderFactory(
     val filePath = file.toPath
     lazy val (reader, readerOptions) = createORCReader(filePath, conf)
     val orcSchema = Utils.tryWithResource(reader)(_.getSchema)
-    val resultedColPruneInfo = OrcUtils.requestedColumnIds(
-      isCaseSensitive, dataSchema, readDataSchema, orcSchema, conf)
+    val resultedColPruneInfo =
+      OrcUtils.requestedColumnIds(isCaseSensitive, dataSchema, readDataSchema, orcSchema, conf)
 
     if (resultedColPruneInfo.isEmpty) {
       new EmptyPartitionReader
     } else {
       val (requestedDataColIds, canPruneCols) = resultedColPruneInfo.get
-      val resultSchemaString = OrcUtils.orcResultSchemaString(canPruneCols,
-        dataSchema, resultSchema, partitionSchema, conf)
+      val resultSchemaString = OrcUtils.orcResultSchemaString(
+        canPruneCols,
+        dataSchema,
+        resultSchema,
+        partitionSchema,
+        conf)
       val requestedColIds = requestedDataColIds ++ Array.fill(partitionSchema.length)(-1)
-      assert(requestedColIds.length == resultSchema.length,
+      assert(
+        requestedColIds.length == resultSchema.length,
         "[BUG] requested column IDs do not match required schema")
       val taskConf = new Configuration(conf)
 
@@ -190,8 +212,13 @@ case class OrcPartitionReaderFactory(
       private lazy val row: InternalRow = {
         Utils.tryWithResource(createORCReader(filePath, conf)._1) { reader =>
           OrcUtils.createAggInternalRowFromFooter(
-            reader, filePath.toString, dataSchema, partitionSchema, aggregation.get,
-            readDataSchema, file.partitionValues)
+            reader,
+            filePath.toString,
+            dataSchema,
+            partitionSchema,
+            aggregation.get,
+            readDataSchema,
+            file.partitionValues)
         }
       }
 
@@ -218,8 +245,13 @@ case class OrcPartitionReaderFactory(
       private lazy val batch: ColumnarBatch = {
         Utils.tryWithResource(createORCReader(filePath, conf)._1) { reader =>
           val row = OrcUtils.createAggInternalRowFromFooter(
-            reader, filePath.toString, dataSchema, partitionSchema, aggregation.get,
-            readDataSchema, file.partitionValues)
+            reader,
+            filePath.toString,
+            dataSchema,
+            partitionSchema,
+            aggregation.get,
+            readDataSchema,
+            file.partitionValues)
           AggregatePushDownUtils.convertAggregatesRowToBatch(row, readDataSchema, offHeap = false)
         }
       }

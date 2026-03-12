@@ -30,9 +30,9 @@ import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.types.StructType
 
 /**
- * A V2SessionCatalog implementation that can be extended to generate arbitrary `Table` definitions
- * for testing DDL as well as write operations (through df.write.saveAsTable, df.write.insertInto
- * and SQL), also supports v2 function operations.
+ * A V2SessionCatalog implementation that can be extended to generate arbitrary `Table`
+ * definitions for testing DDL as well as write operations (through df.write.saveAsTable,
+ * df.write.insertInto and SQL), also supports v2 function operations.
  */
 private[connector] trait TestV2SessionCatalogBase[T <: Table] extends DelegatingCatalogExtension {
 
@@ -44,7 +44,8 @@ private[connector] trait TestV2SessionCatalogBase[T <: Table] extends Delegating
   private val funcCreated: AtomicBoolean = new AtomicBoolean(false)
 
   def checkUsage(): Unit = {
-    assert(tableCreated.get || funcCreated.get,
+    assert(
+      tableCreated.get || funcCreated.get,
       "Either tables or functions are not created, maybe didn't use the session catalog code path?")
   }
 

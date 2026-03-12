@@ -23,8 +23,8 @@ import org.apache.spark.sql.connector.catalog.SupportsNamespaces
 
 /**
  * This base suite contains unified tests for the `ALTER NAMESPACE ... SET LOCATION` command that
- * check V1 and V2 table catalogs. The tests that cannot run for all supported catalogs are located
- * in more specific test suites:
+ * check V1 and V2 table catalogs. The tests that cannot run for all supported catalogs are
+ * located in more specific test suites:
  *
  *   - V2 table catalog tests:
  *     `org.apache.spark.sql.execution.command.v2.AlterNamespaceSetLocationSuite`
@@ -33,7 +33,7 @@ import org.apache.spark.sql.connector.catalog.SupportsNamespaces
  *     - V1 In-Memory catalog:
  *       `org.apache.spark.sql.execution.command.v1.AlterNamespaceSetLocationSuite`
  *     - V1 Hive External catalog:
- *        `org.apache.spark.sql.hive.execution.command.AlterNamespaceSetLocationSuite`
+ *       `org.apache.spark.sql.hive.execution.command.AlterNamespaceSetLocationSuite`
  */
 trait AlterNamespaceSetLocationSuiteBase extends QueryTest with DDLCommandTestUtils {
   override val command = "ALTER NAMESPACE ... SET LOCATION"
@@ -61,7 +61,8 @@ trait AlterNamespaceSetLocationSuiteBase extends QueryTest with DDLCommandTestUt
     val e = intercept[AnalysisException] {
       sql(s"ALTER DATABASE $catalog.$ns SET LOCATION 'loc'")
     }
-    checkError(e,
+    checkError(
+      e,
       condition = "SCHEMA_NOT_FOUND",
       parameters = Map("schemaName" -> s"`$catalog`.`$ns`"))
   }
@@ -71,8 +72,9 @@ trait AlterNamespaceSetLocationSuiteBase extends QueryTest with DDLCommandTestUt
   protected def runBasicTest(): Unit = {
     val ns = s"$catalog.$namespace"
     withNamespace(ns) {
-      sql(s"CREATE NAMESPACE IF NOT EXISTS $ns COMMENT " +
-        "'test namespace' LOCATION '/tmp/loc_test_1'")
+      sql(
+        s"CREATE NAMESPACE IF NOT EXISTS $ns COMMENT " +
+          "'test namespace' LOCATION '/tmp/loc_test_1'")
       sql(s"ALTER NAMESPACE $ns SET LOCATION '/tmp/loc_test_2'")
       assert(getLocation(ns).contains("file:/tmp/loc_test_2"))
     }

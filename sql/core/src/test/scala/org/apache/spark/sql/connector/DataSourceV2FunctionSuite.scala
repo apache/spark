@@ -143,29 +143,22 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
   test("undefined function") {
     withSQLConf(SQLConf.DEFAULT_CATALOG.key -> "testcat") {
       checkError(
-        exception = intercept[AnalysisException](
-          sql("SELECT testcat.non_exist('abc')").collect()
-        ),
+        exception =
+          intercept[AnalysisException](sql("SELECT testcat.non_exist('abc')").collect()),
         condition = "UNRESOLVED_ROUTINE",
         parameters = Map(
           "routineName" -> "`testcat`.`non_exist`",
           "searchPath" -> "[`system`.`builtin`, `system`.`session`, `testcat`]"),
-        context = ExpectedContext(
-          fragment = "testcat.non_exist('abc')",
-          start = 7,
-          stop = 30))
+        context = ExpectedContext(fragment = "testcat.non_exist('abc')", start = 7, stop = 30))
     }
   }
 
   test("non-function catalog") {
     withSQLConf("spark.sql.catalog.testcat" -> classOf[BasicInMemoryTableCatalog].getName) {
       checkError(
-        exception = intercept[AnalysisException](
-          sql("SELECT testcat.strlen('abc')").collect()
-        ),
+        exception = intercept[AnalysisException](sql("SELECT testcat.strlen('abc')").collect()),
         condition = "MISSING_CATALOG_ABILITY.FUNCTIONS",
-        parameters = Map("plugin" -> "testcat")
-      )
+        parameters = Map("plugin" -> "testcat"))
     }
   }
 
@@ -177,18 +170,15 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
         sql("DESCRIBE FUNCTION testcat.abc")
       },
       condition = "MISSING_CATALOG_ABILITY.FUNCTIONS",
-      parameters = Map("plugin" -> "testcat")
-    )
+      parameters = Map("plugin" -> "testcat"))
 
     checkError(
       exception = intercept[AnalysisException] {
         sql("DESCRIBE FUNCTION default.ns1.ns2.fun")
       },
       condition = "REQUIRES_SINGLE_PART_NAMESPACE",
-      parameters = Map(
-        "sessionCatalog" -> "spark_catalog",
-        "identifier" -> "`default`.`ns1`.`ns2`.`fun`")
-    )
+      parameters =
+        Map("sessionCatalog" -> "spark_catalog", "identifier" -> "`default`.`ns1`.`ns2`.`fun`"))
   }
 
   test("DROP FUNCTION: only support session catalog") {
@@ -204,10 +194,8 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
         sql("DROP FUNCTION default.ns1.ns2.fun")
       },
       condition = "REQUIRES_SINGLE_PART_NAMESPACE",
-      parameters = Map(
-        "sessionCatalog" -> "spark_catalog",
-        "identifier" -> "`default`.`ns1`.`ns2`.`fun`")
-    )
+      parameters =
+        Map("sessionCatalog" -> "spark_catalog", "identifier" -> "`default`.`ns1`.`ns2`.`fun`"))
   }
 
   test("DROP FUNCTION IF EXISTS in non-existing namespace should not fail") {
@@ -240,14 +228,13 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
         sql("REFRESH FUNCTION default.ns1.ns2.fun")
       },
       condition = "REQUIRES_SINGLE_PART_NAMESPACE",
-      parameters = Map(
-        "sessionCatalog" -> "spark_catalog",
-        "identifier" -> "`default`.`ns1`.`ns2`.`fun`")
-    )
+      parameters =
+        Map("sessionCatalog" -> "spark_catalog", "identifier" -> "`default`.`ns1`.`ns2`.`fun`"))
   }
 
   test("built-in with non-function catalog should still work") {
-    withSQLConf(SQLConf.DEFAULT_CATALOG.key -> "testcat",
+    withSQLConf(
+      SQLConf.DEFAULT_CATALOG.key -> "testcat",
       "spark.sql.catalog.testcat" -> classOf[BasicInMemoryTableCatalog].getName) {
       checkAnswer(sql("SELECT length('abc')"), Row(3))
     }
@@ -260,8 +247,7 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
   }
 
   test("looking up higher-order function with non-session catalog") {
-    checkAnswer(sql("SELECT transform(array(1, 2, 3), x -> x + 1)"),
-      Row(Array(2, 3, 4)) :: Nil)
+    checkAnswer(sql("SELECT transform(array(1, 2, 3), x -> x + 1)"), Row(Array(2, 3, 4)) :: Nil)
   }
 
   test("built-in override with default v2 function catalog") {
@@ -291,7 +277,9 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
     val viewName = "my_view"
     withView(viewName) {
       withSQLConf(SQLConf.DEFAULT_CATALOG.key -> "testcat") {
-        catalog("testcat").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns"), emptyProps)
+        catalog("testcat")
+          .asInstanceOf[SupportsNamespaces]
+          .createNamespace(Array("ns"), emptyProps)
         addFunction(Identifier.of(Array("ns"), "my_avg"), IntegralAverage)
         sql("USE ns")
         sql(s"CREATE TEMPORARY VIEW $viewName AS SELECT my_avg(col1) FROM values (1), (2), (3)")
@@ -300,7 +288,8 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
       // change default catalog and namespace and add a function with the same name but with no
       // implementation
       withSQLConf(SQLConf.DEFAULT_CATALOG.key -> "testcat2") {
-        catalog("testcat2").asInstanceOf[SupportsNamespaces]
+        catalog("testcat2")
+          .asInstanceOf[SupportsNamespaces]
           .createNamespace(Array("ns2"), emptyProps)
         addFunction(Identifier.of(Array("ns2"), "my_avg"), NoImplAverage)
         sql("USE ns2")
@@ -336,7 +325,8 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
   test("scalar function: bad magic method") {
     catalog("testcat").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns"), emptyProps)
     addFunction(Identifier.of(Array("ns"), "strlen"), StrLen(StrLenBadMagic))
-    intercept[SparkUnsupportedOperationException](sql("SELECT testcat.ns.strlen('abc')").collect())
+    intercept[SparkUnsupportedOperationException](
+      sql("SELECT testcat.ns.strlen('abc')").collect())
   }
 
   test("scalar function: bad magic method with default impl") {
@@ -348,7 +338,8 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
   test("scalar function: no implementation found") {
     catalog("testcat").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns"), emptyProps)
     addFunction(Identifier.of(Array("ns"), "strlen"), StrLen(StrLenNoImpl))
-    intercept[SparkUnsupportedOperationException](sql("SELECT testcat.ns.strlen('abc')").collect())
+    intercept[SparkUnsupportedOperationException](
+      sql("SELECT testcat.ns.strlen('abc')").collect())
   }
 
   test("scalar function: invalid parameter type or length") {
@@ -358,17 +349,9 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
     checkError(
       exception = intercept[AnalysisException](sql("SELECT testcat.ns.strlen(42)")),
       condition = "_LEGACY_ERROR_TEMP_1198",
-      parameters = Map(
-        "unbound" -> "strlen",
-        "arguments" -> "int",
-        "unsupported" -> "Expect StringType"
-      ),
-      context = ExpectedContext(
-        fragment = "testcat.ns.strlen(42)",
-        start = 7,
-        stop = 27
-      )
-    )
+      parameters =
+        Map("unbound" -> "strlen", "arguments" -> "int", "unsupported" -> "Expect StringType"),
+      context = ExpectedContext(fragment = "testcat.ns.strlen(42)", start = 7, stop = 27))
 
     checkError(
       exception = intercept[AnalysisException](sql("SELECT testcat.ns.strlen('a', 'b')")),
@@ -376,66 +359,51 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
       parameters = Map(
         "unbound" -> "strlen",
         "arguments" -> "string, string",
-        "unsupported" -> "Expect exactly one argument"
-      ),
-      context = ExpectedContext(
-        fragment = "testcat.ns.strlen('a', 'b')",
-        start = 7,
-        stop = 33
-      )
-    )
+        "unsupported" -> "Expect exactly one argument"),
+      context = ExpectedContext(fragment = "testcat.ns.strlen('a', 'b')", start = 7, stop = 33))
   }
 
   test("scalar function: default produceResult in Java") {
     catalog("testcat").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns"), emptyProps)
-    addFunction(Identifier.of(Array("ns"), "strlen"),
-      new JavaStrLen(new JavaStrLenDefault))
+    addFunction(Identifier.of(Array("ns"), "strlen"), new JavaStrLen(new JavaStrLenDefault))
     checkAnswer(sql("SELECT testcat.ns.strlen('abc')"), Row(3) :: Nil)
   }
 
   test("scalar function: magic method in Java") {
     catalog("testcat").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns"), emptyProps)
-    addFunction(Identifier.of(Array("ns"), "strlen"),
-      new JavaStrLen(new JavaStrLenMagic))
+    addFunction(Identifier.of(Array("ns"), "strlen"), new JavaStrLen(new JavaStrLenMagic))
     checkAnswer(sql("SELECT testcat.ns.strlen('abc')"), Row(3) :: Nil)
   }
 
   test("scalar function: static magic method in Java") {
     catalog("testcat").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns"), emptyProps)
-    addFunction(Identifier.of(Array("ns"), "strlen"),
-      new JavaStrLen(new JavaStrLenStaticMagic))
+    addFunction(Identifier.of(Array("ns"), "strlen"), new JavaStrLen(new JavaStrLenStaticMagic))
     checkAnswer(sql("SELECT testcat.ns.strlen('abc')"), Row(3) :: Nil)
   }
 
   test("scalar function: magic method should take higher precedence in Java") {
     catalog("testcat").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns"), emptyProps)
-    addFunction(Identifier.of(Array("ns"), "strlen"),
-      new JavaStrLen(new JavaStrLenBoth))
+    addFunction(Identifier.of(Array("ns"), "strlen"), new JavaStrLen(new JavaStrLenBoth))
     // to differentiate, the static method returns string length + 100
     checkAnswer(sql("SELECT testcat.ns.strlen('abc')"), Row(103) :: Nil)
   }
 
   test("scalar function: bad static magic method should fallback to non-static") {
     catalog("testcat").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns"), emptyProps)
-    addFunction(Identifier.of(Array("ns"), "strlen"),
+    addFunction(
+      Identifier.of(Array("ns"), "strlen"),
       new JavaStrLen(new JavaStrLenBadStaticMagic))
     checkAnswer(sql("SELECT testcat.ns.strlen('abc')"), Row(103) :: Nil)
   }
 
   test("scalar function: no implementation found in Java") {
     catalog("testcat").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns"), emptyProps)
-    addFunction(Identifier.of(Array("ns"), "strlen"),
-      new JavaStrLen(new JavaStrLenNoImpl))
+    addFunction(Identifier.of(Array("ns"), "strlen"), new JavaStrLen(new JavaStrLenNoImpl))
     checkError(
       exception = intercept[AnalysisException](sql("SELECT testcat.ns.strlen('abc')").collect()),
       condition = "SCALAR_FUNCTION_NOT_FULLY_IMPLEMENTED",
       parameters = Map("scalarFunc" -> "`strlen`"),
-      context = ExpectedContext(
-        fragment = "testcat.ns.strlen('abc')",
-        start = 7,
-        stop = 30
-      )
-    )
+      context = ExpectedContext(fragment = "testcat.ns.strlen('abc')", start = 7, stop = 30))
   }
 
   test("SPARK-35390: scalar function w/ bad input types") {
@@ -444,17 +412,9 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
     checkError(
       exception = intercept[AnalysisException](sql("SELECT testcat.ns.strlen('abc')").collect()),
       condition = "_LEGACY_ERROR_TEMP_1199",
-      parameters = Map(
-        "bound" -> "strlen_bad_input_types",
-        "argsLen" -> "1",
-        "inputTypesLen" -> "2"
-      ),
-      context = ExpectedContext(
-        fragment = "testcat.ns.strlen('abc')",
-        start = 7,
-        stop = 30
-      )
-    )
+      parameters =
+        Map("bound" -> "strlen_bad_input_types", "argsLen" -> "1", "inputTypesLen" -> "2"),
+      context = ExpectedContext(fragment = "testcat.ns.strlen('abc')", start = 7, stop = 30))
   }
 
   test("SPARK-35390: scalar function w/ mismatch type parameters from magic method") {
@@ -464,12 +424,7 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
       exception = intercept[AnalysisException](sql("SELECT testcat.ns.add(1L, 2L)").collect()),
       condition = "SCALAR_FUNCTION_NOT_FULLY_IMPLEMENTED",
       parameters = Map("scalarFunc" -> "`long_add_mismatch_magic`"),
-      context = ExpectedContext(
-        fragment = "testcat.ns.add(1L, 2L)",
-        start = 7,
-        stop = 28
-      )
-    )
+      context = ExpectedContext(fragment = "testcat.ns.add(1L, 2L)", start = 7, stop = 28))
   }
 
   test("SPARK-49549: scalar function w/ mismatch a compatible ScalarFunction#produceResult") {
@@ -482,18 +437,18 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
     catalog("testcat").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns"), emptyProps)
     addFunction(Identifier.of(Array("ns"), "my_strlen"), StrLen(CharLength))
     checkError(
-      exception = intercept[SparkUnsupportedOperationException]
-        (sql("SELECT testcat.ns.my_strlen('abc')").collect()),
+      exception = intercept[SparkUnsupportedOperationException](
+        sql("SELECT testcat.ns.my_strlen('abc')").collect()),
       condition = "SCALAR_FUNCTION_NOT_COMPATIBLE",
-      parameters = Map("scalarFunc" -> "`CHAR_LENGTH`")
-    )
+      parameters = Map("scalarFunc" -> "`CHAR_LENGTH`"))
   }
 
   test("SPARK-35390: scalar function w/ type coercion") {
     catalog("testcat").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns"), emptyProps)
     addFunction(Identifier.of(Array("ns"), "add"), new JavaLongAdd(new JavaLongAddDefault(false)))
     addFunction(Identifier.of(Array("ns"), "add2"), new JavaLongAdd(new JavaLongAddMagic(false)))
-    addFunction(Identifier.of(Array("ns"), "add3"),
+    addFunction(
+      Identifier.of(Array("ns"), "add3"),
       new JavaLongAdd(new JavaLongAddStaticMagic(false)))
     Seq("add", "add2", "add3").foreach { name =>
       checkAnswer(sql(s"SELECT testcat.ns.$name(42, 58)"), Row(100) :: Nil)
@@ -519,21 +474,19 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
           "paramIndex" -> paramIndex,
           "inputSql" -> "\"\\(DATE '2021-06-01' - DATE '2011-06-01'\\)\"",
           "inputType" -> "\"INTERVAL DAY\"",
-          "requiredType" -> "\"BIGINT\""
-        ),
+          "requiredType" -> "\"BIGINT\""),
         context = ExpectedContext(
           fragment = s"testcat.ns.$name(date '2021-06-01' - date '2011-06-01', 93)",
           start = 7,
-          stop = sqlText.length - 1
-        )
-      )
+          stop = sqlText.length - 1))
     }
   }
 
   test("SPARK-35389: magic function should handle null arguments") {
     catalog("testcat").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns"), emptyProps)
     addFunction(Identifier.of(Array("ns"), "strlen"), new JavaStrLen(new JavaStrLenMagicNullSafe))
-    addFunction(Identifier.of(Array("ns"), "strlen2"),
+    addFunction(
+      Identifier.of(Array("ns"), "strlen2"),
       new JavaStrLen(new JavaStrLenStaticMagicNullSafe))
     Seq("strlen", "strlen2").foreach { name =>
       checkAnswer(sql(s"SELECT testcat.ns.$name(CAST(NULL as STRING))"), Row(0) :: Nil)
@@ -543,20 +496,27 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
   test("SPARK-35389: magic function should handle null primitive arguments") {
     catalog("testcat").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns"), emptyProps)
     addFunction(Identifier.of(Array("ns"), "add"), new JavaLongAdd(new JavaLongAddMagic(false)))
-    addFunction(Identifier.of(Array("ns"), "static_add"),
+    addFunction(
+      Identifier.of(Array("ns"), "static_add"),
       new JavaLongAdd(new JavaLongAddMagic(false)))
 
     Seq("add", "static_add").foreach { name =>
       Seq(true, false).foreach { codegenEnabled =>
         val codeGenFactoryMode = if (codegenEnabled) FALLBACK else NO_CODEGEN
 
-        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegenEnabled.toString,
+        withSQLConf(
+          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegenEnabled.toString,
           SQLConf.CODEGEN_FACTORY_MODE.key -> codeGenFactoryMode.toString) {
 
-          checkAnswer(sql(s"SELECT testcat.ns.$name(CAST(NULL as BIGINT), 42L)"), Row(null) :: Nil)
-          checkAnswer(sql(s"SELECT testcat.ns.$name(42L, CAST(NULL as BIGINT))"), Row(null) :: Nil)
+          checkAnswer(
+            sql(s"SELECT testcat.ns.$name(CAST(NULL as BIGINT), 42L)"),
+            Row(null) :: Nil)
+          checkAnswer(
+            sql(s"SELECT testcat.ns.$name(42L, CAST(NULL as BIGINT))"),
+            Row(null) :: Nil)
           checkAnswer(sql(s"SELECT testcat.ns.$name(42L, 58L)"), Row(100) :: Nil)
-          checkAnswer(sql(s"SELECT testcat.ns.$name(CAST(NULL as BIGINT), CAST(NULL as BIGINT))"),
+          checkAnswer(
+            sql(s"SELECT testcat.ns.$name(CAST(NULL as BIGINT), CAST(NULL as BIGINT))"),
             Row(null) :: Nil)
         }
       }
@@ -568,16 +528,10 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
     addFunction(Identifier.of(Array("ns"), "strlen"), StrLen(BadBoundFunction))
 
     checkError(
-      exception = intercept[AnalysisException](
-        sql("SELECT testcat.ns.strlen('abc')")),
+      exception = intercept[AnalysisException](sql("SELECT testcat.ns.strlen('abc')")),
       condition = "INVALID_UDF_IMPLEMENTATION",
-      parameters = Map(
-        "funcName" -> "`bad_bound_func`"),
-      context = ExpectedContext(
-        fragment = "testcat.ns.strlen('abc')",
-        start = 7,
-        stop = 30)
-    )
+      parameters = Map("funcName" -> "`bad_bound_func`"),
+      context = ExpectedContext(fragment = "testcat.ns.strlen('abc')", start = 7, stop = 30))
   }
 
   test("aggregate function: lookup int average") {
@@ -637,14 +591,8 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
         parameters = Map(
           "unbound" -> "iavg",
           "arguments" -> "smallint",
-          "unsupported" -> "Unsupported non-integral type: ShortType"
-        ),
-        context = ExpectedContext(
-          fragment = "testcat.ns.avg(i)",
-          start = 7,
-          stop = 23
-        )
-      )
+          "unsupported" -> "Unsupported non-integral type: ShortType"),
+        context = ExpectedContext(fragment = "testcat.ns.avg(i)", start = 7, stop = 23))
     }
   }
 
@@ -655,18 +603,21 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
       addFunction(Identifier.of(Array("ns"), "avg"), UnboundDecimalAverage)
 
       (1 to 100).toDF().write.saveAsTable("testcat.ns.t1")
-      checkAnswer(sql("SELECT testcat.ns.avg(value) from testcat.ns.t1"),
+      checkAnswer(
+        sql("SELECT testcat.ns.avg(value) from testcat.ns.t1"),
         Row(BigDecimal(50.5)) :: Nil)
 
       (1 to 100).map(BigDecimal(_)).toDF().write.saveAsTable("testcat.ns.t2")
-      checkAnswer(sql("SELECT testcat.ns.avg(value) from testcat.ns.t2"),
+      checkAnswer(
+        sql("SELECT testcat.ns.avg(value) from testcat.ns.t2"),
         Row(BigDecimal(50.5)) :: Nil)
 
       // can't cast interval to decimal
       checkError(
         exception = intercept[AnalysisException] {
-          sql("SELECT testcat.ns.avg(*) from values " +
-            "(date '2021-06-01' - date '2011-06-01'), (date '2000-01-01' - date '1900-01-01')")
+          sql(
+            "SELECT testcat.ns.avg(*) from values " +
+              "(date '2021-06-01' - date '2011-06-01'), (date '2000-01-01' - date '1900-01-01')")
         },
         condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
         parameters = Map(
@@ -674,14 +625,8 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
           "paramIndex" -> "first",
           "inputSql" -> "\"col1\"",
           "inputType" -> "\"INTERVAL DAY\"",
-          "requiredType" -> "\"DECIMAL(38,18)\""
-        ),
-        context = ExpectedContext(
-          fragment = "testcat.ns.avg(*)",
-          start = 7,
-          stop = 23
-        )
-      )
+          "requiredType" -> "\"DECIMAL(38,18)\""),
+        context = ExpectedContext(fragment = "testcat.ns.avg(*)", start = 7, stop = 23))
     }
   }
 
@@ -689,22 +634,26 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
     def checkDeterministic(df: DataFrame): Unit = {
       val result = df.queryExecution.executedPlan.find(_.isInstanceOf[ProjectExec])
       assert(result.isDefined, s"Expect to find ProjectExec")
-      assert(!result.get.asInstanceOf[ProjectExec].projectList.exists(_.deterministic),
+      assert(
+        !result.get.asInstanceOf[ProjectExec].projectList.exists(_.deterministic),
         "Expect expressions in projectList to be non-deterministic")
     }
 
     catalog("testcat").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns"), emptyProps)
-    Seq(new JavaRandomAddDefault, new JavaRandomAddMagic,
-        new JavaRandomAddStaticMagic).foreach { fn =>
-      addFunction(Identifier.of(Array("ns"), "rand_add"), new JavaRandomAdd(fn))
-      checkDeterministic(sql("SELECT testcat.ns.rand_add(42)"))
+    Seq(new JavaRandomAddDefault, new JavaRandomAddMagic, new JavaRandomAddStaticMagic).foreach {
+      fn =>
+        addFunction(Identifier.of(Array("ns"), "rand_add"), new JavaRandomAdd(fn))
+        checkDeterministic(sql("SELECT testcat.ns.rand_add(42)"))
     }
 
     // A function call is non-deterministic if one of its arguments is non-deterministic
-    Seq(new JavaLongAddDefault(true), new JavaLongAddMagic(true),
-        new JavaLongAddStaticMagic(true)).foreach { fn =>
+    Seq(
+      new JavaLongAddDefault(true),
+      new JavaLongAddMagic(true),
+      new JavaLongAddStaticMagic(true)).foreach { fn =>
       addFunction(Identifier.of(Array("ns"), "add"), new JavaLongAdd(fn))
-      addFunction(Identifier.of(Array("ns"), "rand_add"),
+      addFunction(
+        Identifier.of(Array("ns"), "rand_add"),
         new JavaRandomAdd(new JavaRandomAddDefault))
       checkDeterministic(sql("SELECT testcat.ns.add(10, testcat.ns.rand_add(42))"))
     }
@@ -836,7 +785,9 @@ object DecimalAverage extends AggregateFunction[(Decimal, Int), Decimal] {
     if (input.isNullAt(0)) {
       state
     } else {
-      val l = input.getDecimal(0, DecimalType.SYSTEM_DEFAULT.precision,
+      val l = input.getDecimal(
+        0,
+        DecimalType.SYSTEM_DEFAULT.precision,
         DecimalType.SYSTEM_DEFAULT.scale)
       state match {
         case (_, d) if d == 0 =>

@@ -57,8 +57,11 @@ import org.apache.spark.unsafe.types.UTF8String
 /**
  * Test cases for the [[SparkSessionExtensions]].
  */
-class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with AdaptiveSparkPlanHelper
-  with PlanTest {
+class SparkSessionExtensionSuite
+    extends SparkFunSuite
+    with SQLHelper
+    with AdaptiveSparkPlanHelper
+    with PlanTest {
   private def create(
       builder: SparkSessionExtensionsProvider): Seq[SparkSessionExtensionsProvider] = Seq(builder)
 
@@ -68,18 +71,20 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
     SparkSession.clearDefaultSession()
   }
 
-  private def withSession(
-      builders: Seq[SparkSessionExtensionsProvider])(f: SparkSession => Unit): Unit = {
+  private def withSession(builders: Seq[SparkSessionExtensionsProvider])(
+      f: SparkSession => Unit): Unit = {
     val builder = SparkSession.builder().master("local[1]")
     builders.foreach(builder.withExtensions)
     val spark = builder.getOrCreate()
-    try f(spark) finally {
+    try f(spark)
+    finally {
       stop(spark)
     }
   }
 
   private def withTable(spark: SparkSession, tableNames: String*)(f: => Unit): Unit = {
-    try f finally {
+    try f
+    finally {
       tableNames.foreach { name =>
         spark.sql(s"DROP TABLE IF EXISTS $name")
       }
@@ -148,10 +153,10 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
   }
 
   test("inject multiple rules") {
-    withSession(Seq(_.injectOptimizerRule(MyRule),
-        _.injectPlannerStrategy(MySparkStrategy))) { session =>
-      assert(session.sessionState.optimizer.batches.flatMap(_.rules).contains(MyRule(session)))
-      assert(session.sessionState.planner.strategies.contains(MySparkStrategy(session)))
+    withSession(Seq(_.injectOptimizerRule(MyRule), _.injectPlannerStrategy(MySparkStrategy))) {
+      session =>
+        assert(session.sessionState.optimizer.batches.flatMap(_.rules).contains(MyRule(session)))
+        assert(session.sessionState.planner.strategies.contains(MySparkStrategy(session)))
     }
   }
 
@@ -183,17 +188,16 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
 
     override def apply(plan: LogicalPlan): LogicalPlan =
       plan.resolveOperators {
-      case h: UnresolvedHint if MY_HINT_NAME.contains(h.name.toUpperCase(Locale.ROOT)) =>
-        LocalRelation(h.output, data = Seq.empty, isStreaming = h.isStreaming)
-    }
+        case h: UnresolvedHint if MY_HINT_NAME.contains(h.name.toUpperCase(Locale.ROOT)) =>
+          LocalRelation(h.output, data = Seq.empty, isStreaming = h.isStreaming)
+      }
   }
 
   test("inject custom hint rule") {
     withSession(Seq(_.injectHintResolutionRule(MyHintRule))) { session =>
       assert(
         session.range(1).hint("CONVERT_TO_EMPTY").logicalPlan.isInstanceOf[LocalRelation],
-        "plan is expected to be a local relation"
-      )
+        "plan is expected to be a local relation")
     }
   }
 
@@ -209,10 +213,12 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
     }
     withSession(extensions) { session =>
       session.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, true)
-      assert(session.sessionState.adaptiveRulesHolder.queryStagePrepRules
-        .contains(MyQueryStagePrepRule()))
-      assert(session.sessionState.columnarRules.contains(
-        MyColumnarRule(MyNewQueryStageRule(), MyNewQueryStageRule())))
+      assert(
+        session.sessionState.adaptiveRulesHolder.queryStagePrepRules
+          .contains(MyQueryStagePrepRule()))
+      assert(
+        session.sessionState.columnarRules.contains(
+          MyColumnarRule(MyNewQueryStageRule(), MyNewQueryStageRule())))
       import session.implicits._
       val data = Seq((100L), (200L), (300L)).toDF("vals").repartition(1)
       val df = data.selectExpr("vals + 1")
@@ -253,13 +259,15 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
     withSession(extensions) { session =>
       session.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, true)
       session.conf.set(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key, "-1")
-      assert(session.sessionState.columnarRules.contains(
-        MyColumnarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule())))
+      assert(
+        session.sessionState.columnarRules.contains(
+          MyColumnarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule())))
       import session.implicits._
       // perform a join to inject a shuffle exchange
       val left = Seq((1, 50L), (2, 100L), (3, 150L)).toDF("l1", "l2")
       val right = Seq((1, 50L), (2, 100L), (3, 150L)).toDF("r1", "r2")
-      val data = left.join(right, $"l1" === $"r1")
+      val data = left
+        .join(right, $"l1" === $"r1")
         // repartitioning avoids having the add operation pushed up into the LocalTableScan
         .repartition(1)
       val df = data.selectExpr("l2 + r2")
@@ -267,7 +275,8 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
       df.collect()
 
       // check that column stats exist
-      def findColumnStats(plan: SparkPlan,
+      def findColumnStats(
+          plan: SparkPlan,
           columnStats: ListBuffer[AttributeMap[ColumnStat]]): Unit = {
         plan match {
           case a: AdaptiveSparkPlanExec =>
@@ -284,9 +293,10 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
       val columnStats = ListBuffer[AttributeMap[ColumnStat]]()
       findColumnStats(df.queryExecution.executedPlan, columnStats)
       assert(columnStats.length == 3)
-      assert(columnStats.forall(s => s.forall {
-        case (_, columnStat) => columnStat.distinctCount.contains(BigInt(123))
-      }))
+      assert(columnStats.forall(s =>
+        s.forall { case (_, columnStat) =>
+          columnStat.distinctCount.contains(BigInt(123))
+        }))
     }
   }
 
@@ -295,14 +305,15 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
       case a: AdaptiveSparkPlanExec =>
         assert(a.toString.startsWith("AdaptiveSparkPlan isFinalPlan=true"))
         collectPlanSteps(a.executedPlan)
-      case _ => plan.collect {
-        case _: ReplacedRowToColumnarExec => 1
-        case _: ColumnarProjectExec => 10
-        case _: ColumnarToRowExec => 100
-        case s: QueryStageExec => collectPlanSteps(s.plan).sum
-        case _: MyShuffleExchangeExec => 1000
-        case _: MyBroadcastExchangeExec => 10000
-      }
+      case _ =>
+        plan.collect {
+          case _: ReplacedRowToColumnarExec => 1
+          case _: ColumnarProjectExec => 10
+          case _: ColumnarToRowExec => 100
+          case s: QueryStageExec => collectPlanSteps(s.plan).sum
+          case _: MyShuffleExchangeExec => 1000
+          case _: MyBroadcastExchangeExec => 10000
+        }
     }
 
     val extensions = create { extensions =>
@@ -311,13 +322,15 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
     }
     withSession(extensions) { session =>
       session.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, enableAQE)
-      assert(session.sessionState.columnarRules.contains(
-        MyColumnarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule())))
+      assert(
+        session.sessionState.columnarRules.contains(
+          MyColumnarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule())))
       import session.implicits._
       // perform a join to inject a broadcast exchange
       val left = Seq((1, 50L), (2, 100L), (3, 150L)).toDF("l1", "l2")
       val right = Seq((1, 50L), (2, 100L), (3, 150L)).toDF("r1", "r2")
-      val data = left.join(right, $"l1" === $"r1")
+      val data = left
+        .join(right, $"l1" === $"r1")
         // repartitioning avoids having the add operation pushed up into the LocalTableScan
         .repartition(1)
       val df = data.selectExpr("l2 + r2")
@@ -346,17 +359,20 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
   }
 
   test("reset column vectors") {
-    val session = SparkSession.builder()
+    val session = SparkSession
+      .builder()
       .master("local[1]")
       .config(COLUMN_BATCH_SIZE.key, 2)
       .withExtensions { extensions =>
         extensions.injectColumnar(session =>
-          MyColumnarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule())) }
+          MyColumnarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule()))
+      }
       .getOrCreate()
 
     try {
-      assert(session.sessionState.columnarRules.contains(
-        MyColumnarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule())))
+      assert(
+        session.sessionState.columnarRules.contains(
+          MyColumnarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule())))
       import session.implicits._
 
       val input = Seq((100L), (200L), (300L))
@@ -370,7 +386,8 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
   }
 
   test("use custom class for extensions") {
-    val session = SparkSession.builder()
+    val session = SparkSession
+      .builder()
       .master("local[1]")
       .config(SPARK_SESSION_EXTENSIONS.key, classOf[MyExtensions].getCanonicalName)
       .getOrCreate()
@@ -384,31 +401,39 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
       // Extension functions are treated as built-ins (unqualified)
       val qualifiedIdent = FunctionIdentifier(MyExtensions.myFunction._1.funcName)
       assert(session.sessionState.functionRegistry.lookupFunction(qualifiedIdent).isDefined)
-      assert(session.sessionState.columnarRules.contains(
-        MyColumnarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule())))
+      assert(
+        session.sessionState.columnarRules.contains(
+          MyColumnarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule())))
     } finally {
       stop(session)
     }
   }
 
   test("use multiple custom class for extensions in the specified order") {
-    val session = SparkSession.builder()
+    val session = SparkSession
+      .builder()
       .master("local[1]")
-      .config(SPARK_SESSION_EXTENSIONS.key, Seq(
-        classOf[MyExtensions2].getCanonicalName,
-        classOf[MyExtensions].getCanonicalName).mkString(","))
+      .config(
+        SPARK_SESSION_EXTENSIONS.key,
+        Seq(classOf[MyExtensions2].getCanonicalName, classOf[MyExtensions].getCanonicalName)
+          .mkString(","))
       .getOrCreate()
     try {
-      assert(session.sessionState.planner.strategies.containsSlice(
-        Seq(MySparkStrategy2(session), MySparkStrategy(session))))
+      assert(
+        session.sessionState.planner.strategies
+          .containsSlice(Seq(MySparkStrategy2(session), MySparkStrategy(session))))
       val orderedRules = Seq(MyRule2(session), MyRule(session))
       val orderedCheckRules = Seq(MyCheckRule2(session), MyCheckRule(session))
       val parser = MyParser(session, CatalystSqlParser)
       assert(session.sessionState.analyzer.extendedResolutionRules.containsSlice(orderedRules))
       assert(session.sessionState.analyzer.postHocResolutionRules.containsSlice(orderedRules))
       assert(session.sessionState.analyzer.extendedCheckRules.containsSlice(orderedCheckRules))
-      assert(session.sessionState.optimizer.batches.flatMap(_.rules).filter(orderedRules.contains)
-        .containsSlice(orderedRules ++ orderedRules)) // The optimizer rules are duplicated
+      assert(
+        session.sessionState.optimizer.batches
+          .flatMap(_.rules)
+          .filter(orderedRules.contains)
+          .containsSlice(orderedRules ++ orderedRules)
+      ) // The optimizer rules are duplicated
       assert(session.sessionState.sqlParser === parser)
       // Extension functions are treated as built-ins (unqualified)
       val qualifiedIdent1 = FunctionIdentifier(MyExtensions.myFunction._1.funcName)
@@ -421,22 +446,30 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
   }
 
   test("allow an extension to be duplicated") {
-    val session = SparkSession.builder()
+    val session = SparkSession
+      .builder()
       .master("local[1]")
-      .config(SPARK_SESSION_EXTENSIONS.key, Seq(
-        classOf[MyExtensions].getCanonicalName,
-        classOf[MyExtensions].getCanonicalName).mkString(","))
+      .config(
+        SPARK_SESSION_EXTENSIONS.key,
+        Seq(classOf[MyExtensions].getCanonicalName, classOf[MyExtensions].getCanonicalName)
+          .mkString(","))
       .getOrCreate()
     try {
       assert(session.sessionState.planner.strategies.count(_ === MySparkStrategy(session)) === 2)
-      assert(session.sessionState.analyzer.extendedResolutionRules.count(_ === MyRule(session)) ===
-        2)
-      assert(session.sessionState.analyzer.postHocResolutionRules.count(_ === MyRule(session)) ===
-        2)
-      assert(session.sessionState.analyzer.extendedCheckRules.count(_ === MyCheckRule(session)) ===
-        2)
-      assert(session.sessionState.optimizer.batches.flatMap(_.rules)
-        .count(_ === MyRule(session)) === 4) // The optimizer rules are duplicated
+      assert(
+        session.sessionState.analyzer.extendedResolutionRules.count(_ === MyRule(session)) ===
+          2)
+      assert(
+        session.sessionState.analyzer.postHocResolutionRules.count(_ === MyRule(session)) ===
+          2)
+      assert(
+        session.sessionState.analyzer.extendedCheckRules.count(_ === MyCheckRule(session)) ===
+          2)
+      assert(
+        session.sessionState.optimizer.batches
+          .flatMap(_.rules)
+          .count(_ === MyRule(session)) === 4
+      ) // The optimizer rules are duplicated
       val outerParser = session.sessionState.sqlParser
       assert(outerParser.isInstanceOf[MyParser])
       assert(outerParser.asInstanceOf[MyParser].delegate.isInstanceOf[MyParser])
@@ -449,11 +482,14 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
   }
 
   test("use the last registered function name when there are duplicates") {
-    val session = SparkSession.builder()
+    val session = SparkSession
+      .builder()
       .master("local[1]")
-      .config(SPARK_SESSION_EXTENSIONS.key, Seq(
-        classOf[MyExtensions2].getCanonicalName,
-        classOf[MyExtensions2Duplicate].getCanonicalName).mkString(","))
+      .config(
+        SPARK_SESSION_EXTENSIONS.key,
+        Seq(
+          classOf[MyExtensions2].getCanonicalName,
+          classOf[MyExtensions2Duplicate].getCanonicalName).mkString(","))
       .getOrCreate()
     try {
       // Extension functions are treated as built-ins (unqualified)
@@ -485,8 +521,7 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
     withSession(Seq(_.injectPostHocResolutionRule(MyHintRule))) { session =>
       // unrecognized hint
       QueryTest.checkAnswer(
-        session.sql(
-          """
+        session.sql("""
             |SELECT *
             |FROM (
             |    SELECT /*+ some_random_hint_that_does_not_exist */ 42
@@ -496,8 +531,7 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
 
       // user-defined hint
       QueryTest.checkAnswer(
-        session.sql(
-          """
+        session.sql("""
             |SELECT *
             |FROM (
             |    SELECT /*+ CONVERT_TO_EMPTY */ 42
@@ -537,14 +571,16 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
     }
   }
 
-  test("SPARK-42963: Extend SparkSessionExtensions to inject rules into AQE query stage " +
-    "optimizer") {
+  test(
+    "SPARK-42963: Extend SparkSessionExtensions to inject rules into AQE query stage " +
+      "optimizer") {
     val extensions = create { extensions =>
       extensions.injectQueryStageOptimizerRule(_ => RequireAtLeaseTwoPartitions)
     }
     withSession(extensions) { session =>
-      assert(session.sessionState.adaptiveRulesHolder.queryStageOptimizerRules
-        .contains(RequireAtLeaseTwoPartitions))
+      assert(
+        session.sessionState.adaptiveRulesHolder.queryStageOptimizerRules
+          .contains(RequireAtLeaseTwoPartitions))
       withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "3") {
         val df = session.range(1).repartition()
         df.collect()
@@ -553,17 +589,20 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
     }
   }
 
-  test("SPARK-46170: Support inject adaptive query post planner strategy rules in " +
-    "SparkSessionExtensions") {
+  test(
+    "SPARK-46170: Support inject adaptive query post planner strategy rules in " +
+      "SparkSessionExtensions") {
     val extensions = create { extensions =>
       extensions.injectQueryPostPlannerStrategyRule(_ => MyQueryPostPlannerStrategyRule)
     }
     withSession(extensions) { session =>
-      assert(session.sessionState.adaptiveRulesHolder.queryPostPlannerStrategyRules
-        .contains(MyQueryPostPlannerStrategyRule))
+      assert(
+        session.sessionState.adaptiveRulesHolder.queryPostPlannerStrategyRules
+          .contains(MyQueryPostPlannerStrategyRule))
       import session.implicits._
-      withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "3",
-          SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "false") {
+      withSQLConf(
+        SQLConf.SHUFFLE_PARTITIONS.key -> "3",
+        SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "false") {
         val input = Seq(10, 20, 10).toDF("c1")
         val df = input.groupBy("c1").count()
         df.collect()
@@ -571,8 +610,8 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
         assert(collectFirst(df.queryExecution.executedPlan) {
           case s: ShuffleExchangeExec if s.outputPartitioning == SinglePartition => true
         }.isDefined)
-        assert(collectFirst(df.queryExecution.executedPlan) {
-          case _: SortExec => true
+        assert(collectFirst(df.queryExecution.executedPlan) { case _: SortExec =>
+          true
         }.isDefined)
       }
     }
@@ -581,11 +620,17 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
   test("custom aggregate hint") {
     // The custom hint allows us to replace the aggregate (without grouping keys) with just
     // Literal.
-    withSession(Seq(_.injectHintResolutionRule(CustomAggregateHintResolutionRule),
-      _.injectOptimizerRule(CustomAggregateRule))) { session =>
-      val res = session.range(10).agg(max("id")).as("max_id")
+    withSession(
+      Seq(
+        _.injectHintResolutionRule(CustomAggregateHintResolutionRule),
+        _.injectOptimizerRule(CustomAggregateRule))) { session =>
+      val res = session
+        .range(10)
+        .agg(max("id"))
+        .as("max_id")
         .hint("MAX_VALUE", "id", 10)
-        .queryExecution.optimizedPlan
+        .queryExecution
+        .optimizedPlan
       assert(res.isInstanceOf[Aggregate])
       val expectedAlias = Alias(Literal(10L), "max(id)")()
       compareExpressions(expectedAlias, res.asInstanceOf[Aggregate].aggregateExpressions.head)
@@ -594,12 +639,17 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
 
   test("custom sort hint") {
     // The custom hint allows us to replace the sort with its input
-    withSession(Seq(_.injectHintResolutionRule(CustomSortHintResolutionRule),
-      _.injectOptimizerRule(CustomSortRule))) { session =>
-      val res = session.range(10).sort("id")
+    withSession(
+      Seq(
+        _.injectHintResolutionRule(CustomSortHintResolutionRule),
+        _.injectOptimizerRule(CustomSortRule))) { session =>
+      val res = session
+        .range(10)
+        .sort("id")
         .hint("INPUT_SORTED")
-        .queryExecution.optimizedPlan
-      assert(res.collect {case s: Sort => s}.isEmpty)
+        .queryExecution
+        .optimizedPlan
+      assert(res.collect { case s: Sort => s }.isEmpty)
     }
   }
 
@@ -634,9 +684,7 @@ case class MyHiddenColumn(spark: SparkSession) extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case rel: LocalRelation if rel.output.size == 2 =>
       // rel.output.size == 2 for idempotence
-      val newRel = rel.copy(
-        output = rel.output :+ AttributeReference("x", IntegerType)()
-      )
+      val newRel = rel.copy(output = rel.output :+ AttributeReference("x", IntegerType)())
       assert(rel.getTagValue(LogicalPlan.PLAN_ID_TAG).contains(0L))
       newRel.setTagValue(LogicalPlan.PLAN_ID_TAG, 0L)
       newRel
@@ -644,7 +692,7 @@ case class MyHiddenColumn(spark: SparkSession) extends Rule[LogicalPlan] {
 }
 
 case class MyCheckRule(spark: SparkSession) extends (LogicalPlan => Unit) {
-  override def apply(plan: LogicalPlan): Unit = { }
+  override def apply(plan: LogicalPlan): Unit = {}
 }
 
 case class MySparkStrategy(spark: SparkSession) extends SparkStrategy {
@@ -683,7 +731,8 @@ case class MyParser(spark: SparkSession, delegate: ParserInterface) extends Pars
 
 object MyExtensions {
 
-  val myFunction = (FunctionIdentifier("myFunction"),
+  val myFunction = (
+    FunctionIdentifier("myFunction"),
     new ExpressionInfo(
       "noClass",
       "myDb",
@@ -703,8 +752,10 @@ object MyExtensions {
     (_: Seq[Expression]) => Literal(5, IntegerType))
 }
 
-case class CloseableColumnBatchIterator(itr: Iterator[ColumnarBatch],
-    f: ColumnarBatch => ColumnarBatch) extends Iterator[ColumnarBatch] {
+case class CloseableColumnBatchIterator(
+    itr: Iterator[ColumnarBatch],
+    f: ColumnarBatch => ColumnarBatch)
+    extends Iterator[ColumnarBatch] {
   var cb: ColumnarBatch = null
 
   private def closeCurrentBatch(): Unit = {
@@ -714,9 +765,11 @@ case class CloseableColumnBatchIterator(itr: Iterator[ColumnarBatch],
     }
   }
 
-  TaskContext.get().addTaskCompletionListener[Unit]((tc: TaskContext) => {
-    closeCurrentBatch()
-  })
+  TaskContext
+    .get()
+    .addTaskCompletionListener[Unit]((tc: TaskContext) => {
+      closeCurrentBatch()
+    })
 
   override def hasNext: Boolean = {
     closeCurrentBatch()
@@ -739,15 +792,15 @@ object NoCloseColumnVector extends Logging {
 }
 
 /**
- * Provide a ColumnVector so ColumnarExpression can close temporary values without
- * having to guess what type it really is.
+ * Provide a ColumnVector so ColumnarExpression can close temporary values without having to guess
+ * what type it really is.
  */
 case class NoCloseColumnVector(wrapped: ColumnVector) extends ColumnVector(wrapped.dataType) {
   private var refCount = 1
 
   /**
-   * Don't actually close the ColumnVector this wraps.  The producer of the vector will take
-   * care of that.
+   * Don't actually close the ColumnVector this wraps. The producer of the vector will take care
+   * of that.
    */
   override def close(): Unit = {
     // Empty
@@ -788,6 +841,7 @@ case class NoCloseColumnVector(wrapped: ColumnVector) extends ColumnVector(wrapp
 }
 
 trait ColumnarExpression extends Expression with Serializable {
+
   /**
    * Returns true if this expression supports columnar processing through [[columnarEval]].
    */
@@ -795,19 +849,20 @@ trait ColumnarExpression extends Expression with Serializable {
 
   /**
    * Returns the result of evaluating this expression on the entire
-   * [[org.apache.spark.sql.vectorized.ColumnarBatch]]. The result of
-   * calling this may be a single [[org.apache.spark.sql.vectorized.ColumnVector]] or a scalar
-   * value. Scalar values typically happen if they are a part of the expression i.e. col("a") + 100.
-   * In this case the 100 is a [[org.apache.spark.sql.catalyst.expressions.Literal]] that
+   * [[org.apache.spark.sql.vectorized.ColumnarBatch]]. The result of calling this may be a single
+   * [[org.apache.spark.sql.vectorized.ColumnVector]] or a scalar value. Scalar values typically
+   * happen if they are a part of the expression i.e. col("a") + 100. In this case the 100 is a
+   * [[org.apache.spark.sql.catalyst.expressions.Literal]] that
    * [[org.apache.spark.sql.catalyst.expressions.Add]] would have to be able to handle.
    *
-   * By convention any [[org.apache.spark.sql.vectorized.ColumnVector]] returned by [[columnarEval]]
-   * is owned by the caller and will need to be closed by them. This can happen by putting it into
-   * a [[org.apache.spark.sql.vectorized.ColumnarBatch]] and closing the batch or by closing the
-   * vector directly if it is a temporary value.
+   * By convention any [[org.apache.spark.sql.vectorized.ColumnVector]] returned by
+   * [[columnarEval]] is owned by the caller and will need to be closed by them. This can happen
+   * by putting it into a [[org.apache.spark.sql.vectorized.ColumnarBatch]] and closing the batch
+   * or by closing the vector directly if it is a temporary value.
    */
   def columnarEval(batch: ColumnarBatch): Any = {
-    throw new IllegalStateException(s"Internal Error ${this.getClass} has column support mismatch")
+    throw new IllegalStateException(
+      s"Internal Error ${this.getClass} has column support mismatch")
   }
 
   // We need to override equals because we are subclassing a case class
@@ -828,18 +883,20 @@ object ColumnarBindReferences extends Logging {
       expression: A,
       input: AttributeSeq,
       allowFailures: Boolean = false): A = {
-    expression.transform { case a: AttributeReference =>
-      val ordinal = input.indexOf(a.exprId)
-      if (ordinal == -1) {
-        if (allowFailures) {
-          a
+    expression
+      .transform { case a: AttributeReference =>
+        val ordinal = input.indexOf(a.exprId)
+        if (ordinal == -1) {
+          if (allowFailures) {
+            a
+          } else {
+            sys.error(s"Couldn't find $a in ${input.attrs.mkString("[", ",", "]")}")
+          }
         } else {
-          sys.error(s"Couldn't find $a in ${input.attrs.mkString("[", ",", "]")}")
+          new ColumnarBoundReference(ordinal, a.dataType, input(ordinal).nullable)
         }
-      } else {
-        new ColumnarBoundReference(ordinal, a.dataType, input(ordinal).nullable)
       }
-    }.asInstanceOf[A]
+      .asInstanceOf[A]
   }
 
   /**
@@ -853,7 +910,8 @@ object ColumnarBindReferences extends Logging {
 }
 
 class ColumnarBoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
-  extends BoundReference(ordinal, dataType, nullable) with ColumnarExpression {
+    extends BoundReference(ordinal, dataType, nullable)
+    with ColumnarExpression {
 
   override def columnarEval(batch: ColumnarBatch): Any = {
     // Because of the convention that the returned ColumnVector must be closed by the
@@ -868,14 +926,17 @@ class ColumnarAlias(child: ColumnarExpression, name: String)(
     override val qualifier: Seq[String] = Seq.empty,
     override val explicitMetadata: Option[Metadata] = None,
     override val nonInheritableMetadataKeys: Seq[String] = Seq.empty)
-  extends Alias(child, name)(exprId, qualifier, explicitMetadata, nonInheritableMetadataKeys)
-  with ColumnarExpression {
+    extends Alias(child, name)(exprId, qualifier, explicitMetadata, nonInheritableMetadataKeys)
+    with ColumnarExpression {
 
   override def columnarEval(batch: ColumnarBatch): Any = child.columnarEval(batch)
 
   override protected def withNewChildInternal(newChild: Expression): ColumnarAlias =
-    new ColumnarAlias(newChild.asInstanceOf[ColumnarExpression], name)(exprId, qualifier,
-      explicitMetadata, nonInheritableMetadataKeys)
+    new ColumnarAlias(newChild.asInstanceOf[ColumnarExpression], name)(
+      exprId,
+      qualifier,
+      explicitMetadata,
+      nonInheritableMetadataKeys)
 }
 
 class ColumnarAttributeReference(
@@ -885,14 +946,15 @@ class ColumnarAttributeReference(
     override val metadata: Metadata = Metadata.empty)(
     override val exprId: ExprId = NamedExpression.newExprId,
     override val qualifier: Seq[String] = Seq.empty[String])
-  extends AttributeReference(name, dataType, nullable, metadata)(exprId, qualifier)
-  with ColumnarExpression {
+    extends AttributeReference(name, dataType, nullable, metadata)(exprId, qualifier)
+    with ColumnarExpression {
 
   // No columnar eval is needed because this must be bound before it is evaluated
 }
 
-class ColumnarLiteral (value: Any, dataType: DataType) extends Literal(value, dataType)
-  with ColumnarExpression {
+class ColumnarLiteral(value: Any, dataType: DataType)
+    extends Literal(value, dataType)
+    with ColumnarExpression {
   override def columnarEval(batch: ColumnarBatch): Any = value
 }
 
@@ -900,7 +962,7 @@ class ColumnarLiteral (value: Any, dataType: DataType) extends Literal(value, da
  * A version of ProjectExec that adds in columnar support.
  */
 class ColumnarProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
-  extends ProjectExec(projectList, child) {
+    extends ProjectExec(projectList, child) {
 
   override def supportsColumnar: Boolean =
     projectList.forall(_.asInstanceOf[ColumnarExpression].supportsColumnar)
@@ -908,19 +970,22 @@ class ColumnarProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
   // Disable code generation
   override def supportCodegen: Boolean = false
 
-  override def doExecuteColumnar() : RDD[ColumnarBatch] = {
+  override def doExecuteColumnar(): RDD[ColumnarBatch] = {
     val boundProjectList: Seq[Any] =
       ColumnarBindReferences.bindReferences(
-        projectList.asInstanceOf[Seq[ColumnarExpression]], child.output)
+        projectList.asInstanceOf[Seq[ColumnarExpression]],
+        child.output)
     val rdd = child.executeColumnar()
-    rdd.mapPartitions((itr) => CloseableColumnBatchIterator(itr,
-      (cb) => {
-        val newColumns = boundProjectList.map(
-          expr => expr.asInstanceOf[ColumnarExpression].columnarEval(cb).asInstanceOf[ColumnVector]
-        ).toArray
-        new ColumnarBatch(newColumns, cb.numRows())
-      })
-    )
+    rdd.mapPartitions((itr) =>
+      CloseableColumnBatchIterator(
+        itr,
+        (cb) => {
+          val newColumns = boundProjectList
+            .map(expr =>
+              expr.asInstanceOf[ColumnarExpression].columnarEval(cb).asInstanceOf[ColumnVector])
+            .toArray
+          new ColumnarBatch(newColumns, cb.numRows())
+        }))
   }
 
   // We have to override equals because subclassing a case class like ProjectExec is not that clean
@@ -946,7 +1011,8 @@ case class ColumnarWriteExec(
     partitionColumns: Seq[Attribute],
     bucketSpec: Option[BucketSpec],
     options: Map[String, String],
-    staticPartitions: TablePartitionSpec) extends WriteFilesExecBase {
+    staticPartitions: TablePartitionSpec)
+    extends WriteFilesExecBase {
 
   override def supportsColumnar: Boolean = true
 
@@ -957,18 +1023,23 @@ case class ColumnarWriteExec(
 
   override protected def withNewChildInternal(newChild: SparkPlan): ColumnarWriteExec =
     ColumnarWriteExec(
-      newChild, fileFormat, partitionColumns, bucketSpec, options, staticPartitions)
+      newChild,
+      fileFormat,
+      partitionColumns,
+      bucketSpec,
+      options,
+      staticPartitions)
 }
 
 /**
- * A version of add that supports columnar processing for longs.  This version is broken
- * on purpose so it adds the numbers plus 1 so that the tests can show that it was replaced.
+ * A version of add that supports columnar processing for longs. This version is broken on purpose
+ * so it adds the numbers plus 1 so that the tests can show that it was replaced.
  */
 class BrokenColumnarAdd(
     left: ColumnarExpression,
     right: ColumnarExpression,
     failOnError: Boolean = false)
-  extends Add(left, right, NumericEvalContext(EvalMode.fromBoolean(failOnError)))
+    extends Add(left, right, NumericEvalContext(EvalMode.fromBoolean(failOnError)))
     with ColumnarExpression {
 
   override def supportsColumnar: Boolean = left.supportsColumnar && right.supportsColumnar
@@ -1005,7 +1076,7 @@ class BrokenColumnarAdd(
           for (i <- 0 until batch.numRows()) {
             result.appendLong(l.getLong(i) + r + 1) // BUG to show we replaced Add
           }
-        case  (l, r) =>
+        case (l, r) =>
           ret = nullSafeEval(l, r)
       }
     } finally {
@@ -1020,35 +1091,42 @@ class BrokenColumnarAdd(
   }
 
   override def withNewChildrenInternal(
-      newLeft: Expression, newRight: Expression): BrokenColumnarAdd =
+      newLeft: Expression,
+      newRight: Expression): BrokenColumnarAdd =
     new BrokenColumnarAdd(
       left = newLeft.asInstanceOf[ColumnarExpression],
-      right = newRight.asInstanceOf[ColumnarExpression], failOnError)
+      right = newRight.asInstanceOf[ColumnarExpression],
+      failOnError)
 }
 
-class CannotReplaceException(str: String) extends RuntimeException(str) {
-
-}
+class CannotReplaceException(str: String) extends RuntimeException(str) {}
 
 case class PreRuleReplaceAddWithBrokenVersion() extends Rule[SparkPlan] {
   def replaceWithColumnarExpression(exp: Expression): ColumnarExpression = exp match {
     case a: Alias =>
-      new ColumnarAlias(replaceWithColumnarExpression(a.child),
-        a.name)(a.exprId, a.qualifier, a.explicitMetadata, a.nonInheritableMetadataKeys)
+      new ColumnarAlias(replaceWithColumnarExpression(a.child), a.name)(
+        a.exprId,
+        a.qualifier,
+        a.explicitMetadata,
+        a.nonInheritableMetadataKeys)
     case att: AttributeReference =>
-      new ColumnarAttributeReference(att.name, att.dataType, att.nullable,
-        att.metadata)(att.exprId, att.qualifier)
+      new ColumnarAttributeReference(att.name, att.dataType, att.nullable, att.metadata)(
+        att.exprId,
+        att.qualifier)
     case lit: Literal =>
       new ColumnarLiteral(lit.value, lit.dataType)
-    case add: Add if (add.dataType == LongType) &&
-      (add.left.dataType == LongType) &&
-      (add.right.dataType == LongType) =>
+    case add: Add
+        if (add.dataType == LongType) &&
+          (add.left.dataType == LongType) &&
+          (add.right.dataType == LongType) =>
       // Add only supports Longs for now.
-      new BrokenColumnarAdd(replaceWithColumnarExpression(add.left),
+      new BrokenColumnarAdd(
+        replaceWithColumnarExpression(add.left),
         replaceWithColumnarExpression(add.right))
     case exp =>
-      throw new CannotReplaceException(s"expression " +
-        s"${exp.getClass} ${exp} is not currently supported.")
+      throw new CannotReplaceException(
+        s"expression " +
+          s"${exp.getClass} ${exp} is not currently supported.")
   }
 
   def replaceWithColumnarPlan(plan: SparkPlan): SparkPlan =
@@ -1065,8 +1143,9 @@ case class PreRuleReplaceAddWithBrokenVersion() extends Rule[SparkPlan] {
           val replaced = e.withNewChildren(e.children.map(replaceWithColumnarPlan))
           MyBroadcastExchangeExec(replaced.asInstanceOf[BroadcastExchangeExec])
         case plan: ProjectExec =>
-          new ColumnarProjectExec(plan.projectList.map((exp) =>
-            replaceWithColumnarExpression(exp).asInstanceOf[NamedExpression]),
+          new ColumnarProjectExec(
+            plan.projectList.map((exp) =>
+              replaceWithColumnarExpression(exp).asInstanceOf[NamedExpression]),
             replaceWithColumnarPlan(plan.child))
         case write: WriteFilesExec =>
           ColumnarWriteExec(
@@ -1082,8 +1161,9 @@ case class PreRuleReplaceAddWithBrokenVersion() extends Rule[SparkPlan] {
       }
     } catch {
       case exp: CannotReplaceException =>
-        logWarning(s"Columnar processing for ${plan.getClass} is not currently supported" +
-          s"because ${exp.getMessage}")
+        logWarning(
+          s"Columnar processing for ${plan.getClass} is not currently supported" +
+            s"because ${exp.getMessage}")
         plan
     }
 
@@ -1124,7 +1204,8 @@ case class MyShuffleExchangeExec(delegate: ShuffleExchangeExec) extends ShuffleE
  * Custom Exchange used in tests to demonstrate that broadcasts can be replaced regardless of
  * whether AQE is enabled.
  */
-case class MyBroadcastExchangeExec(delegate: BroadcastExchangeExec) extends BroadcastExchangeLike {
+case class MyBroadcastExchangeExec(delegate: BroadcastExchangeExec)
+    extends BroadcastExchangeLike {
   override val runId: UUID = delegate.runId
   override def relationFuture: java.util.concurrent.Future[Broadcast[Any]] =
     delegate.relationFuture
@@ -1140,8 +1221,7 @@ case class MyBroadcastExchangeExec(delegate: BroadcastExchangeExec) extends Broa
     super.legacyWithNewChildren(Seq(newChild))
 }
 
-class ReplacedRowToColumnarExec(override val child: SparkPlan)
-  extends RowToColumnarExec(child) {
+class ReplacedRowToColumnarExec(override val child: SparkPlan) extends RowToColumnarExec(child) {
 
   // We have to override equals because subclassing a case class like ProjectExec is not that clean
   // One of the issues is that the generated equals will see ColumnarProjectExec and ProjectExec
@@ -1181,7 +1261,8 @@ class MyExtensions extends (SparkSessionExtensions => Unit) {
     e.injectOptimizerRule(MyRule)
     e.injectParser(MyParser)
     e.injectFunction(MyExtensions.myFunction)
-    e.injectColumnar(session => MyColumnarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule()))
+    e.injectColumnar(session =>
+      MyColumnarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule()))
   }
 }
 
@@ -1192,10 +1273,9 @@ object QueryPrepRuleHelper {
 
 // this rule will run during AQE query preparation and will write custom tags to each node
 case class MyQueryStagePrepRule() extends Rule[SparkPlan] {
-  override def apply(plan: SparkPlan): SparkPlan = plan.transformDown {
-    case plan =>
-      plan.setTagValue(QueryPrepRuleHelper.myPrepTag, QueryPrepRuleHelper.myPrepTagValue)
-      plan
+  override def apply(plan: SparkPlan): SparkPlan = plan.transformDown { case plan =>
+    plan.setTagValue(QueryPrepRuleHelper.myPrepTag, QueryPrepRuleHelper.myPrepTagValue)
+    plan
   }
 }
 
@@ -1204,7 +1284,8 @@ case class MyQueryStagePrepRule() extends Rule[SparkPlan] {
 case class MyNewQueryStageRule() extends Rule[SparkPlan] {
   override def apply(plan: SparkPlan): SparkPlan = plan.transformDown {
     case plan if !plan.isInstanceOf[AdaptiveSparkPlanExec] =>
-      assert(plan.getTagValue(QueryPrepRuleHelper.myPrepTag).get ==
+      assert(
+        plan.getTagValue(QueryPrepRuleHelper.myPrepTag).get ==
           QueryPrepRuleHelper.myPrepTagValue)
       plan
   }
@@ -1215,7 +1296,7 @@ case class MyRule2(spark: SparkSession) extends Rule[LogicalPlan] {
 }
 
 case class MyCheckRule2(spark: SparkSession) extends (LogicalPlan => Unit) {
-  override def apply(plan: LogicalPlan): Unit = { }
+  override def apply(plan: LogicalPlan): Unit = {}
 }
 
 case class MySparkStrategy2(spark: SparkSession) extends SparkStrategy {
@@ -1224,7 +1305,8 @@ case class MySparkStrategy2(spark: SparkSession) extends SparkStrategy {
 
 object MyExtensions2 {
 
-  val myFunction = (FunctionIdentifier("myFunction2"),
+  val myFunction = (
+    FunctionIdentifier("myFunction2"),
     new ExpressionInfo(
       "noClass",
       "myDb",
@@ -1258,7 +1340,8 @@ class MyExtensions2 extends (SparkSessionExtensions => Unit) {
 
 object MyExtensions2Duplicate {
 
-  val myFunction = (FunctionIdentifier("myFunction2"),
+  val myFunction = (
+    FunctionIdentifier("myFunction2"),
     new ExpressionInfo(
       "noClass",
       "myDb",
@@ -1285,11 +1368,9 @@ class MyExtensions2Duplicate extends (SparkSessionExtensions => Unit) {
 }
 
 class YourExtensions extends SparkSessionExtensionsProvider {
-  val getAppName = (FunctionIdentifier("get_fake_app_name"),
-    new ExpressionInfo(
-      "zzz.zzz.zzz",
-      "",
-      "get_fake_app_name"),
+  val getAppName = (
+    FunctionIdentifier("get_fake_app_name"),
+    new ExpressionInfo("zzz.zzz.zzz", "", "get_fake_app_name"),
     (_: Seq[Expression]) => Literal("Fake App Name"))
 
   override def apply(v1: SparkSessionExtensions): Unit = {
@@ -1308,8 +1389,8 @@ object RequireAtLeaseTwoPartitions extends Rule[SparkPlan] {
   override def apply(plan: SparkPlan): SparkPlan = {
     val readOpt = plan.find(_.isInstanceOf[AQEShuffleReadExec])
     if (readOpt.exists(_.outputPartitioning.numPartitions == 1)) {
-      plan.transform {
-        case read: AQEShuffleReadExec => read.child
+      plan.transform { case read: AQEShuffleReadExec =>
+        read.child
       }
     } else {
       plan
@@ -1328,7 +1409,6 @@ object MyQueryPostPlannerStrategyRule extends Rule[SparkPlan] {
   }
 }
 
-
 // Example of an Aggregate hint that tells that 'attribute' values are no larger than 'max'.
 // We will use them to rewrite MAX(attribute) with 'max' constant.
 case class CustomAggHint(attribute: AttributeReference, max: Int) extends AggregateHint
@@ -1341,16 +1421,13 @@ case class CustomAggregateHintResolutionRule(spark: SparkSession) extends Rule[L
   def isMax(expr: NamedExpression, attribute: String): Option[AttributeReference] = {
     expr match {
       case Alias(AggregateExpression(Max(a @ AttributeReference(name, _, _, _)), _, _, _, _), _)
-        if name.equalsIgnoreCase(attribute) =>
+          if name.equalsIgnoreCase(attribute) =>
         Some(a)
       case _ => None
     }
   }
 
-  private def applyMaxValueHint(
-      plan: LogicalPlan,
-      attribute: String,
-      max: Int): LogicalPlan = {
+  private def applyMaxValueHint(plan: LogicalPlan, attribute: String, max: Int): LogicalPlan = {
     val newPlan = plan match {
       case a @ Aggregate(keys, aggs, _, None) if keys.isEmpty && aggs.size == 1 =>
         isMax(aggs.head, attribute) match {
@@ -1376,9 +1453,11 @@ case class CustomAggregateRule(spark: SparkSession) extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     plan transformDown {
       case a @ Aggregate(groupingKeys, aggregates, _, Some(CustomAggHint(_, max)))
-        if groupingKeys.isEmpty && aggregates.size == 1 =>
-        a.copy(aggregateExpressions = Seq(Alias(Cast(Literal(max), aggregates.head.dataType),
-          aggregates.head.name)()), hint = None)
+          if groupingKeys.isEmpty && aggregates.size == 1 =>
+        a.copy(
+          aggregateExpressions =
+            Seq(Alias(Cast(Literal(max), aggregates.head.dataType), aggregates.head.name)()),
+          hint = None)
     }
   }
 }

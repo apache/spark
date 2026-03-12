@@ -28,10 +28,9 @@ import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 
-
 /**
- * The DDL command that creates a function.
- * To create a temporary function, the syntax of using this command in SQL is:
+ * The DDL command that creates a function. To create a temporary function, the syntax of using
+ * this command in SQL is:
  * {{{
  *    CREATE [OR REPLACE] TEMPORARY FUNCTION functionName
  *    AS className [USING JAR\FILE 'uri' [, JAR|FILE 'uri']]
@@ -43,9 +42,10 @@ import org.apache.spark.sql.types.{StringType, StructField, StructType}
  *    AS className [USING JAR\FILE 'uri' [, JAR|FILE 'uri']]
  * }}}
  *
- * @param ignoreIfExists: When true, ignore if the function with the specified name exists
- *                        in the specified database.
- * @param replace: When true, alter the function with the specified name
+ * @param ignoreIfExists:
+ *   When true, ignore if the function with the specified name exists in the specified database.
+ * @param replace:
+ *   When true, alter the function with the specified name
  */
 case class CreateFunctionCommand(
     identifier: FunctionIdentifier,
@@ -54,7 +54,7 @@ case class CreateFunctionCommand(
     isTemp: Boolean,
     ignoreIfExists: Boolean,
     replace: Boolean)
-  extends LeafRunnableCommand {
+    extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
@@ -84,17 +84,15 @@ case class CreateFunctionCommand(
   }
 }
 
-
 /**
- * A command for users to get the usage of a registered function.
- * The syntax of using this command in SQL is
+ * A command for users to get the usage of a registered function. The syntax of using this command
+ * in SQL is
  * {{{
  *   DESCRIBE FUNCTION [EXTENDED] upper;
  * }}}
  */
-case class DescribeFunctionCommand(
-    info: ExpressionInfo,
-    isExtended: Boolean) extends LeafRunnableCommand {
+case class DescribeFunctionCommand(info: ExpressionInfo, isExtended: Boolean)
+    extends LeafRunnableCommand {
 
   override val output: Seq[Attribute] = {
     val schema = StructType(Array(StructField("function_desc", StringType, nullable = false)))
@@ -125,17 +123,12 @@ case class DescribeFunctionCommand(
   }
 }
 
-
 /**
- * The DDL command that drops a function.
- * ifExists: returns an error if the function doesn't exist, unless this is true.
- * isTemp: indicates if it is a temporary function.
+ * The DDL command that drops a function. ifExists: returns an error if the function doesn't
+ * exist, unless this is true. isTemp: indicates if it is a temporary function.
  */
-case class DropFunctionCommand(
-    identifier: FunctionIdentifier,
-    ifExists: Boolean,
-    isTemp: Boolean)
-  extends LeafRunnableCommand {
+case class DropFunctionCommand(identifier: FunctionIdentifier, ifExists: Boolean, isTemp: Boolean)
+    extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
@@ -146,10 +139,8 @@ case class DropFunctionCommand(
           throw QueryExecutionErrors.invalidNamespaceNameError(
             Array(CatalogManager.SYSTEM_CATALOG_NAME, db))
         }
-        if (identifier.catalog.exists(
-            !_.equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME))) {
-          throw QueryExecutionErrors.invalidNamespaceNameError(
-            Array(identifier.catalog.get, db))
+        if (identifier.catalog.exists(!_.equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME))) {
+          throw QueryExecutionErrors.invalidNamespaceNameError(Array(identifier.catalog.get, db))
         }
         identifier.funcName
       } else {
@@ -160,7 +151,7 @@ case class DropFunctionCommand(
       // with the same name exists (shadowing case)
       val unqualifiedIdent = FunctionIdentifier(funcName)
       if (!catalog.isTemporaryFunction(unqualifiedIdent) &&
-          catalog.isBuiltinFunction(unqualifiedIdent)) {
+        catalog.isBuiltinFunction(unqualifiedIdent)) {
         throw QueryCompilationErrors.cannotDropBuiltinFuncError(funcName)
       }
       catalog.dropTempFunction(funcName, ifExists)
@@ -172,23 +163,23 @@ case class DropFunctionCommand(
   }
 }
 
-
 /**
- * A command for users to list all of the registered functions.
- * The syntax of using this command in SQL is:
+ * A command for users to list all of the registered functions. The syntax of using this command
+ * in SQL is:
  * {{{
  *    SHOW FUNCTIONS [LIKE pattern]
  * }}}
- * For the pattern, '*' matches any sequence of characters (including no characters) and
- * '|' is for alternation.
- * For example, "show functions like 'yea*|windo*'" will return "window" and "year".
+ * For the pattern, '*' matches any sequence of characters (including no characters) and '|' is
+ * for alternation. For example, "show functions like 'yea*|windo*'" will return "window" and
+ * "year".
  */
 case class ShowFunctionsCommand(
     db: String,
     pattern: Option[String],
     showUserFunctions: Boolean,
     showSystemFunctions: Boolean,
-    override val output: Seq[Attribute]) extends LeafRunnableCommand {
+    override val output: Seq[Attribute])
+    extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     // If pattern is not specified, we use '*', which is used to
@@ -207,8 +198,8 @@ case class ShowFunctionsCommand(
     if (showSystemFunctions) {
       (functionNames ++
         StringUtils.filterPattern(
-          FunctionRegistry.builtinOperators.keys.toSeq, pattern.getOrElse("*")))
-        .sorted.map(Row(_))
+          FunctionRegistry.builtinOperators.keys.toSeq,
+          pattern.getOrElse("*"))).sorted.map(Row(_))
     } else {
       functionNames.sorted.map(Row(_))
     }
@@ -216,10 +207,9 @@ case class ShowFunctionsCommand(
   }
 }
 
-
 /**
- * A command for users to refresh the persistent function.
- * The syntax of using this command in SQL is:
+ * A command for users to refresh the persistent function. The syntax of using this command in SQL
+ * is:
  * {{{
  *    REFRESH FUNCTION functionName
  * }}}

@@ -110,13 +110,16 @@ object ToNumberParser {
  *
  * It works by consuming an input string and a format string. This class accepts the format string
  * as a field, and proceeds to iterate through the format string to generate a sequence of tokens
- * (or throw an exception if the format string is invalid). Then when the function is called with an
- * input string, this class steps through the sequence of tokens and compares them against the input
- * string, returning a Spark Decimal object if they match (or throwing an exception otherwise).
+ * (or throw an exception if the format string is invalid). Then when the function is called with
+ * an input string, this class steps through the sequence of tokens and compares them against the
+ * input string, returning a Spark Decimal object if they match (or throwing an exception
+ * otherwise).
  *
- * @param numberFormat the format string describing the expected inputs.
- * @param errorOnFail true if evaluation should throw an exception if the input string fails to
- *                    match the format string. Otherwise, returns NULL instead.
+ * @param numberFormat
+ *   the format string describing the expected inputs.
+ * @param errorOnFail
+ *   true if evaluation should throw an exception if the input string fails to match the format
+ *   string. Otherwise, returns NULL instead.
  */
 class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Serializable {
   import ToNumberParser._
@@ -160,12 +163,14 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
         case OPTIONAL_PLUS_OR_MINUS_LETTER =>
           tokens.append(OptionalPlusOrMinusSign())
           i += 1
-        case OPTIONAL_MINUS_STRING_START if i < len - 1 &&
-          OPTIONAL_MINUS_STRING_END == numberFormat(i + 1) =>
+        case OPTIONAL_MINUS_STRING_START
+            if i < len - 1 &&
+              OPTIONAL_MINUS_STRING_END == numberFormat(i + 1) =>
           tokens.append(OptionalMinusSign())
           i += 2
-        case WRAPPING_ANGLE_BRACKETS_TO_NEGATIVE_NUMBER_START if i < len - 1 &&
-          WRAPPING_ANGLE_BRACKETS_TO_NEGATIVE_NUMBER_END == numberFormat(i + 1) =>
+        case WRAPPING_ANGLE_BRACKETS_TO_NEGATIVE_NUMBER_START
+            if i < len - 1 &&
+              WRAPPING_ANGLE_BRACKETS_TO_NEGATIVE_NUMBER_END == numberFormat(i + 1) =>
           tokens.prepend(OpeningAngleBracket())
           tokens.append(ClosingAngleBracket())
           i += 2
@@ -212,10 +217,11 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
    */
   private lazy val precision: Int = {
     val lengths = formatTokens.map {
-      case DigitGroups(_, digits) => digits.map {
-        case ExactlyAsManyDigits(num) => num
-        case AtMostAsManyDigits(num) => num
-      }.sum
+      case DigitGroups(_, digits) =>
+        digits.map {
+          case ExactlyAsManyDigits(num) => num
+          case AtMostAsManyDigits(num) => num
+        }.sum
       case _ => 0
     }
     lengths.sum
@@ -226,10 +232,11 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
     if (index != -1) {
       val suffix: Seq[InputToken] = formatTokens.drop(index)
       val lengths: Seq[Int] = suffix.map {
-        case DigitGroups(_, digits) => digits.map {
-          case ExactlyAsManyDigits(num) => num
-          case AtMostAsManyDigits(num) => num
-        }.sum
+        case DigitGroups(_, digits) =>
+          digits.map {
+            case ExactlyAsManyDigits(num) => num
+            case AtMostAsManyDigits(num) => num
+          }.sum
         case _ => 0
       }
       lengths.sum
@@ -264,17 +271,17 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
     val firstDecimalPointIndex: Int = formatTokens.indexOf(DecimalPoint())
     val digitGroupsBeforeDecimalPoint: Seq[DigitGroups] =
       formatTokens.zipWithIndex.flatMap {
-        case (d@DigitGroups(_, _), i)
-          if firstDecimalPointIndex == -1 ||
-            i < firstDecimalPointIndex =>
+        case (d @ DigitGroups(_, _), i)
+            if firstDecimalPointIndex == -1 ||
+              i < firstDecimalPointIndex =>
           Seq(d)
         case _ => Seq()
       }
     val digitGroupsAfterDecimalPoint: Seq[DigitGroups] =
       formatTokens.zipWithIndex.flatMap {
-        case (d@DigitGroups(_, _), i)
-          if firstDecimalPointIndex != -1 &&
-            i > firstDecimalPointIndex =>
+        case (d @ DigitGroups(_, _), i)
+            if firstDecimalPointIndex != -1 &&
+              i > firstDecimalPointIndex =>
           Seq(d)
         case _ => Seq()
       }
@@ -286,8 +293,7 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
         messageParameters = Map("format" -> toSQLValue(numberFormat, StringType)))
     }
     // Make sure the format string contains at least one digit.
-    if (!formatTokens.exists(
-      token => token.isInstanceOf[DigitGroups])) {
+    if (!formatTokens.exists(token => token.isInstanceOf[DigitGroups])) {
       return InvalidFormat(
         errorSubClass = "WRONG_NUM_DIGIT",
         messageParameters = Map("format" -> toSQLValue(numberFormat, StringType)))
@@ -306,46 +312,45 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
         messageParameters = Map("format" -> toSQLValue(numberFormat, StringType)))
     }
     // Make sure that any thousands separators in the format string have digits before and after.
-    if (digitGroupsBeforeDecimalPoint.exists {
-      case DigitGroups(tokens, _) =>
+    if (digitGroupsBeforeDecimalPoint.exists { case DigitGroups(tokens, _) =>
         tokens.zipWithIndex.exists({
           case (_: ThousandsSeparator, j: Int) if j == 0 || j == tokens.length - 1 =>
             true
-          case (_: ThousandsSeparator, j: Int) if tokens(j - 1).isInstanceOf[ThousandsSeparator] =>
+          case (_: ThousandsSeparator, j: Int)
+              if tokens(j - 1).isInstanceOf[ThousandsSeparator] =>
             true
-          case (_: ThousandsSeparator, j: Int) if tokens(j + 1).isInstanceOf[ThousandsSeparator] =>
+          case (_: ThousandsSeparator, j: Int)
+              if tokens(j + 1).isInstanceOf[ThousandsSeparator] =>
             true
           case _ =>
             false
         })
-    }) {
+      }) {
       return InvalidFormat(
         errorSubClass = "CONT_THOUSANDS_SEPS",
         messageParameters = Map("format" -> toSQLValue(numberFormat, StringType)))
     }
     // Make sure that thousands separators does not appear after the decimal point, if any.
-    if (digitGroupsAfterDecimalPoint.exists {
-      case DigitGroups(tokens, digits) =>
+    if (digitGroupsAfterDecimalPoint.exists { case DigitGroups(tokens, digits) =>
         tokens.length > digits.length
-    }) {
+      }) {
       return InvalidFormat(
         errorSubClass = "THOUSANDS_SEPS_MUST_BEFORE_DEC",
-        messageParameters = Map("format" -> toSQLValue(numberFormat, StringType))
-      )
+        messageParameters = Map("format" -> toSQLValue(numberFormat, StringType)))
     }
     // Make sure that the format string does not contain any prohibited duplicate tokens.
     val inputTokenCounts = formatTokens.groupBy(identity).transform((_, v) => v.size)
-    Seq(DecimalPoint(),
+    Seq(
+      DecimalPoint(),
       OptionalPlusOrMinusSign(),
       OptionalMinusSign(),
       DollarSign(),
-      ClosingAngleBracket()).foreach {
-      token => if (inputTokenCounts.getOrElse(token, 0) > 1) {
+      ClosingAngleBracket()).foreach { token =>
+      if (inputTokenCounts.getOrElse(token, 0) > 1) {
         return InvalidFormat(
           errorSubClass = "WRONG_NUM_TOKEN",
-          messageParameters = Map(
-            "token" -> token.toString,
-            "format" -> toSQLValue(numberFormat, StringType)))
+          messageParameters =
+            Map("token" -> token.toString, "format" -> toSQLValue(numberFormat, StringType)))
       }
     }
     // Enforce the ordering of tokens in the format string according to this specification:
@@ -362,8 +367,7 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
       Seq(DecimalPoint()),
       Seq(DigitGroups(Seq(), Seq())),
       Seq(DollarSign()),
-      Seq(OptionalMinusSign(), OptionalPlusOrMinusSign(), ClosingAngleBracket())
-    )
+      Seq(OptionalMinusSign(), OptionalPlusOrMinusSign(), ClosingAngleBracket()))
     var formatTokenIndex = 0
     for (allowedTokens: Seq[InputToken] <- allowedFormatTokens) {
       def tokensMatch(lhs: InputToken, rhs: InputToken): Boolean = {
@@ -395,8 +399,10 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
    * keeping a parallel index into the input string. Throws an exception if the latter does not
    * contain expected characters at any point.
    *
-   * @param input the string that needs to converted
-   * @return the result Decimal value obtained from string parsing
+   * @param input
+   *   the string that needs to converted
+   * @return
+   *   the result Decimal value obtained from string parsing
    */
   def parse(input: UTF8String): Decimal = {
     val inputString = input.toString
@@ -427,16 +433,17 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
         }
       token match {
         case d: DigitGroups =>
-          inputIndex = parseDigitGroups(d, inputString, inputIndex, reachedDecimalPoint).getOrElse(
-            return formatMatchFailure(input, numberFormat))
+          inputIndex =
+            parseDigitGroups(d, inputString, inputIndex, reachedDecimalPoint).getOrElse(
+              return formatMatchFailure(input, numberFormat))
         case DecimalPoint() =>
           inputChar.foreach {
             case POINT_SIGN =>
               reachedDecimalPoint = true
               inputIndex += 1
             case _ =>
-              // There is no decimal point. Consume the token and remain at the same character in
-              // the input string.
+            // There is no decimal point. Consume the token and remain at the same character in
+            // the input string.
           }
         case DollarSign() =>
           inputChar.foreach {
@@ -454,8 +461,8 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
               negateResult = !negateResult
               inputIndex += 1
             case _ =>
-              // There is no plus or minus sign. Consume the token and remain at the same character
-              // in the input string.
+            // There is no plus or minus sign. Consume the token and remain at the same character
+            // in the input string.
           }
         case OptionalMinusSign() =>
           inputChar.foreach {
@@ -463,8 +470,8 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
               negateResult = !negateResult
               inputIndex += 1
             case _ =>
-              // There is no minus sign. Consume the token and remain at the same character in the
-              // input string.
+            // There is no minus sign. Consume the token and remain at the same character in the
+            // input string.
           }
         case OpeningAngleBracket() =>
           inputChar.foreach {
@@ -506,11 +513,16 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
   /**
    * Handle parsing the input string for the given expected DigitGroups from the format string.
    *
-   * @param digitGroups the expected DigitGroups from the format string
-   * @param inputString the input string provided to the original parsing method
-   * @param startingInputIndex the input index within the input string to begin parsing here
-   * @param reachedDecimalPoint true if we have already parsed past the decimal point
-   * @return the new updated index within the input string to resume parsing, or None on error
+   * @param digitGroups
+   *   the expected DigitGroups from the format string
+   * @param inputString
+   *   the input string provided to the original parsing method
+   * @param startingInputIndex
+   *   the input index within the input string to begin parsing here
+   * @param reachedDecimalPoint
+   *   true if we have already parsed past the decimal point
+   * @return
+   *   the new updated index within the input string to resume parsing, or None on error
    */
   private def parseDigitGroups(
       digitGroups: DigitGroups,
@@ -547,12 +559,10 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
           0
         }
       expectedToken match {
-        case ExactlyAsManyDigits(expectedNumDigits)
-          if actualNumDigits != expectedNumDigits =>
+        case ExactlyAsManyDigits(expectedNumDigits) if actualNumDigits != expectedNumDigits =>
           // The input contained more or fewer digits than required.
           return None
-        case AtMostAsManyDigits(expectedMaxDigits)
-          if actualNumDigits > expectedMaxDigits =>
+        case AtMostAsManyDigits(expectedMaxDigits) if actualNumDigits > expectedMaxDigits =>
           // The input contained more digits than allowed.
           return None
         case _ =>
@@ -562,8 +572,8 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
   }
 
   /**
-   * Returns true if the given character matches a digit (0-9) or a comma, updating fields of
-   * this class related to parsing during the process.
+   * Returns true if the given character matches a digit (0-9) or a comma, updating fields of this
+   * class related to parsing during the process.
    */
   private def parsedCharMatchesDigitOrComma(char: Char, reachedDecimalPoint: Boolean): Boolean = {
     char match {
@@ -597,25 +607,31 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
   private def formatMatchFailure(input: UTF8String, originNumberFormat: String): Decimal = {
     if (errorOnFail) {
       throw QueryExecutionErrors.invalidNumberFormatError(
-        StringType, input.toString, originNumberFormat)
+        StringType,
+        input.toString,
+        originNumberFormat)
     }
     null
   }
   private def formatMatchFailure(input: Decimal, originNumberFormat: String): UTF8String = {
     if (errorOnFail) {
       throw QueryExecutionErrors.invalidNumberFormatError(
-        DecimalType.fromDecimal(input), input.toString, originNumberFormat)
+        DecimalType.fromDecimal(input),
+        input.toString,
+        originNumberFormat)
     }
     null
   }
 
   /**
-   * Computes the final Decimal value from the parsedBeforeDecimalPoint and parsedAfterDecimalPoint
-   * fields of this class, as a result of parsing.
+   * Computes the final Decimal value from the parsedBeforeDecimalPoint and
+   * parsedAfterDecimalPoint fields of this class, as a result of parsing.
    *
-   * @param negateResult whether the input string specified to negate the result
-   * @return a Decimal value with the value indicated by the input string and the precision and
-   *         scale indicated by the format string
+   * @param negateResult
+   *   whether the input string specified to negate the result
+   * @return
+   *   a Decimal value with the value indicated by the input string and the precision and scale
+   *   indicated by the format string
    */
   private def parseResultToDecimalValue(negateResult: Boolean): Decimal = {
     // Append zeros to the parsedAfterDecimalPoint string until it comprises the same number of
@@ -643,14 +659,15 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
    * Iterates through the [[formatTokens]] obtained from processing the format string, while also
    * inspecting the input decimal value.
    *
-   * @param input the decimal value that needs to be converted
-   * @return the result String value obtained from string formatting
+   * @param input
+   *   the decimal value that needs to be converted
+   * @return
+   *   the result String value obtained from string formatting
    */
   def format(input: Decimal): UTF8String = {
     val result = new StringBuilder()
     // These are string representations of the input Decimal value.
-    val (inputBeforeDecimalPoint: String,
-      inputAfterDecimalPoint: String) =
+    val (inputBeforeDecimalPoint: String, inputAfterDecimalPoint: String) =
       formatSplitInputBeforeAndAfterDecimalPoint(input)
     // These are indexes into the characters of the input string before and after the decimal point.
     formattingBeforeDecimalPointIndex = 0
@@ -662,7 +679,11 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
       formatToken match {
         case groups: DigitGroups =>
           formatDigitGroups(
-            groups, inputBeforeDecimalPoint, inputAfterDecimalPoint, reachedDecimalPoint, result)
+            groups,
+            inputBeforeDecimalPoint,
+            inputAfterDecimalPoint,
+            reachedDecimalPoint,
+            result)
         case DecimalPoint() =>
           // If the last character so far is a space, change it to a zero. This means the input
           // decimal does not have an integer part.
@@ -720,8 +741,10 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
 
   /**
    * Splits the provided Decimal value's string representation by the decimal point, if any.
-   * @param input the Decimal value to consume
-   * @return two strings representing the contents before and after the decimal point (if any)
+   * @param input
+   *   the Decimal value to consume
+   * @return
+   *   two strings representing the contents before and after the decimal point (if any)
    */
   private def formatSplitInputBeforeAndAfterDecimalPoint(input: Decimal): (String, String) = {
     // Convert the input Decimal value to a string (without exponent notation).
@@ -777,13 +800,16 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
   /**
    * Performs format processing on the digits in [[groups]], updating [[result]].
    *
-   * @param groups the token representing a group of digits from the format string
-   * @param inputBeforeDecimalPoint string representation of the input decimal value before the
-   *                                decimal point
-   * @param inputAfterDecimalPoint string representation of the input decimal value after the
-   *                               decimal point
-   * @param reachedDecimalPoint true if we have reached the decimal point so far during processing
-   * @param result the result of formatting is built here as a string during iteration
+   * @param groups
+   *   the token representing a group of digits from the format string
+   * @param inputBeforeDecimalPoint
+   *   string representation of the input decimal value before the decimal point
+   * @param inputAfterDecimalPoint
+   *   string representation of the input decimal value after the decimal point
+   * @param reachedDecimalPoint
+   *   true if we have reached the decimal point so far during processing
+   * @param result
+   *   the result of formatting is built here as a string during iteration
    */
   private def formatDigitGroups(
       groups: DigitGroups,

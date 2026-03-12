@@ -20,35 +20,20 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 import scala.util.Random
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{
-  FunctionResolution,
-  ResolvedStar,
-  UnresolvedFunction,
-  UnresolvedSeed,
-  UnresolvedStar
-}
-import org.apache.spark.sql.catalyst.expressions.{
-  BinaryArithmetic,
-  Expression,
-  ExpressionWithRandomSeed,
-  InheritAnalysisRules,
-  Literal,
-  TryEval
-}
+import org.apache.spark.sql.catalyst.analysis.{FunctionResolution, ResolvedStar, UnresolvedFunction, UnresolvedSeed, UnresolvedStar}
+import org.apache.spark.sql.catalyst.expressions.{BinaryArithmetic, Expression, ExpressionWithRandomSeed, InheritAnalysisRules, Literal, TryEval}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 
 /**
- * A resolver for [[UnresolvedFunction]]s that resolves functions to concrete [[Expression]]s.
- * It resolves the children of the function first by calling [[ExpressionResolver.resolve]] on them
+ * A resolver for [[UnresolvedFunction]]s that resolves functions to concrete [[Expression]]s. It
+ * resolves the children of the function first by calling [[ExpressionResolver.resolve]] on them
  * if they are not [[UnresolvedStar]]s. If the children are [[UnresolvedStar]]s, it resolves them
  * using [[ExpressionResolver.resolveStar]]. Examples are following:
  *
- *  - Function doesn't contain any [[UnresolvedStar]]:
- *  {{{ SELECT ARRAY(col1) FROM VALUES (1); }}}
- *  it is resolved only using [[ExpressionResolver.resolve]].
- *  - Function contains [[UnresolvedStar]]:
- *  {{{ SELECT ARRAY(*) FROM VALUES (1); }}}
- *  it is resolved using [[ExpressionResolver.resolveStar]].
+ *   - Function doesn't contain any [[UnresolvedStar]]: {{{SELECT ARRAY(col1) FROM VALUES (1);}}}
+ *     it is resolved only using [[ExpressionResolver.resolve]].
+ *   - Function contains [[UnresolvedStar]]: {{{SELECT ARRAY(*) FROM VALUES (1);}}} it is resolved
+ *     using [[ExpressionResolver.resolveStar]].
  *
  * After resolving the function with [[FunctionResolution.resolveFunction]] specific expression
  * nodes require further resolution. See [[resolve]] for more details.
@@ -72,33 +57,32 @@ class FunctionResolver(
 
   /**
    * Main method used to resolve an [[UnresolvedFunction]]. It resolves it in the following steps:
-   *  - Check if the `unresolvedFunction` is an aggregate expression. Set
-   *    `resolvingTreeUnderAggregateExpression` to `true` in that case so we can properly resolve
-   *    attributes in ORDER BY and HAVING.
-   *  - If the function is `count(*)` it is replaced with `count(1)` (please check
-   *    [[normalizeCountExpression]] documentation for more details). Otherwise, we resolve the
-   *    children of it.
-   *  - Resolve the function using [[FunctionResolution.resolveFunction]].
-   *  - Perform further resolution on specific nodes:
-   *    - Initialize the seed of [[InheritAnalysisRules]];
-   *    - Resolve the replacement expression of [[InheritAnalysisRules]];
-   *    - Type coerce [[TryEval]]'s child. Copying tags is specifically important for
-   *      [[FunctionRegistry.FUNC_ALIAS]];
-   *    - Use [[AggregateExpressionResolver]] to resolve [[AggregateExpression]];
-   *    - Use [[BinaryArithmeticResolver]] to resolve [[BinaryArithmetic]]. Specifically important
-   *      for cases like:
-   *      - {{{ SELECT `+`(1,2); }}}
-   *      - df.select(1+2)
-   *  - Apply [[TypeCoercion]] rules to the result of previous step. In case that the resulting
-   *    expression of the previous step is [[BinaryArithmetic]], skip this one as type coercion is
-   *    already applied.
-   *  - Apply timezone, if the resulting expression is [[TimeZoneAwareExpression]].
+   *   - Check if the `unresolvedFunction` is an aggregate expression. Set
+   *     `resolvingTreeUnderAggregateExpression` to `true` in that case so we can properly resolve
+   *     attributes in ORDER BY and HAVING.
+   *   - If the function is `count(*)` it is replaced with `count(1)` (please check
+   *     [[normalizeCountExpression]] documentation for more details). Otherwise, we resolve the
+   *     children of it.
+   *   - Resolve the function using [[FunctionResolution.resolveFunction]].
+   *   - Perform further resolution on specific nodes:
+   *     - Initialize the seed of [[InheritAnalysisRules]];
+   *     - Resolve the replacement expression of [[InheritAnalysisRules]];
+   *     - Type coerce [[TryEval]]'s child. Copying tags is specifically important for
+   *       [[FunctionRegistry.FUNC_ALIAS]];
+   *     - Use [[AggregateExpressionResolver]] to resolve [[AggregateExpression]];
+   *     - Use [[BinaryArithmeticResolver]] to resolve [[BinaryArithmetic]]. Specifically
+   *       important for cases like:
+   *       - {{{SELECT `+`(1,2);}}}
+   *       - df.select(1+2)
+   *   - Apply [[TypeCoercion]] rules to the result of previous step. In case that the resulting
+   *     expression of the previous step is [[BinaryArithmetic]], skip this one as type coercion
+   *     is already applied.
+   *   - Apply timezone, if the resulting expression is [[TimeZoneAwareExpression]].
    */
   override def resolve(unresolvedFunction: UnresolvedFunction): Expression = {
     val expressionInfo = functionResolution.lookupBuiltinOrTempFunction(
       unresolvedFunction.nameParts,
-      Some(unresolvedFunction)
-    )
+      Some(unresolvedFunction))
     if (expressionInfo.exists(_.getGroup == "agg_funcs")) {
       expressionResolutionContextStack.peek().resolvingTreeUnderAggregateExpression = true
     }
@@ -124,22 +108,17 @@ class FunctionResolver(
         }
         coerceExpressionTypes(
           expression = withNewSeed,
-          expressionTreeTraversal = traversals.current
-        )
+          expressionTreeTraversal = traversals.current)
       case inheritAnalysisRules: InheritAnalysisRules =>
         val resolvedInheritAnalysisRules =
           withResolvedChildren(inheritAnalysisRules, expressionResolver.resolve _)
         coerceExpressionTypes(
           expression = resolvedInheritAnalysisRules,
-          expressionTreeTraversal = traversals.current
-        )
+          expressionTreeTraversal = traversals.current)
       case tryEval: TryEval =>
-        val coercedTryEval = tryEval.copy(
-          child = coerceExpressionTypes(
-            expression = tryEval.child,
-            expressionTreeTraversal = traversals.current
-          )
-        )
+        val coercedTryEval = tryEval.copy(child = coerceExpressionTypes(
+          expression = tryEval.child,
+          expressionTreeTraversal = traversals.current))
         coercedTryEval.copyTagsFrom(tryEval)
         coercedTryEval
       case aggregateExpression: AggregateExpression =>
@@ -147,8 +126,7 @@ class FunctionResolver(
           aggregateExpressionResolver.resolveWithoutRecursingIntoChildren(aggregateExpression)
         coerceExpressionTypes(
           expression = resolvedAggregateExpression,
-          expressionTreeTraversal = traversals.current
-        )
+          expressionTreeTraversal = traversals.current)
       case binaryArithmetic: BinaryArithmetic =>
         binaryArithmeticResolver.resolve(binaryArithmetic)
       case other =>
@@ -157,8 +135,7 @@ class FunctionResolver(
 
     TimezoneAwareExpressionResolver.resolveTimezone(
       resolvedFunction,
-      traversals.current.sessionLocalTimeZone
-    )
+      traversals.current.sessionLocalTimeZone)
   }
 
   private def isCountStarExpansionAllowed(unresolvedFunction: UnresolvedFunction): Boolean =
@@ -169,35 +146,31 @@ class FunctionResolver(
     }
 
   /**
-   * Method used to determine whether the given function should be replaced with another one.
-   * Only accepts unqualified or properly qualified builtin count function.
-   * Rejects catalog.db.count (persistent function) to avoid incorrect normalization.
+   * Method used to determine whether the given function should be replaced with another one. Only
+   * accepts unqualified or properly qualified builtin count function. Rejects catalog.db.count
+   * (persistent function) to avoid incorrect normalization.
    */
   private def isCount(unresolvedFunction: UnresolvedFunction): Boolean = {
     !unresolvedFunction.isDistinct &&
-      FunctionResolution.isUnqualifiedOrBuiltinFunctionName(unresolvedFunction.nameParts, "count")
+    FunctionResolution.isUnqualifiedOrBuiltinFunctionName(unresolvedFunction.nameParts, "count")
   }
 
   /**
    * Method used to replace the `count(*)` function with `count(1)` function. Resolution of the
    * `count(*)` is done in the following way:
-   *  - SQL: It is done during the construction of the AST (in [[AstBuilder]]).
-   *  - Dataframes: It is done during the analysis phase and that's why we need to do it here.
+   *   - SQL: It is done during the construction of the AST (in [[AstBuilder]]).
+   *   - Dataframes: It is done during the analysis phase and that's why we need to do it here.
    */
   private def normalizeCountExpression(
       unresolvedFunction: UnresolvedFunction): UnresolvedFunction = {
-    unresolvedFunction.copy(
-      arguments = Seq(Literal(1)),
-      filter = unresolvedFunction.filter
-    )
+    unresolvedFunction.copy(arguments = Seq(Literal(1)), filter = unresolvedFunction.filter)
   }
 
-  private def throwSeedExpressionIsUnfoldable(expressionWithRandomSeed: ExpressionWithRandomSeed) =
+  private def throwSeedExpressionIsUnfoldable(
+      expressionWithRandomSeed: ExpressionWithRandomSeed) =
     throw new AnalysisException(
       errorClass = "SEED_EXPRESSION_IS_UNFOLDABLE",
       messageParameters = Map(
         "seedExpr" -> toSQLExpr(expressionWithRandomSeed.seedExpression),
-        "exprWithSeed" -> toSQLExpr(expressionWithRandomSeed)
-      )
-    )
+        "exprWithSeed" -> toSQLExpr(expressionWithRandomSeed)))
 }

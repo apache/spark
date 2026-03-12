@@ -41,8 +41,7 @@ class SQLQueryContextSuite extends SparkFunSuite with SQLHelper {
       // Empty fragment for invalid indexes
       ("select 1 / 0", -1, 11) -> "",
       ("select 1 / 0", 7, 12) -> "",
-      ("select 1 / 0", 11, 7) -> ""
-    ).foreach { case ((sqlText, start, stop), expectedFragment) =>
+      ("select 1 / 0", 11, 7) -> "").foreach { case ((sqlText, start, stop), expectedFragment) =>
       assert(getFragment(sqlText, start, stop) === expectedFragment)
     }
   }

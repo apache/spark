@@ -17,25 +17,20 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import org.apache.spark.sql.catalyst.expressions.{
-  Cast,
-  DefaultStringProducingExpression,
-  Expression,
-  Literal
-}
+import org.apache.spark.sql.catalyst.expressions.{Cast, DefaultStringProducingExpression, Expression, Literal}
 import org.apache.spark.sql.types.{DataType, StringType}
 
 /**
  * This type coercion object is only used in the single-pass analyzer and is not part of the
  * [[TypeCoercion]] rules used in the fixed-point analyzer.
  *
- * When the database object (e.g. [[View]]) has a custom default collation and a
- * resolving expression's dataType is the companion object [[StringType]], we need to treat the
- * dataType as a collated [[StringType]]. To do this, we wrap the expression with a cast to a
- * [[StringType]] with the default collation or change the dataType to [[StringType]] with the
- * default collation. Note that when the dataType is equal to the companion object [[StringType]],
- * but isn't the same by reference, we shouldn't change the dataType, since that means the user
- * explicitly specified UTF8_BINARY collation.
+ * When the database object (e.g. [[View]]) has a custom default collation and a resolving
+ * expression's dataType is the companion object [[StringType]], we need to treat the dataType as
+ * a collated [[StringType]]. To do this, we wrap the expression with a cast to a [[StringType]]
+ * with the default collation or change the dataType to [[StringType]] with the default collation.
+ * Note that when the dataType is equal to the companion object [[StringType]], but isn't the same
+ * by reference, we shouldn't change the dataType, since that means the user explicitly specified
+ * UTF8_BINARY collation.
  */
 object DefaultCollationTypeCoercion {
 
@@ -75,10 +70,10 @@ object DefaultCollationTypeCoercion {
     }
 
   /**
-   * STRING (without explicit collation) is considered default string type.
-   * STRING COLLATE <collation_name> (with explicit collation) is not considered
-   * default string type even when explicit collation is UTF8_BINARY (default collation).
-   * Should only return true for StringType object and not for StringType("UTF8_BINARY").
+   * STRING (without explicit collation) is considered default string type. STRING COLLATE
+   * <collation_name> (with explicit collation) is not considered default string type even when
+   * explicit collation is UTF8_BINARY (default collation). Should only return true for StringType
+   * object and not for StringType("UTF8_BINARY").
    */
   private def isDefaultStringType(dataType: DataType): Boolean =
     dataType match {
@@ -87,9 +82,9 @@ object DefaultCollationTypeCoercion {
     }
 
   /**
-   * When a default collation is specified for a View,
-   * and the cast's dataType contains companion object [[StringType]],
-   * we should change all its occurrences to [[StringType]] with default collation.
+   * When a default collation is specified for a View, and the cast's dataType contains companion
+   * object [[StringType]], we should change all its occurrences to [[StringType]] with default
+   * collation.
    */
   private def shouldApplyCollationToCast(cast: Cast): Boolean = {
     cast.containsTag(Cast.USER_SPECIFIED_CAST) &&

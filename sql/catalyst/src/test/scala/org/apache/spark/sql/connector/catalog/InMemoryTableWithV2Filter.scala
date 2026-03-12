@@ -34,7 +34,8 @@ class InMemoryTableWithV2Filter(
     columns: Array[Column],
     partitioning: Array[Transform],
     properties: util.Map[String, String])
-  extends InMemoryBaseTable(name, columns, partitioning, properties) with SupportsDeleteV2 {
+    extends InMemoryBaseTable(name, columns, partitioning, properties)
+    with SupportsDeleteV2 {
 
   override def canDeleteWhere(predicates: Array[Predicate]): Boolean = {
     InMemoryTableWithV2Filter.supportsPredicates(predicates)
@@ -50,12 +51,13 @@ class InMemoryTableWithV2Filter(
     new InMemoryV2FilterScanBuilder(schema, options)
   }
 
-  class InMemoryV2FilterScanBuilder(
-     tableSchema: StructType,
-     options: CaseInsensitiveStringMap)
-    extends InMemoryScanBuilder(tableSchema, options) {
+  class InMemoryV2FilterScanBuilder(tableSchema: StructType, options: CaseInsensitiveStringMap)
+      extends InMemoryScanBuilder(tableSchema, options) {
     override def build: Scan = InMemoryV2FilterBatchScan(
-      data.map(_.asInstanceOf[InputPartition]).toImmutableArraySeq, schema, tableSchema, options)
+      data.map(_.asInstanceOf[InputPartition]).toImmutableArraySeq,
+      schema,
+      tableSchema,
+      options)
   }
 
   case class InMemoryV2FilterBatchScan(
@@ -63,11 +65,13 @@ class InMemoryTableWithV2Filter(
       readSchema: StructType,
       tableSchema: StructType,
       options: CaseInsensitiveStringMap)
-    extends BatchScanBaseClass(_data, readSchema, tableSchema) with SupportsRuntimeV2Filtering {
+      extends BatchScanBaseClass(_data, readSchema, tableSchema)
+      with SupportsRuntimeV2Filtering {
 
     override def filterAttributes(): Array[NamedReference] = {
       val scanFields = readSchema.fields.map(_.name).toSet
-      partitioning.flatMap(_.references)
+      partitioning
+        .flatMap(_.references)
         .filter(ref => scanFields.contains(ref.fieldNames.mkString(".")))
     }
 
@@ -75,7 +79,7 @@ class InMemoryTableWithV2Filter(
       if (partitioning.length == 1 && partitioning.head.references().length == 1) {
         val ref = partitioning.head.references().head
         filters.foreach {
-          case p : Predicate if p.name().equals("IN") =>
+          case p: Predicate if p.name().equals("IN") =>
             if (p.children().length > 1) {
               val filterRef = p.children()(0).asInstanceOf[FieldReference].references.head
               if (filterRef.toString.equals(ref.toString)) {
@@ -100,7 +104,8 @@ class InMemoryTableWithV2Filter(
   }
 
   class InMemoryWriterBuilderWithOverWrite(override val info: LogicalWriteInfo)
-    extends InMemoryWriterBuilder(info) with SupportsOverwriteV2 {
+      extends InMemoryWriterBuilder(info)
+      with SupportsOverwriteV2 {
 
     override def truncate(): WriteBuilder = {
       assert(writer.isInstanceOf[Append])
@@ -126,7 +131,9 @@ class InMemoryTableWithV2Filter(
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
     override def commit(messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
       val deleteKeys = InMemoryTableWithV2Filter.filtersToKeys(
-        dataMap.keys, partCols.map(_.toSeq.quoted).toImmutableArraySeq, predicates)
+        dataMap.keys,
+        partCols.map(_.toSeq.quoted).toImmutableArraySeq,
+        predicates)
       dataMap --= deleteKeys
       withData(messages.map(_.asInstanceOf[BufferedRows]))
     }

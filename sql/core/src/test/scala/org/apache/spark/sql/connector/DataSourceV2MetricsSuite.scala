@@ -33,10 +33,9 @@ class StagingInMemoryTableCatalogWithMetrics extends StagingInMemoryTableCatalog
     TestSupportedCommitMetric("numOutputRows", "number of output rows"),
     TestSupportedCommitMetric("numOutputBytes", "written output"))
 
-  private class TestStagedTableWithMetric(
-      ident: Identifier,
-      delegateTable: InMemoryTable
-  ) extends TestStagedTable(ident, delegateTable) with StagedTable {
+  private class TestStagedTableWithMetric(ident: Identifier, delegateTable: InMemoryTable)
+      extends TestStagedTable(ident, delegateTable)
+      with StagedTable {
 
     private var stagedChangesCommitted = false
 
@@ -54,13 +53,16 @@ class StagingInMemoryTableCatalogWithMetrics extends StagingInMemoryTableCatalog
   override def stageCreate(ident: Identifier, tableInfo: TableInfo): StagedTable =
     new TestStagedTableWithMetric(
       ident,
-      new InMemoryTable(s"$name.${ident.quoted}",
-        tableInfo.schema(), tableInfo.partitions(), tableInfo.properties()))
+      new InMemoryTable(
+        s"$name.${ident.quoted}",
+        tableInfo.schema(),
+        tableInfo.partitions(),
+        tableInfo.properties()))
 
   override def stageReplace(ident: Identifier, tableInfo: TableInfo): StagedTable =
     stageCreate(ident, tableInfo)
 
-  override def stageCreateOrReplace(ident: Identifier, tableInfo: TableInfo) : StagedTable =
+  override def stageCreateOrReplace(ident: Identifier, tableInfo: TableInfo): StagedTable =
     stageCreate(ident, tableInfo)
 }
 
@@ -85,8 +87,9 @@ class DataSourceV2MetricsSuite extends DatasourceV2SQLBase {
     val physicalPlans = withQueryExecutionsCaptured(spark)(thunk).map(_.executedPlan)
     val stagedTableWrites = physicalPlans.filter {
       case _: AtomicCreateTableAsSelectExec | _: CreateTableAsSelectExec |
-           _: AtomicReplaceTableAsSelectExec | _: ReplaceTableAsSelectExec |
-           _: AtomicReplaceTableExec | _: ReplaceTableExec => true
+          _: AtomicReplaceTableAsSelectExec | _: ReplaceTableAsSelectExec |
+          _: AtomicReplaceTableExec | _: ReplaceTableExec =>
+        true
       case _ => false
     }
     assert(stagedTableWrites.size === 1)
@@ -95,22 +98,32 @@ class DataSourceV2MetricsSuite extends DatasourceV2SQLBase {
 
   private def commands: Seq[String => Unit] = Seq(
     { catalogName =>
-      sql(s"CREATE TABLE $catalogName.$nonExistingTable AS SELECT * FROM $existingTable") },
+      sql(s"CREATE TABLE $catalogName.$nonExistingTable AS SELECT * FROM $existingTable")
+    },
     { catalogName =>
-      spark.table(existingTable).write.saveAsTable(s"$catalogName.$nonExistingTable") },
+      spark.table(existingTable).write.saveAsTable(s"$catalogName.$nonExistingTable")
+    },
     { catalogName =>
-      sql(s"CREATE OR REPLACE TABLE $catalogName.$nonExistingTable " +
-          s"AS SELECT * FROM $existingTable") },
+      sql(
+        s"CREATE OR REPLACE TABLE $catalogName.$nonExistingTable " +
+          s"AS SELECT * FROM $existingTable")
+    },
     { catalogName =>
-      sql(s"REPLACE TABLE $catalogName.$existingTable AS SELECT * FROM $existingTable") },
+      sql(s"REPLACE TABLE $catalogName.$existingTable AS SELECT * FROM $existingTable")
+    },
     { catalogName =>
-        spark.table(existingTable)
-          .write.mode("overwrite").saveAsTable(s"$catalogName.$existingTable") },
+      spark
+        .table(existingTable)
+        .write
+        .mode("overwrite")
+        .saveAsTable(s"$catalogName.$existingTable")
+    },
     { catalogName =>
-      sql(s"REPLACE TABLE $catalogName.$existingTable (id bigint, data string)") })
+      sql(s"REPLACE TABLE $catalogName.$existingTable (id bigint, data string)")
+    })
 
-  private def catalogCommitMetricsTest(
-      testName: String, catalogName: String)(testFunction: SparkPlan => Unit): Unit = {
+  private def catalogCommitMetricsTest(testName: String, catalogName: String)(
+      testFunction: SparkPlan => Unit): Unit = {
     commands.foreach { command =>
       test(s"$testName - $command") {
         registerCatalog(testCatalog, classOf[InMemoryTableCatalog])
@@ -126,14 +139,16 @@ class DataSourceV2MetricsSuite extends DatasourceV2SQLBase {
   }
 
   catalogCommitMetricsTest(
-      "No metrics in the plan if the catalog does not support them", testCatalog) { sparkPlan =>
+    "No metrics in the plan if the catalog does not support them",
+    testCatalog) { sparkPlan =>
     val metrics = sparkPlan.metrics
 
     assert(metrics.isEmpty)
   }
 
   catalogCommitMetricsTest(
-      "Plan metrics values are the values from the catalog", atomicTestCatalog) { sparkPlan =>
+    "Plan metrics values are the values from the catalog",
+    atomicTestCatalog) { sparkPlan =>
     val metrics = sparkPlan.metrics
 
     assert(metrics.size === StagingInMemoryTableCatalogWithMetrics.testMetrics.length)

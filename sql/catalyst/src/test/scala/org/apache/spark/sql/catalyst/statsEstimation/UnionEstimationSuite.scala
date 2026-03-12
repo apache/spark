@@ -210,8 +210,7 @@ class UnionEstimationSuite extends StatsEstimationTestBase {
     val expectedStats = logical.Statistics(
       sizeInBytes = 2 * 1024,
       rowCount = Some(4),
-      attributeStats = AttributeMap(
-        Seq(attrInt -> ColumnStat(nullCount = Some(0)))))
+      attributeStats = AttributeMap(Seq(attrInt -> ColumnStat(nullCount = Some(0)))))
     assert(union.stats === expectedStats)
   }
 
@@ -256,8 +255,8 @@ class UnionEstimationSuite extends StatsEstimationTestBase {
     val expectedStats = logical.Statistics(
       sizeInBytes = 2 * 1024,
       rowCount = Some(4),
-      attributeStats = AttributeMap(
-        Seq(attrInt -> ColumnStat(min = Some(1), max = Some(4), nullCount = None))))
+      attributeStats =
+        AttributeMap(Seq(attrInt -> ColumnStat(min = Some(1), max = Some(4), nullCount = None))))
     assert(union.stats === expectedStats)
   }
 }

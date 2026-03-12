@@ -83,11 +83,10 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         Invoke(inputObject, "zeroArgNotExistMethod", IntegerType).eval(inputRow)
       },
       condition = "INTERNAL_ERROR",
-      parameters = Map("message" ->
-        ("Couldn't find method zeroArgNotExistMethod with arguments " +
-          "() on class java.lang.Object.")
-      )
-    )
+      parameters = Map(
+        "message" ->
+          ("Couldn't find method zeroArgNotExistMethod with arguments " +
+            "() on class java.lang.Object.")))
 
     checkError(
       exception = intercept[SparkException] {
@@ -99,21 +98,22 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           Seq(StringType)).eval(inputRow)
       },
       condition = "INTERNAL_ERROR",
-      parameters = Map("message" ->
-        ("Couldn't find method oneArgNotExistMethod with arguments " +
-          "(class org.apache.spark.unsafe.types.UTF8String) on class java.lang.Object.")
-      )
-    )
+      parameters = Map(
+        "message" ->
+          ("Couldn't find method oneArgNotExistMethod with arguments " +
+            "(class org.apache.spark.unsafe.types.UTF8String) on class java.lang.Object.")))
   }
 
   test("MapObjects should make copies of unsafe-backed data") {
     // test UnsafeRow-backed data
     val structEncoder = ExpressionEncoder[Array[Tuple2[java.lang.Integer, java.lang.Integer]]]()
     val structInputRow = InternalRow.fromSeq(Seq(Array((1, 2), (3, 4))))
-    val structExpected = new GenericArrayData(
-      Array(InternalRow.fromSeq(Seq(1, 2)), InternalRow.fromSeq(Seq(3, 4))))
+    val structExpected =
+      new GenericArrayData(Array(InternalRow.fromSeq(Seq(1, 2)), InternalRow.fromSeq(Seq(3, 4))))
     checkEvaluationWithUnsafeProjection(
-      structEncoder.serializer.head, structExpected, structInputRow)
+      structEncoder.serializer.head,
+      structExpected,
+      structInputRow)
 
     // test UnsafeArray-backed data
     val arrayEncoder = ExpressionEncoder[Array[Array[Int]]]()
@@ -121,81 +121,151 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val arrayExpected = new GenericArrayData(
       Array(new GenericArrayData(Array(1, 2)), new GenericArrayData(Array(3, 4))))
     checkEvaluationWithUnsafeProjection(
-      arrayEncoder.serializer.head, arrayExpected, arrayInputRow)
+      arrayEncoder.serializer.head,
+      arrayExpected,
+      arrayInputRow)
 
     // test UnsafeMap-backed data
     val mapEncoder = ExpressionEncoder[Array[Map[Int, Int]]]()
-    val mapInputRow = InternalRow.fromSeq(Seq(Array(
-      Map(1 -> 100, 2 -> 200), Map(3 -> 300, 4 -> 400))))
-    val mapExpected = new GenericArrayData(Seq(
-      new ArrayBasedMapData(
-        new GenericArrayData(Array(1, 2)),
-        new GenericArrayData(Array(100, 200))),
-      new ArrayBasedMapData(
-        new GenericArrayData(Array(3, 4)),
-        new GenericArrayData(Array(300, 400)))))
-    checkEvaluationWithUnsafeProjection(
-      mapEncoder.serializer.head, mapExpected, mapInputRow)
+    val mapInputRow =
+      InternalRow.fromSeq(Seq(Array(Map(1 -> 100, 2 -> 200), Map(3 -> 300, 4 -> 400))))
+    val mapExpected = new GenericArrayData(
+      Seq(
+        new ArrayBasedMapData(
+          new GenericArrayData(Array(1, 2)),
+          new GenericArrayData(Array(100, 200))),
+        new ArrayBasedMapData(
+          new GenericArrayData(Array(3, 4)),
+          new GenericArrayData(Array(300, 400)))))
+    checkEvaluationWithUnsafeProjection(mapEncoder.serializer.head, mapExpected, mapInputRow)
   }
 
   test("SPARK-23582: StaticInvoke should support interpreted execution") {
-    Seq((classOf[java.lang.Boolean], "true", true),
+    Seq(
+      (classOf[java.lang.Boolean], "true", true),
       (classOf[java.lang.Byte], "1", 1.toByte),
       (classOf[java.lang.Short], "257", 257.toShort),
       (classOf[java.lang.Integer], "12345", 12345),
       (classOf[java.lang.Long], "12345678", 12345678.toLong),
       (classOf[java.lang.Float], "12.34", 12.34.toFloat),
-      (classOf[java.lang.Double], "1.2345678", 1.2345678)
-    ).foreach { case (cls, arg, expected) =>
-      checkObjectExprEvaluation(StaticInvoke(cls, ObjectType(cls), "valueOf",
-        Seq(BoundReference(0, ObjectType(classOf[java.lang.String]), true))),
-        expected, InternalRow.fromSeq(Seq(arg)))
+      (classOf[java.lang.Double], "1.2345678", 1.2345678)).foreach { case (cls, arg, expected) =>
+      checkObjectExprEvaluation(
+        StaticInvoke(
+          cls,
+          ObjectType(cls),
+          "valueOf",
+          Seq(BoundReference(0, ObjectType(classOf[java.lang.String]), true))),
+        expected,
+        InternalRow.fromSeq(Seq(arg)))
     }
 
     // Return null when null argument is passed with propagateNull = true
     val stringCls = classOf[java.lang.String]
-    checkObjectExprEvaluation(StaticInvoke(stringCls, ObjectType(stringCls), "valueOf",
-      Seq(BoundReference(0, ObjectType(classOf[Object]), true)), propagateNull = true),
-      null, InternalRow.fromSeq(Seq(null)))
-    checkObjectExprEvaluation(StaticInvoke(stringCls, ObjectType(stringCls), "valueOf",
-      Seq(BoundReference(0, ObjectType(classOf[Object]), true)), propagateNull = false),
-      "null", InternalRow.fromSeq(Seq(null)))
+    checkObjectExprEvaluation(
+      StaticInvoke(
+        stringCls,
+        ObjectType(stringCls),
+        "valueOf",
+        Seq(BoundReference(0, ObjectType(classOf[Object]), true)),
+        propagateNull = true),
+      null,
+      InternalRow.fromSeq(Seq(null)))
+    checkObjectExprEvaluation(
+      StaticInvoke(
+        stringCls,
+        ObjectType(stringCls),
+        "valueOf",
+        Seq(BoundReference(0, ObjectType(classOf[Object]), true)),
+        propagateNull = false),
+      "null",
+      InternalRow.fromSeq(Seq(null)))
 
     // test no argument
     val clCls = classOf[java.lang.ClassLoader]
-    checkObjectExprEvaluation(StaticInvoke(clCls, ObjectType(clCls), "getSystemClassLoader", Nil),
-      ClassLoader.getSystemClassLoader, InternalRow.empty)
+    checkObjectExprEvaluation(
+      StaticInvoke(clCls, ObjectType(clCls), "getSystemClassLoader", Nil),
+      ClassLoader.getSystemClassLoader,
+      InternalRow.empty)
     // test more than one argument
     val intCls = classOf[java.lang.Integer]
-    checkObjectExprEvaluation(StaticInvoke(intCls, ObjectType(intCls), "compare",
-      Seq(BoundReference(0, IntegerType, false), BoundReference(1, IntegerType, false))),
-      0, InternalRow.fromSeq(Seq(7, 7)))
+    checkObjectExprEvaluation(
+      StaticInvoke(
+        intCls,
+        ObjectType(intCls),
+        "compare",
+        Seq(BoundReference(0, IntegerType, false), BoundReference(1, IntegerType, false))),
+      0,
+      InternalRow.fromSeq(Seq(7, 7)))
 
-    Seq((DateTimeUtils.getClass, TimestampType, "fromJavaTimestamp", ObjectType(classOf[Timestamp]),
-      new Timestamp(77777), DateTimeUtils.fromJavaTimestamp(new Timestamp(77777))),
-      (DateTimeUtils.getClass, DateType, "fromJavaDate", ObjectType(classOf[Date]),
-        new Date(88888888), DateTimeUtils.fromJavaDate(new Date(88888888))),
-      (classOf[UTF8String], StringType, "fromString", ObjectType(classOf[String]),
-        "abc", UTF8String.fromString("abc")),
-      (Decimal.getClass, DecimalType(38, 0), "fromDecimal", ObjectType(classOf[Any]),
-        BigInt(88888888), Decimal.fromDecimal(BigInt(88888888))),
-      (Decimal.getClass, DecimalType.SYSTEM_DEFAULT,
-        "apply", ObjectType(classOf[java.math.BigInteger]),
-        new java.math.BigInteger("88888888"), Decimal.apply(new java.math.BigInteger("88888888"))),
-      (classOf[ArrayData], ArrayType(IntegerType), "toArrayData", ObjectType(classOf[Any]),
-        Array[Int](1, 2, 3), ArrayData.toArrayData(Array[Int](1, 2, 3))),
-      (classOf[UnsafeArrayData], ArrayType(IntegerType, false),
-        "fromPrimitiveArray", ObjectType(classOf[Array[Int]]),
-        Array[Int](1, 2, 3), UnsafeArrayData.fromPrimitiveArray(Array[Int](1, 2, 3))),
-      (DateTimeUtils.getClass, ObjectType(classOf[Date]),
-        "toJavaDate", ObjectType(classOf[Int]), 77777,
+    Seq(
+      (
+        DateTimeUtils.getClass,
+        TimestampType,
+        "fromJavaTimestamp",
+        ObjectType(classOf[Timestamp]),
+        new Timestamp(77777),
+        DateTimeUtils.fromJavaTimestamp(new Timestamp(77777))),
+      (
+        DateTimeUtils.getClass,
+        DateType,
+        "fromJavaDate",
+        ObjectType(classOf[Date]),
+        new Date(88888888),
+        DateTimeUtils.fromJavaDate(new Date(88888888))),
+      (
+        classOf[UTF8String],
+        StringType,
+        "fromString",
+        ObjectType(classOf[String]),
+        "abc",
+        UTF8String.fromString("abc")),
+      (
+        Decimal.getClass,
+        DecimalType(38, 0),
+        "fromDecimal",
+        ObjectType(classOf[Any]),
+        BigInt(88888888),
+        Decimal.fromDecimal(BigInt(88888888))),
+      (
+        Decimal.getClass,
+        DecimalType.SYSTEM_DEFAULT,
+        "apply",
+        ObjectType(classOf[java.math.BigInteger]),
+        new java.math.BigInteger("88888888"),
+        Decimal.apply(new java.math.BigInteger("88888888"))),
+      (
+        classOf[ArrayData],
+        ArrayType(IntegerType),
+        "toArrayData",
+        ObjectType(classOf[Any]),
+        Array[Int](1, 2, 3),
+        ArrayData.toArrayData(Array[Int](1, 2, 3))),
+      (
+        classOf[UnsafeArrayData],
+        ArrayType(IntegerType, false),
+        "fromPrimitiveArray",
+        ObjectType(classOf[Array[Int]]),
+        Array[Int](1, 2, 3),
+        UnsafeArrayData.fromPrimitiveArray(Array[Int](1, 2, 3))),
+      (
+        DateTimeUtils.getClass,
+        ObjectType(classOf[Date]),
+        "toJavaDate",
+        ObjectType(classOf[Int]),
+        77777,
         DateTimeUtils.toJavaDate(77777)),
-      (DateTimeUtils.getClass, ObjectType(classOf[Timestamp]),
-        "toJavaTimestamp", ObjectType(classOf[Long]),
-        88888888.toLong, DateTimeUtils.toJavaTimestamp(88888888))
-    ).foreach { case (cls, dataType, methodName, argType, arg, expected) =>
-      checkObjectExprEvaluation(StaticInvoke(cls, dataType, methodName,
-        Seq(BoundReference(0, argType, true))), expected, InternalRow.fromSeq(Seq(arg)))
+      (
+        DateTimeUtils.getClass,
+        ObjectType(classOf[Timestamp]),
+        "toJavaTimestamp",
+        ObjectType(classOf[Long]),
+        88888888.toLong,
+        DateTimeUtils.toJavaTimestamp(88888888))).foreach {
+      case (cls, dataType, methodName, argType, arg, expected) =>
+        checkObjectExprEvaluation(
+          StaticInvoke(cls, dataType, methodName, Seq(BoundReference(0, argType, true))),
+          expected,
+          InternalRow.fromSeq(Seq(arg)))
     }
   }
 
@@ -209,54 +279,63 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     val inputInt = Seq(BoundReference(0, ObjectType(classOf[Any]), true))
     val inputPrimitiveInt = Seq(BoundReference(0, IntegerType, false))
-    val inputSum = Seq(BoundReference(0, IntegerType, false), BoundReference(1, DoubleType, false))
+    val inputSum =
+      Seq(BoundReference(0, IntegerType, false), BoundReference(1, DoubleType, false))
 
     checkObjectExprEvaluation(
       Invoke(funcObj, "filterInt", ObjectType(classOf[Any]), inputInt),
-      java.lang.Boolean.valueOf(true), InternalRow.fromSeq(Seq(Integer.valueOf(1))))
+      java.lang.Boolean.valueOf(true),
+      InternalRow.fromSeq(Seq(Integer.valueOf(1))))
 
     checkObjectExprEvaluation(
       Invoke(funcObj, "filterPrimitiveInt", BooleanType, inputPrimitiveInt),
-      false, InternalRow.fromSeq(Seq(-1)))
+      false,
+      InternalRow.fromSeq(Seq(-1)))
 
     checkObjectExprEvaluation(
       Invoke(funcObj, "filterInt", ObjectType(classOf[Any]), inputInt),
-      null, InternalRow.fromSeq(Seq(null)))
+      null,
+      InternalRow.fromSeq(Seq(null)))
 
     checkObjectExprEvaluation(
       Invoke(funcNullObj, "filterInt", ObjectType(classOf[Any]), inputInt),
-      null, InternalRow.fromSeq(Seq(Integer.valueOf(1))))
+      null,
+      InternalRow.fromSeq(Seq(Integer.valueOf(1))))
 
     checkObjectExprEvaluation(
-      Invoke(funcObj, "binOp", DoubleType, inputSum), 1.25, InternalRow.apply(1, 0.25))
+      Invoke(funcObj, "binOp", DoubleType, inputSum),
+      1.25,
+      InternalRow.apply(1, 0.25))
 
     checkObjectExprEvaluation(
-      Invoke(funcSubObj, "binOp", DoubleType, inputSum), 0.75, InternalRow.apply(1, 0.25))
+      Invoke(funcSubObj, "binOp", DoubleType, inputSum),
+      0.75,
+      InternalRow.apply(1, 0.25))
   }
 
   test("SPARK-23593: InitializeJavaBean should support interpreted execution") {
     val list = new java.util.LinkedList[Int]()
     list.add(1)
 
-    val initializeBean = InitializeJavaBean(Literal.fromObject(new java.util.LinkedList[Int]),
+    val initializeBean = InitializeJavaBean(
+      Literal.fromObject(new java.util.LinkedList[Int]),
       Map("add" -> Literal(1)))
     checkEvaluation(initializeBean, list, InternalRow.fromSeq(Seq()))
 
     val initializeWithNonexistingMethod = InitializeJavaBean(
       Literal.fromObject(new java.util.LinkedList[Int]),
       Map("nonexistent" -> Literal(1)))
-    checkExceptionInExpression[Exception](initializeWithNonexistingMethod,
+    checkExceptionInExpression[Exception](
+      initializeWithNonexistingMethod,
       """A method named "nonexistent" is not declared in any enclosing class """ +
         "nor any supertype")
 
-    val initializeWithWrongParamType = InitializeJavaBean(
-      Literal.fromObject(new TestBean),
-      Map("setX" -> Literal("1")))
+    val initializeWithWrongParamType =
+      InitializeJavaBean(Literal.fromObject(new TestBean), Map("setX" -> Literal("1")))
     intercept[Exception] {
       evaluateWithoutCodegen(initializeWithWrongParamType, InternalRow.fromSeq(Seq()))
-    }.getMessage.contains(
-      """A method named "setX" is not declared in any enclosing class """ +
-        "nor any supertype")
+    }.getMessage.contains("""A method named "setX" is not declared in any enclosing class """ +
+      "nor any supertype")
   }
 
   test("InitializeJavaBean doesn't call setters if input in null") {
@@ -299,17 +378,16 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   // by scala values instead of catalyst values.
   private def checkObjectExprEvaluation(
-      expression: => Expression, expected: Any, inputRow: InternalRow = EmptyRow): Unit = {
+      expression: => Expression,
+      expected: Any,
+      inputRow: InternalRow = EmptyRow): Unit = {
     val serializer = new JavaSerializer(new SparkConf()).newInstance()
     val resolver = ResolveTimeZone
     val expr = resolver.resolveTimeZones(serializer.deserialize(serializer.serialize(expression)))
     checkEvaluationWithoutCodegen(expr, expected, inputRow)
     checkEvaluationWithMutableProjection(expr, expected, inputRow)
     if (GenerateUnsafeProjection.canSupport(expr.dataType)) {
-      checkEvaluationWithUnsafeProjection(
-        expr,
-        expected,
-        inputRow)
+      checkEvaluationWithUnsafeProjection(expr, expected, inputRow)
     }
     checkEvaluationWithOptimization(expr, expected, inputRow)
   }
@@ -377,11 +455,16 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     val customCollectionClasses = Seq(
-      classOf[mutable.ArraySeq[Int]], classOf[immutable.ArraySeq[Int]],
-      classOf[Seq[Int]], classOf[scala.collection.Set[Int]],
-      classOf[java.util.List[Int]], classOf[java.util.AbstractList[Int]],
-      classOf[java.util.AbstractSequentialList[Int]], classOf[java.util.Vector[Int]],
-      classOf[java.util.Stack[Int]], null,
+      classOf[mutable.ArraySeq[Int]],
+      classOf[immutable.ArraySeq[Int]],
+      classOf[Seq[Int]],
+      classOf[scala.collection.Set[Int]],
+      classOf[java.util.List[Int]],
+      classOf[java.util.AbstractList[Int]],
+      classOf[java.util.AbstractSequentialList[Int]],
+      classOf[java.util.Vector[Int]],
+      classOf[java.util.Stack[Int]],
+      null,
       classOf[java.util.Set[Int]])
 
     val list = new java.util.ArrayList[Int]()
@@ -408,8 +491,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       (list, ObjectType(classOf[java.util.List[Int]])),
       (vector, ObjectType(classOf[java.util.Vector[Int]])),
       (stack, ObjectType(classOf[java.util.Stack[Int]])),
-      (arrayData, ArrayType(IntegerType))
-    ).foreach { case (collection, inputType) =>
+      (arrayData, ArrayType(IntegerType))).foreach { case (collection, inputType) =>
       customCollectionClasses.foreach(testMapObjects(collection, _, inputType))
 
       // Unsupported custom collection class
@@ -470,21 +552,37 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("LambdaVariable should support interpreted execution") {
     def genSchema(dt: DataType): Seq[StructType] = {
-      Seq(StructType(StructField("col_1", dt, nullable = false) :: Nil),
+      Seq(
+        StructType(StructField("col_1", dt, nullable = false) :: Nil),
         StructType(StructField("col_1", dt, nullable = true) :: Nil))
     }
 
-    val elementTypes = Seq(BooleanType, ByteType, ShortType, IntegerType, LongType, FloatType,
-      DoubleType, DecimalType.USER_DEFAULT, StringType, BinaryType, DateType, TimestampType,
-      CalendarIntervalType, new ExamplePointUDT())
+    val elementTypes = Seq(
+      BooleanType,
+      ByteType,
+      ShortType,
+      IntegerType,
+      LongType,
+      FloatType,
+      DoubleType,
+      DecimalType.USER_DEFAULT,
+      StringType,
+      BinaryType,
+      DateType,
+      TimestampType,
+      CalendarIntervalType,
+      new ExamplePointUDT())
     val arrayTypes = elementTypes.flatMap { elementType =>
-      Seq(ArrayType(elementType, containsNull = false), ArrayType(elementType, containsNull = true))
+      Seq(
+        ArrayType(elementType, containsNull = false),
+        ArrayType(elementType, containsNull = true))
     }
     val mapTypes = elementTypes.flatMap { elementType =>
       Seq(MapType(elementType, elementType, false), MapType(elementType, elementType, true))
     }
     val structTypes = elementTypes.flatMap { elementType =>
-      Seq(StructType(StructField("col1", elementType, false) :: Nil),
+      Seq(
+        StructType(StructField("col1", elementType, false) :: Nil),
         StructType(StructField("col1", elementType, true) :: Nil))
     }
 
@@ -534,11 +632,11 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       ("abcd".getBytes, BinaryType),
       ("abcd", StringType),
       (BigDecimal.valueOf(10), DecimalType.IntDecimal),
-      (IntervalUtils.stringToInterval(UTF8String.fromString("interval 3 day")),
+      (
+        IntervalUtils.stringToInterval(UTF8String.fromString("interval 3 day")),
         CalendarIntervalType),
       (java.math.BigDecimal.valueOf(10), DecimalType.BigIntDecimal),
-      (Array(3, 2, 1), ArrayType(IntegerType))
-    ).foreach { case (input, dt) =>
+      (Array(3, 2, 1), ArrayType(IntegerType))).foreach { case (input, dt) =>
       val enc = RowEncoder.encoderForDataType(dt, lenient = false)
       val validateType = ValidateExternalType(
         GetExternalRowField(inputObject, index = 0, fieldName = "c0"),
@@ -569,11 +667,11 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       ("abcd".getBytes, BinaryType),
       ("abcd", StringType),
       (BigDecimal.valueOf(10), DecimalType.IntDecimal),
-      (IntervalUtils.stringToInterval(UTF8String.fromString("interval 3 day")),
+      (
+        IntervalUtils.stringToInterval(UTF8String.fromString("interval 3 day")),
         CalendarIntervalType),
       (java.math.BigDecimal.valueOf(10), DecimalType.BigIntDecimal),
-      (Array(3, 2, 1), ArrayType(IntegerType))
-    ).foreach { case (input, dt) =>
+      (Array(3, 2, 1), ArrayType(IntegerType))).foreach { case (input, dt) =>
       val enc = RowEncoder.encoderForDataType(dt, lenient = false)
       val validateType = ValidateExternalType(
         GetExternalRowField(inputObject, index = 0, fieldName = "c0"),
@@ -593,14 +691,11 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         "externalType" -> "java.lang.Integer",
         "type" -> "\"DOUBLE\"",
         "expr" -> ("\"getexternalrowfield(input[0, org.apache.spark.sql.Row, true], " +
-          "0, c0)\"")
-      )
-    )
+          "0, c0)\"")))
   }
 
-  private def javaMapSerializerFor(
-      keyClazz: Class[_],
-      valueClazz: Class[_])(inputObject: Expression): Expression = {
+  private def javaMapSerializerFor(keyClazz: Class[_], valueClazz: Class[_])(
+      inputObject: Expression): Expression = {
 
     def kvSerializerFor(inputObject: Expression, clazz: Class[_]): Expression = clazz match {
       case c if c == classOf[java.lang.Integer] =>
@@ -621,27 +716,28 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       keyNullable = true,
       ObjectType(valueClazz),
       kvSerializerFor(_, valueClazz),
-      valueNullable = true
-    )
+      valueNullable = true)
   }
 
-  private def scalaMapSerializerFor[T: TypeTag, U: TypeTag](inputObject: Expression): Expression = {
+  private def scalaMapSerializerFor[T: TypeTag, U: TypeTag](
+      inputObject: Expression): Expression = {
     val keyEnc = ScalaReflection.encoderFor[T]
     val valueEnc = ScalaReflection.encoderFor[U]
 
-    def kvSerializerFor(enc: AgnosticEncoder[_])(inputObject: Expression): Expression = enc match {
-      case AgnosticEncoders.BoxedIntEncoder =>
-        Invoke(inputObject, "intValue", IntegerType)
-      case AgnosticEncoders.StringEncoder =>
-        StaticInvoke(
-          classOf[UTF8String],
-          StringType,
-          "fromString",
-          inputObject :: Nil,
-          returnNullable = false)
-       case _ =>
-         inputObject
-    }
+    def kvSerializerFor(enc: AgnosticEncoder[_])(inputObject: Expression): Expression =
+      enc match {
+        case AgnosticEncoders.BoxedIntEncoder =>
+          Invoke(inputObject, "intValue", IntegerType)
+        case AgnosticEncoders.StringEncoder =>
+          StaticInvoke(
+            classOf[UTF8String],
+            StringType,
+            "fromString",
+            inputObject :: Nil,
+            returnNullable = false)
+        case _ =>
+          inputObject
+      }
 
     ExternalMapToCatalyst(
       inputObject,
@@ -650,8 +746,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       keyNullable = keyEnc.nullable,
       EncoderUtils.externalDataTypeFor(valueEnc),
       kvSerializerFor(valueEnc),
-      valueNullable = valueEnc.nullable
-    )
+      valueNullable = valueEnc.nullable)
   }
 
   test("SPARK-23589 ExternalMapToCatalyst should support interpreted execution") {
@@ -678,7 +773,8 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     // NULL key test
     val scalaMapHasNullKey = scala.collection.Map[java.lang.Integer, String](
-      null.asInstanceOf[java.lang.Integer] -> "v0", java.lang.Integer.valueOf(1) -> "v1")
+      null.asInstanceOf[java.lang.Integer] -> "v0",
+      java.lang.Integer.valueOf(1) -> "v1")
 
     val javaMapHasNullKey = new java.util.HashMap[java.lang.Integer, java.lang.String]() {
       {
@@ -692,39 +788,51 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       javaMapSerializerFor(classOf[java.lang.Integer], classOf[java.lang.String])(
         Literal.fromObject(javaMapHasNullKey))
     checkErrorInExpression[SparkRuntimeException](
-      serializer3, EmptyRow, "NULL_MAP_KEY", Map[String, String]())
+      serializer3,
+      EmptyRow,
+      "NULL_MAP_KEY",
+      Map[String, String]())
 
     // Scala Map
-    val serializer4 = scalaMapSerializerFor[java.lang.Integer, String](
-      Literal.fromObject(scalaMapHasNullKey))
+    val serializer4 =
+      scalaMapSerializerFor[java.lang.Integer, String](Literal.fromObject(scalaMapHasNullKey))
 
     checkErrorInExpression[SparkRuntimeException](
-      serializer4, EmptyRow, "NULL_MAP_KEY", Map[String, String]())
+      serializer4,
+      EmptyRow,
+      "NULL_MAP_KEY",
+      Map[String, String]())
   }
 
   test("SPARK-35244: invoke should throw the original exception") {
     val strClsType = ObjectType(classOf[String])
     checkExceptionInExpression[StringIndexOutOfBoundsException](
-      Invoke(Literal("a", strClsType), "substring", strClsType, Seq(Literal(3))), "")
+      Invoke(Literal("a", strClsType), "substring", strClsType, Seq(Literal(3))),
+      "")
 
     val mathCls = classOf[Math]
     checkExceptionInExpression[ArithmeticException](
-      StaticInvoke(mathCls, IntegerType, "addExact", Seq(Literal(Int.MaxValue), Literal(1))), "")
+      StaticInvoke(mathCls, IntegerType, "addExact", Seq(Literal(Int.MaxValue), Literal(1))),
+      "")
   }
 
   test("SPARK-35278: invoke should find method with correct number of parameters") {
     val strClsType = ObjectType(classOf[String])
     checkExceptionInExpression[StringIndexOutOfBoundsException](
-      Invoke(Literal("a", strClsType), "substring", strClsType, Seq(Literal(3))), "")
+      Invoke(Literal("a", strClsType), "substring", strClsType, Seq(Literal(3))),
+      "")
 
     checkObjectExprEvaluation(
-      Invoke(Literal("a", strClsType), "substring", strClsType, Seq(Literal(0))), "a")
+      Invoke(Literal("a", strClsType), "substring", strClsType, Seq(Literal(0))),
+      "a")
 
     checkExceptionInExpression[StringIndexOutOfBoundsException](
-      Invoke(Literal("a", strClsType), "substring", strClsType, Seq(Literal(0), Literal(3))), "")
+      Invoke(Literal("a", strClsType), "substring", strClsType, Seq(Literal(0), Literal(3))),
+      "")
 
     checkObjectExprEvaluation(
-      Invoke(Literal("a", strClsType), "substring", strClsType, Seq(Literal(0), Literal(1))), "a")
+      Invoke(Literal("a", strClsType), "substring", strClsType, Seq(Literal(0), Literal(1))),
+      "a")
   }
 
   test("SPARK-35278: invoke should correctly invoke override method") {
@@ -733,20 +841,28 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     val input = (1, 2)
     checkObjectExprEvaluation(
-      Invoke(Literal(obj, clsType), "testFunc", IntegerType,
-        Seq(Literal(input, ObjectType(input.getClass)))), 2)
+      Invoke(
+        Literal(obj, clsType),
+        "testFunc",
+        IntegerType,
+        Seq(Literal(input, ObjectType(input.getClass)))),
+      2)
   }
 
   test("SPARK-35288: static invoke should find method without exact param type match") {
     val input = (1, 2)
 
     checkObjectExprEvaluation(
-      StaticInvoke(TestStaticInvoke.getClass, IntegerType, "func",
-        Seq(Literal(input, ObjectType(input.getClass)))), 3)
+      StaticInvoke(
+        TestStaticInvoke.getClass,
+        IntegerType,
+        "func",
+        Seq(Literal(input, ObjectType(input.getClass)))),
+      3)
 
     checkObjectExprEvaluation(
-      StaticInvoke(TestStaticInvoke.getClass, IntegerType, "func",
-        Seq(Literal(1, IntegerType))), -1)
+      StaticInvoke(TestStaticInvoke.getClass, IntegerType, "func", Seq(Literal(1, IntegerType))),
+      -1)
   }
 
   test("SPARK-35281: StaticInvoke shouldn't box primitive when result is nullable") {
@@ -774,7 +890,12 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         }
         val inputRow = InternalRow.fromSeq(Seq(arg))
         checkObjectExprEvaluation(
-          StaticInvoke(cls, dataType, "func", arguments, inputTypes,
+          StaticInvoke(
+            cls,
+            dataType,
+            "func",
+            arguments,
+            inputTypes,
             returnNullable = returnNullable),
           expected,
           inputRow)

@@ -27,7 +27,9 @@ class AnalysisExceptionPositionSuite extends AnalysisTest {
     verifyTablePosition("SHOW PARTITIONS unknown", "unknown")
     verifyTablePosition("ALTER TABLE unknown RECOVER PARTITIONS", "unknown")
     verifyTablePosition("ALTER TABLE unknown ADD PARTITION (p=1)", "unknown")
-    verifyTablePosition("ALTER TABLE unknown PARTITION (p=1) RENAME TO PARTITION (p=2)", "unknown")
+    verifyTablePosition(
+      "ALTER TABLE unknown PARTITION (p=1) RENAME TO PARTITION (p=2)",
+      "unknown")
     verifyTablePosition("ALTER TABLE unknown DROP PARTITION (p=1)", "unknown")
     verifyTablePosition("ALTER TABLE unknown SET SERDEPROPERTIES ('a'='b')", "unknown")
     verifyTablePosition("COMMENT ON TABLE unknown IS 'hello'", "unknown")
@@ -41,8 +43,12 @@ class AnalysisExceptionPositionSuite extends AnalysisTest {
 
   test("SPARK-34057: UnresolvedTableOrView should retain sql text position") {
     verifyTableOrPermanentViewPosition("ANALYZE TABLE unknown COMPUTE STATISTICS", "unknown")
-    verifyTableOrViewPosition("ANALYZE TABLE unknown COMPUTE STATISTICS FOR COLUMNS col", "unknown")
-    verifyTableOrViewPosition("ANALYZE TABLE unknown COMPUTE STATISTICS FOR ALL COLUMNS", "unknown")
+    verifyTableOrViewPosition(
+      "ANALYZE TABLE unknown COMPUTE STATISTICS FOR COLUMNS col",
+      "unknown")
+    verifyTableOrViewPosition(
+      "ANALYZE TABLE unknown COMPUTE STATISTICS FOR ALL COLUMNS",
+      "unknown")
     verifyTableOrPermanentViewPosition("SHOW CREATE TABLE unknown", "unknown")
     verifyTableOrViewPosition("REFRESH TABLE unknown", "unknown")
     verifyTableOrViewPosition("SHOW COLUMNS FROM unknown", "unknown")
@@ -51,8 +57,7 @@ class AnalysisExceptionPositionSuite extends AnalysisTest {
       parsePlan("SHOW COLUMNS FROM unknown IN db"),
       "TABLE_OR_VIEW_NOT_FOUND",
       Map("relationName" -> "`db`.`unknown`"),
-      Array(ExpectedContext("unknown", 18, 24))
-    )
+      Array(ExpectedContext("unknown", 18, 24)))
     verifyTableOrViewPosition("ALTER TABLE unknown RENAME TO t", "unknown")
     verifyTableOrViewPosition("ALTER VIEW unknown RENAME TO v", "unknown")
   }
@@ -97,7 +102,6 @@ class AnalysisExceptionPositionSuite extends AnalysisTest {
       parsePlan(sql),
       "TABLE_OR_VIEW_NOT_FOUND",
       Map("relationName" -> s"`$table`"),
-      Array(ExpectedContext(table, startPos, startPos + table.length - 1))
-    )
+      Array(ExpectedContext(table, startPos, startPos + table.length - 1)))
   }
 }

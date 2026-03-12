@@ -32,9 +32,12 @@ import org.apache.spark.unsafe.types.UTF8String
 
 class UpdatingSessionsIteratorSuite extends SharedSparkSession {
 
-  private val rowSchema = new StructType().add("key1", StringType).add("key2", IntegerType)
+  private val rowSchema = new StructType()
+    .add("key1", StringType)
+    .add("key2", IntegerType)
     .add("session", new StructType().add("start", LongType).add("end", LongType))
-    .add("aggVal1", LongType).add("aggVal2", DoubleType)
+    .add("aggVal1", LongType)
+    .add("aggVal2", DoubleType)
   private val rowAttributes = toAttributes(rowSchema)
 
   private val noKeyRowAttributes = rowAttributes.filterNot { attr =>
@@ -47,11 +50,13 @@ class UpdatingSessionsIteratorSuite extends SharedSparkSession {
 
   private val sessionAttribute = rowAttributes.filter(attr => attr.name == "session").head
 
-  private val noKeySessionAttribute = noKeyRowAttributes.filter(attr => attr.name == "session").head
+  private val noKeySessionAttribute =
+    noKeyRowAttributes.filter(attr => attr.name == "session").head
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    val taskManager = new TaskMemoryManager(new TestMemoryManager(sqlContext.sparkContext.conf), 0)
+    val taskManager =
+      new TaskMemoryManager(new TestMemoryManager(sqlContext.sparkContext.conf), 0)
     TaskContext.setTaskContext(
       new TaskContextImpl(0, 0, 0, 0, 0, 1, taskManager, new Properties, null))
   }
@@ -68,8 +73,14 @@ class UpdatingSessionsIteratorSuite extends SharedSparkSession {
   val spillSizeThreshold = Long.MaxValue
 
   test("no row") {
-    val iterator = new UpdatingSessionsIterator(None.iterator, keysWithSessionAttributes,
-      sessionAttribute, rowAttributes, inMemoryThreshold, spillThreshold, spillSizeThreshold)
+    val iterator = new UpdatingSessionsIterator(
+      None.iterator,
+      keysWithSessionAttributes,
+      sessionAttribute,
+      rowAttributes,
+      inMemoryThreshold,
+      spillThreshold,
+      spillSizeThreshold)
 
     assert(!iterator.hasNext)
   }
@@ -77,8 +88,14 @@ class UpdatingSessionsIteratorSuite extends SharedSparkSession {
   test("only one row") {
     val rows = List(createRow("a", 1, 100, 110, 10, 1.1))
 
-    val iterator = new UpdatingSessionsIterator(rows.iterator, keysWithSessionAttributes,
-      sessionAttribute, rowAttributes, inMemoryThreshold, spillThreshold, spillSizeThreshold)
+    val iterator = new UpdatingSessionsIterator(
+      rows.iterator,
+      keysWithSessionAttributes,
+      sessionAttribute,
+      rowAttributes,
+      inMemoryThreshold,
+      spillThreshold,
+      spillSizeThreshold)
 
     assert(iterator.hasNext)
 
@@ -95,8 +112,14 @@ class UpdatingSessionsIteratorSuite extends SharedSparkSession {
     val row4 = createRow("a", 1, 113, 123, 40, 1.4)
     val rows = List(row1, row2, row3, row4)
 
-    val iterator = new UpdatingSessionsIterator(rows.iterator, keysWithSessionAttributes,
-      sessionAttribute, rowAttributes, inMemoryThreshold, spillThreshold, spillSizeThreshold)
+    val iterator = new UpdatingSessionsIterator(
+      rows.iterator,
+      keysWithSessionAttributes,
+      sessionAttribute,
+      rowAttributes,
+      inMemoryThreshold,
+      spillThreshold,
+      spillSizeThreshold)
 
     val retRows = rows.indices.map { _ =>
       assert(iterator.hasNext)
@@ -126,8 +149,14 @@ class UpdatingSessionsIteratorSuite extends SharedSparkSession {
 
     val rowsAll = rows1 ++ rows2
 
-    val iterator = new UpdatingSessionsIterator(rowsAll.iterator, keysWithSessionAttributes,
-      sessionAttribute, rowAttributes, inMemoryThreshold, spillThreshold, spillSizeThreshold)
+    val iterator = new UpdatingSessionsIterator(
+      rowsAll.iterator,
+      keysWithSessionAttributes,
+      sessionAttribute,
+      rowAttributes,
+      inMemoryThreshold,
+      spillThreshold,
+      spillSizeThreshold)
 
     val retRows1 = rows1.indices.map { _ =>
       assert(iterator.hasNext)
@@ -162,8 +191,14 @@ class UpdatingSessionsIteratorSuite extends SharedSparkSession {
 
     val rowsAll = rows1 ++ rows2
 
-    val iterator = new UpdatingSessionsIterator(rowsAll.iterator, keysWithSessionAttributes,
-      sessionAttribute, rowAttributes, inMemoryThreshold, spillThreshold, spillSizeThreshold)
+    val iterator = new UpdatingSessionsIterator(
+      rowsAll.iterator,
+      keysWithSessionAttributes,
+      sessionAttribute,
+      rowAttributes,
+      inMemoryThreshold,
+      spillThreshold,
+      spillSizeThreshold)
 
     val retRows1 = rows1.indices.map { _ =>
       assert(iterator.hasNext)
@@ -207,8 +242,14 @@ class UpdatingSessionsIteratorSuite extends SharedSparkSession {
 
     val rowsAll = rows1 ++ rows2 ++ rows3 ++ rows4
 
-    val iterator = new UpdatingSessionsIterator(rowsAll.iterator, keysWithSessionAttributes,
-      sessionAttribute, rowAttributes, inMemoryThreshold, spillThreshold, spillSizeThreshold)
+    val iterator = new UpdatingSessionsIterator(
+      rowsAll.iterator,
+      keysWithSessionAttributes,
+      sessionAttribute,
+      rowAttributes,
+      inMemoryThreshold,
+      spillThreshold,
+      spillSizeThreshold)
 
     val retRows1 = rows1.indices.map { _ =>
       assert(iterator.hasNext)
@@ -260,8 +301,14 @@ class UpdatingSessionsIteratorSuite extends SharedSparkSession {
     val row4 = createRow("a", 1, 113, 123, 40, 1.4)
     val rows = List(row1, row2, row3, row4)
 
-    val iterator = new UpdatingSessionsIterator(rows.iterator, keysWithSessionAttributes,
-      sessionAttribute, rowAttributes, inMemoryThreshold, spillThreshold, spillSizeThreshold)
+    val iterator = new UpdatingSessionsIterator(
+      rows.iterator,
+      keysWithSessionAttributes,
+      sessionAttribute,
+      rowAttributes,
+      inMemoryThreshold,
+      spillThreshold,
+      spillSizeThreshold)
 
     // UpdatingSessionIterator can't detect error on hasNext
     assert(iterator.hasNext)
@@ -296,8 +343,14 @@ class UpdatingSessionsIteratorSuite extends SharedSparkSession {
     val row3 = createRow("a", 1, 113, 123, 40, 1.4)
     val rows = List(row1, row2, row3)
 
-    val iterator = new UpdatingSessionsIterator(rows.iterator, keysWithSessionAttributes,
-      sessionAttribute, rowAttributes, inMemoryThreshold, spillThreshold, spillSizeThreshold)
+    val iterator = new UpdatingSessionsIterator(
+      rows.iterator,
+      keysWithSessionAttributes,
+      sessionAttribute,
+      rowAttributes,
+      inMemoryThreshold,
+      spillThreshold,
+      spillSizeThreshold)
 
     // UpdatingSessionIterator can't detect error on hasNext
     assert(iterator.hasNext)
@@ -339,8 +392,13 @@ class UpdatingSessionsIteratorSuite extends SharedSparkSession {
     val row4 = createNoKeyRow(113, 123, 40, 1.4)
     val rows = List(row1, row2, row3, row4)
 
-    val iterator = new UpdatingSessionsIterator(rows.iterator, Seq(noKeySessionAttribute),
-      noKeySessionAttribute, noKeyRowAttributes, inMemoryThreshold, spillThreshold,
+    val iterator = new UpdatingSessionsIterator(
+      rows.iterator,
+      Seq(noKeySessionAttribute),
+      noKeySessionAttribute,
+      noKeyRowAttributes,
+      inMemoryThreshold,
+      spillThreshold,
       spillSizeThreshold)
 
     val retRows = rows.indices.map { _ =>

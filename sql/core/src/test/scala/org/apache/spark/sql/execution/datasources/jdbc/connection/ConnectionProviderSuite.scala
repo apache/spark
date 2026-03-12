@@ -29,9 +29,9 @@ import org.apache.spark.sql.jdbc.JdbcConnectionProvider
 import org.apache.spark.sql.test.SharedSparkSession
 
 class ConnectionProviderSuite
-  extends ConnectionProviderSuiteBase
-  with SharedSparkSession
-  with MockitoSugar {
+    extends ConnectionProviderSuiteBase
+    with SharedSparkSession
+    with MockitoSugar {
 
   test("All built-in providers must be loaded") {
     IntentionallyFaultyConnectionProvider.constructed = false
@@ -70,9 +70,8 @@ class ConnectionProviderSuite
       override def getConnection(driver: Driver, options: Map[String, String]): Connection =
         throw new RuntimeException()
       override def modifiesSecurityContext(
-        driver: Driver,
-        options: Map[String, String]
-      ): Boolean = false
+          driver: Driver,
+          options: Map[String, String]): Boolean = false
     }
     val provider2 = new JdbcConnectionProvider() {
       override val name: String = "test2"
@@ -80,9 +79,8 @@ class ConnectionProviderSuite
       override def getConnection(driver: Driver, options: Map[String, String]): Connection =
         throw new RuntimeException()
       override def modifiesSecurityContext(
-        driver: Driver,
-        options: Map[String, String]
-      ): Boolean = false
+          driver: Driver,
+          options: Map[String, String]): Boolean = false
     }
 
     val providerBase = new ConnectionProviderBase() {
@@ -102,9 +100,8 @@ class ConnectionProviderSuite
       override def getConnection(driver: Driver, options: Map[String, String]): Connection =
         throw new RuntimeException()
       override def modifiesSecurityContext(
-        driver: Driver,
-        options: Map[String, String]
-      ): Boolean = false
+          driver: Driver,
+          options: Map[String, String]): Boolean = false
     }
     val provider2 = new JdbcConnectionProvider() {
       override val name: String = "test2"
@@ -112,9 +109,8 @@ class ConnectionProviderSuite
       override def getConnection(driver: Driver, options: Map[String, String]): Connection =
         mock[Connection]
       override def modifiesSecurityContext(
-        driver: Driver,
-        options: Map[String, String]
-      ): Boolean = false
+          driver: Driver,
+          options: Map[String, String]): Boolean = false
     }
 
     val providerBase = new ConnectionProviderBase() {
@@ -133,9 +129,8 @@ class ConnectionProviderSuite
         mock[Connection]
       }
       override def modifiesSecurityContext(
-        driver: Driver,
-        options: Map[String, String]
-      ): Boolean = true
+          driver: Driver,
+          options: Map[String, String]): Boolean = true
     }
     val provider2 = new JdbcConnectionProvider() {
       override val name: String = "test2"
@@ -145,9 +140,8 @@ class ConnectionProviderSuite
         mock[Connection]
       }
       override def modifiesSecurityContext(
-        driver: Driver,
-        options: Map[String, String]
-      ): Boolean = false
+          driver: Driver,
+          options: Map[String, String]): Boolean = false
     }
 
     val providerBase = new ConnectionProviderBase() {
@@ -165,9 +159,8 @@ class ConnectionProviderSuite
       override def getConnection(driver: Driver, options: Map[String, String]): Connection =
         throw new RuntimeException()
       override def modifiesSecurityContext(
-        driver: Driver,
-        options: Map[String, String]
-      ): Boolean = false
+          driver: Driver,
+          options: Map[String, String]): Boolean = false
     }
 
     val providerBase = new ConnectionProviderBase() {
@@ -215,8 +208,7 @@ class ConnectionProviderSuite
 class DisallowedConnectionProviderSuite extends SharedSparkSession {
 
   override protected def sparkConf: SparkConf =
-    super.sparkConf.set(
-      StaticSQLConf.DISABLED_JDBC_CONN_PROVIDER_LIST.key, "db2")
+    super.sparkConf.set(StaticSQLConf.DISABLED_JDBC_CONN_PROVIDER_LIST.key, "db2")
 
   test("Disabled provider must not be loaded") {
     val providers = ConnectionProvider.loadProviders()

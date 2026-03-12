@@ -56,66 +56,73 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSparkSess
   }
 
   test("All Types Dictionary") {
-    (1 :: 1000 :: Nil).foreach { n => {
-      withTempPath { dir =>
-        List.fill(n)(ROW).toDF().repartition(1).write.parquet(dir.getCanonicalPath)
-        val file = TestUtils.listDirectory(dir).head
+    (1 :: 1000 :: Nil).foreach { n =>
+      {
+        withTempPath { dir =>
+          List.fill(n)(ROW).toDF().repartition(1).write.parquet(dir.getCanonicalPath)
+          val file = TestUtils.listDirectory(dir).head
 
-        val conf = spark.sessionState.conf
-        val reader = new VectorizedParquetRecordReader(
-          conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
-        reader.initialize(file, null)
-        val batch = reader.resultBatch()
-        assert(reader.nextBatch())
-        assert(batch.numRows() == n)
-        var i = 0
-        while (i < n) {
-          assert(batch.column(0).getByte(i) == 1)
-          assert(batch.column(1).getInt(i) == 2)
-          assert(batch.column(2).getLong(i) == 3)
-          assert(batch.column(3).getUTF8String(i).toString == "abc")
-          assert(batch.column(4).getInt(i) == 13)
-          assert(batch.column(5).getLong(i) == 100000)
-          assert(batch.column(6).getBoolean(i) == true)
-          i += 1
+          val conf = spark.sessionState.conf
+          val reader = new VectorizedParquetRecordReader(
+            conf.offHeapColumnVectorEnabled,
+            conf.parquetVectorizedReaderBatchSize)
+          reader.initialize(file, null)
+          val batch = reader.resultBatch()
+          assert(reader.nextBatch())
+          assert(batch.numRows() == n)
+          var i = 0
+          while (i < n) {
+            assert(batch.column(0).getByte(i) == 1)
+            assert(batch.column(1).getInt(i) == 2)
+            assert(batch.column(2).getLong(i) == 3)
+            assert(batch.column(3).getUTF8String(i).toString == "abc")
+            assert(batch.column(4).getInt(i) == 13)
+            assert(batch.column(5).getLong(i) == 100000)
+            assert(batch.column(6).getBoolean(i) == true)
+            i += 1
+          }
+          reader.close()
         }
-        reader.close()
       }
-    }}
+    }
   }
 
   test("All Types Null") {
-    (1 :: 100 :: Nil).foreach { n => {
-      withTempPath { dir =>
-        val data = List.fill(n)(NULL_ROW).toDF()
-        data.repartition(1).write.parquet(dir.getCanonicalPath)
-        val file = TestUtils.listDirectory(dir).head
+    (1 :: 100 :: Nil).foreach { n =>
+      {
+        withTempPath { dir =>
+          val data = List.fill(n)(NULL_ROW).toDF()
+          data.repartition(1).write.parquet(dir.getCanonicalPath)
+          val file = TestUtils.listDirectory(dir).head
 
-        val conf = spark.sessionState.conf
-        val reader = new VectorizedParquetRecordReader(
-          conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
-        reader.initialize(file, null)
-        val batch = reader.resultBatch()
-        assert(reader.nextBatch())
-        assert(batch.numRows() == n)
-        var i = 0
-        while (i < n) {
-          assert(batch.column(0).isNullAt(i))
-          assert(batch.column(1).isNullAt(i))
-          assert(batch.column(2).isNullAt(i))
-          assert(batch.column(3).isNullAt(i))
-          assert(batch.column(4).isNullAt(i))
-          assert(batch.column(5).isNullAt(i))
-          assert(batch.column(6).isNullAt(i))
-          i += 1
+          val conf = spark.sessionState.conf
+          val reader = new VectorizedParquetRecordReader(
+            conf.offHeapColumnVectorEnabled,
+            conf.parquetVectorizedReaderBatchSize)
+          reader.initialize(file, null)
+          val batch = reader.resultBatch()
+          assert(reader.nextBatch())
+          assert(batch.numRows() == n)
+          var i = 0
+          while (i < n) {
+            assert(batch.column(0).isNullAt(i))
+            assert(batch.column(1).isNullAt(i))
+            assert(batch.column(2).isNullAt(i))
+            assert(batch.column(3).isNullAt(i))
+            assert(batch.column(4).isNullAt(i))
+            assert(batch.column(5).isNullAt(i))
+            assert(batch.column(6).isNullAt(i))
+            i += 1
+          }
+          reader.close()
         }
-        reader.close()
-      }}
+      }
     }
   }
 
   test("Read row group containing both dictionary and plain encoded pages") {
-    withSQLConf(ParquetOutputFormat.DICTIONARY_PAGE_SIZE -> "2048",
+    withSQLConf(
+      ParquetOutputFormat.DICTIONARY_PAGE_SIZE -> "2048",
       ParquetOutputFormat.PAGE_SIZE -> "4096") {
       withTempPath { dir =>
         // In order to explicitly test for SPARK-14217, we set the parquet dictionary and page size
@@ -127,8 +134,9 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSparkSess
 
         val conf = spark.sessionState.conf
         val reader = new VectorizedParquetRecordReader(
-          conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
-        reader.initialize(file, null /* set columns to null to project all columns */)
+          conf.offHeapColumnVectorEnabled,
+          conf.parquetVectorizedReaderBatchSize)
+        reader.initialize(file, null /* set columns to null to project all columns */ )
         val column = reader.resultBatch().column(0)
         assert(reader.nextBatch())
 
@@ -145,8 +153,7 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSparkSess
   test("parquet v2 pages - delta encoding") {
     val extraOptions = Map[String, String](
       ParquetOutputFormat.WRITER_VERSION -> ParquetProperties.WriterVersion.PARQUET_2_0.toString,
-      ParquetOutputFormat.ENABLE_DICTIONARY -> "false"
-    )
+      ParquetOutputFormat.ENABLE_DICTIONARY -> "false")
 
     val hadoopConf = spark.sessionState.newHadoopConfWithOptions(extraOptions)
     withMemoryModes { offHeapMode =>
@@ -161,19 +168,21 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSparkSess
           // maintained by the reader(s)
           // Add at least one string with a null
           val data = (1 to 8193).map { i =>
-            (i,
-              i.toLong, i.toShort, Array[Byte](i.toByte),
+            (
+              i,
+              i.toLong,
+              i.toShort,
+              Array[Byte](i.toByte),
               if (i % 2 == 1) s"test_$i" else null,
               DateTimeUtils.fromJavaDate(Date.valueOf(s"2021-11-0" + ((i % 9) + 1))),
-              DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf(s"2020-11-01 12:00:0" + (i % 10))),
+              DateTimeUtils.fromJavaTimestamp(
+                Timestamp.valueOf(s"2020-11-01 12:00:0" + (i % 10))),
               Period.of(1, (i % 11) + 1, 0),
               Duration.ofMillis(((i % 9) + 1) * 100),
-              new BigDecimal(java.lang.Long.toUnsignedString(i * 100000))
-            )
+              new BigDecimal(java.lang.Long.toUnsignedString(i * 100000)))
           }
 
-          spark.createDataFrame(data)
-            .write.options(extraOptions).mode("overwrite").parquet(path)
+          spark.createDataFrame(data).write.options(extraOptions).mode("overwrite").parquet(path)
 
           val blockMetadata = readFooter(new Path(path), hadoopConf).getBlocks.asScala.head
           val columnChunkMetadataList = blockMetadata.getColumns.asScala
@@ -203,8 +212,7 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSparkSess
 
   test("parquet v2 pages - rle encoding for boolean value columns") {
     val extraOptions = Map[String, String](
-      ParquetOutputFormat.WRITER_VERSION -> ParquetProperties.WriterVersion.PARQUET_2_0.toString
-    )
+      ParquetOutputFormat.WRITER_VERSION -> ParquetProperties.WriterVersion.PARQUET_2_0.toString)
 
     val hadoopConf = spark.sessionState.newHadoopConfWithOptions(extraOptions)
     withSQLConf(
@@ -215,8 +223,7 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSparkSess
         val size = 10000
         val data = (1 to size).map { i => (true, false, i % 2 == 1) }
 
-        spark.createDataFrame(data)
-          .write.options(extraOptions).mode("overwrite").parquet(path)
+        spark.createDataFrame(data).write.options(extraOptions).mode("overwrite").parquet(path)
 
         val blockMetadata = readFooter(new Path(path), hadoopConf).getBlocks.asScala.head
         val columnChunkMetadataList = blockMetadata.getColumns.asScala

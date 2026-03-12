@@ -17,10 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import org.apache.spark.sql.catalyst.analysis.resolver.{
-  LogicalPlanResolver,
-  ResolverExtension
-}
+import org.apache.spark.sql.catalyst.analysis.resolver.{LogicalPlanResolver, ResolverExtension}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
 /**

@@ -20,8 +20,7 @@ package org.apache.spark.sql.execution.benchmark
 import org.apache.spark.benchmark.Benchmark
 
 /**
- * Benchmark for encode
- * To run this benchmark:
+ * Benchmark for encode To run this benchmark:
  * {{{
  *   1. without sbt:
  *      bin/spark-submit --class <this class> --jars <spark core test jar> <sql core test jar>
@@ -47,21 +46,28 @@ object EncodeBenchmark extends SqlBasedBenchmark {
         "Sparkは世界で最も人気のあるビッグデータ処理フレームワークである。")
       // scalastyle:off nonascii
 
-      spark.range(N).map { i =>
-        val idx = (i % 6).toInt
-        val str = exprs(idx)
-        (str, str * 3, str * 5, str * 9, "")
-      }.write.parquet(path.getCanonicalPath)
+      spark
+        .range(N)
+        .map { i =>
+          val idx = (i % 6).toInt
+          val str = exprs(idx)
+          (str, str * 3, str * 5, str * 9, "")
+        }
+        .write
+        .parquet(path.getCanonicalPath)
 
       val benchmark = new Benchmark("encode", N, output = output)
       def addBenchmarkCase(charset: String): Unit = {
         benchmark.addCase(charset) { _ =>
-          spark.read.parquet(path.getCanonicalPath).selectExpr(
-            s"encode(_1, '$charset')",
-            s"encode(_2, '$charset')",
-            s"encode(_3, '$charset')",
-            s"encode(_4, '$charset')",
-            s"encode(_5, '$charset')").noop()
+          spark.read
+            .parquet(path.getCanonicalPath)
+            .selectExpr(
+              s"encode(_1, '$charset')",
+              s"encode(_2, '$charset')",
+              s"encode(_3, '$charset')",
+              s"encode(_4, '$charset')",
+              s"encode(_5, '$charset')")
+            .noop()
         }
       }
       addBenchmarkCase("UTF-32")

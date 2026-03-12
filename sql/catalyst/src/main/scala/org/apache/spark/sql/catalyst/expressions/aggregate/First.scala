@@ -26,11 +26,11 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
 
 /**
- * Returns the first value of `child` for a group of rows. If the first value of `child`
- * is `null`, it returns `null` (respecting nulls). Even if [[First]] is used on an already
- * sorted column, if we do partial aggregation and final aggregation (when mergeExpression
- * is used) its result will not be deterministic (unless the input table is sorted and has
- * a single partition, and we use a single reducer to do the aggregation.).
+ * Returns the first value of `child` for a group of rows. If the first value of `child` is
+ * `null`, it returns `null` (respecting nulls). Even if [[First]] is used on an already sorted
+ * column, if we do partial aggregation and final aggregation (when mergeExpression is used) its
+ * result will not be deterministic (unless the input table is sorted and has a single partition,
+ * and we use a single reducer to do the aggregation.).
  */
 @ExpressionDescription(
   usage = """
@@ -52,7 +52,9 @@ import org.apache.spark.sql.types._
   group = "agg_funcs",
   since = "2.0.0")
 case class First(child: Expression, ignoreNulls: Boolean)
-  extends DeclarativeAggregate with ExpectsInputTypes with UnaryLike[Expression] {
+    extends DeclarativeAggregate
+    with ExpectsInputTypes
+    with UnaryLike[Expression] {
 
   def this(child: Expression) = this(child, false)
 
@@ -85,20 +87,17 @@ case class First(child: Expression, ignoreNulls: Boolean)
 
   override lazy val initialValues: Seq[Literal] = Seq(
     /* first = */ Literal.create(null, child.dataType),
-    /* valueSet = */ Literal.create(false, BooleanType)
-  )
+    /* valueSet = */ Literal.create(false, BooleanType))
 
   override lazy val updateExpressions: Seq[Expression] = {
     if (ignoreNulls) {
       Seq(
         /* first = */ If(valueSet || child.isNull, first, child),
-        /* valueSet = */ valueSet || child.isNotNull
-      )
+        /* valueSet = */ valueSet || child.isNotNull)
     } else {
       Seq(
         /* first = */ If(valueSet, first, child),
-        /* valueSet = */ Literal.create(true, BooleanType)
-      )
+        /* valueSet = */ Literal.create(true, BooleanType))
     }
   }
 
@@ -108,21 +107,21 @@ case class First(child: Expression, ignoreNulls: Boolean)
     // false, we are safe to do so because first.right will be null in this case).
     Seq(
       /* first = */ If(valueSet.left, first.left, first.right),
-      /* valueSet = */ valueSet.left || valueSet.right
-    )
+      /* valueSet = */ valueSet.left || valueSet.right)
   }
 
   override lazy val evaluateExpression: AttributeReference = first
 
   override def toString: String = s"$prettyName($child)${if (ignoreNulls) " ignore nulls"}"
 
-  override protected def withNewChildInternal(newChild: Expression): First = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): First =
+    copy(child = newChild)
 }
 
 object FirstLast {
   def validateIgnoreNullExpr(exp: Expression, funcName: String): Boolean = exp match {
     case Literal(b: Boolean, BooleanType) => b
-    case _ => throw QueryCompilationErrors.secondArgumentInFunctionIsNotBooleanLiteralError(
-      funcName)
+    case _ =>
+      throw QueryCompilationErrors.secondArgumentInFunctionIsNotBooleanLiteralError(funcName)
   }
 }

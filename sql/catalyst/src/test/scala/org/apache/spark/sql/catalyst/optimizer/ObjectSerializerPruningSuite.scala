@@ -35,12 +35,14 @@ import org.apache.spark.sql.types._
 class ObjectSerializerPruningSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
-    val batches = Batch("Object serializer pruning", FixedPoint(100),
+    val batches = Batch(
+      "Object serializer pruning",
+      FixedPoint(100),
       ObjectSerializerPruning,
       RemoveNoopOperators) :: Nil
   }
 
-  implicit private def productEncoder[T <: Product : TypeTag]: ExpressionEncoder[T] =
+  implicit private def productEncoder[T <: Product: TypeTag]: ExpressionEncoder[T] =
     ExpressionEncoder[T]()
 
   test("collect struct types") {
@@ -52,21 +54,21 @@ class ObjectSerializerPruningSuite extends PlanTest {
       StructType.fromDDL("a struct<a:int, b:int>, b int"),
       MapType(IntegerType, StructType.fromDDL("a int, b int, c string")),
       MapType(StructType.fromDDL("a struct<a:int, b:int>, b int"), IntegerType),
-      MapType(StructType.fromDDL("a int, b int"), StructType.fromDDL("c long, d string"))
-    )
+      MapType(StructType.fromDDL("a int, b int"), StructType.fromDDL("c long, d string")))
 
     val expectedTypes = Seq(
       Seq.empty[StructType],
       Seq.empty[StructType],
       Seq(StructType.fromDDL("a int, b int")),
       Seq(StructType.fromDDL("a int, b int, c string")),
-      Seq(StructType.fromDDL("a struct<a:int, b:int>, b int"),
+      Seq(
+        StructType.fromDDL("a struct<a:int, b:int>, b int"),
         StructType.fromDDL("a int, b int")),
       Seq(StructType.fromDDL("a int, b int, c string")),
-      Seq(StructType.fromDDL("a struct<a:int, b:int>, b int"),
+      Seq(
+        StructType.fromDDL("a struct<a:int, b:int>, b int"),
         StructType.fromDDL("a int, b int")),
-      Seq(StructType.fromDDL("a int, b int"), StructType.fromDDL("c long, d string"))
-    )
+      Seq(StructType.fromDDL("a int, b int"), StructType.fromDDL("c long, d string")))
 
     dataTypes.zipWithIndex.foreach { case (dt, idx) =>
       val structs = ObjectSerializerPruning.collectStructType(dt, ArrayBuffer.empty[StructType])
@@ -76,69 +78,84 @@ class ObjectSerializerPruningSuite extends PlanTest {
 
   test("SPARK-26619: Prune the unused serializers from SerializeFromObject") {
     val testRelation = LocalRelation($"_1".int, $"_2".int)
-    val serializerObject = CatalystSerde.serialize[(Int, Int)](
-      CatalystSerde.deserialize[(Int, Int)](testRelation))
+    val serializerObject =
+      CatalystSerde.serialize[(Int, Int)](CatalystSerde.deserialize[(Int, Int)](testRelation))
     val query = serializerObject.select($"_1")
     val optimized = Optimize.execute(query.analyze)
-    val expected = serializerObject.copy(serializer = Seq(serializerObject.serializer.head)).analyze
+    val expected =
+      serializerObject.copy(serializer = Seq(serializerObject.serializer.head)).analyze
     comparePlans(optimized, expected)
   }
 
   test("Prune nested serializers") {
     withSQLConf(SQLConf.SERIALIZER_NESTED_SCHEMA_PRUNING_ENABLED.key -> "true") {
-      val testRelation = LocalRelation(
-        $"_1".struct(StructType.fromDDL("_1 int, _2 string")), $"_2".int)
+      val testRelation =
+        LocalRelation($"_1".struct(StructType.fromDDL("_1 int, _2 string")), $"_2".int)
       val serializerObject = CatalystSerde.serialize[((Int, String), Int)](
         CatalystSerde.deserialize[((Int, String), Int)](testRelation))
       val query = serializerObject.select($"_1._1")
       val optimized = Optimize.execute(query.analyze)
 
-      val prunedSerializer = serializerObject.serializer.head.transformDown {
-        case CreateNamedStruct(children) =>
+      val prunedSerializer = serializerObject.serializer.head
+        .transformDown { case CreateNamedStruct(children) =>
           CreateNamedStruct(children.take(2))
-      }.transformUp {
-        // Aligns null literal in `If` expression to make it resolvable.
-        case i @ If(_: IsNull, Literal(null, dt), ser)
-          if !DataTypeUtils.sameType(dt, ser.dataType) =>
-          i.copy(trueValue = Literal(null, ser.dataType))
-      }.asInstanceOf[NamedExpression]
+        }
+        .transformUp {
+          // Aligns null literal in `If` expression to make it resolvable.
+          case i @ If(_: IsNull, Literal(null, dt), ser)
+              if !DataTypeUtils.sameType(dt, ser.dataType) =>
+            i.copy(trueValue = Literal(null, ser.dataType))
+        }
+        .asInstanceOf[NamedExpression]
 
       // `name` in `GetStructField` affects `comparePlans`. Maybe we can ignore
       // `name` in `GetStructField.equals`?
-      val expected = serializerObject.copy(serializer = Seq(prunedSerializer))
-        .select($"_1._1").analyze.transformAllExpressions {
-        case g: GetStructField => g.copy(name = None)
-      }
+      val expected = serializerObject
+        .copy(serializer = Seq(prunedSerializer))
+        .select($"_1._1")
+        .analyze
+        .transformAllExpressions { case g: GetStructField =>
+          g.copy(name = None)
+        }
       comparePlans(optimized, expected)
     }
   }
 
   test("SPARK-32652: Prune nested serializers: RowEncoder") {
     withSQLConf(SQLConf.SERIALIZER_NESTED_SCHEMA_PRUNING_ENABLED.key -> "true") {
-      val testRelation = LocalRelation($"i".struct(StructType.fromDDL("a int, b string")), $"j".int)
-      val rowEncoder = ExpressionEncoder(new StructType()
-        .add("i", new StructType().add("a", "int").add("b", "string"))
-        .add("j", "int"))
-      val serializerObject = CatalystSerde.serialize(
-        CatalystSerde.deserialize(testRelation)(rowEncoder))(rowEncoder)
+      val testRelation =
+        LocalRelation($"i".struct(StructType.fromDDL("a int, b string")), $"j".int)
+      val rowEncoder = ExpressionEncoder(
+        new StructType()
+          .add("i", new StructType().add("a", "int").add("b", "string"))
+          .add("j", "int"))
+      val serializerObject =
+        CatalystSerde.serialize(CatalystSerde.deserialize(testRelation)(rowEncoder))(rowEncoder)
       val query = serializerObject.select($"i.a")
       val optimized = Optimize.execute(query.analyze)
 
-      val prunedSerializer = serializerObject.serializer.head.transformDown {
-        case CreateNamedStruct(children) => CreateNamedStruct(children.take(2))
-      }.transformUp {
-        // Aligns null literal in `If` expression to make it resolvable.
-        case i @ If(invoke: Invoke, Literal(null, dt), ser) if invoke.functionName == "isNullAt" &&
-            !DataTypeUtils.sameType(dt, ser.dataType) =>
-          i.copy(trueValue = Literal(null, ser.dataType))
-      }.asInstanceOf[NamedExpression]
+      val prunedSerializer = serializerObject.serializer.head
+        .transformDown { case CreateNamedStruct(children) =>
+          CreateNamedStruct(children.take(2))
+        }
+        .transformUp {
+          // Aligns null literal in `If` expression to make it resolvable.
+          case i @ If(invoke: Invoke, Literal(null, dt), ser)
+              if invoke.functionName == "isNullAt" &&
+                !DataTypeUtils.sameType(dt, ser.dataType) =>
+            i.copy(trueValue = Literal(null, ser.dataType))
+        }
+        .asInstanceOf[NamedExpression]
 
       // `name` in `GetStructField` affects `comparePlans`. Maybe we can ignore
       // `name` in `GetStructField.equals`?
-      val expected = serializerObject.copy(serializer = Seq(prunedSerializer))
-        .select($"i.a").analyze.transformAllExpressions {
-        case g: GetStructField => g.copy(name = None)
-      }
+      val expected = serializerObject
+        .copy(serializer = Seq(prunedSerializer))
+        .select($"i.a")
+        .analyze
+        .transformAllExpressions { case g: GetStructField =>
+          g.copy(name = None)
+        }
       comparePlans(optimized, expected)
     }
   }

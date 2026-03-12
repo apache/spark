@@ -25,27 +25,28 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
  * Common utilities for generator resolution.
  */
 object GeneratorResolution {
+
   /**
-   * Construct the output attributes for a [[Generator]], given a list of names.  If the list of
+   * Construct the output attributes for a [[Generator]], given a list of names. If the list of
    * names is empty names are assigned from field names in generator.
    *
-   * @throws AnalysisException UDTF_ALIAS_NUMBER_MISMATCH if the number of names does not match
-   *                           the number of output attributes from the generator
+   * @throws AnalysisException
+   *   UDTF_ALIAS_NUMBER_MISMATCH if the number of names does not match the number of output
+   *   attributes from the generator
    */
-  def makeGeneratorOutput(
-      generator: Generator,
-      names: Seq[String]): Seq[Attribute] = {
+  def makeGeneratorOutput(generator: Generator, names: Seq[String]): Seq[Attribute] = {
     val elementAttrs = DataTypeUtils.toAttributes(generator.elementSchema)
 
     if (names.length == elementAttrs.length) {
-      names.zip(elementAttrs).map {
-        case (name, attr) => attr.withName(name)
+      names.zip(elementAttrs).map { case (name, attr) =>
+        attr.withName(name)
       }
     } else if (names.isEmpty) {
       elementAttrs
     } else {
       throw QueryCompilationErrors.aliasesNumberNotMatchUDTFOutputError(
-        elementAttrs.size, names.mkString(","))
+        elementAttrs.size,
+        names.mkString(","))
     }
   }
 }

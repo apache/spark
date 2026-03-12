@@ -26,17 +26,17 @@ import org.apache.spark.sql.classic.SparkSession
  * which is created out of file. It reuses the code from [[ResolveSQLOnFile]] to resolve it
  * properly.
  *
- * We have it as an extension to avoid cyclic dependencies between [[resolver]] and [[datasources]]
- * packages.
+ * We have it as an extension to avoid cyclic dependencies between [[resolver]] and
+ * [[datasources]] packages.
  */
 class FileResolver(sparkSession: SparkSession) extends ResolverExtension {
   private val resolveSQLOnFile = new ResolveSQLOnFile(sparkSession)
 
   /**
    * [[ResolveSQLOnFile]] code that is reused to resolve [[UnresolvedRelation]] has
-   * [[ExpressionEncoder.resolveAndBind]] on its path which introduces another call to
-   * the analyzer which is acceptable as it is called on the leaf node of the plan. That's why we
-   * have to allow invoking transforms in the single-pass analyzer.
+   * [[ExpressionEncoder.resolveAndBind]] on its path which introduces another call to the
+   * analyzer which is acceptable as it is called on the leaf node of the plan. That's why we have
+   * to allow invoking transforms in the single-pass analyzer.
    */
   object UnresolvedRelationResolution {
     def unapply(operator: LogicalPlan): Option[LogicalPlan] =

@@ -37,10 +37,8 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
     if (exp.foldable) {
       prepareForEval(exp).eval() match {
         case s: UTF8String if s != null =>
-          val dataType = DataType.parseTypeWithFallback(
-            s.toString,
-            DataType.fromDDL,
-            DataType.fromJson)
+          val dataType =
+            DataType.parseTypeWithFallback(s.toString, DataType.fromDDL, DataType.fromJson)
           CharVarcharUtils.failIfHasCharVarchar(dataType)
         case _ => throw QueryCompilationErrors.unexpectedSchemaTypeError(exp)
 
@@ -60,10 +58,10 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
 
   def convertToMapData(exp: Expression): Map[String, String] = exp match {
     case m: CreateMap
-      if AbstractMapType(
-        StringTypeWithCollation(supportsTrimCollation = true),
-        StringTypeWithCollation(supportsTrimCollation = true))
-        .acceptsType(m.dataType) =>
+        if AbstractMapType(
+          StringTypeWithCollation(supportsTrimCollation = true),
+          StringTypeWithCollation(supportsTrimCollation = true))
+          .acceptsType(m.dataType) =>
       val arrayMap = m.eval().asInstanceOf[ArrayBasedMapData]
       ArrayBasedMapData.toScalaMap(arrayMap).map { case (key, value) =>
         if (key == null) {
@@ -88,7 +86,8 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
       val f = schema(corruptFieldIndex)
       if (!f.dataType.isInstanceOf[StringType] || !f.nullable) {
         throw QueryCompilationErrors.invalidFieldTypeForCorruptRecordError(
-          columnNameOfCorruptRecord, f.dataType)
+          columnNameOfCorruptRecord,
+          f.dataType)
       }
     }
   }
@@ -113,10 +112,11 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
 
   /**
    * Check if the schema is valid for Json
-   * @param schema The schema to check.
+   * @param schema
+   *   The schema to check.
    * @return
-   *  `TypeCheckSuccess` if the schema is valid
-   *  `DataTypeMismatch` with an error error if the schema is not valid
+   *   `TypeCheckSuccess` if the schema is valid `DataTypeMismatch` with an error error if the
+   *   schema is not valid
    */
   def checkJsonSchema(schema: DataType): TypeCheckResult = {
     val isInvalid = schema.existsRecursively {
@@ -135,10 +135,11 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
   /**
    * Check if the schema is valid for XML
    *
-   * @param schema The schema to check.
+   * @param schema
+   *   The schema to check.
    * @return
-   * `TypeCheckSuccess` if the schema is valid
-   * `DataTypeMismatch` with an error error if the schema is not valid
+   *   `TypeCheckSuccess` if the schema is valid `DataTypeMismatch` with an error error if the
+   *   schema is not valid
    */
   def checkXmlSchema(schema: DataType): TypeCheckResult = {
     val isInvalid = schema.existsRecursively {
@@ -175,13 +176,11 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
           }
         }
       case _: Attribute if a.groupingExpressions.isEmpty =>
-        a.failAnalysis(
-          errorClass = "MISSING_GROUP_BY",
-          messageParameters = Map.empty)
+        a.failAnalysis(errorClass = "MISSING_GROUP_BY", messageParameters = Map.empty)
       case e: Attribute if !a.groupingExpressions.exists(_.semanticEquals(e)) =>
         throw QueryCompilationErrors.columnNotInGroupByClauseError(e)
       case s: ScalarSubquery
-        if s.children.nonEmpty && !a.groupingExpressions.exists(_.semanticEquals(s)) =>
+          if s.children.nonEmpty && !a.groupingExpressions.exists(_.semanticEquals(s)) =>
         s.failAnalysis(
           errorClass = "SCALAR_SUBQUERY_IS_IN_GROUP_BY_OR_AGGREGATE_FUNCTION",
           messageParameters = Map("sqlExpr" -> toSQLExpr(s)))
@@ -207,9 +206,8 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
       if (expr.dataType.existsRecursively(_.isInstanceOf[VariantType])) {
         expr.failAnalysis(
           errorClass = "GROUP_EXPRESSION_TYPE_IS_NOT_ORDERABLE",
-          messageParameters = Map(
-            "sqlExpr" -> toSQLExpr(expr),
-            "dataType" -> toSQLType(expr.dataType)))
+          messageParameters =
+            Map("sqlExpr" -> toSQLExpr(expr), "dataType" -> toSQLType(expr.dataType)))
       }
     }
 

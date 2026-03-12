@@ -46,16 +46,16 @@ class ArrowWindowPythonEvaluatorFactory(
     val spillSize: SQLMetric,
     pythonMetrics: Map[String, SQLMetric],
     sessionUUID: Option[String])
-  extends PartitionEvaluatorFactory[InternalRow, InternalRow] with WindowEvaluatorFactoryBase {
+    extends PartitionEvaluatorFactory[InternalRow, InternalRow]
+    with WindowEvaluatorFactoryBase {
 
   /**
    * Helper functions and data structures for window bounds
    *
-   * It contains:
-   * (1) Total number of window bound indices in the python input row
-   * (2) Function from frame index to its lower bound column index in the python input row
-   * (3) Function from frame index to its upper bound column index in the python input row
-   * (4) Seq from frame index to its window bound type
+   * It contains: (1) Total number of window bound indices in the python input row (2) Function
+   * from frame index to its lower bound column index in the python input row (3) Function from
+   * frame index to its upper bound column index in the python input row (4) Seq from frame index
+   * to its window bound type
    */
   private type WindowBoundHelpers = (Int, Int => Int, Int => Int, Seq[WindowBoundType])
 
@@ -89,13 +89,13 @@ class ArrowWindowPythonEvaluatorFactory(
    */
   private def computeWindowBoundHelpers(
       factories: Seq[InternalRow => WindowFunctionFrame]): WindowBoundHelpers = {
-    val functionFrames = factories.map(_ (EmptyRow))
+    val functionFrames = factories.map(_(EmptyRow))
 
     val windowBoundTypes = functionFrames.map {
       case _: UnboundedWindowFunctionFrame => UnboundedWindow
-      case _: UnboundedFollowingWindowFunctionFrame |
-           _: SlidingWindowFunctionFrame |
-           _: UnboundedPrecedingWindowFunctionFrame => BoundedWindow
+      case _: UnboundedFollowingWindowFunctionFrame | _: SlidingWindowFunctionFrame |
+          _: UnboundedPrecedingWindowFunctionFrame =>
+        BoundedWindow
       // It should be impossible to get other types of window function frame here
       case frame => throw QueryExecutionErrors.unexpectedWindowFunctionFrameError(frame.toString)
     }
@@ -154,9 +154,14 @@ class ArrowWindowPythonEvaluatorFactory(
     private val largeVarTypes = conf.arrowUseLargeVarTypes
 
     // Extract window expressions and window functions
-    private val windowExpressions = expressions.flatMap(_.collect { case e: WindowExpression => e })
+    private val windowExpressions = expressions.flatMap(_.collect { case e: WindowExpression =>
+      e
+    })
     private val udfExpressions = windowExpressions.map { e =>
-      e.windowFunction.asInstanceOf[AggregateExpression].aggregateFunction.asInstanceOf[PythonUDAF]
+      e.windowFunction
+        .asInstanceOf[AggregateExpression]
+        .aggregateFunction
+        .asInstanceOf[PythonUDAF]
     }
 
     // We shouldn't be chaining anything here.
@@ -164,11 +169,11 @@ class ArrowWindowPythonEvaluatorFactory(
     private val (pyFuncs, inputs) = udfExpressions.map(collectFunctions).unzip
     require(pyFuncs.length == expressions.length)
 
-    private val udfWindowBoundTypes = pyFuncs.indices.map(i =>
-      frameWindowBoundTypes(expressionIndexToFrameIndex(i)))
+    private val udfWindowBoundTypes =
+      pyFuncs.indices.map(i => frameWindowBoundTypes(expressionIndexToFrameIndex(i)))
     private val pythonRunnerConf: Map[String, String] =
       (ArrowPythonRunner.getPythonRunnerConfMap(conf)
-      + (windowBoundTypeConf -> udfWindowBoundTypes.map(_.value).mkString(",")))
+        + (windowBoundTypeConf -> udfWindowBoundTypes.map(_.value).mkString(",")))
 
     // Filter child output attributes down to only those that are UDF inputs.
     // Also eliminate duplicate UDF inputs. This is similar to how other Python UDF node
@@ -204,8 +209,7 @@ class ArrowWindowPythonEvaluatorFactory(
       if (isBounded(frameIndex)) {
         Seq(
           BoundReference(lowerBoundIndex(frameIndex), IntegerType, nullable = false),
-          BoundReference(upperBoundIndex(frameIndex), IntegerType, nullable = false)
-        )
+          BoundReference(upperBoundIndex(frameIndex), IntegerType, nullable = false))
       } else {
         Seq.empty
       }
@@ -217,15 +221,14 @@ class ArrowWindowPythonEvaluatorFactory(
     pyFuncs.indices.foreach { exprIndex =>
       val frameIndex = expressionIndexToFrameIndex(exprIndex)
       if (isBounded(frameIndex)) {
-        argMetas(exprIndex) =
-          Array(
-            ArgumentMetadata(lowerBoundIndex(frameIndex), None),
-            ArgumentMetadata(upperBoundIndex(frameIndex), None)) ++
-          argMetas(exprIndex).map(
-            meta => ArgumentMetadata(meta.offset + windowBoundsInput.length, meta.name))
+        argMetas(exprIndex) = Array(
+          ArgumentMetadata(lowerBoundIndex(frameIndex), None),
+          ArgumentMetadata(upperBoundIndex(frameIndex), None)) ++
+          argMetas(exprIndex).map(meta =>
+            ArgumentMetadata(meta.offset + windowBoundsInput.length, meta.name))
       } else {
-        argMetas(exprIndex) = argMetas(exprIndex).map(
-          meta => ArgumentMetadata(meta.offset + windowBoundsInput.length, meta.name))
+        argMetas(exprIndex) = argMetas(exprIndex).map(meta =>
+          ArgumentMetadata(meta.offset + windowBoundsInput.length, meta.name))
       }
     }
 
@@ -244,19 +247,18 @@ class ArrowWindowPythonEvaluatorFactory(
       val pythonInputProj = UnsafeProjection.create(
         allInputs,
         windowBoundsInput.map(ref =>
-          AttributeReference(s"i_${ref.ordinal}", ref.dataType)()) ++ childOutput
-      )
-      val pythonInputSchema = StructType(
-        allInputTypes.zipWithIndex.map { case (dt, i) =>
-          StructField(s"_$i", dt)
-        }
-      )
+          AttributeReference(s"i_${ref.ordinal}", ref.dataType)()) ++ childOutput)
+      val pythonInputSchema = StructType(allInputTypes.zipWithIndex.map { case (dt, i) =>
+        StructField(s"_$i", dt)
+      })
       val grouping = UnsafeProjection.create(partitionSpec, childOutput)
 
       // The queue used to buffer input rows so we can drain it to
       // combine input with output from Python.
-      val queue = HybridRowQueue(context.taskMemoryManager(),
-        new File(Utils.getLocalDir(SparkEnv.get.conf)), childOutput.length)
+      val queue = HybridRowQueue(
+        context.taskMemoryManager(),
+        new File(Utils.getLocalDir(SparkEnv.get.conf)),
+        childOutput.length)
       context.addTaskCompletionListener[Unit] { _ =>
         queue.close()
       }
@@ -300,7 +302,7 @@ class ArrowWindowPythonEvaluatorFactory(
         val indexRow =
           new SpecificInternalRow(Array.fill(numBoundIndices)(IntegerType).toImmutableArraySeq)
 
-        val frames = factories.map(_ (indexRow))
+        val frames = factories.map(_(indexRow))
 
         private[this] def fetchNextPartition(): Unit = {
           // Collect all the rows in the current partition.
@@ -348,22 +350,23 @@ class ArrowWindowPythonEvaluatorFactory(
 
           val join = new JoinedRow
 
-          bufferIterator.zipWithIndex.map {
-            case (current, index) =>
-              var frameIndex = 0
-              while (frameIndex < numFrames) {
-                frames(frameIndex).write(index, current)
-                // If the window is unbounded we don't need to write out window bounds.
-                if (isBounded(frameIndex)) {
-                  indexRow.setInt(
-                    lowerBoundIndex(frameIndex), frames(frameIndex).currentLowerBound())
-                  indexRow.setInt(
-                    upperBoundIndex(frameIndex), frames(frameIndex).currentUpperBound())
-                }
-                frameIndex += 1
+          bufferIterator.zipWithIndex.map { case (current, index) =>
+            var frameIndex = 0
+            while (frameIndex < numFrames) {
+              frames(frameIndex).write(index, current)
+              // If the window is unbounded we don't need to write out window bounds.
+              if (isBounded(frameIndex)) {
+                indexRow.setInt(
+                  lowerBoundIndex(frameIndex),
+                  frames(frameIndex).currentLowerBound())
+                indexRow.setInt(
+                  upperBoundIndex(frameIndex),
+                  frames(frameIndex).currentUpperBound())
               }
+              frameIndex += 1
+            }
 
-              pythonInputProj(join(indexRow, current))
+            pythonInputProj(join(indexRow, current))
           }
         }
       }

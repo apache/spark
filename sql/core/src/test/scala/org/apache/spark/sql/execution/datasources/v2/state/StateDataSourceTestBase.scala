@@ -57,8 +57,7 @@ trait StateDataSourceTestBase extends StreamTest with StateStoreMetricsTest {
         (0, "Strawberry", 1, 2, 2, 2),
         (1, "Apple", 1, 3, 3, 3),
         (0, "Banana", 1, 4, 4, 4),
-        (1, "Strawberry", 1, 5, 5, 5)
-      ),
+        (1, "Strawberry", 1, 5, 5, 5)),
       // batch 1
       AddData(inputData, 6 to 10: _*),
       // state also contains (1, "Strawberry", 1, 5, 5, 5) but not updated here
@@ -77,22 +76,23 @@ trait StateDataSourceTestBase extends StreamTest with StateStoreMetricsTest {
         (1, "Banana", 3, 9, 7, 1), // 1, 7, 1
         (0, "Strawberry", 3, 12, 8, 2), // 2, 8, 2
         (1, "Apple", 3, 15, 9, 3) // 3, 9, 3
-      )
-    )
+      ))
   }
 
   protected def getCompositeKeyStreamingAggregationQuery(
       inputData: MemoryStream[Int]): Dataset[(Int, String, Long, Long, Int, Int)] = {
-    inputData.toDF()
-      .selectExpr("value", "value % 2 AS groupKey",
+    inputData
+      .toDF()
+      .selectExpr(
+        "value",
+        "value % 2 AS groupKey",
         "(CASE value % 3 WHEN 0 THEN 'Apple' WHEN 1 THEN 'Banana' ELSE 'Strawberry' END) AS fruit")
       .groupBy($"groupKey", $"fruit")
       .agg(
         count("*").as("cnt"),
         sum("value").as("sum"),
         max("value").as("max"),
-        min("value").as("min")
-      )
+        min("value").as("min"))
       .as[(Int, String, Long, Long, Int, Int)]
   }
 
@@ -139,21 +139,20 @@ trait StateDataSourceTestBase extends StreamTest with StateStoreMetricsTest {
         (0, 5, 60, 30, 0), // 0, 10, 20, 30, 0
         (1, 5, 65, 31, 1), // 1, 11, 21, 31, 1
         (2, 5, 70, 32, 2) // 2, 12, 22, 32, 2
-      )
-    )
+      ))
   }
 
   protected def getLargeDataStreamingAggregationQuery(
       inputData: MemoryStream[Int]): Dataset[(Int, Long, Long, Int, Int)] = {
-    inputData.toDF()
+    inputData
+      .toDF()
       .selectExpr("value", "value % 10 AS groupKey")
       .groupBy($"groupKey")
       .agg(
         count("*").as("cnt"),
         sum("value").as("sum"),
         max("value").as("max"),
-        min("value").as("min")
-      )
+        min("value").as("min"))
       .as[(Int, Long, Long, Int, Int)]
   }
 
@@ -163,27 +162,23 @@ trait StateDataSourceTestBase extends StreamTest with StateStoreMetricsTest {
 
     testStream(deduplicated, OutputMode.Append())(
       StartStream(checkpointLocation = checkpointRoot),
-
       AddData(inputData, (1 to 5).flatMap(_ => (10 to 15)): _*),
       CheckAnswer(10 to 15: _*),
       assertNumStateRows(total = 6, updated = 6),
-
       AddData(inputData, 25), // Advance watermark to 15 secs, no-data-batch drops rows <= 15
       CheckNewAnswer(25),
       assertNumStateRows(total = 1, updated = 1),
-
       AddData(inputData, 10), // Should not emit anything as data less than watermark
       CheckNewAnswer(),
       assertNumStateRows(total = 1, updated = 0, droppedByWatermark = 1),
-
       AddData(inputData, 45), // Advance watermark to 35 seconds, no-data-batch drops row 25
       CheckNewAnswer(45),
-      assertNumStateRows(total = 1, updated = 1)
-    )
+      assertNumStateRows(total = 1, updated = 1))
   }
 
   protected def getDropDuplicatesQuery(inputData: MemoryStream[Int]): Dataset[Long] = {
-    inputData.toDS()
+    inputData
+      .toDS()
       .withColumn("eventTime", timestamp_seconds($"value"))
       .withWatermark("eventTime", "10 seconds")
       .dropDuplicates()
@@ -196,20 +191,18 @@ trait StateDataSourceTestBase extends StreamTest with StateStoreMetricsTest {
 
     testStream(deduplicated, OutputMode.Append())(
       StartStream(checkpointLocation = checkpointRoot),
-
       AddData(inputData, ("A", 1), ("B", 2), ("C", 3)),
       CheckAnswer(("A", 1), ("B", 2), ("C", 3)),
       assertNumStateRows(total = 3, updated = 3),
-
       AddData(inputData, ("B", 4), ("D", 5)),
       CheckNewAnswer(("D", 5)),
-      assertNumStateRows(total = 4, updated = 1)
-    )
+      assertNumStateRows(total = 4, updated = 1))
   }
 
   protected def getDropDuplicatesQueryWithColumnSpecified(
       inputData: MemoryStream[(String, Int)]): Dataset[(String, Int)] = {
-    inputData.toDS()
+    inputData
+      .toDS()
       .selectExpr("_1 AS col1", "_2 AS col2")
       .dropDuplicates("col1")
       .as[(String, Int)]
@@ -255,13 +248,13 @@ trait StateDataSourceTestBase extends StreamTest with StateStoreMetricsTest {
       // Advances watermark to 23. no-data batch drops state row ("a" -> 23), ("c" -> 23)
       AddData(inputData, "d" -> 25),
       CheckNewAnswer("d" -> 25),
-      assertNumStateRows(total = 2, updated = 1)
-    )
+      assertNumStateRows(total = 2, updated = 1))
   }
 
   protected def getDropDuplicatesWithinWatermarkQuery(
       inputData: MemoryStream[(String, Int)]): DataFrame = {
-    inputData.toDS()
+    inputData
+      .toDS()
       .withColumn("eventTime", timestamp_seconds($"_2"))
       .withWatermark("eventTime", "2 seconds")
       .dropDuplicatesWithinWatermark("_1")
@@ -276,24 +269,20 @@ trait StateDataSourceTestBase extends StreamTest with StateStoreMetricsTest {
 
     testStream(remapped, OutputMode.Update)(
       // batch 0
-      StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock,
+      StartStream(
+        Trigger.ProcessingTime("1 second"),
+        triggerClock = clock,
         checkpointLocation = checkpointRoot),
       AddData(inputData, ("hello world", 1L), ("hello scala", 2L)),
       AdvanceManualClock(1 * 1000),
-      CheckNewAnswer(
-        ("hello", 2, 1000, false),
-        ("world", 1, 0, false),
-        ("scala", 1, 0, false)
-      ),
+      CheckNewAnswer(("hello", 2, 1000, false), ("world", 1, 0, false), ("scala", 1, 0, false)),
       // batch 1
       AddData(inputData, ("hello world", 3L), ("hello scala", 4L)),
       AdvanceManualClock(1 * 1000),
       CheckNewAnswer(
         ("hello", 4, 3000, false),
         ("world", 2, 2000, false),
-        ("scala", 2, 2000, false)
-      )
-    )
+        ("scala", 2, 2000, false)))
   }
 
   protected def getFlatMapGroupsWithStateQuery(
@@ -303,7 +292,8 @@ trait StateDataSourceTestBase extends StreamTest with StateStoreMetricsTest {
     // https://github.com/apache/spark/blob/v2.4.1/examples/src/main/scala/org/apache/spark/examples/sql/streaming/StructuredSessionization.scala
     // scalastyle:on
 
-    val events = inputData.toDF()
+    val events = inputData
+      .toDF()
       .as[(String, Timestamp)]
       .flatMap { case (line, timestamp) =>
         line.split(" ").map(word => Event(sessionId = word, timestamp))
@@ -365,8 +355,7 @@ trait StateDataSourceTestBase extends StreamTest with StateStoreMetricsTest {
       // NOTE: look for evicted rows in right which are not evicted from left - they were
       // properly joined in batch 1
       CheckNewAnswer((6, 6L, 6, 6L), (8, 8L, 8, 8L), (10, 10L, 10, 10L)),
-      assertNumStateRows(8, 6)
-    )
+      assertNumStateRows(8, 6))
   }
 
   protected def runStreamStreamJoinQueryWithOneThousandInputs(checkpointRoot: String): Unit = {
@@ -377,17 +366,16 @@ trait StateDataSourceTestBase extends StreamTest with StateStoreMetricsTest {
     withSQLConf(SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false") {
       testStream(query)(
         StartStream(checkpointLocation = checkpointRoot),
-        AddData(inputData,
-          (1 to 1000).map { i => (i, i.toLong) }: _*),
+        AddData(inputData, (1 to 1000).map { i => (i, i.toLong) }: _*),
         ProcessAllAvailable(),
         // filter is applied to both sides as an optimization
-        assertNumStateRows(1000, 1000)
-      )
+        assertNumStateRows(1000, 1000))
     }
   }
 
   protected def getStreamStreamJoinQuery(inputStream: MemoryStream[(Int, Long)]): DataFrame = {
-    val df = inputStream.toDS()
+    val df = inputStream
+      .toDS()
       .select(col("_1").as("value"), timestamp_seconds($"_2").as("timestamp"))
 
     val leftStream = df.select(col("value").as("leftId"), col("timestamp").as("leftTime"))
@@ -401,17 +389,23 @@ trait StateDataSourceTestBase extends StreamTest with StateStoreMetricsTest {
       .withWatermark("leftTime", "5 seconds")
       .join(
         rightStream.withWatermark("rightTime", "5 seconds"),
-        expr("rightId = leftId AND rightTime >= leftTime AND " +
-          "rightTime <= leftTime + interval 5 seconds"),
+        expr(
+          "rightId = leftId AND rightTime >= leftTime AND " +
+            "rightTime <= leftTime + interval 5 seconds"),
         joinType = "inner")
-      .select(col("leftId"), col("leftTime").cast("int"),
-        col("rightId"), col("rightTime").cast("int"))
+      .select(
+        col("leftId"),
+        col("leftTime").cast("int"),
+        col("rightId"),
+        col("rightTime").cast("int"))
   }
 
-  protected def getSessionWindowAggregationQuery(input: MemoryStream[(String, Long)]): DataFrame = {
+  protected def getSessionWindowAggregationQuery(
+      input: MemoryStream[(String, Long)]): DataFrame = {
     val sessionWindow = session_window($"eventTime", "10 seconds")
 
-    val events = input.toDF()
+    val events = input
+      .toDF()
       .select($"_1".as("value"), $"_2".as("timestamp"))
       .withColumn("eventTime", $"timestamp".cast("timestamp"))
       .withWatermark("eventTime", "30 seconds")
@@ -420,7 +414,10 @@ trait StateDataSourceTestBase extends StreamTest with StateStoreMetricsTest {
     events
       .groupBy(sessionWindow as Symbol("session"), $"sessionId")
       .agg(count("*").as("numEvents"))
-      .selectExpr("sessionId", "CAST(session.start AS LONG)", "CAST(session.end AS LONG)",
+      .selectExpr(
+        "sessionId",
+        "CAST(session.start AS LONG)",
+        "CAST(session.end AS LONG)",
         "CAST(session.end AS LONG) - CAST(session.start AS LONG) AS durationMs",
         "numEvents")
   }
@@ -430,34 +427,33 @@ trait StateDataSourceTestBase extends StreamTest with StateStoreMetricsTest {
     val streamingDf = getSessionWindowAggregationQuery(input)
     testStream(streamingDf, OutputMode.Complete())(
       StartStream(checkpointLocation = checkpointRoot),
-      AddData(input,
+      AddData(
+        input,
         ("hello world spark streaming", 40L),
-        ("world hello structured streaming", 41L)
-      ),
+        ("world hello structured streaming", 41L)),
       CheckNewAnswer(
         ("hello", 40, 51, 11, 2),
         ("world", 40, 51, 11, 2),
         ("streaming", 40, 51, 11, 2),
         ("spark", 40, 50, 10, 1),
-        ("structured", 41, 51, 10, 1)
-      ),
-      StopStream
-    )
+        ("structured", 41, 51, 10, 1)),
+      StopStream)
   }
 
   /**
-   * Runs one batch of a transformWithState query (using RunningCountStatefulProcessor)
-   * to create checkpoint structure with state. Uses RocksDBStateStoreProvider.
+   * Runs one batch of a transformWithState query (using RunningCountStatefulProcessor) to create
+   * checkpoint structure with state. Uses RocksDBStateStoreProvider.
    */
   protected def runTransformWithStateQuery(checkpointRoot: String): Unit = {
     withSQLConf(
       SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
-      SQLConf.SHUFFLE_PARTITIONS.key -> TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString
-    ) {
+      SQLConf.SHUFFLE_PARTITIONS.key -> TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
       val inputData = MemoryStream[String]
-      val result = inputData.toDS()
+      val result = inputData
+        .toDS()
         .groupByKey(x => x)
-        .transformWithState(new org.apache.spark.sql.streaming.RunningCountStatefulProcessor(),
+        .transformWithState(
+          new org.apache.spark.sql.streaming.RunningCountStatefulProcessor(),
           TimeMode.None(),
           OutputMode.Update())
 
@@ -465,47 +461,35 @@ trait StateDataSourceTestBase extends StreamTest with StateStoreMetricsTest {
         StartStream(checkpointLocation = checkpointRoot),
         AddData(inputData, "a"),
         CheckNewAnswer(("a", "1")),
-        StopStream
-      )
+        StopStream)
     }
   }
 
   /**
-   * Helper function to create a query that combines deduplication and aggregation.
-   * This creates a more complex query with multiple stateful operators:
-   * 1. Deduplicates based on (key, value) pairs
-   * 2. Groups by key and aggregates (count, sum, max)
+   * Helper function to create a query that combines deduplication and aggregation. This creates a
+   * more complex query with multiple stateful operators:
+   *   1. Deduplicates based on (key, value) pairs
+   *   2. Groups by key and aggregates (count, sum, max)
    */
-  protected def getDedupAndAggregationQuery(
-      inputData: MemoryStream[(String, Int)]): DataFrame = {
-    inputData.toDS()
+  protected def getDedupAndAggregationQuery(inputData: MemoryStream[(String, Int)]): DataFrame = {
+    inputData
+      .toDS()
       .selectExpr("_1 AS key", "_2 AS value")
       .withColumn("eventTime", (unix_timestamp() + $"value").cast("timestamp"))
       .withWatermark("eventTime", "10 seconds")
-      .dropDuplicates("key", "value")  // First stateful operator: dedup
-      .groupBy($"key")  // Second stateful operator: aggregation
-      .agg(
-        count("*").as("count"),
-        sum("value").as("sum"),
-        max("value").as("max")
-      )
+      .dropDuplicates("key", "value") // First stateful operator: dedup
+      .groupBy($"key") // Second stateful operator: aggregation
+      .agg(count("*").as("count"), sum("value").as("sum"), max("value").as("max"))
   }
 }
 
 case class Event(sessionId: String, timestamp: Timestamp)
 
-case class SessionInfo(
-    numEvents: Int,
-    startTimestampMs: Long,
-    endTimestampMs: Long) {
+case class SessionInfo(numEvents: Int, startTimestampMs: Long, endTimestampMs: Long) {
   def durationMs: Long = endTimestampMs - startTimestampMs
 }
 
-case class SessionUpdate(
-    id: String,
-    durationMs: Long,
-    numEvents: Int,
-    expired: Boolean)
+case class SessionUpdate(id: String, durationMs: Long, numEvents: Int, expired: Boolean)
 
 // Utility for runCompositeKeyStreamingAggregationQuery
 // todo: Move runCompositeKeyStreamingAggregationQuery to this class
@@ -516,29 +500,29 @@ object CompositeKeyAggregationTestUtils {
   }
 
   def getSchemasWithMetadata(stateVersion: Int): ColumnFamilyMetadata = {
-    val keySchema = StructType(Array(
-      StructField("groupKey", IntegerType, nullable = false),
-      StructField("fruit", StringType, nullable = true)
-    ))
+    val keySchema = StructType(
+      Array(
+        StructField("groupKey", IntegerType, nullable = false),
+        StructField("fruit", StringType, nullable = true)))
 
     val valueSchema = if (stateVersion == 1) {
       // State version 1 includes key columns in the value
-      StructType(Array(
-        StructField("groupKey", IntegerType, nullable = false),
-        StructField("fruit", StringType, nullable = true),
-        StructField("count", LongType, nullable = false),
-        StructField("sum", LongType, nullable = false),
-        StructField("max", IntegerType, nullable = false),
-        StructField("min", IntegerType, nullable = false)
-      ))
+      StructType(
+        Array(
+          StructField("groupKey", IntegerType, nullable = false),
+          StructField("fruit", StringType, nullable = true),
+          StructField("count", LongType, nullable = false),
+          StructField("sum", LongType, nullable = false),
+          StructField("max", IntegerType, nullable = false),
+          StructField("min", IntegerType, nullable = false)))
     } else {
       // State version 2 excludes key columns from the value
-      StructType(Array(
-        StructField("count", LongType, nullable = false),
-        StructField("sum", LongType, nullable = false),
-        StructField("max", IntegerType, nullable = false),
-        StructField("min", IntegerType, nullable = false)
-      ))
+      StructType(
+        Array(
+          StructField("count", LongType, nullable = false),
+          StructField("sum", LongType, nullable = false),
+          StructField("max", IntegerType, nullable = false),
+          StructField("min", IntegerType, nullable = false)))
     }
 
     val encoderSpec = NoPrefixKeyStateEncoderSpec(keySchema)
@@ -555,13 +539,11 @@ object DropDuplicatesTestUtils {
   }
 
   def getDropDuplicatesSchemasWithMetadata(): ColumnFamilyMetadata = {
-    val keySchema = StructType(Array(
-      StructField("value", IntegerType, nullable = false),
-      StructField("eventTime", TimestampType)
-    ))
-    val valueSchema = StructType(Array(
-      StructField("__dummy__", NullType)
-    ))
+    val keySchema = StructType(
+      Array(
+        StructField("value", IntegerType, nullable = false),
+        StructField("eventTime", TimestampType)))
+    val valueSchema = StructType(Array(StructField("__dummy__", NullType)))
     val encoderSpec = NoPrefixKeyStateEncoderSpec(keySchema)
     ColumnFamilyMetadata(keySchema, valueSchema, encoderSpec)
   }
@@ -572,12 +554,8 @@ object DropDuplicatesTestUtils {
   }
 
   def getDropDuplicatesWithColumnSchemasWithMetadata(): ColumnFamilyMetadata = {
-    val keySchema = StructType(Array(
-      StructField("col1", StringType, nullable = true)
-    ))
-    val valueSchema = StructType(Array(
-      StructField("__dummy__", NullType, nullable = true)
-    ))
+    val keySchema = StructType(Array(StructField("col1", StringType, nullable = true)))
+    val valueSchema = StructType(Array(StructField("__dummy__", NullType, nullable = true)))
     val encoderSpec = NoPrefixKeyStateEncoderSpec(keySchema)
     ColumnFamilyMetadata(keySchema, valueSchema, encoderSpec)
   }
@@ -588,21 +566,18 @@ object DropDuplicatesTestUtils {
   }
 
   def getDropDuplicatesWithinWatermarkSchemasWithMetadata(): ColumnFamilyMetadata = {
-    val keySchema = StructType(Array(
-      StructField("_1", StringType, nullable = true)
-    ))
-    val valueSchema = StructType(Array(
-      StructField("expiresAtMicros", LongType, nullable = false)
-    ))
+    val keySchema = StructType(Array(StructField("_1", StringType, nullable = true)))
+    val valueSchema = StructType(
+      Array(StructField("expiresAtMicros", LongType, nullable = false)))
     val encoderSpec = NoPrefixKeyStateEncoderSpec(keySchema)
     ColumnFamilyMetadata(keySchema, valueSchema, encoderSpec)
   }
 }
 
 /**
- * Test utility object providing schema definitions for simple streaming aggregation.
- * Used by StatePartitionAllColumnFamiliesWriterSuite and StatePartitionAllColumnFamiliesReaderSuite
- * to eliminate code duplication.
+ * Test utility object providing schema definitions for simple streaming aggregation. Used by
+ * StatePartitionAllColumnFamiliesWriterSuite and StatePartitionAllColumnFamiliesReaderSuite to
+ * eliminate code duplication.
  */
 object SimpleAggregationTestUtils {
   def getSchemas(stateVersion: Int): (StructType, StructType) = {
@@ -611,27 +586,25 @@ object SimpleAggregationTestUtils {
   }
 
   def getSchemasWithMetadata(stateVersion: Int): ColumnFamilyMetadata = {
-    val keySchema = StructType(Array(
-      StructField("groupKey", IntegerType, nullable = false)
-    ))
+    val keySchema = StructType(Array(StructField("groupKey", IntegerType, nullable = false)))
 
     val valueSchema = if (stateVersion == 1) {
       // State version 1 includes key columns in the value
-      StructType(Array(
-        StructField("groupKey", IntegerType, nullable = false),
-        StructField("count", LongType, nullable = false),
-        StructField("sum", LongType, nullable = false),
-        StructField("max", IntegerType, nullable = false),
-        StructField("min", IntegerType, nullable = false)
-      ))
+      StructType(
+        Array(
+          StructField("groupKey", IntegerType, nullable = false),
+          StructField("count", LongType, nullable = false),
+          StructField("sum", LongType, nullable = false),
+          StructField("max", IntegerType, nullable = false),
+          StructField("min", IntegerType, nullable = false)))
     } else {
       // State version 2 excludes key columns from the value
-      StructType(Array(
-        StructField("count", LongType, nullable = false),
-        StructField("sum", LongType, nullable = false),
-        StructField("max", IntegerType, nullable = false),
-        StructField("min", IntegerType, nullable = false)
-      ))
+      StructType(
+        Array(
+          StructField("count", LongType, nullable = false),
+          StructField("sum", LongType, nullable = false),
+          StructField("max", IntegerType, nullable = false),
+          StructField("min", IntegerType, nullable = false)))
     }
 
     val encoderSpec = NoPrefixKeyStateEncoderSpec(keySchema)
@@ -650,28 +623,28 @@ object FlatMapGroupsWithStateTestUtils {
   }
 
   def getSchemasWithMetadata(stateVersion: Int): ColumnFamilyMetadata = {
-    val keySchema = StructType(Array(
-      StructField("value", StringType, nullable = true)
-    ))
+    val keySchema = StructType(Array(StructField("value", StringType, nullable = true)))
 
     val valueSchema = if (stateVersion == 1) {
       // State version 1: Flat structure
-      StructType(Array(
-        StructField("numEvents", IntegerType, nullable = false),
-        StructField("startTimestampMs", LongType, nullable = false),
-        StructField("endTimestampMs", LongType, nullable = false),
-        StructField("timeoutTimestamp", IntegerType, nullable = false)
-      ))
-    } else {
-      // State version 2: Nested structure with groupState wrapper
-      StructType(Array(
-        StructField("groupState", StructType(Array(
+      StructType(
+        Array(
           StructField("numEvents", IntegerType, nullable = false),
           StructField("startTimestampMs", LongType, nullable = false),
-          StructField("endTimestampMs", LongType, nullable = false)
-        )), nullable = false),
-        StructField("timeoutTimestamp", LongType, nullable = false)
-      ))
+          StructField("endTimestampMs", LongType, nullable = false),
+          StructField("timeoutTimestamp", IntegerType, nullable = false)))
+    } else {
+      // State version 2: Nested structure with groupState wrapper
+      StructType(
+        Array(
+          StructField(
+            "groupState",
+            StructType(Array(
+              StructField("numEvents", IntegerType, nullable = false),
+              StructField("startTimestampMs", LongType, nullable = false),
+              StructField("endTimestampMs", LongType, nullable = false))),
+            nullable = false),
+          StructField("timeoutTimestamp", LongType, nullable = false)))
     }
 
     val encoderSpec = NoPrefixKeyStateEncoderSpec(keySchema)
@@ -690,18 +663,19 @@ object SessionWindowTestUtils {
   }
 
   def getSchemasWithMetadata(): ColumnFamilyMetadata = {
-    val keySchema = StructType(Array(
-      StructField("sessionId", StringType, nullable = false),
-      StructField("sessionStartTime", TimestampType, nullable = false)
-    ))
-    val valueSchema = StructType(Array(
-      StructField("session_window", StructType(Array(
-        StructField("start", TimestampType),
-        StructField("end", TimestampType)
-      )), nullable = false),
-      StructField("sessionId", StringType, nullable = false),
-      StructField("count", LongType, nullable = false)
-    ))
+    val keySchema = StructType(
+      Array(
+        StructField("sessionId", StringType, nullable = false),
+        StructField("sessionStartTime", TimestampType, nullable = false)))
+    val valueSchema = StructType(
+      Array(
+        StructField(
+          "session_window",
+          StructType(
+            Array(StructField("start", TimestampType), StructField("end", TimestampType))),
+          nullable = false),
+        StructField("sessionId", StringType, nullable = false),
+        StructField("count", LongType, nullable = false)))
     val encoderSpec = NoPrefixKeyStateEncoderSpec(keySchema)
     ColumnFamilyMetadata(keySchema, valueSchema, encoderSpec)
   }
@@ -721,7 +695,8 @@ object StreamStreamJoinTestUtils {
 
   // Column family names for keyWithIndexToValue stores (derived from allStateStoreNames)
   val KEY_WITH_INDEX_ALL: Seq[String] =
-    allStoreNames.filter(_.endsWith(SymmetricHashJoinStateManager.KeyWithIndexToValueType.toString))
+    allStoreNames.filter(
+      _.endsWith(SymmetricHashJoinStateManager.KeyWithIndexToValueType.toString))
 
   def getKeyToNumValuesSchemas(): (StructType, StructType) = {
     val metadata = getKeyToNumValuesSchemasWithMetadata()
@@ -729,12 +704,8 @@ object StreamStreamJoinTestUtils {
   }
 
   def getKeyToNumValuesSchemasWithMetadata(): ColumnFamilyMetadata = {
-    val keySchema = StructType(Array(
-      StructField("key", IntegerType)
-    ))
-    val valueSchema = StructType(Array(
-      StructField("value", LongType)
-    ))
+    val keySchema = StructType(Array(StructField("key", IntegerType)))
+    val valueSchema = StructType(Array(StructField("value", LongType)))
     val encoderSpec = NoPrefixKeyStateEncoderSpec(keySchema)
     ColumnFamilyMetadata(keySchema, valueSchema, encoderSpec)
   }
@@ -745,22 +716,20 @@ object StreamStreamJoinTestUtils {
   }
 
   def getKeyWithIndexToValueSchemasWithMetadata(stateVersion: Int): ColumnFamilyMetadata = {
-    val keySchema = StructType(Array(
-      StructField("key", IntegerType, nullable = false),
-      StructField("index", LongType)
-    ))
+    val keySchema = StructType(
+      Array(StructField("key", IntegerType, nullable = false), StructField("index", LongType)))
 
     val valueSchema = if (stateVersion == 2 || stateVersion == 3) {
-      StructType(Array(
-        StructField("value", IntegerType, nullable = false),
-        StructField("time", TimestampType, nullable = false),
-        StructField("matched", BooleanType)
-      ))
+      StructType(
+        Array(
+          StructField("value", IntegerType, nullable = false),
+          StructField("time", TimestampType, nullable = false),
+          StructField("matched", BooleanType)))
     } else {
-      StructType(Array(
-        StructField("value", IntegerType, nullable = false),
-        StructField("time", TimestampType, nullable = false)
-      ))
+      StructType(
+        Array(
+          StructField("value", IntegerType, nullable = false),
+          StructField("time", TimestampType, nullable = false)))
     }
 
     val encoderSpec = NoPrefixKeyStateEncoderSpec(keySchema)
@@ -780,10 +749,17 @@ object StreamStreamJoinTestUtils {
     val keyToNumEncoderSpec = NoPrefixKeyStateEncoderSpec(keyToNumKeySchema)
     val keyWithIndexEncoderSpec = NoPrefixKeyStateEncoderSpec(keyWithIndexKeySchema)
 
-    KEY_TO_NUM_VALUES_ALL.map(name => name -> ColumnFamilyMetadata(
-      keyToNumKeySchema, keyToNumValueSchema, keyToNumEncoderSpec)).toMap ++
-    KEY_WITH_INDEX_ALL.map(name => name -> ColumnFamilyMetadata(
-      keyWithIndexKeySchema, keyWithIndexValueSchema, keyWithIndexEncoderSpec)).toMap
+    KEY_TO_NUM_VALUES_ALL
+      .map(name =>
+        name -> ColumnFamilyMetadata(keyToNumKeySchema, keyToNumValueSchema, keyToNumEncoderSpec))
+      .toMap ++
+      KEY_WITH_INDEX_ALL
+        .map(name =>
+          name -> ColumnFamilyMetadata(
+            keyWithIndexKeySchema,
+            keyWithIndexValueSchema,
+            keyWithIndexEncoderSpec))
+        .toMap
 
   }
 }

@@ -27,8 +27,8 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
- * The benchmarks aims to measure performance of JSON parsing when encoding is set and isn't.
- * To run this benchmark:
+ * The benchmarks aims to measure performance of JSON parsing when encoding is set and isn't. To
+ * run this benchmark:
  * {{{
  *   1. without sbt:
  *      bin/spark-submit --class <this class> --jars <spark core test jar>,
@@ -48,7 +48,8 @@ object JsonBenchmark extends SqlBasedBenchmark {
     withTempPath { path =>
       prepareDataInfo(benchmark)
 
-      spark.sparkContext.range(0, rowsNum, 1)
+      spark.sparkContext
+        .range(0, rowsNum, 1)
         .map(_ => "a")
         .toDF("fieldA")
         .write
@@ -73,10 +74,12 @@ object JsonBenchmark extends SqlBasedBenchmark {
   }
 
   def writeShortColumn(path: String, rowsNum: Int): StructType = {
-    spark.sparkContext.range(0, rowsNum, 1)
+    spark.sparkContext
+      .range(0, rowsNum, 1)
       .map(_ => "a")
       .toDF("fieldA")
-      .write.json(path)
+      .write
+      .json(path)
     new StructType().add("fieldA", StringType)
   }
 
@@ -107,17 +110,24 @@ object JsonBenchmark extends SqlBasedBenchmark {
   }
 
   def writeWideColumn(path: String, rowsNum: Int): StructType = {
-    spark.sparkContext.range(0, rowsNum, 1)
+    spark.sparkContext
+      .range(0, rowsNum, 1)
       .map { i =>
         val s = "abcdef0123456789ABCDEF".repeat(20)
         s"""{"a":"$s","b": $i,"c":"$s","d":$i,"e":"$s","f":$i,"x":"$s","y":$i,"z":"$s"}"""
       }
-      .toDF().write.text(path)
+      .toDF()
+      .write
+      .text(path)
     new StructType()
-      .add("a", StringType).add("b", LongType)
-      .add("c", StringType).add("d", LongType)
-      .add("e", StringType).add("f", LongType)
-      .add("x", StringType).add("y", LongType)
+      .add("a", StringType)
+      .add("b", LongType)
+      .add("c", StringType)
+      .add("d", LongType)
+      .add("e", StringType)
+      .add("f", LongType)
+      .add("x", StringType)
+      .add("y", LongType)
       .add("z", StringType)
   }
 
@@ -188,7 +198,8 @@ object JsonBenchmark extends SqlBasedBenchmark {
       val fields = Seq.tabulate(colsNum)(i => StructField(s"col$i", IntegerType))
       val schema = StructType(fields)
 
-      spark.range(rowsNum)
+      spark
+        .range(rowsNum)
         .select(Seq.tabulate(colsNum)(i => lit(i).as(s"col$i")): _*)
         .write
         .json(path.getAbsolutePath)
@@ -321,7 +332,8 @@ object JsonBenchmark extends SqlBasedBenchmark {
     withTempPath { path =>
       prepareDataInfo(benchmark)
 
-      spark.sparkContext.range(0, rows, 1, 1)
+      spark.sparkContext
+        .range(0, rows, 1, 1)
         .toDF("a")
         .write
         .json(path.getAbsolutePath)
@@ -366,19 +378,24 @@ object JsonBenchmark extends SqlBasedBenchmark {
 
   private def datetimeBenchmark(rowsNum: Int, numIters: Int): Unit = {
     def timestamps = {
-      spark.range(0, rowsNum, 1, 1).mapPartitions { iter =>
-        iter.map(Instant.ofEpochSecond(_))
-      }.select($"value".as("timestamp"))
+      spark
+        .range(0, rowsNum, 1, 1)
+        .mapPartitions { iter =>
+          iter.map(Instant.ofEpochSecond(_))
+        }
+        .select($"value".as("timestamp"))
     }
 
     def dates = {
-      spark.range(0, rowsNum, 1, 1).mapPartitions { iter =>
-        iter.map(d => LocalDate.ofEpochDay(d % (100 * 365)))
-      }.select($"value".as("date"))
+      spark
+        .range(0, rowsNum, 1, 1)
+        .mapPartitions { iter =>
+          iter.map(d => LocalDate.ofEpochDay(d % (100 * 365)))
+        }
+        .select($"value".as("date"))
     }
 
     withTempPath { path =>
-
       val timestampDir = new File(path, "timestamp").getAbsolutePath
       val dateDir = new File(path, "date").getAbsolutePath
 
@@ -435,11 +452,15 @@ object JsonBenchmark extends SqlBasedBenchmark {
       }
 
       def timestampStr: Dataset[String] = {
-        spark.range(0, rowsNum, 1, 1).mapPartitions { iter =>
-          iter.map { i =>
-            s"""{"timestamp":"1970-01-01T01:02:03.${i % 200}Z"}""".stripSuffix(".0Z")
+        spark
+          .range(0, rowsNum, 1, 1)
+          .mapPartitions { iter =>
+            iter.map { i =>
+              s"""{"timestamp":"1970-01-01T01:02:03.${i % 200}Z"}""".stripSuffix(".0Z")
+            }
           }
-        }.select($"value".as("timestamp")).as[String]
+          .select($"value".as("timestamp"))
+          .as[String]
       }
 
       readBench.addCase("timestamp strings", numIters) { _ =>
@@ -455,9 +476,13 @@ object JsonBenchmark extends SqlBasedBenchmark {
       }
 
       def dateStr: Dataset[String] = {
-        spark.range(0, rowsNum, 1, 1).mapPartitions { iter =>
-          iter.map(i => s"""{"date":"${LocalDate.ofEpochDay(i % 1000 * 365).toString}"}""")
-        }.select($"value".as("date")).as[String]
+        spark
+          .range(0, rowsNum, 1, 1)
+          .mapPartitions { iter =>
+            iter.map(i => s"""{"date":"${LocalDate.ofEpochDay(i % 1000 * 365).toString}"}""")
+          }
+          .select($"value".as("date"))
+          .as[String]
       }
 
       readBench.addCase("date strings", numIters) { _ =>
@@ -483,25 +508,35 @@ object JsonBenchmark extends SqlBasedBenchmark {
       }
 
       def errorTimestampStr: Dataset[String] = {
-        spark.range(0, rowsNum, 1, 1).mapPartitions { iter =>
-          iter.map { i =>
-            s"""{"timestamp":"data${i % 200}"}"""
+        spark
+          .range(0, rowsNum, 1, 1)
+          .mapPartitions { iter =>
+            iter.map { i =>
+              s"""{"timestamp":"data${i % 200}"}"""
+            }
           }
-        }.select($"value".as("timestamp")).as[String]
+          .select($"value".as("timestamp"))
+          .as[String]
       }
 
-      readBench.addCase("infer error timestamps from Dataset[String] with default format",
+      readBench.addCase(
+        "infer error timestamps from Dataset[String] with default format",
         numIters) { _ =>
         spark.read.option("inferTimestamp", true).json(errorTimestampStr).noop()
       }
 
-      readBench.addCase("infer error timestamps from Dataset[String] with user-provided format",
+      readBench.addCase(
+        "infer error timestamps from Dataset[String] with user-provided format",
         numIters) { _ =>
-        spark.read.option("inferTimestamp", true).option("timestampFormat",
-          "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").json(errorTimestampStr).noop()
+        spark.read
+          .option("inferTimestamp", true)
+          .option("timestampFormat", "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'")
+          .json(errorTimestampStr)
+          .noop()
       }
 
-      readBench.addCase("infer error timestamps from Dataset[String] with legacy format",
+      readBench.addCase(
+        "infer error timestamps from Dataset[String] with legacy format",
         numIters) { _ =>
         withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "LEGACY") {
           spark.read.option("inferTimestamp", true).json(errorTimestampStr).noop()
@@ -559,14 +594,20 @@ object JsonBenchmark extends SqlBasedBenchmark {
     val schema = StructType(fields)
 
     def data: Dataset[String] = {
-      spark.range(0, rowsNum, 1, 1).mapPartitions { iter =>
-        iter.map { i =>
-          (0 until colsNum).map { j =>
-            // Only the last column has an integer value.
-            if (j < colsNum - 1) s""""col${i}":"foo_${j}"""" else s""""col${i}":${j}"""
-          }.mkString("{", ", ", "}")
+      spark
+        .range(0, rowsNum, 1, 1)
+        .mapPartitions { iter =>
+          iter.map { i =>
+            (0 until colsNum)
+              .map { j =>
+                // Only the last column has an integer value.
+                if (j < colsNum - 1) s""""col${i}":"foo_${j}"""" else s""""col${i}":${j}"""
+              }
+              .mkString("{", ", ", "}")
+          }
         }
-      }.select($"value").as[String]
+        .select($"value")
+        .as[String]
     }
 
     benchmark.addCase("parse invalid JSON", numIters) { _ =>

@@ -121,17 +121,32 @@ class BasicInMemoryTableCatalog extends TableCatalog {
   }
 
   override def createTable(
-    ident: Identifier,
-    columns: Array[Column],
-    partitions: Array[Transform],
-    properties: util.Map[String, String]): Table = {
-    createTable(ident, columns, partitions, properties, Distributions.unspecified(),
-      Array.empty, None, None)
+      ident: Identifier,
+      columns: Array[Column],
+      partitions: Array[Transform],
+      properties: util.Map[String, String]): Table = {
+    createTable(
+      ident,
+      columns,
+      partitions,
+      properties,
+      Distributions.unspecified(),
+      Array.empty,
+      None,
+      None)
   }
 
   override def createTable(ident: Identifier, tableInfo: TableInfo): Table = {
-    createTable(ident, tableInfo.columns(), tableInfo.partitions(), tableInfo.properties(),
-      Distributions.unspecified(), Array.empty, None, None, tableInfo.constraints())
+    createTable(
+      ident,
+      tableInfo.columns(),
+      tableInfo.partitions(),
+      tableInfo.properties(),
+      Distributions.unspecified(),
+      Array.empty,
+      None,
+      None,
+      tableInfo.constraints())
   }
 
   // scalastyle:off argcount
@@ -155,9 +170,18 @@ class BasicInMemoryTableCatalog extends TableCatalog {
     InMemoryTableCatalog.maybeSimulateFailedTableCreation(properties)
 
     val tableName = s"$name.${ident.quoted}"
-    val table = new InMemoryTable(tableName, columns, partitions, properties, constraints,
-      distribution, ordering, requiredNumPartitions, advisoryPartitionSize,
-      distributionStrictlyRequired, numRowsPerSplit)
+    val table = new InMemoryTable(
+      tableName,
+      columns,
+      partitions,
+      properties,
+      constraints,
+      distribution,
+      ordering,
+      requiredNumPartitions,
+      advisoryPartitionSize,
+      distributionStrictlyRequired,
+      numRowsPerSplit)
     tables.put(ident, table)
     namespaces.putIfAbsent(ident.namespace.toList, Map())
     table
@@ -171,7 +195,8 @@ class BasicInMemoryTableCatalog extends TableCatalog {
       changes,
       tableProvider = Some("in-memory"),
       statementType = "ALTER TABLE")
-    val finalPartitioning = CatalogV2Util.applyClusterByChanges(table.partitioning, schema, changes)
+    val finalPartitioning =
+      CatalogV2Util.applyClusterByChanges(table.partitioning, schema, changes)
     val constraints = CatalogV2Util.collectConstraintChanges(table, changes)
 
     // fail if the last column in the schema was dropped
@@ -225,16 +250,17 @@ class BasicInMemoryTableCatalog extends TableCatalog {
   }
 }
 
-class InMemoryTableCatalog extends BasicInMemoryTableCatalog with SupportsNamespaces
-  with ProcedureCatalog {
+class InMemoryTableCatalog
+    extends BasicInMemoryTableCatalog
+    with SupportsNamespaces
+    with ProcedureCatalog {
 
   override def capabilities: java.util.Set[TableCatalogCapability] = {
     Set(
       TableCatalogCapability.SUPPORT_COLUMN_DEFAULT_VALUE,
       TableCatalogCapability.SUPPORT_TABLE_CONSTRAINT,
       TableCatalogCapability.SUPPORTS_CREATE_TABLE_WITH_GENERATED_COLUMNS,
-      TableCatalogCapability.SUPPORTS_CREATE_TABLE_WITH_IDENTITY_COLUMNS
-    ).asJava
+      TableCatalogCapability.SUPPORTS_CREATE_TABLE_WITH_IDENTITY_COLUMNS).asJava
   }
 
   protected val procedures: util.Map[Identifier, UnboundProcedure] =
@@ -242,12 +268,13 @@ class InMemoryTableCatalog extends BasicInMemoryTableCatalog with SupportsNamesp
   procedures.put(Identifier.of(Array("dummy"), "increment"), UnboundIncrement)
 
   protected def allNamespaces: Seq[Seq[String]] = {
-    (tables.keySet.asScala.map(_.namespace.toSeq)
-      ++ namespaces.keySet.asScala
-      ++ procedures.keySet.asScala
-      .filter(i => !i.namespace.sameElements(Array("dummy")))
-      .map(_.namespace.toSeq)
-      ).toSeq.distinct
+    (
+      tables.keySet.asScala.map(_.namespace.toSeq)
+        ++ namespaces.keySet.asScala
+        ++ procedures.keySet.asScala
+          .filter(i => !i.namespace.sameElements(Array("dummy")))
+          .map(_.namespace.toSeq)
+    ).toSeq.distinct
   }
 
   override def namespaceExists(namespace: Array[String]): Boolean = {
@@ -290,13 +317,11 @@ class InMemoryTableCatalog extends BasicInMemoryTableCatalog with SupportsNamesp
       case Some(_) =>
         throw new NamespaceAlreadyExistsException(namespace)
       case _ =>
-        // created successfully
+      // created successfully
     }
   }
 
-  override def alterNamespace(
-      namespace: Array[String],
-      changes: NamespaceChange*): Unit = {
+  override def alterNamespace(namespace: Array[String], changes: NamespaceChange*): Unit = {
     val metadata = loadNamespaceMetadata(namespace).asScala.toMap
     namespaces.put(namespace.toList, CatalogV2Util.applyNamespaceChanges(metadata, changes))
   }

@@ -57,20 +57,16 @@ class PythonForeachWriterSuite extends SparkFunSuite with Eventually with Mockit
   }
 
   testWithBuffer(
-      "UnsafeRowBuffer: handles more data than memory",
-      memBytes = 5,
-      sleepPerRowReadMs = 1) { b =>
-
+    "UnsafeRowBuffer: handles more data than memory",
+    memBytes = 5,
+    sleepPerRowReadMs = 1) { b =>
     b.assertIteratorBlocked()
     b.add(1 to 2000)
     b.assertOutput(1 to 2000)
   }
 
-  def testWithBuffer(
-      name: String,
-      memBytes: Long = 4 << 10,
-      sleepPerRowReadMs: Int = 0
-    )(f: BufferTester => Unit): Unit = {
+  def testWithBuffer(name: String, memBytes: Long = 4 << 10, sleepPerRowReadMs: Int = 0)(
+      f: BufferTester => Unit): Unit = {
 
     System.gc()
     test(name) {
@@ -83,7 +79,6 @@ class PythonForeachWriterSuite extends SparkFunSuite with Eventually with Mockit
       }
     }
   }
-
 
   class BufferTester(memBytes: Long, sleepPerRowReadMs: Int) {
     private val buffer = {

@@ -42,8 +42,10 @@ trait WindowEvaluatorFactoryBase {
    *
    * This method uses Code Generation. It can only be used on the executor side.
    *
-   * @param expressions unbound ordered function expressions.
-   * @return the final resulting projection.
+   * @param expressions
+   *   unbound ordered function expressions.
+   * @return
+   *   the final resulting projection.
    */
   protected def createResultProjection(expressions: Seq[Expression]): UnsafeProjection = {
     val references = expressions.zipWithIndex.map { case (e, i) =>
@@ -52,9 +54,7 @@ trait WindowEvaluatorFactoryBase {
     }
     val unboundToRefMap = Utils.toMap(expressions, references)
     val patchedWindowExpression = windowExpression.map(_.transform(unboundToRefMap))
-    UnsafeProjection.create(
-      childOutput ++ patchedWindowExpression,
-      childOutput)
+    UnsafeProjection.create(childOutput ++ patchedWindowExpression, childOutput)
   }
 
   /**
@@ -63,13 +63,19 @@ trait WindowEvaluatorFactoryBase {
    *
    * This method uses Code Generation. It can only be used on the executor side.
    *
-   * @param frame to evaluate. This can either be a Row or Range frame.
-   * @param bound with respect to the row.
-   * @param timeZone the session local timezone for time related calculations.
-   * @return a bound ordering object.
+   * @param frame
+   *   to evaluate. This can either be a Row or Range frame.
+   * @param bound
+   *   with respect to the row.
+   * @param timeZone
+   *   the session local timezone for time related calculations.
+   * @return
+   *   a bound ordering object.
    */
   private def createBoundOrdering(
-      frame: FrameType, bound: Expression, timeZone: String): BoundOrdering = {
+      frame: FrameType,
+      bound: Expression,
+      timeZone: String): BoundOrdering = {
     (frame, bound) match {
       case (RowFrame, CurrentRow) =>
         RowBoundOrdering(0)
@@ -123,14 +129,15 @@ trait WindowEvaluatorFactoryBase {
         RangeBoundOrdering(ordering, current, bound)
 
       case (RangeFrame, _) =>
-        throw SparkException.internalError("Non-Zero range offsets are not supported for windows " +
-          "with multiple order expressions.")
+        throw SparkException.internalError(
+          "Non-Zero range offsets are not supported for windows " +
+            "with multiple order expressions.")
     }
   }
 
   /**
-   * Collection containing an entry for each window frame to process. Each entry contains a frame's
-   * [[WindowExpression]]s and factory function for the [[WindowFunctionFrame]].
+   * Collection containing an entry for each window frame to process. Each entry contains a
+   * frame's [[WindowExpression]]s and factory function for the [[WindowFunctionFrame]].
    */
   protected lazy val windowFrameExpressionFactoryPairs = {
     type FrameKey = (String, FrameType, Expression, Expression, Seq[Expression])
@@ -150,7 +157,8 @@ trait WindowEvaluatorFactoryBase {
         case _ => (tpe, fr.frameType, fr.lower, fr.upper, Nil)
       }
       val (es, fns) = framedFunctions.getOrElseUpdate(
-        key, (ArrayBuffer.empty[Expression], ArrayBuffer.empty[Expression]))
+        key,
+        (ArrayBuffer.empty[Expression], ArrayBuffer.empty[Expression]))
       es += e
       fns += fn
     }
@@ -158,14 +166,15 @@ trait WindowEvaluatorFactoryBase {
     // Collect all valid window functions and group them by their frame.
     windowExpression.foreach { x =>
       x.foreach {
-        case e@WindowExpression(function, spec) =>
+        case e @ WindowExpression(function, spec) =>
           val frame = spec.frameSpecification.asInstanceOf[SpecifiedWindowFrame]
           function match {
             case AggregateExpression(f, _, _, _, _) => collect("AGGREGATE", frame, e, f)
             case f: FrameLessOffsetWindowFunction =>
               collect("FRAME_LESS_OFFSET", f.fakeFrame, e, f)
-            case f: OffsetWindowFunction if frame.frameType == RowFrame &&
-              frame.lower == UnboundedPreceding =>
+            case f: OffsetWindowFunction
+                if frame.frameType == RowFrame &&
+                  frame.lower == UnboundedPreceding =>
               frame.upper match {
                 case UnboundedFollowing => collect("UNBOUNDED_OFFSET", f.fakeFrame, e, f)
                 case CurrentRow => collect("UNBOUNDED_PRECEDING_OFFSET", f.fakeFrame, e, f)
@@ -181,117 +190,112 @@ trait WindowEvaluatorFactoryBase {
     // Map the groups to a (unbound) expression and frame factory pair.
     var numExpressions = 0
     val timeZone = SQLConf.get.sessionLocalTimeZone
-    framedFunctions.toSeq.map {
-      case (key, (expressions, functionSeq)) =>
-        val ordinal = numExpressions
-        val functions = functionSeq.toArray
+    framedFunctions.toSeq.map { case (key, (expressions, functionSeq)) =>
+      val ordinal = numExpressions
+      val functions = functionSeq.toArray
 
-        // Construct an aggregate processor if we need one.
-        // Currently we don't allow mixing of Pandas UDF and SQL aggregation functions
-        // in a single Window physical node. Therefore, we can assume no SQL aggregation
-        // functions if Pandas UDF exists. In the future, we might mix Pandas UDF and SQL
-        // aggregation function in a single physical node.
-        def processor = if (functions.exists(_.isInstanceOf[PythonFuncExpression])) {
-          null
-        } else {
-          val aggFilters = expressions.map {
-            case WindowExpression(ae: AggregateExpression, _) => ae.filter
-            case _ => None
-          }.toArray
-          AggregateProcessor(
-            functions,
-            ordinal,
-            childOutput,
-            (expressions, schema) =>
-              MutableProjection.create(expressions, schema),
-            aggFilters)
-        }
+      // Construct an aggregate processor if we need one.
+      // Currently we don't allow mixing of Pandas UDF and SQL aggregation functions
+      // in a single Window physical node. Therefore, we can assume no SQL aggregation
+      // functions if Pandas UDF exists. In the future, we might mix Pandas UDF and SQL
+      // aggregation function in a single physical node.
+      def processor = if (functions.exists(_.isInstanceOf[PythonFuncExpression])) {
+        null
+      } else {
+        val aggFilters = expressions.map {
+          case WindowExpression(ae: AggregateExpression, _) => ae.filter
+          case _ => None
+        }.toArray
+        AggregateProcessor(
+          functions,
+          ordinal,
+          childOutput,
+          (expressions, schema) => MutableProjection.create(expressions, schema),
+          aggFilters)
+      }
 
-        // Create the factory to produce WindowFunctionFrame.
-        val factory = key match {
-          // Frameless offset Frame
-          case ("FRAME_LESS_OFFSET", _, IntegerLiteral(offset), _, expr) =>
-            target: InternalRow =>
-              new FrameLessOffsetWindowFunctionFrame(
-                target,
-                ordinal,
-                // OFFSET frame functions are guaranteed be OffsetWindowFunction.
-                functions.map(_.asInstanceOf[OffsetWindowFunction]),
-                childOutput,
-                (expressions, schema) =>
-                  MutableProjection.create(expressions, schema),
-                offset,
-                expr.nonEmpty)
-          case ("UNBOUNDED_OFFSET", _, IntegerLiteral(offset), _, expr) =>
-            target: InternalRow => {
-              new UnboundedOffsetWindowFunctionFrame(
-                target,
-                ordinal,
-                // OFFSET frame functions are guaranteed be OffsetWindowFunction.
-                functions.map(_.asInstanceOf[OffsetWindowFunction]),
-                childOutput,
-                (expressions, schema) =>
-                  MutableProjection.create(expressions, schema),
-                offset,
-                expr.nonEmpty)
-            }
-          case ("UNBOUNDED_PRECEDING_OFFSET", _, IntegerLiteral(offset), _, expr) =>
-            target: InternalRow => {
-              new UnboundedPrecedingOffsetWindowFunctionFrame(
-                target,
-                ordinal,
-                // OFFSET frame functions are guaranteed be OffsetWindowFunction.
-                functions.map(_.asInstanceOf[OffsetWindowFunction]),
-                childOutput,
-                (expressions, schema) =>
-                  MutableProjection.create(expressions, schema),
-                offset,
-                expr.nonEmpty)
-            }
+      // Create the factory to produce WindowFunctionFrame.
+      val factory = key match {
+        // Frameless offset Frame
+        case ("FRAME_LESS_OFFSET", _, IntegerLiteral(offset), _, expr) =>
+          target: InternalRow =>
+            new FrameLessOffsetWindowFunctionFrame(
+              target,
+              ordinal,
+              // OFFSET frame functions are guaranteed be OffsetWindowFunction.
+              functions.map(_.asInstanceOf[OffsetWindowFunction]),
+              childOutput,
+              (expressions, schema) => MutableProjection.create(expressions, schema),
+              offset,
+              expr.nonEmpty)
+        case ("UNBOUNDED_OFFSET", _, IntegerLiteral(offset), _, expr) =>
+          target: InternalRow => {
+            new UnboundedOffsetWindowFunctionFrame(
+              target,
+              ordinal,
+              // OFFSET frame functions are guaranteed be OffsetWindowFunction.
+              functions.map(_.asInstanceOf[OffsetWindowFunction]),
+              childOutput,
+              (expressions, schema) => MutableProjection.create(expressions, schema),
+              offset,
+              expr.nonEmpty)
+          }
+        case ("UNBOUNDED_PRECEDING_OFFSET", _, IntegerLiteral(offset), _, expr) =>
+          target: InternalRow => {
+            new UnboundedPrecedingOffsetWindowFunctionFrame(
+              target,
+              ordinal,
+              // OFFSET frame functions are guaranteed be OffsetWindowFunction.
+              functions.map(_.asInstanceOf[OffsetWindowFunction]),
+              childOutput,
+              (expressions, schema) => MutableProjection.create(expressions, schema),
+              offset,
+              expr.nonEmpty)
+          }
 
-          // Entire Partition Frame.
-          case ("AGGREGATE", _, UnboundedPreceding, UnboundedFollowing, _) =>
-            target: InternalRow => {
-              new UnboundedWindowFunctionFrame(target, processor)
-            }
+        // Entire Partition Frame.
+        case ("AGGREGATE", _, UnboundedPreceding, UnboundedFollowing, _) =>
+          target: InternalRow => {
+            new UnboundedWindowFunctionFrame(target, processor)
+          }
 
-          // Growing Frame.
-          case ("AGGREGATE", frameType, UnboundedPreceding, upper, _) =>
-            target: InternalRow => {
-              new UnboundedPrecedingWindowFunctionFrame(
-                target,
-                processor,
-                createBoundOrdering(frameType, upper, timeZone))
-            }
+        // Growing Frame.
+        case ("AGGREGATE", frameType, UnboundedPreceding, upper, _) =>
+          target: InternalRow => {
+            new UnboundedPrecedingWindowFunctionFrame(
+              target,
+              processor,
+              createBoundOrdering(frameType, upper, timeZone))
+          }
 
-          // Shrinking Frame.
-          case ("AGGREGATE", frameType, lower, UnboundedFollowing, _) =>
-            target: InternalRow => {
-              new UnboundedFollowingWindowFunctionFrame(
-                target,
-                processor,
-                createBoundOrdering(frameType, lower, timeZone))
-            }
+        // Shrinking Frame.
+        case ("AGGREGATE", frameType, lower, UnboundedFollowing, _) =>
+          target: InternalRow => {
+            new UnboundedFollowingWindowFunctionFrame(
+              target,
+              processor,
+              createBoundOrdering(frameType, lower, timeZone))
+          }
 
-          // Moving Frame.
-          case ("AGGREGATE", frameType, lower, upper, _) =>
-            target: InternalRow => {
-              new SlidingWindowFunctionFrame(
-                target,
-                processor,
-                createBoundOrdering(frameType, lower, timeZone),
-                createBoundOrdering(frameType, upper, timeZone))
-            }
+        // Moving Frame.
+        case ("AGGREGATE", frameType, lower, upper, _) =>
+          target: InternalRow => {
+            new SlidingWindowFunctionFrame(
+              target,
+              processor,
+              createBoundOrdering(frameType, lower, timeZone),
+              createBoundOrdering(frameType, upper, timeZone))
+          }
 
-          case _ =>
-            throw SparkException.internalError(s"Unsupported factory: $key")
-        }
+        case _ =>
+          throw SparkException.internalError(s"Unsupported factory: $key")
+      }
 
-        // Keep track of the number of expressions. This is a side-effect in a map...
-        numExpressions += expressions.size
+      // Keep track of the number of expressions. This is a side-effect in a map...
+      numExpressions += expressions.size
 
-        // Create the Window Expression - Frame Factory pair.
-        (expressions, factory)
+      // Create the Window Expression - Frame Factory pair.
+      (expressions, factory)
     }
   }
 

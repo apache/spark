@@ -28,11 +28,11 @@ import org.apache.spark.sql.streaming.GroupStateTimeout.{EventTimeTimeout, NoTim
 class GroupStateSuite extends SparkFunSuite {
 
   test("SPARK-35800: ensure TestGroupState creates instances the same as prod") {
-    val testState = TestGroupState.create[Int](
-      Optional.of(5), EventTimeTimeout, 1L, Optional.of(1L), hasTimedOut = false)
+    val testState = TestGroupState
+      .create[Int](Optional.of(5), EventTimeTimeout, 1L, Optional.of(1L), hasTimedOut = false)
 
-    val prodState = GroupStateImpl.createForStreaming[Int](
-      Some(5), 1L, 1L, EventTimeTimeout, false, true)
+    val prodState =
+      GroupStateImpl.createForStreaming[Int](Some(5), 1L, 1L, EventTimeTimeout, false, true)
 
     assert(testState.isInstanceOf[GroupStateImpl[Int]])
 
@@ -61,9 +61,9 @@ class GroupStateSuite extends SparkFunSuite {
     var state: TestGroupState[String] = null
 
     def testState(
-      expectedData: Option[String],
-      shouldBeUpdated: Boolean = false,
-      shouldBeRemoved: Boolean = false): Unit = {
+        expectedData: Option[String],
+        shouldBeUpdated: Boolean = false,
+        shouldBeRemoved: Boolean = false): Unit = {
       if (expectedData.isDefined) {
         assert(state.exists)
         assert(state.get === expectedData.get)
@@ -81,14 +81,18 @@ class GroupStateSuite extends SparkFunSuite {
     // === Tests for state in streaming queries ===
     // Updating empty state
     state = TestGroupState.create[String](
-      Optional.empty[String], NoTimeout, 1, Optional.empty[Long], hasTimedOut = false)
+      Optional.empty[String],
+      NoTimeout,
+      1,
+      Optional.empty[Long],
+      hasTimedOut = false)
     testState(None)
     state.update("")
     testState(Some(""), shouldBeUpdated = true)
 
     // Updating exiting state
-    state = TestGroupState.create[String](
-      Optional.of("2"), NoTimeout, 1, Optional.empty[Long], hasTimedOut = false)
+    state = TestGroupState
+      .create[String](Optional.of("2"), NoTimeout, 1, Optional.empty[Long], hasTimedOut = false)
     testState(Some("2"))
     state.update("3")
     testState(Some("3"), shouldBeUpdated = true)
@@ -96,7 +100,7 @@ class GroupStateSuite extends SparkFunSuite {
     // Removing state
     state.remove()
     testState(None, shouldBeRemoved = true, shouldBeUpdated = false)
-    state.remove()      // should be still callable
+    state.remove() // should be still callable
     state.update("4")
     testState(Some("4"), shouldBeRemoved = false, shouldBeUpdated = true)
 
@@ -109,10 +113,9 @@ class GroupStateSuite extends SparkFunSuite {
   test("GroupState - setTimeout - with NoTimeout") {
     for (initValue <- Seq(Optional.empty[Int], Optional.of((5)))) {
       val states = Seq(
-        TestGroupState.create[Int](
-          initValue, NoTimeout, 1000, Optional.empty[Long], hasTimedOut = false),
-        GroupStateImpl.createForBatch(NoTimeout, watermarkPresent = false)
-      )
+        TestGroupState
+          .create[Int](initValue, NoTimeout, 1000, Optional.empty[Long], hasTimedOut = false),
+        GroupStateImpl.createForBatch(NoTimeout, watermarkPresent = false))
       for (state <- states) {
         // for streaming queries
         testTimeoutDurationNotAllowed[SparkUnsupportedOperationException](state)
@@ -128,7 +131,11 @@ class GroupStateSuite extends SparkFunSuite {
   test("GroupState - setTimeout - with ProcessingTimeTimeout") {
     // for streaming queries
     var state = TestGroupState.create[Int](
-      Optional.empty[Int], ProcessingTimeTimeout, 1000, Optional.empty[Long], hasTimedOut = false)
+      Optional.empty[Int],
+      ProcessingTimeTimeout,
+      1000,
+      Optional.empty[Long],
+      hasTimedOut = false)
     assert(!state.getTimeoutTimestampMs.isPresent())
     state.setTimeoutDuration("-1 month 31 days 1 second")
     assert(state.getTimeoutTimestampMs.isPresent())
@@ -154,8 +161,9 @@ class GroupStateSuite extends SparkFunSuite {
     testTimeoutTimestampNotAllowed[SparkUnsupportedOperationException](state)
 
     // for batch queries
-    state = GroupStateImpl.createForBatch(
-      ProcessingTimeTimeout, watermarkPresent = false).asInstanceOf[GroupStateImpl[Int]]
+    state = GroupStateImpl
+      .createForBatch(ProcessingTimeTimeout, watermarkPresent = false)
+      .asInstanceOf[GroupStateImpl[Int]]
     assert(!state.getTimeoutTimestampMs.isPresent())
     state.setTimeoutDuration(500)
     testTimeoutTimestampNotAllowed[SparkUnsupportedOperationException](state)
@@ -172,7 +180,11 @@ class GroupStateSuite extends SparkFunSuite {
 
   test("GroupState - setTimeout - with EventTimeTimeout") {
     var state = TestGroupState.create[Int](
-      Optional.empty[Int], EventTimeTimeout, 1000, Optional.of(1000), hasTimedOut = false)
+      Optional.empty[Int],
+      EventTimeTimeout,
+      1000,
+      Optional.of(1000),
+      hasTimedOut = false)
     assert(!state.getTimeoutTimestampMs.isPresent())
     testTimeoutDurationNotAllowed[SparkUnsupportedOperationException](state)
     state.setTimeoutTimestamp(5000)
@@ -193,8 +205,9 @@ class GroupStateSuite extends SparkFunSuite {
     testTimeoutDurationNotAllowed[SparkUnsupportedOperationException](state)
 
     // for batch queries
-    state = GroupStateImpl.createForBatch(
-      EventTimeTimeout, watermarkPresent = false).asInstanceOf[GroupStateImpl[Int]]
+    state = GroupStateImpl
+      .createForBatch(EventTimeTimeout, watermarkPresent = false)
+      .asInstanceOf[GroupStateImpl[Int]]
     assert(!state.getTimeoutTimestampMs.isPresent())
     testTimeoutDurationNotAllowed[SparkUnsupportedOperationException](state)
     state.setTimeoutTimestamp(5000)
@@ -222,7 +235,11 @@ class GroupStateSuite extends SparkFunSuite {
 
     // Test setTimeout() with illegal values
     state = TestGroupState.create[Int](
-      Optional.of(5), ProcessingTimeTimeout, 1000, Optional.empty[Long], hasTimedOut = false)
+      Optional.of(5),
+      ProcessingTimeTimeout,
+      1000,
+      Optional.empty[Long],
+      hasTimedOut = false)
 
     testIllegalTimeout {
       state.setTimeoutDuration(-1000)
@@ -241,8 +258,8 @@ class GroupStateSuite extends SparkFunSuite {
       state.setTimeoutDuration("1 month -31 day")
     }
 
-    state = TestGroupState.create[Int](
-      Optional.of(5), EventTimeTimeout, 1000, Optional.of(1000), hasTimedOut = false)
+    state = TestGroupState
+      .create[Int](Optional.of(5), EventTimeTimeout, 1000, Optional.of(1000), hasTimedOut = false)
     testIllegalTimeout {
       state.setTimeoutTimestamp(-10000)
     }
@@ -273,40 +290,49 @@ class GroupStateSuite extends SparkFunSuite {
     // eventTimeWatermarkMs >= 0 if present
     var illegalArgument = intercept[IllegalArgumentException] {
       TestGroupState.create[Int](
-        Optional.of(5), EventTimeTimeout, 100L, Optional.of(-1000), hasTimedOut = false)
+        Optional.of(5),
+        EventTimeTimeout,
+        100L,
+        Optional.of(-1000),
+        hasTimedOut = false)
     }
     assert(
-      illegalArgument.getMessage.contains("eventTimeWatermarkMs must be 0 or positive if present"))
+      illegalArgument.getMessage.contains(
+        "eventTimeWatermarkMs must be 0 or positive if present"))
     illegalArgument = intercept[IllegalArgumentException] {
-      GroupStateImpl.createForStreaming[Int](
-        Some(5), 100L, -1000L, EventTimeTimeout, false, true)
+      GroupStateImpl.createForStreaming[Int](Some(5), 100L, -1000L, EventTimeTimeout, false, true)
     }
     assert(
-      illegalArgument.getMessage.contains("eventTimeWatermarkMs must be 0 or positive if present"))
+      illegalArgument.getMessage.contains(
+        "eventTimeWatermarkMs must be 0 or positive if present"))
 
     // batchProcessingTimeMs must be positive
     illegalArgument = intercept[IllegalArgumentException] {
       TestGroupState.create[Int](
-        Optional.of(5), EventTimeTimeout, -100L, Optional.of(1000), hasTimedOut = false)
+        Optional.of(5),
+        EventTimeTimeout,
+        -100L,
+        Optional.of(1000),
+        hasTimedOut = false)
     }
     assert(illegalArgument.getMessage.contains("batchProcessingTimeMs must be 0 or positive"))
     illegalArgument = intercept[IllegalArgumentException] {
-      GroupStateImpl.createForStreaming[Int](
-        Some(5), -100L, 1000L, EventTimeTimeout, false, true)
+      GroupStateImpl.createForStreaming[Int](Some(5), -100L, 1000L, EventTimeTimeout, false, true)
     }
     assert(illegalArgument.getMessage.contains("batchProcessingTimeMs must be 0 or positive"))
 
     // hasTimedOut cannot be true if there's no timeout configured
     checkError(
       exception = intercept[SparkUnsupportedOperationException] {
-        TestGroupState.create[Int](
-          Optional.of(5), NoTimeout, 100L, Optional.empty[Long], hasTimedOut = true)
+        TestGroupState
+          .create[Int](Optional.of(5), NoTimeout, 100L, Optional.empty[Long], hasTimedOut = true)
       },
       condition = "MISSING_TIMEOUT_CONFIGURATION",
       parameters = Map.empty)
     checkError(
       exception = intercept[SparkUnsupportedOperationException] {
-        GroupStateImpl.createForStreaming[Int](Some(5), 100L, NO_TIMESTAMP, NoTimeout, true, false)
+        GroupStateImpl
+          .createForStreaming[Int](Some(5), 100L, NO_TIMESTAMP, NoTimeout, true, false)
       },
       condition = "MISSING_TIMEOUT_CONFIGURATION",
       parameters = Map.empty)
@@ -316,30 +342,32 @@ class GroupStateSuite extends SparkFunSuite {
     for (timeoutConf <- Seq(NoTimeout, ProcessingTimeTimeout, EventTimeTimeout)) {
       // for streaming queries
       for (initState <- Seq(Optional.empty[Int], Optional.of(5))) {
-        val state1 = TestGroupState.create[Int](
-          initState, timeoutConf, 1000, Optional.empty[Long], hasTimedOut = false)
+        val state1 = TestGroupState
+          .create[Int](initState, timeoutConf, 1000, Optional.empty[Long], hasTimedOut = false)
         assert(state1.hasTimedOut === false)
 
         // hasTimedOut can only be set as true when timeoutConf isn't NoTimeout
         if (timeoutConf != NoTimeout) {
-          val state2 = TestGroupState.create[Int](
-            initState, timeoutConf, 1000, Optional.empty[Long], hasTimedOut = true)
+          val state2 = TestGroupState
+            .create[Int](initState, timeoutConf, 1000, Optional.empty[Long], hasTimedOut = true)
           assert(state2.hasTimedOut)
         }
       }
 
       // for batch queries
       assert(
-        GroupStateImpl.createForBatch(timeoutConf, watermarkPresent = false).hasTimedOut === false)
+        GroupStateImpl
+          .createForBatch(timeoutConf, watermarkPresent = false)
+          .hasTimedOut === false)
     }
   }
 
   test("GroupState - getCurrentWatermarkMs") {
     def streamingState(
-      timeoutConf: GroupStateTimeout,
-      watermark: Optional[Long]): GroupState[Int] = {
-      TestGroupState.create[Int](
-        Optional.empty[Int], timeoutConf, 1000, watermark, hasTimedOut = false)
+        timeoutConf: GroupStateTimeout,
+        watermark: Optional[Long]): GroupState[Int] = {
+      TestGroupState
+        .create[Int](Optional.empty[Int], timeoutConf, 1000, watermark, hasTimedOut = false)
     }
 
     def batchState(timeoutConf: GroupStateTimeout, watermarkPresent: Boolean): GroupState[Any] = {
@@ -373,16 +401,20 @@ class GroupStateSuite extends SparkFunSuite {
 
   test("GroupState - getCurrentProcessingTimeMs") {
     def streamingState(
-      timeoutConf: GroupStateTimeout,
-      procTime: Long,
-      watermarkPresent: Boolean): GroupState[Int] = {
+        timeoutConf: GroupStateTimeout,
+        procTime: Long,
+        watermarkPresent: Boolean): GroupState[Int] = {
       val eventTimeWatermarkMs = if (watermarkPresent) {
         Optional.of(1000L)
       } else {
         Optional.empty[Long]
       }
       TestGroupState.create[Int](
-        Optional.of(1000), timeoutConf, procTime, eventTimeWatermarkMs, hasTimedOut = false)
+        Optional.of(1000),
+        timeoutConf,
+        procTime,
+        eventTimeWatermarkMs,
+        hasTimedOut = false)
     }
 
     def batchState(timeoutConf: GroupStateTimeout, watermarkPresent: Boolean): GroupState[Any] = {
@@ -394,12 +426,15 @@ class GroupStateSuite extends SparkFunSuite {
         // Tests for getCurrentProcessingTimeMs in streaming queries
         // No negative processing time is allowed, and
         // illegal input validation has been added in the separate test
-        assert(streamingState(timeoutConf, 0, watermarkPresent)
-          .getCurrentProcessingTimeMs() === 0)
-        assert(streamingState(timeoutConf, 1000, watermarkPresent)
-          .getCurrentProcessingTimeMs() === 1000)
-        assert(streamingState(timeoutConf, 2000, watermarkPresent)
-          .getCurrentProcessingTimeMs() === 2000)
+        assert(
+          streamingState(timeoutConf, 0, watermarkPresent)
+            .getCurrentProcessingTimeMs() === 0)
+        assert(
+          streamingState(timeoutConf, 1000, watermarkPresent)
+            .getCurrentProcessingTimeMs() === 1000)
+        assert(
+          streamingState(timeoutConf, 2000, watermarkPresent)
+            .getCurrentProcessingTimeMs() === 2000)
 
         // Tests for getCurrentProcessingTimeMs in batch queries
         val currentTime = System.currentTimeMillis()
@@ -421,12 +456,8 @@ class GroupStateSuite extends SparkFunSuite {
     }
     assert(intState.getOption === None)
 
-    intState = TestGroupState.create[Int](
-      Optional.of(10),
-      NoTimeout,
-      1000,
-      Optional.empty[Long],
-      hasTimedOut = false)
+    intState = TestGroupState
+      .create[Int](Optional.of(10), NoTimeout, 1000, Optional.empty[Long], hasTimedOut = false)
 
     assert(intState.get == 10)
     intState.update(0)

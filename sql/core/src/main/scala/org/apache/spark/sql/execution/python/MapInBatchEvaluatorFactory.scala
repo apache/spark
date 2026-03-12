@@ -42,7 +42,7 @@ class MapInBatchEvaluatorFactory(
     val pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
     sessionUUID: Option[String])
-  extends PartitionEvaluatorFactory[InternalRow, InternalRow] {
+    extends PartitionEvaluatorFactory[InternalRow, InternalRow] {
 
   override def createEvaluator(): PartitionEvaluator[InternalRow, InternalRow] =
     new MapInBatchEvaluator
@@ -78,27 +78,31 @@ class MapInBatchEvaluatorFactory(
 
       val unsafeProj = UnsafeProjection.create(output, output)
 
-      columnarBatchIter.flatMap { batch =>
-        if (SQLConf.get.pysparkArrowValidateSchema) {
-          // Ensure the schema matches the expected schema, but allowing nullable fields in the
-          // output schema to become non-nullable in the actual schema.
-          val actualSchema = batch.column(0).dataType()
-          val isCompatible =
-            DataType.equalsIgnoreCompatibleNullability(from = actualSchema, to = outputSchema)
-          if (!isCompatible) {
-            throw QueryExecutionErrors.arrowDataTypeMismatchError(
-              PythonEvalType.toString(pythonEvalType), Seq(outputSchema), Seq(actualSchema))
+      columnarBatchIter
+        .flatMap { batch =>
+          if (SQLConf.get.pysparkArrowValidateSchema) {
+            // Ensure the schema matches the expected schema, but allowing nullable fields in the
+            // output schema to become non-nullable in the actual schema.
+            val actualSchema = batch.column(0).dataType()
+            val isCompatible =
+              DataType.equalsIgnoreCompatibleNullability(from = actualSchema, to = outputSchema)
+            if (!isCompatible) {
+              throw QueryExecutionErrors.arrowDataTypeMismatchError(
+                PythonEvalType.toString(pythonEvalType),
+                Seq(outputSchema),
+                Seq(actualSchema))
+            }
           }
-        }
 
-        // Scalar Iterator UDF returns a StructType column in ColumnarBatch, select
-        // the children here
-        val structVector = batch.column(0).asInstanceOf[ArrowColumnVector]
-        val outputVectors = output.indices.map(structVector.getChild)
-        val flattenedBatch = new ColumnarBatch(outputVectors.toArray)
-        flattenedBatch.setNumRows(batch.numRows())
-        flattenedBatch.rowIterator.asScala
-      }.map(unsafeProj)
+          // Scalar Iterator UDF returns a StructType column in ColumnarBatch, select
+          // the children here
+          val structVector = batch.column(0).asInstanceOf[ArrowColumnVector]
+          val outputVectors = output.indices.map(structVector.getChild)
+          val flattenedBatch = new ColumnarBatch(outputVectors.toArray)
+          flattenedBatch.setNumRows(batch.numRows())
+          flattenedBatch.rowIterator.asScala
+        }
+        .map(unsafeProj)
     }
   }
 }

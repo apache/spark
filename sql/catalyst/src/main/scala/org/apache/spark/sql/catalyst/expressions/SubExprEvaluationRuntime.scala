@@ -28,10 +28,10 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.DataType
 
 /**
- * This class helps subexpression elimination for interpreted evaluation
- * such as `InterpretedUnsafeProjection`. It maintains an evaluation cache.
- * This class wraps `ExpressionProxy` around given expressions. The `ExpressionProxy`
- * intercepts expression evaluation and loads from the cache first.
+ * This class helps subexpression elimination for interpreted evaluation such as
+ * `InterpretedUnsafeProjection`. It maintains an evaluation cache. This class wraps
+ * `ExpressionProxy` around given expressions. The `ExpressionProxy` intercepts expression
+ * evaluation and loads from the cache first.
  */
 class SubExprEvaluationRuntime(cacheMaxEntries: Int) {
   // The id assigned to `ExpressionProxy`. `SubExprEvaluationRuntime` will use assigned ids of
@@ -39,14 +39,14 @@ class SubExprEvaluationRuntime(cacheMaxEntries: Int) {
   // won't be use by multi-threads so we don't need to consider concurrency here.
   private var proxyExpressionCurrentId = 0
 
-  private[sql] val cache: LoadingCache[ExpressionProxy, ResultProxy] = CacheBuilder.newBuilder()
+  private[sql] val cache: LoadingCache[ExpressionProxy, ResultProxy] = CacheBuilder
+    .newBuilder()
     .maximumSize(cacheMaxEntries)
-    .build(
-      new CacheLoader[ExpressionProxy, ResultProxy]() {
-        override def load(expr: ExpressionProxy): ResultProxy = {
-          ResultProxy(expr.proxyEval(currentInput))
-        }
-      })
+    .build(new CacheLoader[ExpressionProxy, ResultProxy]() {
+      override def load(expr: ExpressionProxy): ResultProxy = {
+        ResultProxy(expr.proxyEval(currentInput))
+      }
+    })
 
   private var currentInput: InternalRow = null
 
@@ -61,8 +61,8 @@ class SubExprEvaluationRuntime(cacheMaxEntries: Int) {
   }
 
   /**
-   * Sets given input row as current row for evaluating expressions. This cleans up the cache
-   * too as new input comes.
+   * Sets given input row as current row for evaluating expressions. This cleans up the cache too
+   * as new input comes.
    */
   def setInput(input: InternalRow = null): Unit = {
     currentInput = input
@@ -115,13 +115,11 @@ class SubExprEvaluationRuntime(cacheMaxEntries: Int) {
 }
 
 /**
- * A proxy for an catalyst `Expression`. Given a runtime object `SubExprEvaluationRuntime`,
- * when this is asked to evaluate, it will load from the evaluation cache in the runtime first.
+ * A proxy for an catalyst `Expression`. Given a runtime object `SubExprEvaluationRuntime`, when
+ * this is asked to evaluate, it will load from the evaluation cache in the runtime first.
  */
-case class ExpressionProxy(
-    child: Expression,
-    id: Int,
-    runtime: SubExprEvaluationRuntime) extends UnaryExpression {
+case class ExpressionProxy(child: Expression, id: Int, runtime: SubExprEvaluationRuntime)
+    extends UnaryExpression {
 
   final override def dataType: DataType = child.dataType
   final override def nullable: Boolean = child.nullable

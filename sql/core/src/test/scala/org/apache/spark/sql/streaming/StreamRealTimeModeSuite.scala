@@ -39,8 +39,7 @@ class StreamRealTimeModeSuite extends StreamRealTimeModeSuiteBase {
       assert(
         realTimeTrigger.batchDurationMs == actual,
         s"Real time trigger duration should be ${actual} ms" +
-        s" but got ${realTimeTrigger.batchDurationMs} ms"
-      )
+          s" but got ${realTimeTrigger.batchDurationMs} ms")
     }
 
     // test default
@@ -51,12 +50,10 @@ class StreamRealTimeModeSuite extends StreamRealTimeModeSuiteBase {
       ("1 minute", 60000),
       ("1 hour", 3600000),
       ("1 day", 86400000),
-      ("1 week", 604800000)
-    ).foreach {
-      case (str, ms) =>
-        testTrigger(Trigger.RealTime(str), ms)
-        testTrigger(RealTimeTrigger(str), ms)
-        testTrigger(RealTimeTrigger.create(str), ms)
+      ("1 week", 604800000)).foreach { case (str, ms) =>
+      testTrigger(Trigger.RealTime(str), ms)
+      testTrigger(RealTimeTrigger(str), ms)
+      testTrigger(RealTimeTrigger.create(str), ms)
 
     }
 
@@ -70,41 +67,33 @@ class StreamRealTimeModeSuite extends StreamRealTimeModeSuiteBase {
       (Duration.apply(1000, "ms"), 1000),
       (Duration.apply(60, "s"), 60000),
       (Duration.apply(1, "h"), 3600000),
-      (Duration.apply(1, "d"), 86400000)
-    ).foreach {
-      case (duration, ms) =>
-        testTrigger(Trigger.RealTime(duration), ms)
-        testTrigger(RealTimeTrigger(duration), ms)
-        testTrigger(RealTimeTrigger(duration), ms)
+      (Duration.apply(1, "d"), 86400000)).foreach { case (duration, ms) =>
+      testTrigger(Trigger.RealTime(duration), ms)
+      testTrigger(RealTimeTrigger(duration), ms)
+      testTrigger(RealTimeTrigger(duration), ms)
     }
 
     List(
       (1000, TimeUnit.MILLISECONDS, 1000),
       (60, TimeUnit.SECONDS, 60000),
       (1, TimeUnit.HOURS, 3600000),
-      (1, TimeUnit.DAYS, 86400000)
-    ).foreach {
-      case (interval, unit, ms) =>
-        testTrigger(Trigger.RealTime(interval, unit), ms)
-        testTrigger(RealTimeTrigger(interval, unit), ms)
-        testTrigger(RealTimeTrigger.create(interval, unit), ms)
+      (1, TimeUnit.DAYS, 86400000)).foreach { case (interval, unit, ms) =>
+      testTrigger(Trigger.RealTime(interval, unit), ms)
+      testTrigger(RealTimeTrigger(interval, unit), ms)
+      testTrigger(RealTimeTrigger.create(interval, unit), ms)
     }
     // test invalid
-    List("-1", "0").foreach(
-      str =>
-        intercept[IllegalArgumentException] {
-          testTrigger(Trigger.RealTime(str), -1)
-          testTrigger(RealTimeTrigger.create(str), -1)
-        }
-    )
+    List("-1", "0").foreach(str =>
+      intercept[IllegalArgumentException] {
+        testTrigger(Trigger.RealTime(str), -1)
+        testTrigger(RealTimeTrigger.create(str), -1)
+      })
 
-    List(-1, 0).foreach(
-      duration =>
-        intercept[IllegalArgumentException] {
-          testTrigger(Trigger.RealTime(duration), -1)
-          testTrigger(RealTimeTrigger(duration), -1)
-        }
-    )
+    List(-1, 0).foreach(duration =>
+      intercept[IllegalArgumentException] {
+        testTrigger(Trigger.RealTime(duration), -1)
+        testTrigger(RealTimeTrigger(duration), -1)
+      })
   }
 
   test("processAllAvailable") {
@@ -123,8 +112,7 @@ class StreamRealTimeModeSuite extends StreamRealTimeModeSuiteBase {
       ProcessAllAvailable(),
       StopStream,
       StartStream(),
-      CheckAnswer(2, 3, 4, 5, 6, 7, 8, 11, 12)
-    )
+      CheckAnswer(2, 3, 4, 5, 6, 7, 8, 11, 12))
   }
 
   test("error: batch duration is set less than minimum") {
@@ -134,17 +122,14 @@ class StreamRealTimeModeSuite extends StreamRealTimeModeSuiteBase {
       spark.conf.get(SQLConf.STREAMING_REAL_TIME_MODE_MIN_BATCH_DURATION)
     val ex = intercept[SparkIllegalArgumentException] {
       testStream(mapped, OutputMode.Update, Map.empty, new ContinuousMemorySink())(
-        StartStream(RealTimeTrigger(minBatchDuration - 1))
-      )
+        StartStream(RealTimeTrigger(minBatchDuration - 1)))
     }
     checkError(
       ex,
       "INVALID_STREAMING_REAL_TIME_MODE_TRIGGER_INTERVAL",
       parameters = Map(
         "interval" -> (minBatchDuration - 1).toString,
-        "minBatchDuration" -> minBatchDuration.toString
-      )
-    )
+        "minBatchDuration" -> minBatchDuration.toString))
   }
 
   test("environment check for real-time mode throws when the valid configurations aren't set") {
@@ -153,14 +138,13 @@ class StreamRealTimeModeSuite extends StreamRealTimeModeSuiteBase {
 
     checkError(
       intercept[SparkIllegalArgumentException] {
-        testStream(mapped, OutputMode.Update, Map(
-          "asyncProgressTrackingEnabled" -> "true"
-        ), new ContinuousMemorySink())(
-          StartStream()
-        )
+        testStream(
+          mapped,
+          OutputMode.Update,
+          Map("asyncProgressTrackingEnabled" -> "true"),
+          new ContinuousMemorySink())(StartStream())
       },
-      "STREAMING_REAL_TIME_MODE.ASYNC_PROGRESS_TRACKING_NOT_SUPPORTED"
-    )
+      "STREAMING_REAL_TIME_MODE.ASYNC_PROGRESS_TRACKING_NOT_SUPPORTED")
   }
 
   test("error when unsupported source is used") {
@@ -174,10 +158,8 @@ class StreamRealTimeModeSuite extends StreamRealTimeModeSuiteBase {
           ex.asInstanceOf[SparkIllegalArgumentException],
           "STREAMING_REAL_TIME_MODE.INPUT_STREAM_NOT_SUPPORTED",
           parameters =
-            Map("className" -> "org.apache.spark.sql.execution.streaming.runtime.MemoryStream")
-        )
-      }
-    )
+            Map("className" -> "org.apache.spark.sql.execution.streaming.runtime.MemoryStream"))
+      })
   }
 
   test("error on self union") {
@@ -197,12 +179,11 @@ class StreamRealTimeModeSuite extends StreamRealTimeModeSuiteBase {
         checkError(
           ex.asInstanceOf[SparkIllegalStateException],
           "STREAMING_REAL_TIME_MODE.IDENTICAL_SOURCES_IN_UNION_NOT_SUPPORTED",
-          parameters = Map("sources" ->
-            "MemoryStream\\[value#\\d+\\], MemoryStream\\[value#\\d+\\]"),
-          matchPVals = true
-        )
-      }
-    )
+          parameters = Map(
+            "sources" ->
+              "MemoryStream\\[value#\\d+\\], MemoryStream\\[value#\\d+\\]"),
+          matchPVals = true)
+      })
   }
 }
 
@@ -224,8 +205,7 @@ class StreamRealTimeModeWithManualClockSuite extends StreamRealTimeModeManualClo
       WaitUntilBatchProcessed(0),
       AddData(inputData, 7),
       CheckAnswerWithTimeout(10000, 2, 3, 4, 5, 6, 7, 8),
-      StopStream
-    )
+      StopStream)
   }
 
   test("simple map query with restarts") {
@@ -242,8 +222,7 @@ class StreamRealTimeModeWithManualClockSuite extends StreamRealTimeModeManualClo
       AddData(inputData, 4, 5, 6),
       StartStream(),
       CheckAnswerWithTimeout(10000, 2, 3, 4, 5, 6, 7),
-      StopStream
-    )
+      StopStream)
   }
 
   test("simple map query switching between RTM and MBM") {
@@ -267,8 +246,7 @@ class StreamRealTimeModeWithManualClockSuite extends StreamRealTimeModeManualClo
       CheckAnswerWithTimeout(10000, 2, 3, 4, 5, 6, 7, 8),
       advanceRealTimeClock,
       WaitUntilBatchProcessed(2),
-      StopStream
-    )
+      StopStream)
   }
 
   test("listener progress") {
@@ -287,7 +265,9 @@ class StreamRealTimeModeWithManualClockSuite extends StreamRealTimeModeManualClo
       override def onQueryProgress(event: StreamingQueryListener.QueryProgressEvent): Unit = {
         val progress: StreamingQueryProgress = event.progress
         try {
-          assert(progress.sources(0).startOffset == expectedStartOffset, "startOffset not expected")
+          assert(
+            progress.sources(0).startOffset == expectedStartOffset,
+            "startOffset not expected")
           assert(progress.sources(0).endOffset == expectedEndOffset, "endOffset not expected")
           assert(
             progress.sources(0).numInputRows == expectedNumInputRows,
@@ -299,7 +279,8 @@ class StreamRealTimeModeWithManualClockSuite extends StreamRealTimeModeManualClo
         progressCalled.incrementAndGet()
       }
 
-      override def onQueryTerminated(event: StreamingQueryListener.QueryTerminatedEvent): Unit = {}
+      override def onQueryTerminated(
+          event: StreamingQueryListener.QueryTerminatedEvent): Unit = {}
     })
 
     testStream(mapped, OutputMode.Update, Map.empty, new ContinuousMemorySink())(
@@ -332,8 +313,7 @@ class StreamRealTimeModeWithManualClockSuite extends StreamRealTimeModeManualClo
       CheckAnswerWithTimeout(10000, 2, 3, 4, 5, 6, 7, 8),
       advanceRealTimeClock,
       WaitUntilBatchProcessed(2),
-      StopStream
-    )
+      StopStream)
     eventually(Timeout(streamingTimeout)) {
       assert(progressCalled.get() == 3)
     }
@@ -385,7 +365,6 @@ class StreamRealTimeModeWithManualClockSuite extends StreamRealTimeModeManualClo
       AddData(inputData, 8),
       StartStream(defaultTrigger),
       CheckAnswerWithTimeout(60000, 2, 3, 4, 5, 6, 7, 8, 8, 8, 9),
-      StopStream
-    )
+      StopStream)
   }
 }

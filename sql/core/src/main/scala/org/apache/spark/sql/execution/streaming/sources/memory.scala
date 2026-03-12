@@ -38,8 +38,9 @@ import org.apache.spark.sql.internal.connector.SupportsStreamingUpdateAsAppend
 import org.apache.spark.sql.types.StructType
 
 /**
- * A sink that stores the results in memory. This [[org.apache.spark.sql.execution.streaming.Sink]]
- * is primarily intended for use in unit tests and does not provide durability.
+ * A sink that stores the results in memory. This
+ * [[org.apache.spark.sql.execution.streaming.Sink]] is primarily intended for use in unit tests
+ * and does not provide durability.
  */
 class MemorySink extends Table with SupportsWrite with Logging {
 
@@ -91,12 +92,16 @@ class MemorySink extends Table with SupportsWrite with Logging {
   }
 
   def toDebugString: String = synchronized {
-    batches.map { case AddedData(batchId, data) =>
-      val dataStr = try data.mkString(" ") catch {
-        case NonFatal(e) => "[Error converting to string]"
+    batches
+      .map { case AddedData(batchId, data) =>
+        val dataStr =
+          try data.mkString(" ")
+          catch {
+            case NonFatal(e) => "[Error converting to string]"
+          }
+        s"$batchId: $dataStr"
       }
-      s"$batchId: $dataStr"
-    }.mkString("\n")
+      .mkString("\n")
   }
 
   def write(batchId: Long, needTruncate: Boolean, newRows: Array[Row]): Unit = {
@@ -127,7 +132,7 @@ class MemorySink extends Table with SupportsWrite with Logging {
 }
 
 case class MemoryWriterCommitMessage(partition: Int, data: Seq[Row])
-  extends WriterCommitMessage {}
+    extends WriterCommitMessage {}
 
 class MemoryWrite(sink: MemorySink, schema: StructType, needTruncate: Boolean) extends Write {
   override def toStreaming: StreamingWrite = {
@@ -135,9 +140,8 @@ class MemoryWrite(sink: MemorySink, schema: StructType, needTruncate: Boolean) e
   }
 }
 
-class MemoryStreamingWrite(
-    val sink: MemorySink, schema: StructType, needTruncate: Boolean)
-  extends StreamingWrite {
+class MemoryStreamingWrite(val sink: MemorySink, schema: StructType, needTruncate: Boolean)
+    extends StreamingWrite {
 
   override def createStreamingWriterFactory(info: PhysicalWriteInfo): MemoryWriterFactory = {
     MemoryWriterFactory(schema)
@@ -146,8 +150,8 @@ class MemoryStreamingWrite(
   override def useCommitCoordinator(): Boolean = false
 
   override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
-    val newRows = messages.flatMap {
-      case message: MemoryWriterCommitMessage => message.data
+    val newRows = messages.flatMap { case message: MemoryWriterCommitMessage =>
+      message.data
     }
     sink.write(epochId, needTruncate, newRows)
   }
@@ -158,11 +162,10 @@ class MemoryStreamingWrite(
 }
 
 case class MemoryWriterFactory(schema: StructType)
-  extends DataWriterFactory with StreamingDataWriterFactory {
+    extends DataWriterFactory
+    with StreamingDataWriterFactory {
 
-  override def createWriter(
-      partitionId: Int,
-      taskId: Long): DataWriter[InternalRow] = {
+  override def createWriter(partitionId: Int, taskId: Long): DataWriter[InternalRow] = {
     new MemoryDataWriter(partitionId, schema)
   }
 
@@ -175,7 +178,8 @@ case class MemoryWriterFactory(schema: StructType)
 }
 
 class MemoryDataWriter(partition: Int, schema: StructType)
-  extends DataWriter[InternalRow] with Logging {
+    extends DataWriter[InternalRow]
+    with Logging {
 
   private val data = mutable.Buffer[Row]()
 
@@ -196,7 +200,6 @@ class MemoryDataWriter(partition: Int, schema: StructType)
   override def close(): Unit = {}
 }
 
-
 /**
  * Used to query the data that has been written into a [[MemorySink]].
  */
@@ -205,4 +208,3 @@ case class MemoryPlan(sink: MemorySink, override val output: Seq[Attribute]) ext
 
   override def computeStats(): Statistics = Statistics(sizePerRow * sink.allData.size)
 }
-

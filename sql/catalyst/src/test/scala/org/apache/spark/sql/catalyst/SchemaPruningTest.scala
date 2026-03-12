@@ -21,8 +21,9 @@ import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.internal.SQLConf.NESTED_SCHEMA_PRUNING_ENABLED
 
 /**
- * A PlanTest that ensures that all tests in this suite are run with nested schema pruning enabled.
- * Remove this trait once the default value of SQLConf.NESTED_SCHEMA_PRUNING_ENABLED is set to true.
+ * A PlanTest that ensures that all tests in this suite are run with nested schema pruning
+ * enabled. Remove this trait once the default value of SQLConf.NESTED_SCHEMA_PRUNING_ENABLED is
+ * set to true.
  */
 private[sql] trait SchemaPruningTest extends PlanTest {
   private var originalConfSchemaPruningEnabled = false

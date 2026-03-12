@@ -29,7 +29,8 @@ object IntervalMathUtils {
 
   def subtractExact(a: Int, b: Int): Int = withOverflow(Math.subtractExact(a, b), "try_subtract")
 
-  def subtractExact(a: Long, b: Long): Long = withOverflow(Math.subtractExact(a, b), "try_subtract")
+  def subtractExact(a: Long, b: Long): Long =
+    withOverflow(Math.subtractExact(a, b), "try_subtract")
 
   def negateExact(a: Int): Int = withOverflow(Math.negateExact(a))
 
@@ -40,10 +41,12 @@ object IntervalMathUtils {
       f
     } catch {
       case _: ArithmeticException if suggestedFunc.isEmpty =>
-        throw QueryExecutionErrors.withoutSuggestionIntervalArithmeticOverflowError(context = null)
+        throw QueryExecutionErrors.withoutSuggestionIntervalArithmeticOverflowError(context =
+          null)
       case _: ArithmeticException =>
         throw QueryExecutionErrors.withSuggestionIntervalArithmeticOverflowError(
-          suggestedFunc, context = null)
+          suggestedFunc,
+          context = null)
     }
   }
 }

@@ -25,12 +25,11 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.errors.QueryExecutionErrors
 
 /**
- * Similar to [[SubqueryBroadcastExec]], this node is used to store the
- * initial physical plan of DPP subquery filters when enabling both AQE and DPP.
- * It is intermediate physical plan and not executable.
- * After the build side is executed, this node will be replaced with the
- * [[SubqueryBroadcastExec]] and the child will be optimized with the ReusedExchange
- * from the build side.
+ * Similar to [[SubqueryBroadcastExec]], this node is used to store the initial physical plan of
+ * DPP subquery filters when enabling both AQE and DPP. It is intermediate physical plan and not
+ * executable. After the build side is executed, this node will be replaced with the
+ * [[SubqueryBroadcastExec]] and the child will be optimized with the ReusedExchange from the
+ * build side.
  */
 case class SubqueryAdaptiveBroadcastExec(
     name: String,
@@ -38,7 +37,9 @@ case class SubqueryAdaptiveBroadcastExec(
     onlyInBroadcast: Boolean,
     @transient buildPlan: LogicalPlan,
     buildKeys: Seq[Expression],
-    child: SparkPlan) extends BaseSubqueryExec with UnaryExecNode {
+    child: SparkPlan)
+    extends BaseSubqueryExec
+    with UnaryExecNode {
 
   protected override def doExecute(): RDD[InternalRow] = {
     throw QueryExecutionErrors.executeCodePathUnsupportedError("SubqueryAdaptiveBroadcastExec")
@@ -49,6 +50,7 @@ case class SubqueryAdaptiveBroadcastExec(
     copy(name = "dpp", buildKeys = keys, child = child.canonicalized)
   }
 
-  override protected def withNewChildInternal(newChild: SparkPlan): SubqueryAdaptiveBroadcastExec =
+  override protected def withNewChildInternal(
+      newChild: SparkPlan): SubqueryAdaptiveBroadcastExec =
     copy(child = newChild)
 }

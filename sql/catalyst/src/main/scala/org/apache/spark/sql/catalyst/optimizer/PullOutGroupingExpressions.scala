@@ -31,25 +31,23 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.AGGREGATE
  *
  * Complex grouping expressions are pulled out to a [[Project]] node under [[Aggregate]] and are
  * referenced in both grouping expressions and aggregate expressions without aggregate functions.
- * These references ensure that optimization rules don't change the aggregate expressions to invalid
- * ones that no longer refer to any grouping expressions and also simplify the expression
+ * These references ensure that optimization rules don't change the aggregate expressions to
+ * invalid ones that no longer refer to any grouping expressions and also simplify the expression
  * transformations on the node (need to transform the expression only once).
  *
  * For example, in the following query Spark shouldn't optimize the aggregate expression
- * `Not(IsNull(c))` to `IsNotNull(c)` as the grouping expression is `IsNull(c)`:
- * SELECT not(c IS NULL)
- * FROM t
- * GROUP BY c IS NULL
- * Instead, the aggregate expression references a `_groupingexpression` attribute:
- * Aggregate [_groupingexpression#233], [NOT _groupingexpression#233 AS (NOT (c IS NULL))#230]
- * +- Project [isnull(c#219) AS _groupingexpression#233]
- *    +- LocalRelation [c#219]
+ * `Not(IsNull(c))` to `IsNotNull(c)` as the grouping expression is `IsNull(c)`: SELECT not(c IS
+ * NULL) FROM t GROUP BY c IS NULL Instead, the aggregate expression references a
+ * `_groupingexpression` attribute: Aggregate [_groupingexpression#233], [NOT
+ * _groupingexpression#233 AS (NOT (c IS NULL))#230] +- Project [isnull(c#219) AS
+ * _groupingexpression#233] +- LocalRelation [c#219]
  */
 object PullOutGroupingExpressions extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     plan.transformWithPruning(_.containsPattern(AGGREGATE)) {
       case a: Aggregate if a.resolved =>
-        val complexGroupingExpressionMap = mutable.LinkedHashMap.empty[Expression, NamedExpression]
+        val complexGroupingExpressionMap =
+          mutable.LinkedHashMap.empty[Expression, NamedExpression]
         val newGroupingExpressions = a.groupingExpressions.toIndexedSeq.map {
           case e if !e.foldable && e.children.nonEmpty =>
             complexGroupingExpressionMap

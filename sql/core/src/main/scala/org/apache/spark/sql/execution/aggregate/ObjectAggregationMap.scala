@@ -46,8 +46,8 @@ class ObjectAggregationMap() {
   def size: Int = hashMap.size()
 
   /**
-   * Returns a destructive iterator of AggregationBufferEntry.
-   * Notice: it is illegal to call any method after `destructiveIterator()` has been called.
+   * Returns a destructive iterator of AggregationBufferEntry. Notice: it is illegal to call any
+   * method after `destructiveIterator()` has been called.
    */
   def destructiveIterator(): Iterator[AggregationBufferEntry] = {
     val iter = hashMap.entrySet().iterator()
@@ -80,8 +80,7 @@ class ObjectAggregationMap() {
       TaskContext.get().taskMemoryManager().pageSizeBytes,
       SparkEnv.get.conf.get(config.SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD),
       SparkEnv.get.conf.get(config.SHUFFLE_SPILL_MAX_SIZE_FORCE_SPILL_THRESHOLD),
-      null
-    )
+      null)
 
     val mapIterator = destructiveIterator()
     val unsafeAggBufferProjection =
@@ -95,10 +94,7 @@ class ObjectAggregationMap() {
         case _ =>
       }
 
-      sorter.insertKV(
-        entry.groupingKey,
-        unsafeAggBufferProjection(entry.aggregationBuffer)
-      )
+      sorter.insertKV(entry.groupingKey, unsafeAggBufferProjection(entry.aggregationBuffer))
     }
 
     hashMap.clear()

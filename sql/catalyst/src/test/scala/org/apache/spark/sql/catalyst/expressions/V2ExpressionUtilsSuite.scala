@@ -26,10 +26,10 @@ import org.apache.spark.sql.types.StringType
 class V2ExpressionUtilsSuite extends SparkFunSuite {
 
   test("SPARK-39313: toCatalystOrdering should fail if V2Expression can not be translated") {
-    val supportedV2Sort = SortValue(
-      FieldReference("a"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST)
-    val unsupportedV2Sort = supportedV2Sort.copy(
-      expression = ApplyTransform("v2Fun", FieldReference("a") :: Nil))
+    val supportedV2Sort =
+      SortValue(FieldReference("a"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST)
+    val unsupportedV2Sort =
+      supportedV2Sort.copy(expression = ApplyTransform("v2Fun", FieldReference("a") :: Nil))
     val exc = intercept[AnalysisException] {
       V2ExpressionUtils.toCatalystOrdering(
         Array(supportedV2Sort, unsupportedV2Sort),

@@ -23,8 +23,8 @@ import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql.SparkSession
 
 /**
- * Helper trait to access session state related configurations and utilities.
- * It also provides type annotations for IDEs to build indexes.
+ * Helper trait to access session state related configurations and utilities. It also provides
+ * type annotations for IDEs to build indexes.
  */
 trait SessionStateHelper {
   protected def sessionState(sparkSession: SparkSession): SessionState = {
@@ -43,9 +43,7 @@ trait SessionStateHelper {
     sessionState(sparkSession).conf
   }
 
-  def getHadoopConf(
-      sparkSession: SparkSession,
-      options: Map[String, String]): Configuration = {
+  def getHadoopConf(sparkSession: SparkSession, options: Map[String, String]): Configuration = {
     sessionState(sparkSession).newHadoopConfWithOptions(options)
   }
 

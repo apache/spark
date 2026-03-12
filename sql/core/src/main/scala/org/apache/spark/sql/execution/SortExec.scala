@@ -32,17 +32,19 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
 /**
  * Performs (external) sorting.
  *
- * @param global when true performs a global sort of all partitions by shuffling the data first
- *               if necessary.
- * @param testSpillFrequency Method for configuring periodic spilling in unit tests. If set, will
- *                           spill every `frequency` records.
+ * @param global
+ *   when true performs a global sort of all partitions by shuffling the data first if necessary.
+ * @param testSpillFrequency
+ *   Method for configuring periodic spilling in unit tests. If set, will spill every `frequency`
+ *   records.
  */
 case class SortExec(
     sortOrder: Seq[SortOrder],
     global: Boolean,
     child: SparkPlan,
     testSpillFrequency: Int = 0)
-  extends UnaryExecNode with BlockingOperatorWithCodegen {
+    extends UnaryExecNode
+    with BlockingOperatorWithCodegen {
 
   override def output: Seq[Attribute] = child.output
 
@@ -68,9 +70,9 @@ case class SortExec(
 
   /**
    * This method gets invoked only once for each SortExec instance to initialize an
-   * UnsafeExternalRowSorter, both `plan.execute` and code generation are using it.
-   * In the code generation code path, we need to call this function outside the class so we
-   * should make it public.
+   * UnsafeExternalRowSorter, both `plan.execute` and code generation are using it. In the code
+   * generation code path, we need to call this function outside the class so we should make it
+   * public.
    */
   def createSorter(): UnsafeExternalRowSorter = {
     rowSorter = new ThreadLocal[UnsafeExternalRowSorter]()
@@ -89,8 +91,8 @@ case class SortExec(
     val prefixProjection = UnsafeProjection.create(Seq(prefixExpr))
     val prefixComputer = new UnsafeExternalRowSorter.PrefixComputer {
       private val result = new UnsafeExternalRowSorter.PrefixComputer.Prefix
-      override def computePrefix(row: InternalRow):
-          UnsafeExternalRowSorter.PrefixComputer.Prefix = {
+      override def computePrefix(
+          row: InternalRow): UnsafeExternalRowSorter.PrefixComputer.Prefix = {
         val prefix = prefixProjection.apply(row)
         result.isNull = prefix.isNullAt(0)
         result.value = if (result.isNull) prefixExpr.nullValue else prefix.getLong(0)
@@ -100,7 +102,12 @@ case class SortExec(
 
     val pageSize = SparkEnv.get.memoryManager.pageSizeBytes
     val newRowSorter = UnsafeExternalRowSorter.create(
-      schema, ordering, prefixComparator, prefixComputer, pageSize, canUseRadixSort)
+      schema,
+      ordering,
+      prefixComparator,
+      prefixComputer,
+      pageSize,
+      canUseRadixSort)
 
     if (testSpillFrequency > 0) {
       newRowSorter.setTestSpillFrequency(testSpillFrequency)
@@ -148,15 +155,24 @@ case class SortExec(
     // the iterator to return sorted rows.
     val thisPlan = ctx.addReferenceObj("plan", this)
     // Inline mutable state since not many Sort operations in a task
-    sorterVariable = ctx.addMutableState(classOf[UnsafeExternalRowSorter].getName, "sorter",
-      v => s"$v = $thisPlan.createSorter();", forceInline = true)
-    val metrics = ctx.addMutableState(classOf[TaskMetrics].getName, "metrics",
-      v => s"$v = org.apache.spark.TaskContext.get().taskMetrics();", forceInline = true)
-    val sortedIterator = ctx.addMutableState("scala.collection.Iterator<UnsafeRow>", "sortedIter",
+    sorterVariable = ctx.addMutableState(
+      classOf[UnsafeExternalRowSorter].getName,
+      "sorter",
+      v => s"$v = $thisPlan.createSorter();",
+      forceInline = true)
+    val metrics = ctx.addMutableState(
+      classOf[TaskMetrics].getName,
+      "metrics",
+      v => s"$v = org.apache.spark.TaskContext.get().taskMetrics();",
+      forceInline = true)
+    val sortedIterator = ctx.addMutableState(
+      "scala.collection.Iterator<UnsafeRow>",
+      "sortedIter",
       forceInline = true)
 
     val addToSorter = ctx.freshName("addToSorter")
-    val addToSorterFuncName = ctx.addNewFunction(addToSorter,
+    val addToSorterFuncName = ctx.addNewFunction(
+      addToSorter,
       s"""
         | private void $addToSorter() throws java.io.IOException {
         |   ${child.asInstanceOf[CodegenSupport].produce(ctx, this)}

@@ -23,14 +23,15 @@ import org.apache.spark.sql.execution.command
 
 /**
  * This base suite contains unified tests for the `DESCRIBE NAMESPACE` command that checks V1
- * table catalogs. The tests that cannot run for all V1 catalogs are located in more
- * specific test suites:
+ * table catalogs. The tests that cannot run for all V1 catalogs are located in more specific test
+ * suites:
  *
  *   - V1 In-Memory catalog: `org.apache.spark.sql.execution.command.v1.DescribeNamespaceSuite`
  *   - V1 Hive External catalog:
  *     `org.apache.spark.sql.hive.execution.command.DescribeNamespaceSuite`
  */
-trait DescribeNamespaceSuiteBase extends command.DescribeNamespaceSuiteBase
+trait DescribeNamespaceSuiteBase
+    extends command.DescribeNamespaceSuiteBase
     with command.TestsV1AndV2Commands {
   override def notFoundMsgPrefix: String = "Database"
 
@@ -57,8 +58,8 @@ trait DescribeNamespaceSuiteBase extends command.DescribeNamespaceSuiteBase
 }
 
 /**
- * The class contains tests for the `DESCRIBE NAMESPACE` command to check V1 In-Memory
- * table catalog.
+ * The class contains tests for the `DESCRIBE NAMESPACE` command to check V1 In-Memory table
+ * catalog.
  */
 class DescribeNamespaceSuite extends DescribeNamespaceSuiteBase with CommandSuiteBase {
   override def notFoundMsgPrefix: String = if (conf.useV1Command) "Database" else "Namespace"

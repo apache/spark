@@ -40,8 +40,7 @@ class ApproximatePercentileQuerySuite extends QueryTest with SharedSparkSession 
     withTempView(table) {
       (1 to 1000).toDF("col").createOrReplaceTempView(table)
       checkAnswer(
-        spark.sql(
-          s"""
+        spark.sql(s"""
              |SELECT
              |  percentile_approx(col, 0.25),
              |  percentile_approx(col, 0.5),
@@ -52,8 +51,7 @@ class ApproximatePercentileQuerySuite extends QueryTest with SharedSparkSession 
              |  percentile_approx(col, 1)
              |FROM $table
            """.stripMargin),
-        Row(250D, 500D, 750D, 1D, 1000D, 1D, 1000D)
-      )
+        Row(250d, 500d, 750d, 1d, 1000d, 1d, 1000d))
     }
   }
 
@@ -61,14 +59,12 @@ class ApproximatePercentileQuerySuite extends QueryTest with SharedSparkSession 
     withTempView(table) {
       (1 to 10).toDF("col").createOrReplaceTempView(table)
       checkAnswer(
-        spark.sql(
-          s"""
+        spark.sql(s"""
              |SELECT
              |  percentile_approx(col, array(0.01, 0.1, 0.11))
              |FROM $table
            """.stripMargin),
-        Row(Seq(1, 1, 2))
-      )
+        Row(Seq(1, 1, 2)))
     }
   }
 
@@ -76,16 +72,14 @@ class ApproximatePercentileQuerySuite extends QueryTest with SharedSparkSession 
     withTempView(table) {
       (1 to 1000).toDF("col").createOrReplaceTempView(table)
       checkAnswer(
-        spark.sql(
-          s"""SELECT
+        spark.sql(s"""SELECT
              |  percentile_approx(col, array(0.25, 0.5, 0.75D)),
              |  count(col),
              |  percentile_approx(col, array(0.0, 1.0)),
              |  sum(col)
              |FROM $table
            """.stripMargin),
-        Row(Seq(250D, 500D, 750D), 1000, Seq(1D, 1000D), 500500)
-      )
+        Row(Seq(250d, 500d, 750d), 1000, Seq(1d, 1000d), 500500))
     }
   }
 
@@ -93,13 +87,15 @@ class ApproximatePercentileQuerySuite extends QueryTest with SharedSparkSession 
     withTempView(table) {
       val intSeq = 1 to 1000
       val data: Seq[(java.math.BigDecimal, Date, Timestamp, LocalDateTime)] = intSeq.map { i =>
-        (new java.math.BigDecimal(i), DateTimeUtils.toJavaDate(i),
-          DateTimeUtils.toJavaTimestamp(i), DateTimeUtils.microsToLocalDateTime(i))
+        (
+          new java.math.BigDecimal(i),
+          DateTimeUtils.toJavaDate(i),
+          DateTimeUtils.toJavaTimestamp(i),
+          DateTimeUtils.microsToLocalDateTime(i))
       }
       data.toDF("cdecimal", "cdate", "ctimestamp", "ctimestampntz").createOrReplaceTempView(table)
       checkAnswer(
-        spark.sql(
-          s"""SELECT
+        spark.sql(s"""SELECT
              |  percentile_approx(cdecimal, array(0.25, 0.5, 0.75D)),
              |  percentile_approx(cdate, array(0.25, 0.5, 0.75D)),
              |  percentile_approx(ctimestamp, array(0.25, 0.5, 0.75D)),
@@ -108,22 +104,22 @@ class ApproximatePercentileQuerySuite extends QueryTest with SharedSparkSession 
            """.stripMargin),
         Row(
           Seq("250.000000000000000000", "500.000000000000000000", "750.000000000000000000")
-              .map(i => new java.math.BigDecimal(i)),
+            .map(i => new java.math.BigDecimal(i)),
           Seq(250, 500, 750).map(DateTimeUtils.toJavaDate),
           Seq(250, 500, 750).map(i => DateTimeUtils.toJavaTimestamp(i.toLong)),
-          Seq(250, 500, 750).map(i => DateTimeUtils.microsToLocalDateTime(i.toLong)))
-      )
+          Seq(250, 500, 750).map(i => DateTimeUtils.microsToLocalDateTime(i.toLong))))
     }
   }
 
   test("percentile_approx, multiple records with the minimum value in a partition") {
     withTempView(table) {
-      spark.sparkContext.makeRDD(Seq(1, 1, 2, 1, 1, 3, 1, 1, 4, 1, 1, 5), 4).toDF("col")
+      spark.sparkContext
+        .makeRDD(Seq(1, 1, 2, 1, 1, 3, 1, 1, 4, 1, 1, 5), 4)
+        .toDF("col")
         .createOrReplaceTempView(table)
       checkAnswer(
         spark.sql(s"SELECT percentile_approx(col, array(0.5)) FROM $table"),
-        Row(Seq(1.0D))
-      )
+        Row(Seq(1.0d)))
     }
   }
 
@@ -135,11 +131,10 @@ class ApproximatePercentileQuerySuite extends QueryTest with SharedSparkSession 
 
       // With different accuracies
       val accuracies = Array(1, 10, 100, 1000, 10000)
-      val expectedPercentiles = Array(100D, 200D, 250D, 314D, 777D)
+      val expectedPercentiles = Array(100d, 200d, 250d, 314d, 777d)
       for (accuracy <- accuracies) {
         for (expectedPercentile <- expectedPercentiles) {
-          val df = spark.sql(
-            s"""SELECT
+          val df = spark.sql(s"""SELECT
                | percentile_approx(col, $expectedPercentile/$tableCount, $accuracy)
                |FROM $table
              """.stripMargin)
@@ -156,8 +151,7 @@ class ApproximatePercentileQuerySuite extends QueryTest with SharedSparkSession 
       (1 to 1000).toDF("col").createOrReplaceTempView(table)
       checkAnswer(
         spark.sql(s"SELECT percentile_approx(col, array(0.25 + 0.25D), 200 + 800) FROM $table"),
-        Row(Seq(500))
-      )
+        Row(Seq(500)))
     }
   }
 
@@ -166,8 +160,7 @@ class ApproximatePercentileQuerySuite extends QueryTest with SharedSparkSession 
       Seq.empty[Int].toDF("col").createOrReplaceTempView(table)
       checkAnswer(
         spark.sql(s"SELECT sum(col), percentile_approx(col, 0.5) FROM $table"),
-        Row(null, null)
-      )
+        Row(null, null))
     }
   }
 
@@ -176,8 +169,7 @@ class ApproximatePercentileQuerySuite extends QueryTest with SharedSparkSession 
       Seq.empty[Int].toDF("col").createOrReplaceTempView(table)
       checkAnswer(
         spark.sql(s"SELECT sum(col), percentile_approx(col, 0.5) FROM $table GROUP BY col"),
-        Seq.empty[Row]
-      )
+        Seq.empty[Row])
     }
   }
 
@@ -185,18 +177,13 @@ class ApproximatePercentileQuerySuite extends QueryTest with SharedSparkSession 
     withTempView(table) {
       (1 to 1000).map(x => (x % 3, x)).toDF("key", "value").createOrReplaceTempView(table)
       checkAnswer(
-        spark.sql(
-          s"""SELECT
+        spark.sql(s"""SELECT
              |  key,
              |  percentile_approx(null, 0.5)
              |FROM $table
              |GROUP BY key
            """.stripMargin),
-        Seq(
-          Row(0, null),
-          Row(1, null),
-          Row(2, null))
-      )
+        Seq(Row(0, null), Row(1, null), Row(2, null)))
     }
   }
 
@@ -204,31 +191,31 @@ class ApproximatePercentileQuerySuite extends QueryTest with SharedSparkSession 
     withTempView(table) {
       (1 to 1000).map(x => (x % 3, x)).toDF("key", "value").createOrReplaceTempView(table)
       checkAnswer(
-        spark.sql(
-          s"""SELECT
+        spark.sql(s"""SELECT
               |  percentile_approx(null, 0.5),
               |  sum(null),
               |  percentile_approx(null, 0.5)
               |FROM $table
            """.stripMargin),
-         Row(null, null, null)
-      )
+        Row(null, null, null))
     }
   }
 
   test("percentile_approx(col, ...), input rows contains null, with out group by") {
     withTempView(table) {
-      (1 to 1000).map(Integer.valueOf(_)).flatMap(Seq(null: Integer, _)).toDF("col")
+      (1 to 1000)
+        .map(Integer.valueOf(_))
+        .flatMap(Seq(null: Integer, _))
+        .toDF("col")
         .createOrReplaceTempView(table)
       checkAnswer(
-        spark.sql(
-          s"""SELECT
+        spark.sql(s"""SELECT
               |  percentile_approx(col, 0.5),
               |  sum(null),
               |  percentile_approx(col, 0.5)
               |FROM $table
            """.stripMargin),
-        Row(500D, null, 500D))
+        Row(500d, null, 500d))
     }
   }
 
@@ -240,21 +227,17 @@ class ApproximatePercentileQuerySuite extends QueryTest with SharedSparkSession 
         .map(v => (Integer.valueOf(v % 2), v))
         // Add some nulls
         .flatMap(Seq(_, (null: Integer, null: Integer)))
-        .toDF("key", "value").createOrReplaceTempView(table)
+        .toDF("key", "value")
+        .createOrReplaceTempView(table)
       checkAnswer(
-        spark.sql(
-          s"""SELECT
+        spark.sql(s"""SELECT
               |  percentile_approx(value, 0.5),
               |  sum(value),
               |  percentile_approx(value, 0.5)
               |FROM $table
               |GROUP BY key
            """.stripMargin),
-        Seq(
-          Row(499.0D, 250000, 499.0D),
-          Row(500.0D, 250500, 500.0D),
-          Row(null, null, null))
-      )
+        Seq(Row(499.0d, 250000, 499.0d), Row(500.0d, 250500, 500.0d), Row(null, null, null)))
     }
   }
 
@@ -263,8 +246,7 @@ class ApproximatePercentileQuerySuite extends QueryTest with SharedSparkSession 
       val data = (1 to 10).map(v => (v % 2, v))
       data.toDF("key", "value").createOrReplaceTempView(table)
 
-      val query = spark.sql(
-        s"""
+      val query = spark.sql(s"""
            |SElECT percentile_approx(value, 0.5)
            |OVER
            |  (PARTITION BY key ORDER BY value ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
@@ -282,7 +264,7 @@ class ApproximatePercentileQuerySuite extends QueryTest with SharedSparkSession 
         val percentile = new PercentileDigest(1.0 / DEFAULT_PERCENTILE_ACCURACY)
         sortedValues.foreach { value =>
           percentile.add(value)
-          outputRows :+= Row(percentile.getPercentiles(Array(0.5D)).head)
+          outputRows :+= Row(percentile.getPercentiles(Array(0.5d)).head)
         }
         outputRows
       }
@@ -292,7 +274,7 @@ class ApproximatePercentileQuerySuite extends QueryTest with SharedSparkSession 
   }
 
   test("SPARK-24013: unneeded compress can cause performance issues with sorted input") {
-    val buffer = new PercentileDigest(1.0D / ApproximatePercentile.DEFAULT_PERCENTILE_ACCURACY)
+    val buffer = new PercentileDigest(1.0d / ApproximatePercentile.DEFAULT_PERCENTILE_ACCURACY)
     var compressCounts = 0
     (1 to 10000000).foreach { i =>
       buffer.add(i)
@@ -311,8 +293,7 @@ class ApproximatePercentileQuerySuite extends QueryTest with SharedSparkSession 
         .repartition(1)
         .createOrReplaceTempView(table)
       checkAnswer(
-        spark.sql(
-          s"""SELECT
+        spark.sql(s"""SELECT
              |  percentile_approx(col, 0.77, 1000),
              |  percentile_approx(col, 0.77, 10000),
              |  percentile_approx(col, 0.77, 100000),
@@ -324,27 +305,27 @@ class ApproximatePercentileQuerySuite extends QueryTest with SharedSparkSession 
 
   test("SPARK-37138: Support Ansi Interval type in ApproximatePercentile") {
     withTempView(table) {
-      Seq((Period.ofMonths(100), Duration.ofSeconds(100L)),
+      Seq(
+        (Period.ofMonths(100), Duration.ofSeconds(100L)),
         (Period.ofMonths(200), Duration.ofSeconds(200L)),
         (Period.ofMonths(300), Duration.ofSeconds(300L)))
-        .toDF("col1", "col2").createOrReplaceTempView(table)
-        checkAnswer(
-          spark.sql(
-            s"""SELECT
+        .toDF("col1", "col2")
+        .createOrReplaceTempView(table)
+      checkAnswer(
+        spark.sql(s"""SELECT
                |  percentile_approx(col1, 0.5),
                |  SUM(null),
                |  percentile_approx(col2, 0.5)
                |FROM $table
            """.stripMargin),
-          Row(Period.ofMonths(200).normalized(), null, Duration.ofSeconds(200L)))
+        Row(Period.ofMonths(200).normalized(), null, Duration.ofSeconds(200L)))
     }
   }
 
   test("SPARK-45079: NULL arguments of percentile_approx") {
     checkError(
       exception = intercept[AnalysisException] {
-        sql(
-          """
+        sql("""
             |SELECT percentile_approx(col, array(0.5, 0.4, 0.1), NULL)
             |FROM VALUES (0), (1), (2), (10) AS tab(col);
             |""".stripMargin).collect()
@@ -353,33 +334,28 @@ class ApproximatePercentileQuerySuite extends QueryTest with SharedSparkSession 
       parameters = Map(
         "exprName" -> "accuracy",
         "sqlExpr" -> "\"percentile_approx(col, array(0.5, 0.4, 0.1), NULL)\""),
-      context = ExpectedContext(
-        "", "", 8, 57, "percentile_approx(col, array(0.5, 0.4, 0.1), NULL)"))
+      context =
+        ExpectedContext("", "", 8, 57, "percentile_approx(col, array(0.5, 0.4, 0.1), NULL)"))
     checkError(
       exception = intercept[AnalysisException] {
-        sql(
-          """
+        sql("""
             |SELECT percentile_approx(col, NULL, 100)
             |FROM VALUES (0), (1), (2), (10) AS tab(col);
             |""".stripMargin).collect()
       },
       condition = "DATATYPE_MISMATCH.UNEXPECTED_NULL",
-      parameters = Map(
-        "exprName" -> "percentage",
-        "sqlExpr" -> "\"percentile_approx(col, NULL, 100)\""),
-      context = ExpectedContext(
-        "", "", 8, 40, "percentile_approx(col, NULL, 100)"))
+      parameters =
+        Map("exprName" -> "percentage", "sqlExpr" -> "\"percentile_approx(col, NULL, 100)\""),
+      context = ExpectedContext("", "", 8, 40, "percentile_approx(col, NULL, 100)"))
   }
 
   test("SPARK-54750: percentile_approx returns NULL for certain decimal values") {
     // Regression test: ROUND(PERCENTILE_APPROX(2150/1000.0, 0.95), 3) should return 2.15
     checkAnswer(
       spark.sql("SELECT ROUND(PERCENTILE_APPROX(2150 / 1000.0, 0.95), 3) as p95"),
-      Row(2.15)
-    )
+      Row(2.15))
     checkAnswer(
       spark.sql("SELECT ROUND(PERCENTILE_APPROX(2151 / 1000.0, 0.95), 3) as p95"),
-      Row(2.151)
-    )
+      Row(2.151))
   }
 }

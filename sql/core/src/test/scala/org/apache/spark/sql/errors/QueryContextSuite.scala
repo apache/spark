@@ -32,8 +32,9 @@ class QueryContextSuite extends QueryTest with SharedSparkSession {
       val e = intercept[SparkArithmeticException] {
         spark.range(1).select(lit(1) / lit(0)).collect()
       }
-      assert(e.getQueryContext.head.summary() ==
-        """== DataFrame ==
+      assert(
+        e.getQueryContext.head.summary() ==
+          """== DataFrame ==
           |"div" was called from
           |org.apache.spark.sql.errors.QueryContextSuite.$anonfun$new$3(QueryContextSuite.scala:33)
           |org.scalatest.Assertions.intercept(Assertions.scala:749)
@@ -48,8 +49,7 @@ class QueryContextSuite extends QueryTest with SharedSparkSession {
         exception = intercept[SparkArithmeticException](df.collect()),
         condition = "DIVIDE_BY_ZERO",
         parameters = Map("config" -> ansiConf),
-        context = ExpectedContext("", -1, -1)
-      )
+        context = ExpectedContext("", -1, -1))
     }
   }
 }

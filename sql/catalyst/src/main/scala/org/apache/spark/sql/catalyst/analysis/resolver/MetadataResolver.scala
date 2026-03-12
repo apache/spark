@@ -24,8 +24,8 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{UNRESOLVED_RELATION, UNR
 import org.apache.spark.sql.connector.catalog.CatalogManager
 
 /**
- * The [[MetadataResolver]] performs relation metadata resolution based on the unresolved plan
- * at the start of the analysis phase. Usually it does RPC calls to some table catalog and to table
+ * The [[MetadataResolver]] performs relation metadata resolution based on the unresolved plan at
+ * the start of the analysis phase. Usually it does RPC calls to some table catalog and to table
  * metadata itself.
  *
  * [[RelationsWithResolvedMetadata]] is a map from relation ID to the relations with resolved
@@ -44,8 +44,9 @@ class MetadataResolver(
   override val relationsWithResolvedMetadata = new RelationsWithResolvedMetadata
 
   /**
-   * [[ProhibitedResolver]] passed as an argument to [[tryDelegateResolutionToExtensions]], because
-   * unresolved subtree resolution doesn't make sense during metadata resolution traversal.
+   * [[ProhibitedResolver]] passed as an argument to [[tryDelegateResolutionToExtensions]],
+   * because unresolved subtree resolution doesn't make sense during metadata resolution
+   * traversal.
    */
   private val prohibitedResolver = new ProhibitedResolver
 
@@ -60,20 +61,15 @@ class MetadataResolver(
   override def resolve(unresolvedPlan: LogicalPlan): Unit = {
     AnalysisHelper.allowInvokingTransformsInAnalyzer {
       unresolvedPlan.transformDownWithSubqueriesAndPruning(
-        _.containsAnyPattern(UNRESOLVED_RELATION, UNRESOLVED_WITH)
-      ) {
+        _.containsAnyPattern(UNRESOLVED_RELATION, UNRESOLVED_WITH)) {
         case unresolvedRelation: UnresolvedRelation =>
-          tryResolveRelation(
-            unresolvedRelation = unresolvedRelation
-          )
+          tryResolveRelation(unresolvedRelation = unresolvedRelation)
 
           unresolvedRelation
 
         case unresolvedWith: UnresolvedWith =>
           for (cteRelation <- unresolvedWith.cteRelations) {
-            resolve(
-              unresolvedPlan = cteRelation._2
-            )
+            resolve(unresolvedPlan = cteRelation._2)
           }
 
           unresolvedWith
@@ -88,16 +84,12 @@ class MetadataResolver(
       resolveRelation(unresolvedRelation) match {
         case relationAfterDefaultResolution =>
           val relationAfterExtensionResolution = tryDelegateResolutionToExtension(
-            relationAfterDefaultResolution
-          )
+            relationAfterDefaultResolution)
 
           relationAfterExtensionResolution.getOrElse(relationAfterDefaultResolution) match {
             case _: UnresolvedRelation =>
             case relationWithResolvedMetadata =>
-              relationsWithResolvedMetadata.put(
-                relationId,
-                relationWithResolvedMetadata
-              )
+              relationsWithResolvedMetadata.put(relationId, relationWithResolvedMetadata)
           }
       }
     }
@@ -109,9 +101,7 @@ class MetadataResolver(
    */
   private def resolveRelation(unresolvedRelation: UnresolvedRelation): LogicalPlan = {
     relationResolution
-      .resolveRelation(
-        u = unresolvedRelation
-      )
+      .resolveRelation(u = unresolvedRelation)
       .getOrElse(unresolvedRelation)
   }
 
@@ -134,9 +124,8 @@ class MetadataResolver(
   private[sql] object TestOnly {
     def getRelationsWithResolvedMetadata: RelationsWithResolvedMetadata = {
       val result = new RelationsWithResolvedMetadata
-      relationsWithResolvedMetadata.forEach {
-        case (relationId, relationWithResolvedMetadata) =>
-          result.put(relationId, relationWithResolvedMetadata)
+      relationsWithResolvedMetadata.forEach { case (relationId, relationWithResolvedMetadata) =>
+        result.put(relationId, relationWithResolvedMetadata)
       }
       result
     }

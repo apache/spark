@@ -70,8 +70,9 @@ class MetricViewFactorySuite extends SparkFunSuite {
     val metricView = MetricViewFactory.fromYAML(yaml)
 
     assert(metricView.from.isInstanceOf[SQLSource])
-    assert(metricView.from.asInstanceOf[SQLSource].sql ===
-      "SELECT * FROM my_table WHERE year = 2024")
+    assert(
+      metricView.from.asInstanceOf[SQLSource].sql ===
+        "SELECT * FROM my_table WHERE year = 2024")
     assert(metricView.select.length === 2)
   }
 
@@ -160,9 +161,7 @@ class MetricViewFactorySuite extends SparkFunSuite {
       where = None,
       select = Seq(
         Column("customer_id", DimensionExpression("customer_id"), 0),
-        Column("total_revenue", MeasureExpression("SUM(revenue)"), 1)
-      )
-    )
+        Column("total_revenue", MeasureExpression("SUM(revenue)"), 1)))
 
     val yaml = MetricViewFactory.toYAML(metricView)
 
@@ -182,10 +181,7 @@ class MetricViewFactorySuite extends SparkFunSuite {
       version = "0.1",
       from = SQLSource("SELECT * FROM table WHERE id > 100"),
       where = None,
-      select = Seq(
-        Column("id", DimensionExpression("id"), 0)
-      )
-    )
+      select = Seq(Column("id", DimensionExpression("id"), 0)))
 
     val yaml = MetricViewFactory.toYAML(metricView)
 
@@ -199,9 +195,7 @@ class MetricViewFactorySuite extends SparkFunSuite {
       where = Some("year >= 2020"),
       select = Seq(
         Column("region", DimensionExpression("region"), 0),
-        Column("sales", MeasureExpression("SUM(amount)"), 1)
-      )
-    )
+        Column("sales", MeasureExpression("SUM(amount)"), 1)))
 
     val yaml = MetricViewFactory.toYAML(metricView)
 
@@ -269,8 +263,9 @@ class MetricViewFactorySuite extends SparkFunSuite {
     val reparsedMetricView = MetricViewFactory.fromYAML(serializedYaml)
 
     assert(reparsedMetricView.from.isInstanceOf[SQLSource])
-    assert(reparsedMetricView.from.asInstanceOf[SQLSource].sql ===
-      "SELECT * FROM my_table WHERE year = 2024")
+    assert(
+      reparsedMetricView.from.asInstanceOf[SQLSource].sql ===
+        "SELECT * FROM my_table WHERE year = 2024")
   }
 
   test("column ordinals are preserved") {

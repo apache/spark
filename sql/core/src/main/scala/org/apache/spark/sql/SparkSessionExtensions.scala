@@ -32,27 +32,17 @@ import org.apache.spark.sql.classic.Strategy
 import org.apache.spark.sql.execution.{ColumnarRule, SparkPlan}
 
 /**
- * :: Experimental ::
- * Holder for injection points to the [[SparkSession]]. We make NO guarantee about the stability
- * regarding binary compatibility and source compatibility of methods here.
+ * :: Experimental :: Holder for injection points to the [[SparkSession]]. We make NO guarantee
+ * about the stability regarding binary compatibility and source compatibility of methods here.
  *
  * This current provides the following extension points:
  *
- * <ul>
- * <li>Analyzer Rules.</li>
- * <li>Check Analysis Rules.</li>
- * <li>Cache Plan Normalization Rules.</li>
- * <li>Optimizer Rules.</li>
- * <li>Pre CBO Rules.</li>
- * <li>Planning Strategies.</li>
- * <li>Customized Parser.</li>
- * <li>(External) Catalog listeners.</li>
- * <li>Columnar Rules.</li>
- * <li>Adaptive Query Post Planner Strategy Rules.</li>
- * <li>Adaptive Query Stage Preparation Rules.</li>
- * <li>Adaptive Query Execution Runtime Optimizer Rules.</li>
- * <li>Adaptive Query Stage Optimizer Rules.</li>
- * </ul>
+ * <ul> <li>Analyzer Rules.</li> <li>Check Analysis Rules.</li> <li>Cache Plan Normalization
+ * Rules.</li> <li>Optimizer Rules.</li> <li>Pre CBO Rules.</li> <li>Planning Strategies.</li>
+ * <li>Customized Parser.</li> <li>(External) Catalog listeners.</li> <li>Columnar Rules.</li>
+ * <li>Adaptive Query Post Planner Strategy Rules.</li> <li>Adaptive Query Stage Preparation
+ * Rules.</li> <li>Adaptive Query Execution Runtime Optimizer Rules.</li> <li>Adaptive Query Stage
+ * Optimizer Rules.</li> </ul>
  *
  * The extensions can be used by calling `withExtensions` on the [[SparkSession.Builder]], for
  * example:
@@ -72,7 +62,8 @@ import org.apache.spark.sql.execution.{ColumnarRule, SparkPlan}
  * }}}
  *
  * The extensions can also be used by setting the Spark SQL configuration property
- * `spark.sql.extensions`. Multiple extensions can be set using a comma-separated list. For example:
+ * `spark.sql.extensions`. Multiple extensions can be set using a comma-separated list. For
+ * example:
  * {{{
  *   SparkSession.builder()
  *     .master("...")
@@ -134,7 +125,8 @@ class SparkSessionExtensions {
   }
 
   /**
-   * Build the override rules for the query post planner strategy phase of adaptive query execution.
+   * Build the override rules for the query post planner strategy phase of adaptive query
+   * execution.
    */
   private[sql] def buildQueryPostPlannerStrategyRules(
       session: SparkSession): Seq[Rule[SparkPlan]] = {
@@ -170,9 +162,8 @@ class SparkSessionExtensions {
   }
 
   /**
-   * Inject a rule that applied between `plannerStrategy` and `queryStagePrepRules`, so
-   * it can get the whole plan before injecting exchanges.
-   * Note, these rules can only be applied within AQE.
+   * Inject a rule that applied between `plannerStrategy` and `queryStagePrepRules`, so it can get
+   * the whole plan before injecting exchanges. Note, these rules can only be applied within AQE.
    */
   def injectQueryPostPlannerStrategyRule(builder: QueryPostPlannerStrategyBuilder): Unit = {
     queryPostPlannerStrategyRuleBuilders += builder
@@ -187,11 +178,10 @@ class SparkSessionExtensions {
   }
 
   /**
-   * Inject a runtime `Rule` builder into the [[SparkSession]].
-   * The injected rules will be executed after built-in
-   * [[org.apache.spark.sql.execution.adaptive.AQEOptimizer]] rules are applied.
-   * A runtime optimizer rule is used to improve the quality of a logical plan during execution
-   * which can leverage accurate statistics from shuffle.
+   * Inject a runtime `Rule` builder into the [[SparkSession]]. The injected rules will be
+   * executed after built-in [[org.apache.spark.sql.execution.adaptive.AQEOptimizer]] rules are
+   * applied. A runtime optimizer rule is used to improve the quality of a logical plan during
+   * execution which can leverage accurate statistics from shuffle.
    *
    * Note that, it does not work if adaptive query execution is disabled.
    */
@@ -200,8 +190,7 @@ class SparkSessionExtensions {
   }
 
   /**
-   * Inject a rule that can override the query stage optimizer phase of adaptive query
-   * execution.
+   * Inject a rule that can override the query stage optimizer phase of adaptive query execution.
    */
   def injectQueryStageOptimizerRule(builder: QueryStageOptimizerRuleBuilder): Unit = {
     queryStageOptimizerRuleBuilders += builder
@@ -217,8 +206,8 @@ class SparkSessionExtensions {
   }
 
   /**
-   * Inject an analyzer resolution `Rule` builder into the [[SparkSession]]. These analyzer
-   * rules will be executed as part of the resolution phase of analysis.
+   * Inject an analyzer resolution `Rule` builder into the [[SparkSession]]. These analyzer rules
+   * will be executed as part of the resolution phase of analysis.
    */
   def injectResolutionRule(builder: RuleBuilder): Unit = {
     resolutionRuleBuilders += builder
@@ -252,8 +241,8 @@ class SparkSessionExtensions {
   }
 
   /**
-   * Inject an analyzer `Rule` builder into the [[SparkSession]]. These analyzer
-   * rules will be executed after resolution.
+   * Inject an analyzer `Rule` builder into the [[SparkSession]]. These analyzer rules will be
+   * executed after resolution.
    */
   def injectPostHocResolutionRule(builder: RuleBuilder): Unit = {
     postHocResolutionRuleBuilders += builder
@@ -269,8 +258,8 @@ class SparkSessionExtensions {
   }
 
   /**
-   * Inject an check analysis `Rule` builder into the [[SparkSession]]. The injected rules will
-   * be executed after the analysis phase. A check analysis rule is used to detect problems with a
+   * Inject an check analysis `Rule` builder into the [[SparkSession]]. The injected rules will be
+   * executed after the analysis phase. A check analysis rule is used to detect problems with a
    * LogicalPlan and should throw an exception when a problem is found.
    */
   def injectCheckRule(builder: CheckRuleBuilder): Unit = {
@@ -285,9 +274,9 @@ class SparkSessionExtensions {
 
   /**
    * Inject a plan normalization `Rule` builder into the [[SparkSession]]. The injected rules will
-   * be executed just before query caching decisions are made. Such rules can be used to improve the
-   * cache hit rate by normalizing different plans to the same form. These rules should never modify
-   * the result of the LogicalPlan.
+   * be executed just before query caching decisions are made. Such rules can be used to improve
+   * the cache hit rate by normalizing different plans to the same form. These rules should never
+   * modify the result of the LogicalPlan.
    */
   def injectPlanNormalizationRule(builder: RuleBuilder): Unit = {
     planNormalizationRules += builder
@@ -316,9 +305,9 @@ class SparkSessionExtensions {
   }
 
   /**
-   * Inject an optimizer `Rule` builder that rewrites logical plans into the [[SparkSession]].
-   * The injected rules will be executed once after the operator optimization batch and
-   * before any cost-based optimization rules that depend on stats.
+   * Inject an optimizer `Rule` builder that rewrites logical plans into the [[SparkSession]]. The
+   * injected rules will be executed once after the operator optimization batch and before any
+   * cost-based optimization rules that depend on stats.
    */
   def injectPreCBORule(builder: RuleBuilder): Unit = {
     preCBORules += builder
@@ -331,8 +320,8 @@ class SparkSessionExtensions {
   }
 
   /**
-   * Inject a planner `Strategy` builder into the [[SparkSession]]. The injected strategy will
-   * be used to convert a `LogicalPlan` into a executable
+   * Inject a planner `Strategy` builder into the [[SparkSession]]. The injected strategy will be
+   * used to convert a `LogicalPlan` into a executable
    * [[org.apache.spark.sql.execution.SparkPlan]].
    */
   def injectPlannerStrategy(builder: StrategyBuilder): Unit = {
@@ -351,9 +340,9 @@ class SparkSessionExtensions {
 
   /**
    * Inject a custom parser into the [[SparkSession]]. Note that the builder is passed a session
-   * and an initial parser. The latter allows for a user to create a partial parser and to delegate
-   * to the underlying parser for completeness. If a user injects more parsers, then the parsers
-   * are stacked on top of each other.
+   * and an initial parser. The latter allows for a user to create a partial parser and to
+   * delegate to the underlying parser for completeness. If a user injects more parsers, then the
+   * parsers are stacked on top of each other.
    */
   def injectParser(builder: ParserBuilder): Unit = {
     parserBuilders += builder
@@ -378,9 +367,9 @@ class SparkSessionExtensions {
   }
 
   /**
-  * Injects a custom function into the [[org.apache.spark.sql.catalyst.analysis.FunctionRegistry]]
-  * at runtime for all sessions.
-  */
+   * Injects a custom function into the
+   * [[org.apache.spark.sql.catalyst.analysis.FunctionRegistry]] at runtime for all sessions.
+   */
   def injectFunction(functionDescription: FunctionDescription): Unit = {
     injectedFunctions += functionDescription
   }

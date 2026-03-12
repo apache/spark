@@ -22,7 +22,9 @@ import org.scalatest.BeforeAndAfterAll
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.Suite
 
-/** Manages a local `spark` {@link SparkSession} variable, correctly stopping it after each test. */
+/**
+ * Manages a local `spark` {@link SparkSession} variable, correctly stopping it after each test.
+ */
 trait LocalSparkSession extends BeforeAndAfterEach with BeforeAndAfterAll { self: Suite =>
 
   @transient var spark: SparkSession = _

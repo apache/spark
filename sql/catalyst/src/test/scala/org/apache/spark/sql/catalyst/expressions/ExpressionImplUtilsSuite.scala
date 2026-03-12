@@ -25,15 +25,15 @@ class ExpressionImplUtilsSuite extends SparkFunSuite {
   private val b64encoder = java.util.Base64.getEncoder
 
   case class TestCase(
-    plaintext: String,
-    key: String,
-    base64CiphertextExpected: String,
-    mode: String,
-    padding: String = "Default",
-    ivHexOpt: Option[String] = None,
-    aadOpt: Option[String] = None,
-    expectedErrorClassOpt: Option[String] = None,
-    errorParamsMap: Map[String, String] = Map()) {
+      plaintext: String,
+      key: String,
+      base64CiphertextExpected: String,
+      mode: String,
+      padding: String = "Default",
+      ivHexOpt: Option[String] = None,
+      aadOpt: Option[String] = None,
+      expectedErrorClassOpt: Option[String] = None,
+      errorParamsMap: Map[String, String] = Map()) {
 
     def isIvDefined: Boolean = {
       ivHexOpt.isDefined && ivHexOpt.get != null && ivHexOpt.get.length > 0
@@ -45,25 +45,14 @@ class ExpressionImplUtilsSuite extends SparkFunSuite {
     val utf8Padding: UTF8String = UTF8String.fromString(padding)
     val deterministic: Boolean = mode.equalsIgnoreCase("ECB") || isIvDefined
     val ivBytes: Array[Byte] =
-      ivHexOpt.map({ivHex => Hex.unhex(ivHex.getBytes("UTF-8"))}).getOrElse(null)
-    val aadBytes: Array[Byte] = aadOpt.map({aad => aad.getBytes("UTF-8")}).getOrElse(null)
+      ivHexOpt.map({ ivHex => Hex.unhex(ivHex.getBytes("UTF-8")) }).getOrElse(null)
+    val aadBytes: Array[Byte] = aadOpt.map({ aad => aad.getBytes("UTF-8") }).getOrElse(null)
   }
 
   val testCases = Seq(
-    TestCase(
-      "Spark",
-      "abcdefghijklmnop",
-      "4Hv0UKCx6nfUeAoPZo1z+w==",
-      "ECB"),
-    TestCase("Spark",
-      "abcdefghijklmnop12345678",
-      "NeTYNgA+PCQBN50DA//O2w==",
-      "ECB"),
-    TestCase(
-      "Spark",
-      "abcdefghijklmnop12345678ABCDEFGH",
-      "9J3iZbIxnmaG+OIA9Amd+A==",
-      "ECB"),
+    TestCase("Spark", "abcdefghijklmnop", "4Hv0UKCx6nfUeAoPZo1z+w==", "ECB"),
+    TestCase("Spark", "abcdefghijklmnop12345678", "NeTYNgA+PCQBN50DA//O2w==", "ECB"),
+    TestCase("Spark", "abcdefghijklmnop12345678ABCDEFGH", "9J3iZbIxnmaG+OIA9Amd+A==", "ECB"),
     // Test passing non-null, but empty arrays for IV and AAD
     TestCase(
       "Spark",
@@ -112,8 +101,7 @@ class ExpressionImplUtilsSuite extends SparkFunSuite {
       "abcdefghijklmnop12345678ABCDEFGH",
       "73B0tHM3F7bvmG7yIZB9vMKnzHyuCYjD9PzAI7NJ+kDBWtaFO22" +
         "n2cKlkNcCzr45a4Uol+sNtQwQAV7iRhBdt6YmXoviemyXJWOZ89G279SgxabaomEIyN/HZwenxeN4",
-      "GCM")
-  )
+      "GCM"))
 
   test("AesDecrypt Only") {
     testCases.map(decOnlyCase)
@@ -135,24 +123,20 @@ class ExpressionImplUtilsSuite extends SparkFunSuite {
       "abcdefghijklmnop12345678ABCDEFGH",
       "AAAAAAAAAAAAAAAAQiYi+sRNYDAOTjdSEcYBFsAWPL1f",
       "GCM",
-      ivHexOpt = Some("000000000000000000000000")
-    ),
+      ivHexOpt = Some("000000000000000000000000")),
     TestCase(
       "Spark",
       "abcdefghijklmnop12345678ABCDEFGH",
       "AAAAAAAAAAAAAAAAQiYi+sTLm7KD9UcZ2nlRdYDe/PX4",
       "GCM",
       ivHexOpt = Some("000000000000000000000000"),
-      aadOpt = Some("This is an AAD mixed into the input")
-    ),
+      aadOpt = Some("This is an AAD mixed into the input")),
     TestCase(
       "Spark",
       "abcdefghijklmnop12345678ABCDEFGH",
       "AAAAAAAAAAAAAAAAQiYi+sTLm7KD9UcZ2nlRdYDe/PX4",
       "GCM",
-      aadOpt = Some("This is an AAD mixed into the input")
-    )
-  )
+      aadOpt = Some("This is an AAD mixed into the input")))
 
   test("AesDecrypt only with IVs or AADs") {
     ivAadTestCases.map(decOnlyCase)
@@ -169,8 +153,7 @@ class ExpressionImplUtilsSuite extends SparkFunSuite {
       t.keyBytes,
       t.utf8mode,
       t.utf8Padding,
-      t.aadBytes
-    )
+      t.aadBytes)
     val decryptedString = new String(decryptedBytes)
     assert(decryptedString == t.plaintext)
   }
@@ -182,16 +165,14 @@ class ExpressionImplUtilsSuite extends SparkFunSuite {
       t.utf8mode,
       t.utf8Padding,
       t.ivBytes,
-      t.aadBytes
-    )
+      t.aadBytes)
     val ciphertextBase64 = b64encoder.encodeToString(ciphertextBytes)
     val decryptedBytes = ExpressionImplUtils.aesDecrypt(
       ciphertextBytes,
       t.keyBytes,
       t.utf8mode,
       t.utf8Padding,
-      t.aadBytes
-    )
+      t.aadBytes)
     val decryptedString = new String(decryptedBytes)
     assert(decryptedString == t.plaintext)
     if (t.deterministic) {
@@ -207,11 +188,7 @@ class ExpressionImplUtilsSuite extends SparkFunSuite {
       "ECB",
       ivHexOpt = Some("0000000000000000"),
       expectedErrorClassOpt = Some("UNSUPPORTED_FEATURE.AES_MODE_IV"),
-      errorParamsMap = Map(
-        "mode" -> "ECB",
-        "functionName" -> "`aes_encrypt`"
-      )
-    ),
+      errorParamsMap = Map("mode" -> "ECB", "functionName" -> "`aes_encrypt`")),
     TestCase(
       "Spark",
       "abcdefghijklmnop12345678ABCDEFGH",
@@ -219,11 +196,7 @@ class ExpressionImplUtilsSuite extends SparkFunSuite {
       "ECB",
       aadOpt = Some("ECB does not support AAD mode"),
       expectedErrorClassOpt = Some("UNSUPPORTED_FEATURE.AES_MODE_AAD"),
-      errorParamsMap = Map(
-        "mode" -> "ECB",
-        "functionName" -> "`aes_encrypt`"
-      )
-    ),
+      errorParamsMap = Map("mode" -> "ECB", "functionName" -> "`aes_encrypt`")),
     TestCase(
       "Spark",
       "abcdefghijklmnop12345678ABCDEFGH",
@@ -235,9 +208,7 @@ class ExpressionImplUtilsSuite extends SparkFunSuite {
         "mode" -> "CBC",
         "parameter" -> "`iv`",
         "functionName" -> "`aes_encrypt`/`aes_decrypt`",
-        "actualLength" -> "5"
-      )
-    ),
+        "actualLength" -> "5")),
     TestCase(
       "Spark",
       "abcdefghijklmnop12345678ABCDEFGH",
@@ -249,9 +220,7 @@ class ExpressionImplUtilsSuite extends SparkFunSuite {
         "mode" -> "GCM",
         "parameter" -> "`iv`",
         "functionName" -> "`aes_encrypt`/`aes_decrypt`",
-        "actualLength" -> "5"
-      )
-    ),
+        "actualLength" -> "5")),
     TestCase(
       "Spark",
       "abcdefghijklmnop12345678ABCDEFGH",
@@ -262,9 +231,7 @@ class ExpressionImplUtilsSuite extends SparkFunSuite {
       errorParamsMap = Map(
         "mode" -> "GCM",
         "padding" -> "PKCS",
-        "functionName" -> "`aes_encrypt`/`aes_decrypt`"
-      )
-    ),
+        "functionName" -> "`aes_encrypt`/`aes_decrypt`")),
     TestCase(
       "Spark",
       "abcdefghijklmnop12345678ABCDEFGH",
@@ -272,12 +239,7 @@ class ExpressionImplUtilsSuite extends SparkFunSuite {
       "CBC",
       aadOpt = Some("CBC doesn't support AADs"),
       expectedErrorClassOpt = Some("UNSUPPORTED_FEATURE.AES_MODE_AAD"),
-      errorParamsMap = Map(
-        "mode" -> "CBC",
-        "functionName" -> "`aes_encrypt`"
-      )
-    )
-  )
+      errorParamsMap = Map("mode" -> "CBC", "functionName" -> "`aes_encrypt`")))
 
   test("AesEncrypt unsupported errors") {
     unsupportedErrorCases.foreach { t =>
@@ -296,9 +258,7 @@ class ExpressionImplUtilsSuite extends SparkFunSuite {
       errorParamsMap = Map(
         "parameter" -> "`expr`, `key`",
         "functionName" -> "`aes_encrypt`/`aes_decrypt`",
-        "detailMessage" -> "Input length .*"
-      )
-    ),
+        "detailMessage" -> "Input length .*")),
     // The ciphertext is corrupted
     TestCase(
       "Spark",
@@ -309,9 +269,7 @@ class ExpressionImplUtilsSuite extends SparkFunSuite {
       errorParamsMap = Map(
         "parameter" -> "`expr`, `key`",
         "functionName" -> "`aes_encrypt`/`aes_decrypt`",
-        "detailMessage" -> "Tag mismatch[!]?"
-      )
-    ),
+        "detailMessage" -> "Tag mismatch[!]?")),
     // Valid ciphertext, wrong AAD
     TestCase(
       "Spark",
@@ -323,9 +281,7 @@ class ExpressionImplUtilsSuite extends SparkFunSuite {
       errorParamsMap = Map(
         "parameter" -> "`expr`, `key`",
         "functionName" -> "`aes_encrypt`/`aes_decrypt`",
-        "detailMessage" -> "Tag mismatch[!]?"
-      )
-    ),
+        "detailMessage" -> "Tag mismatch[!]?")),
     // Empty input
     TestCase(
       "Spark",
@@ -336,17 +292,13 @@ class ExpressionImplUtilsSuite extends SparkFunSuite {
       errorParamsMap = Map(
         "parameter" -> "`expr`, `key`",
         "functionName" -> "`aes_encrypt`/`aes_decrypt`",
-        "detailMessage" -> "Invalid buffer arguments"
-      )
-    )
-  )
+        "detailMessage" -> "Invalid buffer arguments")))
 
   test("AesEncrypt Expected Errors") {
     corruptedCiphertexts.foreach { t =>
       checkExpectedError(t, decOnlyCase)
     }
   }
-
 
   private def checkExpectedError(t: TestCase, f: TestCase => Unit) = {
     checkError(
@@ -355,8 +307,7 @@ class ExpressionImplUtilsSuite extends SparkFunSuite {
       },
       condition = t.expectedErrorClassOpt.get,
       parameters = t.errorParamsMap,
-      matchPVals = true
-    )
+      matchPVals = true)
   }
 
   test("Validate UTF8 string") {
@@ -367,39 +318,39 @@ class ExpressionImplUtilsSuite extends SparkFunSuite {
             ExpressionImplUtils.validateUTF8String(str)
           },
           condition = "INVALID_UTF8_STRING",
-          parameters = Map(
-            "str" -> str.getBytes.map(byte => f"\\x$byte%02X").mkString
-          )
-        )
+          parameters = Map("str" -> str.getBytes.map(byte => f"\\x$byte%02X").mkString))
       } else {
-        assert(ExpressionImplUtils.validateUTF8String(str)== expected)
+        assert(ExpressionImplUtils.validateUTF8String(str) == expected)
       }
     }
-    validateUTF8(UTF8String.EMPTY_UTF8,
-      UTF8String.fromString(""), except = false)
-    validateUTF8(UTF8String.fromString(""),
-      UTF8String.fromString(""), except = false)
-    validateUTF8(UTF8String.fromString("aa"),
-      UTF8String.fromString("aa"), except = false)
-    validateUTF8(UTF8String.fromString("\u0061"),
-      UTF8String.fromString("\u0061"), except = false)
-    validateUTF8(UTF8String.fromString(""),
-      UTF8String.fromString(""), except = false)
-    validateUTF8(UTF8String.fromString("abc"),
-      UTF8String.fromString("abc"), except = false)
-    validateUTF8(UTF8String.fromString("hello"),
-      UTF8String.fromString("hello"), except = false)
-    validateUTF8(UTF8String.fromBytes(Array.empty[Byte]),
-      UTF8String.fromString(""), except = false)
-    validateUTF8(UTF8String.fromBytes(Array[Byte](0x41)),
-      UTF8String.fromString("A"), except = false)
-    validateUTF8(UTF8String.fromBytes(Array[Byte](0x61)),
-      UTF8String.fromString("a"), except = false)
+    validateUTF8(UTF8String.EMPTY_UTF8, UTF8String.fromString(""), except = false)
+    validateUTF8(UTF8String.fromString(""), UTF8String.fromString(""), except = false)
+    validateUTF8(UTF8String.fromString("aa"), UTF8String.fromString("aa"), except = false)
+    validateUTF8(UTF8String.fromString("\u0061"), UTF8String.fromString("\u0061"), except = false)
+    validateUTF8(UTF8String.fromString(""), UTF8String.fromString(""), except = false)
+    validateUTF8(UTF8String.fromString("abc"), UTF8String.fromString("abc"), except = false)
+    validateUTF8(UTF8String.fromString("hello"), UTF8String.fromString("hello"), except = false)
+    validateUTF8(
+      UTF8String.fromBytes(Array.empty[Byte]),
+      UTF8String.fromString(""),
+      except = false)
+    validateUTF8(
+      UTF8String.fromBytes(Array[Byte](0x41)),
+      UTF8String.fromString("A"),
+      except = false)
+    validateUTF8(
+      UTF8String.fromBytes(Array[Byte](0x61)),
+      UTF8String.fromString("a"),
+      except = false)
     // scalastyle:off nonascii
-    validateUTF8(UTF8String.fromBytes(Array[Byte](0x80.toByte)),
-      UTF8String.fromString("\uFFFD"), except = true)
-    validateUTF8(UTF8String.fromBytes(Array[Byte](0xFF.toByte)),
-      UTF8String.fromString("\uFFFD"), except = true)
+    validateUTF8(
+      UTF8String.fromBytes(Array[Byte](0x80.toByte)),
+      UTF8String.fromString("\uFFFD"),
+      except = true)
+    validateUTF8(
+      UTF8String.fromBytes(Array[Byte](0xff.toByte)),
+      UTF8String.fromString("\uFFFD"),
+      except = true)
     // scalastyle:on nonascii
   }
 
@@ -418,7 +369,7 @@ class ExpressionImplUtilsSuite extends SparkFunSuite {
     tryValidateUTF8(UTF8String.fromBytes(Array[Byte](0x41)), UTF8String.fromString("A"))
     tryValidateUTF8(UTF8String.fromBytes(Array[Byte](0x61)), UTF8String.fromString("a"))
     tryValidateUTF8(UTF8String.fromBytes(Array[Byte](0x80.toByte)), null)
-    tryValidateUTF8(UTF8String.fromBytes(Array[Byte](0xFF.toByte)), null)
+    tryValidateUTF8(UTF8String.fromBytes(Array[Byte](0xff.toByte)), null)
   }
 
 }

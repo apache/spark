@@ -33,15 +33,19 @@ import org.apache.spark.sql.internal.SQLConf
 object VariableAssignmentUtils {
 
   /**
-   * Assigns a value to a variable (either scripting local or session).
-   * Uses the variable's catalog to determine which variable manager to use:
-   * - FakeLocalCatalog: scripting local variables (managed by SqlScriptingContextManager)
-   * - FakeSystemCatalog: session variables (managed by TempVariableManager)
+   * Assigns a value to a variable (either scripting local or session). Uses the variable's
+   * catalog to determine which variable manager to use:
+   *   - FakeLocalCatalog: scripting local variables (managed by SqlScriptingContextManager)
+   *   - FakeSystemCatalog: session variables (managed by TempVariableManager)
    *
-   * @param varRef The variable reference containing catalog information
-   * @param value The value to assign
-   * @param tempVariableManager The session-level variable manager
-   * @param conf SQL configuration for case sensitivity
+   * @param varRef
+   *   The variable reference containing catalog information
+   * @param value
+   *   The value to assign
+   * @param tempVariableManager
+   *   The session-level variable manager
+   * @param conf
+   *   SQL configuration for case sensitivity
    */
   def assignVariable(
       varRef: VariableReference,
@@ -58,12 +62,14 @@ object VariableAssignmentUtils {
 
     val variableManager = varRef.catalog match {
       case FakeLocalCatalog if scriptingVariableManager.isEmpty =>
-        throw SparkException.internalError("Variable has FakeLocalCatalog, " +
-          "but ScriptingVariableManager is None.")
+        throw SparkException.internalError(
+          "Variable has FakeLocalCatalog, " +
+            "but ScriptingVariableManager is None.")
 
       case FakeLocalCatalog if scriptingVariableManager.get.get(namePartsCaseAdjusted).isEmpty =>
-        throw SparkException.internalError("Local variable should be present " +
-          "because variable resolution has already determined it exists.")
+        throw SparkException.internalError(
+          "Local variable should be present " +
+            "because variable resolution has already determined it exists.")
 
       case FakeLocalCatalog => scriptingVariableManager.get
 
@@ -78,8 +84,7 @@ object VariableAssignmentUtils {
     val varDef = VariableDefinition(
       varRef.identifier,
       varRef.varDef.defaultValueSQL,
-      Literal(value, varRef.dataType)
-    )
+      Literal(value, varRef.dataType))
 
     variableManager.set(namePartsCaseAdjusted, varDef)
   }

@@ -42,8 +42,7 @@ class DeprecatedStreamingAggregationSuite extends StateStoreMetricsTest with Ass
     }
   }
 
-  def testWithAllStateVersions(name: String, confPairs: (String, String)*)
-                              (func: => Any): Unit = {
+  def testWithAllStateVersions(name: String, confPairs: (String, String)*)(func: => Any): Unit = {
     for (version <- StreamingAggregationStateManager.supportedVersions) {
       test(s"$name - state format version $version") {
         executeFuncWithStateVersionSQLConf(version, confPairs, func)
@@ -51,14 +50,12 @@ class DeprecatedStreamingAggregationSuite extends StateStoreMetricsTest with Ass
     }
   }
 
-
   testWithAllStateVersions("typed aggregators") {
     val inputData = MemoryStream[(String, Int)]
     val aggregated = inputData.toDS().groupByKey(_._1).agg(typed.sumLong(_._2))
 
     testStream(aggregated, Update)(
       AddData(inputData, ("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)),
-      CheckLastBatch(("a", 30), ("b", 3), ("c", 1))
-    )
+      CheckLastBatch(("a", 30), ("b", 3), ("c", 1)))
   }
 }

@@ -32,21 +32,23 @@ sealed trait StreamingAggregationStateManager extends Serializable {
   /** Extract columns consisting key from input row, and return the new row for key columns. */
   def getKey(row: UnsafeRow): UnsafeRow
 
-  /** Calculate schema for the value of state. The schema is mainly passed to the StateStoreRDD. */
+  /**
+   * Calculate schema for the value of state. The schema is mainly passed to the StateStoreRDD.
+   */
   def getStateValueSchema: StructType
 
   /** Get the current value of a non-null key from the target state store. */
   def get(store: ReadStateStore, key: UnsafeRow): UnsafeRow
 
   /**
-   * Put a new value for a non-null key to the target state store. Note that key will be
-   * extracted from the input row, and the key would be same as the result of getKey(inputRow).
+   * Put a new value for a non-null key to the target state store. Note that key will be extracted
+   * from the input row, and the key would be same as the result of getKey(inputRow).
    */
   def put(store: StateStore, row: UnsafeRow): Unit
 
   /**
-   * Commit all the updates that have been made to the target state store, and return the
-   * new version.
+   * Commit all the updates that have been made to the target state store, and return the new
+   * version.
    */
   def commit(store: StateStore): Long
 
@@ -81,7 +83,8 @@ object StreamingAggregationStateManager extends Logging {
 
 abstract class StreamingAggregationStateManagerBaseImpl(
     protected val keyExpressions: Seq[Attribute],
-    protected val inputRowAttributes: Seq[Attribute]) extends StreamingAggregationStateManager {
+    protected val inputRowAttributes: Seq[Attribute])
+    extends StreamingAggregationStateManager {
 
   @transient protected lazy val keyProjector =
     GenerateUnsafeProjection.generate(keyExpressions, inputRowAttributes)
@@ -99,19 +102,21 @@ abstract class StreamingAggregationStateManagerBaseImpl(
 }
 
 /**
- * The implementation of StreamingAggregationStateManager for state version 1.
- * In state version 1, the schema of key and value in state are follow:
+ * The implementation of StreamingAggregationStateManager for state version 1. In state version 1,
+ * the schema of key and value in state are follow:
  *
- * - key: Same as key expressions.
- * - value: Same as input row attributes. The schema of value contains key expressions as well.
+ *   - key: Same as key expressions.
+ *   - value: Same as input row attributes. The schema of value contains key expressions as well.
  *
- * @param keyExpressions The attributes of keys.
- * @param inputRowAttributes The attributes of input row.
+ * @param keyExpressions
+ *   The attributes of keys.
+ * @param inputRowAttributes
+ *   The attributes of input row.
  */
 class StreamingAggregationStateManagerImplV1(
     keyExpressions: Seq[Attribute],
     inputRowAttributes: Seq[Attribute])
-  extends StreamingAggregationStateManagerBaseImpl(keyExpressions, inputRowAttributes) {
+    extends StreamingAggregationStateManagerBaseImpl(keyExpressions, inputRowAttributes) {
 
   override def getStateValueSchema: StructType = inputRowAttributes.toStructType
 
@@ -133,22 +138,24 @@ class StreamingAggregationStateManagerImplV1(
 }
 
 /**
- * The implementation of StreamingAggregationStateManager for state version 2.
- * In state version 2, the schema of key and value in state are follow:
+ * The implementation of StreamingAggregationStateManager for state version 2. In state version 2,
+ * the schema of key and value in state are follow:
  *
- * - key: Same as key expressions.
- * - value: The diff between input row attributes and key expressions.
+ *   - key: Same as key expressions.
+ *   - value: The diff between input row attributes and key expressions.
  *
  * The schema of value is changed to optimize the memory/space usage in state, via removing
  * duplicated columns in key-value pair. Hence key columns are excluded from the schema of value.
  *
- * @param keyExpressions The attributes of keys.
- * @param inputRowAttributes The attributes of input row.
+ * @param keyExpressions
+ *   The attributes of keys.
+ * @param inputRowAttributes
+ *   The attributes of input row.
  */
 class StreamingAggregationStateManagerImplV2(
     keyExpressions: Seq[Attribute],
     inputRowAttributes: Seq[Attribute])
-  extends StreamingAggregationStateManagerBaseImpl(keyExpressions, inputRowAttributes) {
+    extends StreamingAggregationStateManagerBaseImpl(keyExpressions, inputRowAttributes) {
 
   private val valueExpressions: Seq[Attribute] = inputRowAttributes.diff(keyExpressions)
   private val keyValueJoinedExpressions: Seq[Attribute] = keyExpressions ++ valueExpressions
@@ -162,10 +169,11 @@ class StreamingAggregationStateManagerImplV2(
     GenerateUnsafeProjection.generate(valueExpressions, inputRowAttributes)
 
   @transient private lazy val joiner =
-    GenerateUnsafeRowJoiner.create(DataTypeUtils.fromAttributes(keyExpressions),
+    GenerateUnsafeRowJoiner.create(
+      DataTypeUtils.fromAttributes(keyExpressions),
       DataTypeUtils.fromAttributes(valueExpressions))
-  @transient private lazy val restoreValueProjector = GenerateUnsafeProjection.generate(
-    inputRowAttributes, keyValueJoinedExpressions)
+  @transient private lazy val restoreValueProjector =
+    GenerateUnsafeProjection.generate(inputRowAttributes, keyValueJoinedExpressions)
 
   override def getStateValueSchema: StructType = valueExpressions.toStructType
 
@@ -210,4 +218,4 @@ class StreamingAggregationStateManagerImplV2(
  * For aggregation state v1 and v2, the state key is the partition key i.e. the aggregation key
  */
 class StreamingAggregationStatePartitionKeyExtractor(stateKeySchema: StructType)
-  extends NoopStatePartitionKeyExtractor(stateKeySchema)
+    extends NoopStatePartitionKeyExtractor(stateKeySchema)

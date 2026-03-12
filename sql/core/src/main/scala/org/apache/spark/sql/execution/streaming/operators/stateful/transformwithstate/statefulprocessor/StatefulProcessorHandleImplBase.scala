@@ -25,7 +25,9 @@ import org.apache.spark.sql.streaming.{StatefulProcessorHandle, TimeMode}
 // scalastyle:on line.size.limit
 
 abstract class StatefulProcessorHandleImplBase(
-    timeMode: TimeMode, keyExprEnc: ExpressionEncoder[Any]) extends StatefulProcessorHandle {
+    timeMode: TimeMode,
+    keyExprEnc: ExpressionEncoder[Any])
+    extends StatefulProcessorHandle {
 
   protected var currState: StatefulProcessorHandleState = PRE_INIT
 
@@ -37,12 +39,14 @@ abstract class StatefulProcessorHandleImplBase(
 
   def verifyTimerOperations(operationType: String): Unit = {
     if (timeMode == NoTime) {
-      throw StateStoreErrors.cannotPerformOperationWithInvalidTimeMode(operationType,
+      throw StateStoreErrors.cannotPerformOperationWithInvalidTimeMode(
+        operationType,
         timeMode.toString)
     }
 
     if (currState < INITIALIZED || currState >= TIMER_PROCESSED) {
-      throw StateStoreErrors.cannotPerformOperationWithInvalidHandleState(operationType,
+      throw StateStoreErrors.cannotPerformOperationWithInvalidHandleState(
+        operationType,
         currState.toString)
     }
   }
@@ -51,7 +55,8 @@ abstract class StatefulProcessorHandleImplBase(
       operationType: String,
       requiredState: StatefulProcessorHandleState): Unit = {
     if (currState != requiredState) {
-      throw StateStoreErrors.cannotPerformOperationWithInvalidHandleState(operationType,
+      throw StateStoreErrors.cannotPerformOperationWithInvalidHandleState(
+        operationType,
         currState.toString)
     }
   }

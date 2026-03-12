@@ -38,16 +38,15 @@ import org.apache.spark.util.Utils
 /**
  * An in-memory (ephemeral) implementation of the system catalog.
  *
- * This is a dummy implementation that does not require setting up external systems.
- * It is intended for testing or exploration purposes only and should not be used
- * in production.
+ * This is a dummy implementation that does not require setting up external systems. It is
+ * intended for testing or exploration purposes only and should not be used in production.
  *
  * All public methods should be synchronized for thread-safety.
  */
 class InMemoryCatalog(
     conf: SparkConf = new SparkConf,
     hadoopConfig: Configuration = new Configuration)
-  extends ExternalCatalog {
+    extends ExternalCatalog {
 
   import CatalogTypes.TablePartitionSpec
 
@@ -109,58 +108,57 @@ class InMemoryCatalog(
   // Databases
   // --------------------------------------------------------------------------
 
-  override def createDatabase(
-      dbDefinition: CatalogDatabase,
-      ignoreIfExists: Boolean): Unit = synchronized {
-    if (catalog.contains(dbDefinition.name)) {
-      if (!ignoreIfExists) {
-        throw new DatabaseAlreadyExistsException(dbDefinition.name)
+  override def createDatabase(dbDefinition: CatalogDatabase, ignoreIfExists: Boolean): Unit =
+    synchronized {
+      if (catalog.contains(dbDefinition.name)) {
+        if (!ignoreIfExists) {
+          throw new DatabaseAlreadyExistsException(dbDefinition.name)
+        }
+      } else {
+        try {
+          val location = new Path(dbDefinition.locationUri)
+          val fs = location.getFileSystem(hadoopConfig)
+          fs.mkdirs(location)
+        } catch {
+          case e: IOException =>
+            throw QueryExecutionErrors.unableToCreateDatabaseAsFailedToCreateDirectoryError(
+              dbDefinition,
+              e)
+        }
+        val newDb = dbDefinition.copy(properties =
+          dbDefinition.properties ++ Map(PROP_OWNER -> Utils.getCurrentUserName()))
+        catalog.put(dbDefinition.name, new DatabaseDesc(newDb))
       }
-    } else {
-      try {
-        val location = new Path(dbDefinition.locationUri)
-        val fs = location.getFileSystem(hadoopConfig)
-        fs.mkdirs(location)
-      } catch {
-        case e: IOException =>
-          throw QueryExecutionErrors.unableToCreateDatabaseAsFailedToCreateDirectoryError(
-            dbDefinition, e)
-      }
-      val newDb = dbDefinition.copy(
-        properties = dbDefinition.properties ++ Map(PROP_OWNER -> Utils.getCurrentUserName()))
-      catalog.put(dbDefinition.name, new DatabaseDesc(newDb))
     }
-  }
 
-  override def dropDatabase(
-      db: String,
-      ignoreIfNotExists: Boolean,
-      cascade: Boolean): Unit = synchronized {
-    if (catalog.contains(db)) {
-      if (!cascade) {
-        // If cascade is false, make sure the database is empty.
-        if (catalog(db).tables.nonEmpty || catalog(db).functions.nonEmpty) {
-          throw QueryCompilationErrors.cannotDropNonemptyDatabaseError(db)
+  override def dropDatabase(db: String, ignoreIfNotExists: Boolean, cascade: Boolean): Unit =
+    synchronized {
+      if (catalog.contains(db)) {
+        if (!cascade) {
+          // If cascade is false, make sure the database is empty.
+          if (catalog(db).tables.nonEmpty || catalog(db).functions.nonEmpty) {
+            throw QueryCompilationErrors.cannotDropNonemptyDatabaseError(db)
+          }
+        }
+        // Remove the database.
+        val dbDefinition = catalog(db).db
+        try {
+          val location = new Path(dbDefinition.locationUri)
+          val fs = location.getFileSystem(hadoopConfig)
+          fs.delete(location, true)
+        } catch {
+          case e: IOException =>
+            throw QueryExecutionErrors.unableToDropDatabaseAsFailedToDeleteDirectoryError(
+              dbDefinition,
+              e)
+        }
+        catalog.remove(db)
+      } else {
+        if (!ignoreIfNotExists) {
+          throw new NoSuchDatabaseException(db)
         }
       }
-      // Remove the database.
-      val dbDefinition = catalog(db).db
-      try {
-        val location = new Path(dbDefinition.locationUri)
-        val fs = location.getFileSystem(hadoopConfig)
-        fs.delete(location, true)
-      } catch {
-        case e: IOException =>
-          throw QueryExecutionErrors.unableToDropDatabaseAsFailedToDeleteDirectoryError(
-            dbDefinition, e)
-      }
-      catalog.remove(db)
-    } else {
-      if (!ignoreIfNotExists) {
-        throw new NoSuchDatabaseException(db)
-      }
     }
-  }
 
   override def alterDatabase(dbDefinition: CatalogDatabase): Unit = synchronized {
     requireDbExists(dbDefinition.name)
@@ -190,49 +188,52 @@ class InMemoryCatalog(
   // Tables
   // --------------------------------------------------------------------------
 
-  override def createTable(
-      tableDefinition: CatalogTable,
-      ignoreIfExists: Boolean): Unit = synchronized {
-    assert(tableDefinition.identifier.database.isDefined,
-      "Table identifier " + tableDefinition.identifier.quotedString +
-      " is missing database name. " +
-      "Cannot create table without a database specified.")
-    val db = tableDefinition.identifier.database.get
-    requireDbExists(db)
-    val table = tableDefinition.identifier.table
-    if (tableExists(db, table)) {
-      if (!ignoreIfExists) {
-        throw new TableAlreadyExistsException(db = db, table = table)
-      }
-    } else {
-      // Set the default table location if this is a managed table and its location is not
-      // specified.
-      // Ideally we should not create a managed table with location, but Hive serde table can
-      // specify location for managed table. And in [[CreateDataSourceTableAsSelectCommand]] we have
-      // to create the table directory and write out data before we create this table, to avoid
-      // exposing a partial written table.
-      val needDefaultTableLocation =
-        tableDefinition.tableType == CatalogTableType.MANAGED &&
-          tableDefinition.storage.locationUri.isEmpty
-
-      val tableWithLocation = if (needDefaultTableLocation) {
-        val defaultTableLocation = new Path(new Path(catalog(db).db.locationUri), table)
-        try {
-          val fs = defaultTableLocation.getFileSystem(hadoopConfig)
-          fs.mkdirs(defaultTableLocation)
-        } catch {
-          case e: IOException =>
-            throw QueryExecutionErrors.unableToCreateTableAsFailedToCreateDirectoryError(
-              table, defaultTableLocation, e)
+  override def createTable(tableDefinition: CatalogTable, ignoreIfExists: Boolean): Unit =
+    synchronized {
+      assert(
+        tableDefinition.identifier.database.isDefined,
+        "Table identifier " + tableDefinition.identifier.quotedString +
+          " is missing database name. " +
+          "Cannot create table without a database specified.")
+      val db = tableDefinition.identifier.database.get
+      requireDbExists(db)
+      val table = tableDefinition.identifier.table
+      if (tableExists(db, table)) {
+        if (!ignoreIfExists) {
+          throw new TableAlreadyExistsException(db = db, table = table)
         }
-        tableDefinition.withNewStorage(locationUri = Some(defaultTableLocation.toUri))
       } else {
-        tableDefinition
+        // Set the default table location if this is a managed table and its location is not
+        // specified.
+        // Ideally we should not create a managed table with location, but Hive serde table can
+        // specify location for managed table. And in [[CreateDataSourceTableAsSelectCommand]] we have
+        // to create the table directory and write out data before we create this table, to avoid
+        // exposing a partial written table.
+        val needDefaultTableLocation =
+          tableDefinition.tableType == CatalogTableType.MANAGED &&
+            tableDefinition.storage.locationUri.isEmpty
+
+        val tableWithLocation = if (needDefaultTableLocation) {
+          val defaultTableLocation = new Path(new Path(catalog(db).db.locationUri), table)
+          try {
+            val fs = defaultTableLocation.getFileSystem(hadoopConfig)
+            fs.mkdirs(defaultTableLocation)
+          } catch {
+            case e: IOException =>
+              throw QueryExecutionErrors.unableToCreateTableAsFailedToCreateDirectoryError(
+                table,
+                defaultTableLocation,
+                e)
+          }
+          tableDefinition.withNewStorage(locationUri = Some(defaultTableLocation.toUri))
+        } else {
+          tableDefinition
+        }
+        val tableProp = tableWithLocation.properties.filter(_._1 != "comment")
+        catalog(db).tables
+          .put(table, new TableDesc(tableWithLocation.copy(properties = tableProp)))
       }
-      val tableProp = tableWithLocation.properties.filter(_._1 != "comment")
-      catalog(db).tables.put(table, new TableDesc(tableWithLocation.copy(properties = tableProp)))
     }
-  }
 
   override def dropTable(
       db: String,
@@ -261,7 +262,8 @@ class InMemoryCatalog(
               throw QueryExecutionErrors.unableToDeletePartitionPathError(partitionPath, e)
           }
         }
-        assert(tableMeta.storage.locationUri.isDefined,
+        assert(
+          tableMeta.storage.locationUri.isDefined,
           "Managed table should always have table location, as we will assign a default location " +
             "to it if it doesn't have one.")
         // Delete the data/directory of the table
@@ -272,7 +274,9 @@ class InMemoryCatalog(
         } catch {
           case e: IOException =>
             throw QueryExecutionErrors.unableToDropTableAsFailedToDeleteDirectoryError(
-              table, dir, e)
+              table,
+              dir,
+              e)
         }
       }
       catalog(db).tables.remove(table)
@@ -283,17 +287,16 @@ class InMemoryCatalog(
     }
   }
 
-  override def renameTable(
-      db: String,
-      oldName: String,
-      newName: String): Unit = synchronized {
+  override def renameTable(db: String, oldName: String, newName: String): Unit = synchronized {
     requireTableExists(db, oldName)
     requireTableNotExists(db, newName)
     val oldDesc = catalog(db).tables(oldName)
-    oldDesc.table = oldDesc.table.copy(identifier = oldDesc.table.identifier.copy(table = newName))
+    oldDesc.table =
+      oldDesc.table.copy(identifier = oldDesc.table.identifier.copy(table = newName))
 
     if (oldDesc.table.tableType == CatalogTableType.MANAGED) {
-      assert(oldDesc.table.storage.locationUri.isDefined,
+      assert(
+        oldDesc.table.storage.locationUri.isDefined,
         "Managed table should always have table location, as we will assign a default location " +
           "to it if it doesn't have one.")
       val oldDir = new Path(oldDesc.table.location)
@@ -304,7 +307,10 @@ class InMemoryCatalog(
       } catch {
         case e: IOException =>
           throw QueryExecutionErrors.unableToRenameTableAsFailedToRenameDirectoryError(
-            oldName, newName, oldDir, e)
+            oldName,
+            newName,
+            oldDir,
+            e)
       }
       oldDesc.table = oldDesc.table.withNewStorage(locationUri = Some(newDir.toUri))
 
@@ -323,10 +329,11 @@ class InMemoryCatalog(
   }
 
   override def alterTable(tableDefinition: CatalogTable): Unit = synchronized {
-    assert(tableDefinition.identifier.database.isDefined,
+    assert(
+      tableDefinition.identifier.database.isDefined,
       "Table identifier " + tableDefinition.identifier.quotedString +
-      " is missing database name. " +
-      "Cannot alter table without a database specified.")
+        " is missing database name. " +
+        "Cannot alter table without a database specified.")
     val db = tableDefinition.identifier.database.get
     requireTableExists(db, tableDefinition.identifier.table)
     val updatedProperties = tableDefinition.properties.filter(kv => kv._1 != "comment")
@@ -334,30 +341,27 @@ class InMemoryCatalog(
     catalog(db).tables(tableDefinition.identifier.table).table = newTableDefinition
   }
 
-  override def alterTableDataSchema(
-      db: String,
-      table: String,
-      newDataSchema: StructType): Unit = synchronized {
-    requireTableExists(db, table)
-    val origTable = catalog(db).tables(table).table
-    val newSchema = StructType(newDataSchema ++ origTable.partitionSchema)
-    catalog(db).tables(table).table = origTable.copy(schema = newSchema)
-  }
+  override def alterTableDataSchema(db: String, table: String, newDataSchema: StructType): Unit =
+    synchronized {
+      requireTableExists(db, table)
+      val origTable = catalog(db).tables(table).table
+      val newSchema = StructType(newDataSchema ++ origTable.partitionSchema)
+      catalog(db).tables(table).table = origTable.copy(schema = newSchema)
+    }
 
-  override def alterTableSchema(
-      db: String,
-      table: String,
-      newSchema: StructType): Unit = synchronized {
-    requireTableExists(db, table)
-    val origTable = catalog(db).tables(table).table
+  override def alterTableSchema(db: String, table: String, newSchema: StructType): Unit =
+    synchronized {
+      requireTableExists(db, table)
+      val origTable = catalog(db).tables(table).table
 
-    val partCols = origTable.partitionColumnNames
-    assert(newSchema.map(_.name).takeRight(partCols.length) == partCols,
-      s"Partition columns ${partCols.mkString("[", ", ", "]")} are only supported at the end of " +
-        s"the new schema ${newSchema.catalogString} for now.")
+      val partCols = origTable.partitionColumnNames
+      assert(
+        newSchema.map(_.name).takeRight(partCols.length) == partCols,
+        s"Partition columns ${partCols.mkString("[", ", ", "]")} are only supported at the end of " +
+          s"the new schema ${newSchema.catalogString} for now.")
 
-    catalog(db).tables(table).table = origTable.copy(schema = newSchema)
-  }
+      catalog(db).tables(table).table = origTable.copy(schema = newSchema)
+    }
 
   override def alterTableStats(
       db: String,
@@ -533,14 +537,15 @@ class InMemoryCatalog(
       val oldPartition = getPartition(db, table, oldSpec)
       val newPartition = if (shouldUpdatePartitionLocation) {
         val oldPartPath = new Path(oldPartition.location)
-        val newPartPath = ExternalCatalogUtils.generatePartitionPath(
-          newSpec, partitionColumnNames, tablePath)
+        val newPartPath =
+          ExternalCatalogUtils.generatePartitionPath(newSpec, partitionColumnNames, tablePath)
         try {
           val fs = tablePath.getFileSystem(hadoopConfig)
           fs.mkdirs(newPartPath)
           if (!fs.rename(oldPartPath, newPartPath)) {
-            throw new IOException(s"Renaming partition path from $oldPartPath to " +
-              s"$newPartPath returned false")
+            throw new IOException(
+              s"Renaming partition path from $oldPartPath to " +
+                s"$newPartPath returned false")
           }
         } catch {
           case e: IOException =>
@@ -597,14 +602,16 @@ class InMemoryCatalog(
     val partitionColumnNames = getTable(db, table).partitionColumnNames
     val partialSpec = partSpec.map(toCatalogPartitionSpec)
     listPartitions(db, table, partialSpec).map { partition =>
-      partitionColumnNames.map { name =>
-        val partValue = if (partition.spec(name) == null) {
-          DEFAULT_PARTITION_NAME
-        } else {
-          escapePathName(partition.spec(name))
+      partitionColumnNames
+        .map { name =>
+          val partValue = if (partition.spec(name) == null) {
+            DEFAULT_PARTITION_NAME
+          } else {
+            escapePathName(partition.spec(name))
+          }
+          escapePathName(name) + "=" + partValue
         }
-        escapePathName(name) + "=" + partValue
-      }.mkString("/")
+        .mkString("/")
     }.sorted
   }
 
@@ -654,10 +661,7 @@ class InMemoryCatalog(
     catalog(db).functions.put(func.identifier.funcName, func)
   }
 
-  override def renameFunction(
-      db: String,
-      oldName: String,
-      newName: String): Unit = synchronized {
+  override def renameFunction(db: String, oldName: String, newName: String): Unit = synchronized {
     requireFunctionExists(db, oldName)
     requireFunctionNotExists(db, newName)
     val oldFunc = getFunction(db, oldName)

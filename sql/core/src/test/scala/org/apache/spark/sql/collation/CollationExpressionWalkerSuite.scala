@@ -31,8 +31,8 @@ import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 /**
- *  This suite is introduced in order to test a bulk of expressions and functionalities related to
- *  collations
+ * This suite is introduced in order to test a bulk of expressions and functionalities related to
+ * collations
  */
 class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSession {
 
@@ -50,9 +50,7 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
    * @param collationType - Flag defining collation type to use
    * @return - List of data generated for expression instance creation
    */
-  def generateData(
-      inputEntry: Seq[Any],
-      collationType: CollationType): Seq[Any] = {
+  def generateData(inputEntry: Seq[Any], collationType: CollationType): Seq[Any] = {
     inputEntry.map(generateSingleEntry(_, collationType))
   }
 
@@ -62,15 +60,15 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
    * @param collationType - Flag defining collation type to use
    * @return - Single input entry data
    */
-  def generateSingleEntry(
-      inputEntry: Any,
-      collationType: CollationType): Any =
+  def generateSingleEntry(inputEntry: Any, collationType: CollationType): Any =
     inputEntry match {
       case e: Class[_] if e.isAssignableFrom(classOf[Expression]) =>
         generateLiterals(StringTypeWithCollation, collationType)
       case se: Class[_] if se.isAssignableFrom(classOf[Seq[Expression]]) =>
-        CreateArray(Seq(generateLiterals(StringTypeWithCollation, collationType),
-          generateLiterals(StringTypeWithCollation, collationType)))
+        CreateArray(
+          Seq(
+            generateLiterals(StringTypeWithCollation, collationType),
+            generateLiterals(StringTypeWithCollation, collationType)))
       case oe: Class[_] if oe.isAssignableFrom(classOf[Option[Any]]) => None
       case b: Class[_] if b.isAssignableFrom(classOf[Boolean]) => false
       case dt: Class[_] if dt.isAssignableFrom(classOf[DataType]) => StringType
@@ -92,18 +90,17 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
    * @param collationType - Flag defining collation type to use
    * @return - Literal/Expression containing expression ready for evaluation
    */
-  def generateLiterals(
-      inputType: AbstractDataType,
-      collationType: CollationType): Expression =
+  def generateLiterals(inputType: AbstractDataType, collationType: CollationType): Expression =
     inputType match {
       // TODO: Try to make this a bit more random.
       case AnyTimestampType => Literal(Timestamp.valueOf("2009-07-30 12:58:59"))
-      case BinaryType => collationType match {
-        case Utf8Binary =>
-          Literal.create("dummy string".getBytes)
-        case Utf8Lcase =>
-          Literal.create("DuMmY sTrInG".getBytes)
-      }
+      case BinaryType =>
+        collationType match {
+          case Utf8Binary =>
+            Literal.create("dummy string".getBytes)
+          case Utf8Lcase =>
+            Literal.create("DuMmY sTrInG".getBytes)
+        }
       case BooleanType => Literal(true)
       case ByteType => Literal(5.toByte)
       case _: DatetimeType => Literal(Timestamp.valueOf("2009-07-30 12:58:59"))
@@ -120,12 +117,13 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
           case Utf8Lcase =>
             Literal.create("DuMmY sTrInG", StringType("UTF8_LCASE"))
         }
-      case VariantType => collationType match {
-        case Utf8Binary =>
-          ParseJson(Literal.create("{}", StringType("UTF8_BINARY")))
-        case Utf8Lcase =>
-          ParseJson(Literal.create("{}", StringType("UTF8_LCASE")))
-      }
+      case VariantType =>
+        collationType match {
+          case Utf8Binary =>
+            ParseJson(Literal.create("{}", StringType("UTF8_BINARY")))
+          case Utf8Lcase =>
+            ParseJson(Literal.create("{}", StringType("UTF8_LCASE")))
+        }
       case TypeCollection(typeCollection) =>
         val strTypes = typeCollection.filter(hasStringType)
         if (strTypes.isEmpty) {
@@ -136,17 +134,20 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
           generateLiterals(strTypes.head, collationType)
         }
       case AbstractArrayType(elementType) =>
-        generateLiterals(elementType, collationType).map(
-          lit => Literal.create(Seq(lit.asInstanceOf[Literal].value), ArrayType(lit.dataType))
-        ).head
+        generateLiterals(elementType, collationType)
+          .map(lit =>
+            Literal.create(Seq(lit.asInstanceOf[Literal].value), ArrayType(lit.dataType)))
+          .head
       case ArrayType(elementType, _) =>
-        generateLiterals(elementType, collationType).map(
-          lit => Literal.create(Seq(lit.asInstanceOf[Literal].value), ArrayType(lit.dataType))
-        ).head
+        generateLiterals(elementType, collationType)
+          .map(lit =>
+            Literal.create(Seq(lit.asInstanceOf[Literal].value), ArrayType(lit.dataType)))
+          .head
       case ArrayType =>
-        generateLiterals(StringTypeWithCollation, collationType).map(
-          lit => Literal.create(Seq(lit.asInstanceOf[Literal].value), ArrayType(lit.dataType))
-        ).head
+        generateLiterals(StringTypeWithCollation, collationType)
+          .map(lit =>
+            Literal.create(Seq(lit.asInstanceOf[Literal].value), ArrayType(lit.dataType)))
+          .head
       case MapType =>
         val key = generateLiterals(StringTypeWithCollation, collationType)
         val value = generateLiterals(StringTypeWithCollation, collationType)
@@ -161,9 +162,11 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
         CreateMap(Seq(key, value))
       case StructType =>
         CreateNamedStruct(
-          Seq(Literal("start"),
+          Seq(
+            Literal("start"),
             generateLiterals(StringTypeWithCollation, collationType),
-          Literal("end"), generateLiterals(StringTypeWithCollation, collationType)))
+            Literal("end"),
+            generateLiterals(StringTypeWithCollation, collationType)))
     }
 
   /**
@@ -173,9 +176,7 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
    * @param collationType - Flag defining collation type to use
    * @return - String representation of a input ready for SQL query
    */
-  def generateInputAsString(
-      inputType: AbstractDataType,
-      collationType: CollationType): String =
+  def generateInputAsString(inputType: AbstractDataType, collationType: CollationType): String =
     inputType match {
       // TODO: Try to make this a bit more random.
       case AnyTimestampType => "TIMESTAMP'2009-07-30 12:58:59'"
@@ -228,8 +229,11 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
           generateInputAsString(StringTypeWithCollation, collationType) + ", 'end', " +
           generateInputAsString(StringTypeWithCollation, collationType) + ")"
       case StructType(fields) =>
-        "named_struct(" + fields.map(f => "'" + f.name + "', " +
-          generateInputAsString(f.dataType, collationType)).mkString(", ") + ")"
+        "named_struct(" + fields
+          .map(f =>
+            "'" + f.name + "', " +
+              generateInputAsString(f.dataType, collationType))
+          .mkString(", ") + ")"
     }
 
   /**
@@ -291,8 +295,11 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
           ", end:" +
           generateInputTypeAsStrings(StringTypeWithCollation, collationType) + ">"
       case StructType(fields) =>
-        "named_struct<" + fields.map(f => "'" + f.name + "', " +
-          generateInputTypeAsStrings(f.dataType, collationType)).mkString(", ") + ">"
+        "named_struct<" + fields
+          .map(f =>
+            "'" + f.name + "', " +
+              generateInputTypeAsStrings(f.dataType, collationType))
+          .mkString(", ") + ">"
     }
 
   /**
@@ -302,8 +309,7 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
    */
   def hasStringType(inputType: AbstractDataType): Boolean = {
     inputType match {
-      case _: StringType | StringTypeWithCollation | StringTypeBinaryLcase | AnyDataType
-      => true
+      case _: StringType | StringTypeWithCollation | StringTypeBinaryLcase | AnyDataType => true
       case ArrayType => true
       case MapType => true
       case MapType(keyType, valueType, _) => hasStringType(keyType) || hasStringType(valueType)
@@ -340,37 +346,44 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
   def extractRelevantExpressions(): (Array[ExpressionInfo], List[String]) = {
     var expressionCounter = 0
     var expectsExpressionCounter = 0;
-    val funInfos = spark.sessionState.functionRegistry.listFunction().map { funcId =>
-      spark.sessionState.catalog.lookupFunctionInfo(funcId)
-    }.filter(funInfo => {
-      // make sure that there is a constructor.
-      val cl = Utils.classForName(funInfo.getClassName)
-      !cl.getConstructors.isEmpty
-    }).filter(funInfo => {
-      expressionCounter = expressionCounter + 1
-      val cl = Utils.classForName(funInfo.getClassName)
-      // dummy instance
-      // Take first constructor.
-      val headConstructor = cl.getConstructors
-        .zip(cl.getConstructors.map(c => c.getParameters.length)).minBy(a => a._2)._1
-
-      val params = headConstructor.getParameters.map(p => p.getType)
-
-      val args = generateData(params.toSeq, Utf8Binary)
-      // Find all expressions that have string as input
-      try {
-        val expr = headConstructor.newInstance(args: _*)
-        expr match {
-          case expTypes: ExpectsInputTypes =>
-            expectsExpressionCounter = expectsExpressionCounter + 1
-            val inputTypes = expTypes.inputTypes
-            inputTypes.exists(it => hasStringType(it)) ||
-              (inputTypes.nonEmpty && hasStringType(expTypes.dataType))
-        }
-      } catch {
-        case _: Throwable => false
+    val funInfos = spark.sessionState.functionRegistry
+      .listFunction()
+      .map { funcId =>
+        spark.sessionState.catalog.lookupFunctionInfo(funcId)
       }
-    }).toArray
+      .filter(funInfo => {
+        // make sure that there is a constructor.
+        val cl = Utils.classForName(funInfo.getClassName)
+        !cl.getConstructors.isEmpty
+      })
+      .filter(funInfo => {
+        expressionCounter = expressionCounter + 1
+        val cl = Utils.classForName(funInfo.getClassName)
+        // dummy instance
+        // Take first constructor.
+        val headConstructor = cl.getConstructors
+          .zip(cl.getConstructors.map(c => c.getParameters.length))
+          .minBy(a => a._2)
+          ._1
+
+        val params = headConstructor.getParameters.map(p => p.getType)
+
+        val args = generateData(params.toSeq, Utf8Binary)
+        // Find all expressions that have string as input
+        try {
+          val expr = headConstructor.newInstance(args: _*)
+          expr match {
+            case expTypes: ExpectsInputTypes =>
+              expectsExpressionCounter = expectsExpressionCounter + 1
+              val inputTypes = expTypes.inputTypes
+              inputTypes.exists(it => hasStringType(it)) ||
+              (inputTypes.nonEmpty && hasStringType(expTypes.dataType))
+          }
+        } catch {
+          case _: Throwable => false
+        }
+      })
+      .toArray
 
     val toSkip = List(
       "parse_url", // Parse URL cannot be generalized with ExpectInputTypes
@@ -385,8 +398,7 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
       "sha",
       "crc32",
       "ascii",
-      "time_trunc"
-    )
+      "time_trunc")
 
     logInfo("Total number of expression: " + expressionCounter)
     logInfo("Total number of expression that expect input: " + expectsExpressionCounter)
@@ -403,32 +415,37 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
    */
   def extractRelevantBuilders(): (Array[ExpressionInfo], List[String]) = {
     var builderExpressionCounter = 0
-    val funInfos = spark.sessionState.functionRegistry.listFunction().map { funcId =>
-      spark.sessionState.catalog.lookupFunctionInfo(funcId)
-    }.filter(funInfo => {
-      // make sure that there is a constructor.
-      val cl = Utils.classForName(funInfo.getClassName)
-      cl.isAssignableFrom(classOf[ExpressionBuilder])
-    }).filter(funInfo => {
-      builderExpressionCounter = builderExpressionCounter + 1
-      val cl = Utils.classForName(funInfo.getClassName)
-      val method = cl.getMethod("build",
-        Utils.classForName("java.lang.String"),
-        Utils.classForName("scala.collection.Seq"))
-      var input: Seq[Expression] = Seq.empty
-      var i = 0
-      for (_ <- 1 to 10) {
-        input = input :+ generateLiterals(StringTypeWithCollation, Utf8Binary)
-        try {
-          method.invoke(null, funInfo.getClassName, input).asInstanceOf[ExpectsInputTypes]
-        }
-        catch {
-          case _: Exception => i = i + 1
-        }
+    val funInfos = spark.sessionState.functionRegistry
+      .listFunction()
+      .map { funcId =>
+        spark.sessionState.catalog.lookupFunctionInfo(funcId)
       }
-      if (i == 10) false
-      else true
-    }).toArray
+      .filter(funInfo => {
+        // make sure that there is a constructor.
+        val cl = Utils.classForName(funInfo.getClassName)
+        cl.isAssignableFrom(classOf[ExpressionBuilder])
+      })
+      .filter(funInfo => {
+        builderExpressionCounter = builderExpressionCounter + 1
+        val cl = Utils.classForName(funInfo.getClassName)
+        val method = cl.getMethod(
+          "build",
+          Utils.classForName("java.lang.String"),
+          Utils.classForName("scala.collection.Seq"))
+        var input: Seq[Expression] = Seq.empty
+        var i = 0
+        for (_ <- 1 to 10) {
+          input = input :+ generateLiterals(StringTypeWithCollation, Utf8Binary)
+          try {
+            method.invoke(null, funInfo.getClassName, input).asInstanceOf[ExpectsInputTypes]
+          } catch {
+            case _: Exception => i = i + 1
+          }
+        }
+        if (i == 10) false
+        else true
+      })
+      .toArray
 
     logInfo("Total number of expression that are built: " + builderExpressionCounter)
     logInfo("Number of extracted expressions of relevance: " + funInfos.length)
@@ -442,14 +459,15 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
    * @param collationType - Defines explicit collation to use
    * @return
    */
-  def transformExpressionToString(expr: ExpectsInputTypes, collationType: CollationType): String = {
+  def transformExpressionToString(
+      expr: ExpectsInputTypes,
+      collationType: CollationType): String = {
     if (expr.isInstanceOf[BinaryOperator]) {
       "col0 " + expr.asInstanceOf[BinaryOperator].symbol + " col1"
     } else {
       if (expr.inputTypes.size == 1) {
         expr.prettyName + "(col0)"
-      }
-      else {
+      } else {
         expr.prettyName + "(col0, " +
           expr.inputTypes.tail.map(generateInputAsString(_, collationType)).mkString(", ") + ")"
       }
@@ -470,27 +488,28 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
       case Utf8Lcase => "tbl_lcase"
     }
 
-    sql(s"CREATE TABLE $tblName (" +
-      inputTypes.zipWithIndex
-        .map(it => "col" +
-          it._2.toString + " " +
-          generateInputTypeAsStrings(it._1, collationType)).mkString(", ") +
-      ") USING PARQUET")
+    sql(
+      s"CREATE TABLE $tblName (" +
+        inputTypes.zipWithIndex
+          .map(it =>
+            "col" +
+              it._2.toString + " " +
+              generateInputTypeAsStrings(it._1, collationType))
+          .mkString(", ") +
+        ") USING PARQUET")
 
-    sql(s"INSERT INTO $tblName VALUES (" +
-      inputTypes.map(generateInputAsString(_, collationType)).mkString(", ") +
-      ")")
+    sql(
+      s"INSERT INTO $tblName VALUES (" +
+        inputTypes.map(generateInputAsString(_, collationType)).mkString(", ") +
+        ")")
 
     sql(s"SELECT * FROM $tblName")
   }
 
   /**
-   * This test does following:
-   * 1) Extract relevant expressions
-   * 2) Run evaluation on expressions with different inputs
-   * 3) Check if both expressions throw an exception
-   * 4) If no exception, check if the result is the same
-   * 5) Otherwise, check if exceptions are the same
+   * This test does following: 1) Extract relevant expressions 2) Run evaluation on expressions
+   * with different inputs 3) Check if both expressions throw an exception 4) If no exception,
+   * check if the result is the same 5) Otherwise, check if exceptions are the same
    */
   test("SPARK-48280: Expression Walker for expression evaluation") {
     val (funInfosExpr, toSkip) = extractRelevantExpressions()
@@ -501,7 +520,8 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
       val TempCl = Utils.classForName(f.getClassName)
       val cl = if (TempCl.isAssignableFrom(classOf[ExpressionBuilder])) {
         val clTemp = Utils.classForName(f.getClassName)
-        val method = clTemp.getMethod("build",
+        val method = clTemp.getMethod(
+          "build",
           Utils.classForName("java.lang.String"),
           Utils.classForName("scala.collection.Seq"))
         val instance = {
@@ -512,19 +532,19 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
             try {
               val tempResult = method.invoke(null, f.getClassName, input)
               if (result == null) result = tempResult.asInstanceOf[Expression]
-            }
-            catch {
+            } catch {
               case _: Exception =>
             }
           }
           result
         }
         instance.getClass
-      }
-      else Utils.classForName(f.getClassName)
+      } else Utils.classForName(f.getClassName)
 
       val headConstructor = cl.getConstructors
-        .zip(cl.getConstructors.map(c => c.getParameters.length)).minBy(a => a._2)._1
+        .zip(cl.getConstructors.map(c => c.getParameters.length))
+        .minBy(a => a._2)
+        ._1
       val params = headConstructor.getParameters.map(p => p.getType)
       val args = generateData(params.toSeq, Utf8Binary)
       val expr = headConstructor.newInstance(args: _*).asInstanceOf[ExpectsInputTypes]
@@ -533,15 +553,13 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
       val inputDataUtf8Binary =
         generateData(
           replaceExpressions(inputTypes, headConstructor.getParameters.map(p => p.getType).toSeq),
-          Utf8Binary
-        )
+          Utf8Binary)
       val instanceUtf8Binary =
         headConstructor.newInstance(inputDataUtf8Binary: _*).asInstanceOf[Expression]
       val inputDataLcase =
         generateData(
           replaceExpressions(inputTypes, headConstructor.getParameters.map(p => p.getType).toSeq),
-          Utf8Lcase
-        )
+          Utf8Lcase)
       val instanceLcase = headConstructor.newInstance(inputDataLcase: _*).asInstanceOf[Expression]
 
       val exceptionUtfBinary = {
@@ -583,25 +601,22 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
           case st if resUtf8Lcase != null && resUtf8Lcase != null && hasStringType(st) =>
             // scalastyle:off caselocale
             assert(resUtf8Binary.toString.toLowerCase === resUtf8Lcase.toString.toLowerCase)
-            // scalastyle:on caselocale
+          // scalastyle:on caselocale
           case _ =>
             assert(resUtf8Lcase === resUtf8Binary)
         }
-      }
-      else {
-        assert(exceptionUtfBinary.getOrElse(new Exception()).getClass
-          == exceptionLcase.getOrElse(new Exception()).getClass)
+      } else {
+        assert(
+          exceptionUtfBinary.getOrElse(new Exception()).getClass
+            == exceptionLcase.getOrElse(new Exception()).getClass)
       }
     }
   }
 
   /**
-   * This test does following:
-   * 1) Extract relevant expressions
-   * 2) Run dataframe select on expressions with different inputs
-   * 3) Check if both expressions throw an exception
-   * 4) If no exception, check if the result is the same
-   * 5) Otherwise, check if exceptions are the same
+   * This test does following: 1) Extract relevant expressions 2) Run dataframe select on
+   * expressions with different inputs 3) Check if both expressions throw an exception 4) If no
+   * exception, check if the result is the same 5) Otherwise, check if exceptions are the same
    */
   test("SPARK-48280: Expression Walker for codeGen generation") {
     val (funInfosExpr, toSkip) = extractRelevantExpressions()
@@ -612,7 +627,8 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
       val TempCl = Utils.classForName(f.getClassName)
       val cl = if (TempCl.isAssignableFrom(classOf[ExpressionBuilder])) {
         val clTemp = Utils.classForName(f.getClassName)
-        val method = clTemp.getMethod("build",
+        val method = clTemp.getMethod(
+          "build",
           Utils.classForName("java.lang.String"),
           Utils.classForName("scala.collection.Seq"))
         val instance = {
@@ -623,19 +639,19 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
             try {
               val tempResult = method.invoke(null, f.getClassName, input)
               if (result == null) result = tempResult.asInstanceOf[Expression]
-            }
-            catch {
+            } catch {
               case _: Exception =>
             }
           }
           result
         }
         instance.getClass
-      }
-      else Utils.classForName(f.getClassName)
+      } else Utils.classForName(f.getClassName)
 
       val headConstructor = cl.getConstructors
-        .zip(cl.getConstructors.map(c => c.getParameters.length)).minBy(a => a._2)._1
+        .zip(cl.getConstructors.map(c => c.getParameters.length))
+        .minBy(a => a._2)
+        ._1
       val params = headConstructor.getParameters.map(p => p.getType)
       val args = generateData(params.toSeq, Utf8Binary)
       val expr = headConstructor.newInstance(args: _*).asInstanceOf[ExpectsInputTypes]
@@ -645,20 +661,22 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
           val utf8_df = generateTableData(expr.inputTypes.take(2), Utf8Binary)
           val utf8_lcase_df = generateTableData(expr.inputTypes.take(2), Utf8Lcase)
 
-          val utf8BinaryResult = try {
-            val df = utf8_df.selectExpr(transformExpressionToString(expr, Utf8Binary))
-            df.getRows(1, 0)
-            scala.util.Right(df)
-          } catch {
-            case e: Throwable => scala.util.Left(e)
-          }
-          val utf8LcaseResult = try {
-            val df = utf8_lcase_df.selectExpr(transformExpressionToString(expr, Utf8Lcase))
-            df.getRows(1, 0)
-            scala.util.Right(df)
-          } catch {
-            case e: Throwable => scala.util.Left(e)
-          }
+          val utf8BinaryResult =
+            try {
+              val df = utf8_df.selectExpr(transformExpressionToString(expr, Utf8Binary))
+              df.getRows(1, 0)
+              scala.util.Right(df)
+            } catch {
+              case e: Throwable => scala.util.Left(e)
+            }
+          val utf8LcaseResult =
+            try {
+              val df = utf8_lcase_df.selectExpr(transformExpressionToString(expr, Utf8Lcase))
+              df.getRows(1, 0)
+              scala.util.Right(df)
+            } catch {
+              case e: Throwable => scala.util.Left(e)
+            }
 
           assert(utf8BinaryResult.isLeft === utf8LcaseResult.isLeft)
 
@@ -669,20 +687,23 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
             val dt = utf8BinaryResultChecked.schema.fields.head.dataType
 
             dt match {
-              case st if utf8BinaryResultChecked != null && utf8LcaseResultChecked != null &&
-                hasStringType(st) =>
+              case st
+                  if utf8BinaryResultChecked != null && utf8LcaseResultChecked != null &&
+                    hasStringType(st) =>
                 // scalastyle:off caselocale
-                assert(utf8BinaryResultChecked.getRows(1, 0).map(_.map(_.toLowerCase))(1) ===
-                  utf8LcaseResultChecked.getRows(1, 0).map(_.map(_.toLowerCase))(1))
+                assert(
+                  utf8BinaryResultChecked.getRows(1, 0).map(_.map(_.toLowerCase))(1) ===
+                    utf8LcaseResultChecked.getRows(1, 0).map(_.map(_.toLowerCase))(1))
               // scalastyle:on caselocale
               case _ =>
-                assert(utf8BinaryResultChecked.getRows(1, 0)(1) ===
-                  utf8LcaseResultChecked.getRows(1, 0)(1))
+                assert(
+                  utf8BinaryResultChecked.getRows(1, 0)(1) ===
+                    utf8LcaseResultChecked.getRows(1, 0)(1))
             }
-          }
-          else {
-            assert(utf8BinaryResult.getOrElse(new Exception()).getClass
-              == utf8LcaseResult.getOrElse(new Exception()).getClass)
+          } else {
+            assert(
+              utf8BinaryResult.getOrElse(new Exception()).getClass
+                == utf8LcaseResult.getOrElse(new Exception()).getClass)
           }
         }
       }

@@ -51,25 +51,19 @@ class DatasetPrimitiveSuite extends QueryTest with SharedSparkSession {
 
   test("toDS") {
     val data = Seq(1, 2, 3, 4, 5, 6)
-    checkDataset(
-      data.toDS(),
-      data: _*)
+    checkDataset(data.toDS(), data: _*)
   }
 
   test("as case class / collect") {
     val ds = Seq(1, 2, 3).toDS().as[IntClass]
-    checkDataset(
-      ds,
-      IntClass(1), IntClass(2), IntClass(3))
+    checkDataset(ds, IntClass(1), IntClass(2), IntClass(3))
 
     assert(ds.collect().head == IntClass(1))
   }
 
   test("map") {
     val ds = Seq(1, 2, 3).toDS()
-    checkDataset(
-      ds.map(_ + 1),
-      2, 3, 4)
+    checkDataset(ds.map(_ + 1), 2, 3, 4)
   }
 
   test("mapPrimitive") {
@@ -77,30 +71,33 @@ class DatasetPrimitiveSuite extends QueryTest with SharedSparkSession {
     checkDataset(dsInt.map(_ > 1), false, true, true)
     checkDataset(dsInt.map(_ + 1), 2, 3, 4)
     checkDataset(dsInt.map(_ + 8589934592L), 8589934593L, 8589934594L, 8589934595L)
-    checkDataset(dsInt.map(_ + 1.1F), 2.1F, 3.1F, 4.1F)
-    checkDataset(dsInt.map(_ + 1.23D), 2.23D, 3.23D, 4.23D)
+    checkDataset(dsInt.map(_ + 1.1f), 2.1f, 3.1f, 4.1f)
+    checkDataset(dsInt.map(_ + 1.23d), 2.23d, 3.23d, 4.23d)
 
     val dsLong = Seq(1L, 2L, 3L).toDS()
     checkDataset(dsLong.map(_ > 1), false, true, true)
     checkDataset(dsLong.map(e => (e + 1).toInt), 2, 3, 4)
     checkDataset(dsLong.map(_ + 8589934592L), 8589934593L, 8589934594L, 8589934595L)
-    checkDataset(dsLong.map(_ + 1.1F), 2.1F, 3.1F, 4.1F)
-    checkDataset(dsLong.map(_ + 1.23D), 2.23D, 3.23D, 4.23D)
+    checkDataset(dsLong.map(_ + 1.1f), 2.1f, 3.1f, 4.1f)
+    checkDataset(dsLong.map(_ + 1.23d), 2.23d, 3.23d, 4.23d)
 
-    val dsFloat = Seq(1F, 2F, 3F).toDS()
+    val dsFloat = Seq(1f, 2f, 3f).toDS()
     checkDataset(dsFloat.map(_ > 1), false, true, true)
     checkDataset(dsFloat.map(e => (e + 1).toInt), 2, 3, 4)
     checkDataset(dsFloat.map(e => (e + 123456L).toLong), 123457L, 123458L, 123459L)
-    checkDataset(dsFloat.map(_ + 1.1F), 2.1F, 3.1F, 4.1F)
-    checkDataset(dsFloat.map(_ + 1.23D), 2.23D, 3.23D, 4.23D)
+    checkDataset(dsFloat.map(_ + 1.1f), 2.1f, 3.1f, 4.1f)
+    checkDataset(dsFloat.map(_ + 1.23d), 2.23d, 3.23d, 4.23d)
 
-    val dsDouble = Seq(1D, 2D, 3D).toDS()
+    val dsDouble = Seq(1d, 2d, 3d).toDS()
     checkDataset(dsDouble.map(_ > 1), false, true, true)
     checkDataset(dsDouble.map(e => (e + 1).toInt), 2, 3, 4)
-    checkDataset(dsDouble.map(e => (e + 8589934592L).toLong),
-      8589934593L, 8589934594L, 8589934595L)
-    checkDataset(dsDouble.map(e => (e + 1.1F).toFloat), 2.1F, 3.1F, 4.1F)
-    checkDataset(dsDouble.map(_ + 1.23D), 2.23D, 3.23D, 4.23D)
+    checkDataset(
+      dsDouble.map(e => (e + 8589934592L).toLong),
+      8589934593L,
+      8589934594L,
+      8589934595L)
+    checkDataset(dsDouble.map(e => (e + 1.1f).toFloat), 2.1f, 3.1f, 4.1f)
+    checkDataset(dsDouble.map(_ + 1.23d), 2.23d, 3.23d, 4.23d)
 
     val dsBoolean = Seq(true, false).toDS()
     checkDataset(dsBoolean.map(e => !e), false, true)
@@ -111,16 +108,14 @@ class DatasetPrimitiveSuite extends QueryTest with SharedSparkSession {
     checkDataset(dsInt.map(e => e), Array(1, 2), Array(3, 4))
     checkDataset(dsInt.map(e => null: Array[Int]), null, null)
 
-    val dsDouble = Seq(Array(1D, 2D), Array(3D, 4D)).toDS()
-    checkDataset(dsDouble.map(e => e), Array(1D, 2D), Array(3D, 4D))
+    val dsDouble = Seq(Array(1d, 2d), Array(3d, 4d)).toDS()
+    checkDataset(dsDouble.map(e => e), Array(1d, 2d), Array(3d, 4d))
     checkDataset(dsDouble.map(e => null: Array[Double]), null, null)
   }
 
   test("filter") {
     val ds = Seq(1, 2, 3, 4).toDS()
-    checkDataset(
-      ds.filter(_ % 2 == 0),
-      2, 4)
+    checkDataset(ds.filter(_ % 2 == 0), 2, 4)
   }
 
   test("filterPrimitive") {
@@ -130,11 +125,11 @@ class DatasetPrimitiveSuite extends QueryTest with SharedSparkSession {
     val dsLong = Seq(1L, 2L, 3L).toDS()
     checkDataset(dsLong.filter(_ > 1), 2L, 3L)
 
-    val dsFloat = Seq(1F, 2F, 3F).toDS()
-    checkDataset(dsFloat.filter(_ > 1), 2F, 3F)
+    val dsFloat = Seq(1f, 2f, 3f).toDS()
+    checkDataset(dsFloat.filter(_ > 1), 2f, 3f)
 
-    val dsDouble = Seq(1D, 2D, 3D).toDS()
-    checkDataset(dsDouble.filter(_ > 1), 2D, 3D)
+    val dsDouble = Seq(1d, 2d, 3d).toDS()
+    checkDataset(dsDouble.filter(_ > 1), 2d, 3d)
 
     val dsBoolean = Seq(true, false).toDS()
     checkDataset(dsBoolean.filter(e => !e), false)
@@ -162,9 +157,7 @@ class DatasetPrimitiveSuite extends QueryTest with SharedSparkSession {
   test("groupBy function, keys") {
     val ds = Seq(1, 2, 3, 4, 5).toDS()
     val grouped = ds.groupByKey(_ % 2)
-    checkDatasetUnorderly(
-      grouped.keys,
-      0, 1)
+    checkDatasetUnorderly(grouped.keys, 0, 1)
   }
 
   test("groupBy function, map") {
@@ -175,9 +168,7 @@ class DatasetPrimitiveSuite extends QueryTest with SharedSparkSession {
       (name, iter.size)
     }
 
-    checkDatasetUnorderly(
-      aggregated,
-      ("even", 5), ("odd", 6))
+    checkDatasetUnorderly(aggregated, ("even", 5), ("odd", 6))
   }
 
   test("groupBy function, flatMap") {
@@ -185,9 +176,7 @@ class DatasetPrimitiveSuite extends QueryTest with SharedSparkSession {
     val grouped = ds.groupByKey(_.length)
     val aggregated = grouped.flatMapGroups { (g, iter) => Iterator(g.toString, iter.mkString) }
 
-    checkDatasetUnorderly(
-      aggregated,
-      "1", "abc", "3", "xyz", "5", "hello")
+    checkDatasetUnorderly(aggregated, "1", "abc", "3", "xyz", "5", "hello")
   }
 
   test("Arrays and Lists") {
@@ -250,11 +239,13 @@ class DatasetPrimitiveSuite extends QueryTest with SharedSparkSession {
     // Tuples
     checkDataset(Seq(Seq(1) -> Seq(2)).toDS(), Seq(1) -> Seq(2))
     checkDataset(Seq(List(1) -> Queue(2)).toDS(), List(1) -> Queue(2))
-    checkDataset(Seq(List(Seq("test1") -> List(Queue("test2")))).toDS(),
+    checkDataset(
+      Seq(List(Seq("test1") -> List(Queue("test2")))).toDS(),
       List(Seq("test1") -> List(Queue("test2"))))
 
     // Complex
-    checkDataset(Seq(ListClass(List(1)) -> Queue("test" -> SeqClass(Seq(2)))).toDS(),
+    checkDataset(
+      Seq(ListClass(List(1)) -> Queue("test" -> SeqClass(Seq(2)))).toDS(),
       ListClass(List(1)) -> Queue("test" -> SeqClass(Seq(2))))
   }
 
@@ -289,25 +280,33 @@ class DatasetPrimitiveSuite extends QueryTest with SharedSparkSession {
     checkDataset(Seq(MapClass(Map(1 -> 2))).toDS(), MapClass(Map(1 -> 2)))
     checkDataset(Seq(Map(1 -> MapClass(Map(2 -> 3)))).toDS(), Map(1 -> MapClass(Map(2 -> 3))))
     checkDataset(Seq(Map(MapClass(Map(1 -> 2)) -> 3)).toDS(), Map(MapClass(Map(1 -> 2)) -> 3))
-    checkDataset(Seq(Map(MapClass(Map(1 -> 2)) -> MapClass(Map(3 -> 4)))).toDS(),
+    checkDataset(
+      Seq(Map(MapClass(Map(1 -> 2)) -> MapClass(Map(3 -> 4)))).toDS(),
       Map(MapClass(Map(1 -> 2)) -> MapClass(Map(3 -> 4))))
     checkDataset(Seq(LHMap(1 -> MapClass(Map(2 -> 3)))).toDS(), LHMap(1 -> MapClass(Map(2 -> 3))))
     checkDataset(Seq(LHMap(MapClass(Map(1 -> 2)) -> 3)).toDS(), LHMap(MapClass(Map(1 -> 2)) -> 3))
-    checkDataset(Seq(LHMap(MapClass(Map(1 -> 2)) -> MapClass(Map(3 -> 4)))).toDS(),
+    checkDataset(
+      Seq(LHMap(MapClass(Map(1 -> 2)) -> MapClass(Map(3 -> 4)))).toDS(),
       LHMap(MapClass(Map(1 -> 2)) -> MapClass(Map(3 -> 4))))
 
     checkDataset(Seq(LHMapClass(LHMap(1 -> 2))).toDS(), LHMapClass(LHMap(1 -> 2)))
-    checkDataset(Seq(Map(1 -> LHMapClass(LHMap(2 -> 3)))).toDS(),
+    checkDataset(
+      Seq(Map(1 -> LHMapClass(LHMap(2 -> 3)))).toDS(),
       Map(1 -> LHMapClass(LHMap(2 -> 3))))
-    checkDataset(Seq(Map(LHMapClass(LHMap(1 -> 2)) -> 3)).toDS(),
+    checkDataset(
+      Seq(Map(LHMapClass(LHMap(1 -> 2)) -> 3)).toDS(),
       Map(LHMapClass(LHMap(1 -> 2)) -> 3))
-    checkDataset(Seq(Map(LHMapClass(LHMap(1 -> 2)) -> LHMapClass(LHMap(3 -> 4)))).toDS(),
+    checkDataset(
+      Seq(Map(LHMapClass(LHMap(1 -> 2)) -> LHMapClass(LHMap(3 -> 4)))).toDS(),
       Map(LHMapClass(LHMap(1 -> 2)) -> LHMapClass(LHMap(3 -> 4))))
-    checkDataset(Seq(LHMap(1 -> LHMapClass(LHMap(2 -> 3)))).toDS(),
+    checkDataset(
+      Seq(LHMap(1 -> LHMapClass(LHMap(2 -> 3)))).toDS(),
       LHMap(1 -> LHMapClass(LHMap(2 -> 3))))
-    checkDataset(Seq(LHMap(LHMapClass(LHMap(1 -> 2)) -> 3)).toDS(),
+    checkDataset(
+      Seq(LHMap(LHMapClass(LHMap(1 -> 2)) -> 3)).toDS(),
       LHMap(LHMapClass(LHMap(1 -> 2)) -> 3))
-    checkDataset(Seq(LHMap(LHMapClass(LHMap(1 -> 2)) -> LHMapClass(LHMap(3 -> 4)))).toDS(),
+    checkDataset(
+      Seq(LHMap(LHMapClass(LHMap(1 -> 2)) -> LHMapClass(LHMap(3 -> 4)))).toDS(),
       LHMap(LHMapClass(LHMap(1 -> 2)) -> LHMapClass(LHMap(3 -> 4))))
 
     val complex = ComplexMapClass(MapClass(Map(1 -> 2)), LHMapClass(LHMap(3 -> 4)))
@@ -324,11 +323,13 @@ class DatasetPrimitiveSuite extends QueryTest with SharedSparkSession {
     checkDataset(Seq(LHMap(1 -> 2) -> Map(3 -> 4)).toDS(), LHMap(1 -> 2) -> Map(3 -> 4))
     checkDataset(Seq(Map(1 -> 2) -> LHMap(3 -> 4)).toDS(), Map(1 -> 2) -> LHMap(3 -> 4))
     checkDataset(Seq(LHMap(1 -> 2) -> LHMap(3 -> 4)).toDS(), LHMap(1 -> 2) -> LHMap(3 -> 4))
-    checkDataset(Seq(LHMap((Map("test1" -> 1) -> 2) -> (3 -> LHMap(4 -> "test2")))).toDS(),
+    checkDataset(
+      Seq(LHMap((Map("test1" -> 1) -> 2) -> (3 -> LHMap(4 -> "test2")))).toDS(),
       LHMap((Map("test1" -> 1) -> 2) -> (3 -> LHMap(4 -> "test2"))))
 
     // Complex
-    checkDataset(Seq(LHMapClass(LHMap(1 -> 2)) -> LHMap("test" -> MapClass(Map(3 -> 4)))).toDS(),
+    checkDataset(
+      Seq(LHMapClass(LHMap(1 -> 2)) -> LHMap("test" -> MapClass(Map(3 -> 4)))).toDS(),
       LHMapClass(LHMap(1 -> 2)) -> LHMap("test" -> MapClass(Map(3 -> 4))))
   }
 
@@ -353,7 +354,8 @@ class DatasetPrimitiveSuite extends QueryTest with SharedSparkSession {
     checkDataset(Seq(HSet("test1", "test2")).toDS(), HSet("test1", "test2"))
     checkDataset(Seq(HSet(Tuple1(1), Tuple1(2))).toDS(), HSet(Tuple1(1), Tuple1(2)))
 
-    checkDataset(Seq(Seq(Some(1), None), Seq(Some(2))).toDF("c").as[Set[Integer]],
+    checkDataset(
+      Seq(Seq(Some(1), None), Seq(Some(2))).toDF("c").as[Set[Integer]],
       Seq(Set[Integer](1, null), Set[Integer](2)): _*)
   }
 

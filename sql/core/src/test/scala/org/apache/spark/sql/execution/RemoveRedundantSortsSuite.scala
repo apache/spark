@@ -24,7 +24,6 @@ import org.apache.spark.sql.execution.joins.ShuffledJoin
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
-
 abstract class RemoveRedundantSortsSuiteBase
     extends QueryTest
     with SharedSparkSession
@@ -167,8 +166,10 @@ abstract class RemoveRedundantSortsSuiteBase
   }
 }
 
-class RemoveRedundantSortsSuite extends RemoveRedundantSortsSuiteBase
-  with DisableAdaptiveExecutionSuite
+class RemoveRedundantSortsSuite
+    extends RemoveRedundantSortsSuiteBase
+    with DisableAdaptiveExecutionSuite
 
-class RemoveRedundantSortsSuiteAE extends RemoveRedundantSortsSuiteBase
-  with EnableAdaptiveExecutionSuite
+class RemoveRedundantSortsSuiteAE
+    extends RemoveRedundantSortsSuiteBase
+    with EnableAdaptiveExecutionSuite

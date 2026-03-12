@@ -25,42 +25,33 @@ import org.apache.spark.sql.connector.write.streaming.StreamingDataWriterFactory
 import org.apache.spark.util.RpcUtils
 
 /**
- * A [[StreamingDataWriterFactory]] that creates [[RealTimeRowWriter]], which sends rows to
- * the driver in real-time through RPC.
+ * A [[StreamingDataWriterFactory]] that creates [[RealTimeRowWriter]], which sends rows to the
+ * driver in real-time through RPC.
  *
  * Note that, because it sends all rows to the driver, this factory will generally be unsuitable
  * for production-quality sinks. It's intended for use in tests.
- *
  */
-case class RealTimeRowWriterFactory(
-    driverEndpointName: String,
-    driverEndpointAddr: RpcAddress
-) extends StreamingDataWriterFactory {
+case class RealTimeRowWriterFactory(driverEndpointName: String, driverEndpointAddr: RpcAddress)
+    extends StreamingDataWriterFactory {
   override def createWriter(
       partitionId: Int,
       taskId: Long,
       epochId: Long): DataWriter[InternalRow] = {
-    new RealTimeRowWriter(
-      driverEndpointName,
-      driverEndpointAddr
-    )
+    new RealTimeRowWriter(driverEndpointName, driverEndpointAddr)
   }
 }
 
 /**
  * A [[DataWriter]] that sends arrays of rows to the driver in real-time through RPC.
  */
-class RealTimeRowWriter(
-    driverEndpointName: String,
-    driverEndpointAddr: RpcAddress
-) extends DataWriter[InternalRow] {
+class RealTimeRowWriter(driverEndpointName: String, driverEndpointAddr: RpcAddress)
+    extends DataWriter[InternalRow] {
 
   private val endpointRef = RpcUtils.makeDriverRef(
     driverEndpointName,
     driverEndpointAddr.host,
     driverEndpointAddr.port,
-    SparkEnv.get.rpcEnv
-  )
+    SparkEnv.get.rpcEnv)
 
   // Spark reuses the same `InternalRow` instance, here we copy it before buffer it.
   override def write(row: InternalRow): Unit = {
