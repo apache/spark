@@ -24,7 +24,6 @@ import org.json4s.JNull
 import org.json4s.JsonAST.{JBool, JString}
 import org.json4s.jackson.JsonMethods.parse
 
-import org.apache.spark.JobExecutionStatus
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.UI.UI_SQL_GROUP_SUB_EXECUTION_ENABLED
 import org.apache.spark.ui.{UIUtils, WebUIPage}
@@ -47,22 +46,6 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
       val currentTime = System.currentTimeMillis()
       val duration = executionUIData.completionTime.map(_.getTime()).getOrElse(currentTime) -
         executionUIData.submissionTime
-
-      def jobLinks(status: JobExecutionStatus, label: String): Seq[Node] = {
-        val jobs = executionUIData.jobs.flatMap { case (jobId, jobStatus) =>
-          if (jobStatus == status) Some(jobId) else None
-        }
-        if (jobs.nonEmpty) {
-          <li class="job-url">
-            <strong>{label} </strong>
-            {jobs.toSeq.sorted.map { jobId =>
-              <a href={jobURL(request, jobId.intValue())}>{jobId.toString}</a><span>&nbsp;</span>
-            }}
-          </li>
-        } else {
-          Nil
-        }
-      }
 
 
       val summary =
@@ -107,9 +90,6 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
                 }
               }
             }
-            {jobLinks(JobExecutionStatus.RUNNING, "Running Jobs:")}
-            {jobLinks(JobExecutionStatus.SUCCEEDED, "Succeeded Jobs:")}
-            {jobLinks(JobExecutionStatus.FAILED, "Failed Jobs:")}
           </ul>
           <div id="plan-viz-download-btn-container">
             <select id="plan-viz-format-select">
@@ -130,6 +110,7 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
       summary ++
         planVisualization(request, metrics, graph) ++
         physicalPlanDescription(executionUIData.physicalPlanDescription) ++
+        jobsTable(request, executionUIData) ++
         modifiedConfigs(configs.filter { case (k, _) => !k.startsWith(pandasOnSparkConfPrefix) }) ++
         modifiedPandasOnSparkConfigs(
           configs.filter { case (k, _) => k.startsWith(pandasOnSparkConfPrefix) }) ++
@@ -223,6 +204,83 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
     <div id="physical-plan-details" style="display: none;">
       <pre>{physicalPlanDescription}</pre>
     </div>
+  }
+
+  private def jobsTable(
+      request: HttpServletRequest,
+      executionUIData: SQLExecutionUIData): Seq[Node] = {
+    val jobIds = executionUIData.jobs.keys.toSeq.sorted
+    if (jobIds.isEmpty) return Nil
+
+    val store = parent.parent.store
+    val rows = jobIds.flatMap { jobId =>
+      try {
+        val job = store.job(jobId)
+        val formattedTime = job.submissionTime.map(UIUtils.formatDate).getOrElse("")
+        val duration = (job.submissionTime, job.completionTime) match {
+          case (Some(start), Some(end)) =>
+            UIUtils.formatDuration(end.getTime - start.getTime)
+          case (Some(start), None) =>
+            UIUtils.formatDuration(System.currentTimeMillis() - start.getTime)
+          case _ => ""
+        }
+        val stagesInfo = {
+          val completed = job.numCompletedStages
+          val total = job.stageIds.size - job.numSkippedStages
+          val extra = Seq(
+            if (job.numFailedStages > 0) s"(${job.numFailedStages} failed)" else "",
+            if (job.numSkippedStages > 0) s"(${job.numSkippedStages} skipped)" else ""
+          ).filter(_.nonEmpty).mkString(" ")
+          s"$completed/$total $extra"
+        }
+        Some(
+          <tr id={"job-" + jobId}>
+            <td><a href={jobURL(request, jobId)}>{jobId}</a></td>
+            <td>{job.description.getOrElse("")}</td>
+            <td>{formattedTime}</td>
+            <td>{duration}</td>
+            <td class="stage-progress-cell">{stagesInfo}</td>
+            <td class="progress-cell">
+              {UIUtils.makeProgressBar(started = job.numActiveTasks,
+              completed = job.numCompletedIndices,
+              failed = job.numFailedTasks, skipped = job.numSkippedTasks,
+              reasonToNumKilled = job.killedTasksSummary,
+              total = job.numTasks - job.numSkippedTasks)}
+            </td>
+          </tr>)
+      } catch {
+        case _: Exception => None
+      }
+    }
+
+    // scalastyle:off
+    <div>
+      <span class="collapse-table" data-bs-toggle="collapse"
+            data-bs-target="#sql-jobs-table"
+            aria-expanded="true" aria-controls="sql-jobs-table"
+            data-collapse-name="collapse-sql-jobs">
+        <h4>
+          <span class="collapse-table-arrow arrow-open"></span>
+          <a>Associated Jobs ({jobIds.size})</a>
+        </h4>
+      </span>
+      <div class="collapsible-table collapse show" id="sql-jobs-table">
+        <table class="table table-bordered table-hover table-sm">
+          <thead>
+            <tr>
+              <th>Job ID</th>
+              <th>Description</th>
+              <th>Submitted</th>
+              <th>Duration</th>
+              <th>Stages: Succeeded/Total</th>
+              <th>Tasks (for all stages): Succeeded/Total</th>
+            </tr>
+          </thead>
+          <tbody>{rows}</tbody>
+        </table>
+      </div>
+    </div>
+    // scalastyle:on
   }
 
   private def modifiedConfigs(modifiedConfigs: Map[String, String]): Seq[Node] = {
