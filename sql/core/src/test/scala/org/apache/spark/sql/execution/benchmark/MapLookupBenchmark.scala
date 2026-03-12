@@ -44,8 +44,8 @@ object MapLookupBenchmark extends SqlBasedBenchmark {
     SparkSession.builder()
       .master("local[1]")
       .appName("MapLookupBenchmark")
-      .config("spark.driver.memory", "6g")
-      .config("spark.executor.memory", "6g")
+      .config("spark.driver.memory", "8g")
+      .config("spark.executor.memory", "8g")
       .getOrCreate()
   }
 
@@ -164,7 +164,7 @@ object MapLookupBenchmark extends SqlBasedBenchmark {
   }
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
-    val sizes = Seq(1, 10, 100, 1000, 10000, 10000, 1000000)
+    val sizes = Seq(1, 10, 100, 1000, 10000, 100000, 1000000)
     for (size <- sizes) {
       run(size, 1.0, IntegerType)
       run(size, 0.5, IntegerType)
