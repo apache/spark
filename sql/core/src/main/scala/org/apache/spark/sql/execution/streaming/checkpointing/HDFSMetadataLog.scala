@@ -331,6 +331,7 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](
 
   /** List the available batches on file system. */
   protected def listBatches: Array[Long] = {
+    // If parent doesn't exist, return empty array rather than throwing an exception
     if (!fileManager.exists(metadataPath)) {
       return Array.empty
     }
@@ -358,6 +359,7 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](
    * @return array of batches ids
    */
   def listBatchesOnDisk: Array[Long] = {
+    // If parent doesn't exist, return empty array rather than throwing an exception
     if (!fileManager.exists(metadataPath)) {
       return Array.empty
     }
