@@ -811,6 +811,9 @@ private[spark] class ApplicationMaster(
         exitCode = code
         shutdown = true
         allocator.setShutdown(true)
+
+      case ExecutorRegisteredOnDriver(executorId, resourceProfileId) =>
+        Option(allocator).foreach(_.onExecutorRegistered(executorId, resourceProfileId))
     }
 
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
@@ -848,9 +851,6 @@ private[spark] class ApplicationMaster(
           case None =>
             logWarning("Container allocator is not ready to find executor loss reasons yet.")
         }
-
-      case ExecutorRegistered(executorId, resourceProfileId) =>
-        Option(allocator).foreach(_.onExecutorRegistered(executorId, resourceProfileId))
     }
 
     override def onDisconnected(remoteAddress: RpcAddress): Unit = {

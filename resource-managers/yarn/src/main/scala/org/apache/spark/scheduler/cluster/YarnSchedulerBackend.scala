@@ -171,7 +171,7 @@ private[spark] abstract class YarnSchedulerBackend(
   }
 
   override protected def onExecutorRegistered(executorId: String, resourceProfileId: Int): Unit = {
-    amEndpoint.foreach(_.send(ExecutorRegisteredWithDriver(executorId, resourceProfileId)))
+    amEndpoint.foreach(_.send(ExecutorRegisteredOnDriver(executorId, resourceProfileId)))
   }
 
   override def sufficientResourcesRegistered(): Boolean = {
