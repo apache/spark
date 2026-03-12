@@ -23,6 +23,7 @@ import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.plans.logical.{CreateFlowCommand, CreateMaterializedViewAsSelect, CreateStreamingTable, CreateStreamingTableAsSelect, CreateView, InsertIntoDir, InsertIntoStatement, LogicalPlan}
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.command.{CreateViewCommand, SetCatalogCommand, SetCommand, SetNamespaceCommand}
 import org.apache.spark.sql.pipelines.Language
@@ -528,7 +529,7 @@ class SqlGraphRegistrationContext(
       // This allows dependency tracking in the dataflow graph
       val pathString = org.apache.spark.sql.catalyst.catalog.CatalogUtils.URIToString(path)
       val dirIdentifier = TableIdentifier(
-        identifier = s"dir_${Math.abs(pathString.hashCode)}",
+        table = s"dir_${Math.abs(pathString.hashCode)}",
         database = context.getCurrentDatabaseOpt,
         catalog = context.getCurrentCatalogOpt
       )

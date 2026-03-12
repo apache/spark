@@ -302,7 +302,7 @@ class DirectoryWrite(
         // Handle partitioning if specified in options
         destination.options.get("partitionBy").foreach { partitionCols =>
           val cols = partitionCols.split(",").map(_.trim)
-          dataFrameWriter.partitionBy(cols: _*)
+          dataFrameWriter.partitionBy(cols.toSeq: _*)
         }
 
         dataFrameWriter.save(destination.path)
