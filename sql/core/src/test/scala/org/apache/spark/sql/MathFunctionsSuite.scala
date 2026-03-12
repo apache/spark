@@ -118,12 +118,12 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("different NaN comparison") {
-    QueryTest.compare(
+    assert(QueryTest.compare(
       java.lang.Double.longBitsToDouble(0x7ff8000000000000L),
-      java.lang.Double.longBitsToDouble(0xfff8000000000000L))
-    QueryTest.compare(
+      java.lang.Double.longBitsToDouble(0xfff8000000000000L)))
+    assert(QueryTest.compare(
       java.lang.Float.intBitsToFloat(0x7fc00000),
-      java.lang.Double.longBitsToDouble(0xffc00000))
+      java.lang.Float.intBitsToFloat(0xffc00000)))
   }
 
   test("sin") {
