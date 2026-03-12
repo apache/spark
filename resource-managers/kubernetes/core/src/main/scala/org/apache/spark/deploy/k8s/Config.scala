@@ -521,17 +521,27 @@ private[spark] object Config extends Logging {
       .checkValue(value => value > 100, "Allocation batch delay must be greater than 0.1s.")
       .createWithDefaultString("1s")
 
+  val KUBERNETES_ALLOCATION_PARALLEL_ENABLED =
+    ConfigBuilder("spark.kubernetes.allocation.batch.parallel.enabled")
+      .doc("When true, executor pods are created in parallel using a thread pool sized by " +
+        "spark.kubernetes.allocation.batch.concurrency. This can significantly speed up " +
+        "executor allocation when K8s API latency is high. " +
+        "When false (default), pods are created serially one by one.")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val KUBERNETES_ALLOCATION_BATCH_CONCURRENCY =
     ConfigBuilder("spark.kubernetes.allocation.batch.concurrency")
       .doc("Number of concurrent threads to use for creating executor pods in each round of " +
-        "allocation. Setting this to a value greater than 1 enables parallel pod creation, " +
-        "which can significantly speed up executor allocation when K8s API latency is high. " +
-        "Setting this to 1 preserves the original serial behavior.")
+        "allocation. Only takes effect when " +
+        "spark.kubernetes.allocation.batch.parallel.enabled is true. " +
+        "A moderate value like 3-5 is recommended.")
       .version("4.2.0")
       .intConf
       .checkValue(value => value > 0,
         "Allocation batch concurrency should be a positive integer")
-      .createWithDefault(1)
+      .createWithDefault(5)
 
   val KUBERNETES_ALLOCATION_RECOVERY_MODE_ENABLED =
     ConfigBuilder("spark.kubernetes.allocation.recoveryMode.enabled")
