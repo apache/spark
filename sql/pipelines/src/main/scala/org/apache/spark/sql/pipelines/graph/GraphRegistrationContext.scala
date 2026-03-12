@@ -36,6 +36,7 @@ class GraphRegistrationContext(
   protected val tables = new mutable.ListBuffer[Table]
   protected val views = new mutable.ListBuffer[View]
   protected val sinks = new mutable.ListBuffer[Sink]
+  protected val directories = new mutable.ListBuffer[Directory]
   protected val flows = new mutable.ListBuffer[UnresolvedFlow]
 
   def registerTable(tableDef: Table): Unit = {
@@ -50,12 +51,20 @@ class GraphRegistrationContext(
     sinks += sinkDef
   }
 
+  def registerDirectory(directoryDef: Directory): Unit = {
+    directories += directoryDef
+  }
+
   def getViews: Seq[View] = {
     views.toSeq
   }
 
   def getSinks: Seq[Sink] = {
     sinks.toSeq
+  }
+
+  def getDirectories: Seq[Directory] = {
+    directories.toSeq
   }
 
   def registerFlow(flowDef: UnresolvedFlow): Unit = {
@@ -86,6 +95,7 @@ class GraphRegistrationContext(
       tables = tables.toSeq,
       views = views.toSeq,
       sinks = sinks.toSeq,
+      directories = directories.toSeq,
       flows = flows.toSeq
     )
   }

@@ -34,12 +34,13 @@ case class DataflowGraph(
     flows: Seq[Flow],
     tables: Seq[Table],
     sinks: Seq[Sink],
+    directories: Seq[Directory],
     views: Seq[View])
   extends GraphOperations
   with GraphValidations {
 
   /** Map of [[Output]]s by their identifiers */
-  lazy val output: Map[TableIdentifier, Output] = mapUnique(sinks ++ tables, "output")(_.identifier)
+  lazy val output: Map[TableIdentifier, Output] = mapUnique(sinks ++ tables ++ directories, "output")(_.identifier)
 
   /**
    * [[Flow]]s in this graph that need to get planned and potentially executed when
@@ -61,6 +62,10 @@ case class DataflowGraph(
   /** Map of [[Sink]]s by their identifiers */
   lazy val sink: Map[TableIdentifier, Sink] =
     mapUnique(sinks, "sink")(_.identifier)
+
+  /** Map of [[Directory]]s by their identifiers */
+  lazy val directory: Map[TableIdentifier, Directory] =
+    mapUnique(directories, "directory")(_.identifier)
 
   /** Map of [[Flow]]s by their identifier */
   lazy val flow: Map[TableIdentifier, Flow] = {
@@ -162,7 +167,8 @@ case class DataflowGraph(
       flows = upstreamFlows,
       views = upstreamViews,
       tables = table.get(srcFlow.destinationIdentifier).toSeq,
-      sinks = sink.get(srcFlow.destinationIdentifier).toSeq
+      sinks = sink.get(srcFlow.destinationIdentifier).toSeq,
+      directories = directory.get(srcFlow.destinationIdentifier).toSeq
     )
     subgraph.resolve().resolvedFlow(srcFlow.identifier)
   }

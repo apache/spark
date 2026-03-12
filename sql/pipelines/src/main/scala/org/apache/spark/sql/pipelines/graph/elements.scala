@@ -269,3 +269,43 @@ case class SinkImpl(
    options: Map[String, String],
    origin: QueryOrigin
 ) extends Sink {}
+
+/**
+ * A directory output representing a non-catalog managed file path in a [[DataflowGraph]].
+ *
+ * Directories are used for exporting data to external storage locations (S3, HDFS, local filesystem)
+ * without registering the output in the catalog. This is useful for:
+ * - Exporting processed data to external systems
+ * - Creating data exports in specific formats (CSV, JSON, etc.)
+ * - Writing to shared storage locations
+ *
+ * @param identifier The identifier of this directory within the graph (generated based on path hash).
+ * @param path The output path (s3://bucket/path, file:///local/path, hdfs://namenode/path, etc.).
+ * @param format The file format to use (parquet, orc, csv, json, avro, etc.).
+ * @param mode The write mode (overwrite, append, errorifexists, ignore).
+ * @param options Additional write options (compression, partitionBy, maxRecordsPerFile, etc.).
+ * @param comment User-specified comment for this directory output.
+ * @param origin Source code location where this directory was defined.
+ */
+case class Directory(
+    identifier: TableIdentifier,
+    path: String,
+    format: String,
+    mode: String,
+    options: Map[String, String],
+    comment: Option[String],
+    origin: QueryOrigin
+) extends GraphElement with Output {
+
+  /**
+   * Returns a user-visible name for the directory output.
+   * Uses the path as the display name for clarity.
+   */
+  override def displayName: String = s"Directory($path)"
+
+  /**
+   * Returns the table identifier for this directory.
+   * This is used for dependency tracking in the dataflow graph.
+   */
+  def asTableIdentifier: TableIdentifier = identifier
+}
