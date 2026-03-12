@@ -27,6 +27,7 @@ import org.json4s.jackson.JsonMethods.parse
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.UI.UI_SQL_GROUP_SUB_EXECUTION_ENABLED
 import org.apache.spark.ui.{UIUtils, WebUIPage}
+import org.apache.spark.ui.jobs.ApiHelper
 
 class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging {
 
@@ -209,10 +210,11 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
   private def jobsTable(
       request: HttpServletRequest,
       executionUIData: SQLExecutionUIData): Seq[Node] = {
-    val jobIds = executionUIData.jobs.keys.toSeq.sorted
+    val jobIds = executionUIData.jobs.keys.toSeq.sorted.reverse
     if (jobIds.isEmpty) return Nil
 
     val store = parent.parent.store
+    val basePath = UIUtils.prependBaseUri(request, parent.basePath)
     val rows = jobIds.flatMap { jobId =>
       try {
         val job = store.job(jobId)
@@ -224,6 +226,11 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
             UIUtils.formatDuration(System.currentTimeMillis() - start.getTime)
           case _ => ""
         }
+        val (lastStageName, lastStageDesc) =
+          ApiHelper.lastStageNameAndDescription(store, job)
+        val jobDesc = UIUtils.makeDescription(
+          job.description.getOrElse(lastStageDesc), basePath, plainText = false)
+        val detailUrl = s"$basePath/jobs/job/?id=$jobId"
         val stagesInfo = {
           val completed = job.numCompletedStages
           val total = job.stageIds.size - job.numSkippedStages
@@ -236,7 +243,10 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
         Some(
           <tr id={"job-" + jobId}>
             <td><a href={jobURL(request, jobId)}>{jobId}</a></td>
-            <td>{job.description.getOrElse("")}</td>
+            <td>
+              {jobDesc}
+              <a href={detailUrl} class="name-link">{lastStageName}</a>
+            </td>
             <td>{formattedTime}</td>
             <td>{duration}</td>
             <td class="stage-progress-cell">{stagesInfo}</td>
