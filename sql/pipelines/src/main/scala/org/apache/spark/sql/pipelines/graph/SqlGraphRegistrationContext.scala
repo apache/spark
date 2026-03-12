@@ -22,7 +22,7 @@ import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
-import org.apache.spark.sql.catalyst.plans.logical.{CreateFlowCommand, CreateMaterializedViewAsSelect, CreateStreamingTable, CreateStreamingTableAsSelect, CreateView, InsertIntoStatement, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{CreateFlowCommand, CreateMaterializedViewAsSelect, CreateStreamingTable, CreateStreamingTableAsSelect, CreateView, InsertIntoDir, InsertIntoStatement, LogicalPlan}
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.command.{CreateViewCommand, SetCatalogCommand, SetCommand, SetNamespaceCommand}
 import org.apache.spark.sql.pipelines.Language
@@ -165,6 +165,9 @@ class SqlGraphRegistrationContext(
       case createFlowCommand: CreateFlowCommand =>
         // CREATE FLOW [ flow_name ] AS INSERT INTO [ destination_name ] BY NAME
         CreateFlowHandler.handle(createFlowCommand, queryOrigin)
+      case insertIntoDir: InsertIntoDir =>
+        // INSERT OVERWRITE DIRECTORY [ path ] USING [ format ] [ OPTIONS ] [ query ]
+        InsertIntoDirHandler.handle(insertIntoDir, queryOrigin)
       case unsupportedLogicalPlan: LogicalPlan =>
         throw SqlGraphElementRegistrationException(
           msg = s"Unsupported plan ${unsupportedLogicalPlan.nodeName} parsed from SQL query",
@@ -500,6 +503,73 @@ class SqlGraphRegistrationContext(
           queryOrigin = queryOrigin
         )
       }
+    }
+  }
+
+  private object InsertIntoDirHandler {
+    def handle(insertIntoDir: InsertIntoDir, queryOrigin: QueryOrigin): Unit = {
+      // Extract path from storage
+      val path = insertIntoDir.storage.locationUri.getOrElse(
+        throw SqlGraphElementRegistrationException(
+          msg = "Directory path is required for INSERT OVERWRITE DIRECTORY",
+          queryOrigin = queryOrigin
+        )
+      )
+
+      // Extract format/provider
+      val provider = insertIntoDir.provider.getOrElse(
+        throw SqlGraphElementRegistrationException(
+          msg = "Format (USING clause) is required for INSERT OVERWRITE DIRECTORY",
+          queryOrigin = queryOrigin
+        )
+      )
+
+      // Generate unique identifier for this directory based on path hash
+      // This allows dependency tracking in the dataflow graph
+      val pathString = org.apache.spark.sql.catalyst.catalog.CatalogUtils.URIToString(path)
+      val dirIdentifier = TableIdentifier(
+        identifier = s"dir_${Math.abs(pathString.hashCode)}",
+        database = context.getCurrentDatabaseOpt,
+        catalog = context.getCurrentCatalogOpt
+      )
+
+      // Determine write mode
+      val mode = if (insertIntoDir.overwrite) "overwrite" else "errorifexists"
+
+      // Register directory as an output
+      graphRegistrationContext.registerDirectory(
+        Directory(
+          identifier = dirIdentifier,
+          path = pathString,
+          format = provider,
+          mode = mode,
+          options = insertIntoDir.storage.properties,
+          comment = None,
+          origin = queryOrigin.copy(
+            objectName = Option(pathString),
+            objectType = Option(QueryOriginType.Table.toString) // Use Table type for now
+          )
+        )
+      )
+
+      // Register flow that writes to this directory
+      graphRegistrationContext.registerFlow(
+        UnresolvedFlow(
+          identifier = dirIdentifier,
+          destinationIdentifier = dirIdentifier,
+          func = FlowAnalysis.createFlowFunctionFromLogicalPlan(insertIntoDir.child),
+          sqlConf = context.getSqlConf,
+          once = false, // Can be refreshed
+          queryContext = QueryContext(
+            currentCatalog = context.getCurrentCatalogOpt,
+            currentDatabase = context.getCurrentDatabaseOpt
+          ),
+          origin = queryOrigin.copy(
+            objectName = Option(pathString),
+            objectType = Option(QueryOriginType.Flow.toString)
+          )
+        )
+      )
     }
   }
 
