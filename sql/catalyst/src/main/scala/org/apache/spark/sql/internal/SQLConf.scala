@@ -2498,11 +2498,15 @@ object SQLConf {
       .intConf
       .createWithDefault(-1)
 
-  val MAP_LOOKUP_HASH_THRESHOLD = buildConf("spark.sql.mapLookupHashThreshold")
-    .doc("The threshold to determine whether to use hash lookup for map lookup expressions. " +
-      "If the map size is small, the cost of building hash map exceeds the cost of a linear scan.")
+  val MAP_LOOKUP_HASH_THRESHOLD =
+  buildConf("spark.sql.optimizer.mapLookupHashThreshold")
+    .internal()
+    .doc("The minimum number of map entries to attempt hash-based lookup in `element_at` and " +
+      "the `[]` operator. Below this threshold, linear scan is used. For key types that do not " +
+      "support hashing (e.g. arrays, structs), linear scan is always used regardless of map size.")
     .version("4.2.0")
     .intConf
+    .checkValue(_ >= 0, "The threshold must be non-negative.")
     .createWithDefault(1000)
 
   val FILES_MAX_PARTITION_BYTES = buildConf("spark.sql.files.maxPartitionBytes")
