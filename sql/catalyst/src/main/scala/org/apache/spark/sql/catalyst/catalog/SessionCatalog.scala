@@ -2617,34 +2617,19 @@ class SessionCatalog(
   def loadPersistentScalarFunction(name: FunctionIdentifier): V1Function = {
     val qualifiedIdent = qualifyIdentifier(name)
 
-    // When database is "session", try persistent first so prioritizeSystemCatalog is honored
-    if (qualifiedIdent.database.contains(CatalogManager.SESSION_NAMESPACE)) {
+    // Partially qualified "session" or "builtin": we're resolving the persistent candidate only.
+    // The resolver's candidate list (resolutionCandidates) already orders [system, persistent] or
+    // [persistent, system] by config; we only look in the persistent catalog here. If not found,
+    // we throw so the resolver can try the next candidate (system).
+    val isSessionOrBuiltin = qualifiedIdent.database.exists(db =>
+      db.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE) ||
+      db.equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE))
+    if (isSessionOrBuiltin) {
       tryFetchCatalogFunction(qualifiedIdent) match {
         case Some(funcMetadata) =>
           return buildV1FunctionFromCatalog(qualifiedIdent, funcMetadata)
         case None =>
-          functionRegistry.lookupFunctionEntry(qualifiedIdent) match {
-            case Some((cachedInfo, cachedBuilder)) =>
-              return V1Function(cachedInfo, cachedBuilder)
-            case None =>
-              failFunctionLookup(qualifiedIdent)
-          }
-      }
-    }
-
-    // When database is "builtin", try persistent first so prioritizeSystemCatalog is honored
-    if (qualifiedIdent.database.contains(CatalogManager.BUILTIN_NAMESPACE)) {
-      tryFetchCatalogFunction(qualifiedIdent) match {
-        case Some(funcMetadata) =>
-          return buildV1FunctionFromCatalog(qualifiedIdent, funcMetadata)
-        case None =>
-          val unqualified = FunctionIdentifier(qualifiedIdent.funcName)
-          functionRegistry.lookupFunctionEntry(unqualified) match {
-            case Some((cachedInfo, cachedBuilder)) =>
-              return V1Function(cachedInfo, cachedBuilder)
-            case None =>
-              failFunctionLookup(qualifiedIdent)
-          }
+          failFunctionLookup(qualifiedIdent)
       }
     }
 
@@ -2719,7 +2704,7 @@ class SessionCatalog(
 
   /**
    * Try to fetch a function from the persistent catalog. Returns None if the database or
-   * function does not exist. Used for "session"/"builtin" to honor prioritizeSystemCatalog.
+   * function does not exist. Used for 2-part "session"/"builtin" when resolving persistent candidate.
    */
   private def tryFetchCatalogFunction(
       qualifiedIdent: FunctionIdentifier): Option[CatalogFunction] = {
