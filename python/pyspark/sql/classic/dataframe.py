@@ -898,7 +898,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
 
     def sortWithinPartitions(
         self,
-        *cols: Union[int, str, Column, List[Union[int, str, Column]]],
+        *cols: Union[Sequence["ColumnOrNameOrOrdinal"], "ColumnOrNameOrOrdinal"],
         **kwargs: Any,
     ) -> ParentDataFrame:
         _cols = self._preapare_cols_for_sort(F.col, cols, kwargs)
@@ -907,7 +907,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
 
     def sort(
         self,
-        *cols: Union[int, str, Column, List[Union[int, str, Column]]],
+        *cols: Union[Sequence["ColumnOrNameOrOrdinal"], "ColumnOrNameOrOrdinal"],
         **kwargs: Any,
     ) -> ParentDataFrame:
         _cols = self._preapare_cols_for_sort(F.col, cols, kwargs)
@@ -933,7 +933,11 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
 
         If `cols` has only one list in it, cols[0] will be used as the list.
         """
-        if len(cols) == 1 and isinstance(cols[0], list):
+        if (
+            len(cols) == 1
+            and not isinstance(cols[0], (str, Column))
+            and isinstance(cols[0], Sequence)
+        ):
             cols = tuple(cols[0])
         return self._jseq(cols, _to_java_column)
 
@@ -944,7 +948,11 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
 
         If `cols` has only one list in it, cols[0] will be used as the list.
         """
-        if len(cols) == 1 and isinstance(cols[0], list):
+        if (
+            len(cols) == 1
+            and not isinstance(cols[0], (int, str, Column))
+            and isinstance(cols[0], Sequence)
+        ):
             cols = tuple(cols[0])
 
         _cols = []

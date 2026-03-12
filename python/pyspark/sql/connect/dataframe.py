@@ -236,7 +236,11 @@ class DataFrame(ParentDataFrame):
                     messageParameters={"arg_name": arg_name, "arg_type": type(c).__name__},
                 )
 
-        if len(cols) == 1 and isinstance(cols[0], (list, tuple)):
+        if (
+            len(cols) == 1
+            and not isinstance(cols[0], (int, str, Column))
+            and isinstance(cols[0], Sequence)
+        ):
             if allow_sequence:
                 cols = tuple(cols[0])
             else:
@@ -748,7 +752,7 @@ class DataFrame(ParentDataFrame):
 
     def sort(
         self,
-        *cols: Union[int, str, Column, List[Union[int, str, Column]]],
+        *cols: Union[Sequence["ColumnOrNameOrOrdinal"], "ColumnOrNameOrOrdinal"],
         **kwargs: Any,
     ) -> ParentDataFrame:
         _cols = self._preapare_cols_for_sort(F.col, cols, kwargs)
@@ -767,7 +771,7 @@ class DataFrame(ParentDataFrame):
 
     def sortWithinPartitions(
         self,
-        *cols: Union[int, str, Column, List[Union[int, str, Column]]],
+        *cols: Union[Sequence["ColumnOrNameOrOrdinal"], "ColumnOrNameOrOrdinal"],
         **kwargs: Any,
     ) -> ParentDataFrame:
         _cols = self._preapare_cols_for_sort(F.col, cols, kwargs)

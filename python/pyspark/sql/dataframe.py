@@ -2958,7 +2958,7 @@ class DataFrame:
     @dispatch_df_method
     def sortWithinPartitions(
         self,
-        *cols: Union[int, str, Column, List[Union[int, str, Column]]],
+        *cols: Union[Sequence["ColumnOrNameOrOrdinal"], "ColumnOrNameOrOrdinal"],
         **kwargs: Any,
     ) -> "DataFrame":
         """Returns a new :class:`DataFrame` with each partition sorted by the specified column(s).
@@ -3022,7 +3022,7 @@ class DataFrame:
     @dispatch_df_method
     def sort(
         self,
-        *cols: Union[int, str, Column, List[Union[int, str, Column]]],
+        *cols: Union[Sequence["ColumnOrNameOrOrdinal"], "ColumnOrNameOrOrdinal"],
         **kwargs: Any,
     ) -> "DataFrame":
         """Returns a new :class:`DataFrame` sorted by the specified column(s).
@@ -3182,7 +3182,7 @@ class DataFrame:
     def _preapare_cols_for_sort(
         self,
         _to_col: Callable[[str], Column],
-        cols: Sequence[Union[int, str, Column, List[Union[int, str, Column]]]],
+        cols: Sequence[Union[Sequence["ColumnOrNameOrOrdinal"], "ColumnOrNameOrOrdinal"]],
         kwargs: Dict[str, Any],
     ) -> Sequence[Column]:
         from pyspark.errors import PySparkTypeError, PySparkValueError, PySparkIndexError
@@ -3192,10 +3192,16 @@ class DataFrame:
                 errorClass="CANNOT_BE_EMPTY", messageParameters={"item": "cols"}
             )
 
-        if len(cols) == 1 and isinstance(cols[0], list):
-            cols = cols[0]
+        if (
+            len(cols) == 1
+            and not isinstance(cols[0], (int, str, Column))
+            and isinstance(cols[0], Sequence)
+        ):
+            cols = tuple(cols[0])
 
-        def _get_col(c: Union[int, str, Column, List[int | str | Column]]) -> Column:
+        def _get_col(
+            c: Union[Sequence["ColumnOrNameOrOrdinal"], "ColumnOrNameOrOrdinal"]
+        ) -> Column:
             if isinstance(c, int) and not isinstance(c, bool):
                 # ordinal is 1-based
                 if c > 0:
