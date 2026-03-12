@@ -1,0 +1,234 @@
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+MapLookup (size=1, hit=1.0, type=IntegerType):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-----------------------------------------------------------------------------------------------------------------------------
+GetMapValue interpreted - Linear Lookup                   20             29           6          0.5        2019.8       1.0X
+GetMapValue interpreted - Hash Lookup                     17             21           4          0.6        1740.1       1.2X
+GetMapValue codegen - Linear Lookup                       17             20           3          0.6        1673.6       1.2X
+GetMapValue codegen - Hash Lookup                         16             18           3          0.6        1556.9       1.3X
+ElementAt interpreted - Linear Lookup                     15             18           4          0.7        1475.2       1.4X
+ElementAt interpreted - Hash Lookup                       14             18           4          0.7        1438.1       1.4X
+ElementAt codegen - Linear Lookup                         14             17           3          0.7        1427.0       1.4X
+ElementAt codegen - Hash Lookup                           13             15           2          0.8        1304.8       1.5X
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+MapLookup (size=1, hit=0.5, type=IntegerType):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-----------------------------------------------------------------------------------------------------------------------------
+GetMapValue interpreted - Linear Lookup                   13             15           3          0.8        1294.1       1.0X
+GetMapValue interpreted - Hash Lookup                     12             14           2          0.8        1248.8       1.0X
+GetMapValue codegen - Linear Lookup                       12             14           2          0.8        1219.6       1.1X
+GetMapValue codegen - Hash Lookup                         12             15           3          0.8        1196.7       1.1X
+ElementAt interpreted - Linear Lookup                     12             13           2          0.9        1158.6       1.1X
+ElementAt interpreted - Hash Lookup                       12             13           2          0.9        1156.3       1.1X
+ElementAt codegen - Linear Lookup                         12             13           2          0.9        1156.7       1.1X
+ElementAt codegen - Hash Lookup                           12             13           2          0.9        1172.5       1.1X
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+MapLookup (size=1, hit=0.0, type=IntegerType):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-----------------------------------------------------------------------------------------------------------------------------
+GetMapValue interpreted - Linear Lookup                   11             13           2          0.9        1115.8       1.0X
+GetMapValue interpreted - Hash Lookup                     11             12           2          0.9        1102.2       1.0X
+GetMapValue codegen - Linear Lookup                       11             12           2          0.9        1082.5       1.0X
+GetMapValue codegen - Hash Lookup                         11             13           2          0.9        1104.7       1.0X
+ElementAt interpreted - Linear Lookup                     11             13           3          0.9        1087.7       1.0X
+ElementAt interpreted - Hash Lookup                       11             13           2          0.9        1093.9       1.0X
+ElementAt codegen - Linear Lookup                         11             12           2          0.9        1061.0       1.1X
+ElementAt codegen - Hash Lookup                           11             12           2          0.9        1079.6       1.0X
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+MapLookup (size=10, hit=1.0, type=IntegerType):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------
+GetMapValue interpreted - Linear Lookup                    11             13           3          0.9        1082.6       1.0X
+GetMapValue interpreted - Hash Lookup                      11             12           2          0.9        1073.3       1.0X
+GetMapValue codegen - Linear Lookup                        11             12           1          0.9        1069.2       1.0X
+GetMapValue codegen - Hash Lookup                          11             12           2          0.9        1059.0       1.0X
+ElementAt interpreted - Linear Lookup                      11             12           2          0.9        1067.7       1.0X
+ElementAt interpreted - Hash Lookup                        11             12           2          0.9        1072.4       1.0X
+ElementAt codegen - Linear Lookup                          11             12           2          0.9        1060.9       1.0X
+ElementAt codegen - Hash Lookup                            11             12           2          0.9        1066.5       1.0X
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+MapLookup (size=10, hit=0.5, type=IntegerType):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------
+GetMapValue interpreted - Linear Lookup                    10             11           2          1.0        1035.5       1.0X
+GetMapValue interpreted - Hash Lookup                      10             12           2          1.0        1044.0       1.0X
+GetMapValue codegen - Linear Lookup                        10             12           2          1.0        1045.0       1.0X
+GetMapValue codegen - Hash Lookup                          10             12           2          1.0        1047.9       1.0X
+ElementAt interpreted - Linear Lookup                      11             11           2          0.9        1060.1       1.0X
+ElementAt interpreted - Hash Lookup                        10             12           2          1.0        1046.4       1.0X
+ElementAt codegen - Linear Lookup                          11             12           1          0.9        1054.9       1.0X
+ElementAt codegen - Hash Lookup                            10             12           2          1.0        1032.8       1.0X
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+MapLookup (size=10, hit=0.0, type=IntegerType):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------
+GetMapValue interpreted - Linear Lookup                    10             11           2          1.0        1026.6       1.0X
+GetMapValue interpreted - Hash Lookup                      10             11           2          1.0        1020.7       1.0X
+GetMapValue codegen - Linear Lookup                        10             11           2          1.0        1036.8       1.0X
+GetMapValue codegen - Hash Lookup                          10             12           2          1.0        1027.7       1.0X
+ElementAt interpreted - Linear Lookup                      10             11           2          1.0        1010.0       1.0X
+ElementAt interpreted - Hash Lookup                        10             12           2          1.0        1030.8       1.0X
+ElementAt codegen - Linear Lookup                          10             11           1          1.0        1018.8       1.0X
+ElementAt codegen - Hash Lookup                            10             11           2          1.0        1010.7       1.0X
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+MapLookup (size=100, hit=1.0, type=IntegerType):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------
+GetMapValue interpreted - Linear Lookup                     11             12           1          0.9        1113.2       1.0X
+GetMapValue interpreted - Hash Lookup                       11             12           2          0.9        1057.3       1.1X
+GetMapValue codegen - Linear Lookup                         11             13           2          0.9        1115.7       1.0X
+GetMapValue codegen - Hash Lookup                           10             11           2          1.0        1011.7       1.1X
+ElementAt interpreted - Linear Lookup                       11             12           2          0.9        1116.4       1.0X
+ElementAt interpreted - Hash Lookup                         10             12           2          1.0        1049.7       1.1X
+ElementAt codegen - Linear Lookup                           11             12           2          0.9        1106.7       1.0X
+ElementAt codegen - Hash Lookup                             10             12           2          1.0        1023.6       1.1X
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+MapLookup (size=100, hit=0.5, type=IntegerType):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------
+GetMapValue interpreted - Linear Lookup                     11             12           1          0.9        1125.4       1.0X
+GetMapValue interpreted - Hash Lookup                       10             11           2          1.0        1029.9       1.1X
+GetMapValue codegen - Linear Lookup                         11             13           2          0.9        1127.4       1.0X
+GetMapValue codegen - Hash Lookup                           10             11           2          1.0        1005.3       1.1X
+ElementAt interpreted - Linear Lookup                       11             13           2          0.9        1137.4       1.0X
+ElementAt interpreted - Hash Lookup                         10             11           2          1.0        1027.1       1.1X
+ElementAt codegen - Linear Lookup                           11             12           1          0.9        1139.5       1.0X
+ElementAt codegen - Hash Lookup                             10             12           2          1.0        1015.6       1.1X
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+MapLookup (size=100, hit=0.0, type=IntegerType):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------
+GetMapValue interpreted - Linear Lookup                     12             13           2          0.9        1164.1       1.0X
+GetMapValue interpreted - Hash Lookup                       10             11           1          1.0        1015.1       1.1X
+GetMapValue codegen - Linear Lookup                         12             13           2          0.9        1164.6       1.0X
+GetMapValue codegen - Hash Lookup                           10             11           2          1.0         992.8       1.2X
+ElementAt interpreted - Linear Lookup                       11             13           2          0.9        1143.7       1.0X
+ElementAt interpreted - Hash Lookup                         10             11           2          1.0        1021.5       1.1X
+ElementAt codegen - Linear Lookup                           12             13           2          0.9        1161.2       1.0X
+ElementAt codegen - Hash Lookup                             10             11           2          1.0         995.7       1.2X
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+MapLookup (size=1000, hit=1.0, type=IntegerType):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------
+GetMapValue interpreted - Linear Lookup                      19             20           2          0.5        1861.7       1.0X
+GetMapValue interpreted - Hash Lookup                        11             12           2          0.9        1126.5       1.7X
+GetMapValue codegen - Linear Lookup                          18             19           2          0.6        1778.3       1.0X
+GetMapValue codegen - Hash Lookup                            11             13           2          0.9        1113.8       1.7X
+ElementAt interpreted - Linear Lookup                        19             21           2          0.5        1877.3       1.0X
+ElementAt interpreted - Hash Lookup                          11             12           2          0.9        1128.2       1.7X
+ElementAt codegen - Linear Lookup                            18             20           2          0.6        1786.2       1.0X
+ElementAt codegen - Hash Lookup                              11             12           2          0.9        1112.4       1.7X
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+MapLookup (size=1000, hit=0.5, type=IntegerType):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------
+GetMapValue interpreted - Linear Lookup                      22             24           2          0.4        2226.4       1.0X
+GetMapValue interpreted - Hash Lookup                        11             12           2          0.9        1099.7       2.0X
+GetMapValue codegen - Linear Lookup                          21             23           2          0.5        2072.1       1.1X
+GetMapValue codegen - Hash Lookup                            11             12           2          0.9        1094.8       2.0X
+ElementAt interpreted - Linear Lookup                        22             24           2          0.4        2234.1       1.0X
+ElementAt interpreted - Hash Lookup                          11             12           2          0.9        1104.6       2.0X
+ElementAt codegen - Linear Lookup                            21             23           2          0.5        2142.6       1.0X
+ElementAt codegen - Hash Lookup                              11             12           2          0.9        1097.9       2.0X
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+MapLookup (size=1000, hit=0.0, type=IntegerType):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------
+GetMapValue interpreted - Linear Lookup                      26             27           2          0.4        2588.3       1.0X
+GetMapValue interpreted - Hash Lookup                        11             12           2          0.9        1091.5       2.4X
+GetMapValue codegen - Linear Lookup                          24             26           2          0.4        2417.9       1.1X
+GetMapValue codegen - Hash Lookup                            11             12           1          0.9        1088.8       2.4X
+ElementAt interpreted - Linear Lookup                        26             28           2          0.4        2574.4       1.0X
+ElementAt interpreted - Hash Lookup                          11             12           2          0.9        1076.1       2.4X
+ElementAt codegen - Linear Lookup                            24             26           2          0.4        2404.7       1.1X
+ElementAt codegen - Hash Lookup                              11             12           2          0.9        1080.6       2.4X
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+MapLookup (size=10000, hit=1.0, type=IntegerType):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+---------------------------------------------------------------------------------------------------------------------------------
+GetMapValue interpreted - Linear Lookup                       92             94           2          0.1        9152.3       1.0X
+GetMapValue interpreted - Hash Lookup                         19             21           2          0.5        1937.1       4.7X
+GetMapValue codegen - Linear Lookup                           85             87           2          0.1        8486.8       1.1X
+GetMapValue codegen - Hash Lookup                             22             23           2          0.5        2166.1       4.2X
+ElementAt interpreted - Linear Lookup                         91             92           2          0.1        9103.5       1.0X
+ElementAt interpreted - Hash Lookup                           19             21           2          0.5        1947.9       4.7X
+ElementAt codegen - Linear Lookup                             85             87           2          0.1        8540.7       1.1X
+ElementAt codegen - Hash Lookup                               22             24           2          0.5        2170.2       4.2X
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+MapLookup (size=10000, hit=0.5, type=IntegerType):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+---------------------------------------------------------------------------------------------------------------------------------
+GetMapValue interpreted - Linear Lookup                      127            132           3          0.1       12718.4       1.0X
+GetMapValue interpreted - Hash Lookup                         19             20           3          0.5        1887.3       6.7X
+GetMapValue codegen - Linear Lookup                          116            118           2          0.1       11592.6       1.1X
+GetMapValue codegen - Hash Lookup                             21             23           2          0.5        2111.7       6.0X
+ElementAt interpreted - Linear Lookup                        128            131           4          0.1       12767.0       1.0X
+ElementAt interpreted - Hash Lookup                           19             20           2          0.5        1890.6       6.7X
+ElementAt codegen - Linear Lookup                            115            117           2          0.1       11518.6       1.1X
+ElementAt codegen - Hash Lookup                               21             23           2          0.5        2132.6       6.0X
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+MapLookup (size=10000, hit=0.0, type=IntegerType):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+---------------------------------------------------------------------------------------------------------------------------------
+GetMapValue interpreted - Linear Lookup                      162            170           6          0.1       16219.8       1.0X
+GetMapValue interpreted - Hash Lookup                         18             20           2          0.5        1832.6       8.9X
+GetMapValue codegen - Linear Lookup                          146            148           2          0.1       14599.2       1.1X
+GetMapValue codegen - Hash Lookup                             21             22           2          0.5        2063.8       7.9X
+ElementAt interpreted - Linear Lookup                        163            168           5          0.1       16282.4       1.0X
+ElementAt interpreted - Hash Lookup                           18             20           2          0.5        1830.9       8.9X
+ElementAt codegen - Linear Lookup                            146            149           4          0.1       14576.9       1.1X
+ElementAt codegen - Hash Lookup                               21             23           2          0.5        2077.6       7.8X
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+MapLookup (size=100000, hit=1.0, type=IntegerType):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------
+GetMapValue interpreted - Linear Lookup                      1877           1926          25          0.0      187738.5       1.0X
+GetMapValue interpreted - Hash Lookup                         108            117           7          0.1       10849.2      17.3X
+GetMapValue codegen - Linear Lookup                          1926           1938           7          0.0      192584.4       1.0X
+GetMapValue codegen - Hash Lookup                             140            151           8          0.1       13983.8      13.4X
+ElementAt interpreted - Linear Lookup                        1807           1866          85          0.0      180696.4       1.0X
+ElementAt interpreted - Hash Lookup                           111            117           5          0.1       11136.7      16.9X
+ElementAt codegen - Linear Lookup                            1807           1907          44          0.0      180746.2       1.0X
+ElementAt codegen - Hash Lookup                               144            154           6          0.1       14384.3      13.1X
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+MapLookup (size=100000, hit=0.5, type=IntegerType):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------
+GetMapValue interpreted - Linear Lookup                      2672           2744         107          0.0      267156.0       1.0X
+GetMapValue interpreted - Hash Lookup                         109            119           7          0.1       10859.6      24.6X
+GetMapValue codegen - Linear Lookup                          2862           2891          38          0.0      286207.1       0.9X
+GetMapValue codegen - Hash Lookup                             147            155           6          0.1       14697.1      18.2X
+ElementAt interpreted - Linear Lookup                        2857           2868           6          0.0      285676.4       0.9X
+ElementAt interpreted - Hash Lookup                           107            113           4          0.1       10737.2      24.9X
+ElementAt codegen - Linear Lookup                            2680           2756         113          0.0      268045.1       1.0X
+ElementAt codegen - Hash Lookup                               139            146           5          0.1       13860.0      19.3X
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+MapLookup (size=100000, hit=0.0, type=IntegerType):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------
+GetMapValue interpreted - Linear Lookup                      3547           3803         105          0.0      354705.7       1.0X
+GetMapValue interpreted - Hash Lookup                         111            119           9          0.1       11100.2      32.0X
+GetMapValue codegen - Linear Lookup                          3547           3762         111          0.0      354682.6       1.0X
+GetMapValue codegen - Hash Lookup                             138            144           4          0.1       13825.5      25.7X
+ElementAt interpreted - Linear Lookup                        3557           3632         117          0.0      355703.5       1.0X
+ElementAt interpreted - Hash Lookup                           109            112           4          0.1       10888.3      32.6X
+ElementAt codegen - Linear Lookup                            3783           3789           4          0.0      378265.0       0.9X
+ElementAt codegen - Hash Lookup                               138            143           5          0.1       13824.6      25.7X
+
