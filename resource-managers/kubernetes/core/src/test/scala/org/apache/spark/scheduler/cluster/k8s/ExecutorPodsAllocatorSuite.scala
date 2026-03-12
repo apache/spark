@@ -1002,7 +1002,6 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
       .set(s"$prefix.option.claimName", "OnDemand")
       .set(s"$prefix.option.sizeLimit", "200Gi")
       .set(s"$prefix.option.storageClass", "gp3")
-      .set(KUBERNETES_ALLOCATION_BATCH_CONCURRENCY.key, "1")
 
     when(executorBuilder.buildFromFeatures(any(classOf[KubernetesExecutorConf]), meq(secMgr),
       meq(kubernetesClient), any(classOf[ResourceProfile])))
@@ -1045,7 +1044,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
       .set(s"$prefix.option.claimName", "OnDemand")
       .set(s"$prefix.option.sizeLimit", "200Gi")
       .set(s"$prefix.option.storageClass", "gp3")
-      .set(KUBERNETES_ALLOCATION_BATCH_CONCURRENCY.key, "2")
+      .set(KUBERNETES_ALLOCATION_PARALLEL_ENABLED.key, "true")
 
     when(executorBuilder.buildFromFeatures(any(classOf[KubernetesExecutorConf]), meq(secMgr),
       meq(kubernetesClient), any(classOf[ResourceProfile])))

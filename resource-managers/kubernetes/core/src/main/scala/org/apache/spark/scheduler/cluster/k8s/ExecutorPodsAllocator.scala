@@ -71,9 +71,11 @@ class ExecutorPodsAllocator(
 
   protected val podAllocationDelay = conf.get(KUBERNETES_ALLOCATION_BATCH_DELAY)
 
+  protected val podAllocationParallelEnabled = conf.get(KUBERNETES_ALLOCATION_PARALLEL_ENABLED)
+
   protected val podAllocationConcurrency = conf.get(KUBERNETES_ALLOCATION_BATCH_CONCURRENCY)
 
-  // Thread pool for parallel pod creation, only created when concurrency > 1
+  // Thread pool for parallel pod creation, only created when parallel is enabled
   protected lazy val podCreationThreadPool =
     ThreadUtils.newDaemonFixedThreadPool(podAllocationConcurrency, "k8s-pod-creator")
   protected lazy val podCreationExecutionContext: ExecutionContext =
@@ -481,7 +483,7 @@ class ExecutorPodsAllocator(
       applicationId: String,
       resourceProfileId: Int,
       pvcsInUse: Set[String]): Unit = {
-    if (podAllocationConcurrency > 1) {
+    if (podAllocationParallelEnabled) {
       requestNewExecutorsParallel(numExecutorsToAllocate, applicationId,
         resourceProfileId, pvcsInUse)
     } else {
@@ -659,15 +661,16 @@ class ExecutorPodsAllocator(
       }
     }
 
-    val results = try {
-      val allResults = ThreadUtils.awaitResult(
-        Future.sequence(futures), Duration(podCreationTimeout, TimeUnit.MILLISECONDS))
-      allResults.flatten
-    } catch {
-      case NonFatal(e) =>
-        logError(log"Timed out waiting for parallel pod creation to complete " +
-          log"after ${MDC(LogKeys.TIMEOUT, podCreationTimeout)} ms", e)
-        Seq.empty
+    val perPodTimeout = Duration(podCreationTimeout, TimeUnit.MILLISECONDS)
+    val results = futures.flatMap { future =>
+      try {
+        ThreadUtils.awaitResult(future, perPodTimeout)
+      } catch {
+        case NonFatal(e) =>
+          logError(log"Timed out or failed waiting for a pod creation future " +
+            log"after ${MDC(LogKeys.TIMEOUT, podCreationTimeout)} ms", e)
+          None
+      }
     }
 
     // Phase 3: Register successful creations
@@ -744,7 +747,7 @@ class ExecutorPodsAllocator(
   }
 
   override def stop(applicationId: String): Unit = {
-    if (podAllocationConcurrency > 1) {
+    if (podAllocationParallelEnabled) {
       Utils.tryLogNonFatalError {
         podCreationThreadPool.shutdownNow()
       }
