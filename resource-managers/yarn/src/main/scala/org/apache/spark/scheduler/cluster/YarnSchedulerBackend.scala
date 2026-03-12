@@ -170,7 +170,7 @@ private[spark] abstract class YarnSchedulerBackend(
     yarnSchedulerEndpointRef.ask[Boolean](KillExecutors(executorIds))
   }
 
-  override protected def onExecutorRegistered(executorId: String, resourceProfileId: Int): Unit = {
+  override def onExecutorRegistered(executorId: String, resourceProfileId: Int): Unit = {
     amEndpoint.foreach(_.send(ExecutorRegisteredOnDriver(executorId, resourceProfileId)))
   }
 
