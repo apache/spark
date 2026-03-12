@@ -48,7 +48,6 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
       val duration = executionUIData.completionTime.map(_.getTime()).getOrElse(currentTime) -
         executionUIData.submissionTime
 
-
       val summary =
         <div>
           <ul class="list-unstyled">
@@ -259,7 +258,7 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
             </td>
           </tr>)
       } catch {
-        case _: Exception => None
+        case _: NoSuchElementException => None
       }
     }
 
@@ -275,6 +274,7 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
         </h4>
       </span>
       <div class="collapsible-table collapse show" id="sql-jobs-table">
+        <div class="table-responsive">
         <table class="table table-bordered table-hover table-sm sortable">
           <thead>
             <tr>
@@ -288,6 +288,7 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
           </thead>
           <tbody>{rows}</tbody>
         </table>
+        </div>
       </div>
     </div>
     // scalastyle:on
