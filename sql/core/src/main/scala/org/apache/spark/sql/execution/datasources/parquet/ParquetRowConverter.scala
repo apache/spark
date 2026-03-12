@@ -438,6 +438,10 @@ private[parquet] class ParquetRowConverter(
           }
         }
 
+      case TimeType =>
+        // TIME is stored as INT64 with TIME logical type in microseconds
+        new ParquetPrimitiveConverter(updater)
+
       case DateType =>
         new ParquetPrimitiveConverter(updater) {
           override def addInt(value: Int): Unit = {

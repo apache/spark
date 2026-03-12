@@ -89,7 +89,7 @@ case class ApproxCountDistinctForIntervals(
           "inputType" -> toSQLType(endpointsExpression.dataType)))
     } else {
       endpointsExpression.dataType match {
-        case ArrayType(_: NumericType | DateType | TimestampType | TimestampNTZType |
+        case ArrayType(_: NumericType | DateType | TimestampType | TimestampNTZType | TimeType |
            _: AnsiIntervalType, _) =>
           if (endpoints.length < 2) {
             DataTypeMismatch(
@@ -144,7 +144,7 @@ case class ApproxCountDistinctForIntervals(
             .toDouble(value.asInstanceOf[PhysicalNumericType#InternalType])
         case _: DateType | _: YearMonthIntervalType =>
           value.asInstanceOf[Int].toDouble
-        case TimestampType | TimestampNTZType | _: DayTimeIntervalType =>
+        case TimestampType | TimestampNTZType | TimeType | _: DayTimeIntervalType =>
           value.asInstanceOf[Long].toDouble
       }
 

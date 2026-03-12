@@ -86,6 +86,7 @@ object RowEncoder {
     case TimestampNTZType => LocalDateTimeEncoder
     case DateType if SqlApiConf.get.datetimeJava8ApiEnabled => LocalDateEncoder(lenient)
     case DateType => DateEncoder(lenient)
+    case TimeType => BoxedLongEncoder
     case CalendarIntervalType => CalendarIntervalEncoder
     case _: DayTimeIntervalType => DayTimeIntervalEncoder
     case _: YearMonthIntervalType => YearMonthIntervalEncoder

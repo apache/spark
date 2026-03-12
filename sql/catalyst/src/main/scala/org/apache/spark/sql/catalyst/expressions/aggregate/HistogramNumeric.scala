@@ -159,7 +159,7 @@ case class HistogramNumeric(
               coord.x.toInt
             case FloatType => coord.x.toFloat
             case ShortType => coord.x.toShort
-            case _: DayTimeIntervalType | LongType | TimestampType | TimestampNTZType =>
+            case _: DayTimeIntervalType | LongType | TimestampType | TimestampNTZType | TimeType =>
               coord.x.toLong
             case _ => coord.x
           }

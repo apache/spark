@@ -135,6 +135,9 @@ public class ParquetVectorUpdaterFactory {
           validateTimestampNTZType();
           // TIMESTAMP_NTZ is a new data type and has no legacy files that need to do rebase.
           return new LongAsMicrosUpdater();
+        } else if (sparkType == DataTypes.TimeType) {
+          // TIME is stored as INT64 in Parquet (microseconds since midnight)
+          return new LongUpdater();
         } else if (sparkType instanceof DayTimeIntervalType) {
           return new LongUpdater();
         }
