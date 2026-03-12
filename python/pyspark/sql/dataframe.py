@@ -1766,15 +1766,7 @@ class DataFrame:
         """
         return DataFrame(self._jdf.coalesce(numPartitions), self.sparkSession)
 
-    @overload
-    def repartition(self, numPartitions: int, *cols: "ColumnOrName") -> "DataFrame":
-        ...
-
-    @overload
-    def repartition(self, *cols: "ColumnOrName") -> "DataFrame":
-        ...
-
-    @dispatch_df_method  # type: ignore[misc]
+    @dispatch_df_method
     def repartition(
         self, numPartitions: Union[int, "ColumnOrName"], *cols: "ColumnOrName"
     ) -> "DataFrame":
@@ -1882,15 +1874,7 @@ class DataFrame:
         """
         ...
 
-    @overload
-    def repartitionByRange(self, numPartitions: int, *cols: "ColumnOrName") -> "DataFrame":
-        ...
-
-    @overload
-    def repartitionByRange(self, *cols: "ColumnOrName") -> "DataFrame":
-        ...
-
-    @dispatch_df_method  # type: ignore[misc]
+    @dispatch_df_method
     def repartitionByRange(
         self, numPartitions: Union[int, "ColumnOrName"], *cols: "ColumnOrName"
     ) -> "DataFrame":
@@ -3621,11 +3605,11 @@ class DataFrame:
         ...
 
     @overload
-    def select(self, __cols: Union[List[Column], List[str]]) -> "DataFrame":
+    def select(self, __cols: Sequence["ColumnOrName"]) -> "DataFrame":
         ...
 
-    @dispatch_df_method  # type: ignore[misc]
-    def select(self, *cols: "ColumnOrName") -> "DataFrame":
+    @dispatch_df_method
+    def select(self, *cols: Union[Sequence["ColumnOrName"], "ColumnOrName"]) -> "DataFrame":
         """Projects a set of expressions and returns a new :class:`DataFrame`.
 
         .. versionadded:: 1.3.0
@@ -3871,11 +3855,13 @@ class DataFrame:
         ...
 
     @overload
-    def groupBy(self, __cols: Union[List[Column], List[str], List[int]]) -> "GroupedData":
+    def groupBy(self, __cols: Sequence["ColumnOrNameOrOrdinal"]) -> "GroupedData":
         ...
 
-    @dispatch_df_method  # type: ignore[misc]
-    def groupBy(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData":
+    @dispatch_df_method
+    def groupBy(
+        self, *cols: Union[Sequence["ColumnOrNameOrOrdinal"], "ColumnOrNameOrOrdinal"]
+    ) -> "GroupedData":
         """
         Groups the :class:`DataFrame` by the specified columns so that aggregation
         can be performed on them.
@@ -3977,15 +3963,17 @@ class DataFrame:
         ...
 
     @overload
-    def rollup(self, *cols: "ColumnOrName") -> "GroupedData":
+    def rollup(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData":
         ...
 
     @overload
-    def rollup(self, __cols: Union[List[Column], List[str]]) -> "GroupedData":
+    def rollup(self, __cols: Sequence["ColumnOrNameOrOrdinal"]) -> "GroupedData":
         ...
 
-    @dispatch_df_method  # type: ignore[misc]
-    def rollup(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData":
+    @dispatch_df_method
+    def rollup(
+        self, *cols: Union[Sequence["ColumnOrNameOrOrdinal"], "ColumnOrNameOrOrdinal"]
+    ) -> "GroupedData":
         """
         Create a multi-dimensional rollup for the current :class:`DataFrame` using
         the specified columns, allowing for aggregation on them.
@@ -4060,15 +4048,17 @@ class DataFrame:
         ...
 
     @overload
-    def cube(self, *cols: "ColumnOrName") -> "GroupedData":
+    def cube(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData":
         ...
 
     @overload
-    def cube(self, __cols: Union[List[Column], List[str]]) -> "GroupedData":
+    def cube(self, __cols: Sequence["ColumnOrNameOrOrdinal"]) -> "GroupedData":
         ...
 
-    @dispatch_df_method  # type: ignore[misc]
-    def cube(self, *cols: "ColumnOrName") -> "GroupedData":
+    @dispatch_df_method
+    def cube(
+        self, *cols: Union[Sequence["ColumnOrNameOrOrdinal"], "ColumnOrNameOrOrdinal"]
+    ) -> "GroupedData":
         """
         Create a multi-dimensional cube for the current :class:`DataFrame` using
         the specified columns, allowing aggregations to be performed on them.
@@ -4149,7 +4139,9 @@ class DataFrame:
 
     @dispatch_df_method
     def groupingSets(
-        self, groupingSets: Sequence[Sequence["ColumnOrName"]], *cols: "ColumnOrName"
+        self,
+        groupingSets: Sequence[Sequence["ColumnOrNameOrOrdinal"]],
+        *cols: "ColumnOrNameOrOrdinal",
     ) -> "GroupedData":
         """
         Create multi-dimensional aggregation for the current :class:`DataFrame` using the specified
@@ -4814,14 +4806,6 @@ class DataFrame:
         resolves columns by position (not by name).
 
         .. versionadded:: 2.4.0
-
-        .. versionchanged:: 3.4.0
-            Supports Spark Connect.
-
-        Parameters
-        ----------
-        other : :class:`DataFrame`
-            Another :class:`DataFrame` that needs to be combined.
 
         Returns
         -------
@@ -6270,11 +6254,13 @@ class DataFrame:
         ...
 
     @overload
-    def groupby(self, __cols: Union[List[Column], List[str], List[int]]) -> "GroupedData":
+    def groupby(self, __cols: Sequence["ColumnOrNameOrOrdinal"]) -> "GroupedData":
         ...
 
-    @dispatch_df_method  # type: ignore[misc]
-    def groupby(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData":
+    @dispatch_df_method
+    def groupby(
+        self, *cols: Union[Sequence["ColumnOrNameOrOrdinal"], "ColumnOrNameOrOrdinal"]
+    ) -> "GroupedData":
         """
         :func:`groupby` is an alias for :func:`groupBy`.
 
