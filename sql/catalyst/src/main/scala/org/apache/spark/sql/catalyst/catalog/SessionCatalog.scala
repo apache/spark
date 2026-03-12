@@ -491,6 +491,11 @@ class SessionCatalog(
         invalidateCachedTable(QualifiedTableName(SESSION_CATALOG_NAME, dbName, t.table))
       }
     }
+    if (databaseExists(dbName)) {
+      // Clear cached functions in this database so cache stays coherent after drop
+      functionRegistry.dropFunctionsInDatabase(dbName)
+      tableFunctionRegistry.dropFunctionsInDatabase(dbName)
+    }
     externalCatalog.dropDatabase(dbName, ignoreIfNotExists, cascade)
   }
 
@@ -2617,22 +2622,6 @@ class SessionCatalog(
   def loadPersistentScalarFunction(name: FunctionIdentifier): V1Function = {
     val qualifiedIdent = qualifyIdentifier(name)
 
-    // Partially qualified "session" or "builtin": we're resolving the persistent candidate only.
-    // The resolver's candidate list (resolutionCandidates) already orders [system, persistent] or
-    // [persistent, system] by config; we only look in the persistent catalog here. If not found,
-    // we throw so the resolver can try the next candidate (system).
-    val isSessionOrBuiltin = qualifiedIdent.database.exists(db =>
-      db.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE) ||
-      db.equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE))
-    if (isSessionOrBuiltin) {
-      tryFetchCatalogFunction(qualifiedIdent) match {
-        case Some(funcMetadata) =>
-          return buildV1FunctionFromCatalog(qualifiedIdent, funcMetadata)
-        case None =>
-          failFunctionLookup(qualifiedIdent)
-      }
-    }
-
     // Check cache first (no synchronization needed for reads)
     functionRegistry.lookupFunctionEntry(qualifiedIdent) match {
       case Some((cachedInfo, cachedBuilder)) =>
@@ -2700,57 +2689,6 @@ class SessionCatalog(
         makeUserDefinedTableFuncBuilder(udf))
       tableFunctionRegistry.lookupFunction(qualifiedIdent, arguments)
     }
-  }
-
-  /**
-   * Try to fetch a function from the persistent catalog. Returns None if the database or
-   * function does not exist. Used for 2-part "session"/"builtin" when resolving persistent candidate.
-   */
-  private def tryFetchCatalogFunction(
-      qualifiedIdent: FunctionIdentifier): Option[CatalogFunction] = {
-    val db = format(qualifiedIdent.database.get)
-    val funcName = qualifiedIdent.funcName
-    try {
-      requireDbExists(db)
-      Some(
-        externalCatalog.getFunction(db, funcName).copy(identifier = qualifiedIdent))
-    } catch {
-      case _: NoSuchNamespaceException | _: NoSuchPermanentFunctionException |
-          _: NoSuchFunctionException =>
-        None
-    }
-  }
-
-  private def buildV1FunctionFromCatalog(
-      qualifiedIdent: FunctionIdentifier,
-      funcMetadata: CatalogFunction): V1Function = {
-    val info = if (funcMetadata.isUserDefinedFunction) {
-      UserDefinedFunction.fromCatalogFunction(funcMetadata, parser).toExpressionInfo
-    } else {
-      makeExprInfoForHiveFunction(funcMetadata)
-    }
-    val builderFactory: () => FunctionBuilder = () =>
-      synchronized {
-        functionRegistry.lookupFunctionBuilder(qualifiedIdent).getOrElse {
-          if (funcMetadata.isUserDefinedFunction) {
-            val udf = UserDefinedFunction.fromCatalogFunction(funcMetadata, parser)
-            registerUserDefinedFunction[Expression](
-              udf,
-              overrideIfExists = false,
-              functionRegistry,
-              makeUserDefinedScalarFuncBuilder(udf))
-          } else {
-            loadFunctionResources(funcMetadata.resources)
-            registerFunction(
-              funcMetadata,
-              overrideIfExists = false,
-              functionRegistry,
-              makeFunctionBuilder(funcMetadata))
-          }
-          functionRegistry.lookupFunctionBuilder(qualifiedIdent).get
-        }
-      }
-    V1Function(info, builderFactory)
   }
 
   /**
