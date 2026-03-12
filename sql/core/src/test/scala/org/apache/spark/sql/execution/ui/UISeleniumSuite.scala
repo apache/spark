@@ -116,7 +116,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser {
     eventually(timeout(30.seconds), interval(3.seconds)) {
       val sd = findErrorMessageViaAPI()
       assert(sd.size === 1, "Analyze fail shall show the query in failed table")
-      assert(sd.head.startsWith("TABLE_OR_VIEW_NOT_FOUND"))
+      assert(sd.head.startsWith("[TABLE_OR_VIEW_NOT_FOUND]"))
 
       val id = findExecutionIDViaAPI()
       // check query detail page
