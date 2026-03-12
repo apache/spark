@@ -19,7 +19,7 @@
 # 1, Build the image
 # docker build -t connect-cg dev/spark-test-image/connect-gen-protos/
 # 2, Run the image under spark repo
-# docker run -it --rm -v "$(pwd)":/spark connect-cg
+# docker run --cpus 1 -it --rm -v "$(pwd)":/spark connect-cg
 
 # Image for generating Spark Connect protobuf files. Based on Ubuntu 24.04.
 FROM ubuntu:noble
