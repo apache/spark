@@ -419,6 +419,11 @@ class SeriesTestsMixin:
         self.assert_eq(psser.isin([timedelta(days=1)]), pser.isin([timedelta(days=1)]))
         self.assert_eq(psser.isin([1]), pser.isin([1]))
 
+        # None with incompatible types: None passes type filter but never matches via IN
+        pser = pd.Series([1, 2, 3, None], name="a")
+        psser = ps.from_pandas(pser)
+        self.assert_eq(psser.isin(["a", "b", "c", None]), pser.isin(["a", "b", "c", None]))
+
     def test_notnull(self):
         pser = pd.Series([1, 2, 3, 4, np.nan, 6], name="x")
         psser = ps.from_pandas(pser)
