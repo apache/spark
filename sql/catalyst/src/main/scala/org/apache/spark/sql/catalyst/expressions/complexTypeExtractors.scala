@@ -460,7 +460,7 @@ trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
       var i = 0
       while (i < len) {
         val k = keys.get(i, keyType)
-        if (!hm.containsKey(k)) hm.put(k, i)
+        hm.putIfAbsent(k, i)
         i += 1
       }
       lastIndex = hm
